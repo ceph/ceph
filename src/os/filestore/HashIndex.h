@@ -43,14 +43,17 @@ extern string reverse_hexdigit_bits_string(string l);
  * ex: ghobject_t("object", CEPH_NO_SNAP, 0xA4CEE0D2)
  * would be located in (root)/2/D/0/
  *
- * Subdirectories are created when the number of objects in a directory
- * exceed (abs(merge_threshhold)) * 16 * split_multiplier.  The number of objects in a directory
- * is encoded as subdir_info_s in an xattr on the directory.
+ * Subdirectories are created when the number of objects in a
+ * directory exceed 16 * (abs(merge_threshhold)) * split_multiplier +
+ * split_rand_factor). The number of objects in a directory is encoded
+ * as subdir_info_s in an xattr on the directory.
  */
 class HashIndex : public LFNIndex {
 private:
   /// Attribute name for storing subdir info @see subdir_info_s
   static const string SUBDIR_ATTR;
+  /// Attribute name for storing index-wide settings
+  static const string SETTINGS_ATTR;
   /// Attribute name for storing in progress op tag
   static const string IN_PROGRESS_OP_TAG;
   /// Size (bits) in object hash
@@ -61,8 +64,12 @@ private:
   /**
    * Merges occur when the number of object drops below
    * merge_threshold and splits occur when the number of objects
-   * exceeds 16 * abs(merge_threshold) * split_multiplier.
-   * Please note if merge_threshold is less than zero, it will never do merging
+   * exceeds:
+   *
+   *   16 * (abs(merge_threshold) * split_multiplier + split_rand_factor)
+   *
+   * Please note if merge_threshold is less than zero, it will never
+   * do merging
    */
   int merge_threshold;
   int split_multiplier;
@@ -94,6 +101,23 @@ private:
       ::decode(hash_level, bl);
     }
   };
+
+  struct settings_s {
+    uint32_t split_rand_factor; ///< random factor added to split threshold (only on root of collection)
+    settings_s() : split_rand_factor(0) {}
+    void encode(bufferlist &bl) const
+    {
+      __u8 v = 1;
+      ::encode(v, bl);
+      ::encode(split_rand_factor, bl);
+    }
+    void decode(bufferlist::iterator &bl)
+    {
+      __u8 v;
+      ::decode(v, bl);
+      ::decode(split_rand_factor, bl);
+    }
+  } settings;
 
   /// Encodes in progress split or merge
   struct InProgressOp {
@@ -134,51 +158,58 @@ private:
 public:
   /// Constructor.
   HashIndex(
+    CephContext* cct,
     coll_t collection,     ///< [in] Collection
     const char *base_path, ///< [in] Path to the index root.
     int merge_at,          ///< [in] Merge threshhold.
     int split_multiple,	   ///< [in] Split threshhold.
     uint32_t index_version,///< [in] Index version
     double retry_probability=0) ///< [in] retry probability
-    : LFNIndex(collection, base_path, index_version, retry_probability),
+    : LFNIndex(cct, collection, base_path, index_version, retry_probability),
       merge_threshold(merge_at),
-      split_multiplier(split_multiple) {}
+      split_multiplier(split_multiple)
+  {}
+
+  int read_settings() override;
 
   /// @see CollectionIndex
-  uint32_t collection_version() { return index_version; }
+  uint32_t collection_version() override { return index_version; }
 
   /// @see CollectionIndex
-  int cleanup();
+  int cleanup() override;
 
   /// @see CollectionIndex
-  int prep_delete();
+  int prep_delete() override;
 
   /// @see CollectionIndex
   int _split(
     uint32_t match,
     uint32_t bits,
     CollectionIndex* dest
-    );
+    ) override;
+
+  /// @see CollectionIndex
+  int apply_layout_settings() override;
 
 protected:
-  int _init();
+  int _init() override;
 
   int _created(
     const vector<string> &path,
     const ghobject_t &oid,
     const string &mangled_name
-    );
+    ) override;
   int _remove(
     const vector<string> &path,
     const ghobject_t &oid,
     const string &mangled_name
-    );
+    ) override;
   int _lookup(
     const ghobject_t &oid,
     vector<string> *path,
     string *mangled_name,
     int *hardlink
-    );
+    ) override;
 
   /**
    * Pre-hash the collection to create folders according to the expected number
@@ -187,16 +218,15 @@ protected:
   int _pre_hash_collection(
       uint32_t pg_num,
       uint64_t expected_num_objs
-      );
+      ) override;
 
   int _collection_list_partial(
     const ghobject_t &start,
     const ghobject_t &end,
-    bool sort_bitwise,
     int max_count,
     vector<ghobject_t> *ls,
     ghobject_t *next
-    );
+    ) override;
 private:
   /// Internal recursively remove path and its subdirs
   int _recursive_remove(
@@ -356,20 +386,6 @@ private:
     return str;
   }
 
-  struct CmpPairNibblewise {
-    bool operator()(const pair<string, ghobject_t>& l,
-		    const pair<string, ghobject_t>& r)
-    {
-      if (l.first < r.first)
-	return true;
-      if (l.first > r.first)
-	return false;
-      if (cmp_nibblewise(l.second, r.second) < 0)
-	return true;
-      return false;
-    }
-  };
-
   struct CmpPairBitwise {
     bool operator()(const pair<string, ghobject_t>& l,
 		    const pair<string, ghobject_t>& r)
@@ -378,7 +394,7 @@ private:
 	return true;
       if (l.first > r.first)
 	return false;
-      if (cmp_bitwise(l.second, r.second) < 0)
+      if (cmp(l.second, r.second) < 0)
 	return true;
       return false;
     }
@@ -397,18 +413,11 @@ private:
     set<string, CmpHexdigitStringBitwise> *hash_prefixes, /// [out] prefixes in dir
     set<pair<string, ghobject_t>, CmpPairBitwise> *objects /// [out] objects
     );
-  int get_path_contents_by_hash_nibblewise(
-    const vector<string> &path,             /// [in] Path to list
-    const ghobject_t *next_object,          /// [in] list > *next_object
-    set<string> *hash_prefixes,             /// [out] prefixes in dir
-    set<pair<string, ghobject_t>, CmpPairNibblewise> *objects /// [out] objects
-    );
 
   /// List objects in collection in ghobject_t order
   int list_by_hash(
     const vector<string> &path, /// [in] Path to list
     const ghobject_t &end,      /// [in] List only objects < end
-    bool sort_bitwise,          /// [in] sort bitwise
     int max_count,              /// [in] List at most max_count
     ghobject_t *next,            /// [in,out] List objects >= *next
     vector<ghobject_t> *out      /// [out] Listed objects
@@ -421,17 +430,15 @@ private:
     ghobject_t *next,            /// [in,out] List objects >= *next
     vector<ghobject_t> *out      /// [out] Listed objects
     ); ///< @return Error Code, 0 on success
-  int list_by_hash_nibblewise(
-    const vector<string> &path, /// [in] Path to list
-    const ghobject_t &end,      /// [in] List only objects < end
-    int max_count,              /// [in] List at most max_count
-    ghobject_t *next,            /// [in,out] List objects >= *next
-    vector<ghobject_t> *out      /// [out] Listed objects
-    ); ///< @return Error Code, 0 on success
 
   /// Create the given levels of sub directories from the given root.
   /// The contents of *path* is not changed after calling this function.
   int recursive_create_path(vector<string>& path, int level);
+
+  /// split each dir below the given path
+  int split_dirs(const vector<string> &path);
+
+  int write_settings();
 };
 
 #endif

@@ -36,21 +36,21 @@ class MFSMapUser : public Message {
 private:
   FSMapUser fsmap;
 
-  ~MFSMapUser() {}
+  ~MFSMapUser() override {}
 
 public:
-  const char *get_type_name() const { return "fsmap.user"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "fsmap.user"; }
+  void print(ostream& out) const override {
     out << "fsmap.user(e " << epoch << ")";
   }
 
   // marshalling
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(fsmap, p);
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(epoch, payload);
     ::encode(fsmap, payload, features);
   }

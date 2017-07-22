@@ -47,15 +47,13 @@ struct MetaSession {
   std::set<ceph_tid_t> flushing_caps_tids;
   std::set<Inode*> early_flushing_caps;
 
-  Cap *s_cap_iterator;
-
   MClientCapRelease *release;
   
   MetaSession()
     : mds_num(-1), con(NULL),
       seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
       state(STATE_NEW), mds_state(0), readonly(false),
-      s_cap_iterator(NULL), release(NULL)
+      release(NULL)
   {}
   ~MetaSession();
 

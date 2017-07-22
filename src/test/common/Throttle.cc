@@ -21,12 +21,11 @@
 
 #include <stdio.h>
 #include <signal.h>
+#include "gtest/gtest.h"
 #include "common/Mutex.h"
 #include "common/Thread.h"
 #include "common/Throttle.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include <gtest/gtest.h>
 
 #include <thread>
 #include <atomic>
@@ -51,7 +50,7 @@ protected:
     {
     }
 
-    virtual void *entry() {
+    void *entry() override {
       usleep(5);
       waited = throttle.get(count);
       throttle.put(count);
@@ -62,10 +61,6 @@ protected:
 };
 
 TEST_F(ThrottleTest, Throttle) {
-  ASSERT_DEATH({
-      Throttle throttle(g_ceph_context, "throttle", -1);
-    }, "");
-
   int64_t throttle_max = 10;
   Throttle throttle(g_ceph_context, "throttle", throttle_max);
   ASSERT_EQ(throttle.get_max(), throttle_max);
@@ -75,7 +70,6 @@ TEST_F(ThrottleTest, Throttle) {
 TEST_F(ThrottleTest, take) {
   int64_t throttle_max = 10;
   Throttle throttle(g_ceph_context, "throttle", throttle_max);
-  ASSERT_DEATH(throttle.take(-1), "");
   ASSERT_EQ(throttle.take(throttle_max), throttle_max);
   ASSERT_EQ(throttle.take(throttle_max), throttle_max * 2);
 }
@@ -91,7 +85,6 @@ TEST_F(ThrottleTest, get) {
     ASSERT_EQ(throttle.put(throttle_max), 0);
   }
 
-  ASSERT_DEATH(throttle.get(-1), "");
   ASSERT_FALSE(throttle.get(5));
   ASSERT_EQ(throttle.put(5), 0);
 
@@ -285,7 +278,7 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
   uint64_t total_observed_total = 0;
   uint64_t total_observations = 0;
 
-  BackoffThrottle throttle(5);
+  BackoffThrottle throttle(g_ceph_context, "backoff_throttle_test", 5);
   bool valid = throttle.set_params(
     low_threshhold,
     high_threshhold,
@@ -422,17 +415,6 @@ TEST(BackoffThrottle, oversaturated)
   ASSERT_GT(results.first, 85);
   ASSERT_LT(results.second.count(), 0.002);
   ASSERT_GT(results.second.count(), 0.0005);
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 /*

@@ -21,6 +21,7 @@ from setuptools import find_packages
 assert sys.version_info >= (2, 7), \
     "Python version lower than 2.7 is not supported"
 
+
 def read(fname):
     path = os.path.join(os.path.dirname(__file__), fname)
     f = open(path)

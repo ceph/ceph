@@ -12,10 +12,10 @@ while [ -n "$*" ]; do
 	    new="$new -f $1"
 	    shift
 	    ;;
-	-g* | -f* | -W* | -MD | -MP | -fPIC | -c | -D* | --param* | -O* | -m* | -pipe | ggc-min* )
+	-g* | -f* | -W* | -MD | -MP | -fPIC | -c | -D* | -E | --param* | -O* | -m* | -pipe | ggc-min* | -pthread )
 	    shift
 	    ;;
-	-I )
+	-I | -isystem )
 	    shift
 	    new="$new -i $1"
 	    shift

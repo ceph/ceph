@@ -76,27 +76,22 @@ void escape_xml_attr(const char *buf, char *out)
 		unsigned char c = *b;
 		switch (c) {
 		case '<':
-			// cppcheck-suppress sizeofDivisionMemfunc
 			memcpy(o, LESS_THAN_XESCAPE, SSTRL(LESS_THAN_XESCAPE));
 			o += SSTRL(LESS_THAN_XESCAPE);
 			break;
 		case '&':
-			// cppcheck-suppress sizeofDivisionMemfunc
 			memcpy(o, AMPERSAND_XESCAPE, SSTRL(AMPERSAND_XESCAPE));
 			o += SSTRL(AMPERSAND_XESCAPE);
 			break;
 		case '>':
-			// cppcheck-suppress sizeofDivisionMemfunc
 			memcpy(o, GREATER_THAN_XESCAPE, SSTRL(GREATER_THAN_XESCAPE));
 			o += SSTRL(GREATER_THAN_XESCAPE);
 			break;
 		case '\'':
-			// cppcheck-suppress sizeofDivisionMemfunc
 			memcpy(o, SGL_QUOTE_XESCAPE, SSTRL(SGL_QUOTE_XESCAPE));
 			o += SSTRL(SGL_QUOTE_XESCAPE);
 			break;
 		case '"':
-			// cppcheck-suppress sizeofDivisionMemfunc
 			memcpy(o, DBL_QUOTE_XESCAPE, SSTRL(DBL_QUOTE_XESCAPE));
 			o += SSTRL(DBL_QUOTE_XESCAPE);
 			break;
@@ -119,7 +114,6 @@ void escape_xml_attr(const char *buf, char *out)
 
 #define DBL_QUOTE_JESCAPE "\\\""
 #define BACKSLASH_JESCAPE "\\\\"
-#define SLASH_JESCAPE "\\/"
 #define TAB_JESCAPE "\\t"
 #define NEWLINE_JESCAPE "\\n"
 
@@ -136,9 +130,6 @@ int escape_json_attr_len(const char *buf, int src_len)
 			break;
 		case '\\':
 			ret += SSTRL(BACKSLASH_JESCAPE);
-			break;
-		case '/':
-			ret += SSTRL(SLASH_JESCAPE);
 			break;
 		case '\t':
 			ret += SSTRL(TAB_JESCAPE);
@@ -170,27 +161,22 @@ void escape_json_attr(const char *buf, int src_len, char *out)
 		unsigned char c = *b;
 		switch (c) {
 		case '"':
-			// cppcheck-suppress sizeofDivisionMemfunc
+			// cppcheck-suppress invalidFunctionArg
 			memcpy(o, DBL_QUOTE_JESCAPE, SSTRL(DBL_QUOTE_JESCAPE));
 			o += SSTRL(DBL_QUOTE_JESCAPE);
 			break;
 		case '\\':
-			// cppcheck-suppress sizeofDivisionMemfunc
+			// cppcheck-suppress invalidFunctionArg
 			memcpy(o, BACKSLASH_JESCAPE, SSTRL(BACKSLASH_JESCAPE));
 			o += SSTRL(BACKSLASH_JESCAPE);
 			break;
-		case '/':
-			// cppcheck-suppress sizeofDivisionMemfunc
-			memcpy(o, SLASH_JESCAPE, SSTRL(SLASH_JESCAPE));
-			o += SSTRL(SLASH_JESCAPE);
-			break;
 		case '\t':
-			// cppcheck-suppress sizeofDivisionMemfunc
+			// cppcheck-suppress invalidFunctionArg
 			memcpy(o, TAB_JESCAPE, SSTRL(TAB_JESCAPE));
 			o += SSTRL(TAB_JESCAPE);
 			break;
 		case '\n':
-			// cppcheck-suppress sizeofDivisionMemfunc
+			// cppcheck-suppress invalidFunctionArg
 			memcpy(o, NEWLINE_JESCAPE, SSTRL(NEWLINE_JESCAPE));
 			o += SSTRL(NEWLINE_JESCAPE);
 			break;

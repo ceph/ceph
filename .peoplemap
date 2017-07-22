@@ -21,6 +21,7 @@ Alfredo Deza <adeza@redhat.com> Alfredo Deza <alfredo.deza@inktank.com>
 Dan Mick <dmick@redhat.com> Dan Mick <dan.mick@inktank.com>
 David Zafman <dzafman@redhat.com> David Zafman <david.zafman@inktank.com>
 Greg Farnum <gfarnum@redhat.com> Greg Farnum <greg@inktank.com>
+Gregory Meno <gmeno@redhat.com> <gregory.meno@inktank.com>
 Ilya Dryomov <idryomov@redhat.com> Ilya Dryomov <ilya.dryomov@inktank.com>
 Jenkins <jenkins@ceph.com> Jenkins <jenkins@inktank.com>
 João Eduardo Luís <joao@suse.de> João Eduardo Luís <joao.luis@inktank.com>
@@ -32,9 +33,11 @@ Ken Dreyer <kdreyer@redhat.com> Ken Dreyer <ken.dreyer@inktank.com>
 Loic Dachary <ldachary@redhat.com> Loic Dachary <loic-201408@dachary.org>
 Loic Dachary <ldachary@redhat.com> Loic Dachary <loic@dachary.org>
 Mark Nelson <mnelson@redhat.com> Mark Nelson <mark.nelson@inktank.com>
+Mark Nelson <mnelson@redhat.com> Mark Nelson <mark.nelson@dreamhost.com>
 Neil Levine <nlevine@redhat.com> Neil Levine <neil.levine@inktank.com>
 Noah Watkins <nwatkins@redhat.com> Noah Watkins <noah.watkins@inktank.com>
 Patrick McGarry <pmcgarry@redhat.com> Patrick McGarry <patrick@inktank.com>
+Piotr Dałek <piotr.dalek@corp.ovh.com> Piotr Dałek <git@predictor.org.pl> Piotr Dałek <piotr.dalek@ts.fujitsu.com>
 Ross Turk <rturk@redhat.com> Ross Turk <ross.turk@inktank.com>
 Sage Weil <sweil@redhat.com> Sage Weil <sage@inktank.com>
 Sahid Orentino Ferdjaoui <sahid.ferdjaoui@redhat.com> Sahid Orentino Ferdjaoui <sahid.ferdjaoui@cloudwatt.com>
@@ -45,5 +48,6 @@ Tyler Brekke <tbrekke@redhat.com> Tyler Brekke <tyler.brekke@inktank.com>
 Warren Usui <wusui@redhat.com> Warren Usui <warren.usui@inktank.com>
 Yan, Zheng <zyan@redhat.com> Yan, Zheng <zheng.z.yan@intel.com>
 Yehuda Sadeh <ysadehwe@redhat.com> Yehuda Sadeh <yehuda@inktank.com>
-Yuri Weinstein <yuri.weinstein@redhat.com> Yuri Weinstein <yuri.weinstein@inktank.com>
+Yuri Weinstein <yuriw@redhat.com> Yuri Weinstein <yuri.weinstein@inktank.com>
 Zhi Zhang <zhangz.david@outlook.com> Zhi (David) Zhang <zhangz@yahoo-inc.com>
+Patrick Donnelly <pdonnell@redhat.com> Patrick Donnelly <batrick@batbytes.com>

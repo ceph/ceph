@@ -1,0 +1,10 @@
+meta:
+- desc: |
+   upgrade the ceph cluster
+upgrade-sequence2:
+   sequential:
+   - ceph.restart:
+       daemons: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, osd.3]
+       wait-for-healthy: false
+       wait-for-osds-up: true
+   - print: "**** done ceph.restart all"

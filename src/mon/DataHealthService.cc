@@ -65,16 +65,10 @@ void DataHealthService::start_epoch()
 }
 
 void DataHealthService::get_health(
-    Formatter *f,
     list<pair<health_status_t,string> >& summary,
     list<pair<health_status_t,string> > *detail)
 {
   dout(10) << __func__ << dendl;
-  if (f) {
-    f->open_object_section("data_health");
-    f->open_array_section("mons");
-  }
-
   for (map<entity_inst_t,DataStats>::iterator it = stats.begin();
        it != stats.end(); ++it) {
     string mon_name = mon->monmap->get_name(it->first.addr);
@@ -110,22 +104,6 @@ void DataHealthService::get_health(
       if (detail)
 	detail->push_back(make_pair(health_status, ss.str()));
     }
-
-    if (f) {
-      f->open_object_section("mon");
-      f->dump_string("name", mon_name.c_str());
-      // leave this unenclosed by an object section to avoid breaking backward-compatibility
-      stats.dump(f);
-      f->dump_stream("health") << health_status;
-      if (health_status != HEALTH_OK)
-        f->dump_string("health_detail", health_detail);
-      f->close_section();
-    }
-  }
-
-  if (f) {
-    f->close_section(); // mons
-    f->close_section(); // data_health
   }
 }
 
@@ -139,7 +117,7 @@ int DataHealthService::update_store_stats(DataStats &ours)
   ours.store_stats.bytes_sst = extra["sst"];
   ours.store_stats.bytes_log = extra["log"];
   ours.store_stats.bytes_misc = extra["misc"];
-  ours.last_update = ceph_clock_now(g_ceph_context);
+  ours.last_update = ceph_clock_now();
 
   return 0;
 }
@@ -159,7 +137,7 @@ int DataHealthService::update_stats()
           << " total " << prettybyte_t(ours.fs_stats.byte_total)
           << ", used " << prettybyte_t(ours.fs_stats.byte_used)
           << ", avail " << prettybyte_t(ours.fs_stats.byte_avail) << dendl;
-  ours.last_update = ceph_clock_now(g_ceph_context);
+  ours.last_update = ceph_clock_now();
 
   return update_store_stats(ours);
 }
@@ -219,7 +197,7 @@ void DataHealthService::service_tick()
     if (ours.fs_stats.avail_percent != last_warned_percent)
       mon->clog->warn()
 	<< "reached concerning levels of available space on local monitor storage"
-	<< " (" << ours.fs_stats.avail_percent << "% free)\n";
+	<< " (" << ours.fs_stats.avail_percent << "% free)";
     last_warned_percent = ours.fs_stats.avail_percent;
   } else {
     last_warned_percent = 0;

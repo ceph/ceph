@@ -23,10 +23,10 @@
 #include <string.h>
 #include <errno.h>
 #include <algorithm>
+using namespace std;
+
 #include "common/debug.h"
 #include "ErasureCodeShec.h"
-#include "crush/CrushWrapper.h"
-#include "osd/osd_types.h"
 extern "C" {
 #include "jerasure/include/jerasure.h"
 #include "jerasure/include/galois.h"
@@ -35,6 +35,7 @@ extern int calc_determinant(int *matrix, int dim);
 extern int* reed_sol_vandermonde_coding_matrix(int k, int m, int w);
 }
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
@@ -44,36 +45,15 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodeShec: ";
 }
 
-int ErasureCodeShec::create_ruleset(const string &name,
-				    CrushWrapper &crush,
-				    ostream *ss) const
-{
-  int ruleid = crush.add_simple_ruleset(name, ruleset_root, ruleset_failure_domain,
-					"indep", pg_pool_t::TYPE_ERASURE, ss);
-  if (ruleid < 0) {
-    return ruleid;
-  } else {
-    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
-    return crush.get_rule_mask_ruleset(ruleid);
-  }
-}
-
 int ErasureCodeShec::init(ErasureCodeProfile &profile,
 			  ostream *ss)
 {
   int err = 0;
-  err |= to_string("ruleset-root", profile,
-		   &ruleset_root,
-		   DEFAULT_RULESET_ROOT, ss);
-  err |= to_string("ruleset-failure-domain", profile,
-		   &ruleset_failure_domain,
-		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
   err |= parse(profile);
   if (err)
     return err;
   prepare();
-  ErasureCode::init(profile, ss);
-  return err;
+  return ErasureCode::init(profile, ss);
 }
 
 unsigned int ErasureCodeShec::get_chunk_size(unsigned int object_size) const
@@ -301,7 +281,7 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const ErasureCodeProfile &profi
   } else if (profile.find("k") == profile.end() ||
 	     profile.find("m") == profile.end() ||
 	     profile.find("c") == profile.end()){
-    dout(10) << "(k, m, c) must be choosed" << dendl;
+    dout(10) << "(k, m, c) must be chosen" << dendl;
     err = -EINVAL;
   } else {
     std::string err_k, err_m, err_c, value_k, value_m, value_c;
@@ -549,6 +529,9 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
 {
   int mindup = k+1, minp = k+1;
   int want[k + m];
+
+  memset(want, 0, sizeof(want));
+
   for (int i = 0; i < k + m; ++i) {
     want[i] = want_[i];
   }

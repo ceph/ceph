@@ -1,9 +1,12 @@
-# radostest 
+# radostest
+add_library(libradostest_obj OBJECT test.cc)
 set(libradostest_srcs 
-  test.cc 
+  test_common.cc
   TestCase.cc)
-add_library(radostest STATIC ${libradostest_srcs})
-target_link_libraries(radostest common json_spirit)
+add_library(radostest STATIC
+  ${libradostest_srcs}
+  $<TARGET_OBJECTS:libradostest_obj>)
+target_link_libraries(radostest ceph-common json_spirit ${EXTRALIBS})
 set_target_properties(radostest PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # ceph_test_rados_api_cmd
@@ -13,7 +16,7 @@ add_executable(ceph_test_rados_api_cmd
 set_target_properties(ceph_test_rados_api_cmd PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_cmd
-  librados global ${UNITTEST_LIBS} radostest)
+  rados_a global ${UNITTEST_LIBS} radostest)
 
 # ceph_test_rados_api_io
 add_executable(ceph_test_rados_api_io
@@ -54,20 +57,12 @@ target_link_libraries(ceph_test_rados_api_aio
 # ceph_test_rados_api_list
 add_executable(ceph_test_rados_api_list
   list.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 set_target_properties(ceph_test_rados_api_list PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_list
-  librados global ${UNITTEST_LIBS} radostest)
-
-# ceph_test_rados_api_nlist
-add_executable(ceph_test_rados_api_nlist
-  nlist.cc
-  )
-set_target_properties(ceph_test_rados_api_nlist PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_nlist
-  librados ${UNITTEST_LIBS} radostest)
+  rados_a global ${UNITTEST_LIBS} radostest)
 
 # ceph_test_rados_api_pool
 add_executable(ceph_test_rados_api_pool
@@ -77,7 +72,7 @@ set_target_properties(ceph_test_rados_api_pool PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS}
   )
 target_link_libraries(ceph_test_rados_api_pool
-  librados ${UNITTEST_LIBS} radostest)
+  rados_a ${UNITTEST_LIBS} radostest)
 
 # ceph_test_rados_api_stat
 add_executable(ceph_test_rados_api_stat
@@ -86,7 +81,7 @@ add_executable(ceph_test_rados_api_stat
 set_target_properties(ceph_test_rados_api_stat PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_stat
-  librados ${UNITTEST_LIBS} radostest)
+  rados_a ${UNITTEST_LIBS} radostest)
 
 # ceph_test_rados_api_watch_notify
 add_executable(ceph_test_rados_api_watch_notify
@@ -95,7 +90,7 @@ add_executable(ceph_test_rados_api_watch_notify
 set_target_properties(ceph_test_rados_api_watch_notify PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_watch_notify
-  librados ${UNITTEST_LIBS} radostest)
+  rados_a ${UNITTEST_LIBS} radostest)
 
 # ceph_test_rados_api_cls
 add_executable(ceph_test_rados_api_cls
@@ -104,16 +99,17 @@ add_executable(ceph_test_rados_api_cls
 set_target_properties(ceph_test_rados_api_cls PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_cls
-  librados ${UNITTEST_LIBS} radostest)
+  rados_a ${UNITTEST_LIBS} radostest)
 
 # ceph_test_rados_api_misc
 add_executable(ceph_test_rados_api_misc
   misc.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 set_target_properties(ceph_test_rados_api_misc PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_misc
-  librados global ${UNITTEST_LIBS} radostest)
+  rados_a global ${UNITTEST_LIBS} radostest)
 
 # ceph_test_rados_api_lock
 add_executable(ceph_test_rados_api_lock
@@ -122,16 +118,26 @@ add_executable(ceph_test_rados_api_lock
 set_target_properties(ceph_test_rados_api_lock PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_lock
-  librados ${UNITTEST_LIBS} radostest)
+  rados_a ${UNITTEST_LIBS} radostest)
+
+# ceph_test_rados_api_service
+add_executable(ceph_test_rados_api_service
+  service.cc
+  )
+set_target_properties(ceph_test_rados_api_service PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_rados_api_service
+  rados_a global ${UNITTEST_LIBS} radostest)
 
 # ceph_test_rados_api_tier
 add_executable(ceph_test_rados_api_tier
   tier.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 set_target_properties(ceph_test_rados_api_tier PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_tier
-  global librados ${UNITTEST_LIBS} ${Boost_SYSTEM_LIBRARY} radostest)
+  global rados_a ${UNITTEST_LIBS} Boost::system radostest)
 
 # ceph_test_rados_api_snapshots
 add_executable(ceph_test_rados_api_snapshots
@@ -140,7 +146,7 @@ add_executable(ceph_test_rados_api_snapshots
 set_target_properties(ceph_test_rados_api_snapshots PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_snapshots
-  librados ${UNITTEST_LIBS} radostest)
+  rados_a ${UNITTEST_LIBS} radostest)
 
 install(TARGETS
   ceph_test_rados_api_aio
@@ -152,6 +158,7 @@ install(TARGETS
   ceph_test_rados_api_lock
   ceph_test_rados_api_misc
   ceph_test_rados_api_pool
+  ceph_test_rados_api_service
   ceph_test_rados_api_snapshots
   ceph_test_rados_api_stat
   ceph_test_rados_api_tier
@@ -163,7 +170,7 @@ add_executable(unittest_librados
   librados.cc
   )
 add_ceph_unittest(unittest_librados ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librados)
-target_link_libraries(unittest_librados librados global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_librados librados ${BLKID_LIBRARIES})
 
 # unittest_librados_config
 add_executable(unittest_librados_config
@@ -172,7 +179,6 @@ add_executable(unittest_librados_config
 add_ceph_unittest(unittest_librados_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librados_config)
 target_link_libraries(unittest_librados_config
   librados
-  global
   ${BLKID_LIBRARIES}
   )
 

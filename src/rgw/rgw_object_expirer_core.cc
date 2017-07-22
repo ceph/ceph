@@ -35,6 +35,7 @@ using namespace std;
 
 #include "cls/lock/cls_lock_client.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 static string objexp_lock_name = "gc_process";
@@ -157,7 +158,7 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
   int num_entries = cct->_conf->rgw_objexp_chunk_size;
 
   int max_secs = cct->_conf->rgw_objexp_gc_interval;
-  utime_t end = ceph_clock_now(cct);
+  utime_t end = ceph_clock_now();
   end += max_secs;
 
   rados::cls::lock::Lock l(objexp_lock_name);
@@ -192,7 +193,7 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
       trim_chunk(shard, last_run, round_start, marker, out_marker);
     }
 
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
     if (now >= end) {
       done = false;
       break;
@@ -229,7 +230,7 @@ bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
 
 bool RGWObjectExpirer::going_down()
 {
-  return (down_flag.read() != 0);
+  return down_flag;
 }
 
 void RGWObjectExpirer::start_processor()
@@ -240,7 +241,7 @@ void RGWObjectExpirer::start_processor()
 
 void RGWObjectExpirer::stop_processor()
 {
-  down_flag.set(1);
+  down_flag = true;
   if (worker) {
     worker->stop();
     worker->join();
@@ -252,7 +253,7 @@ void RGWObjectExpirer::stop_processor()
 void *RGWObjectExpirer::OEWorker::entry() {
   utime_t last_run;
   do {
-    utime_t start = ceph_clock_now(cct);
+    utime_t start = ceph_clock_now();
     ldout(cct, 2) << "object expiration: start" << dendl;
     if (oe->inspect_all_shards(last_run, start)) {
       /* All shards have been processed properly. Next time we can start
@@ -265,7 +266,7 @@ void *RGWObjectExpirer::OEWorker::entry() {
     if (oe->going_down())
       break;
 
-    utime_t end = ceph_clock_now(cct);
+    utime_t end = ceph_clock_now();
     end -= start;
     int secs = cct->_conf->rgw_objexp_gc_interval;
 
@@ -275,7 +276,7 @@ void *RGWObjectExpirer::OEWorker::entry() {
     secs -= end.sec();
 
     lock.Lock();
-    cond.WaitInterval(cct, lock, utime_t(secs, 0));
+    cond.WaitInterval(lock, utime_t(secs, 0));
     lock.Unlock();
   } while (!oe->going_down());
 

@@ -8,11 +8,12 @@
 #include <string>
 #include <include/types.h>
 
+#include <boost/optional.hpp>
+#include <boost/utility/string_ref.hpp>
+
 #include "common/debug.h"
 
 #include "rgw_basic_types.h"
-
-using namespace std;
 
 #define RGW_PERM_NONE            0x00
 #define RGW_PERM_READ            0x01
@@ -25,6 +26,8 @@ using namespace std;
                                   RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP )
 #define RGW_PERM_ALL_S3          RGW_PERM_FULL_CONTROL
 #define RGW_PERM_INVALID         0xFF00
+
+static constexpr char RGW_REFERER_WILDCARD[] = "*";
 
 enum ACLGranteeTypeEnum {
 /* numbers are encoded, should not change */
@@ -214,20 +217,24 @@ struct ACLReferer {
       perm(perm) {
   }
 
-  bool is_match(std::string http_referer) const {
-    if (http_referer == url_spec) {
+  bool is_match(boost::string_ref http_referer) const {
+    const auto http_host = get_http_host(http_referer);
+    if (!http_host || http_host->length() < url_spec.length()) {
+      return false;
+    }
+
+    if ("*" == url_spec) {
       return true;
     }
 
-    if (http_referer.length() < url_spec.length()) {
-      return false;
+    if (http_host->compare(url_spec) == 0) {
+      return true;
     }
 
     if ('.' == url_spec[0]) {
       /* Wildcard support: a referer matches the spec when its last char are
        * perfectly equal to spec. */
-      return !http_referer.compare(http_referer.length() - url_spec.length(),
-                                   url_spec.length(), url_spec);
+      return http_host->ends_with(url_spec);
     }
 
     return false;
@@ -246,10 +253,34 @@ struct ACLReferer {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+
+private:
+  boost::optional<boost::string_ref> get_http_host(const boost::string_ref url) const {
+    size_t pos = url.find("://");
+    if (pos == boost::string_ref::npos || url.starts_with("://") ||
+        url.ends_with("://") || url.ends_with('@')) {
+      return boost::none;
+    }
+    boost::string_ref url_sub = url.substr(pos + strlen("://"));  
+    pos = url_sub.find('@');
+    if (pos != boost::string_ref::npos) {
+      url_sub = url_sub.substr(pos + 1);
+    }
+    pos = url_sub.find_first_of("/:");
+    if (pos == boost::string_ref::npos) {
+      /* no port or path exists */
+      return url_sub;
+    }
+    return url_sub.substr(0, pos);
+  }
 };
 WRITE_CLASS_ENCODER(ACLReferer)
 
-class RGWIdentityApplier;
+namespace rgw {
+namespace auth {
+  class Identity;
+}
+}
 
 class RGWAccessControlList
 {
@@ -272,10 +303,12 @@ public:
 
   virtual ~RGWAccessControlList() {}
 
-  uint32_t get_perm(const RGWIdentityApplier& auth_identity,
+  uint32_t get_perm(const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask);
   uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
-  uint32_t get_referer_perm(const std::string http_referer, uint32_t perm_mask);
+  uint32_t get_referer_perm(uint32_t current_perm,
+                            std::string http_referer,
+                            uint32_t perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 3, bl);
     bool maps_initialized = true;
@@ -352,6 +385,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<ACLOwner*>& o);
   void set_id(const rgw_user& _id) { id = _id; }
   void set_name(const string& name) { display_name = name; }
@@ -379,11 +413,11 @@ public:
     acl.set_ctx(ctx);
   }
 
-  uint32_t get_perm(const RGWIdentityApplier& auth_identity,
+  uint32_t get_perm(const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask,
                     const char * http_referer);
   uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
-  bool verify_permission(const RGWIdentityApplier& auth_identity,
+  bool verify_permission(const rgw::auth::Identity& auth_identity,
                          uint32_t user_perm_mask,
                          uint32_t perm,
                          const char * http_referer = nullptr);

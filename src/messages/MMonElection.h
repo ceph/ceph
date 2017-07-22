@@ -18,11 +18,12 @@
 
 #include "msg/Message.h"
 #include "mon/MonMap.h"
+#include "mon/mon_types.h"
 
 class MMonElection : public Message {
 
-  static const int HEAD_VERSION = 5;
-  static const int COMPAT_VERSION = 2;
+  static const int HEAD_VERSION = 7;
+  static const int COMPAT_VERSION = 5;
 
 public:
   static const int OP_PROPOSE = 1;
@@ -35,7 +36,7 @@ public:
     case OP_ACK: return "ack";
     case OP_NAK: return "nak";
     case OP_VICTORY: return "victory";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
   
@@ -45,36 +46,36 @@ public:
   bufferlist monmap_bl;
   set<int32_t> quorum;
   uint64_t quorum_features;
+  mon_feature_t mon_features;
   bufferlist sharing_bl;
-  /* the following were both used in the next branch for a while
-   * on user cluster, so we've left them in for compatibility. */
-  version_t defunct_one;
-  version_t defunct_two;
+  map<string,string> metadata;
   
   MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
-    op(0), epoch(0), quorum_features(0), defunct_one(0),
-    defunct_two(0)
+    op(0), epoch(0),
+    quorum_features(0),
+    mon_features(0)
   { }
 
   MMonElection(int o, epoch_t e, MonMap *m)
     : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
-      fsid(m->fsid), op(o), epoch(e), quorum_features(0),
-      defunct_one(0), defunct_two(0)
+      fsid(m->fsid), op(o), epoch(e),
+      quorum_features(0),
+      mon_features(0)
   {
     // encode using full feature set; we will reencode for dest later,
     // if necessary
     m->encode(monmap_bl, CEPH_FEATURES_ALL);
   }
 private:
-  ~MMonElection() {}
+  ~MMonElection() override {}
 
 public:  
-  const char *get_type_name() const { return "election"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "election"; }
+  void print(ostream& out) const override {
     out << "election(" << fsid << " " << get_opname(op) << " " << epoch << ")";
   }
   
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     if (monmap_bl.length() && (features != CEPH_FEATURES_ALL)) {
       // reencode old-format monmap
       MonMap t;
@@ -89,30 +90,30 @@ public:
     ::encode(monmap_bl, payload);
     ::encode(quorum, payload);
     ::encode(quorum_features, payload);
-    ::encode(defunct_one, payload);
-    ::encode(defunct_two, payload);
+    ::encode((version_t)0, payload);  // defunct
+    ::encode((version_t)0, payload);  // defunct
     ::encode(sharing_bl, payload);
+    ::encode(mon_features, payload);
+    ::encode(metadata, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    if (header.version >= 2)
-      ::decode(fsid, p);
-    else
-      memset(&fsid, 0, sizeof(fsid));
+    ::decode(fsid, p);
     ::decode(op, p);
     ::decode(epoch, p);
     ::decode(monmap_bl, p);
     ::decode(quorum, p);
-    if (header.version >= 3)
-      ::decode(quorum_features, p);
-    else
-      quorum_features = 0;
-    if (header.version >= 4) {
-      ::decode(defunct_one, p);
-      ::decode(defunct_two, p);
+    ::decode(quorum_features, p);
+    {
+      version_t v;  // defunct fields from old encoding
+      ::decode(v, p);
+      ::decode(v, p);
     }
-    if (header.version >= 5)
-      ::decode(sharing_bl, p);
+    ::decode(sharing_bl, p);
+    if (header.version >= 6)
+      ::decode(mon_features, p);
+    if (header.version >= 7)
+      ::decode(metadata, p);
   }
   
 };

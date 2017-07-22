@@ -14,19 +14,20 @@
 
 // -----------------------------------------------------------------------------
 #include <algorithm>
-#include <dlfcn.h>
 #include <errno.h>
 // -----------------------------------------------------------------------------
 #include "common/debug.h"
 #include "ErasureCodeIsa.h"
 #include "xor_op.h"
-#include "crush/CrushWrapper.h"
-#include "osd/osd_types.h"
+#include "include/assert.h"
+using namespace std;
+
 // -----------------------------------------------------------------------------
 extern "C" {
 #include "isa-l/include/erasure_code.h"
 }
 // -----------------------------------------------------------------------------
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
@@ -44,25 +45,6 @@ _prefix(std::ostream* _dout)
 const std::string ErasureCodeIsaDefault::DEFAULT_K("7");
 const std::string ErasureCodeIsaDefault::DEFAULT_M("3");
 
-int
-ErasureCodeIsa::create_ruleset(const string &name,
-                               CrushWrapper &crush,
-                               ostream *ss) const
-{
-  int ruleid = crush.add_simple_ruleset(name,
-                                        ruleset_root,
-                                        ruleset_failure_domain,
-                                        "indep",
-                                        pg_pool_t::TYPE_ERASURE,
-                                        ss);
-
-  if (ruleid < 0)
-    return ruleid;
-  else {
-    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
-    return crush.get_rule_mask_ruleset(ruleid);
-  }
-}
 
 // -----------------------------------------------------------------------------
 
@@ -70,18 +52,11 @@ int
 ErasureCodeIsa::init(ErasureCodeProfile &profile, ostream *ss)
 {
   int err = 0;
-  err |= to_string("ruleset-root", profile,
-		   &ruleset_root,
-		   DEFAULT_RULESET_ROOT, ss);
-  err |= to_string("ruleset-failure-domain", profile,
-		   &ruleset_failure_domain,
-		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
   err |= parse(profile, ss);
   if (err)
     return err;
   prepare();
-  ErasureCode::init(profile, ss);
-  return err;
+  return ErasureCode::init(profile, ss);
 }
 
 // -----------------------------------------------------------------------------

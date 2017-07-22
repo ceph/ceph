@@ -24,12 +24,12 @@ public:
   {
   }
 
-  virtual ~RbdWatchCtx() {}
+  ~RbdWatchCtx() override {}
 
-  virtual void handle_notify(uint64_t notify_id,
+  void handle_notify(uint64_t notify_id,
                              uint64_t cookie,
                              uint64_t notifier_id,
-                             bufferlist& bl) {
+                             bufferlist& bl) override {
     std::cout << m_image_name << " received notification: notify_id="
               << notify_id << ", cookie=" << cookie << ", notifier_id="
               << notifier_id << ", bl.length=" << bl.length() << std::endl;
@@ -37,7 +37,7 @@ public:
     m_io_ctx.notify_ack(m_header_oid, notify_id, cookie, reply);
   }
 
-  virtual void handle_error(uint64_t cookie, int err) {
+  void handle_error(uint64_t cookie, int err) override {
     std::cerr << m_image_name << " received error: cookie=" << cookie << ", "
               << "err=" << cpp_strerror(err) << std::endl;
   }
@@ -61,19 +61,13 @@ static int do_watch(librados::IoCtx& pp, librbd::Image &image,
   if (old_format != 0) {
     header_oid = std::string(imgname) + RBD_SUFFIX;
   } else {
-    librbd::image_info_t info;
-    r = image.stat(info, sizeof(info));
+    std::string id;
+    r = image.get_id(&id);
     if (r < 0) {
-      std::cerr << "failed to stat image" << std::endl;
       return r;
     }
 
-    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
-
-    std::string image_id(prefix + strlen(RBD_DATA_PREFIX));
-    header_oid = RBD_HEADER_PREFIX + image_id;
+    header_oid = RBD_HEADER_PREFIX + id;
   }
 
   uint64_t cookie;
@@ -115,7 +109,7 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", true, &rados,
+  r = utils::init_and_open_image(pool_name, image_name, "", "", true, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;

@@ -1,6 +1,7 @@
 #!/bin/bash -x
 
 set -e
+set -x
 
 # detect data pool
 datapool=
@@ -37,6 +38,8 @@ setfattr -n ceph.file.layout.pool -v $datapool file2
 getfattr -n ceph.file.layout.pool file2 | grep -q $datapool
 setfattr -n ceph.file.layout.pool_namespace -v foons file2
 getfattr -n ceph.file.layout.pool_namespace file2 | grep -q foons
+setfattr -x ceph.file.layout.pool_namespace file2
+getfattr -n ceph.file.layout.pool_namespace file2 | grep -q -v foons
 
 getfattr -n ceph.file.layout.stripe_unit file2 | grep -q 1048576
 getfattr -n ceph.file.layout.stripe_count file2 | grep -q 8
@@ -90,6 +93,7 @@ getfattr -n ceph.dir.layout.stripe_count dir | grep -q 8
 getfattr -n ceph.dir.layout.object_size dir | grep -q 10485760
 getfattr -n ceph.dir.layout.pool_namespace dir | grep -q dirns
 
+
 setfattr -n ceph.file.layout -v "stripe_count=16" file2
 getfattr -n ceph.file.layout.stripe_count file2 | grep -q 16
 setfattr -n ceph.file.layout -v "object_size=10485760 stripe_count=8 stripe_unit=1048576 pool=$datapool pool_namespace=dirns" file2
@@ -101,6 +105,9 @@ getfattr -n ceph.file.layout.stripe_unit dir/file | grep -q 1048576
 getfattr -n ceph.file.layout.stripe_count dir/file | grep -q 8
 getfattr -n ceph.file.layout.object_size dir/file | grep -q 10485760
 getfattr -n ceph.file.layout.pool_namespace dir/file | grep -q dirns
+
+setfattr -x ceph.dir.layout.pool_namespace dir
+getfattr -n ceph.dir.layout dir | grep -q -v pool_namespace=dirns
 
 setfattr -x ceph.dir.layout dir
 getfattr -n ceph.dir.layout dir     2>&1 | grep -q 'No such attribute'

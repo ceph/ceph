@@ -5,7 +5,6 @@
 #define CEPH_JOURNAL_JOURNAL_RECORDER_H
 
 #include "include/int_types.h"
-#include "include/atomic.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
@@ -42,7 +41,7 @@ private:
     Listener(JournalRecorder *_journal_recorder)
       : journal_recorder(_journal_recorder) {}
 
-    virtual void handle_update(JournalMetadata *) {
+    void handle_update(JournalMetadata *) override {
       journal_recorder->handle_update();
     }
   };
@@ -54,10 +53,10 @@ private:
       : journal_recorder(_journal_recorder) {
     }
 
-    virtual void closed(ObjectRecorder *object_recorder) {
+    void closed(ObjectRecorder *object_recorder) override {
       journal_recorder->handle_closed(object_recorder);
     }
-    virtual void overflow(ObjectRecorder *object_recorder) {
+    void overflow(ObjectRecorder *object_recorder) override {
       journal_recorder->handle_overflow(object_recorder);
     }
   };
@@ -68,7 +67,7 @@ private:
     C_AdvanceObjectSet(JournalRecorder *_journal_recorder)
       : journal_recorder(_journal_recorder) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       journal_recorder->handle_advance_object_set(r);
     }
   };
@@ -92,6 +91,7 @@ private:
   uint32_t m_in_flight_object_closes = 0;
   uint64_t m_current_set;
   ObjectRecorderPtrs m_object_ptrs;
+  std::vector<std::shared_ptr<Mutex>> m_object_locks;
 
   FutureImplPtr m_prev_future;
 
@@ -103,13 +103,26 @@ private:
 
   void close_and_advance_object_set(uint64_t object_set);
 
-  ObjectRecorderPtr create_object_recorder(uint64_t object_number);
-  void create_next_object_recorder(ObjectRecorderPtr object_recorder);
+  ObjectRecorderPtr create_object_recorder(uint64_t object_number,
+                                           std::shared_ptr<Mutex> lock);
+  void create_next_object_recorder_unlock(ObjectRecorderPtr object_recorder);
 
   void handle_update();
 
   void handle_closed(ObjectRecorder *object_recorder);
   void handle_overflow(ObjectRecorder *object_recorder);
+
+  void lock_object_recorders() {
+    for (auto& lock : m_object_locks) {
+      lock->Lock();
+    }
+  }
+
+  void unlock_object_recorders() {
+    for (auto& lock : m_object_locks) {
+      lock->Unlock();
+    }
+  }
 };
 
 } // namespace journal

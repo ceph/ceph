@@ -53,7 +53,9 @@ class PaxosService {
    */
   bool proposing;
 
- protected:
+  bool need_immediate_propose = false;
+
+protected:
   /**
    * Services implementing us used to depend on the Paxos version, back when
    * each service would have a Paxos instance for itself. However, now we only
@@ -75,14 +77,22 @@ class PaxosService {
    */
   bool have_pending; 
 
-protected:
+  /**
+   * health checks for this service
+   *
+   * Child must populate this during encode_pending() by calling encode_health().
+   */
+  health_check_map_t health_checks;
+public:
+  const health_check_map_t& get_health_checks() {
+    return health_checks;
+  }
 
+protected:
   /**
    * format of our state in leveldb, 0 for default
    */
   version_t format_version;
-
-
 
   /**
    * @defgroup PaxosService_h_callbacks Callback classes
@@ -104,7 +114,7 @@ protected:
   public:
     C_RetryMessage(PaxosService *s, MonOpRequestRef op_) :
       C_MonOp(op_), svc(s) { }
-    void _finish(int r) {
+    void _finish(int r) override {
       if (r == -EAGAIN || r >= 0)
 	svc->dispatch(op);
       else if (r == -ECANCELED)
@@ -115,71 +125,8 @@ protected:
   };
 
   /**
-   * Callback used to make sure we call the PaxosService::_active function
-   * whenever a condition is fulfilled.
-   *
-   * This is used in multiple situations, from waiting for the Paxos to commit
-   * our proposed value, to waiting for the Paxos to become active once an
-   * election is finished.
-   */
-  class C_Active : public Context {
-    PaxosService *svc;
-  public:
-    explicit C_Active(PaxosService *s) : svc(s) {}
-    void finish(int r) {
-      if (r >= 0)
-	svc->_active();
-    }
-  };
-
-  /**
-   * Callback class used to propose the pending value once the proposal_timer
-   * fires up.
-   */
-  class C_Propose : public Context {
-    PaxosService *ps;
-  public:
-    explicit C_Propose(PaxosService *p) : ps(p) { }
-    void finish(int r) {
-      ps->proposal_timer = 0;
-      if (r >= 0)
-	ps->propose_pending();
-      else if (r == -ECANCELED || r == -EAGAIN)
-	return;
-      else
-	assert(0 == "bad return value for C_Propose");
-    }
-  };
-
-  /**
-   * Callback class used to mark us as active once a proposal finishes going
-   * through Paxos.
-   *
-   * We should wake people up *only* *after* we inform the service we
-   * just went active. And we should wake people up only once we finish
-   * going active. This is why we first go active, avoiding to wake up the
-   * wrong people at the wrong time, such as waking up a C_RetryMessage
-   * before waking up a C_Active, thus ending up without a pending value.
-   */
-  class C_Committed : public Context {
-    PaxosService *ps;
-  public:
-    explicit C_Committed(PaxosService *p) : ps(p) { }
-    void finish(int r) {
-      ps->proposing = false;
-      if (r >= 0)
-	ps->_active();
-      else if (r == -ECANCELED || r == -EAGAIN)
-	return;
-      else
-	assert(0 == "bad return value for C_Committed");
-    }
-  };
-  /**
    * @}
    */
-  friend class C_Propose;
-  
 
 public:
   /**
@@ -250,7 +197,7 @@ private:
    * @remarks We only create a pending state we our Monitor is the Leader.
    *
    * @pre Paxos is active
-   * @post have_pending is true iif our Monitor is the Leader and Paxos is
+   * @post have_pending is true if our Monitor is the Leader and Paxos is
    *	   active
    */
   void _active();
@@ -420,6 +367,15 @@ public:
   virtual bool should_propose(double &delay);
 
   /**
+   * force an immediate propose.
+   *
+   * This is meant to be called from prepare_update(op).
+   */
+  void force_immediate_propose() {
+    need_immediate_propose = true;
+  }
+
+  /**
    * @defgroup PaxosService_h_courtesy Courtesy functions
    *
    * Courtesy functions, in case the class implementing this service has
@@ -479,6 +435,15 @@ public:
   virtual void get_health(list<pair<health_status_t,string> >& summary,
 			  list<pair<health_status_t,string> > *detail,
 			  CephContext *cct) const { }
+
+  void encode_health(const health_check_map_t& next,
+		     MonitorDBStore::TransactionRef t) {
+    bufferlist bl;
+    ::encode(next, bl);
+    t->put("health", service_name, bl);
+    mon->log_health(next, health_checks, t);
+  }
+  void load_health();
 
  private:
   /**
@@ -576,10 +541,7 @@ public:
    * @returns true if writeable; false otherwise
    */
   bool is_writeable() {
-    return
-      !is_proposing() &&
-      is_write_ready() &&
-      (paxos->is_active() || paxos->is_updating() || paxos->is_writing());
+    return is_write_ready(); 
   }
 
   /**
@@ -602,7 +564,7 @@ public:
    */
   void wait_for_finished_proposal(MonOpRequestRef op, Context *c) {
     if (op)
-      op->mark_event(service_name + ":wait_for_finished_proposal");
+      op->mark_event_string(service_name + ":wait_for_finished_proposal");
     waiting_for_finished_proposal.push_back(c);
   }
   void wait_for_finished_proposal_ctx(Context *c) {
@@ -617,7 +579,7 @@ public:
    */
   void wait_for_active(MonOpRequestRef op, Context *c) {
     if (op)
-      op->mark_event(service_name + ":wait_for_active");
+      op->mark_event_string(service_name + ":wait_for_active");
 
     if (!is_proposing()) {
       paxos->wait_for_active(op, c);
@@ -644,7 +606,7 @@ public:
      * happens to be readable at that specific point in time.
      */
     if (op)
-      op->mark_event(service_name + ":wait_for_readable");
+      op->mark_event_string(service_name + ":wait_for_readable");
 
     if (is_proposing() ||
 	ver > get_last_committed() ||
@@ -652,7 +614,7 @@ public:
       wait_for_finished_proposal(op, c);
     else {
       if (op)
-        op->mark_event(service_name + ":wait_for_readable/paxos");
+        op->mark_event_string(service_name + ":wait_for_readable/paxos");
 
       paxos->wait_for_readable(op, c);
     }
@@ -670,7 +632,7 @@ public:
    */
   void wait_for_writeable(MonOpRequestRef op, Context *c) {
     if (op)
-      op->mark_event(service_name + ":wait_for_writeable");
+      op->mark_event_string(service_name + ":wait_for_writeable");
 
     if (is_proposing())
       wait_for_finished_proposal(op, c);
@@ -838,6 +800,18 @@ public:
   void put_value(MonitorDBStore::TransactionRef t,
 		 const string& key, bufferlist& bl) {
     t->put(get_service_name(), key, bl);
+  }
+
+  /**
+   * Put integer value @v into the key @p key.
+   *
+   * @param t A transaction to which we will add this put operation
+   * @param key The key to which we will add the value
+   * @param v An integer
+   */
+  void put_value(MonitorDBStore::TransactionRef t,
+		 const string& key, version_t v) {
+    t->put(get_service_name(), key, v);
   }
 
   /**

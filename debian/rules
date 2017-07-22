@@ -5,12 +5,16 @@ export DESTDIR=$(CURDIR)/debian/tmp
 
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
-extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON
+extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_EMBEDDED=OFF
 extraopts += -DWITH_CEPHFS_JAVA=ON
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_SYSCONFDIR=/etc
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+  NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+  extraopts += -DBOOST_J=$(NUMJOBS)
+endif
 
 ifeq ($(DEB_HOST_ARCH), armel)
   # armel supports ARMv4t or above instructions sets.
@@ -18,16 +22,23 @@ ifeq ($(DEB_HOST_ARCH), armel)
   extraopts += -DWITH_ATOMIC_OPS=OFF
 endif
 
+ifneq (,$(filter $(DEB_HOST_ARCH), arm armel armhf arm64 i386 amd64 mips mipsel powerpc ppc64))
+  # beast depends on libboost_context which only support the archs above
+  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=ON
+else
+  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=OFF
+endif
+
 %:
 	dh $@ --buildsystem=cmake --with javahelper,python2,python3,systemd --parallel
 
 override_dh_auto_configure:
+	env | sort
 	dh_auto_configure --buildsystem=cmake -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
 
 override_dh_auto_build:
 	dh_auto_build --buildsystem=cmake
 	cp src/init-radosgw debian/radosgw.init
-	cp src/logrotate.conf debian/ceph.logrotate
 
 override_dh_auto_clean:
 	dh_auto_clean --buildsystem=cmake
@@ -48,14 +59,14 @@ override_dh_installdocs:
 	dh_installdocs -a --all ChangeLog
 
 override_dh_installlogrotate:
-	dh_installlogrotate -pceph-base --name ceph
+	cp src/logrotate.conf debian/ceph-common.logrotate
+	dh_installlogrotate -pceph-common
 
 override_dh_installinit:
 	# dh_installinit is only set up to handle one upstart script
 	# per package, so do this ourselves
 	install -d -m0755 debian/ceph-base/etc/init
 	install -m0644 src/upstart/ceph-all.conf debian/ceph-base/etc/init
-	install -m0644 src/upstart/ceph-create-keys.conf debian/ceph-base/etc/init
 	install -d -m0755 debian/ceph-osd/etc/init
 	install -m0644 src/upstart/ceph-osd*.conf debian/ceph-osd/etc/init
 	install -m0644 src/upstart/ceph-disk.conf debian/ceph-osd/etc/init
@@ -65,6 +76,8 @@ override_dh_installinit:
 	install -m0644 src/upstart/rbdmap.conf debian/ceph-common/etc/init
 	install -d -m0755 debian/ceph-mds/etc/init
 	install -m0644 src/upstart/ceph-mds*.conf debian/ceph-mds/etc/init
+	install -d -m0755 debian/ceph-mgr/etc/init
+	install -m0644 src/upstart/ceph-mgr*.conf debian/ceph-mgr/etc/init
 	install -d -m0755 debian/radosgw/etc/init
 	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
 	install -d -m0755 debian/rbd-mirror/etc/init
@@ -81,12 +94,10 @@ override_dh_installinit:
 	install -d -m0755 debian/ceph-mon/lib/systemd/system
 	install -d -m0755 debian/ceph-osd/lib/systemd/system
 	install -m0644 systemd/ceph-mon@.service debian/ceph-mon/lib/systemd/system
-	install -m0644 systemd/ceph-create-keys@.service debian/ceph-base/lib/systemd/system
 	install -m0644 systemd/ceph-osd@.service debian/ceph-osd/lib/systemd/system
 	install -m0644 systemd/ceph-disk@.service debian/ceph-osd/lib/systemd/system
 	install -m0644 systemd/rbdmap.service debian/ceph-common/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mon/lib/systemd/system/ceph-mon@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-base/lib/systemd/system/ceph-create-keys@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-osd@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-disk@.service
 	install -m0644 systemd/ceph-mon.target debian/ceph-mon/lib/systemd/system
@@ -96,6 +107,16 @@ override_dh_installinit:
 	install -m0644 systemd/ceph-mds@.service debian/ceph-mds/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mds/lib/systemd/system/ceph-mds@.service
 	install -m0644 systemd/ceph-mds.target debian/ceph-mds/lib/systemd/system
+
+	install -d -m0755 debian/ceph-fuse/lib/systemd/system
+	install -m0644 systemd/ceph-fuse@.service debian/ceph-fuse/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-fuse/lib/systemd/system/ceph-fuse@.service
+	install -m0644 systemd/ceph-fuse.target debian/ceph-fuse/lib/systemd/system
+
+	install -d -m0755 debian/ceph-mgr/lib/systemd/system
+	install -m0644 systemd/ceph-mgr@.service debian/ceph-mgr/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mgr/lib/systemd/system/ceph-mgr@.service
+	install -m0644 systemd/ceph-mgr.target debian/ceph-mgr/lib/systemd/system
 
 	install -d -m0755 debian/radosgw/lib/systemd/system
 	install -m0644 systemd/ceph-radosgw@.service debian/radosgw/lib/systemd/system
@@ -110,11 +131,20 @@ override_dh_installinit:
 	dh_installinit -p ceph-base --name ceph --no-start
 	dh_installinit -p radosgw --no-start
 
-override_dh_systemd_start:
+	# NOTE: execute systemd helpers so they pickup dh_install'ed units and targets
+	dh_systemd_enable
 	dh_systemd_start --no-restart-on-upgrade
+
+override_dh_systemd_enable:
+	# systemd enable done as part of dh_installinit
+
+override_dh_systemd_start:
+	# systemd start done as part of dh_installinit
 
 override_dh_strip:
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
+	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
+	dh_strip -pceph-mgr --dbg-package=ceph-mgr-dbg
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
@@ -125,27 +155,26 @@ override_dh_strip:
 	dh_strip -plibrados2 --dbg-package=librados2-dbg
 	dh_strip -plibradosstriper1 --dbg-package=libradosstriper1-dbg
 	dh_strip -plibrbd1 --dbg-package=librbd1-dbg
-	dh_strip -plibcephfs1 --dbg-package=libcephfs1-dbg
+	dh_strip -plibcephfs2 --dbg-package=libcephfs2-dbg
 	dh_strip -plibrgw2 --dbg-package=librgw2-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
 
 override_dh_shlibdeps:
-	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor \
-	  --exclude=python-rados --exclude=python-cephfs --exclude=python-rbd    \
-	  --exclude=python3-rados --exclude=python3-cephfs --exclude=python3-rbd \
+	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor
 
 override_dh_python2:
-	for binding in rados cephfs rbd; do                                \
-	  dh_python2 -p python-$$binding; \
+	for binding in rados cephfs rbd rgw; do \
+	  dh_python2 -p python-$$binding;       \
 	done
 	dh_python2 -p ceph-common
 	dh_python2 -p ceph-base
 	dh_python2 -p ceph-osd
+	dh_python2 -p ceph-mgr
 
 override_dh_python3:
-	for binding in rados cephfs rbd; do                                \
-	  dh_python3 -p python3-$$binding; \
+	for binding in rados cephfs rbd rgw; do \
+	  dh_python3 -p python3-$$binding;      \
 	done
 	dh_python3 -p python3-ceph-argparse
 

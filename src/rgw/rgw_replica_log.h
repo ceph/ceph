@@ -22,8 +22,6 @@
 class RGWRados;
 class CephContext;
 
-using namespace std;
-
 #define META_REPLICA_LOG_OBJ_PREFIX "meta.replicalog."
 #define DATA_REPLICA_LOG_OBJ_PREFIX "data.replicalog."
 
@@ -43,26 +41,26 @@ class RGWReplicaLogger {
 protected:
   CephContext *cct;
   RGWRados *store;
-  int open_ioctx(librados::IoCtx& ctx, const string& pool);
+  int open_ioctx(librados::IoCtx& ctx, const rgw_pool& pool);
 
   explicit RGWReplicaLogger(RGWRados *_store);
 
-  int update_bound(const string& oid, const string& pool,
+  int update_bound(const string& oid, const rgw_pool& pool,
                    const string& daemon_id, const string& marker,
                    const utime_t& time,
                    const list<RGWReplicaItemMarker> *entries,
                    bool need_to_exist);
-  int write_bounds(const string& oid, const string& pool,
+  int write_bounds(const string& oid, const rgw_pool& pool,
                  RGWReplicaBounds& bounds);
-  int delete_bound(const string& oid, const string& pool,
+  int delete_bound(const string& oid, const rgw_pool& pool,
                    const string& daemon_id, bool purge_all,
                    bool need_to_exist);
-  int get_bounds(const string& oid, const string& pool,
+  int get_bounds(const string& oid, const rgw_pool& pool,
                  RGWReplicaBounds& bounds);
 };
 
 class RGWReplicaObjectLogger : private RGWReplicaLogger {
-  string pool;
+  rgw_pool pool;
   string prefix;
 
   void get_shard_oid(int id, string& oid) {
@@ -73,7 +71,7 @@ class RGWReplicaObjectLogger : private RGWReplicaLogger {
 
 public:
   RGWReplicaObjectLogger(RGWRados *_store,
-                const string& _pool,
+                const rgw_pool& _pool,
                 const string& _prefix);
 
   int create_log_objects(int shards);
@@ -99,7 +97,7 @@ public:
 };
 
 class RGWReplicaBucketLogger : private RGWReplicaLogger {
-  string pool;
+  rgw_pool pool;
   string prefix;
 
   string obj_name(const rgw_bucket& bucket, int shard_id, bool index_by_instance);

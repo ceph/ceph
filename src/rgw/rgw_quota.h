@@ -15,10 +15,10 @@
 #ifndef CEPH_RGW_QUOTA_H
 #define CEPH_RGW_QUOTA_H
 
-
 #include "include/utime.h"
-#include "include/atomic.h"
 #include "common/lru_map.h"
+
+#include <atomic>
 
 static inline int64_t rgw_rounded_kb(int64_t bytes)
 {
@@ -102,6 +102,11 @@ public:
   virtual int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                           RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
 			  uint64_t num_objs, uint64_t size) = 0;
+
+  virtual int check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
+				  const rgw_user& bucket_owner, const rgw_bucket& bucket,
+				  RGWQuotaInfo& bucket_quota, uint64_t num_objs, bool& need_resharding,
+                                  uint32_t *suggested_num_shards) = 0;
 
   virtual void update_stats(const rgw_user& bucket_owner, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) = 0;
 

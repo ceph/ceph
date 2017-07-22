@@ -51,7 +51,7 @@ If there is no action given, the action will default to --lookup.\n\
 \n\
 EXAMPLES\n\
 $ ceph-conf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr'\n\
-Find out what the value of 'mon add' is for monitor 0.\n\
+Find out what the value of 'mon addr' is for monitor 0.\n\
 \n\
 $ ceph-conf -l mon\n\
 List sections beginning with 'mon'.\n\
@@ -153,6 +153,12 @@ int main(int argc, const char **argv)
 
   global_pre_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
 		  CINIT_FLAG_NO_DAEMON_ACTIONS);
+  std::unique_ptr<CephContext,
+		  std::function<void(CephContext*)> > cct_deleter{
+      g_ceph_context,
+      [](CephContext *p) {p->put();}
+  };
+
   g_conf->apply_changes(NULL);
   g_conf->complain_about_parse_errors(g_ceph_context);
 

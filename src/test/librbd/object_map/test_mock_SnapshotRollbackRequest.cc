@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -24,37 +24,34 @@ public:
   void expect_read_map(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  read(ObjectMap::object_map_name(ictx->id, snap_id),
+                  read(ObjectMap<>::object_map_name(ictx->id, snap_id),
                        0, 0, _)).WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  read(ObjectMap::object_map_name(ictx->id, snap_id),
+                  read(ObjectMap<>::object_map_name(ictx->id, snap_id),
                        0, 0, _)).WillOnce(DoDefault());
     }
   }
 
   void expect_write_map(librbd::ImageCtx *ictx, int r) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP), _,
+                exec(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP), _,
 		     StrEq("lock"), StrEq("assert_locked"), _, _, _))
                   .WillOnce(DoDefault());
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   write_full(
-                    ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP), _, _))
+                    ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP), _, _))
                   .WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   write_full(
-                    ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP), _, _))
+                    ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP), _, _))
                   .WillOnce(DoDefault());
     }
   }
 
   void expect_invalidate(librbd::ImageCtx *ictx, uint32_t times) {
-    EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
-                  .Times(0);
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                 exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                   .Times(times)
@@ -107,7 +104,9 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, ReadMapError) {
     ASSERT_EQ(0, ictx->get_flags(snap_id, &flags));
     ASSERT_NE(0U, flags & RBD_FLAG_OBJECT_MAP_INVALID);
   }
-  ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
+  bool flags_set;
+  ASSERT_EQ(0, ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
+  ASSERT_TRUE(flags_set);
   expect_unlock_exclusive_lock(*ictx);
 }
 
@@ -136,7 +135,9 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, WriteMapError) {
     ASSERT_EQ(0, ictx->get_flags(snap_id, &flags));
     ASSERT_EQ(0U, flags & RBD_FLAG_OBJECT_MAP_INVALID);
   }
-  ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
+  bool flags_set;
+  ASSERT_EQ(0, ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
+  ASSERT_TRUE(flags_set);
   expect_unlock_exclusive_lock(*ictx);
 }
 

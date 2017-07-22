@@ -23,11 +23,13 @@ expect 'ceph osd pool create test 256 256' 0
 expect 'ceph osd pool mksnap test snapshot' 0
 expect 'ceph osd pool rmsnap test snapshot' 0
 
+expect 'rbd --pool=test pool init' 0
 expect 'rbd --pool=test --rbd_validate_pool=false create --size=102400 image' 0
 expect 'rbd --pool=test snap create image@snapshot' 22
 
 expect 'ceph osd pool delete test test --yes-i-really-really-mean-it' 0
 expect 'ceph osd pool create test 256 256' 0
+expect 'rbd --pool=test pool init' 0
 expect 'rbd --pool=test create --size=102400 image' 0
 expect 'rbd --pool=test snap create image@snapshot' 0
 expect 'rbd --pool=test snap ls image' 0

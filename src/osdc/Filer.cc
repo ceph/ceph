@@ -43,7 +43,7 @@ public:
   ceph::real_time mtime;
   C_Probe(Filer *f, Probe *p, object_t o) : filer(f), probe(p), oid(o),
 					    size(0) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r == -ENOENT) {
       r = 0;
       assert(size == 0);
@@ -302,7 +302,7 @@ struct PurgeRange {
   int flags;
   Context *oncommit;
   int uncommitted;
-  PurgeRange(inodeno_t i, file_layout_t& l, const SnapContext& sc,
+  PurgeRange(inodeno_t i, const file_layout_t& l, const SnapContext& sc,
 	     uint64_t fo, uint64_t no, ceph::real_time t, int fl,
 	     Context *fin)
     : ino(i), layout(l), snapc(sc), first(fo), num(no), mtime(t), flags(fl),
@@ -310,7 +310,7 @@ struct PurgeRange {
 };
 
 int Filer::purge_range(inodeno_t ino,
-		       file_layout_t *layout,
+		       const file_layout_t *layout,
 		       const SnapContext& snapc,
 		       uint64_t first_obj, uint64_t num_obj,
 		       ceph::real_time mtime,
@@ -323,7 +323,7 @@ int Filer::purge_range(inodeno_t ino,
   if (num_obj == 1) {
     object_t oid = file_object_t(ino, first_obj);
     object_locator_t oloc = OSDMap::file_to_object_locator(*layout);
-    objecter->remove(oid, oloc, snapc, mtime, flags, NULL, oncommit);
+    objecter->remove(oid, oloc, snapc, mtime, flags, oncommit);
     return 0;
   }
 
@@ -338,7 +338,7 @@ struct C_PurgeRange : public Context {
   Filer *filer;
   PurgeRange *pr;
   C_PurgeRange(Filer *f, PurgeRange *p) : filer(f), pr(p) {}
-  void finish(int r) {
+  void finish(int r) override {
     filer->_do_purge_range(pr, 1);
   }
 };
@@ -373,7 +373,112 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
   // Issue objecter ops outside pr->lock to avoid lock dependency loop
   for (const auto& oid : remove_oids) {
     object_locator_t oloc = OSDMap::file_to_object_locator(pr->layout);
-    objecter->remove(oid, oloc, pr->snapc, pr->mtime, pr->flags, NULL,
+    objecter->remove(oid, oloc, pr->snapc, pr->mtime, pr->flags,
 		     new C_OnFinisher(new C_PurgeRange(this, pr), finisher));
+  }
+}
+
+// -----------------------
+struct TruncRange {
+  std::mutex lock;
+  typedef std::lock_guard<std::mutex> lock_guard;
+  typedef std::unique_lock<std::mutex> unique_lock;
+  inodeno_t ino;
+  file_layout_t layout;
+  SnapContext snapc;
+  ceph::real_time mtime;
+  int flags;
+  Context *oncommit;
+  int uncommitted;
+  uint64_t offset;
+  uint64_t length;
+  uint32_t truncate_seq;
+  TruncRange(inodeno_t i, const file_layout_t& l, const SnapContext& sc,
+	     ceph::real_time t, int fl, Context *fin,
+	     uint64_t off, uint64_t len, uint32_t ts)
+    : ino(i), layout(l), snapc(sc), mtime(t), flags(fl), oncommit(fin),
+      uncommitted(0), offset(off), length(len), truncate_seq(ts) {}
+};
+
+void Filer::truncate(inodeno_t ino,
+		     file_layout_t *layout,
+		     const SnapContext& snapc,
+		     uint64_t offset,
+		     uint64_t len,
+		     __u32 truncate_seq,
+		     ceph::real_time mtime,
+		     int flags,
+		     Context *oncommit)
+{
+  uint64_t period = layout->get_period();
+  uint64_t num_objs = Striper::get_num_objects(*layout, len + (offset % period));
+  if (num_objs == 1) {
+    vector<ObjectExtent> extents;
+    Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
+    ops[0].op.extent.truncate_seq = truncate_seq;
+    ops[0].op.extent.truncate_size = extents[0].offset;
+    objecter->_modify(extents[0].oid, extents[0].oloc, ops, mtime, snapc,
+		      flags, oncommit);
+    return;
+  }
+
+  if (len > 0 && (offset + len) % period)
+    len += period - ((offset + len) % period);
+
+  TruncRange *tr = new TruncRange(ino, *layout, snapc, mtime, flags, oncommit,
+				  offset, len, truncate_seq);
+  _do_truncate_range(tr, 0);
+}
+
+struct C_TruncRange : public Context {
+  Filer *filer;
+  TruncRange *tr;
+  C_TruncRange(Filer *f, TruncRange *t) : filer(f), tr(t) {}
+  void finish(int r) override {
+    filer->_do_truncate_range(tr, 1);
+  }
+};
+
+void Filer::_do_truncate_range(TruncRange *tr, int fin)
+{
+  TruncRange::unique_lock trl(tr->lock);
+  tr->uncommitted -= fin;
+  ldout(cct, 10) << "_do_truncate_range " << tr->ino << " objects " << tr->offset
+		 << "~" << tr->length << " uncommitted " << tr->uncommitted
+		 << dendl;
+
+  if (tr->length == 0 && tr->uncommitted == 0) {
+    tr->oncommit->complete(0);
+    trl.unlock();
+    delete tr;
+    return;
+  }
+
+  vector<ObjectExtent> extents;
+
+  int max = cct->_conf->filer_max_truncate_ops - tr->uncommitted;
+  if (max > 0 && tr->length > 0) {
+    uint64_t len = tr->layout.get_period() * max;
+    if (len > tr->length)
+      len = tr->length;
+
+    uint64_t offset = tr->offset + tr->length - len;
+    Striper::file_to_extents(cct, tr->ino, &tr->layout, offset, len, 0, extents);
+    tr->uncommitted += extents.size();
+    tr->length -= len;
+  }
+
+  trl.unlock();
+
+  // Issue objecter ops outside tr->lock to avoid lock dependency loop
+  for (const auto& p : extents) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
+    ops[0].op.extent.truncate_size = p.offset;
+    ops[0].op.extent.truncate_seq = tr->truncate_seq;
+    objecter->_modify(p.oid, p.oloc, ops, tr->mtime, tr->snapc, tr->flags,
+		      new C_OnFinisher(new C_TruncRange(this, tr), finisher));
   }
 }

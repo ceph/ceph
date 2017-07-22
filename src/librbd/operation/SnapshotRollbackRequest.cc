@@ -5,11 +5,11 @@
 #include "include/rados/librados.hpp"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "osdc/Striper.h"
 #include <boost/lambda/bind.hpp>
@@ -23,7 +23,7 @@ namespace librbd {
 namespace operation {
 
 using util::create_context_callback;
-using util::create_rados_safe_callback;
+using util::create_rados_callback;
 
 namespace {
 
@@ -36,7 +36,7 @@ public:
       m_object_num(object_num) {
   }
 
-  virtual int send() {
+  int send() override {
     I &image_ctx = this->m_image_ctx;
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << "C_RollbackObject: " << __func__ << ": object_num="
@@ -48,7 +48,7 @@ public:
     op.selfmanaged_snap_rollback(m_snap_id);
 
     librados::AioCompletion *rados_completion =
-      util::create_rados_safe_callback(this);
+      util::create_rados_callback(this);
     image_ctx.data_ctx.aio_operate(oid, rados_completion, &op);
     rados_completion->release();
     return 0;
@@ -64,20 +64,21 @@ private:
 template <typename I>
 SnapshotRollbackRequest<I>::SnapshotRollbackRequest(I &image_ctx,
                                                     Context *on_finish,
+						    const cls::rbd::SnapshotNamespace &snap_namespace,
                                                     const std::string &snap_name,
                                                     uint64_t snap_id,
                                                     uint64_t snap_size,
                                                     ProgressContext &prog_ctx)
-  : Request<I>(image_ctx, on_finish), m_snap_name(snap_name),
-    m_snap_id(snap_id), m_snap_size(snap_size), m_prog_ctx(prog_ctx),
-    m_object_map(nullptr) {
+  : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
+    m_snap_name(snap_name), m_snap_id(snap_id),
+    m_snap_size(snap_size), m_prog_ctx(prog_ctx), m_object_map(nullptr) {
 }
 
 template <typename I>
 SnapshotRollbackRequest<I>::~SnapshotRollbackRequest() {
   I &image_ctx = this->m_image_ctx;
   if (m_blocking_writes) {
-    image_ctx.aio_work_queue->unblock_writes();
+    image_ctx.io_work_queue->unblock_writes();
   }
   delete m_object_map;
 }
@@ -94,7 +95,7 @@ void SnapshotRollbackRequest<I>::send_block_writes() {
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   m_blocking_writes = true;
-  image_ctx.aio_work_queue->block_writes(create_context_callback<
+  image_ctx.io_work_queue->block_writes(create_context_callback<
     SnapshotRollbackRequest<I>,
     &SnapshotRollbackRequest<I>::handle_block_writes>(this));
 }
@@ -286,7 +287,7 @@ Context *SnapshotRollbackRequest<I>::send_invalidate_cache() {
   Context *ctx = create_context_callback<
     SnapshotRollbackRequest<I>,
     &SnapshotRollbackRequest<I>::handle_invalidate_cache>(this);
-  image_ctx.invalidate_cache(ctx);
+  image_ctx.invalidate_cache(true, ctx);
   return nullptr;
 }
 

@@ -39,7 +39,7 @@ class MMDSCacheRejoin : public Message {
     case OP_WEAK: return "weak";
     case OP_STRONG: return "strong";
     case OP_ACK: return "ack";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -203,11 +203,11 @@ class MMDSCacheRejoin : public Message {
     Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(o) {}
 private:
-  ~MMDSCacheRejoin() {}
+  ~MMDSCacheRejoin() override {}
 
 public:
-  const char *get_type_name() const { return "cache_rejoin"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "cache_rejoin"; }
+  void print(ostream& out) const override {
     out << "cache_rejoin " << get_opname(op);
   }
 
@@ -285,7 +285,7 @@ public:
   }
 
   // -- encoding --
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(op, payload);
     ::encode(strong_inodes, payload);
     ::encode(inode_base, payload);
@@ -307,7 +307,7 @@ public:
     ::encode(authpinned_dentries, payload);
     ::encode(xlocked_dentries, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(strong_inodes, p);

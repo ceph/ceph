@@ -17,23 +17,17 @@
 #ifndef SUB_PROCESS_H
 #define SUB_PROCESS_H
 
-#include <sys/types.h>
 #include <sys/wait.h>
-
-#include <signal.h>
-#include <errno.h>
 #include <stdarg.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <signal.h>
-
 #include <sstream>
 #include <vector>
 #include <iostream>
-
 #include <include/assert.h>
 #include <common/errno.h>
+#if defined(__FreeBSD__)
+#include <sys/types.h>
+#include <signal.h>
+#endif
 
 /**
  * SubProcess:
@@ -116,7 +110,7 @@ public:
 		  int timeout = 0, int sigkill = SIGKILL);
 
 protected:
-  virtual void exec();
+  void exec() override;
 
 private:
   int timeout;
@@ -309,7 +303,7 @@ inline int SubProcess::spawn() {
     }
 
     exec();
-    assert(0); // Never reached
+    ceph_abort(); // Never reached
   }
 
   ret = -errno;
@@ -391,7 +385,7 @@ inline void SubProcessTimed::exec() {
 
   if (timeout <= 0) {
     SubProcess::exec();
-    assert(0); // Never reached
+    ceph_abort(); // Never reached
   }
 
   sigset_t mask, oldmask;
@@ -440,7 +434,7 @@ inline void SubProcessTimed::exec() {
     }
     (void)setpgid(0, 0); // Become process group leader.
     SubProcess::exec();
-    assert(0); // Never reached
+    ceph_abort(); // Never reached
   }
 
   // Parent

@@ -41,11 +41,11 @@ static void usage(ostream &out)
   out << "  get_command_descriptions --pull585\n";
 }
 
-static void json_print(const MonCommand *mon_commands, int size)
+static void json_print(const std::vector<MonCommand> &mon_commands)
 {
   bufferlist rdata;
   Formatter *f = Formatter::create("json");
-  Monitor::format_command_descriptions(mon_commands, size, f, &rdata);
+  Monitor::format_command_descriptions(mon_commands, f, &rdata);
   delete f;
   string data(rdata.c_str(), rdata.length());
   cout << data << std::endl;
@@ -56,22 +56,32 @@ static void all()
 #undef FLAG
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
-  MonCommand mon_commands[] = {
+  std::vector<MonCommand> mon_commands = {
 #define FLAG(f) (MonCommand::FLAG_##f)
 #define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
     {parsesig, helptext, modulename, req_perms, avail, 0},
 #define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
     {parsesig, helptext, modulename, req_perms, avail, flags},
 #include <mon/MonCommands.h>
-  };
+#undef COMMAND
+#undef COMMAND_WITH_FLAG
 
-  json_print(mon_commands, ARRAY_SIZE(mon_commands));
+#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
+  {parsesig, helptext, modulename, req_perms, avail, FLAG(MGR)},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
+  {parsesig, helptext, modulename, req_perms, avail, flags | FLAG(MGR)},
+#include <mgr/MgrCommands.h>
+ #undef COMMAND
+#undef COMMAND_WITH_FLAG
+ };
+
+  json_print(mon_commands);
 }
 
 // syntax error https://github.com/ceph/ceph/pull/585
 static void pull585()
 {
-  MonCommand mon_commands[] = {
+  std::vector<MonCommand> mon_commands = {
     { "osd pool create "		       
       "name=pool,type=CephPoolname " 
       "name=pg_num,type=CephInt,range=0 " 
@@ -80,14 +90,15 @@ static void pull585()
       "create pool", "osd", "rw", "cli,rest" }
   };
 
-  json_print(mon_commands, ARRAY_SIZE(mon_commands));
+  json_print(mon_commands);
 }
 
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   if (args.empty()) {

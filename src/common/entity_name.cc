@@ -13,11 +13,8 @@
  */
 
 #include "common/entity_name.h"
-#include "include/msgr.h"
 
-#include <errno.h>
 #include <sstream>
-#include <string>
 
 using std::string;
 
@@ -33,6 +30,7 @@ static const str_to_entity_type_t STR_TO_ENTITY_TYPE[] = {
   { CEPH_ENTITY_TYPE_MON, "mon" },
   { CEPH_ENTITY_TYPE_OSD, "osd" },
   { CEPH_ENTITY_TYPE_MDS, "mds" },
+  { CEPH_ENTITY_TYPE_MGR, "mgr" },
   { CEPH_ENTITY_TYPE_CLIENT, "client" },
 };
 
@@ -57,9 +55,9 @@ to_cstr() const
 bool EntityName::
 from_str(const string& s)
 {
-  int pos = s.find('.');
+  size_t pos = s.find('.');
 
-  if (pos < 0)
+  if (pos == string::npos)
     return false;
  
   string type_ = s.substr(0, pos);
@@ -75,9 +73,13 @@ set(uint32_t type_, const std::string &id_)
   type = type_;
   id = id_;
 
-  std::ostringstream oss;
-  oss << ceph_entity_type_name(type_) << "." << id_;
-  type_id = oss.str();
+  if (type) {
+    std::ostringstream oss;
+    oss << ceph_entity_type_name(type_) << "." << id_;
+    type_id = oss.str();
+  } else {
+    type_id.clear();
+  }
 }
 
 int EntityName::

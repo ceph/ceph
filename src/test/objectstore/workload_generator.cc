@@ -31,6 +31,8 @@
 
 #include "TestObjectStoreState.h"
 
+#define dout_context g_ceph_context
+
 static const char *our_name = NULL;
 void usage();
 
@@ -58,7 +60,7 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
 {
   int err = 0;
 
-  m_nr_runs.set(0);
+  m_nr_runs = 0;
 
   init_args(args);
   dout(0) << "data            = " << g_conf->osd_data << dendl;
@@ -350,11 +352,11 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
 					      coll_entry_t *entry,
 					      C_StatState *stat)
 {  
-  m_nr_runs.set(0);
+  m_nr_runs = 0;
   entry->m_osr.flush();
   vector<ghobject_t> ls;
   m_store->collection_list(entry->m_coll, ghobject_t(), ghobject_t::get_max(),
-			   true, INT_MAX, &ls, NULL);
+			   INT_MAX, &ls, NULL);
   dout(2) << __func__ << " coll " << entry->m_coll
       << " (" << ls.size() << " objects)" << dendl;
 
@@ -387,7 +389,7 @@ TestObjectStoreState::coll_entry_t
 
 void WorkloadGenerator::do_stats()
 {
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now();
   m_stats_lock.Lock();
 
   utime_t duration = (now - m_stats_begin);
@@ -412,7 +414,7 @@ void WorkloadGenerator::run()
   int ops_run = 0;
 
   utime_t stats_interval(m_stats_show_secs, 0);
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now();
   utime_t stats_time = now;
   m_stats_begin = now;
 
@@ -429,7 +431,7 @@ void WorkloadGenerator::run()
 
     dout(5) << __func__
         << " m_finished_lock is-locked: " << m_finished_lock.is_locked()
-        << " in-flight: " << m_in_flight.read()
+        << " in-flight: " << m_in_flight.load()
         << dendl;
 
     wait_for_ready();
@@ -441,7 +443,7 @@ void WorkloadGenerator::run()
 
 
     if (m_do_stats) {
-      utime_t now = ceph_clock_now(NULL);
+      utime_t now = ceph_clock_now();
       utime_t elapsed = now - stats_time;
       if (elapsed >= stats_interval) {
 	do_stats();
@@ -500,7 +502,7 @@ queue_tx:
   } while (true);
 
   dout(2) << __func__ << " waiting for "
-	  << m_in_flight.read() << " in-flight transactions" << dendl;
+	  << m_in_flight.load() << " in-flight transactions" << dendl;
 
   wait_for_done();
 
@@ -568,9 +570,9 @@ int main(int argc, const char *argv[])
 //  def_args.push_back("workload_gen_dir/journal");
   argv_to_vec(argc, argv, args);
 
-  global_init(&def_args, args,
-      CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  auto cct = global_init(&def_args, args,
+			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 

@@ -77,6 +77,14 @@ void print_ceph_msg(CephContext *cct, const char *tag, Message *m)
   }
 }
 
+#undef dout_prefix
+#define dout_prefix conn_prefix(_dout)
+ostream& XioConnection::conn_prefix(std::ostream *_dout) {
+  return *_dout << "-- " << get_messenger()->get_myinst().addr << " >> " << peer_addr
+                << " peer=" << peer.name.type_str()
+                << " conn=" << conn << " sess=" << session << " ";
+}
+
 XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
 			     const entity_inst_t& _peer) :
   Connection(m->cct, m),
@@ -136,8 +144,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
   xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES,
              &bytes_opt, sizeof(bytes_opt));
 
-  ldout(m->cct,4) << "Peer type: " << peer.name.type_str() <<
-        " throttle_msgs: " << xopt << " throttle_bytes: " << bytes_opt << dendl;
+  ldout(m->cct,4) << "throttle_msgs: " << xopt << " throttle_bytes: " << bytes_opt << dendl;
 
   /* XXXX fake features, aieee! */
   set_features(XIO_ALL_FEATURES);
@@ -186,7 +193,7 @@ void XioConnection::send_keepalive_or_ack_internal(bool ack, const utime_t *tp)
     xcmd->get_bl_ref().append(CEPH_MSGR_TAG_KEEPALIVE2_ACK);
     xcmd->get_bl_ref().append((char*)&ts, sizeof(ts));
   } else if (has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
-    utime_t t = ceph_clock_now(msgr->cct);
+    utime_t t = ceph_clock_now();
     t.encode_timeval(&ts);
     xcmd->get_bl_ref().append(CEPH_MSGR_TAG_KEEPALIVE2);
     xcmd->get_bl_ref().append((char*)&ts, sizeof(ts));
@@ -281,7 +288,6 @@ int XioConnection::handle_data_msg(struct xio_session *session,
       << " iov_base " << tmsg->in.header.iov_base
       << " iov_len " << (int) tmsg->in.header.iov_len
       << " nents " << tmsg->in.pdata_iov.nents
-      << " conn " << conn << " sess " << session
       << " sn " << tmsg->sn << dendl;
     assert(session == this->session);
     in_seq.set_count(msg_cnt.msg_cnt);
@@ -305,7 +311,7 @@ int XioConnection::handle_data_msg(struct xio_session *session,
   ceph_msg_footer footer;
   buffer::list payload, middle, data;
 
-  const utime_t recv_stamp = ceph_clock_now(msgr->cct);
+  const utime_t recv_stamp = ceph_clock_now();
 
   ldout(msgr->cct,4) << __func__ << " " << "msg_seq.size()="  << msg_seq.size() <<
     dendl;
@@ -427,11 +433,10 @@ int XioConnection::handle_data_msg(struct xio_session *session,
   }
 
   /* update connection timestamp */
-  recv.set(tmsg->timestamp);
+  recv = tmsg->timestamp;
 
-  Message *m =
-    decode_message(msgr->cct, msgr->crcflags, header, footer, payload, middle,
-		   data);
+  Message *m = decode_message(msgr->cct, msgr->crcflags, header, footer,
+                              payload, middle, data, this);
 
   if (m) {
     /* completion */
@@ -446,7 +451,7 @@ int XioConnection::handle_data_msg(struct xio_session *session,
 
     /* update timestamps */
     m->set_recv_stamp(recv_stamp);
-    m->set_recv_complete_stamp(ceph_clock_now(msgr->cct));
+    m->set_recv_complete_stamp(ceph_clock_now());
     m->set_seq(header.seq);
 
     /* MP-SAFE */
@@ -505,7 +510,7 @@ int XioConnection::on_msg(struct xio_session *session,
 
   case CEPH_MSGR_TAG_KEEPALIVE:
     ldout(msgr->cct, 20) << __func__ << " got KEEPALIVE" << dendl;
-    set_last_keepalive(ceph_clock_now(nullptr));
+    set_last_keepalive(ceph_clock_now());
     break;
 
   case CEPH_MSGR_TAG_KEEPALIVE2:
@@ -518,7 +523,7 @@ int XioConnection::on_msg(struct xio_session *session,
       utime_t kp_t = utime_t(*t);
       ldout(msgr->cct, 20) << __func__ << " got KEEPALIVE2 with timestamp" << kp_t << dendl;
       send_keepalive_or_ack(true, &kp_t);
-      set_last_keepalive(ceph_clock_now(nullptr));
+      set_last_keepalive(ceph_clock_now());
     }
 
     break;
@@ -561,7 +566,7 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
   } /* trace ctr */
 
   ldout(msgr->cct,11) << "on_msg_delivered xcon: " << xsend->xcon <<
-    " session: " << session << " msg: " << req << " sn: " << req->sn << dendl;
+    " msg: " << req << " sn: " << req->sn << dendl;
 
   XioMsg *xmsg = dynamic_cast<XioMsg*>(xsend);
   if (xmsg) {
@@ -578,8 +583,8 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
     if ((send_ctr <= uint32_t(xio_qdepth_low_mark())) &&
 	(1 /* XXX memory <= memory low-water mark */))  {
       cstate.state_up_ready(XioConnection::CState::OP_FLAG_NONE);
-      ldout(msgr->cct,2) << "on_msg_delivered xcon: " << xsend->xcon <<
-        " session: " << session << " up_ready from flow_controlled" << dendl;
+      ldout(msgr->cct,2) << "on_msg_delivered xcon: " << xsend->xcon
+        << " up_ready from flow_controlled" << dendl;
     }
   }
 
@@ -781,8 +786,8 @@ int XioConnection::CState::state_up_ready(uint32_t flags)
 
   xcon->flush_out_queues(flags|CState::OP_FLAG_LOCKED);
 
-  session_state.set(UP);
-  startup_state.set(READY);
+  session_state = session_states::UP;
+  startup_state = session_startup_states::READY;
 
   if (! (flags & CState::OP_FLAG_LOCKED))
     pthread_spin_unlock(&xcon->sp);
@@ -792,8 +797,8 @@ int XioConnection::CState::state_up_ready(uint32_t flags)
 
 int XioConnection::CState::state_discon()
 {
-  session_state.set(DISCONNECTED);
-  startup_state.set(IDLE);
+  session_state = session_states::DISCONNECTED;
+  startup_state = session_startup_states::IDLE;
 
   return 0;
 }
@@ -803,7 +808,7 @@ int XioConnection::CState::state_flow_controlled(uint32_t flags)
   if (! (flags & OP_FLAG_LOCKED))
     pthread_spin_lock(&xcon->sp);
 
-  session_state.set(FLOW_CONTROLLED);
+  session_state = session_states::FLOW_CONTROLLED;
 
   if (! (flags & OP_FLAG_LOCKED))
     pthread_spin_unlock(&xcon->sp);
@@ -817,8 +822,8 @@ int XioConnection::CState::state_fail(Message* m, uint32_t flags)
     pthread_spin_lock(&xcon->sp);
 
   // advance to state FAIL, drop queued, msgs, adjust LRU
-  session_state.set(DISCONNECTED);
-  startup_state.set(FAIL);
+  session_state = session_states::DISCONNECTED);
+  startup_state = session_startup_states::FAIL);
 
   xcon->discard_out_queues(flags|OP_FLAG_LOCKED);
   xcon->adjust_clru(flags|OP_FLAG_LOCKED|OP_FLAG_LRU);
@@ -849,7 +854,7 @@ int XioLoopbackConnection::send_message(Message *m)
 
 void XioLoopbackConnection::send_keepalive()
 {
-  utime_t t = ceph_clock_now(nullptr);
+  utime_t t = ceph_clock_now();
   set_last_keepalive(t);
   set_last_keepalive_ack(t);
 }

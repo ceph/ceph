@@ -10,7 +10,7 @@ Synopsis
 ========
 
 | **ceph-osd** -i *osdnum* [ --osd-data *datapath* ] [ --osd-journal
-  *journal* ] [ --mkfs ] [ --mkjournal ] [ --mkkey ]
+  *journal* ] [ --mkfs ] [ --mkjournal ] [--flush-journal] [--check-allows-journal] [--check-wants-journal] [--check-needs-journal] [ --mkkey ]
 
 
 Description
@@ -20,7 +20,7 @@ Description
 system. It is responsible for storing objects on a local file system
 and providing access to them over the network.
 
-The datapath argument should be a directory on a btrfs file system
+The datapath argument should be a directory on a xfs file system
 where the object data resides. The journal is optional, and is only
 useful performance-wise when it resides on a different disk than
 datapath with low latency (ideally, an NVRAM device).
@@ -56,6 +56,18 @@ Options
 .. option:: --osd-journal journal
 
    Journal updates to *journal*.
+
+.. option:: --check-wants-journal
+
+   Check whether a journal is desired.
+
+.. option:: --check-allows-journal
+
+   Check whether a journal is allowed.
+
+.. option:: --check-needs-journal
+
+   Check whether a journal is required.
 
 .. option:: --mkfs
 

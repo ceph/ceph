@@ -40,14 +40,10 @@ function TEST_osd_pool_get_set() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    ceph osd pool create $TEST_POOL 8
 
     local flag
-    for flag in hashpspool nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
-        if [ $flag = hashpspool ]; then
-	    ceph osd dump | grep 'pool ' | grep $flag || return 1
-        else
-	    ! ceph osd dump | grep 'pool ' | grep $flag || return 1
-        fi
+    for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
 	ceph osd pool set $TEST_POOL $flag 0 || return 1
 	! ceph osd dump | grep 'pool ' | grep $flag || return 1
 	ceph osd pool set $TEST_POOL $flag 1 || return 1
@@ -127,7 +123,7 @@ function TEST_mon_add_to_single_mon() {
     # wait for the quorum
     timeout 120 ceph -s > /dev/null || return 1
     local num_mons
-    num_mons=$(ceph mon dump --format=xml 2>/dev/null | $XMLSTARLET sel -t -v "count(//mons/mon)") || return 1
+    num_mons=$(ceph mon dump --format=json 2>/dev/null | jq ".mons | length") || return 1
     [ $num_mons == 2 ] || return 1
     # no reason to take more than 120 secs to get this submitted
     timeout 120 ceph mon add b $MONB || return 1
@@ -152,6 +148,86 @@ function TEST_no_segfault_for_bad_keyring() {
     # 139(11|128) means segfault and core dumped
     [ $? -eq 139 ] && return 1
     CEPH_ARGS=$CEPH_ARGS_orig
+    teardown $dir || return 1
+}
+
+function TEST_mon_features() {
+    local dir=$1
+    setup $dir || return 1
+
+    fsid=$(uuidgen)
+    MONA=127.0.0.1:7127 # git grep '\<7127\>' ; there must be only one
+    MONB=127.0.0.1:7128 # git grep '\<7128\>' ; there must be only one
+    MONC=127.0.0.1:7129 # git grep '\<7129\>' ; there must be only one
+    CEPH_ARGS_orig=$CEPH_ARGS
+    CEPH_ARGS="--fsid=$fsid --auth-supported=none "
+    CEPH_ARGS+="--mon-initial-members=a,b,c "
+    CEPH_ARGS+="--mon-host=$MONA,$MONB,$MONC "
+    CEPH_ARGS+="--mon-debug-no-initial-persistent-features "
+    CEPH_ARGS+="--mon-debug-no-require-luminous "
+
+    run_mon $dir a --public-addr $MONA || return 1
+    run_mon $dir b --public-addr $MONB || return 1
+    timeout 120 ceph -s > /dev/null || return 1
+
+    # expect monmap to contain 3 monitors (a, b, and c)
+    jqinput="$(ceph mon_status --format=json 2>/dev/null)"
+    jq_success "$jqinput" '.monmap.mons | length == 3' || return 1
+    # quorum contains two monitors
+    jq_success "$jqinput" '.quorum | length == 2' || return 1
+    # quorum's monitor features contain kraken and luminous
+    jqfilter='.features.quorum_mon[]|select(. == "kraken")'
+    jq_success "$jqinput" "$jqfilter" "kraken" || return 1
+    jqfilter='.features.quorum_mon[]|select(. == "luminous")'
+    jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+
+    # monmap must have no persistent features set, because we
+    # don't currently have a quorum made out of all the monitors
+    # in the monmap.
+    jqfilter='.monmap.features.persistent | length == 0'
+    jq_success "$jqinput" "$jqfilter" || return 1
+
+    # nor do we have any optional features, for that matter.
+    jqfilter='.monmap.features.optional | length == 0'
+    jq_success "$jqinput" "$jqfilter" || return 1
+
+    # validate 'mon feature ls'
+
+    jqinput="$(ceph mon feature ls --format=json 2>/dev/null)"
+    # 'kraken' and 'luminous' are supported
+    jqfilter='.all.supported[] | select(. == "kraken")'
+    jq_success "$jqinput" "$jqfilter" "kraken" || return 1
+    jqfilter='.all.supported[] | select(. == "luminous")'
+    jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+
+    # start third monitor
+    run_mon $dir c --public-addr $MONC || return 1
+
+    wait_for_quorum 300 3 || return 1
+
+    timeout 300 ceph -s > /dev/null || return 1
+
+    jqinput="$(ceph mon_status --format=json 2>/dev/null)"
+    # expect quorum to have all three monitors
+    jqfilter='.quorum | length == 3'
+    jq_success "$jqinput" "$jqfilter" || return 1
+    # quorum's monitor features contain kraken and luminous
+    jqfilter='.features.quorum_mon[]|select(. == "kraken")'
+    jq_success "$jqinput" "$jqfilter" "kraken" || return 1
+    jqfilter='.features.quorum_mon[]|select(. == "luminous")'
+    jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+
+    # monmap must have no both 'kraken' and 'luminous' persistent
+    # features set.
+    jqfilter='.monmap.features.persistent | length == 2'
+    jq_success "$jqinput" "$jqfilter" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "kraken")'
+    jq_success "$jqinput" "$jqfilter" "kraken" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "luminous")'
+    jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+
+    CEPH_ARGS=$CEPH_ARGS_orig
+    # that's all folks. thank you for tuning in.
     teardown $dir || return 1
 }
 

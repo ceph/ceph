@@ -68,6 +68,11 @@ See `Create a Pool`_ for details on specifying the number of placement groups
 for your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
+A newly created pool must initialized prior to use. Use the ``rbd`` tool
+to initialize the pool::
+
+        rbd pool init cloudstack
+
 Create a Ceph User
 ==================
 
@@ -76,7 +81,7 @@ credentials to access the ``cloudstack`` pool we just created. Although we could
 use ``client.admin`` for this, it's recommended to create a user with only
 access to the ``cloudstack`` pool. ::
 
-  ceph auth get-or-create client.cloudstack mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=cloudstack'
+  ceph auth get-or-create client.cloudstack mon 'profile rbd' osd 'profile rbd pool=cloudstack'
 
 Use the information returned by the command in the next step when adding the 
 Primary Storage.

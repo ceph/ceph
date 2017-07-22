@@ -20,9 +20,6 @@
 #include "common/ceph_time.h"
 #include "rgw_formats.h"
 
-
-using namespace std;
-
 // define as static when RGWBucket implementation compete
 extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
 
@@ -46,14 +43,17 @@ extern int rgw_bucket_delete_bucket_obj(RGWRados *store,
                                         const string& bucket_name,
                                         RGWObjVersionTracker& objv_tracker);
 
-extern int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket);
+extern int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, const RGWBucketInfo& bucket_info);
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name);
 
-extern void rgw_make_bucket_entry_name(const string& tenant_name,
-                                       const string& bucket_name,
-                                       string& bucket_entry);
-extern string rgw_make_bucket_entry_name(const string& tenant_name,
-                                       const string& bucket_name);
+extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
+                                              const std::string& bucket_name);
+static inline void rgw_make_bucket_entry_name(const string& tenant_name,
+                                              const string& bucket_name,
+                                              std::string& bucket_entry) {
+  bucket_entry = rgw_make_bucket_entry_name(tenant_name, bucket_name);
+}
+
 extern void rgw_parse_url_bucket(const string& bucket,
                                  const string& auth_tenant,
                                  string &tenant_name, string &bucket_name);
@@ -74,7 +74,7 @@ public:
     mtime = m;
   }
 
-  void dump(Formatter *f) const {
+  void dump(Formatter *f) const override {
     ep.dump(f);
   }
 };
@@ -88,7 +88,7 @@ public:
     mtime = m;
   }
 
-  void dump(Formatter *f) const {
+  void dump(Formatter *f) const override {
     info.dump(f);
   }
 
@@ -126,7 +126,7 @@ public:
   /**
    * Add a (created) bucket to the user's bucket list.
    */
-  void add(RGWBucketEnt& bucket) {
+  void add(const RGWBucketEnt& bucket) {
     buckets[bucket.bucket.name] = bucket;
   }
 
@@ -210,11 +210,11 @@ struct RGWBucketAdminOpState {
 
   void set_max_aio(int value) { max_aio = value; }
 
-  void set_user_id(rgw_user& user_id) {
+  void set_user_id(const rgw_user& user_id) {
     if (!user_id.empty())
       uid = user_id;
   }
-  void set_bucket_name(std::string& bucket_str) {
+  void set_bucket_name(const std::string& bucket_str) {
     bucket_name = bucket_str; 
   }
   void set_object(std::string& object_str) {
@@ -274,10 +274,11 @@ public:
   int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-          list<rgw_obj_key>& objs_to_unlink, std::string *err_msg = NULL);
+          list<rgw_obj_index_key>& objs_to_unlink, std::string *err_msg = NULL);
 
   int check_object_index(RGWBucketAdminOpState& op_state,
-          map<string, RGWObjEnt> result, std::string *err_msg = NULL);
+                         RGWFormatterFlusher& flusher,
+                         std::string *err_msg = NULL);
 
   int check_index(RGWBucketAdminOpState& op_state,
           map<RGWObjCategory, RGWStorageStats>& existing_stats,
@@ -314,6 +315,10 @@ public:
   static int remove_bucket(RGWRados *store, RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true);
   static int remove_object(RGWRados *store, RGWBucketAdminOpState& op_state);
   static int info(RGWRados *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
+  static int limit_check(RGWRados *store, RGWBucketAdminOpState& op_state,
+			 const std::list<std::string>& user_ids,
+			 RGWFormatterFlusher& flusher,
+			 bool warnings_only = false);
 };
 
 
@@ -396,7 +401,7 @@ class RGWDataChangesLog {
   RWLock modified_lock;
   map<int, set<string> > modified_shards;
 
-  atomic_t down_flag;
+  std::atomic<bool> down_flag = { false };
 
   struct ChangeStatus {
     real_time cur_expiration;
@@ -432,7 +437,7 @@ class RGWDataChangesLog {
 
   public:
     ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log), lock("ChangesRenewThread::lock") {}
-    void *entry();
+    void *entry() override;
     void stop();
   };
 
@@ -466,6 +471,7 @@ public:
   ~RGWDataChangesLog();
 
   int choose_oid(const rgw_bucket_shard& bs);
+  const std::string& get_oid(int shard_id) const { return oids[shard_id]; }
   int add_entry(rgw_bucket& bucket, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int renew_entries();

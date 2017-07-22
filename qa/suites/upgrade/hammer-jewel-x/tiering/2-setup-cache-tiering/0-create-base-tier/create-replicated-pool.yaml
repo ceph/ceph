@@ -1,0 +1,5 @@
+tasks:
+- exec:
+    client.0:
+      - ceph osd pool create base-pool 4
+      - ceph osd pool application enable base-pool rados

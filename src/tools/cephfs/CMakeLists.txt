@@ -25,9 +25,10 @@ set(cephfs_data_scan_srcs
   cephfs-data-scan.cc
   DataScan.cc
   RoleSelector.cc
+  PgFiles.cc
   MDSUtility.cc)
 add_executable(cephfs-data-scan ${cephfs_data_scan_srcs})
-target_link_libraries(cephfs-data-scan librados mds osdc global
+target_link_libraries(cephfs-data-scan librados cephfs mds osdc global
   cls_cephfs_client
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 

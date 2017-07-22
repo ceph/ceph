@@ -4,13 +4,7 @@
 #include <array>
 
 #include <boost/utility/string_ref.hpp>
-/* TODO(rzarzynski): we want to use static_vector when it will be available
- * also on RHEL/Centos 7. At the moment std::vetor is being used instead. */
-#if 0
-#  include <boost/container/static_vector.hpp>
-#else
-#  include <vector>
-#endif
+#include <boost/container/static_vector.hpp>
 
 #include "rgw_swift_auth.h"
 #include "rgw_rest.h"
@@ -24,6 +18,7 @@
 #include "rgw_http_client.h"
 #include "include/str_list.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 #define DEFAULT_SWIFT_PREFIX "/swift"
@@ -31,8 +26,12 @@
 using namespace ceph::crypto;
 
 
+namespace rgw {
+namespace auth {
+namespace swift {
+
 /* TempURL: applier */
-void RGWTempURLAuthApplier::modify_request_state(req_state * s) const       /* in/out */
+void TempURLApplier::modify_request_state(req_state* s) const       /* in/out */
 {
   bool inline_exists = false;
   const std::string& filename = s->info.args.get("filename");
@@ -58,13 +57,14 @@ void RGWTempURLAuthApplier::modify_request_state(req_state * s) const       /* i
 }
 
 /* TempURL: engine */
-bool RGWTempURLAuthEngine::is_applicable() const noexcept
+bool TempURLEngine::is_applicable(const req_state* const s) const noexcept
 {
   return s->info.args.exists("temp_url_sig") ||
          s->info.args.exists("temp_url_expires");
 }
 
-void RGWTempURLAuthEngine::get_owner_info(RGWUserInfo& owner_info) const
+void TempURLEngine::get_owner_info(const req_state* const s,
+                                   RGWUserInfo& owner_info) const
 {
   /* We cannot use req_state::bucket_name because it isn't available
    * now. It will be initialized in RGWHandler_REST_SWIFT::postauth_init(). */
@@ -111,18 +111,18 @@ void RGWTempURLAuthEngine::get_owner_info(RGWUserInfo& owner_info) const
     throw ret;
   }
 
-  ldout(s->cct, 20) << "temp url user (bucket owner): " << bucket_info.owner
-                    << dendl;
+  ldout(cct, 20) << "temp url user (bucket owner): " << bucket_info.owner
+                 << dendl;
 
   if (rgw_get_user_info_by_uid(store, bucket_info.owner, owner_info) < 0) {
     throw -EPERM;
   }
 }
 
-bool RGWTempURLAuthEngine::is_expired(const std::string& expires) const
+bool TempURLEngine::is_expired(const std::string& expires) const
 {
   string err;
-  const utime_t now = ceph_clock_now(g_ceph_context);
+  const utime_t now = ceph_clock_now();
   const uint64_t expiration = (uint64_t)strict_strtoll(expires.c_str(),
                                                        10, &err);
   if (!err.empty()) {
@@ -147,7 +147,7 @@ std::string extract_swift_subuser(const std::string& swift_user_name) {
   }
 }
 
-class RGWTempURLAuthEngine::SignatureHelper
+class TempURLEngine::SignatureHelper
 {
 private:
   static constexpr uint32_t output_size =
@@ -188,32 +188,38 @@ public:
     return rhs.compare(0 /* pos */,  output_size, dest_str) == 0;
   }
 
-}; /* RGWTempURLAuthEngine::SignatureHelper */
+}; /* TempURLEngine::SignatureHelper */
 
-RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
+TempURLEngine::result_t
+TempURLEngine::authenticate(const req_state* const s) const
 {
+  if (! is_applicable(s)) {
+    return result_t::deny();
+  }
+
   const string& temp_url_sig = s->info.args.get("temp_url_sig");
   const string& temp_url_expires = s->info.args.get("temp_url_expires");
+
   if (temp_url_sig.empty() || temp_url_expires.empty()) {
-    return nullptr;
+    return result_t::deny();
   }
 
   RGWUserInfo owner_info;
   try {
-    get_owner_info(owner_info);
+    get_owner_info(s, owner_info);
   } catch (...) {
     ldout(cct, 5) << "cannot get user_info of account's owner" << dendl;
-    return nullptr;
+    return result_t::reject();
   }
 
   if (owner_info.temp_url_keys.empty()) {
     ldout(cct, 5) << "user does not have temp url key set, aborting" << dendl;
-    return nullptr;
+    return result_t::reject();
   }
 
   if (is_expired(temp_url_expires)) {
     ldout(cct, 5) << "temp url link expired" << dendl;
-    return nullptr;
+    return result_t::reject(-EPERM);
   }
 
   /* We need to verify two paths because of compliance with Swift, Tempest
@@ -222,19 +228,14 @@ RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
 
   /* XXX can we search this ONCE? */
   const size_t pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
-  boost::string_ref ref_uri = s->info.request_uri;
+  boost::string_ref ref_uri = s->decoded_uri;
   const std::array<boost::string_ref, 2> allowed_paths = {
     ref_uri,
     ref_uri.substr(pos + 1)
   };
 
   /* Account owner calculates the signature also against a HTTP method. */
-  /* TODO(rzarzynski): switch to static_vector when possible. */
-#if 0
   boost::container::static_vector<boost::string_ref, 3> allowed_methods;
-#else
-  std::vector<boost::string_ref> allowed_methods;
-#endif
   if (strcmp("HEAD", s->info.method) == 0) {
     /* HEAD requests are specially handled. */
     /* TODO: after getting a newer boost (with static_vector supporting
@@ -268,7 +269,8 @@ RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
                           << dendl;
 
         if (sig_helper.is_equal_to(temp_url_sig)) {
-          return apl_factory->create_apl_turl(cct, owner_info);
+          auto apl = apl_factory->create_apl_turl(cct, s, owner_info);
+          return result_t::grant(std::move(apl));
         } else {
           ldout(s->cct,  5) << "temp url signature mismatch: " << local_sig
                             << " != " << temp_url_sig  << dendl;
@@ -277,24 +279,32 @@ RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
     }
   }
 
-  return nullptr;
+  return result_t::reject();
 }
 
 
 /* External token */
-bool RGWExternalTokenAuthEngine::is_applicable() const noexcept
+bool ExternalTokenEngine::is_applicable(const std::string& token) const noexcept
 {
-  if (false == RGWTokenBasedAuthEngine::is_applicable()) {
+  if (token.empty()) {
     return false;
+  } else if (g_conf->rgw_swift_auth_url.empty()) {
+    return false;
+  } else {
+    return true;
   }
-
-  return false == g_conf->rgw_swift_auth_url.empty();
 }
 
-RGWAuthApplier::aplptr_t RGWExternalTokenAuthEngine::authenticate() const
+ExternalTokenEngine::result_t
+ExternalTokenEngine::authenticate(const std::string& token,
+                                  const req_state* const s) const
 {
-  string auth_url = g_conf->rgw_swift_auth_url;
-  if (auth_url[auth_url.length() - 1] != '/') {
+  if (! is_applicable(token)) {
+    return result_t::deny();
+  }
+
+  std::string auth_url = g_conf->rgw_swift_auth_url;
+  if (auth_url.back() != '/') {
     auth_url.append("/");
   }
 
@@ -318,17 +328,17 @@ RGWAuthApplier::aplptr_t RGWExternalTokenAuthEngine::authenticate() const
                 ",", swift_groups);
 
     if (0 == swift_groups.size()) {
-      return nullptr;
+      return result_t::deny(-EPERM);
     } else {
       swift_user = std::move(swift_groups[0]);
     }
   } catch (std::out_of_range) {
     /* The X-Auth-Groups header isn't present in the response. */
-    return nullptr;
+    return result_t::deny(-EPERM);
   }
 
   if (swift_user.empty()) {
-    return nullptr;
+    return result_t::deny(-EPERM);
   }
 
   ldout(cct, 10) << "swift user=" << swift_user << dendl;
@@ -340,10 +350,10 @@ RGWAuthApplier::aplptr_t RGWExternalTokenAuthEngine::authenticate() const
     throw ret;
   }
 
-  return apl_factory->create_apl_local(cct, tmp_uinfo,
-                                       extract_swift_subuser(swift_user));
+  auto apl = apl_factory->create_apl_local(cct, s, tmp_uinfo,
+                                           extract_swift_subuser(swift_user));
+  return result_t::grant(std::move(apl));
 }
-
 
 static int build_token(const string& swift_user,
                        const string& key,
@@ -384,27 +394,31 @@ static int encode_token(CephContext *cct, string& swift_user, string& key,
   if (ret < 0)
     return ret;
 
-  utime_t expiration = ceph_clock_now(cct);
+  utime_t expiration = ceph_clock_now();
   expiration += cct->_conf->rgw_swift_token_expiration;
 
-  ret = build_token(swift_user, key, nonce, expiration, bl);
-
-  return ret;
+  return build_token(swift_user, key, nonce, expiration, bl);
 }
 
 
 /* AUTH_rgwtk (signed token): engine */
-bool RGWSignedTokenAuthEngine::is_applicable() const noexcept
+bool SignedTokenEngine::is_applicable(const std::string& token) const noexcept
 {
-  if (false == RGWTokenBasedAuthEngine::is_applicable()) {
+  if (token.empty()) {
     return false;
+  } else {
+    return token.compare(0, 10, "AUTH_rgwtk") == 0;
   }
-
-  return token.compare(0, 10, "AUTH_rgwtk") == 0;
 }
 
-RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
+SignedTokenEngine::result_t
+SignedTokenEngine::authenticate(const std::string& token,
+                                const req_state* const s) const
 {
+  if (! is_applicable(token)) {
+    return result_t::deny(-EPERM);
+  }
+
   /* Effective token string is the part after the prefix. */
   const std::string etoken = token.substr(strlen("AUTH_rgwtk"));
   const size_t etoken_len = etoken.length();
@@ -415,13 +429,13 @@ RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
     throw -EINVAL;
   }
 
-  bufferptr p(etoken_len/2);
+  ceph::bufferptr p(etoken_len/2);
   int ret = hex_to_buf(etoken.c_str(), p.c_str(), etoken_len);
   if (ret < 0) {
     throw ret;
   }
 
-  bufferlist tok_bl;
+  ceph::bufferlist tok_bl;
   tok_bl.append(p);
 
   uint64_t nonce;
@@ -439,12 +453,12 @@ RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
     throw -EINVAL;
   }
 
-  const utime_t now = ceph_clock_now(cct);
+  const utime_t now = ceph_clock_now();
   if (expiration < now) {
     ldout(cct, 0) << "NOTICE: old timed out token was used now=" << now
 	          << " token.expiration=" << expiration
                   << dendl;
-    return nullptr;
+    return result_t::deny(-EPERM);
   }
 
   RGWUserInfo user_info;
@@ -457,7 +471,7 @@ RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
 
   const auto siter = user_info.swift_keys.find(swift_user);
   if (siter == std::end(user_info.swift_keys)) {
-    return nullptr;
+    return result_t::deny(-EPERM);
   }
 
   const auto swift_key = siter->second;
@@ -473,7 +487,7 @@ RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
                   << " tok_bl.length()=" << tok_bl.length()
 	          << " local_tok_bl.length()=" << local_tok_bl.length()
                   << dendl;
-    return nullptr;
+    return result_t::deny(-EPERM);
   }
 
   if (memcmp(local_tok_bl.c_str(), tok_bl.c_str(),
@@ -484,12 +498,17 @@ RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
                local_tok_bl.length(), buf);
 
     ldout(cct, 0) << "NOTICE: tokens mismatch tok=" << buf << dendl;
-    return nullptr;
+    return result_t::deny(-EPERM);
   }
 
-  return apl_factory->create_apl_local(cct, user_info,
-                                       extract_swift_subuser(swift_user));
+  auto apl = apl_factory->create_apl_local(cct, s, user_info,
+                                           extract_swift_subuser(swift_user));
+  return result_t::grant(std::move(apl));
 }
+
+} /* namespace swift */
+} /* namespace auth */
+} /* namespace rgw */
 
 
 void RGW_SWIFT_Auth_Get::execute()
@@ -586,18 +605,23 @@ void RGW_SWIFT_Auth_Get::execute()
     tenant_path.append(info.user_id.to_str());
   }
 
-  STREAM_IO(s)->print("X-Storage-Url: %s%s/v1%s\r\n", swift_url.c_str(),
-	        swift_prefix.c_str(), tenant_path.c_str());
+  dump_header(s, "X-Storage-Url", swift_url + swift_prefix + "/v1" +
+              tenant_path);
 
+  using rgw::auth::swift::encode_token;
   if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
     goto done;
 
   {
-    char buf[bl.length() * 2 + 1];
-    buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
+    static constexpr size_t PREFIX_LEN = sizeof("AUTH_rgwtk") - 1;
+    char token_val[PREFIX_LEN + bl.length() * 2 + 1];
 
-    STREAM_IO(s)->print("X-Storage-Token: AUTH_rgwtk%s\r\n", buf);
-    STREAM_IO(s)->print("X-Auth-Token: AUTH_rgwtk%s\r\n", buf);
+    snprintf(token_val, PREFIX_LEN + 1, "AUTH_rgwtk");
+    buf_to_hex((const unsigned char *)bl.c_str(), bl.length(),
+	       token_val + PREFIX_LEN);
+
+    dump_header(s, "X-Storage-Token", token_val);
+    dump_header(s, "X-Auth-Token", token_val);
   }
 
   ret = STATUS_NO_CONTENT;
@@ -609,7 +633,7 @@ done:
 }
 
 int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state,
-				RGWClientIO *cio)
+				rgw::io::BasicClient *cio)
 {
   state->dialect = "swift-auth";
   state->formatter = new JSONFormatter;

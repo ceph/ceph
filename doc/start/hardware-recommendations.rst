@@ -52,10 +52,7 @@ Data Storage
 Plan your data storage configuration carefully. There are significant cost and
 performance tradeoffs to consider when planning for data storage. Simultaneous
 OS operations, and simultaneous request for read and write operations from
-multiple daemons against a single drive can slow performance considerably. There
-are also file system limitations to consider: btrfs is not quite stable enough
-for production, but it has the ability to journal and write data simultaneously,
-whereas XFS does not.
+multiple daemons against a single drive can slow performance considerably.
 
 .. important:: Since Ceph has to write all data to the journal before it can 
    send an ACK (for XFS at least), having the journal and OSD 
@@ -99,8 +96,7 @@ You may run multiple Ceph OSD Daemons per hard disk drive, but this will likely
 lead to resource contention and diminish the overall throughput. You may store a
 journal and object data on the same drive, but this may increase the time it
 takes to journal a write and ACK to the client. Ceph must write to the journal
-before it can ACK the write. The btrfs filesystem can write journal data and
-object data simultaneously, whereas XFS cannot.
+before it can ACK the write.
 
 Ceph best practices dictate that you should run operating systems, OSD data and
 OSD journals on separate drives.
@@ -226,7 +222,7 @@ deployment tools  (e.g., Dell's Crowbar) deploy with five different networks,
 but employ VLANs to make hardware and network cabling more manageable. VLANs
 using 802.1q protocol require VLAN-capable NICs and Switches. The added hardware
 expense may be offset by the operational cost savings for network setup and
-maintenance. When using VLANs to handle VM traffic between between the cluster
+maintenance. When using VLANs to handle VM traffic between the cluster
 and compute stacks (e.g., OpenStack, CloudStack, etc.), it is also worth
 considering using 10G Ethernet. Top-of-rack routers for each network also need
 to be able to communicate with spine routers that have even faster
@@ -350,5 +346,5 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 .. _Ceph Write Throughput 2: http://ceph.com/community/ceph-performance-part-2-write-throughput-without-ssd-journals/
 .. _Argonaut v. Bobtail Performance Preview: http://ceph.com/uncategorized/argonaut-vs-bobtail-performance-preview/
 .. _Bobtail Performance - I/O Scheduler Comparison: http://ceph.com/community/ceph-bobtail-performance-io-scheduler-comparison/ 
-.. _Mapping Pools to Different Types of OSDs: http://ceph.com/docs/master/rados/operations/crush-map/#placing-different-pools-on-different-osds
+.. _Mapping Pools to Different Types of OSDs: ../../rados/operations/crush-map#placing-different-pools-on-different-osds
 .. _OS Recommendations: ../os-recommendations

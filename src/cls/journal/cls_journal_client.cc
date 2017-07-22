@@ -2,11 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "cls/journal/cls_journal_client.h"
+#include "include/rados/librados.hpp"
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "common/Cond.h"
 #include <errno.h>
-#include <map>
 
 namespace cls {
 namespace journal {
@@ -15,11 +15,11 @@ namespace client {
 namespace {
 
 struct C_AioExec : public Context {
-  librados::IoCtx ioctx;
+  librados::IoCtx &ioctx;
   std::string oid;
 
-  C_AioExec(librados::IoCtx &_ioctx, const std::string &_oid) : oid(_oid) {
-    ioctx.dup(_ioctx);
+  C_AioExec(librados::IoCtx &_ioctx, const std::string &_oid)
+    : ioctx(_ioctx), oid(_oid) {
   }
 
   static void rados_callback(rados_completion_t c, void *arg) {
@@ -54,7 +54,7 @@ struct C_ClientList : public C_AioExec {
     rados_completion->release();
   }
 
-  virtual void complete(int r) {
+  void complete(int r) override {
     if (r < 0) {
       finish(r);
       return;
@@ -81,7 +81,7 @@ struct C_ClientList : public C_AioExec {
     }
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     on_finish->complete(r);
     delete this;
   }
@@ -115,7 +115,7 @@ struct C_ImmutableMetadata : public C_AioExec {
     rados_completion->release();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     if (r == 0) {
       try {
         bufferlist::iterator iter = outbl.begin();
@@ -155,7 +155,7 @@ struct C_MutableMetadata : public C_AioExec {
     rados_completion->release();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     if (r == 0) {
       try {
         bufferlist::iterator iter = outbl.begin();
@@ -296,13 +296,18 @@ void client_update_data(librados::ObjectWriteOperation *op,
 
 int client_update_state(librados::IoCtx &ioctx, const std::string &oid,
                         const std::string &id, cls::journal::ClientState state) {
+  librados::ObjectWriteOperation op;
+  client_update_state(&op, id, state);
+  return ioctx.operate(oid, &op);
+}
+
+void client_update_state(librados::ObjectWriteOperation *op,
+                         const std::string &id,
+                         cls::journal::ClientState state) {
   bufferlist bl;
   ::encode(id, bl);
   ::encode(static_cast<uint8_t>(state), bl);
-
-  librados::ObjectWriteOperation op;
-  op.exec("journal", "client_update_state", bl);
-  return ioctx.operate(oid, &op);
+  op->exec("journal", "client_update_state", bl);
 }
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,
@@ -331,9 +336,14 @@ void client_commit(librados::ObjectWriteOperation *op, const std::string &id,
 int client_list(librados::IoCtx &ioctx, const std::string &oid,
                 std::set<cls::journal::Client> *clients) {
   C_SaferCond cond;
-  C_ClientList *client_list = new C_ClientList(ioctx, oid, clients, &cond);
-  client_list->send("");
+  client_list(ioctx, oid, clients, &cond);
   return cond.wait();
+}
+
+void client_list(librados::IoCtx &ioctx, const std::string &oid,
+                 std::set<cls::journal::Client> *clients, Context *on_finish) {
+  C_ClientList *client_list = new C_ClientList(ioctx, oid, clients, on_finish);
+  client_list->send("");
 }
 
 int get_next_tag_tid(librados::IoCtx &ioctx, const std::string &oid,

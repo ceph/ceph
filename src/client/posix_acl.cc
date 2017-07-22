@@ -1,7 +1,7 @@
 #include "include/types.h"
 #include <sys/stat.h>
 #include "posix_acl.h"
-#include "UserGroups.h"
+#include "UserPerm.h"
 
 #ifndef ACCESSPERMS
 #define ACCESSPERMS (S_IRWXU|S_IRWXG|S_IRWXO)
@@ -220,7 +220,7 @@ int posix_acl_access_chmod(bufferptr& acl, mode_t mode)
 }
 
 int posix_acl_permits(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
-			 uid_t uid, UserGroups& groups, unsigned want)
+			 const UserPerm& perms, unsigned want)
 {
   if (posix_acl_check(acl.c_str(), acl.length()) < 0)
     return -EIO;
@@ -238,19 +238,19 @@ int posix_acl_permits(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
     perm = entry->e_perm;
     switch(tag) {
       case ACL_USER_OBJ:
-	if (i_uid == uid)
+	if (i_uid == perms.uid())
 	  goto check_perm;
 	break;
       case ACL_USER:
 	id = entry->e_id;
-	if (id == uid)
+	if (id == perms.uid())
 	  goto check_mask;
 	break;
       case ACL_GROUP_OBJ:
 	/* fall through */
       case ACL_GROUP:
 	id = (tag == ACL_GROUP_OBJ) ? i_gid : entry->e_id;
-	if (groups.is_in(id)) {
+	if (perms.gid_in_groups(id)) {
 	  group_found = 1;
 	  if ((perm & want) == want)
 	    goto check_mask;

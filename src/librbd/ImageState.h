@@ -9,6 +9,7 @@
 #include <list>
 #include <string>
 #include <utility>
+#include "cls/rbd/cls_rbd_types.h"
 
 class Context;
 class RWLock;
@@ -25,8 +26,8 @@ public:
   ImageState(ImageCtxT *image_ctx);
   ~ImageState();
 
-  int open();
-  void open(Context *on_finish);
+  int open(bool skip_open_parent);
+  void open(bool skip_open_parent, Context *on_finish);
 
   int close();
   void close(Context *on_finish);
@@ -39,7 +40,9 @@ public:
   int refresh_if_required();
   void refresh(Context *on_finish);
 
-  void snap_set(const std::string &snap_name, Context *on_finish);
+  void snap_set(const cls::rbd::SnapshotNamespace &snap_namespace,
+		const std::string &snap_name,
+		Context *on_finish);
 
   void prepare_lock(Context *on_ready);
   void handle_prepare_lock_complete();
@@ -72,6 +75,7 @@ private:
   struct Action {
     ActionType action_type;
     uint64_t refresh_seq = 0;
+    cls::rbd::SnapshotNamespace snap_namespace;
     std::string snap_name;
     Context *on_ready = nullptr;
 
@@ -85,7 +89,7 @@ private:
       case ACTION_TYPE_REFRESH:
         return (refresh_seq == action.refresh_seq);
       case ACTION_TYPE_SET_SNAP:
-        return snap_name == action.snap_name;
+        return (snap_name == action.snap_name) && (snap_namespace == action.snap_namespace);
       case ACTION_TYPE_LOCK:
         return false;
       default:
@@ -109,8 +113,12 @@ private:
 
   ImageUpdateWatchers *m_update_watchers;
 
+  bool m_skip_open_parent_image;
+
   bool is_transition_state() const;
   bool is_closed() const;
+
+  const Action *find_pending_refresh() const;
 
   void append_context(const Action &action, Context *context);
   void execute_next_action_unlock();

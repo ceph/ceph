@@ -182,3 +182,6 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
  out:
   return r;
 }
+
+// ---------------
+

@@ -89,11 +89,11 @@ private:
   struct C_ConsistentAck : public Context {
     FutureImplPtr future;
     C_ConsistentAck(FutureImpl *_future) : future(_future) {}
-    virtual void complete(int r) {
+    void complete(int r) override {
       future->consistent(r);
       future.reset();
     }
-    virtual void finish(int r) {}
+    void finish(int r) override {}
   };
 
   uint64_t m_tag_tid;
@@ -113,6 +113,7 @@ private:
   Contexts m_contexts;
 
   FutureImplPtr prepare_flush(FlushHandlers *flush_handlers);
+  FutureImplPtr prepare_flush(FlushHandlers *flush_handlers, Mutex &lock);
 
   void consistent(int r);
   void finish_unlock();

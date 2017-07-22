@@ -30,11 +30,11 @@ public:
 
   MClientReconnect() : Message(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION) { }
 private:
-  ~MClientReconnect() {}
+  ~MClientReconnect() override {}
 
 public:
-  const char *get_type_name() const { return "client_reconnect"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "client_reconnect"; }
+  void print(ostream& out) const override {
     out << "client_reconnect("
 	<< caps.size() << " caps)";
   }
@@ -52,7 +52,7 @@ public:
     realms.push_back(r);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     data.clear();
     if (features & CEPH_FEATURE_MDSENC) {
       ::encode(caps, data);
@@ -76,7 +76,7 @@ public:
     }
     ::encode_nohead(realms, data);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = data.begin();
     if (header.version >= 3) {
       // new protocol

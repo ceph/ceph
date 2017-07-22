@@ -439,7 +439,7 @@ still write a new object to a ``degraded`` placement group if it is ``active``.
 If an OSD is ``down`` and the ``degraded`` condition persists, Ceph may mark the
 ``down`` OSD as ``out`` of the cluster and remap the data from the ``down`` OSD
 to another OSD. The time between being marked ``down`` and being marked ``out``
-is controlled by ``mon osd down out interval``, which is set to ``300`` seconds
+is controlled by ``mon osd down out interval``, which is set to ``600`` seconds
 by default.
 
 A placement group can also be ``degraded``, because Ceph cannot find one or more
@@ -468,8 +468,7 @@ Ceph provides a number of settings to balance the resource contention between
 new service requests and the need to recover data objects and restore the
 placement groups to the current state. The ``osd recovery delay start`` setting
 allows an OSD to restart, re-peer and even process some replay requests before
-starting the recovery process. The ``osd recovery threads`` setting limits the
-number of threads for the recovery process (1 thread by default).  The ``osd
+starting the recovery process.  The ``osd
 recovery thread timeout`` sets a thread timeout, because multiple OSDs may fail,
 restart and re-peer at staggered rates. The ``osd recovery max active`` setting
 limits the  number of recovery requests an OSD will entertain simultaneously to
@@ -497,8 +496,9 @@ placement group can't be backfilled, it may be considered ``incomplete``.
 Ceph provides a number of settings to manage the load spike associated with
 reassigning placement groups to an OSD (especially a new OSD). By default,
 ``osd_max_backfills`` sets the maximum number of concurrent backfills to or from
-an OSD to 10. The ``osd backfill full ratio`` enables an OSD to refuse a
-backfill request if the OSD is approaching its full ratio (85%, by default).
+an OSD to 10. The ``backfill full ratio`` enables an OSD to refuse a
+backfill request if the OSD is approaching its full ratio (90%, by default) and
+change with ``ceph osd set-backfillfull-ratio`` comand.
 If an OSD refuses a backfill request, the ``osd backfill retry interval``
 enables an OSD to retry the request (after 10 seconds, by default). OSDs can
 also set ``osd backfill scan min`` and ``osd backfill scan max`` to manage scan

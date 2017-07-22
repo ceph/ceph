@@ -60,8 +60,9 @@ int main(const int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS, "rgw_data");
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_DAEMON,
+			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS, "rgw_data");
 
   for (std::vector<const char *>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -78,7 +79,7 @@ int main(const int argc, const char **argv)
 
   common_init_finish(g_ceph_context);
 
-  store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false);
+  store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false);
   if (!store) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;

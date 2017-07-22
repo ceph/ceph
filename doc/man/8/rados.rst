@@ -55,12 +55,12 @@ Options
 
 .. option:: -b block_size
 
-  Set the block size for put/get ops and for write benchmarking.
+  Set the block size for put/get/append ops and for write benchmarking.
 
 .. option:: --striper
 
    Uses the striping API of rados rather than the default one.
-   Available for stat, get, put, truncate, rm, ls and all xattr related operation
+   Available for stat, get, put, append, truncate, rm, ls and all xattr related operation
 
 
 Global commands
@@ -77,8 +77,16 @@ Global commands
   Create a pool with name foo.
 
 :command:`rmpool` *foo* [ *foo* --yes-i-really-really-mean-it ]
-  Delete the pool foo (and all its data)
+  Delete the pool foo (and all its data).
 
+:command:`list-inconsistent-pg` *pool*
+  List inconsistent PGs in given pool.
+
+:command:`list-inconsistent-obj` *pgid*
+  List inconsistent objects in given PG.
+
+:command:`list-inconsistent-snapset` *pgid*
+  List inconsistent snapsets in given PG.
 
 Pool specific commands
 ======================
@@ -86,8 +94,11 @@ Pool specific commands
 :command:`get` *name* *outfile*
   Read object name from the cluster and write it to outfile.
 
-:command:`put` *name* *infile*
-  Write object name to the cluster with contents from infile.
+:command:`put` *name* *infile* [--offset offset]
+  Write object name with start offset (default:0) to the cluster with contents from infile.
+
+:command:`append` *name* *infile*
+  Append object name to the cluster with contents from infile.
 
 :command:`rm` *name*
   Remove object name.
@@ -122,8 +133,22 @@ Pool specific commands
   default, and is used as the underlying object name for "read" and
   "write" ops.
   Note: -b *objsize* option is valid only in *write* mode.
+  Note: *write* and *seq* must be run on the same host otherwise the
+  objects created by *write* will have names that will fail *seq*.
 
 :command:`cleanup`
+
+:command:`listxattr` *name*
+  List all extended attributes of an object.
+
+:command:`getxattr` *name* *attr*
+  Dump the extended attribute value of *attr* of an object.
+
+:command:`setxattr` *name* *attr* *value*
+  Set the value of *attr* in the extended attributes of an object.
+
+:command:`rmxattr` *name* *attr*
+  Remove *attr* from the extended attributes of an object.
 
 :command:`listomapkeys` *name*
   List all the keys stored in the object map of object name.
@@ -132,13 +157,17 @@ Pool specific commands
   List all key/value pairs stored in the object map of object name.
   The values are dumped in hexadecimal.
 
-:command:`getomapval` *name* *key*
+:command:`getomapval` [ --omap-key-file *file* ] *name* *key* [ *out-file* ]
   Dump the hexadecimal value of key in the object map of object name.
+  If the optional *out-file* argument isn't provided, the value will be
+  written to standard output.
 
-:command:`setomapval` *name* *key* *value*
-  Set the value of key in the object map of object name.
+:command:`setomapval` [ --omap-key-file *file* ] *name* *key* [ *value* ]
+  Set the value of key in the object map of object name. If the optional
+  *value* argument isn't provided, the value will be read from standard
+  input.
 
-:command:`rmomapkey` *name* *key*
+:command:`rmomapkey` [ --omap-key-file *file* ] *name* *key*
   Remove key from the object map of object name.
 
 :command:`getomapheader` *name*
@@ -173,6 +202,10 @@ To delete the object::
 To read a previously snapshotted version of an object::
 
        rados -p foo -s mysnap get myobject blah.txt.old
+
+To list inconsistent objects in PG 0.6::
+
+       rados list-inconsistent-obj 0.6 --format=json-pretty
 
 
 Availability

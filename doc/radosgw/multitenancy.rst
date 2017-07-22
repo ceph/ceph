@@ -38,7 +38,9 @@ Create a user testx$tester to be accessed with Swift::
   # radosgw-admin --tenant testx --uid tester --display-name "Test User" --subuser tester:test --key-type swift --access full user create
   # radosgw-admin --subuser 'testx$tester:test' --key-type swift --secret test123
 
-Note that the subuser with explicit tenant had to be quoted in the shell.
+.. note:: The subuser with explicit tenant has to be quoted in the shell.
+
+   Tenant names may contain only alphanumeric characters and underscores.
 
 Accessing Buckets with Explicit Tenants
 =======================================
@@ -63,15 +65,18 @@ Thus a sample URL would be::
 
   https://ep.host.dom/tenant:bucket
 
-Here's a simple Python sample::
+Here's a simple Python sample:
 
-    from boto.s3.connection import S3Connection, OrdinaryCallingFormat
-    c = S3Connection(
-        aws_access_key_id="TESTER",
-        aws_secret_access_key="test123",
-        host="ep.host.dom",
-        calling_format = OrdinaryCallingFormat())
-    bucket = c.get_bucket("test5b:testbucket")
+.. code-block:: python
+   :linenos:
+
+	from boto.s3.connection import S3Connection, OrdinaryCallingFormat
+	c = S3Connection(
+		aws_access_key_id="TESTER",
+		aws_secret_access_key="test123",
+		host="ep.host.dom",
+		calling_format = OrdinaryCallingFormat())
+	bucket = c.get_bucket("test5b:testbucket")
 
 Note that it's not possible to supply an explicit tenant using
 a hostname. Hostnames cannot contain colons, or any other separators
@@ -88,7 +93,7 @@ Swift with Keystone
 -------------------
 
 TBD -- don't forget to explain the function of
-       rgw keystone make new tenants = true
+       rgw keystone implicit tenants = true
        in commit e9259486decab52a362443d3fd3dec33b0ec654f
 
 Notes and known issues

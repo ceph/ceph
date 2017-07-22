@@ -15,6 +15,7 @@
 #include "common/strtol.h"
 #include "common/ceph_argparse.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
 
 static void usage()
@@ -86,7 +87,7 @@ class C_NotifyCond : public Context {
 public:
   C_NotifyCond(std::mutex *mutex, std::condition_variable *cond, bool *done)
     : mutex(mutex), cond(cond), done(done) {}
-  void finish(int r) {
+  void finish(int r) override {
     std::lock_guard<std::mutex> lock(*mutex);
     *done = true;
     cond->notify_one();
@@ -155,7 +156,8 @@ int main(int argc, const char *argv[])
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
+			 CODE_ENVIRONMENT_UTILITY, 0);
 
   std::string val;
   vector<const char*>::iterator i = args.begin();
@@ -269,7 +271,7 @@ int main(int argc, const char *argv[])
     for (int i = 0; i < cfg.threads; i++) {
       std::stringstream oss;
       oss << "osbench-thread-" << i;
-      oids.emplace_back(pg.make_temp_hobject(oss.str()));
+      oids.emplace_back(hobject_t(sobject_t(oss.str(), CEPH_NOSNAP)));
 
       ObjectStore::Sequencer osr(__func__);
       ObjectStore::Transaction t;
@@ -278,7 +280,7 @@ int main(int argc, const char *argv[])
       assert(r == 0);
     }
   } else {
-    oids.emplace_back(pg.make_temp_hobject("osbench"));
+    oids.emplace_back(hobject_t(sobject_t("osbench", CEPH_NOSNAP)));
 
     ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;

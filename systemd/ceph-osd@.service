@@ -1,6 +1,6 @@
 [Unit]
 Description=Ceph object storage daemon osd.%i
-After=network-online.target local-fs.target time-sync.target
+After=network-online.target local-fs.target time-sync.target ceph-mon.target
 Wants=network-online.target local-fs.target time-sync.target
 PartOf=ceph-osd.target
 
@@ -18,7 +18,8 @@ PrivateTmp=true
 TasksMax=infinity
 Restart=on-failure
 StartLimitInterval=30min
-StartLimitBurst=3
+StartLimitBurst=30
+RestartSec=20s
 
 [Install]
 WantedBy=ceph-osd.target

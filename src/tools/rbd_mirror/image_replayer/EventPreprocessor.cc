@@ -13,6 +13,7 @@
 #include "librbd/journal/Types.h"
 #include <boost/variant.hpp>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 
 #undef dout_prefix
@@ -106,7 +107,7 @@ int EventPreprocessor<I>::preprocess_snap_rename(
   dout(20) << ": "
            << "remote_snap_id=" << event.snap_id << ", "
            << "src_snap_name=" << event.src_snap_name << ", "
-           << "dest_snap_name=" << event.snap_name << dendl;
+           << "dest_snap_name=" << event.dst_snap_name << dendl;
 
   auto snap_seq_it = m_snap_seqs.find(event.snap_id);
   if (snap_seq_it != m_snap_seqs.end()) {
@@ -116,7 +117,8 @@ int EventPreprocessor<I>::preprocess_snap_rename(
     return 0;
   }
 
-  auto snap_id_it = m_local_image_ctx.snap_ids.find(event.src_snap_name);
+  auto snap_id_it = m_local_image_ctx.snap_ids.find({cls::rbd::UserSnapshotNamespace(),
+						     event.src_snap_name});
   if (snap_id_it == m_local_image_ctx.snap_ids.end()) {
     dout(20) << ": cannot map remote snapshot '" << event.src_snap_name << "' "
              << "to local snapshot" << dendl;

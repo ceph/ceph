@@ -15,7 +15,6 @@
 #define CEPH_TEST_DNS_MESSAGES_H
 
 #include "common/dns_resolve.h"
-#include "test/unit.h"
 #include "gmock/gmock.h"
 
 u_char ns_search_msg_ok_payload[] = {

@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "include/types.h"
 #include "hobject.h"
 #include "common/Formatter.h"
 
@@ -37,7 +36,7 @@ set<string> hobject_t::get_prefixes(
   else if (bits == 32)
     from.insert(mask);
   else
-    assert(0);
+    ceph_abort();
 
 
   set<uint32_t> to;
@@ -45,7 +44,7 @@ set<string> hobject_t::get_prefixes(
     for (set<uint32_t>::iterator j = from.begin();
 	 j != from.end();
 	 ++j) {
-      to.insert(*j | (1 << i));
+      to.insert(*j | (1U << i));
       to.insert(*j);
     }
     to.swap(from);
@@ -75,7 +74,7 @@ string hobject_t::to_str() const
 
   char snap_with_hash[1000];
   char *t = snap_with_hash;
-  char *end = t + sizeof(snap_with_hash);
+  const char *end = t + sizeof(snap_with_hash);
 
   uint64_t poolid(pool);
   t += snprintf(t, end - t, "%.*llX", 16, (long long unsigned)poolid);
@@ -90,7 +89,7 @@ string hobject_t::to_str() const
   else
     t += snprintf(t, end - t, ".%llx", (long long unsigned)snap);
 
-  out += string(snap_with_hash);
+  out.append(snap_with_hash, t);
 
   out.push_back('.');
   append_escaped(oid.name, &out);
@@ -319,40 +318,7 @@ bool hobject_t::parse(const string &s)
   return true;
 }
 
-int cmp_nibblewise(const hobject_t& l, const hobject_t& r)
-{
-  if (l.max < r.max)
-    return -1;
-  if (l.max > r.max)
-    return 1;
-  if (l.pool < r.pool)
-    return -1;
-  if (l.pool > r.pool)
-    return 1;
-  if (l.get_nibblewise_key() < r.get_nibblewise_key())
-    return -1;
-  if (l.get_nibblewise_key() > r.get_nibblewise_key())
-    return 1;
-  if (l.nspace < r.nspace)
-    return -1;
-  if (l.nspace > r.nspace)
-    return 1;
-  if (l.get_effective_key() < r.get_effective_key())
-    return -1;
-  if (l.get_effective_key() > r.get_effective_key())
-    return 1;
-  if (l.oid < r.oid)
-    return -1;
-  if (l.oid > r.oid)
-    return 1;
-  if (l.snap < r.snap)
-    return -1;
-  if (l.snap > r.snap)
-    return 1;
-  return 0;
-}
-
-int cmp_bitwise(const hobject_t& l, const hobject_t& r)
+int cmp(const hobject_t& l, const hobject_t& r)
 {
   if (l.max < r.max)
     return -1;
@@ -606,7 +572,7 @@ bool ghobject_t::parse(const string& s)
   return true;
 }
 
-int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r)
+int cmp(const ghobject_t& l, const ghobject_t& r)
 {
   if (l.max < r.max)
     return -1;
@@ -616,27 +582,7 @@ int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r)
     return -1;
   if (l.shard_id > r.shard_id)
     return 1;
-  int ret = cmp_nibblewise(l.hobj, r.hobj);
-  if (ret != 0)
-    return ret;
-  if (l.generation < r.generation)
-    return -1;
-  if (l.generation > r.generation)
-    return 1;
-  return 0;
-}
-
-int cmp_bitwise(const ghobject_t& l, const ghobject_t& r)
-{
-  if (l.max < r.max)
-    return -1;
-  if (l.max > r.max)
-    return 1;
-  if (l.shard_id < r.shard_id)
-    return -1;
-  if (l.shard_id > r.shard_id)
-    return 1;
-  int ret = cmp_bitwise(l.hobj, r.hobj);
+  int ret = cmp(l.hobj, r.hobj);
   if (ret != 0)
     return ret;
   if (l.generation < r.generation)

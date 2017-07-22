@@ -21,12 +21,6 @@
 #include "common/likely.h"
 #include "common/Clock.h"
 #include "log/Log.h"
-#include "include/assert.h"
-
-#include <iostream>
-#include <pthread.h>
-#include <streambuf>
-#include <sstream>
 
 extern void dout_emergency(const char * const str);
 extern void dout_emergency(const std::string &str);
@@ -57,7 +51,7 @@ public:
       char __array[((v >= -1) && (v <= 200)) ? 0 : -1] __attribute__((unused)); \
     }									\
     static size_t _log_exp_length=80; \
-    ceph::log::Entry *_dout_e = cct->_log->create_entry(v, sub, &_log_exp_length);	\
+    ceph::logging::Entry *_dout_e = cct->_log->create_entry(v, sub, &_log_exp_length);	\
     ostream _dout_os(&_dout_e->m_streambuf);				\
     CephContext *_dout_cct = cct;					\
     std::ostream* _dout = &_dout_os;
@@ -77,9 +71,11 @@ public:
 
 // NOTE: depend on magic value in _ASSERT_H so that we detect when
 // /usr/include/assert.h clobbers our fancier version.
-#define dendl std::flush;				\
+#define dendl_impl std::flush;				\
   _ASSERT_H->_log->submit_entry(_dout_e);		\
     }						\
   } while (0)
+
+#define dendl dendl_impl
 
 #endif

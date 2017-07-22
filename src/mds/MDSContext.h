@@ -42,7 +42,7 @@ protected:
 class MDSInternalContextBase : public MDSContext
 {
 public:
-    void complete(int r);
+    void complete(int r) override;
 };
 
 /**
@@ -52,7 +52,7 @@ class MDSInternalContext : public MDSInternalContextBase
 {
 protected:
   MDSRank *mds;
-  virtual MDSRank* get_mds();
+  MDSRank* get_mds() override;
 
 public:
   explicit MDSInternalContext(MDSRank *mds_) : mds(mds_) {
@@ -69,15 +69,32 @@ class MDSInternalContextWrapper : public MDSInternalContextBase
 protected:
   MDSRank *mds;
   Context *fin;
-  MDSRank *get_mds();
+  MDSRank *get_mds() override;
 public:
   MDSInternalContextWrapper(MDSRank *m, Context *c) : mds(m), fin(c) {}
-  void finish(int r);
+  void finish(int r) override;
 };
 
 class MDSIOContextBase : public MDSContext
 {
-    void complete(int r);
+public:
+  void complete(int r) override;
+};
+
+/**
+ * Completion for an log operation, takes big MDSRank lock
+ * before executing finish function. Update log's safe pos
+ * after finish functuon return.
+ */
+class MDSLogContextBase : public MDSIOContextBase
+{
+protected:
+  uint64_t write_pos;
+public:
+  MDSLogContextBase() : write_pos(0) {}
+  void complete(int r) final;
+  void set_write_pos(uint64_t wp) { write_pos = wp; }
+  virtual void pre_finish(int r) {}
 };
 
 /**
@@ -88,7 +105,7 @@ class MDSIOContext : public MDSIOContextBase
 {
 protected:
   MDSRank *mds;
-  virtual MDSRank* get_mds();
+  MDSRank* get_mds() override;
 
 public:
   explicit MDSIOContext(MDSRank *mds_) : mds(mds_) {
@@ -105,21 +122,21 @@ class MDSIOContextWrapper : public MDSIOContextBase
 protected:
   MDSRank *mds;
   Context *fin;
-  MDSRank *get_mds();
+  MDSRank *get_mds() override;
 public:
   MDSIOContextWrapper(MDSRank *m, Context *c) : mds(m), fin(c) {}
-  void finish(int r);
+  void finish(int r) override;
 };
 
 /**
  * No-op for callers expecting MDSInternalContextBase
  */
-class C_MDSInternalNoop : public MDSInternalContextBase
+class C_MDSInternalNoop final : public MDSInternalContextBase
 {
-  virtual MDSRank* get_mds() {assert(0);}
+  MDSRank* get_mds() override {ceph_abort();}
 public:
-  void finish(int r) {}
-  void complete(int r) {}
+  void finish(int r) override {}
+  void complete(int r) override { delete this; }
 };
 
 
@@ -129,24 +146,26 @@ public:
  */
 class C_IO_Wrapper : public MDSIOContext
 {
-private:
+protected:
+  bool async;
   MDSInternalContextBase *wrapped;
+  void finish(int r) override {
+    wrapped->complete(r);
+    wrapped = nullptr;
+  }
 public:
-  C_IO_Wrapper(MDSRank *mds_, MDSInternalContextBase *wrapped_) : MDSIOContext(mds_), wrapped(wrapped_) {
+  C_IO_Wrapper(MDSRank *mds_, MDSInternalContextBase *wrapped_) :
+    MDSIOContext(mds_), async(true), wrapped(wrapped_) {
     assert(wrapped != NULL);
   }
 
-  ~C_IO_Wrapper() {
+  ~C_IO_Wrapper() override {
     if (wrapped != nullptr) {
       delete wrapped;
       wrapped = nullptr;
     }
   }
-
-  virtual void finish(int r) {
-    wrapped->complete(r);
-    wrapped = nullptr;
-  }
+  void complete(int r) final;
 };
 
 
@@ -156,7 +175,7 @@ public:
 class MDSInternalContextGather : public MDSInternalContextBase
 {
 protected:
-  MDSRank *get_mds();
+  MDSRank *get_mds() override;
 };
 
 
@@ -165,7 +184,7 @@ class MDSGather : public C_GatherBase<MDSInternalContextBase, MDSInternalContext
 public:
   MDSGather(CephContext *cct, MDSInternalContextBase *onfinish) : C_GatherBase<MDSInternalContextBase, MDSInternalContextGather>(cct, onfinish) {}
 protected:
-  virtual MDSRank *get_mds() {return NULL;}
+  MDSRank *get_mds() override {return NULL;}
 };
 
 

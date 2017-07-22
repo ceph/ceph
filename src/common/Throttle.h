@@ -4,14 +4,14 @@
 #ifndef CEPH_THROTTLE_H
 #define CEPH_THROTTLE_H
 
-#include "Mutex.h"
-#include "Cond.h"
-#include <list>
 #include <map>
+#include <list>
+#include <chrono>
+#include <atomic>
 #include <iostream>
 #include <condition_variable>
-#include <chrono>
-#include "include/atomic.h"
+
+#include "Cond.h"
 #include "include/Context.h"
 
 class CephContext;
@@ -29,7 +29,7 @@ class Throttle {
   CephContext *cct;
   const std::string name;
   PerfCounters *logger;
-  ceph::atomic_t count, max;
+  std::atomic<unsigned> count = { 0 }, max = { 0 };
   Mutex lock;
   list<Cond*> cond;
   const bool use_perf;
@@ -41,8 +41,8 @@ public:
 private:
   void _reset_max(int64_t m);
   bool _should_wait(int64_t c) const {
-    int64_t m = max.read();
-    int64_t cur = count.read();
+    int64_t m = max;
+    int64_t cur = count;
     return
       m &&
       ((c <= m && cur + c > m) || // normally stay under max
@@ -57,14 +57,21 @@ public:
    * @returns the number of taken slots
    */
   int64_t get_current() const {
-    return count.read();
+    return count;
   }
 
   /**
    * get the max number of slots
    * @returns the max number of slots
    */
-  int64_t get_max() const { return max.read(); }
+  int64_t get_max() const { return max; }
+
+  /**
+   * return true if past midpoint
+   */
+  bool past_midpoint() const {
+    return count >= max / 2;
+  }
 
   /**
    * set the new max number, and wait until the number of taken slots drains
@@ -105,6 +112,11 @@ public:
    * @returns number of requests being hold after this
    */
   int64_t put(int64_t c = 1);
+   /**
+   * reset the zero to the stock
+   */
+  void reset();
+
   bool should_wait(int64_t c) const {
     return _should_wait(c);
   }
@@ -138,9 +150,13 @@ public:
  *
  * delay = 0, r \in [0, l)
  * delay = (r - l) * (e / (h - l)), r \in [l, h)
- * delay = h + (r - h)((m - e)/(1 - h))
+ * delay = e + (r - h)((m - e)/(1 - h))
  */
 class BackoffThrottle {
+  CephContext *cct;
+  const std::string name;
+  PerfCounters *logger;
+
   std::mutex lock;
   using locker = std::unique_lock<std::mutex>;
 
@@ -148,6 +164,8 @@ class BackoffThrottle {
 
   /// allocated once to avoid constantly allocating new ones
   vector<std::condition_variable> conds;
+
+  const bool use_perf;
 
   /// pointers into conds
   list<std::condition_variable*> waiters;
@@ -208,9 +226,10 @@ public:
   uint64_t get_current();
   uint64_t get_max();
 
-  BackoffThrottle(
-    unsigned expected_concurrency ///< [in] determines size of conds
-    ) : conds(expected_concurrency) {}
+  BackoffThrottle(CephContext *cct, const std::string& n,
+    unsigned expected_concurrency, ///< [in] determines size of conds
+    bool _use_perf = true);
+  ~BackoffThrottle();
 };
 
 
@@ -252,7 +271,7 @@ public:
   }
 
 protected:
-  virtual void finish(int r);
+  void finish(int r) override;
 
 private:
   OrderedThrottle *m_ordered_throttle;

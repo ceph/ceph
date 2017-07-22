@@ -7,7 +7,7 @@
 #include "include/int_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ObjectWatcher.h"
+#include "librbd/Watcher.h"
 #include "librbd/mirroring_watcher/Types.h"
 
 namespace librados {
@@ -16,56 +16,50 @@ namespace librados {
 
 namespace librbd {
 
-template <typename ImageCtxT = librbd::ImageCtx>
-class MirroringWatcher : public ObjectWatcher<ImageCtxT> {
-public:
-  typedef typename std::decay<decltype(*ImageCtxT::op_work_queue)>::type ContextWQT;
+namespace watcher {
+namespace util {
+template <typename> struct HandlePayloadVisitor;
+}
+}
 
-  MirroringWatcher(librados::IoCtx &io_ctx, ContextWQT *work_queue);
+template <typename ImageCtxT = librbd::ImageCtx>
+class MirroringWatcher : public Watcher {
+  friend struct watcher::util::HandlePayloadVisitor<MirroringWatcher<ImageCtxT>>;
+
+public:
+  MirroringWatcher(librados::IoCtx &io_ctx, ContextWQ *work_queue);
 
   static int notify_mode_updated(librados::IoCtx &io_ctx,
                                  cls::rbd::MirrorMode mirror_mode);
+  static void notify_mode_updated(librados::IoCtx &io_ctx,
+                                  cls::rbd::MirrorMode mirror_mode,
+                                  Context *on_finish);
+
   static int notify_image_updated(librados::IoCtx &io_ctx,
                                   cls::rbd::MirrorImageState mirror_image_state,
                                   const std::string &image_id,
                                   const std::string &global_image_id);
+  static void notify_image_updated(librados::IoCtx &io_ctx,
+                                   cls::rbd::MirrorImageState mirror_image_state,
+                                   const std::string &image_id,
+                                   const std::string &global_image_id,
+                                   Context *on_finish);
 
-  virtual void handle_mode_updated(cls::rbd::MirrorMode mirror_mode,
-                                   Context *on_ack) = 0;
+  virtual void handle_mode_updated(cls::rbd::MirrorMode mirror_mode) = 0;
   virtual void handle_image_updated(cls::rbd::MirrorImageState state,
                                     const std::string &image_id,
-                                    const std::string &global_image_id,
-                                    Context *on_ack) = 0;
-
-protected:
-  virtual std::string get_oid() const;
-
-  virtual void handle_notify(uint64_t notify_id, uint64_t handle,
-                             bufferlist &bl);
+                                    const std::string &global_image_id) = 0;
 
 private:
-  struct HandlePayloadVisitor : public boost::static_visitor<void> {
-    MirroringWatcher *mirroring_watcher;
-    Context *on_notify_ack;
-
-    HandlePayloadVisitor(MirroringWatcher *mirroring_watcher,
-                         Context *on_notify_ack)
-      : mirroring_watcher(mirroring_watcher), on_notify_ack(on_notify_ack) {
-    }
-
-    template <typename Payload>
-    inline void operator()(const Payload &payload) const {
-      mirroring_watcher->handle_payload(payload, on_notify_ack);
-    }
-  };
-
-  void handle_payload(const mirroring_watcher::ModeUpdatedPayload &payload,
+  bool handle_payload(const mirroring_watcher::ModeUpdatedPayload &payload,
                       Context *on_notify_ack);
-  void handle_payload(const mirroring_watcher::ImageUpdatedPayload &payload,
+  bool handle_payload(const mirroring_watcher::ImageUpdatedPayload &payload,
                       Context *on_notify_ack);
-  void handle_payload(const mirroring_watcher::UnknownPayload &payload,
+  bool handle_payload(const mirroring_watcher::UnknownPayload &payload,
                       Context *on_notify_ack);
 
+  void handle_notify(uint64_t notify_id, uint64_t handle,
+                     uint64_t notifier_id, bufferlist &bl) override;
 };
 
 } // namespace librbd

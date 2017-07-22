@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<script>
+        $(document).ready(function(){
+            // Pre-populated initial data at page load
+            var content_data = {{ content_data }};
+
+            var refresh = function() {
+                $.get("/osd/list_data/", function(data) {
+                    content_data.osds_by_server = data;
+                    $('.inlinesparkline').sparkline();
+                    setTimeout(refresh, 5000);
+                });
+            };
+
+            rivets.formatters.colored_up_in = function(osd){
+                var result = "";
+                if (osd.up) {
+                    result += "<span style='color:#00bb00;'>up</span>";
+                } else {
+                    result += "<span style='color:#bb0000;'>down</span>";
+                }
+
+                result += ", ";
+
+                if (osd.in) {
+                    result += "<span style='color:#00bb00;'>in</span>";
+                } else {
+                    result += "<span style='color:#bb0000;'>out</span>";
+                }
+
+                return result;
+            };
+
+            rivets.formatters.sparkline_data = function(time_series) {
+                result = "";
+                for (var i = 1; i < time_series.length; ++i) {
+                    var delta_v = time_series[i][1] - time_series[i - 1][1];
+                    var delta_t = time_series[i][0] - time_series[i - 1][0];
+                    result += (delta_v / delta_t + ",");
+                }
+                return result;
+            };
+
+            rivets.bind($("div#content"), content_data);
+            $('.inlinesparkline').sparkline();
+            setTimeout(refresh, 5000);
+        });
+</script>
+
+<section class="content-header">
+    <h1>
+        OSD daemons
+    </h1>
+</section>
+
+<section class="content">
+    <div class="box">
+        <div class="box-body">
+
+            <table class="table table-condensed table-bordered">
+            <thead>
+            <tr>
+                <th>Host</th>
+                <th>ID</th>
+                <th>Status</th>
+                <th>PGs</th>
+                <th>Usage</th>
+                <th>Read bytes</th>
+                <th>Write bytes</th>
+                <th>Read ops</th>
+                <th>Write ops</th>
+            </tr>
+            </thead>
+
+            <tbody rv-each-server="osds_by_server">
+                <tr rv-each-osd="server.1">
+                    <td rv-if="osd.first" rv-rowspan="server.1 | length">{server.0}</td>
+                    <td><a rv-href="osd.url">{osd.id}</a></td>
+                    <td rv-html="osd | colored_up_in"></td>
+                    <td>{osd.stats.numpg}</td>
+                    <td>{osd.stats.stat_bytes_used | dimless_binary} / {osd.stats.stat_bytes | dimless_binary}</td>
+                    <td>{osd.stats.op_out_bytes | dimless_binary}/s <span class="inlinesparkline" rv-html="osd.stats_history.op_out_bytes | sparkline_data"></span></td>
+                    <td>{osd.stats.op_in_bytes | dimless_binary}/s <span class="inlinesparkline" rv-html="osd.stats_history.op_in_bytes | sparkline_data"></span></td>
+                    <td>{osd.stats.op_r | dimless}/s</td>
+                    <td>{osd.stats.op_w | dimless}/s</td>
+                </tr>
+            </tbody>
+
+
+            </table>
+
+
+
+
+        </div>
+    </div>
+
+
+</section>
+<!-- /.content -->
+
+{% endblock %}

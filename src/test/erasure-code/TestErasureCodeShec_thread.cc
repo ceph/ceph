@@ -25,10 +25,8 @@
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 #include "include/stringify.h"
-#include "global/global_init.h"
 #include "erasure-code/shec/ErasureCodeShec.h"
 #include "erasure-code/ErasureCodePlugin.h"
-#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
@@ -86,22 +84,6 @@ TEST(ErasureCodeShec, thread)
   pthread_join(tid5, NULL);
 }
 
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **) argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  const char* env = getenv("CEPH_LIB");
-  std::string directory(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", directory, false, false);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
-
 void* thread1(void* pParam)
 {
   TestParam* param = static_cast<TestParam*>(pParam);
@@ -147,7 +129,7 @@ void* thread1(void* pParam)
     ErasureCodeProfile *profile = new ErasureCodeProfile();
     (*profile)["plugin"] = "shec";
     (*profile)["technique"] = "multiple";
-    (*profile)["ruleset-failure-domain"] = "osd";
+    (*profile)["crush-failure-domain"] = "osd";
     (*profile)["k"] = param->k;
     (*profile)["m"] = param->m;
     (*profile)["c"] = param->c;
@@ -165,8 +147,8 @@ void* thread1(void* pParam)
     EXPECT_EQ(i_c, shec->c);
     EXPECT_EQ(i_w, shec->w);
     EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-    EXPECT_STREQ("default", shec->ruleset_root.c_str());
-    EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
+    EXPECT_STREQ("default", shec->rule_root.c_str());
+    EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
     EXPECT_TRUE(shec->matrix != NULL);
     if ((shec->matrix == NULL)) {
       std::cout << "matrix is null" << std::endl;

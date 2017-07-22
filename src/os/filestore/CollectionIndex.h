@@ -24,9 +24,11 @@
 #include "common/RWLock.h"
 
 /**
- * CollectionIndex provides an interface for manipulating indexed collections
+  CollectionIndex provides an interface for manipulating indexed collections
  */
 class CollectionIndex {
+public:
+  CephContext* cct;
 protected:
   /**
    * Object encapsulating a returned path.
@@ -159,14 +161,13 @@ protected:
     uint32_t match,                             //< [in] value to match
     uint32_t bits,                              //< [in] bits to check
     CollectionIndex* dest  //< [in] destination index
-    ) { assert(0); return 0; }
+    ) { ceph_abort(); return 0; }
 
 
   /// List contents of collection by hash
   virtual int collection_list_partial(
     const ghobject_t &start, ///< [in] object at which to start
     const ghobject_t &end,    ///< [in] list only objects < end
-    bool sort_bitwise,      ///< [in] use bitwise sort
     int max_count,          ///< [in] return at most max_count objects
     vector<ghobject_t> *ls,  ///< [out] Listed objects
     ghobject_t *next         ///< [out] Next object to list
@@ -175,8 +176,8 @@ protected:
   /// Call prior to removing directory
   virtual int prep_delete() { return 0; }
 
-  explicit CollectionIndex(const coll_t& collection):
-    access_lock("CollectionIndex::access_lock", true, false) {}
+  CollectionIndex(CephContext* cct, const coll_t& collection)
+    : cct(cct), access_lock("CollectionIndex::access_lock", true, false) {}
 
   /*
    * Pre-hash the collection, this collection should map to a PG folder.
@@ -188,7 +189,12 @@ protected:
   virtual int pre_hash_collection(
       uint32_t pg_num,            ///< [in] pg number of the pool this collection belongs to
       uint64_t expected_num_objs  ///< [in] expected number of objects this collection has
-      ) { assert(0); return 0; }
+      ) { ceph_abort(); return 0; }
+
+  virtual int apply_layout_settings() { ceph_abort(); return 0; }
+
+  /// Read index-wide settings (should be called after construction)
+  virtual int read_settings() { return 0; }
 
   /// Virtual destructor
   virtual ~CollectionIndex() {}

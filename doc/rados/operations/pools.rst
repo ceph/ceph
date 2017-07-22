@@ -26,8 +26,6 @@ pools for storing data. A pool provides you with:
 - **Snapshots**: When you create snapshots with ``ceph osd pool mksnap``, 
   you effectively take a snapshot of a particular pool.
   
-- **Set Ownership**: You can set a user ID as the owner of a pool. 
-
 To organize data into pools, you can list, create, and remove pools. 
 You can also view the utilization statistics for each pool.
 
@@ -51,6 +49,10 @@ Ideally, you should override the default value for the number of placement
 groups in your Ceph configuration file, as the default is NOT ideal.
 For details on placement group numbers refer to `setting the number of placement groups`_
 
+.. note:: Starting with Luminous, all pools need to be associated to the
+   application using the pool. See `Associate Pool to Application`_ below for
+   more information.
+
 For example:: 
 
 	osd pool default pg num = 100
@@ -59,9 +61,9 @@ For example::
 To create a pool, execute:: 
 
 	ceph osd pool create {pool-name} {pg-num} [{pgp-num}] [replicated] \
-             [crush-ruleset-name] [expected-num-objects]
+             [crush-rule-name] [expected-num-objects]
 	ceph osd pool create {pool-name} {pg-num}  {pgp-num}   erasure \
-             [erasure-code-profile] [crush-ruleset-name] [expected_num_objects]
+             [erasure-code-profile] [crush-rule-name] [expected_num_objects]
 
 Where: 
 
@@ -106,10 +108,10 @@ Where:
 :Required: No. 
 :Default: replicated
 
-``[crush-ruleset-name]``
+``[crush-rule-name]``
 
-:Description: The name of a CRUSH ruleset to use for this pool.  The specified
-              ruleset must exist.
+:Description: The name of a CRUSH rule to use for this pool.  The specified
+              rule must exist.
 
 :Type: String
 :Required: No. 
@@ -155,6 +157,23 @@ placement groups for your pool.
 :Required: No.
 :Default: 0, no splitting at the pool creation time. 
 
+Associate Pool to Application
+=============================
+
+Pools need to be associated with an application before use. Pools that will be
+used with CephFS or pools that are automatically created by RGW are
+automatically associated. Pools that are intended for use with RBD should be
+initialized using the ``rbd`` tool (see `Block Device Commands`_ for more
+information).
+
+For other cases, you can manually associate a free-form application name to
+a pool.::
+
+        ceph osd pool application enable {pool-name} {application-name}
+
+.. note:: CephFS uses the application name ``cephfs``, RBD uses the
+   application name ``rbd``, and RGW uses the application name ``rgw``.
+
 Set Pool Quotas
 ===============
 
@@ -177,6 +196,13 @@ To delete a pool, execute::
 
 	ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
 
+
+To remove a pool the mon_allow_pool_delete flag must be set to true in the Monitor's
+configuration. Otherwise they will refuse to remove a pool.
+
+See `Monitor Configuration`_ for more information.
+
+.. _Monitor Configuration: ../../configuration/mon-config-ref
 	
 If you created your own rulesets and rules for a pool you created,  you should
 consider removing them when you no longer need your pool::
@@ -193,7 +219,7 @@ ruleset from the cluster.
 If you created users with permissions strictly for a pool that no longer
 exists, you should consider deleting those users too::
 
-	ceph auth list | grep -C 5 {pool-name}
+	ceph auth ls | grep -C 5 {pool-name}
 	ceph auth del {user}
 
 
@@ -270,15 +296,6 @@ You may set values for the following keys:
 :Type: Integer
 :Version: ``0.54`` and above
 
-.. _crash_replay_interval:
-
-``crash_replay_interval``
-
-:Description: The number of seconds to allow clients to replay acknowledged, 
-              but uncommitted requests.
-              
-:Type: Integer
-
 .. _pg_num:
 
 ``pg_num``
@@ -304,6 +321,16 @@ You may set values for the following keys:
 
 :Description: The ruleset to use for mapping object placement in the cluster.
 :Type: Integer
+
+.. _allow_ec_overwrites:
+
+``allow_ec_overwrites``
+
+:Description: Whether writes to an erasure coded pool can update part
+              of an object, so cephfs and rbd can use it. See
+              `Erasure Coding with Overwrites`_ for more details.
+:Type: Boolean
+:Version: ``12.2.0`` and above
 
 .. _hashpspool:
 
@@ -470,7 +497,7 @@ You may set values for the following keys:
 :Default: ``20``
 
 
-``hit_set_grade_search_last_n``
+``hit_set_search_last_n``
 
 :Description: Count at most N appearance in hit_sets for temperature calculation
 :Type: Integer
@@ -567,12 +594,6 @@ You may get values for the following keys:
 
 :Type: Integer
 :Version: ``0.54`` and above
-
-``crash_replay_interval``
-
-:Description: see crash_replay_interval_
-              
-:Type: Integer
 
 ``pg_num``
 
@@ -741,3 +762,6 @@ a size of 3).
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
 .. _Bloom Filter: http://en.wikipedia.org/wiki/Bloom_filter
 .. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups
+.. _Erasure Coding with Overwrites: ../erasure-code#erasure-coding-with-overwrites
+.. _Block Device Commands: ../../../rbd/rados-rbd-cmds/#create-a-block-device-pool
+

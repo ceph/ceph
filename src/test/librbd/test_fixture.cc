@@ -1,15 +1,16 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "include/stringify.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Operations.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "test/librados/test.h"
 #include <iostream>
@@ -18,17 +19,34 @@
 
 std::string TestFixture::_pool_name;
 librados::Rados TestFixture::_rados;
+rados_t TestFixture::_cluster;
 uint64_t TestFixture::_image_number = 0;
+std::string TestFixture::_data_pool;
 
 TestFixture::TestFixture() : m_image_size(0) {
 }
 
 void TestFixture::SetUpTestCase() {
+  ASSERT_EQ("", connect_cluster(&_cluster));
   _pool_name = get_temp_pool_name("test-librbd-");
   ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados));
+
+  bool created = false;
+  ASSERT_EQ(0, create_image_data_pool(_rados, _data_pool, &created));
+  if (!_data_pool.empty()) {
+    printf("using image data pool: %s\n", _data_pool.c_str());
+    if (!created) {
+      _data_pool.clear();
+    }
+  }
 }
 
 void TestFixture::TearDownTestCase() {
+  rados_shutdown(_cluster);
+  if (!_data_pool.empty()) {
+    ASSERT_EQ(0, _rados.pool_delete(_data_pool.c_str()));
+  }
+
   ASSERT_EQ(0, destroy_one_pool_pp(_pool_name, _rados));
 }
 
@@ -60,17 +78,19 @@ int TestFixture::open_image(const std::string &image_name,
   *ictx = new librbd::ImageCtx(image_name.c_str(), "", NULL, m_ioctx, false);
   m_ictxs.insert(*ictx);
 
-  return (*ictx)->state->open();
+  return (*ictx)->state->open(false);
 }
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,
                              const std::string &snap_name) {
-  return ictx.operations->snap_create(snap_name.c_str());
+  return ictx.operations->snap_create(cls::rbd::UserSnapshotNamespace(),
+				      snap_name.c_str());
 }
 
 int TestFixture::snap_protect(librbd::ImageCtx &ictx,
                               const std::string &snap_name) {
-  return ictx.operations->snap_protect(snap_name.c_str());
+  return ictx.operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
+                                       snap_name.c_str());
 }
 
 int TestFixture::flatten(librbd::ImageCtx &ictx,
@@ -107,7 +127,7 @@ int TestFixture::unlock_image() {
 }
 
 int TestFixture::acquire_exclusive_lock(librbd::ImageCtx &ictx) {
-  int r = ictx.aio_work_queue->write(0, 0, "", 0);
+  int r = ictx.io_work_queue->write(0, 0, {}, 0);
   if (r != 0) {
     return r;
   }

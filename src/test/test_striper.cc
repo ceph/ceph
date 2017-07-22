@@ -1,8 +1,5 @@
 #include "gtest/gtest.h"
 #include "global/global_context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "common/common_init.h"
 
 #include "osdc/Striper.h"
 
@@ -72,19 +69,4 @@ TEST(Striper, GetNumObj)
   size = 805608;
   numobjs = Striper::get_num_objects(l, size);
   ASSERT_EQ(6u, numobjs);
-}
-
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  return RUN_ALL_TESTS();
 }

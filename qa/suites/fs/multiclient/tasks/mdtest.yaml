@@ -1,0 +1,23 @@
+# make sure we get the same MPI version on all hosts
+os_type: ubuntu
+os_version: "14.04"
+
+tasks:
+- pexec:
+    clients:
+      - cd $TESTDIR
+      - wget http://download.ceph.com/qa/mdtest-1.9.3.tgz
+      - mkdir mdtest-1.9.3
+      - cd mdtest-1.9.3
+      - tar xvfz $TESTDIR/mdtest-1.9.3.tgz
+      - rm $TESTDIR/mdtest-1.9.3.tgz
+      - MPI_CC=mpicc make
+      - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
+- ssh_keys:
+- mpi:
+    exec: $TESTDIR/mdtest-1.9.3/mdtest -d $TESTDIR/gmnt -I 20 -z 5 -b 2 -R
+- pexec:
+    all:
+      - rm -f $TESTDIR/gmnt
+      - rm -rf $TESTDIR/mdtest-1.9.3
+      - rm -rf $TESTDIR/._mdtest-1.9.3

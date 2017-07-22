@@ -7,6 +7,7 @@ if(${WITH_CEPHFS})
     flock.cc
     recordlock.cc
     acl.cc
+    main.cc
   )
   set_target_properties(ceph_test_libcephfs PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
@@ -26,6 +27,7 @@ if(${WITH_CEPHFS})
   set_target_properties(ceph_test_libcephfs_access PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
   target_link_libraries(ceph_test_libcephfs_access
+    ceph-common
     cephfs
     librados
     ${UNITTEST_LIBS}

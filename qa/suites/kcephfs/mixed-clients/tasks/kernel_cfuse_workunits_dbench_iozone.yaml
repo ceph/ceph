@@ -1,0 +1,20 @@
+tasks:
+- install:
+- ceph:
+- parallel:
+   - user-workload
+   - kclient-workload
+user-workload:
+  sequential:
+  - ceph-fuse: [client.0]
+  - workunit:
+      clients:
+         client.0:
+           - suites/iozone.sh
+kclient-workload:
+  sequential:
+  - kclient: [client.1]
+  - workunit:
+      clients:
+         client.1:
+           - suites/dbench.sh

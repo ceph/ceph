@@ -17,6 +17,9 @@ TYPE(compressible_bloom_filter)
 #include "test_ceph_time.h"
 TYPE(real_time_wrapper)
 
+#include "test_sstring.h"
+TYPE(sstring_wrapper)
+
 #include "common/snap_types.h"
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
@@ -35,16 +38,17 @@ TYPE(SloppyCRCMap)
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
 TYPE_FEATUREFUL(entity_addr_t)
+TYPE_FEATUREFUL(entity_addrvec_t)
 TYPE_FEATUREFUL(entity_inst_t)
 
 #include "osd/OSDMap.h"
 TYPE(osd_info_t)
 TYPE(osd_xinfo_t)
-TYPE_FEATUREFUL_STRAYDATA(OSDMap)
+TYPE_FEATUREFUL_NOCOPY(OSDMap)
 TYPE_FEATUREFUL_STRAYDATA(OSDMap::Incremental)
 
 #include "crush/CrushWrapper.h"
-TYPE_NOCOPY(CrushWrapper)
+TYPE_FEATUREFUL_NOCOPY(CrushWrapper)
 
 #include "common/histogram.h"
 TYPE(pow2_hist_t)
@@ -66,11 +70,10 @@ TYPE(pg_stat_t)
 TYPE_FEATUREFUL(pool_stat_t)
 TYPE(pg_history_t)
 TYPE(pg_info_t)
-TYPE(pg_interval_t)
 TYPE_FEATUREFUL(pg_query_t)
 TYPE(pg_log_entry_t)
 TYPE(pg_log_t)
-TYPE(pg_missing_item)
+TYPE_FEATUREFUL(pg_missing_item)
 TYPE(pg_missing_t)
 TYPE(pg_ls_response_t)
 TYPE(pg_nls_response_t)
@@ -115,17 +118,21 @@ TYPE(ObjectStore::Transaction)
 #include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
 
-#ifdef WITH_LIBAIO
+#ifdef HAVE_LIBAIO
 #include "os/bluestore/bluestore_types.h"
 TYPE(bluestore_cnode_t)
 TYPE(bluestore_compression_header_t)
 TYPE(bluestore_extent_ref_map_t)
 TYPE(bluestore_pextent_t)
-TYPE(bluestore_blob_t)
-TYPE(bluestore_lextent_t)
+// TODO: bluestore_blob_t repurposes the "feature" param of encode() for its
+// struct_v. at a higher level, BlueStore::ExtendMap encodes the extends using
+// a different interface than the normal ones. see
+// BlueStore::ExtentMap::encode_some(). maybe we can test it using another
+// approach.
+// TYPE_FEATUREFUL(bluestore_blob_t)
 TYPE(bluestore_onode_t)
-TYPE(bluestore_wal_op_t)
-TYPE(bluestore_wal_transaction_t)
+TYPE(bluestore_deferred_op_t)
+TYPE(bluestore_deferred_transaction_t)
 #endif
 
 #include "common/hobject.h"
@@ -133,11 +140,12 @@ TYPE(hobject_t)
 TYPE(ghobject_t)
 
 #include "mon/AuthMonitor.h"
-TYPE(AuthMonitor::Incremental)
+TYPE_FEATUREFUL(AuthMonitor::Incremental)
 
 #include "mon/PGMap.h"
-TYPE(PGMap::Incremental)
-TYPE_NONDETERMINISTIC(PGMap)
+TYPE_FEATUREFUL(PGMap::Incremental)
+TYPE_FEATUREFUL_NONDETERMINISTIC(PGMap)
+TYPE_FEATUREFUL_NONDETERMINISTIC(PGMapDigest)
 
 #include "mon/MonitorDBStore.h"
 TYPE(MonitorDBStore::Transaction)
@@ -149,8 +157,19 @@ TYPE_FEATUREFUL(MonMap)
 #include "mon/MonCap.h"
 TYPE(MonCap)
 
+#include "mon/MgrMap.h"
+TYPE_FEATUREFUL(MgrMap)
+
 #include "mon/mon_types.h"
 TYPE(LevelDBStoreStats)
+
+#include "mon/CreatingPGs.h"
+TYPE(creating_pgs_t)
+
+#include "mgr/ServiceMap.h"
+TYPE_FEATUREFUL(ServiceMap)
+TYPE_FEATUREFUL(ServiceMap::Service)
+TYPE_FEATUREFUL(ServiceMap::Daemon)
 
 #include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
@@ -323,9 +342,19 @@ TYPE(rgw_cls_read_olh_log_ret)
 TYPE(rgw_cls_trim_olh_log_op)
 TYPE(rgw_cls_bucket_clear_olh_op)
 TYPE(rgw_cls_check_index_ret)
+TYPE(cls_rgw_reshard_add_op)
+TYPE(cls_rgw_reshard_list_op)
+TYPE(cls_rgw_reshard_list_ret)
+TYPE(cls_rgw_reshard_get_op)
+TYPE(cls_rgw_reshard_get_ret)
+TYPE(cls_rgw_reshard_remove_op)
+TYPE(cls_rgw_set_bucket_resharding_op)
+TYPE(cls_rgw_clear_bucket_resharding_op)
 
 #include "cls/rgw/cls_rgw_client.h"
 TYPE(rgw_bi_log_entry)
+TYPE(cls_rgw_reshard_entry)
+TYPE(cls_rgw_bucket_instance_entry)
 
 #include "cls/user/cls_user_types.h"
 TYPE(cls_user_bucket)
@@ -375,6 +404,7 @@ TYPE(cls::rbd::MirrorImage)
 #include "cls/lock/cls_lock_types.h"
 TYPE(rados::cls::lock::locker_id_t)
 TYPE_FEATUREFUL(rados::cls::lock::locker_info_t)
+TYPE_FEATUREFUL(rados::cls::lock::lock_info_t)
 
 #include "cls/lock/cls_lock_ops.h"
 TYPE(cls_lock_lock_op)
@@ -557,14 +587,16 @@ MESSAGE(MOSDPGCreate)
 MESSAGE(MOSDPGInfo)
 #include "messages/MOSDPGLog.h"
 MESSAGE(MOSDPGLog)
-#include "messages/MOSDPGMissing.h"
-MESSAGE(MOSDPGMissing)
 #include "messages/MOSDPGNotify.h"
 MESSAGE(MOSDPGNotify)
 #include "messages/MOSDPGQuery.h"
 MESSAGE(MOSDPGQuery)
 #include "messages/MOSDPGRemove.h"
 MESSAGE(MOSDPGRemove)
+#include "messages/MOSDPGRecoveryDelete.h"
+MESSAGE(MOSDPGRecoveryDelete)
+#include "messages/MOSDPGRecoveryDeleteReply.h"
+MESSAGE(MOSDPGRecoveryDeleteReply)
 #include "messages/MOSDPGScan.h"
 MESSAGE(MOSDPGScan)
 #include "messages/MOSDPGTemp.h"

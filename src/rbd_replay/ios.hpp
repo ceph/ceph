@@ -117,9 +117,9 @@ public:
     : IO(ionum, start_time, thread_id, io_set_t()) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 };
 
 class StopThreadIO : public IO {
@@ -131,9 +131,9 @@ public:
     : IO(ionum, start_time, thread_id, deps) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 };
 
 class ReadIO : public IO {
@@ -151,9 +151,9 @@ public:
       m_length(length) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 
 private:
   imagectx_id_t m_imagectx;
@@ -176,9 +176,9 @@ public:
       m_length(length) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 
 private:
   imagectx_id_t m_imagectx;
@@ -201,9 +201,9 @@ public:
       m_length(length) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 
 private:
   imagectx_id_t m_imagectx;
@@ -226,9 +226,9 @@ public:
       m_length(length) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 
 private:
   imagectx_id_t m_imagectx;
@@ -251,9 +251,9 @@ public:
       m_length(length) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 
 private:
   imagectx_id_t m_imagectx;
@@ -276,9 +276,9 @@ public:
       m_length(length) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 
 private:
   imagectx_id_t m_imagectx;
@@ -303,13 +303,13 @@ public:
       m_readonly(readonly) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
   imagectx_id_t imagectx() const {
     return m_imagectx;
   }
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 
 private:
   imagectx_id_t m_imagectx;
@@ -329,13 +329,13 @@ public:
       m_imagectx(imagectx) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
   imagectx_id_t imagectx() const {
     return m_imagectx;
   }
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 
 private:
   imagectx_id_t m_imagectx;
@@ -358,13 +358,13 @@ public:
       m_readonly(readonly) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
   imagectx_id_t imagectx() const {
     return m_imagectx;
   }
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 
 private:
   imagectx_id_t m_imagectx;
@@ -384,13 +384,13 @@ public:
       m_imagectx(imagectx) {
   }
 
-  virtual void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl) const override;
 
   imagectx_id_t imagectx() const {
     return m_imagectx;
   }
 
-  void write_debug(std::ostream& out) const;
+  void write_debug(std::ostream& out) const override;
 
 private:
   imagectx_id_t m_imagectx;

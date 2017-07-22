@@ -88,7 +88,7 @@ bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_ent
     ldout(cct, 10) << "chain_cache_entry: cache_locator=" << cache_info->cache_locator << dendl;
     map<string, ObjectCacheEntry>::iterator iter = cache_map.find(cache_info->cache_locator);
     if (iter == cache_map.end()) {
-      ldout(cct, 20) << "chain_cache_entry: couldn't find cachce locator" << dendl;
+      ldout(cct, 20) << "chain_cache_entry: couldn't find cache locator" << dendl;
       return false;
     }
 

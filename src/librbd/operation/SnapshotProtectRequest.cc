@@ -31,8 +31,9 @@ std::ostream& operator<<(std::ostream& os,
 template <typename I>
 SnapshotProtectRequest<I>::SnapshotProtectRequest(I &image_ctx,
                                                   Context *on_finish,
-                                                  const std::string &snap_name)
-  : Request<I>(image_ctx, on_finish), m_snap_name(snap_name) {
+						  const cls::rbd::SnapshotNamespace &snap_namespace,
+						  const std::string &snap_name)
+  : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace), m_snap_name(snap_name) {
 }
 
 template <typename I>
@@ -85,7 +86,7 @@ int SnapshotProtectRequest<I>::verify_and_send_protect_snap() {
     return -ENOSYS;
   }
 
-  uint64_t snap_id = image_ctx.get_snap_id(m_snap_name);
+  uint64_t snap_id = image_ctx.get_snap_id(m_snap_namespace, m_snap_name);
   if (snap_id == CEPH_NOSNAP) {
     return -ENOENT;
   }

@@ -33,6 +33,10 @@ else
 	LIBEXECDIR=$CEPH_ROOT/src
 	ETCDIR=.
 	ASSUME_DEV=1
+	CEPH_LIB=$CEPH_ROOT/build/lib
+	echo "$PYTHONPATH" | grep -q $CEPH_LIB || export PYTHONPATH=$CEPH_LIB/cython_modules/lib.2:$PYTHONPATH
+	echo "$LD_LIBRARY_PATH" | grep -q $CEPH_LIB || export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
+	echo "$DYLD_LIBRARY_PATH" | grep -q $CEPH_LIB || export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
     else
 	BINDIR=@bindir@
 	SBINDIR=@sbindir@
@@ -48,6 +52,16 @@ if [ -n "$CEPH_BIN" ] && [ -n "$CEPH_ROOT" ] && [ -n "$CEPH_BUILD_DIR" ]; then
   ETCDIR=$CEPH_BIN
   LIBEXECDIR=$CEPH_ROOT/src
   ASSUME_DEV=1
+fi
+
+if [ `uname` = FreeBSD ]; then
+  GETOPT=/usr/local/bin/getopt
+else
+  GETOPT=getopt
+fi
+
+if id ceph > /dev/null 2>&1; then
+  SET_CEPHUSER_ARGS=" --setuser ceph --setgroup ceph"
 fi
 
 usage_exit() {
@@ -137,7 +151,7 @@ stop_daemon() {
 ## command line options
 options=
 
-OPTS=$(getopt -n 'init-ceph' -o 'hvam:c:' -l 'help,verbose,valgrind,novalgrind,allhosts,restart,norestart,btrfs,nobtrfs,fsmount,nofsmount,btrfsumount,fsumount,conf:,cluster:,hostname:' -- "$@")
+OPTS=$(${GETOPT} -n 'init-ceph' -o 'hvam:c:' -l 'help,verbose,valgrind,novalgrind,allhosts,restart,norestart,btrfs,nobtrfs,fsmount,nofsmount,btrfsumount,fsumount,conf:,cluster:,hostname:' -- "$@")
 if [ $? != 0 ]
 then
     exit 1
@@ -251,7 +265,8 @@ get_local_name_list
 get_name_list "$@"
 
 # Reverse the order if we are stopping
-if [ "$command" = "stop" ]; then
+
+if [ "$command" = "stop" -o "$command" = "onestop" ]; then
     for f in $what; do
        new_order="$f $new_order"
     done
@@ -276,7 +291,7 @@ for name in $what; do
 
     get_conf pid_file "$run_dir/$type.$id.pid" "pid file"
 
-    if [ "$command" = "start" ]; then
+    if [ "$command" = "start" -o "$command" = "onestart" ]; then
 	if [ -n "$pid_file" ]; then
 	    do_cmd "mkdir -p "`dirname $pid_file`
 	    cmd="$cmd --pid-file $pid_file"
@@ -332,7 +347,7 @@ for name in $what; do
     get_conf asok "$run_dir/$cluster-$type.$id.asok" "admin socket"
 
     case "$command" in
-	start)
+	start|onestart)
             # Increase max_open_files, if the configuration calls for it.
             get_conf max_open_files "32768" "max open files"
 
@@ -352,7 +367,7 @@ for name in $what; do
 
 	    [ -n "$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES" ] && tcmalloc="TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES"
 
-	    cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
+	    cmd="$files $tcmalloc $wrap $cmd --cluster $cluster ${SET_CEPHUSER_ARGS} $runmode"
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
@@ -408,6 +423,10 @@ for name in $what; do
 		case "${update_crush:-1}" in 1|[Tt][Rr][Uu][Ee])
 		    # update location in crush
 		    get_conf osd_location_hook "$BINDIR/ceph-crush-location" "osd crush location hook"
+                   if [ ! -e "$osd_location_hook" ]; then
+                       EXIT_STATUS=2
+                       continue
+                   fi
 		    osd_location=`$osd_location_hook --cluster $cluster --id $id --type osd`
 		    get_conf osd_weight "" "osd crush initial weight"
 		    defaultweight="$(df -P -k $osd_data/. | tail -1 | awk '{ print sprintf("%.4f",$2/1073741824) }')"
@@ -436,27 +455,11 @@ for name in $what; do
 		continue
 	    fi
 
-	    if [ "$type" = "mon" ]; then
-		# this will only work if we are using default paths
-		# for the mon data and admin socket.  if so, run
-		# ceph-create-keys.  this is the case for (normal)
-		# chef and ceph-deploy clusters, which is who needs
-		# these keys.  it's also true for legacy installs
-		# via mkcephfs, which is fine too; there is no harm
-		# in creating these keys.
-		get_conf mon_data "/var/lib/ceph/mon/$cluster-$id" "mon data"
-		if [ "$mon_data" = "/var/lib/ceph/mon/$cluster-$id" -a "$asok" = "/var/run/ceph/$cluster-mon.$id.asok" ]; then
-		    echo Starting ceph-create-keys on $host...
-		    cmd2="$SBINDIR/ceph-create-keys --cluster $cluster -i $id 2> /dev/null &"
-		    do_cmd "$cmd2"
-		fi
-	    fi
-
 	    [ -n "$post_start" ] && do_cmd "$post_start"
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && touch $lockfile
 	    ;;
 
-	stop)
+	stop|onestop)
 	    get_conf pre_stop "" "pre stop command"
 	    get_conf post_stop "" "post stop command"
 	    [ -n "$pre_stop" ] && do_cmd "$pre_stop"
@@ -474,7 +477,8 @@ for name in $what; do
 	status)
 	    if daemon_is_running $name ceph-$type $id $pid_file; then
 		printf "$name: running "
-		do_cmd "$BINDIR/ceph --admin-daemon $asok version 2>/dev/null" || echo unknown
+		do_cmd "$BINDIR/ceph daemon $name version 2>/dev/null" || printf unknown
+		printf "\n"
             elif [ -e "$pid_file" ]; then
                 # daemon is dead, but pid file still exists
                 echo "$name: dead."
@@ -509,7 +513,7 @@ for name in $what; do
 	    signal_daemon $name ceph-$type $pid_file -1 "Reloading"
 	    ;;
 
-	restart)
+	restart|onerestart)
 	    $0 $options stop $name
 	    $0 $options start $name
 	    ;;

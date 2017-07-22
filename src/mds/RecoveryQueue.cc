@@ -20,7 +20,7 @@
 
 #include "RecoveryQueue.h"
 
-
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << " RecoveryQueue::" << __func__ << " "
@@ -29,11 +29,11 @@ class C_MDC_Recover : public MDSIOContextBase {
 protected:
   RecoveryQueue *rq;
   CInode *in;
-  void finish(int r) {
+  void finish(int r) override {
     rq->_recovered(in, r, size, mtime);
   }
 
-  MDSRank *get_mds() {
+  MDSRank *get_mds() override {
     return rq->mds;
   }
 
@@ -89,7 +89,7 @@ void RecoveryQueue::_start(CInode *in)
   // blech
   if (pi->client_ranges.size() && !pi->get_max_size()) {
     mds->clog->warn() << "bad client_range " << pi->client_ranges
-		      << " on ino " << pi->ino << "\n";
+		      << " on ino " << pi->ino;
   }
 
   if (pi->client_ranges.size() && pi->get_max_size()) {
@@ -161,8 +161,16 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
     if (r == -EBLACKLISTED) {
       mds->respawn();
       return;
+    } else {
+      // Something wrong on the OSD side trying to recover the size
+      // of this inode.  In principle we could record this as a piece
+      // of per-inode damage, but it's actually more likely that
+      // this indicates something wrong with the MDS (like maybe
+      // it has the wrong auth caps?)
+      mds->clog->error() << " OSD read error while recovering size for inode 0x"
+                         << std::hex << in->ino() << std::dec;
+      mds->damaged();
     }
-    assert(0 == "unexpected error from osd during recovery");
   }
 
   file_recovering.erase(in);
@@ -176,7 +184,7 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
     mds->mdcache->remove_inode(in);
   } else {
     // journal
-    mds->locker->check_inode_max_size(in, true, true, size, false, 0, mtime);
+    mds->locker->check_inode_max_size(in, true, 0,  size, mtime);
     mds->locker->eval(in, CEPH_LOCK_IFILE);
     in->auth_unpin(this);
   }

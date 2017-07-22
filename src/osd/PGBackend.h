@@ -24,11 +24,13 @@
 #include "os/ObjectStore.h"
 #include "common/LogClient.h"
 #include <string>
+#include "PGTransaction.h"
 
 namespace Scrub {
   class Store;
 }
 struct shard_info_wrapper;
+struct inconsistent_obj_wrapper;
 
 //forward declaration
 class OSDMap;
@@ -48,6 +50,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
   * 4) Handling scrub, deep-scrub, repair
   */
  class PGBackend {
+ public:
+   CephContext* cct;
  protected:
    ObjectStore *store;
    const coll_t coll;
@@ -62,6 +66,9 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
     */
    class Listener {
    public:
+     /// Debugging
+     virtual DoutPrefixProvider *get_dpp() = 0;
+
      /// Recovery
 
      /**
@@ -71,6 +78,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        const hobject_t &oid,
        const ObjectRecoveryInfo &recovery_info,
        ObjectContextRef obc,
+       bool is_delete,
        ObjectStore::Transaction *t
        ) = 0;
 
@@ -80,7 +88,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
       */
      virtual void on_global_recover(
        const hobject_t &oid,
-       const object_stat_sum_t &stat_diff
+       const object_stat_sum_t &stat_diff,
+       bool is_delete
        ) = 0;
 
      /**
@@ -89,17 +98,33 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual void on_peer_recover(
        pg_shard_t peer,
        const hobject_t &oid,
-       const ObjectRecoveryInfo &recovery_info,
-       const object_stat_sum_t &stat
+       const ObjectRecoveryInfo &recovery_info
        ) = 0;
 
      virtual void begin_peer_recover(
        pg_shard_t peer,
        const hobject_t oid) = 0;
 
-     virtual void failed_push(pg_shard_t from, const hobject_t &soid) = 0;
-     
+     virtual void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) = 0;
+     virtual void primary_failed(const hobject_t &soid) = 0;
+     virtual bool primary_error(const hobject_t& soid, eversion_t v) = 0;
      virtual void cancel_pull(const hobject_t &soid) = 0;
+
+     virtual void apply_stats(
+       const hobject_t &soid,
+       const object_stat_sum_t &delta_stats) = 0;
+
+     /**
+      * Called when a read on the primary fails when pushing
+      */
+     virtual void on_primary_error(
+       const hobject_t &oid,
+       eversion_t v
+       ) = 0;
+
+     virtual void remove_missing_object(const hobject_t &oid,
+					eversion_t v,
+					Context *on_complete) = 0;
 
      /**
       * Bless a context
@@ -121,6 +146,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        OpRequestRef op = OpRequestRef()
        ) = 0;
      virtual epoch_t get_epoch() const = 0;
+     virtual epoch_t get_interval_start_epoch() const = 0;
+     virtual epoch_t get_last_peering_reset_epoch() const = 0;
 
      virtual const set<pg_shard_t> &get_actingbackfill_shards() const = 0;
      virtual const set<pg_shard_t> &get_acting_shards() const = 0;
@@ -128,7 +155,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual std::string gen_dbg_prefix() const = 0;
 
-     virtual const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &get_missing_loc_shards()
+     virtual const map<hobject_t, set<pg_shard_t>> &get_missing_loc_shards()
        const = 0;
 
      virtual const pg_missing_tracker_t &get_local_missing() const = 0;
@@ -174,7 +201,13 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual ObjectContextRef get_obc(
        const hobject_t &hoid,
-       map<string, bufferlist> &attrs) = 0;
+       const map<string, bufferlist> &attrs) = 0;
+
+     virtual bool try_lock_for_read(
+       const hobject_t &hoid,
+       ObcLockManager &manager) = 0;
+
+     virtual void release_locks(ObcLockManager &manager) = 0;
 
      virtual void op_applied(
        const eversion_t &applied_version) = 0;
@@ -185,11 +218,20 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual void log_operation(
        const vector<pg_log_entry_t> &logv,
-       boost::optional<pg_hit_set_history_t> &hset_history,
+       const boost::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
-       const eversion_t &trim_rollback_to,
+       const eversion_t &roll_forward_to,
        bool transaction_applied,
        ObjectStore::Transaction &t) = 0;
+
+     virtual void pgb_set_object_snap_mapping(
+       const hobject_t &soid,
+       const set<snapid_t> &snaps,
+       ObjectStore::Transaction *t) = 0;
+
+     virtual void pgb_clear_object_snap_mapping(
+       const hobject_t &soid,
+       ObjectStore::Transaction *t) = 0;
 
      virtual void update_peer_last_complete_ondisk(
        pg_shard_t fromosd,
@@ -216,10 +258,9 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual pg_shard_t primary_shard() const = 0;
 
      virtual uint64_t min_peer_features() const = 0;
-     virtual bool sort_bitwise() const = 0;
 
-     virtual hobject_t get_temp_recovery_object(eversion_t version,
-						snapid_t snap) = 0;
+     virtual hobject_t get_temp_recovery_object(const hobject_t& target,
+						eversion_t version) = 0;
 
      virtual void send_message_osd_cluster(
        int peer, Message *m, epoch_t from_epoch) = 0;
@@ -236,12 +277,17 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual LogClientTemp clog_error() = 0;
 
+     virtual bool check_failsafe_full(ostream &ss) = 0;
+
+     virtual bool check_osdmap_full(const set<pg_shard_t> &missing_on) = 0;
+
      virtual ~Listener() {}
    };
    Listener *parent;
    Listener *get_parent() const { return parent; }
-   PGBackend(Listener *l, ObjectStore *store, coll_t coll,
+   PGBackend(CephContext* cct, Listener *l, ObjectStore *store, coll_t coll,
 	     ObjectStore::CollectionHandle &ch) :
+     cct(cct),
      store(store),
      coll(coll),
      ch(ch),
@@ -264,6 +310,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
     */
    struct RecoveryHandle {
      bool cache_dont_need;
+     map<pg_shard_t, vector<pair<hobject_t, eversion_t> > > deletes;
 
      RecoveryHandle(): cache_dont_need(false) {}
      virtual ~RecoveryHandle() {}
@@ -277,6 +324,11 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      RecoveryHandle *h,     ///< [in] op to finish
      int priority           ///< [in] msg priority
      ) = 0;
+
+   void recover_delete_object(const hobject_t &oid, eversion_t v,
+			      RecoveryHandle *h);
+   void send_recovery_deletes(int prio,
+			      const map<pg_shard_t, vector<pair<hobject_t, eversion_t> > > &deletes);
 
    /**
     * recover_object
@@ -299,7 +351,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
     * @param missing [in] set of info, missing pairs for queried nodes
     * @param overlaps [in] mapping of object to file offset overlaps
     */
-   virtual void recover_object(
+   virtual int recover_object(
      const hobject_t &hoid, ///< [in] object to recover
      eversion_t v,          ///< [in] version to recover
      ObjectContextRef head,  ///< [in] context of the head/snapdir object
@@ -315,11 +367,14 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    virtual bool can_handle_while_inactive(OpRequestRef op) = 0;
 
    /// gives PGBackend a crack at an incoming message
-   virtual bool handle_message(
+   bool handle_message(
      OpRequestRef op ///< [in] message received
-     ) = 0; ///< @return true if the message was handled
+     ); ///< @return true if the message was handled
 
-   virtual void check_recovery_sources(const OSDMapRef osdmap) = 0;
+   /// the variant of handle_message that is overridden by child classes
+   virtual bool _handle_message(OpRequestRef op) = 0;
+
+   virtual void check_recovery_sources(const OSDMapRef& osdmap) = 0;
 
 
    /**
@@ -341,20 +396,20 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    virtual void dump_recovery_info(Formatter *f) const = 0;
 
  private:
-   set<hobject_t, hobject_t::BitwiseComparator> temp_contents;
+   set<hobject_t> temp_contents;
  public:
    // Track contents of temp collection, clear on reset
    void add_temp_obj(const hobject_t &oid) {
      temp_contents.insert(oid);
    }
-   void add_temp_objs(const set<hobject_t, hobject_t::BitwiseComparator> &oids) {
+   void add_temp_objs(const set<hobject_t> &oids) {
      temp_contents.insert(oids.begin(), oids.end());
    }
    void clear_temp_obj(const hobject_t &oid) {
      temp_contents.erase(oid);
    }
-   void clear_temp_objs(const set<hobject_t, hobject_t::BitwiseComparator> &oids) {
-     for (set<hobject_t, hobject_t::BitwiseComparator>::const_iterator i = oids.begin();
+   void clear_temp_objs(const set<hobject_t> &oids) {
+     for (set<hobject_t>::const_iterator i = oids.begin();
 	  i != oids.end();
 	  ++i) {
        temp_contents.erase(*i);
@@ -363,130 +418,14 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual ~PGBackend() {}
 
-   /**
-    * Client IO Interface
-    */
-   class PGTransaction {
-   public:
-     /// Write
-     virtual void touch(
-       const hobject_t &hoid  ///< [in] obj to touch
-       ) = 0;
-     virtual void stash(
-       const hobject_t &hoid,   ///< [in] obj to remove
-       version_t former_version ///< [in] former object version
-       ) = 0;
-     virtual void remove(
-       const hobject_t &hoid ///< [in] obj to remove
-       ) = 0;
-     virtual void setattrs(
-       const hobject_t &hoid,         ///< [in] object to write
-       map<string, bufferlist> &attrs ///< [in] attrs, may be cleared
-       ) = 0;
-     virtual void setattr(
-       const hobject_t &hoid,         ///< [in] object to write
-       const string &attrname,        ///< [in] attr to write
-       bufferlist &bl                 ///< [in] val to write, may be claimed
-       ) = 0;
-     virtual void rmattr(
-       const hobject_t &hoid,         ///< [in] object to write
-       const string &attrname         ///< [in] attr to remove
-       ) = 0;
-     virtual void clone(
-       const hobject_t &from,
-       const hobject_t &to
-       ) = 0;
-     virtual void rename(
-       const hobject_t &from,
-       const hobject_t &to
-       ) = 0;
-     virtual void set_alloc_hint(
-       const hobject_t &hoid,
-       uint64_t expected_object_size,
-       uint64_t expected_write_size,
-       uint32_t flags
-       ) = 0;
-
-     /// Optional, not supported on ec-pool
-     virtual void write(
-       const hobject_t &hoid, ///< [in] object to write
-       uint64_t off,          ///< [in] off at which to write
-       uint64_t len,          ///< [in] len to write from bl
-       bufferlist &bl,        ///< [in] bl to write will be claimed to len
-       uint32_t fadvise_flags = 0 ///< [in] fadvise hint
-       ) { assert(0); }
-     virtual void omap_setkeys(
-       const hobject_t &hoid,         ///< [in] object to write
-       map<string, bufferlist> &keys  ///< [in] omap keys, may be cleared
-       ) { assert(0); }
-     virtual void omap_setkeys(
-       const hobject_t &hoid,         ///< [in] object to write
-       bufferlist &keys_bl  ///< [in] omap keys, may be cleared
-       ) { assert(0); }
-     virtual void omap_rmkeys(
-       const hobject_t &hoid,         ///< [in] object to write
-       set<string> &keys              ///< [in] omap keys, may be cleared
-       ) { assert(0); }
-     virtual void omap_rmkeys(
-       const hobject_t &hoid,         ///< [in] object to write
-       bufferlist &keys_bl            ///< [in] omap keys, may be cleared
-       ) { assert(0); }
-     virtual void omap_clear(
-       const hobject_t &hoid          ///< [in] object to clear omap
-       ) { assert(0); }
-     virtual void omap_setheader(
-       const hobject_t &hoid,         ///< [in] object to write
-       bufferlist &header             ///< [in] header
-       ) { assert(0); }
-     virtual void clone_range(
-       const hobject_t &from,         ///< [in] from
-       const hobject_t &to,           ///< [in] to
-       uint64_t fromoff,              ///< [in] offset
-       uint64_t len,                  ///< [in] len
-       uint64_t tooff                 ///< [in] offset
-       ) { assert(0); }
-     virtual void truncate(
-       const hobject_t &hoid,
-       uint64_t off
-       ) { assert(0); }
-     virtual void zero(
-       const hobject_t &hoid,
-       uint64_t off,
-       uint64_t len
-       ) { assert(0); }
-
-     /// Supported on all backends
-
-     /// off must be the current object size
-     virtual void append(
-       const hobject_t &hoid, ///< [in] object to write
-       uint64_t off,          ///< [in] off at which to write
-       uint64_t len,          ///< [in] len to write from bl
-       bufferlist &bl,        ///< [in] bl to write will be claimed to len
-       uint32_t fadvise_flags ///< [in] fadvise hint
-       ) { write(hoid, off, len, bl, fadvise_flags); }
-
-     /// to_append *must* have come from the same PGBackend (same concrete type)
-     virtual void append(
-       PGTransaction *to_append ///< [in] trans to append, to_append is cleared
-       ) = 0;
-     virtual void nop() = 0;
-     virtual bool empty() const = 0;
-     virtual uint64_t get_bytes_written() const = 0;
-     virtual ~PGTransaction() {}
-   };
-   using PGTransactionUPtr = std::unique_ptr<PGTransaction>;
-
-   /// Get implementation specific empty transaction
-   virtual PGTransaction *get_transaction() = 0;
-
    /// execute implementation specific transaction
    virtual void submit_transaction(
      const hobject_t &hoid,               ///< [in] object
+     const object_stat_sum_t &delta_stats,///< [in] stat change
      const eversion_t &at_version,        ///< [in] version
      PGTransactionUPtr &&t,               ///< [in] trans to execute (move)
      const eversion_t &trim_to,           ///< [in] trim log to here
-     const eversion_t &trim_rollback_to,  ///< [in] trim rollback info to here
+     const eversion_t &roll_forward_to,  ///< [in] trim rollback info to here
      const vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
      boost::optional<pg_hit_set_history_t> &hset_history,
@@ -498,6 +437,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      OpRequestRef op                      ///< [in] op
      ) = 0;
 
+   /// submit callback to be called in order with pending writes
+   virtual void call_write_ordered(std::function<void(void)> &&cb) = 0;
 
    void try_stash(
      const hobject_t &hoid,
@@ -505,9 +446,26 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      ObjectStore::Transaction *t);
 
    void rollback(
-     const hobject_t &hoid,
-     const ObjectModDesc &desc,
+     const pg_log_entry_t &entry,
      ObjectStore::Transaction *t);
+
+   friend class LRBTrimmer;
+   void rollforward(
+     const pg_log_entry_t &entry,
+     ObjectStore::Transaction *t);
+
+   void trim(
+     const pg_log_entry_t &entry,
+     ObjectStore::Transaction *t);
+
+   void remove(
+     const hobject_t &hoid,
+     ObjectStore::Transaction *t);
+
+ protected:
+
+   void handle_recovery_delete(OpRequestRef op);
+   void handle_recovery_delete_reply(OpRequestRef op);
 
    /// Reapply old attributes
    void rollback_setattrs(
@@ -536,12 +494,22 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    /// Delete object to rollback create
    void rollback_create(
      const hobject_t &hoid,
-     ObjectStore::Transaction *t);
+     ObjectStore::Transaction *t) {
+     remove(hoid, t);
+   }
 
-   /// Trim object stashed at stashed_version
-   void trim_stashed_object(
+   /// Clone the extents back into place
+   void rollback_extents(
+     version_t gen,
+     const vector<pair<uint64_t, uint64_t> > &extents,
      const hobject_t &hoid,
-     version_t stashed_version,
+     ObjectStore::Transaction *t);
+ public:
+
+   /// Trim object stashed at version
+   void trim_rollback_object(
+     const hobject_t &hoid,
+     version_t gen,
      ObjectStore::Transaction *t);
 
    /// List objects in collection
@@ -586,24 +554,27 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    void be_scan_list(
      ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
      ThreadPool::TPHandle &handle);
-   enum scrub_error_type be_compare_scrub_objects(
+   bool be_compare_scrub_objects(
      pg_shard_t auth_shard,
      const ScrubMap::object &auth,
      const object_info_t& auth_oi,
      const ScrubMap::object &candidate,
      shard_info_wrapper& shard_error,
+     inconsistent_obj_wrapper &result,
      ostream &errorstream);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
      const map<pg_shard_t,ScrubMap*> &maps,
-     object_info_t *auth_oi);
+     object_info_t *auth_oi,
+     map<pg_shard_t, shard_info_wrapper> &shard_map,
+     inconsistent_obj_wrapper &object_error);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
      bool repair,
-     map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &missing,
-     map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &inconsistent,
-     map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator> &authoritative,
-     map<hobject_t, pair<uint32_t,uint32_t>, hobject_t::BitwiseComparator> &missing_digest,
+     map<hobject_t, set<pg_shard_t>> &missing,
+     map<hobject_t, set<pg_shard_t>> &inconsistent,
+     map<hobject_t, list<pg_shard_t>> &authoritative,
+     map<hobject_t, pair<uint32_t,uint32_t>> &missing_digest,
      int &shallow_errors, int &deep_errors,
      Scrub::Store *store,
      const spg_t& pgid,
@@ -625,30 +596,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
      CephContext *cct);
- };
-
-struct PG_SendMessageOnConn: public Context {
-  PGBackend::Listener *pg;
-  Message *reply;
-  ConnectionRef conn;
-  PG_SendMessageOnConn(
-    PGBackend::Listener *pg,
-    Message *reply,
-    ConnectionRef conn) : pg(pg), reply(reply), conn(conn) {}
-  void finish(int) {
-    pg->send_message_osd_cluster(reply, conn.get());
-  }
-};
-
-struct PG_RecoveryQueueAsync : public Context {
-  PGBackend::Listener *pg;
-  GenContext<ThreadPool::TPHandle&> *c;
-  PG_RecoveryQueueAsync(
-    PGBackend::Listener *pg,
-    GenContext<ThreadPool::TPHandle&> *c) : pg(pg), c(c) {}
-  void finish(int) {
-    pg->schedule_recovery_work(c);
-  }
 };
 
 #endif

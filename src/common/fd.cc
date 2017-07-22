@@ -12,34 +12,26 @@
  *
  */
 
-#include "fd.h"
-
-#include <sys/types.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <errno.h>
-
+#include "include/compat.h"
 #include "debug.h"
 #include "errno.h"
 
 void dump_open_fds(CephContext *cct)
 {
-  const char *fn = "/proc/self/fd";
+  const char *fn = PROCPREFIX "/proc/self/fd";
   DIR *d = opendir(fn);
   if (!d) {
     lderr(cct) << "dump_open_fds unable to open " << fn << dendl;
     return;
   }
-  struct dirent de, *pde = 0;
+  struct dirent *de = nullptr;
 
   int n = 0;
-  while (readdir_r(d, &de, &pde) >= 0) {
-    if (pde == NULL)
-      break;
-    if (de.d_name[0] == '.')
+  while ((de = ::readdir(d))) {
+    if (de->d_name[0] == '.')
       continue;
     char path[PATH_MAX];
-    snprintf(path, sizeof(path), "%s/%s", fn, de.d_name);
+    snprintf(path, sizeof(path), "%s/%s", fn, de->d_name);
     char target[PATH_MAX];
     ssize_t r = readlink(path, target, sizeof(target) - 1);
     if (r < 0) {
@@ -48,7 +40,7 @@ void dump_open_fds(CephContext *cct)
       continue;
     }
     target[r] = 0;
-    lderr(cct) << "dump_open_fds " << de.d_name << " -> " << target << dendl;
+    lderr(cct) << "dump_open_fds " << de->d_name << " -> " << target << dendl;
     n++;
   }
   lderr(cct) << "dump_open_fds dumped " << n << " open files" << dendl;

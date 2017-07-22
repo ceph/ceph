@@ -1,9 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/algorithm/string.hpp>
+#include <boost/lexical_cast.hpp>
+
 #include "librbd/Utils.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
+#include "include/rbd/features.h"
+#include "common/dout.h"
+
+#define dout_subsys ceph_subsys_rbd
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd: "
 
 namespace librbd {
 namespace util {
@@ -32,8 +41,8 @@ std::string unique_lock_name(const std::string &name, void *address) {
   return name + " (" + stringify(address) + ")";
 }
 
-librados::AioCompletion *create_rados_ack_callback(Context *on_finish) {
-  return create_rados_ack_callback<Context, &Context::complete>(on_finish);
+librados::AioCompletion *create_rados_callback(Context *on_finish) {
+  return create_rados_callback<Context, &Context::complete>(on_finish);
 }
 
 std::string generate_image_id(librados::IoCtx &ioctx) {
@@ -47,13 +56,48 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
   std::string id = bid_ss.str();
 
   // ensure the image id won't overflow the fixed block name size
-  const size_t max_id_length = RBD_MAX_BLOCK_NAME_SIZE - strlen(RBD_DATA_PREFIX) - 1;
-  if (id.length() > max_id_length) {
-    id = id.substr(id.length() - max_id_length);
+  if (id.length() > RBD_MAX_IMAGE_ID_LENGTH) {
+    id = id.substr(id.length() - RBD_MAX_IMAGE_ID_LENGTH);
   }
 
   return id;
 }
 
+uint64_t get_rbd_default_features(CephContext* cct)
+{
+  auto str_val = cct->_conf->get_val<std::string>("rbd_default_features");
+  return boost::lexical_cast<uint64_t>(str_val);
+}
+
+bool calc_sparse_extent(const bufferptr &bp,
+                        size_t sparse_size,
+                        uint64_t length,
+                        size_t *write_offset,
+                        size_t *write_length,
+                        size_t *offset) {
+  size_t extent_size;
+  if (*offset + sparse_size > length) {
+    extent_size = length - *offset;
+  } else {
+    extent_size = sparse_size;
+  }
+
+  bufferptr extent(bp, *offset, extent_size);
+  *offset += extent_size;
+
+  bool extent_is_zero = extent.is_zero();
+  if (!extent_is_zero) {
+    *write_length += extent_size;
+  }
+  if (extent_is_zero && *write_length == 0) {
+    *write_offset += extent_size;
+  }
+
+  if ((extent_is_zero || *offset == length) && *write_length != 0) {
+    return true;
+  }
+  return false;
+}
 } // namespace util
+
 } // namespace librbd

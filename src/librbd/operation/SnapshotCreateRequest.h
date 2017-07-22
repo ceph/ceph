@@ -4,8 +4,9 @@
 #ifndef CEPH_LIBRBD_OPERATION_SNAPSHOT_CREATE_REQUEST_H
 #define CEPH_LIBRBD_OPERATION_SNAPSHOT_CREATE_REQUEST_H
 
+#include "cls/rbd/cls_rbd_types.h"
+#include "librbd/Types.h"
 #include "librbd/operation/Request.h"
-#include "librbd/parent_types.h"
 #include <string>
 
 class Context;
@@ -59,22 +60,25 @@ public:
    * (if enabled) and bubble the originating error code back to the client.
    */
   SnapshotCreateRequest(ImageCtxT &image_ctx, Context *on_finish,
-		        const std::string &snap_name, uint64_t journal_op_tid,
+			const cls::rbd::SnapshotNamespace &snap_namespace,
+		        const std::string &snap_name,
+			uint64_t journal_op_tid,
                         bool skip_object_map);
 
 protected:
-  virtual void send_op();
-  virtual bool should_complete(int r) {
+  void send_op() override;
+  bool should_complete(int r) override {
     return true;
   }
-  virtual bool can_affect_io() const override {
+  bool can_affect_io() const override {
     return true;
   }
-  virtual journal::Event create_event(uint64_t op_tid) const {
-    return journal::SnapCreateEvent(op_tid, m_snap_name);
+  journal::Event create_event(uint64_t op_tid) const override {
+    return journal::SnapCreateEvent(op_tid, m_snap_namespace, m_snap_name);
   }
 
 private:
+  cls::rbd::SnapshotNamespace m_snap_namespace;
   std::string m_snap_name;
   bool m_skip_object_map;
 
@@ -82,7 +86,7 @@ private:
 
   uint64_t m_snap_id;
   uint64_t m_size;
-  parent_info m_parent_info;
+  ParentInfo m_parent_info;
 
   void send_suspend_requests();
   Context *handle_suspend_requests(int *result);

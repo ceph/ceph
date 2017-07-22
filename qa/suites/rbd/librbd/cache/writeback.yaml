@@ -1,0 +1,6 @@
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        rbd cache: true

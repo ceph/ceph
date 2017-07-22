@@ -29,9 +29,20 @@ directory while creating key for a client following the undermentioned syntax. :
 
 ./ceph auth get-or-create client.*client_name* mon 'allow r' mds 'allow r, allow rw path=/*specified_directory*' osd 'allow rw pool=data'
 
-for example, to restrict client ``foo`` to ``bar`` directory, we will use. ::
+for example, to restrict client ``foo`` to writing only in the ``bar`` directory,
+we will use: ::
 
 ./ceph auth get-or-create client.foo mon 'allow r' mds 'allow r, allow rw path=/bar' osd 'allow rw pool=data'
+
+To completely restrict the client to the ``bar`` directory, omit the
+unqualified "allow r" clause: ::
+
+./ceph auth get-or-create client.foo mon 'allow r' mds 'allow rw path=/bar' osd 'allow rw pool=data'
+
+Note that if a client's read access is restricted to a path, they will only
+be able to mount the filesystem when specifying a readable path in the
+mount command (see below).
+
 
 See `User Management - Add a User to a Keyring`_. for additional details on user management
 
@@ -78,19 +89,27 @@ restricts access to the CephFS data pool(s):
         caps: [mon] allow r
         caps: [osd] allow rw pool=data1, allow rw pool=data2
 
+.. note::
+
+    Without a corresponding MDS path restriction, the OSD capabilities above do
+    **not** restrict file deletions outside of the ``data1`` and ``data2``
+    pools.
+
 You may also restrict clients from writing data by using 'r' instead of
 'rw' in OSD capabilities.  This does not affect the ability of the client
 to update filesystem metadata for these files, but it will prevent them
 from persistently writing data in a way that would be visible to other clients.
 
-Layout modification restriction
-===============================
+Layout and Quota restriction (the 'p' flag)
+===========================================
 
-To prevent clients from modifying the data pool used for files or
-directories, use the 'p' modifier in MDS authentication capabilities.
+To set layouts or quotas, clients require the 'p' flag in addition to 'rw'.
+This restricts all the attributes that are set by special extended attributes
+with a "ceph." prefix, as well as restricting other means of setting
+these fields (such as openc operations with layouts).
 
-For example, in the following snippet client.0 can modify the pool used
-for files, but client.1 cannot.
+For example, in the following snippet client.0 can modify layouts and quotas, 
+but client.1 cannot.
 
 ::
 
@@ -107,4 +126,4 @@ for files, but client.1 cannot.
         caps: [osd] allow rw pool=data
 
 
-.. _User Management - Add a User to a Keyring: ../rados/operations/user-management/#add-a-user-to-a-keyring
+.. _User Management - Add a User to a Keyring: ../../rados/operations/user-management/#add-a-user-to-a-keyring

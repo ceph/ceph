@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env python
 #
 # Copyright (C) 2015, 2016 Red Hat <contact@redhat.com>
 #
@@ -16,6 +16,7 @@ import argparse
 import configobj
 import mock
 import os
+import platform
 import pytest
 import shutil
 import tempfile
@@ -39,12 +40,12 @@ class Base(object):
         os.unlink(self.conf_file)
 
     def save_conf(self):
-        self.conf.write(open(self.conf_file, 'w'))
+        self.conf.write(open(self.conf_file, 'wb'))
 
 
 class TestPrepare(Base):
 
-    def test_init_dir(self):
+    def test_init_filestore_dir(self):
         parser = argparse.ArgumentParser('ceph-disk')
         subparsers = parser.add_subparsers()
         main.Prepare.set_subparser(subparsers)
@@ -54,6 +55,7 @@ class TestPrepare(Base):
         args = parser.parse_args([
             'prepare',
             data,
+            '--filestore',
         ])
 
         def set_type(self):
@@ -71,7 +73,7 @@ class TestPrepare(Base):
 
     @mock.patch('stat.S_ISBLK')
     @mock.patch('ceph_disk.main.is_partition')
-    def test_init_dev(self, m_is_partition, m_s_isblk):
+    def test_init_filestore_dev(self, m_is_partition, m_s_isblk):
         m_s_isblk.return_value = True
 
         parser = argparse.ArgumentParser('ceph-disk')
@@ -84,12 +86,36 @@ class TestPrepare(Base):
         args = parser.parse_args([
             'prepare',
             data,
+            '--filestore',
         ])
         prepare = main.Prepare.factory(args)
         assert isinstance(prepare.data, main.PrepareData)
         assert prepare.data.is_device()
         assert isinstance(prepare.journal, main.PrepareJournal)
         assert prepare.journal.is_device()
+
+    def test_init_default_dir(self):
+        parser = argparse.ArgumentParser('ceph-disk')
+        subparsers = parser.add_subparsers()
+        main.Prepare.set_subparser(subparsers)
+
+        data = tempfile.mkdtemp()
+        main.setup_statedir(data)
+        args = parser.parse_args([
+            'prepare',
+            data,
+        ])
+
+        def set_type(self):
+            self.type = self.FILE
+        with mock.patch.multiple(main.PrepareData,
+                                 set_type=set_type):
+            prepare = main.Prepare.factory(args)
+        assert isinstance(prepare.data, main.PrepareBluestoreData)
+        assert prepare.data.is_file()
+        prepare.prepare()
+        assert os.path.exists(os.path.join(data, 'fsid'))
+        shutil.rmtree(data)
 
     def test_set_subparser(self):
         parser = argparse.ArgumentParser('ceph-disk')
@@ -133,6 +159,8 @@ class TestDevice(Base):
                               m_update_partition,
                               m_get_free_partition_index,
                               m_is_partition):
+        if platform.system() == 'FreeBSD':
+            return
         m_is_partition.return_value = False
         partition_number = 1
         m_get_free_partition_index.return_value = partition_number
@@ -154,7 +182,7 @@ class TestDevice(Base):
                        partition_number,
                        main.PTYPE['regular']['journal']['ready']),
                    '--mbrtogpt', '--', path]
-        m_command_check_call.assert_called_with(command)
+        m_command_check_call.assert_called_with(command, exit=True)
         m_update_partition.assert_called_with(path, 'created')
 
         actual_partition_number = device.create_partition(
@@ -167,7 +195,7 @@ class TestDevice(Base):
                        partition_number,
                        main.PTYPE['regular']['journal']['ready']),
                    '--mbrtogpt', '--', path]
-        m_command_check_call.assert_called_with(command)
+        m_command_check_call.assert_called_with(command, exit=True)
 
 
 class TestDevicePartition(Base):
@@ -395,3 +423,37 @@ class TestPrepareData(Base):
                                  set_type=set_type):
             data = main.PrepareData(args)
         assert data.args.cluster_uuid == cluster_uuid
+
+
+class TestSecrets(Base):
+
+    @mock.patch('ceph_disk.main.command')
+    def test_secrets(self, m_command):
+        key = "KEY"
+        m_command.side_effect = lambda cmd: (key + "\n", '', 0)
+        s = main.Secrets()
+        assert {"cephx_secret": key} == s.keys
+        assert '{"cephx_secret": "' + key + '"}' == s.get_json()
+
+    @mock.patch('ceph_disk.main.open')
+    @mock.patch('ceph_disk.main.CryptHelpers.get_dmcrypt_keysize')
+    @mock.patch('ceph_disk.main.command')
+    def test_lockbox_secrets(self,
+                             m_command,
+                             m_get_dmcrypt_keysize,
+                             m_open):
+        key = "KEY"
+        m_command.side_effect = lambda cmd: (key + "\n", '', 0)
+        m_get_dmcrypt_keysize.side_effect = lambda args: 32
+
+        class File:
+            def read(self, size):
+                return b'O' * size
+
+        m_open.side_effect = lambda path, mode: File()
+        s = main.LockboxSecrets({})
+        assert {
+            "dmcrypt_key": 'T09PTw==',
+            "cephx_secret": key,
+            "cephx_lockbox_secret": key,
+        } == s.keys

@@ -14,6 +14,7 @@
  */
 #include "include/compat.h"
 #include "include/int_types.h"
+#include "boost/tuple/tuple.hpp"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -89,6 +90,7 @@ using ceph::crypto::SHA1;
 #define tracepoint(...)
 #endif
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore(" << basedir << ") "
@@ -105,6 +107,7 @@ using ceph::crypto::SHA1;
 #define XATTR_SPILL_OUT_NAME "user.cephos.spill_out"
 #define XATTR_NO_SPILL_OUT "0"
 #define XATTR_SPILL_OUT "1"
+#define __FUNC__ __func__ << "(" << __LINE__ << ")"
 
 //Initial features in new superblock.
 static CompatSet get_fs_initial_compat_set() {
@@ -129,12 +132,13 @@ int FileStore::validate_hobject_key(const hobject_t &obj) const
   return len > m_filestore_max_xattr_value_size ? -ENAMETOOLONG : 0;
 }
 
-int FileStore::get_block_device_fsid(const string& path, uuid_d *fsid)
+int FileStore::get_block_device_fsid(CephContext* cct, const string& path,
+				     uuid_d *fsid)
 {
   // make sure we don't try to use aio or direct_io (and get annoying
   // error messages from failing to do so); performance implications
   // should be irrelevant for this use
-  FileJournal j(*fsid, 0, 0, path.c_str(), false, false);
+  FileJournal j(cct, *fsid, 0, 0, path.c_str(), false, false);
   return j.peek_fsid(*fsid);
 }
 
@@ -143,10 +147,10 @@ void FileStore::FSPerfTracker::update_from_perfcounters(
 {
   os_commit_latency.consume_next(
     logger.get_tavg_ms(
-      l_os_j_lat));
+      l_filestore_journal_latency));
   os_apply_latency.consume_next(
     logger.get_tavg_ms(
-      l_os_apply_lat));
+      l_filestore_apply_latency));
 }
 
 
@@ -245,7 +249,7 @@ int FileStore::lfn_open(const coll_t& cid,
 
   if (create)
     flags |= O_CREAT;
-  if (g_conf->filestore_odsync_write) {
+  if (cct->_conf->filestore_odsync_write) {
     flags |= O_DSYNC;
   }
 
@@ -256,7 +260,7 @@ int FileStore::lfn_open(const coll_t& cid,
   if (!((*index).index)) {
     r = get_index(cid, index);
     if (r < 0) {
-      dout(10) << __func__ << " could not get index r = " << r << dendl;
+      dout(10) << __FUNC__ << ": could not get index r = " << r << dendl;
       return r;
     }
   } else {
@@ -323,7 +327,7 @@ int FileStore::lfn_open(const coll_t& cid,
       TEMP_FAILURE_RETRY(::close(fd));
     }
   } else {
-    *outfd = FDRef(new FDCache::FD(fd));
+    *outfd = std::make_shared<FDCache::FD>(fd);
   }
 
   if (need_lock) {
@@ -400,8 +404,8 @@ int FileStore::lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t&
     if (exist)
       return -EEXIST;
 
-    dout(25) << "lfn_link path_old: " << path_old << dendl;
-    dout(25) << "lfn_link path_new: " << path_new << dendl;
+    dout(25) << __FUNC__ << ": path_old: " << path_old << dendl;
+    dout(25) << __FUNC__ << ": path_new: " << path_new << dendl;
     r = ::link(path_old->path(), path_new->path());
     if (r < 0)
       return -errno;
@@ -430,8 +434,8 @@ int FileStore::lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t&
     if (exist)
       return -EEXIST;
 
-    dout(25) << "lfn_link path_old: " << path_old << dendl;
-    dout(25) << "lfn_link path_new: " << path_new << dendl;
+    dout(25) << __FUNC__ << ": path_old: " << path_old << dendl;
+    dout(25) << __FUNC__ << ": path_new: " << path_new << dendl;
     r = ::link(path_old->path(), path_new->path());
     if (r < 0)
       return -errno;
@@ -455,7 +459,7 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
   Index index;
   int r = get_index(cid, &index);
   if (r < 0) {
-    dout(25) << __func__ << " get_index failed " << cpp_strerror(r) << dendl;
+    dout(25) << __FUNC__ << ": get_index failed " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -472,26 +476,20 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
     }
 
     if (!force_clear_omap) {
-      if (hardlink == 0) {
-          if (!m_disable_wbthrottle) {
-	    wbthrottle.clear_object(o); // should be only non-cache ref
-          }
-	  fdcache.clear(o);
-	  return 0;
-      } else if (hardlink == 1) {
+      if (hardlink == 0 || hardlink == 1) {
 	  force_clear_omap = true;
       }
     }
     if (force_clear_omap) {
-      dout(20) << __func__ << ": clearing omap on " << o
+      dout(20) << __FUNC__ << ": clearing omap on " << o
 	       << " in cid " << cid << dendl;
       r = object_map->clear(o, &spos);
       if (r < 0 && r != -ENOENT) {
-	dout(25) << __func__ << " omap clear failed " << cpp_strerror(r) << dendl;
+	dout(25) << __FUNC__ << ": omap clear failed " << cpp_strerror(r) << dendl;
 	assert(!m_filestore_fail_eio || r != -EIO);
 	return r;
       }
-      if (g_conf->filestore_debug_inject_read_err) {
+      if (cct->_conf->filestore_debug_inject_read_err) {
 	debug_obj_on_delete(o);
       }
       if (!m_disable_wbthrottle) {
@@ -505,17 +503,25 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
       if (!backend->can_checkpoint())
 	object_map->sync(&o, &spos);
     }
+    if (hardlink == 0) {
+      if (!m_disable_wbthrottle) {
+	wbthrottle.clear_object(o); // should be only non-cache ref
+      }
+      return 0;
+    }
   }
   r = index->unlink(o);
   if (r < 0) {
-    dout(25) << __func__ << " index unlink failed " << cpp_strerror(r) << dendl;
+    dout(25) << __FUNC__ << ": index unlink failed " << cpp_strerror(r) << dendl;
     return r;
   }
   return 0;
 }
 
-FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbits_t flags, const char *name, bool do_update) :
-  JournalingObjectStore(base),
+FileStore::FileStore(CephContext* cct, const std::string &base,
+		     const std::string &jdev, osflagbits_t flags,
+		     const char *name, bool do_update) :
+  JournalingObjectStore(cct, base),
   internal_name(name),
   basedir(base), journalpath(jdev),
   generic_flags(flags),
@@ -523,62 +529,63 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   fsid_fd(-1), op_fd(-1),
   basedir_fd(-1), current_fd(-1),
   backend(NULL),
-  index_manager(do_update),
+  index_manager(cct, do_update),
   lock("FileStore::lock"),
   force_sync(false),
   sync_entry_timeo_lock("FileStore::sync_entry_timeo_lock"),
-  timer(g_ceph_context, sync_entry_timeo_lock),
+  timer(cct, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
-  fdcache(g_ceph_context),
-  wbthrottle(g_ceph_context),
+  fdcache(cct),
+  wbthrottle(cct),
   next_osr_id(0),
-  m_disable_wbthrottle(g_conf->filestore_odsync_write || 
-                      !g_conf->filestore_wbthrottle_enable),
-  throttle_ops(g_conf->filestore_caller_concurrency),
-  throttle_bytes(g_conf->filestore_caller_concurrency),
-  m_ondisk_finisher_num(g_conf->filestore_ondisk_finisher_threads),
-  m_apply_finisher_num(g_conf->filestore_apply_finisher_threads),
-  op_tp(g_ceph_context, "FileStore::op_tp", "tp_fstore_op", g_conf->filestore_op_threads, "filestore_op_threads"),
-  op_wq(this, g_conf->filestore_op_thread_timeout,
-	g_conf->filestore_op_thread_suicide_timeout, &op_tp),
+  m_disable_wbthrottle(cct->_conf->filestore_odsync_write ||
+                      !cct->_conf->filestore_wbthrottle_enable),
+  throttle_ops(cct, "filestore_ops", cct->_conf->filestore_caller_concurrency),
+  throttle_bytes(cct, "filestore_bytes", cct->_conf->filestore_caller_concurrency),
+  m_ondisk_finisher_num(cct->_conf->filestore_ondisk_finisher_threads),
+  m_apply_finisher_num(cct->_conf->filestore_apply_finisher_threads),
+  op_tp(cct, "FileStore::op_tp", "tp_fstore_op", cct->_conf->filestore_op_threads, "filestore_op_threads"),
+  op_wq(this, cct->_conf->filestore_op_thread_timeout,
+	cct->_conf->filestore_op_thread_suicide_timeout, &op_tp),
   logger(NULL),
+  trace_endpoint("0.0.0.0", 0, "FileStore"),
   read_error_lock("FileStore::read_error_lock"),
-  m_filestore_commit_timeout(g_conf->filestore_commit_timeout),
-  m_filestore_journal_parallel(g_conf->filestore_journal_parallel ),
-  m_filestore_journal_trailing(g_conf->filestore_journal_trailing),
-  m_filestore_journal_writeahead(g_conf->filestore_journal_writeahead),
-  m_filestore_fiemap_threshold(g_conf->filestore_fiemap_threshold),
-  m_filestore_max_sync_interval(g_conf->filestore_max_sync_interval),
-  m_filestore_min_sync_interval(g_conf->filestore_min_sync_interval),
-  m_filestore_fail_eio(g_conf->filestore_fail_eio),
-  m_filestore_fadvise(g_conf->filestore_fadvise),
+  m_filestore_commit_timeout(cct->_conf->filestore_commit_timeout),
+  m_filestore_journal_parallel(cct->_conf->filestore_journal_parallel ),
+  m_filestore_journal_trailing(cct->_conf->filestore_journal_trailing),
+  m_filestore_journal_writeahead(cct->_conf->filestore_journal_writeahead),
+  m_filestore_fiemap_threshold(cct->_conf->filestore_fiemap_threshold),
+  m_filestore_max_sync_interval(cct->_conf->filestore_max_sync_interval),
+  m_filestore_min_sync_interval(cct->_conf->filestore_min_sync_interval),
+  m_filestore_fail_eio(cct->_conf->filestore_fail_eio),
+  m_filestore_fadvise(cct->_conf->filestore_fadvise),
   do_update(do_update),
-  m_journal_dio(g_conf->journal_dio),
-  m_journal_aio(g_conf->journal_aio),
-  m_journal_force_aio(g_conf->journal_force_aio),
-  m_osd_rollback_to_cluster_snap(g_conf->osd_rollback_to_cluster_snap),
-  m_osd_use_stale_snap(g_conf->osd_use_stale_snap),
+  m_journal_dio(cct->_conf->journal_dio),
+  m_journal_aio(cct->_conf->journal_aio),
+  m_journal_force_aio(cct->_conf->journal_force_aio),
+  m_osd_rollback_to_cluster_snap(cct->_conf->osd_rollback_to_cluster_snap),
+  m_osd_use_stale_snap(cct->_conf->osd_use_stale_snap),
   m_filestore_do_dump(false),
   m_filestore_dump_fmt(true),
-  m_filestore_sloppy_crc(g_conf->filestore_sloppy_crc),
-  m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size),
-  m_filestore_max_alloc_hint_size(g_conf->filestore_max_alloc_hint_size),
+  m_filestore_sloppy_crc(cct->_conf->filestore_sloppy_crc),
+  m_filestore_sloppy_crc_block_size(cct->_conf->filestore_sloppy_crc_block_size),
+  m_filestore_max_alloc_hint_size(cct->_conf->filestore_max_alloc_hint_size),
   m_fs_type(0),
   m_filestore_max_inline_xattr_size(0),
   m_filestore_max_inline_xattrs(0),
   m_filestore_max_xattr_value_size(0)
 {
-  m_filestore_kill_at.set(g_conf->filestore_kill_at);
+  m_filestore_kill_at = cct->_conf->filestore_kill_at;
   for (int i = 0; i < m_ondisk_finisher_num; ++i) {
     ostringstream oss;
     oss << "filestore-ondisk-" << i;
-    Finisher *f = new Finisher(g_ceph_context, oss.str(), "fn_odsk_fstore");
+    Finisher *f = new Finisher(cct, oss.str(), "fn_odsk_fstore");
     ondisk_finishers.push_back(f);
   }
   for (int i = 0; i < m_apply_finisher_num; ++i) {
     ostringstream oss;
     oss << "filestore-apply-" << i;
-    Finisher *f = new Finisher(g_ceph_context, oss.str(), "fn_appl_fstore");
+    Finisher *f = new Finisher(cct, oss.str(), "fn_appl_fstore");
     apply_finishers.push_back(f);
   }
 
@@ -591,42 +598,43 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   current_op_seq_fn = sss.str();
 
   ostringstream omss;
-  if (g_conf->filestore_omap_backend_path != "") {
-      omap_dir = g_conf->filestore_omap_backend_path;
+  if (cct->_conf->filestore_omap_backend_path != "") {
+      omap_dir = cct->_conf->filestore_omap_backend_path;
   } else {
       omss << basedir << "/current/omap";
       omap_dir = omss.str();
   }
 
   // initialize logger
-  PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_first, l_os_last);
+  PerfCountersBuilder plb(cct, internal_name, l_filestore_first, l_filestore_last);
 
-  plb.add_u64(l_os_jq_ops, "journal_queue_ops", "Operations in journal queue");
-  plb.add_u64_counter(l_os_j_ops, "journal_ops", "Total journal entries written");
-  plb.add_u64(l_os_jq_bytes, "journal_queue_bytes", "Size of journal queue");
-  plb.add_u64_counter(l_os_j_bytes, "journal_bytes", "Total operations size in journal");
-  plb.add_time_avg(l_os_j_lat, "journal_latency", "Average journal queue completing latency");
-  plb.add_u64_counter(l_os_j_wr, "journal_wr", "Journal write IOs");
-  plb.add_u64_avg(l_os_j_wr_bytes, "journal_wr_bytes", "Journal data written");
-  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops", "Max operations in writing to FS queue");
-  plb.add_u64(l_os_oq_ops, "op_queue_ops", "Operations in writing to FS queue");
-  plb.add_u64_counter(l_os_ops, "ops", "Operations written to store");
-  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes", "Max data in writing to FS queue");
-  plb.add_u64(l_os_oq_bytes, "op_queue_bytes", "Size of writing to FS queue");
-  plb.add_u64_counter(l_os_bytes, "bytes", "Data written to store");
-  plb.add_time_avg(l_os_apply_lat, "apply_latency", "Apply latency");
-  plb.add_u64(l_os_committing, "committing", "Is currently committing");
+  plb.add_u64(l_filestore_journal_queue_ops, "journal_queue_ops", "Operations in journal queue");
+  plb.add_u64(l_filestore_journal_ops, "journal_ops", "Active journal entries to be applied");
+  plb.add_u64(l_filestore_journal_queue_bytes, "journal_queue_bytes", "Size of journal queue");
+  plb.add_u64(l_filestore_journal_bytes, "journal_bytes", "Active journal operation size to be applied");
+  plb.add_time_avg(l_filestore_journal_latency, "journal_latency", "Average journal queue completing latency");
+  plb.add_u64_counter(l_filestore_journal_wr, "journal_wr", "Journal write IOs");
+  plb.add_u64_avg(l_filestore_journal_wr_bytes, "journal_wr_bytes", "Journal data written");
+  plb.add_u64(l_filestore_op_queue_max_ops, "op_queue_max_ops", "Max operations in writing to FS queue");
+  plb.add_u64(l_filestore_op_queue_ops, "op_queue_ops", "Operations in writing to FS queue");
+  plb.add_u64_counter(l_filestore_ops, "ops", "Operations written to store");
+  plb.add_u64(l_filestore_op_queue_max_bytes, "op_queue_max_bytes", "Max data in writing to FS queue");
+  plb.add_u64(l_filestore_op_queue_bytes, "op_queue_bytes", "Size of writing to FS queue");
+  plb.add_u64_counter(l_filestore_bytes, "bytes", "Data written to store");
+  plb.add_time_avg(l_filestore_apply_latency, "apply_latency", "Apply latency");
+  plb.add_u64(l_filestore_committing, "committing", "Is currently committing");
 
-  plb.add_u64_counter(l_os_commit, "commitcycle", "Commit cycles");
-  plb.add_time_avg(l_os_commit_len, "commitcycle_interval", "Average interval between commits");
-  plb.add_time_avg(l_os_commit_lat, "commitcycle_latency", "Average latency of commit");
-  plb.add_u64_counter(l_os_j_full, "journal_full", "Journal writes while full");
-  plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg", "Store operation queue latency");
+  plb.add_u64_counter(l_filestore_commitcycle, "commitcycle", "Commit cycles");
+  plb.add_time_avg(l_filestore_commitcycle_interval, "commitcycle_interval", "Average interval between commits");
+  plb.add_time_avg(l_filestore_commitcycle_latency, "commitcycle_latency", "Average latency of commit");
+  plb.add_u64_counter(l_filestore_journal_full, "journal_full", "Journal writes while full");
+  plb.add_time_avg(l_filestore_queue_transaction_latency_avg, "queue_transaction_latency_avg", "Store operation queue latency");
+  plb.add_time(l_filestore_sync_pause_max_lat, "sync_pause_max_latency", "Max latency of op_wq pause before syncfs");
 
   logger = plb.create_perf_counters();
 
-  g_ceph_context->get_perfcounters_collection()->add(logger);
-  g_ceph_context->_conf->add_observer(this);
+  cct->get_perfcounters_collection()->add(logger);
+  cct->_conf->add_observer(this);
 
   superblock.compat_features = get_fs_initial_compat_set();
 }
@@ -641,8 +649,8 @@ FileStore::~FileStore()
     delete *it;
     *it = NULL;
   }
-  g_ceph_context->_conf->remove_observer(this);
-  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  cct->_conf->remove_observer(this);
+  cct->get_perfcounters_collection()->remove(logger);
 
   if (journal)
     journal->logger = NULL;
@@ -678,7 +686,7 @@ void FileStore::collect_metadata(map<string,string> *pm)
   ss << "0x" << std::hex << m_fs_type << std::dec;
   (*pm)["filestore_f_type"] = ss.str();
 
-  if (g_conf->filestore_collect_device_partition_information) {
+  if (cct->_conf->filestore_collect_device_partition_information) {
     rc = get_device_by_uuid(get_fsid(), "PARTUUID", partition_path,
           dev_node);
   } else {
@@ -713,6 +721,14 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   }
   buf0->total = buf.f_blocks * buf.f_bsize;
   buf0->available = buf.f_bavail * buf.f_bsize;
+  // Adjust for writes pending in the journal
+  if (journal) {
+    uint64_t estimate = journal->get_journal_size_estimate();
+    if (buf0->available > estimate)
+      buf0->available -= estimate;
+    else
+      buf0->available = 0;
+  }
   return 0;
 }
 
@@ -721,8 +737,10 @@ void FileStore::new_journal()
 {
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
-    journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(),
-			      m_journal_dio, m_journal_aio, m_journal_force_aio);
+    journal = new FileJournal(cct, fsid, &finisher, &sync_cond,
+			      journalpath.c_str(),
+			      m_journal_dio, m_journal_aio,
+			      m_journal_force_aio);
     if (journal)
       journal->logger = logger;
   }
@@ -736,7 +754,7 @@ int FileStore::dump_journal(ostream& out)
   if (!journalpath.length())
     return -EINVAL;
 
-  FileJournal *journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
+  FileJournal *journal = new FileJournal(cct, fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
   r = journal->dump(out);
   delete journal;
   return r;
@@ -802,7 +820,7 @@ int FileStore::mkfs()
   basedir_fd = ::open(basedir.c_str(), O_RDONLY);
   if (basedir_fd < 0) {
     ret = -errno;
-    derr << "mkfs failed to open base dir " << basedir << ": " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": failed to open base dir " << basedir << ": " << cpp_strerror(ret) << dendl;
     return ret;
   }
 
@@ -811,7 +829,7 @@ int FileStore::mkfs()
   fsid_fd = ::open(fsid_fn, O_RDWR|O_CREAT, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
-    derr << "mkfs: failed to open " << fsid_fn << ": " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": failed to open " << fsid_fn << ": " << cpp_strerror(ret) << dendl;
     goto close_basedir_fd;
   }
 
@@ -823,9 +841,9 @@ int FileStore::mkfs()
   if (read_fsid(fsid_fd, &old_fsid) < 0 || old_fsid.is_zero()) {
     if (fsid.is_zero()) {
       fsid.generate_random();
-      dout(1) << "mkfs generated fsid " << fsid << dendl;
+      dout(1) << __FUNC__ << ": generated fsid " << fsid << dendl;
     } else {
-      dout(1) << "mkfs using provided fsid " << fsid << dendl;
+      dout(1) << __FUNC__ << ": using provided fsid " << fsid << dendl;
     }
 
     fsid.print(fsid_str);
@@ -833,46 +851,46 @@ int FileStore::mkfs()
     ret = ::ftruncate(fsid_fd, 0);
     if (ret < 0) {
       ret = -errno;
-      derr << "mkfs: failed to truncate fsid: "
+      derr << __FUNC__ << ": failed to truncate fsid: "
 	   << cpp_strerror(ret) << dendl;
       goto close_fsid_fd;
     }
     ret = safe_write(fsid_fd, fsid_str, strlen(fsid_str));
     if (ret < 0) {
-      derr << "mkfs: failed to write fsid: "
+      derr << __FUNC__ << ": failed to write fsid: "
 	   << cpp_strerror(ret) << dendl;
       goto close_fsid_fd;
     }
     if (::fsync(fsid_fd) < 0) {
       ret = -errno;
-      derr << "mkfs: close failed: can't write fsid: "
+      derr << __FUNC__ << ": close failed: can't write fsid: "
 	   << cpp_strerror(ret) << dendl;
       goto close_fsid_fd;
     }
-    dout(10) << "mkfs fsid is " << fsid << dendl;
+    dout(10) << __FUNC__ << ": fsid is " << fsid << dendl;
   } else {
     if (!fsid.is_zero() && fsid != old_fsid) {
-      derr << "mkfs on-disk fsid " << old_fsid << " != provided " << fsid << dendl;
+      derr << __FUNC__ << ": on-disk fsid " << old_fsid << " != provided " << fsid << dendl;
       ret = -EINVAL;
       goto close_fsid_fd;
     }
     fsid = old_fsid;
-    dout(1) << "mkfs fsid is already set to " << fsid << dendl;
+    dout(1) << __FUNC__ << ": fsid is already set to " << fsid << dendl;
   }
 
   // version stamp
   ret = write_version_stamp();
   if (ret < 0) {
-    derr << "mkfs: write_version_stamp() failed: "
+    derr << __FUNC__ << ": write_version_stamp() failed: "
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   }
 
   // superblock
-  superblock.omap_backend = g_conf->filestore_omap_backend;
+  superblock.omap_backend = cct->_conf->filestore_omap_backend;
   ret = write_superblock();
   if (ret < 0) {
-    derr << "mkfs: write_superblock() failed: "
+    derr << __FUNC__ << ": write_superblock() failed: "
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   }
@@ -881,16 +899,24 @@ int FileStore::mkfs()
   ret = ::fstatfs(basedir_fd, &basefs);
   if (ret < 0) {
     ret = -errno;
-    derr << "mkfs cannot fstatfs basedir "
+    derr << __FUNC__ << ": cannot fstatfs basedir "
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   }
+
+#if defined(__linux__)
+  if (basefs.f_type == BTRFS_SUPER_MAGIC &&
+      !g_ceph_context->check_experimental_feature_enabled("btrfs")) {
+    derr << __FUNC__ << ": deprecated btrfs support is not enabled" << dendl;
+    goto close_fsid_fd;
+  }
+#endif
 
   create_backend(basefs.f_type);
 
   ret = backend->create_current();
   if (ret < 0) {
-    derr << "mkfs: failed to create current/ " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": failed to create current/ " << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   }
 
@@ -900,7 +926,7 @@ int FileStore::mkfs()
     int fd = read_op_seq(&initial_seq);
     if (fd < 0) {
       ret = fd;
-      derr << "mkfs: failed to create " << current_op_seq_fn << ": "
+      derr << __FUNC__ << ": failed to create " << current_op_seq_fn << ": "
 	   << cpp_strerror(ret) << dendl;
       goto close_fsid_fd;
     }
@@ -908,7 +934,7 @@ int FileStore::mkfs()
       ret = write_op_seq(fd, 1);
       if (ret < 0) {
 	VOID_TEMP_FAILURE_RETRY(::close(fd));
-	derr << "mkfs: failed to write to " << current_op_seq_fn << ": "
+	derr << __FUNC__ << ": failed to write to " << current_op_seq_fn << ": "
 	     << cpp_strerror(ret) << dendl;
 	goto close_fsid_fd;
       }
@@ -923,7 +949,7 @@ int FileStore::mkfs()
 	VOID_TEMP_FAILURE_RETRY(::close(current_fd));
 	if (ret < 0 && ret != -EEXIST) {
 	  VOID_TEMP_FAILURE_RETRY(::close(fd));
-	  derr << "mkfs: failed to create snap_1: " << cpp_strerror(ret) << dendl;
+	  derr << __FUNC__ << ": failed to create snap_1: " << cpp_strerror(ret) << dendl;
 	  goto close_fsid_fd;
 	}
       }
@@ -932,7 +958,7 @@ int FileStore::mkfs()
   }
   ret = KeyValueDB::test_init(superblock.omap_backend, omap_dir);
   if (ret < 0) {
-    derr << "mkfs failed to create " << g_conf->filestore_omap_backend << dendl;
+    derr << __FUNC__ << ": failed to create " << cct->_conf->filestore_omap_backend << dendl;
     goto close_fsid_fd;
   }
   // create fsid under omap
@@ -943,7 +969,7 @@ int FileStore::mkfs()
   omap_fsid_fd = ::open(omap_fsid_fn, O_RDWR|O_CREAT, 0644);
   if (omap_fsid_fd < 0) {
     ret = -errno;
-    derr << "mkfs: failed to open " << omap_fsid_fn << ": " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": failed to open " << omap_fsid_fn << ": " << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   }
 
@@ -954,37 +980,37 @@ int FileStore::mkfs()
     ret = ::ftruncate(omap_fsid_fd, 0);
     if (ret < 0) {
       ret = -errno;
-      derr << "mkfs: failed to truncate fsid: "
+      derr << __FUNC__ << ": failed to truncate fsid: "
 	   << cpp_strerror(ret) << dendl;
       goto close_omap_fsid_fd;
     }
     ret = safe_write(omap_fsid_fd, fsid_str, strlen(fsid_str));
     if (ret < 0) {
-      derr << "mkfs: failed to write fsid: "
+      derr << __FUNC__ << ": failed to write fsid: "
 	   << cpp_strerror(ret) << dendl;
       goto close_omap_fsid_fd;
     }
-    dout(10) << "mkfs: write success, fsid:" << fsid_str << ", ret:" << ret << dendl;
+    dout(10) << __FUNC__ << ": write success, fsid:" << fsid_str << ", ret:" << ret << dendl;
     if (::fsync(omap_fsid_fd) < 0) {
       ret = -errno;
-      derr << "mkfs: close failed: can't write fsid: "
+      derr << __FUNC__ << ": close failed: can't write fsid: "
 	   << cpp_strerror(ret) << dendl;
       goto close_omap_fsid_fd;
     }
     dout(10) << "mkfs omap fsid is " << fsid << dendl;
   } else {
     if (fsid != old_omap_fsid) {
-      derr << "FileStore::mkfs: " << omap_fsid_fn
+      derr << __FUNC__ << ": " << omap_fsid_fn
            << " has existed omap fsid " << old_omap_fsid
            << " != expected osd fsid " << fsid
            << dendl;
       ret = -EINVAL;
       goto close_omap_fsid_fd;
     }
-    dout(1) << "FileStore::mkfs: omap fsid is already set to " << fsid << dendl;
+    dout(1) << __FUNC__ << ": omap fsid is already set to " << fsid << dendl;
   }
 
-  dout(1) << g_conf->filestore_omap_backend << " db exists/created" << dendl;
+  dout(1) << cct->_conf->filestore_omap_backend << " db exists/created" << dendl;
 
   // journal?
   ret = mkjournal();
@@ -1019,12 +1045,12 @@ int FileStore::mkjournal()
   int fd = ::open(fn, O_RDONLY, 0644);
   if (fd < 0) {
     int err = errno;
-    derr << "FileStore::mkjournal: open error: " << cpp_strerror(err) << dendl;
+    derr << __FUNC__ << ": open error: " << cpp_strerror(err) << dendl;
     return -err;
   }
   ret = read_fsid(fd, &fsid);
   if (ret < 0) {
-    derr << "FileStore::mkjournal: read error: " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": read error: " << cpp_strerror(ret) << dendl;
     VOID_TEMP_FAILURE_RETRY(::close(fd));
     return ret;
   }
@@ -1038,10 +1064,10 @@ int FileStore::mkjournal()
     if (ret < 0) {
       ret = journal->create();
       if (ret)
-	derr << "mkjournal error creating journal on " << journalpath
+	derr << __FUNC__ << ": error creating journal on " << journalpath
 		<< ": " << cpp_strerror(ret) << dendl;
       else
-	dout(0) << "mkjournal created journal on " << journalpath << dendl;
+	dout(0) << __FUNC__ << ": created journal on " << journalpath << dendl;
     }
     delete journal;
     journal = 0;
@@ -1083,7 +1109,7 @@ int FileStore::lock_fsid()
   int r = ::fcntl(fsid_fd, F_SETLK, &l);
   if (r < 0) {
     int err = errno;
-    dout(0) << "lock_fsid failed to lock " << basedir << "/fsid, is another ceph-osd still running? "
+    dout(0) << __FUNC__ << ": failed to lock " << basedir << "/fsid, is another ceph-osd still running? "
 	    << cpp_strerror(err) << dendl;
     return -err;
   }
@@ -1092,7 +1118,7 @@ int FileStore::lock_fsid()
 
 bool FileStore::test_mount_in_use()
 {
-  dout(5) << "test_mount basedir " << basedir << " journal " << journalpath << dendl;
+  dout(5) << __FUNC__ << ": basedir " << basedir << " journal " << journalpath << dendl;
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
 
@@ -1107,6 +1133,30 @@ bool FileStore::test_mount_in_use()
   return inuse;
 }
 
+bool FileStore::is_rotational()
+{
+  bool rotational;
+  if (backend) {
+    rotational = backend->is_rotational();
+  } else {
+    int fd = ::open(basedir.c_str(), O_RDONLY);
+    if (fd < 0)
+      return true;
+    struct statfs st;
+    int r = ::fstatfs(fd, &st);
+    ::close(fd);
+    if (r < 0) {
+      return true;
+    }
+    create_backend(st.f_type);
+    rotational = backend->is_rotational();
+    delete backend;
+    backend = NULL;
+  }
+  dout(10) << __func__ << " " << (int)rotational << dendl;
+  return rotational;
+}
+
 int FileStore::_detect_fs()
 {
   struct statfs st;
@@ -1116,11 +1166,19 @@ int FileStore::_detect_fs()
 
   blk_size = st.f_bsize;
 
+#if defined(__linux__)
+  if (st.f_type == BTRFS_SUPER_MAGIC &&
+      !g_ceph_context->check_experimental_feature_enabled("btrfs")) {
+    derr <<__FUNC__ << ": deprecated btrfs support is not enabled" << dendl;
+    return -EPERM;
+  }
+#endif
+
   create_backend(st.f_type);
 
   r = backend->detect_features();
   if (r < 0) {
-    derr << "_detect_fs: detect_features error: " << cpp_strerror(r) << dendl;
+    derr << __FUNC__ << ": detect_features error: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -1132,7 +1190,7 @@ int FileStore::_detect_fs()
   int tmpfd = ::open(fn, O_CREAT|O_WRONLY|O_TRUNC, 0700);
   if (tmpfd < 0) {
     int ret = -errno;
-    derr << "_detect_fs unable to create " << fn << ": " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": unable to create " << fn << ": " << cpp_strerror(ret) << dendl;
     return ret;
   }
 
@@ -1254,15 +1312,13 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
   int ret = safe_read_file(basedir.c_str(), "store_version",
       bp.c_str(), bp.length());
   if (ret < 0) {
-    if (ret == -ENOENT)
-      return 0;
     return ret;
   }
   bufferlist bl;
   bl.push_back(std::move(bp));
   bufferlist::iterator i = bl.begin();
   ::decode(*version, i);
-  dout(10) << __func__ << " was " << *version << " vs target "
+  dout(10) << __FUNC__ << ": was " << *version << " vs target "
 	   << target_version << dendl;
   if (*version == target_version)
     return 1;
@@ -1272,7 +1328,7 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
 
 int FileStore::write_version_stamp()
 {
-  dout(1) << __func__ << " " << target_version << dendl;
+  dout(1) << __FUNC__ << ": " << target_version << dendl;
   bufferlist bl;
   ::encode(target_version, bl);
 
@@ -1282,9 +1338,14 @@ int FileStore::write_version_stamp()
 
 int FileStore::upgrade()
 {
-  dout(1) << "upgrade" << dendl;
+  dout(1) << __FUNC__ << dendl;
   uint32_t version;
   int r = version_stamp_is_valid(&version);
+
+  if (r == -ENOENT) {
+      derr << "The store_version file doesn't exist." << dendl;
+      return -EINVAL;
+  }
   if (r < 0)
     return r;
   if (r == 1)
@@ -1313,7 +1374,7 @@ int FileStore::read_op_seq(uint64_t *seq)
   memset(s, 0, sizeof(s));
   int ret = safe_read(op_fd, s, sizeof(s) - 1);
   if (ret < 0) {
-    derr << "error reading " << current_op_seq_fn << ": " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": error reading " << current_op_seq_fn << ": " << cpp_strerror(ret) << dendl;
     VOID_TEMP_FAILURE_RETRY(::close(op_fd));
     assert(!m_filestore_fail_eio || ret != -EIO);
     return ret;
@@ -1352,7 +1413,7 @@ int FileStore::mount()
   // make sure global base dir exists
   if (::access(basedir.c_str(), R_OK | W_OK)) {
     ret = -errno;
-    derr << "FileStore::mount: unable to access basedir '" << basedir << "': "
+    derr << __FUNC__ << ": unable to access basedir '" << basedir << "': "
 	 << cpp_strerror(ret) << dendl;
     goto done;
   }
@@ -1362,20 +1423,20 @@ int FileStore::mount()
   fsid_fd = ::open(buf, O_RDWR, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
-    derr << "FileStore::mount: error opening '" << buf << "': "
+    derr << __FUNC__ << ": error opening '" << buf << "': "
 	 << cpp_strerror(ret) << dendl;
     goto done;
   }
 
   ret = read_fsid(fsid_fd, &fsid);
   if (ret < 0) {
-    derr << "FileStore::mount: error reading fsid_fd: " << cpp_strerror(ret)
+    derr << __FUNC__ << ": error reading fsid_fd: " << cpp_strerror(ret)
 	 << dendl;
     goto close_fsid_fd;
   }
 
   if (lock_fsid() < 0) {
-    derr << "FileStore::mount: lock_fsid failed" << dendl;
+    derr << __FUNC__ << ": lock_fsid failed" << dendl;
     ret = -EBUSY;
     goto close_fsid_fd;
   }
@@ -1386,12 +1447,12 @@ int FileStore::mount()
   uint32_t version_stamp;
   ret = version_stamp_is_valid(&version_stamp);
   if (ret < 0) {
-    derr << "FileStore::mount: error in version_stamp_is_valid: "
+    derr << __FUNC__ << ": error in version_stamp_is_valid: "
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   } else if (ret == 0) {
-    if (do_update || (int)version_stamp < g_conf->filestore_update_to) {
-      derr << "FileStore::mount: stale version stamp detected: "
+    if (do_update || (int)version_stamp < cct->_conf->filestore_update_to) {
+      derr << __FUNC__ << ": stale version stamp detected: "
 	   << version_stamp
 	   << ". Proceeding, do_update "
 	   << "is set, performing disk format upgrade."
@@ -1399,10 +1460,10 @@ int FileStore::mount()
       do_update = true;
     } else {
       ret = -EINVAL;
-      derr << "FileStore::mount: stale version stamp " << version_stamp
+      derr << __FUNC__ << ": stale version stamp " << version_stamp
 	   << ". Please run the FileStore update script before starting the "
 	   << "OSD, or set filestore_update_to to " << target_version
-	   << " (currently " << g_conf->filestore_update_to << ")"
+	   << " (currently " << cct->_conf->filestore_update_to << ")"
 	   << dendl;
       goto close_fsid_fd;
     }
@@ -1415,7 +1476,7 @@ int FileStore::mount()
 
   // Check if this FileStore supports all the necessary features to mount
   if (supported_compat_set.compare(superblock.compat_features) == -1) {
-    derr << "FileStore::mount: Incompatible features set "
+    derr << __FUNC__ << ": Incompatible features set "
 	   << superblock.compat_features << dendl;
     ret = -EINVAL;
     goto close_fsid_fd;
@@ -1425,7 +1486,7 @@ int FileStore::mount()
   basedir_fd = ::open(basedir.c_str(), O_RDONLY);
   if (basedir_fd < 0) {
     ret = -errno;
-    derr << "FileStore::mount: failed to open " << basedir << ": "
+    derr << __FUNC__ << ": failed to open " << basedir << ": "
 	 << cpp_strerror(ret) << dendl;
     basedir_fd = -1;
     goto close_fsid_fd;
@@ -1434,7 +1495,7 @@ int FileStore::mount()
   // test for btrfs, xattrs, etc.
   ret = _detect_fs();
   if (ret < 0) {
-    derr << "FileStore::mount: error in _detect_fs: "
+    derr << __FUNC__ << ": error in _detect_fs: "
 	 << cpp_strerror(ret) << dendl;
     goto close_basedir_fd;
   }
@@ -1443,7 +1504,7 @@ int FileStore::mount()
     list<string> ls;
     ret = backend->list_checkpoints(ls);
     if (ret < 0) {
-      derr << "FileStore::mount: error in _list_snaps: "<< cpp_strerror(ret) << dendl;
+      derr << __FUNC__ << ": error in _list_snaps: "<< cpp_strerror(ret) << dendl;
       goto close_basedir_fd;
     }
 
@@ -1471,7 +1532,7 @@ int FileStore::mount()
 
   if (backend->can_checkpoint()) {
     if (snaps.empty()) {
-      dout(0) << "mount WARNING: no consistent snaps found, store may be in inconsistent state" << dendl;
+      dout(0) << __FUNC__ << ": WARNING: no consistent snaps found, store may be in inconsistent state" << dendl;
     } else {
       char s[NAME_MAX];
       uint64_t curr_seq = 0;
@@ -1517,14 +1578,14 @@ int FileStore::mount()
 	       << TEXT_NORMAL << std::endl;
 	}
 
-        dout(10) << "mount rolling back to consistent snap " << cp << dendl;
+        dout(10) << __FUNC__ << ": rolling back to consistent snap " << cp << dendl;
 	snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, (long long unsigned)cp);
       }
 
       // drop current?
       ret = backend->rollback_to(s);
       if (ret) {
-	derr << "FileStore::mount: error rolling back to " << s << ": "
+	derr << __FUNC__ << ": error rolling back to " << s << ": "
 	     << cpp_strerror(ret) << dendl;
 	goto close_basedir_fd;
       }
@@ -1535,7 +1596,7 @@ int FileStore::mount()
   current_fd = ::open(current_fn.c_str(), O_RDONLY);
   if (current_fd < 0) {
     ret = -errno;
-    derr << "FileStore::mount: error opening: " << current_fn << ": " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": error opening: " << current_fn << ": " << cpp_strerror(ret) << dendl;
     goto close_basedir_fd;
   }
 
@@ -1544,7 +1605,7 @@ int FileStore::mount()
   op_fd = read_op_seq(&initial_op_seq);
   if (op_fd < 0) {
     ret = op_fd;
-    derr << "FileStore::mount: read_op_seq failed" << dendl;
+    derr << __FUNC__ << ": read_op_seq failed" << dendl;
     goto close_current_fd;
   }
 
@@ -1561,7 +1622,7 @@ int FileStore::mount()
     int r = ::creat(nosnapfn, 0644);
     if (r < 0) {
       ret = -errno;
-      derr << "FileStore::mount: failed to create current/nosnap" << dendl;
+      derr << __FUNC__ << ": failed to create current/nosnap" << dendl;
       goto close_current_fd;
     }
     VOID_TEMP_FAILURE_RETRY(::close(r));
@@ -1578,7 +1639,7 @@ int FileStore::mount()
   snprintf(omap_fsid_buf, sizeof(omap_fsid_buf), "%s/osd_uuid", omap_dir.c_str());
   // if osd_uuid not exists, assume as this omap matchs corresponding osd
   if (::stat(omap_fsid_buf, &omap_fsid_stat) != 0){
-    dout(10) << "Filestore::mount osd_uuid not found under omap, "
+    dout(10) << __FUNC__ << ": osd_uuid not found under omap, "
              << "assume as matched."
              << dendl;
   }else{
@@ -1586,7 +1647,7 @@ int FileStore::mount()
     omap_fsid_fd = ::open(omap_fsid_buf, O_RDONLY, 0644);
     if (omap_fsid_fd < 0) {
         ret = -errno;
-        derr << "FileStore::mount: error opening '" << omap_fsid_buf << "': "
+        derr << __FUNC__ << ": error opening '" << omap_fsid_buf << "': "
              << cpp_strerror(ret)
              << dendl;
         goto close_current_fd;
@@ -1595,14 +1656,14 @@ int FileStore::mount()
     VOID_TEMP_FAILURE_RETRY(::close(omap_fsid_fd));
     omap_fsid_fd = -1; // defensive 
     if (ret < 0) {
-      derr << "FileStore::mount: error reading omap_fsid_fd"
+      derr << __FUNC__ << ": error reading omap_fsid_fd"
            << ", omap_fsid = " << omap_fsid
            << cpp_strerror(ret)
            << dendl;
       goto close_current_fd;
     }
     if (fsid != omap_fsid) {
-      derr << "FileStore::mount: " << omap_fsid_buf
+      derr << __FUNC__ << ": " << omap_fsid_buf
            << " has existed omap fsid " << omap_fsid
            << " != expected osd fsid " << fsid
            << dendl;
@@ -1613,45 +1674,45 @@ int FileStore::mount()
 
   dout(0) << "start omap initiation" << dendl;
   if (!(generic_flags & SKIP_MOUNT_OMAP)) {
-    KeyValueDB * omap_store = KeyValueDB::create(g_ceph_context,
+    KeyValueDB * omap_store = KeyValueDB::create(cct,
 						 superblock.omap_backend,
 						 omap_dir);
     if (omap_store == NULL)
     {
-      derr << "Error creating " << superblock.omap_backend << dendl;
+      derr << __FUNC__ << ": Error creating " << superblock.omap_backend << dendl;
       ret = -1;
       goto close_current_fd;
     }
 
     if (superblock.omap_backend == "rocksdb")
-      ret = omap_store->init(g_conf->filestore_rocksdb_options);
+      ret = omap_store->init(cct->_conf->filestore_rocksdb_options);
     else
       ret = omap_store->init();
 
     if (ret < 0) {
-      derr << "Error initializing omap_store: " << cpp_strerror(ret) << dendl;
+      derr << __FUNC__ << ": Error initializing omap_store: " << cpp_strerror(ret) << dendl;
       goto close_current_fd;
     }
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
       delete omap_store;
-      derr << "Error initializing " << superblock.omap_backend
+      derr << __FUNC__ << ": Error initializing " << superblock.omap_backend
 	   << " : " << err.str() << dendl;
       ret = -1;
       goto close_current_fd;
     }
 
-    DBObjectMap *dbomap = new DBObjectMap(omap_store);
+    DBObjectMap *dbomap = new DBObjectMap(cct, omap_store);
     ret = dbomap->init(do_update);
     if (ret < 0) {
       delete dbomap;
-      derr << "Error initializing DBObjectMap: " << ret << dendl;
+      derr << __FUNC__ << ": Error initializing DBObjectMap: " << ret << dendl;
       goto close_current_fd;
     }
     stringstream err2;
 
-    if (g_conf->filestore_debug_omap_check && !dbomap->check(err2)) {
+    if (cct->_conf->filestore_debug_omap_check && !dbomap->check(err2)) {
       derr << err2.str() << dendl;
       delete dbomap;
       ret = -EINVAL;
@@ -1670,28 +1731,28 @@ int FileStore::mount()
 	!m_filestore_journal_trailing) {
       if (!backend->can_checkpoint()) {
 	m_filestore_journal_writeahead = true;
-	dout(0) << "mount: enabling WRITEAHEAD journal mode: checkpoint is not enabled" << dendl;
+	dout(0) << __FUNC__ << ": enabling WRITEAHEAD journal mode: checkpoint is not enabled" << dendl;
       } else {
 	m_filestore_journal_parallel = true;
-	dout(0) << "mount: enabling PARALLEL journal mode: fs, checkpoint is enabled" << dendl;
+	dout(0) << __FUNC__ << ": enabling PARALLEL journal mode: fs, checkpoint is enabled" << dendl;
       }
     } else {
       if (m_filestore_journal_writeahead)
-	dout(0) << "mount: WRITEAHEAD journal mode explicitly enabled in conf" << dendl;
+	dout(0) << __FUNC__ << ": WRITEAHEAD journal mode explicitly enabled in conf" << dendl;
       if (m_filestore_journal_parallel)
-	dout(0) << "mount: PARALLEL journal mode explicitly enabled in conf" << dendl;
+	dout(0) << __FUNC__ << ": PARALLEL journal mode explicitly enabled in conf" << dendl;
       if (m_filestore_journal_trailing)
-	dout(0) << "mount: TRAILING journal mode explicitly enabled in conf" << dendl;
+	dout(0) << __FUNC__ << ": TRAILING journal mode explicitly enabled in conf" << dendl;
     }
     if (m_filestore_journal_writeahead)
       journal->set_wait_on_full(true);
   } else {
-    dout(0) << "mount: no journal" << dendl;
+    dout(0) << __FUNC__ << ": no journal" << dendl;
   }
 
   ret = _sanity_check_fs();
   if (ret) {
-    derr << "FileStore::mount: _sanity_check_fs failed with error "
+    derr << __FUNC__ << ": _sanity_check_fs failed with error "
 	 << ret << dendl;
     goto close_current_fd;
   }
@@ -1723,9 +1784,9 @@ int FileStore::mount()
   if (!m_disable_wbthrottle) {
     wbthrottle.start();
   } else {
-    dout(0) << "mount INFO: WbThrottle is disabled" << dendl;
-    if (g_conf->filestore_odsync_write) {
-      dout(0) << "mount INFO: O_DSYNC write is enabled" << dendl;
+    dout(0) << __FUNC__ << ": INFO: WbThrottle is disabled" << dendl;
+    if (cct->_conf->filestore_odsync_write) {
+      dout(0) << __FUNC__ << ": INFO: O_DSYNC write is enabled" << dendl;
     }
   }
   sync_thread.create("filestore_sync");
@@ -1733,7 +1794,7 @@ int FileStore::mount()
   if (!(generic_flags & SKIP_JOURNAL_REPLAY)) {
     ret = journal_replay(initial_op_seq);
     if (ret < 0) {
-      derr << "mount failed to open journal " << journalpath << ": " << cpp_strerror(ret) << dendl;
+      derr << __FUNC__ << ": failed to open journal " << journalpath << ": " << cpp_strerror(ret) << dendl;
       if (ret == -ENOTTY) {
         derr << "maybe journal is not pointing to a block device and its size "
 	     << "wasn't configured?" << dendl;
@@ -1745,7 +1806,7 @@ int FileStore::mount()
 
   {
     stringstream err2;
-    if (g_conf->filestore_debug_omap_check && !object_map->check(err2)) {
+    if (cct->_conf->filestore_debug_omap_check && !object_map->check(err2)) {
       derr << err2.str() << dendl;
       ret = -EINVAL;
       goto stop_sync;
@@ -1767,7 +1828,7 @@ int FileStore::mount()
   timer.init();
 
   // upgrade?
-  if (g_conf->filestore_update_to >= (int)get_target_version()) {
+  if (cct->_conf->filestore_update_to >= (int)get_target_version()) {
     int err = upgrade();
     if (err < 0) {
       derr << "error converting store" << dendl;
@@ -1808,7 +1869,7 @@ done:
 
 void FileStore::init_temp_collections()
 {
-  dout(10) << __func__ << dendl;
+  dout(10) << __FUNC__ << dendl;
   vector<coll_t> ls;
   int r = list_collections(ls, true);
   assert(r >= 0);
@@ -1832,14 +1893,14 @@ void FileStore::init_temp_collections()
     if (temps.count(temp)) {
       temps.erase(temp);
     } else {
-      dout(10) << __func__ << " creating " << temp << dendl;
-      r = _create_collection(temp, spos);
+      dout(10) << __FUNC__ << ": creating " << temp << dendl;
+      r = _create_collection(temp, 0, spos);
       assert(r == 0);
     }
   }
 
   for (set<coll_t>::iterator p = temps.begin(); p != temps.end(); ++p) {
-    dout(10) << __func__ << " removing stray " << *p << dendl;
+    dout(10) << __FUNC__ << ": removing stray " << *p << dendl;
     r = _collection_remove_recursive(*p, spos);
     assert(r == 0);
   }
@@ -1847,7 +1908,7 @@ void FileStore::init_temp_collections()
 
 int FileStore::umount()
 {
-  dout(5) << "umount " << basedir << dendl;
+  dout(5) << __FUNC__ << ": " << basedir << dendl;
 
   flush();
   sync();
@@ -1926,7 +1987,7 @@ FileStore::Op *FileStore::build_op(vector<Transaction>& tls,
   }
 
   Op *o = new Op;
-  o->start = ceph_clock_now(g_ceph_context);
+  o->start = ceph_clock_now();
   o->tls = std::move(tls);
   o->onreadable = onreadable;
   o->onreadable_sync = onreadable_sync;
@@ -1945,11 +2006,12 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
   // sequencer, the op order will be preserved.
 
   osr->queue(o);
+  o->trace.event("queued");
 
-  logger->inc(l_os_ops);
-  logger->inc(l_os_bytes, o->bytes);
+  logger->inc(l_filestore_ops);
+  logger->inc(l_filestore_bytes, o->bytes);
 
-  dout(5) << "queue_op " << o << " seq " << o->op
+  dout(5) << __FUNC__ << ": " << o << " seq " << o->op
 	  << " " << *osr
 	  << " " << o->bytes << " bytes"
 	  << "   (queue has " << throttle_ops.get_current() << " ops and " << throttle_bytes.get_current() << " bytes)"
@@ -1962,16 +2024,16 @@ void FileStore::op_queue_reserve_throttle(Op *o)
   throttle_ops.get();
   throttle_bytes.get(o->bytes);
 
-  logger->set(l_os_oq_ops, throttle_ops.get_current());
-  logger->set(l_os_oq_bytes, throttle_bytes.get_current());
+  logger->set(l_filestore_op_queue_ops, throttle_ops.get_current());
+  logger->set(l_filestore_op_queue_bytes, throttle_bytes.get_current());
 }
 
 void FileStore::op_queue_release_throttle(Op *o)
 {
   throttle_ops.put();
   throttle_bytes.put(o->bytes);
-  logger->set(l_os_oq_ops, throttle_ops.get_current());
-  logger->set(l_os_oq_bytes, throttle_bytes.get_current());
+  logger->set(l_filestore_op_queue_ops, throttle_ops.get_current());
+  logger->set(l_filestore_op_queue_bytes, throttle_bytes.get_current());
 }
 
 void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
@@ -1980,22 +2042,24 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
     wbthrottle.throttle();
   }
   // inject a stall?
-  if (g_conf->filestore_inject_stall) {
-    int orig = g_conf->filestore_inject_stall;
-    dout(5) << "_do_op filestore_inject_stall " << orig << ", sleeping" << dendl;
-    for (int n = 0; n < g_conf->filestore_inject_stall; n++)
-      sleep(1);
-    g_conf->set_val("filestore_inject_stall", "0");
-    dout(5) << "_do_op done stalling" << dendl;
+  if (cct->_conf->filestore_inject_stall) {
+    int orig = cct->_conf->filestore_inject_stall;
+    dout(5) << __FUNC__ << ": filestore_inject_stall " << orig << ", sleeping" << dendl;
+    sleep(orig);
+    cct->_conf->set_val("filestore_inject_stall", "0");
+    dout(5) << __FUNC__ << ": done stalling" << dendl;
   }
 
   osr->apply_lock.Lock();
   Op *o = osr->peek_queue();
+  o->trace.event("op_apply_start");
   apply_manager.op_apply_start(o->op);
-  dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
+  dout(5) << __FUNC__ << ": " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
+  o->trace.event("_do_transactions start");
   int r = _do_transactions(o->tls, o->op, &handle);
+  o->trace.event("op_apply_finish");
   apply_manager.op_apply_finish(o->op);
-  dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
+  dout(10) << __FUNC__ << ": " << o << " seq " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
 
   o->tls.clear();
@@ -2007,16 +2071,17 @@ void FileStore::_finish_op(OpSequencer *osr)
   list<Context*> to_queue;
   Op *o = osr->dequeue(&to_queue);
 
-  utime_t lat = ceph_clock_now(g_ceph_context);
+  utime_t lat = ceph_clock_now();
   lat -= o->start;
 
-  dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " lat " << lat << dendl;
+  dout(10) << __FUNC__ << ": " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " lat " << lat << dendl;
   osr->apply_lock.Unlock();  // locked in _do_op
+  o->trace.event("_finish_op");
 
   // called with tp lock held
   op_queue_release_throttle(o);
 
-  logger->tinc(l_os_apply_lat, lat);
+  logger->tinc(l_filestore_apply_latency, lat);
 
   if (o->onreadable_sync) {
     o->onreadable_sync->complete(0);
@@ -2039,7 +2104,7 @@ struct C_JournaledAhead : public Context {
 
   C_JournaledAhead(FileStore *f, FileStore::OpSequencer *os, FileStore::Op *o, Context *ondisk):
     fs(f), osr(os), o(o), ondisk(ondisk) { }
-  void finish(int r) {
+  void finish(int r) override {
     fs->_journaled_ahead(osr, o, ondisk);
   }
 };
@@ -2053,32 +2118,40 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
   Context *onreadable_sync;
   ObjectStore::Transaction::collect_contexts(
     tls, &onreadable, &ondisk, &onreadable_sync);
-  if (g_conf->filestore_blackhole) {
-    dout(0) << "queue_transactions filestore_blackhole = TRUE, dropping transaction" << dendl;
+
+  if (cct->_conf->objectstore_blackhole) {
+    dout(0) << __FUNC__ << ": objectstore_blackhole = TRUE, dropping transaction"
+	    << dendl;
     delete ondisk;
     delete onreadable;
     delete onreadable_sync;
     return 0;
   }
 
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   // set up the sequencer
   OpSequencer *osr;
   assert(posr);
   if (posr->p) {
     osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(5) << "queue_transactions existing " << osr << " " << *osr << dendl;
+    dout(5) << __FUNC__ << ": existing " << osr << " " << *osr << dendl;
   } else {
-    osr = new OpSequencer(next_osr_id.inc());
-    osr->set_cct(g_ceph_context);
+    osr = new OpSequencer(cct, ++next_osr_id);
+    osr->set_cct(cct);
     osr->parent = posr;
     posr->p = osr;
-    dout(5) << "queue_transactions new " << osr << " " << *osr << dendl;
+    dout(5) << __FUNC__ << ": new " << osr << " " << *osr << dendl;
   }
 
   // used to include osr information in tracepoints during transaction apply
   for (vector<Transaction>::iterator i = tls.begin(); i != tls.end(); ++i) {
     (*i).set_osr(osr);
+  }
+
+  ZTracer::Trace trace;
+  if (osd_op && osd_op->pg_trace) {
+    osd_op->store_trace.init("filestore op", &trace_endpoint, &osd_op->pg_trace);
+    trace = osd_op->store_trace;
   }
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
@@ -2099,37 +2172,43 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
 
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
+    trace.keyval("opnum", op_num);
 
     if (m_filestore_do_dump)
       dump_transactions(o->tls, o->op, osr);
 
     if (m_filestore_journal_parallel) {
-      dout(5) << "queue_transactions (parallel) " << o->op << " " << o->tls << dendl;
+      dout(5) << __FUNC__ << ": (parallel) " << o->op << " " << o->tls << dendl;
 
+      trace.keyval("journal mode", "parallel");
+      trace.event("journal started");
       _op_journal_transactions(tbl, orig_len, o->op, ondisk, osd_op);
 
       // queue inside submit_manager op submission lock
       queue_op(osr, o);
+      trace.event("op queued");
     } else if (m_filestore_journal_writeahead) {
-      dout(5) << "queue_transactions (writeahead) " << o->op << " " << o->tls << dendl;
+      dout(5) << __FUNC__ << ": (writeahead) " << o->op << " " << o->tls << dendl;
 
       osr->queue_journal(o->op);
 
+      trace.keyval("journal mode", "writeahead");
+      trace.event("journal started");
       _op_journal_transactions(tbl, orig_len, o->op,
 			       new C_JournaledAhead(this, osr, o, ondisk),
 			       osd_op);
     } else {
-      assert(0);
+      ceph_abort();
     }
     submit_manager.op_submit_finish(op_num);
-    utime_t end = ceph_clock_now(g_ceph_context);
-    logger->tinc(l_os_queue_lat, end - start);
+    utime_t end = ceph_clock_now();
+    logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
     return 0;
   }
 
   if (!journal) {
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
-    dout(5) << __func__ << " (no journal) " << o << " " << tls << dendl;
+    dout(5) << __FUNC__ << ": (no journal) " << o << " " << tls << dendl;
 
     if (handle)
       handle->suspend_tp_timeout();
@@ -2146,12 +2225,15 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
       dump_transactions(o->tls, o->op, osr);
 
     queue_op(osr, o);
+    trace.keyval("opnum", op_num);
+    trace.keyval("journal mode", "none");
+    trace.event("op queued");
 
     if (ondisk)
       apply_manager.add_waiter(op_num, ondisk);
     submit_manager.op_submit_finish(op_num);
-    utime_t end = ceph_clock_now(g_ceph_context);
-    logger->tinc(l_os_queue_lat, end - start);
+    utime_t end = ceph_clock_now();
+    logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
     return 0;
   }
 
@@ -2163,15 +2245,20 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
     orig_len = journal->prepare_entry(tls, &tbl);
   }
   uint64_t op = submit_manager.op_submit_start();
-  dout(5) << "queue_transactions (trailing journal) " << op << " " << tls << dendl;
+  dout(5) << __FUNC__ << ": (trailing journal) " << op << " " << tls << dendl;
 
   if (m_filestore_do_dump)
     dump_transactions(tls, op, osr);
 
+  trace.event("op_apply_start");
+  trace.keyval("opnum", op);
+  trace.keyval("journal mode", "trailing");
   apply_manager.op_apply_start(op);
+  trace.event("do_transactions");
   int r = do_transactions(tls, op);
 
   if (r >= 0) {
+    trace.event("journal started");
     _op_journal_transactions(tbl, orig_len, op, ondisk, osd_op);
   } else {
     delete ondisk;
@@ -2185,16 +2272,19 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
   apply_finishers[osr->id % m_apply_finisher_num]->queue(onreadable, r);
 
   submit_manager.op_submit_finish(op);
+  trace.event("op_apply_finish");
   apply_manager.op_apply_finish(op);
 
-  utime_t end = ceph_clock_now(g_ceph_context);
-  logger->tinc(l_os_queue_lat, end - start);
+  utime_t end = ceph_clock_now();
+  logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
   return r;
 }
 
 void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
 {
-  dout(5) << "_journaled_ahead " << o << " seq " << o->op << " " << *osr << " " << o->tls << dendl;
+  dout(5) << __FUNC__ << ": " << o << " seq " << o->op << " " << *osr << " " << o->tls << dendl;
+
+  o->trace.event("writeahead journal finished");
 
   // this should queue in order because the journal does it's completions in order.
   queue_op(osr, o);
@@ -2240,12 +2330,12 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
   // sync all previous operations on this sequencer
   int ret = object_map->sync();
   if (ret < 0) {
-    derr << __func__ << " : omap sync error " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": omap sync error " << cpp_strerror(ret) << dendl;
     assert(0 == "_set_global_replay_guard failed");
   }
   ret = sync_filesystem(basedir_fd);
   if (ret < 0) {
-    derr << __func__ << " : sync_filesytem error " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": sync_filesystem error " << cpp_strerror(ret) << dendl;
     assert(0 == "_set_global_replay_guard failed");
   }
 
@@ -2254,7 +2344,7 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
     int err = errno;
-    derr << __func__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
+    derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
     assert(0 == "_set_global_replay_guard failed");
   }
 
@@ -2266,7 +2356,7 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
   int r = chain_fsetxattr<true, true>(
     fd, GLOBAL_REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
-    derr << __func__ << ": fsetxattr " << GLOBAL_REPLAY_GUARD_XATTR
+    derr << __FUNC__ << ": fsetxattr " << GLOBAL_REPLAY_GUARD_XATTR
 	 << " got " << cpp_strerror(r) << dendl;
     assert(0 == "fsetxattr failed");
   }
@@ -2277,7 +2367,7 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
   _inject_failure();
 
   VOID_TEMP_FAILURE_RETRY(::close(fd));
-  dout(10) << __func__ << ": " << spos << " done" << dendl;
+  dout(10) << __FUNC__ << ": " << spos << " done" << dendl;
 }
 
 int FileStore::_check_global_replay_guard(const coll_t& cid,
@@ -2287,14 +2377,14 @@ int FileStore::_check_global_replay_guard(const coll_t& cid,
   get_cdir(cid, fn, sizeof(fn));
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
-    dout(10) << __func__ << ": " << cid << " dne" << dendl;
+    dout(10) << __FUNC__ << ": " << cid << " dne" << dendl;
     return 1;  // if collection does not exist, there is no guard, and we can replay.
   }
 
   char buf[100];
   int r = chain_fgetxattr(fd, GLOBAL_REPLAY_GUARD_XATTR, buf, sizeof(buf));
   if (r < 0) {
-    dout(20) << __func__ << " no xattr" << dendl;
+    dout(20) << __FUNC__ << ": no xattr" << dendl;
     assert(!m_filestore_fail_eio || r != -EIO);
     VOID_TEMP_FAILURE_RETRY(::close(fd));
     return 1;  // no xattr
@@ -2320,7 +2410,7 @@ void FileStore::_set_replay_guard(const coll_t& cid,
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
     int err = errno;
-    derr << "_set_replay_guard " << cid << " error " << cpp_strerror(err) << dendl;
+    derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
     assert(0 == "_set_replay_guard failed");
   }
   _set_replay_guard(fd, spos, 0, in_progress);
@@ -2336,17 +2426,19 @@ void FileStore::_set_replay_guard(int fd,
   if (backend->can_checkpoint())
     return;
 
-  dout(10) << "_set_replay_guard " << spos << (in_progress ? " START" : "") << dendl;
+  dout(10) << __FUNC__ << ": " << spos << (in_progress ? " START" : "") << dendl;
 
   _inject_failure();
 
   // first make sure the previous operation commits
   ::fsync(fd);
 
-  // sync object_map too.  even if this object has a header or keys,
-  // it have had them in the past and then removed them, so always
-  // sync.
-  object_map->sync(hoid, &spos);
+  if (!in_progress) {
+    // sync object_map too.  even if this object has a header or keys,
+    // it have had them in the past and then removed them, so always
+    // sync.
+    object_map->sync(hoid, &spos);
+  }
 
   _inject_failure();
 
@@ -2366,7 +2458,7 @@ void FileStore::_set_replay_guard(int fd,
 
   _inject_failure();
 
-  dout(10) << "_set_replay_guard " << spos << " done" << dendl;
+  dout(10) << __FUNC__ << ": " << spos << " done" << dendl;
 }
 
 void FileStore::_close_replay_guard(const coll_t& cid,
@@ -2377,21 +2469,27 @@ void FileStore::_close_replay_guard(const coll_t& cid,
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
     int err = errno;
-    derr << "_close_replay_guard " << cid << " error " << cpp_strerror(err) << dendl;
+    derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
     assert(0 == "_close_replay_guard failed");
   }
   _close_replay_guard(fd, spos);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
 
-void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
+void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos,
+				    const ghobject_t *hoid)
 {
   if (backend->can_checkpoint())
     return;
 
-  dout(10) << "_close_replay_guard " << spos << dendl;
+  dout(10) << __FUNC__ << ": " << spos << dendl;
 
   _inject_failure();
+
+  // sync object_map too.  even if this object has a header or keys,
+  // it have had them in the past and then removed them, so always
+  // sync.
+  object_map->sync(hoid, &spos);
 
   // then record that we are done with this operation
   bufferlist v(40);
@@ -2410,10 +2508,11 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
 
   _inject_failure();
 
-  dout(10) << "_close_replay_guard " << spos << " done" << dendl;
+  dout(10) << __FUNC__ << ": " << spos << " done" << dendl;
 }
 
-int FileStore::_check_replay_guard(const coll_t& cid, ghobject_t oid, const SequencerPosition& spos)
+int FileStore::_check_replay_guard(const coll_t& cid, const ghobject_t &oid,
+                                   const SequencerPosition& spos)
 {
   if (!replaying || backend->can_checkpoint())
     return 1;
@@ -2425,7 +2524,7 @@ int FileStore::_check_replay_guard(const coll_t& cid, ghobject_t oid, const Sequ
   FDRef fd;
   r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
-    dout(10) << "_check_replay_guard " << cid << " " << oid << " dne" << dendl;
+    dout(10) << __FUNC__ << ": " << cid << " " << oid << " dne" << dendl;
     return 1;  // if file does not exist, there is no guard, and we can replay.
   }
   int ret = _check_replay_guard(**fd, spos);
@@ -2442,7 +2541,7 @@ int FileStore::_check_replay_guard(const coll_t& cid, const SequencerPosition& s
   get_cdir(cid, fn, sizeof(fn));
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
-    dout(10) << "_check_replay_guard " << cid << " dne" << dendl;
+    dout(10) << __FUNC__ << ": " << cid << " dne" << dendl;
     return 1;  // if collection does not exist, there is no guard, and we can replay.
   }
   int ret = _check_replay_guard(fd, spos);
@@ -2458,7 +2557,7 @@ int FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
   char buf[100];
   int r = chain_fgetxattr(fd, REPLAY_GUARD_XATTR, buf, sizeof(buf));
   if (r < 0) {
-    dout(20) << "_check_replay_guard no xattr" << dendl;
+    dout(20) << __FUNC__ << ": no xattr" << dendl;
     assert(!m_filestore_fail_eio || r != -EIO);
     return 1;  // no xattr
   }
@@ -2472,21 +2571,21 @@ int FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
   if (!p.end())   // older journals don't have this
     ::decode(in_progress, p);
   if (opos > spos) {
-    dout(10) << "_check_replay_guard object has " << opos << " > current pos " << spos
+    dout(10) << __FUNC__ << ": object has " << opos << " > current pos " << spos
 	     << ", now or in future, SKIPPING REPLAY" << dendl;
     return -1;
   } else if (opos == spos) {
     if (in_progress) {
-      dout(10) << "_check_replay_guard object has " << opos << " == current pos " << spos
+      dout(10) << __FUNC__ << ": object has " << opos << " == current pos " << spos
 	       << ", in_progress=true, CONDITIONAL REPLAY" << dendl;
       return 0;
     } else {
-      dout(10) << "_check_replay_guard object has " << opos << " == current pos " << spos
+      dout(10) << __FUNC__ << ": object has " << opos << " == current pos " << spos
 	       << ", in_progress=false, SKIPPING REPLAY" << dendl;
       return -1;
     }
   } else {
-    dout(10) << "_check_replay_guard object has " << opos << " < current pos " << spos
+    dout(10) << __FUNC__ << ": object has " << opos << " < current pos " << spos
 	     << ", in past, will replay" << dendl;
     return 1;
   }
@@ -2496,7 +2595,7 @@ void FileStore::_do_transaction(
   Transaction& t, uint64_t op_seq, int trans_num,
   ThreadPool::TPHandle *handle)
 {
-  dout(10) << "_do_transaction on " << &t << dendl;
+  dout(10) << __FUNC__ << ": on " << &t << dendl;
 
 #ifdef WITH_LTTNG
   const char *osr_name = t.get_osr() ? static_cast<OpSequencer*>(t.get_osr())->get_name().c_str() : "<NULL>";
@@ -2519,9 +2618,10 @@ void FileStore::_do_transaction(
       break;
     case Transaction::OP_TOUCH:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         tracepoint(objectstore, touch_enter, osr_name);
         if (_check_replay_guard(cid, oid, spos) > 0)
           r = _touch(cid, oid);
@@ -2531,9 +2631,10 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_WRITE:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         uint64_t off = op->off;
         uint64_t len = op->len;
         uint32_t fadvise_flags = i.get_fadvise_flags();
@@ -2548,9 +2649,10 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_ZERO:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         uint64_t off = op->off;
         uint64_t len = op->len;
         tracepoint(objectstore, zero_enter, osr_name, off, len);
@@ -2568,9 +2670,10 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_TRUNCATE:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         uint64_t off = op->off;
         tracepoint(objectstore, truncate_enter, osr_name, off);
         if (_check_replay_guard(cid, oid, spos) > 0)
@@ -2581,9 +2684,10 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_REMOVE:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         tracepoint(objectstore, remove_enter, osr_name);
         if (_check_replay_guard(cid, oid, spos) > 0)
           r = _remove(cid, oid, spos);
@@ -2593,9 +2697,10 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_SETATTR:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         string name = i.decode_string();
         bufferlist bl;
         i.decode_bl(bl);
@@ -2614,9 +2719,10 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_SETATTRS:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         map<string, bufferptr> aset;
         i.decode_attrset(aset);
         tracepoint(objectstore, setattrs_enter, osr_name);
@@ -2630,9 +2736,10 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_RMATTR:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         string name = i.decode_string();
         tracepoint(objectstore, rmattr_enter, osr_name);
         if (_check_replay_guard(cid, oid, spos) > 0)
@@ -2643,9 +2750,10 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_RMATTRS:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         tracepoint(objectstore, rmattrs_enter, osr_name);
         if (_check_replay_guard(cid, oid, spos) > 0)
           r = _rmattrs(cid, oid, spos);
@@ -2655,10 +2763,11 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_CLONE:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
-        ghobject_t noid = i.get_oid(op->dest_oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
+        const ghobject_t &noid = i.get_oid(op->dest_oid);
         tracepoint(objectstore, clone_enter, osr_name);
         r = _clone(cid, oid, noid, spos);
         tracepoint(objectstore, clone_exit, r);
@@ -2667,48 +2776,60 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_CLONERANGE:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
-        ghobject_t noid = i.get_oid(op->dest_oid);
-	_kludge_temp_object_collection(cid, noid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const ghobject_t &noid = i.get_oid(op->dest_oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
+        const coll_t &ncid = !_need_temp_object_collection(_cid, noid) ?
+          _cid : _cid.get_temp();
         uint64_t off = op->off;
         uint64_t len = op->len;
         tracepoint(objectstore, clone_range_enter, osr_name, len);
-        r = _clone_range(cid, oid, noid, off, len, off, spos);
+        r = _clone_range(cid, oid, ncid, noid, off, len, off, spos);
         tracepoint(objectstore, clone_range_exit, r);
       }
       break;
 
     case Transaction::OP_CLONERANGE2:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
-        ghobject_t noid = i.get_oid(op->dest_oid);
-	_kludge_temp_object_collection(cid, noid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const ghobject_t &noid = i.get_oid(op->dest_oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
+        const coll_t &ncid = !_need_temp_object_collection(_cid, noid) ?
+          _cid : _cid.get_temp();
         uint64_t srcoff = op->off;
         uint64_t len = op->len;
         uint64_t dstoff = op->dest_off;
         tracepoint(objectstore, clone_range2_enter, osr_name, len);
-        r = _clone_range(cid, oid, noid, srcoff, len, dstoff, spos);
+        r = _clone_range(cid, oid, ncid, noid, srcoff, len, dstoff, spos);
         tracepoint(objectstore, clone_range2_exit, r);
       }
       break;
 
     case Transaction::OP_MKCOLL:
       {
-        coll_t cid = i.get_cid(op->cid);
+        const coll_t &cid = i.get_cid(op->cid);
         tracepoint(objectstore, mkcoll_enter, osr_name);
         if (_check_replay_guard(cid, spos) > 0)
-          r = _create_collection(cid, spos);
+          r = _create_collection(cid, op->split_bits, spos);
         tracepoint(objectstore, mkcoll_exit, r);
+      }
+      break;
+
+    case Transaction::OP_COLL_SET_BITS:
+      {
+	const coll_t &cid = i.get_cid(op->cid);
+	int bits = op->split_bits;
+	r = _collection_set_bits(cid, bits);
       }
       break;
 
     case Transaction::OP_COLL_HINT:
       {
-        coll_t cid = i.get_cid(op->cid);
+        const coll_t &cid = i.get_cid(op->cid);
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
@@ -2730,7 +2851,7 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_RMCOLL:
       {
-        coll_t cid = i.get_cid(op->cid);
+        const coll_t &cid = i.get_cid(op->cid);
         tracepoint(objectstore, rmcoll_enter, osr_name);
         if (_check_replay_guard(cid, spos) > 0)
           r = _destroy_collection(cid);
@@ -2740,16 +2861,16 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_COLL_ADD:
       {
-        coll_t ocid = i.get_cid(op->cid);
-        coll_t ncid = i.get_cid(op->dest_cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const coll_t &ocid = i.get_cid(op->cid);
+        const coll_t &ncid = i.get_cid(op->dest_cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 
 	assert(oid.hobj.pool >= -1);
 
         // always followed by OP_COLL_REMOVE
         Transaction::Op *op2 = i.decode_op();
-        coll_t ocid2 = i.get_cid(op2->cid);
-        ghobject_t oid2 = i.get_oid(op2->oid);
+        const coll_t &ocid2 = i.get_cid(op2->cid);
+        const ghobject_t &oid2 = i.get_oid(op2->oid);
         assert(op2->op == Transaction::OP_COLL_REMOVE);
         assert(ocid2 == ocid);
         assert(oid2 == oid);
@@ -2770,9 +2891,9 @@ void FileStore::_do_transaction(
     case Transaction::OP_COLL_MOVE:
       {
         // WARNING: this is deprecated and buggy; only here to replay old journals.
-        coll_t ocid = i.get_cid(op->cid);
-        coll_t ncid = i.get_cid(op->dest_cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const coll_t &ocid = i.get_cid(op->cid);
+        const coll_t &ncid = i.get_cid(op->dest_cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
         tracepoint(objectstore, coll_move_enter);
         r = _collection_add(ocid, ncid, oid, spos);
         if (r == 0 &&
@@ -2784,12 +2905,14 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_COLL_MOVE_RENAME:
       {
-        coll_t oldcid = i.get_cid(op->cid);
-        ghobject_t oldoid = i.get_oid(op->oid);
-        coll_t newcid = i.get_cid(op->dest_cid);
-        ghobject_t newoid = i.get_oid(op->dest_oid);
-	_kludge_temp_object_collection(oldcid, oldoid);
-	_kludge_temp_object_collection(newcid, newoid);
+        const coll_t &_oldcid = i.get_cid(op->cid);
+        const ghobject_t &oldoid = i.get_oid(op->oid);
+        const coll_t &_newcid = i.get_cid(op->dest_cid);
+        const ghobject_t &newoid = i.get_oid(op->dest_oid);
+        const coll_t &oldcid = !_need_temp_object_collection(_oldcid, oldoid) ?
+          _oldcid : _oldcid.get_temp();
+        const coll_t &newcid = !_need_temp_object_collection(_newcid, newoid) ?
+          _oldcid : _newcid.get_temp();
         tracepoint(objectstore, coll_move_rename_enter);
         r = _collection_move_rename(oldcid, oldoid, newcid, newoid, spos);
         tracepoint(objectstore, coll_move_rename_exit, r);
@@ -2798,12 +2921,13 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_TRY_RENAME:
       {
-        coll_t oldcid = i.get_cid(op->cid);
-	coll_t newcid = oldcid;
-        ghobject_t oldoid = i.get_oid(op->oid);
-        ghobject_t newoid = i.get_oid(op->dest_oid);
-	_kludge_temp_object_collection(oldcid, oldoid);
-	_kludge_temp_object_collection(newcid, newoid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oldoid = i.get_oid(op->oid);
+        const ghobject_t &newoid = i.get_oid(op->dest_oid);
+        const coll_t &oldcid = !_need_temp_object_collection(_cid, oldoid) ?
+          _cid : _cid.get_temp();
+        const coll_t &newcid = !_need_temp_object_collection(_cid, newoid) ?
+          _cid : _cid.get_temp();
         tracepoint(objectstore, coll_try_rename_enter);
         r = _collection_move_rename(oldcid, oldoid, newcid, newoid, spos, true);
         tracepoint(objectstore, coll_try_rename_exit, r);
@@ -2812,7 +2936,7 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_COLL_SETATTR:
     case Transaction::OP_COLL_RMATTR:
-      assert(0 == "collection attr methods no longer implmented");
+      assert(0 == "collection attr methods no longer implemented");
       break;
 
     case Transaction::OP_STARTSYNC:
@@ -2829,9 +2953,10 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_OMAP_CLEAR:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         tracepoint(objectstore, omap_clear_enter, osr_name);
         r = _omap_clear(cid, oid, spos);
         tracepoint(objectstore, omap_clear_exit, r);
@@ -2839,9 +2964,10 @@ void FileStore::_do_transaction(
       break;
     case Transaction::OP_OMAP_SETKEYS:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         map<string, bufferlist> aset;
         i.decode_attrset(aset);
         tracepoint(objectstore, omap_setkeys_enter, osr_name);
@@ -2851,9 +2977,10 @@ void FileStore::_do_transaction(
       break;
     case Transaction::OP_OMAP_RMKEYS:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         set<string> keys;
         i.decode_keyset(keys);
         tracepoint(objectstore, omap_rmkeys_enter, osr_name);
@@ -2863,9 +2990,10 @@ void FileStore::_do_transaction(
       break;
     case Transaction::OP_OMAP_RMKEYRANGE:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         string first, last;
         first = i.decode_string();
         last = i.decode_string();
@@ -2876,9 +3004,10 @@ void FileStore::_do_transaction(
       break;
     case Transaction::OP_OMAP_SETHEADER:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         bufferlist bl;
         i.decode_bl(bl);
         tracepoint(objectstore, omap_setheader_enter, osr_name);
@@ -2905,9 +3034,10 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_SETALLOCHINT:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
         tracepoint(objectstore, setallochint_enter, osr_name);
@@ -2920,7 +3050,7 @@ void FileStore::_do_transaction(
 
     default:
       derr << "bad op " << op->op << dendl;
-      assert(0);
+      ceph_abort();
     }
 
     if (r < 0) {
@@ -2929,7 +3059,14 @@ void FileStore::_do_transaction(
       if (r == -ENOENT && !(op->op == Transaction::OP_CLONERANGE ||
 			    op->op == Transaction::OP_CLONE ||
 			    op->op == Transaction::OP_CLONERANGE2 ||
-			    op->op == Transaction::OP_COLL_ADD))
+			    op->op == Transaction::OP_COLL_ADD ||
+			    op->op == Transaction::OP_SETATTR ||
+			    op->op == Transaction::OP_SETATTRS ||
+			    op->op == Transaction::OP_RMATTR ||
+			    op->op == Transaction::OP_OMAP_SETKEYS ||
+			    op->op == Transaction::OP_OMAP_RMKEYS ||
+			    op->op == Transaction::OP_OMAP_RMKEYRANGE ||
+			    op->op == Transaction::OP_OMAP_SETHEADER))
 	// -ENOENT is normally okay
 	// ...including on a replayed OP_RMCOLL with checkpoint mode
 	ok = true;
@@ -2972,20 +3109,20 @@ void FileStore::_do_transaction(
 
 	if (r == -ENOENT && (op->op == Transaction::OP_CLONERANGE ||
 			     op->op == Transaction::OP_CLONE ||
-			     op->op == Transaction::OP_CLONERANGE2))
+			     op->op == Transaction::OP_CLONERANGE2)) {
 	  msg = "ENOENT on clone suggests osd bug";
-
-	if (r == -ENOSPC)
+	} else if (r == -ENOSPC) {
 	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
 	  // by partially applying transactions.
-	  msg = "ENOSPC handling not implemented";
-
-	if (r == -ENOTEMPTY) {
+	  msg = "ENOSPC from disk filesystem, misconfigured cluster";
+	} else if (r == -ENOTEMPTY) {
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
-	}
+	} else if (r == -EPERM) {
+          msg = "EPERM suggests file(s) in osd data dir not owned by ceph user, or leveldb corruption";
+        }
 
-	dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op
-		<< " (" << spos << ", or op " << spos.op << ", counting from 0)" << dendl;
+	derr  << " error " << cpp_strerror(r) << " not handled on operation " << op
+	      << " (" << spos << ", or op " << spos.op << ", counting from 0)" << dendl;
 	dout(0) << msg << dendl;
 	dout(0) << " transaction dump:\n";
 	JSONFormatter f(true);
@@ -2996,7 +3133,7 @@ void FileStore::_do_transaction(
 	*_dout << dendl;
 
 	if (r == -EMFILE) {
-	  dump_open_fds(g_ceph_context);
+	  dump_open_fds(cct);
 	}
 
 	assert(0 == "unexpected error");
@@ -3034,14 +3171,14 @@ int FileStore::stat(
   int r = lfn_stat(cid, oid, st);
   assert(allow_eio || !m_filestore_fail_eio || r != -EIO);
   if (r < 0) {
-    dout(10) << "stat " << cid << "/" << oid
+    dout(10) << __FUNC__ << ": " << cid << "/" << oid
 	     << " = " << r << dendl;
   } else {
-    dout(10) << "stat " << cid << "/" << oid
+    dout(10) << __FUNC__ << ": " << cid << "/" << oid
 	     << " = " << r
 	     << " (size " << st->st_size << ")" << dendl;
   }
-  if (g_conf->filestore_debug_inject_read_err &&
+  if (cct->_conf->filestore_debug_inject_read_err &&
       debug_mdata_eio(oid)) {
     return -EIO;
   } else {
@@ -3050,25 +3187,31 @@ int FileStore::stat(
   }
 }
 
+int FileStore::set_collection_opts(
+  const coll_t& cid,
+  const pool_opts_t& opts)
+{
+  return -EOPNOTSUPP;
+}
+
 int FileStore::read(
   const coll_t& _cid,
   const ghobject_t& oid,
   uint64_t offset,
   size_t len,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
   int got;
   tracepoint(objectstore, read_enter, _cid.c_str(), offset, len);
   const coll_t& cid = !_need_temp_object_collection(_cid, oid) ? _cid : _cid.get_temp();
 
-  dout(15) << "read " << cid << "/" << oid << " " << offset << "~" << len << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
   FDRef fd;
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
-    dout(10) << "FileStore::read(" << cid << "/" << oid << ") open error: "
+    dout(10) << __FUNC__ << ": (" << cid << "/" << oid << ") open error: "
 	     << cpp_strerror(r) << dendl;
     return r;
   }
@@ -3091,12 +3234,8 @@ int FileStore::read(
   bufferptr bptr(len);  // prealloc space for entire read
   got = safe_pread(**fd, bptr.c_str(), len, offset);
   if (got < 0) {
-    dout(10) << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
+    dout(10) << __FUNC__ << ": (" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
     lfn_close(fd);
-    if (!(allow_eio || !m_filestore_fail_eio || got != -EIO)) {
-      derr << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
-      assert(0 == "eio on pread");
-    }
     return got;
   }
   bptr.set_length(got);   // properly size the buffer
@@ -3114,7 +3253,7 @@ int FileStore::read(
     ostringstream ss;
     int errors = backend->_crc_verify_read(**fd, offset, got, bl, &ss);
     if (errors != 0) {
-      dout(0) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
+      dout(0) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~"
 	      << got << " ... BAD CRC:\n" << ss.str() << dendl;
       assert(0 == "bad crc on read");
     }
@@ -3122,10 +3261,14 @@ int FileStore::read(
 
   lfn_close(fd);
 
-  dout(10) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~"
 	   << got << "/" << len << dendl;
-  if (g_conf->filestore_debug_inject_read_err &&
+  if (cct->_conf->filestore_debug_inject_read_err &&
       debug_data_eio(oid)) {
+    return -EIO;
+  } else if (cct->_conf->filestore_debug_random_read_err &&
+    (rand() % (int)(cct->_conf->filestore_debug_random_read_err * 100.0)) == 0) {
+    dout(0) << __func__ << ": inject random EIO" << dendl;
     return -EIO;
   } else {
     tracepoint(objectstore, read_exit, got);
@@ -3136,11 +3279,12 @@ int FileStore::read(
 int FileStore::_do_fiemap(int fd, uint64_t offset, size_t len,
                           map<uint64_t, uint64_t> *m)
 {
-  struct fiemap *fiemap = NULL;
   uint64_t i;
   struct fiemap_extent *extent = NULL;
+  struct fiemap *fiemap = NULL;
   int r = 0;
 
+more:
   r = backend->do_fiemap(fd, offset, len, &fiemap);
   if (r < 0)
     return r;
@@ -3160,10 +3304,11 @@ int FileStore::_do_fiemap(int fd, uint64_t offset, size_t len,
 
   i = 0;
 
+  struct fiemap_extent *last = nullptr;
   while (i < fiemap->fm_mapped_extents) {
     struct fiemap_extent *next = extent + 1;
 
-    dout(10) << "FileStore::fiemap() fm_mapped_extents=" << fiemap->fm_mapped_extents
+    dout(10) << __FUNC__ << ": fm_mapped_extents=" << fiemap->fm_mapped_extents
              << " fe_logical=" << extent->fe_logical << " fe_length=" << extent->fe_length << dendl;
 
     /* try to merge extents */
@@ -3180,9 +3325,16 @@ int FileStore::_do_fiemap(int fd, uint64_t offset, size_t len,
       extent->fe_length = offset + len - extent->fe_logical;
     (*m)[extent->fe_logical] = extent->fe_length;
     i++;
-    extent++;
+    last = extent++;
   }
+  uint64_t xoffset = last->fe_logical + last->fe_length - offset;
+  offset = last->fe_logical + last->fe_length;
+  len -= xoffset;
+  const bool is_last = (last->fe_flags & FIEMAP_EXTENT_LAST) || (len == 0);
   free(fiemap);
+  if (!is_last) {
+    goto more;
+  }
 
   return r;
 }
@@ -3241,20 +3393,30 @@ int FileStore::fiemap(const coll_t& _cid, const ghobject_t& oid,
                     uint64_t offset, size_t len,
                     bufferlist& bl)
 {
+  map<uint64_t, uint64_t> exomap;
+  int r = fiemap(_cid, oid, offset, len, exomap);
+  if (r >= 0) {
+    ::encode(exomap, bl);
+  }
+  return r;
+}
+
+int FileStore::fiemap(const coll_t& _cid, const ghobject_t& oid,
+                    uint64_t offset, size_t len,
+                    map<uint64_t, uint64_t>& destmap)
+{
   tracepoint(objectstore, fiemap_enter, _cid.c_str(), offset, len);
   const coll_t& cid = !_need_temp_object_collection(_cid, oid) ? _cid : _cid.get_temp();
+  destmap.clear();
 
   if ((!backend->has_seek_data_hole() && !backend->has_fiemap()) ||
       len <= (size_t)m_filestore_fiemap_threshold) {
-    map<uint64_t, uint64_t> m;
-    m[offset] = len;
-    ::encode(m, bl);
+    destmap[offset] = len;
     return 0;
   }
 
-  dout(15) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
-  map<uint64_t, uint64_t> exomap;
   FDRef fd;
 
   int r = lfn_open(cid, oid, false, &fd);
@@ -3265,48 +3427,43 @@ int FileStore::fiemap(const coll_t& _cid, const ghobject_t& oid,
 
   if (backend->has_seek_data_hole()) {
     dout(15) << "seek_data/seek_hole " << cid << "/" << oid << " " << offset << "~" << len << dendl;
-    r = _do_seek_hole_data(**fd, offset, len, &exomap);
+    r = _do_seek_hole_data(**fd, offset, len, &destmap);
   } else if (backend->has_fiemap()) {
     dout(15) << "fiemap ioctl" << cid << "/" << oid << " " << offset << "~" << len << dendl;
-    r = _do_fiemap(**fd, offset, len, &exomap);
+    r = _do_fiemap(**fd, offset, len, &destmap);
   }
 
   lfn_close(fd);
 
-  if (r >= 0) {
-    ::encode(exomap, bl);
-  }
-
 done:
 
-  dout(10) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num_extents=" << exomap.size() << " " << exomap << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num_extents=" << destmap.size() << " " << destmap << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
   tracepoint(objectstore, fiemap_exit, r);
   return r;
 }
 
-
 int FileStore::_remove(const coll_t& cid, const ghobject_t& oid,
 		       const SequencerPosition &spos)
 {
-  dout(15) << "remove " << cid << "/" << oid << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << dendl;
   int r = lfn_unlink(cid, oid, spos);
-  dout(10) << "remove " << cid << "/" << oid << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
 
 int FileStore::_truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size)
 {
-  dout(15) << "truncate " << cid << "/" << oid << " size " << size << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << " size " << size << dendl;
   int r = lfn_truncate(cid, oid, size);
-  dout(10) << "truncate " << cid << "/" << oid << " size " << size << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " size " << size << " = " << r << dendl;
   return r;
 }
 
 
 int FileStore::_touch(const coll_t& cid, const ghobject_t& oid)
 {
-  dout(15) << "touch " << cid << "/" << oid << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << dendl;
 
   FDRef fd;
   int r = lfn_open(cid, oid, true, &fd);
@@ -3315,7 +3472,7 @@ int FileStore::_touch(const coll_t& cid, const ghobject_t& oid)
   } else {
     lfn_close(fd);
   }
-  dout(10) << "touch " << cid << "/" << oid << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
 
@@ -3323,13 +3480,13 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
                      uint64_t offset, size_t len,
                      const bufferlist& bl, uint32_t fadvise_flags)
 {
-  dout(15) << "write " << cid << "/" << oid << " " << offset << "~" << len << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int r;
 
   FDRef fd;
   r = lfn_open(cid, oid, true, &fd);
   if (r < 0) {
-    dout(0) << "write couldn't open " << cid << "/"
+    dout(0) << __FUNC__ << ": couldn't open " << cid << "/"
 	    << oid << ": "
 	    << cpp_strerror(r) << dendl;
     goto out;
@@ -3337,8 +3494,13 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
 
   // write
   r = bl.write_fd(**fd, offset);
-  if (r == 0)
-    r = bl.length();
+  if (r < 0) {
+    derr << __FUNC__ << ": write_fd on " << cid << "/" << oid
+         << " error: " << cpp_strerror(r) << dendl;
+    lfn_close(fd);
+    goto out;
+  }
+  r = bl.length();
 
   if (r >= 0 && m_filestore_sloppy_crc) {
     int rc = backend->_crc_update_write(**fd, offset, len, bl);
@@ -3359,16 +3521,16 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
   lfn_close(fd);
 
  out:
-  dout(10) << "write " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << dendl;
   return r;
 }
 
 int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len)
 {
-  dout(15) << "zero " << cid << "/" << oid << " " << offset << "~" << len << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int ret = 0;
 
-  if (g_conf->filestore_punch_hole) {
+  if (cct->_conf->filestore_punch_hole) {
 #ifdef CEPH_HAVE_FALLOCATE
 # if !defined(DARWIN) && !defined(__FreeBSD__)
 #    ifdef FALLOC_FL_KEEP_SIZE
@@ -3421,7 +3583,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
 
   // lame, kernel is old and doesn't support it.
   // write zeros.. yuck!
-  dout(20) << "zero falling back to writing zeros" << dendl;
+  dout(20) << __FUNC__ << ": falling back to writing zeros" << dendl;
   {
     bufferlist bl;
     bl.append_zero(len);
@@ -3435,14 +3597,14 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
 #    endif
 # endif
 #endif
-  dout(20) << "zero " << cid << "/" << oid << " " << offset << "~" << len << " = " << ret << dendl;
+  dout(20) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << " = " << ret << dendl;
   return ret;
 }
 
 int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
 		      const SequencerPosition& spos)
 {
-  dout(15) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << dendl;
 
   if (_check_replay_guard(cid, newoid, spos) < 0)
     return 0;
@@ -3516,20 +3678,20 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
  out:
   lfn_close(o);
  out2:
-  dout(10) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
   return r;
 }
 
 int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff)
 {
-  dout(20) << "_do_clone_range copy " << srcoff << "~" << len << " to " << dstoff << dendl;
+  dout(20) << __FUNC__ << ": copy " << srcoff << "~" << len << " to " << dstoff << dendl;
   return backend->clone_range(from, to, srcoff, len, dstoff);
 }
 
 int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff)
 {
-  dout(20) << __func__ << " " << srcoff << "~" << len << " to " << dstoff << dendl;
+  dout(20) << __FUNC__ << ": " << srcoff << "~" << len << " to " << dstoff << dendl;
   int r = 0;
   map<uint64_t, uint64_t> exomap;
   // fiemap doesn't allow zero length
@@ -3553,7 +3715,7 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
     uint64_t it_off = miter->first - srcoff + dstoff;
     r = _do_copy_range(from, to, miter->first, miter->second, it_off, true);
     if (r < 0) {
-      derr << "FileStore::_do_copy_range: copy error at " << miter->first << "~" << miter->second
+      derr << __FUNC__ << ": copy error at " << miter->first << "~" << miter->second
              << " to " << it_off << ", " << cpp_strerror(r) << dendl;
       break;
     }
@@ -3569,14 +3731,14 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
     r = ::fstat(to, &st);
     if (r < 0) {
       r = -errno;
-      derr << __func__ << ": fstat error at " << to << " " << cpp_strerror(r) << dendl;
+      derr << __FUNC__ << ": fstat error at " << to << " " << cpp_strerror(r) << dendl;
       goto out;
     }
     if (st.st_size < (int)(dstoff + len)) {
       r = ::ftruncate(to, dstoff + len);
       if (r < 0) {
         r = -errno;
-        derr << __func__ << ": ftruncate error at " << dstoff+len << " " << cpp_strerror(r) << dendl;
+        derr << __FUNC__ << ": ftruncate error at " << dstoff+len << " " << cpp_strerror(r) << dendl;
         goto out;
       }
     }
@@ -3584,13 +3746,13 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
   }
 
  out:
-  dout(20) << __func__ << " " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
+  dout(20) << __FUNC__ << ": " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
   return r;
 }
 
 int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff, bool skip_sloppycrc)
 {
-  dout(20) << "_do_copy_range " << srcoff << "~" << len << " to " << dstoff << dendl;
+  dout(20) << __FUNC__ << ": " << srcoff << "~" << len << " to " << dstoff << dendl;
   int r = 0;
   loff_t pos = srcoff;
   loff_t end = srcoff + len;
@@ -3611,14 +3773,14 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
       r = safe_splice(from, &pos, pipefd[1], NULL, l, SPLICE_F_NONBLOCK);
       dout(10) << "  safe_splice read from " << pos << "~" << l << " got " << r << dendl;
       if (r < 0) {
-	derr << "FileStore::_do_copy_range: safe_splice read error at " << pos << "~" << len
+	derr << __FUNC__ << ": safe_splice read error at " << pos << "~" << len
 	  << ", " << cpp_strerror(r) << dendl;
 	break;
       }
       if (r == 0) {
 	// hrm, bad source range, wtf.
 	r = -ERANGE;
-	derr << "FileStore::_do_copy_range got short read result at " << pos
+	derr << __FUNC__ << ": got short read result at " << pos
 	  << " of fd " << from << " len " << len << dendl;
 	break;
       }
@@ -3627,7 +3789,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
       dout(10) << " safe_splice write to " << to << " len " << r
 	<< " got " << r << dendl;
       if (r < 0) {
-	derr << "FileStore::_do_copy_range: write error at " << pos << "~"
+	derr << __FUNC__ << ": write error at " << pos << "~"
 	  << r << ", " << cpp_strerror(r) << dendl;
 	break;
       }
@@ -3668,7 +3830,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 	  continue;
 	} else {
 	  r = -errno;
-	  derr << "FileStore::_do_copy_range: read error at " << pos << "~" << len
+	  derr << __FUNC__ << ": read error at " << pos << "~" << len
 	    << ", " << cpp_strerror(r) << dendl;
 	  break;
 	}
@@ -3676,7 +3838,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
       if (r == 0) {
 	// hrm, bad source range, wtf.
 	r = -ERANGE;
-	derr << "FileStore::_do_copy_range got short read result at " << pos
+	derr << __FUNC__ << ": got short read result at " << pos
 	  << " of fd " << from << " len " << len << dendl;
 	break;
       }
@@ -3687,7 +3849,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 	  << " got " << r2 << dendl;
 	if (r2 < 0) {
 	  r = r2;
-	  derr << "FileStore::_do_copy_range: write error at " << pos << "~"
+	  derr << __FUNC__ << ": write error at " << pos << "~"
 	    << r-op << ", " << cpp_strerror(r) << dendl;
 
 	  break;
@@ -3700,31 +3862,36 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
     }
   }
 
-  assert(pos == end);
+  if (r < 0 && replaying) {
+    assert(r == -ERANGE);
+    derr << __FUNC__ << ": short source tolerated because we are replaying" << dendl;
+    r = pos - from;;
+  }
+  assert(replaying || pos == end);
   if (r >= 0 && !skip_sloppycrc && m_filestore_sloppy_crc) {
     int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
     assert(rc >= 0);
   }
-  dout(20) << "_do_copy_range " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
+  dout(20) << __FUNC__ << ": " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
   return r;
 }
 
-int FileStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
+int FileStore::_clone_range(const coll_t& oldcid, const ghobject_t& oldoid, const coll_t& newcid, const ghobject_t& newoid,
 			    uint64_t srcoff, uint64_t len, uint64_t dstoff,
 			    const SequencerPosition& spos)
 {
-  dout(15) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " " << srcoff << "~" << len << " to " << dstoff << dendl;
+  dout(15) << __FUNC__ << ": " << oldcid << "/" << oldoid << " -> " << newcid << "/" << newoid << " " << srcoff << "~" << len << " to " << dstoff << dendl;
 
-  if (_check_replay_guard(cid, newoid, spos) < 0)
+  if (_check_replay_guard(newcid, newoid, spos) < 0)
     return 0;
 
   int r;
   FDRef o, n;
-  r = lfn_open(cid, oldoid, false, &o);
+  r = lfn_open(oldcid, oldoid, false, &o);
   if (r < 0) {
     goto out2;
   }
-  r = lfn_open(cid, newoid, true, &n);
+  r = lfn_open(newcid, newoid, true, &n);
   if (r < 0) {
     goto out;
   }
@@ -3741,19 +3908,20 @@ int FileStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid, const g
  out:
   lfn_close(o);
  out2:
-  dout(10) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " "
+  dout(10) << __FUNC__ << ": " << oldcid << "/" << oldoid << " -> " << newcid << "/" << newoid << " "
 	   << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
   return r;
 }
 
 class SyncEntryTimeout : public Context {
 public:
-  explicit SyncEntryTimeout(int commit_timeo)
-    : m_commit_timeo(commit_timeo)
+  CephContext* cct;
+  explicit SyncEntryTimeout(CephContext* cct, int commit_timeo)
+    : cct(cct), m_commit_timeo(commit_timeo)
   {
   }
 
-  void finish(int r) {
+  void finish(int r) override {
     BackTrace *bt = new BackTrace(1);
     generic_dout(-1) << "FileStore: sync_entry timed out after "
 	   << m_commit_timeo << " seconds.\n";
@@ -3775,31 +3943,31 @@ void FileStore::sync_entry()
     utime_t min_interval;
     min_interval.set_from_double(m_filestore_min_sync_interval);
 
-    utime_t startwait = ceph_clock_now(g_ceph_context);
+    utime_t startwait = ceph_clock_now();
     if (!force_sync) {
-      dout(20) << "sync_entry waiting for max_interval " << max_interval << dendl;
-      sync_cond.WaitInterval(g_ceph_context, lock, max_interval);
+      dout(20) << __FUNC__ << ":  waiting for max_interval " << max_interval << dendl;
+      sync_cond.WaitInterval(lock, max_interval);
     } else {
-      dout(20) << "sync_entry not waiting, force_sync set" << dendl;
+      dout(20) << __FUNC__ << ": not waiting, force_sync set" << dendl;
     }
 
     if (force_sync) {
-      dout(20) << "sync_entry force_sync set" << dendl;
+      dout(20) << __FUNC__ << ": force_sync set" << dendl;
       force_sync = false;
     } else if (stop) {
-      dout(20) << __func__ << " stop set" << dendl;
+      dout(20) << __FUNC__ << ": stop set" << dendl;
       break;
     } else {
       // wait for at least the min interval
-      utime_t woke = ceph_clock_now(g_ceph_context);
+      utime_t woke = ceph_clock_now();
       woke -= startwait;
-      dout(20) << "sync_entry woke after " << woke << dendl;
+      dout(20) << __FUNC__ << ": woke after " << woke << dendl;
       if (woke < min_interval) {
 	utime_t t = min_interval;
 	t -= woke;
-	dout(20) << "sync_entry waiting for another " << t
+	dout(20) << __FUNC__ << ": waiting for another " << t
 		 << " to reach min interval " << min_interval << dendl;
-	sync_cond.WaitInterval(g_ceph_context, lock, t);
+	sync_cond.WaitInterval(lock, t);
       }
     }
 
@@ -3810,22 +3978,25 @@ void FileStore::sync_entry()
 
     op_tp.pause();
     if (apply_manager.commit_start()) {
-      utime_t start = ceph_clock_now(g_ceph_context);
+      utime_t start = ceph_clock_now();
       uint64_t cp = apply_manager.get_committing_seq();
 
       sync_entry_timeo_lock.Lock();
       SyncEntryTimeout *sync_entry_timeo =
-	new SyncEntryTimeout(m_filestore_commit_timeout);
-      timer.add_event_after(m_filestore_commit_timeout, sync_entry_timeo);
+	new SyncEntryTimeout(cct, m_filestore_commit_timeout);
+      if (!timer.add_event_after(m_filestore_commit_timeout,
+				 sync_entry_timeo)) {
+	sync_entry_timeo = nullptr;
+      }
       sync_entry_timeo_lock.Unlock();
 
-      logger->set(l_os_committing, 1);
+      logger->set(l_filestore_committing, 1);
 
-      dout(15) << "sync_entry committing " << cp << dendl;
+      dout(15) << __FUNC__ << ": committing " << cp << dendl;
       stringstream errstream;
-      if (g_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
+      if (cct->_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
 	derr << errstream.str() << dendl;
-	assert(0);
+	ceph_abort();
       }
 
       if (backend->can_checkpoint()) {
@@ -3856,10 +4027,9 @@ void FileStore::sync_entry()
 	    derr << "ioctl WAIT_SYNC got " << cpp_strerror(err) << dendl;
 	    assert(0 == "wait_sync got error");
 	  }
-	  dout(20) << " done waiting for checkpoint" << cid << " to complete" << dendl;
+	  dout(20) << " done waiting for checkpoint " << cid << " to complete" << dendl;
 	}
-      } else
-      {
+      } else {
 	apply_manager.commit_started();
 	op_tp.unpause();
 
@@ -3887,21 +4057,25 @@ void FileStore::sync_entry()
 	}
       }
 
-      utime_t done = ceph_clock_now(g_ceph_context);
+      utime_t done = ceph_clock_now();
       utime_t lat = done - start;
       utime_t dur = done - startwait;
-      dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;
+      dout(10) << __FUNC__ << ": commit took " << lat << ", interval was " << dur << dendl;
+      utime_t max_pause_lat = logger->tget(l_filestore_sync_pause_max_lat);
+      if (max_pause_lat < dur - lat) {
+        logger->tinc(l_filestore_sync_pause_max_lat, dur - lat);
+      }
 
-      logger->inc(l_os_commit);
-      logger->tinc(l_os_commit_lat, lat);
-      logger->tinc(l_os_commit_len, dur);
+      logger->inc(l_filestore_commitcycle);
+      logger->tinc(l_filestore_commitcycle_latency, lat);
+      logger->tinc(l_filestore_commitcycle_interval, dur);
 
       apply_manager.commit_finish();
       if (!m_disable_wbthrottle) {
         wbthrottle.clear();
       }
 
-      logger->set(l_os_committing, 0);
+      logger->set(l_filestore_committing, 0);
 
       // remove old snaps?
       if (backend->can_checkpoint()) {
@@ -3918,24 +4092,25 @@ void FileStore::sync_entry()
 	}
       }
 
-      dout(15) << "sync_entry committed to op_seq " << cp << dendl;
+      dout(15) << __FUNC__ << ": committed to op_seq " << cp << dendl;
 
-      sync_entry_timeo_lock.Lock();
-      timer.cancel_event(sync_entry_timeo);
-      sync_entry_timeo_lock.Unlock();
+      if (sync_entry_timeo) {
+	Mutex::Locker lock(sync_entry_timeo_lock);
+	timer.cancel_event(sync_entry_timeo);
+      }
     } else {
       op_tp.unpause();
     }
 
     lock.Lock();
-    finish_contexts(g_ceph_context, fin, 0);
+    finish_contexts(cct, fin, 0);
     fin.clear();
     if (!sync_waiters.empty()) {
-      dout(10) << "sync_entry more waiters, committing again" << dendl;
+      dout(10) << __FUNC__ << ": more waiters, committing again" << dendl;
       goto again;
     }
     if (!stop && journal && journal->should_commit_now()) {
-      dout(10) << "sync_entry journal says we should commit again (probably is/was full)" << dendl;
+      dout(10) << __FUNC__ << ": journal says we should commit again (probably is/was full)" << dendl;
       goto again;
     }
   }
@@ -3946,16 +4121,16 @@ void FileStore::sync_entry()
 void FileStore::_start_sync()
 {
   if (!journal) {  // don't do a big sync if the journal is on
-    dout(10) << "start_sync" << dendl;
+    dout(10) << __FUNC__ << dendl;
     sync_cond.Signal();
   } else {
-    dout(10) << "start_sync - NOOP (journal is on)" << dendl;
+    dout(10) << __FUNC__ << ": - NOOP (journal is on)" << dendl;
   }
 }
 
 void FileStore::do_force_sync()
 {
-  dout(10) << __func__ << dendl;
+  dout(10) << __FUNC__ << dendl;
   Mutex::Locker l(lock);
   force_sync = true;
   sync_cond.Signal();
@@ -3967,7 +4142,7 @@ void FileStore::start_sync(Context *onsafe)
   sync_waiters.push_back(onsafe);
   sync_cond.Signal();
   force_sync = true;
-  dout(10) << "start_sync" << dendl;
+  dout(10) << __FUNC__ << dendl;
 }
 
 void FileStore::sync()
@@ -3990,9 +4165,9 @@ void FileStore::sync()
 
 void FileStore::_flush_op_queue()
 {
-  dout(10) << "_flush_op_queue draining op tp" << dendl;
+  dout(10) << __FUNC__ << ": draining op tp" << dendl;
   op_wq.drain();
-  dout(10) << "_flush_op_queue waiting for apply finisher" << dendl;
+  dout(10) << __FUNC__ << ": waiting for apply finisher" << dendl;
   for (vector<Finisher*>::iterator it = apply_finishers.begin(); it != apply_finishers.end(); ++it) {
     (*it)->wait_for_empty();
   }
@@ -4003,29 +4178,29 @@ void FileStore::_flush_op_queue()
  */
 void FileStore::flush()
 {
-  dout(10) << "flush" << dendl;
+  dout(10) << __FUNC__ << dendl;
 
-  if (g_conf->filestore_blackhole) {
+  if (cct->_conf->filestore_blackhole) {
     // wait forever
     Mutex lock("FileStore::flush::lock");
     Cond cond;
     lock.Lock();
     while (true)
       cond.Wait(lock);
-    assert(0);
+    ceph_abort();
   }
 
   if (m_filestore_journal_writeahead) {
     if (journal)
       journal->flush();
-    dout(10) << "flush draining ondisk finisher" << dendl;
+    dout(10) << __FUNC__ << ": draining ondisk finisher" << dendl;
     for (vector<Finisher*>::iterator it = ondisk_finishers.begin(); it != ondisk_finishers.end(); ++it) {
       (*it)->wait_for_empty();
     }
   }
 
   _flush_op_queue();
-  dout(10) << "flush complete" << dendl;
+  dout(10) << __FUNC__ << ": complete" << dendl;
 }
 
 /*
@@ -4033,7 +4208,7 @@ void FileStore::flush()
  */
 void FileStore::sync_and_flush()
 {
-  dout(10) << "sync_and_flush" << dendl;
+  dout(10) << __FUNC__ << dendl;
 
   if (m_filestore_journal_writeahead) {
     if (journal)
@@ -4044,12 +4219,12 @@ void FileStore::sync_and_flush()
     _flush_op_queue();
     sync();
   }
-  dout(10) << "sync_and_flush done" << dendl;
+  dout(10) << __FUNC__ << ": done" << dendl;
 }
 
 int FileStore::flush_journal()
 {
-  dout(10) << __func__ << dendl;
+  dout(10) << __FUNC__ << dendl;
   sync_and_flush();
   sync();
   return 0;
@@ -4057,11 +4232,11 @@ int FileStore::flush_journal()
 
 int FileStore::snapshot(const string& name)
 {
-  dout(10) << "snapshot " << name << dendl;
+  dout(10) << __FUNC__ << ": " << name << dendl;
   sync_and_flush();
 
   if (!backend->can_checkpoint()) {
-    dout(0) << "snapshot " << name << " failed, not supported" << dendl;
+    dout(0) << __FUNC__ << ": " << name << " failed, not supported" << dendl;
     return -EOPNOTSUPP;
   }
 
@@ -4070,7 +4245,7 @@ int FileStore::snapshot(const string& name)
 
   int r = backend->create_checkpoint(s, NULL);
   if (r) {
-    derr << "snapshot " << name << " failed: " << cpp_strerror(r) << dendl;
+    derr << __FUNC__ << ": " << name << " failed: " << cpp_strerror(r) << dendl;
   }
 
   return r;
@@ -4133,7 +4308,7 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
     char *attrname = name;
     if (parse_attrname(&name)) {
       if (*name) {
-        dout(20) << "fgetattrs " << fd << " getting '" << name << "'" << dendl;
+        dout(20) << __FUNC__ << ": " << fd << " getting '" << name << "'" << dendl;
         int r = _fgetattr(fd, attrname, aset[name]);
         if (r < 0) {
 	  delete[] names2;
@@ -4163,7 +4338,7 @@ int FileStore::_fsetattrs(int fd, map<string, bufferptr> &aset)
     // ??? Why do we skip setting all the other attrs if one fails?
     int r = chain_fsetxattr(fd, n, val, p->second.length());
     if (r < 0) {
-      derr << "FileStore::_setattrs: chain_setxattr returned " << r << dendl;
+      derr << __FUNC__ << ": chain_setxattr returned " << r << dendl;
       return r;
     }
   }
@@ -4173,24 +4348,25 @@ int FileStore::_fsetattrs(int fd, map<string, bufferptr> &aset)
 // debug EIO injection
 void FileStore::inject_data_error(const ghobject_t &oid) {
   Mutex::Locker l(read_error_lock);
-  dout(10) << __func__ << ": init error on " << oid << dendl;
+  dout(10) << __FUNC__ << ": init error on " << oid << dendl;
   data_error_set.insert(oid);
 }
 void FileStore::inject_mdata_error(const ghobject_t &oid) {
   Mutex::Locker l(read_error_lock);
-  dout(10) << __func__ << ": init error on " << oid << dendl;
+  dout(10) << __FUNC__ << ": init error on " << oid << dendl;
   mdata_error_set.insert(oid);
 }
+
 void FileStore::debug_obj_on_delete(const ghobject_t &oid) {
   Mutex::Locker l(read_error_lock);
-  dout(10) << __func__ << ": clear error on " << oid << dendl;
+  dout(10) << __FUNC__ << ": clear error on " << oid << dendl;
   data_error_set.erase(oid);
   mdata_error_set.erase(oid);
 }
 bool FileStore::debug_data_eio(const ghobject_t &oid) {
   Mutex::Locker l(read_error_lock);
   if (data_error_set.count(oid)) {
-    dout(10) << __func__ << ": inject error on " << oid << dendl;
+    dout(10) << __FUNC__ << ": inject error on " << oid << dendl;
     return true;
   } else {
     return false;
@@ -4199,7 +4375,7 @@ bool FileStore::debug_data_eio(const ghobject_t &oid) {
 bool FileStore::debug_mdata_eio(const ghobject_t &oid) {
   Mutex::Locker l(read_error_lock);
   if (mdata_error_set.count(oid)) {
-    dout(10) << __func__ << ": inject error on " << oid << dendl;
+    dout(10) << __FUNC__ << ": inject error on " << oid << dendl;
     return true;
   } else {
     return false;
@@ -4213,7 +4389,7 @@ int FileStore::getattr(const coll_t& _cid, const ghobject_t& oid, const char *na
 {
   tracepoint(objectstore, getattr_enter, _cid.c_str());
   const coll_t& cid = !_need_temp_object_collection(_cid, oid) ? _cid : _cid.get_temp();
-  dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << " '" << name << "'" << dendl;
   FDRef fd;
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
@@ -4230,16 +4406,16 @@ int FileStore::getattr(const coll_t& _cid, const ghobject_t& oid, const char *na
     Index index;
     r = get_index(cid, &index);
     if (r < 0) {
-      dout(10) << __func__ << " could not get index r = " << r << dendl;
+      dout(10) << __FUNC__ << ": could not get index r = " << r << dendl;
       goto out;
     }
     r = object_map->get_xattrs(oid, to_get, &got);
     if (r < 0 && r != -ENOENT) {
-      dout(10) << __func__ << " get_xattrs err r =" << r << dendl;
+      dout(10) << __FUNC__ << ": get_xattrs err r =" << r << dendl;
       goto out;
     }
     if (got.empty()) {
-      dout(10) << __func__ << " got.size() is 0" << dendl;
+      dout(10) << __FUNC__ << ": got.size() is 0" << dendl;
       return -ENODATA;
     }
     bp = bufferptr(got.begin()->second.c_str(),
@@ -4247,9 +4423,9 @@ int FileStore::getattr(const coll_t& _cid, const ghobject_t& oid, const char *na
     r = bp.length();
   }
  out:
-  dout(10) << "getattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
-  if (g_conf->filestore_debug_inject_read_err &&
+  if (cct->_conf->filestore_debug_inject_read_err &&
       debug_mdata_eio(oid)) {
     return -EIO;
   } else {
@@ -4265,7 +4441,7 @@ int FileStore::getattrs(const coll_t& _cid, const ghobject_t& oid, map<string,bu
   set<string> omap_attrs;
   map<string, bufferlist> omap_aset;
   Index index;
-  dout(15) << "getattrs " << cid << "/" << oid << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << dendl;
   FDRef fd;
   bool spill_out = true;
   char buf[2];
@@ -4287,25 +4463,25 @@ int FileStore::getattrs(const coll_t& _cid, const ghobject_t& oid, map<string,bu
   }
 
   if (!spill_out) {
-    dout(10) << __func__ << " no xattr exists in object_map r = " << r << dendl;
+    dout(10) << __FUNC__ << ": no xattr exists in object_map r = " << r << dendl;
     goto out;
   }
 
   r = get_index(cid, &index);
   if (r < 0) {
-    dout(10) << __func__ << " could not get index r = " << r << dendl;
+    dout(10) << __FUNC__ << ": could not get index r = " << r << dendl;
     goto out;
   }
   {
     r = object_map->get_all_xattrs(oid, &omap_attrs);
     if (r < 0 && r != -ENOENT) {
-      dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
+      dout(10) << __FUNC__ << ": could not get omap_attrs r = " << r << dendl;
       goto out;
     }
 
     r = object_map->get_xattrs(oid, omap_attrs, &omap_aset);
     if (r < 0 && r != -ENOENT) {
-      dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
+      dout(10) << __FUNC__ << ": could not get omap_attrs r = " << r << dendl;
       goto out;
     }
     if (r == -ENOENT)
@@ -4320,10 +4496,10 @@ int FileStore::getattrs(const coll_t& _cid, const ghobject_t& oid, map<string,bu
 			    bufferptr(i->second.c_str(), i->second.length())));
   }
  out:
-  dout(10) << "getattrs " << cid << "/" << oid << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
 
-  if (g_conf->filestore_debug_inject_read_err &&
+  if (cct->_conf->filestore_debug_inject_read_err &&
       debug_mdata_eio(oid)) {
     return -EIO;
   } else {
@@ -4358,7 +4534,7 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
   r = _fgetattrs(**fd, inline_set);
   incomplete_inline = (r == -E2BIG);
   assert(!m_filestore_fail_eio || r != -EIO);
-  dout(15) << "setattrs " << cid << "/" << oid
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid
 	   << (incomplete_inline ? " (incomplete_inline, forcing omap)" : "")
 	   << dendl;
 
@@ -4408,7 +4584,7 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
   if (spill_out && !omap_remove.empty()) {
     r = object_map->remove_xattrs(oid, omap_remove, &spos);
     if (r < 0 && r != -ENOENT) {
-      dout(10) << __func__ << " could not remove_xattrs r = " << r << dendl;
+      dout(10) << __FUNC__ << ": could not remove_xattrs r = " << r << dendl;
       assert(!m_filestore_fail_eio || r != -EIO);
       goto out_close;
     } else {
@@ -4419,7 +4595,7 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
   if (!omap_set.empty()) {
     r = object_map->set_xattrs(oid, omap_set, &spos);
     if (r < 0) {
-      dout(10) << __func__ << " could not set_xattrs r = " << r << dendl;
+      dout(10) << __FUNC__ << ": could not set_xattrs r = " << r << dendl;
       assert(!m_filestore_fail_eio || r != -EIO);
       goto out_close;
     }
@@ -4427,7 +4603,7 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
  out_close:
   lfn_close(fd);
  out:
-  dout(10) << "setattrs " << cid << "/" << oid << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
 
@@ -4435,7 +4611,7 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
 int FileStore::_rmattr(const coll_t& cid, const ghobject_t& oid, const char *name,
 		       const SequencerPosition &spos)
 {
-  dout(15) << "rmattr " << cid << "/" << oid << " '" << name << "'" << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << " '" << name << "'" << dendl;
   FDRef fd;
   bool spill_out = true;
 
@@ -4457,14 +4633,14 @@ int FileStore::_rmattr(const coll_t& cid, const ghobject_t& oid, const char *nam
     Index index;
     r = get_index(cid, &index);
     if (r < 0) {
-      dout(10) << __func__ << " could not get index r = " << r << dendl;
+      dout(10) << __FUNC__ << ": could not get index r = " << r << dendl;
       goto out_close;
     }
     set<string> to_remove;
     to_remove.insert(string(name));
     r = object_map->remove_xattrs(oid, to_remove, &spos);
     if (r < 0 && r != -ENOENT) {
-      dout(10) << __func__ << " could not remove_xattrs index r = " << r << dendl;
+      dout(10) << __FUNC__ << ": could not remove_xattrs index r = " << r << dendl;
       assert(!m_filestore_fail_eio || r != -EIO);
       goto out_close;
     }
@@ -4472,14 +4648,14 @@ int FileStore::_rmattr(const coll_t& cid, const ghobject_t& oid, const char *nam
  out_close:
   lfn_close(fd);
  out:
-  dout(10) << "rmattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   return r;
 }
 
 int FileStore::_rmattrs(const coll_t& cid, const ghobject_t& oid,
 			const SequencerPosition &spos)
 {
-  dout(15) << "rmattrs " << cid << "/" << oid << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << dendl;
 
   map<string,bufferptr> aset;
   FDRef fd;
@@ -4505,32 +4681,32 @@ int FileStore::_rmattrs(const coll_t& cid, const ghobject_t& oid,
       get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
       r = chain_fremovexattr(**fd, n);
       if (r < 0) {
-        dout(10) << __func__ << " could not remove xattr r = " << r << dendl;
+        dout(10) << __FUNC__ << ": could not remove xattr r = " << r << dendl;
 	goto out_close;
       }
     }
   }
 
   if (!spill_out) {
-    dout(10) << __func__ << " no xattr exists in object_map r = " << r << dendl;
+    dout(10) << __FUNC__ << ": no xattr exists in object_map r = " << r << dendl;
     goto out_close;
   }
 
   r = get_index(cid, &index);
   if (r < 0) {
-    dout(10) << __func__ << " could not get index r = " << r << dendl;
+    dout(10) << __FUNC__ << ": could not get index r = " << r << dendl;
     goto out_close;
   }
   {
     r = object_map->get_all_xattrs(oid, &omap_attrs);
     if (r < 0 && r != -ENOENT) {
-      dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
+      dout(10) << __FUNC__ << ": could not get omap_attrs r = " << r << dendl;
       assert(!m_filestore_fail_eio || r != -EIO);
       goto out_close;
     }
     r = object_map->remove_xattrs(oid, omap_attrs, &spos);
     if (r < 0 && r != -ENOENT) {
-      dout(10) << __func__ << " could not remove omap_attrs r = " << r << dendl;
+      dout(10) << __FUNC__ << ": could not remove omap_attrs r = " << r << dendl;
       goto out_close;
     }
     if (r == -ENOENT)
@@ -4542,7 +4718,7 @@ int FileStore::_rmattrs(const coll_t& cid, const ghobject_t& oid,
  out_close:
   lfn_close(fd);
  out:
-  dout(10) << "rmattrs " << cid << "/" << oid << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
 
@@ -4563,7 +4739,7 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
   vector<ghobject_t> objects;
   ghobject_t max;
   while (!max.is_max()) {
-    r = collection_list(cid, max, ghobject_t::get_max(), true,
+    r = collection_list(cid, max, ghobject_t::get_max(),
 			300, &objects, &max);
     if (r < 0)
       return r;
@@ -4591,7 +4767,7 @@ int FileStore::list_collections(vector<coll_t>& ls)
 int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
 {
   tracepoint(objectstore, list_collections_enter);
-  dout(10) << "list_collections" << dendl;
+  dout(10) << __FUNC__ << dendl;
 
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/current", basedir.c_str());
@@ -4605,11 +4781,8 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
     return r;
   }
 
-  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
-  struct dirent *de;
-  while ((r = ::readdir_r(dir, (struct dirent *)&buf, &de)) == 0) {
-    if (!de)
-      break;
+  struct dirent *de = nullptr;
+  while ((de = ::readdir(dir))) {
     if (de->d_type == DT_UNKNOWN) {
       // d_type not supported (non-ext[234], btrfs), must stat
       struct stat sb;
@@ -4639,7 +4812,7 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
       continue;
     coll_t cid;
     if (!cid.parse(de->d_name)) {
-      derr << "ignoging invalid collection '" << de->d_name << "'" << dendl;
+      derr << "ignoring invalid collection '" << de->d_name << "'" << dendl;
       continue;
     }
     if (!cid.is_temp() || include_temp)
@@ -4647,7 +4820,7 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
   }
 
   if (r > 0) {
-    derr << "trying readdir_r " << fn << ": " << cpp_strerror(r) << dendl;
+    derr << "trying readdir " << fn << ": " << cpp_strerror(r) << dendl;
     r = -r;
   }
 
@@ -4662,11 +4835,11 @@ int FileStore::collection_stat(const coll_t& c, struct stat *st)
   tracepoint(objectstore, collection_stat_enter, c.c_str());
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
-  dout(15) << "collection_stat " << fn << dendl;
+  dout(15) << __FUNC__ << ": " << fn << dendl;
   int r = ::stat(fn, st);
   if (r < 0)
     r = -errno;
-  dout(10) << "collection_stat " << fn << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << fn << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
   tracepoint(objectstore, collection_stat_exit, r);
   return r;
@@ -4681,33 +4854,88 @@ bool FileStore::collection_exists(const coll_t& c)
   return ret;
 }
 
-bool FileStore::collection_empty(const coll_t& c)
+int FileStore::collection_empty(const coll_t& c, bool *empty)
 {
   tracepoint(objectstore, collection_empty_enter, c.c_str());
-  dout(15) << "collection_empty " << c << dendl;
+  dout(15) << __FUNC__ << ": " << c << dendl;
   Index index;
   int r = get_index(c, &index);
-  if (r < 0)
-    return false;
+  if (r < 0) {
+    derr << __FUNC__ << ": get_index returned: " << cpp_strerror(r)
+         << dendl;
+    return r;
+  }
 
   assert(NULL != index.index);
   RWLock::RLocker l((index.index)->access_lock);
 
   vector<ghobject_t> ls;
-  r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(), true,
+  r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(),
 				     1, &ls, NULL);
   if (r < 0) {
+    derr << __FUNC__ << ": collection_list_partial returned: "
+         << cpp_strerror(r) << dendl;
     assert(!m_filestore_fail_eio || r != -EIO);
-    return false;
+    return r;
   }
-  bool ret = ls.empty();
-  tracepoint(objectstore, collection_empty_exit, ret);
-  return ret;
+  *empty = ls.empty();
+  tracepoint(objectstore, collection_empty_exit, *empty);
+  return 0;
 }
-int FileStore::collection_list(const coll_t& c, ghobject_t start, ghobject_t end,
-			       bool sort_bitwise, int max,
+
+int FileStore::_collection_set_bits(const coll_t& c, int bits)
+{
+  char fn[PATH_MAX];
+  get_cdir(c, fn, sizeof(fn));
+  dout(10) << __FUNC__ << ": " << fn << " " << bits << dendl;
+  char n[PATH_MAX];
+  int r;
+  int32_t v = bits;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  get_attrname("bits", n, PATH_MAX);
+  r = chain_fsetxattr(fd, n, (char*)&v, sizeof(v));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
+ out:
+  dout(10) << __FUNC__ << ": " << fn << " " << bits << " = " << r << dendl;
+  return r;
+}
+
+int FileStore::collection_bits(const coll_t& c)
+{
+  char fn[PATH_MAX];
+  get_cdir(c, fn, sizeof(fn));
+  dout(15) << __FUNC__ << ": " << fn << dendl;
+  int r;
+  char n[PATH_MAX];
+  int32_t bits;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    bits = r = -errno;
+    goto out;
+  }
+  get_attrname("bits", n, PATH_MAX);
+  r = chain_fgetxattr(fd, n, (char*)&bits, sizeof(bits));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
+  if (r < 0) {
+    bits = r;
+    goto out;
+  }
+ out:
+  dout(10) << __FUNC__ << ": " << fn << " = " << bits << dendl;
+  return bits;
+}
+
+int FileStore::collection_list(const coll_t& c,
+			       const ghobject_t& orig_start,
+			       const ghobject_t& end,
+			       int max,
 			       vector<ghobject_t> *ls, ghobject_t *next)
 {
+  ghobject_t start = orig_start;
   if (start.is_max())
     return 0;
 
@@ -4735,26 +4963,26 @@ int FileStore::collection_list(const coll_t& c, ghobject_t start, ghobject_t end
       pool = 0;
       shard = shard_id_t::NO_SHARD;
     }
-    dout(20) << __func__ << " pool is " << pool << " shard is " << shard
+    dout(20) << __FUNC__ << ": pool is " << pool << " shard is " << shard
 	     << " pgid " << pgid << dendl;
   }
   ghobject_t sep;
   sep.hobj.pool = -1;
   sep.set_shard(shard);
   if (!c.is_temp() && !c.is_meta()) {
-    if (cmp_bitwise(start, sep) < 0) { // bitwise vs nibble doesn't matter here
-      dout(10) << __func__ << " first checking temp pool" << dendl;
+    if (start < sep) {
+      dout(10) << __FUNC__ << ": first checking temp pool" << dendl;
       coll_t temp = c.get_temp();
-      int r = collection_list(temp, start, end, sort_bitwise, max, ls, next);
+      int r = collection_list(temp, start, end, max, ls, next);
       if (r < 0)
 	return r;
       if (*next != ghobject_t::get_max())
 	return r;
       start = sep;
-      dout(10) << __func__ << " fall through to non-temp collection, start "
+      dout(10) << __FUNC__ << ": fall through to non-temp collection, start "
 	       << start << dendl;
     } else {
-      dout(10) << __func__ << " start " << start << " >= sep " << sep << dendl;
+      dout(10) << __FUNC__ << ": start " << start << " >= sep " << sep << dendl;
     }
   }
 
@@ -4766,7 +4994,7 @@ int FileStore::collection_list(const coll_t& c, ghobject_t start, ghobject_t end
   assert(NULL != index.index);
   RWLock::RLocker l((index.index)->access_lock);
 
-  r = index->collection_list_partial(start, end, sort_bitwise, max, ls, next);
+  r = index->collection_list_partial(start, end, max, ls, next);
 
   if (r < 0) {
     assert(!m_filestore_fail_eio || r != -EIO);
@@ -4790,7 +5018,7 @@ int FileStore::omap_get(const coll_t& _c, const ghobject_t &hoid,
 {
   tracepoint(objectstore, omap_get_enter, _c.c_str());
   const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
-  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  dout(15) << __FUNC__ << ": " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
   if (r < 0)
@@ -4819,7 +5047,7 @@ int FileStore::omap_get_header(
 {
   tracepoint(objectstore, omap_get_header_enter, _c.c_str());
   const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
-  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  dout(15) << __FUNC__ << ": " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
   if (r < 0)
@@ -4844,7 +5072,7 @@ int FileStore::omap_get_keys(const coll_t& _c, const ghobject_t &hoid, set<strin
 {
   tracepoint(objectstore, omap_get_keys_enter, _c.c_str());
   const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
-  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  dout(15) << __FUNC__ << ": " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
   if (r < 0)
@@ -4871,7 +5099,7 @@ int FileStore::omap_get_values(const coll_t& _c, const ghobject_t &hoid,
 {
   tracepoint(objectstore, omap_get_values_enter, _c.c_str());
   const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
-  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  dout(15) << __FUNC__ << ": " << c << "/" << hoid << dendl;
   Index index;
   const char *where = "()";
   int r = get_index(c, &index);
@@ -4897,7 +5125,7 @@ int FileStore::omap_get_values(const coll_t& _c, const ghobject_t &hoid,
   r = 0;
  out:
   tracepoint(objectstore, omap_get_values_exit, r);
-  dout(15) << __func__ << " " << c << "/" << hoid << " = " << r
+  dout(15) << __FUNC__ << ": " << c << "/" << hoid << " = " << r
 	   << where << dendl;
   return r;
 }
@@ -4908,7 +5136,7 @@ int FileStore::omap_check_keys(const coll_t& _c, const ghobject_t &hoid,
 {
   tracepoint(objectstore, omap_check_keys_enter, _c.c_str());
   const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
-  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  dout(15) << __FUNC__ << ": " << c << "/" << hoid << dendl;
 
   Index index;
   int r = get_index(c, &index);
@@ -4935,11 +5163,11 @@ ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(const coll_t& _c,
 {
   tracepoint(objectstore, get_omap_iterator, _c.c_str());
   const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
-  dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+  dout(15) << __FUNC__ << ": " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
   if (r < 0) {
-    dout(10) << __func__ << " " << c << "/" << hoid << " = 0 "
+    dout(10) << __FUNC__ << ": " << c << "/" << hoid << " = 0 "
 	     << "(get_index failed with " << cpp_strerror(r) << ")" << dendl;
     return ObjectMap::ObjectMapIterator();
   }
@@ -4948,7 +5176,7 @@ ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(const coll_t& _c,
     RWLock::RLocker l((index.index)->access_lock);
     r = lfn_find(hoid, index);
     if (r < 0) {
-      dout(10) << __func__ << " " << c << "/" << hoid << " = 0 "
+      dout(10) << __FUNC__ << ": " << c << "/" << hoid << " = 0 "
 	       << "(lfn_find failed with " << cpp_strerror(r) << ")" << dendl;
       return ObjectMap::ObjectMapIterator();
     }
@@ -4960,16 +5188,19 @@ int FileStore::_collection_hint_expected_num_objs(const coll_t& c, uint32_t pg_n
     uint64_t expected_num_objs,
     const SequencerPosition &spos)
 {
-  dout(15) << __func__ << " collection: " << c << " pg number: "
+  dout(15) << __FUNC__ << ": collection: " << c << " pg number: "
      << pg_num << " expected number of objects: " << expected_num_objs << dendl;
 
-  if (!collection_empty(c) && !replaying) {
+  bool empty;
+  int ret = collection_empty(c, &empty);
+  if (ret < 0)
+    return ret;
+  if (!empty && !replaying) {
     dout(0) << "Failed to give an expected number of objects hint to collection : "
       << c << ", only empty collection can take such type of hint. " << dendl;
     return 0;
   }
 
-  int ret;
   Index index;
   ret = get_index(c, &index);
   if (ret < 0)
@@ -4986,28 +5217,31 @@ int FileStore::_collection_hint_expected_num_objs(const coll_t& c, uint32_t pg_n
 
 int FileStore::_create_collection(
   const coll_t& c,
+  int bits,
   const SequencerPosition &spos)
 {
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
-  dout(15) << "create_collection " << fn << dendl;
+  dout(15) << __FUNC__ << ": " << fn << dendl;
   int r = ::mkdir(fn, 0755);
   if (r < 0)
     r = -errno;
   if (r == -EEXIST && replaying)
     r = 0;
-  dout(10) << "create_collection " << fn << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << fn << " = " << r << dendl;
 
   if (r < 0)
     return r;
   r = init_index(c);
   if (r < 0)
     return r;
-
+  r = _collection_set_bits(c, bits);
+  if (r < 0)
+    return r;
   // create parallel temp collection, too
   if (!c.is_meta() && !c.is_temp()) {
     coll_t temp = c.get_temp();
-    r = _create_collection(temp, spos);
+    r = _create_collection(temp, 0, spos);
     if (r < 0)
       return r;
   }
@@ -5021,7 +5255,7 @@ int FileStore::_destroy_collection(const coll_t& c)
   int r = 0;
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
-  dout(15) << "_destroy_collection " << fn << dendl;
+  dout(15) << __FUNC__ << ": " << fn << dendl;
   {
     Index from;
     r = get_index(c, &from);
@@ -5052,7 +5286,7 @@ int FileStore::_destroy_collection(const coll_t& c)
   }
 
  out_final:
-  dout(10) << "_destroy_collection " << fn << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << fn << " = " << r << dendl;
   return r;
 }
 
@@ -5060,7 +5294,7 @@ int FileStore::_destroy_collection(const coll_t& c)
 int FileStore::_collection_add(const coll_t& c, const coll_t& oldcid, const ghobject_t& o,
 			       const SequencerPosition& spos)
 {
-  dout(15) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
+  dout(15) << __FUNC__ << ": " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
 
   int dstcmp = _check_replay_guard(c, o, spos);
   if (dstcmp < 0)
@@ -5080,7 +5314,7 @@ int FileStore::_collection_add(const coll_t& c, const coll_t& oldcid, const ghob
     // the source collection/object does not exist. If we are replaying, we
     // should be safe, so just return 0 and move on.
     assert(replaying);
-    dout(10) << "collection_add " << c << "/" << o << " from "
+    dout(10) << __FUNC__ << ": " << c << "/" << o << " from "
 	     << oldcid << "/" << o << " (dne, continue replay) " << dendl;
     return 0;
   }
@@ -5101,7 +5335,7 @@ int FileStore::_collection_add(const coll_t& c, const coll_t& oldcid, const ghob
   }
   lfn_close(fd);
 
-  dout(10) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
+  dout(10) << __FUNC__ << ": " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
   return r;
 }
 
@@ -5110,7 +5344,7 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
 				       const SequencerPosition& spos,
 				       bool allow_enoent)
 {
-  dout(15) << __func__ << " " << c << "/" << o << " from " << oldcid << "/" << oldoid << dendl;
+  dout(15) << __FUNC__ << ": " << c << "/" << o << " from " << oldcid << "/" << oldoid << dendl;
   int r = 0;
   int dstcmp, srccmp;
 
@@ -5141,39 +5375,48 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
       // the source collection/object does not exist. If we are replaying, we
       // should be safe, so just return 0 and move on.
       if (replaying) {
-	dout(10) << __func__ << " " << c << "/" << o << " from "
+	dout(10) << __FUNC__ << ": " << c << "/" << o << " from "
 		 << oldcid << "/" << oldoid << " (dne, continue replay) " << dendl;
       } else if (allow_enoent) {
-	dout(10) << __func__ << " " << c << "/" << o << " from "
+	dout(10) << __FUNC__ << ": " << c << "/" << o << " from "
 		 << oldcid << "/" << oldoid << " (dne, ignoring enoent)"
 		 << dendl;
       } else {
 	assert(0 == "ERROR: source must exist");
       }
-      return 0;
-    }
-    if (dstcmp > 0) {      // if dstcmp == 0 the guard already says "in-progress"
-      _set_replay_guard(**fd, spos, &o, true);
-    }
 
-    r = lfn_link(oldcid, c, oldoid, o);
-    if (replaying && !backend->can_checkpoint() &&
-	r == -EEXIST)    // crashed between link() and set_replay_guard()
-      r = 0;
+      if (!replaying) {
+	return 0;
+      }
+      if (allow_enoent && dstcmp > 0) { // if dstcmp == 0, try_rename was started.
+	return 0;
+      }
 
-    _inject_failure();
+      r = 0; // don't know if object_map was cloned
+    } else {
+      if (dstcmp > 0) { // if dstcmp == 0 the guard already says "in-progress"
+	_set_replay_guard(**fd, spos, &o, true);
+      }
+
+      r = lfn_link(oldcid, c, oldoid, o);
+      if (replaying && !backend->can_checkpoint() &&
+	  r == -EEXIST)    // crashed between link() and set_replay_guard()
+	r = 0;
+
+      lfn_close(fd);
+      fd = FDRef();
+
+      _inject_failure();
+    }
 
     if (r == 0) {
       // the name changed; link the omap content
-      r = object_map->clone(oldoid, o, &spos);
+      r = object_map->rename(oldoid, o, &spos);
       if (r == -ENOENT)
 	r = 0;
     }
 
     _inject_failure();
-
-    lfn_close(fd);
-    fd = FDRef();
 
     if (r == 0)
       r = lfn_unlink(oldcid, oldoid, spos, true);
@@ -5183,12 +5426,12 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
 
     // close guard on object so we don't do this again
     if (r == 0) {
-      _close_replay_guard(**fd, spos);
+      _close_replay_guard(**fd, spos, &o);
       lfn_close(fd);
     }
   }
 
-  dout(10) << __func__ << " " << c << "/" << o << " from " << oldcid << "/" << oldoid
+  dout(10) << __FUNC__ << ": " << c << "/" << o << " from " << oldcid << "/" << oldoid
 	   << " = " << r << dendl;
   return r;
 
@@ -5198,19 +5441,19 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
     r = lfn_unlink(oldcid, oldoid, spos, true);
   }
 
-  dout(10) << __func__ << " " << c << "/" << o << " from " << oldcid << "/" << oldoid
+  dout(10) << __FUNC__ << ": " << c << "/" << o << " from " << oldcid << "/" << oldoid
 	   << " = " << r << dendl;
   return r;
 }
 
 void FileStore::_inject_failure()
 {
-  if (m_filestore_kill_at.read()) {
-    int final = m_filestore_kill_at.dec();
-    dout(5) << "_inject_failure " << (final+1) << " -> " << final << dendl;
+  if (m_filestore_kill_at) {
+    int final = --m_filestore_kill_at;
+    dout(5) << __FUNC__ << ": " << (final+1) << " -> " << final << dendl;
     if (final == 0) {
-      derr << "_inject_failure KILLING" << dendl;
-      g_ceph_context->_log->flush();
+      derr << __FUNC__ << ": KILLING" << dendl;
+      cct->_log->flush();
       _exit(1);
     }
   }
@@ -5218,7 +5461,7 @@ void FileStore::_inject_failure()
 
 int FileStore::_omap_clear(const coll_t& cid, const ghobject_t &hoid,
 			   const SequencerPosition &spos) {
-  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << hoid << dendl;
   Index index;
   int r = get_index(cid, &index);
   if (r < 0)
@@ -5239,7 +5482,7 @@ int FileStore::_omap_clear(const coll_t& cid, const ghobject_t &hoid,
 int FileStore::_omap_setkeys(const coll_t& cid, const ghobject_t &hoid,
 			     const map<string, bufferlist> &aset,
 			     const SequencerPosition &spos) {
-  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << hoid << dendl;
   Index index;
   int r;
   //treat pgmeta as a logical object, skip to check exist
@@ -5248,7 +5491,7 @@ int FileStore::_omap_setkeys(const coll_t& cid, const ghobject_t &hoid,
 
   r = get_index(cid, &index);
   if (r < 0) {
-    dout(20) << __func__ << " get_index got " << cpp_strerror(r) << dendl;
+    dout(20) << __FUNC__ << ": get_index got " << cpp_strerror(r) << dendl;
     return r;
   }
   {
@@ -5256,20 +5499,25 @@ int FileStore::_omap_setkeys(const coll_t& cid, const ghobject_t &hoid,
     RWLock::RLocker l((index.index)->access_lock);
     r = lfn_find(hoid, index);
     if (r < 0) {
-      dout(20) << __func__ << " lfn_find got " << cpp_strerror(r) << dendl;
+      dout(20) << __FUNC__ << ": lfn_find got " << cpp_strerror(r) << dendl;
       return r;
     }
   }
 skip:
+  if (g_conf->subsys.should_gather(ceph_subsys_filestore, 20)) {
+    for (auto& p : aset) {
+      dout(20) << __FUNC__ << ":  set " << p.first << dendl;
+    }
+  }
   r = object_map->set_keys(hoid, aset, &spos);
-  dout(20) << __func__ << " " << cid << "/" << hoid << " = " << r << dendl;
+  dout(20) << __FUNC__ << ": " << cid << "/" << hoid << " = " << r << dendl;
   return r;
 }
 
 int FileStore::_omap_rmkeys(const coll_t& cid, const ghobject_t &hoid,
 			    const set<string> &keys,
 			    const SequencerPosition &spos) {
-  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << hoid << dendl;
   Index index;
   int r;
   //treat pgmeta as a logical object, skip to check exist
@@ -5296,7 +5544,7 @@ skip:
 int FileStore::_omap_rmkeyrange(const coll_t& cid, const ghobject_t &hoid,
 				const string& first, const string& last,
 				const SequencerPosition &spos) {
-  dout(15) << __func__ << " " << cid << "/" << hoid << " [" << first << "," << last << "]" << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << hoid << " [" << first << "," << last << "]" << dendl;
   set<string> keys;
   {
     ObjectMap::ObjectMapIterator iter = get_omap_iterator(cid, hoid);
@@ -5314,7 +5562,7 @@ int FileStore::_omap_setheader(const coll_t& cid, const ghobject_t &hoid,
 			       const bufferlist &bl,
 			       const SequencerPosition &spos)
 {
-  dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << hoid << dendl;
   Index index;
   int r = get_index(cid, &index);
   if (r < 0)
@@ -5337,14 +5585,14 @@ int FileStore::_split_collection(const coll_t& cid,
 {
   int r;
   {
-    dout(15) << __func__ << " " << cid << " bits: " << bits << dendl;
+    dout(15) << __FUNC__ << ": " << cid << " bits: " << bits << dendl;
     if (!collection_exists(cid)) {
-      dout(2) << __func__ << ": " << cid << " DNE" << dendl;
+      dout(2) << __FUNC__ << ": " << cid << " DNE" << dendl;
       assert(replaying);
       return 0;
     }
     if (!collection_exists(dest)) {
-      dout(2) << __func__ << ": " << dest << " DNE" << dendl;
+      dout(2) << __FUNC__ << ": " << dest << " DNE" << dendl;
       assert(replaying);
       return 0;
     }
@@ -5381,14 +5629,14 @@ int FileStore::_split_collection(const coll_t& cid,
     _close_replay_guard(cid, spos);
     _close_replay_guard(dest, spos);
   }
-  if (g_conf->filestore_debug_verify_split) {
+  _collection_set_bits(cid, bits);
+  if (!r && cct->_conf->filestore_debug_verify_split) {
     vector<ghobject_t> objects;
     ghobject_t next;
     while (1) {
       collection_list(
 	cid,
 	next, ghobject_t::get_max(),
-	true,
 	get_ideal_list_max(),
 	&objects,
 	&next);
@@ -5397,7 +5645,7 @@ int FileStore::_split_collection(const coll_t& cid,
       for (vector<ghobject_t>::iterator i = objects.begin();
 	   i != objects.end();
 	   ++i) {
-	dout(20) << __func__ << ": " << *i << " still in source "
+	dout(20) << __FUNC__ << ": " << *i << " still in source "
 		 << cid << dendl;
 	assert(!i->match(bits, rem));
       }
@@ -5408,7 +5656,6 @@ int FileStore::_split_collection(const coll_t& cid,
       collection_list(
 	dest,
 	next, ghobject_t::get_max(),
-	true,
 	get_ideal_list_max(),
 	&objects,
 	&next);
@@ -5417,7 +5664,7 @@ int FileStore::_split_collection(const coll_t& cid,
       for (vector<ghobject_t>::iterator i = objects.begin();
 	   i != objects.end();
 	   ++i) {
-	dout(20) << __func__ << ": " << *i << " now in dest "
+	dout(20) << __FUNC__ << ": " << *i << " now in dest "
 		 << *i << dendl;
 	assert(i->match(bits, rem));
       }
@@ -5431,7 +5678,7 @@ int FileStore::_set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
                                uint64_t expected_object_size,
                                uint64_t expected_write_size)
 {
-  dout(15) << "set_alloc_hint " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << dendl;
+  dout(15) << __FUNC__ << ": " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << dendl;
 
   FDRef fd;
   int ret = 0;
@@ -5448,12 +5695,12 @@ int FileStore::_set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
     uint64_t hint = MIN(expected_write_size, m_filestore_max_alloc_hint_size);
 
     ret = backend->set_alloc_hint(**fd, hint);
-    dout(20) << "set_alloc_hint hint " << hint << " ret " << ret << dendl;
+    dout(20) << __FUNC__ << ": hint " << hint << " ret " << ret << dendl;
   }
 
   lfn_close(fd);
 out:
-  dout(10) << "set_alloc_hint " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << " = " << ret << dendl;
+  dout(10) << __FUNC__ << ": " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << " = " << ret << dendl;
   assert(!m_filestore_fail_eio || ret != -EIO);
   return ret;
 }
@@ -5511,8 +5758,10 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_max_xattr_value_size_xfs") ||
       changed.count("filestore_max_xattr_value_size_btrfs") ||
       changed.count("filestore_max_xattr_value_size_other")) {
-    Mutex::Locker l(lock);
-    set_xattr_limits_via_conf();
+    if (backend) {
+      Mutex::Locker l(lock);
+      set_xattr_limits_via_conf();
+    }
   }
 
   if (changed.count("filestore_queue_max_bytes") ||
@@ -5538,7 +5787,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
-    m_filestore_kill_at.set(conf->filestore_kill_at);
+    m_filestore_kill_at = conf->filestore_kill_at;
     m_filestore_fail_eio = conf->filestore_fail_eio;
     m_filestore_fadvise = conf->filestore_fadvise;
     m_filestore_sloppy_crc = conf->filestore_sloppy_crc;
@@ -5563,25 +5812,25 @@ int FileStore::set_throttle_params()
 {
   stringstream ss;
   bool valid = throttle_bytes.set_params(
-    g_conf->filestore_queue_low_threshhold,
-    g_conf->filestore_queue_high_threshhold,
-    g_conf->filestore_expected_throughput_bytes,
-    g_conf->filestore_queue_high_delay_multiple,
-    g_conf->filestore_queue_max_delay_multiple,
-    g_conf->filestore_queue_max_bytes,
+    cct->_conf->filestore_queue_low_threshhold,
+    cct->_conf->filestore_queue_high_threshhold,
+    cct->_conf->filestore_expected_throughput_bytes,
+    cct->_conf->filestore_queue_high_delay_multiple,
+    cct->_conf->filestore_queue_max_delay_multiple,
+    cct->_conf->filestore_queue_max_bytes,
     &ss);
 
   valid &= throttle_ops.set_params(
-    g_conf->filestore_queue_low_threshhold,
-    g_conf->filestore_queue_high_threshhold,
-    g_conf->filestore_expected_throughput_ops,
-    g_conf->filestore_queue_high_delay_multiple,
-    g_conf->filestore_queue_max_delay_multiple,
-    g_conf->filestore_queue_max_ops,
+    cct->_conf->filestore_queue_low_threshhold,
+    cct->_conf->filestore_queue_high_threshhold,
+    cct->_conf->filestore_expected_throughput_ops,
+    cct->_conf->filestore_queue_high_delay_multiple,
+    cct->_conf->filestore_queue_max_delay_multiple,
+    cct->_conf->filestore_queue_max_ops,
     &ss);
 
-  logger->set(l_os_oq_max_ops, throttle_ops.get_max());
-  logger->set(l_os_oq_max_bytes, throttle_bytes.get_max());
+  logger->set(l_filestore_op_queue_max_ops, throttle_ops.get_max());
+  logger->set(l_filestore_op_queue_max_bytes, throttle_bytes.get_max());
 
   if (!valid) {
     derr << "tried to set invalid params: "
@@ -5593,7 +5842,7 @@ int FileStore::set_throttle_params()
 
 void FileStore::dump_start(const std::string& file)
 {
-  dout(10) << "dump_start " << file << dendl;
+  dout(10) << __FUNC__ << ": " << file << dendl;
   if (m_filestore_do_dump) {
     dump_stop();
   }
@@ -5605,7 +5854,7 @@ void FileStore::dump_start(const std::string& file)
 
 void FileStore::dump_stop()
 {
-  dout(10) << "dump_stop" << dendl;
+  dout(10) << __FUNC__ << dendl;
   m_filestore_do_dump = false;
   if (m_filestore_dump.is_open()) {
     m_filestore_dump_fmt.close_section();
@@ -5641,46 +5890,46 @@ void FileStore::set_xattr_limits_via_conf()
   switch (m_fs_type) {
 #if defined(__linux__)
   case XFS_SUPER_MAGIC:
-    fs_xattr_size = g_conf->filestore_max_inline_xattr_size_xfs;
-    fs_xattrs = g_conf->filestore_max_inline_xattrs_xfs;
-    fs_xattr_max_value_size = g_conf->filestore_max_xattr_value_size_xfs;
+    fs_xattr_size = cct->_conf->filestore_max_inline_xattr_size_xfs;
+    fs_xattrs = cct->_conf->filestore_max_inline_xattrs_xfs;
+    fs_xattr_max_value_size = cct->_conf->filestore_max_xattr_value_size_xfs;
     break;
   case BTRFS_SUPER_MAGIC:
-    fs_xattr_size = g_conf->filestore_max_inline_xattr_size_btrfs;
-    fs_xattrs = g_conf->filestore_max_inline_xattrs_btrfs;
-    fs_xattr_max_value_size = g_conf->filestore_max_xattr_value_size_btrfs;
+    fs_xattr_size = cct->_conf->filestore_max_inline_xattr_size_btrfs;
+    fs_xattrs = cct->_conf->filestore_max_inline_xattrs_btrfs;
+    fs_xattr_max_value_size = cct->_conf->filestore_max_xattr_value_size_btrfs;
     break;
 #endif
   default:
-    fs_xattr_size = g_conf->filestore_max_inline_xattr_size_other;
-    fs_xattrs = g_conf->filestore_max_inline_xattrs_other;
-    fs_xattr_max_value_size = g_conf->filestore_max_xattr_value_size_other;
+    fs_xattr_size = cct->_conf->filestore_max_inline_xattr_size_other;
+    fs_xattrs = cct->_conf->filestore_max_inline_xattrs_other;
+    fs_xattr_max_value_size = cct->_conf->filestore_max_xattr_value_size_other;
     break;
   }
 
   // Use override value if set
-  if (g_conf->filestore_max_inline_xattr_size)
-    m_filestore_max_inline_xattr_size = g_conf->filestore_max_inline_xattr_size;
+  if (cct->_conf->filestore_max_inline_xattr_size)
+    m_filestore_max_inline_xattr_size = cct->_conf->filestore_max_inline_xattr_size;
   else
     m_filestore_max_inline_xattr_size = fs_xattr_size;
 
   // Use override value if set
-  if (g_conf->filestore_max_inline_xattrs)
-    m_filestore_max_inline_xattrs = g_conf->filestore_max_inline_xattrs;
+  if (cct->_conf->filestore_max_inline_xattrs)
+    m_filestore_max_inline_xattrs = cct->_conf->filestore_max_inline_xattrs;
   else
     m_filestore_max_inline_xattrs = fs_xattrs;
 
   // Use override value if set
-  if (g_conf->filestore_max_xattr_value_size)
-    m_filestore_max_xattr_value_size = g_conf->filestore_max_xattr_value_size;
+  if (cct->_conf->filestore_max_xattr_value_size)
+    m_filestore_max_xattr_value_size = cct->_conf->filestore_max_xattr_value_size;
   else
     m_filestore_max_xattr_value_size = fs_xattr_max_value_size;
 
-  if (m_filestore_max_xattr_value_size < g_conf->osd_max_object_name_len) {
+  if (m_filestore_max_xattr_value_size < cct->_conf->osd_max_object_name_len) {
     derr << "WARNING: max attr value size ("
 	 << m_filestore_max_xattr_value_size
 	 << ") is smaller than osd_max_object_name_len ("
-	 << g_conf->osd_max_object_name_len
+	 << cct->_conf->osd_max_object_name_len
 	 << ").  Your backend filesystem appears to not support attrs large "
 	 << "enough to handle the configured max rados name size.  You may get "
 	 << "unexpected ENAMETOOLONG errors on rados operations or buggy "
@@ -5694,6 +5943,21 @@ uint64_t FileStore::estimate_objects_overhead(uint64_t num_objects)
   uint64_t res = num_objects * blk_size / 2; //assumes that each object uses ( in average ) additional 1/2 block due to FS allocation granularity.
   return res;
 }
+
+int FileStore::apply_layout_settings(const coll_t &cid)
+{
+  dout(20) << __FUNC__ << ": " << cid << dendl;
+  Index index;
+  int r = get_index(cid, &index);
+  if (r < 0) {
+    dout(10) << "Error getting index for " << cid << ": " << cpp_strerror(r)
+	     << dendl;
+    return r;
+  }
+
+  return index->apply_layout_settings();
+}
+
 
 // -- FSSuperblock --
 

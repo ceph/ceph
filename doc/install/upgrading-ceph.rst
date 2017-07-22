@@ -115,7 +115,7 @@ follows::
 .. important:: If your cluster already has an ``auth supported`` option defined in
    the configuration file, no changes are necessary.
 
-See `Ceph Authentication - Backward Compatibility`_ for details.
+See `User Management - Backward Compatibility`_ for details.
 
 
 Monitor On-wire Protocol
@@ -175,7 +175,7 @@ extended period of time between ``ceph-mon`` upgrades. See `Upgrading
 Monitors`_ for details.
 
 .. note:: See the `Authentication`_ section and the 
-   `Ceph Authentication - Backward Compatibility`_ for additional information
+   `User Management - Backward Compatibility`_ for additional information
    on authentication backward compatibility settings for Bobtail.
 
 Once you complete the upgrade of your monitors from Argonaut to
@@ -274,7 +274,6 @@ Then add a new ``ceph.repo`` repository entry with the following contents.
 	baseurl=http://download.ceph.com/rpm/el6/$basearch
 	enabled=1
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -312,7 +311,6 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``, etc).
 	baseurl=http://download.ceph.com/rpm-emperor/{distro}/$basearch
 	enabled=1
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -339,7 +337,7 @@ you may need to uninstall, auto remove dependencies and reinstall.
 
 See `v0.65`_ for details on the new command line interface.
 
-.. _v0.65: http://ceph.com/docs/master/release-notes/#v0-65
+.. _v0.65: http://docs.ceph.com/docs/master/release-notes/#v0-65
 
 
 Monitor
@@ -411,7 +409,7 @@ you may need to uninstall, auto remove dependencies and reinstall.
 
 See `v0.65`_ for details on the new command line interface.
 
-.. _v0.65: http://ceph.com/docs/master/release-notes/#v0-65
+.. _v0.65: http://docs.ceph.com/docs/master/release-notes/#v0-65
 
 
 Upgrade Sequence
@@ -438,7 +436,6 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``,
 	baseurl=http://download.ceph.com/rpm-firefly/{distro}/$basearch
 	enabled=1
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -511,7 +508,6 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``,
 	baseurl=http://download.ceph.com/rpm/{distro}/$basearch
 	enabled=1
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -742,8 +738,7 @@ Under those directories, the keyring should be in a file named ``keyring``.
 
 .. _Monitor Config Reference: ../../rados/configuration/mon-config-ref
 .. _Joao's blog post: http://ceph.com/dev-notes/cephs-new-monitor-changes 
-.. _Ceph Authentication: ../../rados/operations/authentication/
-.. _Ceph Authentication - Backward Compatibility: ../../rados/operations/authentication/#backward-compatibility
+.. _User Management - Backward Compatibility: ../../rados/configuration/auth-config-ref/#backward-compatibility
 .. _manually: ../install-storage-cluster/
 .. _Operating a Cluster: ../../rados/operations/operating
 .. _Monitoring a Cluster: ../../rados/operations/monitoring

@@ -92,6 +92,10 @@ public:
     void rmkeys_by_prefix(
       const string &prefix
       );
+    void rm_range_keys(
+        const string &prefix,
+        const string &start,
+        const string &end);
   };
 
   KeyValueDB::Transaction get_transaction() {
@@ -149,12 +153,6 @@ protected:
   WholeSpaceIterator _get_iterator() {
     return std::make_shared<KineticWholeSpaceIteratorImpl>(kinetic_conn.get());
   }
-
-  // TODO: remove snapshots from interface
-  WholeSpaceIterator _get_snapshot_iterator() {
-    return _get_iterator();
-  }
-
 };
 
 #endif

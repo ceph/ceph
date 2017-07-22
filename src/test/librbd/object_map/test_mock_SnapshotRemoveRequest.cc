@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -23,7 +23,7 @@ using ::testing::StrEq;
 class TestMockObjectMapSnapshotRemoveRequest : public TestMockFixture {
 public:
   void expect_load_map(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
-    std::string snap_oid(ObjectMap::object_map_name(ictx->id, snap_id));
+    std::string snap_oid(ObjectMap<>::object_map_name(ictx->id, snap_id));
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   exec(snap_oid, _, StrEq("rbd"), StrEq("object_map_load"), _, _, _))
@@ -36,7 +36,7 @@ public:
   }
 
   void expect_remove_snapshot(librbd::ImageCtx *ictx, int r) {
-    std::string oid(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP));
+    std::string oid(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP));
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
@@ -52,7 +52,7 @@ public:
   }
 
   void expect_remove_map(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
-    std::string snap_oid(ObjectMap::object_map_name(ictx->id, snap_id));
+    std::string snap_oid(ObjectMap<>::object_map_name(ictx->id, snap_id));
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid, _))
                     .WillOnce(Return(r));
@@ -63,9 +63,6 @@ public:
   }
 
   void expect_invalidate(librbd::ImageCtx *ictx) {
-    EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
-                  .Times(0);
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                 exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                   .WillOnce(DoDefault());

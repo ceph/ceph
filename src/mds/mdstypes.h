@@ -14,8 +14,8 @@
 #include "common/Clock.h"
 #include "common/DecayCounter.h"
 #include "common/entity_name.h"
-#include "MDSContext.h"
 
+#include "include/Context.h"
 #include "include/frag.h"
 #include "include/xlist.h"
 #include "include/interval_set.h"
@@ -31,11 +31,6 @@
 #include <boost/serialization/strong_typedef.hpp>
 
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
-
-
-#define MDS_REF_SET      // define me for improved debug output, sanity checking
-//#define MDS_AUTHPIN_SET  // define me for debugging auth pin leaks
-//#define MDS_VERIFY_FRAGSTAT    // do (slow) sanity checking on frags
 
 #define MDS_PORT_CACHE   0x200
 #define MDS_PORT_LOCKER  0x300
@@ -57,6 +52,7 @@
 #define MDS_INO_LOG_OFFSET        (2*MAX_MDS)
 #define MDS_INO_LOG_BACKUP_OFFSET (3*MAX_MDS)
 #define MDS_INO_LOG_POINTER_OFFSET    (4*MAX_MDS)
+#define MDS_INO_PURGE_QUEUE       (5*MAX_MDS)
 
 #define MDS_INO_SYSTEM_BASE       ((6*MAX_MDS) + (MAX_MDS * NUM_STRAY))
 
@@ -78,8 +74,6 @@
 typedef int32_t mds_rank_t;
 typedef int32_t fs_cluster_id_t;
 
-
-
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;
 constexpr fs_cluster_id_t FS_CLUSTER_ID_NONE = {-1};
@@ -90,13 +84,14 @@ extern const mds_rank_t MDS_RANK_NONE;
 class mds_role_t
 {
   public:
-  mds_rank_t rank;
   fs_cluster_id_t fscid;
+  mds_rank_t rank;
+
   mds_role_t(fs_cluster_id_t fscid_, mds_rank_t rank_)
-    : rank(rank_), fscid(fscid_)
+    : fscid(fscid_), rank(rank_)
   {}
   mds_role_t()
-    : rank(MDS_RANK_NONE), fscid(FS_CLUSTER_ID_NONE)
+    : fscid(FS_CLUSTER_ID_NONE), rank(MDS_RANK_NONE)
   {}
   bool operator<(mds_role_t const &rhs) const
   {
@@ -115,11 +110,6 @@ class mds_role_t
   }
 };
 std::ostream& operator<<(std::ostream &out, const mds_role_t &role);
-
-
-extern long g_num_ino, g_num_dir, g_num_dn, g_num_cap;
-extern long g_num_inoa, g_num_dira, g_num_dna, g_num_capa;
-extern long g_num_inos, g_num_dirs, g_num_dns, g_num_caps;
 
 
 // CAPS
@@ -169,10 +159,11 @@ struct scatter_info_t {
 struct frag_info_t : public scatter_info_t {
   // this frag
   utime_t mtime;
+  uint64_t change_attr;
   int64_t nfiles;        // files
   int64_t nsubdirs;      // subdirs
 
-  frag_info_t() : nfiles(0), nsubdirs(0) {}
+  frag_info_t() : change_attr(0), nfiles(0), nsubdirs(0) {}
 
   int64_t size() const { return nfiles + nsubdirs; }
 
@@ -181,10 +172,16 @@ struct frag_info_t : public scatter_info_t {
   }
 
   // *this += cur - acc;
-  void add_delta(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime) {
+  void add_delta(const frag_info_t &cur, const frag_info_t &acc, bool *touched_mtime=0, bool *touched_chattr=0) {
     if (cur.mtime > mtime) {
       mtime = cur.mtime;
-      touched_mtime = true;
+      if (touched_mtime)
+	*touched_mtime = true;
+    }
+    if (cur.change_attr > change_attr) {
+      change_attr = cur.change_attr;
+      if (touched_chattr)
+	*touched_chattr = true;
     }
     nfiles += cur.nfiles - acc.nfiles;
     nsubdirs += cur.nsubdirs - acc.nsubdirs;
@@ -193,6 +190,8 @@ struct frag_info_t : public scatter_info_t {
   void add(const frag_info_t& other) {
     if (other.mtime > mtime)
       mtime = other.mtime;
+    if (other.change_attr > change_attr)
+      change_attr = other.change_attr;
     nfiles += other.nfiles;
     nsubdirs += other.nsubdirs;
   }
@@ -212,6 +211,9 @@ WRITE_CLASS_ENCODER(frag_info_t)
 
 inline bool operator==(const frag_info_t &l, const frag_info_t &r) {
   return memcmp(&l, &r, sizeof(l)) == 0;
+}
+inline bool operator!=(const frag_info_t &l, const frag_info_t &r) {
+  return !(l == r);
 }
 
 std::ostream& operator<<(std::ostream &out, const frag_info_t &f);
@@ -246,7 +248,7 @@ struct nest_info_t : public scatter_info_t {
   }
 
   // *this += cur - acc;
-  void add_delta(const nest_info_t &cur, nest_info_t &acc) {
+  void add_delta(const nest_info_t &cur, const nest_info_t &acc) {
     if (cur.rctime > rctime)
       rctime = cur.rctime;
     rbytes += cur.rbytes - acc.rbytes;
@@ -272,6 +274,9 @@ WRITE_CLASS_ENCODER(nest_info_t)
 
 inline bool operator==(const nest_info_t &l, const nest_info_t &r) {
   return memcmp(&l, &r, sizeof(l)) == 0;
+}
+inline bool operator!=(const nest_info_t &l, const nest_info_t &r) {
+  return !(l == r);
 }
 
 std::ostream& operator<<(std::ostream &out, const nest_info_t &n);
@@ -404,28 +409,24 @@ inline bool operator==(const client_writeable_range_t& l,
 
 struct inline_data_t {
 private:
-  bufferlist *blp;
+  std::unique_ptr<bufferlist> blp;
 public:
   version_t version;
 
   void free_data() {
-    delete blp;
-    blp = NULL;
+    blp.reset();
   }
   bufferlist& get_data() {
     if (!blp)
-      blp = new bufferlist;
+      blp.reset(new bufferlist);
     return *blp;
   }
   size_t length() const { return blp ? blp->length() : 0; }
 
-  inline_data_t() : blp(0), version(1) {}
-  inline_data_t(const inline_data_t& o) : blp(0), version(o.version) {
+  inline_data_t() : version(1) {}
+  inline_data_t(const inline_data_t& o) : version(o.version) {
     if (o.blp)
       get_data() = *o.blp;
-  }
-  ~inline_data_t() {
-    free_data();
   }
   inline_data_t& operator=(const inline_data_t& o) {
     version = o.version;
@@ -438,7 +439,7 @@ public:
   bool operator==(const inline_data_t& o) const {
    return length() == o.length() &&
 	  (length() == 0 ||
-	   (*const_cast<bufferlist*>(blp) == *const_cast<bufferlist*>(o.blp)));
+	   (*const_cast<bufferlist*>(blp.get()) == *const_cast<bufferlist*>(o.blp.get())));
   }
   bool operator!=(const inline_data_t& o) const {
     return !(*this == o);
@@ -470,6 +471,7 @@ struct inode_t {
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time
+  utime_t    btime;   // birth time
 
   // perm (namespace permissions)
   uint32_t   mode;
@@ -493,6 +495,9 @@ struct inode_t {
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
   inline_data_t inline_data;
 
+  // change attribute
+  uint64_t   change_attr;
+
   std::map<client_t,client_writeable_range_t> client_ranges;  // client(s) can write to these ranges
 
   // dirfrag, recursive accountin
@@ -501,6 +506,8 @@ struct inode_t {
   nest_info_t accounted_rstat; // protected by parent's nestlock
 
   quota_info_t quota;
+
+  mds_rank_t export_pin;
  
   // special stuff
   version_t version;           // auth only
@@ -521,7 +528,8 @@ struct inode_t {
 	      size(0), max_size_ever(0),
 	      truncate_seq(0), truncate_size(0), truncate_from(0),
 	      truncate_pending(0),
-	      time_warp_seq(0),
+	      time_warp_seq(0), change_attr(0),
+              export_pin(MDS_RANK_NONE),
 	      version(0), file_data_version(0), xattr_version(0),
 	      last_scrub_version(0), backtrace_version(0) {
     clear_layout();
@@ -555,7 +563,7 @@ struct inode_t {
     layout = file_layout_t();
   }
 
-  uint64_t get_layout_size_increment() {
+  uint64_t get_layout_size_increment() const {
     return layout.get_period();
   }
 
@@ -699,6 +707,7 @@ struct session_info_t {
   EntityName auth_name;
 
   client_t get_client() const { return client_t(inst.name.num()); }
+  const entity_name_t& get_source() const { return inst.name; }
 
   void clear_meta() {
     prealloc_inos.clear();
@@ -1053,6 +1062,11 @@ inline void encode(const inode_load_vec_t &c, bufferlist &bl) { c.encode(bl); }
 inline void decode(inode_load_vec_t & c, const utime_t &t, bufferlist::iterator &p) {
   c.decode(t, p);
 }
+// for dencoder
+inline void decode(inode_load_vec_t & c, bufferlist::iterator &p) {
+  utime_t sample;
+  c.decode(sample, p);
+}
 
 class dirfrag_load_vec_t {
 public:
@@ -1132,11 +1146,16 @@ inline void encode(const dirfrag_load_vec_t &c, bufferlist &bl) { c.encode(bl); 
 inline void decode(dirfrag_load_vec_t& c, const utime_t &t, bufferlist::iterator &p) {
   c.decode(t, p);
 }
+// this for dencoder
+inline void decode(dirfrag_load_vec_t& c, bufferlist::iterator &p) {
+  utime_t sample;
+  c.decode(sample, p);
+}
 
 inline std::ostream& operator<<(std::ostream& out, dirfrag_load_vec_t& dl)
 {
   // ugliness!
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   DecayRate rate(g_conf->mds_decay_halflife);
   return out << "[" << dl.vec[0].get(now, rate) << "," << dl.vec[1].get(now, rate) 
 	     << " " << dl.meta_load(now, rate)
@@ -1184,6 +1203,11 @@ inline void encode(const mds_load_t &c, bufferlist &bl) { c.encode(bl); }
 inline void decode(mds_load_t &c, const utime_t &t, bufferlist::iterator &p) {
   c.decode(t, p);
 }
+// this one is for dencoder
+inline void decode(mds_load_t &c, bufferlist::iterator &p) {
+  utime_t sample;
+  c.decode(sample, p);
+}
 
 inline std::ostream& operator<<( std::ostream& out, mds_load_t& load )
 {
@@ -1203,7 +1227,7 @@ public:
   DecayCounter count;
 
 public:
-  load_spread_t() : p(0), n(0), count(ceph_clock_now(g_ceph_context))
+  load_spread_t() : p(0), n(0), count(ceph_clock_now())
   {
     for (int i=0; i<MAX; i++)
       last[i] = -1;
@@ -1231,55 +1255,16 @@ public:
 
 
 // ================================================================
-
-//#define MDS_PIN_REPLICATED     1
-//#define MDS_STATE_AUTH     (1<<0)
-
-class MLock;
-class SimpleLock;
-
-class MDSCacheObject;
-
 typedef std::pair<mds_rank_t, mds_rank_t> mds_authority_t;
+
 // -- authority delegation --
 // directory authority types
 //  >= 0 is the auth mds
 #define CDIR_AUTH_PARENT   mds_rank_t(-1)   // default
 #define CDIR_AUTH_UNKNOWN  mds_rank_t(-2)
-#define CDIR_AUTH_DEFAULT   mds_authority_t(CDIR_AUTH_PARENT, CDIR_AUTH_UNKNOWN)
-#define CDIR_AUTH_UNDEF     mds_authority_t(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN)
+#define CDIR_AUTH_DEFAULT  mds_authority_t(CDIR_AUTH_PARENT, CDIR_AUTH_UNKNOWN)
+#define CDIR_AUTH_UNDEF    mds_authority_t(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN)
 //#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
-
-
-
-/*
- * for metadata leases to clients
- */
-struct ClientLease {
-  client_t client;
-  MDSCacheObject *parent;
-
-  ceph_seq_t seq;
-  utime_t ttl;
-  xlist<ClientLease*>::item item_session_lease; // per-session list
-  xlist<ClientLease*>::item item_lease;         // global list
-
-  ClientLease(client_t c, MDSCacheObject *p) : 
-    client(c), parent(p), seq(0),
-    item_session_lease(this),
-    item_lease(this) { }
-};
-
-
-// print hack
-struct mdsco_db_line_prefix {
-  MDSCacheObject *object;
-  explicit mdsco_db_line_prefix(MDSCacheObject *o) : object(o) {}
-};
-std::ostream& operator<<(std::ostream& out, mdsco_db_line_prefix o);
-
-// printer
-std::ostream& operator<<(std::ostream& out, MDSCacheObject &o);
 
 class MDSCacheObjectInfo {
 public:
@@ -1296,383 +1281,21 @@ public:
   static void generate_test_instances(list<MDSCacheObjectInfo*>& ls);
 };
 
+inline std::ostream& operator<<(std::ostream& out, const MDSCacheObjectInfo &info) {
+  if (info.ino) return out << info.ino << "." << info.snapid;
+  if (info.dname.length()) return out << info.dirfrag << "/" << info.dname
+    << " snap " << info.snapid;
+  return out << info.dirfrag;
+}
+
 inline bool operator==(const MDSCacheObjectInfo& l, const MDSCacheObjectInfo& r) {
   if (l.ino || r.ino)
     return l.ino == r.ino && l.snapid == r.snapid;
   else
     return l.dirfrag == r.dirfrag && l.dname == r.dname;
 }
-
 WRITE_CLASS_ENCODER(MDSCacheObjectInfo)
 
-
-class MDSCacheObject {
- public:
-  // -- pins --
-  const static int PIN_REPLICATED =  1000;
-  const static int PIN_DIRTY      =  1001;
-  const static int PIN_LOCK       = -1002;
-  const static int PIN_REQUEST    = -1003;
-  const static int PIN_WAITER     =  1004;
-  const static int PIN_DIRTYSCATTERED = -1005;
-  static const int PIN_AUTHPIN    =  1006;
-  static const int PIN_PTRWAITER  = -1007;
-  const static int PIN_TEMPEXPORTING = 1008;  // temp pin between encode_ and finish_export
-  static const int PIN_CLIENTLEASE = 1009;
-
-  const char *generic_pin_name(int p) const {
-    switch (p) {
-    case PIN_REPLICATED: return "replicated";
-    case PIN_DIRTY: return "dirty";
-    case PIN_LOCK: return "lock";
-    case PIN_REQUEST: return "request";
-    case PIN_WAITER: return "waiter";
-    case PIN_DIRTYSCATTERED: return "dirtyscattered";
-    case PIN_AUTHPIN: return "authpin";
-    case PIN_PTRWAITER: return "ptrwaiter";
-    case PIN_TEMPEXPORTING: return "tempexporting";
-    case PIN_CLIENTLEASE: return "clientlease";
-    default: assert(0); return 0;
-    }
-  }
-
-  // -- state --
-  const static int STATE_AUTH      = (1<<30);
-  const static int STATE_DIRTY     = (1<<29);
-  const static int STATE_NOTIFYREF = (1<<28); // notify dropping ref drop through _put()
-  const static int STATE_REJOINING = (1<<27);  // replica has not joined w/ primary copy
-  const static int STATE_REJOINUNDEF = (1<<26);  // contents undefined.
-
-
-  // -- wait --
-  const static uint64_t WAIT_ORDERED	 = (1ull<<61);
-  const static uint64_t WAIT_SINGLEAUTH  = (1ull<<60);
-  const static uint64_t WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
-
-
-  // ============================================
-  // cons
- public:
-  MDSCacheObject() :
-    state(0), 
-    ref(0),
-    auth_pins(0), nested_auth_pins(0),
-    replica_nonce(0)
-  {}
-  virtual ~MDSCacheObject() {}
-
-  // printing
-  virtual void print(std::ostream& out) = 0;
-  virtual std::ostream& print_db_line_prefix(std::ostream& out) { 
-    return out << "mdscacheobject(" << this << ") "; 
-  }
-  
-  // --------------------------------------------
-  // state
- protected:
-  __u32 state;     // state bits
-
- public:
-  unsigned get_state() const { return state; }
-  unsigned state_test(unsigned mask) const { return (state & mask); }
-  void state_clear(unsigned mask) { state &= ~mask; }
-  void state_set(unsigned mask) { state |= mask; }
-  void state_reset(unsigned s) { state = s; }
-
-  bool is_auth() const { return state_test(STATE_AUTH); }
-  bool is_dirty() const { return state_test(STATE_DIRTY); }
-  bool is_clean() const { return !is_dirty(); }
-  bool is_rejoining() const { return state_test(STATE_REJOINING); }
-
-  // --------------------------------------------
-  // authority
-  virtual mds_authority_t authority() const = 0;
-  bool is_ambiguous_auth() const {
-    return authority().second != CDIR_AUTH_UNKNOWN;
-  }
-
-  // --------------------------------------------
-  // pins
-protected:
-  __s32      ref;       // reference count
-#ifdef MDS_REF_SET
-  std::map<int,int> ref_map;
-#endif
-
- public:
-  int get_num_ref(int by = -1) const {
-#ifdef MDS_REF_SET
-    if (by >= 0) {
-      if (ref_map.find(by) == ref_map.end()) {
-	return 0;
-      } else {
-        return ref_map.find(by)->second;
-      }
-    }
-#endif
-    return ref;
-  }
-  virtual const char *pin_name(int by) const = 0;
-  //bool is_pinned_by(int by) { return ref_set.count(by); }
-  //multiset<int>& get_ref_set() { return ref_set; }
-
-  virtual void last_put() {}
-  virtual void bad_put(int by) {
-#ifdef MDS_REF_SET
-    assert(ref_map[by] > 0);
-#endif
-    assert(ref > 0);
-  }
-  virtual void _put() {}
-  void put(int by) {
-#ifdef MDS_REF_SET
-    if (ref == 0 || ref_map[by] == 0) {
-#else
-    if (ref == 0) {
-#endif
-      bad_put(by);
-    } else {
-      ref--;
-#ifdef MDS_REF_SET
-      ref_map[by]--;
-#endif
-      if (ref == 0)
-	last_put();
-      if (state_test(STATE_NOTIFYREF))
-	_put();
-    }
-  }
-
-  virtual void first_get() {}
-  virtual void bad_get(int by) {
-#ifdef MDS_REF_SET
-    assert(by < 0 || ref_map[by] == 0);
-#endif
-    assert(0);
-  }
-  void get(int by) {
-    if (ref == 0)
-      first_get();
-    ref++;
-#ifdef MDS_REF_SET
-    if (ref_map.find(by) == ref_map.end())
-      ref_map[by] = 0;
-    ref_map[by]++;
-#endif
-  }
-
-  void print_pin_set(std::ostream& out) const {
-#ifdef MDS_REF_SET
-    std::map<int, int>::const_iterator it = ref_map.begin();
-    while (it != ref_map.end()) {
-      out << " " << pin_name(it->first) << "=" << it->second;
-      ++it;
-    }
-#else
-    out << " nref=" << ref;
-#endif
-  }
-
-  protected:
-  int auth_pins;
-  int nested_auth_pins;
-#ifdef MDS_AUTHPIN_SET
-  multiset<void*> auth_pin_set;
-#endif
-
-  public:
-  bool is_auth_pinned() const { return auth_pins || nested_auth_pins; }
-  int get_num_auth_pins() const { return auth_pins; }
-  int get_num_nested_auth_pins() const { return nested_auth_pins; }
-
-  void dump_states(Formatter *f) const;
-  void dump(Formatter *f) const;
-
-  // --------------------------------------------
-  // auth pins
-  virtual bool can_auth_pin() const = 0;
-  virtual void auth_pin(void *who) = 0;
-  virtual void auth_unpin(void *who) = 0;
-  virtual bool is_frozen() const = 0;
-  virtual bool is_freezing() const = 0;
-  virtual bool is_freezing_or_frozen() const {
-    return is_frozen() || is_freezing();
-  }
-
-
-  // --------------------------------------------
-  // replication (across mds cluster)
- protected:
-  unsigned		replica_nonce; // [replica] defined on replica
-  compact_map<mds_rank_t,unsigned>	replica_map;   // [auth] mds -> nonce
-
- public:
-  bool is_replicated() const { return !replica_map.empty(); }
-  bool is_replica(mds_rank_t mds) const { return replica_map.count(mds); }
-  int num_replicas() const { return replica_map.size(); }
-  unsigned add_replica(mds_rank_t mds) {
-    if (replica_map.count(mds)) 
-      return ++replica_map[mds];  // inc nonce
-    if (replica_map.empty()) 
-      get(PIN_REPLICATED);
-    return replica_map[mds] = 1;
-  }
-  void add_replica(mds_rank_t mds, unsigned nonce) {
-    if (replica_map.empty()) 
-      get(PIN_REPLICATED);
-    replica_map[mds] = nonce;
-  }
-  unsigned get_replica_nonce(mds_rank_t mds) {
-    assert(replica_map.count(mds));
-    return replica_map[mds];
-  }
-  void remove_replica(mds_rank_t mds) {
-    assert(replica_map.count(mds));
-    replica_map.erase(mds);
-    if (replica_map.empty())
-      put(PIN_REPLICATED);
-  }
-  void clear_replica_map() {
-    if (!replica_map.empty())
-      put(PIN_REPLICATED);
-    replica_map.clear();
-  }
-  compact_map<mds_rank_t,unsigned>::iterator replicas_begin() { return replica_map.begin(); }
-  compact_map<mds_rank_t,unsigned>::iterator replicas_end() { return replica_map.end(); }
-  const compact_map<mds_rank_t,unsigned>& get_replicas() const { return replica_map; }
-  void list_replicas(std::set<mds_rank_t>& ls) const {
-    for (compact_map<mds_rank_t,unsigned>::const_iterator p = replica_map.begin();
-	 p != replica_map.end();
-	 ++p)
-      ls.insert(p->first);
-  }
-
-  unsigned get_replica_nonce() const { return replica_nonce; }
-  void set_replica_nonce(unsigned n) { replica_nonce = n; }
-
-
-  // ---------------------------------------------
-  // waiting
- protected:
-  compact_multimap<uint64_t, pair<uint64_t, MDSInternalContextBase*> > waiting;
-  static uint64_t last_wait_seq;
-
- public:
-  bool is_waiter_for(uint64_t mask, uint64_t min=0) {
-    if (!min) {
-      min = mask;
-      while (min & (min-1))  // if more than one bit is set
-	min &= min-1;        //  clear LSB
-    }
-    for (auto p = waiting.lower_bound(min);
-	 p != waiting.end();
-	 ++p) {
-      if (p->first & mask) return true;
-      if (p->first > mask) return false;
-    }
-    return false;
-  }
-  virtual void add_waiter(uint64_t mask, MDSInternalContextBase *c) {
-    if (waiting.empty())
-      get(PIN_WAITER);
-
-    uint64_t seq = 0;
-    if (mask & WAIT_ORDERED) {
-      seq = ++last_wait_seq;
-      mask &= ~WAIT_ORDERED;
-    }
-    waiting.insert(pair<uint64_t, pair<uint64_t, MDSInternalContextBase*> >(
-			    mask,
-			    pair<uint64_t, MDSInternalContextBase*>(seq, c)));
-//    pdout(10,g_conf->debug_mds) << (mdsco_db_line_prefix(this)) 
-//			       << "add_waiter " << hex << mask << dec << " " << c
-//			       << " on " << *this
-//			       << dendl;
-    
-  }
-  virtual void take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls) {
-    if (waiting.empty()) return;
-
-    // process ordered waiters in the same order that they were added.
-    std::map<uint64_t, MDSInternalContextBase*> ordered_waiters;
-
-    for (auto it = waiting.begin();
-	 it != waiting.end(); ) {
-      if (it->first & mask) {
-
-	if (it->second.first > 0)
-	  ordered_waiters.insert(it->second);
-	else
-	  ls.push_back(it->second.second);
-//	pdout(10,g_conf->debug_mds) << (mdsco_db_line_prefix(this))
-//				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
-//				   << " tag " << hex << it->first << dec
-//				   << " on " << *this
-//				   << dendl;
-	waiting.erase(it++);
-      } else {
-//	pdout(10,g_conf->debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
-//				   << " tag " << hex << it->first << dec
-//				   << " on " << *this 
-//				   << dendl;
-	++it;
-      }
-    }
-    for (auto it = ordered_waiters.begin();
-	 it != ordered_waiters.end();
-	 ++it) {
-      ls.push_back(it->second);
-    }
-    if (waiting.empty())
-      put(PIN_WAITER);
-  }
-  void finish_waiting(uint64_t mask, int result = 0) {
-    list<MDSInternalContextBase*> finished;
-    take_waiting(mask, finished);
-    finish_contexts(g_ceph_context, finished, result);
-  }
-
-
-  // ---------------------------------------------
-  // locking
-  // noop unless overloaded.
-  virtual SimpleLock* get_lock(int type) { assert(0); return 0; }
-  virtual void set_object_info(MDSCacheObjectInfo &info) { assert(0); }
-  virtual void encode_lock_state(int type, bufferlist& bl) { assert(0); }
-  virtual void decode_lock_state(int type, bufferlist& bl) { assert(0); }
-  virtual void finish_lock_waiters(int type, uint64_t mask, int r=0) { assert(0); }
-  virtual void add_lock_waiter(int type, uint64_t mask, MDSInternalContextBase *c) { assert(0); }
-  virtual bool is_lock_waiting(int type, uint64_t mask) { assert(0); return false; }
-
-  virtual void clear_dirty_scattered(int type) { assert(0); }
-
-  // ---------------------------------------------
-  // ordering
-  virtual bool is_lt(const MDSCacheObject *r) const = 0;
-  struct ptr_lt {
-    bool operator()(const MDSCacheObject* l, const MDSCacheObject* r) const {
-      return l->is_lt(r);
-    }
-  };
-
-};
-
-inline std::ostream& operator<<(std::ostream& out, MDSCacheObject &o) {
-  o.print(out);
-  return out;
-}
-
-inline std::ostream& operator<<(std::ostream& out, const MDSCacheObjectInfo &info) {
-  if (info.ino) return out << info.ino << "." << info.snapid;
-  if (info.dname.length()) return out << info.dirfrag << "/" << info.dname
-				      << " snap " << info.snapid;
-  return out << info.dirfrag;
-}
-
-inline std::ostream& operator<<(std::ostream& out, mdsco_db_line_prefix o) {
-  o.object->print_db_line_prefix(out);
-  return out;
-}
 
 // parse a map of keys/values.
 namespace qi = boost::spirit::qi;

@@ -1,0 +1,26 @@
+# make sure we get the same MPI version on all hosts
+os_type: ubuntu
+os_version: "14.04"
+
+tasks:
+- pexec:
+    clients:
+      - cd $TESTDIR
+      - wget http://download.ceph.com/qa/ior.tbz2
+      - tar xvfj ior.tbz2
+      - cd ior
+      - ./configure
+      - make
+      - make install DESTDIR=$TESTDIR/binary/
+      - cd $TESTDIR/
+      - rm ior.tbz2
+      - rm -r ior
+      - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
+- ssh_keys:
+- mpi:
+    exec: $TESTDIR/binary/usr/local/bin/ior -e -w -r -W -b 10m -a POSIX -o $TESTDIR/gmnt/ior.testfile
+- pexec:
+    all:
+      - rm -f $TESTDIR/gmnt/ior.testfile
+      - rm -f $TESTDIR/gmnt
+      - rm -rf $TESTDIR/binary

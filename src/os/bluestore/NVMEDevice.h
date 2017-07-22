@@ -19,17 +19,16 @@
 
 #include <queue>
 #include <map>
-#include <pciaccess.h>
 #include <limits>
 
 // since _Static_assert introduced in c11
 #define _Static_assert static_assert
 
 
-#include "include/atomic.h"
 #include "include/interval_set.h"
 #include "common/ceph_time.h"
 #include "common/Mutex.h"
+#include "common/Cond.h"
 #include "BlockDevice.h"
 
 enum class IOCommand {
@@ -55,7 +54,6 @@ class NVMEDevice : public BlockDevice {
   uint64_t block_size;
 
   bool aio_stop;
-  bufferptr zeros;
 
   struct BufferedExtents {
     struct Extent {
@@ -207,7 +205,7 @@ class NVMEDevice : public BlockDevice {
   aio_callback_t aio_callback;
   void *aio_callback_priv;
 
-  NVMEDevice(aio_callback_t cb, void *cbpriv);
+  NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);
 
   bool supported_bdev_label() override { return false; }
 
@@ -223,17 +221,23 @@ class NVMEDevice : public BlockDevice {
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
            IOContext *ioc,
            bool buffered) override;
-
+  int aio_read(
+    uint64_t off,
+    uint64_t len,
+    bufferlist *pbl,
+    IOContext *ioc) override;
   int aio_write(uint64_t off, bufferlist& bl,
                 IOContext *ioc,
                 bool buffered) override;
+  int write(uint64_t off, bufferlist& bl, bool buffered) override;
   int flush() override;
   int read_random(uint64_t off, uint64_t len, char *buf, bool buffered) override;
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;
-  int open(string path) override;
+  int open(const string& path) override;
   void close() override;
+  int collect_metadata(string prefix, map<string,string> *pm) const override;
 };
 
 #endif

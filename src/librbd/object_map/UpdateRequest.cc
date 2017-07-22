@@ -17,14 +17,15 @@
 namespace librbd {
 namespace object_map {
 
-void UpdateRequest::send() {
+template <typename I>
+void UpdateRequest<I>::send() {
   assert(m_image_ctx.snap_lock.is_locked());
   assert(m_image_ctx.object_map_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   // safe to update in-memory state first without handling rollback since any
   // failures will invalidate the object map
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
+  std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_snap_id));
   ldout(cct, 20) << this << " updating object map"
                  << ": ictx=" << &m_image_ctx << ", oid=" << oid << ", ["
 		 << m_start_object_no << "," << m_end_object_no << ") = "
@@ -33,9 +34,31 @@ void UpdateRequest::send() {
 		 << "->" << static_cast<uint32_t>(m_new_state)
 		 << dendl;
 
+  librados::ObjectWriteOperation op;
+  if (m_snap_id == CEPH_NOSNAP) {
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
+  }
+  cls_client::object_map_update(&op, m_start_object_no, m_end_object_no,
+				m_new_state, m_current_state);
+
+  librados::AioCompletion *rados_completion = create_callback_completion();
+  std::vector<librados::snap_t> snaps;
+  int r = m_image_ctx.md_ctx.aio_operate(
+    oid, rados_completion, &op, 0, snaps,
+    (m_trace.valid() ? m_trace.get_info() : nullptr));
+  assert(r == 0);
+  rados_completion->release();
+}
+
+template <typename I>
+void UpdateRequest<I>::finish_request() {
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
+  ldout(m_image_ctx.cct, 20) << this << " on-disk object map updated"
+                             << dendl;
+
   // rebuilding the object map might update on-disk only
   if (m_snap_id == m_image_ctx.snap_id) {
-    assert(m_image_ctx.object_map_lock.is_wlocked());
     for (uint64_t object_no = m_start_object_no;
          object_no < MIN(m_end_object_no, m_object_map.size());
          ++object_no) {
@@ -46,24 +69,9 @@ void UpdateRequest::send() {
       }
     }
   }
-
-  librados::ObjectWriteOperation op;
-  if (m_snap_id == CEPH_NOSNAP) {
-    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
-  }
-  cls_client::object_map_update(&op, m_start_object_no, m_end_object_no,
-				m_new_state, m_current_state);
-
-  librados::AioCompletion *rados_completion = create_callback_completion();
-  int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
-  assert(r == 0);
-  rados_completion->release();
-}
-
-void UpdateRequest::finish_request() {
-  ldout(m_image_ctx.cct, 20) << this << " on-disk object map updated"
-                             << dendl;
 }
 
 } // namespace object_map
 } // namespace librbd
+
+template class librbd::object_map::UpdateRequest<librbd::ImageCtx>;

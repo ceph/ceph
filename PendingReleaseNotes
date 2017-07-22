@@ -1,54 +1,247 @@
->= 11.0.0
+>= 12.0.0
+------
+* The "journaler allow split entries" config setting has been removed.
+* The 'apply' mode of cephfs-journal-tool has been removed
+* Added new configuration "public bind addr" to support dynamic environments
+  like Kubernetes. When set the Ceph MON daemon could bind locally to an IP
+  address and advertise a different IP address "public addr" on the network.
+* RGW: bucket index resharding now uses the reshard namespace in upgrade scenarios as well
+  this is a changed behaviour from RC1 where a new pool for reshard was created
+
+12.0.0
 ------
 
-* The list of monitor hosts/addresses for building the monmap can now be
-  obtained from DNS SRV records. The service name used in when querying the DNS 
-  is defined in the "mon_dns_srv_name" config option, which defaults to
-  "ceph-mon".
+ * When assigning a network to the public network and not to
+   the cluster network the network specification of the public
+   network will be used for the cluster network as well.
+   In older versions this would lead to cluster services
+   being bound to 0.0.0.0:<port>, thus making the
+   cluster service even more publicly available than the
+   public services. When only specifying a cluster network it
+   will still result in the public services binding to 0.0.0.0.
 
-* The 'osd class load list' config option is a list of object class names that
-  the OSD is permitted to load (or '*' for all classes). By default it
-  contains all existing in-tree classes for backwards compatibility.
+*  Some variants of the omap_get_keys and omap_get_vals librados
+   functions have been deprecated in favor of omap_get_vals2 and
+   omap_get_keys2.  The new methods include an output argument
+   indicating whether there are additional keys left to fetch.
+   Previously this had to be inferred from the requested key count vs
+   the number of keys returned, but this breaks with new OSD-side
+   limits on the number of keys or bytes that can be returned by a
+   single omap request.  These limits were introduced by kraken but
+   are effectively disabled by default (by setting a very large limit
+   of 1 GB) because users of the newly deprecated interface cannot
+   tell whether they should fetch more keys or not.  In the case of
+   the standalone calls in the C++ interface
+   (IoCtx::get_omap_{keys,vals}), librados has been updated to loop on
+   the client side to provide a correct result via multiple calls to
+   the OSD.  In the case of the methods used for building
+   multi-operation transactions, however, client-side looping is not
+   practical, and the methods have been deprecated.  Note that use of
+   either the IoCtx methods on older librados versions or the
+   deprecated methods on any version of librados will lead to
+   incomplete results if/when the new OSD limits are enabled.
 
-* The 'osd class default list' config option is a list of object class names
-  (or '*' for all classes) that clients may invoke having only the '*', 'x',
-  'class-read', or 'class-write' capabilities. By default it contains all
-  existing in-tree classes for backwards compatibility. Invoking classes not
-  listed in 'osd class default list' requires a capability naming the class
-  (e.g. 'allow class foo').
+* In previous versions, if a client sent an op to the wrong OSD, the OSD
+  would reply with ENXIO.  The rationale here is that the client or OSD is
+  clearly buggy and we want to surface the error as clearly as possible.
+  We now only send the ENXIO reply if the osd_enxio_on_misdirected_op option
+  is enabled (it's off by default).  This means that a VM using librbd that
+  previously would have gotten an EIO and gone read-only will now see a
+  blocked/hung IO instead.
 
-11.0.0
+*  When configuring ceph-fuse mounts in /etc/fstab, a new syntax is
+   available that uses "ceph.<arg>=<val>" in the options column, instead
+   of putting configuration in the device column.  The old style syntax
+   still works.  See the documentation page "Mount CephFS in your
+   file systems table" for details.
+
+12.0.1
 ------
 
-* If you have manually specified the monitor user rocksdb via the
-  ``mon keyvaluedb = rocksdb`` option, you will need to manually add a file
-  to the mon data directory to preserve this option::
+* The original librados rados_objects_list_open (C) and objects_begin
+  (C++) object listing API, deprecated in Hammer, has finally been
+  removed.  Users of this interface must update their software to use
+  either the rados_nobjects_list_open (C) and nobjects_begin (C++) API or
+  the new rados_object_list_begin (C) and object_list_begin (C++) API
+  before updating the client-side librados library to Luminous.
 
-     echo rocksdb > /var/lib/ceph/mon/ceph-`hostname`/kv_backend
+  Object enumeration (via any API) with the latest librados version
+  and pre-Hammer OSDs is no longer supported.  Note that no in-tree
+  Ceph services rely on object enumeration via the deprecated APIs, so
+  only external librados users might be affected.
 
-  New monitors will now use rocksdb by default, but if that file is
-  not present, existing monitors will use leveldb.  The ``mon keyvaluedb`` option
-  now only affects the backend chosen when a monitor is created.
+  The newest (and recommended) rados_object_list_begin (C) and
+  object_list_begin (C++) API is only usable on clusters with the
+  SORTBITWISE flag enabled (Jewel and later).  (Note that this flag is
+  required to be set before upgrading beyond Jewel.)
 
-* The 'osd crush initial weight' option allows you to specify a CRUSH
-  weight for a newly added OSD.  Previously a value of 0 (the default)
-  meant that we should use the size of the OSD's store to weight the
-  new OSD.  Now, a value of 0 means it should have a weight of 0, and
-  a negative value (the new default) means we should automatically
-  weight the OSD based on its size.  If your configuration file
-  explicitly specifies a value of 0 for this option you will need to
-  change it to a negative value (e.g., -1) to preserve the current
-  behavior.
+* The rados copy-get-classic operation has been removed since it has not been
+  used by the OSD since before hammer.  It is unlikely any librados user is
+  using this operation explicitly since there is also the more modern copy-get.
 
-* The `osd crush location` config option is no longer supported.  Please
-  update your ceph.conf to use the `crush location` option instead.
+* The RGW api for getting object torrent has changed its params from 'get_torrent'
+  to 'torrent' so that it can be compatible with Amazon S3. Now the request for 
+  object torrent is like 'GET /ObjectName?torrent'.
 
-* The static libraries are not included by the debian development packages
-  (lib*-dev) any more. As it is not required per debian packaging policy.
-  And their shared versions are packaged as before.
+* The configuration option "osd pool erasure code stripe width" has
+  been replaced by "osd pool erasure code stripe unit", and given the
+  ability to be overridden by the erasure code profile setting
+  "stripe_unit". For more details see "Erasure Code Profiles" in the
+  documentation.
 
-* The libtool pseudo-libraries (.la files) are not included by the debian
-  development packages (lib*-dev) any more. As it is unneeded, and per
-  https://wiki.debian.org/ReleaseGoals/LAFileRemoval and
-  https://www.debian.org/doc/manuals/maint-guide/advanced.en.html,
-  we should remove them.
+* rbd and cephfs can use erasure coding with bluestore. This may be
+  enabled by setting 'allow_ec_overwrites' to 'true' for a pool. Since
+  this relies on bluestore's checksumming to do deep scrubbing,
+  enabling this on a pool stored on filestore is not allowed.
+
+* The 'rados df' JSON output now prints numeric values as numbers instead of
+  strings.
+
+* There was a bug introduced in Jewel (#19119) that broke the mapping behavior
+  when an "out" OSD that still existed in the CRUSH map was removed with 'osd rm'.
+  This could result in 'misdirected op' and other errors.  The bug is now fixed,
+  but the fix itself introduces the same risk because the behavior may vary between
+  clients and OSDs.  To avoid problems, please ensure that all OSDs are removed
+  from the CRUSH map before deleting them.  That is, be sure to do::
+
+     ceph osd crush rm osd.123
+
+  before::
+
+     ceph osd rm osd.123
+
+12.0.2
+------
+
+* The original librados rados_objects_list_open (C) and objects_begin
+  (C++) object listing API, deprecated in Hammer, has finally been
+  removed.  Users of this interface must update their software to use
+  either the rados_nobjects_list_open (C) and nobjects_begin (C++) API or
+  the new rados_object_list_begin (C) and object_list_begin (C++) API
+  before updating the client-side librados library to Luminous.
+
+  Object enumeration (via any API) with the latest librados version
+  and pre-Hammer OSDs is no longer supported.  Note that no in-tree
+  Ceph services rely on object enumeration via the deprecated APIs, so
+  only external librados users might be affected.
+
+  The newest (and recommended) rados_object_list_begin (C) and
+  object_list_begin (C++) API is only usable on clusters with the
+  SORTBITWISE flag enabled (Jewel and later).  (Note that this flag is
+  required to be set before upgrading beyond Jewel.)
+* CephFS clients without the 'p' flag in their authentication capability
+  string will no longer be able to set quotas or any layout fields.  This
+  flag previously only restricted modification of the pool and namespace
+  fields in layouts.
+* CephFS directory fragmentation (large directory support) is enabled
+  by default on new filesystems.  To enable it on existing filesystems
+  use "ceph fs set <fs_name> allow_dirfrags".
+* CephFS will generate a health warning if you have fewer standby daemons
+  than it thinks you wanted.  By default this will be 1 if you ever had
+  a standby, and 0 if you did not.  You can customize this using
+  ``ceph fs set <fs> standby_count_wanted <number>``.  Setting it
+  to zero will effectively disable the health check.
+* The "ceph mds tell ..." command has been removed.  It is superceded
+  by "ceph tell mds.<id> ..."
+
+12.1.0
+------
+
+* The ``mon_osd_max_op_age`` option has been renamed to
+  ``mon_osd_warn_op_age`` (default: 32 seconds), to indicate we
+  generate a warning at this age.  There is also a new
+  ``mon_osd_err_op_age_ratio`` that is a expressed as a multitple of
+  ``mon_osd_warn_op_age`` (default: 128, for roughly 60 minutes) to
+  control when an error is generated.
+
+* The default maximum size for a single RADOS object has been reduced from
+  100GB to 128MB.  The 100GB limit was completely impractical in practice
+  while the 128MB limit is a bit high but not unreasonable.  If you have an
+  application written directly to librados that is using objects larger than
+  128MB you may need to adjust ``osd_max_object_size``.
+
+* The semantics of the 'rados ls' and librados object listing
+  operations have always been a bit confusing in that "whiteout"
+  objects (which logically don't exist and will return ENOENT if you
+  try to access them) are included in the results.  Previously
+  whiteouts only occurred in cache tier pools.  In luminous, logically
+  deleted but snapshotted objects now result in a whiteout object, and
+  as a result they will appear in 'rados ls' results, even though
+  trying to read such an object will result in ENOENT.  The 'rados
+  listsnaps' operation can be used in such a case to enumerate which
+  snapshots are present.
+
+  This may seem a bit strange, but is less strange than having a
+  deleted-but-snapshotted object not appear at all and be completely
+  hidden from librados's ability to enumerate objects.  Future
+  versions of Ceph will likely include an alternative object
+  enumeration interface that makes it more natural and efficient to
+  enumerate all objects along with their snapshot and clone metadata.
+
+* The deprecated 'crush_ruleset' property has finally been removed; please use
+  'crush_rule' instead for the 'osd pool get ...' and 'osd pool set ..' commands.
+
+* The 'osd pool default crush replicated ruleset' option has been
+  removed and replaced by the 'osd pool default crush rule' option.
+  By default it is -1, which means the mon will pick the first type
+  replicated rule in the CRUSH map for replicated pools.  Erasure
+  coded pools have rules that are automatically created for them if they are
+  not specified at pool creation time.
+
+* The `status` ceph-mgr module is enabled by default, and initially provides two
+  commands: `ceph tell mgr osd status` and `ceph tell mgr fs status`.  These
+  are high level colorized views to complement the existing CLI.
+
+12.1.1
+------
+
+* choose_args encoding has been changed to make it architecture-independent.
+  If you deployed Luminous dev releases or 12.1.0 rc release and made use of
+  the CRUSH choose_args feature, you need to remove all choose_args mappings
+  from your CRUSH map before starting the upgrade.
+
+* The 'ceph health' structured output (JSON or XML) no longer contains
+  a 'timechecks' section describing the time sync status.  This
+  information is now available via the 'ceph time-sync-status'
+  command.
+
+* Certain extra fields in the 'ceph health' structured output that
+  used to appear if the mons were low on disk space (which duplicated
+  the information in the normal health warning messages) are now gone.
+
+* The "ceph -w" output no longer contains audit log entries by default.
+  Add a "--watch-channel=audit" or "--watch-channel=*" to see them.
+
+12.1.2
+------
+
+* New "ceph -w" behavior - the "ceph -w" output no longer contains I/O rates,
+  available space, pg info, etc. because these are no longer logged to the
+  central log (which is what "ceph -w" shows). The same information can be
+  obtained by running "ceph pg stat"; alternatively, I/O rates per pool can
+  be determined using "ceph osd pool stats". Although these commands do not
+  self-update like "ceph -w" did, they do have the ability to return formatted
+  output by providing a "--format=<format>" option.
+
+* Pools are now expected to be associated with the application using them.
+  Upon completing the upgrade to Luminous, the cluster will attempt to associate
+  existing pools to known applications (i.e. CephFS, RBD, and RGW). In-use pools
+  that are not associated to an application will generate a health warning. Any
+  unassociated pools can be manually associated using the new
+  "ceph osd pool application enable" command. For more details see
+  "Associate Pool to Application" in the documentation.
+
+* ceph-mgr now has a Zabbix plugin. Using zabbix_sender it sends trapper
+  events to a Zabbix server containing high-level information of the Ceph
+  cluster. This makes it easy to monitor a Ceph cluster's status and send
+  out notifications in case of a malfunction.
+
+* The 'mon_warn_osd_usage_min_max_delta' config option has been
+  removed and the associated health warning has been disabled because
+  it does not address clusters undergoing recovery or CRUSH rules that do
+  not target all devices in the cluster.
+
+* Specifying user authorization capabilities for RBD clients has been
+  simplified. The general syntax for using RBD capability profiles is
+  "mon 'profile rbd' osd 'profile rbd[-read-only][ pool={pool-name}[, ...]]'".
+  For more details see "User Management" in the documentation.

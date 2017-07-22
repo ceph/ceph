@@ -1,0 +1,76 @@
+# begin crush map
+tunable choose_local_tries 0
+tunable choose_local_fallback_tries 0
+tunable choose_total_tries 50
+tunable chooseleaf_descend_once 1
+tunable chooseleaf_vary_r 1
+tunable chooseleaf_stable 1
+tunable straw_calc_version 1
+tunable allowed_bucket_algs 54
+
+# devices
+device 0 osd.0
+device 1 osd.1
+
+# types
+type 0 osd
+type 1 host
+type 2 chassis
+type 3 rack
+type 4 row
+type 5 pdu
+type 6 pod
+type 7 room
+type 8 datacenter
+type 9 region
+type 10 root
+
+# buckets
+host HOST {
+	id -2		# do not change unnecessarily
+	# weight 6.000
+	alg straw2
+	hash 0	# rjenkins1
+	item osd.0 weight 3.000
+	item osd.1 weight 3.000
+}
+root default {
+	id -1		# do not change unnecessarily
+	# weight 6.000
+	alg straw2
+	hash 0	# rjenkins1
+	item HOST weight 6.000
+}
+
+# rules
+rule replicated_rule {
+	id 0
+	type replicated
+	min_size 1
+	max_size 10
+	step take default
+	step choose firstn 0 type osd
+	step emit
+}
+
+# choose_args
+choose_args 0 {
+  {
+    bucket_id -1
+    weight_set [
+      [ 6.000 ]
+      [ 6.000 ]
+    ]
+    ids [ -10 ]
+  }
+  {
+    bucket_id -2
+    weight_set [
+      [ 2.000 3.000 ]
+      [ 2.000 3.000 ]
+    ]
+    ids [ -20 1 ]
+  }
+}
+
+# end crush map

@@ -24,21 +24,22 @@ deployment using the following command:
 
 .. code::
 
-	$ cd src
-	$ ./vstart.sh -d -n -x
+	$ cd ceph/build  # Assuming this is where you ran cmake
+	$ make vstart
+	$ ../src/vstart.sh -d -n -x
 
 You can also configure ``vstart.sh`` to use only one monitor and one metadata server by using the following:
 
 .. code::
 
-	$ MON=1 MDS=1 ./vstart.sh -d -n -x
+	$ MON=1 MDS=1 ../src/vstart.sh -d -n -x
 
 The system creates three pools on startup: `cephfs_data`, `cephfs_metadata`, and `rbd`.  Let's get some stats on
 the current pools:
 
 .. code::
 
-	$ ./ceph osd pool stats
+	$ bin/ceph osd pool stats
 	*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
 	pool rbd id 0
 	  nothing is going on
@@ -49,7 +50,7 @@ the current pools:
 	pool cephfs_metadata id 2
 	  nothing is going on
 	
-	$ ./ceph osd pool stats cephfs_data
+	$ bin/ceph osd pool stats cephfs_data
 	*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
 	pool cephfs_data id 1
 	  nothing is going on
@@ -68,44 +69,58 @@ Make a pool and run some benchmarks against it:
 
 .. code::
 
-	$ ./rados mkpool mypool
-	$ ./rados -p mypool bench 10 write -b 123
+	$ bin/rados mkpool mypool
+	$ bin/rados -p mypool bench 10 write -b 123
 
 Place a file into the new pool:
 
 .. code::
 
-	$ ./rados -p mypool put objectone <somefile>
-	$ ./rados -p mypool put objecttwo <anotherfile>
+	$ bin/rados -p mypool put objectone <somefile>
+	$ bin/rados -p mypool put objecttwo <anotherfile>
 
 List the objects in the pool:
 
 .. code::
 
-	$ ./rados -p mypool ls
+	$ bin/rados -p mypool ls
 
 Once you are done, type the following to stop the development ceph deployment:
 
 .. code::
 
-	$ ./stop.sh
+	$ ../src/stop.sh
 
-Running a RadosGW development environment
------------------------------------------
-Add the ``-r`` to vstart.sh to enable the RadosGW
+Resetting your vstart environment
+---------------------------------
+
+The vstart script creates out/ and dev/ directories which contain
+the cluster's state.  If you want to quickly reset your environment,
+you might do something like this:
 
 .. code::
 
-	$ cd src
-	$ ./vstart.sh -d -n -x -r
+    [build]$ ../src/stop.sh
+    [build]$ rm -rf out dev
+    [build]$ MDS=1 MON=1 OSD=3 ../src/vstart.sh -n -d
+
+Running a RadosGW development environment
+-----------------------------------------
+
+Set the ``RGW`` environment variable when running vstart.sh to enable the RadosGW.
+
+.. code::
+
+	$ cd build
+	$ RGW=1 ../src/vstart.sh -d -n -x
 
 You can now use the swift python client to communicate with the RadosGW.
 
 .. code::
 
-    $ swift -A http://localhost:8000/auth -U tester:testing -K asdf list
-    $ swift -A http://localhost:8000/auth -U tester:testing -K asdf upload mycontainer ceph
-    $ swift -A http://localhost:8000/auth -U tester:testing -K asdf list
+    $ swift -A http://localhost:8000/auth -U test:tester -K testing list
+    $ swift -A http://localhost:8000/auth -U test:tester -K testing upload mycontainer ceph
+    $ swift -A http://localhost:8000/auth -U test:tester -K testing list
 
 
 Run unit tests

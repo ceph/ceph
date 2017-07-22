@@ -1,0 +1,6 @@
+tasks:
+- kclient:
+- workunit:
+    clients:
+      all:
+        - suites/fsstress.sh

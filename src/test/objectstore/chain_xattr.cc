@@ -23,6 +23,7 @@
 #include <signal.h>
 #include "os/filestore/chain_xattr.h"
 #include "include/Context.h"
+#include "include/coredumpctl.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -120,6 +121,7 @@ TEST(chain_xattr, get_and_set) {
   {
     int x;
     const string name = user + string(CHAIN_XATTR_MAX_NAME_LEN * 2, '@');
+    PrCtl unset_dumpable;
     ASSERT_DEATH(chain_setxattr(file, name.c_str(), &x, sizeof(x)), "");
     ASSERT_DEATH(chain_fsetxattr(fd, name.c_str(), &x, sizeof(x)), "");
   }
@@ -347,13 +349,14 @@ TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
   ::unlink(file);
   int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
 
+  std::size_t existing_xattrs = get_xattrs(fd).size();
   char buf[800];
-  memset(buf, sizeof(buf), 0x1F);
+  memset(buf, 0x1F, sizeof(buf));
   // set chunked without either
   {
     std::size_t r = chain_fsetxattr(fd, name, buf, sizeof(buf));
     ASSERT_EQ(sizeof(buf), r);
-    ASSERT_GT(get_xattrs(fd).size(), 1UL);
+    ASSERT_GT(get_xattrs(fd).size(), existing_xattrs + 1UL);
   }
 
   // verify
@@ -368,7 +371,7 @@ TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
   {
     std::size_t r = chain_fsetxattr<false, true>(fd, name, buf, sizeof(buf));
     ASSERT_EQ(sizeof(buf), r);
-    ASSERT_EQ(1UL, get_xattrs(fd).size());
+    ASSERT_EQ(existing_xattrs + 1UL, get_xattrs(fd).size());
   }
 
   // verify
@@ -389,15 +392,16 @@ TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
   const char *file = FILENAME;
   ::unlink(file);
   int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
+  std::size_t existing_xattrs = get_xattrs(fd).size();
   ::close(fd);
 
   char buf[3000];
-  memset(buf, sizeof(buf), 0x1F);
+  memset(buf, 0x1F, sizeof(buf));
   // set chunked without either
   {
     std::size_t r = chain_setxattr(file, name, buf, sizeof(buf));
     ASSERT_EQ(sizeof(buf), r);
-    ASSERT_GT(get_xattrs(file).size(), 1UL);
+    ASSERT_GT(get_xattrs(file).size(), existing_xattrs + 1UL);
   }
 
   // verify
@@ -412,7 +416,7 @@ TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
   {
     std::size_t r = chain_setxattr<false, true>(file, name, buf, sizeof(buf));
     ASSERT_EQ(sizeof(buf), r);
-    ASSERT_EQ(1UL, get_xattrs(file).size());
+    ASSERT_EQ(existing_xattrs + 1UL, get_xattrs(file).size());
   }
 
   // verify
@@ -430,7 +434,8 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->set_val("err_to_stderr", "false");
   g_ceph_context->_conf->set_val("log_to_stderr", "false");

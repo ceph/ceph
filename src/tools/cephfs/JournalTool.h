@@ -56,14 +56,17 @@ class JournalTool : public MDSUtility
 
     // I/O handles
     librados::Rados rados;
-    librados::IoCtx io;
+    librados::IoCtx input;
+    librados::IoCtx output;
+
+    bool other_pool;
 
     // Metadata backing store manipulation
-    int scavenge_dentries(
+    int read_lost_found(std::set<std::string> &lost);
+    int recover_dentries(
         EMetaBlob const &metablob,
         bool const dry_run,
         std::set<inodeno_t> *consumed_inos);
-    int replay_offline(EMetaBlob const &metablob, bool const dry_run);
 
     // Splicing
     int erase_region(JournalScanner const &jp, uint64_t const pos, uint64_t const length);
@@ -78,7 +81,7 @@ class JournalTool : public MDSUtility
   public:
     void usage();
     JournalTool() :
-      rank(0) {}
+      rank(0), other_pool(false) {}
     int main(std::vector<const char*> &argv);
 };
 

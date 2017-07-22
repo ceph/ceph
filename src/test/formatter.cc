@@ -12,13 +12,14 @@
  *
  */
 
-#include "test/unit.h"
+#include "gtest/gtest.h"
 #include "common/Formatter.h"
 #include "common/HTMLFormatter.h"
 
 #include <sstream>
 #include <string>
 
+using namespace ceph;
 using std::ostringstream;
 
 TEST(JsonFormatter, Simple1) {

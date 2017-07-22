@@ -165,6 +165,32 @@ weight).
  subsequent releases.
 
 
+Replacing an OSD
+----------------
+
+When disks fail, or if an admnistrator wants to reprovision OSDs with a new
+backend, for instance, for switching from FileStore to BlueStore, OSDs need to
+be replaced. Unlike `Removing the OSD`_, replaced OSD's id and CRUSH map entry
+need to be keep intact after the OSD is destroyed for replacement.
+
+#. Destroy the OSD first::
+
+     ceph osd destroy {id} --yes-i-really-mean-it
+
+#. Zap a disk for the new OSD, if the disk was used before for other purposes.
+   It's not necessary for a new disk::
+
+     ceph-disk zap /dev/sdX
+
+#. Prepare the disk for replacement by using the previously destroyed OSD id::
+
+     ceph-disk prepare --bluestore /dev/sdX  --osd-id {id} --osd-uuid `uuidgen`
+
+#. And activate the OSD::
+
+     ceph-disk activate /dev/sdX1
+
+
 Starting the OSD
 ----------------
 
@@ -287,6 +313,32 @@ key, removes the OSD from the OSD map, and removes the OSD from the
 ``ceph.conf`` file. If your host has multiple drives, you may need to remove an
 OSD for each drive by repeating this procedure.
 
+#. Let the cluster forget the OSD first. This step removes the OSD from the CRUSH
+   map, removes its authentication key. And it is removed from the OSD map as
+   well. Please note the `purge subcommand`_ is introduced in Luminous, for older
+   versions, please see below ::
+
+    ceph osd purge {id} --yes-i-really-mean-it
+
+#. Navigate to the host where you keep the master copy of the cluster's
+   ``ceph.conf`` file. ::
+
+	ssh {admin-host}
+	cd /etc/ceph
+	vim ceph.conf
+
+#. Remove the OSD entry from your ``ceph.conf`` file (if it exists). ::
+
+	[osd.1]
+		host = {hostname}
+
+#. From the host where you keep the master copy of the cluster's ``ceph.conf`` file,
+   copy the updated ``ceph.conf`` file to the ``/etc/ceph`` directory of other
+   hosts in your cluster.
+
+If your Ceph cluster is older than Luminous, instead of using ``ceph osd purge``,
+you need to perform this step manually:
+
 
 #. Remove the OSD from the CRUSH map so that it no longer receives data. You may
    also decompile the CRUSH map, remove the OSD from the device list, remove the
@@ -308,23 +360,7 @@ OSD for each drive by repeating this procedure.
 	ceph osd rm {osd-num}
 	#for example
 	ceph osd rm 1
-	
-#. Navigate to the host where you keep the master copy of the cluster's 
-   ``ceph.conf`` file. ::
 
-	ssh {admin-host}
-	cd /etc/ceph
-	vim ceph.conf
-
-#. Remove the OSD entry from your ``ceph.conf`` file (if it exists). ::
-
-	[osd.1]
-		host = {hostname}
- 
-#. From the host where you keep the master copy of the cluster's ``ceph.conf`` file, 
-   copy the updated ``ceph.conf`` file to the ``/etc/ceph`` directory of other 
-   hosts in your cluster.
-   
-		
 	
 .. _Remove an OSD: ../crush-map#removeosd
+.. _purge subcommand: ../../../man/ceph#osd

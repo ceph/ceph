@@ -40,6 +40,7 @@ function TEST_bench() {
     local dir=$1
 
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 
     local osd_bench_small_size_max_iops=$(CEPH_ARGS='' ceph-conf \

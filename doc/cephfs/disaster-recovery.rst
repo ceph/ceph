@@ -130,33 +130,151 @@ objects.
 
 Finally, you can regenerate metadata objects for missing files
 and directories based on the contents of a data pool.  This is
-a two-phase process.  First, scanning *all* objects to calculate
+a three-phase process.  First, scanning *all* objects to calculate
 size and mtime metadata for inodes.  Second, scanning the first
-object from every file to collect this metadata and inject
-it into the metadata pool.
+object from every file to collect this metadata and inject it into
+the metadata pool. Third, checking inode linkages and fixing found
+errors.
 
 ::
 
     cephfs-data-scan scan_extents <data pool>
     cephfs-data-scan scan_inodes <data pool>
+    cephfs-data-scan scan_links
 
-This command may take a very long time if there are many
-files or very large files in the data pool.  To accelerate
-the process, run multiple instances of the tool.  Decide on
-a number of workers, and pass each worker a number within
-the range 0-(N_workers - 1), like so:
+'scan_extents' and 'scan_inodes' commands may take a *very long* time
+if there are many files or very large files in the data pool.
+
+To accelerate the process, run multiple instances of the tool.
+
+Decide on a number of workers, and pass each worker a number within
+the range 0-(worker_m - 1).
+
+The example below shows how to run 4 workers simultaneously:
 
 ::
 
     # Worker 0
-    cephfs-data-scan scan_extents <data pool> 0 1
+    cephfs-data-scan scan_extents --worker_n 0 --worker_m 4 <data pool>
     # Worker 1
-    cephfs-data-scan scan_extents <data pool> 1 1
+    cephfs-data-scan scan_extents --worker_n 1 --worker_m 4 <data pool>
+    # Worker 2
+    cephfs-data-scan scan_extents --worker_n 2 --worker_m 4 <data pool>
+    # Worker 3
+    cephfs-data-scan scan_extents --worker_n 3 --worker_m 4 <data pool>
 
     # Worker 0
-    cephfs-data-scan scan_inodes <data pool> 0 1
+    cephfs-data-scan scan_inodes --worker_n 0 --worker_m 4 <data pool>
     # Worker 1
-    cephfs-data-scan scan_inodes <data pool> 1 1
+    cephfs-data-scan scan_inodes --worker_n 1 --worker_m 4 <data pool>
+    # Worker 2
+    cephfs-data-scan scan_inodes --worker_n 2 --worker_m 4 <data pool>
+    # Worker 3
+    cephfs-data-scan scan_inodes --worker_n 3 --worker_m 4 <data pool>
 
-It is important to ensure that all workers have completed the
+It is **important** to ensure that all workers have completed the
 scan_extents phase before any workers enter the scan_inodes phase.
+
+After completing the metadata recovery, you may want to run cleanup
+operation to delete ancillary data geneated during recovery.
+
+::
+
+    cephfs-data-scan cleanup <data pool>
+
+Finding files affected by lost data PGs
+---------------------------------------
+
+Losing a data PG may affect many files.  Files are split into many objects,
+so identifying which files are affected by loss of particular PGs requires
+a full scan over all object IDs that may exist within the size of a file. 
+This type of scan may be useful for identifying which files require
+restoring from a backup.
+
+.. danger::
+
+    This command does not repair any metadata, so when restoring files in
+    this case you must *remove* the damaged file, and replace it in order
+    to have a fresh inode.  Do not overwrite damaged files in place.
+
+If you know that objects have been lost from PGs, use the ``pg_files``
+subcommand to scan for files that may have been damaged as a result:
+
+::
+
+    cephfs-data-scan pg_files <path> <pg id> [<pg id>...]
+
+For example, if you have lost data from PGs 1.4 and 4.5, and you would like
+to know which files under /home/bob might have been damaged:
+
+::
+
+    cephfs-data-scan pg_files /home/bob 1.4 4.5
+
+The output will be a list of paths to potentially damaged files, one
+per line.
+
+Note that this command acts as a normal CephFS client to find all the
+files in the filesystem and read their layouts, so the MDS must be
+up and running.
+
+Using an alternate metadata pool for recovery
+---------------------------------------------
+
+.. warning::
+
+   There has not been extensive testing of this procedure. It should be
+   undertaken with great care.
+
+If an existing filesystem is damaged and inoperative, it is possible to create
+a fresh metadata pool and attempt to reconstruct the filesystem metadata
+into this new pool, leaving the old metadata in place. This could be used to
+make a safer attempt at recovery since the existing metadata pool would not be
+overwritten.
+
+.. caution::
+
+   During this process, multiple metadata pools will contain data referring to
+   the same data pool. Extreme caution must be exercised to avoid changing the
+   data pool contents while this is the case. Once recovery is complete, the
+   damaged metadata pool should be deleted.
+
+To begin this process, first create the fresh metadata pool and initialize
+it with empty file system data structures:
+
+::
+
+    ceph fs flag set enable_multiple true --yes-i-really-mean-it
+    ceph osd pool create recovery <pg-num> replicated <crush-ruleset-name>
+    ceph fs new recovery-fs recovery <data pool> --allow-dangerous-metadata-overlay
+    cephfs-data-scan init --force-init --filesystem recovery-fs --alternate-pool recovery
+    ceph fs reset recovery-fs --yes-i-really-mean-it
+    cephfs-table-tool recovery-fs:all reset session
+    cephfs-table-tool recovery-fs:all reset snap
+    cephfs-table-tool recovery-fs:all reset inode
+
+Next, run the recovery toolset using the --alternate-pool argument to output
+results to the alternate pool:
+
+::
+
+    cephfs-data-scan scan_extents --alternate-pool recovery --filesystem <original filesystem name> <original data pool name>
+    cephfs-data-scan scan_inodes --alternate-pool recovery --filesystem <original filesystem name> --force-corrupt --force-init <original data pool name>
+    cephfs-data-scan scan_links --filesystem recovery-fs
+
+If the damaged filesystem contains dirty journal data, it may be recovered next
+with:
+
+::
+
+    cephfs-journal-tool --rank=<original filesystem name>:0 event recover_dentries list --alternate-pool recovery
+    cephfs-journal-tool --rank recovery-fs:0 journal reset --force
+
+After recovery, some recovered directories will have incorrect statistics.
+Ensure the parameters mds_verify_scatter and mds_debug_scatterstat are set
+to false (the default) to prevent the MDS from checking the statistics, then
+run a forward scrub to repair them. Ensure you have an MDS running and issue:
+
+::
+
+    ceph daemon mds.a scrub_path / recursive repair

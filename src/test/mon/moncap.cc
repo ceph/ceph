@@ -43,6 +43,8 @@ const char *parse_good[] = {
   "allow command abc with arg=foo arg2=bar",
   "allow command abc with arg=foo arg2 prefix bar arg3 prefix baz",
   "allow command abc with arg=foo arg2 prefix \"bar bingo\" arg3 prefix baz",
+  "allow command abc with arg regex \"^[0-9a-z.]*$\"",
+  "allow command abc with arg regex \"\(invaluid regex\"",
   "allow service foo x",
   "allow service foo x; allow service bar x",
   "allow service foo w ;allow service bar x",
@@ -55,6 +57,8 @@ const char *parse_good[] = {
   "allow command abc.def with arg=foo arg2=bar, allow service foo r",
   "allow command \"foo bar\" with arg=\"baz\"",
   "allow command \"foo bar\" with arg=\"baz.xx\"",
+  "profile osd",
+  "profile \"mds-bootstrap\", profile foo",
   0
 };
 
@@ -177,7 +181,7 @@ TEST(MonCap, AllowAll) {
 
   ASSERT_TRUE(cap.parse("allow *", NULL));
   ASSERT_TRUE(cap.is_allow_all());
-  ASSERT_TRUE(cap.is_capable(NULL, EntityName(),
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON, EntityName(),
 			     "foo", "asdf", map<string,string>(), true, true, true));
 
   MonCap cap2;
@@ -195,29 +199,62 @@ TEST(MonCap, ProfileOSD) {
   name.from_str("osd.123");
   map<string,string> ca;
 
-  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, false, false));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, true, false));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "mon", "", ca, true, false,false));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "osd", "", ca, true, false, false));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "osd", "", ca, true, true, false));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "osd", "", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "osd", "", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "mon", "", ca, true, false,false));
 
-  ASSERT_FALSE(cap.is_capable(NULL, name, "mds", "", ca, true, true, true));
-  ASSERT_FALSE(cap.is_capable(NULL, name, "mon", "", ca, true, true, true));
+  ASSERT_FALSE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "mds", "", ca, true, true, true));
+  ASSERT_FALSE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "mon", "", ca, true, true, true));
 
   ca.clear();
-  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ASSERT_FALSE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
   ca["key"] = "daemon-private/osd.123";
-  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ASSERT_FALSE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
   ca["key"] = "daemon-private/osd.12/asdf";
-  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ASSERT_FALSE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
   ca["key"] = "daemon-private/osd.123/";
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
   ca["key"] = "daemon-private/osd.123/foo";
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key put", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key exists", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key delete", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key put", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key exists", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key delete", ca, true, true, true));
 }
 
+TEST(MonCap, CommandRegEx) {
+  MonCap cap;
+  ASSERT_FALSE(cap.is_allow_all());
+  ASSERT_TRUE(cap.parse("allow command abc with arg regex \"^[0-9a-z.]*$\"", NULL));
+
+  EntityName name;
+  name.from_str("osd.123");
+  ASSERT_TRUE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_OSD, name, "",
+                             "abc", {{"arg", "12345abcde"}}, true, true, true));
+  ASSERT_FALSE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_OSD, name, "",
+                              "abc", {{"arg", "~!@#$"}}, true, true, true));
+
+  ASSERT_TRUE(cap.parse("allow command abc with arg regex \"[*\"", NULL));
+  ASSERT_FALSE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_OSD, name, "",
+                              "abc", {{"arg", ""}}, true, true, true));
+}

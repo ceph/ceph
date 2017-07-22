@@ -87,7 +87,7 @@ public:
    * @param fl The filelock to check for
    * @returns True if the lock is waiting, false otherwise
    */
-  bool is_waiting(const ceph_filelock &fl);
+  bool is_waiting(const ceph_filelock &fl) const;
   /**
    * Remove a lock from the waiting_locks list
    *
@@ -144,7 +144,7 @@ private:
   bool is_deadlock(const ceph_filelock& fl,
 		   list<multimap<uint64_t, ceph_filelock>::iterator>&
 		      overlapping_locks,
-		   const ceph_filelock *first_fl=NULL, unsigned depth=0);
+		   const ceph_filelock *first_fl=NULL, unsigned depth=0) const;
 
   /**
    * Add a lock to the waiting_locks list
@@ -252,21 +252,11 @@ private:
 public:
   void encode(bufferlist& bl) const {
     ::encode(held_locks, bl);
-    ::encode(waiting_locks, bl);
     ::encode(client_held_lock_counts, bl);
-    ::encode(client_waiting_lock_counts, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(held_locks, bl);
-    ::decode(waiting_locks, bl);
     ::decode(client_held_lock_counts, bl);
-    ::decode(client_waiting_lock_counts, bl);
-  }
-  void clear() {
-    held_locks.clear();
-    waiting_locks.clear();
-    client_held_lock_counts.clear();
-    client_waiting_lock_counts.clear();
   }
   bool empty() const {
     return held_locks.empty() && waiting_locks.empty() &&

@@ -4,7 +4,7 @@
 
 The perf counters provide generic internal infrastructure for gauges and counters.  The counted values can be both integer and float.  There is also an "average" type (normally float) that combines a sum and num counter which can be divided to provide an average.
 
-The intention is that this data will be collected and aggregated by a tool like ``collectd`` or ``statsd`` and fed into a tool like ``graphite`` for graphing and analysis.
+The intention is that this data will be collected and aggregated by a tool like ``collectd`` or ``statsd`` and fed into a tool like ``graphite`` for graphing and analysis.  Also, note the :doc:`../mgr/prometheus`.
 
 Access
 ------
@@ -39,89 +39,121 @@ The ``perf schema`` command dumps a json description of which values are availab
 +------+-------------------------------------+
 | 2    | unsigned 64-bit integer value       |
 +------+-------------------------------------+
-| 4    | average (sum + count pair)          |
+| 4    | average (sum + count pair), where   |
 +------+-------------------------------------+
 | 8    | counter (vs gauge)                  |
 +------+-------------------------------------+
 
-Every value will have either bit 1 or 2 set to indicate the type (float or integer).  If bit 8 is set (counter), the reader may want to subtract off the previously read value to get the delta during the previous interval.  
+Every value will have either bit 1 or 2 set to indicate the type
+(float or integer).
 
-If bit 4 is set (average), there will be two values to read, a sum and a count.  If it is a counter, the average for the previous interval would be sum delta (since the previous read) divided by the count delta.  Alternatively, dividing the values outright would provide the lifetime average value.  Normally these are used to measure latencies (number of requests and a sum of request latencies), and the average for the previous interval is what is interesting.
+If bit 8 is set (counter), the value is monotonically increasing and
+the reader may want to subtract off the previously read value to get
+the delta during the previous interval.
+
+If bit 4 is set (average), there will be two values to read, a sum and
+a count.  If it is a counter, the average for the previous interval
+would be sum delta (since the previous read) divided by the count
+delta.  Alternatively, dividing the values outright would provide the
+lifetime average value.  Normally these are used to measure latencies
+(number of requests and a sum of request latencies), and the average
+for the previous interval is what is interesting.
+
+Instead of interpreting the bit fields, the ``metric type`` has a
+value of either ``guage`` or ``counter``, and the ``value type``
+property will be one of ``real``, ``integer``, ``real-integer-pair``
+(for a sum + real count pair), or ``integer-integer-pair`` (for a
+sum + integer count pair).
 
 Here is an example of the schema output::
 
- {
-   "throttle-msgr_dispatch_throttler-hbserver" : {
-      "get_or_fail_fail" : {
-         "type" : 10
-      },
-      "get_sum" : {
-         "type" : 10
-      },
-      "max" : {
-         "type" : 10
-      },
-      "put" : {
-         "type" : 10
-      },
-      "val" : {
-         "type" : 10
-      },
-      "take" : {
-         "type" : 10
-      },
-      "get_or_fail_success" : {
-         "type" : 10
-      },
-      "wait" : {
-         "type" : 5
-      },
-      "get" : {
-         "type" : 10
-      },
-      "take_sum" : {
-         "type" : 10
-      },
-      "put_sum" : {
-         "type" : 10
-      }
-   },
-   "throttle-msgr_dispatch_throttler-client" : {
-      "get_or_fail_fail" : {
-         "type" : 10
-      },
-      "get_sum" : {
-         "type" : 10
-      },
-      "max" : {
-         "type" : 10
-      },
-      "put" : {
-         "type" : 10
-      },
-      "val" : {
-         "type" : 10
-      },
-      "take" : {
-         "type" : 10
-      },
-      "get_or_fail_success" : {
-         "type" : 10
-      },
-      "wait" : {
-         "type" : 5
-      },
-      "get" : {
-         "type" : 10
-      },
-      "take_sum" : {
-         "type" : 10
-      },
-      "put_sum" : {
-         "type" : 10
-      }
-   }
- }
+  {
+    "throttle-bluestore_throttle_bytes": {
+        "val": {
+            "type": 2,
+            "metric_type": "gauge",
+            "value_type": "integer",
+            "description": "Currently available throttle",
+            "nick": ""
+        },
+        "max": {
+            "type": 2,
+            "metric_type": "gauge",
+            "value_type": "integer",
+            "description": "Max value for throttle",
+            "nick": ""
+        },
+        "get_started": {
+            "type": 10,
+            "metric_type": "counter",
+            "value_type": "integer",
+            "description": "Number of get calls, increased before wait",
+            "nick": ""
+        },
+        "get": {
+            "type": 10,
+            "metric_type": "counter",
+            "value_type": "integer",
+            "description": "Gets",
+            "nick": ""
+        },
+        "get_sum": {
+            "type": 10,
+            "metric_type": "counter",
+            "value_type": "integer",
+            "description": "Got data",
+            "nick": ""
+        },
+        "get_or_fail_fail": {
+            "type": 10,
+            "metric_type": "counter",
+            "value_type": "integer",
+            "description": "Get blocked during get_or_fail",
+            "nick": ""
+        },
+        "get_or_fail_success": {
+            "type": 10,
+            "metric_type": "counter",
+            "value_type": "integer",
+            "description": "Successful get during get_or_fail",
+            "nick": ""
+        },
+        "take": {
+            "type": 10,
+            "metric_type": "counter",
+            "value_type": "integer",
+            "description": "Takes",
+            "nick": ""
+        },
+        "take_sum": {
+            "type": 10,
+            "metric_type": "counter",
+            "value_type": "integer",
+            "description": "Taken data",
+            "nick": ""
+        },
+        "put": {
+            "type": 10,
+            "metric_type": "counter",
+            "value_type": "integer",
+            "description": "Puts",
+            "nick": ""
+        },
+        "put_sum": {
+            "type": 10,
+            "metric_type": "counter",
+            "value_type": "integer",
+            "description": "Put data",
+            "nick": ""
+        },
+        "wait": {
+            "type": 5,
+            "metric_type": "gauge",
+            "value_type": "real-integer-pair",
+            "description": "Waiting latency",
+            "nick": ""
+        }
+  }
 
 
 Dump

@@ -47,6 +47,15 @@ Install Ceph
    directory. Ensure that the keyring file has appropriate read permissions 
    (e.g., ``sudo chmod +r /etc/ceph/ceph.client.admin.keyring``).
 
+Create a Block Device Pool
+==========================
+
+#. On the admin node, use the ``ceph`` tool to `create a pool`_
+   (we recommend the name 'rbd').
+
+#. On the admin node, use the ``rbd`` tool to initialize the pool for use by RBD::
+
+        rbd pool init <pool-name>
 
 Configure a Block Device
 ========================
@@ -72,10 +81,15 @@ Configure a Block Device
 	sudo mount /dev/rbd/rbd/foo /mnt/ceph-block-device
 	cd /mnt/ceph-block-device
 
+#. Optionally configure the block device to be automatically mapped and mounted
+   at boot (and unmounted/unmapped at shutdown) - see the `rbdmap manpage`_.
+
 
 See `block devices`_ for additional details.
 
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
+.. _create a pool: ../../rados/operations/pools/#create-a-pool
 .. _block devices: ../../rbd/rbd
 .. _FAQ: http://wiki.ceph.com/How_Can_I_Give_Ceph_a_Try
 .. _OS Recommendations: ../os-recommendations
+.. _rbdmap manpage: ../../man/8/rbdmap

@@ -17,7 +17,7 @@
 void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
 			librados::snap_t start, librados::snap_t end,
 			interval_set<uint64_t> *diff, uint64_t *end_size,
-                        bool *end_exists)
+                        bool *end_exists, librados::snap_t *clone_end_snap_id)
 {
   ldout(cct, 10) << "calc_snap_set_diff start " << start << " end " << end
 		 << ", snap_set seq " << snap_set.seq << dendl;
@@ -26,6 +26,7 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
   diff->clear();
   *end_size = 0;
   *end_exists = false;
+  *clone_end_snap_id = 0;
 
   for (vector<librados::clone_info_t>::const_iterator r = snap_set.clones.begin();
        r != snap_set.clones.end();
@@ -79,6 +80,7 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
     if (end <= b) {
       ldout(cct, 20) << " end" << dendl;
       *end_exists = true;
+      *clone_end_snap_id = b;
       break;
     }
 

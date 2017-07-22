@@ -39,7 +39,7 @@ int main(int argc, char **argv)
   }
   
  
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   while (loop++ < count) {
     int ret = safe_write(fd, buf, bsize);
     if (ret)
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
   }
   ::fsync(fd);
   ::close(fd);
-  utime_t end = ceph_clock_now(g_ceph_context);
+  utime_t end = ceph_clock_now();
   end -= start;
 
 

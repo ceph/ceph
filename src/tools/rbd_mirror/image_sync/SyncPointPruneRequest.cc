@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include <set>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::image_sync::SyncPointPruneRequest: " \
@@ -61,7 +62,8 @@ void SyncPointPruneRequest<I>::send() {
          it != m_client_meta_copy.sync_points.rend(); ++it) {
       MirrorPeerSyncPoint &sync_point = *it;
       if (&sync_point == &m_client_meta_copy.sync_points.front()) {
-        if (m_remote_image_ctx->get_snap_id(sync_point.snap_name) ==
+        if (m_remote_image_ctx->get_snap_id(
+	      cls::rbd::UserSnapshotNamespace(), sync_point.snap_name) ==
               CEPH_NOSNAP) {
           derr << ": failed to locate sync point snapshot: "
                << sync_point.snap_name << dendl;
@@ -108,7 +110,9 @@ void SyncPointPruneRequest<I>::send_remove_snap() {
   Context *ctx = create_context_callback<
     SyncPointPruneRequest<I>, &SyncPointPruneRequest<I>::handle_remove_snap>(
       this);
-  m_remote_image_ctx->operations->snap_remove(snap_name.c_str(), ctx);
+  m_remote_image_ctx->operations->snap_remove(cls::rbd::UserSnapshotNamespace(),
+					      snap_name.c_str(),
+					      ctx);
 }
 
 template <typename I>

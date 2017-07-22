@@ -24,18 +24,19 @@ These mirrors are available on the following locations:
 - **UK: UK**: http://uk.ceph.com
 - **US-East: US East Coast**: http://us-east.ceph.com/
 - **US-West: US West Coast**: http://us-west.ceph.com/
+- **CN: China**: http://cn.ceph.com/
 
 You can replace all download.ceph.com URLs with any of the mirrors, for example:
 
-  http://download.ceph.com/tarballs/
-  http://download.ceph.com/debian-hammer/
-  http://download.ceph.com/rpm-hammer/
+- http://download.ceph.com/tarballs/
+- http://download.ceph.com/debian-hammer/
+- http://download.ceph.com/rpm-hammer/
 
 Change this to:
 
-  http://eu.ceph.com/tarballs/
-  http://eu.ceph.com/debian-hammer/
-  http://eu.ceph.com/rpm-hammer/
+- http://eu.ceph.com/tarballs/
+- http://eu.ceph.com/debian-hammer/
+- http://eu.ceph.com/rpm-hammer/
 
 
 Mirroring

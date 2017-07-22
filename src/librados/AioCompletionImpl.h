@@ -31,7 +31,7 @@ struct librados::AioCompletionImpl {
   Cond cond;
   int ref, rval;
   bool released;
-  bool ack, safe;
+  bool complete;
   version_t objver;
   ceph_tid_t tid;
 
@@ -49,7 +49,8 @@ struct librados::AioCompletionImpl {
   xlist<AioCompletionImpl*>::item aio_write_list_item;
 
   AioCompletionImpl() : lock("AioCompletionImpl lock", false, false),
-			ref(1), rval(0), released(false), ack(false), safe(false),
+			ref(1), rval(0), released(false),
+			complete(false),
 			objver(0),
                         tid(0),
 			callback_complete(0),
@@ -75,55 +76,41 @@ struct librados::AioCompletionImpl {
   }
   int wait_for_complete() {
     lock.Lock();
-    while (!ack)
+    while (!complete)
       cond.Wait(lock);
     lock.Unlock();
     return 0;
   }
   int wait_for_safe() {
-    lock.Lock();
-    while (!safe)
-      cond.Wait(lock);
-    lock.Unlock();
-    return 0;
+    return wait_for_complete();
   }
   int is_complete() {
     lock.Lock();
-    int r = ack;
+    int r = complete;
     lock.Unlock();
     return r;
   }
   int is_safe() {
-    lock.Lock();
-    int r = safe;
-    lock.Unlock();
-    return r;
+    return is_complete();
   }
   int wait_for_complete_and_cb() {
     lock.Lock();
-    while (!ack || callback_complete)
+    while (!complete || callback_complete || callback_safe)
       cond.Wait(lock);
     lock.Unlock();
     return 0;
   }
   int wait_for_safe_and_cb() {
-    lock.Lock();
-    while (!safe || callback_safe)
-      cond.Wait(lock);
-    lock.Unlock();
-    return 0;
+    return wait_for_complete_and_cb();
   }
   int is_complete_and_cb() {
     lock.Lock();
-    int r = ack && !callback_complete;
+    int r = complete && !callback_complete && !callback_safe;
     lock.Unlock();
     return r;
   }
   int is_safe_and_cb() {
-    lock.Lock();
-    int r = safe && !callback_safe;
-    lock.Unlock();
-    return r;
+    return is_complete_and_cb();
   }
   int get_return_value() {
     lock.Lock();
@@ -175,31 +162,19 @@ struct C_AioComplete : public Context {
     c->_get();
   }
 
-  void finish(int r) {
-    rados_callback_t cb = c->callback_complete;
-    void *cb_arg = c->callback_complete_arg;
-    cb(c, cb_arg);
+  void finish(int r) override {
+    rados_callback_t cb_complete = c->callback_complete;
+    void *cb_complete_arg = c->callback_complete_arg;
+    if (cb_complete)
+      cb_complete(c, cb_complete_arg);
+
+    rados_callback_t cb_safe = c->callback_safe;
+    void *cb_safe_arg = c->callback_safe_arg;
+    if (cb_safe)
+      cb_safe(c, cb_safe_arg);
 
     c->lock.Lock();
     c->callback_complete = NULL;
-    c->cond.Signal();
-    c->put_unlock();
-  }
-};
-
-struct C_AioSafe : public Context {
-  AioCompletionImpl *c;
-
-  explicit C_AioSafe(AioCompletionImpl *cc) : c(cc) {
-    c->_get();
-  }
-
-  void finish(int r) {
-    rados_callback_t cb = c->callback_safe;
-    void *cb_arg = c->callback_safe_arg;
-    cb(c, cb_arg);
-
-    c->lock.Lock();
     c->callback_safe = NULL;
     c->cond.Signal();
     c->put_unlock();
@@ -221,12 +196,12 @@ struct C_AioCompleteAndSafe : public Context {
     c->get();
   }
 
-  void finish(int r) {
+  void finish(int r) override {
     c->lock.Lock();
     c->rval = r;
-    c->ack = true;
-    c->safe = true;
+    c->complete = true;
     c->lock.Unlock();
+
     rados_callback_t cb_complete = c->callback_complete;
     void *cb_complete_arg = c->callback_complete_arg;
     if (cb_complete)

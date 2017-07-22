@@ -25,11 +25,14 @@ using std::deque;
 #include "common/Thread.h"
 #include "common/Throttle.h"
 #include "JournalThrottle.h"
-
+#include "common/zipkin_trace.h"
 
 #ifdef HAVE_LIBAIO
 # include <libaio.h>
 #endif
+
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 /**
  * Implements journaling on top of block device or file.
@@ -46,8 +49,7 @@ public:
     Context *finish;
     utime_t start;
     TrackedOpRef tracked_op;
-    completion_item(uint64_t o, Context *c, utime_t s,
-		    TrackedOpRef opref)
+    completion_item(uint64_t o, Context *c, utime_t s, TrackedOpRef opref)
       : seq(o), finish(c), start(s), tracked_op(opref) {}
     completion_item() : seq(0), finish(0), start(0) {}
   };
@@ -56,6 +58,7 @@ public:
     bufferlist bl;
     uint32_t orig_len;
     TrackedOpRef tracked_op;
+    ZTracer::Trace trace;
     write_item(uint64_t s, bufferlist& b, int ol, TrackedOpRef opref) :
       seq(s), orig_len(ol), tracked_op(opref) {
       bl.claim(b, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
@@ -102,11 +105,11 @@ public:
     completions.pop_front();
   }
 
-  int prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl);
+  int prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) override;
 
   void submit_entry(uint64_t seq, bufferlist& bl, uint32_t orig_len,
 		    Context *oncommit,
-		    TrackedOpRef osd_op = TrackedOpRef());
+		    TrackedOpRef osd_op = TrackedOpRef()) override;
   /// End protected by finisher_lock
 
   /*
@@ -137,8 +140,8 @@ public:
      * not known.
      *
      * If the first read on open fails, we can assume corruption
-     * if start_seq > committed_up_thru because the entry would have
-     * a sequence >= start_seq and therefore > committed_up_thru.
+     * if start_seq > committed_up_to because the entry would have
+     * a sequence >= start_seq and therefore > committed_up_to.
      */
     uint64_t start_seq;
 
@@ -257,7 +260,6 @@ private:
     aio_info(bufferlist& b, uint64_t o, uint64_t s)
       : iov(NULL), done(false), off(o), len(b.length()), seq(s) {
       bl.claim(b);
-      memset((void*)&iocb, 0, sizeof(iocb));
     }
     ~aio_info() {
       delete[] iov;
@@ -327,7 +329,6 @@ private:
   int _open(bool wr, bool create=false);
   int _open_block_device();
   void _close(int fd) const;
-  void _check_disk_write_cache() const;
   int _open_file(int64_t oldsize, blksize_t blksize, bool create);
   int _dump(ostream& out, bool simple);
   void print_header(const header_t &hdr) const;
@@ -351,7 +352,7 @@ private:
   int write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq);
 
 
-  void align_bl(off64_t pos, bufferlist& bl);
+  void check_align(off64_t pos, bufferlist& bl);
   int write_bl(off64_t& pos, bufferlist& bl);
 
   /// read len from journal starting at in_pos and wrapping up to len
@@ -368,7 +369,7 @@ private:
     FileJournal *journal;
   public:
     explicit Writer(FileJournal *fj) : journal(fj) {}
-    void *entry() {
+    void *entry() override {
       journal->write_thread_entry();
       return 0;
     }
@@ -378,7 +379,7 @@ private:
     FileJournal *journal;
   public:
     explicit WriteFinisher(FileJournal *fj) : journal(fj) {}
-    void *entry() {
+    void *entry() override {
       journal->write_finish_thread_entry();
       return 0;
     }
@@ -388,15 +389,18 @@ private:
     return ROUND_UP_TO(sizeof(header), block_size);
   }
 
+  ZTracer::Endpoint trace_endpoint;
+
  public:
-  FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true, bool faio=false) :
-    Journal(fsid, fin, sync_cond),
-    finisher_lock("FileJournal::finisher_lock", false, true, false, g_ceph_context),
+  FileJournal(CephContext* cct, uuid_d fsid, Finisher *fin, Cond *sync_cond,
+	      const char *f, bool dio=false, bool ai=true, bool faio=false) :
+    Journal(cct, fsid, fin, sync_cond),
+    finisher_lock("FileJournal::finisher_lock", false, true, false, cct),
     journaled_seq(0),
     plug_journal_completions(false),
-    writeq_lock("FileJournal::writeq_lock", false, true, false, g_ceph_context),
+    writeq_lock("FileJournal::writeq_lock", false, true, false, cct),
     completions_lock(
-      "FileJournal::completions_lock", false, true, false, g_ceph_context),
+      "FileJournal::completions_lock", false, true, false, cct),
     fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
@@ -416,61 +420,64 @@ private:
     full_state(FULL_NOTFULL),
     fd(-1),
     writing_seq(0),
-    throttle(g_conf->filestore_caller_concurrency),
-    write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
+    throttle(cct->_conf->filestore_caller_concurrency),
+    write_lock("FileJournal::write_lock", false, true, false, cct),
     write_stop(true),
     aio_stop(true),
     write_thread(this),
-    write_finish_thread(this) {
+    write_finish_thread(this),
+    trace_endpoint("0.0.0.0", 0, "FileJournal") {
 
       if (aio && !directio) {
-        derr << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;
+	lderr(cct) << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;
         aio = false;
       }
 #ifndef HAVE_LIBAIO
       if (aio) {
-        derr << "FileJournal::_open_any: libaio not compiled in; disabling aio" << dendl;
+	lderr(cct) << "FileJournal::_open_any: libaio not compiled in; disabling aio" << dendl;
         aio = false;
       }
 #endif
 
-      g_conf->add_observer(this);
+      cct->_conf->add_observer(this);
   }
-  ~FileJournal() {
+  ~FileJournal() override {
     assert(fd == -1);
     delete[] zero_buf;
-    g_conf->remove_observer(this);
+    cct->_conf->remove_observer(this);
   }
 
-  int check();
-  int create();
-  int open(uint64_t fs_op_seq);
-  void close();
+  int check() override;
+  int create() override;
+  int open(uint64_t fs_op_seq) override;
+  void close() override;
   int peek_fsid(uuid_d& fsid);
 
-  int dump(ostream& out);
+  int dump(ostream& out) override;
   int simple_dump(ostream& out);
   int _fdump(Formatter &f, bool simple);
 
-  void flush();
+  void flush() override;
 
-  void reserve_throttle_and_backoff(uint64_t count);
+  void reserve_throttle_and_backoff(uint64_t count) override;
 
-  bool is_writeable() {
+  bool is_writeable() override {
     return read_pos == 0;
   }
-  int make_writeable();
+  int make_writeable() override;
 
   // writes
-  void commit_start(uint64_t seq);
-  void committed_thru(uint64_t seq);
-  bool should_commit_now() {
+  void commit_start(uint64_t seq) override;
+  void committed_thru(uint64_t seq) override;
+  bool should_commit_now() override {
     return full_state != FULL_NOTFULL && !write_stop;
   }
 
   void write_header_sync();
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
+
+  off64_t get_journal_size_estimate();
 
   // reads
 
@@ -512,7 +519,7 @@ private:
 
   bool read_entry(
     bufferlist &bl,
-    uint64_t &last_seq) {
+    uint64_t &last_seq) override {
     return read_entry(bl, last_seq, 0);
   }
 

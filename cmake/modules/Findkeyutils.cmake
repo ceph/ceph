@@ -9,16 +9,11 @@ if(KEYUTILS_INCLUDE_DIR AND KEYUTILS_LIBRARIES)
 	set(KEYUTILS_FIND_QUIETLY TRUE)
 endif(KEYUTILS_INCLUDE_DIR AND KEYUTILS_LIBRARIES)
 
-INCLUDE(CheckCXXSymbolExists)
-
 # include dir
-
-find_path(KEYUTILS_INCLUDE_DIR keyutils.h NO_DEFAULT_PATH PATHS
-  /usr/include
+find_path(KEYUTILS_INCLUDE_DIR keyutils.h PATHS
   /opt/local/include
   /usr/local/include
 )
-
 
 # finally the library itself
 find_library(LIBKEYUTILS NAMES keyutils)

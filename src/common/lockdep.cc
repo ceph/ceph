@@ -11,15 +11,9 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "BackTrace.h"
-#include "Clock.h"
-#include "common/dout.h"
-#include "common/environment.h"
-#include "common/valgrind.h"
-#include "include/types.h"
 #include "lockdep.h"
-
-#include "include/unordered_map.h"
+#include "common/dout.h"
+#include "common/valgrind.h"
 
 #if defined(__FreeBSD__) && defined(__LP64__)	// On FreeBSD pthread_t is a pointer.
 namespace std {
@@ -129,7 +123,7 @@ int lockdep_dump_locks()
 	 ++q) {
       lockdep_dout(0) << "  * " << lock_names[q->first] << "\n";
       if (q->second)
-	q->second->print(*_dout);
+	*_dout << *(q->second);
       *_dout << dendl;
     }
   }
@@ -146,7 +140,7 @@ int lockdep_get_free_id(void)
     int tmp = last_freed_id;
     last_freed_id = -1;
     free_ids[tmp/8] &= 255 - (1 << (tmp % 8));
-    lockdep_dout(1) << "reusing last freed id " << tmp << dendl;
+    lockdep_dout(1) << "lockdep reusing last freed id " << tmp << dendl;
     return tmp;
   }
   
@@ -157,7 +151,7 @@ int lockdep_get_free_id(void)
       for (int j = 0; j < 8; ++j) {
         if (free_ids[i] & (1 << j)) {
           free_ids[i] &= 255 - (1 << j);
-          lockdep_dout(1) << "using id " << i * 8 + j << dendl;
+          lockdep_dout(1) << "lockdep using id " << i * 8 + j << dendl;
           return i * 8 + j;
         }
       }
@@ -296,7 +290,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace)
       }
       delete bt;
       *_dout << dendl;
-      assert(0);
+      ceph_abort();
     }
     else if (!(follows[p->first][id/8] & (1 << (id % 8)))) {
       // new dependency
@@ -327,7 +321,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace)
 	// don't add this dependency, or we'll get aMutex. cycle in the graph, and
 	// does_follow() won't terminate.
 
-	assert(0);  // actually, we should just die here.
+	ceph_abort();  // actually, we should just die here.
       } else {
         BackTrace *bt = NULL;
         if (force_backtrace || lockdep_force_backtrace()) {

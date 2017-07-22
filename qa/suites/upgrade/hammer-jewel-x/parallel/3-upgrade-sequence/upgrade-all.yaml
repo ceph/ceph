@@ -1,0 +1,18 @@
+upgrade-sequence:
+   sequential:
+   - ceph.restart:
+       daemons: [osd.0, osd.1, osd.2, osd.3]
+       wait-for-healthy: false
+       wait-for-osds-up: true
+   - ceph.restart:
+       daemons: [mon.a, mon.b, mon.c]
+       wait-for-healthy: false
+       wait-for-osds-up: true
+   - print: "**** done ceph.restart do not wait for healthy"
+   - exec:
+       mon.a:
+         - sleep 300 # http://tracker.ceph.com/issues/17808
+         - ceph osd set sortbitwise
+         - ceph osd set require_jewel_osds
+   - ceph.healthy:
+   - print: "**** done ceph.healthy"

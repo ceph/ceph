@@ -1,12 +1,6 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <iostream>
-
-#include <string.h>
-#include <stdlib.h>
-#include <errno.h>
-
 #include "include/types.h"
 #include "include/utime.h"
 #include "objclass/objclass.h"
@@ -19,12 +13,6 @@
 
 CLS_VER(1,0)
 CLS_NAME(log)
-
-cls_handle_t h_class;
-cls_method_handle_t h_log_add;
-cls_method_handle_t h_log_list;
-cls_method_handle_t h_log_trim;
-cls_method_handle_t h_log_info;
 
 static string log_index_prefix = "1_";
 
@@ -132,7 +120,7 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
       index = entry.id;
     }
 
-    CLS_LOG(0, "storing entry at %s", index.c_str());
+    CLS_LOG(20, "storing entry at %s", index.c_str());
 
 
     if (index > header.max_marker)
@@ -312,9 +300,15 @@ static int cls_log_info(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(log)
 {
   CLS_LOG(1, "Loaded log class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_log_add;
+  cls_method_handle_t h_log_list;
+  cls_method_handle_t h_log_trim;
+  cls_method_handle_t h_log_info;
 
   cls_register("log", &h_class);
 

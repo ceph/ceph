@@ -27,6 +27,9 @@ namespace mirror {
 
 class ProgressContext;
 
+template <typename> class ImageSync;
+template <typename> class InstanceWatcher;
+
 namespace image_replayer {
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -40,9 +43,9 @@ public:
   static BootstrapRequest* create(
         librados::IoCtx &local_io_ctx,
         librados::IoCtx &remote_io_ctx,
-        ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
+        InstanceWatcher<ImageCtxT> *instance_watcher,
         ImageCtxT **local_image_ctx,
-        const std::string &local_image_name,
+        const std::string &local_image_id,
         const std::string &remote_image_id,
         const std::string &global_image_id,
         ContextWQ *work_queue, SafeTimer *timer,
@@ -52,32 +55,33 @@ public:
         Journaler *journaler,
         MirrorPeerClientMeta *client_meta,
         Context *on_finish,
+        bool *do_resync,
         ProgressContext *progress_ctx = nullptr) {
     return new BootstrapRequest(local_io_ctx, remote_io_ctx,
-                                image_sync_throttler, local_image_ctx,
-                                local_image_name, remote_image_id,
+                                instance_watcher, local_image_ctx,
+                                local_image_id, remote_image_id,
                                 global_image_id, work_queue, timer, timer_lock,
                                 local_mirror_uuid, remote_mirror_uuid,
-                                journaler, client_meta, on_finish,
-				progress_ctx);
+                                journaler, client_meta, on_finish, do_resync,
+                                progress_ctx);
   }
 
   BootstrapRequest(librados::IoCtx &local_io_ctx,
                    librados::IoCtx &remote_io_ctx,
-                   ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
+                   InstanceWatcher<ImageCtxT> *instance_watcher,
                    ImageCtxT **local_image_ctx,
-                   const std::string &local_image_name,
+                   const std::string &local_image_id,
                    const std::string &remote_image_id,
                    const std::string &global_image_id, ContextWQ *work_queue,
                    SafeTimer *timer, Mutex *timer_lock,
                    const std::string &local_mirror_uuid,
                    const std::string &remote_mirror_uuid, Journaler *journaler,
                    MirrorPeerClientMeta *client_meta, Context *on_finish,
-		   ProgressContext *progress_ctx = nullptr);
-  ~BootstrapRequest();
+                   bool *do_resync, ProgressContext *progress_ctx = nullptr);
+  ~BootstrapRequest() override;
 
-  void send();
-  void cancel();
+  void send() override;
+  void cancel() override;
 
 private:
   /**
@@ -86,9 +90,6 @@ private:
    * <start>
    *    |
    *    v
-   * GET_LOCAL_IMAGE_ID * * * * * * * * * * * * * * * * *
-   *    |                                               *
-   *    v                                               *
    * GET_REMOTE_TAG_CLASS * * * * * * * * * * * * * * * *
    *    |                                               *
    *    v                                               *
@@ -99,6 +100,9 @@ private:
    *    |                                               *
    *    v                                               *
    * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * *
+   *    |                                               *
+   *    v                                               *
+   * IS_PRIMARY * * * * * * * * * * * * * * * * * * * * *
    *    |                                               *
    *    | (remote image primary)                        *
    *    \----> OPEN_LOCAL_IMAGE * * * * * * * * * * * * *
@@ -144,9 +148,8 @@ private:
 
   librados::IoCtx &m_local_io_ctx;
   librados::IoCtx &m_remote_io_ctx;
-  ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
+  InstanceWatcher<ImageCtxT> *m_instance_watcher;
   ImageCtxT **m_local_image_ctx;
-  std::string m_local_image_name;
   std::string m_local_image_id;
   std::string m_remote_image_id;
   std::string m_global_image_id;
@@ -158,6 +161,8 @@ private:
   Journaler *m_journaler;
   MirrorPeerClientMeta *m_client_meta;
   ProgressContext *m_progress_ctx;
+  bool *m_do_resync;
+
   Mutex m_lock;
   bool m_canceled = false;
 
@@ -165,13 +170,11 @@ private:
   cls::journal::Client m_client;
   uint64_t m_remote_tag_class = 0;
   ImageCtxT *m_remote_image_ctx = nullptr;
-  bool m_created_local_image = false;
+  bool m_primary = false;
   int m_ret_val = 0;
+  ImageSync<ImageCtxT> *m_image_sync = nullptr;
 
   bufferlist m_out_bl;
-
-  void get_local_image_id();
-  void handle_get_local_image_id(int r);
 
   void get_remote_tag_class();
   void handle_get_remote_tag_class(int r);
@@ -184,6 +187,9 @@ private:
 
   void open_remote_image();
   void handle_open_remote_image(int r);
+
+  void is_primary();
+  void handle_is_primary(int r);
 
   void update_client_state();
   void handle_update_client_state(int r);

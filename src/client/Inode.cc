@@ -5,9 +5,9 @@
 #include "Inode.h"
 #include "Dentry.h"
 #include "Dir.h"
+#include "Fh.h"
 #include "MetaSession.h"
 #include "ClientSnapRealm.h"
-#include "UserGroups.h"
 
 #include "mds/flock.h"
 
@@ -176,7 +176,7 @@ bool Inode::cap_is_valid(Cap* cap) const
     << "cap expire  " << cap->session->cap_ttl << std::endl
     << "cur time    " << ceph_clock_now(cct) << std::endl;*/
   if ((cap->session->cap_gen <= cap->gen)
-      && (ceph_clock_now(client->cct) < cap->session->cap_ttl)) {
+      && (ceph_clock_now() < cap->session->cap_ttl)) {
     return true;
   }
   return false;
@@ -288,6 +288,27 @@ int Inode::caps_dirty()
   return dirty_caps | flushing_caps;
 }
 
+const UserPerm* Inode::get_best_perms()
+{
+  const UserPerm *perms = NULL;
+  for (const auto ci : caps) {
+    const UserPerm& iperm = ci.second->latest_perms;
+    if (!perms) { // we don't have any, take what's present
+      perms = &iperm;
+    } else if (iperm.uid() == uid) {
+      if (iperm.gid() == gid) { // we have the best possible, return
+	return &iperm;
+      }
+      if (perms->uid() != uid) { // take uid > gid every time
+	perms = &iperm;
+      }
+    } else if (perms->uid() != uid && iperm.gid() == gid) {
+      perms = &iperm; // a matching gid is better than nothing
+    }
+  }
+  return perms;
+}
+
 bool Inode::have_valid_size()
 {
   // RD+RDCACHE or WR+WRBUFFER => valid size
@@ -310,12 +331,12 @@ Dir *Inode::open_dir()
   return dir;
 }
 
-bool Inode::check_mode(uid_t ruid, UserGroups& groups, unsigned want)
+bool Inode::check_mode(const UserPerm& perms, unsigned want)
 {
-  if (uid == ruid) {
+  if (uid == perms.uid()) {
     // if uid is owner, owner entry determines access
     want = want << 6;
-  } else if (groups.is_in(gid)) {
+  } else if (perms.gid_in_groups(gid)) {
     // if a gid or sgid matches the owning group, group entry determines access
     want = want << 3;
   }
@@ -346,18 +367,20 @@ void Inode::dump(Formatter *f) const
   if (rdev)
     f->dump_unsigned("rdev", rdev);
   f->dump_stream("ctime") << ctime;
+  f->dump_stream("btime") << btime;
   f->dump_stream("mode") << '0' << std::oct << mode << std::dec;
   f->dump_unsigned("uid", uid);
   f->dump_unsigned("gid", gid);
-  f->dump_unsigned("nlink", nlink);
+  f->dump_int("nlink", nlink);
 
-  f->dump_int("size", size);
-  f->dump_int("max_size", max_size);
-  f->dump_int("truncate_seq", truncate_seq);
-  f->dump_int("truncate_size", truncate_size);
+  f->dump_unsigned("size", size);
+  f->dump_unsigned("max_size", max_size);
+  f->dump_unsigned("truncate_seq", truncate_seq);
+  f->dump_unsigned("truncate_size", truncate_size);
   f->dump_stream("mtime") << mtime;
   f->dump_stream("atime") << atime;
-  f->dump_int("time_warp_seq", time_warp_seq);
+  f->dump_unsigned("time_warp_seq", time_warp_seq);
+  f->dump_unsigned("change_attr", change_attr);
 
   f->dump_object("layout", layout);
   if (is_dir()) {
@@ -434,10 +457,10 @@ void Inode::dump(Formatter *f) const
     f->close_section();
   }
   if (!cap_snaps.empty()) {
-    for (map<snapid_t,CapSnap*>::const_iterator p = cap_snaps.begin(); p != cap_snaps.end(); ++p) {
+    for (const auto &p : cap_snaps) {
       f->open_object_section("cap_snap");
-      f->dump_stream("follows") << p->first;
-      p->second->dump(f);
+      f->dump_stream("follows") << p.first;
+      p.second.dump(f);
       f->close_section();
     }
   }
@@ -447,8 +470,8 @@ void Inode::dump(Formatter *f) const
     f->open_array_section("open_by_mode");
     for (map<int,int>::const_iterator p = open_by_mode.begin(); p != open_by_mode.end(); ++p) {
       f->open_object_section("ref");
-      f->dump_unsigned("mode", p->first);
-      f->dump_unsigned("refs", p->second);
+      f->dump_int("mode", p->first);
+      f->dump_int("refs", p->second);
       f->close_section();
     }
     f->close_section();
@@ -524,3 +547,11 @@ void CapSnap::dump(Formatter *f) const
   f->dump_int("dirty_data", (int)dirty_data);
   f->dump_unsigned("flush_tid", flush_tid);
 }
+
+void Inode::set_async_err(int r)
+{
+  for (const auto &fh : fhs) {
+    fh->async_err = r;
+  }
+}
+

@@ -10,27 +10,32 @@
 
 static multimap<ceph_filelock, ceph_lock_state_t*> global_waiting_locks;
 
+static void remove_global_waiting(ceph_filelock &fl, ceph_lock_state_t *lock_state)
+{
+  for (auto p = global_waiting_locks.find(fl);
+       p != global_waiting_locks.end(); ) {
+    if (p->first != fl)
+      break;
+    if (p->second == lock_state) {
+      global_waiting_locks.erase(p);
+      break;
+    }
+    ++p;
+  }
+}
+
 ceph_lock_state_t::~ceph_lock_state_t()
 {
   if (type == CEPH_LOCK_FCNTL) {
     for (auto p = waiting_locks.begin(); p != waiting_locks.end(); ++p) {
-      for (auto q = global_waiting_locks.find(p->second);
-	   q != global_waiting_locks.end(); ) {
-	if (q->first != p->second)
-	  break;
-	if (q->second == this) {
-	  global_waiting_locks.erase(q);
-	  break;
-	}
-	++q;
-      }
+      remove_global_waiting(p->second, this);
     }
   }
 }
 
-bool ceph_lock_state_t::is_waiting(const ceph_filelock &fl)
+bool ceph_lock_state_t::is_waiting(const ceph_filelock &fl) const
 {
-  multimap<uint64_t, ceph_filelock>::iterator p = waiting_locks.find(fl.start);
+  multimap<uint64_t, ceph_filelock>::const_iterator p = waiting_locks.find(fl.start);
   while (p != waiting_locks.end()) {
     if (p->second.start > fl.start)
       return false;
@@ -50,6 +55,9 @@ void ceph_lock_state_t::remove_waiting(const ceph_filelock& fl)
       break;
     if (p->second.length == fl.length &&
 	ceph_filelock_owner_equal(p->second, fl)) {
+      if (type == CEPH_LOCK_FCNTL) {
+	remove_global_waiting(p->second, this);
+      }
       waiting_locks.erase(p);
       --client_waiting_lock_counts[(client_t)fl.client];
       if (!client_waiting_lock_counts[(client_t)fl.client]) {
@@ -59,25 +67,12 @@ void ceph_lock_state_t::remove_waiting(const ceph_filelock& fl)
     }
     ++p;
   }
-
-  if (type == CEPH_LOCK_FCNTL) {
-    for (auto q = global_waiting_locks.find(fl);
-	 q != global_waiting_locks.end(); ) {
-      if (q->first != fl)
-	break;
-      if (q->second == this) {
-	global_waiting_locks.erase(q);
-	break;
-      }
-      ++q;
-    }
-  }
 }
 
 bool ceph_lock_state_t::is_deadlock(const ceph_filelock& fl,
 				    list<multimap<uint64_t, ceph_filelock>::iterator>&
 				      overlapping_locks,
-				    const ceph_filelock *first_fl, unsigned depth)
+				    const ceph_filelock *first_fl, unsigned depth) const
 {
   ldout(cct,15) << "is_deadlock " << fl << dendl;
 
@@ -141,6 +136,7 @@ bool ceph_lock_state_t::is_deadlock(const ceph_filelock& fl,
 void ceph_lock_state_t::add_waiting(const ceph_filelock& fl)
 {
   waiting_locks.insert(pair<uint64_t, ceph_filelock>(fl.start, fl));
+  ++client_waiting_lock_counts[(client_t)fl.client];
   if (type == CEPH_LOCK_FCNTL) {
     global_waiting_locks.insert(pair<ceph_filelock,ceph_lock_state_t*>(fl, this));
   }
@@ -200,8 +196,6 @@ bool ceph_lock_state_t::add_lock(ceph_filelock& new_lock,
   if (ret) {
     ++client_held_lock_counts[(client_t)new_lock.client];
   }
-  else if (wait_on_fail && !replay)
-    ++client_waiting_lock_counts[(client_t)new_lock.client];
   return ret;
 }
 
@@ -320,16 +314,8 @@ bool ceph_lock_state_t::remove_all_from (client_t client)
 	++iter;
 	continue;
       }
-
-      for (auto p = global_waiting_locks.find(iter->second);
-	   p != global_waiting_locks.end(); ) {
-	if (p->first != iter->second)
-	  break;
-	if (p->second == this) {
-	  global_waiting_locks.erase(p);
-	  break;
-	}
-	++p;
+      if (type == CEPH_LOCK_FCNTL) {
+	remove_global_waiting(iter->second, this);
       }
       waiting_locks.erase(iter++);
     }
@@ -442,12 +428,12 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
       if (0 == new_lock.length) {
         if (old_lock->start + old_lock->length == new_lock.start) {
           new_lock.start = old_lock->start;
-        } else assert(0); /* if there's no end to new_lock, the neighbor
+        } else ceph_abort(); /* if there's no end to new_lock, the neighbor
                              HAS TO be to left side */
       } else if (0 == old_lock->length) {
         if (new_lock.start + new_lock.length == old_lock->start) {
           new_lock.length = 0;
-        } else assert(0); //same as before, but reversed
+        } else ceph_abort(); //same as before, but reversed
       } else {
         if (old_lock->start + old_lock->length == new_lock.start) {
           new_lock.start = old_lock->start;

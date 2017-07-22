@@ -14,7 +14,7 @@ struct BackTrace {
   const static int max = 100;
 
   int skip;
-  void *array[max];
+  void *array[max]{};
   size_t size;
   char **strings;
 
@@ -35,8 +35,13 @@ struct BackTrace {
   BackTrace(const BackTrace& other);
   const BackTrace& operator=(const BackTrace& other);
 
-  void print(std::ostream& out);
+  void print(std::ostream& out) const;
 };
+
+inline std::ostream& operator<<(std::ostream& out, const BackTrace& bt) {
+  bt.print(out);
+  return out;
+}
 
 }
 

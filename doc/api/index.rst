@@ -26,14 +26,12 @@ See `librbdpy`_.
 
 .. _librbdpy: ../rbd/librbdpy
 
+Ceph RADOS Gateway APIs
+=======================
 
-Calamari APIs
-=============
+See `librgw-py`_.
 
-See `Calamari API`_.
-
-.. _Calamari API: http://ceph.com/calamari/docs/calamari_rest/index.html
-
+.. _librgw-py: ../radosgw/api
 
 Ceph Object Store APIs
 ======================

@@ -22,6 +22,7 @@
 #include <zlib.h>
 
 // -----------------------------------------------------------------------------
+#define dout_context cct
 #define dout_subsys ceph_subsys_compressor
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
@@ -36,7 +37,15 @@ _prefix(std::ostream* _dout)
 }
 // -----------------------------------------------------------------------------
 
-const long unsigned int max_len = 2048;
+#define MAX_LEN (CEPH_PAGE_SIZE)
+
+// default window size for Zlib 1.2.8, negated for raw deflate
+#define ZLIB_DEFAULT_WIN_SIZE -15
+
+// desired memory usage level. increasing to 9 doesn't speed things up
+// significantly (helps only on >=16K blocks) and sometimes degrades
+// compression ratio.
+#define ZLIB_MEMORY_LEVEL 8
 
 int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
 {
@@ -44,14 +53,13 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
   unsigned have;
   z_stream strm;
   unsigned char* c_in;
-  int level = 5;
   int begin = 1;
 
   /* allocate deflate state */
   strm.zalloc = Z_NULL;
   strm.zfree = Z_NULL;
   strm.opaque = Z_NULL;
-  ret = deflateInit(&strm, level);
+  ret = deflateInit2(&strm, cct->_conf->compressor_zlib_level, Z_DEFLATED, ZLIB_DEFAULT_WIN_SIZE, ZLIB_MEMORY_LEVEL, Z_DEFAULT_STRATEGY);
   if (ret != Z_OK) {
     dout(1) << "Compression init error: init return "
          << ret << " instead of Z_OK" << dendl;
@@ -69,12 +77,12 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
     int flush = i != in.buffers().end() ? Z_NO_FLUSH : Z_FINISH;
 
     strm.next_in = c_in;
-
     do {
-      strm.avail_out = max_len;
-      bufferptr ptr = buffer::create_page_aligned(max_len);
+      bufferptr ptr = buffer::create_page_aligned(MAX_LEN);
       strm.next_out = (unsigned char*)ptr.c_str() + begin;
+      strm.avail_out = MAX_LEN - begin;
       if (begin) {
+        // put a compressor variation mark in front of compressed stream, not used at the moment
         ptr.c_str()[0] = 0;
         begin = 0;
       }
@@ -85,7 +93,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
          deflateEnd(&strm);
          return -1;
       }
-      have = max_len - strm.avail_out;
+      have = MAX_LEN - strm.avail_out;
       out.append(ptr, 0, have);
     } while (strm.avail_out == 0);
     if (strm.avail_in != 0) {
@@ -126,10 +134,11 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
     strm.next_in = c_in;
 
     do {
-      strm.avail_out = max_len;
-      bufferptr ptr = buffer::create_page_aligned(max_len);
+      bufferptr ptr = buffer::create_page_aligned(MAX_LEN);
       strm.next_out = (unsigned char*)ptr.c_str() + begin;
+      strm.avail_out = MAX_LEN - begin;
       if (begin) {
+        // put a compressor variation mark in front of compressed stream, not used at the moment
         ptr.c_str()[0] = 1;
         begin = 0;
       }
@@ -139,7 +148,7 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
               << ret << ")" << dendl;
          return -1;
       }
-      have = max_len - strm.avail_out;
+      have = MAX_LEN - strm.avail_out;
       out.append(ptr, 0, have);
     } while (strm.avail_out == 0);
     if (strm.avail_in != 0) {
@@ -178,10 +187,9 @@ int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, 
   strm.opaque = Z_NULL;
   strm.avail_in = 0;
   strm.next_in = Z_NULL;
-  if (*p == 1)
-    ret = inflateInit2(&strm, -HIST_SIZE);
-  else
-    ret = inflateInit(&strm);
+
+  // choose the variation of compressor
+  ret = inflateInit2(&strm, ZLIB_DEFAULT_WIN_SIZE);
   if (ret != Z_OK) {
     dout(1) << "Decompression init error: init return "
          << ret << " instead of Z_OK" << dendl;
@@ -189,17 +197,17 @@ int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, 
   }
 
   size_t remaining = MIN(p.get_remaining(), compressed_size);
-  while(remaining) {
 
+  while(remaining) {
     long unsigned int len = p.get_ptr_and_advance(remaining, &c_in);
     remaining -= len;
-    strm.avail_in = len;
+    strm.avail_in = len - begin;
     strm.next_in = (unsigned char*)c_in + begin;
     begin = 0;
 
     do {
-      strm.avail_out = max_len;
-      bufferptr ptr = buffer::create_page_aligned(max_len);
+      strm.avail_out = MAX_LEN;
+      bufferptr ptr = buffer::create_page_aligned(MAX_LEN);
       strm.next_out = (unsigned char*)ptr.c_str();
       ret = inflate(&strm, Z_NO_FLUSH);
       if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR) {
@@ -208,10 +216,9 @@ int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, 
        inflateEnd(&strm);
        return -1;
       }
-      have = max_len - strm.avail_out;
+      have = MAX_LEN - strm.avail_out;
       out.append(ptr, 0, have);
     } while (strm.avail_out == 0);
-
   }
 
   /* clean up and return */

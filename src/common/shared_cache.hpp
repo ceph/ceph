@@ -17,11 +17,12 @@
 
 #include <map>
 #include <list>
-#include <memory>
-#include <utility>
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "include/unordered_map.h"
+
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 template <class K, class V, class C = std::less<K>, class H = std::hash<K> >
 class SharedLRU {

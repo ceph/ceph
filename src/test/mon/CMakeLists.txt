@@ -23,6 +23,7 @@ set_target_properties(ceph_test_mon_msg PROPERTIES COMPILE_FLAGS
 #scripts
 add_ceph_test(misc.sh ${CMAKE_CURRENT_SOURCE_DIR}/misc.sh)
 add_ceph_test(mkfs.sh ${CMAKE_CURRENT_SOURCE_DIR}/mkfs.sh)
+add_ceph_test(mon-bind.sh ${CMAKE_CURRENT_SOURCE_DIR}/mon-bind.sh)
 add_ceph_test(mon-created-time.sh ${CMAKE_CURRENT_SOURCE_DIR}/mon-created-time.sh)
 add_ceph_test(mon-handle-forward.sh ${CMAKE_CURRENT_SOURCE_DIR}/mon-handle-forward.sh)
 add_ceph_test(mon-ping.sh ${CMAKE_CURRENT_SOURCE_DIR}/mon-ping.sh)
@@ -42,12 +43,14 @@ target_link_libraries(unittest_mon_moncap mon global)
 # unittest_mon_pgmap
 add_executable(unittest_mon_pgmap
   PGMap.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_mon_pgmap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mon_pgmap)
 target_link_libraries(unittest_mon_pgmap mon global)
 
-add_executable(unittest_mon_pgmonitor
-  PGMonitor.cc
+# unittest_mon_montypes
+add_executable(unittest_mon_montypes
+  test_mon_types.cc
   )
-add_ceph_unittest(unittest_mon_pgmonitor ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mon_pgmonitor)
-target_link_libraries(unittest_mon_pgmonitor mon global)
+add_ceph_unittest(unittest_mon_montypes ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mon_montypes)
+target_link_libraries(unittest_mon_montypes mon global)

@@ -5,28 +5,8 @@
 #include "common/Formatter.h"
 #include "include/uuid.h"
 #include "include/stringify.h"
-#include "include/small_encoding.h"
 
 // bluefs_extent_t
-
-void bluefs_extent_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  small_encode_lba(offset, bl);
-  small_encode_varint_lowz(length, bl);
-  ::encode(bdev, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluefs_extent_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  small_decode_lba(offset, p);
-  small_decode_varint_lowz(length, p);
-  ::decode(bdev, p);
-  DECODE_FINISH(p);
-}
-
 void bluefs_extent_t::dump(Formatter *f) const
 {
   f->dump_unsigned("offset", offset);
@@ -43,7 +23,7 @@ void bluefs_extent_t::generate_test_instances(list<bluefs_extent_t*>& ls)
   ls.back()->bdev = 1;
 }
 
-ostream& operator<<(ostream& out, bluefs_extent_t e)
+ostream& operator<<(ostream& out, const bluefs_extent_t& e)
 {
   return out << (int)e.bdev << ":0x" << std::hex << e.offset << "+" << e.length
 	     << std::dec;
@@ -102,10 +82,10 @@ ostream& operator<<(ostream& out, const bluefs_super_t& s)
 
 // bluefs_fnode_t
 
-vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
+mempool::bluefs::vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
   uint64_t offset, uint64_t *x_off)
 {
-  vector<bluefs_extent_t>::iterator p = extents.begin();
+  auto p = extents.begin();
   while (p != extents.end()) {
     if ((int64_t) offset >= p->length) {
       offset -= p->length;
@@ -116,28 +96,6 @@ vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
   }
   *x_off = offset;
   return p;
-}
-
-void bluefs_fnode_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  small_encode_varint(ino, bl);
-  small_encode_varint(size, bl);
-  ::encode(mtime, bl);
-  ::encode(prefer_bdev, bl);
-  ::encode(extents, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluefs_fnode_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  small_decode_varint(ino, p);
-  small_decode_varint(size, p);
-  ::decode(mtime, p);
-  ::decode(prefer_bdev, p);
-  ::decode(extents, p);
-  DECODE_FINISH(p);
 }
 
 void bluefs_fnode_t::dump(Formatter *f) const

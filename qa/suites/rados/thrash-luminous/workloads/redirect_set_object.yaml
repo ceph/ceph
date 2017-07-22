@@ -1,0 +1,9 @@
+tasks:
+- rados:
+    clients: [client.0]
+    ops: 4000
+    objects: 500
+    set_redirect: true
+    op_weights:
+      set_redirect: 100
+      copy_from: 100

@@ -11,7 +11,7 @@
 class TestJournalRecorder : public RadosTestFixture {
 public:
 
-  virtual void TearDown() {
+  void TearDown() override {
     for (std::list<journal::JournalRecorder*>::iterator it = m_recorders.begin();
          it != m_recorders.end(); ++it) {
       delete *it;

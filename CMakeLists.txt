@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(ceph)
-set(VERSION "10.2.1")
+set(VERSION 12.1.1)
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
@@ -22,7 +22,15 @@ endif()
 if(POLICY CMP0065)
   cmake_policy(SET CMP0065 NEW)
 endif()
-
+if(POLICY CMP0051)
+  # cmake 3.1 and higher include generator expressions in SOURCES property.
+  # in BuildBoost.cmake, get_target_property(<var> <target> SOURCES) is used
+  # to retrieve the source files of a target. in that case, we are only
+  # interested in the *source* files. and i don't want to bother stripping off
+  # the TARGET_OBJECTS elements from the returned SOURCES. so let's stick with
+  # the old behavior now.
+  cmake_policy(SET CMP0051 OLD)
+endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
@@ -65,11 +73,6 @@ include_directories(
   ${PROJECT_BINARY_DIR}/src/include
   ${PROJECT_SOURCE_DIR}/src)
 
-if(LEVELDB_PREFIX)
-  include_directories(${LEVELDB_PREFIX}/include)
-  link_directories(${LEVELDB_PREFIX}/lib)
-endif()
-
 if(OFED_PREFIX)
   include_directories(${OFED_PREFIX}/include)
   link_directories(${OFED_PREFIX}/lib)
@@ -80,11 +83,6 @@ if(FREEBSD)
   link_directories(/usr/local/lib)
   list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
 endif(FREEBSD)
-
-#put all the libs and binaries in one place
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 #Check Includes
 include(CheckIncludeFiles)
@@ -102,7 +100,6 @@ CHECK_FUNCTION_EXISTS(posix_fadvise HAVE_POSIX_FADVISE)
 CHECK_FUNCTION_EXISTS(posix_fallocate HAVE_POSIX_FALLOCATE)
 CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS)
 CHECK_FUNCTION_EXISTS(sync_file_range HAVE_SYNC_FILE_RANGE)
-CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
 CHECK_FUNCTION_EXISTS(pwritev HAVE_PWRITEV)
 CHECK_FUNCTION_EXISTS(splice CEPH_HAVE_SPLICE)
 CHECK_FUNCTION_EXISTS(getgrouplist HAVE_GETGROUPLIST)
@@ -116,12 +113,10 @@ CHECK_FUNCTION_EXISTS(pthread_set_name_np HAVE_PTHREAD_SET_NAME_NP)
 CHECK_FUNCTION_EXISTS(pthread_setname_np HAVE_PTHREAD_SETNAME_NP)
 CHECK_FUNCTION_EXISTS(pthread_getname_np HAVE_PTHREAD_GETNAME_NP)
 CHECK_FUNCTION_EXISTS(eventfd HAVE_EVENTFD)
+CHECK_FUNCTION_EXISTS(getprogname HAVE_GETPROGNAME)
 
-CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
-CHECK_INCLUDE_FILES("inttypes.h" HAVE_INTTYPES_H)
 CHECK_INCLUDE_FILES("linux/types.h" HAVE_LINUX_TYPES_H)
 CHECK_INCLUDE_FILES("linux/version.h" HAVE_LINUX_VERSION_H)
-CHECK_INCLUDE_FILES("stdint.h" HAVE_STDINT_H)
 CHECK_INCLUDE_FILES("arpa/nameser_compat.h" HAVE_ARPA_NAMESER_COMPAT_H)
 CHECK_INCLUDE_FILES("sys/mount.h" HAVE_SYS_MOUNT_H)
 CHECK_INCLUDE_FILES("sys/param.h" HAVE_SYS_PARAM_H)
@@ -180,6 +175,12 @@ else(ENABLE_SHARED)
 endif(ENABLE_SHARED)
 set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
+option(WITH_RDMA "Enable RDMA in async messenger" ON)
+if(WITH_RDMA)
+  find_package(rdma REQUIRED)
+  set(HAVE_RDMA ${RDMA_FOUND})
+endif(WITH_RDMA)
+
 find_package(Backtrace)
 
 if(LINUX)
@@ -213,17 +214,28 @@ set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif(${WITH_FUSE})
 
 option(WITH_XFS "XFS is here" ON)
-if(${WITH_XFS})
-find_package(xfs)
-set(HAVE_LIBXFS ${XFS_FOUND})
-endif(${WITH_XFS})
+if(WITH_XFS)
+  find_package(xfs)
+  set(HAVE_LIBXFS ${XFS_FOUND})
+endif()
+
+option(WITH_ZFS "enable LibZFS if found" OFF)
+if(WITH_ZFS)
+  find_package(zfs)
+  set(HAVE_LIBZFS ${ZFS_FOUND})
+endif()
 
 option(WITH_SPDK "Enable SPDK" OFF)
 if(WITH_SPDK)
-  find_package(pciaccess REQUIRED)
   find_package(dpdk REQUIRED)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
+
+option(WITH_PMEM "Enable PMEM" OFF)
+if(WITH_PMEM)
+  find_package(pmem REQUIRED)
+  set(HAVE_PMEM ${PMEM_FOUND})
+endif(WITH_PMEM)
 
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
@@ -234,35 +246,47 @@ option(WITH_KVS "Key value store is here" ON)
 # remote block storage
 option(WITH_RBD "Remote block storage is here" ON)
 
+# KERNEL remote block storage
+option(WITH_KRBD "Kernel Remote block storage is here" ON)
+
+if(WITH_KRBD AND WITHOUT_RBD)
+  message(FATAL_ERROR "Cannot have WITH_KRBD with WITH_RBD.")
+endif()
+
+# embedded ceph daemon static library
+# NOTE: Ceph is mostly LGPL (see COPYING), which means that
+# static linking brings with it restrictions. Please be sure
+# to look at the LGPL license carefully before linking this library to
+# your code. See http://www.gnu.org/licenses/gpl-faq.html#LGPLStaticVsDynamic.
+option(WITH_EMBEDDED "build the embedded ceph daemon library" ON)
+
 option(WITH_LEVELDB "LevelDB is here" ON)
-if(${WITH_LEVELDB})
-find_package(leveldb REQUIRED)
-find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
-endif(${WITH_LEVELDB})
-
-option(WITH_EXPAT "EXPAT is here" ON)
-if(${WITH_EXPAT})
-find_package(EXPAT REQUIRED)
-endif(${WITH_EXPAT})
-
-find_package(fcgi REQUIRED)
-
-find_package(atomic_ops REQUIRED)
-message(STATUS "${ATOMIC_OPS_LIBRARIES}")
-if(NOT ${ATOMIC_OPS_FOUND})
-  set(NO_ATOMIC_OPS 1)
-endif(NOT ${ATOMIC_OPS_FOUND})
+if(WITH_LEVELDB)
+  if(LEVELDB_PREFIX)
+    include_directories(${LEVELDB_PREFIX}/include)
+    link_directories(${LEVELDB_PREFIX}/lib)
+  endif()
+  find_package(leveldb REQUIRED)
+  find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
+endif(WITH_LEVELDB)
 
 find_package(snappy REQUIRED)
 
+option(WITH_LZ4 "LZ4 compression support" OFF)
+if(WITH_LZ4)
+  find_package(LZ4 REQUIRED)
+  set(HAVE_LZ4 ${LZ4_FOUND})
+endif(WITH_LZ4)
+
 #if allocator is set on command line make sure it matches below strings
 if(ALLOCATOR)
-  if(${ALLOCATOR} STREQUAL "tcmalloc")
+  if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
     find_package(gperftools REQUIRED)
     set(HAVE_LIBTCMALLOC ON)
   elseif(${ALLOCATOR} STREQUAL "jemalloc")
     find_package(JeMalloc REQUIRED)
     set(HAVE_LIBJEMALLOC ${JEMALLOC_FOUND})
+    set(HAVE_JEMALLOC 1)
   endif()
 else(ALLOCATOR)
   find_package(gperftools)
@@ -276,15 +300,18 @@ else(ALLOCATOR)
   elseif(JEMALLOC_FOUND)
     set(ALLOCATOR jemalloc)
   else()
-    message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
+    if(NOT FREEBSD)
+      # FreeBSD already has jemalloc as its default allocator
+      message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
+    endif()
     set(ALLOCATOR "libc")
   endif(GPERFTOOLS_FOUND)
 endif(ALLOCATOR)
 
-if(NOT FREEBSD)
-  # XXX keyutils is available, but not yet recognised
+
+if(WITH_LIBCEPHFS OR WITH_KRBD)
   find_package(keyutils REQUIRED)
-endif(NOT FREEBSD)
+endif()
 
 find_package(CURL REQUIRED)
 set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
@@ -312,7 +339,7 @@ if(USE_NSS)
 else(USE_NSS)
   #openssl
   find_package(OpenSSL REQUIRED)
-  set(HAVE_OPENSSL ON)
+  set(USE_OPENSSL ON)
   set(SSL_LIBRARIES ${OPENSSL_LIBRARIES})
   message(STATUS "SSL with OpenSSL selected (Libs: ${SSL_LIBRARIES})")
 endif(USE_NSS)
@@ -323,11 +350,82 @@ if(WITH_XIO)
 set(HAVE_XIO ${XIO_FOUND})
 endif(WITH_XIO)
 
+option(WITH_DPDK "Enable DPDK messaging" OFF)
+if(WITH_DPDK)
+find_package(dpdk)
+set(HAVE_DPDK ${DPDK_FOUND})
+endif(WITH_DPDK)
+
+option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
+if(WITH_BLKIN)
+  set(BLKIN_LIBRARIES blkin lttng-ust)
+  include_directories(src/blkin/blkin-lib)
+endif(WITH_BLKIN)
+
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
+option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" OFF)
+option(WITH_RADOSGW_BEAST_FRONTEND "Rados Gateway's Beast frontend is enabled" ON)
+if(WITH_RADOSGW)
+  find_package(EXPAT REQUIRED)
+  if(WITH_RADOSGW_FCGI_FRONTEND)
+    find_package(fcgi REQUIRED)
+  endif()
+endif(WITH_RADOSGW)
+
+
+if (WITH_RADOSGW)
+  if (NOT DEFINED OPENSSL_FOUND)
+    message(STATUS "Looking for openssl anyways, because radosgw selected")
+    find_package(OpenSSL)
+  endif()
+  if (OPENSSL_FOUND)
+    execute_process(
+      COMMAND
+	"sh" "-c"
+	"objdump -p ${OPENSSL_SSL_LIBRARY} | sed -n 's/^  SONAME  *//p'"
+      OUTPUT_VARIABLE LIBSSL_SONAME
+      ERROR_VARIABLE OBJDUMP_ERRORS
+      RESULT_VARIABLE OBJDUMP_RESULTS
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (OBJDUMP_RESULTS)
+      message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
+    endif()
+    if (NOT OBJDUMP_ERRORS STREQUAL "")
+      message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
+    endif()
+    execute_process(
+      COMMAND
+	"sh" "-c"
+	"objdump -p ${OPENSSL_CRYPTO_LIBRARY} | sed -n 's/^  SONAME  *//p'"
+      OUTPUT_VARIABLE LIBCRYPTO_SONAME
+      ERROR_VARIABLE OBJDUMP_ERRORS
+      RESULT_VARIABLE OBJDUMP_RESULTS
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (OBJDUMP_RESULTS)
+      message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
+    endif()
+    if (NOT OBJDUMP_ERRORS STREQUAL "")
+      message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
+    endif()
+    message(STATUS "ssl soname: ${LIBSSL_SONAME}")
+    message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
+  else()
+    message(WARNING "ssl not found: rgw civetweb may fail to dlopen libssl libcrypto")
+  endif()
+endif (WITH_RADOSGW)
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
+
+#option for Mgr
+option(WITH_MGR "ceph-mgr is enabled" ON)
+if(WITH_MGR)
+    set(Python_ADDITIONAL_VERSIONS 2.7)
+    find_package(PythonInterp 2.7 REQUIRED)
+    find_package(PythonLibs 2.7 REQUIRED)
+    # Boost dependency check deferred to Boost section
+endif(WITH_MGR)
 
 option(WITH_THREAD_SAFE_RES_QUERY "res_query is thread safe" OFF)
 if(WITH_THREAD_SAFE_RES_QUERY)
@@ -344,9 +442,11 @@ set(HAVE_LIBROCKSDB 1)
 # -lz link into kv
 find_package(ZLIB REQUIRED)
 
+#option for EventTrace
+option(WITH_EVENTTRACE "Event tracing support" OFF)
+
 #option for LTTng
-#currently off by default because lttng-gen-tp run unconditionally and forces a rebuild
-option(WITH_LTTNG "LTTng tracing is enabled" OFF)
+option(WITH_LTTNG "LTTng tracing is enabled" ON)
 if(${WITH_LTTNG})
   find_package(LTTngUST REQUIRED)
   find_program(LTTNG_GEN_TP
@@ -356,35 +456,118 @@ if(${WITH_LTTNG})
   endif()
 endif(${WITH_LTTNG})
 
+option(WITH_OSD_INSTRUMENT_FUNCTIONS OFF)
+
 #option for Babeltrace
-option(HAVE_BABELTRACE "Babeltrace libraries are enabled" ON)
-if(${HAVE_BABELTRACE})
+option(WITH_BABELTRACE "Babeltrace libraries are enabled" ON)
+if(WITH_BABELTRACE)
+  set(HAVE_BABELTRACE ON)
   find_package(babeltrace REQUIRED)
-  set(WITH_BABELTRACE ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_BABELTRACE_H ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_CTF_EVENTS_H ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_CTF_ITERATOR_H ${BABELTRACE_FOUND})
-endif(${HAVE_BABELTRACE})
+endif(WITH_BABELTRACE)
 
 option(DEBUG_GATHER "C_Gather debugging is enabled" ON)
-option(HAVE_LIBZFS "LibZFS is enabled" OFF)
 option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
+
+option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
+
+option(WITH_FIO "Support for fio engines" OFF)
+if(WITH_FIO)
+  find_package(fio REQUIRED)
+endif(WITH_FIO)
 
 if(LINUX)
   add_definitions(-D__linux__)
 endif(LINUX)
 
-if(ENABLE_SHARED)
-  set(Boost_USE_STATIC_LIBS   OFF)
-else(ENABLE_SHARED)
-  set(Boost_USE_STATIC_LIBS   ON)
-endif(ENABLE_SHARED)
+# ASAN and friends
+option(WITH_ASAN "build with ASAN" OFF)
+option(WITH_ASAN_LEAK "explicitly enable ASAN leak detection" OFF)
+
+if(WITH_ASAN)
+  set(ASAN_CFLAGS "-fsanitize=address -fno-omit-frame-pointer")
+  if(WITH_ASAN_LEAK)
+    set(ASAN_CFLAGS "${ASAN_CFLAGS} -fsanitize=leak")
+  endif()
+  set(ASAN_LFLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ASAN_CFLAGS} -lasan")
+  set(CMAKE_EXE_LINKER_FLAGS "${ASAN_LFLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ASAN_CFLAGS}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${ASAN_CFLAGS}")
+  if(HAVE_JEMALLOC)
+    message(FATAL "ASAN does not work well with JeMalloc")
+  endif()
+endif()
+
+option(WITH_TSAN "build with TSAN" OFF)
+if(WITH_TSAN)
+  if (WITH_ASAN AND WITH_ASAN_LEAK)
+    message(FATAL_ERROR "Cannot combine -fsanitize-leak w/-fsanitize-thread")
+  endif()
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread -fno-omit-frame-pointer -pie -ltsan ")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread -fno-omit-frame-pointer -fPIC")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread -fno-omit-frame-pointer -fPIC")
+  if(HAVE_JEMALLOC)
+    message(FATAL "TSAN does not work well with JeMalloc")
+  endif()
+endif()
+
+option(WITH_UBSAN "build with UBSAN" OFF)
+if(WITH_UBSAN)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=undefined")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=undefined")
+  if(HAVE_JEMALLOC)
+    message(FATAL "UBSAN does not work well with JeMalloc")
+  endif()
+endif()
+
+# Rocksdb
+option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
+if (WITH_SYSTEM_ROCKSDB)
+  find_package(rocksdb REQUIRED)
+endif()
+
+# Boost
+option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
+
+# Boost::thread depends on Boost::atomic, so list it explicitly.
+set(BOOST_COMPONENTS
+  atomic thread system regex random program_options date_time iostreams
+  filesystem)
+set(BOOST_HEADER_COMPONENTS container)
+
+if(WITH_MGR)
+	list(APPEND BOOST_COMPONENTS python)
+endif()
+
+if(WITH_RADOSGW_BEAST_FRONTEND)
+	list(APPEND BOOST_COMPONENTS coroutine context)
+endif()
 
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
-include_directories(${Boost_INCLUDE_DIRS})
-include_directories(${PROJECT_BINARY_DIR}/include)
+# require minimally the bundled version
+if(WITH_SYSTEM_BOOST)
+  if(ENABLE_SHARED)
+    set(Boost_USE_STATIC_LIBS OFF)
+  else()
+    set(Boost_USE_STATIC_LIBS ON)
+  endif()
+  find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+else()
+  set(BOOST_J 1 CACHE STRING
+    "max jobs for Boost build") # override w/-DBOOST_J=<n>
+  set(Boost_USE_STATIC_LIBS ON)
+  include(BuildBoost)
+  build_boost(1.63
+    COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
+  include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
+endif()
+set(Boost_USE_MULTITHREADED ON)
+
+include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
 
@@ -419,3 +602,11 @@ if(WITH_SYSTEMD)
   add_subdirectory(systemd)
 endif()
 
+include(CTags)
+option(CTAG_EXCLUDES "Exclude files/directories when running ctag.")
+add_tags(ctags
+  SRC_DIR src
+  TAG_FILE tags
+  EXCLUDE_OPTS ${CTAG_EXCLUDES}
+  EXCLUDES "*.js" "*.css")
+add_custom_target(tags DEPENDS ctags)

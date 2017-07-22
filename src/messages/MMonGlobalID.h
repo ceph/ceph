@@ -21,20 +21,20 @@ struct MMonGlobalID : public PaxosServiceMessage {
   uint64_t old_max_id;
   MMonGlobalID() : PaxosServiceMessage(MSG_MON_GLOBAL_ID, 0), old_max_id(0) { }
 private:
-  ~MMonGlobalID() {}
+  ~MMonGlobalID() override {}
 
 public:
-  const char *get_type_name() const { return "global_id"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "global_id"; }
+  void print(ostream& out) const override {
     out << "global_id  (" << old_max_id << ")";
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(old_max_id, p);
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(old_max_id, payload);
   }

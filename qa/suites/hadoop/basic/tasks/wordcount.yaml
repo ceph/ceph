@@ -1,0 +1,8 @@
+tasks:
+- ssh_keys:
+- install:
+- ceph:
+- hadoop:
+- workunit: 
+    clients:
+      client.0: [hadoop/wordcount.sh]

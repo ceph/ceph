@@ -14,62 +14,53 @@
 #ifndef CEPH_HEALTH_MONITOR_H
 #define CEPH_HEALTH_MONITOR_H
 
-#include "mon/QuorumService.h"
-#include "mon/HealthService.h"
+#include "mon/PaxosService.h"
 
 //forward declaration
 namespace ceph { class Formatter; }
+class HealthService;
 
-class HealthMonitor : public QuorumService
+class HealthMonitor : public PaxosService
 {
   map<int,HealthService*> services;
-
-protected:
-  virtual void service_shutdown();
+  version_t version = 0;
+  map<int,health_check_map_t> quorum_checks;  // for each quorum member
+  health_check_map_t leader_checks;           // leader only
 
 public:
-  HealthMonitor(Monitor *m) : QuorumService(m) { }
-  virtual ~HealthMonitor() {
+  HealthMonitor(Monitor *m, Paxos *p, const string& service_name);
+  ~HealthMonitor() override {
     assert(services.empty());
   }
-
 
   /**
    * @defgroup HealthMonitor_Inherited_h Inherited abstract methods
    * @{
    */
-  virtual void init();
-  virtual void get_health(Formatter *f,
-		     list<pair<health_status_t,string> >& summary,
-		     list<pair<health_status_t,string> > *detail);
-  virtual bool service_dispatch(MonOpRequestRef op);
+  void init() override;
 
-  virtual void start_epoch() {
-    for (map<int,HealthService*>::iterator it = services.begin();
-         it != services.end(); ++it) {
-      it->second->start(get_epoch());
-    }
-  }
+  void get_health(
+    list<pair<health_status_t,string> >& summary,
+    list<pair<health_status_t,string> > *detail,
+    CephContext *cct) const override {}
 
-  virtual void finish_epoch() {
-    generic_dout(20) << "HealthMonitor::finish_epoch()" << dendl;
-    for (map<int,HealthService*>::iterator it = services.begin();
-         it != services.end(); ++it) {
-      assert(it->second != NULL);
-      it->second->finish();
-    }
-  }
+  bool preprocess_query(MonOpRequestRef op) override;
+  bool prepare_update(MonOpRequestRef op) override;
 
-  virtual void cleanup() { }
-  virtual void service_tick() { }
+  bool prepare_health_checks(MonOpRequestRef op);
 
-  virtual int get_type() {
-    return QuorumService::SERVICE_HEALTH;
-  }
+  bool check_leader_health();
+  bool check_member_health();
 
-  virtual string get_name() const {
-    return "health";
-  }
+  void create_initial() override;
+  void update_from_paxos(bool *need_bootstrap) override;
+  void create_pending() override;
+  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  version_t get_trim_to() override;
+
+  void encode_full(MonitorDBStore::TransactionRef t) override { }
+
+  void tick() override;
 
   /**
    * @} // HealthMonitor_Inherited_h

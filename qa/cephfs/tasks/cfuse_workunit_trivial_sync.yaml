@@ -1,0 +1,4 @@
+tasks:
+- workunit:
+    clients:
+      all: [fs/misc/trivial_sync.sh]

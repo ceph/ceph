@@ -69,8 +69,9 @@ int main(int argc, const char **argv)
 	argv_to_vec(argc, argv, args);
 	env_to_vec(args);
 
-	global_init(NULL, args, CEPH_ENTITY_TYPE_ANY, CODE_ENVIRONMENT_UTILITY,
-		    0);
+	auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_ANY,
+			       CODE_ENVIRONMENT_UTILITY,
+			       0);
 
 	for (arg_iter = args.begin(); arg_iter != args.end();) {
 	  if (ceph_argparse_witharg(args, arg_iter, &val, "--addr",
@@ -102,14 +103,14 @@ int main(int argc, const char **argv)
 	  "initial msgs (pipe depth) " << n_msgs << " " <<
 	  "data buffer size " << n_dsize << std::endl;
 
-	messenger = Messenger::create(g_ceph_context, g_conf->ms_type,
+	messenger = Messenger::create(g_ceph_context, g_conf->get_val<std::string>("ms_type"),
 				      entity_name_t::MON(-1),
 				      "client",
-				      getpid());
+				      getpid(), 0);
 
 	// enable timing prints
 	messenger->set_magic(MSG_MAGIC_TRACE_CTR);
-	messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
+	messenger->set_default_policy(Messenger::Policy::lossy_client(0));
 
 	string dest_str = "tcp://";
 	dest_str += addr;

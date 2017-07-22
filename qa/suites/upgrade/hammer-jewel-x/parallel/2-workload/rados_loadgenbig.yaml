@@ -1,0 +1,8 @@
+workload:
+  full_sequential:
+    - workunit:
+        branch: hammer
+        clients:
+          client.0:
+            - rados/load-gen-big.sh
+    - print: "**** done rados/load-gen-big.sh 2-workload"

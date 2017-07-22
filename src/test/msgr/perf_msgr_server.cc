@@ -22,7 +22,6 @@
 
 using namespace std;
 
-#include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "global/global_init.h"
@@ -40,17 +39,17 @@ class ServerDispatcher : public Dispatcher {
     OpWQ(time_t timeout, time_t suicide_timeout, ThreadPool *tp)
       : ThreadPool::WorkQueue<Message>("ServerDispatcher::OpWQ", timeout, suicide_timeout, tp) {}
 
-    bool _enqueue(Message *m) {
+    bool _enqueue(Message *m) override {
       messages.push_back(m);
       return true;
     }
-    void _dequeue(Message *m) {
-      assert(0);
+    void _dequeue(Message *m) override {
+      ceph_abort();
     }
-    bool _empty() {
+    bool _empty() override {
       return messages.empty();
     }
-    Message *_dequeue() {
+    Message *_dequeue() override {
       if (messages.empty())
 	return NULL;
       Message *m = messages.front();
@@ -63,8 +62,8 @@ class ServerDispatcher : public Dispatcher {
       m->get_connection()->send_message(reply);
       m->put();
     }
-    void _process_finish(Message *m) { }
-    void _clear() {
+    void _process_finish(Message *m) override { }
+    void _clear() override {
       assert(messages.empty());
     }
   } op_wq;
@@ -75,11 +74,11 @@ class ServerDispatcher : public Dispatcher {
     op_wq(30, 30, &op_tp) {
     op_tp.start();
   }
-  ~ServerDispatcher() {
+  ~ServerDispatcher() override {
     op_tp.stop();
   }
-  bool ms_can_fast_dispatch_any() const { return true; }
-  bool ms_can_fast_dispatch(Message *m) const {
+  bool ms_can_fast_dispatch_any() const override { return true; }
+  bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OP:
       return true;
@@ -88,19 +87,20 @@ class ServerDispatcher : public Dispatcher {
     }
   }
 
-  void ms_handle_fast_connect(Connection *con) {}
-  void ms_handle_fast_accept(Connection *con) {}
-  bool ms_dispatch(Message *m) { return true; }
-  bool ms_handle_reset(Connection *con) { return true; }
-  void ms_handle_remote_reset(Connection *con) {}
-  void ms_fast_dispatch(Message *m) {
+  void ms_handle_fast_connect(Connection *con) override {}
+  void ms_handle_fast_accept(Connection *con) override {}
+  bool ms_dispatch(Message *m) override { return true; }
+  bool ms_handle_reset(Connection *con) override { return true; }
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override { return false; }
+  void ms_fast_dispatch(Message *m) override {
     usleep(think_time);
     //cerr << __func__ << " reply message=" << m << std::endl;
     op_wq.queue(m);
   }
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) {
+                            bool& isvalid, CryptoKey& session_key) override {
     isvalid = true;
     return true;
   }
@@ -115,8 +115,8 @@ class MessengerServer {
  public:
   MessengerServer(string t, string addr, int threads, int delay):
       msgr(NULL), type(t), bindaddr(addr), dispatcher(threads, delay) {
-    msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0), "server", 0);
-    msgr->set_default_policy(Messenger::Policy::stateless_server(0, 0));
+    msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0), "server", 0, 0);
+    msgr->set_default_policy(Messenger::Policy::stateless_server(0));
   }
   ~MessengerServer() {
     msgr->shutdown();
@@ -144,7 +144,8 @@ int main(int argc, char **argv)
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 
@@ -155,15 +156,17 @@ int main(int argc, char **argv)
 
   int worker_threads = atoi(args[1]);
   int think_time = atoi(args[2]);
+  std::string public_msgr_type = g_ceph_context->_conf->ms_public_type.empty() ? g_ceph_context->_conf->get_val<std::string>("ms_type") : g_ceph_context->_conf->ms_public_type;
+
   cerr << " This tool won't handle connection error alike things, " << std::endl;
   cerr << "please ensure the proper network environment to test." << std::endl;
   cerr << " Or ctrl+c when meeting error and restart tests" << std::endl;
-  cerr << " using ms-type " << g_ceph_context->_conf->ms_type << std::endl;
+  cerr << " using ms-public-type " << public_msgr_type << std::endl;
   cerr << "       bind ip:port " << args[0] << std::endl;
   cerr << "       worker threads " << worker_threads << std::endl;
   cerr << "       thinktime(us) " << think_time << std::endl;
 
-  MessengerServer server(g_ceph_context->_conf->ms_type, args[0], worker_threads, think_time);
+  MessengerServer server(public_msgr_type, args[0], worker_threads, think_time);
   server.start();
 
   return 0;

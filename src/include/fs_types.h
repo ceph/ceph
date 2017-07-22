@@ -4,7 +4,6 @@
 #define CEPH_INCLUDE_FS_TYPES_H
 
 #include "types.h"
-#include "utime.h"
 
 // --------------------------------------
 // ino
@@ -28,7 +27,24 @@ struct inodeno_t {
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(inodeno_t)
 
-inline ostream& operator<<(ostream& out, inodeno_t ino) {
+template<>
+struct denc_traits<inodeno_t> {
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = true;
+  static void bound_encode(const inodeno_t &o, size_t& p) {
+    denc(o.val, p);
+  }
+  static void encode(const inodeno_t &o, buffer::list::contiguous_appender& p) {
+    denc(o.val, p);
+  }
+  static void decode(inodeno_t& o, buffer::ptr::iterator &p) {
+    denc(o.val, p);
+  }
+};
+
+inline ostream& operator<<(ostream& out, const inodeno_t& ino) {
   return out << hex << ino.val << dec;
 }
 
@@ -86,7 +102,7 @@ struct file_layout_t {
   }
 
   uint64_t get_period() const {
-    return stripe_count * object_size;
+    return static_cast<uint64_t>(stripe_count) * object_size;
   }
 
   void from_legacy(const ceph_file_layout& fl);

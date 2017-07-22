@@ -23,7 +23,7 @@ class PaxosServiceMessage : public Message {
       version(v), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0)  { }
  protected:
-  ~PaxosServiceMessage() {}
+  ~PaxosServiceMessage() override {}
 
  public:
   void paxos_encode() {
@@ -38,13 +38,13 @@ class PaxosServiceMessage : public Message {
     ::decode(deprecated_session_mon_tid, p);
   }
 
-  void encode_payload(uint64_t features) {
-    assert(0);
+  void encode_payload(uint64_t features) override {
+    ceph_abort();
     paxos_encode();
   }
 
-  void decode_payload() {
-    assert(0);
+  void decode_payload() override {
+    ceph_abort();
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
   }
@@ -64,7 +64,7 @@ class PaxosServiceMessage : public Message {
     return session;
   }
   
-  const char *get_type_name() const { return "PaxosServiceMessage"; }
+  const char *get_type_name() const override { return "PaxosServiceMessage"; }
 };
 
 #endif

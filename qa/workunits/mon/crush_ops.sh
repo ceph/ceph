@@ -19,6 +19,19 @@ ceph osd crush rule create-simple foo default host
 ceph osd crush rule create-simple foo default host
 ceph osd crush rule create-simple bar default host
 
+# make sure we're at luminous+ before using crush device classes
+ceph osd require-osd-release luminous
+ceph osd crush class create ssd
+ceph osd crush class create hdd
+ceph osd crush set-device-class ssd osd.0
+ceph osd crush set-device-class hdd osd.1
+ceph osd crush rule create-replicated foo-ssd default host ssd
+ceph osd crush rule create-replicated foo-hdd default host hdd
+
+ceph osd erasure-code-profile set ec-foo-ssd crush-device-class=ssd m=2 k=2
+ceph osd pool create ec-foo 2 erasure ec-foo-ssd
+ceph osd pool rm ec-foo ec-foo --yes-i-really-really-mean-it
+
 ceph osd crush rule ls | grep foo
 
 ceph osd crush rule rm foo
@@ -26,7 +39,7 @@ ceph osd crush rule rm foo  # idempotent
 ceph osd crush rule rm bar
 
 # can't delete in-use rules, tho:
-expect_false ceph osd crush rule rm replicated_ruleset
+expect_false ceph osd crush rule rm replicated_rule
 
 # build a simple map
 expect_false ceph osd crush add-bucket foo osd
@@ -74,11 +87,16 @@ ceph osd crush rm foo
 ceph osd crush rm osd.$o2 host2
 ceph osd crush rm host2
 
+ceph osd crush add-bucket foo host
+ceph osd crush move foo root=default rack=localrack
+
+ceph osd crush create-or-move osd.$o1 1.0 root=default
+ceph osd crush move osd.$o1 host=foo
+ceph osd find osd.$o1 | grep host | grep foo
+
 ceph osd crush rm osd.$o1
 ceph osd crush rm osd.$o2
 
-ceph osd crush add-bucket foo host
-ceph osd crush move foo root=default rack=localrack
 ceph osd crush rm foo
 
 # test reweight
@@ -86,6 +104,7 @@ o3=`ceph osd create`
 ceph osd crush add $o3 123 root=default
 ceph osd tree | grep osd.$o3 | grep 123
 ceph osd crush reweight osd.$o3 113
+expect_false ceph osd crush reweight osd.$o3 123456
 ceph osd tree | grep osd.$o3 | grep 113
 ceph osd crush rm osd.$o3
 ceph osd rm osd.$o3
@@ -98,6 +117,7 @@ ceph osd crush add $o5 123 root=default host=foobaz
 ceph osd tree | grep osd.$o4 | grep 123
 ceph osd tree | grep osd.$o5 | grep 123
 ceph osd crush reweight-subtree foobaz 155
+expect_false ceph osd crush reweight-subtree foobaz 123456
 ceph osd tree | grep osd.$o4 | grep 155
 ceph osd tree | grep osd.$o5 | grep 155
 ceph osd crush rm osd.$o4

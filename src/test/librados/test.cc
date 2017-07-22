@@ -6,9 +6,8 @@
 #include "test/librados/test.h"
 
 #include "include/stringify.h"
-#include "common/Formatter.h"
-#include "json_spirit/json_spirit.h"
-#include "common/errno.h"
+#include "common/ceph_context.h"
+#include "common/config.h"
 
 #include <errno.h>
 #include <sstream>
@@ -34,97 +33,6 @@ std::string get_temp_pool_name(const std::string &prefix)
   return prefix + out;
 }
 
-int wait_for_healthy(rados_t *cluster)
-{
-  bool healthy = false;
-  // This timeout is very long because the tests are sometimes
-  // run on a thrashing cluster
-  int timeout = 3600;
-  int slept = 0;
-
-  while(!healthy) {
-    JSONFormatter cmd_f;
-    cmd_f.open_object_section("command");
-    cmd_f.dump_string("prefix", "status");
-    cmd_f.dump_string("format", "json");
-    cmd_f.close_section();
-    std::ostringstream cmd_stream;
-    cmd_f.flush(cmd_stream);
-    const std::string serialized_cmd = cmd_stream.str();
-
-    const char *cmd[2];
-    cmd[1] = NULL;
-    cmd[0] = serialized_cmd.c_str();
-
-    char *outbuf = NULL;
-    size_t outlen = 0;
-    int ret = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0,
-        &outbuf, &outlen, NULL, NULL);
-    if (ret) {
-      return ret;
-    }
-
-    std::string out(outbuf, outlen);
-    rados_buffer_free(outbuf);
-
-    json_spirit::mValue root;
-    assert(json_spirit::read(out, root));
-    json_spirit::mObject root_obj = root.get_obj();
-    json_spirit::mObject pgmap = root_obj["pgmap"].get_obj();
-    json_spirit::mArray pgs_by_state = pgmap["pgs_by_state"].get_array();
-
-    if (pgs_by_state.size() == 1) {
-      json_spirit::mObject state = pgs_by_state[0].get_obj();
-      std::string state_name = state["state_name"].get_str();
-      if (state_name != std::string("active+clean")) {
-        healthy = false;
-      } else {
-        healthy = true;
-      }
-
-    } else {
-      healthy = false;
-    }
-
-    if (slept >= timeout) {
-      return -ETIMEDOUT;
-    };
-
-    if (!healthy) {
-      sleep(1);
-      slept += 1;
-    }
-  }
-
-  return 0;
-}
-
-int rados_pool_set(
-    rados_t *cluster,
-    const std::string &pool_name,
-    const std::string &var,
-    const std::string &val)
-{
-  JSONFormatter cmd_f;
-  cmd_f.open_object_section("command");
-  cmd_f.dump_string("prefix", "osd pool set"); 
-  cmd_f.dump_string("pool", pool_name);
-  cmd_f.dump_string("var", var);
-  cmd_f.dump_string("val", val);
-  cmd_f.close_section();
-
-  std::ostringstream cmd_stream;
-  cmd_f.flush(cmd_stream);
-
-  const std::string serialized_cmd = cmd_stream.str();
-
-  const char *cmd[2];
-  cmd[1] = NULL;
-  cmd[0] = serialized_cmd.c_str();
-  int ret = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL,
-      NULL, NULL, NULL);
-  return ret;
-}
 
 std::string create_one_pool(
     const std::string &pool_name, rados_t *cluster, uint32_t pg_num)
@@ -141,6 +49,17 @@ std::string create_one_pool(
     return oss.str();
   }
 
+  rados_ioctx_t ioctx;
+  ret = rados_ioctx_create(*cluster, pool_name.c_str(), &ioctx);
+  if (ret < 0) {
+    rados_shutdown(*cluster);
+    std::ostringstream oss;
+    oss << "rados_ioctx_create(" << pool_name << ") failed with error " << ret;
+    return oss.str();
+  }
+
+  rados_application_enable(ioctx, "rados", 1);
+  rados_ioctx_destroy(ioctx);
   return "";
 }
 
@@ -189,35 +108,6 @@ int destroy_ec_profile_and_ruleset(rados_t *cluster,
   return destroy_ruleset(cluster, ruleset, oss);
 }
 
-std::string set_pg_num(
-    rados_t *cluster, const std::string &pool_name, uint32_t pg_num)
-{
-  // Wait for 'creating' to clear
-  int r = wait_for_healthy(cluster);
-  if (r != 0) {
-    goto err;
-  }
-
-  // Adjust pg_num
-  r = rados_pool_set(cluster, pool_name, "pg_num", stringify(pg_num));
-  if (r != 0) {
-    goto err;
-  }
-
-  // Wait for 'creating' to clear
-  r = wait_for_healthy(cluster);
-  if (r != 0) {
-    goto err;
-  }
-
-  return "";
-
-err:
-  rados_shutdown(*cluster);
-  std::ostringstream oss;
-  oss << __func__ << "(" << pool_name << ") failed with error " << r;
-  return oss.str();
-}
 
 std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster)
 {
@@ -235,7 +125,7 @@ std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster)
   char *cmd[2];
   cmd[1] = NULL;
 
-  std::string profile_create = "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile-" + pool_name + "\", \"profile\": [ \"k=2\", \"m=1\", \"ruleset-failure-domain=osd\"]}";
+  std::string profile_create = "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile-" + pool_name + "\", \"profile\": [ \"k=2\", \"m=1\", \"crush-failure-domain=osd\"]}";
   cmd[0] = (char *)profile_create.c_str();
   ret = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0);
   if (ret) {
@@ -276,6 +166,17 @@ std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster,
     oss << "cluster.pool_create(" << pool_name << ") failed with error " << ret;
     return oss.str();
   }
+
+  IoCtx ioctx;
+  ret = cluster.ioctx_create(pool_name.c_str(), ioctx);
+  if (ret < 0) {
+    cluster.shutdown();
+    std::ostringstream oss;
+    oss << "cluster.ioctx_create(" << pool_name << ") failed with error "
+        << ret;
+    return oss.str();
+  }
+  ioctx.application_enable("rados", true);
   return "";
 }
 
@@ -328,7 +229,7 @@ std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
 
   bufferlist inbl;
   ret = cluster.mon_command(
-    "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile-" + pool_name + "\", \"profile\": [ \"k=2\", \"m=1\", \"ruleset-failure-domain=osd\"]}",
+    "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile-" + pool_name + "\", \"profile\": [ \"k=2\", \"m=1\", \"crush-failure-domain=osd\"]}",
     inbl, NULL, NULL);
   if (ret) {
     cluster.shutdown();
@@ -413,7 +314,7 @@ std::string connect_cluster_pp(librados::Rados &cluster,
     if (ret) {
       std::ostringstream oss;
       oss << "failed to set config value " << setting.first << " to '"
-          << setting.second << "': " << cpp_strerror(ret);
+          << setting.second << "': " << strerror(-ret);
       return oss.str();
     }
   }
@@ -447,11 +348,14 @@ int destroy_one_ec_pool(const std::string &pool_name, rados_t *cluster)
     return ret;
   }
 
-  std::ostringstream oss;
-  ret = destroy_ec_profile_and_ruleset(cluster, pool_name, oss);
-  if (ret) {
-    rados_shutdown(*cluster);
-    return ret;
+  CephContext *cct = static_cast<CephContext*>(rados_cct(*cluster));
+  if (!cct->_conf->mon_fake_pool_delete) { // hope this is in [global]
+    std::ostringstream oss;
+    ret = destroy_ec_profile_and_ruleset(cluster, pool_name, oss);
+    if (ret) {
+      rados_shutdown(*cluster);
+      return ret;
+    }
   }
 
   rados_wait_for_latest_osdmap(*cluster);
@@ -478,11 +382,14 @@ int destroy_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
     return ret;
   }
 
-  std::ostringstream oss;
-  ret = destroy_ec_profile_and_ruleset_pp(cluster, pool_name, oss);
-  if (ret) {
-    cluster.shutdown();
-    return ret;
+  CephContext *cct = static_cast<CephContext*>(cluster.cct());
+  if (!cct->_conf->mon_fake_pool_delete) { // hope this is in [global]
+    std::ostringstream oss;
+    ret = destroy_ec_profile_and_ruleset_pp(cluster, pool_name, oss);
+    if (ret) {
+      cluster.shutdown();
+      return ret;
+    }
   }
 
   cluster.wait_for_latest_osdmap();

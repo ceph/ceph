@@ -27,7 +27,6 @@ seed::~seed()
 {
   seed::info.sha1_bl.clear();
   bl.clear();
-  torrent_bl.clear();
   s = NULL;
   store = NULL;
 }
@@ -58,10 +57,9 @@ void seed::get_torrent_file(int &op_ret, RGWRados::Object::Read &read_op, uint64
   }
 
   string oid, key;
-  rgw_bucket bucket;
   map<string, bufferlist> m;
   set<string> obj_key;
-  get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
+  get_obj_bucket_and_oid_loc(obj, oid, key);
   ldout(s->cct, 0) << "NOTICE: head obj oid= " << oid << dendl;
 
   obj_key.insert(RGW_OBJ_TORRENT);
@@ -91,15 +89,35 @@ bool seed::get_flag()
   return is_torrent;
 }
 
-void seed::save_data(bufferlist &bl)
+void seed::update(bufferlist &bl)
 {
   if (!is_torrent)
   {
     return;
   }
-
   info.len += bl.length();
-  torrent_bl.push_back(bl);
+  sha1(&h, bl, bl.length());
+}
+
+int seed::complete()
+{
+  uint64_t remain = info.len%info.piece_length;
+  uint8_t  remain_len = ((remain > 0)? 1 : 0);
+  sha_len = (info.len/info.piece_length + remain_len)*CEPH_CRYPTO_SHA1_DIGESTSIZE;
+
+  int ret = 0;
+   /* produce torrent data */
+  do_encode();
+
+  /* save torrent data into OMAP */
+  ret = save_torrent_file();
+  if (0 != ret)
+  {
+    ldout(s->cct, 0) << "ERROR: failed to save_torrent_file() ret= "<< ret << dendl;
+    return ret;
+  }
+
+  return 0;
 }
 
 off_t seed::get_data_len()
@@ -150,49 +168,6 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
     h->Final((byte *)sha);
     set_info_pieces(sha);
   }
-}
-
-int seed::sha1_process()
-{
-  uint64_t remain = info.len%info.piece_length;
-  uint8_t  remain_len = ((remain > 0)? 1 : 0);
-  sha_len = (info.len/info.piece_length + remain_len)*CEPH_CRYPTO_SHA1_DIGESTSIZE;
-
-  SHA1 h;
-  list<bufferlist>::iterator iter = torrent_bl.begin();
-  for (; iter != torrent_bl.end(); iter++)
-  {
-    bufferlist &bl_info = *iter;
-    sha1(&h, bl_info, (*iter).length());
-  }
-
-  return 0;
-}
-
-int seed::handle_data()
-{
-  int ret = 0;
-
-  /* sha1 process */
-  ret = sha1_process();
-  if (0 != ret)
-  {
-    ldout(s->cct, 0) << "ERROR: failed to sha1_process() ret= "<< ret << dendl;
-    return ret;
-  }
-
-  /* produce torrent data */
-  do_encode();
-
-  /* save torrent data into OMAP */
-  ret = save_torrent_file();
-  if (0 != ret)
-  {
-    ldout(s->cct, 0) << "ERROR: failed to save_torrent_file() ret= "<< ret << dendl;
-    return ret;
-  }
-
-  return 0;
 }
 
 int seed::get_params()
@@ -268,7 +243,10 @@ int seed::save_torrent_file()
   string key = RGW_OBJ_TORRENT;
   rgw_obj obj(s->bucket, s->object.name);    
 
-  op_ret = store->omap_set(obj, key, bl);
+  rgw_raw_obj raw_obj;
+  store->obj_to_raw(s->bucket_info.placement_rule, obj, &raw_obj);
+
+  op_ret = store->omap_set(raw_obj, key, bl);
   if (op_ret < 0)
   {
     ldout(s->cct, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;

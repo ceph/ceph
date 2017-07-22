@@ -29,8 +29,9 @@ def get_ceph_gid():
         gid = -1
     return gid
 
-def wait_for_quorum(cluster, mon_id):
-    while True:
+def wait_for_quorum(cluster, mon_id, wait_count=600):
+    # wait 10 minutes by default
+    while wait_count > 0:
         p = subprocess.Popen(
             args=[
                 'ceph',
@@ -48,11 +49,13 @@ def wait_for_quorum(cluster, mon_id):
         if returncode != 0:
             LOG.info('ceph-mon admin socket not ready yet.')
             time.sleep(1)
+            wait_count -= 1
             continue
 
         if out == '':
             LOG.info('ceph-mon admin socket returned no data')
             time.sleep(1)
+            wait_count -= 1
             continue
 
         try:
@@ -65,12 +68,16 @@ def wait_for_quorum(cluster, mon_id):
         if state not in QUORUM_STATES:
             LOG.info('ceph-mon is not in quorum: %r', state)
             time.sleep(1)
+            wait_count -= 1
             continue
 
         break
 
+    if wait_count == 0:
+        raise SystemExit("ceph-mon was not able to join quorum within %d seconds" % wait_count)
 
-def get_key(cluster, mon_id):
+
+def get_key(cluster, mon_id, wait_count=600):
     path = '/etc/ceph/{cluster}.client.admin.keyring'.format(
         cluster=cluster,
         )
@@ -86,30 +93,62 @@ def get_key(cluster, mon_id):
         os.makedirs(pathdir)
         os.chmod(pathdir, 0770)
         os.chown(pathdir, get_ceph_uid(), get_ceph_gid())
-    while True:
+    while wait_count > 0:
         try:
             with file(tmp, 'w') as f:
                 os.fchmod(f.fileno(), 0600)
                 os.fchown(f.fileno(), get_ceph_uid(), get_ceph_gid())
                 LOG.info('Talking to monitor...')
-                returncode = subprocess.call(
-                    args=[
-                        'ceph',
+
+                args_prefix = [
+                        "ceph",
+                        '--connect-timeout=20',
                         '--cluster={cluster}'.format(cluster=cluster),
                         '--name=mon.',
                         '--keyring=/var/lib/ceph/mon/{cluster}-{mon_id}/keyring'.format(
                             cluster=cluster,
                             mon_id=mon_id,
                             ),
+                        ]
+
+                # First try getting the key if it already exists, to handle
+                # the case where it exists but doesn't match the caps
+                # we would pass into get-or-create.
+                returncode = subprocess.call(
+                    args=args_prefix + [
                         'auth',
-                        'get-or-create',
+                        'get',
                         'client.admin',
-                        'mon', 'allow *',
-                        'osd', 'allow *',
-                        'mds', 'allow *',
                         ],
                     stdout=f,
                     )
+                if returncode == errno.ENOENT:
+                    returncode = subprocess.call(
+                        args=args_prefix + [
+                            'auth',
+                            'get-or-create',
+                            'client.admin',
+                            'mon', 'allow *',
+                            'osd', 'allow *',
+                            'mds', 'allow *',
+                            'mgr', 'allow *',
+                            ],
+                        stdout=f,
+                        )
+                else:
+                    returncode = subprocess.call(
+                        args=args_prefix + [
+                            'auth',
+                            'caps',
+                            'client.admin',
+                            'mon', 'allow *',
+                            'osd', 'allow *',
+                            'mds', 'allow *',
+                            'mgr', 'allow *',
+                            ],
+                        stdout=f,
+                        )
+
             if returncode != 0:
                 if returncode == errno.EPERM or returncode == errno.EACCES:
                     LOG.info('Cannot get or create admin key, permission denied')
@@ -117,6 +156,7 @@ def get_key(cluster, mon_id):
                 else:
                     LOG.info('Cannot get or create admin key')
                     time.sleep(1)
+                    wait_count -= 1
                     continue
 
             os.rename(tmp, path)
@@ -130,7 +170,11 @@ def get_key(cluster, mon_id):
                 else:
                     raise
 
-def bootstrap_key(cluster, type_):
+    if wait_count == 0:
+        raise SystemExit("Could not get or create the admin key after %d seconds" % wait_count)
+
+
+def bootstrap_key(cluster, type_, wait_count=600):
     path = '/var/lib/ceph/bootstrap-{type}/{cluster}.keyring'.format(
         type=type_,
         cluster=cluster,
@@ -145,6 +189,7 @@ def bootstrap_key(cluster, type_):
 
     args = [
         'ceph',
+        '--connect-timeout=20',
         '--cluster={cluster}'.format(cluster=cluster),
         'auth',
         'get-or-create',
@@ -159,7 +204,7 @@ def bootstrap_key(cluster, type_):
         os.chmod(pathdir, 0770)
         os.chown(pathdir, get_ceph_uid(), get_ceph_gid())
 
-    while True:
+    while wait_count > 0:
         try:
             with file(tmp, 'w') as f:
                 os.fchmod(f.fileno(), 0600)
@@ -176,6 +221,7 @@ def bootstrap_key(cluster, type_):
                 else:
                     LOG.info('Cannot get or create bootstrap key for %s', type_)
                     time.sleep(1)
+                    wait_count -= 1
                     continue
 
             os.rename(tmp, path)
@@ -188,6 +234,8 @@ def bootstrap_key(cluster, type_):
                     pass
                 else:
                     raise
+    if wait_count == 0:
+        raise SystemExit("Could not get or create %s bootstrap key after %d seconds" % (type_, wait_count))
 
 
 def parse_args():
@@ -210,8 +258,15 @@ def parse_args():
         help='id of a ceph-mon that is coming up',
         required=True,
         )
+    parser.add_argument(
+        '--timeout', '-t',
+        metavar='TIMEOUT',
+        type=int,
+        help='timeout in seconds to wait',
+        )
     parser.set_defaults(
         cluster='ceph',
+        timeout=600,
         )
     parser.set_defaults(
         # we want to hold on to this, for later
@@ -232,20 +287,23 @@ def main():
         level=loglevel,
         )
 
-    wait_for_quorum(cluster=args.cluster, mon_id=args.id)
-    get_key(cluster=args.cluster, mon_id=args.id)
+    wait_for_quorum(cluster=args.cluster, mon_id=args.id, wait_count=args.timeout)
+    get_key(cluster=args.cluster, mon_id=args.id, wait_count=args.timeout)
 
     bootstrap_key(
         cluster=args.cluster,
         type_='osd',
+        wait_count=args.timeout,
         )
     bootstrap_key(
         cluster=args.cluster,
         type_='rgw',
+        wait_count=args.timeout,
         )
     bootstrap_key(
         cluster=args.cluster,
         type_='mds',
+        wait_count=args.timeout,
         )
 
 

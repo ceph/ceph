@@ -425,7 +425,7 @@ of the enhanced authentication.
 .. _Monitor Bootstrapping: ../../../install/manual-deployment#monitor-bootstrapping
 .. _Operating a Cluster: ../../operations/operating
 .. _Manual Deployment: ../../../install/manual-deployment
-.. _Cephx: http://ceph.com/docs/cuttlefish/rados/configuration/auth-config-ref/
+.. _Cephx: http://docs.ceph.com/docs/cuttlefish/rados/configuration/auth-config-ref/
 .. _Ceph configuration: ../ceph-conf
 .. _Create an Admin Host: ../../deployment/ceph-deploy-admin
 .. _Architecture - High Availability Authentication: ../../../architecture#high-availability-authentication

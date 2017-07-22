@@ -4,9 +4,6 @@
 #ifndef __CEPH_LOG_GRAYLOG_H
 #define __CEPH_LOG_GRAYLOG_H
 
-
-#include <memory>
-
 #include <boost/asio.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
@@ -21,7 +18,7 @@ namespace ceph {
 
 class Formatter;
 
-namespace log {
+namespace logging {
 
 struct Entry;
 class SubsystemMap;

@@ -2,7 +2,7 @@
 
 source $(dirname $0)/detect-build-env-vars.sh
 
-TMP=$(mktemp --tmpdir -d)
+TMP=$(mktemp -d)
 trap "rm -fr $TMP" EXIT
 
 export PATH=$TMP:$PATH

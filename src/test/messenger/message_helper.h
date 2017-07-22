@@ -107,11 +107,12 @@ static inline Message* new_simple_ping_with_data(const char *tag,
   for (uint32_t i = 0; i < nfrags; ++i) {
     if (do_page_alignment) {
       if (posix_memalign(&p, pagesize, segsize))
-	p = NULL;
+	p = nullptr;
     } else {
 	p = malloc(segsize);
     }
-
+    if (!p)
+      throw std::bad_alloc();
     strcpy((char*) p, tag);
     uint32_t* t = (uint32_t* ) (((char*) p) + segsize - 32);
     *t = counter;

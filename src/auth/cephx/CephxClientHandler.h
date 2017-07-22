@@ -47,29 +47,30 @@ public:
     reset();
   }
 
-  void reset() {
+  void reset() override {
     RWLock::WLocker l(lock);
     starting = true;
     server_challenge = 0;
   }
-  void prepare_build_request();
-  int build_request(bufferlist& bl) const;
-  int handle_response(int ret, bufferlist::iterator& iter);
-  bool build_rotating_request(bufferlist& bl) const;
+  void prepare_build_request() override;
+  int build_request(bufferlist& bl) const override;
+  int handle_response(int ret, bufferlist::iterator& iter) override;
+  bool build_rotating_request(bufferlist& bl) const override;
 
-  int get_protocol() const { return CEPH_AUTH_CEPHX; }
+  int get_protocol() const override { return CEPH_AUTH_CEPHX; }
 
-  AuthAuthorizer *build_authorizer(uint32_t service_id) const;
+  AuthAuthorizer *build_authorizer(uint32_t service_id) const override;
 
-  bool need_tickets();
+  bool need_tickets() override;
 
-  void set_global_id(uint64_t id) {
+  void set_global_id(uint64_t id) override {
     RWLock::WLocker l(lock);
     global_id = id;
     tickets.global_id = id;
   }
 private:
-  void validate_tickets();
+  void validate_tickets() override;
+  bool _need_tickets() const;
 };
 
 #endif

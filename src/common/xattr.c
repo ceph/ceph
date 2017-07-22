@@ -9,7 +9,6 @@
  * Foundation.  See file COPYING.
  */
 
-#include "acconfig.h"
 #if defined(__FreeBSD__)
 #include <errno.h>
 #include <stdint.h>

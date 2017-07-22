@@ -1,0 +1,11 @@
+# do not require luminous osds at mkfs time; only set flag at
+# the end of the test run, then do a final scrub (to convert any
+# legacy snapsets), and verify we are healthy.
+tasks:
+- full_sequential_finally:
+  - ceph.osd_scrub_pgs:
+      cluster: ceph
+  - exec:
+      mon.a:
+        - ceph pg dump -f json-pretty
+        - "ceph pg dump sum -f json-pretty | grep num_legacy_snapsets | head -1 | grep ': 0'"

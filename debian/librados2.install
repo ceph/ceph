@@ -1,2 +1,3 @@
+usr/lib/ceph/libceph-common.so*
 usr/lib/librados.so.*
 usr/lib/librados_tp.so.*

@@ -8,6 +8,8 @@
 #include "include/stringify.h"
 #include "common/RWLock.h"
 
+#include <atomic>
+
 #define ERROR_LOGGER_SHARDS 32
 #define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
 
@@ -65,9 +67,9 @@ class RGWSyncErrorLogger {
   vector<string> oids;
   int num_shards;
 
-  atomic_t counter;
+  std::atomic<int64_t> counter = { 0 };
 public:
-  RGWSyncErrorLogger(RGWRados *_store, const string oid_prefix, int _num_shards);
+  RGWSyncErrorLogger(RGWRados *_store, const string &oid_prefix, int _num_shards);
   RGWCoroutine *log_error_cr(const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message);
 
   static string get_shard_oid(const string& oid_prefix, int shard_id);
@@ -147,7 +149,7 @@ public:
                                                                 reset_backoff(false), exit_on_error(_exit_on_error) {
   }
 
-  virtual ~RGWBackoffControlCR() {
+  ~RGWBackoffControlCR() override {
     if (cr) {
       cr->put();
     }
@@ -156,7 +158,7 @@ public:
   virtual RGWCoroutine *alloc_cr() = 0;
   virtual RGWCoroutine *alloc_finisher_cr() { return NULL; }
 
-  int operate();
+  int operate() override;
 };
 
 struct RGWMetaSyncEnv {
@@ -191,12 +193,11 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWSyncBackoff backoff;
 
   RGWMetaSyncEnv sync_env;
-  rgw_meta_sync_status sync_status;
 
   void init_sync_env(RGWMetaSyncEnv *env);
-  int store_sync_info();
+  int store_sync_info(const rgw_meta_sync_info& sync_info);
 
-  atomic_t going_down;
+  std::atomic<bool> going_down = { false };
 
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
@@ -206,15 +207,15 @@ public:
       http_manager(store->ctx(), completion_mgr),
       status_manager(_sm), error_logger(NULL), meta_sync_cr(NULL) {}
 
-  ~RGWRemoteMetaLog();
+  ~RGWRemoteMetaLog() override;
 
   int init();
   void finish();
 
   int read_log_info(rgw_mdlog_info *log_info);
-  int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info);
+  int read_master_log_shards_info(const string& master_period, map<int, RGWMetadataLogInfo> *shards_info);
   int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result);
-  int read_sync_status();
+  int read_sync_status(rgw_meta_sync_status *sync_status);
   int init_sync_status();
   int run_sync();
 
@@ -223,7 +224,6 @@ public:
   RGWMetaSyncEnv& get_sync_env() {
     return sync_env;
   }
-  const rgw_meta_sync_status& get_sync_status() const { return sync_status; }
 };
 
 class RGWMetaSyncStatusManager {
@@ -232,7 +232,7 @@ class RGWMetaSyncStatusManager {
 
   RGWRemoteMetaLog master_log;
 
-  map<int, rgw_obj> shard_objs;
+  map<int, rgw_raw_obj> shard_objs;
 
   struct utime_shard {
     real_time ts;
@@ -257,18 +257,15 @@ public:
     : store(_store), master_log(store, async_rados, this),
       ts_to_shard_lock("ts_to_shard_lock") {}
   int init();
-  void finish();
 
-  const rgw_meta_sync_status& get_sync_status() const {
-    return master_log.get_sync_status();
+  int read_sync_status(rgw_meta_sync_status *sync_status) {
+    return master_log.read_sync_status(sync_status);
   }
-
-  int read_sync_status() { return master_log.read_sync_status(); }
   int init_sync_status() { return master_log.init_sync_status(); }
   int read_log_info(rgw_mdlog_info *log_info) {
     return master_log.read_log_info(log_info);
   }
-  int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info) {
+  int read_master_log_shards_info(const string& master_period, map<int, RGWMetadataLogInfo> *shards_info) {
     return master_log.read_master_log_shards_info(master_period, shards_info);
   }
   int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result) {
@@ -436,7 +433,7 @@ public:
     error_injection = (sync_env->cct->_conf->rgw_sync_meta_inject_err_probability > 0);
   }
 
-  int operate();
+  int operate() override;
 };
 
 class RGWShardCollectCR : public RGWCoroutine {
@@ -452,8 +449,16 @@ public:
                                                              status(0) {}
 
   virtual bool spawn_next() = 0;
-  int operate();
+  int operate() override;
 };
 
+// MetaLogTrimCR factory function
+RGWCoroutine* create_meta_log_trim_cr(RGWRados *store, RGWHTTPManager *http,
+                                      int num_shards, utime_t interval);
+
+// factory function for mdlog trim via radosgw-admin
+RGWCoroutine* create_admin_meta_log_trim_cr(RGWRados *store,
+                                            RGWHTTPManager *http,
+                                            int num_shards);
 
 #endif

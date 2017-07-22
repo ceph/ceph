@@ -1,0 +1,8 @@
+tasks:
+- install:
+- ceph:
+    fs: ext4
+- rgw: [client.0]
+- swift:
+    client.0:
+      rgw_server: client.0

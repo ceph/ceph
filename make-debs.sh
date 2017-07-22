@@ -34,24 +34,12 @@ git clean -dxf
 # d) contains the short hash of the commit
 #
 vers=$(git describe --match "v*" | sed s/^v//)
-#
-# creating the distribution tarbal requires some configure
-# options (otherwise parts of the source tree will be left out).
-#
-./autogen.sh
-./configure --with-rocksdb --with-ocf \
-    --with-nss --with-debug --enable-cephfs-java \
-    --with-lttng --with-babeltrace
-#
-# use distdir= to set the name of the top level directory of the
-# tarbal to match the desired version
-#
-make distdir=ceph-$vers dist
+./make-dist $vers
 #
 # rename the tarbal to match debian conventions and extract it
 #
-mv ceph-$vers.tar.gz $releasedir/ceph_$vers.orig.tar.gz
-tar -C $releasedir -zxf $releasedir/ceph_$vers.orig.tar.gz
+mv ceph-$vers.tar.bz2 $releasedir/ceph_$vers.orig.tar.bz2
+tar -C $releasedir -jxf $releasedir/ceph_$vers.orig.tar.bz2
 #
 # copy the debian directory over and remove -dbg packages
 # because they are large and take time to build

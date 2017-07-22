@@ -14,7 +14,6 @@
 #include "common/dns_resolve.h"
 #include "test/common/dns_messages.h"
 
-#include "test/unit.h"
 #include "common/debug.h"
 #include "gmock/gmock.h"
 
@@ -34,11 +33,11 @@ using ::testing::StrEq;
 
 class DNSResolverTest : public ::testing::Test {
   protected:
-    virtual void SetUp() {
+    void SetUp() override {
       g_ceph_context->_conf->subsys.set_log_level(dout_subsys, TEST_DEBUG);
     }
 
-    virtual void TearDown()  {
+    void TearDown() override  {
       DNSResolver::get_instance(nullptr);
     }
 };
@@ -84,7 +83,7 @@ TEST_F(DNSResolverTest, resolve_ip_addr_fail) {
   ASSERT_EQ(ret, -1);
   std::ostringstream os;
   os << addr;
-  ASSERT_EQ(os.str(), ":/0");
+  ASSERT_EQ(os.str(), "-");
 }
 
 
@@ -136,25 +135,25 @@ TEST_F(DNSResolverTest, resolve_srv_hosts_empty_domain) {
 #endif
   }
 
-  map<string, entity_addr_t> addrs;
+  map<string, DNSResolver::Record> records;
   DNSResolver::get_instance(resolvH)->resolve_srv_hosts(g_ceph_context, "cephmon", 
-      DNSResolver::SRV_Protocol::TCP, &addrs);
+      DNSResolver::SRV_Protocol::TCP, &records);
 
-  ASSERT_EQ(addrs.size(), (unsigned int)3);
-  map<string,entity_addr_t>::iterator it = addrs.find("mon.a");
-  ASSERT_NE(it, addrs.end());
+  ASSERT_EQ(records.size(), (unsigned int)3);
+  auto it = records.find("mon.a");
+  ASSERT_NE(it, records.end());
   std::ostringstream os;
-  os << it->second;
+  os << it->second.addr;
   ASSERT_EQ(os.str(), "192.168.1.11:6789/0");
   os.str("");
-  it = addrs.find("mon.b");
-  ASSERT_NE(it, addrs.end());
-  os << it->second;
+  it = records.find("mon.b");
+  ASSERT_NE(it, records.end());
+  os << it->second.addr;
   ASSERT_EQ(os.str(), "192.168.1.12:6789/0");
   os.str("");
-  it = addrs.find("mon.c");
-  ASSERT_NE(it, addrs.end());
-  os << it->second;
+  it = records.find("mon.c");
+  ASSERT_NE(it, records.end());
+  os << it->second.addr;
   ASSERT_EQ(os.str(), "192.168.1.13:6789/0");
 }
 
@@ -206,25 +205,25 @@ TEST_F(DNSResolverTest, resolve_srv_hosts_full_domain) {
 #endif
   }
 
-  map<string, entity_addr_t> addrs;
+  map<string, DNSResolver::Record> records;
   DNSResolver::get_instance(resolvH)->resolve_srv_hosts(g_ceph_context, "cephmon", 
-      DNSResolver::SRV_Protocol::TCP, "ceph.com", &addrs);
+      DNSResolver::SRV_Protocol::TCP, "ceph.com", &records);
 
-  ASSERT_EQ(addrs.size(), (unsigned int)3);
-  map<string,entity_addr_t>::iterator it = addrs.find("mon.a");
-  ASSERT_NE(it, addrs.end());
+  ASSERT_EQ(records.size(), (unsigned int)3);
+  auto it = records.find("mon.a");
+  ASSERT_NE(it, records.end());
   std::ostringstream os;
-  os << it->second;
+  os << it->second.addr;
   ASSERT_EQ(os.str(), "192.168.1.11:6789/0");
   os.str("");
-  it = addrs.find("mon.b");
-  ASSERT_NE(it, addrs.end());
-  os << it->second;
+  it = records.find("mon.b");
+  ASSERT_NE(it, records.end());
+  os << it->second.addr;
   ASSERT_EQ(os.str(), "192.168.1.12:6789/0");
   os.str("");
-  it = addrs.find("mon.c");
-  ASSERT_NE(it, addrs.end());
-  os << it->second;
+  it = records.find("mon.c");
+  ASSERT_NE(it, records.end());
+  os << it->second.addr;
   ASSERT_EQ(os.str(), "192.168.1.13:6789/0");
 }
 
@@ -245,11 +244,11 @@ TEST_F(DNSResolverTest, resolve_srv_hosts_fail) {
 #endif
   }
 
-  map<string, entity_addr_t> addrs;
+  map<string, DNSResolver::Record> records;
   int ret = DNSResolver::get_instance(resolvH)->resolve_srv_hosts(
-      g_ceph_context, "noservice", DNSResolver::SRV_Protocol::TCP, "", &addrs);
+      g_ceph_context, "noservice", DNSResolver::SRV_Protocol::TCP, "", &records);
 
-  ASSERT_EQ(ret, 0);
-  ASSERT_EQ(addrs.size(), (unsigned int)0);
+  ASSERT_EQ(0, ret);
+  ASSERT_TRUE(records.empty());
 }
 

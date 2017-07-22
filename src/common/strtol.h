@@ -16,7 +16,6 @@
 #define CEPH_COMMON_STRTOL_H
 
 #include <string>
-#include <limits>
 extern "C" {
 #include <stdint.h>
 }

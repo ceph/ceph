@@ -8,14 +8,8 @@
  *
  */
 
-#include <algorithm>
-#include <cstring>
-#include <cstdlib>
 #include <errno.h>
-#include <iostream>
 #include <map>
-#include <sstream>
-#include <vector>
 
 #include "include/types.h"
 #include "include/utime.h"
@@ -38,44 +32,7 @@ using namespace rados::cls::lock;
 CLS_VER(1,0)
 CLS_NAME(lock)
 
-cls_handle_t h_class;
-cls_method_handle_t h_lock_op;
-cls_method_handle_t h_unlock_op;
-cls_method_handle_t h_break_lock;
-cls_method_handle_t h_get_info;
-cls_method_handle_t h_list_locks;
-cls_method_handle_t h_assert_locked;
-cls_method_handle_t h_set_cookie;
-
 #define LOCK_PREFIX    "lock."
-
-typedef struct lock_info_s {
-  map<locker_id_t, locker_info_t> lockers; // map of lockers
-  ClsLockType lock_type;                              // lock type (exclusive / shared)
-  string tag;                                         // tag: operations on lock can only succeed with this tag
-                                                      //      as long as set of non expired lockers
-                                                      //      is bigger than 0.
-
-  void encode(bufferlist &bl, uint64_t features) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(lockers, bl, features);
-    uint8_t t = (uint8_t)lock_type;
-    ::encode(t, bl);
-    ::encode(tag, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(lockers, bl);
-    uint8_t t;
-    ::decode(t, bl);
-    lock_type = (ClsLockType)t; 
-    ::decode(tag, bl);
-    DECODE_FINISH(bl);
-  }
-  lock_info_s() : lock_type(LOCK_NONE) {}
-} lock_info_t;
-WRITE_CLASS_ENCODER_FEATURES(lock_info_t)
 
 static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t *lock)
 {
@@ -105,7 +62,7 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
 
   /* now trim expired locks */
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
 
   map<locker_id_t, locker_info_t>::iterator iter = lock->lockers.begin();
 
@@ -131,7 +88,7 @@ static int write_lock(cls_method_context_t hctx, const string& name, const lock_
   key.append(name);
 
   bufferlist lock_bl;
-  ::encode(lock, lock_bl, cls_get_features(hctx));
+  ::encode(lock, lock_bl, cls_get_client_features(hctx));
 
   int r = cls_cxx_setxattr(hctx, key.c_str(), &lock_bl);
   if (r < 0)
@@ -226,7 +183,7 @@ static int lock_obj(cls_method_context_t hctx,
   linfo.tag = tag;
   utime_t expiration;
   if (!duration.is_zero()) {
-    expiration = ceph_clock_now(g_ceph_context);
+    expiration = ceph_clock_now();
     expiration += duration;
 
   }
@@ -398,7 +355,7 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ret.lock_type = linfo.lock_type;
   ret.tag = linfo.tag;
 
-  ::encode(ret, *out, cls_get_features(hctx));
+  ::encode(ret, *out, cls_get_client_features(hctx));
 
   return 0;
 }
@@ -601,9 +558,18 @@ int set_cookie(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(lock)
 {
   CLS_LOG(20, "Loaded lock class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_lock_op;
+  cls_method_handle_t h_unlock_op;
+  cls_method_handle_t h_break_lock;
+  cls_method_handle_t h_get_info;
+  cls_method_handle_t h_list_locks;
+  cls_method_handle_t h_assert_locked;
+  cls_method_handle_t h_set_cookie;
 
   cls_register("lock", &h_class);
   cls_register_cxx_method(h_class, "lock",

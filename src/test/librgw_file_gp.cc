@@ -28,6 +28,7 @@
 #include "common/debug.h"
 #include "global/global_init.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 namespace {
@@ -191,7 +192,8 @@ TEST(LibRGW, LOOKUP_BUCKET) {
 }
 
 extern "C" {
-  static bool r2_cb(const char* name, void *arg, uint64_t offset) {
+  static bool r2_cb(const char* name, void *arg, uint64_t offset,
+		    uint32_t flags) {
     // don't need arg--it would point to fids
     fids.push_back(fid_type(name, offset, nullptr));
     return true; /* XXX ? */

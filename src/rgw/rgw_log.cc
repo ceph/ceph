@@ -12,6 +12,7 @@
 #include "rgw_acl.h"
 #include "rgw_rados.h"
 #include "rgw_client_io.h"
+#include "rgw_rest.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -97,7 +98,7 @@ class UsageLogger {
     UsageLogger *logger;
   public:
     explicit C_UsageLogTimeout(UsageLogger *_l) : logger(_l) {}
-    void finish(int r) {
+    void finish(int r) override {
       logger->flush();
       logger->set_timer();
     }
@@ -112,7 +113,7 @@ public:
     timer.init();
     Mutex::Locker l(timer_lock);
     set_timer();
-    utime_t ts = ceph_clock_now(cct);
+    utime_t ts = ceph_clock_now();
     recalc_round_timestamp(ts);
   }
 
@@ -211,18 +212,18 @@ static void log_usage(struct req_state *s, const string& op_name)
   string p = payer.to_str();
   rgw_usage_log_entry entry(u, p, bucket_name);
 
-  uint64_t bytes_sent = s->cio->get_bytes_sent();
-  uint64_t bytes_received = s->cio->get_bytes_received();
+  uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
+  uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
   rgw_usage_data data(bytes_sent, bytes_received);
 
   data.ops = 1;
-  if (!error)
+  if (!s->is_err())
     data.successful_ops = 1;
 
   entry.add(op_name, data);
 
-  utime_t ts = ceph_clock_now(s->cct);
+  utime_t ts = ceph_clock_now();
 
   usage_logger->insert(ts, entry);
 }
@@ -245,11 +246,20 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   formatter->dump_int("bytes_sent", entry.bytes_sent);
   formatter->dump_int("bytes_received", entry.bytes_received);
   formatter->dump_int("object_size", entry.obj_size);
-  uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
+  uint64_t total_time =  entry.total_time.sec() * 1000000LL + entry.total_time.usec();
 
   formatter->dump_int("total_time", total_time);
   formatter->dump_string("user_agent",  entry.user_agent);
   formatter->dump_string("referrer",  entry.referrer);
+  if (entry.x_headers.size() > 0) {
+    formatter->open_array_section("http_x_headers");
+    for (const auto& iter: entry.x_headers) {
+      formatter->open_object_section(iter.first.c_str());
+      formatter->dump_string(iter.first.c_str(), iter.second);
+      formatter->close_section();
+    }
+    formatter->close_section();
+  }
   formatter->close_section();
 }
 
@@ -290,7 +300,8 @@ void OpsLogSocket::log(struct rgw_log_entry& entry)
   append_output(bl);
 }
 
-int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsLogSocket *olog)
+int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
+	       const string& op_name, OpsLogSocket *olog)
 {
   struct rgw_log_entry entry;
   string bucket_id;
@@ -339,16 +350,28 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   set_param_str(s, "REQUEST_URI", entry.uri);
   set_param_str(s, "REQUEST_METHOD", entry.op);
 
+  /* custom header logging */
+  if (rest) {
+    if (rest->log_x_headers()) {
+      for (const auto& iter : s->info.env->get_map()) {
+	if (rest->log_x_header(iter.first)) {
+	  entry.x_headers.insert(
+	    rgw_log_entry::headers_map::value_type(iter.first, iter.second));
+	}
+      }
+    }
+  }
+
   entry.user = s->user->user_id.to_str();
   if (s->object_acl)
     entry.object_owner = s->object_acl->get_owner().get_id();
   entry.bucket_owner = s->bucket_owner.get_id();
 
-  uint64_t bytes_sent = s->cio->get_bytes_sent();
-  uint64_t bytes_received = s->cio->get_bytes_received();
+  uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
+  uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
   entry.time = s->time;
-  entry.total_time = ceph_clock_now(s->cct) - s->time;
+  entry.total_time = ceph_clock_now() - s->time;
   entry.bytes_sent = bytes_sent;
   entry.bytes_received = bytes_received;
   if (s->err.http_ret) {
@@ -358,7 +381,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   } else
     entry.http_status = "200"; // default
 
-  entry.error_code = s->err.s3_code;
+  entry.error_code = s->err.err_code;
   entry.bucket_id = bucket_id;
 
   bufferlist bl;
@@ -377,7 +400,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				        s->bucket.bucket_id, entry.bucket);
 
-    rgw_obj obj(store->get_zone_params().log_pool, oid);
+    rgw_raw_obj obj(store->get_zone_params().log_pool, oid);
 
     ret = store->append_async(obj, bl.length(), bl);
     if (ret == -ENOENT) {

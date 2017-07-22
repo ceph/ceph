@@ -18,18 +18,18 @@
 #include "msg/Message.h"
 #include "include/ceph_features.h"
 
+#define	CLIENT_CAPS_SYNC		(0x1)
 
 class MClientCaps : public Message {
-  static const int HEAD_VERSION = 8;
+  static const int HEAD_VERSION = 10;
   static const int COMPAT_VERSION = 1;
 
  public:
   struct ceph_mds_caps_head head;
 
-  uint64_t size, max_size, truncate_size;
+  uint64_t size, max_size, truncate_size, change_attr;
   uint32_t truncate_seq;
-  utime_t mtime, atime, ctime;
-  file_layout_t layout;
+  utime_t mtime, atime, ctime, btime;
   uint32_t time_warp_seq;
 
   struct ceph_mds_cap_peer peer;
@@ -45,6 +45,9 @@ class MClientCaps : public Message {
   ceph_tid_t oldest_flush_tid;
   uint32_t caller_uid;
   uint32_t caller_gid;
+
+  /* advisory CLIENT_CAPS_* flags to send to mds */
+  unsigned flags;
 
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
@@ -62,12 +65,18 @@ class MClientCaps : public Message {
   __u32 get_truncate_seq() { return truncate_seq; }
   uint64_t get_truncate_size() { return truncate_size; }
   utime_t get_ctime() { return ctime; }
+  utime_t get_btime() { return btime; }
   utime_t get_mtime() { return mtime; }
   utime_t get_atime() { return atime; }
+  __u64 get_change_attr() { return change_attr; }
   __u32 get_time_warp_seq() { return time_warp_seq; }
 
   const file_layout_t& get_layout() {
     return layout;
+  }
+
+  void set_layout(const file_layout_t &l) {
+    layout = l;
   }
 
   int       get_migrate_seq() { return head.migrate_seq; }
@@ -110,11 +119,13 @@ class MClientCaps : public Message {
       size(0),
       max_size(0),
       truncate_size(0),
+      change_attr(0),
       truncate_seq(0),
       time_warp_seq(0),
       osd_epoch_barrier(0),
       oldest_flush_tid(0),
-      caller_uid(0), caller_gid(0) {
+      caller_uid(0), caller_gid(0),
+      flags(0) {
     inline_version = 0;
   }
   MClientCaps(int op,
@@ -131,11 +142,13 @@ class MClientCaps : public Message {
       size(0),
       max_size(0),
       truncate_size(0),
+      change_attr(0),
       truncate_seq(0),
       time_warp_seq(0),
       osd_epoch_barrier(oeb),
       oldest_flush_tid(0),
-      caller_uid(0), caller_gid(0) {
+      caller_uid(0), caller_gid(0),
+      flags(0) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -156,11 +169,13 @@ class MClientCaps : public Message {
       size(0),
       max_size(0),
       truncate_size(0),
+      change_attr(0),
       truncate_seq(0),
       time_warp_seq(0),
       osd_epoch_barrier(oeb),
       oldest_flush_tid(0),
-      caller_uid(0), caller_gid(0) {
+      caller_uid(0), caller_gid(0),
+      flags(0) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -171,11 +186,13 @@ class MClientCaps : public Message {
     inline_version = 0;
   }
 private:
-  ~MClientCaps() {}
+  file_layout_t layout;
+
+  ~MClientCaps() override {}
 
 public:
-  const char *get_type_name() const { return "Cfcap";}
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "Cfcap";}
+  void print(ostream& out) const override {
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
 	<< " " << head.cap_id
@@ -202,7 +219,7 @@ public:
     out << ")";
   }
   
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ceph_mds_caps_body_legacy body;
@@ -255,8 +272,15 @@ public:
     if (header.version >= 8) {
       ::decode(layout.pool_ns, p);
     }
+    if (header.version >= 9) {
+      ::decode(btime, p);
+      ::decode(change_attr, p);
+    }
+    if (header.version >= 10) {
+      ::decode(flags, p);
+    }
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     header.version = HEAD_VERSION;
     head.snap_trace_len = snapbl.length();
     head.xattr_len = xattrbl.length();
@@ -264,6 +288,7 @@ public:
     ::encode(head, payload);
     ceph_mds_caps_body_legacy body;
     if (head.op == CEPH_CAP_OP_EXPORT) {
+      memset(&body, 0, sizeof(body));
       body.peer = peer;
     } else {
       body.size = size;
@@ -311,6 +336,9 @@ public:
     ::encode(caller_gid, payload);
 
     ::encode(layout.pool_ns, payload);
+    ::encode(btime, payload);
+    ::encode(change_attr, payload);
+    ::encode(flags, payload);
   }
 };
 

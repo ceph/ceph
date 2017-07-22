@@ -15,7 +15,7 @@ target_link_libraries(rbd_replay LINK_PRIVATE librbd librados global)
 add_executable(rbd-replay
   rbd-replay.cc)
 target_link_libraries(rbd-replay
-  librbd librados global rbd_replay rbd_replay_types common)
+  librbd librados global rbd_replay rbd_replay_types ceph-common)
 install(TARGETS rbd-replay DESTINATION bin)
 
 set(librbd_replay_ios_srcs
@@ -23,7 +23,7 @@ set(librbd_replay_ios_srcs
 add_library(rbd_replay_ios STATIC ${librbd_replay_ios_srcs})
 target_link_libraries(rbd_replay_ios librbd librados global)
 
-if(${WITH_BABELTRACE})
+if(HAVE_BABELTRACE)
   add_executable(rbd-replay-prep
     rbd-replay-prep.cc)
   target_link_libraries(rbd-replay-prep
@@ -32,12 +32,12 @@ if(${WITH_BABELTRACE})
     rbd_replay_types
     librbd
     librados
-    common
+    ceph-common
     global
     babeltrace
     babeltrace-ctf
-    udev
-    ${Boost_DATE_TIME_LIBRARY}
+    Boost::date_time
     )
   install(TARGETS rbd-replay-prep DESTINATION bin)
-endif(${WITH_BABELTRACE})
+endif(HAVE_BABELTRACE)
+

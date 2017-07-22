@@ -1,0 +1,48 @@
+Some libraries that Ceph uses are incorporated into the build tree
+through a technique known as git subtrees. This is an alternative to
+git submodules, which is also used in Ceph.
+
+One such library is the dmclock library. Here are some basic notes on
+the use of git subtrees.
+
+When a subtree is added to the repo, commands such as these were run
+from the top-level ceph directory:
+
+    git subtree add --prefix src/dmclock \
+	git@github.com:ceph/dmclock.git master --squash
+
+That essentially brings in a full copy of the library into the
+subdirectory src/dmclock, but squashes all the commits into a single
+one.
+
+If in time the library is updated and you'd like to bring the updates
+in, you could run:
+
+    git subtree pull --prefix src/dmclock \
+        git@github.com:ceph/dmclock.git master --squash
+
+WARNINGS
+
+1. A rebase should NEVER include the commits by which a subtree is
+added or pulled. Those commits do not include the prefix that was used
+for the subtree add/pull, and therefore the commits are applied to the
+wrong files or, more likely, to non-existant files. If something like
+this must be done, a workable approach is to a) do an interactive
+rebase, b) remove the commits for the former subtree add/pull, and
+either c) replace those commits with executions (x/exec) of the
+commands used to add/pull the subtrees, or d) do those commands from
+the command-line by using (e/edit) on preceding commits.
+
+2. If you'd like to modify the library contained in a subtree you'll
+need to choose whether to just change your subtree and maintain those
+differences into the future (until the library incorporates them) or,
+if you're able, modify the library and use a "git subtree pull ..." to
+bring them in.
+
+3. If you modify the library within the ceph tree, then it's best not
+to combine changes within the subtree and outside the subtree in a
+single commit. Each commit should either only contain changes within
+the subtree or outside the subtree. That gives you the option to
+cleanly push those changes back to the library's repo. That way if you
+ultimately decide to make the changes to the library, you can easily
+remove the subtree commits.

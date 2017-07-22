@@ -14,7 +14,7 @@
 
 
 #include "cls_cephfs_client.h"
-
+#include "include/rados/librados.hpp"
 #include "mds/CInode.h"
 
 #define XATTR_CEILING "scan_ceiling"
@@ -48,6 +48,21 @@ int ClsCephFSClient::accumulate_inode_metadata(
   // Execute op
   bufferlist outbl;
   return ctx.operate(zeroth_object.name, &op, &outbl);
+}
+
+int ClsCephFSClient::delete_inode_accumulate_result(
+    librados::IoCtx &ctx,
+    const std::string &oid)
+{
+  librados::ObjectWriteOperation op;
+
+  // Remove xattrs from object
+  //
+  op.rmxattr(XATTR_CEILING);
+  op.rmxattr(XATTR_MAX_SIZE);
+  op.rmxattr(XATTR_MAX_MTIME);
+
+  return (ctx.operate(oid, &op));
 }
 
 int ClsCephFSClient::fetch_inode_accumulate_result(

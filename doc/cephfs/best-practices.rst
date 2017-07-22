@@ -8,7 +8,7 @@ For the actual configuration guide for CephFS, please see the instructions
 at :doc:`/cephfs/index`.
 
 Which Ceph version?
-===================
+-------------------
 
 Use at least the Jewel (v10.2.0) release of Ceph.  This is the first
 release to include stable CephFS code and fsck/repair tools.  Make sure
@@ -20,7 +20,7 @@ appropriate kernel version if you are using the kernel client
 for CephFS.
 
 Most stable configuration
-=========================
+-------------------------
 
 Some features in CephFS are still experimental.  See
 :doc:`/cephfs/experimental-features` for guidance on these.
@@ -34,7 +34,7 @@ adjusting ``max_mds`` upwards, as this would cause multiple
 daemons to be active at once.
 
 Which client?
-=============
+-------------
 
 The fuse client is the easiest way to get up to date code, while
 the kernel client will often give better performance.
@@ -48,7 +48,7 @@ try using the other client, in order to find out whether the bug was
 client-specific or not (and then to let the developers know).
 
 Which kernel version?
----------------------
+~~~~~~~~~~~~~~~~~~~~~
 
 Because the kernel client is distributed as part of the linux kernel (not
 as part of packaged ceph releases),
@@ -69,7 +69,7 @@ includes CephFS support, as in this case the distributor will be responsible
 for backporting fixes to their stable kernel: check with your vendor.
 
 Reporting issues
-================
+----------------
 
 If you have identified a specific issue, please report it with as much
 information as possible.  Especially important information:

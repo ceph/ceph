@@ -6,7 +6,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/WatchNotifyTypes.h"
-#include "librbd/image_watcher/Notifier.h"
+#include "librbd/watcher/Notifier.h"
 #include <map>
 
 #define dout_subsys ceph_subsys_rbd
@@ -15,12 +15,14 @@
                            << this << " " << __func__
 
 namespace librbd {
+
 namespace image_watcher {
 
 using namespace watch_notify;
 using util::create_context_callback;
 
-NotifyLockOwner::NotifyLockOwner(ImageCtx &image_ctx, Notifier &notifier,
+NotifyLockOwner::NotifyLockOwner(ImageCtx &image_ctx,
+                                 watcher::Notifier &notifier,
                                  bufferlist &&bl, Context *on_finish)
   : m_image_ctx(image_ctx), m_notifier(notifier), m_bl(std::move(bl)),
     m_on_finish(on_finish) {
@@ -35,7 +37,7 @@ void NotifyLockOwner::send_notify() {
   ldout(cct, 20) << dendl;
 
   assert(m_image_ctx.owner_lock.is_locked());
-  m_notifier.notify(m_bl, &m_out_bl, create_context_callback<
+  m_notifier.notify(m_bl, &m_notify_response, create_context_callback<
     NotifyLockOwner, &NotifyLockOwner::handle_notify>(this));
 }
 
@@ -50,30 +52,17 @@ void NotifyLockOwner::handle_notify(int r) {
     return;
   }
 
-  typedef std::map<std::pair<uint64_t, uint64_t>, bufferlist> responses_t;
-  responses_t responses;
-  if (m_out_bl.length() > 0) {
-    try {
-      bufferlist::iterator iter = m_out_bl.begin();
-      ::decode(responses, iter);
-    } catch (const buffer::error &err) {
-      lderr(cct) << ": failed to decode response" << dendl;
-      finish(-EINVAL);
-      return;
-    }
-  }
-
   bufferlist response;
   bool lock_owner_responded = false;
-  for (responses_t::iterator i = responses.begin(); i != responses.end(); ++i) {
-    if (i->second.length() > 0) {
+  for (auto &it : m_notify_response.acks) {
+    if (it.second.length() > 0) {
       if (lock_owner_responded) {
         lderr(cct) << ": duplicate lock owners detected" << dendl;
         finish(-EINVAL);
         return;
       }
       lock_owner_responded = true;
-      response.claim(i->second);
+      response.claim(it.second);
     }
   }
 

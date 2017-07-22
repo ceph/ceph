@@ -22,7 +22,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "EpollDriver."
 
-int EpollDriver::init(int nevent)
+int EpollDriver::init(EventCenter *c, int nevent)
 {
   events = (struct epoll_event*)malloc(sizeof(struct epoll_event)*nevent);
   if (!events) {

@@ -81,7 +81,7 @@ Concepts
   See MapHandling
 
 *PG*
-  See src/osd/PG.* src/osd/ReplicatedPG.*
+  See src/osd/PG.* src/osd/PrimaryLogPG.*
 
   Objects in rados are hashed into *PGs* and *PGs* are placed via crush onto
   OSDs.  The PG structure is responsible for handling requests pertaining to

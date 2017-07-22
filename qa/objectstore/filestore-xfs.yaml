@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    fs: xfs
+    conf:
+      osd:
+        osd objectstore: filestore
+        osd sloppy crc: true

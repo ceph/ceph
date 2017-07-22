@@ -26,17 +26,16 @@
 #include "common/config.h"
 #include "common/sync_filesystem.h"
 
-#ifdef HAVE_LIBZFS
-
 #include "ZFSFileStoreBackend.h"
 
+#define dout_context cct()
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "zfsfilestorebackend(" << get_basedir_path() << ") "
 
 ZFSFileStoreBackend::ZFSFileStoreBackend(FileStore *fs) :
   GenericFileStoreBackend(fs), base_zh(NULL), current_zh(NULL),
-  m_filestore_zfs_snap(g_conf->filestore_zfs_snap)
+  m_filestore_zfs_snap(cct()->_conf->filestore_zfs_snap)
 {
   int ret = zfs.init();
   if (ret < 0) {
@@ -257,4 +256,3 @@ int ZFSFileStoreBackend::destroy_checkpoint(const string& name)
   }
   return ret;
 }
-#endif

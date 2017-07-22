@@ -29,11 +29,12 @@ struct ECSubWrite {
   ObjectStore::Transaction t;
   eversion_t at_version;
   eversion_t trim_to;
-  eversion_t trim_rollback_to;
+  eversion_t roll_forward_to;
   vector<pg_log_entry_t> log_entries;
-  set<hobject_t, hobject_t::BitwiseComparator> temp_added;
-  set<hobject_t, hobject_t::BitwiseComparator> temp_removed;
+  set<hobject_t> temp_added;
+  set<hobject_t> temp_removed;
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
+  bool backfill = false;
   ECSubWrite() : tid(0) {}
   ECSubWrite(
     pg_shard_t from,
@@ -44,19 +45,22 @@ struct ECSubWrite {
     const ObjectStore::Transaction &t,
     eversion_t at_version,
     eversion_t trim_to,
-    eversion_t trim_rollback_to,
+    eversion_t roll_forward_to,
     vector<pg_log_entry_t> log_entries,
     boost::optional<pg_hit_set_history_t> updated_hit_set_history,
-    const set<hobject_t, hobject_t::BitwiseComparator> &temp_added,
-    const set<hobject_t, hobject_t::BitwiseComparator> &temp_removed)
+    const set<hobject_t> &temp_added,
+    const set<hobject_t> &temp_removed,
+    bool backfill)
     : from(from), tid(tid), reqid(reqid),
       soid(soid), stats(stats), t(t),
       at_version(at_version),
-      trim_to(trim_to), trim_rollback_to(trim_rollback_to),
+      trim_to(trim_to), roll_forward_to(roll_forward_to),
       log_entries(log_entries),
       temp_added(temp_added),
       temp_removed(temp_removed),
-      updated_hit_set_history(updated_hit_set_history) {}
+      updated_hit_set_history(updated_hit_set_history),
+      backfill(backfill)
+    {}
   void claim(ECSubWrite &other) {
     from = other.from;
     tid = other.tid;
@@ -66,11 +70,12 @@ struct ECSubWrite {
     t.swap(other.t);
     at_version = other.at_version;
     trim_to = other.trim_to;
-    trim_rollback_to = other.trim_rollback_to;
+    roll_forward_to = other.roll_forward_to;
     log_entries.swap(other.log_entries);
     temp_added.swap(other.temp_added);
     temp_removed.swap(other.temp_removed);
     updated_hit_set_history = other.updated_hit_set_history;
+    backfill = other.backfill;
   }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
@@ -100,8 +105,8 @@ WRITE_CLASS_ENCODER(ECSubWriteReply)
 struct ECSubRead {
   pg_shard_t from;
   ceph_tid_t tid;
-  map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator> to_read;
-  set<hobject_t, hobject_t::BitwiseComparator> attrs_to_read;
+  map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >> to_read;
+  set<hobject_t> attrs_to_read;
   void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
@@ -112,9 +117,9 @@ WRITE_CLASS_ENCODER_FEATURES(ECSubRead)
 struct ECSubReadReply {
   pg_shard_t from;
   ceph_tid_t tid;
-  map<hobject_t, list<pair<uint64_t, bufferlist> >, hobject_t::BitwiseComparator> buffers_read;
-  map<hobject_t, map<string, bufferlist>, hobject_t::BitwiseComparator> attrs_read;
-  map<hobject_t, int, hobject_t::BitwiseComparator> errors;
+  map<hobject_t, list<pair<uint64_t, bufferlist> >> buffers_read;
+  map<hobject_t, map<string, bufferlist>> attrs_read;
+  map<hobject_t, int> errors;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;

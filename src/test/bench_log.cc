@@ -9,6 +9,8 @@
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 
+#define dout_context g_ceph_context
+
 struct T : public Thread {
   int num;
   set<int> myset;
@@ -20,7 +22,7 @@ struct T : public Thread {
     mymap[10] = "bar";
   }
 
-  void *entry() {
+  void *entry() override {
     while (num-- > 0)
       generic_dout(0) << "this is a typical log line.  set "
 		      << myset << " and map " << mymap << dendl;
@@ -39,9 +41,10 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_OSD,
+			 CODE_ENVIRONMENT_UTILITY, 0);
 
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
 
   list<T*> ls;
   for (int i=0; i<threads; i++) {
@@ -57,13 +60,13 @@ int main(int argc, const char **argv)
     delete t;
   }
 
-  utime_t t = ceph_clock_now(NULL);
+  utime_t t = ceph_clock_now();
   t -= start;
   cout << " flushing.. " << t << " so far ..." << std::endl;
 
   g_ceph_context->_log->flush();
 
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   utime_t dur = end - start;
 
   cout << dur << std::endl;

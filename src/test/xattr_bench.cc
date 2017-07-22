@@ -66,7 +66,7 @@ public:
     (*in_progress)++;
   }
 
-  void finish(int r) {
+  void finish(int r) override {
     Mutex::Locker l(*lock);
     (*in_progress)--;
     cond->Signal();
@@ -152,7 +152,8 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(0, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(0, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   std::cerr << "args: " << args << std::endl;
@@ -164,7 +165,8 @@ int main(int argc, char **argv) {
   string store_path(args[1]);
   string store_dev(args[2]);
 
-  boost::scoped_ptr<ObjectStore> store(new FileStore(store_path, store_dev));
+  boost::scoped_ptr<ObjectStore> store(new FileStore(cct.get(), store_path,
+						     store_dev));
 
   std::cerr << "mkfs starting" << std::endl;
   assert(!store->mkfs());

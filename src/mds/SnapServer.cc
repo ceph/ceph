@@ -27,6 +27,7 @@
 #include "common/config.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".snap "
@@ -131,12 +132,12 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
   //dump();
 }
 
-bool SnapServer::_is_prepared(version_t tid)
+bool SnapServer::_is_prepared(version_t tid) const
 {
   return 
     pending_update.count(tid) ||
@@ -165,11 +166,9 @@ bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
     dout(7) << "commit " << tid << " destroy " << sn << " seq " << seq << dendl;
     snaps.erase(sn);
 
-    for (set<int64_t>::const_iterator p = mds->mdsmap->get_data_pools().begin();
-	 p != mds->mdsmap->get_data_pools().end();
-	 ++p) {
-      need_to_purge[*p].insert(sn);
-      need_to_purge[*p].insert(seq);
+    for (const auto p : mds->mdsmap->get_data_pools()) {
+      need_to_purge[p].insert(sn);
+      need_to_purge[p].insert(seq);
     }
 
     pending_destroy.erase(tid);
@@ -179,7 +178,7 @@ bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
     pending_noop.erase(tid);
   }
   else
-    assert(0);
+    ceph_abort();
 
   // bump version.
   version++;
@@ -211,7 +210,7 @@ void SnapServer::_rollback(version_t tid)
   }    
 
   else
-    assert(0);
+    ceph_abort();
 
   // bump version.
   version++;

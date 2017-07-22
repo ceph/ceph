@@ -3,7 +3,6 @@
 #ifndef CEPH_ASYNC_COMPLETION_H
 #define CEPH_ASYNC_COMPLETION_H
 
-#include "include/int_types.h"
 #include "include/Context.h"
 
 namespace ceph {
@@ -34,7 +33,7 @@ public:
     m_context_completion.start_op();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     m_context_completion.finish_op(r);
   }
 

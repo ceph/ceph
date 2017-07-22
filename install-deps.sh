@@ -19,16 +19,22 @@ if test $(id -u) != 0 ; then
 fi
 export LC_ALL=C # the following is vulnerable to i18n
 
+function munge_ceph_spec_in {
+    local OUTFILE=$1
+    sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
+}
+
 if [ x`uname`x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/git \
+        devel/gperf \
         devel/gmake \
-        devel/automake \
+        devel/cmake \
         devel/yasm \
         devel/boost-all \
+        devel/boost-python-libs \
         devel/valgrind \
         devel/pkgconf \
-        devel/libatomic_ops \
         devel/libedit \
         devel/libtool \
         devel/google-perftools \
@@ -41,17 +47,27 @@ if [ x`uname`x = xFreeBSDx ]; then
         archivers/snappy \
         ftp/curl \
         misc/e2fsprogs-libuuid \
+        misc/getopt \
+        net/socat \
         textproc/expat2 \
+        textproc/gsed \
         textproc/libxml2 \
         textproc/xmlstarlet \
+	textproc/jq \
+	textproc/sphinx \
         emulators/fuse \
         java/junit \
         lang/python27 \
+	devel/py-pip \
         devel/py-argparse \
         devel/py-nose \
         www/py-flask \
         www/fcgi \
         sysutils/flock \
+        sysutils/fusefs-libs \
+
+	# Now use pip to install some extra python modules
+	pip install pecan
 
     exit
 else
@@ -84,14 +100,22 @@ else
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ -n "$backports" ] ; then rm $control; fi
         ;;
-    centos|fedora|rhel)
-        echo "Using yum to install dependencies"
-        $SUDO yum install -y redhat-lsb-core
+    centos|fedora|rhel|ol|virtuozzo)
+        yumdnf="yum"
+        builddepcmd="yum-builddep -y"
+        if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
+            yumdnf="dnf"
+            builddepcmd="dnf -y builddep --allowerasing"
+        fi
+        echo "Using $yumdnf to install dependencies"
+        $SUDO $yumdnf install -y redhat-lsb-core
         case $(lsb_release -si) in
             Fedora)
-                $SUDO yum install -y yum-utils
+                if test $yumdnf = yum; then
+                    $SUDO $yumdnf install -y yum-utils
+                fi
                 ;;
-            CentOS|RedHatEnterpriseServer)
+            CentOS|RedHatEnterpriseServer|VirtuozzoLinux)
                 $SUDO yum install -y yum-utils
                 MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
                 if test $(lsb_release -si) = RedHatEnterpriseServer ; then
@@ -105,20 +129,36 @@ else
                 if test $(lsb_release -si) = CentOS -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
+                if test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
+                    $SUDO yum-config-manager --enable cr
+                fi
                 ;;
         esac
-        sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
-        $SUDO yum-builddep -y $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+        munge_ceph_spec_in $DIR/ceph.spec
+        $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
-    opensuse|suse)
+    opensuse|suse|sles)
         echo "Using zypper to install dependencies"
         $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
-        sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
+        munge_ceph_spec_in $DIR/ceph.spec
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
+        ;;
+    alpine)
+        # for now we need the testing repo for leveldb
+        TESTREPO="http://nl.alpinelinux.org/alpine/edge/testing"
+        if ! grep -qF "$TESTREPO" /etc/apk/repositories ; then
+            $SUDO echo "$TESTREPO" | sudo tee -a /etc/apk/repositories > /dev/null
+        fi
+        source alpine/APKBUILD.in
+        $SUDO apk --update add abuild build-base ccache $makedepends
+        if id -u build >/dev/null 2>&1 ; then
+           $SUDO addgroup build abuild
+        fi
         ;;
     *)
         echo "$ID is unknown, dependencies will have to be installed manually."
+	exit 1
         ;;
     esac
 fi
@@ -129,7 +169,8 @@ function populate_wheelhouse() {
 
     # although pip comes with virtualenv, having a recent version
     # of pip matters when it comes to using wheel packages
-    pip --timeout 300 $install 'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' || return 1
+    # workaround of https://github.com/pypa/setuptools/issues/1042
+    pip --timeout 300 $install 'setuptools >= 0.8,< 36' 'pip >= 7.0' 'wheel >= 0.24' || return 1
     if test $# != 0 ; then
         pip --timeout 300 $install $@ || return 1
     fi

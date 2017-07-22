@@ -42,7 +42,7 @@ private:
   virtual void _prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds) = 0;
   virtual bool _commit(version_t tid, MMDSTableRequest *req=NULL) = 0;
   virtual void _rollback(version_t tid) = 0;
-  virtual void _server_update(bufferlist& bl) { assert(0); }
+  virtual void _server_update(bufferlist& bl) { ceph_abort(); }
 
   void _note_prepare(mds_rank_t mds, uint64_t reqid) {
     pending_for_mds[version].mds = mds;
@@ -58,7 +58,7 @@ private:
   
 
   MDSTableServer(MDSRank *m, int tab) : MDSTable(m, get_mdstable_name(tab), false), table(tab) {}
-  virtual ~MDSTableServer() {}
+  ~MDSTableServer() override {}
 
   void handle_request(MMDSTableRequest *m);
   void do_server_update(bufferlist& bl);
@@ -66,11 +66,11 @@ private:
   virtual void encode_server_state(bufferlist& bl) const = 0;
   virtual void decode_server_state(bufferlist::iterator& bl) = 0;
 
-  void encode_state(bufferlist& bl) const {
+  void encode_state(bufferlist& bl) const override {
     encode_server_state(bl);
     ::encode(pending_for_mds, bl);
   }
-  void decode_state(bufferlist::iterator& bl) {
+  void decode_state(bufferlist::iterator& bl) override {
     decode_server_state(bl);
     ::decode(pending_for_mds, bl);
   }

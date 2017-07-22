@@ -17,11 +17,11 @@ public:
   AutomaticPolicy(ImageCtx *image_ctx) : m_image_ctx(image_ctx) {
   }
 
-  virtual bool may_auto_request_lock() {
+  bool may_auto_request_lock() override {
     return true;
   }
 
-  virtual int lock_requested(bool force);
+  int lock_requested(bool force) override;
 
 private:
   ImageCtx *m_image_ctx;

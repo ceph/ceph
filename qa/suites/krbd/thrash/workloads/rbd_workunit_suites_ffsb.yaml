@@ -1,0 +1,8 @@
+tasks:
+- rbd:
+    all:
+      image_size: 20480
+- workunit:
+    clients:
+      all:
+        - suites/ffsb.sh

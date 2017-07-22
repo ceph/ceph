@@ -1,3 +1,57 @@
+ceph (12.1.1-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Mon, 17 Jul 2017 16:55:59 +0000
+
+ceph (12.1.0-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Thu, 22 Jun 2017 15:43:47 +0000
+
+ceph (12.0.3-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Tue, 16 May 2017 12:42:53 +0000
+
+ceph (12.0.2-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Thu, 20 Apr 2017 19:59:57 +0000
+
+ceph (12.0.1-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Fri, 24 Mar 2017 15:47:57 +0000
+
+ceph (12.0.0-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Wed, 08 Feb 2017 13:57:30 +0000
+
+ceph (11.1.0-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Mon, 12 Dec 2016 18:27:51 +0000
+
+ceph (11.0.2-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Mon, 17 Oct 2016 11:16:49 +0000
+
+ceph (11.0.1-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Tue, 11 Oct 2016 16:27:56 +0000
+
 ceph (11.0.0-1) stable; urgency=low
 
   * New upstream release

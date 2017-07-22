@@ -1,0 +1,11 @@
+meta:
+- desc: install ceph/jewel latest
+tasks:
+- install:
+    branch: jewel
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+- print: "**** done install jewel"
+- ceph:
+    skip_mgr_daemons: true
+    add_osds_to_crush: true
+- print: "**** done ceph"

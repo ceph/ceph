@@ -1,0 +1,52 @@
+ceph-qa-suite
+-------------
+
+clusters/    - some predefined cluster layouts
+suites/      - set suite
+
+The suites directory has a hierarchical collection of tests.  This can be
+freeform, but generally follows the convention of
+
+  suites/<test suite name>/<test group>/...
+
+A test is described by a yaml fragment.
+
+A test can exist as a single .yaml file in the directory tree.  For example:
+
+ suites/foo/one.yaml
+ suites/foo/two.yaml
+
+is a simple group of two tests.
+
+A directory with a magic '+' file represents a test that combines all
+other items in the directory into a single yaml fragment.  For example:
+
+ suites/foo/bar/+
+ suites/foo/bar/a.yaml
+ suites/foo/bar/b.yaml
+ suites/foo/bar/c.yaml
+
+is a single test consisting of a + b + c.
+
+A directory with a magic '%' file represents a test matrix formed from
+all other items in the directory.  For example,
+
+ suites/baz/%
+ suites/baz/a.yaml
+ suites/baz/b/b1.yaml
+ suites/baz/b/b2.yaml
+ suites/baz/c.yaml
+ suites/baz/d/d1.yaml
+ suites/baz/d/d2.yaml
+
+is a 4-dimensional test matrix.  Two dimensions (a, c) are trivial (1
+item), so this is really 2x2 = 4 tests, which are
+
+  a + b1 + c + d1
+  a + b1 + c + d2
+  a + b2 + c + d1
+  a + b2 + c + d2
+
+Symlinks are okay.
+
+The teuthology code can be found in https://github.com/ceph/teuthology.git

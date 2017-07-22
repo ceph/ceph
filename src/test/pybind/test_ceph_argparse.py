@@ -1,4 +1,4 @@
-#!/usr/bin/nosetests --nocapture
+#!/usr/bin/env nosetests 
 # -*- mode:python; tab-width:4; indent-tabs-mode:t; coding:utf-8 -*-
 # vim: ts=4 sw=4 smarttab expandtab fileencoding=utf-8
 #
@@ -179,24 +179,6 @@ class TestPG(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['pg', 'debug']))
         assert_equal({}, validate_command(sigdict, ['pg', 'debug',
                                                     'invalid']))
-
-    def test_force_create_pg(self):
-        self.one_pgid('force_create_pg')
-
-    def set_ratio(self, command):
-        self.assert_valid_command(['pg',
-                                   command,
-                                   '0.0'])
-        assert_equal({}, validate_command(sigdict, ['pg', command]))
-        assert_equal({}, validate_command(sigdict, ['pg',
-                                                    command,
-                                                    '2.0']))
-
-    def test_set_full_ratio(self):
-        self.set_ratio('set_full_ratio')
-
-    def test_set_nearfull_ratio(self):
-        self.set_ratio('set_nearfull_ratio')
 
 
 class TestAuth(TestArgparse):
@@ -505,9 +487,9 @@ class TestFS(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['fs', 'ls', 'toomany']))
 
     def test_fs_set_default(self):
-        self.assert_valid_command(['fs', 'set_default', 'cephfs'])
-        assert_equal({}, validate_command(sigdict, ['fs', 'set_default']))
-        assert_equal({}, validate_command(sigdict, ['fs', 'set_default', 'cephfs', 'toomany']))
+        self.assert_valid_command(['fs', 'set-default', 'cephfs'])
+        assert_equal({}, validate_command(sigdict, ['fs', 'set-default']))
+        assert_equal({}, validate_command(sigdict, ['fs', 'set-default', 'cephfs', 'toomany']))
 
 class TestMon(TestArgparse):
 
@@ -1030,9 +1012,6 @@ class TestOSD(TestArgparse):
         self.assert_valid_command(['osd', 'pool', 'delete',
                                    'poolname'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete',
-                                                    'poolname', 'poolname',
-                                                    'not really']))
         assert_equal({}, validate_command(sigdict,
                                           ['osd', 'pool', 'delete',
                                            'poolname', 'poolname',
@@ -1051,7 +1030,7 @@ class TestOSD(TestArgparse):
 
     def test_pool_get(self):
         for var in ('size', 'min_size', 'crash_replay_interval',
-                    'pg_num', 'pgp_num', 'crush_ruleset', 'auid', 'fast_read',
+                    'pg_num', 'pgp_num', 'crush_rule', 'auid', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
                     'deep_scrub_interval', 'recovery_priority',
                     'recovery_op_priority'):
@@ -1070,7 +1049,7 @@ class TestOSD(TestArgparse):
 
     def test_pool_set(self):
         for var in ('size', 'min_size', 'crash_replay_interval',
-                    'pg_num', 'pgp_num', 'crush_ruleset',
+                    'pg_num', 'pgp_num', 'crush_rule',
                     'hashpspool', 'auid', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
                     'deep_scrub_interval', 'recovery_priority',
@@ -1121,9 +1100,6 @@ class TestOSD(TestArgparse):
                                                     '100',
                                                     'toomany']))
 
-    def test_thrash(self):
-        self.check_1_natural_arg('osd', 'thrash')
-
     def test_tier_op(self):
         for op in ('add', 'remove', 'set-overlay'):
             self.assert_valid_command(['osd', 'tier', op,
@@ -1156,6 +1132,24 @@ class TestOSD(TestArgparse):
                                                     'poolname',
                                                     'toomany']))
 
+    def set_ratio(self, command):
+        self.assert_valid_command(['osd',
+                                   command,
+                                   '0.0'])
+        assert_equal({}, validate_command(sigdict, ['osd', command]))
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    command,
+                                                    '2.0']))
+
+    def test_set_full_ratio(self):
+        self.set_ratio('set-full-ratio')
+
+    def test_set_backfillfull_ratio(self):
+        self.set_ratio('set-backfillfull-ratio')
+
+    def test_set_nearfull_ratio(self):
+        self.set_ratio('set-nearfull-ratio')
+
 
 class TestConfigKey(TestArgparse):
 
@@ -1177,6 +1171,9 @@ class TestConfigKey(TestArgparse):
 
     def test_exists(self):
         self.check_1_string_arg('config-key', 'exists')
+
+    def test_dump(self):
+        self.check_no_arg('config-key', 'dump')
 
     def test_list(self):
         self.check_no_arg('config-key', 'list')

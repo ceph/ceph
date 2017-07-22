@@ -9,6 +9,8 @@
 #include "rgw_rest.h"
 #include "rgw_user.h"
 
+#include "common/errno.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
@@ -21,8 +23,10 @@
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 
 
-RGWRealmReloader::RGWRealmReloader(RGWRados*& store, Pauser* frontends)
+RGWRealmReloader::RGWRealmReloader(RGWRados*& store, std::map<std::string, std::string>& service_map_meta,
+                                   Pauser* frontends)
   : store(store),
+    service_map_meta(service_map_meta),
     frontends(frontends),
     timer(store->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
     mutex("RGWRealmReloader"),
@@ -41,7 +45,7 @@ class RGWRealmReloader::C_Reload : public Context {
   RGWRealmReloader* reloader;
  public:
   C_Reload(RGWRealmReloader* reloader) : reloader(reloader) {}
-  void finish(int r) { reloader->reload(); }
+  void finish(int r) override { reloader->reload(); }
 };
 
 void RGWRealmReloader::handle_notify(RGWRealmNotify type,
@@ -64,12 +68,10 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
   reload_scheduled = new C_Reload(this);
   cond.SignalOne(); // wake reload() if it blocked on a bad configuration
 
-  // schedule reload() with a delay so we can batch up changes
-  auto delay = cct->_conf->rgw_realm_reconfigure_delay;
-  timer.add_event_after(delay, reload_scheduled);
+  // schedule reload() without delay
+  timer.add_event_after(0, reload_scheduled);
 
-  ldout(cct, 4) << "Notification on realm, reconfiguration scheduled in "
-      << delay << 's' << dendl;
+  ldout(cct, 4) << "Notification on realm, reconfiguration scheduled" << dendl;
 }
 
 void RGWRealmReloader::reload()
@@ -102,7 +104,8 @@ void RGWRealmReloader::reload()
                                          cct->_conf->rgw_enable_gc_threads,
                                          cct->_conf->rgw_enable_lc_threads,
                                          cct->_conf->rgw_enable_quota_threads,
-                                         cct->_conf->rgw_run_sync_thread);
+                                         cct->_conf->rgw_run_sync_thread,
+                                         cct->_conf->rgw_dynamic_resharding);
 
     ldout(cct, 1) << "Creating new store" << dendl;
 
@@ -143,6 +146,13 @@ void RGWRealmReloader::reload()
 
       RGWStoreManager::close_storage(store_cleanup);
     }
+  }
+
+  int r = store->register_to_service_map("rgw", service_map_meta);
+  if (r < 0) {
+    lderr(cct) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
+
+    /* ignore error */
   }
 
   ldout(cct, 1) << "Finishing initialization of new store" << dendl;

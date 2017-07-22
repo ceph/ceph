@@ -36,6 +36,10 @@ public:
                                  local_mirror_uuid, client_meta, work_queue);
   }
 
+  static void destroy(EventPreprocessor* processor) {
+    delete processor;
+  }
+
   EventPreprocessor(ImageCtxT &local_image_ctx, Journaler &remote_journaler,
                     const std::string &local_mirror_uuid,
                     MirrorPeerClientMeta *client_meta, ContextWQ *work_queue);

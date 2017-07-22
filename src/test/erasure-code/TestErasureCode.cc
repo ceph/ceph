@@ -17,9 +17,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#include "global/global_init.h"
 #include "erasure-code/ErasureCode.h"
-#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
@@ -33,26 +31,25 @@ public:
 
   ErasureCodeTest(unsigned int _k, unsigned int _m, unsigned int _chunk_size) :
     k(_k), m(_m), chunk_size(_chunk_size) {}
-  virtual ~ErasureCodeTest() {}
+  ~ErasureCodeTest() override {}
 
-  virtual int init(ErasureCodeProfile &profile, ostream *ss) {
+  int init(ErasureCodeProfile &profile, ostream *ss) override {
     return 0;
   }
 
-  virtual unsigned int get_chunk_count() const { return k + m; }
-  virtual unsigned int get_data_chunk_count() const { return k; }
-  virtual unsigned int get_chunk_size(unsigned int object_size) const {
+  unsigned int get_chunk_count() const override { return k + m; }
+  unsigned int get_data_chunk_count() const override { return k; }
+  unsigned int get_chunk_size(unsigned int object_size) const override {
     return chunk_size;
   }
-  virtual int encode_chunks(const set<int> &want_to_encode,
-			    map<int, bufferlist> *encoded) {
+  int encode_chunks(const set<int> &want_to_encode,
+			    map<int, bufferlist> *encoded) override {
     encode_chunks_encoded = *encoded;
     return 0;
   }
-  virtual int create_ruleset(const string &name,
-			     CrushWrapper &crush,
-			     ostream *ss) const { return 0; }
-
+  int create_rule(const string &name,
+		  CrushWrapper &crush,
+		  ostream *ss) const override { return 0; }
 };
 
 /*
@@ -151,22 +148,6 @@ TEST(ErasureCodeTest, encode_misaligned_non_contiguous)
     ASSERT_TRUE(encoded[i].is_aligned(ErasureCode::SIMD_ALIGN));
     ASSERT_TRUE(encoded[i].is_n_align_sized(chunk_size));
   }
-}
-
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", directory, false, false);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 /*

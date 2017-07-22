@@ -27,7 +27,7 @@ void AsyncRequest<T>::async_complete(int r) {
 
 template <typename T>
 librados::AioCompletion *AsyncRequest<T>::create_callback_completion() {
-  return util::create_rados_safe_callback(this);
+  return util::create_rados_callback(this);
 }
 
 template <typename T>
@@ -66,4 +66,6 @@ void AsyncRequest<T>::finish_request() {
 
 } // namespace librbd
 
+#ifndef TEST_F
 template class librbd::AsyncRequest<librbd::ImageCtx>;
+#endif

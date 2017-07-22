@@ -5,20 +5,23 @@ import os
 import time
 import sys
 
+from datetime import datetime
 from nose import with_setup, SkipTest
-from nose.tools import eq_ as eq, assert_raises
+from nose.tools import eq_ as eq, assert_raises, assert_not_equal
 from rados import (Rados,
                    LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
                    LIBRADOS_OP_FLAG_FADVISE_NOCACHE,
                    LIBRADOS_OP_FLAG_FADVISE_RANDOM)
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
-                 FunctionNotSupported, ArgumentOutOfRange, DiskQuotaExceeded,
+                 FunctionNotSupported, ArgumentOutOfRange,
+                 DiskQuotaExceeded, ConnectionShutdown, PermissionError,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
                  RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_JOURNALING,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
                  RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
-                 RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN)
+                 RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
+                 RBD_LOCK_MODE_EXCLUSIVE)
 
 rados = None
 ioctx = None
@@ -133,6 +136,10 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
             rados.conf_set('rbd_default_stripe_count', str(stripe_count or 0))
         if stripe_unit is not None:
             rados.conf_set('rbd_default_stripe_unit', str(stripe_unit or 0))
+        feature_data_pool = 0
+        datapool = rados.conf_get('rbd_default_data_pool')
+        if not len(datapool) == 0:
+            feature_data_pool = 128
         image_name = get_temp_image_name()
         if exception is None:
             RBD().create(ioctx, image_name, IMG_SIZE)
@@ -145,8 +152,12 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
                     eq(expected_order, actual_order)
 
                     expected_features = features
-                    if expected_features is None or format == 1:
-                        expected_features = 0 if format == 1 else 61
+                    if format == 1:
+                        expected_features = 0
+                    elif expected_features is None:
+                        expected_features = 61 | feature_data_pool
+                    else:
+                        expected_features |= feature_data_pool
                     eq(expected_features, image.features())
 
                     expected_stripe_count = stripe_count
@@ -191,14 +202,14 @@ def test_create_defaults():
     check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 1, 1 << 16)
     check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 10, 1 << 20)
     check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 10, 1 << 16)
-    check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 0, 0)
+    check_default_params(2, 20, 0, 0, 0)
     # make sure invalid combinations of stripe unit and order are still invalid
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 10, 1 << 50, exception=InvalidArgument)
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 10, 100, exception=InvalidArgument)
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 0, 1, exception=InvalidArgument)
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 1, 0, exception=InvalidArgument)
     # 0 stripe unit and count are still ignored
-    check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 0, 0)
+    check_default_params(2, 22, 0, 0, 0)
 
 def test_context_manager():
     with Rados(conffile='') as cluster:
@@ -316,6 +327,18 @@ class TestImage(object):
         eq(image.stripe_count(), stripe_count)
         image.close()
         RBD().remove(ioctx, image_name)
+
+    @require_new_format()
+    def test_id(self):
+        assert_not_equal(b'', self.image.id())
+
+    def test_block_name_prefix(self):
+        assert_not_equal(b'', self.image.block_name_prefix())
+
+    def test_create_timestamp(self):
+        timestamp = self.image.create_timestamp()
+        assert_not_equal(0, timestamp.year)
+        assert_not_equal(1970, timestamp.year)
 
     def test_invalidate_cache(self):
         self.image.write(b'abc', 0)
@@ -506,6 +529,17 @@ class TestImage(object):
         self.image.remove_snap('snap1')
         assert_raises(ImageNotFound, self.image.unprotect_snap, 'snap1')
         assert_raises(ImageNotFound, self.image.is_protected_snap, 'snap1')
+
+    def test_snap_timestamp(self):
+        self.image.create_snap('snap1')
+        eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
+        for snap in self.image.list_snaps():
+            snap_id = snap["id"]
+        time = self.image.get_snap_timestamp(snap_id)
+        assert_not_equal(b'', time.year)
+        assert_not_equal(0, time.year)
+        assert_not_equal(time.year, '1970')
+        self.image.remove_snap('snap1')
 
     def test_limit_snaps(self):
         self.image.set_snap_limit(2)
@@ -790,7 +824,34 @@ class TestImage(object):
         eq(retval[0], 0)
         eq(sys.getrefcount(comp), 2)
 
+    def test_metadata(self):
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 0)
+        self.image.metadata_set("key1", "value1")
+        self.image.metadata_set("key2", "value2")
+        value = self.image.metadata_get("key1")
+        eq(value, "value1")
+        value = self.image.metadata_get("key2")
+        eq(value, "value2")
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 2)
+        self.image.metadata_remove("key1")
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 1)
+        eq(metadata[0], ("key2", "value2"))
+        self.image.metadata_remove("key2")
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 0)
 
+        N = 65
+        for i in xrange(N):
+            self.image.metadata_set("key" + str(i), "X" * 1025)
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), N)
+        for i in xrange(N):
+            self.image.metadata_remove("key" + str(i))
+            metadata = list(self.image.metadata_list())
+            eq(len(metadata), N - i - 1)
 
 def check_diff(image, offset, length, from_snapshot, expected):
     extents = []
@@ -882,6 +943,7 @@ class TestClone(object):
         eq(pool, pool_name)
         eq(image, image_name)
         eq(snap, 'snap1')
+        eq(self.image.id(), self.clone.parent_id())
 
         # create a new pool...
         pool_name2 = get_temp_pool_name()
@@ -898,6 +960,7 @@ class TestClone(object):
         eq(pool, pool_name)
         eq(image, image_name)
         eq(snap, 'snap1')
+        eq(self.image.id(), self.other_clone.parent_id())
 
         # can't unprotect snap with children
         assert_raises(ImageBusy, self.image.unprotect_snap, 'snap1')
@@ -1071,6 +1134,8 @@ class TestClone(object):
                 clone.flatten()
                 assert_raises(ImageNotFound, clone.parent_info)
                 assert_raises(ImageNotFound, clone2.parent_info)
+                assert_raises(ImageNotFound, clone.parent_id)
+                assert_raises(ImageNotFound, clone2.parent_id)
                 after_flatten = clone.read(IMG_SIZE // 2, 256)
                 eq(data, after_flatten)
                 after_flatten = clone2.read(IMG_SIZE // 2, 256)
@@ -1164,6 +1229,7 @@ class TestExclusiveLock(object):
                 image1.write(data, 0)
                 image2.flatten()
                 assert_raises(ImageNotFound, image1.parent_info)
+                assert_raises(ImageNotFound, image1.parent_id)
                 parent = True
                 for x in range(30):
                     try:
@@ -1228,6 +1294,48 @@ class TestExclusiveLock(object):
             for offset in [0, IMG_SIZE // 2]:
                 read = image2.read(offset, 256)
                 eq(data, read)
+    def test_acquire_release_lock(self):
+        with Image(ioctx, image_name) as image:
+            image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
+            image.lock_release()
+
+    def test_break_lock(self):
+        blacklist_rados = Rados(conffile='')
+        blacklist_rados.connect()
+        try:
+            blacklist_ioctx = blacklist_rados.open_ioctx(pool_name)
+            try:
+                rados2.conf_set('rbd_blacklist_on_break_lock', 'true')
+                with Image(ioctx2, image_name) as image, \
+                     Image(blacklist_ioctx, image_name) as blacklist_image:
+                    blacklist_image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
+                    assert_raises(ReadOnlyImage, image.lock_acquire,
+                                  RBD_LOCK_MODE_EXCLUSIVE)
+
+                    lock_owners = list(image.lock_get_owners())
+                    eq(1, len(lock_owners))
+                    eq(RBD_LOCK_MODE_EXCLUSIVE, lock_owners[0]['mode'])
+                    image.lock_break(RBD_LOCK_MODE_EXCLUSIVE,
+                                     lock_owners[0]['owner'])
+
+                    assert_raises(ConnectionShutdown,
+                                  blacklist_image.is_exclusive_lock_owner)
+
+                    blacklist_rados.wait_for_latest_osdmap()
+                    data = rand_data(256)
+                    assert_raises(ConnectionShutdown,
+                                  blacklist_image.write, data, 0)
+
+                    image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
+
+                    try:
+                        blacklist_image.close()
+                    except ConnectionShutdown:
+                        pass
+            finally:
+                blacklist_ioctx.close()
+        finally:
+            blacklist_rados.shutdown()
 
 class TestMirroring(object):
 
@@ -1357,3 +1465,93 @@ class TestMirroring(object):
         eq(N + 1, len(images))
         for i in range(N):
             self.rbd.remove(ioctx, image_name + str(i))
+
+
+class TestTrash(object):
+
+    def setUp(self):
+        global rados2
+        rados2 = Rados(conffile='')
+        rados2.connect()
+        global ioctx2
+        ioctx2 = rados2.open_ioctx(pool_name)
+
+    def tearDown(self):
+        global ioctx2
+        ioctx2.close()
+        global rados2
+        rados2.shutdown()
+
+    def test_move(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        RBD().trash_move(ioctx, image_name, 1000)
+        RBD().trash_remove(ioctx, image_id, True)
+
+    def test_remove_denied(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        RBD().trash_move(ioctx, image_name, 1000)
+        assert_raises(PermissionError, RBD().trash_remove, ioctx, image_id)
+
+    def test_remove(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        RBD().trash_move(ioctx, image_name, 0)
+        RBD().trash_remove(ioctx, image_id)
+
+    def test_get(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        RBD().trash_move(ioctx, image_name, 1000)
+
+        info = RBD().trash_get(ioctx, image_id)
+        eq(image_id, info['id'])
+        eq(image_name, info['name'])
+        eq('USER', info['source'])
+        assert(info['deferment_end_time'] > info['deletion_time'])
+
+        RBD().trash_remove(ioctx, image_id, True)
+
+    def test_list(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id1 = image.id()
+            image_name1 = image_name
+        RBD().trash_move(ioctx, image_name, 1000)
+
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id2 = image.id()
+            image_name2 = image_name
+        RBD().trash_move(ioctx, image_name, 1000)
+
+        entries = list(RBD().trash_list(ioctx))
+        for e in entries:
+            if e['id'] == image_id1:
+                eq(e['name'], image_name1)
+            elif e['id'] == image_id2:
+                eq(e['name'], image_name2)
+            else:
+                assert False
+            eq(e['source'], 'USER')
+            assert e['deferment_end_time'] > e['deletion_time']
+
+        RBD().trash_remove(ioctx, image_id1, True)
+        RBD().trash_remove(ioctx, image_id2, True)
+
+    def test_restore(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+        RBD().trash_move(ioctx, image_name, 1000)
+        RBD().trash_restore(ioctx, image_id, image_name)
+        remove_image()

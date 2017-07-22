@@ -10,6 +10,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::image_replayer::ReplayStatusFormatter: " \
@@ -195,7 +196,13 @@ void ReplayStatusFormatter<I>::handle_update_tag_cache(uint64_t master_tag_tid,
     }
   }
 
-  if (tag_data.predecessor.tag_tid == 0) {
+  if (tag_data.predecessor.mirror_uuid !=
+        librbd::Journal<>::LOCAL_MIRROR_UUID &&
+      tag_data.predecessor.mirror_uuid !=
+        librbd::Journal<>::ORPHAN_MIRROR_UUID) {
+    dout(20) << "hit remote image non-primary epoch" << dendl;
+    tag_data.predecessor.tag_tid = mirror_tag_tid;
+  } else if (tag_data.predecessor.tag_tid == 0) {
     // We failed. Don't consider this fatal, just terminate retrieving.
     dout(20) << "making fake tag" << dendl;
     tag_data.predecessor.tag_tid = mirror_tag_tid;

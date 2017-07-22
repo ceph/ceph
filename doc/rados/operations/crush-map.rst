@@ -235,17 +235,19 @@ To map placement groups to OSDs, a CRUSH map requires a list of OSD devices
 of devices appears first in the CRUSH map. To declare a device in the CRUSH map,
 create a new line under your list of devices, enter ``device`` followed by a
 unique numeric ID, followed by the corresponding ``ceph-osd`` daemon instance.
+The device class can optionaly be added to group devices so they can be
+conveniently targetted by a crush rule.
 
 ::
 
 	#devices
-	device {num} {osd.name}
+	device {num} {osd.name} [class {class}]
 
 For example:: 
 
 	#devices
-	device 0 osd.0
-	device 1 osd.1
+	device 0 osd.0 class ssd
+	device 1 osd.1 class hdd
 	device 2 osd.2
 	device 3 osd.3
 	
@@ -486,7 +488,7 @@ default pools.
    you create a new pool, its default ruleset is ``0``.
 
 
-CRUSH rules deﬁnes placement and replication strategies or distribution policies
+CRUSH rules define placement and replication strategies or distribution policies
 that allow you to specify exactly how CRUSH places object replicas. For
 example, you might create a rule selecting a pair of targets for 2-way
 mirroring, another rule for selecting three targets in two different data
@@ -503,7 +505,7 @@ A rule takes the following form::
 		type [ replicated | erasure ]
 		min_size <min-size>
 		max_size <max-size>
-		step take <bucket-name>
+		step take <bucket-name> [class <device-class>]
 		step [choose|chooseleaf] [firstn|indep] <N> <bucket-type>
 		step emit
 	}
@@ -554,9 +556,12 @@ A rule takes the following form::
 :Default: 10
 
 
-``step take <bucket-name>``
+``step take <bucket-name> [class <device-class>]``
 
 :Description: Takes a bucket name, and begins iterating down the tree.
+              If the ``device-class`` is specified, it must match
+              a class previously used when defining a device. All
+              devices that do not belong to the class are excluded.
 :Purpose: A component of the rule.
 :Required: Yes
 :Example: ``step take data``
@@ -633,7 +638,7 @@ Placing Different Pools on Different OSDS:
 
 Suppose you want to have most pools default to OSDs backed by large hard drives,
 but have some pools mapped to OSDs backed by fast solid-state drives (SSDs).
-It's possible to have multiple independent CRUSH heirarchies within the same
+It's possible to have multiple independent CRUSH hierarchies within the same
 CRUSH map. Define two hierarchies with two different root nodes--one for hard
 disks (e.g., "root platter") and one for SSDs (e.g., "root ssd") as shown
 below::
@@ -1252,4 +1257,4 @@ Further, as noted above, be careful running old versions of the
 ``ceph-osd`` daemon after reverting to legacy values as the feature
 bit is not perfectly enforced.
 
-.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: http://ceph.com/papers/weil-crush-sc06.pdf
+.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/wp-content/uploads/2016/08/weil-crush-sc06.pdf

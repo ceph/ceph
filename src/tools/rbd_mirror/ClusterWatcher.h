@@ -35,13 +35,11 @@ public:
   // Caller controls frequency of calls
   void refresh_pools();
   const PoolPeers& get_pool_peers() const;
-  const PoolNames& get_pool_names() const;
 
 private:
   Mutex &m_lock;
   RadosRef m_cluster;
   PoolPeers m_pool_peers;
-  PoolNames m_pool_names;
 
   void read_pool_peers(PoolPeers *pool_peers, PoolNames *pool_names);
 };

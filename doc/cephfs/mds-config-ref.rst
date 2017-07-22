@@ -11,15 +11,6 @@
 :Default: ``true`` 
 
 
-``max mds``
-
-:Description: The number of active MDS daemons during cluster creation. Set
-              under ``[mon]`` or ``[global]``.
-              
-:Type:  32-bit Integer
-:Default: ``1``
-
-
 ``mds max file size``
 
 :Description: The maximum allowed file size to set when creating a 
@@ -173,15 +164,6 @@
 :Default: ``2`` (i.e., rjenkins)
 
 
-``mds log``
-
-:Description: Set to ``true`` if the MDS should journal metadata updates 
-              (disabled for benchmarking only).
-              
-:Type:  Boolean
-:Default: ``true``
-
-
 ``mds log skip corrupt events``
 
 :Description: Determines whether the MDS should try to skip corrupt journal 
@@ -300,24 +282,6 @@
 :Default: ``50``
 
 
-``mds bal merge rd``
-
-:Description: The minimum read temperature before Ceph merges 
-              adjacent directory fragments.
-
-:Type:  Float
-:Default: ``1000``
-
-
-``mds bal merge wr``
-
-:Description: The minimum write temperature before Ceph merges 
-              adjacent directory fragments.
-              
-:Type:  Float
-:Default: ``1000``
-
-
 ``mds bal interval``
 
 :Description: The frequency (in seconds) of workload exchanges between MDSs.
@@ -327,10 +291,25 @@
 
 ``mds bal fragment interval``
 
-:Description: The frequency (in seconds) of adjusting directory fragmentation.
+:Description: The delay (in seconds) between a fragment being elegible for split
+              or merge and executing the fragmentation change.
 :Type:  32-bit Integer
 :Default: ``5``
 
+
+``mds bal fragment fast factor``
+
+:Description: The ratio by which frags may exceed the split size before
+              a split is executed immediately (skipping the fragment interval)
+:Type:  Float
+:Default: ``1.5``
+
+``mds bal fragment size max``
+
+:Description: The maximum size of a fragment before any new entries
+              are rejected with ENOSPC.
+:Type:  32-bit Integer
+:Default: ``100000``
 
 ``mds bal idle threshold``
 
@@ -363,9 +342,9 @@
 
 :Description: The method for calculating MDS load. 
 
-              - ``1`` = Hybrid.
-              - ``2`` = Request rate and latency. 
-              - ``3`` = CPU load.
+              - ``0`` = Hybrid.
+              - ``1`` = Request rate and latency. 
+              - ``2`` = CPU load.
               
 :Type:  32-bit Integer
 :Default: ``0``

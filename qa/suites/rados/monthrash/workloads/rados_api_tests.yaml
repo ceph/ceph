@@ -1,0 +1,20 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - reached quota
+      - overall HEALTH_
+      - (CACHE_POOL_NO_HIT_SET)
+      - (POOL_FULL)
+      - (REQUEST_SLOW)
+      - (MON_DOWN)
+      - (PG_
+    conf:
+      global:
+        debug objecter: 20
+        debug rados: 20
+        debug ms: 1
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rados/test.sh

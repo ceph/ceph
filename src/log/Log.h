@@ -6,12 +6,10 @@
 
 #include "common/Thread.h"
 
-#include <pthread.h>
-
 #include "EntryQueue.h"
 
 namespace ceph {
-namespace log {
+namespace logging {
 
 class Graylog;
 class SubsystemMap;
@@ -53,7 +51,7 @@ class Log : private Thread
 
   bool m_inject_segv;
 
-  void *entry();
+  void *entry() override;
 
   void _flush(EntryQueue *q, EntryQueue *requeue, bool crash);
 
@@ -61,7 +59,7 @@ class Log : private Thread
 
 public:
   explicit Log(SubsystemMap *s);
-  virtual ~Log();
+  ~Log() override;
 
   void set_flush_on_exit();
 
@@ -96,6 +94,7 @@ public:
 
   /// induce a segv on the next log event
   void inject_segv();
+  void reset_segv();
 };
 
 }

@@ -20,13 +20,14 @@
 #include <string>
 #include <set>
 
+#include "include/counter.h"
 #include "include/types.h"
 #include "include/buffer_fwd.h"
 #include "include/lru.h"
 #include "include/elist.h"
 #include "include/filepath.h"
-#include "mdstypes.h"
 
+#include "MDSCacheObject.h"
 #include "SimpleLock.h"
 #include "LocalLock.h"
 #include "ScrubHeader.h"
@@ -46,75 +47,10 @@ class Session;
 bool operator<(const CDentry& l, const CDentry& r);
 
 // dentry
-class CDentry : public MDSCacheObject, public LRUObject {
-  /*
-   * This class uses a boost::pool to handle allocation. This is *not*
-   * thread-safe, so don't do allocations from multiple threads!
-   *
-   * Alternatively, switch the pool to use a boost::singleton_pool.
-   */
-
-private:
-  static boost::pool<> pool;
+class CDentry : public MDSCacheObject, public LRUObject, public Counter<CDentry> {
 public:
-  static void *operator new(size_t num_bytes) { 
-    void *n = pool.malloc();
-    if (!n)
-      throw std::bad_alloc();
-    return n;
-  }
-  void operator delete(void *p) {
-    pool.free(p);
-  }
+  friend class CDir;
 
-public:
-  // -- state --
-  static const int STATE_NEW =          (1<<0);
-  static const int STATE_FRAGMENTING =  (1<<1);
-  static const int STATE_PURGING =      (1<<2);
-  static const int STATE_BADREMOTEINO = (1<<3);
-  static const int STATE_EVALUATINGSTRAY = (1<<4);
-  static const int STATE_PURGINGPINNED =  (1<<5);
-  // stray dentry needs notification of releasing reference
-  static const int STATE_STRAY =	STATE_NOTIFYREF;
-
-  // -- pins --
-  static const int PIN_INODEPIN =     1;  // linked inode is pinned
-  static const int PIN_FRAGMENTING = -2;  // containing dir is refragmenting
-  static const int PIN_PURGING =      3;
-  static const int PIN_SCRUBPARENT =  4;
-
-  const char *pin_name(int p) const {
-    switch (p) {
-    case PIN_INODEPIN: return "inodepin";
-    case PIN_FRAGMENTING: return "fragmenting";
-    case PIN_PURGING: return "purging";
-    case PIN_SCRUBPARENT: return "scrubparent";
-    default: return generic_pin_name(p);
-    }
-  }
-
-  // -- wait --
-  //static const int WAIT_LOCK_OFFSET = 8;
-
-  void add_waiter(uint64_t tag, MDSInternalContextBase *c);
-
-  static const unsigned EXPORT_NONCE = 1;
-
-  bool is_lt(const MDSCacheObject *r) const {
-    return *this < *static_cast<const CDentry*>(r);
-  }
-
-public:
-  std::string name;
-  __u32 hash;
-  snapid_t first, last;
-
-  dentry_key_t key() { 
-    return dentry_key_t(last, name.c_str(), hash);
-  }
-
-public:
   struct linkage_t {
     CInode *inode;
     inodeno_t remote_ino;
@@ -142,68 +78,73 @@ public:
     void link_remote(CInode *in);
   };
 
-protected:
-  CDir *dir;     // containing dirfrag
-  linkage_t linkage;
-  list<linkage_t> projected;
-  
-  version_t version;  // dir version when last touched.
-  version_t projected_version;  // what it will be when i unlock/commit.
 
-public:
-  elist<CDentry*>::item item_dirty;
-  elist<CDentry*>::item item_stray;
+  // -- state --
+  static const int STATE_NEW =          (1<<0);
+  static const int STATE_FRAGMENTING =  (1<<1);
+  static const int STATE_PURGING =      (1<<2);
+  static const int STATE_BADREMOTEINO = (1<<3);
+  static const int STATE_EVALUATINGSTRAY = (1<<4);
+  static const int STATE_PURGINGPINNED =  (1<<5);
+  static const int STATE_BOTTOMLRU =    (1<<6);
+  // stray dentry needs notification of releasing reference
+  static const int STATE_STRAY =	STATE_NOTIFYREF;
+  static const int MASK_STATE_IMPORT_KEPT = STATE_BOTTOMLRU;
 
-protected:
-  friend class Migrator;
-  friend class Locker;
-  friend class MDCache;
-  friend class StrayManager;
-  friend class CInode;
-  friend class C_MDC_XlockRequest;
+  // -- pins --
+  static const int PIN_INODEPIN =     1;  // linked inode is pinned
+  static const int PIN_FRAGMENTING = -2;  // containing dir is refragmenting
+  static const int PIN_PURGING =      3;
+  static const int PIN_SCRUBPARENT =  4;
+
+  static const unsigned EXPORT_NONCE = 1;
 
 
-public:
-  // lock
-  static LockType lock_type;
-  static LockType versionlock_type;
-
-  SimpleLock lock;
-  LocalLock versionlock;
-
- public:
-  // cons
   CDentry(const std::string& n, __u32 h,
 	  snapid_t f, snapid_t l) :
     name(n), hash(h),
     first(f), last(l),
-    dir(0),
-    version(0), projected_version(0),
     item_dirty(this),
     lock(this, &lock_type),
-    versionlock(this, &versionlock_type) {
-    g_num_dn++;
-    g_num_dna++;
+    versionlock(this, &versionlock_type),
+    dir(0),
+    version(0), projected_version(0) {
   }
   CDentry(const std::string& n, __u32 h, inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
     name(n), hash(h),
     first(f), last(l),
-    dir(0),
-    version(0), projected_version(0),
     item_dirty(this),
     lock(this, &lock_type),
-    versionlock(this, &versionlock_type) {
-    g_num_dn++;
-    g_num_dna++;
+    versionlock(this, &versionlock_type),
+    dir(0),
+    version(0), projected_version(0) {
     linkage.remote_ino = ino;
     linkage.remote_d_type = dt;
   }
-  ~CDentry() {
-    g_num_dn--;
-    g_num_dns++;
+
+  const char *pin_name(int p) const override {
+    switch (p) {
+    case PIN_INODEPIN: return "inodepin";
+    case PIN_FRAGMENTING: return "fragmenting";
+    case PIN_PURGING: return "purging";
+    case PIN_SCRUBPARENT: return "scrubparent";
+    default: return generic_pin_name(p);
+    }
   }
 
+  // -- wait --
+  //static const int WAIT_LOCK_OFFSET = 8;
+
+  void add_waiter(uint64_t tag, MDSInternalContextBase *c) override;
+
+  bool is_lt(const MDSCacheObject *r) const override {
+    return *this < *static_cast<const CDentry*>(r);
+  }
+
+  dentry_key_t key() {
+    return dentry_key_t(last, name.c_str(), hash);
+  }
 
   const CDir *get_dir() const { return dir; }
   CDir *get_dir() { return dir; }
@@ -219,9 +160,7 @@ public:
     projected.push_back(linkage_t());
     return &projected.back();
   }
-  void push_projected_linkage() {
-    _project_linkage();
-  }
+  void push_projected_linkage();
   void push_projected_linkage(inodeno_t ino, char d_type) {
     linkage_t *p = _project_linkage();
     p->remote_ino = ino;
@@ -237,6 +176,13 @@ public:
       return &projected.back();
     return &linkage;
   }
+
+  const linkage_t *get_projected_linkage() const {
+    if (!projected.empty())
+      return &projected.back();
+    return &linkage;
+  }
+
   CInode *get_projected_inode() {
     return get_projected_linkage()->inode;
   }
@@ -250,21 +196,21 @@ public:
   }
 
   // ref counts: pin ourselves in the LRU when we're pinned.
-  void first_get() {
+  void first_get() override {
     lru_pin();
   }
-  void last_put() {
+  void last_put() override {
     lru_unpin();
   }
-  void _put();
+  void _put() override;
 
   // auth pins
-  bool can_auth_pin() const;
-  void auth_pin(void *by);
-  void auth_unpin(void *by);
+  bool can_auth_pin() const override;
+  void auth_pin(void *by) override;
+  void auth_unpin(void *by) override;
   void adjust_nested_auth_pins(int adjustment, int diradj, void *by);
-  bool is_frozen() const;
-  bool is_freezing() const;
+  bool is_frozen() const override;
+  bool is_freezing() const override;
   int get_num_dir_auth_pins() const;
   
   // remote links
@@ -276,8 +222,8 @@ public:
   const CDentry& operator= (const CDentry& right);
 
   // misc
-  void make_path_string(std::string& s) const;
-  void make_path(filepath& fp) const;
+  void make_path_string(std::string& s, bool projected=false) const;
+  void make_path(filepath& fp, bool projected=false) const;
 
   // -- version --
   version_t get_version() const { return version; }
@@ -285,7 +231,7 @@ public:
   version_t get_projected_version() const { return projected_version; }
   void set_projected_version(version_t v) { projected_version = v; }
   
-  mds_authority_t authority() const;
+  mds_authority_t authority() const override;
 
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
@@ -345,28 +291,26 @@ public:
     ::decode(replica_map, blp);
 
     // twiddle
-    state = 0;
+    state &= MASK_STATE_IMPORT_KEPT;
     state_set(CDentry::STATE_AUTH);
     if (nstate & STATE_DIRTY)
       _mark_dirty(ls);
     if (!replica_map.empty())
       get(PIN_REPLICATED);
+    replica_nonce = 0;
   }
 
   // -- locking --
-  SimpleLock* get_lock(int type) {
+  SimpleLock* get_lock(int type) override {
     assert(type == CEPH_LOCK_DN);
     return &lock;
   }
-  void set_object_info(MDSCacheObjectInfo &info);
-  void encode_lock_state(int type, bufferlist& bl);
-  void decode_lock_state(int type, bufferlist& bl);
-
+  void set_object_info(MDSCacheObjectInfo &info) override;
+  void encode_lock_state(int type, bufferlist& bl) override;
+  void decode_lock_state(int type, bufferlist& bl) override;
 
   // ---------------------------------------------
   // replicas (on clients)
- public:
-  map<client_t,ClientLease*> client_lease_map;
 
   bool is_any_leases() const {
     return !client_lease_map.empty();
@@ -393,12 +337,42 @@ public:
   void remove_client_lease(ClientLease *r, Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   void remove_client_leases(Locker *locker);
 
-  
-  ostream& print_db_line_prefix(ostream& out);
-  void print(ostream& out);
+  ostream& print_db_line_prefix(ostream& out) override;
+  void print(ostream& out) override;
   void dump(Formatter *f) const;
 
-  friend class CDir;
+
+  std::string name;
+  __u32 hash;
+  snapid_t first, last;
+
+  elist<CDentry*>::item item_dirty;
+  elist<CDentry*>::item item_stray;
+
+  // lock
+  static LockType lock_type;
+  static LockType versionlock_type;
+
+  SimpleLock lock;
+  LocalLock versionlock;
+
+  map<client_t,ClientLease*> client_lease_map;
+
+
+protected:
+  friend class Migrator;
+  friend class Locker;
+  friend class MDCache;
+  friend class StrayManager;
+  friend class CInode;
+  friend class C_MDC_XlockRequest;
+
+  CDir *dir;     // containing dirfrag
+  linkage_t linkage;
+  list<linkage_t> projected;
+
+  version_t version;  // dir version when last touched.
+  version_t projected_version;  // what it will be when i unlock/commit.
 };
 
 ostream& operator<<(ostream& out, const CDentry& dn);

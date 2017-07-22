@@ -15,28 +15,6 @@
 CLS_VER(1, 0)
 CLS_NAME(journal)
 
-cls_handle_t h_class;
-cls_method_handle_t h_journal_create;
-cls_method_handle_t h_journal_get_order;
-cls_method_handle_t h_journal_get_splay_width;
-cls_method_handle_t h_journal_get_pool_id;
-cls_method_handle_t h_journal_get_minimum_set;
-cls_method_handle_t h_journal_set_minimum_set;
-cls_method_handle_t h_journal_get_active_set;
-cls_method_handle_t h_journal_set_active_set;
-cls_method_handle_t h_journal_get_client;
-cls_method_handle_t h_journal_client_register;
-cls_method_handle_t h_journal_client_update_data;
-cls_method_handle_t h_journal_client_update_state;
-cls_method_handle_t h_journal_client_unregister;
-cls_method_handle_t h_journal_client_commit;
-cls_method_handle_t h_journal_client_list;
-cls_method_handle_t h_journal_get_next_tag_tid;
-cls_method_handle_t h_journal_get_tag;
-cls_method_handle_t h_journal_tag_create;
-cls_method_handle_t h_journal_tag_list;
-cls_method_handle_t h_journal_object_guard_append;
-
 namespace {
 
 static const uint64_t MAX_KEYS_READ = 64;
@@ -1132,15 +1110,31 @@ int journal_object_guard_append(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
-#if __GNUC__ >= 4
-  #define CEPH_CLS_API    __attribute__ ((visibility ("default")))
-#else
-  #define CEPH_CLS_API
-#endif
-
-void CEPH_CLS_API __cls_init()
+CLS_INIT(journal)
 {
   CLS_LOG(20, "Loaded journal class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_journal_create;
+  cls_method_handle_t h_journal_get_order;
+  cls_method_handle_t h_journal_get_splay_width;
+  cls_method_handle_t h_journal_get_pool_id;
+  cls_method_handle_t h_journal_get_minimum_set;
+  cls_method_handle_t h_journal_set_minimum_set;
+  cls_method_handle_t h_journal_get_active_set;
+  cls_method_handle_t h_journal_set_active_set;
+  cls_method_handle_t h_journal_get_client;
+  cls_method_handle_t h_journal_client_register;
+  cls_method_handle_t h_journal_client_update_data;
+  cls_method_handle_t h_journal_client_update_state;
+  cls_method_handle_t h_journal_client_unregister;
+  cls_method_handle_t h_journal_client_commit;
+  cls_method_handle_t h_journal_client_list;
+  cls_method_handle_t h_journal_get_next_tag_tid;
+  cls_method_handle_t h_journal_get_tag;
+  cls_method_handle_t h_journal_tag_create;
+  cls_method_handle_t h_journal_tag_list;
+  cls_method_handle_t h_journal_object_guard_append;
 
   cls_register("journal", &h_class);
 

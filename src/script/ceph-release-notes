@@ -19,7 +19,8 @@ Next either set the github token as an env variable
 
 Example:
 
-  ceph-release-notes -r tags/v0.87..origin/giant $(git rev-parse --show-toplevel)
+  ceph-release-notes -r tags/v0.87..origin/giant \
+      $(git rev-parse --show-toplevel)
 
 """
 
@@ -34,44 +35,108 @@ import requests
 from git import Repo
 
 
-merge_re = re.compile("Merge pull request #(\d+).*")
 fixes_re = re.compile(r"Fixes\:? #(\d+)")
-tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
+reviewed_by_re = re.compile(r"Rev(.*)By", re.IGNORECASE)
+# labels is the list of relevant labels defined for github.com/ceph/ceph
+labels = ['bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
+          'mon', 'performance', 'pybind', 'rdma', 'rgw', 'rbd', 'tests',
+          'tools']
+merge_re = re.compile("Merge pull request #(\d+).*")
+# prefixes is the list of commit description prefixes we recognize
+prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
+            'common', 'core', 'crush', 'doc', 'fs', 'librados', 'librbd',
+            'log', 'mds', 'mgr', 'mon', 'msg', 'objecter', 'osd', 'pybind',
+            'rbd', 'rbd-mirror', 'rbd-nbd', 'rgw', 'tests', 'tools']
 signed_off_re = re.compile("Signed-off-by: (.+) <")
+tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 
+
 def get_original_issue(issue, verbose):
-    r = requests.get(tracker_uri.format(issue),params={"include":"relations"}).json()
+    r = requests.get(tracker_uri.format(issue),
+                     params={"include": "relations"}).json()
 
     # looking up for the original issue only makes sense
     # when dealing with an issue in the Backport tracker
     if r["issue"]["tracker"]["name"] != "Backport":
         if verbose:
-            print ("http://tracker.ceph.com/issues/" + issue + " is from the tracker " + r["issue"]["tracker"]["name"] + ", do not look for the original issue")
+            print ("http://tracker.ceph.com/issues/" + issue +
+                   " is from the tracker " + r["issue"]["tracker"]["name"] +
+                   ", do not look for the original issue")
         return issue
 
     # if a Backport issue does not have a relation, keep it
     if "relations" not in r["issue"]:
         if verbose:
-            print ("http://tracker.ceph.com/issues/" + issue + " has no relations, do not look for the original issue")
+            print ("http://tracker.ceph.com/issues/" + issue +
+                   " has no relations, do not look for the original issue")
         return issue
-    
-    copied_to = [str(i['issue_id']) for i in r["issue"]["relations"] if i["relation_type"] == "copied_to"]
+
+    copied_to = [
+                    str(i['issue_id']) for i in r["issue"]["relations"]
+                    if i["relation_type"] == "copied_to"
+                ]
     if copied_to:
         if len(copied_to) > 1:
             if verbose:
-                print ("ERROR: http://tracker.ceph.com/issues/" + issue + " has more than one Copied To relation")
+                print ("ERROR: http://tracker.ceph.com/issues/" + issue +
+                       " has more than one Copied To relation")
             return issue
         if verbose:
-            print ("http://tracker.ceph.com/issues/" + issue + " is the backport of http://tracker.ceph.com/issues/" + copied_to[0])
+            print ("http://tracker.ceph.com/issues/" + issue +
+                   " is the backport of http://tracker.ceph.com/issues/" +
+                   copied_to[0])
         return copied_to[0]
     else:
         if verbose:
-            print ("http://tracker.ceph.com/issues/" + issue + " has no copied_to relations, do not look for the original issue")
+            print ("http://tracker.ceph.com/issues/" + issue +
+                   " has no copied_to relations; do not look for the" +
+                   " original issue")
         return issue
 
 
-def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
+def split_component(title, gh, number):
+    title_re = '(' + '|'.join(prefixes) + ')(:.*)'
+    match = re.match(title_re, title)
+    if match:
+        return match.group(1)+match.group(2)
+    else:
+        issue = gh.repos("ceph")("ceph").issues(number).get()
+        issue_labels = {it['name'] for it in issue['labels']}
+        if 'documentation' in issue_labels:
+            return 'doc: ' + title
+        item = labels.intersection(issue_labels)
+        if item:
+            return ",".join(item) + ': ' + title
+        else:
+            return 'UNKNOWN: ' + title
+
+def _title_message(commit, pr, strict):
+    title = pr['title']
+    message_lines = commit.message.split('\n')
+    if strict or len(message_lines) < 1:
+        return (title, None)
+    lines = []
+    for line in message_lines[1:]:
+        if reviewed_by_re.match(line):
+            continue
+        line = line.strip()
+        if line:
+            lines.append(line)
+    if len(lines) == 0:
+        return (title, None)
+    duplicates_pr_title = lines[0] == pr['title'].strip()
+    if duplicates_pr_title:
+        return (title, None)
+    assert len(lines) > 0, "missing message content"
+    if len(lines) == 1:
+        # assume that a single line means the intention is to
+        # re-write the PR title
+        return (lines[0], None)
+    message = "    " + "\n    ".join(lines)
+    return (title, message)
+
+def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
 
     issue2prs = {}
     pr2issues = {}
@@ -79,94 +144,133 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
 
     for commit in repo.iter_commits(ref, merges=True):
         merge = merge_re.match(commit.summary)
-        if merge:
-            number = merge.group(1)
-            pr = gh.repos("ceph")("ceph").pulls(number).get()
-            title = pr['title']
-            message_lines = commit.message.split('\n')
-            if not strict and len(message_lines) > 1:
-                lines = []
-                for line in message_lines[1:]:
-                    if 'Reviewed-by' in line:
-                        continue
-                    line = line.strip()
-                    if line:
-                        lines.append(line)
-                duplicates_pr_title = lines[0] == pr['title'].strip()
-                if duplicates_pr_title:
-                    lines.pop(0)
-                if len(lines) == 0:
-                    if duplicates_pr_title:
-                        message = None
-                elif len(lines) == 1:
-                    # assume that a single line means the intention is to
-                    # re-write the PR title
-                    title = lines[0]
-                    message = None
-                else:
-                    message = "    " + "\n    ".join(lines)
-            else:
-                message = None
-            issues = []
-            if pr['body']:
-                issues = fixes_re.findall(pr['body']) + tracker_re.findall(pr['body'])
+        if not merge:
+            continue
+        number = merge.group(1)
+        print ("Considering PR#" + number)
+        # do not pick up ceph/ceph-qa-suite.git PRs
+        if int(number) < 1311:
+            print ("Ignoring low-numbered PR, probably picked up from"
+                   " ceph/ceph-qa-suite.git")
+            continue
+        pr = gh.repos("ceph")("ceph").pulls(number).get()
+        (title, message) = _title_message(commit, pr, strict)
+        issues = []
+        if pr['body']:
+            issues = fixes_re.findall(pr['body']) + tracker_re.findall(
+                pr['body']
+            )
 
-            authors = {}
-            for c in repo.iter_commits("{sha1}^1..{sha1}^2".format(sha1=commit.hexsha)):
-                for author in re.findall("Signed-off-by:\s*(.*?)\s*<", c.message):
-                    authors[author] = 1
-                issues.extend(fixes_re.findall(c.message) + tracker_re.findall(c.message))
-            if authors:
-                author = ", ".join(authors.keys())
-            else:
-                author = commit.parents[-1].author.name
+        authors = {}
+        for c in repo.iter_commits(
+                     "{sha1}^1..{sha1}^2".format(sha1=commit.hexsha)
+                 ):
+            for author in re.findall(
+                              "Signed-off-by:\s*(.*?)\s*<", c.message
+                          ):
+                authors[author] = 1
+            issues.extend(fixes_re.findall(c.message) +
+                          tracker_re.findall(c.message))
+        if authors:
+            author = ", ".join(authors.keys())
+        else:
+            author = commit.parents[-1].author.name
 
-            if strict and not issues:
-                print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " has no associated issue")
-                continue    
-            
+        if strict and not issues:
+            print ("ERROR: https://github.com/ceph/ceph/pull/" +
+                   str(number) + " has no associated issue")
+            continue
+
+        if strict:
+            title_re = (
+                '^(?:hammer|infernalis|jewel|kraken):\s+(' +
+                '|'.join(prefixes) +
+                ')(:.*)'
+            )
+            match = re.match(title_re, title)
+            if not match:
+                print ("ERROR: https://github.com/ceph/ceph/pull/" +
+                       str(number) + " title " + title.encode("utf-8") +
+                       " does not match " + title_re)
+            else:
+                title = match.group(1) + match.group(2)
+        if use_tags:
+            title = split_component(title, gh, number)
+
+        title = title.strip(' \t\n\r\f\v\.\,\;\:\-\=')
+        # escape asterisks, which is used by reStructuredTextrst for inline
+        # emphasis
+        title = title.replace('*', '\*')
+        pr2info[number] = (author, title, message)
+
+        for issue in set(issues):
             if strict:
-                title_re = '^(?:hammer|infernalis|jewel|kraken):\s+(cli|common|mon|msgr|osd|log|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|cmake|doc|crush|librados)(:.*)'
-                match = re.match(title_re, title)
-                if not match:
-                    print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title.encode("utf-8") + " does not match " + title_re)
-                else:
-                    title = match.group(1) + match.group(2)
-
-            pr2info[number] = (author, title, message)
-
-            for issue in set(issues):
                 issue = get_original_issue(issue, verbose)
-                issue2prs.setdefault(issue, set([])).add(number)
-                pr2issues.setdefault(number, set([])).add(issue)
-            sys.stdout.write('.')
+            issue2prs.setdefault(issue, set([])).add(number)
+            pr2issues.setdefault(number, set([])).add(issue)
+        sys.stdout.write('.')
 
     print (" done collecting merges.")
 
     if strict:
-        for (issue, prs) in issue2prs.iteritems():
+        for (issue, prs) in issue2prs.items():
             if len(prs) > 1:
-                print (">>>>>>> " + str(len(prs)) + " pr for issue " + issue + " " + str(prs))
+                print (">>>>>>> " + str(len(prs)) + " pr for issue " +
+                       issue + " " + str(prs))
 
-    for (pr, (author, title, message)) in sorted(pr2info.iteritems(), key=lambda (k,v): (v[2], v[1])):
+    for (pr, (author, title, message)) in sorted(
+        pr2info.items(), key=lambda title: title[1][1]
+    ):
         if pr in pr2issues:
             if plaintext:
                 issues = map(lambda issue: '#' + str(issue), pr2issues[pr])
             else:
-                issues = map(lambda issue: '`issue#{issue} <http://tracker.ceph.com/issues/{issue}>`_'.format(issue=issue), pr2issues[pr])
+                issues = map(lambda issue: (
+                    '`issue#{issue} <http://tracker.ceph.com/issues/{issue}>`_'
+                    ).format(issue=issue), pr2issues[pr]
+                )
             issues = ", ".join(issues) + ", "
         else:
             issues = ''
         if plaintext:
-            print ("* {title} ({issues}{author})".format(title=title.encode("utf-8"), issues=issues, author=author.encode("utf-8")))
+            print ("* {title} ({issues}{author})".format(
+                    title=title.encode("utf-8"),
+                    issues=issues,
+                    author=author.encode("utf-8")
+                )
+            )
         else:
-            print ("* {title} ({issues}`pr#{pr} <http://github.com/ceph/ceph/pull/{pr}>`_, {author})".format(title=title.encode("utf-8"), issues=issues, author=author.encode("utf-8"), pr=pr))
+            print (
+                (
+                    "* {title} ({issues}`pr#{pr} <"
+                    "https://github.com/ceph/ceph/pull/{pr}"
+                    ">`_, {author})"
+                ).format(
+                    title=title.encode("utf-8"),
+                    issues=issues,
+                    author=author.encode("utf-8"), pr=pr
+                )
+            )
         if message:
             print (message)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    desc = '''
+    Make ceph release notes for a given revision. Eg usage:
+
+    $ ceph-release-notes -r tags/v0.87..origin/giant \
+        $(git rev-parse --show-toplevel)
+
+    It is recommended to set the github env. token in order to avoid
+    hitting the api rate limits.
+    '''
+
+    parser = argparse.ArgumentParser(
+        description=desc,
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
     parser.add_argument("--rev", "-r",
                         help="git revision range for creating release notes")
     parser.add_argument("--text", "-t",
@@ -177,14 +281,27 @@ if __name__ == "__main__":
                         help="verbose")
     parser.add_argument("--strict",
                         action='store_true', default=None,
-                        help="strict")
+                        help="strict, recommended only for backport releases")
     parser.add_argument("repo", metavar="repo",
                         help="path to ceph git repo")
-    parser.add_argument("--token", default=os.getenv("GITHUB_ACCESS_TOKEN"),
-                        help="Github Access Token ($GITHUB_ACCESS_TOKEN otherwise)")
+    parser.add_argument(
+        "--token",
+        default=os.getenv("GITHUB_ACCESS_TOKEN"),
+        help="Github Access Token ($GITHUB_ACCESS_TOKEN otherwise)",
+    )
+    parser.add_argument("--use-tags", default=False,
+                        help="Use github tags to guess the component")
 
     args = parser.parse_args()
     gh = github.GitHub(
         access_token=args.token)
 
-    make_release_notes(gh, Repo(args.repo), args.rev, args.text, args.verbose, args.strict)
+    make_release_notes(
+        gh,
+        Repo(args.repo),
+        args.rev,
+        args.text,
+        args.verbose,
+        args.strict,
+        args.use_tags
+    )

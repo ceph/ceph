@@ -19,7 +19,7 @@
 
 class MBackfillReserve : public Message {
   static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 3;
 public:
   spg_t pgid;
   epoch_t query_epoch;
@@ -41,11 +41,11 @@ public:
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio) {}
 
-  const char *get_type_name() const {
+  const char *get_type_name() const override {
     return "MBackfillReserve";
   }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "MBackfillReserve ";
     switch (type) {
     case REQUEST:
@@ -63,23 +63,16 @@ public:
     return;
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid.pgid, p);
     ::decode(query_epoch, p);
     ::decode(type, p);
-    if (header.version > 1)
-      ::decode(priority, p);
-    else
-      priority = 0;
-    if (header.version >= 3)
-      ::decode(pgid.shard, p);
-    else
-      pgid.shard = shard_id_t::NO_SHARD;
-
+    ::decode(priority, p);
+    ::decode(pgid.shard, p);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(pgid.pgid, payload);
     ::encode(query_epoch, payload);
     ::encode(type, payload);

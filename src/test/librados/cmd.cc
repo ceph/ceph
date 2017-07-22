@@ -116,9 +116,13 @@ TEST(LibRadosCmd, OSDCmd) {
   // note: tolerate NXIO here in case the cluster is thrashing out underneath us.
   cmd[0] = (char *)"asdfasdf";
   r = rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
   ASSERT_TRUE(r == -22 || r == -ENXIO);
   cmd[0] = (char *)"version";
   r = rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
   ASSERT_TRUE(r == -22 || r == -ENXIO);
   cmd[0] = (char *)"{\"prefix\":\"version\"}";
   r = rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
@@ -168,6 +172,8 @@ TEST(LibRadosCmd, PGCmd) {
   // note: tolerate NXIO here in case the cluster is thrashing out underneath us.
   int r = rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
   ASSERT_TRUE(r == -22 || r == -ENXIO);
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
 
   // make sure the pg exists on the osd before we query it
   rados_ioctx_t io;

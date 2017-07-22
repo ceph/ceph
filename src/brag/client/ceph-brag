@@ -258,7 +258,7 @@ def get_nums():
   num_mons = len(oj['monmap']['mons'])
   num_osds = int(oj['osdmap']['osdmap']['num_in_osds'])
   try:
-    num_mdss = oj['mdsmap']['in']
+    num_mdss = oj['fsmap']['in']
   except KeyError:
     num_mdss = 0
 

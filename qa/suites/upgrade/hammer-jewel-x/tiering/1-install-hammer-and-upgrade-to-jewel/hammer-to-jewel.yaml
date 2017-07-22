@@ -1,0 +1,13 @@
+tasks:
+- install:
+    branch: hammer
+    exclude_packages:
+    - ceph-mgr
+    - libcephfs2
+    - libcephfs-devel
+    - libcephfs-dev
+- print: '**** done hammer'
+- ceph:
+    fs: xfs
+    skip_mgr_daemons: true
+    add_osds_to_crush: true

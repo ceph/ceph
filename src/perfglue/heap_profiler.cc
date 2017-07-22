@@ -26,6 +26,8 @@
 #include "global/global_context.h"
 #include "common/debug.h"
 
+#define dout_context g_ceph_context
+
 bool ceph_using_tcmalloc()
 {
   return true;

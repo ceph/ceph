@@ -42,11 +42,13 @@ void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_
   cout << "  tag: " << tag << std::endl;
   cout << "  lockers:" << std::endl;
 
-  if (assert_type)
+  if (assert_type) {
     ASSERT_EQ(*assert_type, lock_type);
+  }
 
-  if (assert_tag)
+  if (assert_tag) {
     ASSERT_EQ(*assert_tag, tag);
+  }
 
   map<locker_id_t, locker_info_t>::iterator liter;
   for (liter = lockers.begin(); liter != lockers.end(); ++liter) {
@@ -283,12 +285,12 @@ TEST(ClsLock, TestLockDuration) {
   Lock l("lock");
   utime_t dur(5, 0);
   l.set_duration(dur);
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
   int r = l.lock_exclusive(&ioctx, oid);
   if (r == 0) {
     // it's possible to get success if we were just really slow...
-    ASSERT_TRUE(ceph_clock_now(NULL) > start + dur);
+    ASSERT_TRUE(ceph_clock_now() > start + dur);
   } else {
     ASSERT_EQ(-EEXIST, r);
   }

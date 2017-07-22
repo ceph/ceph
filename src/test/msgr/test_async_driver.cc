@@ -24,12 +24,13 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 #include "include/Context.h"
-#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "msg/async/Event.h"
+
+#include <atomic>
 
 // We use epoll, kqueue, evport, select in descending order by performance.
 #if defined(__linux__)
@@ -57,6 +58,7 @@
 
 #include <gtest/gtest.h>
 
+
 #if GTEST_HAS_PARAM_TEST
 
 class EventDriverTest : public ::testing::TestWithParam<const char*> {
@@ -64,7 +66,7 @@ class EventDriverTest : public ::testing::TestWithParam<const char*> {
   EventDriver *driver;
 
   EventDriverTest(): driver(0) {}
-  virtual void SetUp() {
+  void SetUp() override {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
 #ifdef HAVE_EPOLL
     if (strcmp(GetParam(), "epoll"))
@@ -76,9 +78,9 @@ class EventDriverTest : public ::testing::TestWithParam<const char*> {
 #endif
     if (strcmp(GetParam(), "select"))
       driver = new SelectDriver(g_ceph_context);
-    driver->init(100);
+    driver->init(NULL, 100);
   }
-  virtual void TearDown() {
+  void TearDown() override {
     delete driver;
   }
 };
@@ -115,7 +117,7 @@ TEST_P(EventDriverTest, PipeTest) {
   r = driver->event_wait(fired_events, &tv);
   ASSERT_EQ(r, 0);
 
-  char c;
+  char c = 'A';
   r = write(fds[1], &c, sizeof(c));
   ASSERT_EQ(r, 1);
   r = driver->event_wait(fired_events, &tv);
@@ -147,10 +149,12 @@ void* echoclient(void *arg)
   sa.sin_port = htons(port);
   char addr[] = "127.0.0.1";
   int r = inet_pton(AF_INET, addr, &sa.sin_addr);
+  assert(r == 1);
 
   int connect_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (connect_sd >= 0) {
     r = connect(connect_sd, (struct sockaddr*)&sa, sizeof(sa));
+    assert(r == 0);
     int t = 0;
   
     do {
@@ -223,21 +227,22 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
     tv.tv_sec = 5;
     tv.tv_usec = 0;
     r = driver->event_wait(fired_events, &tv);
-    ASSERT_EQ(r, 1);
-    ASSERT_EQ(fired_events[0].mask, EVENT_READABLE);
+    ASSERT_EQ(1, r);
+    ASSERT_EQ(EVENT_READABLE, fired_events[0].mask);
 
     fired_events.clear();
     char data[100];
     r = ::read(client_sd, data, sizeof(data));
     if (r == 0)
       break;
-    ASSERT_TRUE(r > 0);
+    ASSERT_GT(r, 0);
     r = driver->add_event(client_sd, EVENT_READABLE, EVENT_WRITABLE);
+    ASSERT_EQ(0, r);
     r = driver->event_wait(fired_events, &tv);
-    ASSERT_EQ(r, 1);
+    ASSERT_EQ(1, r);
     ASSERT_EQ(fired_events[0].mask, EVENT_WRITABLE);
     r = write(client_sd, data, strlen(data));
-    ASSERT_EQ(r, (int)strlen(data));
+    ASSERT_EQ((int)strlen(data), r);
     driver->del_event(client_sd, EVENT_READABLE|EVENT_WRITABLE,
                       EVENT_WRITABLE);
   } while (1);
@@ -249,13 +254,13 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
 class FakeEvent : public EventCallback {
 
  public:
-  void do_request(int fd_or_id) {}
+  void do_request(int fd_or_id) override {}
 };
 
 TEST(EventCenterTest, FileEventExpansion) {
   vector<int> sds;
   EventCenter center(g_ceph_context);
-  center.init(100, 0);
+  center.init(100, 0, "posix");
   center.set_owner();
   EventCallbackRef e(new FakeEvent());
   for (int i = 0; i < 300; i++) {
@@ -276,13 +281,13 @@ class Worker : public Thread {
  public:
   EventCenter center;
   explicit Worker(CephContext *c, int idx): cct(c), done(false), center(c) {
-    center.init(100, idx);
+    center.init(100, idx, "posix");
   }
   void stop() {
     done = true; 
     center.wakeup();
   }
-  void* entry() {
+  void* entry() override {
     center.set_owner();
     while (!done)
       center.process_events(1000000);
@@ -291,15 +296,15 @@ class Worker : public Thread {
 };
 
 class CountEvent: public EventCallback {
-  atomic_t *count;
+  std::atomic<unsigned> *count;
   Mutex *lock;
   Cond *cond;
 
  public:
-  CountEvent(atomic_t *atomic, Mutex *l, Cond *c): count(atomic), lock(l), cond(c) {}
-  void do_request(int id) {
+  CountEvent(std::atomic<unsigned> *atomic, Mutex *l, Cond *c): count(atomic), lock(l), cond(c) {}
+  void do_request(int id) override {
     lock->Lock();
-    count->dec();
+    (*count)--;
     cond->Signal();
     lock->Unlock();
   }
@@ -307,18 +312,18 @@ class CountEvent: public EventCallback {
 
 TEST(EventCenterTest, DispatchTest) {
   Worker worker1(g_ceph_context, 1), worker2(g_ceph_context, 2);
-  atomic_t count(0);
+  std::atomic<unsigned> count = { 0 };
   Mutex lock("DispatchTest::lock");
   Cond cond;
   worker1.create("worker_1");
   worker2.create("worker_2");
   for (int i = 0; i < 10000; ++i) {
-    count.inc();
+    count++;
     worker1.center.dispatch_event_external(EventCallbackRef(new CountEvent(&count, &lock, &cond)));
-    count.inc();
+    count++;
     worker2.center.dispatch_event_external(EventCallbackRef(new CountEvent(&count, &lock, &cond)));
     Mutex::Locker l(lock);
-    while (count.read())
+    while (count)
       cond.Wait(lock);
   }
   worker1.stop();
@@ -353,17 +358,6 @@ TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 
 #endif
 
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
 
 /*
  * Local Variables:

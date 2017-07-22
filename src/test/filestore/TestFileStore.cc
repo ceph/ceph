@@ -30,7 +30,7 @@ TEST(FileStore, create)
 {
   {
     map<string,string> pm;
-    FileStore fs("a", "b");
+    FileStore fs(g_ceph_context, "a", "b");
     TestFileStore::create_backend(fs, 0);
     fs.collect_metadata(&pm);
     ASSERT_EQ(pm["filestore_backend"], "generic");
@@ -38,7 +38,7 @@ TEST(FileStore, create)
 #if defined(__linux__)
   {
     map<string,string> pm;
-    FileStore fs("a", "b");
+    FileStore fs(g_ceph_context, "a", "b");
     TestFileStore::create_backend(fs, BTRFS_SUPER_MAGIC);
     fs.collect_metadata(&pm);
     ASSERT_EQ(pm["filestore_backend"], "btrfs");
@@ -46,7 +46,7 @@ TEST(FileStore, create)
 # ifdef HAVE_LIBXFS
   {
     map<string,string> pm;
-    FileStore fs("a", "b");
+    FileStore fs(g_ceph_context, "a", "b");
     TestFileStore::create_backend(fs, XFS_SUPER_MAGIC);
     fs.collect_metadata(&pm);
     ASSERT_EQ(pm["filestore_backend"], "xfs");
@@ -68,7 +68,8 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->set_val("osd_journal_size", "100");
   g_ceph_context->_conf->apply_changes(NULL);

@@ -5,6 +5,7 @@
 #define CEPH_RGW_METADATA_H
 
 #include <string>
+#include <boost/optional.hpp>
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -12,10 +13,12 @@
 #include "cls/version/cls_version_types.h"
 #include "cls/log/cls_log_types.h"
 #include "common/RWLock.h"
+#include "common/RefCountedObj.h"
 #include "common/ceph_time.h"
 
 
 class RGWRados;
+class RGWCoroutine;
 class JSONObj;
 struct RGWObjVersionTracker;
 
@@ -86,7 +89,7 @@ public:
   }
 
 protected:
-  virtual void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) = 0;
+  virtual void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) = 0;
   /**
    * Compare an incoming versus on-disk tag/version+mtime combo against
    * the sync mode to see if the new one should replace the on-disk one.
@@ -115,16 +118,27 @@ protected:
   /*
    * The tenant_name is always returned on purpose. May be empty, of course.
    */
-  static void parse_bucket(const string &bucket,
-                           string &tenant_name, string &bucket_name)
+  static void parse_bucket(const string& bucket,
+                           string *tenant_name,
+                           string *bucket_name,
+                           string *bucket_instance = nullptr /* optional */)
   {
     int pos = bucket.find('/');
     if (pos >= 0) {
-      tenant_name = bucket.substr(0, pos);
+      *tenant_name = bucket.substr(0, pos);
     } else {
-      tenant_name.clear();
+      tenant_name->clear();
     }
-    bucket_name = bucket.substr(pos + 1);
+    string bn = bucket.substr(pos + 1);
+    pos = bn.find (':');
+    if (pos < 0) {
+      *bucket_name = std::move(bn);
+      return;
+    }
+    *bucket_name = bn.substr(0, pos);
+    if (bucket_instance) {
+      *bucket_instance = bn.substr(pos + 1);
+    }
   }
 };
 
@@ -139,6 +153,35 @@ struct RGWMetadataLogInfo {
 };
 
 class RGWCompletionManager;
+
+class RGWMetadataLogInfoCompletion : public RefCountedObject {
+ public:
+  using info_callback_t = std::function<void(int, const cls_log_header&)>;
+ private:
+  cls_log_header header;
+  librados::IoCtx io_ctx;
+  librados::AioCompletion *completion;
+  std::mutex mutex; //< protects callback between cancel/complete
+  boost::optional<info_callback_t> callback; //< cleared on cancel
+ public:
+  RGWMetadataLogInfoCompletion(info_callback_t callback);
+  ~RGWMetadataLogInfoCompletion() override;
+
+  librados::IoCtx& get_io_ctx() { return io_ctx; }
+  cls_log_header& get_header() { return header; }
+  librados::AioCompletion* get_completion() { return completion; }
+
+  void finish(librados::completion_t cb) {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (callback) {
+      (*callback)(completion->get_return_value(), header);
+    }
+  }
+  void cancel() {
+    std::lock_guard<std::mutex> lock(mutex);
+    callback = boost::none;
+  }
+};
 
 class RGWMetadataLog {
   CephContext *cct;
@@ -193,7 +236,7 @@ public:
 
   int trim(int shard_id, const real_time& from_time, const real_time& end_time, const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWMetadataLogInfo *info);
-  int get_info_async(int shard_id, RGWMetadataLogInfo *info, RGWCompletionManager *completion_manager, void *user_info, int *pret);
+  int get_info_async(int shard_id, RGWMetadataLogInfoCompletion *completion);
   int lock_exclusive(int shard_id, timespan duration, string&zone_id, string& owner_id);
   int unlock(int shard_id, string& zone_id, string& owner_id);
 
@@ -223,6 +266,27 @@ struct RGWMetadataLogData {
 };
 WRITE_CLASS_ENCODER(RGWMetadataLogData)
 
+struct RGWMetadataLogHistory {
+  epoch_t oldest_realm_epoch;
+  std::string oldest_period_id;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(oldest_realm_epoch, bl);
+    ::encode(oldest_period_id, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    DECODE_START(1, p);
+    ::decode(oldest_realm_epoch, p);
+    ::decode(oldest_period_id, p);
+    DECODE_FINISH(p);
+  }
+
+  static const std::string oid;
+};
+WRITE_CLASS_ENCODER(RGWMetadataLogHistory)
+
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
   CephContext *cct;
@@ -232,8 +296,6 @@ class RGWMetadataManager {
   std::map<std::string, RGWMetadataLog> md_logs;
   // use the current period's log for mutating operations
   RGWMetadataLog* current_log = nullptr;
-  // oldest log's position in the period history
-  RGWPeriodHistory::Cursor oldest_log_period;
 
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
 
@@ -255,9 +317,23 @@ public:
 
   int init(const std::string& current_period);
 
-  RGWPeriodHistory::Cursor get_oldest_log_period() const {
-    return oldest_log_period;
-  }
+  /// initialize the oldest log period if it doesn't exist, and attach it to
+  /// our current history
+  RGWPeriodHistory::Cursor init_oldest_log_period();
+
+  /// read the oldest log period, and return a cursor to it in our existing
+  /// period history
+  RGWPeriodHistory::Cursor read_oldest_log_period() const;
+
+  /// read the oldest log period asynchronously and write its result to the
+  /// given cursor pointer
+  RGWCoroutine* read_oldest_log_period_cr(RGWPeriodHistory::Cursor *period,
+                                          RGWObjVersionTracker *objv) const;
+
+  /// try to advance the oldest log period when the given period is trimmed,
+  /// using a rados lock to provide atomicity
+  RGWCoroutine* trim_log_period_cr(RGWPeriodHistory::Cursor period,
+                                   RGWObjVersionTracker *objv) const;
 
   /// find or create the metadata log for the given period
   RGWMetadataLog* get_log(const std::string& period);

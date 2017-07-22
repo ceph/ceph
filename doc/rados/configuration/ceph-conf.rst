@@ -227,6 +227,11 @@ Ceph supports the following metavariables:
 :Description: Expands to ``$type.$id``.
 :Example: ``/var/run/ceph/$cluster-$name.asok``
 
+``$pid``
+
+:Description: Expands to daemon pid.
+:Example: ``/var/run/ceph/$cluster-$name-$pid.asok``
+
 
 .. _ceph-conf-common-settings:
 
@@ -322,14 +327,12 @@ authentication in the ``[global]`` section of your Ceph configuration file. ::
 	auth service required = cephx
 	auth client required = cephx
 
-Additionally, you should enable message signing. See `Cephx Config Reference`_
-and  `Cephx Authentication`_ for details. 
+Additionally, you should enable message signing. See `Cephx Config Reference`_ for details. 
 
 .. important:: When upgrading, we recommend expressly disabling authentication 
    first, then perform the upgrade. Once the upgrade is complete, re-enable 
    authentication.
 
-.. _Cephx Authentication: ../../operations/authentication
 .. _Cephx Config Reference: ../auth-config-ref
 
 
@@ -380,8 +383,9 @@ use with Ceph, and mount it to the directory you just created::
 	sudo mkfs -t {fstype} /dev/{disk}
 	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}
 
-We recommend using the ``xfs`` file system or the ``btrfs`` file system when
-running :command:`mkfs`.
+We recommend using the ``xfs`` file system when running
+:command:`mkfs`.  (``btrfs`` and ``ext4`` are not recommended and no
+longer tested.)
 
 See the `OSD Config Reference`_ for additional configuration details.
 
@@ -520,8 +524,7 @@ To invoke a cluster other than the default ``ceph`` cluster, use the
 	ceph -c openstack.conf health
 
 
-.. _Hardware Recommendations: ../../../install/hardware-recommendations
-.. _hardware recommendations: ../../../install/hardware-recommendations
+.. _Hardware Recommendations: ../../../start/hardware-recommendations
 .. _Network Configuration Reference: ../network-config-ref
 .. _OSD Config Reference: ../osd-config-ref
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction

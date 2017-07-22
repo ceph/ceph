@@ -133,10 +133,10 @@ Writer::Writer(OmapBench *omap_bench) : ob(omap_bench) {
   oid = name.str();
 }
 void Writer::start_time() {
-  begin_time = ceph_clock_now(g_ceph_context);
+  begin_time = ceph_clock_now();
 }
 void Writer::stop_time() {
-  end_time = ceph_clock_now(g_ceph_context);
+  end_time = ceph_clock_now();
 }
 double Writer::get_time() {
   return (end_time - begin_time) * 1000;
@@ -232,7 +232,9 @@ int OmapBench::print_written_omap() {
     objstrm << prefix;
     objstrm << i;
     cout << "\nPrinting omap for "<<objstrm.str() << std::endl;
-    key_read.omap_get_keys("", LONG_MAX, &out_keys, &err);
+    // FIXME: we ignore pmore here.  this shouldn't happen for benchmark
+    // keys, though, unless the OSD limit is *really* low.
+    key_read.omap_get_keys2("", LONG_MAX, &out_keys, nullptr, &err);
     io_ctx.operate(objstrm.str(), &key_read, NULL);
     if (err < 0) {
       cout << "error " << err;

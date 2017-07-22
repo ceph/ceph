@@ -37,7 +37,7 @@ class RGWRealmWatcher : public librados::WatchCtx2 {
   };
 
   RGWRealmWatcher(CephContext* cct, RGWRealm& realm);
-  ~RGWRealmWatcher();
+  ~RGWRealmWatcher() override;
 
   /// register a watcher for the given notification type
   void add_watcher(RGWRealmNotify type, Watcher& watcher);

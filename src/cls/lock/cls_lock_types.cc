@@ -12,8 +12,6 @@
  * 
  */
 
-#include "include/types.h"
-#include "msg/msg_types.h"
 #include "common/Formatter.h"
 
 #include "cls/lock/cls_lock_types.h"
@@ -49,6 +47,7 @@ void locker_info_t::dump(Formatter *f) const
 
 static void generate_test_addr(entity_addr_t& a, int nonce, int port)
 {
+  a.set_type(entity_addr_t::TYPE_LEGACY);
   a.set_nonce(nonce);
   a.set_family(AF_INET);
   a.set_in4_quad(0, 127);
@@ -68,3 +67,32 @@ void locker_info_t::generate_test_instances(list<locker_info_t*>& o)
   o.push_back(new locker_info_t);
 }
 
+void lock_info_t::dump(Formatter *f) const
+{
+  f->dump_int("lock_type", lock_type);
+  f->dump_string("tag", tag);
+  f->open_array_section("lockers");
+  for (auto &i : lockers) {
+    f->open_object_section("locker");
+    f->dump_object("id", i.first);
+    f->dump_object("info", i.second);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void lock_info_t::generate_test_instances(list<lock_info_t *>& o)
+{
+  lock_info_t *i = new lock_info_t;
+  locker_id_t id;
+  locker_info_t info;
+  generate_lock_id(id, 1, "cookie");
+  info.expiration = utime_t(5, 0);
+  generate_test_addr(info.addr, 1, 2);
+  info.description = "description";
+  i->lockers[id] = info;
+  i->lock_type = LOCK_EXCLUSIVE;
+  i->tag = "tag";
+  o.push_back(i);
+  o.push_back(new lock_info_t);
+}

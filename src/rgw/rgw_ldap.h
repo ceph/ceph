@@ -28,6 +28,7 @@ namespace rgw {
     std::string binddn;
     std::string bindpw;
     std::string searchdn;
+    std::string searchfilter;
     std::string dnattr;
     LDAP *ldap;
     bool msad = false; /* TODO: possible future specialization */
@@ -37,9 +38,9 @@ namespace rgw {
     using lock_guard = std::lock_guard<std::mutex>;
 
     LDAPHelper(std::string _uri, std::string _binddn, std::string _bindpw,
-	       std::string _searchdn, std::string _dnattr)
+	       std::string _searchdn, std::string _searchfilter, std::string _dnattr)
       : uri(std::move(_uri)), binddn(std::move(_binddn)),
-	bindpw(std::move(_bindpw)), searchdn(_searchdn), dnattr(_dnattr),
+	bindpw(std::move(_bindpw)), searchdn(_searchdn), searchfilter(_searchfilter), dnattr(_dnattr),
 	ldap(nullptr) {
       // nothing
     }
@@ -78,7 +79,7 @@ namespace rgw {
       int ret = ldap_initialize(&tldap, uri.c_str());
       if (ret == LDAP_SUCCESS) {
 	unsigned long ldap_ver = LDAP_VERSION3;
-	ret = ldap_set_option(ldap, LDAP_OPT_PROTOCOL_VERSION,
+	ret = ldap_set_option(tldap, LDAP_OPT_PROTOCOL_VERSION,
 			      (void*) &ldap_ver);
 	if (ret == LDAP_SUCCESS) {
 	  ret = ldap_simple_bind_s(tldap, dn, pwd.c_str());
@@ -105,7 +106,7 @@ namespace rgw {
   {
   public:
     LDAPHelper(std::string _uri, std::string _binddn, std::string _bindpw,
-	       std::string _searchdn, std::string _dnattr)
+	       std::string _searchdn, std::string _searchfilter, std::string _dnattr)
       {}
 
     int init() {

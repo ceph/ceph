@@ -4,7 +4,7 @@
   tunable straw_calc_version 1
 # build then reweight-item then tree
   $ map="$TESTDIR/foo"
-  $ crushtool --outfn "$map" --build --set-chooseleaf-vary-r 0 --num_osds 25 node straw 5 rack straw 1 root straw 0 --reweight-item osd.2 99 -o "$map" --tree
+  $ crushtool --outfn "$map" --build --set-chooseleaf-vary-r 0 --set-chooseleaf-stable 0 --num_osds 25 node straw 5 rack straw 1 root straw 0 --reweight-item osd.2 99 -o "$map" --tree
   crushtool reweighting item osd.2 to 99
   ID\tWEIGHT\tTYPE NAME (esc)
   -11\t123.00000\troot root (esc)
@@ -50,6 +50,7 @@
   tunable choose_total_tries 50
   tunable chooseleaf_descend_once 1
   tunable straw_calc_version 1
+  tunable allowed_bucket_algs 54
   
   # devices
   device 0 osd.0
@@ -188,8 +189,8 @@
   }
   
   # rules
-  rule replicated_ruleset {
-  \truleset 0 (esc)
+  rule replicated_rule {
+  \tid 0 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -201,8 +202,8 @@
   # end crush map
 # tunables before reweight
   $ crushtool -i "$map" --set-straw-calc-version 0 --reweight --test --show-utilization --max-x 100 --min-x 1
-  rule 0 (replicated_ruleset), x = 1..100, numrep = 1..10
-  rule 0 (replicated_ruleset) num_rep 1 result size == 1:\t100/100 (esc)
+  rule 0 (replicated_rule), x = 1..100, numrep = 1..10
+  rule 0 (replicated_rule) num_rep 1 result size == 1:\t100/100 (esc)
     device 0:\t\t stored : 4\t expected : 4 (esc)
     device 1:\t\t stored : 4\t expected : 4 (esc)
     device 2:\t\t stored : 40\t expected : 4 (esc)
@@ -224,7 +225,7 @@
     device 22:\t\t stored : 2\t expected : 4 (esc)
     device 23:\t\t stored : 2\t expected : 4 (esc)
     device 24:\t\t stored : 2\t expected : 4 (esc)
-  rule 0 (replicated_ruleset) num_rep 2 result size == 2:\t100/100 (esc)
+  rule 0 (replicated_rule) num_rep 2 result size == 2:\t100/100 (esc)
     device 0:\t\t stored : 6\t expected : 8 (esc)
     device 1:\t\t stored : 6\t expected : 8 (esc)
     device 2:\t\t stored : 60\t expected : 8 (esc)
@@ -250,7 +251,7 @@
     device 22:\t\t stored : 4\t expected : 8 (esc)
     device 23:\t\t stored : 5\t expected : 8 (esc)
     device 24:\t\t stored : 6\t expected : 8 (esc)
-  rule 0 (replicated_ruleset) num_rep 3 result size == 3:\t100/100 (esc)
+  rule 0 (replicated_rule) num_rep 3 result size == 3:\t100/100 (esc)
     device 0:\t\t stored : 8\t expected : 12 (esc)
     device 1:\t\t stored : 6\t expected : 12 (esc)
     device 2:\t\t stored : 69\t expected : 12 (esc)
@@ -276,7 +277,7 @@
     device 22:\t\t stored : 15\t expected : 12 (esc)
     device 23:\t\t stored : 8\t expected : 12 (esc)
     device 24:\t\t stored : 11\t expected : 12 (esc)
-  rule 0 (replicated_ruleset) num_rep 4 result size == 4:\t100/100 (esc)
+  rule 0 (replicated_rule) num_rep 4 result size == 4:\t100/100 (esc)
     device 0:\t\t stored : 8\t expected : 16 (esc)
     device 1:\t\t stored : 6\t expected : 16 (esc)
     device 2:\t\t stored : 72\t expected : 16 (esc)
@@ -302,8 +303,8 @@
     device 22:\t\t stored : 20\t expected : 16 (esc)
     device 23:\t\t stored : 10\t expected : 16 (esc)
     device 24:\t\t stored : 15\t expected : 16 (esc)
-  rule 0 (replicated_ruleset) num_rep 5 result size == 4:\t3/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 5 result size == 5:\t97/100 (esc)
+  rule 0 (replicated_rule) num_rep 5 result size == 4:\t3/100 (esc)
+  rule 0 (replicated_rule) num_rep 5 result size == 5:\t97/100 (esc)
     device 0:\t\t stored : 8\t expected : 20 (esc)
     device 1:\t\t stored : 6\t expected : 20 (esc)
     device 2:\t\t stored : 74\t expected : 20 (esc)
@@ -329,8 +330,8 @@
     device 22:\t\t stored : 25\t expected : 20 (esc)
     device 23:\t\t stored : 13\t expected : 20 (esc)
     device 24:\t\t stored : 18\t expected : 20 (esc)
-  rule 0 (replicated_ruleset) num_rep 6 result size == 4:\t3/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 6 result size == 5:\t97/100 (esc)
+  rule 0 (replicated_rule) num_rep 6 result size == 4:\t3/100 (esc)
+  rule 0 (replicated_rule) num_rep 6 result size == 5:\t97/100 (esc)
     device 0:\t\t stored : 8\t expected : 20 (esc)
     device 1:\t\t stored : 6\t expected : 20 (esc)
     device 2:\t\t stored : 74\t expected : 20 (esc)
@@ -356,8 +357,8 @@
     device 22:\t\t stored : 25\t expected : 20 (esc)
     device 23:\t\t stored : 13\t expected : 20 (esc)
     device 24:\t\t stored : 18\t expected : 20 (esc)
-  rule 0 (replicated_ruleset) num_rep 7 result size == 4:\t3/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 7 result size == 5:\t97/100 (esc)
+  rule 0 (replicated_rule) num_rep 7 result size == 4:\t3/100 (esc)
+  rule 0 (replicated_rule) num_rep 7 result size == 5:\t97/100 (esc)
     device 0:\t\t stored : 8\t expected : 20 (esc)
     device 1:\t\t stored : 6\t expected : 20 (esc)
     device 2:\t\t stored : 74\t expected : 20 (esc)
@@ -383,8 +384,8 @@
     device 22:\t\t stored : 25\t expected : 20 (esc)
     device 23:\t\t stored : 13\t expected : 20 (esc)
     device 24:\t\t stored : 18\t expected : 20 (esc)
-  rule 0 (replicated_ruleset) num_rep 8 result size == 4:\t3/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 8 result size == 5:\t97/100 (esc)
+  rule 0 (replicated_rule) num_rep 8 result size == 4:\t3/100 (esc)
+  rule 0 (replicated_rule) num_rep 8 result size == 5:\t97/100 (esc)
     device 0:\t\t stored : 8\t expected : 20 (esc)
     device 1:\t\t stored : 6\t expected : 20 (esc)
     device 2:\t\t stored : 74\t expected : 20 (esc)
@@ -410,8 +411,8 @@
     device 22:\t\t stored : 25\t expected : 20 (esc)
     device 23:\t\t stored : 13\t expected : 20 (esc)
     device 24:\t\t stored : 18\t expected : 20 (esc)
-  rule 0 (replicated_ruleset) num_rep 9 result size == 4:\t2/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 9 result size == 5:\t98/100 (esc)
+  rule 0 (replicated_rule) num_rep 9 result size == 4:\t2/100 (esc)
+  rule 0 (replicated_rule) num_rep 9 result size == 5:\t98/100 (esc)
     device 0:\t\t stored : 8\t expected : 20 (esc)
     device 1:\t\t stored : 6\t expected : 20 (esc)
     device 2:\t\t stored : 74\t expected : 20 (esc)
@@ -437,8 +438,8 @@
     device 22:\t\t stored : 25\t expected : 20 (esc)
     device 23:\t\t stored : 13\t expected : 20 (esc)
     device 24:\t\t stored : 18\t expected : 20 (esc)
-  rule 0 (replicated_ruleset) num_rep 10 result size == 4:\t2/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 10 result size == 5:\t98/100 (esc)
+  rule 0 (replicated_rule) num_rep 10 result size == 4:\t2/100 (esc)
+  rule 0 (replicated_rule) num_rep 10 result size == 5:\t98/100 (esc)
     device 0:\t\t stored : 8\t expected : 20 (esc)
     device 1:\t\t stored : 6\t expected : 20 (esc)
     device 2:\t\t stored : 74\t expected : 20 (esc)
@@ -466,8 +467,8 @@
     device 24:\t\t stored : 18\t expected : 20 (esc)
   crushtool successfully built or modified map.  Use '-o <file>' to write it out.
   $ crushtool -i "$map" --set-straw-calc-version 1 --reweight --test --show-utilization --max-x 100 --min-x 1
-  rule 0 (replicated_ruleset), x = 1..100, numrep = 1..10
-  rule 0 (replicated_ruleset) num_rep 1 result size == 1:\t100/100 (esc)
+  rule 0 (replicated_rule), x = 1..100, numrep = 1..10
+  rule 0 (replicated_rule) num_rep 1 result size == 1:\t100/100 (esc)
     device 1:\t\t stored : 1\t expected : 4 (esc)
     device 2:\t\t stored : 75\t expected : 4 (esc)
     device 3:\t\t stored : 2\t expected : 4 (esc)
@@ -482,7 +483,7 @@
     device 20:\t\t stored : 2\t expected : 4 (esc)
     device 22:\t\t stored : 1\t expected : 4 (esc)
     device 23:\t\t stored : 1\t expected : 4 (esc)
-  rule 0 (replicated_ruleset) num_rep 2 result size == 2:\t100/100 (esc)
+  rule 0 (replicated_rule) num_rep 2 result size == 2:\t100/100 (esc)
     device 0:\t\t stored : 1\t expected : 8 (esc)
     device 1:\t\t stored : 1\t expected : 8 (esc)
     device 2:\t\t stored : 95\t expected : 8 (esc)
@@ -507,7 +508,7 @@
     device 22:\t\t stored : 6\t expected : 8 (esc)
     device 23:\t\t stored : 5\t expected : 8 (esc)
     device 24:\t\t stored : 8\t expected : 8 (esc)
-  rule 0 (replicated_ruleset) num_rep 3 result size == 3:\t100/100 (esc)
+  rule 0 (replicated_rule) num_rep 3 result size == 3:\t100/100 (esc)
     device 0:\t\t stored : 1\t expected : 12 (esc)
     device 1:\t\t stored : 1\t expected : 12 (esc)
     device 2:\t\t stored : 95\t expected : 12 (esc)
@@ -533,8 +534,8 @@
     device 22:\t\t stored : 11\t expected : 12 (esc)
     device 23:\t\t stored : 11\t expected : 12 (esc)
     device 24:\t\t stored : 11\t expected : 12 (esc)
-  rule 0 (replicated_ruleset) num_rep 4 result size == 3:\t3/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 4 result size == 4:\t97/100 (esc)
+  rule 0 (replicated_rule) num_rep 4 result size == 3:\t3/100 (esc)
+  rule 0 (replicated_rule) num_rep 4 result size == 4:\t97/100 (esc)
     device 0:\t\t stored : 1\t expected : 16 (esc)
     device 1:\t\t stored : 1\t expected : 16 (esc)
     device 2:\t\t stored : 95\t expected : 16 (esc)
@@ -560,9 +561,9 @@
     device 22:\t\t stored : 14\t expected : 16 (esc)
     device 23:\t\t stored : 13\t expected : 16 (esc)
     device 24:\t\t stored : 14\t expected : 16 (esc)
-  rule 0 (replicated_ruleset) num_rep 5 result size == 3:\t3/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 5 result size == 4:\t43/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 5 result size == 5:\t54/100 (esc)
+  rule 0 (replicated_rule) num_rep 5 result size == 3:\t3/100 (esc)
+  rule 0 (replicated_rule) num_rep 5 result size == 4:\t43/100 (esc)
+  rule 0 (replicated_rule) num_rep 5 result size == 5:\t54/100 (esc)
     device 0:\t\t stored : 1\t expected : 20 (esc)
     device 1:\t\t stored : 1\t expected : 20 (esc)
     device 2:\t\t stored : 95\t expected : 20 (esc)
@@ -588,9 +589,9 @@
     device 22:\t\t stored : 16\t expected : 20 (esc)
     device 23:\t\t stored : 15\t expected : 20 (esc)
     device 24:\t\t stored : 16\t expected : 20 (esc)
-  rule 0 (replicated_ruleset) num_rep 6 result size == 3:\t2/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 6 result size == 4:\t43/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 6 result size == 5:\t55/100 (esc)
+  rule 0 (replicated_rule) num_rep 6 result size == 3:\t2/100 (esc)
+  rule 0 (replicated_rule) num_rep 6 result size == 4:\t43/100 (esc)
+  rule 0 (replicated_rule) num_rep 6 result size == 5:\t55/100 (esc)
     device 0:\t\t stored : 1\t expected : 20 (esc)
     device 1:\t\t stored : 1\t expected : 20 (esc)
     device 2:\t\t stored : 95\t expected : 20 (esc)
@@ -616,9 +617,9 @@
     device 22:\t\t stored : 16\t expected : 20 (esc)
     device 23:\t\t stored : 16\t expected : 20 (esc)
     device 24:\t\t stored : 16\t expected : 20 (esc)
-  rule 0 (replicated_ruleset) num_rep 7 result size == 3:\t2/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 7 result size == 4:\t42/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 7 result size == 5:\t56/100 (esc)
+  rule 0 (replicated_rule) num_rep 7 result size == 3:\t2/100 (esc)
+  rule 0 (replicated_rule) num_rep 7 result size == 4:\t42/100 (esc)
+  rule 0 (replicated_rule) num_rep 7 result size == 5:\t56/100 (esc)
     device 0:\t\t stored : 1\t expected : 20 (esc)
     device 1:\t\t stored : 1\t expected : 20 (esc)
     device 2:\t\t stored : 95\t expected : 20 (esc)
@@ -644,9 +645,9 @@
     device 22:\t\t stored : 16\t expected : 20 (esc)
     device 23:\t\t stored : 16\t expected : 20 (esc)
     device 24:\t\t stored : 16\t expected : 20 (esc)
-  rule 0 (replicated_ruleset) num_rep 8 result size == 3:\t2/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 8 result size == 4:\t40/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 8 result size == 5:\t58/100 (esc)
+  rule 0 (replicated_rule) num_rep 8 result size == 3:\t2/100 (esc)
+  rule 0 (replicated_rule) num_rep 8 result size == 4:\t40/100 (esc)
+  rule 0 (replicated_rule) num_rep 8 result size == 5:\t58/100 (esc)
     device 0:\t\t stored : 1\t expected : 20 (esc)
     device 1:\t\t stored : 1\t expected : 20 (esc)
     device 2:\t\t stored : 95\t expected : 20 (esc)
@@ -672,9 +673,9 @@
     device 22:\t\t stored : 16\t expected : 20 (esc)
     device 23:\t\t stored : 16\t expected : 20 (esc)
     device 24:\t\t stored : 16\t expected : 20 (esc)
-  rule 0 (replicated_ruleset) num_rep 9 result size == 3:\t2/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 9 result size == 4:\t37/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 9 result size == 5:\t61/100 (esc)
+  rule 0 (replicated_rule) num_rep 9 result size == 3:\t2/100 (esc)
+  rule 0 (replicated_rule) num_rep 9 result size == 4:\t37/100 (esc)
+  rule 0 (replicated_rule) num_rep 9 result size == 5:\t61/100 (esc)
     device 0:\t\t stored : 1\t expected : 20 (esc)
     device 1:\t\t stored : 1\t expected : 20 (esc)
     device 2:\t\t stored : 95\t expected : 20 (esc)
@@ -700,9 +701,9 @@
     device 22:\t\t stored : 16\t expected : 20 (esc)
     device 23:\t\t stored : 16\t expected : 20 (esc)
     device 24:\t\t stored : 16\t expected : 20 (esc)
-  rule 0 (replicated_ruleset) num_rep 10 result size == 3:\t2/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 10 result size == 4:\t36/100 (esc)
-  rule 0 (replicated_ruleset) num_rep 10 result size == 5:\t62/100 (esc)
+  rule 0 (replicated_rule) num_rep 10 result size == 3:\t2/100 (esc)
+  rule 0 (replicated_rule) num_rep 10 result size == 4:\t36/100 (esc)
+  rule 0 (replicated_rule) num_rep 10 result size == 5:\t62/100 (esc)
     device 0:\t\t stored : 1\t expected : 20 (esc)
     device 1:\t\t stored : 1\t expected : 20 (esc)
     device 2:\t\t stored : 95\t expected : 20 (esc)

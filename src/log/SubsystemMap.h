@@ -10,7 +10,7 @@
 #include "include/assert.h"
 
 namespace ceph {
-namespace log {
+namespace logging {
 
 struct Subsystem {
   int log_level, gather_level;
@@ -28,7 +28,7 @@ class SubsystemMap {
 public:
   SubsystemMap() : m_max_name_len(0) {}
 
-  int get_num() const {
+  size_t get_num() const {
     return m_subsys.size();
   }
 

@@ -1,0 +1,19 @@
+roles:
+- [mon.a, mds.a, mgr.x, osd.0, osd.1, client.0]
+overrides:
+  ceph:
+    log-whitelist:
+      - MDS in read-only mode
+      - force file system read-only
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_FULL)
+      - (MDS_READ_ONLY)
+tasks:
+- install:
+- ceph:
+- rgw:
+  - client.0
+- exec:
+    client.0:
+      - ceph_test_admin_socket_output --all

@@ -13,14 +13,12 @@
  */
 
 #include "common/pick_address.h"
-
-#include <netdb.h>
-#include <errno.h>
-
 #include "include/ipaddr.h"
 #include "include/str_list.h"
 #include "common/debug.h"
 #include "common/errno.h"
+
+#include <netdb.h>
 
 #define dout_subsys ceph_subsys_
 
@@ -32,7 +30,7 @@ static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
   get_str_list(networks, nets);
 
   for(std::list<string>::iterator s = nets.begin(); s != nets.end(); ++s) {
-      struct sockaddr net;
+      struct sockaddr_storage net;
       unsigned int prefix_len;
 
       if (!parse_network(s->c_str(), &net, &prefix_len)) {
@@ -40,7 +38,7 @@ static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
 	exit(1);
       }
 
-      const struct sockaddr *found = find_ip_in_subnet(ifa, &net, prefix_len);
+      const struct sockaddr *found = find_ip_in_subnet(ifa, (struct sockaddr *) &net, prefix_len);
       if (found)
 	return found;
     }
@@ -56,11 +54,11 @@ struct Observer : public md_config_obs_t {
     keys[1] = NULL;
   }
 
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     return (const char **)keys;
   }
   void handle_conf_change(const struct md_config_t *conf,
-			  const std::set <std::string> &changed) {
+			  const std::set <std::string> &changed) override {
     // do nothing.
   }
 };
@@ -112,6 +110,7 @@ void pick_addresses(CephContext *cct, int needs)
     exit(1);
   }
 
+
   if ((needs & CEPH_PICK_ADDRESS_PUBLIC)
       && cct->_conf->public_addr.is_blank_ip()
       && !cct->_conf->public_network.empty()) {
@@ -119,9 +118,16 @@ void pick_addresses(CephContext *cct, int needs)
   }
 
   if ((needs & CEPH_PICK_ADDRESS_CLUSTER)
-      && cct->_conf->cluster_addr.is_blank_ip()
-      && !cct->_conf->cluster_network.empty()) {
-    fill_in_one_address(cct, ifa, cct->_conf->cluster_network, "cluster_addr");
+      && cct->_conf->cluster_addr.is_blank_ip()) {
+    if (!cct->_conf->cluster_network.empty()) {
+      fill_in_one_address(cct, ifa, cct->_conf->cluster_network, "cluster_addr");
+    } else {
+      if (!cct->_conf->public_network.empty()) {
+        lderr(cct) << "Public network was set, but cluster network was not set " << dendl;
+        lderr(cct) << "    Using public network also for cluster network" << dendl;
+        fill_in_one_address(cct, ifa, cct->_conf->public_network, "cluster_addr");
+      }
+    }
   }
 
   freeifaddrs(ifa);

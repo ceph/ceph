@@ -21,12 +21,11 @@
 
 #include <stdio.h>
 #include <signal.h>
+#include <gtest/gtest.h>
 #include "osd/OSD.h"
 #include "os/ObjectStore.h"
 #include "mon/MonClient.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include <gtest/gtest.h>
 #include "msg/Messenger.h"
 
 class TestOSDScrub: public OSD {
@@ -37,12 +36,13 @@ public:
       int id,
       Messenger *internal,
       Messenger *external,
-      Messenger *hb_client,
+      Messenger *hb_front_client,
+      Messenger *hb_back_client,
       Messenger *hb_front_server,
       Messenger *hb_back_server,
       Messenger *osdc_messenger,
       MonClient *mc, const std::string &dev, const std::string &jdev) :
-      OSD(cct_, store_, id, internal, external, hb_client, hb_front_server, hb_back_server, osdc_messenger, mc, dev, jdev)
+      OSD(cct_, store_, id, internal, external, hb_front_client, hb_back_client, hb_front_server, hb_back_server, osdc_messenger, mc, dev, jdev)
   {
   }
 
@@ -56,15 +56,16 @@ TEST(TestOSDScrub, scrub_time_permit) {
              g_conf->osd_objectstore,
              g_conf->osd_data,
              g_conf->osd_journal);
-  Messenger *ms = Messenger::create(g_ceph_context, g_conf->ms_type,
-             entity_name_t::OSD(0), "make_checker",
-             getpid());
+  std::string cluster_msgr_type = g_conf->ms_cluster_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_cluster_type;
+  Messenger *ms = Messenger::create(g_ceph_context, cluster_msgr_type,
+				    entity_name_t::OSD(0), "make_checker",
+				    getpid(), 0);
   ms->set_cluster_protocol(CEPH_OSD_PROTOCOL);
-  ms->set_default_policy(Messenger::Policy::stateless_server(0, 0));
+  ms->set_default_policy(Messenger::Policy::stateless_server(0));
   ms->bind(g_conf->public_addr);
   MonClient mc(g_ceph_context);
   mc.build_initial_monmap();
-  TestOSDScrub* osd = new TestOSDScrub(g_ceph_context, store, 0, ms, ms, ms, ms, ms, ms, &mc, "", "");
+  TestOSDScrub* osd = new TestOSDScrub(g_ceph_context, store, 0, ms, ms, ms, ms, ms, ms, ms, &mc, "", "");
 
   g_ceph_context->_conf->set_val("osd_scrub_begin_hour", "0");
   g_ceph_context->_conf->set_val("osd_scrub_end_hour", "24");
@@ -139,17 +140,6 @@ TEST(TestOSDScrub, scrub_time_permit) {
   ret = osd->scrub_time_permit(now);
   ASSERT_TRUE(ret);
 
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 // Local Variables:

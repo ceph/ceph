@@ -38,21 +38,23 @@ public:
     m_handle_mismatch(handle_mismatch),
     m_invalidate(invalidate)
   {
-    m_io_ctx.dup(image_ctx->md_ctx);
+    m_io_ctx.dup(image_ctx->data_ctx);
     m_io_ctx.snap_set_read(CEPH_SNAPDIR);
   }
 
-  virtual void complete(int r) {
+  void complete(int r) override {
     I &image_ctx = this->m_image_ctx;
     if (should_complete(r)) {
       ldout(image_ctx.cct, 20) << m_oid << " C_VerifyObjectCallback completed "
 			       << dendl;
+      m_io_ctx.close();
+
       this->finish(r);
       delete this;
     }
   }
 
-  virtual int send() {
+  int send() override {
     send_list_snaps();
     return 0;
   }
@@ -96,7 +98,7 @@ private:
     librados::ObjectReadOperation op;
     op.list_snaps(&m_snap_set, &m_snap_list_ret);
 
-    librados::AioCompletion *comp = util::create_rados_safe_callback(this);
+    librados::AioCompletion *comp = util::create_rados_callback(this);
     int r = m_io_ctx.aio_operate(m_oid, comp, &op, NULL);
     assert(r == 0);
     comp->release();

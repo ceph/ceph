@@ -12,21 +12,20 @@
  *
  */
 
+#include <boost/format.hpp>
+
 #include "common/escape.h"
 #include "common/Formatter.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_formats.h"
+#include "rgw/rgw_rest.h"
 
 #define LARGE_SIZE 8192
 
 #define dout_subsys ceph_subsys_rgw
 
 RGWFormatter_Plain::RGWFormatter_Plain(const bool ukv)
-  : buf(NULL),
-    len(0),
-    max_len(0),
-    min_stack_level(0),
-    use_kv(ukv)
+  : use_kv(ukv)
 {
 }
 
@@ -41,7 +40,7 @@ void RGWFormatter_Plain::flush(ostream& os)
     return;
 
   if (len) {
-    os << buf << "\n";
+    os << buf;
     os.flush();
   }
 
@@ -134,7 +133,7 @@ void RGWFormatter_Plain::dump_string(const char *name, const std::string& s)
 std::ostream& RGWFormatter_Plain::dump_stream(const char *name)
 {
   // TODO: implement this!
-  assert(0);
+  ceph_abort();
 }
 
 void RGWFormatter_Plain::dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap)
@@ -156,13 +155,14 @@ void RGWFormatter_Plain::dump_format_va(const char *name, const char *ns, bool q
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
 
   const char *eol;
-  if (len) {
+  if (wrote_something) {
     if (use_kv && entry.is_array && entry.size > 1)
       eol = ", ";
     else
       eol = "\n";
   } else
     eol = "";
+  wrote_something = true;
 
   if (use_kv && !entry.is_array)
     write_data("%s%s: %s", eol, name, buf);
@@ -268,14 +268,103 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
   va_end(ap);
 
   const char *eol;
-  if (len)
+  if (wrote_something) {
     eol = "\n";
-  else
+  } else
     eol = "";
+  wrote_something = true;
 
   if (use_kv && !entry.is_array)
     write_data("%s%s: %s", eol, name, buf);
   else
     write_data("%s%s", eol, buf);
 
+}
+
+
+/* An utility class that serves as a mean to access the protected static
+ * methods of XMLFormatter. */
+class HTMLHelper : public XMLFormatter {
+public:
+  static std::string escape(const std::string& unescaped_str) {
+    return escape_xml_str(unescaped_str.c_str());
+  }
+};
+
+void RGWSwiftWebsiteListingFormatter::generate_header(
+  const std::string& dir_path,
+  const std::string& css_path)
+{
+  ss << R"(<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 )"
+     << R"(Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">)";
+
+  ss << "<html><head><title>Listing of " << HTMLHelper::escape(dir_path)
+     << "</title>";
+
+  if (! css_path.empty()) {
+    ss << boost::format(R"(<link rel="stylesheet" type="text/css" href="%s" />)")
+                                % url_encode(css_path);
+  } else {
+    ss << R"(<style type="text/css">)"
+       << R"(h1 {font-size: 1em; font-weight: bold;})"
+       << R"(th {text-align: left; padding: 0px 1em 0px 1em;})"
+       << R"(td {padding: 0px 1em 0px 1em;})"
+       << R"(a {text-decoration: none;})"
+       << R"(</style>)";
+  }
+
+  ss << "</head><body>";
+
+  ss << R"(<h1 id="title">Listing of )" << HTMLHelper::escape(dir_path) << "</h1>"
+     << R"(<table id="listing">)"
+     << R"(<tr id="heading">)"
+     << R"(<th class="colname">Name</th>)"
+     << R"(<th class="colsize">Size</th>)"
+     << R"(<th class="coldate">Date</th>)"
+     << R"(</tr>)";
+
+  if (! prefix.empty()) {
+    ss << R"(<tr id="parent" class="item">)"
+       << R"(<td class="colname"><a href="../">../</a></td>)"
+       << R"(<td class="colsize">&nbsp;</td>)"
+       << R"(<td class="coldate">&nbsp;</td>)"
+       << R"(</tr>)";
+  }
+}
+
+void RGWSwiftWebsiteListingFormatter::generate_footer()
+{
+  ss << R"(</table></body></html>)";
+}
+
+std::string RGWSwiftWebsiteListingFormatter::format_name(
+  const std::string& item_name) const
+{
+  return item_name.substr(prefix.length());
+}
+
+void RGWSwiftWebsiteListingFormatter::dump_object(const rgw_bucket_dir_entry& objent)
+{
+  const auto name = format_name(objent.key.name);
+  ss << boost::format(R"(<tr class="item %s">)")
+                                % "default"
+     << boost::format(R"(<td class="colname"><a href="%s">%s</a></td>)")
+                                % url_encode(name)
+                                % HTMLHelper::escape(name)
+     << boost::format(R"(<td class="colsize">%lld</td>)") % objent.meta.size
+     << boost::format(R"(<td class="coldate">%s</td>)")
+                                % dump_time_to_str(objent.meta.mtime)
+     << R"(</tr>)";
+}
+
+void RGWSwiftWebsiteListingFormatter::dump_subdir(const std::string& name)
+{
+  const auto fname = format_name(name);
+  ss << R"(<tr class="item subdir">)"
+     << boost::format(R"(<td class="colname"><a href="%s">%s</a></td>)")
+                                % url_encode(fname)
+                                % HTMLHelper::escape(fname)
+     << R"(<td class="colsize">&nbsp;</td>)"
+     << R"(<td class="coldate">&nbsp;</td>)"
+     << R"(</tr>)";
 }

@@ -16,18 +16,18 @@ struct MClientQuota : public Message {
     memset(&quota, 0, sizeof(quota));
   }
 private:
-  ~MClientQuota() {}
+  ~MClientQuota() override {}
 
 public:
-  const char *get_type_name() const { return "client_quota"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "client_quota"; }
+  void print(ostream& out) const override {
     out << "client_quota(";
     out << " [" << ino << "] ";
     out << rstat;
     out << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(ino, payload);
     ::encode(rstat.rctime, payload);
     ::encode(rstat.rbytes, payload);
@@ -35,7 +35,7 @@ public:
     ::encode(rstat.rsubdirs, payload);
     ::encode(quota, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
     ::decode(rstat.rctime, p);

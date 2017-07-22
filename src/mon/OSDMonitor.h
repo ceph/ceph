@@ -30,7 +30,9 @@ using namespace std;
 #include "msg/Messenger.h"
 
 #include "osd/OSDMap.h"
+#include "osd/OSDMapMapping.h"
 
+#include "CreatingPGs.h"
 #include "PaxosService.h"
 
 class Monitor;
@@ -99,21 +101,38 @@ struct failure_info_t {
     }
   }
 
-  void cancel_report(int who) {
+  MonOpRequestRef cancel_report(int who) {
     map<int, failure_reporter_t>::iterator p = reporters.find(who);
     if (p == reporters.end())
-      return;
+      return MonOpRequestRef();
+    MonOpRequestRef ret = p->second.op;
     reporters.erase(p);
-    if (reporters.empty())
-      max_failed_since = utime_t();
+    return ret;
   }
 };
 
+
+class LastEpochClean {
+  struct Lec {
+    vector<epoch_t> epoch_by_pg;
+    ps_t next_missing = 0;
+    epoch_t floor = std::numeric_limits<epoch_t>::max();
+    void report(ps_t pg, epoch_t last_epoch_clean);
+  };
+  std::map<uint64_t, Lec> report_by_pool;
+public:
+  void report(const pg_t& pg, epoch_t last_epoch_clean);
+  void remove_pool(uint64_t pool);
+  epoch_t get_lower_bound(const OSDMap& latest) const;
+};
+
+
 class OSDMonitor : public PaxosService {
+  CephContext *cct;
+
 public:
   OSDMap osdmap;
 
-private:
   // [leader]
   OSDMap::Incremental pending_inc;
   map<int, bufferlist> pending_metadata;
@@ -128,11 +147,10 @@ private:
 
   bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
+  void force_failure(int target_osd, int by);
 
-  // map thrashing
-  int thrash_map;
-  int thrash_last_up_osd;
-  bool thrash();
+  // the time of last msg(MSG_ALIVE and MSG_PGTEMP) proposed without delay
+  utime_t last_attempted_minwait_time;
 
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
@@ -146,24 +164,27 @@ private:
 
   // svc
 public:  
-  void create_initial();
+  void create_initial() override;
+  void get_store_prefixes(std::set<string>& s) override;
+
 private:
-  void update_from_paxos(bool *need_bootstrap);
-  void create_pending();  // prepare a new pending
-  void encode_pending(MonitorDBStore::TransactionRef t);
-  void on_active();
-  void on_shutdown();
+  void update_from_paxos(bool *need_bootstrap) override;
+  void create_pending() override;  // prepare a new pending
+  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  void on_active() override;
+  void on_restart() override;
+  void on_shutdown() override;
   /**
    * we haven't delegated full version stashing to paxosservice for some time
    * now, making this function useless in current context.
    */
-  virtual void encode_full(MonitorDBStore::TransactionRef t) { }
+  void encode_full(MonitorDBStore::TransactionRef t) override { }
   /**
    * do not let paxosservice periodically stash full osdmaps, or we will break our
    * locally-managed full maps.  (update_from_paxos loads the latest and writes them
    * out going forward from there, but if we just synced that may mean we skip some.)
    */
-  virtual bool should_stash_full() {
+  bool should_stash_full() override {
     return false;
   }
 
@@ -173,7 +194,7 @@ private:
    * This ensures that anyone post-sync will have enough to rebuild their
    * full osdmaps.
    */
-  void encode_trim_extra(MonitorDBStore::TransactionRef tx, version_t first);
+  void encode_trim_extra(MonitorDBStore::TransactionRef tx, version_t first) override;
 
   void update_msgr_features();
   int check_cluster_features(uint64_t features, stringstream &ss);
@@ -186,22 +207,38 @@ private:
    */
   bool validate_crush_against_features(const CrushWrapper *newcrush,
                                       stringstream &ss);
-
+  void check_osdmap_subs();
   void share_map_with_random_osd();
 
+  Mutex prime_pg_temp_lock = {"OSDMonitor::prime_pg_temp_lock"};
+  struct PrimeTempJob : public ParallelPGMapper::Job {
+    OSDMonitor *osdmon;
+    PrimeTempJob(const OSDMap& om, OSDMonitor *m)
+      : ParallelPGMapper::Job(&om), osdmon(m) {}
+    void process(int64_t pool, unsigned ps_begin, unsigned ps_end) override {
+      for (unsigned ps = ps_begin; ps < ps_end; ++ps) {
+	pg_t pgid(ps, pool);
+	osdmon->prime_pg_temp(*osdmap, pgid);
+      }
+    }
+    void complete() override {}
+  };
   void maybe_prime_pg_temp();
-  void prime_pg_temp(OSDMap& next,
-		     ceph::unordered_map<pg_t, pg_stat_t>::iterator pp);
-  int prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd);
+  void prime_pg_temp(const OSDMap& next, pg_t pgid);
+
+  ParallelPGMapper mapper;                        ///< for background pg work
+  OSDMapMapping mapping;                          ///< pg <-> osd mappings
+  unique_ptr<ParallelPGMapper::Job> mapping_job;  ///< background mapping job
+  void start_mapping();
 
   void update_logger();
 
   void handle_query(PaxosServiceMessage *m);
-  bool preprocess_query(MonOpRequestRef op);  // true if processed.
-  bool prepare_update(MonOpRequestRef op);
-  bool should_propose(double &delay);
+  bool preprocess_query(MonOpRequestRef op) override;  // true if processed.
+  bool prepare_update(MonOpRequestRef op) override;
+  bool should_propose(double &delay) override;
 
-  version_t get_trim_to();
+  version_t get_trim_to() override;
 
   bool can_mark_down(int o);
   bool can_mark_up(int o);
@@ -220,16 +257,6 @@ public:
 			MonOpRequestRef req = MonOpRequestRef());
 
 private:
-  int reweight_by_utilization(int oload,
-			      double max_change,
-			      int max_osds,
-			      bool by_pg,
-			      const set<int64_t> *pools,
-			      bool no_increasing,
-			      bool dry_run,
-			      std::stringstream *ss,
-			      std::string *out_str,
-			      Formatter *f);
   void print_utilization(ostream &out, Formatter *f, bool tree) const;
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
@@ -245,6 +272,9 @@ private:
   void process_failures();
   void take_all_failures(list<MonOpRequestRef>& ls);
 
+  bool preprocess_full(MonOpRequestRef op);
+  bool prepare_full(MonOpRequestRef op);
+
   bool preprocess_boot(MonOpRequestRef op);
   bool prepare_boot(MonOpRequestRef op);
   void _booted(MonOpRequestRef op, bool logit);
@@ -257,7 +287,10 @@ private:
   bool preprocess_pgtemp(MonOpRequestRef op);
   bool prepare_pgtemp(MonOpRequestRef op);
 
-  int _check_remove_pool(int64_t pool, const pg_pool_t *pi, ostream *ss);
+  bool preprocess_pg_created(MonOpRequestRef op);
+  bool prepare_pg_created(MonOpRequestRef op);
+
+  int _check_remove_pool(int64_t pool_id, const pg_pool_t &pool, ostream *ss);
   bool _check_become_tier(
       int64_t tier_pool_id, const pg_pool_t *tier_pool,
       int64_t base_pool_id, const pg_pool_t *base_pool,
@@ -266,7 +299,7 @@ private:
       int64_t base_pool_id, const pg_pool_t *base_pool, const pg_pool_t *tier_pool,
       int *err, ostream *ss) const;
 
-  int _prepare_remove_pool(int64_t pool, ostream *ss);
+  int _prepare_remove_pool(int64_t pool, ostream *ss, bool no_fake);
   int _prepare_rename_pool(int64_t pool, string newname);
 
   bool preprocess_pool_op (MonOpRequestRef op);
@@ -277,25 +310,31 @@ private:
   int crush_rename_bucket(const string& srcname,
 			  const string& dstname,
 			  ostream *ss);
-  int normalize_profile(ErasureCodeProfile &profile, ostream *ss);
-  int crush_ruleset_create_erasure(const string &name,
-				   const string &profile,
-				   int *ruleset,
-				   ostream *ss);
-  int get_crush_ruleset(const string &ruleset_name,
-			int *crush_ruleset,
+  void check_legacy_ec_plugin(const string& plugin, 
+			      const string& profile) const;
+  int normalize_profile(const string& profilename, 
+			ErasureCodeProfile &profile,
+			bool force,
+			ostream *ss);
+  int crush_rule_create_erasure(const string &name,
+				const string &profile,
+				int *rule,
+				ostream *ss);
+  int get_crush_rule(const string &rule_name,
+			int *crush_rule,
 			ostream *ss);
   int get_erasure_code(const string &erasure_code_profile,
 		       ErasureCodeInterfaceRef *erasure_code,
 		       ostream *ss) const;
-  int prepare_pool_crush_ruleset(const unsigned pool_type,
+  int prepare_pool_crush_rule(const unsigned pool_type,
 				 const string &erasure_code_profile,
-				 const string &ruleset_name,
-				 int *crush_ruleset,
+				 const string &rule_name,
+				 int *crush_rule,
 				 ostream *ss);
-  bool erasure_code_profile_in_use(const map<int64_t, pg_pool_t> &pools,
-				   const string &profile,
-				   ostream *ss);
+  bool erasure_code_profile_in_use(
+    const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
+    const string &profile,
+    ostream *ss);
   int parse_erasure_code_profile(const vector<string> &erasure_code_profile,
 				 map<string,string> *erasure_code_profile_map,
 				 ostream *ss);
@@ -308,8 +347,8 @@ private:
 				unsigned *stripe_width,
 				ostream *ss);
   int prepare_new_pool(string& name, uint64_t auid,
-		       int crush_ruleset,
-		       const string &crush_ruleset_name,
+		       int crush_rule,
+		       const string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
@@ -320,8 +359,6 @@ private:
 
   void update_pool_flags(int64_t pool_id, uint64_t flags);
   bool update_pools_status();
-  void get_pools_health(list<pair<health_status_t,string> >& summary,
-                        list<pair<health_status_t,string> > *detail) const;
 
   bool prepare_set_flag(MonOpRequestRef op, int flag);
   bool prepare_unset_flag(MonOpRequestRef op, int flag);
@@ -334,7 +371,7 @@ private:
     bool logit;
     C_Booted(OSDMonitor *cm, MonOpRequestRef op_, bool l=true) :
       C_MonOp(op_), cmon(cm), logit(l) {}
-    void _finish(int r) {
+    void _finish(int r) override {
       if (r >= 0)
 	cmon->_booted(op, logit);
       else if (r == -ECANCELED)
@@ -351,7 +388,7 @@ private:
     epoch_t e;
     C_ReplyMap(OSDMonitor *o, MonOpRequestRef op_, epoch_t ee)
       : C_MonOp(op_), osdmon(o), e(ee) {}
-    void _finish(int r) {
+    void _finish(int r) override {
       if (r >= 0)
 	osdmon->_reply_map(op, e);
       else if (r == -ECANCELED)
@@ -372,7 +409,7 @@ private:
       if (rd)
 	reply_data = *rd;
     }
-    void _finish(int r) {
+    void _finish(int r) override {
       if (r >= 0)
 	osdmon->_pool_op_reply(op, replyCode, epoch, &reply_data);
       else if (r == -ECANCELED)
@@ -390,13 +427,51 @@ private:
   OpTracker op_tracker;
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
+  void count_metadata(const string& field, Formatter *f);
+public:
+  void count_metadata(const string& field, map<string,int> *out);
+protected:
+  int get_osd_objectstore_type(int osd, std::string *type);
+  bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
+				       ostream *err);
 
- public:
+  // when we last received PG stats from each osd
+  map<int,utime_t> last_osd_report;
+  // TODO: use last_osd_report to store the osd report epochs, once we don't
+  //       need to upgrade from pre-luminous releases.
+  map<int,epoch_t> osd_epochs;
+  LastEpochClean last_epoch_clean;
+  bool preprocess_beacon(MonOpRequestRef op);
+  bool prepare_beacon(MonOpRequestRef op);
+  epoch_t get_min_last_epoch_clean() const;
+
+  friend class C_UpdateCreatingPGs;
+  std::map<int, std::map<epoch_t, std::set<pg_t>>> creating_pgs_by_osd_epoch;
+  std::vector<pg_t> pending_created_pgs;
+  // the epoch when the pg mapping was calculated
+  epoch_t creating_pgs_epoch = 0;
+  creating_pgs_t creating_pgs;
+  std::mutex creating_pgs_lock;
+
+  creating_pgs_t update_pending_pgs(const OSDMap::Incremental& inc);
+  void trim_creating_pgs(creating_pgs_t *creating_pgs,
+			 const ceph::unordered_map<pg_t,pg_stat_t>& pgm);
+  unsigned scan_for_creating_pgs(
+    const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
+    const mempool::osdmap::set<int64_t>& removed_pools,
+    utime_t modified,
+    creating_pgs_t* creating_pgs) const;
+  pair<int32_t, pg_t> get_parent_pg(pg_t pgid) const;
+  void update_creating_pgs();
+  void check_pg_creates_subs();
+  epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
+
+  int32_t _allocate_osd_id(int32_t* existing_id);
+
+public:
   OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name);
 
-  void tick();  // check state, take actions
-
-  int parse_osd_id(const char *s, stringstream *pss);
+  void tick() override;  // check state, take actions
 
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail,
@@ -405,11 +480,48 @@ private:
   bool prepare_command(MonOpRequestRef op);
   bool prepare_command_impl(MonOpRequestRef op, map<string,cmd_vartype>& cmdmap);
 
-  int set_crash_replay_interval(const int64_t pool_id, const uint32_t cri);
+  int validate_osd_create(
+      const int32_t id,
+      const uuid_d& uuid,
+      const bool check_osd_exists,
+      int32_t* existing_id,
+      stringstream& ss);
+  int prepare_command_osd_create(
+      const int32_t id,
+      const uuid_d& uuid,
+      int32_t* existing_id,
+      stringstream& ss);
+  void do_osd_create(const int32_t id, const uuid_d& uuid, int32_t* new_id);
+  int prepare_command_osd_purge(int32_t id, stringstream& ss);
+  int prepare_command_osd_destroy(int32_t id, stringstream& ss);
+  int _prepare_command_osd_crush_remove(
+      CrushWrapper &newcrush,
+      int32_t id,
+      int32_t ancestor,
+      bool has_ancestor,
+      bool unlink_only);
+  void do_osd_crush_remove(CrushWrapper& newcrush);
+  int prepare_command_osd_crush_remove(
+      CrushWrapper &newcrush,
+      int32_t id,
+      int32_t ancestor,
+      bool has_ancestor,
+      bool unlink_only);
+  int prepare_command_osd_remove(int32_t id);
+  int prepare_command_osd_new(
+      MonOpRequestRef op,
+      const map<string,cmd_vartype>& cmdmap,
+      const map<string,string>& secrets,
+      stringstream &ss,
+      Formatter *f);
+
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
+  int prepare_command_pool_application(const string &prefix,
+                                       map<string,cmd_vartype> &cmdmap,
+                                       stringstream& ss);
 
-  void handle_osd_timeouts(const utime_t &now,
+  bool handle_osd_timeouts(const utime_t &now,
 			   std::map<int,utime_t> &last_osd_report);
 
   void send_latest(MonOpRequestRef op, epoch_t start=0);
@@ -427,8 +539,10 @@ private:
   int dump_osd_metadata(int osd, Formatter *f, ostream *err);
   void print_nodes(Formatter *f);
 
-  void check_subs();
-  void check_sub(Subscription *sub);
+  void check_osdmap_sub(Subscription *sub);
+  void check_pg_creates_sub(Subscription *sub);
+
+  void do_application_enable(int64_t pool_id, const std::string &app_name);
 
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {

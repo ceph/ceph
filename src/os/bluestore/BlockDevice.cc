@@ -22,8 +22,17 @@
 #include "NVMEDevice.h"
 #endif
 
-#include "common/debug.h"
+#if defined(HAVE_PMEM)
+#include "PMEMDevice.h"
+#include <libpmem.h>
+#endif
 
+#include "common/debug.h"
+#include "common/EventTrace.h"
+#include "common/errno.h"
+#include "include/compat.h"
+
+#define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev "
@@ -32,40 +41,60 @@ void IOContext::aio_wait()
 {
   std::unique_lock<std::mutex> l(lock);
   // see _aio_thread for waker logic
-  ++num_waiting;
-  while (num_running.load() > 0 || num_reading.load() > 0) {
+  while (num_running.load() > 0) {
     dout(10) << __func__ << " " << this
-	     << " waiting for " << num_running.load() << " aios and/or "
-	     << num_reading.load() << " readers to complete" << dendl;
+	     << " waiting for " << num_running.load() << " aios to complete"
+	     << dendl;
     cond.wait(l);
   }
-  --num_waiting;
   dout(20) << __func__ << " " << this << " done" << dendl;
 }
 
-BlockDevice *BlockDevice::create(const string& path, aio_callback_t cb, void *cbpriv)
+BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
+				 aio_callback_t cb, void *cbpriv)
 {
   string type = "kernel";
-  char buf[PATH_MAX];
-  int r = ::readlink(path.c_str(), buf, sizeof(buf));
+  char buf[PATH_MAX + 1];
+  int r = ::readlink(path.c_str(), buf, sizeof(buf) - 1);
   if (r >= 0) {
+    buf[r] = '\0';
     char *bname = ::basename(buf);
     if (strncmp(bname, SPDK_PREFIX, sizeof(SPDK_PREFIX)-1) == 0)
       type = "ust-nvme";
   }
-  dout(1) << __func__ << " path " << path << " type " << type << dendl;
 
+#if defined(HAVE_PMEM)
   if (type == "kernel") {
-    return new KernelDevice(cb, cbpriv);
-  }
-#if defined(HAVE_SPDK)
-  if (type == "ust-nvme") {
-    return new NVMEDevice(cb, cbpriv);
+    int is_pmem = 0;
+    void *addr = pmem_map_file(path.c_str(), 1024*1024, PMEM_FILE_EXCL, O_RDONLY, NULL, &is_pmem);
+    if (addr != NULL) {
+      if (is_pmem)
+	type = "pmem";
+      pmem_unmap(addr, 1024*1024);
+    }
   }
 #endif
 
+  dout(1) << __func__ << " path " << path << " type " << type << dendl;
+
+#if defined(HAVE_PMEM)
+  if (type == "pmem") {
+    return new PMEMDevice(cct, cb, cbpriv);
+  }
+#endif
+
+  if (type == "kernel") {
+    return new KernelDevice(cct, cb, cbpriv);
+  }
+#if defined(HAVE_SPDK)
+  if (type == "ust-nvme") {
+    return new NVMEDevice(cct, cb, cbpriv);
+  }
+#endif
+
+
   derr << __func__ << " unknown backend " << type << dendl;
-  assert(0);
+  ceph_abort();
   return NULL;
 }
 

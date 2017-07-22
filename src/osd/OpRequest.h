@@ -22,29 +22,8 @@
 #include "include/xlist.h"
 #include "msg/Message.h"
 #include "include/memory.h"
+#include "osd/osd_types.h"
 #include "common/TrackedOp.h"
-
-/**
- * osd request identifier
- *
- * caller name + incarnation# + tid to unique identify this request.
- */
-struct osd_reqid_t {
-  entity_name_t name; // who
-  ceph_tid_t         tid;
-  int32_t       inc;  // incarnation
-
-  osd_reqid_t()
-    : tid(0), inc(0) {}
-  osd_reqid_t(const entity_name_t& a, int i, ceph_tid_t t)
-    : name(a), tid(t), inc(i) {}
-
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<osd_reqid_t*>& o);
-};
-WRITE_CLASS_ENCODER(osd_reqid_t)
 
 /**
  * The OpRequest takes in a Message* and takes over a single reference
@@ -60,6 +39,8 @@ struct OpRequest : public TrackedOp {
   bool may_read();
   bool may_write();
   bool may_cache();
+  bool rwordered_forced();
+  bool rwordered();
   bool includes_pg_op();
   bool need_read_cap();
   bool need_write_cap();
@@ -75,6 +56,7 @@ struct OpRequest : public TrackedOp {
   void set_promote();
   void set_skip_handle_cache();
   void set_skip_promote();
+  void set_force_rwordered();
 
   struct ClassInfo {
     ClassInfo(const std::string& name, bool read, bool write,
@@ -94,7 +76,7 @@ struct OpRequest : public TrackedOp {
     return classes_;
   }
 
-  void _dump(utime_t now, Formatter *f) const;
+  void _dump(Formatter *f) const override;
 
   bool has_feature(uint64_t f) const {
     return request->get_connection()->has_feature(f);
@@ -118,31 +100,31 @@ private:
   OpRequest(Message *req, OpTracker *tracker);
 
 protected:
-  void _dump_op_descriptor_unlocked(ostream& stream) const;
-  void _unregistered();
+  void _dump_op_descriptor_unlocked(ostream& stream) const override;
+  void _unregistered() override;
 
 public:
-  ~OpRequest() {
+  ~OpRequest() override {
     request->put();
   }
-  bool send_map_update;
-  epoch_t sent_epoch;
-  bool hitset_inserted;
-  Message *get_req() const { return request; }
-  bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
-  bool been_reached_pg() { return hit_flag_points & flag_reached_pg; }
-  bool been_delayed() { return hit_flag_points & flag_delayed; }
-  bool been_started() { return hit_flag_points & flag_started; }
-  bool been_sub_op_sent() { return hit_flag_points & flag_sub_op_sent; }
-  bool been_commit_sent() { return hit_flag_points & flag_commit_sent; }
-  bool currently_queued_for_pg() { return latest_flag_point & flag_queued_for_pg; }
-  bool currently_reached_pg() { return latest_flag_point & flag_reached_pg; }
-  bool currently_delayed() { return latest_flag_point & flag_delayed; }
-  bool currently_started() { return latest_flag_point & flag_started; }
-  bool currently_sub_op_sent() { return latest_flag_point & flag_sub_op_sent; }
-  bool currently_commit_sent() { return latest_flag_point & flag_commit_sent; }
 
-  const char *state_string() const {
+  bool check_send_map = true; ///< true until we check if sender needs a map
+  epoch_t sent_epoch = 0;     ///< client's map epoch
+  epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
+
+  bool hitset_inserted;
+  const Message *get_req() const { return request; }
+  Message *get_nonconst_req() { return request; }
+
+  entity_name_t get_source() {
+    if (request) {
+      return request->get_source();
+    } else {
+      return entity_name_t();
+    }
+  }
+
+  const char *state_string() const override {
     switch(latest_flag_point) {
     case flag_queued_for_pg: return "queued for pg";
     case flag_reached_pg: return "reached pg";
@@ -162,13 +144,13 @@ public:
     mark_flag_point(flag_reached_pg, "reached_pg");
   }
   void mark_delayed(const string& s) {
-    mark_flag_point(flag_delayed, s);
+    mark_flag_point_string(flag_delayed, s);
   }
   void mark_started() {
     mark_flag_point(flag_started, "started");
   }
   void mark_sub_op_sent(const string& s) {
-    mark_flag_point(flag_sub_op_sent, s);
+    mark_flag_point_string(flag_sub_op_sent, s);
   }
   void mark_commit_sent() {
     mark_flag_point(flag_commit_sent, "commit_sent");
@@ -185,11 +167,12 @@ public:
     return reqid;
   }
 
-  typedef ceph::shared_ptr<OpRequest> Ref;
+  typedef boost::intrusive_ptr<OpRequest> Ref;
 
 private:
   void set_rmw_flags(int flags);
-  void mark_flag_point(uint8_t flag, const string& s);
+  void mark_flag_point(uint8_t flag, const char *s);
+  void mark_flag_point_string(uint8_t flag, const string& s);
 };
 
 typedef OpRequest::Ref OpRequestRef;

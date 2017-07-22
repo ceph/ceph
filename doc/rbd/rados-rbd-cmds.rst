@@ -13,6 +13,41 @@ details.
 .. important:: To use Ceph Block Device commands, you must have access to 
    a running Ceph cluster.
 
+Create a Block Device Pool
+==========================
+
+#. On the admin node, use the ``ceph`` tool to `create a pool`_.
+
+#. On the admin node, use the ``rbd`` tool to initialize the pool for use by RBD::
+
+        rbd pool init <pool-name>
+
+.. note:: The ``rbd`` tool assumes a default pool name of 'rbd' when not
+   provided.
+
+Create a Block Device User
+==========================
+
+Unless specified, the ``rbd`` command will access the Ceph cluster using the ID
+``admin``. This ID allows full administrative access to the cluster. It is
+recommended that you utilize a more restricted user wherever possible.
+
+To `create a Ceph user`_, with ``ceph`` specify the ``auth get-or-create``
+command, user name, monitor caps, and OSD caps::
+
+        ceph auth get-or-create client.{ID} mon 'profile rbd' osd 'profile {profile name} [pool={pool-name}][, profile ...]'
+
+For example, to create a user ID named ``qemu`` with read-write access to the
+pool ``vms`` and read-only access to the pool ``images``, execute the
+following::
+
+	ceph auth get-or-create client.qemu mon 'profile rbd' osd 'profile rbd pool=vms, profile rbd-read-only pool=images'
+
+The output from the ``ceph auth get-or-create`` command will be the keyring for
+the specified user, which can be written to ``/etc/ceph/ceph.client.{ID}.keyring``.
+
+.. note:: The user ID can be specified when using the ``rbd`` command by
+        providing the ``--id {id}`` optional argument.
 
 Creating a Block Device Image
 =============================
@@ -22,7 +57,7 @@ the :term:`Ceph Storage Cluster` first. To create a block device image, execute
 the  following::
 
 	rbd create --size {megabytes} {pool-name}/{image-name}
-	
+
 For example, to create a 1GB image named ``bar`` that stores information in a
 pool named ``swimmingpool``, execute the following::
 
@@ -112,6 +147,7 @@ For example::
 	rbd rm swimmingpool/bar
 
 
-
+.. _create a pool: ../../rados/operations/pools/#create-a-pool
 .. _Storage Pools: ../../rados/operations/pools
 .. _RBD – Manage RADOS Block Device (RBD) Images: ../../man/8/rbd/
+.. _create a Ceph user: ../../rados/operations/user-management#add-a-user

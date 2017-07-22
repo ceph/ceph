@@ -23,7 +23,6 @@
 #include <string>
 
 class CephContext;
-class CryptoHandler;
 class CryptoKeyContext;
 namespace ceph { class Formatter; }
 

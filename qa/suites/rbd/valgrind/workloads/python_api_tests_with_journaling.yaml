@@ -1,0 +1,9 @@
+os_type: centos
+os_version: "7.3"
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/test_librbd_python.sh
+    env:
+      RBD_FEATURES: "125"

@@ -39,15 +39,6 @@
 CLS_VER(1,0)
 CLS_NAME(hello)
 
-cls_handle_t h_class;
-cls_method_handle_t h_say_hello;
-cls_method_handle_t h_record_hello;
-cls_method_handle_t h_replay;
-cls_method_handle_t h_writes_dont_return_data;
-cls_method_handle_t h_turn_it_to_11;
-cls_method_handle_t h_bad_reader;
-cls_method_handle_t h_bad_writer;
-
 /**
  * say hello - a "read" method that does not depend on the object
  *
@@ -261,7 +252,7 @@ static int bad_writer(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 class PGLSHelloFilter : public PGLSFilter {
   string val;
 public:
-  int init(bufferlist::iterator& params) {
+  int init(bufferlist::iterator& params) override {
     try {
       ::decode(xattr, params);
       ::decode(val, params);
@@ -271,9 +262,9 @@ public:
     return 0;
   }
 
-  virtual ~PGLSHelloFilter() {}
-  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata)
+  ~PGLSHelloFilter() override {}
+  bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata) override
   {
     if (val.size() != xattr_data.length())
       return false;
@@ -298,11 +289,20 @@ PGLSFilter *hello_filter()
  * We do two things here: we register the new class, and then register
  * all of the class's methods.
  */
-void __cls_init()
+CLS_INIT(hello)
 {
   // this log message, at level 0, will always appear in the ceph-osd
   // log file.
   CLS_LOG(0, "loading cls_hello");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_say_hello;
+  cls_method_handle_t h_record_hello;
+  cls_method_handle_t h_replay;
+  cls_method_handle_t h_writes_dont_return_data;
+  cls_method_handle_t h_turn_it_to_11;
+  cls_method_handle_t h_bad_reader;
+  cls_method_handle_t h_bad_writer;
 
   cls_register("hello", &h_class);
 

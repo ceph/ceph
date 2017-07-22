@@ -1,4 +1,5 @@
 from __future__ import print_function
+from nose import SkipTest
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, requires, opt,
@@ -11,7 +12,7 @@ import errno
 import sys
 
 # Are we running Python 2.x
-_python2 = sys.hexversion < 0x03000000
+_python2 = sys.version_info[0] < 3
 
 def test_rados_init_error():
     assert_raises(Error, Rados, conffile='', rados_id='admin',
@@ -144,7 +145,10 @@ class TestRados(object):
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'')
         for mon in json.loads(buf.decode('utf8'))['mons']:
             while True:
-                buf = json.loads(self.rados.ping_monitor(mon['name']))
+                output = self.rados.ping_monitor(mon['name'])
+                if output is None:
+                    continue
+                buf = json.loads(output)
                 if buf.get('health'):
                     break
 
@@ -672,6 +676,32 @@ class TestIoctx(object):
         eq(contents, b"bar")
         [i.remove() for i in self.ioctx.list_objects()]
 
+    def test_aio_stat(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(_, size, mtime):
+            with lock:
+                count[0] += 1
+                lock.notify()
+
+        comp = self.ioctx.aio_stat("foo", cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), -2)
+
+        self.ioctx.write("foo", b"bar")
+
+        comp = self.ioctx.aio_stat("foo", cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 2:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+
+        [i.remove() for i in self.ioctx.list_objects()]
+
     def _take_down_acting_set(self, pool, objectname):
         # find acting_set for pool:objectname and take it down; used to
         # verify that async reads don't complete while acting set is missing
@@ -798,6 +828,68 @@ class TestIoctx(object):
 
         ret, buf = self.ioctx.execute("foo", "hello", "say_hello", b"nose")
         eq(buf, b"Hello, nose!")
+
+    def test_aio_execute(self):
+        count = [0]
+        retval = [None]
+        lock = threading.Condition()
+        def cb(_, buf):
+            with lock:
+                if retval[0] is None:
+                    retval[0] = buf
+                count[0] += 1
+                lock.notify()
+        self.ioctx.write("foo", b"") # ensure object exists
+
+        comp = self.ioctx.aio_execute("foo", "hello", "say_hello", b"", 32, cb, cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 2:
+                lock.wait()
+        eq(comp.get_return_value(), 13)
+        eq(retval[0], b"Hello, world!")
+
+        retval[0] = None
+        comp = self.ioctx.aio_execute("foo", "hello", "say_hello", b"nose", 32, cb, cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 4:
+                lock.wait()
+        eq(comp.get_return_value(), 12)
+        eq(retval[0], b"Hello, nose!")
+
+        [i.remove() for i in self.ioctx.list_objects()]
+
+    def test_applications(self):
+        cmd = {"prefix":"osd dump", "format":"json"}
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'')
+        eq(ret, 0)
+        assert len(buf) > 0
+        release = json.loads(buf.decode("utf-8")).get("require_osd_release",
+                                                      None)
+        if not release or release[0] < 'l':
+            raise SkipTest
+
+        eq([], self.ioctx.application_list())
+
+        self.ioctx.application_enable("app1")
+        assert_raises(Error, self.ioctx.application_enable, "app2")
+        self.ioctx.application_enable("app2", True)
+
+        assert_raises(Error, self.ioctx.application_metadata_list, "dne")
+        eq([], self.ioctx.application_metadata_list("app1"))
+
+        assert_raises(Error, self.ioctx.application_metadata_set, "dne", "key",
+                      "key")
+        self.ioctx.application_metadata_set("app1", "key1", "val1")
+        self.ioctx.application_metadata_set("app1", "key2", "val2")
+        self.ioctx.application_metadata_set("app2", "key1", "val1")
+
+        eq([("key1", "val1"), ("key2", "val2")],
+           self.ioctx.application_metadata_list("app1"))
+
+        self.ioctx.application_metadata_remove("app1", "key1")
+        eq([("key2", "val2")], self.ioctx.application_metadata_list("app1"))
 
 class TestObject(object):
 

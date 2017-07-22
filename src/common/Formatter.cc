@@ -14,29 +14,12 @@
 
 #define LARGE_SIZE 1024
 
-#include "include/int_types.h"
-
-#include "assert.h"
-#include "Formatter.h"
 #include "HTMLFormatter.h"
 #include "common/escape.h"
 #include "include/buffer.h"
 
-#include <algorithm>
-#include <iostream>
-#include <sstream>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <vector>
-#include <string>
 #include <set>
 #include <boost/format.hpp>
-
-
-static char tolower_underscore(const char b) {
-  return ' ' == b ? '_' : std::tolower(b);
-}
 
 // -----------------------
 namespace ceph {
@@ -326,9 +309,10 @@ void JSONFormatter::write_raw_data(const char *data)
 const char *XMLFormatter::XML_1_DTD =
   "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
 
-XMLFormatter::XMLFormatter(bool pretty, bool lowercased_underscored)
+XMLFormatter::XMLFormatter(bool pretty, bool lowercased, bool underscored)
 : m_pretty(pretty),
-  m_lowercased_underscored(lowercased_underscored)
+  m_lowercased(lowercased),
+  m_underscored(underscored)
 {
   reset();
 }
@@ -410,10 +394,8 @@ void XMLFormatter::close_section()
   finish_pending_string();
 
   std::string section = m_sections.back();
-  if (m_lowercased_underscored) {
-    std::transform(section.begin(), section.end(), section.begin(),
-          tolower_underscore);
-  }
+  std::transform(section.begin(), section.end(), section.begin(),
+	 [this](char c) { return this->to_lower_underscore(c); });
   m_sections.pop_back();
   print_spaces();
   m_ss << "</" << section << ">";
@@ -424,9 +406,9 @@ void XMLFormatter::close_section()
 void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 {
   std::string e(name);
-  if (m_lowercased_underscored) {
-    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
-  }
+  std::transform(e.begin(), e.end(), e.begin(),
+      [this](char c) { return this->to_lower_underscore(c); });
+
   print_spaces();
   m_ss << "<" << e << ">" << u << "</" << e << ">";
   if (m_pretty)
@@ -436,9 +418,9 @@ void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 void XMLFormatter::dump_int(const char *name, int64_t u)
 {
   std::string e(name);
-  if (m_lowercased_underscored) {
-    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
-  }
+  std::transform(e.begin(), e.end(), e.begin(),
+      [this](char c) { return this->to_lower_underscore(c); });
+
   print_spaces();
   m_ss << "<" << e << ">" << u << "</" << e << ">";
   if (m_pretty)
@@ -448,9 +430,9 @@ void XMLFormatter::dump_int(const char *name, int64_t u)
 void XMLFormatter::dump_float(const char *name, double d)
 {
   std::string e(name);
-  if (m_lowercased_underscored) {
-    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
-  }
+  std::transform(e.begin(), e.end(), e.begin(),
+      [this](char c) { return this->to_lower_underscore(c); });
+
   print_spaces();
   m_ss << "<" << e << ">" << d << "</" << e << ">";
   if (m_pretty)
@@ -460,9 +442,9 @@ void XMLFormatter::dump_float(const char *name, double d)
 void XMLFormatter::dump_string(const char *name, const std::string& s)
 {
   std::string e(name);
-  if (m_lowercased_underscored) {
-    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
-  }
+  std::transform(e.begin(), e.end(), e.begin(),
+      [this](char c) { return this->to_lower_underscore(c); });
+
   print_spaces();
   m_ss << "<" << e << ">" << escape_xml_str(s.c_str()) << "</" << e << ">";
   if (m_pretty)
@@ -472,9 +454,9 @@ void XMLFormatter::dump_string(const char *name, const std::string& s)
 void XMLFormatter::dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs)
 {
   std::string e(name);
-  if (m_lowercased_underscored) {
-    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
-  }
+  std::transform(e.begin(), e.end(), e.begin(),
+      [this](char c) { return this->to_lower_underscore(c); });
+
   std::string attrs_str;
   get_attrs_str(&attrs, attrs_str);
   print_spaces();
@@ -495,11 +477,10 @@ void XMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted,
 {
   char buf[LARGE_SIZE];
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
-
   std::string e(name);
-  if (m_lowercased_underscored) {
-    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
-  }
+  std::transform(e.begin(), e.end(), e.begin(),
+      [this](char c) { return this->to_lower_underscore(c); });
+
   print_spaces();
   if (ns) {
     m_ss << "<" << e << " xmlns=\"" << ns << "\">" << buf << "</" << e << ">";
@@ -544,9 +525,8 @@ void XMLFormatter::open_section_in_ns(const char *name, const char *ns, const Fo
   }
 
   std::string e(name);
-  if (m_lowercased_underscored) {
-    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
-  }
+  std::transform(e.begin(), e.end(), e.begin(),
+      [this](char c) { return this->to_lower_underscore(c); });
 
   if (ns) {
     m_ss << "<" << e << attrs_str << " xmlns=\"" << ns << "\">";
@@ -586,6 +566,16 @@ std::string XMLFormatter::escape_xml_str(const char *str)
   std::vector<char> escaped(len, '\0');
   escape_xml_attr(str, &escaped[0]);
   return std::string(&escaped[0]);
+}
+
+char XMLFormatter::to_lower_underscore(char c) const
+{
+  if (m_underscored && c == ' ') {
+      return '_';
+  } else if (m_lowercased) {
+    return std::tolower(c);
+  }
+  return c;
 }
 
 TableFormatter::TableFormatter(bool keyval) : m_keyval(keyval)

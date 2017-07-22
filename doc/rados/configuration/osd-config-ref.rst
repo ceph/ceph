@@ -237,6 +237,17 @@ scrubbing operations.
 :Type: Integer in the range of 0 to 24
 :Default: ``24``
 
+
+``osd scrub during recovery``
+
+:Description: Allow scrub during recovery. Setting this to ``false`` will disable
+              scheduling new scrub (and deep--scrub) while there is active recovery.
+              Already running scrubs will be continued. This might be useful to reduce
+              load on busy clusters.
+:Type: Boolean
+:Default: ``true``
+
+
 ``osd scrub thread timeout`` 
 
 :Description: The maximum time in seconds before timing out a scrub thread.
@@ -279,6 +290,32 @@ scrubbing operations.
 
 :Type: Float
 :Default: Once per week. ``7*60*60*24``
+
+
+``osd scrub chunk min``
+
+:Description: The minimal number of object store chunks to scrub during single operation.
+              Ceph blocks writes to single chunk during scrub.
+
+:Type: 32-bit Integer
+:Default: 5
+
+
+``osd scrub chunk max``
+
+:Description: The maximum number of object store chunks to scrub during single operation.
+
+:Type: 32-bit Integer
+:Default: 25
+
+
+``osd scrub sleep``
+
+:Description: Time to sleep before scrubbing next group of chunks. Increasing this value will slow
+              down whole scrub operation while client operations will be less impacted.
+
+:Type: Float
+:Default: 0
 
 
 ``osd deep scrub interval``
@@ -383,7 +420,27 @@ recovery operations to ensure optimal performance during recovery.
               ``osd client op priority``.
 
 :Type: 32-bit Integer
-:Default: ``10`` 
+:Default: ``3`` 
+:Valid Range: 1-63
+
+
+``osd scrub priority``
+
+:Description: The priority set for scrub operations. It is relative to
+              ``osd client op priority``.
+
+:Type: 32-bit Integer
+:Default: ``5``
+:Valid Range: 1-63
+
+
+``osd snap trim priority``
+
+:Description: The priority set for snap trim operations. It is relative to
+              ``osd client op priority``.
+
+:Type: 32-bit Integer
+:Default: ``5``
 :Valid Range: 1-63
 
 
@@ -391,7 +448,7 @@ recovery operations to ensure optimal performance during recovery.
 
 :Description: The Ceph OSD Daemon operation thread timeout in seconds.
 :Type: 32-bit Integer
-:Default: ``30`` 
+:Default: ``15`` 
 
 
 ``osd op complaint time`` 
@@ -425,10 +482,9 @@ recovery operations to ensure optimal performance during recovery.
 	      operations. ``be`` is the default and is the same
 	      priority as all other threads in the OSD. ``rt`` means
 	      the disk thread will have precendence over all other
-	      threads in the OSD. This is useful if scrubbing is much
-	      needed and must make progress at the expense of client
-	      operations. Note: Only works with the Linux Kernel CFQ
-	      scheduler.
+	      threads in the OSD. Note: Only works with the Linux Kernel 
+	      CFQ scheduler. Since Jewel scrubbing is no longer carried
+	      out by the disk iothread, see osd priority options instead.
 :Type: String
 :Default: the empty string
 
@@ -442,9 +498,8 @@ recovery operations to ensure optimal performance during recovery.
 	      host were in class ``idle`` and compete for I/O
 	      (i.e. due to controller congestion), it can be used to
 	      lower the disk thread priority of one OSD to 7 so that
-	      another OSD with priority 0 can potentially scrub
-	      faster. Note: Only works with the Linux Kernel CFQ
-	      scheduler.
+	      another OSD with priority 0 can have priority.
+	      Note: Only works with the Linux Kernel CFQ scheduler.
 :Type: Integer in the range of 0 to 7 or -1 if not to be used.
 :Default: ``-1``
 
@@ -486,7 +541,7 @@ priority than requests to read or write data.
 
 :Description: The maximum number of backfills allowed to or from a single OSD.
 :Type: 64-bit Unsigned Integer
-:Default: ``10``
+:Default: ``1``
 
 
 ``osd backfill scan min`` 
@@ -503,15 +558,6 @@ priority than requests to read or write data.
 
 :Type: 32-bit Integer
 :Default: ``512`` 
-
-
-``osd backfill full ratio``
-
-:Description: Refuse to accept backfill requests when the Ceph OSD Daemon's 
-              full ratio is above this value.
-
-:Type: Float
-:Default: ``0.85``
 
 
 ``osd backfill retry interval``
@@ -608,7 +654,7 @@ perform well in a degraded state.
               increased load on the cluster.
 
 :Type: 32-bit Integer
-:Default: ``15``
+:Default: ``3``
 
 
 ``osd recovery max chunk`` 
@@ -618,10 +664,11 @@ perform well in a degraded state.
 :Default: ``8 << 20`` 
 
 
-``osd recovery threads`` 
+``osd recovery max single start``
 
-:Description: The number of threads for recovering data.
-:Type: 32-bit Integer
+:Description: The maximum number of recovery operations per OSD that will be
+              newly started when an OSD is recovering.
+:Type: 64-bit Integer Unsigned
 :Default: ``1``
 
 
@@ -641,6 +688,53 @@ perform well in a degraded state.
 :Default: ``true``
 
 
+``osd recovery sleep``
+
+:Description: Time in seconds to sleep before next recovery or backfill op.
+              Increasing this value will slow down recovery operation while
+              client operations will be less impacted.
+
+:Type: Float
+:Default: ``0``
+
+
+``osd recovery sleep hdd``
+
+:Description: Time in seconds to sleep before next recovery or backfill op
+              for HDDs.
+
+:Type: Float
+:Default: ``0.1``
+
+
+``osd recovery sleep ssd``
+
+:Description: Time in seconds to sleep before next recovery or backfill op
+              for SSDs.
+
+:Type: Float
+:Default: ``0``
+
+Tiering
+=======
+
+``osd agent max ops``
+
+:Description: The maximum number of simultaneous flushing ops per tiering agent
+              in the high speed mode.
+:Type: 32-bit Integer
+:Default: ``4``
+
+
+``osd agent max low ops``
+
+:Description: The maximum number of simultaneous flushing ops per tiering agent
+              in the low speed mode.
+:Type: 32-bit Integer
+:Default: ``2``
+
+See `cache target dirty high ratio`_ for when the tiering agent flushes dirty
+objects within the high speed mode.
 
 Miscellaneous
 =============
@@ -709,11 +803,15 @@ Miscellaneous
 :Default: ``false`` 
 
 
-``osd preserve trimmed log``
+``osd fast fail on connection refused``
 
-:Description: Preserves trimmed log files, but uses more disk space.
+:Description: If this option is enabled, crashed OSDs are marked down
+              immediately by connected peers and MONs (assuming that the
+              crashed OSD host survives). Disable it to restore old
+              behavior, at the expense of possible long I/O stalls when
+              OSDs crash in the middle of I/O operations.
 :Type: Boolean
-:Default: ``false``
+:Default: ``true``
 
 
 
@@ -722,3 +820,4 @@ Miscellaneous
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
 .. _Pool & PG Config Reference: ../pool-pg-config-ref
 .. _Journal Config Reference: ../journal-ref
+.. _cache target dirty high ratio: ../../operations/pools#cache-target-dirty-high-ratio

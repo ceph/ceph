@@ -1,0 +1,9 @@
+tasks:
+- install:
+- ceph:
+- mds_thrash:
+
+overrides:
+  ceph:
+    log-whitelist:
+      - not responding, replacing

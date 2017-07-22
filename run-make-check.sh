@@ -13,20 +13,6 @@
 #
 
 #
-# Return true if the working tree is after the release that made
-# make -j8 check possible
-#
-function can_parallel_make_check() {
-    local commit=$(git rev-parse tags/v0.88^{})
-    git rev-list HEAD | grep --quiet $commit
-}
-
-function maybe_parallel_make_check() {
-    if can_parallel_make_check ; then
-        echo -j$(get_processors)
-    fi
-}
-#
 # Return MAX(1, (number of processors / 2)) by default or NPROC
 #
 function get_processors() {
@@ -41,22 +27,34 @@ function get_processors() {
     fi
 }
 
-DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
-BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-if can_parallel_make_check ; then
-	CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-else
-	CHECK_MAKEOPTS=""
-fi
-
 function run() {
-    # Same logic as install-deps.sh for finding package installer
     local install_cmd
-    test -f /etc/redhat-release && install_cmd="yum install -y"
+    local which_pkg="which"
+    if test -f /etc/redhat-release ; then
+        source /etc/os-release
+        if ! type bc > /dev/null 2>&1 ; then
+            echo "Please install bc and re-run." 
+            exit 1
+        fi
+        if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
+            install_cmd="dnf -y install"
+        else
+            install_cmd="yum install -y"
+        fi
+    else
+        which_pkg="debianutils"
+    fi
+
     type apt-get > /dev/null 2>&1 && install_cmd="apt-get install -y"
     type zypper > /dev/null 2>&1 && install_cmd="zypper --gpg-auto-import-keys --non-interactive install"
+
+    if ! type sudo > /dev/null 2>&1 ; then
+        echo "Please install sudo and re-run. This script assumes it is running"
+        echo "as a normal user with the ability to run commands as root via sudo." 
+        exit 1
+    fi
     if [ -n "$install_cmd" ]; then
-        sudo $install_cmd ccache jq
+        $DRY_RUN sudo $install_cmd ccache jq $which_pkg
     else
         echo "WARNING: Don't know how to install packages" >&2
     fi
@@ -64,27 +62,37 @@ function run() {
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
     fi
-    export TMPDIR=$(mktemp -d --tmpdir ceph.XXX)
-    if test -x ./do_cmake.sh ; then
-        $DRY_RUN ./do_cmake.sh $@ || return 1
-        cd build
-        $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
-        $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure || return 1
-    else
-        $DRY_RUN ./autogen.sh || return 1
-        $DRY_RUN ./configure "$@"  --with-librocksdb-static --disable-static --with-radosgw --with-debug --without-lttng \
-            CC="ccache gcc" CXX="ccache g++" CFLAGS="-Wall -g" CXXFLAGS="-Wall -g" || return 1
-        $DRY_RUN make $BUILD_MAKEOPTS || return 1
-        $DRY_RUN make $CHECK_MAKEOPTS check || return 1
-        $DRY_RUN make dist || return 1
+
+    # Init defaults after deps are installed. get_processors() depends on coreutils nproc.
+    DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
+    BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+    CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+
+    $DRY_RUN ./do_cmake.sh $@ || return 1
+    $DRY_RUN cd build
+    $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
+    if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
+        rm -f ${TMPDIR:-/tmp}/ceph-asok.*
+        return 1
     fi
-    rm -rf $TMPDIR
 }
 
 function main() {
+    if [[ $EUID -eq 0 ]] ; then
+        echo "For best results, run this script as a normal user configured"
+        echo "with the ability to run commands as root via sudo."
+    fi
+    echo -n "Checking hostname sanity... "
+    if hostname --fqdn >/dev/null 2>&1 ; then
+        echo "OK"
+    else
+        echo "NOT OK"
+        echo "Please fix 'hostname --fqdn', otherwise 'make check' will fail"
+        return 1
+    fi
     if run "$@" ; then
-        echo "make check: successful run on $(git rev-parse HEAD)"
         rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
+        echo "cmake check: successful run on $(git rev-parse HEAD)"
         return 0
     else
         rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*

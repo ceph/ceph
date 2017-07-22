@@ -16,9 +16,6 @@
 
 #include "include/stringify.h"
 #include "mds/SessionMap.h"
-#include "common/ceph_argparse.h"
-#include "common/common_init.h"
-#include "global/global_init.h"
 
 #include "gtest/gtest.h"
 
@@ -149,14 +146,3 @@ TEST(MDSSessionFilter, ReconnectingEquality)
   ASSERT_FALSE(filter.match(*a, [](client_t c) -> bool {return false;}));
   a->put();
 }
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0); 
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-} 

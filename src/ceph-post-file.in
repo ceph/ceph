@@ -53,7 +53,13 @@ description=""
 user="`whoami`@`hostname -f`"
 remote="postfile@drop.ceph.com"
 
-ARGS=$(getopt -n "ceph-post-file" -o 'd:u:hk:i:r:' -l "description:,user:,help,known-hosts:,remote:" -- "$@")
+if [ `uname` = FreeBSD ]; then
+  GETOPT=/usr/local/bin/getopt
+else
+  GETOPT=getopt
+fi
+
+ARGS=$(${GETOPT} -n "ceph-post-file" -o 'd:u:hk:i:r:' -l "description:,user:,help,known-hosts:,remote:" -- "$@")
 eval set -- $ARGS
 
 while true; do

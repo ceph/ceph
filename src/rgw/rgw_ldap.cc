@@ -35,7 +35,7 @@ std::string parse_rgw_ldap_bindpw(CephContext* ctx)
     }
   }
 
-  return std::move(ldap_bindpw);
+  return ldap_bindpw;
 }
 
 #if defined(HAVE_OPENLDAP)
@@ -50,12 +50,33 @@ namespace rgw {
       filter += "))";
     } else {
       /* openldap */
-      filter = "(";
-      filter += dnattr;
-      filter += "=";
-      filter += uid;
-      filter += ")";
+      if (searchfilter.empty()) {
+        /* no search filter provided in config, we construct our own */
+        filter = "(";
+        filter += dnattr;
+        filter += "=";
+        filter += uid;
+        filter += ")";
+      } else {
+        if (searchfilter.find("@USERNAME@") != std::string::npos) {
+        /* we need to substitute the @USERNAME@ placeholder */
+	  filter = searchfilter;
+          filter.replace(searchfilter.find("@USERNAME@"), std::string("@USERNAME@").length(), uid);
+        } else {
+        /* no placeholder for username, so we need to append our own username filter to the custom searchfilter */
+          filter = "(&(";
+          filter += searchfilter;
+          filter += ")(";
+          filter += dnattr;
+          filter += "=";
+          filter += uid;
+          filter += "))";
+        }
+      }
     }
+    ldout(g_ceph_context, 12)
+      << __func__ << " search filter: " << filter
+      << dendl;
     char *attrs[] = { const_cast<char*>(dnattr.c_str()), nullptr };
     LDAPMessage *answer = nullptr, *entry = nullptr;
     bool once = true;
@@ -73,6 +94,7 @@ namespace rgw {
 	if (ret != LDAP_SUCCESS) {
 	  ldout(g_ceph_context, 10)
 	    << __func__ << " simple_bind failed uid=" << uid
+	    << "ldap err=" << ret
 	    << dendl;
 	}
 	ldap_memfree(dn);

@@ -27,7 +27,6 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   TrackedOp(tracker, req->get_recv_stamp()),
   rmw_flags(0), request(req),
   hit_flag_points(0), latest_flag_point(0),
-  send_map_update(false), sent_epoch(0),
   hitset_inserted(false) {
   if (req->get_priority() < tracker->cct->_conf->osd_client_op_priority) {
     // don't warn as quickly for low priority ops
@@ -40,34 +39,31 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   } else if (req->get_type() == MSG_OSD_REPOP) {
     reqid = static_cast<MOSDRepOp*>(req)->reqid;
   }
-  tracker->mark_event(this, "header_read", request->get_recv_stamp());
-  tracker->mark_event(this, "throttled", request->get_throttle_stamp());
-  tracker->mark_event(this, "all_read", request->get_recv_complete_stamp());
-  tracker->mark_event(this, "dispatched", request->get_dispatch_stamp());
+  mark_event("header_read", request->get_recv_stamp());
+  mark_event("throttled", request->get_throttle_stamp());
+  mark_event("all_read", request->get_recv_complete_stamp());
+  mark_event("dispatched", request->get_dispatch_stamp());
 }
 
-void OpRequest::_dump(utime_t now, Formatter *f) const
+void OpRequest::_dump(Formatter *f) const
 {
   Message *m = request;
   f->dump_string("flag_point", state_string());
   if (m->get_orig_source().is_client()) {
     f->open_object_section("client_info");
-    stringstream client_name;
+    stringstream client_name, client_addr;
     client_name << m->get_orig_source();
+    client_addr << m->get_orig_source_addr();
     f->dump_string("client", client_name.str());
+    f->dump_string("client_addr", client_addr.str());
     f->dump_unsigned("tid", m->get_tid());
     f->close_section(); // client_info
   }
   {
     f->open_array_section("events");
     Mutex::Locker l(lock);
-    for (list<pair<utime_t, string> >::const_iterator i = events.begin();
-	 i != events.end();
-	 ++i) {
-      f->open_object_section("event");
-      f->dump_stream("time") << i->first;
-      f->dump_string("event", i->second);
-      f->close_section();
+    for (auto& i : events) {
+      f->dump_object("event", i);
     }
     f->close_section();
   }
@@ -96,6 +92,13 @@ bool OpRequest::may_write() {
   return need_write_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
 }
 bool OpRequest::may_cache() { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
+bool OpRequest::rwordered_forced() {
+  return check_rmw(CEPH_OSD_RMW_FLAG_RWORDERED);
+}
+bool OpRequest::rwordered() {
+  return may_write() || may_cache() || rwordered_forced();
+}
+
 bool OpRequest::includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
 bool OpRequest::need_read_cap() {
   return check_rmw(CEPH_OSD_RMW_FLAG_READ);
@@ -132,13 +135,25 @@ void OpRequest::set_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CACHE); }
 void OpRequest::set_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE); }
 void OpRequest::set_skip_handle_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE); }
 void OpRequest::set_skip_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE); }
+void OpRequest::set_force_rwordered() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RWORDERED); }
 
-void OpRequest::mark_flag_point(uint8_t flag, const string& s) {
+void OpRequest::mark_flag_point(uint8_t flag, const char *s) {
 #ifdef WITH_LTTNG
   uint8_t old_flags = hit_flag_points;
 #endif
   mark_event(s);
-  current = s;
+  hit_flag_points |= flag;
+  latest_flag_point = flag;
+  tracepoint(oprequest, mark_flag_point, reqid.name._type,
+	     reqid.name._num, reqid.tid, reqid.inc, rmw_flags,
+	     flag, s, old_flags, hit_flag_points);
+}
+
+void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
+#ifdef WITH_LTTNG
+  uint8_t old_flags = hit_flag_points;
+#endif
+  mark_event_string(s);
   hit_flag_points |= flag;
   latest_flag_point = flag;
   tracepoint(oprequest, mark_flag_point, reqid.name._type,

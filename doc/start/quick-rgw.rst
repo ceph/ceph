@@ -70,8 +70,8 @@ Configuring the Ceph Object Gateway Instance
    firewall (e.g., port ``80``). If it is not open, add the port and reload the
    firewall configuration. For example::
 
-    sudo firewall-cmd --list-all sudo firewall-cmd --zone=public --add-port
-    80/tcp --permanent
+    sudo firewall-cmd --list-all
+    sudo firewall-cmd --zone=public --add-port 80/tcp --permanent
     sudo firewall-cmd --reload
 
    See `Preflight Checklist`_ for more information on configuring firewall with
@@ -97,5 +97,5 @@ Configuring the Ceph Object Gateway Instance
 See the `Configuring Ceph Object Gateway`_ guide for additional administration
 and API details.
 
-.. _Configuring Ceph Object Gateway: ../../radosgw/config
+.. _Configuring Ceph Object Gateway: ../../radosgw/config-fcgi
 .. _Preflight Checklist: ../quick-start-preflight

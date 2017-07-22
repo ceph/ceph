@@ -27,6 +27,7 @@ int XioDispatchHook::release_msgs()
   /* queue for release */
   xcmp = static_cast<XioCompletion *>(rsp_pool.alloc(sizeof(XioCompletion)));
   new (xcmp) XioCompletion(xcon, this);
+  xcmp->trace = m->trace;
 
   /* merge with portal traffic */
   xcon->portal->enqueue(xcon, xcmp);

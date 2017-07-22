@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -70,10 +70,6 @@ struct AsyncRequest<MockOperationImageCtx> : public AsyncRequest<MockImageCtx> {
 #include "librbd/operation/Request.cc"
 #include "librbd/operation/SnapshotRollbackRequest.cc"
 
-template class librbd::AsyncRequest<librbd::MockImageCtx>;
-template class librbd::AsyncObjectThrottle<librbd::MockImageCtx>;
-template class librbd::operation::Request<librbd::MockImageCtx>;
-
 namespace librbd {
 namespace operation {
 
@@ -88,12 +84,12 @@ public:
   typedef ResizeRequest<MockOperationImageCtx> MockResizeRequest;
 
   void expect_block_writes(MockOperationImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.aio_work_queue, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_unblock_writes(MockOperationImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.aio_work_queue, unblock_writes())
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes())
                   .Times(1);
   }
 
@@ -165,8 +161,8 @@ public:
 
   void expect_invalidate_cache(MockOperationImageCtx &mock_image_ctx, int r) {
     if (mock_image_ctx.object_cacher != nullptr) {
-      EXPECT_CALL(mock_image_ctx, invalidate_cache(_))
-                    .WillOnce(CompleteContext(r, NULL));
+      EXPECT_CALL(mock_image_ctx, invalidate_cache(true, _))
+                    .WillOnce(WithArg<1>(CompleteContext(r, static_cast<ContextWQ*>(NULL))));
     }
   }
 
@@ -176,7 +172,8 @@ public:
     C_SaferCond cond_ctx;
     librbd::NoOpProgressContext prog_ctx;
     MockSnapshotRollbackRequest *req = new MockSnapshotRollbackRequest(
-      mock_image_ctx, &cond_ctx, snap_name, snap_id, snap_size, prog_ctx);
+	mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), snap_name,
+	snap_id, snap_size, prog_ctx);
     {
       RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
       req->send();
@@ -305,6 +302,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, RollbackObjectsError) {
 TEST_F(TestMockOperationSnapshotRollbackRequest, InvalidateCacheError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  REQUIRE(ictx->cache);
 
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;

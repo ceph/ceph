@@ -27,11 +27,13 @@ static uint64_t MAX_METADATA_ITEMS = 128;
 }
 
 using util::create_context_callback;
-using util::create_rados_ack_callback;
+using util::create_rados_callback;
 
 template <typename I>
-OpenRequest<I>::OpenRequest(I *image_ctx, Context *on_finish)
-  : m_image_ctx(image_ctx), m_on_finish(on_finish), m_error_result(0),
+OpenRequest<I>::OpenRequest(I *image_ctx, bool skip_open_parent,
+                            Context *on_finish)
+  : m_image_ctx(image_ctx), m_skip_open_parent_image(skip_open_parent),
+    m_on_finish(on_finish), m_error_result(0),
     m_last_metadata_key(ImageCtx::METADATA_CONF_PREFIX) {
 }
 
@@ -47,7 +49,7 @@ void OpenRequest<I>::send_v1_detect_header() {
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_v1_detect_header>(this);
+    create_rados_callback<klass, &klass::handle_v1_detect_header>(this);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(util::old_header_name(m_image_ctx->name),
                                  comp, &op, &m_out_bl);
@@ -89,7 +91,7 @@ void OpenRequest<I>::send_v2_detect_header() {
 
     using klass = OpenRequest<I>;
     librados::AioCompletion *comp =
-      create_rados_ack_callback<klass, &klass::handle_v2_detect_header>(this);
+      create_rados_callback<klass, &klass::handle_v2_detect_header>(this);
     m_out_bl.clear();
     m_image_ctx->md_ctx.aio_operate(util::id_obj_name(m_image_ctx->name),
                                    comp, &op, &m_out_bl);
@@ -119,23 +121,19 @@ Context *OpenRequest<I>::handle_v2_detect_header(int *result) {
 
 template <typename I>
 void OpenRequest<I>::send_v2_get_id() {
-  if (m_image_ctx->id.empty()) {
-    CephContext *cct = m_image_ctx->cct;
-    ldout(cct, 10) << this << " " << __func__ << dendl;
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
 
-    librados::ObjectReadOperation op;
-    cls_client::get_id_start(&op);
+  librados::ObjectReadOperation op;
+  cls_client::get_id_start(&op);
 
-    using klass = OpenRequest<I>;
-    librados::AioCompletion *comp =
-      create_rados_ack_callback<klass, &klass::handle_v2_get_id>(this);
-    m_out_bl.clear();
-    m_image_ctx->md_ctx.aio_operate(util::id_obj_name(m_image_ctx->name),
-                                    comp, &op, &m_out_bl);
-    comp->release();
-  } else {
-    send_v2_get_name();
-  }
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_callback<klass, &klass::handle_v2_get_id>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(util::id_obj_name(m_image_ctx->name),
+                                  comp, &op, &m_out_bl);
+  comp->release();
 }
 
 template <typename I>
@@ -166,7 +164,7 @@ void OpenRequest<I>::send_v2_get_name() {
   cls_client::dir_get_name_start(&op, m_image_ctx->id);
 
   using klass = OpenRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     klass, &klass::handle_v2_get_name>(this);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_out_bl);
@@ -182,9 +180,60 @@ Context *OpenRequest<I>::handle_v2_get_name(int *result) {
     bufferlist::iterator it = m_out_bl.begin();
     *result = cls_client::dir_get_name_finish(&it, &m_image_ctx->name);
   }
-  if (*result < 0) {
+  if (*result < 0 && *result != -ENOENT) {
     lderr(cct) << "failed to retreive name: "
                << cpp_strerror(*result) << dendl;
+    send_close_image(*result);
+  } else if (*result == -ENOENT) {
+    // image does not exist in directory, look in the trash bin
+    ldout(cct, 10) << "image id " << m_image_ctx->id << " does not exist in "
+                   << "rbd directory, searching in rbd trash..." << dendl;
+    send_v2_get_name_from_trash();
+  } else {
+    send_v2_get_immutable_metadata();
+  }
+
+  return nullptr;
+}
+
+template <typename I>
+void OpenRequest<I>::send_v2_get_name_from_trash() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::trash_get_start(&op, m_image_ctx->id);
+
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp = create_rados_callback<
+    klass, &klass::handle_v2_get_name_from_trash>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(RBD_TRASH, comp, &op, &m_out_bl);
+  comp->release();
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_v2_get_name_from_trash(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  cls::rbd::TrashImageSpec trash_spec;
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::trash_get_finish(&it, &trash_spec);
+    m_image_ctx->name = trash_spec.name;
+  }
+  if (*result < 0) {
+    if (*result == -EOPNOTSUPP) {
+      *result = -ENOENT;
+    } else if (*result == -ENOENT) {
+      lderr(cct) << "image id " << m_image_ctx->id << " does not exist in rbd "
+                 << "trash, failed to retrieve image name: "
+                 << cpp_strerror(*result) << dendl;
+    } else {
+      lderr(cct) << "failed to retreive name from trash: "
+                 << cpp_strerror(*result) << dendl;
+    }
     send_close_image(*result);
   } else {
     send_v2_get_immutable_metadata();
@@ -205,7 +254,7 @@ void OpenRequest<I>::send_v2_get_immutable_metadata() {
   cls_client::get_immutable_metadata_start(&op);
 
   using klass = OpenRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     klass, &klass::handle_v2_get_immutable_metadata>(this);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
@@ -243,7 +292,7 @@ void OpenRequest<I>::send_v2_get_stripe_unit_count() {
   cls_client::get_stripe_unit_count_start(&op);
 
   using klass = OpenRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     klass, &klass::handle_v2_get_stripe_unit_count>(this);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
@@ -273,8 +322,98 @@ Context *OpenRequest<I>::handle_v2_get_stripe_unit_count(int *result) {
     return nullptr;
   }
 
-  m_image_ctx->init_layout();
+  send_v2_get_create_timestamp();
+  return nullptr;
+}
 
+template <typename I>
+void OpenRequest<I>::send_v2_get_create_timestamp() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::get_create_timestamp_start(&op);
+
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp = create_rados_callback<
+    klass, &klass::handle_v2_get_create_timestamp>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
+                                  &m_out_bl);
+  comp->release();
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_v2_get_create_timestamp(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::get_create_timestamp_finish(&it,
+        &m_image_ctx->create_timestamp);
+  }
+  if (*result < 0 && *result != -EOPNOTSUPP) {
+    lderr(cct) << "failed to retrieve create_timestamp: "
+               << cpp_strerror(*result)
+               << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
+  send_v2_get_data_pool();
+  return nullptr;
+}
+
+template <typename I>
+void OpenRequest<I>::send_v2_get_data_pool() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::get_data_pool_start(&op);
+
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp = create_rados_callback<
+    klass, &klass::handle_v2_get_data_pool>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
+                                  &m_out_bl);
+  comp->release();
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  int64_t data_pool_id = -1;
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::get_data_pool_finish(&it, &data_pool_id);
+  } else if (*result == -EOPNOTSUPP) {
+    *result = 0;
+  }
+
+  if (*result < 0) {
+    lderr(cct) << "failed to read data pool: " << cpp_strerror(*result)
+               << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
+  if (data_pool_id != -1) {
+    librados::Rados rados(m_image_ctx->md_ctx);
+    *result = rados.ioctx_create2(data_pool_id, m_image_ctx->data_ctx);
+    if (*result < 0) {
+      lderr(cct) << "failed to initialize data pool IO context: "
+                 << cpp_strerror(*result) << dendl;
+      send_close_image(*result);
+      return nullptr;
+    }
+  }
+
+  m_image_ctx->init_layout();
   send_v2_apply_metadata();
   return nullptr;
 }
@@ -290,7 +429,7 @@ void OpenRequest<I>::send_v2_apply_metadata() {
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_v2_apply_metadata>(this);
+    create_rados_callback<klass, &klass::handle_v2_apply_metadata>(this);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
                                   &m_out_bl);
@@ -372,10 +511,10 @@ void OpenRequest<I>::send_refresh() {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   using klass = OpenRequest<I>;
-  RefreshRequest<I> *ctx = RefreshRequest<I>::create(
-    *m_image_ctx, false,
+  RefreshRequest<I> *req = RefreshRequest<I>::create(
+    *m_image_ctx, false, m_skip_open_parent_image,
     create_context_callback<klass, &klass::handle_refresh>(this));
-  ctx->send();
+  req->send();
 }
 
 template <typename I>
@@ -404,10 +543,10 @@ Context *OpenRequest<I>::send_set_snap(int *result) {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   using klass = OpenRequest<I>;
-  SetSnapRequest<I> *ctx = SetSnapRequest<I>::create(
-    *m_image_ctx, m_image_ctx->snap_name,
+  SetSnapRequest<I> *req = SetSnapRequest<I>::create(
+    *m_image_ctx, m_image_ctx->snap_namespace, m_image_ctx->snap_name,
     create_context_callback<klass, &klass::handle_set_snap>(this));
-  ctx->send();
+  req->send();
   return nullptr;
 }
 

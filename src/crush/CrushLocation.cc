@@ -9,7 +9,7 @@
 #include "common/debug.h"
 #include "include/compat.h"
 
-#include <common/SubProcess.h>
+#include "common/SubProcess.h"
 
 #include <vector>
 
@@ -42,6 +42,12 @@ int CrushLocation::update_from_hook()
 {
   if (cct->_conf->crush_location_hook.length() == 0)
     return 0;
+ 
+  if (0 != access(cct->_conf->crush_location_hook.c_str(), R_OK)) {
+    lderr(cct) << "the user define crush location hook: " << cct->_conf->crush_location_hook
+               << " may not exist or can not access it" << dendl;
+    return errno;
+  }
 
   SubProcessTimed hook(
     cct->_conf->crush_location_hook.c_str(),

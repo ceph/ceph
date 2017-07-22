@@ -15,11 +15,9 @@
 #ifndef CEPH_LOGCLIENT_H
 #define CEPH_LOGCLIENT_H
 
+#include <atomic>
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
-
-#include <iosfwd>
-#include <sstream>
 
 class LogClient;
 class MLog;
@@ -33,7 +31,7 @@ struct Connection;
 class LogChannel;
 
 namespace ceph {
-namespace log {
+namespace logging {
   class Graylog;
 }
 }
@@ -182,7 +180,7 @@ private:
   std::string syslog_facility;
   bool log_to_syslog;
   bool log_to_monitors;
-  shared_ptr<ceph::log::Graylog> graylog;
+  shared_ptr<ceph::logging::Graylog> graylog;
 
 
   friend class LogClientTemp;
@@ -205,8 +203,7 @@ public:
   }
 
   bool handle_log_ack(MLogAck *m);
-  void reset_session();
-  Message *get_mon_log_message();
+  Message *get_mon_log_message(bool flush);
   bool are_pending();
 
   LogChannelRef create_channel() {
@@ -218,7 +215,7 @@ public:
     if (channels.count(name))
       c = channels[name];
     else {
-      c = LogChannelRef(new LogChannel(cct, this, name));
+      c = std::make_shared<LogChannel>(cct, this, name);
       channels[name] = c;
     }
     return c;
@@ -233,6 +230,9 @@ public:
     channels.clear();
   }
 
+  uint64_t get_next_seq();
+  const entity_inst_t& get_myinst();
+  const EntityName& get_myname();
   version_t queue(LogEntry &entry);
 
 private:
@@ -245,7 +245,7 @@ private:
   bool is_mon;
   Mutex log_lock;
   version_t last_log_sent;
-  version_t last_log;
+  std::atomic<uint64_t> last_log;
   std::deque<LogEntry> log_queue;
 
   std::map<std::string, LogChannelRef> channels;

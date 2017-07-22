@@ -71,16 +71,25 @@ private:
 void AioDiscardEvent::encode(bufferlist& bl) const {
   ::encode(offset, bl);
   ::encode(length, bl);
+  ::encode(skip_partial_discard, bl);
 }
 
 void AioDiscardEvent::decode(__u8 version, bufferlist::iterator& it) {
   ::decode(offset, it);
   ::decode(length, it);
+  if (version >= 4) {
+    ::decode(skip_partial_discard, it);
+  }
 }
 
 void AioDiscardEvent::dump(Formatter *f) const {
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
+  f->dump_bool("skip_partial_discard", skip_partial_discard);
+}
+
+uint32_t AioWriteEvent::get_fixed_size() {
+  return EventEntry::get_fixed_size() + 16 /* offset, length */;
 }
 
 void AioWriteEvent::encode(bufferlist& bl) const {
@@ -96,6 +105,23 @@ void AioWriteEvent::decode(__u8 version, bufferlist::iterator& it) {
 }
 
 void AioWriteEvent::dump(Formatter *f) const {
+  f->dump_unsigned("offset", offset);
+  f->dump_unsigned("length", length);
+}
+
+void AioWriteSameEvent::encode(bufferlist& bl) const {
+  ::encode(offset, bl);
+  ::encode(length, bl);
+  ::encode(data, bl);
+}
+
+void AioWriteSameEvent::decode(__u8 version, bufferlist::iterator& it) {
+  ::decode(offset, it);
+  ::decode(length, it);
+  ::decode(data, it);
+}
+
+void AioWriteSameEvent::dump(Formatter *f) const {
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
 }
@@ -142,16 +168,40 @@ void OpFinishEvent::dump(Formatter *f) const {
 void SnapEventBase::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
   ::encode(snap_name, bl);
+  ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
 }
 
 void SnapEventBase::decode(__u8 version, bufferlist::iterator& it) {
   OpEventBase::decode(version, it);
   ::decode(snap_name, it);
+  if (version >= 4) {
+    cls::rbd::SnapshotNamespaceOnDisk sn;
+    ::decode(sn, it);
+    snap_namespace = sn.snapshot_namespace;
+  }
 }
 
 void SnapEventBase::dump(Formatter *f) const {
   OpEventBase::dump(f);
   f->dump_string("snap_name", snap_name);
+  cls::rbd::SnapshotNamespaceOnDisk(snap_namespace).dump(f);
+}
+
+void SnapCreateEvent::encode(bufferlist &bl) const {
+  SnapEventBase::encode(bl);
+}
+
+void SnapCreateEvent::decode(__u8 version, bufferlist::iterator& it) {
+  SnapEventBase::decode(version, it);
+  if (version == 3) {
+    cls::rbd::SnapshotNamespaceOnDisk sn;
+    ::decode(sn, it);
+    snap_namespace = sn.snapshot_namespace;
+  }
+}
+
+void SnapCreateEvent::dump(Formatter *f) const {
+  SnapEventBase::dump(f);
 }
 
 void SnapLimitEvent::encode(bufferlist &bl) const {
@@ -170,13 +220,15 @@ void SnapLimitEvent::dump(Formatter *f) const {
 }
 
 void SnapRenameEvent::encode(bufferlist& bl) const {
-  SnapEventBase::encode(bl);
+  OpEventBase::encode(bl);
+  ::encode(dst_snap_name, bl);
   ::encode(snap_id, bl);
   ::encode(src_snap_name, bl);
 }
 
 void SnapRenameEvent::decode(__u8 version, bufferlist::iterator& it) {
-  SnapEventBase::decode(version, it);
+  OpEventBase::decode(version, it);
+  ::decode(dst_snap_name, it);
   ::decode(snap_id, it);
   if (version >= 2) {
     ::decode(src_snap_name, it);
@@ -184,10 +236,10 @@ void SnapRenameEvent::decode(__u8 version, bufferlist::iterator& it) {
 }
 
 void SnapRenameEvent::dump(Formatter *f) const {
-  SnapEventBase::dump(f);
+  OpEventBase::dump(f);
   f->dump_unsigned("src_snap_id", snap_id);
   f->dump_string("src_snap_name", src_snap_name);
-  f->dump_string("dest_snap_name", snap_name);
+  f->dump_string("dest_snap_name", dst_snap_name);
 }
 
 void RenameEvent::encode(bufferlist& bl) const {
@@ -220,13 +272,64 @@ void ResizeEvent::dump(Formatter *f) const {
   f->dump_unsigned("size", size);
 }
 
-void DemoteEvent::encode(bufferlist& bl) const {
+void DemotePromoteEvent::encode(bufferlist& bl) const {
 }
 
-void DemoteEvent::decode(__u8 version, bufferlist::iterator& it) {
+void DemotePromoteEvent::decode(__u8 version, bufferlist::iterator& it) {
 }
 
-void DemoteEvent::dump(Formatter *f) const {
+void DemotePromoteEvent::dump(Formatter *f) const {
+}
+
+void UpdateFeaturesEvent::encode(bufferlist& bl) const {
+  OpEventBase::encode(bl);
+  ::encode(features, bl);
+  ::encode(enabled, bl);
+}
+
+void UpdateFeaturesEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpEventBase::decode(version, it);
+  ::decode(features, it);
+  ::decode(enabled, it);
+}
+
+void UpdateFeaturesEvent::dump(Formatter *f) const {
+  OpEventBase::dump(f);
+  f->dump_unsigned("features", features);
+  f->dump_bool("enabled", enabled);
+}
+
+void MetadataSetEvent::encode(bufferlist& bl) const {
+  OpEventBase::encode(bl);
+  ::encode(key, bl);
+  ::encode(value, bl);
+}
+
+void MetadataSetEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpEventBase::decode(version, it);
+  ::decode(key, it);
+  ::decode(value, it);
+}
+
+void MetadataSetEvent::dump(Formatter *f) const {
+  OpEventBase::dump(f);
+  f->dump_string("key", key);
+  f->dump_string("value", value);
+}
+
+void MetadataRemoveEvent::encode(bufferlist& bl) const {
+  OpEventBase::encode(bl);
+  ::encode(key, bl);
+}
+
+void MetadataRemoveEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpEventBase::decode(version, it);
+  ::decode(key, it);
+}
+
+void MetadataRemoveEvent::dump(Formatter *f) const {
+  OpEventBase::dump(f);
+  f->dump_string("key", key);
 }
 
 void UnknownEvent::encode(bufferlist& bl) const {
@@ -244,9 +347,10 @@ EventType EventEntry::get_event_type() const {
 }
 
 void EventEntry::encode(bufferlist& bl) const {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(4, 1, bl);
   boost::apply_visitor(EncodeVisitor(bl), event);
   ENCODE_FINISH(bl);
+  encode_metadata(bl);
 }
 
 void EventEntry::decode(bufferlist::iterator& it) {
@@ -296,8 +400,20 @@ void EventEntry::decode(bufferlist::iterator& it) {
   case EVENT_TYPE_FLATTEN:
     event = FlattenEvent();
     break;
-  case EVENT_TYPE_DEMOTE:
-    event = DemoteEvent();
+  case EVENT_TYPE_DEMOTE_PROMOTE:
+    event = DemotePromoteEvent();
+    break;
+  case EVENT_TYPE_UPDATE_FEATURES:
+    event = UpdateFeaturesEvent();
+    break;
+  case EVENT_TYPE_METADATA_SET:
+    event = MetadataSetEvent();
+    break;
+  case EVENT_TYPE_METADATA_REMOVE:
+    event = MetadataRemoveEvent();
+    break;
+  case EVENT_TYPE_AIO_WRITESAME:
+    event = AioWriteSameEvent();
     break;
   default:
     event = UnknownEvent();
@@ -306,52 +422,78 @@ void EventEntry::decode(bufferlist::iterator& it) {
 
   boost::apply_visitor(DecodeVisitor(struct_v, it), event);
   DECODE_FINISH(it);
+  if (struct_v >= 4) {
+    decode_metadata(it);
+  }
 }
 
 void EventEntry::dump(Formatter *f) const {
   boost::apply_visitor(DumpVisitor(f, "event_type"), event);
+  f->dump_stream("timestamp") << timestamp;
+}
+
+void EventEntry::encode_metadata(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(timestamp, bl);
+  ENCODE_FINISH(bl);
+}
+
+void EventEntry::decode_metadata(bufferlist::iterator& it) {
+  DECODE_START(1, it);
+  ::decode(timestamp, it);
+  DECODE_FINISH(it);
 }
 
 void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(AioDiscardEvent()));
-  o.push_back(new EventEntry(AioDiscardEvent(123, 345)));
+  o.push_back(new EventEntry(AioDiscardEvent(123, 345, false), utime_t(1, 1)));
 
   bufferlist bl;
   bl.append(std::string(32, '1'));
   o.push_back(new EventEntry(AioWriteEvent()));
-  o.push_back(new EventEntry(AioWriteEvent(123, 456, bl)));
+  o.push_back(new EventEntry(AioWriteEvent(123, 456, bl), utime_t(1, 1)));
 
   o.push_back(new EventEntry(AioFlushEvent()));
 
-  o.push_back(new EventEntry(OpFinishEvent(123, -1)));
+  o.push_back(new EventEntry(OpFinishEvent(123, -1), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(SnapCreateEvent()));
-  o.push_back(new EventEntry(SnapCreateEvent(234, "snap")));
+  o.push_back(new EventEntry(SnapCreateEvent(), utime_t(1, 1)));
+  o.push_back(new EventEntry(SnapCreateEvent(234, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(SnapRemoveEvent()));
-  o.push_back(new EventEntry(SnapRemoveEvent(345, "snap")));
+  o.push_back(new EventEntry(SnapRemoveEvent(345, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(SnapRenameEvent()));
-  o.push_back(new EventEntry(SnapRenameEvent(456, 1, "src snap", "dest snap")));
+  o.push_back(new EventEntry(SnapRenameEvent(456, 1, "src snap", "dest snap"),
+                             utime_t(1, 1)));
 
   o.push_back(new EventEntry(SnapProtectEvent()));
-  o.push_back(new EventEntry(SnapProtectEvent(567, "snap")));
+  o.push_back(new EventEntry(SnapProtectEvent(567, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(SnapUnprotectEvent()));
-  o.push_back(new EventEntry(SnapUnprotectEvent(678, "snap")));
+  o.push_back(new EventEntry(SnapUnprotectEvent(678, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(SnapRollbackEvent()));
-  o.push_back(new EventEntry(SnapRollbackEvent(789, "snap")));
+  o.push_back(new EventEntry(SnapRollbackEvent(789, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(RenameEvent()));
-  o.push_back(new EventEntry(RenameEvent(890, "image name")));
+  o.push_back(new EventEntry(RenameEvent(890, "image name"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(ResizeEvent()));
-  o.push_back(new EventEntry(ResizeEvent(901, 1234)));
+  o.push_back(new EventEntry(ResizeEvent(901, 1234), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(FlattenEvent(123)));
+  o.push_back(new EventEntry(FlattenEvent(123), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(DemoteEvent()));
+  o.push_back(new EventEntry(DemotePromoteEvent()));
+
+  o.push_back(new EventEntry(UpdateFeaturesEvent()));
+  o.push_back(new EventEntry(UpdateFeaturesEvent(123, 127, true), utime_t(1, 1)));
+
+  o.push_back(new EventEntry(MetadataSetEvent()));
+  o.push_back(new EventEntry(MetadataSetEvent(123, "key", "value"), utime_t(1, 1)));
+
+  o.push_back(new EventEntry(MetadataRemoveEvent()));
+  o.push_back(new EventEntry(MetadataRemoveEvent(123, "key"), utime_t(1, 1)));
 }
 
 // Journal Client
@@ -375,12 +517,18 @@ void MirrorPeerSyncPoint::encode(bufferlist& bl) const {
   ::encode(snap_name, bl);
   ::encode(from_snap_name, bl);
   ::encode(object_number, bl);
+  ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
 }
 
 void MirrorPeerSyncPoint::decode(__u8 version, bufferlist::iterator& it) {
   ::decode(snap_name, it);
   ::decode(from_snap_name, it);
   ::decode(object_number, it);
+  if (version >= 2) {
+    cls::rbd::SnapshotNamespaceOnDisk sn;
+    ::decode(sn, it);
+    snap_namespace = sn.snapshot_namespace;
+  }
 }
 
 void MirrorPeerSyncPoint::dump(Formatter *f) const {
@@ -389,6 +537,7 @@ void MirrorPeerSyncPoint::dump(Formatter *f) const {
   if (object_number) {
     f->dump_unsigned("object_number", *object_number);
   }
+  cls::rbd::SnapshotNamespaceOnDisk(snap_namespace).dump(f);
 }
 
 void MirrorPeerClientMeta::encode(bufferlist& bl) const {
@@ -466,7 +615,7 @@ ClientMetaType ClientData::get_client_meta_type() const {
 }
 
 void ClientData::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   boost::apply_visitor(EncodeVisitor(bl), client_meta);
   ENCODE_FINISH(bl);
 }
@@ -506,7 +655,7 @@ void ClientData::generate_test_instances(std::list<ClientData *> &o) {
   o.push_back(new ClientData(ImageClientMeta(123)));
   o.push_back(new ClientData(MirrorPeerClientMeta()));
   o.push_back(new ClientData(MirrorPeerClientMeta("image_id",
-                                                  {{"snap 2", "snap 1", 123}},
+                                                  {{{}, "snap 2", "snap 1", 123}},
                                                   {{1, 2}, {3, 4}})));
   o.push_back(new ClientData(CliClientMeta()));
 }
@@ -600,8 +749,20 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
   case EVENT_TYPE_FLATTEN:
     out << "Flatten";
     break;
-  case EVENT_TYPE_DEMOTE:
-    out << "Demote";
+  case EVENT_TYPE_DEMOTE_PROMOTE:
+    out << "Demote/Promote";
+    break;
+  case EVENT_TYPE_UPDATE_FEATURES:
+    out << "UpdateFeatures";
+    break;
+  case EVENT_TYPE_METADATA_SET:
+    out << "MetadataSet";
+    break;
+  case EVENT_TYPE_METADATA_REMOVE:
+    out << "MetadataRemove";
+    break;
+  case EVENT_TYPE_AIO_WRITESAME:
+    out << "AioWriteSame";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";

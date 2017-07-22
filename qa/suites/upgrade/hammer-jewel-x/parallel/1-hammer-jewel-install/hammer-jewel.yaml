@@ -1,0 +1,20 @@
+tasks:
+- install:
+    branch: hammer
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+- print: "**** done hammer"
+- ceph:
+   fs: xfs
+   skip_mgr_daemons: true
+   add_osds_to_crush: true
+- install.upgrade:
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    osd.0:
+      branch: jewel
+    osd.2:
+      branch: jewel
+- print: "*** client.0 upgraded packages to jewel"
+- parallel:
+   - workload
+   - upgrade-sequence
+- print: "**** done parallel"

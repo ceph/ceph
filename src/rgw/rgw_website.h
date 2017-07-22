@@ -164,26 +164,39 @@ WRITE_CLASS_ENCODER(RGWBWRoutingRules)
 struct RGWBucketWebsiteConf
 {
   RGWRedirectInfo redirect_all;
-  string index_doc_suffix;
-  string error_doc;
+  std::string index_doc_suffix;
+  std::string error_doc;
+  std::string subdir_marker;
+  std::string listing_css_doc;
+  bool listing_enabled;
   RGWBWRoutingRules routing_rules;
 
-  RGWBucketWebsiteConf() {}
+  RGWBucketWebsiteConf()
+    : listing_enabled(false) {
+  }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(index_doc_suffix, bl);
     ::encode(error_doc, bl);
     ::encode(routing_rules, bl);
     ::encode(redirect_all, bl);
+    ::encode(subdir_marker, bl);
+    ::encode(listing_css_doc, bl);
+    ::encode(listing_enabled, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(index_doc_suffix, bl);
     ::decode(error_doc, bl);
     ::decode(routing_rules, bl);
     ::decode(redirect_all, bl);
+    if (struct_v >= 2) {
+      ::decode(subdir_marker, bl);
+      ::decode(listing_css_doc, bl);
+      ::decode(listing_enabled, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -192,8 +205,24 @@ struct RGWBucketWebsiteConf
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
 
-  bool should_redirect(const string& key, const int http_error_code, RGWBWRoutingRule *redirect);
-  void get_effective_key(const string& key, string *effective_key);
+  bool should_redirect(const std::string& key,
+                       const int http_error_code,
+                       RGWBWRoutingRule *redirect);
+
+  void get_effective_key(const std::string& key,
+                         std::string *effective_key, bool is_file) const;
+
+  const std::string& get_index_doc() const {
+    return index_doc_suffix;
+  }
+
+  bool is_empty() const {
+    return index_doc_suffix.empty() &&
+           error_doc.empty() &&
+           subdir_marker.empty() &&
+           listing_css_doc.empty() &&
+           ! listing_enabled;
+  }
 };
 WRITE_CLASS_ENCODER(RGWBucketWebsiteConf)
 

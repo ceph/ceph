@@ -4,9 +4,7 @@
 #ifndef CEPH_CLS_USER_OPS_H
 #define CEPH_CLS_USER_OPS_H
 
-#include "include/types.h"
 #include "cls_user_types.h"
-#include "common/ceph_time.h"
 
 struct cls_user_set_buckets_op {
   list<cls_user_bucket_entry> entries;

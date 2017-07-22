@@ -12,13 +12,35 @@
  *
  */
 
-#include <cxxabi.h>
-#include "common/cmdparse.h"
-#include "include/str_list.h"
 #include "json_spirit/json_spirit.h"
 #include "common/debug.h"
 
 using namespace std;
+
+/**
+ * Given a cmddesc like "foo baz name=bar,type=CephString",
+ * return the prefix "foo baz".
+ */
+std::string cmddesc_get_prefix(const std::string &cmddesc)
+{
+  stringstream ss(cmddesc);
+  std::string word;
+  std::ostringstream result;
+  bool first = true;
+  while (std::getline(ss, word, ' ')) {
+    if (word.find_first_of(",=") != string::npos) {
+      break;
+    }
+
+    if (!first) {
+      result << " ";
+    }
+    result << word;
+    first = false;
+  }
+
+  return result.str();
+}
 
 /**
  * Read a command description list out of cmd, and dump it to f.
@@ -97,7 +119,8 @@ dump_cmddesc_to_json(Formatter *jf,
 		     const string& helptext,
 		     const string& module,
 		     const string& perm,
-		     const string& avail)
+		     const string& avail,
+		     uint64_t flags)
 {
       jf->open_object_section(secname.c_str());
       jf->open_array_section("sig");
@@ -107,8 +130,70 @@ dump_cmddesc_to_json(Formatter *jf,
       jf->dump_string("module", module.c_str());
       jf->dump_string("perm", perm.c_str());
       jf->dump_string("avail", avail.c_str());
+      jf->dump_int("flags", flags);
       jf->close_section(); // cmd
 }
+
+void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
+{
+  assert(f != nullptr);
+
+  class dump_visitor : public boost::static_visitor<void>
+  {
+    Formatter *f;
+    std::string const &key;
+    public:
+    dump_visitor(Formatter *f_, std::string const &key_)
+      : f(f_), key(key_)
+    {
+    }
+
+    void operator()(const std::string &operand) const
+    {
+      f->dump_string(key.c_str(), operand);
+    }
+
+    void operator()(const bool &operand) const
+    {
+      f->dump_bool(key.c_str(), operand);
+    }
+
+    void operator()(const int64_t &operand) const
+    {
+      f->dump_int(key.c_str(), operand);
+    }
+
+    void operator()(const double &operand) const
+    {
+      f->dump_float(key.c_str(), operand);
+    }
+
+    void operator()(const std::vector<std::string> &operand) const
+    {
+      f->open_array_section(key.c_str());
+      for (const auto i : operand) {
+        f->dump_string("item", i);
+      }
+      f->close_section();
+    }
+
+    void operator()(const std::vector<int64_t> &operand) const
+    {
+      f->open_array_section(key.c_str());
+      for (const auto i : operand) {
+        f->dump_int("item", i);
+      }
+      f->close_section();
+    }
+  };
+
+  //f->open_object_section("cmdmap");
+  for (const auto &i : cmdmap) {
+    boost::apply_visitor(dump_visitor(f, i.first), i.second);
+  }
+  //f->close_section();
+}
+
 
 /** Parse JSON in vector cmd into a map from field to map of values
  * (use mValue/mObject)
@@ -161,7 +246,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
 	    // if an empty array is acceptable, the caller should always check for
 	    // vector<string> if the expected value of "vector<int64_t>" in the
 	    // cmdmap is missing.
-	    (*mapp)[it->first] = std::move(vector<string>());
+	    (*mapp)[it->first] = vector<string>();
 	  } else if (spvals.front().type() == json_spirit::str_type) {
 	    vector<string> outv;
 	    for (const auto& sv : spvals) {
@@ -230,7 +315,7 @@ cmd_vartype_stringify(const cmd_vartype &v)
 
 
 void
-handle_bad_get(CephContext *cct, string k, const char *tname)
+handle_bad_get(CephContext *cct, const string& k, const char *tname)
 {
   ostringstream errstr;
   int status;
@@ -240,10 +325,53 @@ handle_bad_get(CephContext *cct, string k, const char *tname)
   errstr << "bad boost::get: key " << k << " is not type " << typestr;
   lderr(cct) << errstr.str() << dendl;
 
-  BackTrace bt(1);
   ostringstream oss;
-  bt.print(oss);
+  oss << BackTrace(1);
   lderr(cct) << oss.rdbuf() << dendl;
   if (status == 0)
     free((char *)typestr);
+}
+
+long parse_pos_long(const char *s, std::ostream *pss)
+{
+  if (*s == '-' || *s == '+') {
+    if (pss)
+      *pss << "expected numerical value, got: " << s;
+    return -EINVAL;
+  }
+
+  string err;
+  long r = strict_strtol(s, 10, &err);
+  if ((r == 0) && !err.empty()) {
+    if (pss)
+      *pss << err;
+    return -1;
+  }
+  if (r < 0) {
+    if (pss)
+      *pss << "unable to parse positive integer '" << s << "'";
+    return -1;
+  }
+  return r;
+}
+
+int parse_osd_id(const char *s, std::ostream *pss)
+{
+  // osd.NNN?
+  if (strncmp(s, "osd.", 4) == 0) {
+    s += 4;
+  }
+
+  // NNN?
+  ostringstream ss;
+  long id = parse_pos_long(s, &ss);
+  if (id < 0) {
+    *pss << ss.str();
+    return id;
+  }
+  if (id > 0xffff) {
+    *pss << "osd id " << id << " is too large";
+    return -ERANGE;
+  }
+  return id;
 }

@@ -8,6 +8,8 @@
 /ceph-fs-common
 /ceph-mds-dbg
 /ceph-mds
+/ceph-mgr-dbg
+/ceph-mgr
 /ceph-mon-dbg
 /ceph-mon
 /ceph-osd-dbg
@@ -19,9 +21,9 @@
 /*.debhelper
 /ceph
 /files
-/libcephfs1-dbg
+/libcephfs2-dbg
 /libcephfs-dev
-/libcephfs1
+/libcephfs2
 /librados2-dbg
 /librados-dev
 /librados2

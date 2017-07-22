@@ -58,7 +58,7 @@ a number of things:
   For example, when you run multiple clusters in a `federated architecture`_, 
   the cluster name (e.g., ``us-west``, ``us-east``) identifies the cluster for
   the current CLI session. **Note:** To identify the cluster name on the 
-  command line interface, specify the a Ceph configuration file with the 
+  command line interface, specify the Ceph configuration file with the 
   cluster name (e.g., ``ceph.conf``, ``us-west.conf``, ``us-east.conf``, etc.).
   Also see CLI usage (``ceph --cluster {cluster-name}``).
   
@@ -150,9 +150,9 @@ The procedure is as follows:
 
 	mon host = 192.168.0.1
 
-   **Note:** You may use IPv6 addresses too, but you must set ``ms bind ipv6`` 
-   to ``true``. See `Network Configuration Reference`_ for details about 
-   network configuration.
+   **Note:** You may use IPv6 addresses instead of IPv4 addresses, but
+   you must set ``ms bind ipv6`` to ``true``. See `Network Configuration
+   Reference`_ for details about network configuration.
 
 #. Create a keyring for your cluster and generate a monitor secret key. ::
 
@@ -290,6 +290,12 @@ The procedure is as follows:
    **Note:** Once you add OSDs and start them, the placement group health errors
    should disappear. See the next section for details.
 
+Manager daemon configuration
+============================
+
+On each node where you run a ceph-mon daemon, you should also set up a ceph-mgr daemon.
+
+See :doc:`../mgr/administrator`
 
 Adding OSDs
 ===========
@@ -317,7 +323,7 @@ on  ``node2`` and ``node3``:
 #. Prepare the OSD. ::
 
 	ssh {node-name}
-	sudo ceph-disk prepare --cluster {cluster-name} --cluster-uuid {uuid} --fs-type {ext4|xfs|btrfs} {data-path} [{journal-path}]
+	sudo ceph-disk prepare --cluster {cluster-name} --cluster-uuid {uuid} {data-path} [{journal-path}]
 
    For example::
 
@@ -454,6 +460,44 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 
 
 
+Adding MDS
+==========
+
+In the below instructions, ``{id}`` is an arbitrary name, such as the hostname of the machine.
+
+#. Create the mds data directory.::
+
+	mkdir -p /var/lib/ceph/mds/{cluster-name}-{id}
+
+#. Create a keyring.::
+
+	ceph-authtool --create-keyring /var/lib/ceph/mds/{cluster-name}-{id}/keyring --gen-key -n mds.{id}
+    
+#. Import the keyring and set caps.::
+
+	ceph auth add mds.{id} osd "allow rwx" mds "allow" mon "allow profile mds" -i /var/lib/ceph/mds/{cluster}-{id}/keyring
+   
+#. Add to ceph.conf.::
+
+	[mds.{id}]
+	host = {id}
+
+#. Start the daemon the manual way.::
+
+	ceph-mds --cluster {cluster-name} -i {id} -m {mon-hostname}:{mon-port} [-f]
+
+#. Start the daemon the right way (using ceph.conf entry).::
+
+	service ceph start
+
+#. If starting the daemon fails with this error::
+
+	mds.-1.0 ERROR: failed to authenticate: (22) Invalid argument
+
+   Then make sure you do not have a keyring set in ceph.conf in the global section; move it to the client section; or add a keyring setting specific to this mds daemon. And verify that you see the same key in the mds data directory and ``ceph auth get mds.{id}`` output.
+
+#. Now you are ready to `create a Ceph filesystem`_.
+
 
 Summary
 =======
@@ -486,3 +530,4 @@ To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 .. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
 .. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data
+.. _create a Ceph filesystem: ../../cephfs/createfs

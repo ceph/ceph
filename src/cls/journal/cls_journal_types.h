@@ -9,7 +9,6 @@
 #include "include/encoding.h"
 #include <iosfwd>
 #include <list>
-#include <set>
 #include <string>
 
 namespace ceph {

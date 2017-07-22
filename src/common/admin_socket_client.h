@@ -15,7 +15,6 @@
 #ifndef CEPH_COMMON_ADMIN_SOCKET_CLIENT_H
 #define CEPH_COMMON_ADMIN_SOCKET_CLIENT_H
 
-#include <stdint.h>
 #include <string>
 
 /* This is a simple client that talks to an AdminSocket using blocking I/O.

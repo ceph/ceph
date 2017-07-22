@@ -4,12 +4,15 @@
 #ifndef CEPH_CLS_LOCK_CLIENT_H
 #define CEPH_CLS_LOCK_CLIENT_H
 
-
-#include "include/types.h"
-#include "include/rados/librados.hpp"
-
 #include "cls/lock/cls_lock_types.h"
 
+namespace librados {
+  class AioCompletion;
+  class ObjectWriteOperation;
+  class IoCtx;
+  class ObjectReadOperation;
+  class ObjectOperation;
+}
 
 namespace rados {
   namespace cls {
@@ -32,6 +35,10 @@ namespace rados {
 
       extern int unlock(librados::IoCtx *ioctx, const std::string& oid,
 			const std::string& name, const std::string& cookie);
+
+      extern int aio_unlock(librados::IoCtx *ioctx, const std::string& oid,
+			    const std::string& name, const std::string& cookie,
+			    librados::AioCompletion *completion);
 
       extern void break_lock(librados::ObjectWriteOperation *op,
 			     const std::string& name, const std::string& cookie,

@@ -11,25 +11,25 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 
-#include "librbd/AioImageRequestWQ.h"
-#include "librbd/AioCompletion.h"
-#include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ExclusiveLock.h"
-#include "librbd/exclusive_lock/AutomaticPolicy.h"
-#include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
-#include "librbd/journal/StandardPolicy.h"
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/Utils.h"
 #include "librbd/LibrbdWriteback.h"
+#include "librbd/exclusive_lock/AutomaticPolicy.h"
+#include "librbd/exclusive_lock/StandardPolicy.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/AsyncOperation.h"
+#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/journal/StandardPolicy.h"
 
 #include "osdc/Striper.h"
 #include <boost/bind.hpp>
@@ -54,12 +54,20 @@ namespace {
 
 class ThreadPoolSingleton : public ThreadPool {
 public:
+  ContextWQ *op_work_queue;
+
   explicit ThreadPoolSingleton(CephContext *cct)
     : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", 1,
-                 "rbd_op_threads") {
+                 "rbd_op_threads"),
+      op_work_queue(new ContextWQ("librbd::op_work_queue",
+                                  cct->_conf->rbd_op_thread_timeout,
+                                  this)) {
     start();
   }
-  virtual ~ThreadPoolSingleton() {
+  ~ThreadPoolSingleton() override {
+    op_work_queue->drain();
+    delete op_work_queue;
+
     stop();
   }
 };
@@ -73,7 +81,7 @@ public:
         lock("librbd::Journal::SafeTimerSingleton::lock") {
     init();
   }
-  virtual ~SafeTimerSingleton() {
+  ~SafeTimerSingleton() {
     Mutex::Locker locker(lock);
     shutdown();
   }
@@ -86,7 +94,7 @@ struct C_FlushCache : public Context {
   C_FlushCache(ImageCtx *_image_ctx, Context *_on_safe)
     : image_ctx(_image_ctx), on_safe(_on_safe) {
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     // successful cache flush indicates all IO is now safe
     image_ctx->flush_cache(on_safe);
   }
@@ -99,7 +107,7 @@ struct C_ShutDownCache : public Context {
   C_ShutDownCache(ImageCtx *_image_ctx, Context *_on_finish)
     : image_ctx(_image_ctx), on_finish(_on_finish) {
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     image_ctx->object_cacher->stop();
     on_finish->complete(r);
   }
@@ -116,7 +124,7 @@ struct C_InvalidateCache : public Context {
     : image_ctx(_image_ctx), purge_on_error(_purge_on_error),
       reentrant_safe(_reentrant_safe), on_finish(_on_finish) {
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     assert(image_ctx->cache_lock.is_locked());
     CephContext *cct = image_ctx->cct;
 
@@ -138,7 +146,9 @@ struct C_InvalidateCache : public Context {
     } else {
       lderr(cct) << "could not release all objects from cache: "
                  << unclean << " bytes remain" << dendl;
-      r = -EBUSY;
+      if (r == 0) {
+        r = -EBUSY;
+      }
     }
 
     if (reentrant_safe) {
@@ -187,8 +197,9 @@ struct C_InvalidateCache : public Context {
       state(new ImageState<>(this)),
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
-      aio_work_queue(nullptr), op_work_queue(nullptr),
-      asok_hook(nullptr)
+      io_work_queue(nullptr), op_work_queue(nullptr),
+      asok_hook(nullptr),
+      trace_endpoint("librbd")
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -197,20 +208,18 @@ struct C_InvalidateCache : public Context {
 
     memset(&header, 0, sizeof(header));
 
-    ThreadPool *thread_pool_singleton = get_thread_pool_instance(cct);
-    aio_work_queue = new AioImageRequestWQ(this, "librbd::aio_work_queue",
-                                           cct->_conf->rbd_op_thread_timeout,
-                                           thread_pool_singleton);
-    op_work_queue = new ContextWQ("librbd::op_work_queue",
-                                  cct->_conf->rbd_op_thread_timeout,
-                                  thread_pool_singleton);
+    ThreadPool *thread_pool;
+    get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+    io_work_queue = new io::ImageRequestWQ<>(
+      this, "librbd::io_work_queue", cct->_conf->rbd_op_thread_timeout,
+      thread_pool);
 
     if (cct->_conf->rbd_auto_exclusive_lock_until_manual_request) {
       exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
     } else {
       exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
     }
-    journal_policy = new journal::StandardPolicy(this);
+    journal_policy = new journal::StandardPolicy<ImageCtx>(this);
   }
 
   ImageCtx::~ImageCtx() {
@@ -239,13 +248,11 @@ struct C_InvalidateCache : public Context {
 
     md_ctx.aio_flush();
     data_ctx.aio_flush();
-    op_work_queue->drain();
-    aio_work_queue->drain();
+    io_work_queue->drain();
 
     delete journal_policy;
     delete exclusive_lock_policy;
-    delete op_work_queue;
-    delete aio_work_queue;
+    delete io_work_queue;
     delete operations;
     delete state;
   }
@@ -263,6 +270,7 @@ struct C_InvalidateCache : public Context {
       pname += snap_name;
     }
 
+    trace_endpoint.copy_name(pname);
     perf_start(pname);
 
     if (cache) {
@@ -367,6 +375,9 @@ struct C_InvalidateCache : public Context {
     plb.add_u64_counter(l_librbd_flush, "flush", "Flushes");
     plb.add_u64_counter(l_librbd_aio_flush, "aio_flush", "Async flushes");
     plb.add_time_avg(l_librbd_aio_flush_latency, "aio_flush_latency", "Latency of async flushes");
+    plb.add_u64_counter(l_librbd_ws, "ws", "WriteSames");
+    plb.add_u64_counter(l_librbd_ws_bytes, "ws_bytes", "WriteSame data");
+    plb.add_time_avg(l_librbd_ws_latency, "ws_latency", "WriteSame latency");
     plb.add_u64_counter(l_librbd_snap_create, "snap_create", "Snap creations");
     plb.add_u64_counter(l_librbd_snap_remove, "snap_remove", "Snap removals");
     plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback", "Snap rollbacks");
@@ -403,12 +414,14 @@ struct C_InvalidateCache : public Context {
     return flags;
   }
 
-  int ImageCtx::snap_set(string in_snap_name)
+  int ImageCtx::snap_set(cls::rbd::SnapshotNamespace in_snap_namespace,
+			 string in_snap_name)
   {
     assert(snap_lock.is_wlocked());
-    snap_t in_snap_id = get_snap_id(in_snap_name);
+    snap_t in_snap_id = get_snap_id(in_snap_namespace, in_snap_name);
     if (in_snap_id != CEPH_NOSNAP) {
       snap_id = in_snap_id;
+      snap_namespace = in_snap_namespace;
       snap_name = in_snap_name;
       snap_exists = true;
       data_ctx.snap_set_read(snap_id);
@@ -421,16 +434,17 @@ struct C_InvalidateCache : public Context {
   {
     assert(snap_lock.is_wlocked());
     snap_id = CEPH_NOSNAP;
+    snap_namespace = {};
     snap_name = "";
     snap_exists = true;
     data_ctx.snap_set_read(snap_id);
   }
 
-  snap_t ImageCtx::get_snap_id(string in_snap_name) const
+  snap_t ImageCtx::get_snap_id(cls::rbd::SnapshotNamespace in_snap_namespace,
+			       string in_snap_name) const
   {
     assert(snap_lock.is_locked());
-    map<string, snap_t>::const_iterator it =
-      snap_ids.find(in_snap_name);
+    auto it = snap_ids.find({in_snap_namespace, in_snap_name});
     if (it != snap_ids.end())
       return it->second;
     return CEPH_NOSNAP;
@@ -458,8 +472,20 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
+  int ImageCtx::get_snap_namespace(snap_t in_snap_id,
+				   cls::rbd::SnapshotNamespace *out_snap_namespace) const
+  {
+    assert(snap_lock.is_locked());
+    const SnapInfo *info = get_snap_info(in_snap_id);
+    if (info) {
+      *out_snap_namespace = info->snap_namespace;
+      return 0;
+    }
+    return -ENOENT;
+  }
+
   int ImageCtx::get_parent_spec(snap_t in_snap_id,
-				parent_spec *out_pspec) const
+				ParentSpec *out_pspec) const
   {
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
@@ -501,6 +527,11 @@ struct C_InvalidateCache : public Context {
     return stripe_count * (1ull << order);
   }
 
+  utime_t ImageCtx::get_create_timestamp() const
+  {
+    return create_timestamp;
+  }
+
   int ImageCtx::is_snap_protected(snap_t in_snap_id,
 				  bool *is_protected) const
   {
@@ -527,23 +558,28 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
-  void ImageCtx::add_snap(string in_snap_name, snap_t id, uint64_t in_size,
-			  parent_info parent, uint8_t protection_status,
-                          uint64_t flags)
+  void ImageCtx::add_snap(cls::rbd::SnapshotNamespace in_snap_namespace,
+			  string in_snap_name,
+			  snap_t id, uint64_t in_size,
+			  const ParentInfo &parent, uint8_t protection_status,
+                          uint64_t flags, utime_t timestamp)
   {
     assert(snap_lock.is_wlocked());
     snaps.push_back(id);
-    SnapInfo info(in_snap_name, in_size, parent, protection_status, flags);
-    snap_info.insert(pair<snap_t, SnapInfo>(id, info));
-    snap_ids.insert(pair<string, snap_t>(in_snap_name, id));
+    SnapInfo info(in_snap_name, in_snap_namespace,
+		  in_size, parent, protection_status, flags, timestamp);
+    snap_info.insert({id, info});
+    snap_ids.insert({{in_snap_namespace, in_snap_name}, id});
   }
 
-  void ImageCtx::rm_snap(string in_snap_name, snap_t id)
+  void ImageCtx::rm_snap(cls::rbd::SnapshotNamespace in_snap_namespace,
+			 string in_snap_name,
+			 snap_t id)
   {
     assert(snap_lock.is_wlocked());
     snaps.erase(std::remove(snaps.begin(), snaps.end(), id), snaps.end());
     snap_info.erase(id);
-    snap_ids.erase(in_snap_name);
+    snap_ids.erase({in_snap_namespace, in_snap_name});
   }
 
   uint64_t ImageCtx::get_image_size(snap_t in_snap_id) const
@@ -598,18 +634,23 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
-  bool ImageCtx::test_flags(uint64_t flags) const
+  int ImageCtx::test_flags(uint64_t flags, bool *flags_set) const
   {
     RWLock::RLocker l(snap_lock);
-    return test_flags(flags, snap_lock);
+    return test_flags(flags, snap_lock, flags_set);
   }
 
-  bool ImageCtx::test_flags(uint64_t flags, const RWLock &in_snap_lock) const
+  int ImageCtx::test_flags(uint64_t flags, const RWLock &in_snap_lock,
+                           bool *flags_set) const
   {
     assert(snap_lock.is_locked());
     uint64_t snap_flags;
-    get_flags(snap_id, &snap_flags);
-    return ((snap_flags & flags) == flags);
+    int r = get_flags(snap_id, &snap_flags);
+    if (r < 0) {
+      return r;
+    }
+    *flags_set = ((snap_flags & flags) == flags);
+    return 0;
   }
 
   int ImageCtx::update_flags(snap_t in_snap_id, uint64_t flag, bool enabled)
@@ -634,7 +675,7 @@ struct C_InvalidateCache : public Context {
     return 0;
   }
 
-  const parent_info* ImageCtx::get_parent_info(snap_t in_snap_id) const
+  const ParentInfo* ImageCtx::get_parent_info(snap_t in_snap_id) const
   {
     assert(snap_lock.is_locked());
     assert(parent_lock.is_locked());
@@ -648,7 +689,7 @@ struct C_InvalidateCache : public Context {
 
   int64_t ImageCtx::get_parent_pool_id(snap_t in_snap_id) const
   {
-    const parent_info *info = get_parent_info(in_snap_id);
+    const ParentInfo *info = get_parent_info(in_snap_id);
     if (info)
       return info->spec.pool_id;
     return -1;
@@ -656,7 +697,7 @@ struct C_InvalidateCache : public Context {
 
   string ImageCtx::get_parent_image_id(snap_t in_snap_id) const
   {
-    const parent_info *info = get_parent_info(in_snap_id);
+    const ParentInfo *info = get_parent_info(in_snap_id);
     if (info)
       return info->spec.image_id;
     return "";
@@ -664,7 +705,7 @@ struct C_InvalidateCache : public Context {
 
   uint64_t ImageCtx::get_parent_snap_id(snap_t in_snap_id) const
   {
-    const parent_info *info = get_parent_info(in_snap_id);
+    const ParentInfo *info = get_parent_info(in_snap_id);
     if (info)
       return info->spec.snap_id;
     return CEPH_NOSNAP;
@@ -673,7 +714,7 @@ struct C_InvalidateCache : public Context {
   int ImageCtx::get_parent_overlap(snap_t in_snap_id, uint64_t *overlap) const
   {
     assert(snap_lock.is_locked());
-    const parent_info *info = get_parent_info(in_snap_id);
+    const ParentInfo *info = get_parent_info(in_snap_id);
     if (info) {
       *overlap = info->overlap;
       return 0;
@@ -684,7 +725,7 @@ struct C_InvalidateCache : public Context {
   void ImageCtx::aio_read_from_cache(object_t o, uint64_t object_no,
 				     bufferlist *bl, size_t len,
 				     uint64_t off, Context *onfinish,
-				     int fadvise_flags) {
+				     int fadvise_flags, ZTracer::Trace *trace) {
     snap_lock.get_read();
     ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, fadvise_flags);
     snap_lock.put_read();
@@ -693,7 +734,7 @@ struct C_InvalidateCache : public Context {
     extent.buffer_extents.push_back(make_pair(0, len));
     rd->extents.push_back(extent);
     cache_lock.Lock();
-    int r = object_cacher->readx(rd, object_set, onfinish);
+    int r = object_cacher->readx(rd, object_set, onfinish, trace);
     cache_lock.Unlock();
     if (r != 0)
       onfinish->complete(r);
@@ -701,7 +742,8 @@ struct C_InvalidateCache : public Context {
 
   void ImageCtx::write_to_cache(object_t o, const bufferlist& bl, size_t len,
 				uint64_t off, Context *onfinish,
-				int fadvise_flags, uint64_t journal_tid) {
+				int fadvise_flags, uint64_t journal_tid,
+				ZTracer::Trace *trace) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(
       snapc, bl, ceph::real_time::min(), fadvise_flags, journal_tid);
@@ -714,7 +756,7 @@ struct C_InvalidateCache : public Context {
     wr->extents.push_back(extent);
     {
       Mutex::Locker l(cache_lock);
-      object_cacher->writex(wr, object_set, onfinish);
+      object_cacher->writex(wr, object_set, onfinish, trace);
     }
   }
 
@@ -774,7 +816,7 @@ struct C_InvalidateCache : public Context {
     return result;
   }
 
-  void ImageCtx::invalidate_cache(Context *on_finish) {
+  void ImageCtx::invalidate_cache(bool purge_on_error, Context *on_finish) {
     if (object_cacher == NULL) {
       op_work_queue->queue(on_finish, 0);
       return;
@@ -784,7 +826,7 @@ struct C_InvalidateCache : public Context {
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
 
-    flush_cache(new C_InvalidateCache(this, false, false, on_finish));
+    flush_cache(new C_InvalidateCache(this, purge_on_error, false, on_finish));
   }
 
   void ImageCtx::clear_nonexistence_cache() {
@@ -792,6 +834,11 @@ struct C_InvalidateCache : public Context {
     if (!object_cacher)
       return;
     object_cacher->clear_nonexistence(object_set);
+  }
+
+  bool ImageCtx::is_cache_empty() {
+    Mutex::Locker locker(cache_lock);
+    return object_cacher->set_is_empty(object_set);
   }
 
   void ImageCtx::register_watch(Context *on_finish) {
@@ -895,7 +942,6 @@ struct C_InvalidateCache : public Context {
                                         map<string, bufferlist> *res) {
     size_t conf_prefix_len = prefix.size();
 
-    string start = prefix;
     for (auto it : pairs) {
       if (it.first.compare(0, MIN(conf_prefix_len, it.first.size()), prefix) > 0)
         return false;
@@ -944,7 +990,11 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_object_flush_bytes", false)(
         "rbd_journal_object_flush_age", false)(
         "rbd_journal_pool", false)(
-        "rbd_journal_max_payload_bytes", false);
+        "rbd_journal_max_payload_bytes", false)(
+        "rbd_journal_max_concurrent_object_sets", false)(
+        "rbd_mirroring_resync_after_disconnect", false)(
+        "rbd_mirroring_replay_delay", false)(
+        "rbd_skip_partial_discard", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -1000,14 +1050,18 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_object_flush_age);
     ASSIGN_OPTION(journal_pool);
     ASSIGN_OPTION(journal_max_payload_bytes);
+    ASSIGN_OPTION(journal_max_concurrent_object_sets);
+    ASSIGN_OPTION(mirroring_resync_after_disconnect);
+    ASSIGN_OPTION(mirroring_replay_delay);
+    ASSIGN_OPTION(skip_partial_discard);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {
     return new ExclusiveLock<ImageCtx>(*this);
   }
 
-  ObjectMap *ImageCtx::create_object_map(uint64_t snap_id) {
-    return new ObjectMap(*this, snap_id);
+  ObjectMap<ImageCtx> *ImageCtx::create_object_map(uint64_t snap_id) {
+    return new ObjectMap<ImageCtx>(*this, snap_id);
   }
 
   Journal<ImageCtx> *ImageCtx::create_journal() {
@@ -1060,11 +1114,14 @@ struct C_InvalidateCache : public Context {
     journal_policy = policy;
   }
 
-  ThreadPool *ImageCtx::get_thread_pool_instance(CephContext *cct) {
+  void ImageCtx::get_thread_pool_instance(CephContext *cct,
+                                          ThreadPool **thread_pool,
+                                          ContextWQ **op_work_queue) {
     ThreadPoolSingleton *thread_pool_singleton;
     cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       thread_pool_singleton, "librbd::thread_pool");
-    return thread_pool_singleton;
+    *thread_pool = thread_pool_singleton;
+    *op_work_queue = thread_pool_singleton->op_work_queue;
   }
 
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,

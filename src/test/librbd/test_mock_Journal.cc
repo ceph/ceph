@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -10,21 +10,24 @@
 #include "common/Mutex.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Journaler.h"
-#include "librbd/AioCompletion.h"
-#include "librbd/AioObjectRequest.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ObjectRequest.h"
 #include "librbd/journal/Replay.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/journal/CreateRequest.h"
+#include "librbd/journal/OpenRequest.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "librbd/journal/PromoteRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <functional>
 #include <list>
 #include <boost/scope_exit.hpp>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 
 namespace librbd {
@@ -154,12 +157,52 @@ public:
 
 MockCreate *MockCreate::s_instance = nullptr;
 
+template<>
+class OpenRequest<MockJournalImageCtx> {
+public:
+  TagData *tag_data;
+  Context *on_finish;
+  static OpenRequest *s_instance;
+  static OpenRequest *create(MockJournalImageCtx *image_ctx,
+                             ::journal::MockJournalerProxy *journaler,
+                             Mutex *lock, journal::ImageClientMeta *client_meta,
+                             uint64_t *tag_tid, journal::TagData *tag_data,
+                             Context *on_finish) {
+    assert(s_instance != nullptr);
+    s_instance->tag_data = tag_data;
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  OpenRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+OpenRequest<MockJournalImageCtx> *OpenRequest<MockJournalImageCtx>::s_instance = nullptr;
+
+
+template <>
+class PromoteRequest<MockJournalImageCtx> {
+public:
+  static PromoteRequest s_instance;
+  static PromoteRequest *create(MockJournalImageCtx *image_ctx, bool force,
+                                Context *on_finish) {
+    return &s_instance;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+PromoteRequest<MockJournalImageCtx> PromoteRequest<MockJournalImageCtx>::s_instance;
+
 } // namespace journal
 } // namespace librbd
 
 // template definitions
 #include "librbd/Journal.cc"
-template class librbd::Journal<librbd::MockJournalImageCtx>;
 
 using ::testing::_;
 using ::testing::DoAll;
@@ -174,7 +217,6 @@ using ::testing::WithArg;
 using namespace std::placeholders;
 
 ACTION_P2(StartReplay, wq, ctx) {
-  ctx->replay_handler = arg0;
   wq->queue(ctx, 0);
 }
 
@@ -184,15 +226,15 @@ class TestMockJournal : public TestMockFixture {
 public:
   typedef journal::MockReplay MockJournalReplay;
   typedef Journal<MockJournalImageCtx> MockJournal;
+  typedef journal::OpenRequest<MockJournalImageCtx> MockJournalOpenRequest;
 
   typedef std::function<void(::journal::ReplayHandler*)> ReplayAction;
-  typedef std::list<ReplayAction> ReplayActions;
   typedef std::list<Context *> Contexts;
 
   TestMockJournal() : m_lock("lock") {
   }
 
-  ~TestMockJournal() {
+  ~TestMockJournal() override {
     assert(m_commit_contexts.empty());
   }
 
@@ -200,16 +242,17 @@ public:
   Cond m_cond;
   Contexts m_commit_contexts;
 
-  struct C_StartReplay : public Context {
-    ReplayActions replay_actions;
-    ::journal::ReplayHandler *replay_handler;
+  struct C_ReplayAction : public Context {
+    ::journal::ReplayHandler **replay_handler;
+    ReplayAction replay_action;
 
-    C_StartReplay(const ReplayActions &replay_actions)
-      : replay_actions(replay_actions), replay_handler(nullptr) {
+    C_ReplayAction(::journal::ReplayHandler **replay_handler,
+                   const ReplayAction &replay_action)
+      : replay_handler(replay_handler), replay_action(replay_action) {
     }
-    virtual void finish(int r) {
-      for (auto &action : replay_actions) {
-        action(replay_handler);
+    void finish(int r) override {
+      if (replay_action) {
+        replay_action(*replay_handler);
       }
     }
   };
@@ -218,15 +261,26 @@ public:
     EXPECT_CALL(mock_journaler, construct());
   }
 
-  void expect_init_journaler(::journal::MockJournaler &mock_journaler, int r) {
-    EXPECT_CALL(mock_journaler, init(_))
-                  .WillOnce(CompleteContext(r, NULL));
+  void expect_open_journaler(MockImageCtx &mock_image_ctx,
+                             ::journal::MockJournaler &mock_journaler,
+                             MockJournalOpenRequest &mock_open_request,
+                             bool primary, int r) {
+    EXPECT_CALL(mock_journaler, add_listener(_))
+                  .WillOnce(SaveArg<0>(&m_listener));
+    EXPECT_CALL(mock_open_request, send())
+                  .WillOnce(DoAll(Invoke([&mock_open_request, primary]() {
+                                    if (!primary) {
+                                      mock_open_request.tag_data->mirror_uuid = "remote mirror uuid";
+                                    }
+                                  }),
+                                  FinishRequest(&mock_open_request, r,
+                                                &mock_image_ctx)));
   }
 
   void expect_shut_down_journaler(::journal::MockJournaler &mock_journaler) {
     EXPECT_CALL(mock_journaler, remove_listener(_));
     EXPECT_CALL(mock_journaler, shut_down(_))
-                  .WillOnce(CompleteContext(0, NULL));
+                  .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(NULL)));
   }
 
   void expect_get_max_append_size(::journal::MockJournaler &mock_journaler,
@@ -235,13 +289,11 @@ public:
                   .WillOnce(Return(max_size));
   }
 
-  void expect_get_journaler_cached_client(::journal::MockJournaler &mock_journaler, int r) {
-
-    journal::ImageClientMeta image_client_meta;
-    image_client_meta.tag_class = 0;
-
+  void expect_get_journaler_cached_client(::journal::MockJournaler &mock_journaler,
+                                          const journal::ImageClientMeta &client_meta,
+                                          int r) {
     journal::ClientData client_data;
-    client_data.client_meta = image_client_meta;
+    client_data.client_meta = client_meta;
 
     cls::journal::Client client;
     ::encode(client_data, client.data);
@@ -253,30 +305,26 @@ public:
 
   void expect_get_journaler_tags(MockImageCtx &mock_image_ctx,
                                  ::journal::MockJournaler &mock_journaler,
-                                 int r) {
-    journal::TagData tag_data;
-
-    bufferlist tag_data_bl;
-    ::encode(tag_data, tag_data_bl);
-
-    ::journal::Journaler::Tags tags = {{0, 0, {}}, {1, 0, tag_data_bl}};
-    EXPECT_CALL(mock_journaler, get_tags(0, _, _))
-                  .WillOnce(DoAll(SetArgPointee<1>(tags),
-                                  WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue))));
-    EXPECT_CALL(mock_journaler, add_listener(_));
+                                 uint64_t start_after_tag_tid,
+                                 ::journal::Journaler::Tags &&tags, int r) {
+    EXPECT_CALL(mock_journaler, get_tags(start_after_tag_tid, 0, _, _))
+                  .WillOnce(DoAll(SetArgPointee<2>(tags),
+                                  WithArg<3>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue))));
   }
 
   void expect_start_replay(MockJournalImageCtx &mock_image_ctx,
                            ::journal::MockJournaler &mock_journaler,
-                           const ReplayActions &actions) {
+                           const ReplayAction &action) {
     EXPECT_CALL(mock_journaler, start_replay(_))
-                 .WillOnce(StartReplay(mock_image_ctx.image_ctx->op_work_queue,
-                                       new C_StartReplay(actions)));
+                 .WillOnce(DoAll(SaveArg<0>(&m_replay_handler),
+                           StartReplay(mock_image_ctx.image_ctx->op_work_queue,
+                                       new C_ReplayAction(&m_replay_handler,
+                                                          action))));
   }
 
   void expect_stop_replay(::journal::MockJournaler &mock_journaler) {
     EXPECT_CALL(mock_journaler, stop_replay(_))
-                  .WillOnce(CompleteContext(0, NULL));
+                  .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(NULL)));
   }
 
   void expect_shut_down_replay(MockJournalImageCtx &mock_image_ctx,
@@ -292,11 +340,16 @@ public:
                   .WillOnce(Return(bufferlist()));
   }
 
-  void expect_try_pop_front(::journal::MockJournaler &mock_journaler,
+  void expect_try_pop_front(MockJournalImageCtx &mock_image_ctx,
+                            ::journal::MockJournaler &mock_journaler,
                             bool entries_available,
-                            ::journal::MockReplayEntry &mock_replay_entry) {
+                            ::journal::MockReplayEntry &mock_replay_entry,
+                            const ReplayAction &action = {}) {
     EXPECT_CALL(mock_journaler, try_pop_front(_))
                   .WillOnce(DoAll(SetArgPointee<0>(::journal::MockReplayEntryProxy()),
+                                  StartReplay(mock_image_ctx.image_ctx->op_work_queue,
+                                              new C_ReplayAction(&m_replay_handler,
+                                                                 action)),
                                   Return(entries_available)));
     if (entries_available) {
       expect_get_data(mock_replay_entry);
@@ -307,7 +360,7 @@ public:
     EXPECT_CALL(mock_journal_replay, decode(_, _))
                   .WillOnce(Return(0));
     EXPECT_CALL(mock_journal_replay, process(_, _, _))
-                  .WillOnce(DoAll(WithArg<1>(CompleteContext(0, NULL)),
+                  .WillOnce(DoAll(WithArg<1>(CompleteContext(0, static_cast<ContextWQ*>(NULL))),
                                   WithArg<2>(Invoke(this, &TestMockJournal::save_commit_context))));
   }
 
@@ -317,7 +370,7 @@ public:
 
   void expect_stop_append(::journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, stop_append(_))
-                  .WillOnce(CompleteContext(r, NULL));
+                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
   }
 
   void expect_committed(::journal::MockJournaler &mock_journaler,
@@ -347,7 +400,7 @@ public:
 
   void expect_flush_commit_position(::journal::MockJournaler &mock_journaler) {
     EXPECT_CALL(mock_journaler, flush_commit_position(_))
-                  .WillOnce(CompleteContext(0, NULL));
+                  .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(NULL)));
   }
 
   int when_open(MockJournal &mock_journal) {
@@ -373,9 +426,9 @@ public:
 
   uint64_t when_append_io_event(MockJournalImageCtx &mock_image_ctx,
                                 MockJournal &mock_journal,
-                                AioObjectRequest<> *object_request = nullptr) {
+                                io::ObjectRequest<> *object_request = nullptr) {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
-    MockJournal::AioObjectRequests object_requests;
+    MockJournal::IOObjectRequests object_requests;
     if (object_request != nullptr) {
       object_requests.push_back(object_request);
     }
@@ -416,19 +469,19 @@ public:
 
   void open_journal(MockJournalImageCtx &mock_image_ctx,
                     MockJournal &mock_journal,
-                    ::journal::MockJournaler &mock_journaler) {
+                    ::journal::MockJournaler &mock_journaler,
+                    MockJournalOpenRequest &mock_open_request,
+                    bool primary = true) {
     expect_op_work_queue(mock_image_ctx);
 
     InSequence seq;
     expect_construct_journaler(mock_journaler);
-    expect_init_journaler(mock_journaler, 0);
+    expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                          primary, 0);
     expect_get_max_append_size(mock_journaler, 1 << 16);
-    expect_get_journaler_cached_client(mock_journaler, 0);
-    expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
     expect_start_replay(
-      mock_image_ctx, mock_journaler, {
-        std::bind(&invoke_replay_complete, _1, 0)
-      });
+      mock_image_ctx, mock_journaler,
+      std::bind(&invoke_replay_complete, _1, 0));
 
     MockJournalReplay mock_journal_replay;
     expect_stop_replay(mock_journaler);
@@ -451,6 +504,9 @@ public:
   static void invoke_replay_complete(::journal::ReplayHandler *handler, int r) {
     handler->handle_complete(r);
   }
+
+  ::journal::ReplayHandler *m_replay_handler = nullptr;
+  ::journal::JournalMetadataListener *m_listener = nullptr;
 };
 
 TEST_F(TestMockJournal, StateTransitions) {
@@ -466,28 +522,27 @@ TEST_F(TestMockJournal, StateTransitions) {
   InSequence seq;
 
   ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
-    mock_image_ctx, mock_journaler, {
-      std::bind(&invoke_replay_ready, _1),
-      std::bind(&invoke_replay_ready, _1),
-      std::bind(&invoke_replay_complete, _1, 0)
-    });
+    mock_image_ctx, mock_journaler,
+    std::bind(&invoke_replay_ready, _1));
 
   ::journal::MockReplayEntry mock_replay_entry;
   MockJournalReplay mock_journal_replay;
-  expect_try_pop_front(mock_journaler, true, mock_replay_entry);
+  expect_try_pop_front(mock_image_ctx, mock_journaler, true, mock_replay_entry);
   expect_replay_process(mock_journal_replay);
-  expect_try_pop_front(mock_journaler, true, mock_replay_entry);
+  expect_try_pop_front(mock_image_ctx, mock_journaler, true, mock_replay_entry);
   expect_replay_process(mock_journal_replay);
-  expect_try_pop_front(mock_journaler, false, mock_replay_entry);
-  expect_try_pop_front(mock_journaler, true, mock_replay_entry);
+  expect_try_pop_front(mock_image_ctx, mock_journaler, false, mock_replay_entry,
+                       std::bind(&invoke_replay_ready, _1));
+  expect_try_pop_front(mock_image_ctx, mock_journaler, true, mock_replay_entry);
   expect_replay_process(mock_journal_replay);
-  expect_try_pop_front(mock_journaler, false, mock_replay_entry);
+  expect_try_pop_front(mock_image_ctx, mock_journaler, false, mock_replay_entry,
+                       std::bind(&invoke_replay_complete, _1, 0));
 
   expect_stop_replay(mock_journaler);
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
@@ -515,53 +570,12 @@ TEST_F(TestMockJournal, InitError) {
   InSequence seq;
 
   ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, -EINVAL);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, -EINVAL);
   expect_shut_down_journaler(mock_journaler);
   ASSERT_EQ(-EINVAL, when_open(mock_journal));
-}
-
-TEST_F(TestMockJournal, GetCachedClientError) {
-  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockJournalImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal(mock_image_ctx);
-  expect_op_work_queue(mock_image_ctx);
-
-  InSequence seq;
-
-  ::journal::MockJournaler mock_journaler;
-  expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
-  expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, -ENOENT);
-  expect_shut_down_journaler(mock_journaler);
-  ASSERT_EQ(-ENOENT, when_open(mock_journal));
-}
-
-TEST_F(TestMockJournal, GetTagsError) {
-  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockJournalImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal(mock_image_ctx);
-  expect_op_work_queue(mock_image_ctx);
-
-  InSequence seq;
-
-  ::journal::MockJournaler mock_journaler;
-  expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
-  expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, -EBADMSG);
-  expect_shut_down_journaler(mock_journaler);
-  ASSERT_EQ(-EBADMSG, when_open(mock_journal));
 }
 
 TEST_F(TestMockJournal, ReplayCompleteError) {
@@ -577,15 +591,14 @@ TEST_F(TestMockJournal, ReplayCompleteError) {
   InSequence seq;
 
   ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
-    mock_image_ctx, mock_journaler, {
-      std::bind(&invoke_replay_complete, _1, -EINVAL)
-    });
+    mock_image_ctx, mock_journaler,
+    std::bind(&invoke_replay_complete, _1, -EINVAL));
 
   MockJournalReplay mock_journal_replay;
   expect_stop_replay(mock_journaler);
@@ -594,14 +607,12 @@ TEST_F(TestMockJournal, ReplayCompleteError) {
 
   // replay failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
-    mock_image_ctx, mock_journaler, {
-      std::bind(&invoke_replay_complete, _1, 0)
-    });
+    mock_image_ctx, mock_journaler,
+    std::bind(&invoke_replay_complete, _1, 0));
 
   expect_stop_replay(mock_journaler);
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
@@ -626,36 +637,33 @@ TEST_F(TestMockJournal, FlushReplayError) {
   InSequence seq;
 
   ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
-    mock_image_ctx, mock_journaler, {
-      std::bind(&invoke_replay_ready, _1),
-      std::bind(&invoke_replay_complete, _1, 0)
-    });
+    mock_image_ctx, mock_journaler,
+    std::bind(&invoke_replay_ready, _1));
 
   ::journal::MockReplayEntry mock_replay_entry;
   MockJournalReplay mock_journal_replay;
-  expect_try_pop_front(mock_journaler, true, mock_replay_entry);
+  expect_try_pop_front(mock_image_ctx, mock_journaler, true, mock_replay_entry);
   expect_replay_process(mock_journal_replay);
-  expect_try_pop_front(mock_journaler, false, mock_replay_entry);
+  expect_try_pop_front(mock_image_ctx, mock_journaler, false, mock_replay_entry,
+                       std::bind(&invoke_replay_complete, _1, 0));
   expect_stop_replay(mock_journaler);
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, -EINVAL);
   expect_shut_down_journaler(mock_journaler);
 
   // replay flush failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
-    mock_image_ctx, mock_journaler, {
-      std::bind(&invoke_replay_complete, _1, 0)
-    });
+    mock_image_ctx, mock_journaler,
+    std::bind(&invoke_replay_complete, _1, 0));
 
   expect_stop_replay(mock_journaler);
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
@@ -680,20 +688,18 @@ TEST_F(TestMockJournal, CorruptEntry) {
   InSequence seq;
 
   ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
-    mock_image_ctx, mock_journaler, {
-      std::bind(&invoke_replay_ready, _1),
-      std::bind(&invoke_replay_complete, _1, 0)
-    });
+    mock_image_ctx, mock_journaler,
+    std::bind(&invoke_replay_ready, _1));
 
   ::journal::MockReplayEntry mock_replay_entry;
   MockJournalReplay mock_journal_replay;
-  expect_try_pop_front(mock_journaler, true, mock_replay_entry);
+  expect_try_pop_front(mock_image_ctx, mock_journaler, true, mock_replay_entry);
   EXPECT_CALL(mock_journal_replay, decode(_, _)).WillOnce(Return(-EBADMSG));
   expect_stop_replay(mock_journaler);
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0, true);
@@ -701,14 +707,12 @@ TEST_F(TestMockJournal, CorruptEntry) {
 
   // replay failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
-    mock_image_ctx, mock_journaler, {
-      std::bind(&invoke_replay_complete, _1, 0)
-    });
+    mock_image_ctx, mock_journaler,
+    std::bind(&invoke_replay_complete, _1, 0));
   expect_stop_replay(mock_journaler);
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
   expect_start_append(mock_journaler);
@@ -732,15 +736,14 @@ TEST_F(TestMockJournal, StopError) {
   InSequence seq;
 
   ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
-    mock_image_ctx, mock_journaler, {
-      std::bind(&invoke_replay_complete, _1, 0)
-    });
+    mock_image_ctx, mock_journaler,
+    std::bind(&invoke_replay_complete, _1, 0));
 
   MockJournalReplay mock_journal_replay;
   expect_stop_replay(mock_journaler);
@@ -765,22 +768,19 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
 
   InSequence seq;
   ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
 
-  ::journal::ReplayHandler *replay_handler = nullptr;
   expect_start_replay(
-    mock_image_ctx, mock_journaler, {
-      std::bind(&invoke_replay_ready, _1),
-      [&replay_handler] (::journal::ReplayHandler *handler) {replay_handler = handler;},
-    });
+    mock_image_ctx, mock_journaler,
+    std::bind(&invoke_replay_ready, _1));
 
   ::journal::MockReplayEntry mock_replay_entry;
   MockJournalReplay mock_journal_replay;
-  expect_try_pop_front(mock_journaler, true, mock_replay_entry);
+  expect_try_pop_front(mock_image_ctx, mock_journaler, true, mock_replay_entry);
 
   EXPECT_CALL(mock_journal_replay, decode(_, _))
                 .WillOnce(Return(0));
@@ -789,17 +789,17 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
                 .WillOnce(DoAll(SaveArg<1>(&on_ready),
                                 WithArg<2>(Invoke(this, &TestMockJournal::save_commit_context))));
 
-  expect_try_pop_front(mock_journaler, false, mock_replay_entry);
+  expect_try_pop_front(mock_image_ctx, mock_journaler, false,
+                       mock_replay_entry);
   expect_stop_replay(mock_journaler);
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0, true);
   expect_shut_down_journaler(mock_journaler);
 
   // replay write-to-disk failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler, {
       std::bind(&invoke_replay_complete, _1, 0)
@@ -827,7 +827,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
   on_safe->complete(-EINVAL);
 
   // flag the replay as complete
-  replay_handler->handle_complete(0);
+  m_replay_handler->handle_complete(0);
 
   ASSERT_EQ(0, ctx.wait());
 
@@ -849,22 +849,21 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   InSequence seq;
 
   ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
-    mock_image_ctx, mock_journaler, {
-      std::bind(&invoke_replay_ready, _1),
-      std::bind(&invoke_replay_complete, _1, 0)
-    });
+    mock_image_ctx, mock_journaler,
+    std::bind(&invoke_replay_ready, _1));
 
   ::journal::MockReplayEntry mock_replay_entry;
   MockJournalReplay mock_journal_replay;
-  expect_try_pop_front(mock_journaler, true, mock_replay_entry);
+  expect_try_pop_front(mock_image_ctx, mock_journaler, true, mock_replay_entry);
   expect_replay_process(mock_journal_replay);
-  expect_try_pop_front(mock_journaler, false, mock_replay_entry);
+  expect_try_pop_front(mock_image_ctx, mock_journaler, false, mock_replay_entry,
+                       std::bind(&invoke_replay_complete, _1, 0));
   expect_stop_replay(mock_journaler);
 
   Context *on_flush = nullptr;
@@ -875,14 +874,12 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   // replay write-to-disk failure should result in replay-restart
   expect_shut_down_journaler(mock_journaler);
   expect_construct_journaler(mock_journaler);
-  expect_init_journaler(mock_journaler, 0);
+  expect_open_journaler(mock_image_ctx, mock_journaler, mock_open_request,
+                        true, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
-  expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
-    mock_image_ctx, mock_journaler, {
-      std::bind(&invoke_replay_complete, _1, 0)
-    });
+    mock_image_ctx, mock_journaler,
+    std::bind(&invoke_replay_complete, _1, 0));
 
   expect_stop_replay(mock_journaler);
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
@@ -890,6 +887,15 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
 
   C_SaferCond ctx;
   mock_journal.open(&ctx);
+
+  // proceed with the flush
+  {
+    // wait for on_flush callback
+    Mutex::Locker locker(m_lock);
+    while (on_flush == nullptr) {
+      m_cond.Wait(m_lock);
+    }
+  }
 
   {
     // wait for the on_safe process callback
@@ -900,15 +906,6 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   }
   m_commit_contexts.front()->complete(-EINVAL);
   m_commit_contexts.clear();
-
-  // proceed with the flush
-  {
-    // wait for on_flush callback
-    Mutex::Locker locker(m_lock);
-    while (on_flush == nullptr) {
-      m_cond.Wait(m_lock);
-    }
-  }
   on_flush->complete(0);
 
   ASSERT_EQ(0, ctx.wait());
@@ -927,7 +924,8 @@ TEST_F(TestMockJournal, EventAndIOCommitOrder) {
   MockJournalImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal(mock_image_ctx);
   ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request);
   BOOST_SCOPE_EXIT_ALL(&) {
     close_journal(mock_journal, mock_journaler);
   };
@@ -937,11 +935,13 @@ TEST_F(TestMockJournal, EventAndIOCommitOrder) {
   expect_append_journaler(mock_journaler);
   expect_wait_future(mock_future, &on_journal_safe1);
   ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal));
+  mock_journal.get_work_queue()->drain();
 
   Context *on_journal_safe2;
   expect_append_journaler(mock_journaler);
   expect_wait_future(mock_future, &on_journal_safe2);
   ASSERT_EQ(2U, when_append_io_event(mock_image_ctx, mock_journal));
+  mock_journal.get_work_queue()->drain();
 
   // commit journal event followed by IO event (standard)
   on_journal_safe1->complete(0);
@@ -971,7 +971,8 @@ TEST_F(TestMockJournal, AppendWriteEvent) {
   MockJournalImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal(mock_image_ctx);
   ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request);
   BOOST_SCOPE_EXIT_ALL(&) {
     close_journal(mock_journal, mock_journaler);
   };
@@ -985,6 +986,7 @@ TEST_F(TestMockJournal, AppendWriteEvent) {
   expect_append_journaler(mock_journaler);
   expect_wait_future(mock_future, &on_journal_safe);
   ASSERT_EQ(1U, when_append_write_event(mock_image_ctx, mock_journal, 1 << 17));
+  mock_journal.get_work_queue()->drain();
 
   on_journal_safe->complete(0);
   C_SaferCond event_ctx;
@@ -1009,14 +1011,15 @@ TEST_F(TestMockJournal, EventCommitError) {
   MockJournalImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal(mock_image_ctx);
   ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request);
   BOOST_SCOPE_EXIT_ALL(&) {
     close_journal(mock_journal, mock_journaler);
   };
 
   C_SaferCond object_request_ctx;
-  AioObjectRemove *object_request = new AioObjectRemove(
-    ictx, "oid", 0, {}, &object_request_ctx);
+  auto object_request = new io::ObjectRemoveRequest(
+    ictx, "oid", 0, {}, {}, &object_request_ctx);
 
   ::journal::MockFuture mock_future;
   Context *on_journal_safe;
@@ -1024,6 +1027,7 @@ TEST_F(TestMockJournal, EventCommitError) {
   expect_wait_future(mock_future, &on_journal_safe);
   ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal,
                                      object_request));
+  mock_journal.get_work_queue()->drain();
 
   // commit the event in the journal w/o waiting writeback
   expect_future_committed(mock_journaler);
@@ -1048,14 +1052,15 @@ TEST_F(TestMockJournal, EventCommitErrorWithPendingWriteback) {
   MockJournalImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal(mock_image_ctx);
   ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request);
   BOOST_SCOPE_EXIT_ALL(&) {
     close_journal(mock_journal, mock_journaler);
   };
 
   C_SaferCond object_request_ctx;
-  AioObjectRemove *object_request = new AioObjectRemove(
-    ictx, "oid", 0, {}, &object_request_ctx);
+  auto object_request = new io::ObjectRemoveRequest(
+    ictx, "oid", 0, {}, {}, &object_request_ctx);
 
   ::journal::MockFuture mock_future;
   Context *on_journal_safe;
@@ -1063,6 +1068,7 @@ TEST_F(TestMockJournal, EventCommitErrorWithPendingWriteback) {
   expect_wait_future(mock_future, &on_journal_safe);
   ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal,
                                      object_request));
+  mock_journal.get_work_queue()->drain();
 
   expect_future_is_valid(mock_future);
   C_SaferCond flush_ctx;
@@ -1088,7 +1094,8 @@ TEST_F(TestMockJournal, IOCommitError) {
   MockJournalImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal(mock_image_ctx);
   ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request);
   BOOST_SCOPE_EXIT_ALL(&) {
     close_journal(mock_journal, mock_journaler);
   };
@@ -1098,6 +1105,7 @@ TEST_F(TestMockJournal, IOCommitError) {
   expect_append_journaler(mock_journaler);
   expect_wait_future(mock_future, &on_journal_safe);
   ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal));
+  mock_journal.get_work_queue()->drain();
 
   // failed IO remains uncommitted in journal
   on_journal_safe->complete(0);
@@ -1116,7 +1124,8 @@ TEST_F(TestMockJournal, FlushCommitPosition) {
   MockJournalImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal(mock_image_ctx);
   ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request);
   BOOST_SCOPE_EXIT_ALL(&) {
     close_journal(mock_journal, mock_journaler);
   };
@@ -1138,7 +1147,8 @@ TEST_F(TestMockJournal, ExternalReplay) {
   MockJournalImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal(mock_image_ctx);
   ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request);
   BOOST_SCOPE_EXIT_ALL(&) {
     close_journal(mock_journal, mock_journaler);
   };
@@ -1149,15 +1159,12 @@ TEST_F(TestMockJournal, ExternalReplay) {
   expect_shut_down_journaler(mock_journaler);
 
   C_SaferCond start_ctx;
-  C_SaferCond close_request_ctx;
 
   journal::Replay<MockJournalImageCtx> *journal_replay = nullptr;
-  mock_journal.start_external_replay(&journal_replay, &start_ctx,
-                                     &close_request_ctx);
+  mock_journal.start_external_replay(&journal_replay, &start_ctx);
   ASSERT_EQ(0, start_ctx.wait());
 
   mock_journal.stop_external_replay();
-  ASSERT_EQ(-ECANCELED, close_request_ctx.wait());
 }
 
 TEST_F(TestMockJournal, ExternalReplayFailure) {
@@ -1169,7 +1176,8 @@ TEST_F(TestMockJournal, ExternalReplayFailure) {
   MockJournalImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal(mock_image_ctx);
   ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request);
   BOOST_SCOPE_EXIT_ALL(&) {
     close_journal(mock_journal, mock_journaler);
   };
@@ -1180,45 +1188,10 @@ TEST_F(TestMockJournal, ExternalReplayFailure) {
   expect_shut_down_journaler(mock_journaler);
 
   C_SaferCond start_ctx;
-  C_SaferCond close_request_ctx;
 
   journal::Replay<MockJournalImageCtx> *journal_replay = nullptr;
-  mock_journal.start_external_replay(&journal_replay, &start_ctx,
-                                     &close_request_ctx);
+  mock_journal.start_external_replay(&journal_replay, &start_ctx);
   ASSERT_EQ(-EINVAL, start_ctx.wait());
-  ASSERT_EQ(-EINVAL, close_request_ctx.wait());
-}
-
-TEST_F(TestMockJournal, ExternalReplayCloseRequest) {
-  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockJournalImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal(mock_image_ctx);
-  ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
-
-  InSequence seq;
-  expect_stop_append(mock_journaler, 0);
-  expect_shut_down_journaler(mock_journaler);
-
-  C_SaferCond start_ctx;
-  C_SaferCond close_request_ctx;
-
-  journal::Replay<MockJournalImageCtx> *journal_replay = nullptr;
-  mock_journal.start_external_replay(&journal_replay, &start_ctx,
-                                     &close_request_ctx);
-  ASSERT_EQ(0, start_ctx.wait());
-
-  C_SaferCond close_ctx;
-  mock_journal.close(&close_ctx);
-
-  ASSERT_EQ(0, close_request_ctx.wait());
-  mock_journal.stop_external_replay();
-
-  ASSERT_EQ(0, close_ctx.wait());
 }
 
 TEST_F(TestMockJournal, AppendDisabled) {
@@ -1232,7 +1205,8 @@ TEST_F(TestMockJournal, AppendDisabled) {
   MockJournalPolicy mock_journal_policy;
 
   ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request);
   BOOST_SCOPE_EXIT_ALL(&) {
     close_journal(mock_journal, mock_journaler);
   };
@@ -1249,6 +1223,142 @@ TEST_F(TestMockJournal, AppendDisabled) {
   ASSERT_FALSE(mock_journal.is_journal_appending());
 
   expect_shut_down_journaler(mock_journaler);
+}
+
+TEST_F(TestMockJournal, CloseListenerEvent) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request);
+
+  struct Listener : public journal::Listener {
+    C_SaferCond ctx;
+    void handle_close() override {
+      ctx.complete(0);
+    }
+    void handle_resync() override {
+      ADD_FAILURE() << "unexpected resync request";
+    }
+    void handle_promoted() override {
+      ADD_FAILURE() << "unexpected promotion event";
+    }
+  } listener;
+  mock_journal.add_listener(&listener);
+
+  expect_shut_down_journaler(mock_journaler);
+  close_journal(mock_journal, mock_journaler);
+
+  ASSERT_EQ(0, listener.ctx.wait());
+  mock_journal.remove_listener(&listener);
+}
+
+TEST_F(TestMockJournal, ResyncRequested) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request,
+               false);
+
+  struct Listener : public journal::Listener {
+    C_SaferCond ctx;
+    void handle_close() override {
+      ADD_FAILURE() << "unexpected close action";
+    }
+    void handle_resync() override {
+      ctx.complete(0);
+    }
+    void handle_promoted() override {
+      ADD_FAILURE() << "unexpected promotion event";
+    }
+  } listener;
+  mock_journal.add_listener(&listener);
+
+  BOOST_SCOPE_EXIT_ALL(&) {
+    mock_journal.remove_listener(&listener);
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  InSequence seq;
+
+  journal::TagData tag_data;
+  tag_data.mirror_uuid = Journal<>::LOCAL_MIRROR_UUID;
+
+  bufferlist tag_data_bl;
+  ::encode(tag_data, tag_data_bl);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0,
+                            {{0, 0, tag_data_bl}}, 0);
+
+  journal::ImageClientMeta image_client_meta;
+  image_client_meta.tag_class = 0;
+  image_client_meta.resync_requested = true;
+  expect_get_journaler_cached_client(mock_journaler, image_client_meta, 0);
+  expect_shut_down_journaler(mock_journaler);
+
+  m_listener->handle_update(nullptr);
+  ASSERT_EQ(0, listener.ctx.wait());
+}
+
+TEST_F(TestMockJournal, ForcePromoted) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, mock_open_request,
+               false);
+
+  struct Listener : public journal::Listener {
+    C_SaferCond ctx;
+    void handle_close() override {
+      ADD_FAILURE() << "unexpected close action";
+    }
+    void handle_resync() override {
+      ADD_FAILURE() << "unexpected resync event";
+    }
+    void handle_promoted() override {
+      ctx.complete(0);
+    }
+  } listener;
+  mock_journal.add_listener(&listener);
+
+  BOOST_SCOPE_EXIT_ALL(&) {
+    mock_journal.remove_listener(&listener);
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  InSequence seq;
+
+  journal::TagData tag_data;
+  tag_data.mirror_uuid = Journal<>::LOCAL_MIRROR_UUID;
+
+  bufferlist tag_data_bl;
+  ::encode(tag_data, tag_data_bl);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0,
+                            {{100, 0, tag_data_bl}}, 0);
+
+  journal::ImageClientMeta image_client_meta;
+  image_client_meta.tag_class = 0;
+  expect_get_journaler_cached_client(mock_journaler, image_client_meta, 0);
+  expect_shut_down_journaler(mock_journaler);
+
+  m_listener->handle_update(nullptr);
+  ASSERT_EQ(0, listener.ctx.wait());
 }
 
 } // namespace librbd

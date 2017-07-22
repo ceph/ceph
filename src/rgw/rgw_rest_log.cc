@@ -18,9 +18,13 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_log.h"
 #include "rgw_client_io.h"
+#include "rgw_sync.h"
+#include "rgw_data_sync.h"
+#include "rgw_common.h"
 #include "common/errno.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define LOG_CLASS_LIST_MAX_ENTRIES (1000)
 #define dout_subsys ceph_subsys_rgw
 
@@ -75,6 +79,9 @@ void RGWOp_MDLog_List::execute() {
       http_ret = -EINVAL;
       return;
     }
+    if (max_entries > LOG_CLASS_LIST_MAX_ENTRIES) {
+      max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
+    }
   } 
 
   if (period.empty()) {
@@ -91,15 +98,8 @@ void RGWOp_MDLog_List::execute() {
 
   meta_log.init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
 
-  do {
-    http_ret = meta_log.list_entries(handle, max_entries, entries,
-				     &last_marker, &truncated);
-    if (http_ret < 0) 
-      break;
-
-    if (!max_entries_str.empty()) 
-      max_entries -= entries.size();
-  } while (truncated && (max_entries > 0));
+  http_ret = meta_log.list_entries(handle, max_entries, entries,
+                                   &last_marker, &truncated);
 
   meta_log.complete_list_entries(handle);
 }
@@ -131,7 +131,7 @@ void RGWOp_MDLog_List::send_response() {
 
 void RGWOp_MDLog_Info::execute() {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
-  period = store->meta_mgr->get_oldest_log_period();
+  period = store->meta_mgr->read_oldest_log_period();
   http_ret = period.get_error();
 }
 
@@ -411,7 +411,7 @@ void RGWOp_BILog_List::execute() {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = store->list_bi_log_entries(bucket_info.bucket, shard_id,
+    int ret = store->list_bi_log_entries(bucket_info, shard_id,
                                           marker, max_entries - count, 
                                           entries, &truncated);
     if (ret < 0) {
@@ -493,7 +493,7 @@ void RGWOp_BILog_Info::execute() {
     }
   }
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->get_bucket_stats(bucket_info.bucket, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
+  int ret =  store->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0 && ret != -ENOENT) {
     http_ret = ret;
     return;
@@ -555,7 +555,7 @@ void RGWOp_BILog_Delete::execute() {
       return;
     }
   }
-  http_ret = store->trim_bi_log_entries(bucket_info.bucket, shard_id, start_marker, end_marker);
+  http_ret = store->trim_bi_log_entries(bucket_info, shard_id, start_marker, end_marker);
   if (http_ret < 0) {
     dout(5) << "ERROR: trim_bi_log_entries() " << dendl;
   }
@@ -600,20 +600,16 @@ void RGWOp_DATALog_List::execute() {
       http_ret = -EINVAL;
       return;
     }
-  } 
-  
-  do {
-    // Note that last_marker is updated to be the marker of the last
-    // entry listed
-    http_ret = store->data_log->list_entries(shard_id, ut_st, ut_et, 
-					     max_entries, entries, marker,
-					     &last_marker, &truncated);
-    if (http_ret < 0) 
-      break;
+    if (max_entries > LOG_CLASS_LIST_MAX_ENTRIES) {
+      max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
+    }
+  }
 
-    if (!max_entries_str.empty()) 
-      max_entries -= entries.size();
-  } while (truncated && (max_entries > 0));
+  // Note that last_marker is updated to be the marker of the last
+  // entry listed
+  http_ret = store->data_log->list_entries(shard_id, ut_st, ut_et,
+                                           max_entries, entries, marker,
+                                           &last_marker, &truncated);
 }
 
 void RGWOp_DATALog_List::send_response() {
@@ -837,6 +833,84 @@ void RGWOp_DATALog_Delete::execute() {
   http_ret = store->data_log->trim_entries(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
+// not in header to avoid pulling in rgw_sync.h
+class RGWOp_MDLog_Status : public RGWRESTOp {
+  rgw_meta_sync_status status;
+public:
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("mdlog", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
+  void execute() override;
+  void send_response() override;
+  const string name() override { return "get_metadata_log_status"; }
+};
+
+void RGWOp_MDLog_Status::execute()
+{
+  auto sync = store->get_meta_sync_manager();
+  if (sync == nullptr) {
+    ldout(s->cct, 1) << "no sync manager" << dendl;
+    http_ret = -ENOENT;
+    return;
+  }
+  http_ret = sync->read_sync_status(&status);
+}
+
+void RGWOp_MDLog_Status::send_response()
+{
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret >= 0) {
+    encode_json("status", status, s->formatter);
+  }
+  flusher.flush();
+}
+
+// not in header to avoid pulling in rgw_data_sync.h
+class RGWOp_DATALog_Status : public RGWRESTOp {
+  rgw_data_sync_status status;
+public:
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("datalog", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
+  void execute() override ;
+  void send_response() override;
+  const string name() override { return "get_data_changes_log_status"; }
+};
+
+void RGWOp_DATALog_Status::execute()
+{
+  const auto source_zone = s->info.args.get("source-zone");
+  auto sync = store->get_data_sync_manager(source_zone);
+  if (sync == nullptr) {
+    ldout(s->cct, 1) << "no sync manager for source-zone " << source_zone << dendl;
+    http_ret = -ENOENT;
+    return;
+  }
+  http_ret = sync->read_sync_status(&status);
+}
+
+void RGWOp_DATALog_Status::send_response()
+{
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret >= 0) {
+    encode_json("status", status, s->formatter);
+  }
+  flusher.flush();
+}
+
+
 RGWOp *RGWHandler_Log::op_get() {
   bool exists;
   string type = s->info.args.get("type", &exists);
@@ -852,6 +926,8 @@ RGWOp *RGWHandler_Log::op_get() {
       } else {
         return new RGWOp_MDLog_List;
       }
+    } else if (s->info.args.exists("status")) {
+      return new RGWOp_MDLog_Status;
     } else {
       return new RGWOp_MDLog_Info;
     }
@@ -868,6 +944,8 @@ RGWOp *RGWHandler_Log::op_get() {
       } else {
         return new RGWOp_DATALog_List;
       }
+    } else if (s->info.args.exists("status")) {
+      return new RGWOp_DATALog_Status;
     } else {
       return new RGWOp_DATALog_Info;
     }

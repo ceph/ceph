@@ -20,13 +20,13 @@ extern "C" {
 #include "builder.h"
 }
 
+#include "include/assert.h"
 #include "include/err.h"
 #include "include/encoding.h"
 
 
 #include "common/Mutex.h"
 
-#include "include/assert.h"
 #define BUG_ON(x) assert(!(x))
 
 namespace ceph {
@@ -50,14 +50,21 @@ inline static void decode(crush_rule_step &s, bufferlist::iterator &p)
 
 using namespace std;
 class CrushWrapper {
-  mutable Mutex mapper_lock;
 public:
   std::map<int32_t, string> type_map; /* bucket/device type names */
   std::map<int32_t, string> name_map; /* bucket/device names */
   std::map<int32_t, string> rule_name_map;
+  std::map<int32_t, int32_t> class_map; /* item id -> class id */
+  std::map<int32_t, string> class_name; /* class id -> class name */
+  std::map<string, int32_t> class_rname; /* class name -> class id */
+  std::map<int32_t, map<int32_t, int32_t> > class_bucket; /* bucket[id][class] == id */
+  std::map<uint64_t, crush_choose_arg_map> choose_args;
 
 private:
   struct crush_map *crush;
+
+  bool have_uniform_rules = false;
+
   /* reverse maps */
   mutable bool have_rmaps;
   mutable std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
@@ -78,13 +85,13 @@ public:
   CrushWrapper(const CrushWrapper& other);
   const CrushWrapper& operator=(const CrushWrapper& other);
 
-  CrushWrapper() : mapper_lock("CrushWrapper::mapper_lock"),
-		   crush(0), have_rmaps(false) {
+  CrushWrapper() : crush(0), have_rmaps(false) {
     create();
   }
   ~CrushWrapper() {
     if (crush)
       crush_destroy(crush);
+    choose_args_clear();
   }
 
   crush_map *get_crush_map() { return crush; }
@@ -94,11 +101,21 @@ public:
     if (crush)
       crush_destroy(crush);
     crush = crush_create();
+    choose_args_clear();
     assert(crush);
     have_rmaps = false;
 
     set_tunables_default();
   }
+
+  /// true if any rule has a ruleset != the rule id
+  bool has_legacy_rulesets() const;
+
+  /// fix rules whose ruleid != ruleset
+  int renumber_rules_by_ruleset();
+
+  /// true if any ruleset has more than 1 rule
+  bool has_multirule_rulesets() const;
 
   // tunables
   void set_tunables_argonaut() {
@@ -164,7 +181,7 @@ public:
     crush->straw_calc_version = 1;
   }
   void set_tunables_default() {
-    set_tunables_firefly();
+    set_tunables_jewel();
     crush->straw_calc_version = 1;
   }
 
@@ -311,6 +328,8 @@ public:
   bool has_v3_rules() const;
   bool has_v4_buckets() const;
   bool has_v5_rules() const;
+  bool has_choose_args() const;          // any choose_args
+  bool has_incompat_choose_args() const; // choose_args that can't be made compat
 
   bool is_v2_rule(unsigned ruleid) const;
   bool is_v3_rule(unsigned ruleid) const;
@@ -349,6 +368,11 @@ public:
   int get_num_type_names() const {
     return type_map.size();
   }
+  int get_max_type_id() const {
+    if (type_map.empty())
+      return 0;
+    return type_map.rbegin()->first;
+  }
   int get_type_id(const string& name) const {
     build_rmaps();
     if (type_rmap.count(name))
@@ -372,7 +396,7 @@ public:
     build_rmaps();
     return name_rmap.count(name);
   }
-  bool item_exists(int i) {
+  bool item_exists(int i) const {
     return name_map.count(i);
   }
   int get_item_id(const string& name) const {
@@ -395,7 +419,119 @@ public:
       name_rmap[name] = i;
     return 0;
   }
+  void swap_names(int a, int b) {
+    string an = name_map[a];
+    string bn = name_map[b];
+    name_map[a] = bn;
+    name_map[b] = an;
+    if (have_rmaps) {
+      name_rmap[an] = b;
+      name_rmap[bn] = a;
+    }
+  }
+  bool id_has_class(int i) {
+    int idout;
+    int classout;
+    if (split_id_class(i, &idout, &classout) != 0)
+      return false;
+    return classout != -1;
+  }
+  int split_id_class(int i, int *idout, int *classout) const;
 
+  bool class_exists(const string& name) const {
+    return class_rname.count(name);
+  }
+  const char *get_class_name(int i) const {
+    auto p = class_name.find(i);
+    if (p != class_name.end())
+      return p->second.c_str();
+    return 0;
+  }
+  int get_class_id(const string& name) const {
+    auto p = class_rname.find(name);
+    if (p != class_rname.end())
+      return p->second;
+    else
+      return -EINVAL;
+  }
+  int remove_class_name(const string& name) {
+    auto p = class_rname.find(name);
+    if (p == class_rname.end())
+      return -ENOENT;
+    int class_id = p->second;
+    auto q = class_name.find(class_id);
+    if (q == class_name.end())
+      return -ENOENT;
+    class_rname.erase(name);
+    class_name.erase(class_id);
+    return 0;
+  }
+
+  int rename_class(const string& srcname, const string& dstname) {
+    auto p = class_rname.find(srcname);
+    if (p == class_rname.end())
+      return -ENOENT;
+    int class_id = p->second;
+    auto q = class_name.find(class_id);
+    if (q == class_name.end())
+      return -ENOENT;
+    class_rname.erase(srcname);
+    class_name.erase(class_id);
+    class_rname[dstname] = class_id;
+    class_name[class_id] = dstname;
+    return 0;
+  }
+
+  int32_t _alloc_class_id() const;
+
+  int get_or_create_class_id(const string& name) {
+    int c = get_class_id(name);
+    if (c < 0) {
+      int i = _alloc_class_id();
+      class_name[i] = name;
+      class_rname[name] = i;
+      return i;
+    } else {
+      return c;
+    }
+  }
+
+  const char *get_item_class(int t) const {
+    std::map<int,int>::const_iterator p = class_map.find(t);
+    if (p == class_map.end())
+      return 0;
+    return get_class_name(p->second);
+  }
+  int set_item_class(int i, const string& name) {
+    if (!is_valid_crush_name(name))
+      return -EINVAL;
+    class_map[i] = get_or_create_class_id(name);
+    return 0;
+  }
+  int set_item_class(int i, int c) {
+    class_map[i] = c;
+    return c;
+  }
+  void get_devices_by_class(const string &name, set<int> *devices) const {
+    assert(devices);
+    devices->clear();
+    if (!class_exists(name)) {
+      return;
+    }
+    auto cid = get_class_id(name);
+    for (auto& p : class_map) {
+      if (p.first >= 0 && p.second == cid) {
+        devices->insert(p.first);
+      }
+    }
+  }
+  void class_remove_item(int i) {
+    auto it = class_map.find(i);
+    if (it == class_map.end()) {
+      return;
+    }
+    class_map.erase(it);
+  }
   int can_rename_item(const string& srcname,
 		      const string& dstname,
 		      ostream *ss) const;
@@ -446,6 +582,14 @@ public:
    * These are parentless nodes in the map.
    */
   void find_roots(set<int>& roots) const;
+
+  /**
+   * find tree roots that are not shadow (device class) items
+   *
+   * These are parentless nodes in the map that are not shadow
+   * items for device classes.
+   */
+  void find_nonshadow_roots(set<int>& roots) const;
 
   /**
    * see if an item is contained within a subtree
@@ -499,7 +643,13 @@ public:
    * FIXME: ambiguous for items that occur multiple times in the map
    */
   pair<string,string> get_immediate_parent(int id, int *ret = NULL);
-  int get_immediate_parent_id(int id, int *parent);
+  int get_immediate_parent_id(int id, int *parent) const;
+
+  /**
+   * return ancestor of the given type, or 0 if none
+   * (parent is always a bucket and thus <0)
+   */
+  int get_parent_of_type(int id, int type) const;
 
   /**
    * get the fully qualified location of a device by successively finding
@@ -520,6 +670,15 @@ public:
    */
   int get_full_location_ordered(int id, vector<pair<string, string> >& path);
 
+  /*
+   * identical to get_full_location_ordered(int id, vector<pair<string, string> >& path),
+   * although it returns a concatenated string with the type/name pairs in descending
+   * hierarchical order with format key1=val1,key2=val2.
+   *
+   * returns the location in descending hierarchy as a string.
+   */
+  string get_full_location_ordered_string(int id);
+
   /**
    * returns (type_id, type) of all parent buckets between id and
    * default, can be used to check for anomolous CRUSH maps
@@ -533,6 +692,15 @@ public:
    * @return number of items, or error
    */
   int get_children(int id, list<int> *children);
+
+  /**
+    * enumerate leaves(devices) of given node
+    *
+    * @param name parent bucket name
+    * @return 0 on success or a negative errno on error.
+    */
+  int get_leaves(const string &name, set<int> *leaves);
+  int _get_leaves(int id, list<int> *leaves); // worker
 
   /**
    * insert an item into the map at a specific position
@@ -578,6 +746,16 @@ public:
    * @return 0 for success, negative on error
    */
   int move_bucket(CephContext *cct, int id, const map<string,string>& loc);
+
+  /**
+   * swap bucket contents of two buckets without touching bucket ids
+   *
+   * @param cct cct
+   * @param src bucket a
+   * @param dst bucket b
+   * @return 0 for success, negative on error
+   */
+  int swap_bucket(CephContext *cct, int src, int dst);
 
   /**
    * add a link to an existing bucket in the hierarchy to the new location
@@ -632,6 +810,16 @@ public:
   int remove_item(CephContext *cct, int id, bool unlink_only);
 
   /**
+   * recursively remove buckets starting at item and stop removing
+   * when a bucket is in use.
+   *
+   * @param item id to remove
+   * @param unused true if only unused items should be removed
+   * @return 0 on success, negative on error
+   */
+  int remove_root(int item, bool unused);
+
+  /**
    * remove all instances of an item nested beneath a certain point from the map
    *
    * @param cct cct
@@ -643,7 +831,7 @@ public:
 private:
   bool _maybe_remove_last_instance(CephContext *cct, int id, bool unlink_only);
   int _remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
-  bool _bucket_is_in_use(CephContext *cct, int id);
+  bool _bucket_is_in_use(int id);
 public:
   int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 
@@ -690,18 +878,37 @@ public:
     return (float)get_item_weight_in_loc(id, loc) / (float)0x10000;
   }
 
+  int validate_weightf(float weight) {
+    uint64_t iweight = weight * 0x10000;
+    if (iweight > std::numeric_limits<int>::max()) {
+      return -EOVERFLOW;
+    }
+    return 0;
+  }
   int adjust_item_weight(CephContext *cct, int id, int weight);
   int adjust_item_weightf(CephContext *cct, int id, float weight) {
+    int r = validate_weightf(weight);
+    if (r < 0) {
+      return r;
+    }
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
   }
   int adjust_item_weight_in_loc(CephContext *cct, int id, int weight, const map<string,string>& loc);
   int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight, const map<string,string>& loc) {
+    int r = validate_weightf(weight);
+    if (r < 0) {
+      return r;
+    }
     return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000), loc);
   }
   void reweight(CephContext *cct);
 
   int adjust_subtree_weight(CephContext *cct, int id, int weight);
   int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
+    int r = validate_weightf(weight);
+    if (r < 0) {
+      return r;
+    }
     return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000));
   }
 
@@ -798,9 +1005,10 @@ public:
   int get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap);
 
   /* modifiers */
-  int add_rule(int len, int ruleset, int type, int minsize, int maxsize, int ruleno) {
+
+  int add_rule(int ruleno, int len, int type, int minsize, int maxsize) {
     if (!crush) return -ENOENT;
-    crush_rule *n = crush_make_rule(len, ruleset, type, minsize, maxsize);
+    crush_rule *n = crush_make_rule(len, ruleno, type, minsize, maxsize);
     assert(n);
     ruleno = crush_add_rule(crush, n, ruleno);
     return ruleno;
@@ -854,14 +1062,18 @@ public:
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }
 
-  int add_simple_ruleset(string name, string root_name, string failure_domain_type,
-			 string mode, int rule_type, ostream *err = 0);
+  int add_simple_rule(
+    string name, string root_name, string failure_domain_type,
+    string device_class,
+    string mode, int rule_type, ostream *err = 0);
+
   /**
-   * @param rno ruleset id to use, -1 to pick the lowest available
+   * @param rno rule[set] id to use, -1 to pick the lowest available
    */
-  int add_simple_ruleset_at(string name, string root_name,
-                            string failure_domain_type, string mode,
-                            int rule_type, int rno, ostream *err = 0);
+  int add_simple_rule_at(
+    string name, string root_name,
+    string failure_domain_type, string device_class, string mode,
+    int rule_type, int rno, ostream *err = 0);
 
   int remove_rule(int ruleno);
 
@@ -922,11 +1134,11 @@ private:
 
     if (!IS_ERR(parent_bucket)) {
       // zero out the bucket weight
-      crush_bucket_adjust_item_weight(crush, parent_bucket, item, 0);
+      bucket_adjust_item_weight(cct, parent_bucket, item, 0);
       adjust_item_weight(cct, parent_bucket->id, parent_bucket->weight);
 
       // remove the bucket from the parent
-      crush_bucket_remove_item(crush, parent_bucket, item);
+      bucket_remove_item(parent_bucket, item);
     } else if (PTR_ERR(parent_bucket) != -ENOENT) {
       return PTR_ERR(parent_bucket);
     }
@@ -1018,17 +1230,35 @@ public:
     assert(b);
     return crush_add_bucket(crush, bucketno, b, idout);
   }
-  
+
+  int bucket_add_item(crush_bucket *bucket, int item, int weight);
+  int bucket_remove_item(struct crush_bucket *bucket, int item);
+  int bucket_adjust_item_weight(CephContext *cct, struct crush_bucket *bucket, int item, int weight);
+
   void finalize() {
     assert(crush);
     crush_finalize(crush);
+    have_uniform_rules = !has_legacy_rulesets();
   }
+
+  int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
+  int device_class_clone(int original, int device_class, int *clone);
+  bool class_is_in_use(int class_id);
+  int populate_classes();
+  int rebuild_roots_with_classes();
+  /* remove unused roots generated for class devices */
+  int trim_roots_with_class(bool unused);
+  int cleanup_classes();
 
   void start_choose_profile() {
     free(crush->choose_tries);
-    crush->choose_tries = (__u32 *)malloc(sizeof(*crush->choose_tries) * crush->choose_total_tries);
+    /*
+     * the original choose_total_tries value was off by one (it
+     * counted "retries" and not "tries").  add one to alloc.
+     */
+    crush->choose_tries = (__u32 *)malloc(sizeof(*crush->choose_tries) * (crush->choose_total_tries + 1));
     memset(crush->choose_tries, 0,
-	   sizeof(*crush->choose_tries) * crush->choose_total_tries);
+	   sizeof(*crush->choose_tries) * (crush->choose_total_tries + 1));
   }
   void stop_choose_profile() {
     free(crush->choose_tries);
@@ -1050,7 +1280,14 @@ public:
 
   int find_rule(int ruleset, int type, int size) const {
     if (!crush) return -1;
-    return crush_find_rule(crush, ruleset, type, size);
+    if (!have_uniform_rules) {
+      return crush_find_rule(crush, ruleset, type, size);
+    } else {
+      if (ruleset < (int)crush->max_rules &&
+	  crush->rules[ruleset])
+	return ruleset;
+      return -1;
+    }
   }
 
   bool ruleset_exists(int const ruleset) const {
@@ -1082,28 +1319,83 @@ public:
     return result;
   }
 
+  crush_choose_arg_map choose_args_get(uint64_t choose_args_index) const {
+    auto i = choose_args.find(choose_args_index);
+    if (i == choose_args.end()) {
+      crush_choose_arg_map arg_map;
+      arg_map.args = NULL;
+      arg_map.size = 0;
+      return arg_map;
+    } else {
+      return i->second;
+    }
+  }
+
+  void destroy_choose_args(crush_choose_arg_map arg_map) {
+    for (__u32 i = 0; i < arg_map.size; i++) {
+      crush_choose_arg *arg = &arg_map.args[i];
+      for (__u32 j = 0; j < arg->weight_set_size; j++) {
+	crush_weight_set *weight_set = &arg->weight_set[j];
+	free(weight_set->weights);
+      }
+      if (arg->weight_set)
+	free(arg->weight_set);
+      if (arg->ids)
+	free(arg->ids);
+    }
+    free(arg_map.args);
+  }
+  
+  void choose_args_clear() {
+    for (auto w : choose_args)
+      destroy_choose_args(w.second);
+    choose_args.clear();
+  }
+
+  template<typename WeightVector>
   void do_rule(int rule, int x, vector<int>& out, int maxout,
-	       const vector<__u32>& weight) const {
-    Mutex::Locker l(mapper_lock);
+	       const WeightVector& weight,
+	       uint64_t choose_args_index) const {
     int rawout[maxout];
-    int scratch[maxout * 3];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size(), scratch);
+    char work[crush_work_size(crush, maxout)];
+    crush_init_workspace(crush, work);
+    crush_choose_arg_map arg_map = choose_args_get(choose_args_index);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0],
+			       weight.size(), work, arg_map.args);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
   }
-  
+
+  int _choose_type_stack(
+    CephContext *cct,
+    const vector<pair<int,int>>& stack,
+    const set<int>& overfull,
+    const vector<int>& underfull,
+    const vector<int>& orig,
+    vector<int>::const_iterator& i,
+    set<int>& used,
+    vector<int> *pw) const;
+
+  int try_remap_rule(
+    CephContext *cct,
+    int rule,
+    int maxout,
+    const set<int>& overfull,
+    const vector<int>& underfull,
+    const vector<int>& orig,
+    vector<int> *out) const;
+
   bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
-   
-    assert(crush);    
+    assert(crush);
 
     __u32 i;
     for (i = 0; i < crush->max_rules; i++) {
       if (crush->rules[i] &&
-          crush->rules[i]->mask.ruleset == ruleset &&
-          crush->rules[i]->mask.type == type) {
+	  crush->rules[i]->mask.ruleset == ruleset &&
+	  crush->rules[i]->mask.type == type) {
 
         if (crush->rules[i]->mask.min_size <= size &&
             crush->rules[i]->mask.max_size >= size) {
@@ -1121,26 +1413,25 @@ public:
     return false;
   }
 
-  void encode(bufferlist &bl, bool lean=false) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &blp);
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
   void dump(Formatter *f) const;
   void dump_rules(Formatter *f) const;
   void dump_rule(int ruleset, Formatter *f) const;
   void dump_tunables(Formatter *f) const;
+  void dump_choose_args(Formatter *f) const;
   void list_rules(Formatter *f) const;
   void dump_tree(ostream *out, Formatter *f) const;
   void dump_tree(Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
-  int _get_osd_pool_default_crush_replicated_ruleset(CephContext *cct,
-                                                     bool quiet);
   int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
 
   static bool is_valid_crush_name(const string& s);
   static bool is_valid_crush_loc(CephContext *cct,
 				 const map<string,string>& loc);
 };
-WRITE_CLASS_ENCODER(CrushWrapper)
+WRITE_CLASS_ENCODER_FEATURES(CrushWrapper)
 
 #endif

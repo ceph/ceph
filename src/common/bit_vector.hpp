@@ -13,13 +13,7 @@
 
 #include "common/Formatter.h"
 #include "include/assert.h"
-#include "include/buffer.h"
 #include "include/encoding.h"
-#include <stdint.h>
-#include <cmath>
-#include <list>
-#include <vector>
-#include <boost/static_assert.hpp>
 
 namespace ceph {
 
@@ -115,7 +109,7 @@ template <uint8_t _b>
 const uint32_t BitVector<_b>::BLOCK_SIZE = 4096;
 
 template <uint8_t _b>
-BitVector<_b>::BitVector() : m_size(0), m_crc_enabled(true)
+BitVector<_b>::BitVector() : m_size(0), m_crc_enabled(true), m_header_crc(0)
 {
 }
 
@@ -231,8 +225,11 @@ void BitVector<_b>::decode_data(bufferlist::iterator& it, uint64_t byte_offset) 
   while (byte_offset < end_offset) {
     uint64_t len = MIN(BLOCK_SIZE, end_offset - byte_offset);
 
+    bufferptr ptr;
+    it.copy_deep(len, ptr);
+
     bufferlist bit;
-    it.copy(len, bit);
+    bit.append(ptr);
     if (m_crc_enabled &&
 	m_data_crcs[byte_offset / BLOCK_SIZE] != bit.crc32c(0)) {
       throw buffer::malformed_input("invalid data block CRC");

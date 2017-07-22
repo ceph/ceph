@@ -27,9 +27,11 @@ void krbd_destroy(struct krbd_ctx *ctx);
 int krbd_map(struct krbd_ctx *ctx, const char *pool, const char *image,
              const char *snap, const char *options, char **pdevnode);
 
-int krbd_unmap(struct krbd_ctx *ctx, const char *devnode);
+int krbd_unmap(struct krbd_ctx *ctx, const char *devnode,
+               const char *options);
 int krbd_unmap_by_spec(struct krbd_ctx *ctx, const char *pool,
-                       const char *image, const char *snap);
+                       const char *image, const char *snap,
+                       const char *options);
 
 #ifdef __cplusplus
 }

@@ -1,0 +1,9 @@
+tasks:
+- install:
+- ceph:
+    fs: xfs
+- ceph-fuse:
+- workunit:
+    clients:
+      all:
+        - suites/blogbench.sh

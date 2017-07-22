@@ -13,6 +13,7 @@
 #include "include/assert.h"
 
 #include "InodeRef.h"
+#include "UserPerm.h"
 
 class Client;
 struct MetaSession;
@@ -22,8 +23,8 @@ struct SnapRealm;
 struct Inode;
 class ceph_lock_state_t;
 class MetaRequest;
-class UserGroups;
 class filepath;
+class Fh;
 
 struct Cap {
   MetaSession *session;
@@ -37,9 +38,11 @@ struct Cap {
   uint64_t seq, issue_seq;
   __u32 mseq;  // migration seq
   __u32 gen;
+  UserPerm latest_perms;
 
   Cap() : session(NULL), inode(NULL), cap_item(this), cap_id(0), issued(0),
-	       implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(0) {}
+	  implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(0),
+	  latest_perms()  {}
 
   void dump(Formatter *f) const;
 };
@@ -51,8 +54,9 @@ struct CapSnap {
   int issued, dirty;
 
   uint64_t size;
-  utime_t ctime, mtime, atime;
+  utime_t ctime, btime, mtime, atime;
   version_t time_warp_seq;
+  uint64_t change_attr;
   uint32_t   mode;
   uid_t      uid;
   gid_t      gid;
@@ -66,9 +70,9 @@ struct CapSnap {
   uint64_t flush_tid;
 
   explicit CapSnap(Inode *i)
-    : in(i), issued(0), dirty(0),
-      size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
-      inline_version(0), writing(false), dirty_data(false), flush_tid(0)
+    : in(i), issued(0), dirty(0), size(0), time_warp_seq(0), change_attr(0),
+      mode(0), uid(0), gid(0), xattr_version(0), inline_version(0),
+      writing(false), dirty_data(false), flush_tid(0)
   {}
 
   void dump(Formatter *f) const;
@@ -92,6 +96,7 @@ struct Inode {
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time
+  utime_t    btime;   // birth time
 
   // perm (namespace permissions)
   uint32_t   mode;
@@ -110,6 +115,7 @@ struct Inode {
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
+  uint64_t   change_attr;
 
   uint64_t max_size;  // max size we can write to
 
@@ -173,7 +179,7 @@ struct Inode {
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
   InodeRef snapdir_parent;  // only if we are a snapdir inode
-  map<snapid_t,CapSnap*> cap_snaps;   // pending flush to mds
+  map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   map<int,int> open_by_mode;
@@ -222,12 +228,14 @@ struct Inode {
 
   xlist<MetaRequest*> unsafe_ops;
 
+  std::set<Fh*> fhs;
+
   Inode(Client *c, vinodeno_t vino, file_layout_t *newlayout)
     : client(c), ino(vino.ino), snapid(vino.snapid), faked_ino(0),
       rdev(0), mode(0), uid(0), gid(0), nlink(0),
       size(0), truncate_seq(1), truncate_size(-1),
-      time_warp_seq(0), max_size(0), version(0), xattr_version(0),
-      inline_version(0), flags(0),
+      time_warp_seq(0), change_attr(0), max_size(0), version(0),
+      xattr_version(0), inline_version(0), flags(0),
       dir(0), dir_release_count(1), dir_ordered_count(1),
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
       cap_dirtier_uid(-1), cap_dirtier_gid(-1),
@@ -238,8 +246,7 @@ struct Inode {
       oset((void *)this, newlayout->pool_id, this->ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
       _ref(0), ll_ref(0), dn_set(),
-      fcntl_locks(NULL), flock_locks(NULL),
-      async_err(0)
+      fcntl_locks(NULL), flock_locks(NULL)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&quota, 0, sizeof(quota));
@@ -257,7 +264,7 @@ struct Inode {
     }
   };
 
-  bool check_mode(uid_t uid, UserGroups& groups, unsigned want);
+  bool check_mode(const UserPerm& perms, unsigned want);
 
   // CAPS --------
   void get_open_ref(int mode);
@@ -276,13 +283,14 @@ struct Inode {
   int caps_wanted();
   int caps_mds_wanted();
   int caps_dirty();
+  const UserPerm *get_best_perms();
 
   bool have_valid_size();
   Dir *open_dir();
 
-  // Record errors to be exposed in fclose/fflush
-  int async_err;
-
+  void add_fh(Fh *f) {fhs.insert(f);}
+  void rm_fh(Fh *f) {fhs.erase(f);}
+  void set_async_err(int r);
   void dump(Formatter *f) const;
 };
 

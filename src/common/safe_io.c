@@ -12,7 +12,8 @@
  *
  */
 
-#define _XOPEN_SOURCE 500
+#include "common/safe_io.h"
+#include "include/compat.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -20,9 +21,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
-
-#include "common/safe_io.h"
-#include "include/compat.h"
 
 ssize_t safe_read(int fd, void *buf, size_t count)
 {
@@ -119,7 +117,7 @@ ssize_t safe_pwrite(int fd, const void *buf, size_t count, off_t offset)
 }
 
 #ifdef CEPH_HAVE_SPLICE
-ssize_t safe_splice(int fd_in, loff_t *off_in, int fd_out, loff_t *off_out,
+ssize_t safe_splice(int fd_in, off_t *off_in, int fd_out, off_t *off_out,
 		    size_t len, unsigned int flags)
 {
   size_t cnt = 0;
@@ -142,8 +140,8 @@ ssize_t safe_splice(int fd_in, loff_t *off_in, int fd_out, loff_t *off_out,
   return cnt;
 }
 
-ssize_t safe_splice_exact(int fd_in, loff_t *off_in, int fd_out,
-			  loff_t *off_out, size_t len, unsigned int flags)
+ssize_t safe_splice_exact(int fd_in, off_t *off_in, int fd_out,
+			  off_t *off_out, size_t len, unsigned int flags)
 {
   ssize_t ret = safe_splice(fd_in, off_in, fd_out, off_out, len, flags);
   if (ret < 0)

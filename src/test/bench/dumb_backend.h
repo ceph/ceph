@@ -43,7 +43,7 @@ class DumbBackend : public Backend {
     DumbBackend *backend;
   public:
     explicit SyncThread(DumbBackend *backend) : backend(backend) {}
-    void *entry() {
+    void *entry() override {
       backend->sync_loop();
       return 0;
     }
@@ -69,19 +69,19 @@ class DumbBackend : public Backend {
       ThreadPool *tp) :
       ThreadPool::WorkQueue<write_item>("DumbBackend::queue", ti, ti*10, tp),
       backend(_backend) {}
-    bool _enqueue(write_item *item) {
+    bool _enqueue(write_item *item) override {
       item_queue.push_back(item);
       return true;
     }
-    void _dequeue(write_item*) { assert(0); }
-    write_item *_dequeue() {
+    void _dequeue(write_item*) override { ceph_abort(); }
+    write_item *_dequeue() override {
       if (item_queue.empty())
 	return 0;
       write_item *retval = item_queue.front();
       item_queue.pop_front();
       return retval;
     }
-    bool _empty() {
+    bool _empty() override {
       return item_queue.empty();
     }
     void _process(write_item *item, ThreadPool::TPHandle &) override {
@@ -92,7 +92,7 @@ class DumbBackend : public Backend {
 	item->on_applied,
 	item->on_commit);
     }
-    void _clear() {
+    void _clear() override {
       return item_queue.clear();
     }
   } queue;
@@ -134,7 +134,7 @@ public:
       sem.Put();
     }
   }
-  ~DumbBackend() {
+  ~DumbBackend() override {
     {
       Mutex::Locker l(sync_loop_mutex);
       if (sync_loop_stop == 0)
@@ -150,7 +150,7 @@ public:
     uint64_t offset,
     const bufferlist &bl,
     Context *on_applied,
-    Context *on_commit) {
+    Context *on_commit) override {
     sem.Get();
     queue.queue(
       new write_item(
@@ -162,7 +162,7 @@ public:
     uint64_t offset,
     uint64_t length,
     bufferlist *bl,
-    Context *on_complete);
+    Context *on_complete) override;
 };
 
 #endif

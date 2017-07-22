@@ -20,6 +20,7 @@
 #include "messages/MMDSTableRequest.h"
 #include "events/ETableServer.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".tableserver(" << get_mdstable_name(table) << ") "
@@ -37,14 +38,15 @@ void MDSTableServer::handle_request(MMDSTableRequest *req)
   }
 }
 
-class C_Prepare : public MDSInternalContext {
+class C_Prepare : public MDSLogContextBase {
   MDSTableServer *server;
   MMDSTableRequest *req;
   version_t tid;
+  MDSRank *get_mds() override { return server->mds; }
 public:
 
-  C_Prepare(MDSTableServer *s, MMDSTableRequest *r, version_t v) : MDSInternalContext(s->mds), server(s), req(r), tid(v) {}
-  void finish(int r) {
+  C_Prepare(MDSTableServer *s, MMDSTableRequest *r, version_t v) : server(s), req(r), tid(v) {}
+  void finish(int r) override {
     server->_prepare_logged(req, tid);
   }
 };
@@ -81,12 +83,13 @@ void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
   req->put();
 }
 
-class C_Commit : public MDSInternalContext {
+class C_Commit : public MDSLogContextBase {
   MDSTableServer *server;
   MMDSTableRequest *req;
+  MDSRank *get_mds() override { return server->mds; }
 public:
-  C_Commit(MDSTableServer *s, MMDSTableRequest *r) : MDSInternalContext(s->mds), server(s), req(r) {}
-  void finish(int r) {
+  C_Commit(MDSTableServer *s, MMDSTableRequest *r) : server(s), req(r) {}
+  void finish(int r) override {
     server->_commit_logged(req);
   }
 };

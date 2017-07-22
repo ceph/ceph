@@ -1,0 +1,16 @@
+meta:
+- desc: run the rbd_mirror_ha.sh workunit to test the rbd-mirror daemon
+tasks:
+- exec:
+    cluster1.client.mirror:
+    - ceph --cluster cluster1 auth caps client.mirror mon 'profile rbd' osd 'profile rbd'
+    cluster2.client.mirror:
+    - ceph --cluster cluster2 auth caps client.mirror mon 'profile rbd' osd 'profile rbd'
+- workunit:
+    clients:
+      cluster1.client.mirror: [rbd/rbd_mirror_ha.sh]
+    env:
+      # override workunit setting of CEPH_ARGS='--cluster'
+      CEPH_ARGS: ''
+      RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
+    timeout: 6h

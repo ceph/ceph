@@ -90,6 +90,14 @@ See `Create a Pool`_ for detail on specifying the number of placement groups for
 your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
+Newly created pools must initialized prior to use. Use the ``rbd`` tool
+to initialize the pools::
+
+        rbd pool init volumes
+        rbd pool init images
+        rbd pool init backups
+        rbd pool init vms
+
 .. _Create a Pool: ../../rados/operations/pools#createpool
 .. _Placement Groups: ../../rados/operations/placement-groups
 
@@ -124,9 +132,9 @@ Setup Ceph Client Authentication
 If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
 and Glance. Execute the following::
 
-    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rwx pool=vms, allow rx pool=images'
-    ceph auth get-or-create client.glance mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=images'
-    ceph auth get-or-create client.cinder-backup mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=backups'
+    ceph auth get-or-create client.glance mon 'profile rbd' osd 'profile rbd pool=images'
+    ceph auth get-or-create client.cinder mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd pool=vms, profile rbd pool=images'
+    ceph auth get-or-create client.cinder-backup mon 'profile rbd' osd 'profile rbd pool=backups'
 
 Add the keyrings for ``client.cinder``, ``client.glance``, and
 ``client.cinder-backup`` to the appropriate nodes and change their ownership::
@@ -176,7 +184,7 @@ Save the uuid of the secret for configuring ``nova-compute`` later.
    However from a platform consistency perspective, it's better to keep the
    same UUID.
 
-.. _cephx authentication: ../../rados/operations/authentication
+.. _cephx authentication: ../../rados/configuration/auth-config-ref/#enabling-disabling-cephx
 
 
 Configure OpenStack to use Ceph
@@ -218,8 +226,9 @@ Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` sectio
 .. important:: Glance has not completely moved to 'store' yet.
     So we still need to configure the store in the DEFAULT section until Kilo.
 
-Kilo
-~~~~
+Kilo and after
+~~~~~~~~~~~~~~
+
 Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` section::
 
     [glance_store]
@@ -232,15 +241,29 @@ Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` sectio
 
 For more information about the configuration options available in Glance please refer to the OpenStack Configuration Reference: http://docs.openstack.org/.
 
-Any OpenStack version
-~~~~~~~~~~~~~~~~~~~~~
+Enable copy-on-write cloning of images
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Note that this exposes the back end location via Glance's API, so the endpoint
+with this option enabled should not be publicly accessible.
+
+Any OpenStack version except Mitaka
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you want to enable copy-on-write cloning of images, also add under the ``[DEFAULT]`` section::
 
     show_image_direct_url = True
 
-Note that this exposes the back end location via Glance's API, so the endpoint
-with this option enabled should not be publicly accessible.
+For Mitaka only
+^^^^^^^^^^^^^^^
+
+To enable image locations and take advantage of copy-on-write cloning for images, add under the ``[DEFAULT]`` section::
+
+    show_multiple_locations = True
+    show_image_direct_url = True
+
+Disable cache management (any OpenStack version)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Disable the Glance cache management to avoid images getting cached under ``/var/lib/glance/image-cache/``,
 assuming your configuration file has ``flavor = keystone+cachemanagement``::
@@ -272,6 +295,7 @@ specify the pool name for the block device. On your OpenStack node, edit
     ...
     [ceph]
     volume_driver = cinder.volume.drivers.rbd.RBDDriver
+    volume_backend_name = ceph
     rbd_pool = volumes
     rbd_ceph_conf = /etc/ceph/ceph.conf
     rbd_flatten_volume_from_snapshot = false
@@ -316,6 +340,8 @@ from volume), you must tell Nova (and libvirt) which user and UUID to refer to
 when attaching the device. libvirt will refer to this user when connecting and
 authenticating with the Ceph cluster. ::
 
+    [libvirt]
+    ...
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
@@ -371,7 +397,7 @@ On every Compute node, edit ``/etc/nova/nova.conf`` and add::
     libvirt_images_type = rbd
     libvirt_images_rbd_pool = vms
     libvirt_images_rbd_ceph_conf = /etc/ceph/ceph.conf
-    libvirt_disk_cachemodes="network=writeback"
+    disk_cachemodes="network=writeback"
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
@@ -481,6 +507,6 @@ dashboard, you can boot from that volume by performing the following steps:
 #. Select the volume you created.
 
 .. _qemu-img: ../qemu-rbd/#running-qemu-with-rbd
-.. _Block Devices and OpenStack (Dumpling): http://ceph.com/docs/dumpling/rbd/rbd-openstack
+.. _Block Devices and OpenStack (Dumpling): http://docs.ceph.com/docs/dumpling/rbd/rbd-openstack
 .. _stable/havana: https://github.com/jdurgin/nova/tree/havana-ephemeral-rbd
 .. _stable/icehouse: https://github.com/angdraug/nova/tree/rbd-ephemeral-clone-stable-icehouse

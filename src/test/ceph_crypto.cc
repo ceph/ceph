@@ -1,10 +1,13 @@
+#include "gtest/gtest.h"
+#include "common/ceph_argparse.h"
 #include "common/ceph_crypto.h"
-
-#include "test/unit.h"
+#include "common/common_init.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
 
 class CryptoEnvironment: public ::testing::Environment {
 public:
-  void SetUp() {
+  void SetUp() override {
     ceph::crypto::init(g_ceph_context);
   }
 };
@@ -107,12 +110,15 @@ TEST(HMACSHA1, Restart) {
 
 class ForkDeathTest : public ::testing::Test {
  protected:
-  virtual void SetUp() {
+  void SetUp() override {
     // shutdown NSS so it can be reinitialized after the fork
-    ceph::crypto::shutdown();
+    // some data structures used by NSPR are only initialized once, and they
+    // will be cleaned up with ceph::crypto::shutdown(false), so we need to
+    // keep them around after fork.
+    ceph::crypto::shutdown(true);
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     // undo the NSS shutdown we did in the parent process, after the
     // test is done
     ceph::crypto::init(g_ceph_context);
@@ -138,3 +144,15 @@ TEST_F(ForkDeathTest, MD5) {
   ASSERT_EXIT(do_simple_crypto(), ::testing::ExitedWithCode(0), "^$");
 }
 #endif //GTEST_HAS_DEATH_TEST
+
+int main(int argc, char **argv) {
+  std::vector<const char*> args(argv, argv + argc);
+  env_to_vec(args);
+  auto cct = global_init(NULL, args,
+                         CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY,
+                         CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  common_init_finish(g_ceph_context);
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

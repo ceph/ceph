@@ -30,7 +30,4 @@ if [ -z $CEPH_BUILD_DIR ]; then
 fi
 
 source ${CEPH_DISK_VIRTUALENV}/bin/activate
-tox -c ${TOX_PATH} > ${CEPH_DISK_VIRTUALENV}/tox.out 2>&1
-status=$?
-grep -v InterpreterNotFound < ${CEPH_DISK_VIRTUALENV}/tox.out
-exit $status
+tox -c ${TOX_PATH}

@@ -33,34 +33,30 @@ Files: src/common/bloom_filter.hpp
 Copyright: Copyright (C) 2000 Arash Partow
 License: Boost Software License, Version 1.0
 
-Files: m4/acx_pthread.m4
-Copyright: Steven G. Johnson <stevenj@alum.mit.edu>
-License: GPLWithACException
-
 Files: src/common/crc32c_intel*:
 Copyright:
     Copyright 2012-2013 Intel Corporation All Rights Reserved.
 License: BSD 3-clause
 
-Files: src/common/sctp_crc32.c: 
+Files: src/common/sctp_crc32.c:
 Copyright:
     Copyright (c) 2001-2007, by Cisco Systems, Inc. All rights reserved.
     Copyright (c) 2004-2006 Intel Corporation - All Rights Reserved
 License:
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
- 
+
   a) Redistributions of source code must retain the above copyright notice,
     this list of conditions and the following disclaimer.
- 
+
   b) Redistributions in binary form must reproduce the above copyright
      notice, this list of conditions and the following disclaimer in
     the documentation and/or other materials provided with the distribution.
- 
+
   c) Neither the name of Cisco Systems, Inc. nor the names of its
      contributors may be used to endorse or promote products derived
      from this software without specific prior written permission.
- 
+
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
   THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -114,19 +110,19 @@ License:
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
   are met:
-  
+
    - Redistributions of source code must retain the above copyright
      notice, this list of conditions and the following disclaimer.
-  
+
    - Redistributions in binary form must reproduce the above copyright
      notice, this list of conditions and the following disclaimer in
      the documentation and/or other materials provided with the
      distribution.
-  
+
    - Neither the name of the University of Tennessee nor the names of its
      contributors may be used to endorse or promote products derived
      from this software without specific prior written permission.
-  
+
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR

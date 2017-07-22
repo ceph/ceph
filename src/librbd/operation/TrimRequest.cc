@@ -3,12 +3,12 @@
 
 #include "librbd/operation/TrimRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
-#include "librbd/AioObjectRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/ObjectRequest.h"
 #include "common/ContextCompletion.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -36,7 +36,7 @@ public:
   {
   }
 
-  virtual int send() {
+  int send() override {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
     assert(image_ctx.exclusive_lock == nullptr ||
@@ -45,8 +45,8 @@ public:
     string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
 
-    AioObjectRequest<> *req = new AioObjectTrim(&image_ctx, oid, m_object_no,
-                                                m_snapc, this);
+    auto req = new io::ObjectTrimRequest(&image_ctx, oid, m_object_no,
+                                         m_snapc, false, this);
     req->send();
     return 0;
   }
@@ -64,7 +64,7 @@ public:
   {
   }
 
-  virtual int send() {
+  int send() override {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
     assert(image_ctx.exclusive_lock == nullptr ||
@@ -82,7 +82,7 @@ public:
     ldout(image_ctx.cct, 10) << "removing " << oid << dendl;
 
     librados::AioCompletion *rados_completion =
-      util::create_rados_safe_callback(this);
+      util::create_rados_callback(this);
     int r = image_ctx.data_ctx.aio_remove(oid, rados_completion);
     assert(r == 0);
     rados_completion->release();
@@ -131,8 +131,18 @@ bool TrimRequest<I>::should_complete(int r)
 
   RWLock::RLocker owner_lock(image_ctx.owner_lock);
   switch (m_state) {
+  case STATE_PRE_COPYUP:
+    ldout(cct, 5) << " PRE_COPYUP" << dendl;
+    send_copyup_objects();
+    break;
+
   case STATE_COPYUP_OBJECTS:
     ldout(cct, 5) << " COPYUP_OBJECTS" << dendl;
+    send_post_copyup();
+    break;
+
+  case STATE_POST_COPYUP:
+    ldout(cct, 5) << " POST_COPYUP" << dendl;
     send_pre_remove();
     break;
 
@@ -170,58 +180,33 @@ bool TrimRequest<I>::should_complete(int r)
 
 template <typename I>
 void TrimRequest<I>::send() {
-  send_copyup_objects();
+  send_pre_copyup();
 }
 
-template <typename I>
+template<typename I>
 void TrimRequest<I>::send_copyup_objects() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
-  assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
 
-  if (m_delete_start >= m_num_objects) {
-    send_clean_boundary();
-    return;
-  }
+  ldout(image_ctx.cct, 5) << this << " send_copyup_objects: "
+                          << " start object=" << m_copyup_start << ", "
+                          << " end object=" << m_copyup_end << dendl;
+  m_state = STATE_COPYUP_OBJECTS;
 
   ::SnapContext snapc;
-  bool has_snapshots;
-  uint64_t parent_overlap;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     RWLock::RLocker parent_locker(image_ctx.parent_lock);
-
     snapc = image_ctx.snapc;
-    has_snapshots = !image_ctx.snaps.empty();
-    int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
-    assert(r == 0);
   }
-
-  // copyup is only required for portion of image that overlaps parent
-  uint64_t copyup_end = Striper::get_num_objects(image_ctx.layout,
-                                                 parent_overlap);
-  // TODO: protect against concurrent shrink and snap create?
-  if (copyup_end <= m_delete_start || !has_snapshots) {
-    send_pre_remove();
-    return;
-  }
-
-  uint64_t copyup_start = m_delete_start;
-  m_delete_start = copyup_end;
-
-  ldout(image_ctx.cct, 5) << this << " send_copyup_objects: "
-			    << " start object=" << copyup_start << ", "
-			    << " end object=" << copyup_end << dendl;
-  m_state = STATE_COPYUP_OBJECTS;
 
   Context *ctx = this->create_callback_context();
   typename AsyncObjectThrottle<I>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_CopyupObject<I> >(),
       boost::lambda::_1, &image_ctx, snapc, boost::lambda::_2));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
-    this, image_ctx, context_factory, ctx, &m_prog_ctx, copyup_start,
-    copyup_end);
+    this, image_ctx, context_factory, ctx, &m_prog_ctx, m_copyup_start,
+    m_copyup_end);
   throttle->start_ops(image_ctx.concurrent_management_ops);
 }
 
@@ -245,6 +230,62 @@ void TrimRequest<I>::send_remove_objects() {
   throttle->start_ops(image_ctx.concurrent_management_ops);
 }
 
+template<typename I>
+void TrimRequest<I>::send_pre_copyup() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
+
+  if (m_delete_start >= m_num_objects) {
+    send_clean_boundary();
+    return;
+  }
+
+  bool has_snapshots;
+  uint64_t parent_overlap;
+  {
+    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker parent_locker(image_ctx.parent_lock);
+
+    has_snapshots = !image_ctx.snaps.empty();
+    int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
+    assert(r == 0);
+  }
+
+  // copyup is only required for portion of image that overlaps parent
+  m_copyup_end = Striper::get_num_objects(image_ctx.layout, parent_overlap);
+
+  // TODO: protect against concurrent shrink and snap create?
+  // skip to remove if no copyup is required.
+  if (m_copyup_end <= m_delete_start || !has_snapshots) {
+    send_pre_remove();
+    return;
+  }
+
+  m_copyup_start = m_delete_start;
+  m_delete_start = m_copyup_end;
+
+  {
+    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    if (image_ctx.object_map != nullptr) {
+      ldout(image_ctx.cct, 5) << this << " send_pre_copyup: "
+                              << " copyup_start=" << m_copyup_start
+                              << " copyup_end=" << m_copyup_end << dendl;
+      m_state = STATE_PRE_COPYUP;
+
+      assert(image_ctx.exclusive_lock->is_lock_owner());
+
+      RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
+      if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
+            CEPH_NOSNAP, m_copyup_start, m_copyup_end, OBJECT_PENDING,
+            OBJECT_EXISTS, {}, this)) {
+        return;
+      }
+    }
+  }
+
+  send_copyup_objects();
+}
+
 template <typename I>
 void TrimRequest<I>::send_pre_remove() {
   I &image_ctx = this->m_image_ctx;
@@ -254,12 +295,9 @@ void TrimRequest<I>::send_pre_remove() {
     return;
   }
 
-  bool remove_objects = false;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (image_ctx.object_map == nullptr) {
-      remove_objects = true;
-    } else {
+    if (image_ctx.object_map != nullptr) {
       ldout(image_ctx.cct, 5) << this << " send_pre_remove: "
 				<< " delete_start=" << m_delete_start
 				<< " num_objects=" << m_num_objects << dendl;
@@ -268,22 +306,44 @@ void TrimRequest<I>::send_pre_remove() {
       assert(image_ctx.exclusive_lock->is_lock_owner());
 
       // flag the objects as pending deletion
-      Context *ctx = this->create_callback_context();
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
-      if (!image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
-					    OBJECT_PENDING, OBJECT_EXISTS,
-                                            ctx)) {
-        delete ctx;
-        remove_objects = true;
+      if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
+            CEPH_NOSNAP, m_delete_start, m_num_objects, OBJECT_PENDING,
+            OBJECT_EXISTS, {}, this)) {
+        return;
       }
     }
   }
 
-  // avoid possible recursive lock attempts
-  if (remove_objects) {
-    // no object map update required
-    send_remove_objects();
+  // no object map update required
+  send_remove_objects();
+}
+
+template<typename I>
+void TrimRequest<I>::send_post_copyup() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
+
+  {
+    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    if (image_ctx.object_map != nullptr) {
+      ldout(image_ctx.cct, 5) << this << " send_post_copyup:"
+                              << " copyup_start=" << m_copyup_start
+                              << " copyup_end=" << m_copyup_end << dendl;
+      m_state = STATE_POST_COPYUP;
+
+      assert(image_ctx.exclusive_lock->is_lock_owner());
+
+      RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
+      if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
+            CEPH_NOSNAP, m_copyup_start, m_copyup_end, OBJECT_NONEXISTENT,
+            OBJECT_PENDING, {}, this)) {
+        return;
+      }
+    }
   }
+
+  send_pre_remove();
 }
 
 template <typename I>
@@ -291,12 +351,9 @@ void TrimRequest<I>::send_post_remove() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
 
-  bool clean_boundary = false;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (image_ctx.object_map == nullptr) {
-      clean_boundary = true;
-    } else {
+    if (image_ctx.object_map != nullptr) {
       ldout(image_ctx.cct, 5) << this << " send_post_remove: "
           		        << " delete_start=" << m_delete_start
           		        << " num_objects=" << m_num_objects << dendl;
@@ -305,22 +362,17 @@ void TrimRequest<I>::send_post_remove() {
       assert(image_ctx.exclusive_lock->is_lock_owner());
 
       // flag the pending objects as removed
-      Context *ctx = this->create_callback_context();
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
-      if (!image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
-					    OBJECT_NONEXISTENT,
-					    OBJECT_PENDING, ctx)) {
-        delete ctx;
-	clean_boundary = true;
+      if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
+            CEPH_NOSNAP, m_delete_start, m_num_objects, OBJECT_NONEXISTENT,
+            OBJECT_PENDING, {}, this)) {
+        return;
       }
     }
   }
 
-  // avoid possible recursive lock attempts
-  if (clean_boundary) {
-    // no object map update required
-    send_clean_boundary();
-  }
+  // no object map update required
+  send_clean_boundary();
 }
 
 template <typename I>
@@ -361,13 +413,13 @@ void TrimRequest<I>::send_clean_boundary() {
     ldout(cct, 20) << " ex " << *p << dendl;
     Context *req_comp = new C_ContextCompletion(*completion);
 
-    AioObjectRequest<> *req;
+    io::ObjectRequest<> *req;
     if (p->offset == 0) {
-      req = new AioObjectTrim(&image_ctx, p->oid.name, p->objectno, snapc,
-                              req_comp);
+      req = new io::ObjectTrimRequest(&image_ctx, p->oid.name, p->objectno,
+                                      snapc, true, req_comp);
     } else {
-      req = new AioObjectTruncate(&image_ctx, p->oid.name, p->objectno,
-                                  p->offset, snapc, req_comp);
+      req = new io::ObjectTruncateRequest(&image_ctx, p->oid.name, p->objectno,
+                                          p->offset, snapc, {}, req_comp);
     }
     req->send();
   }

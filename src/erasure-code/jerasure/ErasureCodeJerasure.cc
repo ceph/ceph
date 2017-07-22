@@ -17,8 +17,9 @@
 
 #include "common/debug.h"
 #include "ErasureCodeJerasure.h"
-#include "crush/CrushWrapper.h"
-#include "osd/osd_types.h"
+
+using namespace std;
+
 extern "C" {
 #include "jerasure.h"
 #include "reed_sol.h"
@@ -29,6 +30,7 @@ extern "C" {
 
 #define LARGEST_VECTOR_WORDSIZE 16
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
@@ -38,37 +40,17 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodeJerasure: ";
 }
 
-int ErasureCodeJerasure::create_ruleset(const string &name,
-					CrushWrapper &crush,
-					ostream *ss) const
-{
-  int ruleid = crush.add_simple_ruleset(name, ruleset_root, ruleset_failure_domain,
-					"indep", pg_pool_t::TYPE_ERASURE, ss);
-  if (ruleid < 0)
-    return ruleid;
-  else {
-    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
-    return crush.get_rule_mask_ruleset(ruleid);
-  }
-}
 
 int ErasureCodeJerasure::init(ErasureCodeProfile& profile, ostream *ss)
 {
   int err = 0;
   dout(10) << "technique=" << technique << dendl;
   profile["technique"] = technique;
-  err |= to_string("ruleset-root", profile,
-		   &ruleset_root,
-		   DEFAULT_RULESET_ROOT, ss);
-  err |= to_string("ruleset-failure-domain", profile,
-		   &ruleset_failure_domain,
-		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
   err |= parse(profile, ss);
   if (err)
     return err;
   prepare();
-  ErasureCode::init(profile, ss);
-  return err;
+  return ErasureCode::init(profile, ss);
 }
 
 int ErasureCodeJerasure::parse(ErasureCodeProfile &profile,

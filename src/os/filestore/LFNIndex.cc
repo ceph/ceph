@@ -35,6 +35,7 @@
 #include "LFNIndex.h"
 using ceph::crypto::SHA1;
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "LFNIndex(" << get_base_path() << ") "
@@ -156,12 +157,11 @@ int LFNIndex::pre_hash_collection(uint32_t pg_num, uint64_t expected_num_objs)
 
 int LFNIndex::collection_list_partial(const ghobject_t &start,
 				      const ghobject_t &end,
-				      bool sort_bitwise,
 				      int max_count,
 				      vector<ghobject_t> *ls,
 				      ghobject_t *next)
 {
-  return _collection_list_partial(start, end, sort_bitwise, max_count, ls, next);
+  return _collection_list_partial(start, end, max_count, ls, next);
 }
 
 /* Derived class utility methods */
@@ -406,8 +406,6 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
 {
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
-  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
-  int r;
   if (!dir) {
     return -errno;
   }
@@ -416,14 +414,12 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
     seekdir(dir, *handle);
   }
 
-  struct dirent *de;
+  struct dirent *de = nullptr;
+  int r = 0;
   int listed = 0;
-  bool end = false;
-  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
-    if (!de) {
-      end = true;
-      break;
-    }
+  bool end = true;
+  while ((de = ::readdir(dir))) {
+    end = false;
     if (max_objs > 0 && listed >= max_objs) {
       break;
     }
@@ -466,15 +462,11 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
 {
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
-  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
   if (!dir)
     return -errno;
 
-  struct dirent *de;
-  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
-    if (!de) {
-      break;
-    }
+  struct dirent *de = nullptr;
+  while ((de = ::readdir(dir))) {
     string short_name(de->d_name);
     string demangled_name;
     if (lfn_is_subdir(short_name, &demangled_name)) {
@@ -639,43 +631,40 @@ string LFNIndex::lfn_generate_object_name_current(const ghobject_t &oid)
 
   char buf[PATH_MAX];
   char *t = buf;
-  char *end = t + sizeof(buf);
+  const char *end = t + sizeof(buf);
   if (oid.hobj.snap == CEPH_NOSNAP)
     t += snprintf(t, end - t, "head");
   else if (oid.hobj.snap == CEPH_SNAPDIR)
     t += snprintf(t, end - t, "snapdir");
   else
     t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.snap);
-  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
-  full_name += string(buf);
+  t += snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
+  full_name.append(buf, t);
   full_name.append("_");
 
   append_escaped(oid.hobj.nspace.begin(), oid.hobj.nspace.end(), &full_name);
   full_name.append("_");
 
   t = buf;
-  end = t + sizeof(buf);
   if (oid.hobj.pool == -1)
     t += snprintf(t, end - t, "none");
   else
     t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.pool);
-  full_name += string(buf);
+  full_name.append(buf, t);
 
   if (oid.generation != ghobject_t::NO_GEN ||
       oid.shard_id != shard_id_t::NO_SHARD) {
     full_name.append("_");
 
     t = buf;
-    end = t + sizeof(buf);
-    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.generation);
-    full_name += string(buf);
+    t += snprintf(t, end - buf, "%llx", (long long unsigned)oid.generation);
+    full_name.append(buf, t);
 
     full_name.append("_");
 
     t = buf;
-    end = t + sizeof(buf);
-    t += snprintf(t, end - t, "%x", (int)oid.shard_id);
-    full_name += string(buf);
+    t += snprintf(t, end - buf, "%x", (int)oid.shard_id);
+    full_name.append(buf, t);
   }
 
   return full_name;
@@ -790,8 +779,9 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
             *hardlink = 0;
           else
             return -errno;
-        }
-	*hardlink = st.st_nlink;
+        } else {
+	  *hardlink = st.st_nlink;
+	}
       }
       return 0;
     }
@@ -831,7 +821,7 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
       }
     }
   }
-  assert(0); // Unreachable
+  ceph_abort(); // Unreachable
   return 0;
 }
 
@@ -1017,7 +1007,7 @@ static int parse_object(const char *s, ghobject_t& o)
 	  *t++ = '_';
 	  break;
 	}
-	default: assert(0);
+	default: ceph_abort();
 	}
       } else {
 	*t++ = *i;

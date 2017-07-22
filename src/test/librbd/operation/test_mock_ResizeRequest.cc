@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -62,12 +62,12 @@ public:
   typedef TrimRequest<MockImageCtx> MockTrimRequest;
 
   void expect_block_writes(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.aio_work_queue, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_unblock_writes(MockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.aio_work_queue, unblock_writes())
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes())
                   .Times(1);
   }
 
@@ -101,9 +101,6 @@ public:
                     .WillOnce(Return(r));
     } else {
       expect_is_lock_owner(mock_image_ctx);
-      if (mock_image_ctx.exclusive_lock != nullptr) {
-        EXPECT_CALL(*mock_image_ctx.exclusive_lock, assert_header_locked(_));
-      }
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                   exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("set_size"), _, _, _))
                     .WillOnce(Return(r));
@@ -116,9 +113,21 @@ public:
                   .WillOnce(FinishRequest(&mock_trim_request, r, &mock_image_ctx));
   }
 
+  void expect_flush_cache(MockImageCtx &mock_image_ctx, int r) {
+    if (!mock_image_ctx.image_ctx->cache) {
+      return;
+    }
+    EXPECT_CALL(mock_image_ctx, flush_cache(_))
+                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
+    expect_op_work_queue(mock_image_ctx);
+  }
+
   void expect_invalidate_cache(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(mock_image_ctx, invalidate_cache(_))
-                  .WillOnce(CompleteContext(r, NULL));
+    if (!mock_image_ctx.image_ctx->cache) {
+      return;
+    }
+    EXPECT_CALL(mock_image_ctx, invalidate_cache(false, _))
+                   .WillOnce(WithArg<1>(CompleteContext(r, static_cast<ContextWQ*>(NULL))));
     expect_op_work_queue(mock_image_ctx);
   }
 
@@ -203,8 +212,9 @@ TEST_F(TestMockOperationResizeRequest, ShrinkSuccess) {
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
-  expect_trim(mock_image_ctx, mock_trim_request, 0);
+  expect_flush_cache(mock_image_ctx, 0);
   expect_invalidate_cache(mock_image_ctx, 0);
+  expect_trim(mock_image_ctx, mock_trim_request, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_update_header(mock_image_ctx, 0);
   expect_shrink_object_map(mock_image_ctx);
@@ -264,14 +274,17 @@ TEST_F(TestMockOperationResizeRequest, TrimError) {
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
+  expect_flush_cache(mock_image_ctx, 0);
+  expect_invalidate_cache(mock_image_ctx, -EBUSY);
   expect_trim(mock_image_ctx, mock_trim_request, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
   ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2, true, 0, false));
 }
 
-TEST_F(TestMockOperationResizeRequest, InvalidateCacheError) {
+TEST_F(TestMockOperationResizeRequest, FlushCacheError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  REQUIRE(ictx->cache);
 
   MockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
@@ -286,7 +299,30 @@ TEST_F(TestMockOperationResizeRequest, InvalidateCacheError) {
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
-  expect_trim(mock_image_ctx, mock_trim_request, 0);
+  expect_flush_cache(mock_image_ctx, -EINVAL);
+  expect_commit_op_event(mock_image_ctx, -EINVAL);
+  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2, true, 0, false));
+}
+
+TEST_F(TestMockOperationResizeRequest, InvalidateCacheError) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  REQUIRE(ictx->cache);
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLock mock_exclusive_lock;
+  MockJournal mock_journal;
+  MockObjectMap mock_object_map;
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
+                      mock_object_map);
+
+  InSequence seq;
+  expect_block_writes(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, true, 0);
+  expect_unblock_writes(mock_image_ctx);
+
+  MockTrimRequest mock_trim_request;
+  expect_flush_cache(mock_image_ctx, 0);
   expect_invalidate_cache(mock_image_ctx, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
   ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2, true, 0, false));

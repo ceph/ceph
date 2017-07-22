@@ -40,14 +40,13 @@ class ErasureCodeNonRegression {
   string plugin;
   bool create;
   bool check;
-  bool show_path;
   string base;
   string directory;
   ErasureCodeProfile profile;
+  boost::intrusive_ptr<CephContext> cct;
 public:
   int setup(int argc, char** argv);
   int run();
-  int run_show_path();
   int run_create();
   int run_check();
   int decode_erasures(ErasureCodeInterfaceRef erasure_code,
@@ -70,8 +69,6 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
      "prefix all paths with base")
     ("parameter,P", po::value<vector<string> >(),
      "add a parameter to the erasure code profile")
-    ("path", po::value<string>(), "content path instead of inferring it from parameters")
-    ("show-path", "display the content path and exit")
     ("create", "create the erasure coded content in the directory")
     ("check", "check the content in the directory matches the chunks and vice versa")
     ;
@@ -94,15 +91,14 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
     ceph_options.push_back(i->c_str());
   }
 
-  global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
-    CODE_ENVIRONMENT_UTILITY,
-    CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  cct = global_init(&def_args, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
+		    CODE_ENVIRONMENT_UTILITY,
+		    CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
   const char* env = getenv("CEPH_LIB");
   std::string libs_dir(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", libs_dir, false, false);
+  g_conf->set_val_or_die("erasure_code_dir", libs_dir, false);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -114,10 +110,9 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
   base = vm["base"].as<string>();
   check = vm.count("check") > 0;
   create = vm.count("create") > 0;
-  show_path = vm.count("show-path") > 0;
 
-  if (!check && !create && !show_path) {
-    cerr << "must specifify either --check, --create or --show-path" << endl;
+  if (!check && !create) {
+    cerr << "must specifify either --check, or --create" << endl;
     return 1;
   }
 
@@ -143,9 +138,6 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
     }
   }
 
-  if (vm.count("path"))
-    directory = vm["path"].as<string>();
-
   return 0;
 }
 
@@ -156,15 +148,7 @@ int ErasureCodeNonRegression::run()
     return ret;
   if(check && (ret = run_check()))
     return ret;
-  if(show_path && (ret = run_show_path()))
-    return ret;
   return ret;
-}
-
-int ErasureCodeNonRegression::run_show_path()
-{
-  cout << directory << endl;
-  return 0;
 }
 
 int ErasureCodeNonRegression::run_create()
@@ -173,7 +157,7 @@ int ErasureCodeNonRegression::run_create()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
+			      g_conf->get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
@@ -245,7 +229,7 @@ int ErasureCodeNonRegression::run_check()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
+			      g_conf->get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;

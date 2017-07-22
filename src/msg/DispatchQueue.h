@@ -15,18 +15,17 @@
 #ifndef CEPH_DISPATCHQUEUE_H
 #define CEPH_DISPATCHQUEUE_H
 
+#include <atomic>
 #include <map>
 #include <boost/intrusive_ptr.hpp>
 #include "include/assert.h"
 #include "include/xlist.h"
-#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 #include "common/PrioritizedQueue.h"
 
 class CephContext;
-class DispatchQueue;
 class Messenger;
 class Message;
 struct Connection;
@@ -87,9 +86,9 @@ class DispatchQueue {
     marrival_map.erase(i);
   }
 
-  uint64_t next_id;
+  std::atomic<uint64_t> next_id;
     
-  enum { D_CONNECT = 1, D_ACCEPT, D_BAD_REMOTE_RESET, D_BAD_RESET, D_NUM_CODES };
+  enum { D_CONNECT = 1, D_ACCEPT, D_BAD_REMOTE_RESET, D_BAD_RESET, D_CONN_REFUSED, D_NUM_CODES };
 
   /**
    * The DispatchThread runs dispatch_entry to empty out the dispatch_queue.
@@ -98,7 +97,7 @@ class DispatchQueue {
     DispatchQueue *dq;
   public:
     explicit DispatchThread(DispatchQueue *dq) : dq(dq) {}
-    void *entry() {
+    void *entry() override {
       dq->entry();
       return 0;
     }
@@ -112,7 +111,7 @@ class DispatchQueue {
     DispatchQueue *dq;
   public:
     explicit LocalDeliveryThread(DispatchQueue *dq) : dq(dq) {}
-    void *entry() {
+    void *entry() override {
       dq->run_local_delivery();
       return 0;
     }
@@ -184,15 +183,24 @@ class DispatchQueue {
       QueueItem(D_BAD_RESET, con));
     cond.Signal();
   }
+  void queue_refused(Connection *con) {
+    Mutex::Locker l(lock);
+    if (stop)
+      return;
+    mqueue.enqueue_strict(
+      0,
+      CEPH_MSG_PRIO_HIGHEST,
+      QueueItem(D_CONN_REFUSED, con));
+    cond.Signal();
+  }
 
-  bool can_fast_dispatch(Message *m) const;
+  bool can_fast_dispatch(const Message *m) const;
   void fast_dispatch(Message *m);
   void fast_preprocess(Message *m);
   void enqueue(Message *m, int priority, uint64_t id);
   void discard_queue(uint64_t id);
   void discard_local();
   uint64_t get_id() {
-    Mutex::Locker l(lock);
     return next_id++;
   }
   void start();

@@ -6,7 +6,6 @@
 
 
 #include "include/types.h"
-#include "include/atomic.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -15,12 +14,14 @@
 #include "rgw_rados.h"
 #include "cls/rgw/cls_rgw_types.h"
 
+#include <atomic>
+
 class RGWGC {
   CephContext *cct;
   RGWRados *store;
   int max_objs;
   string *obj_names;
-  atomic_t down_flag;
+  std::atomic<bool> down_flag = { false };
 
   int tag_index(const string& tag);
 
@@ -32,7 +33,7 @@ class RGWGC {
 
   public:
     GCWorker(CephContext *_cct, RGWGC *_gc) : cct(_cct), gc(_gc), lock("GCWorker") {}
-    void *entry();
+    void *entry() override;
     void stop();
   };
 

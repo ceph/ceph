@@ -153,6 +153,13 @@ class interval_set {
   };
 
   interval_set() : _size(0) {}
+  interval_set(std::map<T,T>& other) {
+    m.swap(other);
+    _size = 0;
+    for (auto& i : m) {
+      _size += i.second;
+    }
+  }
 
   int num_intervals() const
   {
@@ -234,31 +241,40 @@ class interval_set {
     return _size == other._size && m == other.m;
   }
 
-  int size() const {
+  int64_t size() const {
     return _size;
   }
 
-  void encode(bufferlist& bl) const {
-    ::encode(m, bl);
+  void bound_encode(size_t& p) const {
+    denc_traits<std::map<T,T>>::bound_encode(m, p);
   }
-  void encode_nohead(bufferlist& bl) const {
-    ::encode_nohead(m, bl);
+  void encode(bufferlist::contiguous_appender& p) const {
+    denc(m, p);
   }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(m, bl);
+  void decode(bufferptr::iterator& p) {
+    denc(m, p);
     _size = 0;
-    for (typename std::map<T,T>::const_iterator p = m.begin();
-         p != m.end();
-         p++)
-      _size += p->second;
+    for (const auto& i : m) {
+      _size += i.second;
+    }
   }
-  void decode_nohead(int n, bufferlist::iterator& bl) {
-    ::decode_nohead(n, m, bl);
+  void decode(bufferlist::iterator& p) {
+    denc(m, p);
     _size = 0;
-    for (typename std::map<T,T>::const_iterator p = m.begin();
-         p != m.end();
-         p++)
-      _size += p->second;
+    for (const auto& i : m) {
+      _size += i.second;
+    }
+  }
+
+  void encode_nohead(bufferlist::contiguous_appender& p) const {
+    denc_traits<std::map<T,T>>::encode_nohead(m, p);
+  }
+  void decode_nohead(int n, bufferptr::iterator& p) {
+    denc_traits<std::map<T,T>>::decode_nohead(n, m, p);
+    _size = 0;
+    for (const auto& i : m) {
+      _size += i.second;
+    }
   }
 
   void clear() {
@@ -352,7 +368,7 @@ class interval_set {
         
         if (p->first + p->second != start) {
           //cout << "p is " << p->first << "~" << p->second << ", start is " << start << ", len is " << len << endl;
-          assert(0);
+          ceph_abort();
         }
         
         p->second += len;               // append to end
@@ -495,6 +511,11 @@ class interval_set {
     swap(a);    
     union_of(a, b);
   }
+  void union_insert(T off, T len) {
+    interval_set a;
+    a.insert(off, len);
+    union_of(a);
+  }
 
   bool subset_of(const interval_set &big) const {
     for (typename std::map<T,T>::const_iterator i = m.begin();
@@ -539,10 +560,51 @@ class interval_set {
     }
   }
 
+  /*
+   * Move contents of m into another std::map<T,T>. Use that instead of
+   * encoding interval_set into bufferlist then decoding it back into std::map.
+   */
+  void move_into(std::map<T,T>& other) {
+    other = std::move(m);
+  }
+
 private:
   // data
   int64_t _size;
   std::map<T,T> m;   // map start -> len
+};
+
+// declare traits explicitly because (1) it's templatized, and (2) we
+// want to include _nohead variants.
+template<typename T>
+struct denc_traits<interval_set<T>> {
+  static constexpr bool supported = true;
+  static constexpr bool bounded = false;
+  static constexpr bool featured = false;
+  static constexpr bool need_contiguous = denc_traits<T>::need_contiguous;
+  static void bound_encode(const interval_set<T>& v, size_t& p) {
+    v.bound_encode(p);
+  }
+  static void encode(const interval_set<T>& v,
+		     bufferlist::contiguous_appender& p) {
+    v.encode(p);
+  }
+  static void decode(interval_set<T>& v, bufferptr::iterator& p) {
+    v.decode(p);
+  }
+  template<typename U=T>
+    static typename std::enable_if<sizeof(U) && !need_contiguous>::type
+    decode(interval_set<T>& v, bufferlist::iterator& p) {
+    v.decode(p);
+  }
+  static void encode_nohead(const interval_set<T>& v,
+			    bufferlist::contiguous_appender& p) {
+    v.encode_nohead(p);
+  }
+  static void decode_nohead(size_t n, interval_set<T>& v,
+			    bufferptr::iterator& p) {
+    v.decode_nohead(n, p);
+  }
 };
 
 
@@ -561,15 +623,5 @@ inline std::ostream& operator<<(std::ostream& out, const interval_set<T> &s) {
   return out;
 }
 
-template<class T>
-inline void encode(const interval_set<T>& s, bufferlist& bl)
-{
-  s.encode(bl);
-}
-template<class T>
-inline void decode(interval_set<T>& s, bufferlist::iterator& p)
-{
-  s.decode(p);
-}
 
 #endif

@@ -21,7 +21,6 @@
 
 class CephContext;
 struct MAuthReply;
-class AuthClientHandler;
 class RotatingKeyRing;
 
 class AuthClientHandler {
@@ -40,7 +39,7 @@ public:
       lock("AuthClientHandler::lock") {}
   virtual ~AuthClientHandler() {}
 
-  void init(EntityName& n) { name = n; }
+  void init(const EntityName& n) { name = n; }
   
   void set_want_keys(__u32 keys) {
     RWLock::WLocker l(lock);

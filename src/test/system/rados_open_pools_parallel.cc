@@ -59,11 +59,11 @@ public:
   {
   }
 
-  ~StRadosOpenPool()
+  ~StRadosOpenPool() override
   {
   }
 
-  int run()
+  int run() override
   {
     rados_t cl;
     RETURN1_IF_NONZERO(rados_create(&cl, NULL));
@@ -85,6 +85,7 @@ public:
     if (m_open_pool_sem)
       m_open_pool_sem->post();
     rados_ioctx_destroy(io_ctx);
+    rados_pool_delete(cl, m_pool_name.c_str());
     rados_shutdown(cl);
     return 0;
   }

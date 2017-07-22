@@ -41,7 +41,6 @@
 #include <xmmintrin.h>
 #endif
 
-#include "include/atomic.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/ceph_hash.h"
@@ -56,6 +55,8 @@
 #include "global/global_init.h"
 
 #include "test/perf_helper.h"
+
+#include <atomic>
 
 using namespace ceph;
 
@@ -95,15 +96,15 @@ void discard(void* value) {
 // Test functions start here
 //----------------------------------------------------------------------
 
-// Measure the cost of atomic_t::compare_and_swap
+// Measure the cost of atomic compare-and-swap
 double atomic_int_cmp()
 {
   int count = 1000000;
-  atomic_t value(11);
-  int test = 11;
+  std::atomic<unsigned> value = { 11 };
+  unsigned int test = 11;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value.compare_and_swap(test, test+2);
+    value.compare_exchange_strong(test, test+2);
     test += 2;
   }
   uint64_t stop = Cycles::rdtsc();
@@ -111,43 +112,43 @@ double atomic_int_cmp()
   return Cycles::to_seconds(stop - start)/count;
 }
 
-// Measure the cost of atomic_t::inc
+// Measure the cost of incrementing an atomic
 double atomic_int_inc()
 {
   int count = 1000000;
-  atomic_t value(11);
+  std::atomic<int64_t> value = { 11 };
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value.inc();
+    value++;
   }
   uint64_t stop = Cycles::rdtsc();
   // printf("Final value: %d\n", value.load());
   return Cycles::to_seconds(stop - start)/count;
 }
 
-// Measure the cost of reading an atomic_t
+// Measure the cost of reading an atomic
 double atomic_int_read()
 {
   int count = 1000000;
-  atomic_t value(11);
+  std::atomic<int64_t> value = { 11 };
   int total = 0;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    total += value.read();
+    total += value;
   }
   uint64_t stop = Cycles::rdtsc();
   // printf("Total: %d\n", total);
   return Cycles::to_seconds(stop - start)/count;
 }
 
-// Measure the cost of storing a new value in a atomic_t
+// Measure the cost of storing a new value in an atomic
 double atomic_int_set()
 {
   int count = 1000000;
-  atomic_t value(11);
+  std::atomic<int64_t> value = { 11 };
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value.set(88);
+    value = 88;
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -330,7 +331,7 @@ class CondPingPong {
     CondPingPong *p;
    public:
     explicit Consumer(CondPingPong *p): p(p) {}
-    void* entry() {
+    void* entry() override {
       p->consume();
       return 0;
     }
@@ -450,7 +451,7 @@ double eventcenter_poll()
 {
   int count = 1000000;
   EventCenter center(g_ceph_context);
-  center.init(1000, 0);
+  center.init(1000, 0, "posix");
   center.set_owner();
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
@@ -467,13 +468,13 @@ class CenterWorker : public Thread {
  public:
   EventCenter center;
   explicit CenterWorker(CephContext *c): cct(c), done(false), center(c) {
-    center.init(100, 0);
+    center.init(100, 0, "posix");
   }
   void stop() {
     done = true;
     center.wakeup();
   }
-  void* entry() {
+  void* entry() override {
     center.set_owner();
     bind_thread_to_cpu(2);
     while (!done)
@@ -483,12 +484,12 @@ class CenterWorker : public Thread {
 };
 
 class CountEvent: public EventCallback {
-  atomic_t *count;
+  std::atomic<int64_t> *count;
 
  public:
-  explicit CountEvent(atomic_t *atomic): count(atomic) {}
-  void do_request(int id) {
-    count->dec();
+  explicit CountEvent(std::atomic<int64_t> *atomic): count(atomic) {}
+  void do_request(int id) override {
+    (*count)--;
   }
 };
 
@@ -497,20 +498,20 @@ double eventcenter_dispatch()
   int count = 100000;
 
   CenterWorker worker(g_ceph_context);
-  atomic_t flag(1);
+  std::atomic<int64_t> flag = { 1 };
   worker.create("evt_center_disp");
   EventCallbackRef count_event(new CountEvent(&flag));
 
   worker.center.dispatch_event_external(count_event);
   // Start a new thread and wait for it to ready.
-  while (flag.read())
+  while (flag)
     usleep(100);
 
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    flag.set(1);
+    flag = 1;
     worker.center.dispatch_event_external(count_event);
-    while (flag.read())
+    while (flag)
       ;
   }
   uint64_t stop = Cycles::rdtsc();
@@ -749,7 +750,7 @@ double test_spinlock()
 // Helper for spawn_thread. This is the main function that the thread executes
 // (intentionally empty).
 class ThreadHelper : public Thread {
-  void *entry() { return 0; }
+  void *entry() override { return 0; }
 };
 
 // Measure the cost of start and joining with a thread.
@@ -768,7 +769,7 @@ double spawn_thread()
 
 class FakeContext : public Context {
  public:
-  virtual void finish(int r) {}
+  void finish(int r) override {}
 };
 
 // Measure the cost of starting and stopping a Dispatch::Timer.
@@ -889,7 +890,7 @@ double perf_ceph_clock_now()
   int count = 100000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    ceph_clock_now(g_ceph_context);
+    ceph_clock_now();
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -1018,7 +1019,8 @@ int main(int argc, char *argv[])
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   Cycles::init();
 

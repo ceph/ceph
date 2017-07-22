@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "mdstypes.h"
+#include "MDSContext.h"
 #include "common/Formatter.h"
 
 const mds_gid_t MDS_GID_NONE = mds_gid_t(0);
@@ -14,21 +15,26 @@ const mds_rank_t MDS_RANK_NONE = mds_rank_t(-1);
 
 void frag_info_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(version, bl);
   ::encode(mtime, bl);
   ::encode(nfiles, bl);
   ::encode(nsubdirs, bl);
+  ::encode(change_attr, bl);
   ENCODE_FINISH(bl);
 }
 
 void frag_info_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(version, bl);
   ::decode(mtime, bl);
   ::decode(nfiles, bl);
   ::decode(nsubdirs, bl);
+  if (struct_v >= 3)
+    ::decode(change_attr, bl);
+  else
+    change_attr = 0;
   DECODE_FINISH(bl);
 }
 
@@ -238,7 +244,7 @@ void inline_data_t::decode(bufferlist::iterator &p)
  */
 void inode_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(13, 6, bl);
+  ENCODE_START(15, 6, bl);
 
   ::encode(ino, bl);
   ::encode(rdev, bl);
@@ -285,12 +291,17 @@ void inode_t::encode(bufferlist &bl, uint64_t features) const
   ::encode(last_scrub_version, bl);
   ::encode(last_scrub_stamp, bl);
 
+  ::encode(btime, bl);
+  ::encode(change_attr, bl);
+
+  ::encode(export_pin, bl);
+
   ENCODE_FINISH(bl);
 }
 
 void inode_t::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(13, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(15, 6, 6, p);
 
   ::decode(ino, p);
   ::decode(rdev, p);
@@ -363,6 +374,19 @@ void inode_t::decode(bufferlist::iterator &p)
     ::decode(last_scrub_version, p);
     ::decode(last_scrub_stamp, p);
   }
+  if (struct_v >= 14) {
+    ::decode(btime, p);
+    ::decode(change_attr, p);
+  } else {
+    btime = utime_t();
+    change_attr = 0;
+  }
+
+  if (struct_v >= 15) {
+    ::decode(export_pin, p);
+  } else {
+    export_pin = MDS_RANK_NONE;
+  }
 
   DECODE_FINISH(p);
 }
@@ -372,6 +396,7 @@ void inode_t::dump(Formatter *f) const
   f->dump_unsigned("ino", ino);
   f->dump_unsigned("rdev", rdev);
   f->dump_stream("ctime") << ctime;
+  f->dump_stream("btime") << btime;
   f->dump_unsigned("mode", mode);
   f->dump_unsigned("uid", uid);
   f->dump_unsigned("gid", gid);
@@ -398,6 +423,8 @@ void inode_t::dump(Formatter *f) const
   f->dump_stream("mtime") << mtime;
   f->dump_stream("atime") << atime;
   f->dump_unsigned("time_warp_seq", time_warp_seq);
+  f->dump_unsigned("change_attr", change_attr);
+  f->dump_int("export_pin", export_pin);
 
   f->open_array_section("client_ranges");
   for (map<client_t,client_writeable_range_t>::const_iterator p = client_ranges.begin(); p != client_ranges.end(); ++p) {
@@ -443,6 +470,7 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
   if (version == other.version) {
     if (rdev != other.rdev ||
         ctime != other.ctime ||
+        btime != other.btime ||
         mode != other.mode ||
         uid != other.uid ||
         gid != other.gid ||
@@ -456,6 +484,7 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
         truncate_size != other.truncate_size ||
         truncate_from != other.truncate_from ||
         truncate_pending != other.truncate_pending ||
+	change_attr != other.change_attr ||
         mtime != other.mtime ||
         atime != other.atime ||
         time_warp_seq != other.time_warp_seq ||
@@ -851,7 +880,6 @@ void MDSCacheObjectInfo::generate_test_instances(list<MDSCacheObjectInfo*>& ls)
   ls.back()->snapid = 21322;
 }
 
-
 /*
  * mds_table_pending_t
  */
@@ -1040,69 +1068,6 @@ void cap_reconnect_t::generate_test_instances(list<cap_reconnect_t*>& ls)
   ls.back()->path = "/test/path";
   ls.back()->capinfo.cap_id = 1;
 }
-
-uint64_t MDSCacheObject::last_wait_seq = 0;
-
-void MDSCacheObject::dump(Formatter *f) const
-{
-  f->dump_bool("is_auth", is_auth());
-
-  // Fields only meaningful for auth
-  f->open_object_section("auth_state");
-  {
-    f->open_object_section("replicas");
-    const compact_map<mds_rank_t,unsigned>& replicas = get_replicas();
-    for (compact_map<mds_rank_t,unsigned>::const_iterator i = replicas.begin();
-         i != replicas.end(); ++i) {
-      std::ostringstream rank_str;
-      rank_str << i->first;
-      f->dump_int(rank_str.str().c_str(), i->second);
-    }
-    f->close_section();
-  }
-  f->close_section(); // auth_state
-
-  // Fields only meaningful for replica
-  f->open_object_section("replica_state");
-  {
-    f->open_array_section("authority");
-    f->dump_int("first", authority().first);
-    f->dump_int("second", authority().second);
-    f->close_section();
-    f->dump_unsigned("replica_nonce", get_replica_nonce());
-  }
-  f->close_section();  // replica_state
-
-  f->dump_int("auth_pins", auth_pins);
-  f->dump_int("nested_auth_pins", nested_auth_pins);
-  f->dump_bool("is_frozen", is_frozen());
-  f->dump_bool("is_freezing", is_freezing());
-
-#ifdef MDS_REF_SET
-    f->open_object_section("pins");
-    for(std::map<int, int>::const_iterator it = ref_map.begin();
-        it != ref_map.end(); ++it) {
-      f->dump_int(pin_name(it->first), it->second);
-    }
-    f->close_section();
-#endif
-    f->dump_int("nref", ref);
-}
-
-/*
- * Use this in subclasses when printing their specialized
- * states too.
- */
-void MDSCacheObject::dump_states(Formatter *f) const
-{
-  if (state_test(STATE_AUTH)) f->dump_string("state", "auth");
-  if (state_test(STATE_DIRTY)) f->dump_string("state", "dirty");
-  if (state_test(STATE_NOTIFYREF)) f->dump_string("state", "notifyref");
-  if (state_test(STATE_REJOINING)) f->dump_string("state", "rejoining");
-  if (state_test(STATE_REJOINUNDEF))
-    f->dump_string("state", "rejoinundef");
-}
-
 
 ostream& operator<<(ostream &out, const mds_role_t &role)
 {

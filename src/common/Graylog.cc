@@ -2,20 +2,13 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Graylog.h"
-
-#include <iostream>
-#include <sstream>
-
-#include <arpa/inet.h>
-
 #include "common/Formatter.h"
 #include "common/LogEntry.h"
 #include "log/Entry.h"
 #include "log/SubsystemMap.h"
-#include "include/uuid.h"
 
 namespace ceph {
-namespace log {
+namespace logging {
 
 Graylog::Graylog(const SubsystemMap * const s, std::string logger)
     : m_subs(s),
@@ -167,5 +160,5 @@ void Graylog::log_log_entry(LogEntry const * const e)
   }
 }
 
-} // ceph::log::
+} // ceph::logging::
 } // ceph::

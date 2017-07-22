@@ -81,7 +81,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     ceph_options.push_back(i->c_str());
   }
 
-  global_init(
+  cct = global_init(
     &def_args, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
     CODE_ENVIRONMENT_UTILITY,
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
@@ -153,7 +153,7 @@ int ErasureCodeBench::encode()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
+			      g_conf->get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
@@ -176,14 +176,14 @@ int ErasureCodeBench::encode()
   for (int i = 0; i < k + m; i++) {
     want_to_encode.insert(i);
   }
-  utime_t begin_time = ceph_clock_now(g_ceph_context);
+  utime_t begin_time = ceph_clock_now();
   for (int i = 0; i < max_iterations; i++) {
     map<int,bufferlist> encoded;
     code = erasure_code->encode(want_to_encode, in, &encoded);
     if (code)
       return code;
   }
-  utime_t end_time = ceph_clock_now(g_ceph_context);
+  utime_t end_time = ceph_clock_now();
   cout << (end_time - begin_time) << "\t" << (max_iterations * (in_size / 1024)) << endl;
   return 0;
 }
@@ -257,7 +257,7 @@ int ErasureCodeBench::decode()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
+			      g_conf->get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
@@ -295,7 +295,7 @@ int ErasureCodeBench::decode()
     display_chunks(encoded, erasure_code->get_chunk_count());
   }
 
-  utime_t begin_time = ceph_clock_now(g_ceph_context);
+  utime_t begin_time = ceph_clock_now();
   for (int i = 0; i < max_iterations; i++) {
     if (exhaustive_erasures) {
       code = decode_erasures(encoded, encoded, 0, erasures, erasure_code);
@@ -321,7 +321,7 @@ int ErasureCodeBench::decode()
 	return code;
     }
   }
-  utime_t end_time = ceph_clock_now(g_ceph_context);
+  utime_t end_time = ceph_clock_now();
   cout << (end_time - begin_time) << "\t" << (max_iterations * (in_size / 1024)) << endl;
   return 0;
 }

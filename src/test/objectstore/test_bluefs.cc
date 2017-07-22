@@ -47,17 +47,17 @@ TEST(BlueFS, mkfs) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
   uuid_d fsid;
-  BlueFS fs;
-  fs.add_block_device(BlueFS::BDEV_DB, fn);
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
-  fs.mkfs(fsid);
+  ASSERT_EQ(0, fs.mkfs(fsid));
   rm_temp_bdev(fn);
 }
 
 TEST(BlueFS, mkfs_mount) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -72,7 +72,7 @@ TEST(BlueFS, mkfs_mount) {
 TEST(BlueFS, write_read) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -82,13 +82,9 @@ TEST(BlueFS, write_read) {
     BlueFS::FileWriter *h;
     ASSERT_EQ(0, fs.mkdir("dir"));
     ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
-    bufferlist bl;
-    bl.append("foo");
-    h->append(bl);
-    bl.append("bar");
-    h->append(bl);
-    bl.append("baz");
-    h->append(bl);
+    h->append("foo", 3);
+    h->append("bar", 3);
+    h->append("baz", 3);
     fs.fsync(h);
     fs.close_writer(h);
   }
@@ -108,7 +104,7 @@ TEST(BlueFS, write_read) {
 TEST(BlueFS, small_appends) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -119,9 +115,7 @@ TEST(BlueFS, small_appends) {
     ASSERT_EQ(0, fs.mkdir("dir"));
     ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
     for (unsigned i = 0; i < 10000; ++i) {
-      bufferlist bl;
-      bl.append("fddjdjdjdjdjdjdjdjdjdjjddjoo");
-      h->append(bl);
+      h->append("abcdeabcdeabcdeabcdeabcdeabc", 23);
     }
     fs.fsync(h);
     fs.close_writer(h);
@@ -130,10 +124,8 @@ TEST(BlueFS, small_appends) {
     BlueFS::FileWriter *h;
     ASSERT_EQ(0, fs.open_for_write("dir", "file_sync", &h, false));
     for (unsigned i = 0; i < 1000; ++i) {
-      bufferlist bl;
-      bl.append("fddjdjdjdjdjdjdjdjdjdjjddjoo");
-      h->append(bl);
-      fs.fsync(h);
+      h->append("abcdeabcdeabcdeabcdeabcdeabc", 23);
+      ASSERT_EQ(0, fs.fsync(h));
     }
     fs.close_writer(h);
   }
@@ -164,7 +156,7 @@ void write_data(BlueFS &fs, uint64_t rationed_bytes)
       char *buf = gen_buffer(ALLOC_SIZE);
       bufferptr bp = buffer::claim_char(ALLOC_SIZE, buf);
       bl.push_back(bp);
-      h->append(bl);
+      h->append(bl.c_str(), bl.length());
       r = fs.fsync(h);
       if (r < 0) {
          fs.close_writer(h);
@@ -191,7 +183,7 @@ void create_single_file(BlueFS &fs)
     char *buf = gen_buffer(ALLOC_SIZE);
     bufferptr bp = buffer::claim_char(ALLOC_SIZE, buf);
     bl.push_back(bp);
-    h->append(bl);
+    h->append(bl.c_str(), bl.length());
     fs.fsync(h);
     fs.close_writer(h);
 }
@@ -202,7 +194,7 @@ void write_single_file(BlueFS &fs, uint64_t rationed_bytes)
     stringstream ss;
     string dir = "dir.test";
     string file = "testfile";
-    int r=0, j=0;
+    int r=0;
     uint64_t written_bytes = 0;
     rationed_bytes -= ALLOC_SIZE;
     while (1) {
@@ -211,7 +203,7 @@ void write_single_file(BlueFS &fs, uint64_t rationed_bytes)
       char *buf = gen_buffer(ALLOC_SIZE);
       bufferptr bp = buffer::claim_char(ALLOC_SIZE, buf);
       bl.push_back(bp);
-      h->append(bl);
+      h->append(bl.c_str(), bl.length());
       r = fs.fsync(h);
       if (r < 0) {
          fs.close_writer(h);
@@ -219,7 +211,6 @@ void write_single_file(BlueFS &fs, uint64_t rationed_bytes)
       }
       written_bytes += g_conf->bluefs_alloc_size;
       fs.close_writer(h);
-      j++;
       if ((rationed_bytes - written_bytes) <= g_conf->bluefs_alloc_size) {
         break;
       }
@@ -263,7 +254,7 @@ TEST(BlueFS, test_flush_1) {
     "65536");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -298,7 +289,7 @@ TEST(BlueFS, test_flush_2) {
     "65536");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -326,7 +317,7 @@ TEST(BlueFS, test_flush_3) {
     "65536");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -360,7 +351,7 @@ TEST(BlueFS, test_simple_compaction_sync) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -380,7 +371,7 @@ TEST(BlueFS, test_simple_compaction_sync) {
           char *buf = gen_buffer(4096);
 	  bufferptr bp = buffer::claim_char(4096, buf);
 	  bl.push_back(bp);
-          h->append(bl);
+          h->append(bl.c_str(), bl.length());
           fs.fsync(h);
           fs.close_writer(h);
        }
@@ -413,7 +404,7 @@ TEST(BlueFS, test_simple_compaction_async) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -433,7 +424,7 @@ TEST(BlueFS, test_simple_compaction_async) {
           char *buf = gen_buffer(4096);
 	  bufferptr bp = buffer::claim_char(4096, buf);
 	  bl.push_back(bp);
-          h->append(bl);
+          h->append(bl.c_str(), bl.length());
           fs.fsync(h);
           fs.close_writer(h);
        }
@@ -469,7 +460,7 @@ TEST(BlueFS, test_compaction_sync) {
     "bluefs_compact_log_sync",
     "true");
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -507,7 +498,7 @@ TEST(BlueFS, test_compaction_async) {
     "bluefs_compact_log_sync",
     "false");
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -545,7 +536,7 @@ TEST(BlueFS, test_replay) {
     "bluefs_compact_log_sync",
     "false");
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -571,7 +562,7 @@ TEST(BlueFS, test_replay) {
   }
   fs.umount();
   // remount and check log can replay safe?
-  fs.mount();
+  ASSERT_EQ(0, fs.mount());
   fs.umount();
   rm_temp_bdev(fn);
 }
@@ -585,8 +576,9 @@ int main(int argc, char **argv) {
   def_args.push_back("--debug-bluefs=1/20");
   def_args.push_back("--debug-bdev=1/20");
 
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      0);
+  auto cct = global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->set_val(
     "enable_experimental_unrecoverable_data_corrupting_features",

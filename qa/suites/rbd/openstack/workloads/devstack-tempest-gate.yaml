@@ -1,0 +1,51 @@
+tasks:
+- qemu:
+    all:
+      type: filesystem
+      cpus: 4
+      memory: 12288
+      disks:
+      - image_size: 30720
+      - image_size: 30720
+      test: http://git.ceph.com/?p={repo};a=blob_plain;hb={branch};f=qa/workunits/rbd/run_devstack_tempest.sh
+      image_url: https://cloud-images.ubuntu.com/releases/16.04/release/ubuntu-16.04-server-cloudimg-amd64-disk1.img
+      cloud_config_archive:
+      - type: text/cloud-config
+        content: |
+          users:
+          - name: stack
+            lock_passwd: False
+            shell: /bin/bash
+            sudo: ["ALL=(root) NOPASSWD:ALL\nDefaults:stack,tempest !requiretty"]
+          - name: tempest
+            lock_passwd: False
+            shell: /bin/bash
+            sudo:
+            - "ALL=(root) NOPASSWD:/sbin/ip"
+            - "ALL=(root) NOPASSWD:/sbin/iptables"
+            - "ALL=(root) NOPASSWD:/usr/bin/ovsdb-client"
+      - |
+        #!/bin/bash -ex
+        wget -q -O- "http://git.ceph.com/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc" | apt-key add -
+        wget -q -O /etc/apt/sources.list.d/ceph.list "https://shaman.ceph.com/api/repos/ceph/{ceph_branch}/{ceph_sha1}/ubuntu/xenial/repo"
+        apt-get update
+
+        mount --bind /mnt/test_b /opt
+        mkdir /opt/stack
+        chown -R stack:stack /home/stack
+        chown -R stack:stack /opt/stack
+
+        mkdir /mnt/log/stack
+        chmod a+rwx /mnt/log/stack
+        chown -R stack:stack /mnt/log/stack
+
+        apt-get install -y ceph-common librbd1
+
+        mkdir /mnt/log/stack/ceph
+        chown -R stack:stack /mnt/log/stack/ceph
+        chmod a+rwx /mnt/log/stack/ceph
+
+        # sanity check that the cluster is reachable from the VM
+        echo '[client]' >> /etc/ceph/ceph.conf
+        echo 'log file = /mnt/log/stack/ceph/$name.$pid.log' >> /etc/ceph/ceph.conf
+        rbd --debug-ms=10 --debug-rbd=20 info client.0.1

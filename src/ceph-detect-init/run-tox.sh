@@ -17,11 +17,6 @@
 # GNU Library Public License for more details.
 #
 
-if [ x"`uname`"x = xFreeBSDx ]; then
-    echo FreeBSD init system has not been integrated.
-    exit 0
-fi
-
 # run from the ceph-detect-init directory or from its parent
 : ${CEPH_DETECT_INIT_VIRTUALENV:=/tmp/ceph-detect-init-virtualenv}
 test -d ceph-detect-init && cd ceph-detect-init
@@ -33,7 +28,4 @@ else
 fi
 
 source ${CEPH_DETECT_INIT_VIRTUALENV}/bin/activate
-tox -c ${TOX_PATH} > ${CEPH_DETECT_INIT_VIRTUALENV}/tox.out 2>&1
-status=$?
-grep -v InterpreterNotFound < ${CEPH_DETECT_INIT_VIRTUALENV}/tox.out
-exit $status
+tox -c ${TOX_PATH}

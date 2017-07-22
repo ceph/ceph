@@ -25,6 +25,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/config.h"
+#include "common/Formatter.h"
 
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
@@ -36,6 +37,7 @@
 #include "crush/CrushTester.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_crush
 
 using namespace std;
@@ -164,9 +166,24 @@ void usage()
   cout << "                         reweight a given item (and adjust ancestor\n"
        << "                         weights as needed)\n";
   cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
+  cout << "   -i mapfn --create-simple-rule name root type mode\n"
+       << "                         create crush rule <name> to start from <root>,\n"
+       << "                         replicate across buckets of type <type>, using\n"
+       << "                         a choose mode of <firstn|indep>\n";
+  cout << "   -i mapfn --create-replicated-rule name root type\n"
+       << "                         create crush rule <name> to start from <root>,\n"
+       << "                         replicate across buckets of type <type>\n";
+  cout << "   --device-class <class>\n";
+  cout << "                         use device class <class> for new rule\n";
+  cout << "   -i mapfn --remove-rule name\n"
+       << "                         remove the specified crush rule\n";
   cout << "\n";
   cout << "Options for the display/test stage\n";
   cout << "\n";
+  cout << "   -f --format           the format of --dump, defaults to json-pretty\n";
+  cout << "                         can be one of json, json-pretty, xml, xml-pretty,\n";
+  cout << "                         table, table-kv, html, html-pretty\n";
+  cout << "   --dump                dump the crush map\n";
   cout << "   --tree                print map summary as a tree\n";
   cout << "   --check [max_id]      check if any item is referencing an unknown name/type\n";
   cout << "   -i mapfn --show-location id\n";
@@ -236,6 +253,8 @@ int main(int argc, const char **argv)
   bool test = false;
   bool display = false;
   bool tree = false;
+  string dump_format = "json-pretty";
+  bool dump = false;
   int full_location = -1;
   bool write_to_file = false;
   int verbose = 0;
@@ -244,6 +263,9 @@ int main(int argc, const char **argv)
   bool reweight = false;
   int add_item = -1;
   bool update_item = false;
+  bool add_rule = false;
+  std::string rule_name, rule_root, rule_type, rule_mode, rule_device_class;
+  bool del_rule = false;
   float add_weight = 0;
   map<string,string> add_loc;
   float reweight_weight = 0;
@@ -271,8 +293,12 @@ int main(int argc, const char **argv)
   // only parse arguments from CEPH_ARGS, if in the environment
   vector<const char *> env_args;
   env_to_vec(env_args);
-  global_init(NULL, env_args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  auto cct = global_init(NULL, env_args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  // crushtool times out occasionally when quits. so do not
+  // release the g_ceph_context.
+  cct->get();
   common_init_finish(g_ceph_context);
 
   int x;
@@ -287,7 +313,7 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      exit(0);
+      return EXIT_SUCCESS;
     } else if (ceph_argparse_witharg(args, i, &val, "-d", "--decompile", (char*)NULL)) {
       infn = val;
       decompile = true;
@@ -299,6 +325,10 @@ int main(int argc, const char **argv)
       verbose += 1;
     } else if (ceph_argparse_flag(args, i, "--tree", (char*)NULL)) {
       tree = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL)) {
+      dump_format = val;
+    } else if (ceph_argparse_flag(args, i, "--dump", (char*)NULL)) {
+      dump = true;
     } else if (ceph_argparse_flag(args, i, "--show_utilization", (char*)NULL)) {
       display = true;
       tester.set_output_utilization(true);
@@ -358,17 +388,17 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &add_item, err, "--add_item", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       if (i == args.end()) {
 	cerr << "expecting additional argument to --add-item" << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       add_weight = atof(*i);
       i = args.erase(i);
       if (i == args.end()) {
 	cerr << "expecting additional argument to --add-item" << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       add_name.assign(*i);
       i = args.erase(i);
@@ -376,25 +406,102 @@ int main(int argc, const char **argv)
       update_item = true;
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       if (i == args.end()) {
 	cerr << "expecting additional argument to --update-item" << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       add_weight = atof(*i);
       i = args.erase(i);
       if (i == args.end()) {
 	cerr << "expecting additional argument to --update-item" << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       add_name.assign(*i);
       i = args.erase(i);
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--create-simple-rule", (char*)NULL)) {
+      rule_name.assign(val);
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        return EXIT_FAILURE;
+      }
+      if (i == args.end()) {
+        cerr << "expecting additional argument to --create-simple-rule" << std::endl;
+        return EXIT_FAILURE;
+      }
+
+      rule_root.assign(*i);
+      i = args.erase(i);
+      if (i == args.end()) {
+        cerr << "expecting additional argument to --create-simple-rule" << std::endl;
+        return EXIT_FAILURE;
+      }
+
+      rule_type.assign(*i);
+      i = args.erase(i);
+      if (i == args.end()) {
+        cerr << "expecting additional argument to --create-simple-rule" << std::endl;
+        return EXIT_FAILURE;
+      }
+
+      rule_mode.assign(*i);
+      i = args.erase(i);
+
+      cout << "--create-simple-rule:"
+           << " name=" << rule_name
+           << " root=" << rule_root
+           << " type=" << rule_type
+           << " mode=" << rule_mode
+           << std::endl;
+      add_rule = true;
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--create-replicated-rule", (char*)NULL)) {
+      rule_name.assign(val);
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        return EXIT_FAILURE;
+      }
+      if (i == args.end()) {
+        cerr << "expecting additional argument to --create-replicated-rule" << std::endl;
+        return EXIT_FAILURE;
+      }
+
+      rule_root.assign(*i);
+      i = args.erase(i);
+      if (i == args.end()) {
+        cerr << "expecting additional argument to --create-replicated-rule" << std::endl;
+        return EXIT_FAILURE;
+      }
+
+      rule_type.assign(*i);
+      i = args.erase(i);
+      rule_mode = "firstn";
+
+      cout << "--create-replicated-rule:"
+           << " name=" << rule_name
+           << " root=" << rule_root
+           << " type=" << rule_type
+           << std::endl;
+      add_rule = true;
+
+    } else if (ceph_argparse_witharg(args, i, &val, "--device-class", (char*)NULL)) {
+      rule_device_class.assign(val);
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        return EXIT_FAILURE;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--remove-rule", (char*)NULL)) {
+      rule_name.assign(val);
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        return EXIT_FAILURE;
+      }
+      del_rule = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--loc", (char*)NULL)) {
       std::string type(val);
       if (i == args.end()) {
 	cerr << "expecting additional argument to --loc" << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       std::string name(*i);
       i = args.erase(i);
@@ -405,12 +512,12 @@ int main(int argc, const char **argv)
       tester.set_output_csv(true);
     } else if (ceph_argparse_flag(args, i, "--help-output", (char*)NULL)) {
       data_analysis_usage();
-      exit(0);
+      return EXIT_SUCCESS;
     } else if (ceph_argparse_witharg(args, i, &val, "--output-name", (char*)NULL)) {
       std::string name(val);
       if (i == args.end()) {
 	cerr << "expecting additional argument to --output-name" << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       else {
         tester.set_output_data_file_name(name + "-");
@@ -421,7 +528,7 @@ int main(int argc, const char **argv)
       reweight_name = val;
       if (i == args.end()) {
 	cerr << "expecting additional argument to --reweight-item" << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       reweight_weight = atof(*i);
       i = args.erase(i);
@@ -430,89 +537,89 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &num_osds, err, "--num_osds", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
     } else if (ceph_argparse_witharg(args, i, &x, err, "--num_rep", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       tester.set_num_rep(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--max_x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       tester.set_max_x(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--min_x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       tester.set_min_x(x);
     } else if (ceph_argparse_witharg(args, i, &z, err, "--pool_id", (char*)NULL)) {
       if (!err.str().empty()) {
-  cerr << err.str() << std::endl;
-  exit(EXIT_FAILURE);
+	cerr << err.str() << std::endl;
+	return EXIT_FAILURE;
       }
       tester.set_pool_id(z);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       tester.set_x(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--max_rule", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       tester.set_max_rule(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--min_rule", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       tester.set_min_rule(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--rule", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       tester.set_rule(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--ruleset", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       tester.set_ruleset(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--batches", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       tester.set_batches(x);
     } else if (ceph_argparse_witharg(args, i, &y, err, "--mark-down-ratio", (char*)NULL)) {
       if (!err.str().empty()) {
         cerr << err.str() << std::endl;
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
       tester.set_device_down_ratio(y);
     } else if (ceph_argparse_witharg(args, i, &y, err, "--mark-down-bucket-ratio", (char*)NULL)) {
       if (!err.str().empty()) {
         cerr << err.str() << std::endl;
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
       tester.set_bucket_down_ratio(y);
     } else if (ceph_argparse_witharg(args, i, &tmp, err, "--weight", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       int dev = tmp;
       if (i == args.end()) {
 	cerr << "expecting additional argument to --weight" << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
       float f = atof(*i);
       i = args.erase(i);
@@ -529,24 +636,24 @@ int main(int argc, const char **argv)
 
   if (decompile + compile + build > 1) {
     cerr << "cannot specify more than one of compile, decompile, and build" << std::endl;
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
-  if (!check && !compile && !decompile && !build && !test && !reweight && !adjust && !tree &&
-      add_item < 0 && full_location < 0 &&
+  if (!check && !compile && !decompile && !build && !test && !reweight && !adjust && !tree && !dump &&
+      add_item < 0 && !add_rule && !del_rule && full_location < 0 &&
       remove_name.empty() && reweight_name.empty()) {
     cerr << "no action specified; -h for help" << std::endl;
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
   if ((!build) && (!args.empty())) {
     cerr << "unrecognized arguments: " << args << std::endl;
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
   else {
     if ((args.size() % 3) != 0U) {
       cerr << "remaining args: " << args << std::endl;
       cerr << "layers must be specified with 3-tuples of (name, buckettype, size)"
     	   << std::endl;
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
     }
     for (size_t j = 0; j < args.size(); j += 3) {
       layer_t l;
@@ -575,19 +682,19 @@ int main(int argc, const char **argv)
     if (infn == "-") {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin must not be from a tty" << std::endl;
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
       r = get_fd_data(STDIN_FILENO, bl);
       if (r < 0) {
         cerr << "error reading data from STDIN" << std::endl;
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
     } else {
       r = bl.read_file(infn.c_str(), &error);
       if (r < 0) {
         cerr << me << ": error reading '" << infn << "': " 
              << error << std::endl;
-        exit(1);
+        return EXIT_FAILURE;
       }
     }
     bufferlist::iterator p = bl.begin();
@@ -595,7 +702,7 @@ int main(int argc, const char **argv)
       crush.decode(p);
     } catch(...) {
       cerr << me << ": unable to decode " << infn << std::endl;
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
     }
   }
 
@@ -614,7 +721,7 @@ int main(int argc, const char **argv)
       cc.enable_unsafe_tunables();
     int r = cc.compile(in, srcfn.c_str());
     if (r < 0) 
-      exit(1);
+      return EXIT_FAILURE;
 
     modified = true;
   }
@@ -622,7 +729,7 @@ int main(int argc, const char **argv)
   if (build) {
     if (layers.empty()) {
       cerr << me << ": must specify at least one layer" << std::endl;
-      exit(1);
+      return EXIT_FAILURE;
     }
 
     crush.create();
@@ -658,7 +765,7 @@ int main(int argc, const char **argv)
 	}
       if (buckettype < 0) {
 	cerr << "unknown bucket type '" << l.buckettype << "'" << std::endl;
-	exit(EXIT_FAILURE);
+	return EXIT_FAILURE;
       }
 
       // build items
@@ -732,8 +839,8 @@ int main(int argc, const char **argv)
 		<< dendl;
     }
     
-    if (OSDMap::build_simple_crush_rulesets(g_ceph_context, crush, root, &cerr))
-      exit(EXIT_FAILURE);
+    if (OSDMap::build_simple_crush_rules(g_ceph_context, crush, root, &cerr))
+      return EXIT_FAILURE;
 
     modified = true;
   }
@@ -824,6 +931,36 @@ int main(int argc, const char **argv)
     }
   }
 
+  if (add_rule) {
+    if (crush.rule_exists(rule_name)) {
+      cerr << "rule " << rule_name << " already exists" << std::endl;
+      return EXIT_FAILURE;
+    }
+    int r = crush.add_simple_rule(rule_name, rule_root, rule_type,
+				  rule_device_class,
+				  rule_mode, pg_pool_t::TYPE_REPLICATED, &err);
+    if (r < 0) {
+      cerr << err.str() << std::endl;
+      return EXIT_FAILURE;
+    }
+    modified = true;
+  }
+
+  if (del_rule) {
+    if (!crush.rule_exists(rule_name)) {
+      cerr << "rule " << rule_name << " does not exist" << std::endl;
+      return 0;
+    }
+    int ruleno = crush.get_rule_id(rule_name);
+    assert(ruleno >= 0);
+    int r = crush.remove_rule(ruleno);
+    if (r < 0) {
+      cerr << "fail to remove rule " << rule_name << std::endl;
+      return EXIT_FAILURE;
+    }
+    modified = true;
+  }
+
   if (reweight) {
     crush.reweight(g_ceph_context);
     modified = true;
@@ -844,6 +981,15 @@ int main(int argc, const char **argv)
     crush.dump_tree(&cout, NULL);
   }
 
+  if (dump) {
+    boost::scoped_ptr<Formatter> f(Formatter::create(dump_format, "json-pretty", "json-pretty"));
+    f->open_object_section("crush_map");
+    crush.dump(f.get());
+    f->close_section();
+    f->flush(cout);
+    cout << "\n";
+  }
+
   if (decompile) {
     CrushCompiler cc(crush, cerr, verbose);
     if (!outfn.empty()) {
@@ -851,7 +997,7 @@ int main(int argc, const char **argv)
       o.open(outfn.c_str(), ios::out | ios::binary | ios::trunc);
       if (!o.is_open()) {
 	cerr << me << ": error writing '" << outfn << "'" << std::endl;
-	exit(1);
+	return EXIT_FAILURE;
       }
       cc.decompile(o);
       o.close();
@@ -864,7 +1010,7 @@ int main(int argc, const char **argv)
     tester.check_overlapped_rules();
     if (max_id >= 0) {
       if (!tester.check_name_maps(max_id)) {
-	exit(1);
+	return EXIT_FAILURE;
       }
     }
   }
@@ -876,7 +1022,7 @@ int main(int argc, const char **argv)
 
     int r = tester.test();
     if (r < 0)
-      exit(1);
+      return EXIT_FAILURE;
   }
 
   // output ---
@@ -887,11 +1033,11 @@ int main(int argc, const char **argv)
       cout << me << " successfully built or modified map.  Use '-o <file>' to write it out." << std::endl;
     } else {
       bufferlist bl;
-      crush.encode(bl);
+      crush.encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
       int r = bl.write_file(outfn.c_str());
       if (r < 0) {
 	cerr << me << ": error writing '" << outfn << "': " << cpp_strerror(r) << std::endl;
-	exit(1);
+	return EXIT_FAILURE;
       }
       if (verbose)
 	cout << "wrote crush map to " << outfn << std::endl;

@@ -1,0 +1,23 @@
+roles:
+- [mon.a, mon.c, osd.0, osd.1, osd.2]
+- [mon.b, mgr.x, mds.a, osd.3, osd.4, osd.5]
+- [client.0]
+- [client.1]
+openstack:
+- volumes: # attached to each instance
+    count: 3
+    size: 10 # GB
+tasks:
+- install:
+- ceph:
+- rbd.xfstests:
+    client.0:
+        test_image: 'test_image-0'
+        scratch_image: 'scratch_image-0'
+        tests: '-g auto'
+        randomize: true
+    client.1:
+        test_image: 'test_image-1'
+        scratch_image: 'scratch_image-1'
+        tests: '-g auto'
+        randomize: true

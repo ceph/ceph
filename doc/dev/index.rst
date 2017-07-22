@@ -135,7 +135,7 @@ in the body of the message.
 
 There are also `other Ceph-related mailing lists`_.
 
-.. _`other Ceph-related mailing lists`: https://ceph.com/resources/mailing-list-irc/
+.. _`other Ceph-related mailing lists`: https://ceph.com/irc/
 
 IRC
 ---
@@ -145,7 +145,7 @@ time using `Internet Relay Chat`_.
 
 .. _`Internet Relay Chat`: http://www.irchelp.org/
 
-See https://ceph.com/resources/mailing-list-irc/ for how to set up your IRC
+See https://ceph.com/irc/ for how to set up your IRC
 client and a list of channels.
 
 Submitting patches
@@ -163,21 +163,45 @@ All newcomers are encouraged to read that file carefully.
 Building from source
 --------------------
 
-See instructions at :doc:`/dev/quick_guide` and :doc:`/install/build-ceph`.
+See instructions at :doc:`/install/build-ceph`.
+
+Using ccache to speed up local builds
+-------------------------------------
+
+Rebuilds of the ceph source tree can benefit significantly from use of `ccache`_.
+Many a times while switching branches and such, one might see build failures for
+certain older branches mostly due to older build artifacts. These rebuilds can
+significantly benefit the use of ccache. For a full clean source tree, one could
+do ::
+
+  $ make clean
+
+  # note the following will nuke everything in the source tree that
+  # isn't tracked by git, so make sure to backup any log files /conf options
+
+  $ git clean -fdx; git submodule foreach git clean -fdx
+
+ccache is available as a package in most distros. To build ceph with ccache one
+can::
+
+  $ cmake -DWITH_CCACHE=ON ..
+
+ccache can also be used for speeding up all builds in the system. for more
+details refer to the `run modes`_ of the ccache manual. The default settings of
+``ccache`` can be displayed with ``ccache -s``.
+
+.. note: It is recommended to override the ``max_size``, which is the size of
+   cache, defaulting to 10G, to a larger size like 25G or so. Refer to the
+   `configuration`_ section of ccache manual.
+
+.. _`ccache`: https://ccache.samba.org/
+.. _`run modes`: https://ccache.samba.org/manual.html#_run_modes
+.. _`configuration`: https://ccache.samba.org/manual.html#_configuration
 
 Development-mode cluster
 ------------------------
 
-You can start a development-mode Ceph cluster, after compiling the source,
-with::
-
-    cd src
-    install -d -m0755 out dev/osd0
-    ./vstart.sh -n -x -l
-    # check that it's there
-    ./ceph health
-
-For more ``vstart.sh`` examples, see :doc:`/dev/quick_guide`.
+See :doc:`/dev/quick_guide`.
 
 Backporting
 -----------
@@ -565,25 +589,48 @@ When your PR hits GitHub, the Ceph project's `Continuous Integration (CI)
 infrastructure will test it automatically. At the time of this writing
 (March 2016), the automated CI testing included a test to check that the
 commits in the PR are properly signed (see `Submitting patches`_) and a
-``make check`` test.
+`make check`_ test.
 
-The latter, ``make check``, builds the PR and runs it through a battery of
+The latter, `make check`_, builds the PR and runs it through a battery of
 tests. These tests run on machines operated by the Ceph Continuous
 Integration (CI) team. When the tests complete, the result will be shown
 on GitHub in the pull request itself.
 
 You can (and should) also test your modifications before you open a PR. 
-Refer to the the `Testing`_ chapter for details.
+Refer to the `Testing`_ chapter for details.
+
+Notes on PR make check test
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The GitHub `make check`_ test is driven by a Jenkins instance.
+
+Jenkins merges the PR branch into the latest version of the base branch before
+starting the build, so you don't have to rebase the PR to pick up any fixes.
+
+You can trigger the PR tests at any time by adding a comment to the PR - the
+comment should contain the string "test this please". Since a human subscribed
+to the PR might interpret that as a request for him or her to test the PR, it's
+good to write the request as "Jenkins, test this please".
+
+The `make check`_ log is the place to go if there is a failure and you're not
+sure what caused it. To reach it, first click on "details" (next to the `make
+check`_ test in the PR) to get into the Jenkins web GUI, and then click on
+"Console Output" (on the left).
+
+Jenkins is set up to grep the log for strings known to have been associated
+with `make check`_ failures in the past. However, there is no guarantee that
+the strings are associated with any given `make check`_ failure. You have to
+dig into the log to be sure.
 
 Integration tests AKA ceph-qa-suite
 -----------------------------------
 
 Since Ceph is a complex beast, it may also be necessary to test your fix to
 see how it behaves on real clusters running either on real or virtual
-hardware. Tests designed for this purpose live in the `ceph-qa-suite
-repository`_ and are run via the `teuthology framework`_.
+hardware. Tests designed for this purpose live in the `ceph/qa
+sub-directory`_ and are run via the `teuthology framework`_.
 
-.. _`ceph-qa-suite repository`: https://github.com/ceph/ceph-qa-suite/
+.. _`ceph/qa sub-directory`: https://github.com/ceph/ceph/tree/master/qa/
 .. _`teuthology repository`: https://github.com/ceph/teuthology
 .. _`teuthology framework`: https://github.com/ceph/teuthology
 
@@ -645,26 +692,28 @@ flagged for backporting, in which case the status should be changed to
 Testing
 =======
 
-Ceph has two types of tests: "make check" tests and integration tests.
+Ceph has two types of tests: `make check`_ tests and integration tests.
 The former are run via `GNU Make <https://www.gnu.org/software/make/>`,
 and the latter are run via the `teuthology framework`_. The following two
-chapters examine the "make check" and integration tests in detail.
+chapters examine the `make check`_ and integration tests in detail.
+
+.. _`make check`:
 
 Testing - make check
 ====================
 
-After compiling Ceph, the ``make check`` command can be used to run the
+After compiling Ceph, the `make check`_ command can be used to run the
 code through a battery of tests covering various aspects of Ceph. For
-inclusion in "make check", a test must:
+inclusion in `make check`_, a test must:
 
 * bind ports that do not conflict with other tests
 * not require root access
 * not require more than one machine to run
 * complete within a few minutes
 
-While it is possible to run ``make check`` directly, it can be tricky to
+While it is possible to run `make check`_ directly, it can be tricky to
 correctly set up your environment. Fortunately, a script is provided to
-make it easier run "make check" on your code. It can be run from the
+make it easier run `make check`_ on your code. It can be run from the
 top-level directory of the Ceph source tree by doing::
 
     $ ./run-make-check.sh
@@ -674,15 +723,13 @@ command to complete successfully on x86_64 (other architectures may have
 different constraints). Depending on your hardware, it can take from 20
 minutes to three hours to complete, but it's worth the wait.
 
-Future sections
----------------
+Caveats
+-------
 
-* Principles of make check tests
-* Where to find test results
-* How to interpret test results
-* Find the corresponding source code
-* Writing make check tests
-* Make check caveats
+1. Unlike the various Ceph daemons and ``ceph-fuse``, the `make check`_ tests
+   are linked against the default memory allocator (glibc) unless explicitly
+   linked against something else. This enables tools like valgrind to be used
+   in the tests.
 
 Testing - integration tests
 ===========================
@@ -690,7 +737,7 @@ Testing - integration tests
 When a test requires multiple machines, root access or lasts for a
 longer time (for example, to simulate a realistic Ceph deployment), it
 is deemed to be an integration test. Integration tests are organized into
-"suites", which are defined in the `ceph-qa-suite repository`_ and run with
+"suites", which are defined in the `ceph/qa sub-directory`_ and run with
 the ``teuthology-suite`` command.
 
 The ``teuthology-suite`` command is part of the `teuthology framework`_.
@@ -706,7 +753,7 @@ multiple platforms using the same packages (RPM, DEB) that can be
 installed on any machine running those platforms.
 
 Teuthology has a `list of platforms that it supports
-<https://github.com/ceph/ceph-qa-suite/tree/master/distros/supported>`_ (as
+<https://github.com/ceph/ceph/tree/master/qa/distros/supported>`_ (as
 of March 2016 the list consisted of "CentOS 7.2" and "Ubuntu 14.04").  It
 expects to be provided pre-built Ceph packages for these platforms.
 Teuthology deploys these platforms on machines (bare-metal or
@@ -726,56 +773,56 @@ The results of the nightlies are published at http://pulpito.ceph.com/ and
 http://pulpito.ovh.sepia.ceph.com:8081/. The developer nick shows in the
 test results URL and in the first column of the Pulpito dashboard.  The
 results are also reported on the `ceph-qa mailing list
-<http://ceph.com/resources/mailing-list-irc/>`_ for analysis.
+<https://ceph.com/irc/>`_ for analysis.
 
 Suites inventory
 ----------------
 
-The ``suites`` directory of the `ceph-qa-suite repository`_ contains
+The ``suites`` directory of the `ceph/qa sub-directory`_ contains
 all the integration tests, for all the Ceph components.
 
-`ceph-deploy <https://github.com/ceph/ceph-qa-suite/tree/master/suites/ceph-deploy>`_
+`ceph-deploy <https://github.com/ceph/ceph/tree/master/qa/suites/ceph-deploy>`_
   install a Ceph cluster with ``ceph-deploy`` (`ceph-deploy man page`_)
 
-`ceph-disk <https://github.com/ceph/ceph-qa-suite/tree/master/suites/ceph-disk>`_
+`ceph-disk <https://github.com/ceph/ceph/tree/master/qa/suites/ceph-disk>`_
   verify init scripts (upstart etc.) and udev integration with
   ``ceph-disk`` (`ceph-disk man page`_), with and without `dmcrypt
   <https://gitlab.com/cryptsetup/cryptsetup/wikis/DMCrypt>`_ support.
 
-`dummy <https://github.com/ceph/ceph-qa-suite/tree/master/suites/dummy>`_
+`dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
   get a machine, do nothing and return success (commonly used to
   verify the integration testing infrastructure works as expected)
 
-`fs <https://github.com/ceph/ceph-qa-suite/tree/master/suites/fs>`_
+`fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
   test CephFS
 
-`kcephfs <https://github.com/ceph/ceph-qa-suite/tree/master/suites/kcephfs>`_
+`kcephfs <https://github.com/ceph/ceph/tree/master/qa/suites/kcephfs>`_
   test the CephFS kernel module
 
-`krbd <https://github.com/ceph/ceph-qa-suite/tree/master/suites/krbd>`_
+`krbd <https://github.com/ceph/ceph/tree/master/qa/suites/krbd>`_
   test the RBD kernel module
 
-`powercycle <https://github.com/ceph/ceph-qa-suite/tree/master/suites/powercycle>`_
+`powercycle <https://github.com/ceph/ceph/tree/master/qa/suites/powercycle>`_
   verify the Ceph cluster behaves when machines are powered off
   and on again
 
-`rados <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados>`_
+`rados <https://github.com/ceph/ceph/tree/master/qa/suites/rados>`_
   run Ceph clusters including OSDs and MONs, under various conditions of
   stress
 
-`rbd <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rbd>`_
+`rbd <https://github.com/ceph/ceph/tree/master/qa/suites/rbd>`_
   run RBD tests using actual Ceph clusters, with and without qemu
 
-`rgw <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rgw>`_
+`rgw <https://github.com/ceph/ceph/tree/master/qa/suites/rgw>`_
   run RGW tests using actual Ceph clusters
 
-`smoke <https://github.com/ceph/ceph-qa-suite/tree/master/suites/smoke>`_
+`smoke <https://github.com/ceph/ceph/tree/master/qa/suites/smoke>`_
   run tests that exercise the Ceph API with an actual Ceph cluster
 
-`teuthology <https://github.com/ceph/ceph-qa-suite/tree/master/suites/teuthology>`_
+`teuthology <https://github.com/ceph/ceph/tree/master/qa/suites/teuthology>`_
   verify that teuthology can run integration tests, with and without OpenStack
 
-`upgrade <https://github.com/ceph/ceph-qa-suite/tree/master/suites/upgrade>`_
+`upgrade <https://github.com/ceph/ceph/tree/master/qa/suites/upgrade>`_
   for various versions of Ceph, verify that upgrades can happen
   without disrupting an ongoing workload
 
@@ -813,7 +860,7 @@ if you decide to go this route.
 
 If you have access to an OpenStack tenant, you have another option: the
 `teuthology framework`_ has an OpenStack backend, which is documented `here
-<https://github.com/dachary/teuthology/tree/openstack#openstack-backend>`_.
+<https://github.com/dachary/teuthology/tree/openstack#openstack-backend>`__.
 This OpenStack backend can build packages from a given git commit or
 branch, provision VMs, install the packages and run integration tests
 on those VMs. This process is controlled using a tool called
@@ -833,11 +880,13 @@ available by running the following command on the teuthology machine::
 
    $ teuthology-suite --help
 
+.. _teuthology-suite: http://docs.ceph.com/teuthology/docs/teuthology.suite.html
+
 How integration tests are defined
 ---------------------------------
 
 Integration tests are defined by yaml files found in the ``suites``
-subdirectory of the `ceph-qa-suite repository`_ and implemented by python
+subdirectory of the `ceph/qa sub-directory`_ and implemented by python
 code found in the ``tasks`` subdirectory. Some tests ("standalone tests")
 are defined in a single yaml file, while other tests are defined by a
 directory tree containing yaml files that are combined, at runtime, into a
@@ -850,7 +899,7 @@ Let us first examine a standalone test, or "singleton".
 
 Here is a commented example using the integration test
 `rados/singleton/all/admin-socket.yaml
-<https://github.com/ceph/ceph-qa-suite/blob/master/suites/rados/singleton/all/admin-socket.yaml>`_
+<https://github.com/ceph/ceph/blob/master/qa/suites/rados/singleton/all/admin-socket.yaml>`_
 ::
 
       roles:
@@ -882,19 +931,19 @@ id ``a`` (that is the ``mon.a`` in the list of roles) and two OSDs
 The body of the test is in the ``tasks`` array: each element is
 evaluated in order, causing the corresponding python file found in the
 ``tasks`` subdirectory of the `teuthology repository`_ or
-`ceph-qa-suite repository`_ to be run. "Running" in this case means calling
+`ceph/qa sub-directory`_ to be run. "Running" in this case means calling
 the ``task()`` function defined in that file.
 
 In this case, the `install
-<https://github.com/ceph/teuthology/blob/master/teuthology/task/install.py>`_
+<https://github.com/ceph/teuthology/blob/master/teuthology/task/install/__init__.py>`_
 task comes first. It installs the Ceph packages on each machine (as
 defined by the ``roles`` array). A full description of the ``install``
 task is `found in the python file
-<https://github.com/ceph/teuthology/blob/master/teuthology/task/install.py>`_
+<https://github.com/ceph/teuthology/blob/master/teuthology/task/install/__init__.py>`_
 (search for "def task").
 
 The ``ceph`` task, which is documented `here
-<https://github.com/ceph/ceph-qa-suite/blob/master/tasks/ceph.py>`_ (again,
+<https://github.com/ceph/ceph/blob/master/qa/tasks/ceph.py>`__ (again,
 search for "def task"), starts OSDs and MONs (and possibly MDSs as well)
 as required by the ``roles`` array. In this example, it will start one MON
 (``mon.a``) and two OSDs (``osd.0`` and ``osd.1``), all on the same
@@ -902,7 +951,7 @@ machine. Control moves to the next task when the Ceph cluster reaches
 ``HEALTH_OK`` state.
 
 The next task is ``admin_socket`` (`source code
-<https://github.com/ceph/ceph-qa-suite/blob/master/tasks/admin_socket.py>`_).
+<https://github.com/ceph/ceph/blob/master/qa/tasks/admin_socket.py>`_).
 The parameter of the ``admin_socket`` task (and any other task) is a
 structure which is interpreted as documented in the task. In this example
 the parameter is a set of commands to be sent to the admin socket of
@@ -920,7 +969,7 @@ Each test has a "test description", which is similar to a directory path,
 but not the same. In the case of a standalone test, like the one in
 `Reading a standalone test`_, the test description is identical to the
 relative path (starting from the ``suites/`` directory of the
-`ceph-qa-suite repository`_) of the yaml file defining the test.
+`ceph/qa sub-directory`_) of the yaml file defining the test.
 
 Much more commonly, tests are defined not by a single yaml file, but by a
 `directory tree of yaml files`. At runtime, the tree is walked and all yaml
@@ -930,7 +979,7 @@ beginning of every test log.
 
 In these cases, the description of each test consists of the
 subdirectory under `suites/
-<https://github.com/ceph/ceph-qa-suite/tree/master/suites>`_ containing the
+<https://github.com/ceph/ceph/tree/master/qa/suites>`_ containing the
 yaml facets, followed by an expression in curly braces (``{}``) consisting of
 a list of yaml facets in order of concatenation. For instance the
 test description::
@@ -947,7 +996,7 @@ How are tests built from directories?
 
 As noted in the previous section, most tests are not defined in a single
 yaml file, but rather as a `combination` of files collected from a
-directory tree within the ``suites/`` subdirectory of the `ceph-qa-suite repository`_. 
+directory tree within the ``suites/`` subdirectory of the `ceph/qa sub-directory`_. 
 
 The set of all tests defined by a given subdirectory of ``suites/`` is
 called an "integration test suite", or a "teuthology suite".
@@ -965,7 +1014,7 @@ teuthology to construct a test matrix from yaml facets found in
 subdirectories below the directory containing the operator.
 
 For example, the `ceph-disk suite
-<https://github.com/ceph/ceph-qa-suite/tree/jewel/suites/ceph-disk/>`_ is
+<https://github.com/ceph/ceph/tree/jewel/qa/suites/ceph-disk/>`_ is
 defined by the ``suites/ceph-disk/`` tree, which consists of the files and
 subdirectories in the following structure::
 
@@ -996,7 +1045,7 @@ three standalone tests:
 
 (which would of course be wrong in this case).
 
-Referring to the `ceph-qa-suite repository`_, you will notice that the
+Referring to the `ceph/qa sub-directory`_, you will notice that the
 ``centos_7.0.yaml`` and ``ubuntu_14.04.yaml`` files in the
 ``suites/ceph-disk/basic/distros/`` directory are implemented as symlinks.
 By using symlinks instead of copying, a single file can appear in multiple
@@ -1026,7 +1075,7 @@ Concatenation operator
 For even greater flexibility in sharing yaml files between suites, the
 special file plus (``+``) can be used to concatenate files within a
 directory. For instance, consider the `suites/rbd/thrash
-<https://github.com/ceph/ceph-qa-suite/tree/master/suites/rbd/thrash>`_
+<https://github.com/ceph/ceph/tree/master/qa/suites/rbd/thrash>`_
 tree::
 
   directory: rbd/thrash
@@ -1080,7 +1129,7 @@ Filtering tests by their description
 
 When a few jobs fail and need to be run again, the ``--filter`` option
 can be used to select tests with a matching description. For instance, if the
-``rados`` suite fails the `all/peer.yaml <https://github.com/ceph/ceph-qa-suite/blob/master/suites/rados/singleton/all/peer.yaml>`_ test, the following will only run the tests that contain this file::
+``rados`` suite fails the `all/peer.yaml <https://github.com/ceph/ceph/blob/master/qa/suites/rados/singleton/all/peer.yaml>`_ test, the following will only run the tests that contain this file::
 
   teuthology-suite --suite rados --filter all/peer.yaml
 
@@ -1090,14 +1139,14 @@ option.
 
 Both ``--filter`` and ``--filter-out`` take a comma-separated list of strings (which
 means the comma character is implicitly forbidden in filenames found in the
-`ceph-qa-suite repository`_). For instance::
+`ceph/qa sub-directory`_). For instance::
 
   teuthology-suite --suite rados --filter all/peer.yaml,all/rest-api.yaml
 
 will run tests that contain either
-`all/peer.yaml <https://github.com/ceph/ceph-qa-suite/blob/master/suites/rados/singleton/all/peer.yaml>`_
+`all/peer.yaml <https://github.com/ceph/ceph/blob/master/qa/suites/rados/singleton/all/peer.yaml>`_
 or
-`all/rest-api.yaml <https://github.com/ceph/ceph-qa-suite/blob/master/suites/rados/singleton/all/rest-api.yaml>`_
+`all/rest-api.yaml <https://github.com/ceph/ceph/blob/master/qa/suites/rados/singleton/all/rest-api.yaml>`_
 
 Each string is looked up anywhere in the test description and has to
 be an exact match: they are not regular expressions.
@@ -1106,11 +1155,14 @@ Reducing the number of tests
 ----------------------------
 
 The ``rados`` suite generates thousands of tests out of a few hundred
-files. For instance, all tests in the `rados/thrash suite
-<https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados/thrash>`_
-run for ``xfs``, ``btrfs`` and ``ext4`` because they are combined (via
-special file ``%``) with the `fs directory
-<https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados/thrash/fs>`_
+files. This happens because teuthology constructs test matrices from
+subdirectories wherever it encounters a file named ``%``. For instance,
+all tests in the `rados/basic suite
+<https://github.com/ceph/ceph/tree/master/qa/suites/rados/basic>`_
+run with different messenger types: ``simple``, ``async`` and
+``random``, because they are combined (via the special file ``%``) with
+the `msgr directory
+<https://github.com/ceph/ceph/tree/master/qa/suites/rados/basic/msgr>`_
 
 All integration tests are required to be run before a Ceph release is published. 
 When merely verifying whether a contribution can be merged without
@@ -1120,7 +1172,7 @@ reduce the number of tests that are triggered. For instance::
   teuthology-suite --suite rados --subset 0/4000
 
 will run as few tests as possible. The tradeoff in this case is that
-some tests will only run on ``xfs`` and not on ``ext4`` or ``btrfs``,
+not all combinations of test variations will together,
 but no matter how small a ratio is provided in the ``--subset``,
 teuthology will still ensure that all files in the suite are in at
 least one test. Understanding the actual logic that drives this
@@ -1158,12 +1210,11 @@ Prepare tenant
 If you have not tried to use ``ceph-workbench`` with this tenant before,
 proceed to the next step.
 
-To start with a clean slate, login to your tenant via the Horizon dashboard and
-delete all of the following:
+To start with a clean slate, login to your tenant via the Horizon dashboard and:
 
-* ``teuthology`` and ``packages-repository`` instances, if any
-* ``teuthology`` security group
-* ``teuthology`` and ``teuthology-myself`` key pairs
+* terminate the ``teuthology`` and ``packages-repository`` instances, if any
+* delete the ``teuthology`` and ``teuthology-worker`` security groups, if any
+* delete the ``teuthology`` and ``teuthology-myself`` key pairs, if any
 
 Also do the above if you ever get key-related errors ("invalid key", etc.) when
 trying to schedule suites.
@@ -1174,13 +1225,13 @@ Getting ceph-workbench
 Since testing in the cloud is done using the `ceph-workbench
 ceph-qa-suite`_ tool, you will need to install that first. It is designed
 to be installed via Docker, so if you don't have Docker running on your
-development machine, take care of that first. The Docker project has a good
-tutorial called `Get Started with Docker Engine for Linux
-<https://docs.docker.com/linux/>`_ if you unsure how to proceed.
+development machine, take care of that first. You can follow `the official
+tutorial <https://docs.docker.com/engine/installation/>`_ to install if
+you have not installed yet.
 
 Once Docker is up and running, install ``ceph-workbench`` by following the
 `Installation instructions in the ceph-workbench documentation
-<http://ceph-workbench.readthedocs.org/en/latest/#installation>`_::
+<http://ceph-workbench.readthedocs.org/en/latest/#installation>`_.
 
 Linking ceph-workbench with your OpenStack tenant
 -------------------------------------------------
@@ -1307,6 +1358,33 @@ Even if you don't providing the ``--upload`` option, however, all the logs can
 still be found on the teuthology machine in the directory
 ``/usr/share/nginx/html``.
 
+Provision VMs ad hoc
+--------------------
+
+From the teuthology VM, it is possible to provision machines on an "ad hoc"
+basis, to use however you like. The magic incantation is::
+
+    teuthology-lock --lock-many $NUMBER_OF_MACHINES \
+        --os-type $OPERATING_SYSTEM \
+        --os-version $OS_VERSION \
+        --machine-type openstack \
+        --owner $EMAIL_ADDRESS
+
+The command must be issued from the ``~/teuthology`` directory. The possible
+values for ``OPERATING_SYSTEM`` AND ``OS_VERSION`` can be found by examining
+the contents of the directory ``teuthology/openstack/``. For example::
+
+    teuthology-lock --lock-many 1 --os-type ubuntu --os-version 16.04 \
+        --machine-type openstack --owner foo@example.com
+
+When you are finished with the machine, find it in the list of machines::
+
+    openstack server list
+
+to determine the name or ID, and then terminate it with::
+
+    openstack server delete $NAME_OR_ID
+
 Deploy a cluster for manual testing
 -----------------------------------
 
@@ -1320,21 +1398,27 @@ manually.
 However, there are times when the automated tests do not cover a particular
 scenario and manual testing is desired. It turns out that it is simple to
 adapt a test to stop and wait after the Ceph installation phase, and the
-engineer can then ssh into the running cluster.
+engineer can then ssh into the running cluster. Simply add the following
+snippet in the desired place within the test YAML and schedule a run with the
+test::
 
-This common use case is currently provided for by the following command::
+    tasks:
+    - exec:
+        client.0:
+          - sleep 1000000000 # forever
 
-   ceph-workbench ceph-qa-suite --simultaneous-jobs 9 --verbose
-   --teuthology-git-url http://github.com/dachary/teuthology
-   --teuthology-branch openstack --ceph-qa-suite-git-url
-   http://github.com/dachary/ceph-qa-suite --suite-branch wip-ceph-disk
-   --ceph-git-url http://github.com/ceph/ceph --ceph jewel --suite
-   ceph-disk --filter ubuntu_14
+(Make sure you have a ``client.0`` defined in your ``roles`` stanza or adapt
+accordingly.)
 
-This builds packages from the Ceph git repository and branch specified in
-the ``--ceph-git-url`` and ``--ceph`` options, respectively, provisions VMs
-in OpenStack, installs the packages, and deploys a Ceph cluster on them.
-Then, instead of running automated tests, it stops and enters a wait loop.
+The same effect can be achieved using the ``interactive`` task::
+
+    tasks:
+    - interactive
+
+By following the test log, you can determine when the test cluster has entered
+the "sleep forever" condition. At that point, you can ssh to the teuthology
+machine and from there to one of the target VMs (OpenStack) or teuthology
+worker machines machine (Sepia) where the test cluster is running.
 
 The VMs (or "instances" in OpenStack terminology) created by
 `ceph-workbench ceph-qa-suite`_ are named as follows:
@@ -1355,16 +1439,50 @@ be found out by searching for the string ``Locked targets``::
       target149202171058.teuthology: null
       target149202171059.teuthology: null
 
-The IP addresses of the target machines can be found by running
-``openstack server list`` on the teuthology machine.
+The IP addresses of the target machines can be found by running ``openstack
+server list`` on the teuthology machine, but the target VM hostnames (e.g.
+``target149202171058.teuthology``) are resolvable within the teuthology
+cluster.
 
-The whole process, which takes some time to complete, can be monitored as
-described in `Run the dummy suite`_. Be patient.
 
-Once the target machines are up and running and the test enters its wait
-loop, the engineer can ssh into the target machines and do whatever manual
-testing is required. Use the teuthology machine as jump host.
+Testing - how to run s3-tests locally
+=====================================
 
+RGW code can be tested by building Ceph locally from source, starting a vstart
+cluster, and running the "s3-tests" suite against it.
+
+The following instructions should work on jewel and above.
+
+Step 1 - build Ceph
+-------------------
+
+Refer to :doc:`/install/build-ceph`.
+
+You can do step 2 separately while it is building.
+
+Step 2 - vstart
+---------------
+
+When the build completes, and still in the top-level directory of the git
+clone where you built Ceph, do the following, for cmake builds::
+
+    cd build/
+    RGW=1 ../vstart.sh -n
+
+This will produce a lot of output as the vstart cluster is started up. At the
+end you should see a message like::
+
+    started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output.
+
+This means the cluster is running.
+
+
+Step 3 - run s3-tests
+---------------------
+
+To run the s3tests suite do the following::
+
+   $ ../qa/workunits/rgw/run-s3tests.sh
 
 .. WIP
 .. ===

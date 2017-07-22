@@ -4,6 +4,8 @@
 #include "rgw_period_history.h"
 #include "rgw_rados.h"
 
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
@@ -67,6 +69,15 @@ bool Cursor::has_next() const
   return epoch < history->get_newest_epoch();
 }
 
+bool operator==(const Cursor& lhs, const Cursor& rhs)
+{
+  return lhs.history == rhs.history && lhs.epoch == rhs.epoch;
+}
+
+bool operator!=(const Cursor& lhs, const Cursor& rhs)
+{
+  return !(lhs == rhs);
+}
 
 class RGWPeriodHistory::Impl final {
  public:

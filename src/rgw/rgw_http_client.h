@@ -6,9 +6,10 @@
 
 #include "common/RWLock.h"
 #include "common/Cond.h"
-#include "include/atomic.h"
 #include "rgw_common.h"
 #include "rgw_string.h"
+
+#include <atomic>
 
 using param_pair_t = pair<string, string>;
 using param_vec_t = vector<param_pair_t>;
@@ -33,7 +34,7 @@ class RGWHTTPClient
   string last_url;
   bool verify_ssl; // Do not validate self signed certificates, default to false
 
-  atomic_t stopped;
+  std::atomic<unsigned> stopped { 0 };
 
 protected:
   CephContext *cct;
@@ -41,7 +42,8 @@ protected:
 
   int init_request(const char *method,
                    const char *url,
-                   rgw_http_req_data *req_data);
+                   rgw_http_req_data *req_data,
+                   bool send_data_hint = false);
 
   virtual int receive_header(void *ptr, size_t len) {
     return 0;
@@ -92,7 +94,7 @@ public:
       http_status(HTTP_STATUS_NOSTATUS),
       req_data(nullptr),
       user_info(nullptr),
-      verify_ssl(true),
+      verify_ssl(cct->_conf->rgw_verify_ssl),
       cct(cct) {
   }
 
@@ -156,13 +158,13 @@ public:
   }
 
 protected:
-  virtual int receive_header(void *ptr, size_t len) override;
+  int receive_header(void *ptr, size_t len) override;
 
-  virtual int receive_data(void *ptr, size_t len) override {
+  int receive_data(void *ptr, size_t len) override {
     return 0;
   }
 
-  virtual int send_data(void *ptr, size_t len) override {
+  int send_data(void *ptr, size_t len) override {
     return 0;
   }
 
@@ -219,8 +221,8 @@ class RGWHTTPManager {
   RGWCompletionManager *completion_mgr;
   void *multi_handle;
   bool is_threaded;
-  atomic_t going_down;
-  atomic_t is_stopped;
+  std::atomic<unsigned> going_down { 0 };
+  std::atomic<unsigned> is_stopped { 0 };
 
   RWLock reqs_lock;
   map<uint64_t, rgw_http_req_data *> reqs;
@@ -247,7 +249,7 @@ class RGWHTTPManager {
 
   public:
     ReqsThread(RGWHTTPManager *_m) : manager(_m) {}
-    void *entry();
+    void *entry() override;
   };
 
   ReqsThread *reqs_thread;
@@ -263,7 +265,8 @@ public:
   int set_threaded();
   void stop();
 
-  int add_request(RGWHTTPClient *client, const char *method, const char *url);
+  int add_request(RGWHTTPClient *client, const char *method, const char *url,
+                  bool send_data_hint = false);
   int remove_request(RGWHTTPClient *client);
 
   /* only for non threaded case */

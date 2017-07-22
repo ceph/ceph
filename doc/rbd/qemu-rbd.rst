@@ -203,12 +203,12 @@ None::
 
    rbd_cache = false
 
-QEMU's cache settings override Ceph's default settings (i.e., settings that are
-not explicitly set in the Ceph configuration file). If you  explicitly set `RBD
-Cache`_ settings in your Ceph configuration file, your Ceph settings override
-the QEMU cache settings. If you set cache settings on the QEMU command line, the
-QEMU command line settings override the Ceph configuration file settings.
+QEMU's cache settings override Ceph's cache settings (including settings that
+are explicitly set in the Ceph configuration file).
 
+.. note:: Prior to QEMU v2.4.0, if you explicitly set `RBD Cache`_ settings
+   in the Ceph configuration file, your Ceph settings override the QEMU cache
+   settings.
 
 .. _QEMU Open Source Processor Emulator: http://wiki.qemu.org/Main_Page
 .. _QEMU Manual: http://wiki.qemu.org/Manual

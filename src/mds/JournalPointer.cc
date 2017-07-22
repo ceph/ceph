@@ -22,6 +22,7 @@
 #include "mds/JournalPointer.h"
 
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() << ".journalpointer "
@@ -91,7 +92,7 @@ int JournalPointer::save(Objecter *objecter) const
   C_SaferCond waiter;
   objecter->write_full(object_t(object_id), object_locator_t(pool_id),
 		       SnapContext(), data,
-		       ceph::real_clock::now(g_ceph_context), 0, NULL,
+		       ceph::real_clock::now(), 0,
 		       &waiter);
   int write_result = waiter.wait();
   if (write_result < 0) {
@@ -114,7 +115,7 @@ void JournalPointer::save(Objecter *objecter, Context *completion) const
 
   objecter->write_full(object_t(get_object_id()), object_locator_t(pool_id),
 		       SnapContext(), data,
-		       ceph::real_clock::now(g_ceph_context), 0, NULL,
+		       ceph::real_clock::now(), 0,
 		       completion);
 }
 

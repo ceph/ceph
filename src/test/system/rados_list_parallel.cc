@@ -52,11 +52,11 @@ public:
   {
   }
 
-  ~RadosDeleteObjectsR()
+  ~RadosDeleteObjectsR() override
   {
   }
 
-  int run(void)
+  int run(void) override
   {
     int ret_val = 0;
     rados_t cl;
@@ -137,11 +137,11 @@ public:
   {
   }
 
-  ~RadosAddObjectsR()
+  ~RadosAddObjectsR() override
   {
   }
 
-  int run(void)
+  int run(void) override
   {
     int ret_val = 0;
     rados_t cl;
@@ -223,7 +223,7 @@ int main(int argc, const char **argv)
   const char *num_objects = getenv("NUM_OBJECTS");
   const std::string pool = get_temp_pool_name(argv[0]);
   if (num_objects) {
-    g_num_objects = atoi(num_objects); 
+    g_num_objects = atoi(num_objects);
     if (g_num_objects == 0)
       return 100;
   }
@@ -343,6 +343,6 @@ int main(int argc, const char **argv)
   rados_connect(cl);
   rados_pool_delete(cl, pool.c_str());
 
-  printf("******* SUCCESS **********\n"); 
+  printf("******* SUCCESS **********\n");
   return EXIT_SUCCESS;
 }

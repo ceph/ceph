@@ -4,9 +4,16 @@
 #ifndef CEPH_RGW_KEYSTONE_H
 #define CEPH_RGW_KEYSTONE_H
 
+#include <type_traits>
+
+#include <boost/optional.hpp>
+#include <boost/utility/string_ref.hpp>
+
 #include "rgw_common.h"
 #include "rgw_http_client.h"
 #include "common/Cond.h"
+
+#include <atomic>
 
 int rgw_open_cms_envelope(CephContext *cct,
                           const std::string& src,
@@ -27,12 +34,76 @@ bool rgw_decode_pki_token(CephContext *cct,
                           const string& token,
                           bufferlist& bl);
 
-enum class KeystoneApiVersion {
+namespace rgw {
+namespace keystone {
+
+enum class ApiVersion {
   VER_2,
   VER_3
 };
 
-class KeystoneService {
+
+class Config {
+protected:
+  Config() = default;
+  virtual ~Config() = default;
+
+public:
+  virtual std::string get_endpoint_url() const noexcept = 0;
+  virtual ApiVersion get_api_version() const noexcept = 0;
+
+  virtual boost::string_ref get_admin_token() const noexcept = 0;
+  virtual boost::string_ref get_admin_user() const noexcept = 0;
+  virtual boost::string_ref get_admin_password() const noexcept = 0;
+  virtual boost::string_ref get_admin_tenant() const noexcept = 0;
+  virtual boost::string_ref get_admin_project() const noexcept = 0;
+  virtual boost::string_ref get_admin_domain() const noexcept = 0;
+};
+
+class CephCtxConfig : public Config {
+protected:
+  CephCtxConfig() = default;
+  virtual ~CephCtxConfig() = default;
+
+public:
+  static CephCtxConfig& get_instance() {
+    static CephCtxConfig instance;
+    return instance;
+  }
+
+  std::string get_endpoint_url() const noexcept override;
+  ApiVersion get_api_version() const noexcept override;
+
+  boost::string_ref get_admin_token() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_token;
+  }
+
+  boost::string_ref get_admin_user() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_user;
+  }
+
+  boost::string_ref get_admin_password() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_password;
+  }
+
+  boost::string_ref get_admin_tenant() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_tenant;
+  }
+
+  boost::string_ref get_admin_project() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_project;
+  }
+
+  boost::string_ref get_admin_domain() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_domain;
+  }
+};
+
+
+class TokenEnvelope;
+class TokenCache;
+
+class Service {
 public:
   class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
   public:
@@ -57,15 +128,19 @@ public:
   typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
   typedef RGWKeystoneHTTPTransceiver RGWGetRevokedTokens;
 
-  static KeystoneApiVersion get_api_version();
-
-  static int get_keystone_url(CephContext * const cct,
-                              std::string& url);
-  static int get_keystone_admin_token(CephContext * const cct,
-                                      std::string& token);
+  static int get_admin_token(CephContext* const cct,
+                             TokenCache& token_cache,
+                             const Config& config,
+                             std::string& token);
+  static int issue_admin_token_request(CephContext* const cct,
+                                       const Config& config,
+                                       TokenEnvelope& token);
+  static int get_keystone_barbican_token(CephContext * const cct,
+                                         std::string& token);
 };
 
-class KeystoneToken {
+
+class TokenEnvelope {
 public:
   class Domain {
   public:
@@ -111,9 +186,13 @@ public:
   User user;
   list<Role> roles;
 
+  void decode_v3(JSONObj* obj);
+  void decode_v2(JSONObj* obj);
+
 public:
-  // FIXME: default ctor needs to be eradicated here
-  KeystoneToken() = default;
+  /* We really need the default ctor because of the internals of TokenCache. */
+  TokenEnvelope() = default;
+
   time_t get_expires() const { return token.expires; }
   const std::string& get_domain_id() const {return project.domain.id;};
   const std::string& get_domain_name() const {return project.domain.name;};
@@ -122,40 +201,45 @@ public:
   const std::string& get_user_id() const {return user.id;};
   const std::string& get_user_name() const {return user.name;};
   bool has_role(const string& r) const;
-  bool expired() {
-    uint64_t now = ceph_clock_now(NULL).sec();
-    return (now >= (uint64_t)get_expires());
+  bool expired() const {
+    const uint64_t now = ceph_clock_now().sec();
+    return now >= static_cast<uint64_t>(get_expires());
   }
-  int parse(CephContext *cct,
-            const string& token_str,
-            bufferlist& bl /* in */);
-  void decode_json(JSONObj *access_obj);
+  int parse(CephContext* cct,
+            const std::string& token_str,
+            ceph::buffer::list& bl /* in */,
+            ApiVersion version);
 };
 
 
-class RGWKeystoneTokenCache {
+class TokenCache {
   struct token_entry {
-    KeystoneToken token;
+    TokenEnvelope token;
     list<string>::iterator lru_iter;
   };
 
-  atomic_t down_flag;
+  std::atomic<bool> down_flag = { false };
 
   class RevokeThread : public Thread {
-    friend class RGWKeystoneTokenCache;
+    friend class TokenCache;
     typedef RGWPostHTTPData RGWGetRevokedTokens;
 
     CephContext * const cct;
-    RGWKeystoneTokenCache * const cache;
+    TokenCache* const cache;
+    const rgw::keystone::Config& config;
+
     Mutex lock;
     Cond cond;
 
-    RevokeThread(CephContext * const cct, RGWKeystoneTokenCache * cache)
+    RevokeThread(CephContext* const cct,
+                 TokenCache* const cache,
+                 const rgw::keystone::Config& config)
       : cct(cct),
         cache(cache),
-        lock("RGWKeystoneTokenCache::RevokeThread") {
+        config(config),
+        lock("rgw::keystone::TokenCache::RevokeThread") {
     }
-    void *entry();
+    void *entry() override;
     void stop();
     int check_revoked();
   } revocator;
@@ -163,6 +247,7 @@ class RGWKeystoneTokenCache {
   CephContext * const cct;
 
   std::string admin_token_id;
+  std::string barbican_token_id;
   std::map<std::string, token_entry> tokens;
   std::list<std::string> tokens_lru;
 
@@ -170,64 +255,114 @@ class RGWKeystoneTokenCache {
 
   const size_t max;
 
-  RGWKeystoneTokenCache()
-    : revocator(g_ceph_context, this),
+  TokenCache(const rgw::keystone::Config& config)
+    : revocator(g_ceph_context, this, config),
       cct(g_ceph_context),
-      lock("RGWKeystoneTokenCache"),
+      lock("rgw::keystone::TokenCache"),
       max(cct->_conf->rgw_keystone_token_cache_size) {
-    /* The thread name has been kept for backward compliance. */
-    revocator.create("rgw_swift_k_rev");
+    /* revocation logic needs to be smarter, but meanwhile,
+     *  make it optional.
+     * see http://tracker.ceph.com/issues/9493
+     *     http://tracker.ceph.com/issues/19499
+     */
+    if (cct->_conf->rgw_keystone_revocation_interval > 0
+        && cct->_conf->rgw_keystone_token_cache_size ) {
+      /* The thread name has been kept for backward compliance. */
+      revocator.create("rgw_swift_k_rev");
+    }
   }
-  ~RGWKeystoneTokenCache() {
-    down_flag.set(1);
+
+  ~TokenCache() {
+    down_flag = true;
 
     revocator.stop();
     revocator.join();
   }
 
 public:
-  RGWKeystoneTokenCache(const RGWKeystoneTokenCache&) = delete;
-  void operator=(const RGWKeystoneTokenCache&) = delete;
+  TokenCache(const TokenCache&) = delete;
+  void operator=(const TokenCache&) = delete;
 
-  static RGWKeystoneTokenCache& get_instance();
+  template<class ConfigT>
+  static TokenCache& get_instance() {
+    static_assert(std::is_base_of<rgw::keystone::Config, ConfigT>::value,
+                  "ConfigT must be a subclass of rgw::keystone::Config");
 
-  bool find(const string& token_id, KeystoneToken& token);
-  bool find_admin(KeystoneToken& token);
-  void add(const string& token_id, const KeystoneToken& token);
-  void add_admin(const KeystoneToken& token);
-  void invalidate(const string& token_id);
+    /* In C++11 this is thread safe. */
+    static TokenCache instance(ConfigT::get_instance());
+    return instance;
+  }
+
+  bool find(const std::string& token_id, TokenEnvelope& token);
+  boost::optional<TokenEnvelope> find(const std::string& token_id) {
+    TokenEnvelope token_envlp;
+    if (find(token_id, token_envlp)) {
+      return token_envlp;
+    }
+    return boost::none;
+  }
+  bool find_admin(TokenEnvelope& token);
+  bool find_barbican(TokenEnvelope& token);
+  void add(const std::string& token_id, const TokenEnvelope& token);
+  void add_admin(const TokenEnvelope& token);
+  void add_barbican(const TokenEnvelope& token);
+  void invalidate(const std::string& token_id);
   bool going_down() const;
 private:
-  void add_locked(const string& token_id, const KeystoneToken& token);
-  bool find_locked(const string& token_id, KeystoneToken& token);
+  void add_locked(const std::string& token_id, const TokenEnvelope& token);
+  bool find_locked(const std::string& token_id, TokenEnvelope& token);
 
 };
 
 
-class KeystoneAdminTokenRequest {
+class AdminTokenRequest {
 public:
-  virtual ~KeystoneAdminTokenRequest() = default;
-  virtual void dump(Formatter *f) const = 0;
+  virtual ~AdminTokenRequest() = default;
+  virtual void dump(Formatter* f) const = 0;
 };
 
-class KeystoneAdminTokenRequestVer2 : public KeystoneAdminTokenRequest {
+class AdminTokenRequestVer2 : public AdminTokenRequest {
+  const Config& conf;
+
+public:
+  AdminTokenRequestVer2(const Config& conf)
+    : conf(conf) {
+  }
+  void dump(Formatter *f) const override;
+};
+
+class AdminTokenRequestVer3 : public AdminTokenRequest {
+  const Config& conf;
+
+public:
+  AdminTokenRequestVer3(const Config& conf)
+    : conf(conf) {
+  }
+  void dump(Formatter *f) const override;
+};
+
+class BarbicanTokenRequestVer2 : public AdminTokenRequest {
   CephContext *cct;
 
 public:
-  KeystoneAdminTokenRequestVer2(CephContext * const _cct)
+  BarbicanTokenRequestVer2(CephContext * const _cct)
     : cct(_cct) {
   }
   void dump(Formatter *f) const;
 };
 
-class KeystoneAdminTokenRequestVer3 : public KeystoneAdminTokenRequest {
+class BarbicanTokenRequestVer3 : public AdminTokenRequest {
   CephContext *cct;
 
 public:
-  KeystoneAdminTokenRequestVer3(CephContext * const _cct)
+  BarbicanTokenRequestVer3(CephContext * const _cct)
     : cct(_cct) {
   }
   void dump(Formatter *f) const;
 };
+
+
+}; /* namespace keystone */
+}; /* namespace rgw */
 
 #endif

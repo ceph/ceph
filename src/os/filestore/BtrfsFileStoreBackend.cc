@@ -43,6 +43,7 @@
 
 #if defined(__linux__)
 
+#define dout_context cct()
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "btrfsfilestorebackend(" << get_basedir_path() << ") "
@@ -55,8 +56,8 @@ BtrfsFileStoreBackend::BtrfsFileStoreBackend(FileStore *fs):
     GenericFileStoreBackend(fs), has_clone_range(false),
     has_snap_create(false), has_snap_destroy(false),
     has_snap_create_v2(false), has_wait_sync(false), stable_commits(false),
-    m_filestore_btrfs_clone_range(g_conf->filestore_btrfs_clone_range),
-    m_filestore_btrfs_snap (g_conf->filestore_btrfs_snap) { }
+    m_filestore_btrfs_clone_range(cct()->_conf->filestore_btrfs_clone_range),
+    m_filestore_btrfs_snap (cct()->_conf->filestore_btrfs_snap) { }
 
 int BtrfsFileStoreBackend::detect_features()
 {
@@ -320,12 +321,8 @@ int BtrfsFileStoreBackend::list_checkpoints(list<string>& ls)
 
   list<string> snaps;
   char path[PATH_MAX];
-  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
   struct dirent *de;
-  while (::readdir_r(dir, (struct dirent *)&buf, &de) == 0) {
-    if (!de)
-      break;
-
+  while ((de = ::readdir(dir))) {
     snprintf(path, sizeof(path), "%s/%s", get_basedir_path().c_str(), de->d_name);
 
     struct stat st;

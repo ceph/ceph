@@ -39,7 +39,7 @@ static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
  */
 
 SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
-				 string mname, uint64_t _nonce, uint64_t features)
+				 string mname, uint64_t _nonce)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     accepter(this, _nonce),
     dispatch_queue(cct, this, mname),
@@ -55,7 +55,6 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
   ANNOTATE_BENIGN_RACE_SIZED(&timeout, sizeof(timeout),
                              "SimpleMessenger read timeout");
   ceph_spin_init(&global_seq_lock);
-  local_features = features;
   init_local_connection();
 }
 
@@ -158,6 +157,14 @@ void SimpleMessenger::set_addr_unknowns(const entity_addr_t &addr)
     my_inst.addr.set_port(port);
     init_local_connection();
   }
+}
+
+void SimpleMessenger::set_addr(const entity_addr_t &addr)
+{
+  entity_addr_t t = addr;
+  t.set_nonce(nonce);
+  set_myaddr(t);
+  init_local_connection();
 }
 
 int SimpleMessenger::get_proto_version(int peer_type, bool connect)
@@ -307,6 +314,27 @@ int SimpleMessenger::rebind(const set<int>& avoid_ports)
   return accepter.rebind(avoid_ports);
 }
 
+
+int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
+{
+  if (!cct->_conf->ms_bind_before_connect)
+    return 0;
+  Mutex::Locker l(lock);
+  if (did_bind) {
+    assert(my_inst.addr == bind_addr);
+    return 0;
+  }
+  if (started) {
+    ldout(cct,10) << "rank.bind already started" << dendl;
+    return -1;
+  }
+  ldout(cct,10) << "rank.bind " << bind_addr << dendl;
+
+  set_myaddr(bind_addr);
+  return 0;
+}
+
+
 int SimpleMessenger::start()
 {
   lock.Lock();
@@ -425,6 +453,7 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
 				     const entity_addr_t& dest_addr, int dest_type,
 				     bool already_locked)
 {
+  m->trace.event("simple submitting message");
   if (cct->_conf->ms_dump_on_send) {
     m->encode(-1, true);
     ldout(cct, 0) << "submit_message " << *m << "\n";
@@ -573,6 +602,10 @@ void SimpleMessenger::wait()
       p->unregister_pipe();
       p->pipe_lock.Lock();
       p->stop_and_wait();
+      // don't generate an event here; we're shutting down anyway.
+      PipeConnectionRef con = p->connection_state;
+      if (con)
+	con->clear_pipe(p);
       p->pipe_lock.Unlock();
     }
 
@@ -704,9 +737,10 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
     t.set_port(my_inst.addr.get_port());
-    ANNOTATE_BENIGN_RACE_SIZED(&my_inst.addr.u, sizeof(my_inst.addr.u),
+    t.set_nonce(my_inst.addr.get_nonce());
+    ANNOTATE_BENIGN_RACE_SIZED(&my_inst.addr, sizeof(my_inst.addr),
                                "SimpleMessenger learned addr");
-    my_inst.addr.u = t.u;
+    my_inst.addr = t;
     ldout(cct,1) << "learned my addr " << my_inst.addr << dendl;
     need_addr = false;
     init_local_connection();
@@ -718,6 +752,6 @@ void SimpleMessenger::init_local_connection()
 {
   local_connection->peer_addr = my_inst.addr;
   local_connection->peer_type = my_inst.name.type();
-  local_connection->set_features(local_features);
+  local_connection->set_features(CEPH_FEATURES_ALL);
   ms_deliver_handle_fast_connect(local_connection.get());
 }

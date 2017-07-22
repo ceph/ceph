@@ -11,7 +11,7 @@
 class TestJournalTrimmer : public RadosTestFixture {
 public:
 
-  virtual void TearDown() {
+  void TearDown() override {
     for (MetadataList::iterator it = m_metadata_list.begin();
          it != m_metadata_list.end(); ++it) {
       (*it)->remove_listener(&m_listener);

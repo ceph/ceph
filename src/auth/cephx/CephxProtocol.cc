@@ -38,7 +38,7 @@ void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uin
   uint64_t k = 0;
   const uint64_t *p = (const uint64_t *)enc.c_str();
   for (int pos = 0; pos + sizeof(k) <= enc.length(); pos+=sizeof(k), p++)
-    k ^= mswab64(*p);
+    k ^= mswab(*p);
   *key = k;
 }
 
@@ -179,7 +179,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
            << " validity=" << msg_a.validity << dendl;
   session_key = msg_a.session_key;
   if (!msg_a.validity.is_zero()) {
-    expires = ceph_clock_now(cct);
+    expires = ceph_clock_now();
     expires += msg_a.validity;
     renew_after = expires;
     renew_after -= ((double)msg_a.validity.sec() / 4);
@@ -193,7 +193,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
 bool CephXTicketHandler::have_key()
 {
   if (have_key_flag) {
-    have_key_flag = ceph_clock_now(cct) < expires;
+    have_key_flag = ceph_clock_now() < expires;
   }
 
   return have_key_flag;
@@ -202,7 +202,7 @@ bool CephXTicketHandler::have_key()
 bool CephXTicketHandler::need_key() const
 {
   if (have_key_flag) {
-    return (!expires.is_zero()) && (ceph_clock_now(cct) >= renew_after);
+    return (!expires.is_zero()) && (ceph_clock_now() >= renew_after);
   }
 
   return true;

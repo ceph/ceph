@@ -122,7 +122,7 @@ TEST(cls_rgw, test_log_add_same_time)
   ASSERT_EQ(0, ioctx.create(oid, true));
 
   /* generate log */
-  utime_t start_time = ceph_clock_now(g_ceph_context);
+  utime_t start_time = ceph_clock_now();
   generate_log(ioctx, oid, 10, start_time, false);
 
   librados::ObjectReadOperation *rop = new_rop();
@@ -209,7 +209,7 @@ TEST(cls_rgw, test_log_add_different_time)
   ASSERT_EQ(0, ioctx.create(oid, true));
 
   /* generate log */
-  utime_t start_time = ceph_clock_now(g_ceph_context);
+  utime_t start_time = ceph_clock_now();
   generate_log(ioctx, oid, 10, start_time, true);
 
   librados::ObjectReadOperation *rop = new_rop();
@@ -305,7 +305,7 @@ TEST(cls_rgw, test_log_trim)
   ASSERT_EQ(0, ioctx.create(oid, true));
 
   /* generate log */
-  utime_t start_time = ceph_clock_now(g_ceph_context);
+  utime_t start_time = ceph_clock_now();
   generate_log(ioctx, oid, 10, start_time, true);
 
   librados::ObjectReadOperation *rop = new_rop();

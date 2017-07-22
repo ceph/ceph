@@ -1,0 +1,23 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - reached quota
+    conf:
+      global:
+        ms inject delay max: 1
+        ms inject delay probability: 0.005
+        ms inject delay type: mon
+        ms inject internal delays: 0.002
+        ms inject socket failures: 2500
+tasks:
+- install: null
+- ceph:
+    fs: xfs
+- mon_thrash:
+    revive_delay: 90
+    thrash_delay: 1
+    thrash_many: true
+- workunit:
+    clients:
+      client.0:
+      - rados/test.sh

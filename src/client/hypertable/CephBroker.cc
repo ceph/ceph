@@ -41,7 +41,7 @@
 
 using namespace Hypertable;
 
-atomic_t CephBroker::ms_next_fd = ATOMIC_INIT(0);
+std::atomic<int> CephBroker::ms_next_fd{0};
 
 /* A thread-safe version of strerror */
 static std::string cpp_strerror(int err)
@@ -310,11 +310,11 @@ void CephBroker::remove(ResponseCallback *cb, const char *fname) {
 
 void CephBroker::length(ResponseCallbackLength *cb, const char *fname, bool) {
   int r;
-  struct stat statbuf;
+  struct ceph_statx stx;
 
   HT_DEBUGF("length file='%s'", fname);
 
-  if ((r = ceph_lstat(cmount, fname, &statbuf)) < 0) {
+  if ((r = ceph_statx(cmount, fname, &stx, CEPH_STATX_SIZE, AT_SYMLINK_NOFOLLOW)) < 0) {
     String abspath;
     make_abs_path(fname, abspath);
     std::string errs(cpp_strerror(r));
@@ -322,7 +322,7 @@ void CephBroker::length(ResponseCallbackLength *cb, const char *fname, bool) {
     report_error(cb,- r);
     return;
   }
-  cb->response(statbuf.st_size);
+  cb->response(stx.stx_size);
 }
 
 void CephBroker::pread(ResponseCallbackRead *cb, uint32_t fd, uint64_t offset,
@@ -384,17 +384,17 @@ void CephBroker::rmdir(ResponseCallback *cb, const char *dname) {
 int CephBroker::rmdir_recursive(const char *directory) {
   struct ceph_dir_result *dirp;
   struct dirent de;
-  struct stat st;
+  struct ceph_statx stx;
   int r;
   if ((r = ceph_opendir(cmount, directory, &dirp)) < 0)
     return r; //failed to open
-  while ((r = ceph_readdirplus_r(cmount, dirp, &de, &st, 0)) > 0) {
+  while ((r = ceph_readdirplus_r(cmount, dirp, &de, &stx, CEPH_STATX_INO, AT_NO_ATTR_SYNC, NULL)) > 0) {
     String new_dir = de.d_name;
     if(!(new_dir.compare(".")==0 || new_dir.compare("..")==0)) {
       new_dir = directory;
       new_dir += '/';
       new_dir += de.d_name;
-      if (S_ISDIR(st.st_mode)) { //it's a dir, clear it out...
+      if (S_ISDIR(stx.stx_mode)) { //it's a dir, clear it out...
 	if((r=rmdir_recursive(new_dir.c_str())) < 0) return r;
       } else { //delete this file
 	if((r=ceph_unlink(cmount, new_dir.c_str())) < 0) return r;
@@ -487,11 +487,11 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname) {
 
 void CephBroker::exists(ResponseCallbackExists *cb, const char *fname) {
   String abspath;
-  struct stat statbuf;
+  struct ceph_statx stx;
   
   HT_DEBUGF("exists file='%s'", fname);
   make_abs_path(fname, abspath);
-  cb->response(ceph_lstat(cmount, abspath.c_str(), &statbuf) == 0);
+  cb->response(ceph_statx(cmount, abspath.c_str(), &stx, 0, AT_SYMLINK_NOFOLLOW) == 0);
 }
 
 void CephBroker::rename(ResponseCallback *cb, const char *src, const char *dst) {

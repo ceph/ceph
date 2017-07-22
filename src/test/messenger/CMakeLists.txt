@@ -3,7 +3,7 @@ add_executable(simple_server
   simple_dispatcher.cc
   )
 target_link_libraries(simple_server
-  os global common ${Boost_REGEX_LIBRARY}
+  global ceph-common
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   )
@@ -13,7 +13,7 @@ add_executable(simple_client
   simple_dispatcher.cc
   )
 target_link_libraries(simple_client
-  os global common ${Boost_REGEX_LIBRARY}
+  global ceph-common
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   )
@@ -24,7 +24,7 @@ if(HAVE_XIO)
     xio_dispatcher.cc
     )
   target_link_libraries(xio_server
-    os global common ${Boost_REGEX_LIBRARY}
+    global ceph-common
     ${XIO_LIBRARY} pthread rt
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
@@ -35,10 +35,9 @@ if(HAVE_XIO)
     xio_dispatcher.cc
     )
   target_link_libraries(xio_client
-    os global common ${Boost_REGEX_LIBRARY}
+    global ceph-common
     ${XIO_LIBRARY} pthread rt
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
 endif(HAVE_XIO)
-

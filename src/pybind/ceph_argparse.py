@@ -23,6 +23,9 @@ import threading
 import uuid
 
 
+FLAG_MGR = 8   # command is intended for mgr
+
+
 try:
     basestring
 except NameError:
@@ -388,11 +391,19 @@ class CephName(CephArgtype):
         if s == '*':
             self.val = s
             return
+        elif s == "mgr":
+            self.nametype = "mgr"
+            self.val = s
+            return
+        elif s == "mon":
+            self.nametype = "mon"
+            self.val = s
+            return
         if s.find('.') == -1:
             raise ArgumentFormat('CephName: no . in {0}'.format(s))
         else:
             t, i = s.split('.', 1)
-            if t not in ('osd', 'mon', 'client', 'mds'):
+            if t not in ('osd', 'mon', 'client', 'mds', 'mgr'):
                 raise ArgumentValid('unknown type ' + t)
             if t == 'osd':
                 if i != '*':
@@ -880,9 +891,9 @@ def store_arg(desc, d):
         d[desc.name] = desc.instance.val
 
 
-def validate(args, signature, partial=False):
+def validate(args, signature, flags=0, partial=False):
     """
-    validate(args, signature, partial=False)
+    validate(args, signature, flags=0, partial=False)
 
     args is a list of either words or k,v pairs representing a possible
     command input following format of signature.  Runs a validation; no
@@ -904,6 +915,8 @@ def validate(args, signature, partial=False):
     reqsiglen = len([desc for desc in mysig if desc.req])
     matchcnt = 0
     d = dict()
+    save_exception = None
+
     for desc in mysig:
         setattr(desc, 'numseen', 0)
         while desc.numseen < desc.n:
@@ -911,12 +924,12 @@ def validate(args, signature, partial=False):
 
             # no arg, but not required?  Continue consuming mysig
             # in case there are later required args
-            if not myarg and not desc.req:
+            if myarg in (None, []) and not desc.req:
                 break
 
             # out of arguments for a required param?
             # Either return (if partial validation) or raise
-            if not myarg and desc.req:
+            if myarg in (None, []) and desc.req:
                 if desc.N and desc.numseen < 1:
                     # wanted N, didn't even get 1
                     if partial:
@@ -976,6 +989,9 @@ def validate(args, signature, partial=False):
             print(save_exception[0], 'not valid: ', save_exception[1], file=sys.stderr)
         raise ArgumentError("unused arguments: " + str(myargs))
 
+    if flags & FLAG_MGR:
+        d['target'] = ('mgr','')
+
     # Finally, success
     return d
 
@@ -1031,7 +1047,7 @@ def validate_command(sigdict, args, verbose=False):
             for cmd in cmdsig.values():
                 sig = cmd['sig']
                 try:
-                    valid_dict = validate(args, sig)
+                    valid_dict = validate(args, sig, flags=cmd.get('flags', 0))
                     found = cmd
                     break
                 except ArgumentPrefix:
@@ -1072,7 +1088,7 @@ def find_cmd_target(childargs):
     should be sent to a monitor or an osd.  We do this before even
     asking for the 'real' set of command signatures, so we can ask the
     right daemon.
-    Returns ('osd', osdid), ('pg', pgid), or ('mon', '')
+    Returns ('osd', osdid), ('pg', pgid), ('mgr', '') or ('mon', '')
     """
     sig = parse_funcsig(['tell', {'name': 'target', 'type': 'CephName'}])
     try:
@@ -1185,11 +1201,22 @@ def run_in_thread(target, *args, **kwargs):
         interrupt = True
 
     if interrupt:
-        t.retval = -errno.EINTR
+        t.retval = -errno.EINTR, None, 'Interrupted!'
     if t.exception:
         raise t.exception
     return t.retval
 
+
+def send_command_retry(*args, **kwargs):
+    while True:
+        try:
+            return send_command(*args, **kwargs)
+        except Exception as e:
+            if ('get_command_descriptions' in str(e) and
+                'object in state configuring' in str(e)):
+                continue
+            else:
+                raise
 
 def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                  verbose=False):
@@ -1215,6 +1242,10 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
             ret, outbuf, outs = run_in_thread(
                 cluster.osd_command, osdid, cmd, inbuf, timeout)
 
+        elif target[0] == 'mgr':
+            ret, outbuf, outs = run_in_thread(
+                cluster.mgr_command, cmd, inbuf, timeout)
+
         elif target[0] == 'pg':
             pgid = target[1]
             # pgid will already be in the command for the pg <pgid>
@@ -1235,7 +1266,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
             if verbose:
                 print('{0} to {1}'.format(cmd, target[0]),
                       file=sys.stderr)
-            if target[1] == '':
+            if len(target) < 2 or target[1] == '':
                 ret, outbuf, outs = run_in_thread(
                     cluster.mon_command, cmd, inbuf, timeout)
             else:
@@ -1286,6 +1317,8 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
         cmddict.update({'prefix': prefix})
     if argdict:
         cmddict.update(argdict)
+        if 'target' in argdict:
+            target = argdict.get('target')
 
     # grab prefix for error messages
     prefix = cmddict['prefix']
@@ -1304,8 +1337,9 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
                 # use the target we were originally given
                 pass
 
-        ret, outbuf, outs = send_command(cluster, target, [json.dumps(cmddict)],
-                                         inbuf, timeout, verbose)
+        ret, outbuf, outs = send_command_retry(cluster,
+                                               target, [json.dumps(cmddict)],
+                                               inbuf, timeout, verbose)
 
     except Exception as e:
         if not isinstance(e, ArgumentError):

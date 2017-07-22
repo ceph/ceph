@@ -18,7 +18,7 @@
 #include <string>
 #include <map>
 
-#include "include/buffer.h"
+#include "include/buffer.h"  // for bufferlist
 
 namespace librados {
 

@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        filestore flush min: 0
+tasks:
+- check-counter:
+    counters:
+      mds:
+        - "mds.dir_split"
+- workunit:
+    clients:
+      all:
+        - suites/ffsb.sh
