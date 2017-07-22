@@ -44,14 +44,53 @@ or not it is in the quorum. ::
 Authentication Subsystem
 ========================
 
-To add a keyring for an OSD, execute the following::
+Add auth info for ``entity`` from input file, or random key if no input is given, and/or any caps specified. ::
 
-	ceph auth add {osd} {--in-file|-i} {path-to-osd-keyring}
+        ceph auth add <entity> {<caps> [<caps>...]}
 
-To list the cluster's keys and their capabilities, execute the following::
+Update caps for ``entity`` from caps specified. ::
 
-	ceph auth ls
+        ceph auth caps <entity> <caps> [<caps>...]
 
+Delete all caps for ``entity``. ::
+
+        ceph auth del <entity>
+
+List the cluster's auth info. ::
+
+        ceph auth ls
+
+Write keyring for ``entity``, or master keyring if none given. ::
+
+        ceph auth export {<entity>}
+
+Write keyring file with requested key. ::
+
+        ceph auth get <entity>
+
+Display requested key. ::
+
+        ceph auth get-key <entity>
+
+Get or add auth info for ``entity`` from input file, or random key if no input is given, and/or any caps specified. ::
+
+        ceph auth get-or-create <entity> {<caps> [<caps>...]}
+
+Get or add key for ``entity`` from system/caps pairs specified. ::
+
+        ceph auth get-or-create-key <entity> {<caps> [<caps>...]}
+
+Import auth info from keyring file. ::
+
+        ceph auth import {--in-file|-i} {path-to-keyring}
+
+Display key info for ``entity``. ::
+
+        ceph auth print-key <entity>
+
+Remove all caps for ``entity``. ::
+
+        ceph auth rm <entity>
 
 Placement Group Subsystem
 =========================
@@ -141,7 +180,7 @@ Remove an existing bucket from the CRUSH map. ::
 
 Move an existing bucket from one position in the hierarchy to another.  ::
 
-   ceph osd crush move {id} {loc1} [{loc2} ...]
+        ceph osd crush move {id} {loc1} [{loc2} ...]
 
 Set the weight of the item given by ``{name}`` to ``{weight}``. ::
 
