@@ -288,7 +288,7 @@ def task(ctx, config):
         'repair_test task only accepts a dict for config'
 
     manager = ctx.managers['ceph']
-    manager.wait_for_all_up()
+    manager.wait_for_all_osds_up()
 
     manager.raw_cluster_cmd('osd', 'set', 'noscrub')
     manager.raw_cluster_cmd('osd', 'set', 'nodeep-scrub')
