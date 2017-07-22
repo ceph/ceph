@@ -153,7 +153,15 @@ version_t HealthMonitor::get_trim_to()
 
 bool HealthMonitor::preprocess_query(MonOpRequestRef op)
 {
-  switch (op->get_req()->get_type()) {
+  return false;
+}
+
+bool HealthMonitor::prepare_update(MonOpRequestRef op)
+{
+  Message *m = op->get_req();
+  dout(7) << "prepare_update " << *m
+	  << " from " << m->get_orig_source_inst() << dendl;
+  switch (m->get_type()) {
   case MSG_MON_HEALTH:
     {
       MMonHealth *hm = static_cast<MMonHealth*>(op->get_req());
@@ -165,22 +173,18 @@ bool HealthMonitor::preprocess_query(MonOpRequestRef op)
       }
       return services[service_type]->service_dispatch(op);
     }
-
   case MSG_MON_HEALTH_CHECKS:
-    return preprocess_health_checks(op);
+    return prepare_health_checks(op);
+  default:
+    return false;
   }
-  return false;
 }
 
-bool HealthMonitor::prepare_update(MonOpRequestRef op)
-{
-  return false;
-}
-
-bool HealthMonitor::preprocess_health_checks(MonOpRequestRef op)
+bool HealthMonitor::prepare_health_checks(MonOpRequestRef op)
 {
   MMonHealthChecks *m = static_cast<MMonHealthChecks*>(op->get_req());
-  quorum_checks[m->get_source().num()] = m->health_checks;
+  // no need to check if it's changed, the peon has done so
+  quorum_checks[m->get_source().num()] = std::move(m->health_checks);
   return true;
 }
 
