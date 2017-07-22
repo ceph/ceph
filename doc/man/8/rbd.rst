@@ -383,6 +383,21 @@ Commands
   --io-total.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
   --io-pattern seq.
 
+:command:`trash ls` [*pool-name*]
+  List all entries from trash.
+
+:command:`trash mv` *image-spec*
+  Move an image to the trash. Images, even ones actively in-use by 
+  clones, can be moved to the trash and deleted at a later time.
+
+:command:`trash rm` *image-id* 
+  Delete an image from trash. If image deferment time has not expired
+  you can not removed it unless use force. But an actively in-use by clones 
+  or has snapshots can not be removed.
+
+:command:`trash restore` *image-id*  
+  Restore an image from trash.
+
 Image and snap specs
 ====================
 
@@ -560,6 +575,30 @@ To lock an image for exclusive use::
 To release a lock::
 
        rbd lock remove mypool/myimage mylockid client.2485
+
+To list images from trash::
+
+       rbd trash ls mypool
+
+To defer delete an image (use *--delay* to set delay-time, default is 0)::
+
+       rbd trash mv mypool/myimage
+
+To delete an image from trash (be careful!)::
+
+       rbd trash rm mypool/myimage-id
+
+To force delete an image from trash (be careful!)::
+
+       rbd trash rm mypool/myimage-id  --force
+
+To restore an image from trash::
+
+       rbd trash restore mypool/myimage-id
+
+To restore an image from trash and rename it::
+
+       rbd trash restore mypool/myimage-id --image mynewimage
 
 
 Availability
