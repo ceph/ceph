@@ -20,6 +20,7 @@
 #include <atomic>
 
 namespace ceph {
+inline namespace version_1_0 {
 
 class spinlock;
 
@@ -43,11 +44,7 @@ class spinlock final
   }
 };
 
-} // namespace ceph
-
 // Free functions:
-namespace ceph {
-
 inline void spin_lock(std::atomic_flag& lock)
 {
  while(lock.test_and_set(std::memory_order_acquire))
@@ -89,6 +86,7 @@ inline void spin_unlock(ceph::spinlock *lock)
  spin_unlock(*lock);
 }
 
+} // inline namespace (version)
 } // namespace ceph
 
 #endif
