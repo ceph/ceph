@@ -3187,6 +3187,44 @@ void PGMap::get_health_checks(
       }
     }
   }
+
+  // POOL_APP
+  {
+    list<string> detail;
+    for (auto &it : pools) {
+      const pg_pool_t &pool = it.second;
+      const string& pool_name = osdmap.get_pool_name(it.first);
+      auto it2 = pg_pool_sum.find(it.first);
+      if (it2 == pg_pool_sum.end()) {
+        continue;
+      }
+      const pool_stat_t *pstat = &it2->second;
+      if (pstat == nullptr) {
+        continue;
+      }
+      const object_stat_sum_t& sum = pstat->stats.sum;
+      // application metadata is not encoded until luminous is minimum
+      // required release
+      if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+          sum.num_objects > 0 && pool.application_metadata.empty() &&
+          !pool.is_tier() && !g_conf->mon_debug_no_require_luminous) {
+        stringstream ss;
+        ss << "application not enabled on pool '" << pool_name << "'";
+        detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << "application not enabled on " << detail.size() << " pool(s)";
+      auto& d = checks->add("POOL_APP_NOT_ENABLED", HEALTH_WARN, ss.str());
+      stringstream tip;
+      tip << "use 'ceph osd pool application enable <pool-name> "
+          << "<app-name>', where <app-name> is 'cephfs', 'rbd', 'rgw', "
+          << "or freeform for custom applications.";
+      detail.push_back(tip.str());
+      d.detail.swap(detail);
+    }
+  }
 }
 
 void PGMap::get_health(
