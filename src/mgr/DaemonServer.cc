@@ -318,16 +318,18 @@ bool DaemonServer::handle_open(MMgrOpen *m)
   configure->stats_period = g_conf->mgr_stats_period;
   m->get_connection()->send_message(configure);
 
+  DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
+    daemon = daemon_state.get(key);
+  }
+  if (daemon) {
     dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
+    Mutex::Locker l(daemon->lock);
     daemon_state.get(key)->perf_counters.clear();
   }
 
   if (m->service_daemon) {
-    DaemonStatePtr daemon;
-    if (daemon_state.exists(key)) {
-      daemon = daemon_state.get(key);
-    } else {
+    if (!daemon) {
       dout(4) << "constructing new DaemonState for " << key << dendl;
       daemon = std::make_shared<DaemonState>(daemon_state.types);
       daemon->key = key;
@@ -336,6 +338,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
       }
       daemon_state.insert(daemon);
     }
+    Mutex::Locker l(daemon->lock);
     daemon->service_daemon = true;
     daemon->metadata = m->daemon_metadata;
     daemon->service_status = m->daemon_status;
@@ -395,6 +398,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
     // always contains metadata.
   }
   assert(daemon != nullptr);
+  Mutex::Locker l(daemon->lock);
   auto &daemon_counters = daemon->perf_counters;
   daemon_counters.update(m);
   // if there are any schema updates, notify the python modules
@@ -680,6 +684,7 @@ bool DaemonServer::handle_command(MCommand *m)
 	DaemonKey key(p.first, q.first);
 	assert(daemon_state.exists(key));
 	auto daemon = daemon_state.get(key);
+	Mutex::Locker l(daemon->lock);
 	f->dump_stream("status_stamp") << daemon->service_status_stamp;
 	f->dump_stream("last_beacon") << daemon->last_service_beacon;
 	f->open_object_section("status");
@@ -978,6 +983,7 @@ void DaemonServer::_prune_pending_service_map()
 	continue;
       }
       auto daemon = daemon_state.get(key);
+      Mutex::Locker l(daemon->lock);
       if (daemon->last_service_beacon == utime_t()) {
 	// we must have just restarted; assume they are alive now.
 	daemon->last_service_beacon = ceph_clock_now();
