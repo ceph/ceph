@@ -6498,8 +6498,14 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
 
     string key;
     cmd_getval(g_ceph_context, cmdmap, "key", key);
+    auto it = p.application_metadata[app].find(key);
+    if (it == p.application_metadata[app].end()) {
+      ss << "application '" << app << "' on pool '" << pool_name
+         << "' does not have key '" << key << "'";
+      return 0; // idempotent
+    }
 
-    p.application_metadata[app].erase(key);
+    p.application_metadata[app].erase(it);
     ss << "removed application '" << app << "' key '" << key << "' on pool '"
        << pool_name << "'";
   } else {
