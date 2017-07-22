@@ -1242,6 +1242,9 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  if (candidate.get_namespace() == cct->_conf->osd_hit_set_namespace)
 	    continue;
 
+	  if (missing_loc.is_deleted(candidate))
+	    continue;
+
 	  // skip wrong namespace
 	  if (m->get_hobj().nspace != librados::all_nspaces &&
                candidate.get_namespace() != m->get_hobj().nspace)
@@ -1396,6 +1399,9 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
 	  // skip wrong namespace
 	  if (candidate.get_namespace() != m->get_hobj().nspace)
+	    continue;
+
+	  if (missing_loc.is_deleted(candidate))
 	    continue;
 
 	  if (filter && !pgls_filter(filter, candidate, filter_out))
