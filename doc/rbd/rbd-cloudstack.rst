@@ -81,7 +81,7 @@ credentials to access the ``cloudstack`` pool we just created. Although we could
 use ``client.admin`` for this, it's recommended to create a user with only
 access to the ``cloudstack`` pool. ::
 
-  ceph auth get-or-create client.cloudstack mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=cloudstack'
+  ceph auth get-or-create client.cloudstack mon 'profile rbd' osd 'profile rbd pool=cloudstack'
 
 Use the information returned by the command in the next step when adding the 
 Primary Storage.

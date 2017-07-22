@@ -98,24 +98,24 @@ capabilities when creating or updating a user.
 
 Capability syntax follows the form::
 
-	{daemon-type} 'allow {capability}' [{daemon-type} 'allow {capability}']
+	{daemon-type} '{capspec}[, {capspec} ...]'
 
-
-- **Monitor Caps:** Monitor capabilities include ``r``, ``w``, ``x`` and 
-  ``allow profile {cap}``. For example:: 
+- **Monitor Caps:** Monitor capabilities include ``r``, ``w``, ``x`` access
+  settings or ``profile {name}``. For example::
 
 	mon 'allow rwx'
-	mon 'allow profile osd'
+	mon 'profile osd'
 
-- **OSD Caps:** OSD capabilities include ``r``, ``w``, ``x``, ``class-read``, 
-  ``class-write`` and ``profile osd``. Additionally, OSD capabilities also 
-  allow for pool and namespace settings. ::
+- **OSD Caps:** OSD capabilities include ``r``, ``w``, ``x``, ``class-read``,
+  ``class-write`` access settings or ``profile {name}``. Additionally, OSD
+  capabilities also allow for pool and namespace settings. ::
 
-	osd 'allow {capability}' [pool={poolname}] [namespace={namespace-name}]
+	osd 'allow {access} [pool={pool-name} [namespace={namespace-name}]]'
+	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]]'
 
 - **Metadata Server Caps:** Metadata server capability simply requires ``allow``, 
   or blank and does not parse anything further. :: 
-  
+
 	mds 'allow'
 
 
@@ -168,20 +168,20 @@ The following entries describe each capability.
               admin commands.
 
 
-``profile osd``
+``profile osd`` (Monitor only)
 
 :Description: Gives a user permissions to connect as an OSD to other OSDs or 
               monitors. Conferred on OSDs to enable OSDs to handle replication
               heartbeat traffic and status reporting.
 
 
-``profile mds``
+``profile mds`` (Monitor only)
 
 :Description: Gives a user permissions to connect as a MDS to other MDSs or 
               monitors.
 
 
-``profile bootstrap-osd``
+``profile bootstrap-osd`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap an OSD. Conferred on 
               deployment tools such as ``ceph-disk``, ``ceph-deploy``, etc.
@@ -189,13 +189,23 @@ The following entries describe each capability.
               bootstrapping an OSD.
 
 
-``profile bootstrap-mds``
+``profile bootstrap-mds`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap a metadata server. 
               Conferred on deployment tools such as ``ceph-deploy``, etc.
               so they have permissions to add keys, etc. when bootstrapping
               a metadata server.
 
+``profile rbd`` (Monitor and OSD)
+
+:Description: Gives a user permissions to manipulate RBD images. When used
+              as a Monitor cap, it provides the minimal privileges required
+              by an RBD client application. When used as an OSD cap, it
+              provides read-write access to an RBD client application.
+
+``profile rbd-read-only`` (OSD only)
+
+:Description: Gives a user read-only permissions to an RBD image.
 
 
 Pool

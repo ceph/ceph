@@ -240,3 +240,8 @@
   removed and the associated health warning has been disabled because
   it does not address clusters undergoing recovery or CRUSH rules that do
   not target all devices in the cluster.
+
+* Specifying user authorization capabilities for RBD clients has been
+  simplified. The general syntax for using RBD capability profiles is
+  "mon 'profile rbd' osd 'profile rbd[-read-only][ pool={pool-name}[, ...]]'".
+  For more details see "User Management" in the documentation.

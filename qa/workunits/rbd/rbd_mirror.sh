@@ -388,7 +388,7 @@ request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 
 testlog "TEST: no blacklists"
-ceph --cluster ${CLUSTER1} osd blacklist ls 2>&1 | grep -q "listed 0 entries"
-ceph --cluster ${CLUSTER2} osd blacklist ls 2>&1 | grep -q "listed 0 entries"
+CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER1} osd blacklist ls 2>&1 | grep -q "listed 0 entries"
+CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER2} osd blacklist ls 2>&1 | grep -q "listed 0 entries"
 
 echo OK
