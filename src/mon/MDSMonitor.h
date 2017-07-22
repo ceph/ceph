@@ -139,6 +139,9 @@ class MDSMonitor : public PaxosService {
   void remove_from_metadata(MonitorDBStore::TransactionRef t);
   int load_metadata(map<mds_gid_t, Metadata>& m);
   void count_metadata(const string& field, Formatter *f);
+public:
+  void count_metadata(const string& field, map<string,int> *out);
+protected:
 
   // MDS daemon GID to latest health state from that GID
   std::map<uint64_t, MDSHealth> pending_daemon_health;

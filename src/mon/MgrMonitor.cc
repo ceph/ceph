@@ -25,6 +25,8 @@
 
 #include "MgrMonitor.h"
 
+#define MGR_METADATA_PREFIX "mgr_metadata"
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, map)
@@ -34,7 +36,6 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 		<< "(" << mon->get_state_name()
 		<< ").mgr e" << mgrmap.get_epoch() << " ";
 }
-
 
 // Prefix for mon store of active mgr's command descriptions
 const static std::string command_descs_prefix = "mgr_command_descs";
@@ -137,6 +138,17 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_map.encode(bl, mon->get_quorum_con_features());
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
+
+  for (auto& p : pending_metadata) {
+    dout(10) << __func__ << " set metadata for " << p.first << dendl;
+    t->put(MGR_METADATA_PREFIX, p.first, p.second);
+  }
+  for (auto& name : pending_metadata_rm) {
+    dout(10) << __func__ << " rm metadata for " << name << dendl;
+    t->erase(MGR_METADATA_PREFIX, name);
+  }
+  pending_metadata.clear();
+  pending_metadata_rm.clear();
 
   health_check_map_t next;
   if (pending_map.active_gid == 0) {
@@ -329,6 +341,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     pending_map.active_gid = m->get_gid();
     pending_map.active_name = m->get_name();
     pending_map.available_modules = m->get_available_modules();
+    ::encode(m->get_metadata(), pending_metadata[m->get_name()]);
+    pending_metadata_rm.erase(m->get_name());
 
     mon->clog->info() << "Activating manager daemon "
                       << pending_map.active_name;
@@ -353,6 +367,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
                          << " started";
       pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name(),
 					    m->get_available_modules()};
+      ::encode(m->get_metadata(), pending_metadata[m->get_name()]);
+      pending_metadata_rm.erase(m->get_name());
       updated = true;
     }
   }
@@ -592,6 +608,8 @@ void MgrMonitor::drop_active()
     last_beacon.erase(pending_map.active_gid);
   }
 
+  pending_metadata_rm.insert(pending_map.active_name);
+  pending_metadata.erase(pending_map.active_name);
   pending_map.active_name = "";
   pending_map.active_gid = 0;
   pending_map.available = false;
@@ -604,11 +622,12 @@ void MgrMonitor::drop_active()
 
 void MgrMonitor::drop_standby(uint64_t gid)
 {
+  pending_metadata_rm.insert(pending_map.standbys[gid].name);
+  pending_metadata.erase(pending_map.standbys[gid].name);
   pending_map.standbys.erase(gid);
   if (last_beacon.count(gid) > 0) {
     last_beacon.erase(gid);
   }
-
 }
 
 bool MgrMonitor::preprocess_command(MonOpRequestRef op)
@@ -665,6 +684,58 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     }
     f->close_section();
     f->flush(rdata);
+  } else if (prefix == "mgr metadata") {
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "id", name);
+    if (name.size() > 0 && !map.have_name(name)) {
+      ss << "mgr." << name << " does not exist";
+      r = -ENOENT;
+      goto reply;
+    }
+    string format;
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
+    if (name.size()) {
+      f->open_object_section("mgr_metadata");
+      f->dump_string("id", name);
+      r = dump_metadata(name, f.get(), &ss);
+      if (r < 0)
+        goto reply;
+      f->close_section();
+    } else {
+      r = 0;
+      f->open_array_section("mgr_metadata");
+      for (auto& i : map.get_all_names()) {
+	f->open_object_section("mgr");
+	f->dump_string("id", i);
+	r = dump_metadata(i, f.get(), NULL);
+	if (r == -EINVAL || r == -ENOENT) {
+	  // Drop error, continue to get other daemons' metadata
+	  dout(4) << "No metadata for mgr." << i << dendl;
+	  r = 0;
+	} else if (r < 0) {
+	  // Unexpected error
+	  goto reply;
+	}
+	f->close_section();
+      }
+      f->close_section();
+    }
+    f->flush(rdata);
+  } else if (prefix == "mgr versions") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    count_metadata("ceph_version", f.get());
+    f->flush(rdata);
+    r = 0;
+  } else if (prefix == "mgr count-metadata") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    string field;
+    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    count_metadata(field, f.get());
+    f->flush(rdata);
+    r = 0;
   } else {
     return false;
   }
@@ -807,4 +878,59 @@ void MgrMonitor::on_shutdown()
   cancel_timer();
 }
 
+int MgrMonitor::load_metadata(const string& name, std::map<string, string>& m,
+			      ostream *err)
+{
+  bufferlist bl;
+  int r = mon->store->get(MGR_METADATA_PREFIX, name, bl);
+  if (r < 0)
+    return r;
+  try {
+    bufferlist::iterator p = bl.begin();
+    ::decode(m, p);
+  }
+  catch (buffer::error& e) {
+    if (err)
+      *err << "mgr." << name << " metadata is corrupt";
+    return -EIO;
+  }
+  return 0;
+}
+
+void MgrMonitor::count_metadata(const string& field, std::map<string,int> *out)
+{
+  std::set<string> ls = map.get_all_names();
+  for (auto& name : ls) {
+    std::map<string,string> meta;
+    load_metadata(name, meta, nullptr);
+    auto p = meta.find(field);
+    if (p == meta.end()) {
+      (*out)["unknown"]++;
+    } else {
+      (*out)[p->second]++;
+    }
+  }
+}
+
+void MgrMonitor::count_metadata(const string& field, Formatter *f)
+{
+  std::map<string,int> by_val;
+  count_metadata(field, &by_val);
+  f->open_object_section(field.c_str());
+  for (auto& p : by_val) {
+    f->dump_int(p.first.c_str(), p.second);
+  }
+  f->close_section();
+}
+
+int MgrMonitor::dump_metadata(const string& name, Formatter *f, ostream *err)
+{
+  std::map<string,string> m;
+  if (int r = load_metadata(name, m, err))
+    return r;
+  for (auto& p : m) {
+    f->dump_string(p.first.c_str(), p.second);
+  }
+  return 0;
+}
 

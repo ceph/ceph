@@ -160,10 +160,13 @@ Major Changes from Kraken
   * *CLI changes*:
 
     - The ``ceph -s`` or ``ceph status`` command has a fresh look.
-    - ``ceph {osd,mds,mon} versions`` summarizes versions of running daemons.
-    - ``ceph {osd,mds,mon} count-metadata <property>`` similarly
+    - ``ceph mgr metadata`` will dump metadata associated with each mgr
+      daemon.
+    - ``ceph versions`` or ``ceph {osd,mds,mon,mgr} versions``
+      summarize versions of running daemons.
+    - ``ceph {osd,mds,mon,mgr} count-metadata <property>`` similarly
       tabulates any other daemon metadata visible via the ``ceph
-      {osd,mds,mon} metadata`` commands.
+      {osd,mds,mon,mgr} metadata`` commands.
     - ``ceph features`` summarizes features and releases of connected
       clients and daemons.
     - ``ceph osd require-osd-release <release>`` replaces the old
@@ -317,6 +320,10 @@ Upgrade from Jewel or Kraken
 
 #. Do not create any new erasure-code pools while upgrading the monitors.
 
+#. You can monitor the progress of your upgrade at each stage with the
+   ``ceph versions`` command, which will tell you what ceph version is
+   running for each type of daemon.
+
 #. Set the ``noout`` flag for the duration of the upgrade. (Optional
    but recommended.)::
 
@@ -368,7 +375,7 @@ Upgrade from Jewel or Kraken
      # systemctl restart ceph-osd.target
 
    You can monitor the progress of the OSD upgrades with the new
-   ``ceph osd versions`` command.::
+   ``ceph versions`` or ``ceph osd versions`` command.::
 
      # ceph osd versions
      {

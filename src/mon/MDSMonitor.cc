@@ -1863,19 +1863,24 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
   return 0;
 }
 
-void MDSMonitor::count_metadata(const string& field, Formatter *f)
+void MDSMonitor::count_metadata(const string& field, map<string,int> *out)
 {
-  map<string,int> by_val;
   map<mds_gid_t,Metadata> meta;
   load_metadata(meta);
   for (auto& p : meta) {
     auto q = p.second.find(field);
     if (q == p.second.end()) {
-      by_val["unknown"]++;
+      (*out)["unknown"]++;
     } else {
-      by_val[q->second]++;
+      (*out)[q->second]++;
     }
   }
+}
+
+void MDSMonitor::count_metadata(const string& field, Formatter *f)
+{
+  map<string,int> by_val;
+  count_metadata(field, &by_val);
   f->open_object_section(field.c_str());
   for (auto& p : by_val) {
     f->dump_int(p.first.c_str(), p.second);

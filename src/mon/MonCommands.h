@@ -279,6 +279,10 @@ COMMAND("mon count-metadata name=property,type=CephString",
 COMMAND("mon versions",
 	"check running versions of monitors",
 	"mon", "r", "cli,rest")
+COMMAND("versions",
+	"check running versions of ceph daemons",
+	"mon", "r", "cli,rest")
+
 
 
 /*
@@ -1017,3 +1021,12 @@ COMMAND("mgr module enable "						\
 COMMAND("mgr module disable "						\
 	"name=module,type=CephString",
 	"disable mgr module", "mgr", "rw", "cli,rest")
+COMMAND("mgr metadata name=id,type=CephString,req=false",
+	"dump metadata for all daemons or a specific daemon",
+	"mgr", "r", "cli,rest")
+COMMAND("mgr count-metadata name=property,type=CephString",
+	"count ceph-mgr daemons by metadata field property",
+	"mgr", "r", "cli,rest")
+COMMAND("mgr versions", \
+	"check running versions of ceph-mgr daemons",
+	"mgr", "r", "cli,rest")
