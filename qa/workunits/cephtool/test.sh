@@ -1855,7 +1855,7 @@ function test_mon_stdin_stdout()
 function test_osd_compact()
 {
   ceph tell osd.1 compact
-  ceph daemon osd.1 compact
+  $SUDO ceph daemon osd.1 compact
 }
 
 #
