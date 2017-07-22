@@ -129,7 +129,7 @@ Major Changes from Kraken
   * Improved discard handling when the object map feature is enabled.
   * rbd CLI ``import`` and ``copy`` commands now detect sparse and
     preserve sparse regions.
-  * Images and Snapshots will now include a creation timestamp
+  * Images and Snapshots will now include a creation timestamp.
 
 - *CephFS*:
 
@@ -195,7 +195,7 @@ Major Changes from Kraken
       for applying changes to entire subtrees.  For example, ``ceph
       osd down `ceph osd ls-tree rack1```.
     - ``ceph osd {add,rm}-{noout,noin,nodown,noup}`` allow the
-      `noout`, `nodown`, `noin`, and `noup` flags to be applied to
+      `noout`, `noin`, `nodown`, and `noup` flags to be applied to
       specific OSDs.
     - ``ceph log last [n]`` will output the last *n* lines of the cluster
       log.
@@ -331,7 +331,7 @@ Upgrade from Jewel or Kraken
 
 #. Upgrade monitors by installing the new packages and restarting the
    monitor daemons.  Note that, unlike prior releases, the ceph-mon
-   daemons *must* be upgraded first.::
+   daemons *must* be upgraded first::
 
      # systemctl restart ceph-mon.target
 
@@ -355,7 +355,7 @@ Upgrade from Jewel or Kraken
    If you are upgrading from kraken, you may already have ceph-mgr
    daemons deployed.  If not, or if you are upgrading from jewel, you
    can deploy new daemons with tools like ceph-deploy or ceph-ansible.
-   For example,::
+   For example::
 
      # ceph-deploy mgr create HOST
 
@@ -370,12 +370,12 @@ Upgrade from Jewel or Kraken
      ...
 
 #. Upgrade all OSDs by installing the new packages and restarting the
-   ceph-osd daemons on all hosts.::
+   ceph-osd daemons on all hosts::
 
      # systemctl restart ceph-osd.target
 
    You can monitor the progress of the OSD upgrades with the new
-   ``ceph versions`` or ``ceph osd versions`` command.::
+   ``ceph versions`` or ``ceph osd versions`` command::
 
      # ceph osd versions
      {
@@ -384,12 +384,12 @@ Upgrade from Jewel or Kraken
      }
 
 #. Upgrade all CephFS daemons by upgrading packages and restarting
-   daemons on all hosts.::
+   daemons on all hosts::
 
      # systemctl restart ceph-mds.target
 
 #. Upgrade all radosgw daemons by upgrading packages and restarting
-   daemons on all hosts.::
+   daemons on all hosts::
 
      # systemctl restart radosgw.target
 
@@ -5820,7 +5820,7 @@ Upgrading from Hammer
 
 * For all distributions that support systemd (CentOS 7, Fedora, Debian
   Jessie 8.x, OpenSUSE), ceph daemons are now managed using native systemd
-  files instead of the legacy sysvinit scripts.  For example,::
+  files instead of the legacy sysvinit scripts.  For example::
 
     systemctl start ceph.target       # start all daemons
     systemctl status ceph-osd@12      # check status of osd.12
@@ -5861,7 +5861,7 @@ Upgrading from Hammer
 
 	   ceph-deploy install --stable jewel HOST
 
-      #. Stop the daemon(s).::
+      #. Stop the daemon(s)::
 
 	   service ceph stop           # fedora, centos, rhel, debian
 	   stop ceph-all               # ubuntu
@@ -5871,7 +5871,7 @@ Upgrading from Hammer
 	   chown -R ceph:ceph /var/lib/ceph
            chown -R ceph:ceph /var/log/ceph
 
-      #. Restart the daemon(s).::
+      #. Restart the daemon(s)::
 
 	   start ceph-all                # ubuntu
 	   systemctl start ceph.target   # debian, centos, fedora, rhel
@@ -9432,7 +9432,7 @@ Upgrading from Hammer
 
 * For all distributions that support systemd (CentOS 7, Fedora, Debian
   Jessie 8.x, OpenSUSE), ceph daemons are now managed using native systemd
-  files instead of the legacy sysvinit scripts.  For example,::
+  files instead of the legacy sysvinit scripts.  For example::
 
     systemctl start ceph.target       # start all daemons
     systemctl status ceph-osd@12      # check status of osd.12
@@ -9472,7 +9472,7 @@ Upgrading from Hammer
 
 	   ceph-deploy install --stable infernalis HOST
 
-      #. Stop the daemon(s).::
+      #. Stop the daemon(s)::
 
 	   service ceph stop           # fedora, centos, rhel, debian
 	   stop ceph-all               # ubuntu
@@ -9482,7 +9482,7 @@ Upgrading from Hammer
 	   chown -R ceph:ceph /var/lib/ceph
            chown -R ceph:ceph /var/log/ceph
 
-      #. Restart the daemon(s).::
+      #. Restart the daemon(s)::
 
 	   start ceph-all                # ubuntu
 	   systemctl start ceph.target   # debian, centos, fedora, rhel
@@ -10123,7 +10123,7 @@ Upgrading from Hammer
 
 * For all distributions that support systemd (CentOS 7, Fedora, Debian
   Jessie 8.x, OpenSUSE), ceph daemons are now managed using native systemd
-  files instead of the legacy sysvinit scripts.  For example,::
+  files instead of the legacy sysvinit scripts.  For example::
 
     systemctl start ceph.target       # start all daemons
     systemctl status ceph-osd@12      # check status of osd.12
@@ -10162,7 +10162,7 @@ Upgrading from Hammer
 
 	   ceph-deploy install --stable infernalis HOST
 
-      #. Stop the daemon(s).::
+      #. Stop the daemon(s)::
 
 	   service ceph stop           # fedora, centos, rhel, debian
 	   stop ceph-all               # ubuntu
@@ -10172,7 +10172,7 @@ Upgrading from Hammer
 	   chown -R ceph:ceph /var/lib/ceph
            chown -R ceph:ceph /var/log/ceph
 
-      #. Restart the daemon(s).::
+      #. Restart the daemon(s)::
 
 	   start ceph-all                # ubuntu
 	   systemctl start ceph.target   # debian, centos, fedora, rhel
@@ -18729,7 +18729,7 @@ Please refer to the document `Upgrading from Argonaut to Bobtail`_ for details.
   Upgrading a cluster without adjusting the Ceph configuration will
   likely prevent the system from starting up on its own.  We recommend
   first modifying the configuration to indicate that authentication is
-  disabled, and only then upgrading to the latest version.::
+  disabled, and only then upgrading to the latest version::
 
      auth client required = none
      auth service required = none
