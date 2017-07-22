@@ -87,6 +87,9 @@ struct health_check_map_t {
   void clear() {
     checks.clear();
   }
+  bool empty() const {
+    return checks.empty();
+  }
   void swap(health_check_map_t& other) {
     checks.swap(other.checks);
   }
