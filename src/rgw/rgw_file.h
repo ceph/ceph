@@ -253,6 +253,7 @@ namespace rgw {
     static constexpr uint32_t FLAG_LOCKED = 0x0200;
     static constexpr uint32_t FLAG_STATELESS_OPEN = 0x0400;
     static constexpr uint32_t FLAG_EXACT_MATCH = 0x0800;
+    static constexpr uint32_t FLAG_MOUNT = 0x1000;
 
 #define CREATE_FLAGS(x) \
     ((x) & ~(RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_LOCK))
@@ -262,7 +263,7 @@ namespace rgw {
   private:
     RGWFileHandle(RGWLibFS* _fs)
       : fs(_fs), bucket(nullptr), parent(nullptr), variant_type{directory()},
-	depth(0), flags(FLAG_ROOT)
+	depth(0), flags(FLAG_NONE)
       {
 	/* root */
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
@@ -277,7 +278,8 @@ namespace rgw {
       return XXH64(uid.c_str(), uid.length(), fh_key::seed);
     }
 
-    void init_rootfs(std::string& fsid, const std::string& object_name) {
+    void init_rootfs(std::string& fsid, const std::string& object_name,
+                     bool is_bucket) {
       /* fh_key */
       fh.fh_hk.bucket = XXH64(fsid.c_str(), fsid.length(), fh_key::seed);
       fh.fh_hk.object = XXH64(object_name.c_str(), object_name.length(),
@@ -286,6 +288,14 @@ namespace rgw {
       name = object_name;
 
       state.dev = init_fsid(fsid);
+
+      if (is_bucket) {
+        flags |= RGWFileHandle::FLAG_BUCKET | RGWFileHandle::FLAG_MOUNT;
+        bucket = this;
+        depth = 1;
+      } else {
+        flags |= RGWFileHandle::FLAG_ROOT | RGWFileHandle::FLAG_MOUNT;
+      }
     }
 
   public:
@@ -523,6 +533,7 @@ namespace rgw {
 
     bool is_open() const { return flags & FLAG_OPEN; }
     bool is_root() const { return flags & FLAG_ROOT; }
+    bool is_mount() const { return flags & FLAG_MOUNT; }
     bool is_bucket() const { return flags & FLAG_BUCKET; }
     bool is_object() const { return !is_bucket(); }
     bool is_file() const { return (fh.fh_type == RGW_FS_TYPE_FILE); }
@@ -847,7 +858,7 @@ namespace rgw {
     };
 
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
-	    const char* _key)
+	    const char* _key, const char *root)
       : cct(_cct), root_fh(this), invalidate_cb(nullptr),
 	invalidate_arg(nullptr), shutdown(false), refcnt(1),
 	fh_cache(cct->_conf->rgw_nfs_fhcache_partitions,
@@ -856,7 +867,11 @@ namespace rgw {
 	       cct->_conf->rgw_nfs_lru_lane_hiwat),
 	uid(_uid), key(_user_id, _key) {
 
-      root_fh.init_rootfs(uid, RGWFileHandle::root_name);
+      if (!root || !strcmp(root, "/")) {
+        root_fh.init_rootfs(uid, RGWFileHandle::root_name, false);
+      } else {
+        root_fh.init_rootfs(uid, root, true);
+      }
 
       /* pointer to self */
       fs.fs_private = this;
@@ -1053,7 +1068,7 @@ namespace rgw {
 	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
 	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
 	  /* ref parent (non-initial ref cannot fail on valid object) */
-	  if (! parent->is_root()) {
+	  if (! parent->is_mount()) {
 	    (void) fh_lru.ref(parent, cohort::lru::FLAG_NONE);
 	  }
 	  goto out; /* !LATCHED */
@@ -1074,13 +1089,13 @@ namespace rgw {
     } /*  lookup_fh(RGWFileHandle*, const char *, const uint32_t) */
 
     inline void unref(RGWFileHandle* fh) {
-      if (likely(! fh->is_root())) {
+      if (likely(! fh->is_mount())) {
 	(void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
       }
     }
 
     inline RGWFileHandle* ref(RGWFileHandle* fh) {
-      if (likely(! fh->is_root())) {
+      if (likely(! fh->is_mount())) {
 	fh_lru.ref(fh, cohort::lru::FLAG_NONE);
       }
       return fh;

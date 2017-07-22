@@ -956,7 +956,7 @@ namespace rgw {
       fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
     }
     /* cond-unref parent */
-    if (parent && (! parent->is_root())) {
+    if (parent && (! parent->is_mount())) {
       /* safe because if parent->unref causes its deletion,
        * there are a) by refcnt, no other objects/paths pointing
        * to it and b) by the semantics of valid iteration of
@@ -1520,7 +1520,38 @@ void rgwfile_version(int *major, int *minor, int *extra)
 
   /* stash access data for "mount" */
   RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
-				  sec_key);
+				  sec_key, "/");
+  assert(new_fs);
+
+  rc = new_fs->authorize(rgwlib.get_store());
+  if (rc != 0) {
+    delete new_fs;
+    return -EINVAL;
+  }
+
+  /* register fs for shared gc */
+  rgwlib.get_fe()->get_process()->register_fs(new_fs);
+
+  struct rgw_fs *fs = new_fs->get_fs();
+  fs->rgw = rgw;
+
+  /* XXX we no longer assume "/" is unique, but we aren't tracking the
+   * roots atm */
+
+  *rgw_fs = fs;
+
+  return 0;
+}
+
+int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
+               const char *sec_key, const char *root, struct rgw_fs **rgw_fs,
+               uint32_t flags)
+{
+  int rc = 0;
+
+  /* stash access data for "mount" */
+  RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
+				  sec_key, root);
   assert(new_fs);
 
   rc = new_fs->authorize(rgwlib.get_store());

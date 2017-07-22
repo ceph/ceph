@@ -53,8 +53,8 @@ TEST(LibRGW, INIT) {
 }
 
 TEST(LibRGW, MOUNT) {
-  int ret = rgw_mount(rgw, uid.c_str(), access_key.c_str(), secret_key.c_str(),
-		      &fs, RGW_MOUNT_FLAG_NONE);
+  int ret = rgw_mount2(rgw, uid.c_str(), access_key.c_str(), secret_key.c_str(),
+                       "/", &fs, RGW_MOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
 }
