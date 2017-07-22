@@ -108,6 +108,11 @@ EOF
 chmod 0755 ${STACK_HOME_PATH}/start.sh
 sudo -H -u ${STACK_USER} ${STACK_HOME_PATH}/start.sh
 
+# switch to rbd profile caps
+ceph auth caps client.cinder mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd pool=vms, profile rbd pool=images'
+ceph auth caps client.cinder-bak mon 'profile rbd' osd 'profile rbd pool=backups, profile rbd pool=volumes'
+ceph auth caps client.glance mon 'profile rbd' osd 'profile rbd pool=images'
+
 # execute tempest
 chown -R ${TEMPEST_USER}:${STACK_GROUP} ${STACK_OPT_PATH}/tempest
 chown -R ${TEMPEST_USER}:${STACK_GROUP} ${STACK_OPT_PATH}/data/tempest

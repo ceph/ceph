@@ -43,6 +43,8 @@ const char *parse_good[] = {
   "allow command abc with arg=foo arg2=bar",
   "allow command abc with arg=foo arg2 prefix bar arg3 prefix baz",
   "allow command abc with arg=foo arg2 prefix \"bar bingo\" arg3 prefix baz",
+  "allow command abc with arg regex \"^[0-9a-z.]*$\"",
+  "allow command abc with arg regex \"\(invaluid regex\"",
   "allow service foo x",
   "allow service foo x; allow service bar x",
   "allow service foo w ;allow service bar x",
@@ -55,6 +57,8 @@ const char *parse_good[] = {
   "allow command abc.def with arg=foo arg2=bar, allow service foo r",
   "allow command \"foo bar\" with arg=\"baz\"",
   "allow command \"foo bar\" with arg=\"baz.xx\"",
+  "profile osd",
+  "profile \"mds-bootstrap\", profile foo",
   0
 };
 
@@ -238,3 +242,19 @@ TEST(MonCap, ProfileOSD) {
 			     name, "", "config-key delete", ca, true, true, true));
 }
 
+TEST(MonCap, CommandRegEx) {
+  MonCap cap;
+  ASSERT_FALSE(cap.is_allow_all());
+  ASSERT_TRUE(cap.parse("allow command abc with arg regex \"^[0-9a-z.]*$\"", NULL));
+
+  EntityName name;
+  name.from_str("osd.123");
+  ASSERT_TRUE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_OSD, name, "",
+                             "abc", {{"arg", "12345abcde"}}, true, true, true));
+  ASSERT_FALSE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_OSD, name, "",
+                              "abc", {{"arg", "~!@#$"}}, true, true, true));
+
+  ASSERT_TRUE(cap.parse("allow command abc with arg regex \"[*\"", NULL));
+  ASSERT_FALSE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_OSD, name, "",
+                              "abc", {{"arg", ""}}, true, true, true));
+}
