@@ -141,8 +141,7 @@ function TEST_replicated_pool_with_ruleset() {
     local poolname=mypool
     ceph osd crush rule create-simple $ruleset $root $failure_domain || return 1
     ceph osd crush rule ls | grep $ruleset
-    ceph osd pool create $poolname 12 12 replicated $ruleset 2>&1 | \
-        grep "pool 'mypool' created" || return 1
+    ceph osd pool create $poolname 12 12 replicated $ruleset || return 1
     rule_id=`ceph osd crush rule dump $ruleset | grep "rule_id" | awk -F[' ':,] '{print $4}'`
     ceph osd pool get $poolname crush_rule  2>&1 | \
         grep "crush_rule: $rule_id" || return 1
@@ -173,16 +172,13 @@ function TEST_erasure_code_pool_lrc() {
 function TEST_replicated_pool() {
     local dir=$1
     run_mon $dir a || return 1
-    ceph osd pool create replicated 12 12 replicated replicated_rule 2>&1 | \
-        grep "pool 'replicated' created" || return 1
+    ceph osd pool create replicated 12 12 replicated replicated_rule || return 1
     ceph osd pool create replicated 12 12 replicated replicated_rule 2>&1 | \
         grep 'already exists' || return 1
     # default is replicated
-    ceph osd pool create replicated1 12 12 2>&1 | \
-        grep "pool 'replicated1' created" || return 1
+    ceph osd pool create replicated1 12 12 || return 1
     # default is replicated, pgp_num = pg_num
-    ceph osd pool create replicated2 12 2>&1 | \
-        grep "pool 'replicated2' created" || return 1
+    ceph osd pool create replicated2 12 || return 1
     ceph osd pool create replicated 12 12 erasure 2>&1 | \
         grep 'cannot change to type erasure' || return 1
 }
@@ -204,8 +200,7 @@ function TEST_utf8_cli() {
     # the fix for http://tracker.ceph.com/issues/7387.  If it turns out
     # to not be OK (when is the default encoding *not* UTF-8?), maybe
     # the character '黄' can be replaced with the escape $'\xe9\xbb\x84'
-    ceph osd pool create 黄 1024 2>&1 | \
-        grep "pool '黄' created" || return 1
+    ceph osd pool create 黄 1024 || return 1
     ceph osd lspools 2>&1 | \
         grep "黄" || return 1
     ceph -f json-pretty osd dump | \
