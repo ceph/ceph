@@ -43,7 +43,7 @@ class PyModules
   Client   &client;
   Finisher &finisher;
 
-  mutable Mutex lock{"PyModules"};
+  mutable Mutex lock{"PyModules::lock"};
 
   std::string get_site_packages();
 
