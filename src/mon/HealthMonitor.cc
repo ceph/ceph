@@ -278,17 +278,24 @@ bool HealthMonitor::check_member_health()
   }
 
   auto p = quorum_checks.find(mon->rank);
-  if (p == quorum_checks.end() ||
-      p->second != next) {
-    if (mon->is_leader()) {
-      // prepare to propose
-      quorum_checks[mon->rank] = next;
-      changed = true;
-    } else {
-      // tell the leader
-      mon->messenger->send_message(new MMonHealthChecks(next),
-				   mon->monmap->get_inst(mon->get_leader()));
+  if (p == quorum_checks.end()) {
+    if (next.empty()) {
+      return false;
     }
+  } else {
+    if (p->second == next) {
+      return false;
+    }
+  }
+
+  if (mon->is_leader()) {
+    // prepare to propose
+    quorum_checks[mon->rank] = next;
+    changed = true;
+  } else {
+    // tell the leader
+    mon->messenger->send_message(new MMonHealthChecks(next),
+                                 mon->monmap->get_inst(mon->get_leader()));
   }
 
   return changed;
