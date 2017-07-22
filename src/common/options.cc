@@ -1154,10 +1154,6 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("mon_warn_osd_usage_min_max_delta", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(.40)
-  .set_description(""),
-
   Option("mon_min_osdmap_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(500)
   .set_description(""),
