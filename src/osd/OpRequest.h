@@ -85,6 +85,7 @@ struct OpRequest : public TrackedOp {
 private:
   Message *request; /// the logical request we are tracking
   osd_reqid_t reqid;
+  entity_inst_t req_src_inst;
   uint8_t hit_flag_points;
   uint8_t latest_flag_point;
   utime_t dequeued_time;
