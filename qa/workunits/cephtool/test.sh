@@ -2374,6 +2374,7 @@ function test_mon_pool_application()
   ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{"key1":"value1"},"rgw":{}}'
   ceph osd pool application rm app_for_test rbd key1
   ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{},"rgw":{}}'
+  ceph osd pool application rm app_for_test rbd key1 # should be idempotent
 
   expect_false ceph osd pool application disable app_for_test rgw
   ceph osd pool application disable app_for_test rgw --yes-i-really-mean-it
