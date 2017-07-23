@@ -829,7 +829,7 @@ int main(int argc, const char **argv)
 
     {
       set<int> roots;
-      crush.find_roots(roots);
+      crush.find_roots(&roots);
       if (roots.size() > 1)
 	dout(1)	<< "The crush rulesets will use the root " << root << "\n"
 		<< "and ignore the others.\n"
