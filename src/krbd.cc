@@ -764,3 +764,59 @@ int krbd_showmapped(struct krbd_ctx *ctx, Formatter *f)
 {
   return dump_images(ctx, f);
 }
+
+int krbd_is_image_mapped(struct krbd_ctx *ctx, const char *poolname, 
+                         const char *imgname, const char *snapname,
+                         std::ostringstream &mapped_info, bool &is_mapped) {
+  struct udev_enumerate *enm;
+  struct udev_list_entry *l;
+  struct udev *udev = ctx->udev; 
+  const char *mapped_id, *mapped_pool, *mapped_image, *mapped_snap;
+  int r;
+  is_mapped = false;
+
+  enm = udev_enumerate_new(udev);
+  if(!enm)
+    return -ENOMEM;
+
+  r = udev_enumerate_add_match_subsystem(enm, "rbd");
+  if (r < 0)
+    goto out_enm;
+
+  r = udev_enumerate_scan_devices(enm);
+  if (r < 0)
+    goto out_enm;
+
+  udev_list_entry_foreach(l, udev_enumerate_get_list_entry(enm)) {
+    struct udev_device *dev;
+
+    dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(l));
+    if (dev) {
+      mapped_id = udev_device_get_sysname(dev);
+      mapped_pool = udev_device_get_sysattr_value(dev, "pool");
+      mapped_image = udev_device_get_sysattr_value(dev, "name");
+      mapped_snap = udev_device_get_sysattr_value(dev, "current_snap");
+      string kname = get_kernel_rbd_name(mapped_id);
+
+      udev_device_unref(dev);
+      if (mapped_pool && poolname && strcmp(mapped_pool, poolname) == 0 &&
+          mapped_image && imgname && strcmp(mapped_image, imgname) == 0) {
+        if (!snapname || snapname[0] == '\0') {
+          mapped_info << "image " << *poolname << "/" << *imgname
+                      << " already mapped as " << kname;
+          is_mapped = true;
+          goto out_enm;
+        } else if (snapname && mapped_snap &&
+		   strcmp(snapname, mapped_snap) == 0) {
+          mapped_info << "image " << *poolname << "/" << *imgname << "@"
+                     << *snapname << " already mapped as " << kname;
+          is_mapped = true;
+          goto out_enm;
+        }
+      }
+    }
+  }
+out_enm:
+  udev_enumerate_unref(enm);
+  return r;
+}
