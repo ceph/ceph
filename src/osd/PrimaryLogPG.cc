@@ -10243,8 +10243,11 @@ void PrimaryLogPG::remove_missing_object(const hobject_t &soid,
 	 t2.register_on_complete(on_complete);
 	 int r = osd->store->queue_transaction(osr.get(), std::move(t2), nullptr);
 	 assert(r == 0);
+	 unlock();
+       } else {
+	 unlock();
+	 on_complete->complete(-EAGAIN);
        }
-       unlock();
      }));
   int r = osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
   assert(r == 0);
