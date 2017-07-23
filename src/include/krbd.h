@@ -45,6 +45,11 @@ namespace ceph {
 
 int krbd_showmapped(struct krbd_ctx *ctx, ceph::Formatter *f);
 
+int check_mapped_image(struct udev *udev, const char *poolname, 
+                       const char *imgname, const char *snapname,
+                       std::ostringstream &mapped_info);
+
+
 #endif /* __cplusplus */
 
 #endif /* CEPH_KRBD_H */
