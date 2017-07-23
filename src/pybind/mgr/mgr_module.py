@@ -40,13 +40,26 @@ class OSDMap(object):
     def get_epoch(self):
         return ceph_osdmap.get_epoch(self._handle)
 
+    def get_crush_version(self):
+        return ceph_osdmap.get_crush_version(self._handle)
+
     def dump(self):
         return ceph_osdmap.dump(self._handle)
 
     def new_incremental(self):
         return OSDMapIncremental(ceph_osdmap.new_incremental(self._handle))
 
-    def calc_pg_upmaps(self, inc, max_deviation=.01, max_iterations=10, pools=[]):
+    def apply_incremental(self, inc):
+        return OSDMap(ceph_osdmap.apply_incremental(self._handle, inc._handle))
+
+    def get_crush(self):
+        return CRUSHMap(ceph_osdmap.get_crush(self._handle), self)
+
+    def get_pools_by_take(self, take):
+        return ceph_osdmap.get_pools_by_take(self._handle, take).get('pools', [])
+
+    def calc_pg_upmaps(self, inc,
+                       max_deviation=.01, max_iterations=10, pools=[]):
         return ceph_osdmap.calc_pg_upmaps(
             self._handle,
             inc._handle,
@@ -63,12 +76,37 @@ class OSDMapIncremental(object):
     def dump(self):
         return ceph_osdmap_incremental.dump(self._handle)
 
-class CRUSHMap(object):
-    def __init__(self, handle):
-        self._handle = handle
+    def set_osd_reweights(self, weightmap):
+        """
+        weightmap is a dict, int to float.  e.g. { 0: .9, 1: 1.0, 3: .997 }
+        """
+        return ceph_osdmap_incremental.set_osd_reweights(self._handle, weightmap)
 
-#    def get_epoch(self):
-#        return ceph_crushmap.get_epoch(self._handle)
+    def set_crush_compat_weight_set_weights(self, weightmap):
+        """
+        weightmap is a dict, int to float.  devices only.  e.g.,
+        { 0: 3.4, 1: 3.3, 2: 3.334 }
+        """
+        return ceph_osdmap_incremental.set_crush_compat_weight_set_weights(
+            self._handle, weightmap)
+
+
+
+class CRUSHMap(object):
+    def __init__(self, handle, parent_osdmap):
+        self._handle = handle
+        # keep ref to parent osdmap since handle lifecycle is owned by it
+        self._parent_osdmap = parent_osdmap
+
+    def dump(self):
+        return ceph_crushmap.dump(self._handle)
+
+    def find_takes(self):
+        return ceph_crushmap.find_takes(self._handle).get('takes',[])
+
+    def get_take_weight_osd_map(self, root):
+        uglymap = ceph_crushmap.get_take_weight_osd_map(self._handle, root)
+        return { int(k): v for k, v in uglymap.get('weights', {}).iteritems() }
 
 
 class MgrModule(object):
