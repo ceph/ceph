@@ -289,7 +289,7 @@ static int do_kernel_map(const char *poolname, const char *imgname,
 {
 #if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
-  std::ostringstream oss;
+  std::ostringstream oss, mapped_info;
   char *devnode;
   int r;
 
@@ -310,6 +310,16 @@ static int do_kernel_map(const char *poolname, const char *imgname,
       oss << it->second;
       ++it;
     }
+  }
+
+  r = check_mapped_image(krbd->udev, poolname, imgname, snapname, &mapped_info);
+  if(r < 0) {
+    std::cout << "rbd: can't get image map infomation: " << cpp_strerror(r) << endl;
+    goto out;
+  }
+  else if (r = 0){
+    std::cout << "rbd: duplicate devices for the same image: " << mapped_info << endl;
+    goto out;
   }
 
   r = krbd_map(krbd, poolname, imgname, snapname, oss.str().c_str(), &devnode);
