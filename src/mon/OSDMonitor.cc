@@ -942,6 +942,18 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
   mapping_job.reset();
 
+  // ensure we don't have blank new_state updates.  these are interrpeted as
+  // CEPH_OSD_UP (and almost certainly not what we want!).
+  auto p = pending_inc.new_state.begin();
+  while (p != pending_inc.new_state.end()) {
+    if (p->second == 0) {
+      dout(10) << "new_state for osd." << p->first << " is 0, removing" << dendl;
+      p = pending_inc.new_state.erase(p);
+    } else {
+      ++p;
+    }
+  }
+
   bufferlist bl;
 
   {
