@@ -1020,6 +1020,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
           derr << "Unexpected error reading metadata: " << cpp_strerror(r)
                << dendl;
           ss << get_err.str();
+          f->close_section();
           break;
         }
         f->close_section();
