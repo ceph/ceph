@@ -5141,6 +5141,12 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	return -EEXIST;
       return 0;
     }
+    if (n > (unsigned)g_conf->mon_max_pool_pg_num) {
+      ss << "'pg_num' must be greater than 0 and less than or equal to "
+         << g_conf->mon_max_pool_pg_num
+         << " (you may adjust 'mon max pool pg num' for higher values)";
+      return -ERANGE;
+    }
     string force;
     cmd_getval(g_ceph_context,cmdmap, "force", force);
     if (p.cache_mode != pg_pool_t::CACHEMODE_NONE &&
