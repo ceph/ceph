@@ -533,7 +533,7 @@ std::vector<Option> global_options = {
   .set_default("")
   .set_description(""),
 
-  Option("heartbeat_inject_failure", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("heartbeat_inject_failure", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -646,28 +646,28 @@ std::vector<Option> global_options = {
   .set_default(65536)
   .set_description(""),
 
-  Option("ms_inject_socket_failures", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("ms_inject_socket_failures", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("ms_inject_delay_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("ms_inject_delay_type", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("")
   .set_description("")
   .set_safe(),
 
-  Option("ms_inject_delay_msg_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("ms_inject_delay_msg_type", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("")
   .set_description(""),
 
-  Option("ms_inject_delay_max", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("ms_inject_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(1)
   .set_description(""),
 
-  Option("ms_inject_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("ms_inject_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("ms_inject_internal_delays", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("ms_inject_internal_delays", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -787,7 +787,7 @@ std::vector<Option> global_options = {
   .set_default(1)
   .set_description(""),
 
-  Option("ms_dpdk_debug_allow_loopback", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("ms_dpdk_debug_allow_loopback", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -795,7 +795,7 @@ std::vector<Option> global_options = {
   .set_default(8192)
   .set_description(""),
 
-  Option("inject_early_sigterm", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("inject_early_sigterm", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -1183,11 +1183,11 @@ std::vector<Option> global_options = {
   .set_default(100)
   .set_description(""),
 
-  Option("mon_scrub_inject_crc_mismatch", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("mon_scrub_inject_crc_mismatch", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0.0)
   .set_description(""),
 
-  Option("mon_scrub_inject_missing_keys", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("mon_scrub_inject_missing_keys", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0.0)
   .set_description(""),
 
@@ -1207,7 +1207,7 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("mon_inject_sync_get_chunk_delay", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("mon_inject_sync_get_chunk_delay", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -1231,47 +1231,47 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_deprecated_as_obsolete", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_deprecated_as_obsolete", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_dump_transactions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_dump_transactions", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_dump_json", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_dump_json", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_dump_location", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("mon_debug_dump_location", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("/var/log/ceph/$cluster-$name.tdump")
   .set_description(""),
 
-  Option("mon_debug_no_require_luminous", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_no_require_luminous", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_no_require_bluestore_for_ec_overwrites", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_no_require_bluestore_for_ec_overwrites", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_no_initial_persistent_features", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_no_initial_persistent_features", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_inject_transaction_delay_max", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("mon_inject_transaction_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(10.0)
   .set_description(""),
 
-  Option("mon_inject_transaction_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("mon_inject_transaction_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mon_sync_provider_kill_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_sync_provider_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mon_sync_requester_kill_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_sync_requester_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -1283,7 +1283,7 @@ std::vector<Option> global_options = {
   .set_default("rocksdb")
   .set_description(""),
 
-  Option("mon_debug_unsafe_allow_tier_with_nonempty_snaps", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_unsafe_allow_tier_with_nonempty_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -1331,7 +1331,7 @@ std::vector<Option> global_options = {
   .set_default(500)
   .set_description(""),
 
-  Option("paxos_kill_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("paxos_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -1379,7 +1379,7 @@ std::vector<Option> global_options = {
   .set_default(60*60)
   .set_description(""),
 
-  Option("auth_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("auth_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -1455,7 +1455,7 @@ std::vector<Option> global_options = {
   .set_default(32)
   .set_description(""),
 
-  Option("objecter_inject_no_watch_ping", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("objecter_inject_no_watch_ping", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -1463,7 +1463,7 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("objecter_debug_inject_relock_delay", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("objecter_debug_inject_relock_delay", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -1771,11 +1771,11 @@ std::vector<Option> global_options = {
   .set_default(40)
   .set_description(""),
 
-  Option("osd_inject_bad_map_crc_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_inject_bad_map_crc_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_inject_failure_on_pg_removal", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_inject_failure_on_pg_removal", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -2207,7 +2207,7 @@ std::vector<Option> global_options = {
   .set_default(30)
   .set_description(""),
 
-  Option("osd_kill_backfill_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_kill_backfill_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -2267,71 +2267,71 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_crash_on_ignored_backoff", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_crash_on_ignored_backoff", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_inject_dispatch_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_inject_dispatch_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_inject_dispatch_delay_duration", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_inject_dispatch_delay_duration", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(.1)
   .set_description(""),
 
-  Option("osd_debug_drop_ping_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_drop_ping_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_drop_ping_duration", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_drop_ping_duration", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_op_order", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_op_order", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_verify_missing_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_verify_missing_on_start", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_scrub_chance_rewrite_digest", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_scrub_chance_rewrite_digest", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_verify_snaps_on_info", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_verify_snaps_on_info", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_verify_stray_on_activate", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_verify_stray_on_activate", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_skip_full_check_in_backfill_reservation", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_skip_full_check_in_backfill_reservation", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_reject_backfill_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_reject_backfill_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_inject_copyfrom_error", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_inject_copyfrom_error", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_misdirected_ops", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_misdirected_ops", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_skip_full_check_in_recovery", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_skip_full_check_in_recovery", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_random_push_read_error", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_random_push_read_error", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_verify_cached_snaps", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_verify_cached_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -2387,7 +2387,7 @@ std::vector<Option> global_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("osd_debug_pg_log_writeout", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_pg_log_writeout", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -2652,15 +2652,15 @@ std::vector<Option> global_options = {
   .set_default(64 << 10)
   .set_description(""),
 
-  Option("bdev_debug_inflight_ios", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bdev_debug_inflight_ios", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bdev_inject_crash", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bdev_inject_crash", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("bdev_inject_crash_flush_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bdev_inject_crash_flush_delay", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(2)
   .set_description(""),
 
@@ -2684,11 +2684,11 @@ std::vector<Option> global_options = {
   .set_default(4096)
   .set_description(""),
 
-  Option("bdev_debug_aio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bdev_debug_aio", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bdev_debug_aio_suicide_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("bdev_debug_aio_suicide_timeout", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(60.0)
   .set_description(""),
 
@@ -3104,51 +3104,51 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_misc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_misc", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_no_reuse_blocks", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_no_reuse_blocks", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_small_allocations", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_small_allocations", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_debug_freelist", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_freelist", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_prefill", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_prefill", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_debug_prefragment_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_prefragment_max", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(1048576)
   .set_description(""),
 
-  Option("bluestore_debug_inject_read_err", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_inject_read_err", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_randomize_serial_transaction", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_randomize_serial_transaction", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_debug_omit_block_device_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_omit_block_device_write", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_fsck_abort", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_fsck_abort", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_omit_kv_commit", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_omit_kv_commit", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_permit_any_bdev_label", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_permit_any_bdev_label", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -3156,7 +3156,7 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_random_read_err", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_random_read_err", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -3276,15 +3276,15 @@ std::vector<Option> global_options = {
   .set_default(0)
   .set_description(""),
 
-  Option("filestore_debug_inject_read_err", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("filestore_debug_inject_read_err", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("filestore_debug_random_read_err", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("filestore_debug_random_read_err", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("filestore_debug_omap_check", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("filestore_debug_omap_check", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -3512,11 +3512,11 @@ std::vector<Option> global_options = {
   .set_default("")
   .set_description(""),
 
-  Option("filestore_kill_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("filestore_inject_stall", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_inject_stall", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -3524,7 +3524,7 @@ std::vector<Option> global_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("filestore_debug_verify_split", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("filestore_debug_verify_split", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -3712,7 +3712,7 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("debug_deliberately_leak_memory", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("debug_deliberately_leak_memory", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 };
@@ -3814,7 +3814,7 @@ std::vector<Option> rgw_options = {
   .set_default(32)
   .set_description(""),
 
-  Option("rgw_lc_debug_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_lc_debug_interval", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(-1)
   .set_description(""),
 
@@ -4405,11 +4405,11 @@ std::vector<Option> rgw_options = {
   .set_default(1200)
   .set_description(""),
 
-  Option("rgw_sync_data_inject_err_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("rgw_sync_data_inject_err_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("rgw_sync_meta_inject_err_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("rgw_sync_meta_inject_err_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -5109,55 +5109,55 @@ std::vector<Option> mds_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("mds_debug_scatterstat", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mds_debug_scatterstat", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mds_debug_frag", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mds_debug_frag", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mds_debug_auth_pins", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mds_debug_auth_pins", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mds_debug_subtrees", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mds_debug_subtrees", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mds_kill_mdstable_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_kill_mdstable_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mds_kill_export_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_kill_export_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mds_kill_import_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_kill_import_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mds_kill_link_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_kill_link_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mds_kill_rename_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_kill_rename_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mds_kill_openc_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_kill_openc_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mds_kill_journal_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_kill_journal_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mds_kill_journal_expire_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_kill_journal_expire_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mds_kill_journal_replay_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_kill_journal_replay_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -5165,11 +5165,11 @@ std::vector<Option> mds_options = {
   .set_default(1)
   .set_description(""),
 
-  Option("mds_kill_create_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_kill_create_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mds_inject_traceless_reply_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("mds_inject_traceless_reply_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -5387,15 +5387,15 @@ std::vector<Option> mds_client_options = {
   .set_default(1000)
   .set_description(""),
 
-  Option("client_debug_getattr_caps", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("client_debug_getattr_caps", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("client_debug_force_sync_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("client_debug_force_sync_read", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("client_debug_inject_tick_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("client_debug_inject_tick_delay", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -5403,11 +5403,11 @@ std::vector<Option> mds_client_options = {
   .set_default(4096)
   .set_description(""),
 
-  Option("client_inject_release_failure", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("client_inject_release_failure", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("client_inject_fixed_oldest_tid", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("client_inject_fixed_oldest_tid", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
