@@ -917,6 +917,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
     for (auto &state : st)
       f->dump_string("state", state);
     f->close_section();
+    f->close_section();
   }
   f->close_section();
 
