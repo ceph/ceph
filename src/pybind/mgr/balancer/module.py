@@ -4,6 +4,7 @@ Balance PG distribution across OSDs.
 """
 
 import json
+import random
 import time
 from mgr_module import MgrModule, CommandResult
 from threading import Event
@@ -64,11 +65,30 @@ class Module(MgrModule):
         self.log.info('do_upmap')
         max_iterations = self.get_config('upmap_max_iterations', 10)
         max_deviation = self.get_config('upmap_max_deviation', .01)
+
+        osdmap_dump = self.get('osd_map')
+        pools = [str(i['pool_name']) for i in osdmap_dump.get('pools',[])]
+        if len(pools) == 0:
+            self.log.info('no pools, nothing to do')
+            return
+        # shuffle pool list so they all get equal (in)attention
+        random.shuffle(pools)
+        self.log.info('pools %s' % pools)
+
         osdmap = self.get_osdmap()
         inc = osdmap.new_incremental()
-        osdmap.calc_pg_upmaps(inc, max_deviation, max_iterations, [])
+        total_did = 0
+        left = max_iterations
+        for pool in pools:
+            did = osdmap.calc_pg_upmaps(inc, max_deviation, left, [pool])
+            total_did += did
+            left -= did
+            if left <= 0:
+                break
+        self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
+
         incdump = inc.dump()
-        self.log.info('inc is %s' % incdump)
+        self.log.debug('resulting inc is %s' % incdump)
 
         for pgid in incdump.get('old_pg_upmap_items', []):
             self.log.info('ceph osd rm-pg-upmap-items %s', pgid)
