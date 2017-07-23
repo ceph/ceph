@@ -133,11 +133,9 @@ public:
     pair<uint64_t, T> last;
     pair<uint64_t, T> cur;
     avg_tracker() : last(0, 0), cur(0, 0) {}
-    T avg() const {
+    T current_avg() const {
       if (cur.first == last.first)
-	return cur.first ?
-	  cur.second / cur.first :
-	  0; // no change, report avg over all time
+        return 0;
       return (cur.second - last.second) / (cur.first - last.first);
     }
     void consume_next(const pair<uint64_t, T> &next) {
