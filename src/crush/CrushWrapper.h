@@ -574,25 +574,25 @@ public:
    *
    * Note that these may not be parentless roots.
    */
-  void find_takes(set<int>& roots) const;
+  void find_takes(set<int> *roots) const;
 
   /**
    * find tree roots
    *
    * These are parentless nodes in the map.
    */
-  void find_roots(set<int>& roots) const;
+  void find_roots(set<int> *roots) const;
 
 
   /**
    * find tree roots that contain shadow (device class) items only
    */
-  void find_shadow_roots(set<int>& roots) const {
+  void find_shadow_roots(set<int> *roots) const {
     set<int> all;
-    find_roots(all);
+    find_roots(&all);
     for (auto& p: all) {
       if (is_shadow_item(p)) {
-        roots.insert(p);
+        roots->insert(p);
       }
     }
   }
@@ -603,12 +603,12 @@ public:
    * These are parentless nodes in the map that are not shadow
    * items for device classes.
    */
-  void find_nonshadow_roots(set<int>& roots) const {
+  void find_nonshadow_roots(set<int> *roots) const {
     set<int> all;
-    find_roots(all);
+    find_roots(&all);
     for (auto& p: all) {
       if (!is_shadow_item(p)) {
-        roots.insert(p);
+        roots->insert(p);
       }
     }
   }
