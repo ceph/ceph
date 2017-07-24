@@ -47,6 +47,9 @@ class MemDB : public KeyValueDB
   int transaction_rollback(KeyValueDB::Transaction t);
   int _open(ostream &out);
   void close() override;
+  int repair() override {
+    return 0;
+  }
   bool _get(const string &prefix, const string &k, bufferlist *out);
   bool _get_locked(const string &prefix, const string &k, bufferlist *out);
   std::string _get_data_fn();

@@ -62,6 +62,9 @@ public:
 
   void close();
 
+  void repair() override {
+  }
+
   enum KineticOpType {
     KINETIC_OP_WRITE,
     KINETIC_OP_DELETE,
