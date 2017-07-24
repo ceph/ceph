@@ -173,7 +173,7 @@ class Module(MgrModule):
 
                 else:
                     rank_table.add_row([
-                        rank, "failed", "", "", "", ""
+                        rank, "failed", "", "", "", "", ""
                     ])
 
             # Find the standby replays
