@@ -61,7 +61,9 @@ using rgw::IAM::s3GetObject;
 using rgw::IAM::s3GetObjectAcl;
 using rgw::IAM::s3GetObjectVersionAcl;
 using rgw::IAM::s3GetObjectTorrent;
+using rgw::IAM::s3GetObjectTagging;
 using rgw::IAM::s3GetObjectVersion;
+using rgw::IAM::s3GetObjectVersionTagging;
 using rgw::IAM::s3GetObjectVersionTorrent;
 using rgw::IAM::s3GetReplicationConfiguration;
 using rgw::IAM::s3ListAllMyBuckets;
@@ -324,7 +326,9 @@ TEST_F(PolicyTest, Parse3) {
 				      s3GetBucketTagging |
 				      s3GetBucketWebsite |
 				      s3GetLifecycleConfiguration |
-				      s3GetReplicationConfiguration));
+				      s3GetReplicationConfiguration |
+				      s3GetObjectTagging |
+				      s3GetObjectVersionTagging));
   EXPECT_EQ(p->statements[2].notaction, s3None);
   ASSERT_FALSE(p->statements[2].resource.empty());
   ASSERT_EQ(p->statements[2].resource.size(), 2U);
@@ -370,7 +374,8 @@ TEST_F(PolicyTest, Eval3) {
 		  s3GetBucketPolicy | s3GetBucketNotification |
 		  s3GetBucketLogging | s3GetBucketTagging |
 		  s3GetBucketWebsite | s3GetLifecycleConfiguration |
-		  s3GetReplicationConfiguration);
+		  s3GetReplicationConfiguration |
+		  s3GetObjectTagging | s3GetObjectVersionTagging);
 
   EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy,
 		   ARN(Partition::aws, Service::s3,
