@@ -1296,12 +1296,12 @@ public:
 	  for (auto &&i: missing.get_items()) {
 	    if (checked.count(i.first))
 	      continue;
-	    if (i.second.need > log.tail ||
-	      i.first > info.last_backfill) {
-	      ldpp_dout(dpp, -1) << __func__ << ": invalid missing set entry found "
-				 << i.first << " " << i.second << " log tail = "
-				 << log.tail << " last_backfill = " << info.last_backfill
-				 << dendl;
+	    if (i.first > info.last_backfill) {
+	      ldpp_dout(dpp, -1) << __func__ << ": invalid missing set entry "
+				<< "found before last_backfill: "
+				<< i.first << " " << i.second
+				<< " last_backfill = " << info.last_backfill
+				<< dendl;
 	      assert(0 == "invalid missing set entry found");
 	    }
 	    bufferlist bv;
