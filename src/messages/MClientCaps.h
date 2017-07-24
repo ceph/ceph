@@ -18,13 +18,15 @@
 #include "msg/Message.h"
 #include "include/ceph_features.h"
 
-#define	CLIENT_CAPS_SYNC		(0x1)
-
 class MClientCaps : public Message {
   static const int HEAD_VERSION = 10;
   static const int COMPAT_VERSION = 1;
 
  public:
+  static const unsigned FLAG_SYNC		= (1<<0);
+  static const unsigned FLAG_NO_CAPSNAP		= (1<<1);
+  static const unsigned FLAG_PENDING_CAPSNAP	= (1<<2);
+
   struct ceph_mds_caps_head head;
 
   uint64_t size, max_size, truncate_size, change_attr;

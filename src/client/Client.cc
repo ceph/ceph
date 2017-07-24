@@ -3323,7 +3323,11 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   m->time_warp_seq = in->time_warp_seq;
   m->change_attr = in->change_attr;
   if (sync)
-    m->flags |= CLIENT_CAPS_SYNC;
+    m->flags |= MClientCaps::FLAG_SYNC;
+  if (in->cap_snaps.empty())
+    m->flags |= MClientCaps::FLAG_NO_CAPSNAP;
+  else
+    m->flags |= MClientCaps::FLAG_PENDING_CAPSNAP;
     
   if (flush & CEPH_CAP_FILE_WR) {
     m->inline_version = in->inline_version;
