@@ -434,9 +434,9 @@ information stored in OSDs.::
   # keyring with the caps, and there is no need to pass the "--keyring" option.
   # i.e. just use "ceph-monstore-tool /tmp/mon-store rebuild" instead
   ceph-authtool /path/to/admin.keyring -n mon. \
-    --cap mon allow 'allow *'
+    --cap mon 'allow *'
   ceph-authtool /path/to/admin.keyring -n client.admin \
-    --cap mon allow 'allow *' --cap osd 'allow *' --cap mds 'allow *'
+    --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *'
   ceph-monstore-tool /tmp/mon-store rebuild -- --keyring /path/to/admin.keyring
   # backup corrupted store.db just in case
   mv /var/lib/ceph/mon/mon.0/store.db /var/lib/ceph/mon/mon.0/store.db.corrupted
