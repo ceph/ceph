@@ -3782,7 +3782,8 @@ int process_pg_map_command(
       } else {
         int filter = pg_string_state(state_str);
         if (filter < 0) {
-          *ss << "'" << state_str << "' is not a valid pg state";
+          *ss << "'" << state_str << "' is not a valid pg state,"
+              << " available choices: " << pg_state_string(0xFFFFFFFF);
           return -EINVAL;
         }
         state |= filter;
