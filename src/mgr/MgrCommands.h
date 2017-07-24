@@ -53,6 +53,15 @@ COMMAND("pg deep-scrub name=pgid,type=CephPgid", "start deep-scrub on <pgid>", \
 COMMAND("pg repair name=pgid,type=CephPgid", "start repair on <pgid>", \
 	"pg", "rw", "cli,rest")
 
+COMMAND("pg force-recovery name=pgid,type=CephPgid,n=N", "force recovery of <pgid> first", \
+	"pg", "rw", "cli,rest")
+COMMAND("pg force-backfill name=pgid,type=CephPgid,n=N", "force backfill of <pgid> first", \
+	"pg", "rw", "cli,rest")
+COMMAND("pg cancel-force-recovery name=pgid,type=CephPgid,n=N", "restore normal recovery priority of <pgid>", \
+	"pg", "rw", "cli,rest")
+COMMAND("pg cancel-force-backfill name=pgid,type=CephPgid,n=N", "restore normal backfill priority of <pgid>", \
+	"pg", "rw", "cli,rest")
+
 // stuff in osd namespace
 COMMAND("osd perf", \
         "print dump of OSD perf summary stats", \
