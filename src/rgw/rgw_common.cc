@@ -663,6 +663,14 @@ void rgw_to_iso8601(const real_time& t, string *dest)
   *dest = buf;
 }
 
+
+string rgw_to_asctime(const utime_t& t)
+{
+  stringstream s;
+  t.asctime(s);
+  return s.str();
+}
+
 /*
  * calculate the sha1 value of a given msg and key
  */

@@ -99,10 +99,7 @@ int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
 
 static void get_new_date_str(string& date_str)
 {
-  utime_t tm = ceph_clock_now();
-  stringstream s;
-  tm.asctime(s);
-  date_str = s.str();
+  date_str = rgw_to_asctime(ceph_clock_now());
 }
 
 int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const char *resource)

@@ -13,9 +13,7 @@
 
 void RGWLoadGenRequestEnv::set_date(utime_t& tm)
 {
-  stringstream s;
-  tm.asctime(s);
-  date_str = s.str();
+  date_str = rgw_to_asctime(tm);
 }
 
 int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
