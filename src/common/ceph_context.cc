@@ -550,21 +550,11 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
 		         << "result is " << out->length() << " bytes" << dendl;
 }
 
-
-static bool is_daemon(uint32_t module_type)
-{
-  if (module_type == CEPH_ENTITY_TYPE_OSD ||
-      module_type == CEPH_ENTITY_TYPE_MDS ||
-      module_type == CEPH_ENTITY_TYPE_MON) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
-CephContext::CephContext(uint32_t module_type_, int init_flags_)
+CephContext::CephContext(uint32_t module_type_,
+                         enum code_environment_t code_env,
+                         int init_flags_)
   : nref(1),
-    _conf(new md_config_t(is_daemon(module_type_))),
+    _conf(new md_config_t(code_env == CODE_ENVIRONMENT_DAEMON)),
     _log(NULL),
     _module_type(module_type_),
     _init_flags(init_flags_),

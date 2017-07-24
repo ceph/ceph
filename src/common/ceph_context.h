@@ -20,6 +20,7 @@
 #include <boost/noncopyable.hpp>
 
 #include "common/cmdparse.h"
+#include "common/code_environment.h"
 #include "crush/CrushLocation.h"
 #include "include/Spinlock.h"
 
@@ -50,7 +51,9 @@ namespace ceph {
  */
 class CephContext {
 public:
-  CephContext(uint32_t module_type_, int init_flags_ = 0);
+  CephContext(uint32_t module_type_,
+              enum code_environment_t code_env=CODE_ENVIRONMENT_UTILITY,
+              int init_flags_ = 0);
 
   // ref count!
 private:
