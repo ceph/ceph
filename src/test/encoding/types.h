@@ -609,6 +609,8 @@ MESSAGE(MOSDPing)
 MESSAGE(MOSDRepScrub)
 #include "messages/MOSDScrub.h"
 MESSAGE(MOSDScrub)
+#include "messages/MOSDForceRecovery.h"
+MESSAGE(MOSDForceRecovery)
 #include "messages/MOSDSubOp.h"
 MESSAGE(MOSDSubOp)
 #include "messages/MOSDSubOpReply.h"

@@ -974,12 +974,15 @@ public:
   bool needs_recovery() const;
   bool needs_backfill() const;
 
+  /// clip calculated priority to reasonable range
+  inline int clamp_recovery_priority(int priority);
   /// get log recovery reservation priority
   unsigned get_recovery_priority();
   /// get backfill reservation priority
   unsigned get_backfill_priority();
 
   void mark_clean();  ///< mark an active pg clean
+  void change_recovery_force_mode(int new_mode, bool clear);
 
   /// return [start,end) bounds for required past_intervals
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
@@ -2395,7 +2398,7 @@ public:
   virtual void kick_snap_trim() = 0;
   virtual void snap_trimmer_scrub_complete() = 0;
   bool requeue_scrub(bool high_priority = false);
-  void queue_recovery(bool front = false);
+  void queue_recovery();
   bool queue_scrub();
   unsigned get_scrub_priority();
 

@@ -802,6 +802,8 @@ std::string pg_state_string(int state)
     oss << "recovery_toofull+";
   if (state & PG_STATE_RECOVERING)
     oss << "recovering+";
+  if (state & PG_STATE_FORCED_RECOVERY)
+    oss << "forced_recovery+";
   if (state & PG_STATE_DOWN)
     oss << "down+";
   if (state & PG_STATE_UNDERSIZED)
@@ -825,6 +827,8 @@ std::string pg_state_string(int state)
     oss << "backfill_wait+";
   if (state & PG_STATE_BACKFILL)
     oss << "backfilling+";
+  if (state & PG_STATE_FORCED_BACKFILL)
+    oss << "forced_backfill+";
   if (state & PG_STATE_BACKFILL_TOOFULL)
     oss << "backfill_toofull+";
   if (state & PG_STATE_INCOMPLETE)
@@ -866,6 +870,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_REPAIR;
   else if (state == "recovering")
     type = PG_STATE_RECOVERING;
+  else if (state == "forced_recovery")
+    type = PG_STATE_FORCED_RECOVERY;
   else if (state == "backfill_wait")
     type = PG_STATE_BACKFILL_WAIT;
   else if (state == "incomplete")
@@ -878,6 +884,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_DEEP_SCRUB;
   else if (state == "backfill")
     type = PG_STATE_BACKFILL;
+  else if (state == "forced_backfill")
+    type = PG_STATE_FORCED_BACKFILL;
   else if (state == "backfill_toofull")
     type = PG_STATE_BACKFILL_TOOFULL;
   else if (state == "recovery_wait")

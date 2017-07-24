@@ -11231,6 +11231,7 @@ bool PrimaryLogPG::start_recovery_ops(
 
   if (state_test(PG_STATE_RECOVERING)) {
     state_clear(PG_STATE_RECOVERING);
+    state_clear(PG_STATE_FORCED_RECOVERY);
     if (needs_backfill()) {
       dout(10) << "recovery done, queuing backfill" << dendl;
       queue_peering_event(
@@ -11242,6 +11243,7 @@ bool PrimaryLogPG::start_recovery_ops(
     } else {
       dout(10) << "recovery done, no backfill" << dendl;
       eio_errors_to_process = false;
+      state_clear(PG_STATE_FORCED_BACKFILL);
       queue_peering_event(
         CephPeeringEvtRef(
           std::make_shared<CephPeeringEvt>(
@@ -11251,6 +11253,8 @@ bool PrimaryLogPG::start_recovery_ops(
     }
   } else { // backfilling
     state_clear(PG_STATE_BACKFILL);
+    state_clear(PG_STATE_FORCED_BACKFILL);
+    state_clear(PG_STATE_FORCED_RECOVERY);
     dout(10) << "recovery done, backfill done" << dendl;
     eio_errors_to_process = false;
     queue_peering_event(
