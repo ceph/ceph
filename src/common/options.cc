@@ -528,7 +528,15 @@ std::vector<Option> global_options = {
   .set_description(""),
 
   Option("keyring", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin,")
+  .set_default(
+    "/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,"
+    "/etc/ceph/keyring,/etc/ceph/keyring.bin," 
+#if defined(__FreeBSD)
+    "/usr/local/etc/ceph/$cluster.$name.keyring,"
+    "/usr/local/etc/ceph/$cluster.keyring,"
+    "/usr/local/etc/ceph/keyring,/usr/local/etc/ceph/keyring.bin," 
+#endif
+  )
   .set_description(""),
 
   Option("heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -621,11 +629,21 @@ std::vector<Option> global_options = {
   .set_description(""),
 
   Option("ms_bind_retry_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+#if !defined(__FreeBSD__)
   .set_default(3)
+#else
+  // FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
+  .set_default(6)
+#endif
   .set_description(""),
 
   Option("ms_bind_retry_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+#if !defined(__FreeBSD__)
   .set_default(5)
+#else
+  // FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
+  .set_default(6)
+#endif
   .set_description(""),
 
   Option("ms_bind_before_connect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -1646,11 +1664,15 @@ std::vector<Option> global_options = {
   .set_description(""),
 
   Option("osd_pool_default_erasure_code_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("plugin=jerasure " "technique=reed_sol_van " "k=2 " "m=1 ")
+  .set_default("plugin=jerasure technique=reed_sol_van k=2 m=1")
   .set_description(""),
 
   Option("osd_erasure_code_plugins", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("jerasure" " lrc")
+  .set_default("jerasure lrc"
+#ifdef HAVE_BETTER_YASM_ELF64
+       " isa"
+#endif
+      )
   .set_description(""),
 
   Option("osd_allow_recovery_below_min_size", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
