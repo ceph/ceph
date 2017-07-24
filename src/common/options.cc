@@ -1817,6 +1817,10 @@ std::vector<Option> get_global_options() {
     .set_default(1)
     .set_description(""),
 
+    Option("osd_objecter_finishers", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description(""),
+
     Option("osd_map_dedup", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),

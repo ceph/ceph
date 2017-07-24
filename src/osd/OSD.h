@@ -800,7 +800,8 @@ public:
 
   // -- Objecter, for tiering reads/writes from/to other OSDs --
   Objecter *objecter;
-  Finisher objecter_finisher;
+  int m_objecter_finishers;
+  vector<Finisher*> objecter_finishers;
 
   // -- Watch --
   Mutex watch_lock;
