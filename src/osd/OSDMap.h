@@ -1176,6 +1176,9 @@ public:
     assert(i != pool_name.end());
     return i->second;
   }
+  const mempool::osdmap::map<int64_t,string>& get_pool_names() const {
+    return pool_name;
+  }
   bool have_pg_pool(int64_t p) const {
     return pools.count(p);
   }

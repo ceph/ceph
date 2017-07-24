@@ -1053,24 +1053,25 @@ TEST(CrushWrapper, choose_args_compat) {
   arg_map.args = choose_args;
 
   uint64_t features = CEPH_FEATURE_CRUSH_TUNABLES5|CEPH_FEATURE_INCARNATION_2;
+  int64_t caid = CrushWrapper::DEFAULT_CHOOSE_ARGS;
 
   // if the client is capable, encode choose_args
   {
-    c.choose_args[0] = arg_map;
+    c.choose_args[caid] = arg_map;
     bufferlist bl;
     c.encode(bl, features|CEPH_FEATURE_CRUSH_CHOOSE_ARGS);
     bufferlist::iterator i(bl.begin());
     CrushWrapper c_new;
     c_new.decode(i);
     ASSERT_EQ(1u, c_new.choose_args.size());
-    ASSERT_EQ(1u, c_new.choose_args[0].args[-1-id].weight_set_size);
-    ASSERT_EQ(weights, c_new.choose_args[0].args[-1-id].weight_set[0].weights[0]);
+    ASSERT_EQ(1u, c_new.choose_args[caid].args[-1-id].weight_set_size);
+    ASSERT_EQ(weights, c_new.choose_args[caid].args[-1-id].weight_set[0].weights[0]);
     ASSERT_EQ(weight, c_new.get_bucket_item_weightf(id, 0));
   }
 
   // if the client is not compatible, copy choose_arg in the weights
   {
-    c.choose_args[0] = arg_map;
+    c.choose_args[caid] = arg_map;
     bufferlist bl;
     c.encode(bl, features);
     c.choose_args.clear();
