@@ -126,16 +126,10 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
       f->dump_unsigned("max", fs->mds_map.max_mds);
     }
   } else {
-    if (filesystems.size() == 1) {
-      auto fs = filesystems.begin()->second;
-      *out << fs->mds_map.up.size() << "/" << fs->mds_map.in.size() << "/"
-           << fs->mds_map.max_mds << " up";
-    } else {
-      for (auto i : filesystems) {
-        auto fs = i.second;
-        *out << fs->mds_map.fs_name << "-" << fs->mds_map.up.size() << "/"
-             << fs->mds_map.in.size() << "/" << fs->mds_map.max_mds << " up ";
-      }
+    for (auto i : filesystems) {
+      auto fs = i.second;
+      *out << fs->mds_map.fs_name << "-" << fs->mds_map.up.size() << "/"
+	   << fs->mds_map.in.size() << "/" << fs->mds_map.max_mds << " up ";
     }
   }
 
