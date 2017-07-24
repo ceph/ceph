@@ -3109,11 +3109,12 @@ void PGMap::get_health_checks(
       for (auto& p : warn_osd_by_max) {
 	ostringstream ss;
 	if (p.second.size() > 1) {
-	  ss << "osds " << p.second;
+	  ss << "osds " << p.second
+             << " have blocked requests > " << p.first << " sec";
 	} else {
-	  ss << "osd." << *p.second.begin();
+	  ss << "osd." << *p.second.begin()
+             << " has blocked requests > " << p.first << " sec";
 	}
-	ss << " have blocked requests > " << p.first << " sec";
 	d.detail.push_back(ss.str());
 	if (--left == 0) {
 	  break;
@@ -3130,11 +3131,12 @@ void PGMap::get_health_checks(
       for (auto& p : error_osd_by_max) {
 	ostringstream ss;
 	if (p.second.size() > 1) {
-	  ss << "osds " << p.second;
+	  ss << "osds " << p.second
+             << " have stuck requests > " << p.first << " sec";
 	} else {
-	  ss << "osd." << *p.second.begin();
+	  ss << "osd." << *p.second.begin()
+             << " has stuck requests > " << p.first << " sec";
 	}
-	ss << " have stuck requests > " << p.first << " sec";
 	d.detail.push_back(ss.str());
 	if (--left == 0) {
 	  break;
