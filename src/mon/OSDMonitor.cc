@@ -884,7 +884,7 @@ void OSDMonitor::prime_pg_temp(
   int next_up_primary, next_acting_primary;
   next.pg_to_up_acting_osds(pgid, &next_up, &next_up_primary,
 			    &next_acting, &next_acting_primary);
-  if (acting == next_acting)
+  if (acting == next_acting && next_up != next_acting)
     return;  // no change since last epoch
 
   if (acting.empty())
@@ -892,6 +892,12 @@ void OSDMonitor::prime_pg_temp(
   const pg_pool_t *pool = next.get_pg_pool(pgid.pool());
   if (pool && acting.size() < pool->min_size)
     return;  // can be no worse off than before
+
+  if (next_up == next_acting) {
+    acting.clear();
+    dout(20) << __func__ << "next_up === next_acting now, clear pg_temp"
+             << dendl;
+  }
 
   dout(20) << __func__ << " " << pgid << " " << up << "/" << acting
 	   << " -> " << next_up << "/" << next_acting
