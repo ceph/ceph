@@ -147,10 +147,10 @@ void *RGWLC::LCWorker::entry() {
 
     utime_t end = ceph_clock_now();
     int secs = schedule_next_start_time(start, end);
-    time_t next_time = end + secs;
-    char buf[30];
-    char *nt = ctime_r(&next_time, buf);
-    dout(5) << "schedule life cycle next start time: " << nt <<dendl;
+    utime_t next;
+    next.set_from_double(end + secs);
+
+    dout(5) << "schedule life cycle next start time: " << rgw_to_asctime(next) <<dendl;
 
     lock.Lock();
     cond.WaitInterval(lock, utime_t(secs, 0));
