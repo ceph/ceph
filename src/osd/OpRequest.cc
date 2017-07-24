@@ -39,6 +39,7 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   } else if (req->get_type() == MSG_OSD_REPOP) {
     reqid = static_cast<MOSDRepOp*>(req)->reqid;
   }
+  req_src_inst = req->get_source_inst();
   mark_event("header_read", request->get_recv_stamp());
   mark_event("throttled", request->get_throttle_stamp());
   mark_event("all_read", request->get_recv_complete_stamp());
@@ -52,8 +53,8 @@ void OpRequest::_dump(Formatter *f) const
   if (m->get_orig_source().is_client()) {
     f->open_object_section("client_info");
     stringstream client_name, client_addr;
-    client_name << m->get_orig_source();
-    client_addr << m->get_orig_source_addr();
+    client_name << req_src_inst.name;
+    client_addr << req_src_inst.addr;
     f->dump_string("client", client_name.str());
     f->dump_string("client_addr", client_addr.str());
     f->dump_unsigned("tid", m->get_tid());
