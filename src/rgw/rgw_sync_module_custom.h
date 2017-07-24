@@ -9,7 +9,9 @@ public:
   bool supports_data_export() override {
     return false;
   }
-  int create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) override;
+  int create_instance(CephContext *cct, 
+                      map<std::string, std::string, ltstr_nocase>& config, 
+                      RGWSyncModuleInstanceRef *instance) override;
 };
 
 #endif

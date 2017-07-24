@@ -4399,7 +4399,7 @@ int RGWRados::init_complete()
   if (run_sync_thread) {
     ret = sync_modules_manager->create_instance(cct, zone_public_config.tier_type, zone_params.tier_config, &sync_module);
     if (ret < 0) {
-    lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << " tier_type="<<zone_public_config.tier_type<<" zone id="<<zone_public_config.id<<" name="<<zone_public_config.name<<dendl;
+      lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << " tier_type="<<zone_public_config.tier_type<<" zone id="<<zone_public_config.id<<" name="<<zone_public_config.name<<dendl;
       return ret;
     }
   }

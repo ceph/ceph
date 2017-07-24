@@ -39,7 +39,7 @@ public:
 
 class RGWCustomSyncObj : public RGWAsyncRadosRequest {
   RGWRados *store;
-  string source_zone;
+  std::string source_zone;
 
   RGWBucketInfo bucket_info;
 
@@ -52,7 +52,7 @@ protected:
   int _send_request();
 public:
   RGWCustomSyncObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
-                         const string& _source_zone,
+                         const std::string& _source_zone,
                          RGWBucketInfo& _bucket_info,
                          const rgw_obj_key& _key,
                          RGWCustomAccess* _custom_access) : RGWAsyncRadosRequest(caller, cn), store(_store),
@@ -64,7 +64,7 @@ public:
 
 int RGWCustomSyncObj::_send_request()
 {
-  string user_id;
+  std::string user_id;
   rgw_obj src_obj(bucket_info.bucket, key);
 
   RGWRESTStreamRWRequest *in_stream_req;
@@ -75,7 +75,7 @@ int RGWCustomSyncObj::_send_request()
       /* source is in the master zonegroup */
       conn = store->rest_master_conn;
     } else {
-      map<string, RGWRESTConn *>::iterator iter = store->zonegroup_conn_map.find(bucket_info.zonegroup);
+      map<std::string, RGWRESTConn *>::iterator iter = store->zonegroup_conn_map.find(bucket_info.zonegroup);
       if (iter == store->zonegroup_conn_map.end()) {
         ldout(store->ctx(), 0) << "RGWCustomSyncObj:could not find zonegroup connection to zonegroup: " << source_zone << dendl;
         return -ENOENT;
@@ -83,7 +83,7 @@ int RGWCustomSyncObj::_send_request()
       conn = iter->second;
     }
   } else {
-    map<string, RGWRESTConn *>::iterator iter = store->zone_conn_map.find(source_zone);
+    map<std::string, RGWRESTConn *>::iterator iter = store->zone_conn_map.find(source_zone);
     if (iter == store->zone_conn_map.end()) {
       ldout(store->ctx(), 0) << "RGWCustomSyncObj:could not find zone connection to zone: " << source_zone << dendl;
       return -ENOENT;
@@ -91,8 +91,8 @@ int RGWCustomSyncObj::_send_request()
     conn = iter->second;
   }
 
-  string etag;
-  map<string, string> req_headers;
+  std::string etag;
+  map<std::string, std::string> req_headers;
   real_time set_mtime;
 
   //obj_time_weight dest_mtime_weight;
@@ -105,22 +105,26 @@ int RGWCustomSyncObj::_send_request()
                       false /* prepend_meta */, true /* GET */, false /* rgwx-stat */,
                       true /* sync manifest */, &cb, &in_stream_req);
   if (ret < 0) {
-    ldout(store->ctx(),0) << "custom error get_obj ret:" << ret << bucket_info.bucket.name << "file:" << key.name << dendl;
+    ldout(store->ctx(),0) << "custom error get_obj ret:" << ret << " "
+                          << bucket_info.bucket.name << "file:" << key.name << dendl;
     return ret;
   }
 
   ret = conn->complete_request(in_stream_req, etag, &set_mtime, nullptr, req_headers);
   if (ret < 0) {
-    ldout(store->ctx(),0) << "custom error complete_request ret:" << ret << bucket_info.bucket.name << "file:" << key.name << dendl;
+    ldout(store->ctx(),0) << "custom error complete_request ret:" << ret << " "
+                          << bucket_info.bucket.name << "file:" << key.name << dendl;
     return ret;
   }
   
   ldout(store->ctx(), 0) <<"custom get obj len="<< cb.get_len() << dendl;
   ret = custom_access->put_obj(bucket_info.bucket.name, key.name, &(cb.get_data()), cb.get_len());
   if (ret < 0) {
-    ldout(store->ctx(),0) << "custom error put_obj ret:" << ret << bucket_info.bucket.name << " file:" << key.name << dendl;
+    ldout(store->ctx(),0) << "custom error put_obj ret:" << ret << " "
+                          << bucket_info.bucket.name << " file:" << key.name << dendl;
   }else
-    ldout(store->ctx(),0) << "custom success ret:"<<ret<<" bucket:" << bucket_info.bucket.name << " file:" << key.name << dendl;
+    ldout(store->ctx(),0) << "custom success ret:"<<ret<<" bucket:" 
+                          << bucket_info.bucket.name << " file:" << key.name << dendl;
   return ret;
 }
 
@@ -128,7 +132,7 @@ class RGWCustomSyncObjCR : public RGWSimpleCoroutine {
   CephContext *cct;
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
-  string source_zone;
+  std::string source_zone;
 
   RGWBucketInfo bucket_info;
 
@@ -138,7 +142,7 @@ class RGWCustomSyncObjCR : public RGWSimpleCoroutine {
   RGWCustomAccess* custom_access;
 public:
   RGWCustomSyncObjCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-                     const string& _source_zone,
+                     const std::string& _source_zone,
                      RGWBucketInfo& _bucket_info,
                      const rgw_obj_key& _key, RGWCustomAccess* _custom_access) 
                        : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
@@ -209,14 +213,14 @@ public:
 };
 
 class RGWCustomRemove : public RGWAsyncRadosRequest {
-	CephContext *cct;
+  CephContext *cct;
   RGWBucketInfo bucket_info;
 
   rgw_obj_key key;
   RGWCustomAccess *custom_access;
 protected:
   int _send_request(){
-	  int ret = custom_access->remove_obj(bucket_info.bucket.name, key.name);
+    int ret = custom_access->remove_obj(bucket_info.bucket.name, key.name);
     return ret;
   }
 public:
@@ -278,12 +282,12 @@ public:
 };
 
 class RGWCustomDataSyncModule : public RGWDataSyncModule {
-  string prefix;
-  map<string, string, ltstr_nocase>& config;
-  set<string> bucket_filter;
+  std::string prefix;
+  map<std::string, std::string, ltstr_nocase>& config;
+  set<std::string> bucket_filter;
   RGWCustomInfo custom_info;
   
-  bool check_bucket_filter(string& bucket_name) {
+  bool check_bucket_filter(std::string& bucket_name) {
     if (bucket_filter.empty()) {
       return true;
     }
@@ -293,7 +297,7 @@ class RGWCustomDataSyncModule : public RGWDataSyncModule {
   }
   
 public:
-  RGWCustomDataSyncModule(const string& _prefix, map<string, string, ltstr_nocase>& _config) 
+  RGWCustomDataSyncModule(const std::string& _prefix, map<std::string, std::string, ltstr_nocase>& _config) 
                           : prefix(_prefix), config(_config) {
     auto iter = config.find("src_bucket");
     if (iter == config.end())
@@ -415,14 +419,14 @@ public:
 class RGWCustomSyncModuleInstance : public RGWSyncModuleInstance {
   RGWCustomDataSyncModule data_handler;
 public:
-  RGWCustomSyncModuleInstance(const string& _prefix, map<string, string, ltstr_nocase>& _config) : data_handler(_prefix, _config) {}
+  RGWCustomSyncModuleInstance(const std::string& _prefix, map<std::string, std::string, ltstr_nocase>& _config) : data_handler(_prefix, _config) {}
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
 };
 
-int RGWCustomSyncModule::create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
-  string prefix;
+int RGWCustomSyncModule::create_instance(CephContext *cct, map<std::string, std::string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
+  std::string prefix;
   auto i = config.find("prefix");
   if (i != config.end()) {
     prefix = i->second;

@@ -10,8 +10,6 @@
 
 class RGWRESTUfileRequest : public RGWRESTSimpleRequest {
   Mutex lock;
-  //list<bufferlist> pending_send;
-  //list<bufferptr>* ptrs;
   RGWCustomInfo& custom_info;
   uint64_t bl_len;
   uint64_t total_send;
@@ -22,15 +20,15 @@ protected:
   RGWGetDataCB *cb;
   RGWHTTPManager http_manager;
 private:
-  void create_ufile_canonical_header(const string& method, const string& bucket, const string& key, const string& content_type, string& dest_str);
-  int get_ufile_header_digest(const string& auth_hdr, const string& key, string& dest);
+  void create_ufile_canonical_header(const std::string& method, const string& bucket, const string& key, const string& content_type, string& dest_str);
+  int get_ufile_header_digest(const std::string& auth_hdr, const string& key, string& dest);
   int complete();
   int add_output_data(bufferlist& bl, uint64_t len);
   void reset(); 
 public:
   int send_data(void *ptr, size_t len);
   
-  RGWRESTUfileRequest(CephContext *_cct, const string& _url, param_vec_t *_headers,
+  RGWRESTUfileRequest(CephContext *_cct, const std::string& _url, param_vec_t *_headers,
                                  param_vec_t *_params, RGWCustomInfo& _custom_info) 
                                    : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
                                      lock("RGWRESTStreamWriteUfileRequest"), 
@@ -42,14 +40,14 @@ public:
   
   RGWGetDataCB *get_out_cb() { return cb; }
 
-  int put_obj(const string& bucket, const string& obj, bufferlist* bl, uint64_t obj_size);
-  int rm_obj(const string& bucket, const string& obj);
-  int create_bucket(const string& bucket);
+  int put_obj(const std::string& bucket, const string& obj, bufferlist* bl, uint64_t obj_size);
+  int rm_obj(const std::string& bucket, const string& obj);
+  int create_bucket(const std::string& bucket);
 };
 
 RGWRESTUfileRequest::~RGWRESTUfileRequest() {
-  //pending_send.clear();
-  delete cb; 
+  delete cb;
+  cb = nullptr; 
 }
 
 void RGWRESTUfileRequest::reset() {
@@ -63,7 +61,6 @@ int RGWRESTUfileRequest::add_output_data(bufferlist& bl, uint64_t len) {
     int ret = status;
     return ret;
   }
-  //pending_send.push_back(bl);
   cur_it = bl.buffers().begin();
   end_it = bl.buffers().end();
   bl_len = len;
@@ -73,7 +70,6 @@ int RGWRESTUfileRequest::add_output_data(bufferlist& bl, uint64_t len) {
 
 int RGWRESTUfileRequest::send_data(void *ptr, size_t len) {
   uint64_t sent = 0;
-  //dout(20) << "RGWRESTStreamWriteRequest::send_data()" << dendl;
   if (bl_len == 0 || status < 0) {
     dout(20) << "RGWRESTStreamWriteRequest::send_data status=" <<status << " len:"<<bl_len<<dendl;
     reset();
@@ -97,7 +93,6 @@ int RGWRESTUfileRequest::send_data(void *ptr, size_t len) {
     }
   }
   
-  //dout(0)<<"ufile request send_data bl.len:"<<bl_len<<" total_send:"<<total_send<<" sent:"<< sent << dendl;
   return sent;
 }
 
@@ -108,11 +103,11 @@ int RGWRESTUfileRequest::complete() {
   return status;
 }
 
-void RGWRESTUfileRequest::create_ufile_canonical_header(const string& method, const string& bucket, const string& key, const string& content_type, string& dest_str) {
+void RGWRESTUfileRequest::create_ufile_canonical_header(const std::string& method, const string& bucket, const string& key, const string& content_type, string& dest_str) {
   dest_str = method +"\n" + "\n" + content_type + "\n" +"\n" + "/"+bucket +"/" +key;
 }
 
-int RGWRESTUfileRequest::get_ufile_header_digest(const string& auth_hdr, const string& key, string& dest)
+int RGWRESTUfileRequest::get_ufile_header_digest(const std::string& auth_hdr, const string& key, string& dest)
 {
   if (key.empty())
     return -EINVAL;
@@ -120,28 +115,28 @@ int RGWRESTUfileRequest::get_ufile_header_digest(const string& auth_hdr, const s
   char hmac_sha1[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   calc_hmac_sha1(key.c_str(), key.size(), auth_hdr.c_str(), auth_hdr.size(), hmac_sha1);
 
-  char b64[64]; /* 64 is really enough */
-  int ret = ceph_armor(b64, b64 + 64, hmac_sha1,
+  char encode_buf_64[64]; /* 64 is really enough */
+  int ret = ceph_armor(encode_buf_64, encode_buf_64 + 64, hmac_sha1,
            hmac_sha1 + CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
   if (ret < 0) {
-    dout(10) << "ceph_armor failed" << dendl;
+    dout(10) << "ceph_armor failed:" << ret << dendl;
     return ret;
   }
-  b64[ret] = '\0';
+  encode_buf_64[ret] = '\0';
 
-  dest = b64;
+  dest = encode_buf_64;
 
   return 0;
 }
 
-int RGWRESTUfileRequest::put_obj(const string& bucket, const string& obj, bufferlist* bl, uint64_t obj_size) {
+int RGWRESTUfileRequest::put_obj(const std::string& bucket, const string& obj, bufferlist* bl, uint64_t obj_size) {
   
-  string new_url = "http://" + bucket + "." + custom_info.domain_name + "/" + obj;
+  std::string new_url = "http://" + bucket + "." + custom_info.domain_name + "/" + obj;
   
-  string string2sign;
-  string sign;
-  string auth;
-  string content_type = "application/octet-stream";
+  std::string string2sign;
+  std::string sign;
+  std::string auth;
+  std::string content_type = "application/octet-stream";
   create_ufile_canonical_header("PUT", bucket, obj,content_type, string2sign);
   get_ufile_header_digest(string2sign ,custom_info.private_key, sign);
   auth = "UCloud ";
@@ -149,8 +144,8 @@ int RGWRESTUfileRequest::put_obj(const string& bucket, const string& obj, buffer
   auth.append(":");
   auth.append(sign);
 
-  headers.push_back(pair<string, string>("Authorization", auth));
-  headers.push_back(pair<string, string>("Content-Type", content_type));
+  headers.push_back(pair<std::string, string>("Authorization", auth));
+  headers.push_back(pair<std::string, string>("Content-Type", content_type));
 
   set_send_length(obj_size);
 
@@ -168,23 +163,23 @@ int RGWRESTUfileRequest::put_obj(const string& bucket, const string& obj, buffer
   return r;
 }
     
-int RGWRESTUfileRequest::rm_obj(const string& bucket, const string& obj) {
+int RGWRESTUfileRequest::rm_obj(const std::string& bucket, const string& obj) {
 
-	string new_url = "http://" + bucket+ "." + custom_info.domain_name + "/" + obj;
+  std::string new_url = "http://" + bucket+ "." + custom_info.domain_name + "/" + obj;
 
-	string string2sign;
-	string sign;
-	string auth;
-	string content_type = "application/octet-stream";
-	create_ufile_canonical_header("DELETE",bucket, obj, content_type, string2sign);
-	get_ufile_header_digest(string2sign, custom_info.private_key, sign);
-	auth = "UCloud ";
-	auth.append(custom_info.public_key);
-	auth.append(":");
-	auth.append(sign);
+  std::string string2sign;
+  std::string sign;
+  std::string auth;
+  std::string content_type = "application/octet-stream";
+  create_ufile_canonical_header("DELETE",bucket, obj, content_type, string2sign);
+  get_ufile_header_digest(string2sign, custom_info.private_key, sign);
+  auth = "UCloud ";
+  auth.append(custom_info.public_key);
+  auth.append(":");
+  auth.append(sign);
 
-	headers.push_back(pair<string, string>("Authorization", auth));
-	headers.push_back(pair<string, string>("Content-Type", content_type));
+  headers.push_back(pair<std::string, string>("Authorization", auth));
+  headers.push_back(pair<std::string, string>("Content-Type", content_type));
 
   int r = http_manager.add_request(this, "DELETE", new_url.c_str());
   if (r < 0)
@@ -194,22 +189,22 @@ int RGWRESTUfileRequest::rm_obj(const string& bucket, const string& obj) {
   return r;
 }
 
-int RGWRESTUfileRequest::create_bucket(const string& bucket) {
-  string url = "http://"+ custom_info.bucket_host +"/?";
-  std::map<string, string> querys;
+int RGWRESTUfileRequest::create_bucket(const std::string& bucket) {
+  std::string url = "http://"+ custom_info.bucket_host +"/?";
+  std::map<std::string, string> querys;
   querys["BucketName"] = bucket;
   querys["PublicKey"] = custom_info.public_key;
   querys["Action"] = "CreateBucket";
   querys["Type"] = "private";
   querys["Region"]= custom_info.bucket_region;
-  string str2sign;
+  std::string str2sign;
   
-  map<string, string>::iterator iter = querys.begin();
+  map<std::string, string>::iterator iter = querys.begin();
   while(iter != querys.end())
   {
     str2sign += (iter->first + iter->second);
     if (iter->first == "PublicKey") {
-      string encode_value;
+      std::string encode_value;
       url_encode(iter->second, encode_value);
       url += (iter->first +"="+ encode_value +"&");
     }
@@ -231,7 +226,7 @@ int RGWRESTUfileRequest::create_bucket(const string& bucket) {
     sprintf( ( hex + (2*i)), "%02x", out[i]&0xff);
   }
   
-  url += string(hex, 40);
+  url += std::string(hex, 40);
 
   int r = http_manager.add_request(this, "GET", url.c_str());
   if (r < 0)
@@ -241,29 +236,29 @@ int RGWRESTUfileRequest::create_bucket(const string& bucket) {
   return r;
 }
 
-int RGWUfileAccess::get_ufile_retcode(string& http_response, int* retcode) {
-  string::size_type pos = http_response.find("RetCode");
-  if (pos == string::npos)
+int RGWUfileAccess::get_ufile_retcode(std::string& http_response, int* retcode) {
+  std::string::size_type pos = http_response.find("RetCode");
+  if (pos == std::string::npos)
     return -1;
   pos = http_response.find(":", pos);
-  if (pos == string::npos)
+  if (pos == std::string::npos)
     return -1;
-  string::size_type end_pos = http_response.find(",", pos+1);
-  if(end_pos == string::npos) {
+  std::string::size_type end_pos = http_response.find(",", pos+1);
+  if(end_pos == std::string::npos) {
     end_pos = http_response.find("}", pos+1);
-    if (end_pos == string::npos)
+    if (end_pos == std::string::npos)
       return -1;
   }
-  string ret = http_response.substr(pos+1, end_pos);
+  std::string ret = http_response.substr(pos+1, end_pos);
   *retcode = std::stoi(ret);
   return 0;
 }
 
-int RGWUfileAccess::put_obj(string& bucket, string& key, bufferlist *bl, off_t bl_len) {
+int RGWUfileAccess::put_obj(std::string& bucket, string& key, bufferlist *bl, off_t bl_len) {
   param_vec_t _headers;
   param_vec_t _params;
-  string url = "";
-  string dest_bucket = custom_info.dest_bucket.empty() ? bucket : custom_info.dest_bucket;
+  std::string url = "";
+  std::string dest_bucket = custom_info.dest_bucket.empty() ? bucket : custom_info.dest_bucket;
   dest_bucket = custom_info.bucket_prefix + dest_bucket;
   
   RGWRESTUfileRequest* req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, custom_info);
@@ -278,7 +273,7 @@ int RGWUfileAccess::put_obj(string& bucket, string& key, bufferlist *bl, off_t b
     delete req;
     return ret;
   }
-  string msg(resp.c_str(), resp_len);
+  std::string msg(resp.c_str(), resp_len);
   delete req;
   int ret_code;
   if (get_ufile_retcode(msg, &ret_code) < 0) {
@@ -308,11 +303,11 @@ int RGWUfileAccess::put_obj(string& bucket, string& key, bufferlist *bl, off_t b
   return ret;
 }
 
-int RGWUfileAccess::remove_obj(string& bucket, string& key) {
+int RGWUfileAccess::remove_obj(std::string& bucket, string& key) {
   param_vec_t _headers;
   param_vec_t _params;
-  string url = "";
-  string dest_bucket = custom_info.dest_bucket.empty() ? bucket : custom_info.dest_bucket;
+  std::string url = "";
+  std::string dest_bucket = custom_info.dest_bucket.empty() ? bucket : custom_info.dest_bucket;
   dest_bucket = custom_info.bucket_prefix + dest_bucket;
   RGWRESTUfileRequest* req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, custom_info);
   int ret = req->rm_obj(dest_bucket, key);
@@ -328,7 +323,7 @@ int RGWUfileAccess::remove_obj(string& bucket, string& key) {
     delete req;
     return ret;
   }
-  string msg(resp.c_str(), resp_len);
+  std::string msg(resp.c_str(), resp_len);
   delete req;
 
   dout(0) << "ufile rm_obj:"<< key << " failed:" << ret<< " error msg:" << msg << dendl;
