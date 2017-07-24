@@ -1989,6 +1989,10 @@ class CephManager:
         """
         return self.get_osd_dump_json()['osds']
 
+    def get_mgr_dump(self):
+        out = self.raw_cluster_cmd('mgr', 'dump', '--format=json')
+        return json.loads(out)
+
     def get_stuck_pgs(self, type_, threshold):
         """
         :returns: stuck pg information from the cluster
@@ -2181,6 +2185,20 @@ class CephManager:
     def wait_for_pools(self, pools):
         for pool in pools:
             self.wait_for_pool(pool)
+
+    def is_mgr_available(self):
+        x = self.get_mgr_dump()
+        return x.get('available', False)
+
+    def wait_for_mgr_available(self, timeout=None):
+        self.log("waiting for mgr available")
+        start = time.time()
+        while not self.is_mgr_available():
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired in wait_for_mgr_available'
+            time.sleep(3)
+        self.log("mgr available!")
 
     def wait_for_recovery(self, timeout=None):
         """
