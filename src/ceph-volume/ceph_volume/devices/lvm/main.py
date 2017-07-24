@@ -3,6 +3,7 @@ from textwrap import dedent
 from ceph_volume import terminal
 from . import activate
 from . import prepare
+from . import create
 
 
 class LVM(object):
@@ -18,6 +19,7 @@ class LVM(object):
     mapper = {
         'activate': activate.Activate,
         'prepare': prepare.Prepare,
+        'create': create.Create,
     }
 
     def __init__(self, argv):
