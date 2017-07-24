@@ -49,16 +49,16 @@ their nicks on `GitHub`_:
 
 .. _github: https://github.com/
 
-========= =============== =============
-Scope     Lead            GitHub nick
-========= =============== =============
-Ceph      Sage Weil       liewegas
-RADOS     Samuel Just     athanatos
-RGW       Yehuda Sadeh    yehudasa
-RBD       Jason Dillaman  dillaman
-CephFS    John Spray      jcsp
-Build/Ops Ken Dreyer      ktdreyer
-========= =============== =============
+========= ================ =============
+Scope     Lead             GitHub nick
+========= ================ =============
+Ceph      Sage Weil        liewegas
+RADOS     Samuel Just      athanatos
+RGW       Yehuda Sadeh     yehudasa
+RBD       Jason Dillaman   dillaman
+CephFS    Patrick Donnelly batrick
+Build/Ops Ken Dreyer       ktdreyer
+========= ================ =============
 
 The Ceph-specific acronyms in the table are explained in
 :doc:`/architecture`.
