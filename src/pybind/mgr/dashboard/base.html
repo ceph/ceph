@@ -340,7 +340,6 @@
             <i class="fa fa-heartbeat" rv-style="health_status | health_color"></i>
             <span>Cluster health</span></a>
         </li>
-        PATH: {{ path_info }}
         <li class="treeview{%if path_info.startswith(('/server', '/osd'))%} active{%endif%}">
           <a href="#"><i class="fa fa-server"></i> <span>Cluster</span>
             <span class="pull-right-container">
