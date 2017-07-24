@@ -2601,7 +2601,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 
   snapid_t follows = m->get_snap_follows();
   dout(7) << "handle_client_caps "
-	  << ((m->flags & CLIENT_CAPS_SYNC) ? "sync" : "async")
+	  << ((m->flags & MClientCaps::FLAG_SYNC) ? "sync" : "async")
 	  << " on " << m->get_ino()
 	  << " tid " << m->get_client_tid() << " follows " << follows
 	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;
@@ -2818,7 +2818,9 @@ void Locker::handle_client_caps(MClientCaps *m)
     //  released all WR/EXCL caps (the FLUSHSNAP always comes before the cap
     //  update/release).
     if (!head_in->client_need_snapflush.empty()) {
-      if ((cap->issued() & CEPH_CAP_ANY_FILE_WR) == 0) {
+      if ((m->flags & MClientCaps::FLAG_NO_CAPSNAP) ||
+	  (!(cap->issued() & CEPH_CAP_ANY_FILE_WR) &&
+	   !(m->flags & MClientCaps::FLAG_PENDING_CAPSNAP))) {
 	_do_null_snapflush(head_in, client);
       } else {
 	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
@@ -2835,7 +2837,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     }
 
     // filter wanted based on what we could ever give out (given auth/replica status)
-    bool need_flush = m->flags & CLIENT_CAPS_SYNC;
+    bool need_flush = m->flags & MClientCaps::FLAG_SYNC;
     int new_wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
     if (new_wanted != cap->wanted()) {
       if (!need_flush && (new_wanted & ~cap->pending())) {
