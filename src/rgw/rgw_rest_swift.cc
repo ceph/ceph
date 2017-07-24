@@ -384,7 +384,8 @@ static void dump_container_metadata(struct req_state *s,
   dump_header(s, "X-Container-Bytes-Used-Actual", bucket.size_rounded);
 
   if (s->object.empty()) {
-    auto swift_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl);
+    auto swift_policy = \
+      static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
     std::string read_acl, write_acl;
     swift_policy->to_str(read_acl, write_acl);
 

@@ -1801,8 +1801,8 @@ struct req_state {
   } auth;
 
   std::unique_ptr<RGWAccessControlPolicy> user_acl;
-  RGWAccessControlPolicy *bucket_acl;
-  RGWAccessControlPolicy *object_acl;
+  std::unique_ptr<RGWAccessControlPolicy> bucket_acl;
+  std::unique_ptr<RGWAccessControlPolicy> object_acl;
 
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;

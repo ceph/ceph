@@ -16,6 +16,7 @@
 
 #include "common/Clock.h"
 #include "common/armor.h"
+#include "common/backport14.h"
 #include "common/errno.h"
 #include "common/mime.h"
 #include "common/utf8.h"
@@ -401,18 +402,17 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   }
 
   if(s->dialect.compare("s3") == 0) {
-    s->bucket_acl = new RGWAccessControlPolicy_S3(s->cct);
+    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy_S3>(s->cct);
   } else if(s->dialect.compare("swift")  == 0) {
     /* We aren't allocating the account policy for those operations using
      * the Swift's infrastructure that don't really need req_state::user.
      * Typical example here is the implementation of /info. */
     if (!s->user->user_id.empty()) {
-      s->user_acl = std::unique_ptr<RGWAccessControlPolicy>(
-          new RGWAccessControlPolicy_SWIFTAcct(s->cct));
+      s->user_acl = ceph::make_unique<RGWAccessControlPolicy_SWIFTAcct>(s->cct);
     }
-    s->bucket_acl = new RGWAccessControlPolicy_SWIFT(s->cct);
+    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy_SWIFT>(s->cct);
   } else {
-    s->bucket_acl = new RGWAccessControlPolicy(s->cct);
+    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy>(s->cct);
   }
 
   /* check if copy source is within the current domain */
@@ -457,7 +457,8 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     s->bucket = s->bucket_info.bucket;
 
     if (s->bucket_exists) {
-      ret = read_bucket_policy(store, s, s->bucket_info, s->bucket_attrs, s->bucket_acl, s->bucket);
+      ret = read_bucket_policy(store, s, s->bucket_info, s->bucket_attrs,
+                               s->bucket_acl.get(), s->bucket);
       acct_acl_user = {
         s->bucket_info.owner,
         s->bucket_acl->get_owner().get_display_name(),
@@ -560,7 +561,7 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
     if (!s->bucket_exists) {
       return -ERR_NO_SUCH_BUCKET;
     }
-    s->object_acl = new RGWAccessControlPolicy(s->cct);
+    s->object_acl = ceph::make_unique<RGWAccessControlPolicy>(s->cct);
 
     rgw_obj obj(s->bucket, s->object);
       
@@ -568,7 +569,9 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
     if (prefetch_data) {
       store->set_prefetch_data(s->obj_ctx, obj);
     }
-    ret = read_obj_policy(store, s, s->bucket_info, s->bucket_attrs, s->object_acl, s->iam_policy, s->bucket, s->object);
+    ret = read_obj_policy(store, s, s->bucket_info, s->bucket_attrs,
+			  s->object_acl.get(), s->iam_policy, s->bucket,
+                          s->object);
   }
 
   return ret;
@@ -1327,7 +1330,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   } else {
     bucket = s->bucket;
     pbucket_info = &s->bucket_info;
-    bucket_acl = s->bucket_acl;
+    bucket_acl = s->bucket_acl.get();
     bucket_policy = &s->iam_policy;
   }
 
@@ -1464,7 +1467,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
       }
     } else {
       bucket = s->bucket;
-      bucket_acl = s->bucket_acl;
+      bucket_acl = s->bucket_acl.get();
       bucket_policy = s->iam_policy.get_ptr();
     }
 
@@ -3923,7 +3926,8 @@ void RGWPutMetadataBucket::execute()
    * contain such keys yet. */
   if (has_policy) {
     if (s->dialect.compare("swift") == 0) {
-	auto old_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl);
+	auto old_policy = \
+          static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
 	auto new_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(&policy);
 	new_policy->filter_merge(policy_rw_mask, old_policy);
 	policy = *new_policy;
@@ -4480,8 +4484,10 @@ void RGWGetACLs::pre_exec()
 void RGWGetACLs::execute()
 {
   stringstream ss;
-  RGWAccessControlPolicy *acl = (!s->object.empty() ? s->object_acl : s->bucket_acl);
-  RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(acl);
+  RGWAccessControlPolicy* const acl = \
+    (!s->object.empty() ? s->object_acl.get() : s->bucket_acl.get());
+  RGWAccessControlPolicy_S3* const s3policy = \
+    static_cast<RGWAccessControlPolicy_S3*>(acl);
   s3policy->to_xml(ss);
   acls = ss.str();
 }
@@ -4574,7 +4580,8 @@ void RGWPutACLs::execute()
   }
 
 
-  RGWAccessControlPolicy *existing_policy = (s->object.empty() ? s->bucket_acl : s->object_acl);
+  RGWAccessControlPolicy* const existing_policy = \
+    (s->object.empty() ? s->bucket_acl.get() : s->object_acl.get());
 
   owner = existing_policy->get_owner();
 
