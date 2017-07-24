@@ -1,4 +1,4 @@
-#include "rgw_custom_access.h"
+#include "rgw_cloud_ufile.h"
 #include "rgw_common.h"
 #include "rgw_rest_client.h"
 #include "rgw_rados.h"
@@ -10,7 +10,7 @@
 
 class RGWRESTUfileRequest : public RGWRESTSimpleRequest {
   Mutex lock;
-  RGWCustomInfo& custom_info;
+  RGWCloudInfo& cloud_info;
   uint64_t bl_len;
   uint64_t total_send;
   uint64_t pos;
@@ -29,10 +29,10 @@ public:
   int send_data(void *ptr, size_t len);
   
   RGWRESTUfileRequest(CephContext *_cct, const std::string& _url, param_vec_t *_headers,
-                                 param_vec_t *_params, RGWCustomInfo& _custom_info) 
+                                 param_vec_t *_params, RGWCloudInfo& _cloud_info) 
                                    : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
                                      lock("RGWRESTStreamWriteUfileRequest"), 
-                                     custom_info(_custom_info), bl_len(0),total_send(0),pos(0),
+                                     cloud_info(_cloud_info), bl_len(0),total_send(0),pos(0),
                                      cb(NULL),
                                      http_manager(_cct)
   { }
@@ -131,16 +131,16 @@ int RGWRESTUfileRequest::get_ufile_header_digest(const std::string& auth_hdr, co
 
 int RGWRESTUfileRequest::put_obj(const std::string& bucket, const string& obj, bufferlist* bl, uint64_t obj_size) {
   
-  std::string new_url = "http://" + bucket + "." + custom_info.domain_name + "/" + obj;
+  std::string new_url = "http://" + bucket + "." + cloud_info.domain_name + "/" + obj;
   
   std::string string2sign;
   std::string sign;
   std::string auth;
   std::string content_type = "application/octet-stream";
   create_ufile_canonical_header("PUT", bucket, obj,content_type, string2sign);
-  get_ufile_header_digest(string2sign ,custom_info.private_key, sign);
+  get_ufile_header_digest(string2sign ,cloud_info.private_key, sign);
   auth = "UCloud ";
-  auth.append(custom_info.public_key);
+  auth.append(cloud_info.public_key);
   auth.append(":");
   auth.append(sign);
 
@@ -165,16 +165,16 @@ int RGWRESTUfileRequest::put_obj(const std::string& bucket, const string& obj, b
     
 int RGWRESTUfileRequest::rm_obj(const std::string& bucket, const string& obj) {
 
-  std::string new_url = "http://" + bucket+ "." + custom_info.domain_name + "/" + obj;
+  std::string new_url = "http://" + bucket+ "." + cloud_info.domain_name + "/" + obj;
 
   std::string string2sign;
   std::string sign;
   std::string auth;
   std::string content_type = "application/octet-stream";
   create_ufile_canonical_header("DELETE",bucket, obj, content_type, string2sign);
-  get_ufile_header_digest(string2sign, custom_info.private_key, sign);
+  get_ufile_header_digest(string2sign, cloud_info.private_key, sign);
   auth = "UCloud ";
-  auth.append(custom_info.public_key);
+  auth.append(cloud_info.public_key);
   auth.append(":");
   auth.append(sign);
 
@@ -190,13 +190,13 @@ int RGWRESTUfileRequest::rm_obj(const std::string& bucket, const string& obj) {
 }
 
 int RGWRESTUfileRequest::create_bucket(const std::string& bucket) {
-  std::string url = "http://"+ custom_info.bucket_host +"/?";
+  std::string url = "http://"+ cloud_info.bucket_host +"/?";
   std::map<std::string, string> querys;
   querys["BucketName"] = bucket;
-  querys["PublicKey"] = custom_info.public_key;
+  querys["PublicKey"] = cloud_info.public_key;
   querys["Action"] = "CreateBucket";
   querys["Type"] = "private";
-  querys["Region"]= custom_info.bucket_region;
+  querys["Region"]= cloud_info.bucket_region;
   std::string str2sign;
   
   map<std::string, string>::iterator iter = querys.begin();
@@ -215,7 +215,7 @@ int RGWRESTUfileRequest::create_bucket(const std::string& bucket) {
   }
 
   url += "Signature=";
-  str2sign += custom_info.private_key;
+  str2sign += cloud_info.private_key;
   
   ceph::crypto::SHA1 sha1;
   unsigned char out[20];
@@ -236,7 +236,7 @@ int RGWRESTUfileRequest::create_bucket(const std::string& bucket) {
   return r;
 }
 
-int RGWUfileAccess::get_ufile_retcode(std::string& http_response, int* retcode) {
+int RGWCloudUfile::get_ufile_retcode(std::string& http_response, int* retcode) {
   std::string::size_type pos = http_response.find("RetCode");
   if (pos == std::string::npos)
     return -1;
@@ -254,14 +254,14 @@ int RGWUfileAccess::get_ufile_retcode(std::string& http_response, int* retcode) 
   return 0;
 }
 
-int RGWUfileAccess::put_obj(std::string& bucket, string& key, bufferlist *bl, off_t bl_len) {
+int RGWCloudUfile::put_obj(std::string& bucket, string& key, bufferlist *bl, off_t bl_len) {
   param_vec_t _headers;
   param_vec_t _params;
   std::string url = "";
-  std::string dest_bucket = custom_info.dest_bucket.empty() ? bucket : custom_info.dest_bucket;
-  dest_bucket = custom_info.bucket_prefix + dest_bucket;
+  std::string dest_bucket = cloud_info.dest_bucket.empty() ? bucket : cloud_info.dest_bucket;
+  dest_bucket = cloud_info.bucket_prefix + dest_bucket;
   
-  RGWRESTUfileRequest* req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, custom_info);
+  RGWRESTUfileRequest* req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
   int ret = req->put_obj(dest_bucket, key, bl, bl_len);
   if (ret >= 0) {
     delete req;
@@ -281,8 +281,8 @@ int RGWUfileAccess::put_obj(std::string& bucket, string& key, bufferlist *bl, of
   }
 
   // if bucket not exist, create it
-  if(ret_code == RGWUfileAccess::UFILE_BUCKET_NOT_EXIST) {
-    req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, custom_info);
+  if(ret_code == RGWCloudUfile::UFILE_BUCKET_NOT_EXIST) {
+    req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
     ret = req->create_bucket(dest_bucket);
     delete req;
     if(ret < 0) {
@@ -290,7 +290,7 @@ int RGWUfileAccess::put_obj(std::string& bucket, string& key, bufferlist *bl, of
       return ret;
     }
     
-    req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, custom_info);
+    req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
     ret = req->put_obj(dest_bucket, key, bl, bl_len);
     delete req;
     if (ret < 0) {
@@ -303,13 +303,13 @@ int RGWUfileAccess::put_obj(std::string& bucket, string& key, bufferlist *bl, of
   return ret;
 }
 
-int RGWUfileAccess::remove_obj(std::string& bucket, string& key) {
+int RGWCloudUfile::remove_obj(std::string& bucket, string& key) {
   param_vec_t _headers;
   param_vec_t _params;
   std::string url = "";
-  std::string dest_bucket = custom_info.dest_bucket.empty() ? bucket : custom_info.dest_bucket;
-  dest_bucket = custom_info.bucket_prefix + dest_bucket;
-  RGWRESTUfileRequest* req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, custom_info);
+  std::string dest_bucket = cloud_info.dest_bucket.empty() ? bucket : cloud_info.dest_bucket;
+  dest_bucket = cloud_info.bucket_prefix + dest_bucket;
+  RGWRESTUfileRequest* req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
   int ret = req->rm_obj(dest_bucket, key);
   if (ret == 0) {
     dout(0) << "ufile rm_obj:" << key << " success." << dendl;

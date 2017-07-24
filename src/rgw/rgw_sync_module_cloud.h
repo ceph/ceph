@@ -3,9 +3,9 @@
 
 #include "rgw_sync_module.h"
 
-class RGWCustomSyncModule : public RGWSyncModule {
+class RGWCloudSyncModule : public RGWSyncModule {
 public:
-  RGWCustomSyncModule() {}
+  RGWCloudSyncModule() {}
   bool supports_data_export() override {
     return false;
   }
