@@ -2439,7 +2439,7 @@ function test_mds_tell_help_command()
 function test_mgr_tell()
 {
   ceph tell mgr help
-  ceph tell mgr fs status
+  #ceph tell mgr fs status   # see http://tracker.ceph.com/issues/20761
   ceph tell mgr osd status
 }
 
