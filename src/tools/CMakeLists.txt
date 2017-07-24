@@ -55,11 +55,9 @@ if(WITH_TESTS)
 endif(WITH_TESTS)
 endif(WITH_LIBCEPHFS)
 
-if(WITH_TESTS)
 add_executable(ceph-kvstore-tool ceph_kvstore_tool.cc)
 target_link_libraries(ceph-kvstore-tool os global)
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
-endif(WITH_TESTS)
 
 set(ceph_conf_srcs ceph_conf.cc)
 add_executable(ceph-conf ${ceph_conf_srcs})

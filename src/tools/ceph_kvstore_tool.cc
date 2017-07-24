@@ -46,13 +46,13 @@ class StoreTool
   string store_path;
 
   public:
-  StoreTool(string type, const string &path) : store_path(path) {
+  StoreTool(string type, const string &path, bool need_open_db=true) : store_path(path) {
     KeyValueDB *db_ptr;
     if (type == "bluestore-kv") {
 #ifdef HAVE_LIBAIO
       // note: we'll leak this!  the only user is ceph-kvstore-tool and
       // we don't care.
-      bluestore.reset(new BlueStore(g_ceph_context, path));
+      bluestore.reset(new BlueStore(g_ceph_context, path, need_open_db));
       int r = bluestore->start_kv_only(&db_ptr);
       if (r < 0) {
 	exit(1);
@@ -63,14 +63,16 @@ class StoreTool
 #endif
     } else {
       db_ptr = KeyValueDB::create(g_ceph_context, type, path);
-      int r = db_ptr->open(std::cerr);
-      if (r < 0) {
-	cerr << "failed to open type " << type << " path " << path << ": "
-	     << cpp_strerror(r) << std::endl;
-	exit(1);
+      if (need_open_db) {
+        int r = db_ptr->open(std::cerr);
+        if (r < 0) {
+	  cerr << "failed to open type " << type << " path " << path << ": "
+	       << cpp_strerror(r) << std::endl;
+	  exit(1);
+	}
+	db = db_ptr;
       }
     }
-    db = db_ptr;
   }
 
   ~StoreTool() {
@@ -279,6 +281,10 @@ class StoreTool
   void compact_range(string prefix, string start, string end) {
     db->compact_range(prefix, start, end);
   }
+
+  int repair() {
+    return db->repair(std::cout);
+  }
 };
 
 void usage(const char *pname)
@@ -300,6 +306,7 @@ void usage(const char *pname)
     << "  compact\n"
     << "  compact-prefix <prefix>\n"
     << "  compact-range <prefix> <start> <end>\n"
+    << "  repair\n"
     << std::endl;
 }
 
@@ -324,9 +331,18 @@ int main(int argc, const char *argv[])
   string path(args[1]);
   string cmd(args[2]);
 
-  StoreTool st(type, path);
+  bool need_open_db = (cmd != "repair");
+  StoreTool st(type, path, need_open_db);
 
-  if (cmd == "list" || cmd == "list-crc") {
+  if (cmd == "repair") {
+    int ret = st.repair();
+    if (!ret) {
+      std::cout << "repair kvstore successfully" << std::endl;
+    } else {
+      std::cout << "repair kvstore failed" << std::endl;
+    }
+    return ret;
+  } else if (cmd == "list" || cmd == "list-crc") {
     string prefix;
     if (argc > 4)
       prefix = url_unescape(argv[4]);

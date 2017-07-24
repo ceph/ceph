@@ -2123,7 +2123,11 @@ private:
 
   int _open_bdev(bool create);
   void _close_bdev();
-  int _open_db(bool create);
+  /*
+   * @warning to_repair_db means that we open this db to repair it, will not
+   * hold the rocksdb's file lock.
+   */
+  int _open_db(bool create, bool to_repair_db=false);
   void _close_db();
   int _open_fm(bool create);
   void _close_fm();
@@ -2294,15 +2298,15 @@ public:
   bool test_mount_in_use() override;
 
 private:
-  int _mount(bool kv_only);
+  int _mount(bool kv_only, bool open_db=true);
 public:
   int mount() override {
     return _mount(false);
   }
   int umount() override;
 
-  int start_kv_only(KeyValueDB **pdb) {
-    int r = _mount(true);
+  int start_kv_only(KeyValueDB **pdb, bool open_db=true) {
+    int r = _mount(true, open_db);
     if (r < 0)
       return r;
     *pdb = db;

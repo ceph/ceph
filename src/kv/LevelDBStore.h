@@ -66,6 +66,7 @@ class LevelDBStore : public KeyValueDB {
 #endif
   boost::scoped_ptr<leveldb::DB> db;
 
+  int load_leveldb_options(bool create_if_missing, leveldb::Options &opts);
   int do_open(ostream &out, bool create_if_missing);
 
   // manage async compactions
@@ -188,6 +189,7 @@ public:
   {
     return logger;
   }
+  int repair(std::ostream &out) override;
 
   class LevelDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
