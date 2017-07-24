@@ -1,4 +1,3 @@
-#/bin/bash -fv
 source ./copy_func.sh
 #
 # Take a templated file, modify a local copy, and write it to the
