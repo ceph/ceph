@@ -89,6 +89,7 @@ class RocksDBStore : public KeyValueDB {
   int create_db_dir();
   int do_open(ostream &out, bool create_if_missing,
 	      const vector<ColumnFamily>* cfs = nullptr);
+  int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
 
   // manage async compactions
   Mutex compact_queue_lock;
@@ -173,7 +174,7 @@ public:
     else
       return static_cast<rocksdb::ColumnFamilyHandle*>(iter->second);
   }
-
+  int repair(std::ostream &out) override;
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(Formatter *f) override;
 
