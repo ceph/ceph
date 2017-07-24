@@ -4401,6 +4401,11 @@ void OSD::build_initial_pg_history(
     if (acting_primary != new_acting_primary) {
       h->same_primary_since = e;
     }
+    if (pgid.pgid.is_split(lastmap->get_pg_num(pgid.pgid.pool()),
+			   osdmap->get_pg_num(pgid.pgid.pool()),
+			   nullptr)) {
+      h->last_epoch_split = e;
+    }
     lastmap = osdmap;
   }
   dout(20) << __func__ << " " << debug.str() << dendl;
