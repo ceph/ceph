@@ -487,6 +487,7 @@ function TEST_corrupt_scrub_replicated() {
     create_rbd_pool || return 1
     wait_for_clean || return 1
 
+    ceph osd pool create foo 1 || return 1
     ceph osd pool create $poolname 1 1 || return 1
     wait_for_clean || return 1
 
@@ -1614,9 +1615,10 @@ function corrupt_scrub_erasure() {
 	fi
     done
     create_rbd_pool || return 1
-    wait_for_clean || return 1
+    ceph osd pool create foo 1
 
     create_ec_pool $poolname $allow_overwrites k=2 m=1 stripe_unit=2K --force || return 1
+    wait_for_clean || return 1
 
     for i in $(seq 1 $total_objs) ; do
         objname=EOBJ${i}
