@@ -363,4 +363,4 @@ you need to perform this step manually:
 
 	
 .. _Remove an OSD: ../crush-map#removeosd
-.. _purge subcommand: ../../../man/ceph#osd
+.. _purge subcommand: /man/8/ceph#osd

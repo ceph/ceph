@@ -247,6 +247,22 @@ Usage::
 
 	ceph df {detail}
 
+.. _ceph features:
+
+features
+--------
+
+Show the releases and features of all connected daemons and clients connected
+to the cluster, along with the numbers of them in each bucket grouped by the
+corresponding features/releases. Each release of Ceph supports a different set
+of features, expressed by the features bitmask. New cluster features require
+that clients support the feature, or else they are not allowed to connect to
+these new features. As new features or capabilities are enabled after an
+upgrade, older clients are prevented from connecting.
+
+Usage::
+
+    ceph features
 
 fs
 --
@@ -1074,6 +1090,18 @@ Subcommand ``setmaxosd`` sets new maximum osd value.
 Usage::
 
 	ceph osd setmaxosd <int[0-]>
+
+Subcommand ``set-require-min-compat-client`` enforces the cluster to be backward
+compatible with the specified client version. This subcommand prevent you from
+makeing making any changes (e.g., crush tunables, or using new features) that
+would violate the current setting. Please note, This subcommand will fail if
+any connected daemon or client is not compatible with the features offered by
+the given <version>. To see the features and releases of all clients connected
+to cluster, please see `ceph features`_.
+
+Usage::
+
+    ceph osd set-require-min-compat-client <version>
 
 Subcommand ``stat`` prints summary of OSD map.
 
