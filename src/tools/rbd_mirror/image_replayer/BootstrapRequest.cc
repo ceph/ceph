@@ -75,6 +75,12 @@ BootstrapRequest<I>::~BootstrapRequest() {
 }
 
 template <typename I>
+bool BootstrapRequest<I>::is_syncing() const {
+  Mutex::Locker locker(m_lock);
+  return (m_image_sync != nullptr);
+}
+
+template <typename I>
 void BootstrapRequest<I>::send() {
   *m_do_resync = false;
 
@@ -637,24 +643,26 @@ void BootstrapRequest<I>::image_sync() {
   }
 
   dout(20) << dendl;
-  update_progress("IMAGE_SYNC");
-
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(
-      this);
-
   {
     Mutex::Locker locker(m_lock);
     if (m_canceled) {
       m_ret_val = -ECANCELED;
     } else {
       assert(m_image_sync == nullptr);
+
+      Context *ctx = create_context_callback<
+        BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(this);
       m_image_sync = ImageSync<I>::create(
           *m_local_image_ctx, m_remote_image_ctx, m_timer, m_timer_lock,
           m_local_mirror_uuid, m_journaler, m_client_meta, m_work_queue,
           m_instance_watcher, ctx, m_progress_ctx);
 
       m_image_sync->get();
+
+      m_lock.Unlock();
+      update_progress("IMAGE_SYNC");
+      m_lock.Lock();
+
       m_image_sync->send();
       return;
     }
@@ -670,7 +678,6 @@ void BootstrapRequest<I>::handle_image_sync(int r) {
 
   {
     Mutex::Locker locker(m_lock);
-
     m_image_sync->put();
     m_image_sync = nullptr;
 

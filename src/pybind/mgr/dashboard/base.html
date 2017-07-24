@@ -18,6 +18,8 @@
           href="/static/AdminLTE-2.3.7/dist/css/AdminLTE.min.css">
     <link rel="stylesheet"
           href="/static/AdminLTE-2.3.7/dist/css/skins/skin-blue.min.css">
+    <link rel="stylesheet"
+          href="/static/AdminLTE-2.3.7/plugins/datatables/jquery.dataTables.css">
 
     <script src="/static/AdminLTE-2.3.7/plugins/jQuery/jquery-2.2.3.min.js"></script>
     <script src="/static/AdminLTE-2.3.7/plugins/sparkline/jquery.sparkline.min.js"></script>
@@ -27,6 +29,7 @@
 
     <script src="/static/AdminLTE-2.3.7/bootstrap/js/bootstrap.min.js"></script>
     <script src="/static/AdminLTE-2.3.7/dist/js/app.min.js"></script>
+    <script src="/static/AdminLTE-2.3.7/plugins/datatables/jquery.dataTables.min.js"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.17.1/moment.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.4.0/Chart.min.js"></script>
@@ -112,11 +115,38 @@
                 return format_number(n, 1024, ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']);
             };
 
+            rivets.formatters.block_health_color = function(rbd_mirroring) {
+                if (rbd_mirroring.errors > 0) {
+                    return "color: #ff0000";
+                } else if (rbd_mirroring.warnings > 0) {
+                    return "color: #ffc200";
+                }
+                return "";
+            };
+
+            rivets.formatters.short_version = function(version) {
+                // Expect "ceph version 1.2.3-g9asdasd (as98d7a0s8d7)"
+                var result = /ceph version\s+([^ ]+)\s+\(.+\)/.exec(version);
+                if (result) {
+                    // Return the "1.2.3-g9asdasd" part
+                    return result[1];
+                } else {
+                    // Unexpected format, pass it through
+                    return version;
+                }
+                return
+            };
+
             /* This is useful if you need to display some alternative text
              * when a collection is empty using rv-hide */
             rivets.formatters.length = function(val) {
               return val.length;
             }
+
+            rivets.formatters.hide_count_box = function(value) {
+                value = +value
+                return (isNaN(value) || value == 0)
+            };
 
             rivets.bind($("#health"), toplevel_data);
             rivets.bind($("section.sidebar"), toplevel_data);
@@ -203,6 +233,55 @@
             font-weight: bold;
         }
 
+        .dataTables_wrapper .dataTables_filter {
+            color: #ddd
+        }
+
+        .dataTables_wrapper .dataTables_filter input {
+            color: #222d32
+        }
+
+        .dataTables_wrapper tbody td {
+            background-color: #424d52;
+            color: #ddd;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .ellipsis {
+            color: #ddd !important
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            color: #ddd !important
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+            color: #424d52 !important
+        }
+
+        .nav-tabs-custom {
+            background-color: #222d32;
+            color: #ddd;
+        }
+        .nav-tabs-custom>.nav-tabs>li{
+            margin-right: 0;
+        }
+        .nav-tabs-custom>.nav-tabs>li>a{
+            border-bottom-color: transparent;
+            color: #aaa;
+        }
+        .nav-tabs-custom>.nav-tabs>li.active>a{
+            background-color: #424d52;
+            color: #eee;
+        }
+        .nav-tabs-custom>.nav-tabs>li.active:hover>a{
+            background-color: #66777f;
+            color: #eee;
+        }
+        .nav-tabs-custom>.tab-content {
+            background-color: #424d52;
+            color: #eee;
+        }
+
     </style>
 
 </head>
@@ -256,11 +335,13 @@
       <!-- Sidebar Menu -->
       <ul class="sidebar-menu">
         <!-- Optionally, you can add icons to the links -->
-        <li><a href="/health">
+        <li class="{%if path_info=='/' or path_info.startswith('/health')%}active{%endif%}">
+            <a href="/health">
             <i class="fa fa-heartbeat" rv-style="health_status | health_color"></i>
             <span>Cluster health</span></a>
         </li>
-        <li class="treeview active">
+        PATH: {{ path_info }}
+        <li class="treeview{%if path_info.startswith(('/server', '/osd'))%} active{%endif%}">
           <a href="#"><i class="fa fa-server"></i> <span>Cluster</span>
             <span class="pull-right-container">
               <i class="fa fa-angle-left pull-right"></i>
@@ -275,20 +356,40 @@
             </li>
           </ul>
         </li>
-        <li class="treeview active">
-          <a href="#"><i class="fa fa-hdd-o"></i> <span>Block</span>
+        <li class="treeview{%if path_info.startswith('/rbd')%} active{%endif%}">
+          <a href="#">
+            <i class="fa fa-hdd-o" rv-style="rbd_mirroring | block_health_color"></i> <span>Block</span>
             <span class="pull-right-container">
               <i class="fa fa-angle-left pull-right"></i>
             </span>
           </a>
           <ul class="treeview-menu menu-open">
-            <li rv-each-pool="rbd_pools">
-                <a rv-href="pool.url">{pool.name}</a>
+            <li>
+              <a href="/rbd_mirroring">
+                <i class="fa fa-exchange"></i> Mirroring
+                <span class="pull-right-container">
+                    <small rv-hide="rbd_mirroring.warnings | hide_count_box" class="label pull-right bg-yellow">{rbd_mirroring.warnings}</small>
+                    <small rv-hide="rbd_mirroring.errors | hide_count_box" class="label pull-right bg-red">{rbd_mirroring.errors}</small>
+                </span>
+              </a>
+            </li>
+            <li class="treeview{%if path_info.startswith('/rbd_pool')%} active menu-open{%endif%}">
+              <a href="#">
+                <i class="fa fa-dot-circle-o"></i> <span>Pools</span>
+                <span class="pull-right-container">
+                  <i class="fa fa-angle-left pull-right"></i>
+                </span>
+              </a>
+              <ul class="treeview-menu">
+                <li rv-each-pool="rbd_pools">
+                  <a rv-href="pool.url"><i class="fa fa-circle-o"></i> {pool.name}</a>
+                </li>
+              </ul>
             </li>
             <li class="ceph-none-found" rv-hide="rbd_pools | length">None found</li>
           </ul>
         </li>
-        <li class="treeview active">
+        <li class="treeview{%if path_info.startswith(('/filesystem/', '/clients/'))%} active{%endif%}">
           <a href="#"><i class="fa fa-folder"></i> <span>Filesystems</span>
             <span class="pull-right-container">
               <i class="fa fa-angle-left pull-right"></i>

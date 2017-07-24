@@ -80,6 +80,8 @@ public:
                    bool *do_resync, ProgressContext *progress_ctx = nullptr);
   ~BootstrapRequest() override;
 
+  bool is_syncing() const;
+
   void send() override;
   void cancel() override;
 
@@ -163,7 +165,7 @@ private:
   ProgressContext *m_progress_ctx;
   bool *m_do_resync;
 
-  Mutex m_lock;
+  mutable Mutex m_lock;
   bool m_canceled = false;
 
   Tags m_remote_tags;

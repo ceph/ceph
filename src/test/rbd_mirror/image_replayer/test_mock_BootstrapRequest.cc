@@ -245,7 +245,6 @@ OpenLocalImageRequest<librbd::MockTestImageCtx>*
 
 // template definitions
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.cc"
-template class rbd::mirror::image_replayer::BootstrapRequest<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {
