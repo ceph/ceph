@@ -49,6 +49,7 @@ extern "C" {
 
 #define LIBRADOS_SUPPORTS_WATCH 1
 #define LIBRADOS_SUPPORTS_SERVICES 1
+#define LIBRADOS_SUPPORTS_APP_METADATA 1
 
 /* RADOS lock flags
  * They are also defined in cls_lock_types.h. Keep them in sync!
