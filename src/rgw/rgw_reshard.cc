@@ -534,6 +534,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   if (reshard_log) {
     ret = reshard_log->update(bucket_info, new_bucket_info);
     if (ret < 0) {
+      unlock_bucket();
       return ret;
     }
   }
