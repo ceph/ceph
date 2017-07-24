@@ -3054,7 +3054,8 @@ void PGMap::get_health_checks(
   // REQUEST_SLOW
   // REQUEST_STUCK
   if (cct->_conf->mon_osd_warn_op_age > 0 &&
-      osd_sum.op_queue_age_hist.upper_bound() >
+      !osd_sum.op_queue_age_hist.h.empty() &&
+      osd_sum.op_queue_age_hist.upper_bound() / 1000.0 >
       cct->_conf->mon_osd_warn_op_age) {
     list<string> warn_detail, error_detail;
     unsigned warn = 0, error = 0;
@@ -3364,7 +3365,8 @@ void PGMap::get_health(
 
   // slow requests
   if (cct->_conf->mon_osd_warn_op_age > 0 &&
-      osd_sum.op_queue_age_hist.upper_bound() > cct->_conf->mon_osd_warn_op_age) {
+      osd_sum.op_queue_age_hist.upper_bound() / 1000.0  >
+      cct->_conf->mon_osd_warn_op_age) {
     auto sum = _warn_slow_request_histogram(
       cct, osd_sum.op_queue_age_hist, "", summary, NULL);
     if (sum.first > 0 || sum.second > 0) {
