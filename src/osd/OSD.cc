@@ -7794,9 +7794,11 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	if (service.is_preparing_to_stop() || service.is_stopping()) {
 	  service.got_stop_ack();
 	} else {
-	  clog->warn() << "map e" << osdmap->get_epoch()
-		       << " wrongly marked me down at e"
-		       << osdmap->get_down_at(whoami);
+          clog->warn() << "Monitor daemon marked osd." << whoami << " down, "
+                          "but it is still running";
+          clog->debug() << "map e" << osdmap->get_epoch()
+                        << " wrongly marked me down at e"
+                        << osdmap->get_down_at(whoami);
 	}
       } else if (!osdmap->get_addr(whoami).probably_equals(
 		   client_messenger->get_myaddr())) {
