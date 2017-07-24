@@ -282,10 +282,10 @@ public:
 #define OPTION_OPT_U32(name) uint64_t name;
 #define OPTION_OPT_U64(name) uint64_t name;
 #define OPTION_OPT_UUID(name) uuid_d name;
-#define OPTION(name, ty, init) \
+#define OPTION(name, ty) \
   public:                      \
     OPTION_##ty(name)          
-#define SAFE_OPTION(name, ty, init) \
+#define SAFE_OPTION(name, ty) \
   protected:                        \
     OPTION_##ty(name)               
 #include "common/legacy_config_opts.h"
