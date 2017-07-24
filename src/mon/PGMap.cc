@@ -3377,7 +3377,7 @@ void PGMap::get_health(
       }
       if (sum.second > 0) {
 	ostringstream ss;
-	ss << sum.first << " requests are blocked > "
+	ss << sum.second << " requests are blocked > "
 	   << (cct->_conf->mon_osd_warn_op_age *
 	       cct->_conf->mon_osd_err_op_age_ratio)
 	   << " sec";
