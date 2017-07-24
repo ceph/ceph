@@ -513,8 +513,12 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
                           shell=True)
     weights = []
     for line in output.strip().split('\n'):
-        osd_id, weight, osd_name = re.split('\s+', line)
-        weights.append(float(weight))
+        print(line)
+        linev = re.split('\s+', line)
+        if linev[0] is '':
+            linev.pop(0)
+        print('linev %s' % linev)
+        weights.append(float(linev[1]))
 
     return weights
 

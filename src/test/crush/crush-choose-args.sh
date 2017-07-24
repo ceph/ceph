@@ -52,6 +52,7 @@ function TEST_choose_args_update() {
     run_mon $dir a || return 1
     run_osd $dir 0 || return 1
 
+    ceph osd set-require-min-compat-client luminous
     ceph osd getcrushmap > $dir/map || return 1
     crushtool -d $dir/map -o $dir/map.txt || return 1
     sed -i -e '/end crush map/d' $dir/map.txt
@@ -105,6 +106,8 @@ function TEST_no_update_weight_set() {
     run_mon $dir a || return 1
     run_osd $dir 0 || return 1
 
+    ceph osd set-require-min-compat-client luminous
+    ceph osd crush tree
     ceph osd getcrushmap > $dir/map || return 1
     crushtool -d $dir/map -o $dir/map.txt || return 1
     sed -i -e '/end crush map/d' $dir/map.txt
@@ -114,8 +117,8 @@ choose_args 0 {
   {
     bucket_id -1
     weight_set [
-      [ 6.000 ]
-      [ 7.000 ]
+      [ 2.000 ]
+      [ 1.000 ]
     ]
     ids [ -10 ]
   }
@@ -123,7 +126,7 @@ choose_args 0 {
     bucket_id -2
     weight_set [
       [ 2.000 ]
-      [ 2.000 ]
+      [ 1.000 ]
     ]
     ids [ -20 ]
   }
@@ -133,15 +136,18 @@ choose_args 0 {
 EOF
     crushtool -c $dir/map.txt -o $dir/map-new || return 1
     ceph osd setcrushmap -i $dir/map-new || return 1
+    ceph osd crush tree
 
 
     run_osd $dir 1 || return 1
+    ceph osd crush tree
     ceph osd getcrushmap > $dir/map-one-more || return 1
     crushtool -d $dir/map-one-more -o $dir/map-one-more.txt || return 1
     cat $dir/map-one-more.txt
     diff -u $dir/map-one-more.txt $CEPH_ROOT/src/test/crush/crush-choose-args-expected-one-more-0.txt || return 1
 
     destroy_osd $dir 1 || return 1
+    ceph osd crush tree
     ceph osd getcrushmap > $dir/map-one-less || return 1
     crushtool -d $dir/map-one-less -o $dir/map-one-less.txt || return 1
     diff -u $dir/map-one-less.txt $dir/map.txt || return 1

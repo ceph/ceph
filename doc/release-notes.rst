@@ -433,6 +433,9 @@ Upgrade compatibility notes, Kraken to Luminous
   (when the ``ceph osd require-osd-release luminous`` command is run)
   but any provisioning tools that create erasure coded pools may need
   to be updated.
+* The structure of the XML output for ``osd crush tree`` has changed
+  slightly to better match the ``osd tree`` output.  The top level
+  structure is now ``nodes`` instead of ``crush_map_roots``.
 * When assigning a network to the public network and not to
   the cluster network the network specification of the public
   network will be used for the cluster network as well.

@@ -12,8 +12,84 @@
    1       1.00000             osd.1          DNE        0         
    2       1.00000             osd.2          DNE        0         
 
-  $ osdmaptool --tree=json om
+  $ osdmaptool --tree=json-pretty om
   osdmaptool: osdmap file 'om'
-  {"nodes":[{"id":-1,"device_class":"","name":"default","type":"root","type_id":10,"children":[-3]},{"id":-3,"device_class":"","name":"localrack","type":"rack","type_id":3,"children":[-2]},{"id":-2,"device_class":"","name":"localhost","type":"host","type_id":1,"children":[2,1,0]},{"id":0,"device_class":"","name":"osd.0","type":"osd","type_id":0,"crush_weight":1.000000,"depth":3,"exists":0,"status":"down","reweight":0.000000,"primary_affinity":1.000000},{"id":1,"device_class":"","name":"osd.1","type":"osd","type_id":0,"crush_weight":1.000000,"depth":3,"exists":0,"status":"down","reweight":0.000000,"primary_affinity":1.000000},{"id":2,"device_class":"","name":"osd.2","type":"osd","type_id":0,"crush_weight":1.000000,"depth":3,"exists":0,"status":"down","reweight":0.000000,"primary_affinity":1.000000}],"stray":[]}
+  {
+      "nodes": [
+          {
+              "id": -1,
+              "name": "default",
+              "type": "root",
+              "type_id": 10,
+              "children": [
+                  -3
+              ]
+          },
+          {
+              "id": -3,
+              "name": "localrack",
+              "type": "rack",
+              "type_id": 3,
+              "pool_weights": {},
+              "children": [
+                  -2
+              ]
+          },
+          {
+              "id": -2,
+              "name": "localhost",
+              "type": "host",
+              "type_id": 1,
+              "pool_weights": {},
+              "children": [
+                  2,
+                  1,
+                  0
+              ]
+          },
+          {
+              "id": 0,
+              "name": "osd.0",
+              "type": "osd",
+              "type_id": 0,
+              "crush_weight": 1.000000,
+              "depth": 3,
+              "pool_weights": {},
+              "exists": 0,
+              "status": "down",
+              "reweight": 0.000000,
+              "primary_affinity": 1.000000
+          },
+          {
+              "id": 1,
+              "name": "osd.1",
+              "type": "osd",
+              "type_id": 0,
+              "crush_weight": 1.000000,
+              "depth": 3,
+              "pool_weights": {},
+              "exists": 0,
+              "status": "down",
+              "reweight": 0.000000,
+              "primary_affinity": 1.000000
+          },
+          {
+              "id": 2,
+              "name": "osd.2",
+              "type": "osd",
+              "type_id": 0,
+              "crush_weight": 1.000000,
+              "depth": 3,
+              "pool_weights": {},
+              "exists": 0,
+              "status": "down",
+              "reweight": 0.000000,
+              "primary_affinity": 1.000000
+          }
+      ],
+      "stray": []
+  }
+  
+
   $ rm -f om
 

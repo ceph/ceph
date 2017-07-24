@@ -36,6 +36,7 @@ CRUSH algorithm.
 	cache-tiering
 	placement-groups
 	crush-map
+	crush-map-edits
 
 
 

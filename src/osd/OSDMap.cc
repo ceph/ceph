@@ -1312,8 +1312,9 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_V4;
   if (crush->has_nondefault_tunables5())
     features |= CEPH_FEATURE_CRUSH_TUNABLES5;
-  if (crush->has_incompat_choose_args())
-    features |= CEPH_FEATURE_CRUSH_CHOOSE_ARGS;
+  if (crush->has_incompat_choose_args()) {
+    features |= CEPH_FEATUREMASK_CRUSH_CHOOSE_ARGS;
+  }
   mask |= CEPH_FEATURES_CRUSH;
 
   if (!pg_upmap.empty() || !pg_upmap_items.empty())
@@ -3051,7 +3052,7 @@ public:
 
   OSDTreePlainDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
 		     unsigned f)
-    : Parent(crush), osdmap(osdmap_), filter(f) { }
+    : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
   bool should_dump_leaf(int i) const override {
     if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
@@ -3080,7 +3081,7 @@ public:
 
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i)) {
-	dump_item(CrushTreeDumper::Item(i, 0, 0), tbl);
+	dump_item(CrushTreeDumper::Item(i, 0, 0, 0), tbl);
       }
     }
   }
@@ -3129,7 +3130,7 @@ public:
 
   OSDTreeFormattingDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
 			  unsigned f)
-    : Parent(crush), osdmap(osdmap_), filter(f) { }
+    : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
   bool should_dump_leaf(int i) const override {
     if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
@@ -3152,7 +3153,7 @@ public:
     f->open_array_section("stray");
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i))
-	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
+	dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
     }
     f->close_section();
   }
@@ -3941,7 +3942,7 @@ public:
 
   OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
 		       const PGStatService *pgs_, bool tree_) :
-    Parent(crush),
+    Parent(crush, osdmap_->get_pool_names()),
     osdmap(osdmap_),
     pgs(pgs_),
     tree(tree_),
@@ -3956,7 +3957,7 @@ protected:
   void dump_stray(F *f) {
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (osdmap->exists(i) && !this->is_touched(i))
-	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
+	dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
     }
   }
 
@@ -4213,7 +4214,7 @@ protected:
 			 const size_t num_pgs,
 			 Formatter *f) override {
     f->open_object_section("item");
-    CrushTreeDumper::dump_item_fields(crush, qi, f);
+    CrushTreeDumper::dump_item_fields(crush, weight_set_names, qi, f);
     f->dump_float("reweight", reweight);
     f->dump_int("kb", kb);
     f->dump_int("kb_used", kb_used);
