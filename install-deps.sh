@@ -26,6 +26,7 @@ function munge_ceph_spec_in {
 
 if [ x`uname`x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
+        devel/babeltrace \
         devel/git \
         devel/gperf \
         devel/gmake \
@@ -41,7 +42,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         lang/cython \
         devel/py-virtualenv \
         databases/leveldb \
-	net/openldap24-client \
+        net/openldap-client \
         security/nss \
         security/cryptopp \
         archivers/snappy \
@@ -53,14 +54,16 @@ if [ x`uname`x = xFreeBSDx ]; then
         textproc/gsed \
         textproc/libxml2 \
         textproc/xmlstarlet \
-	textproc/jq \
-	textproc/sphinx \
+        textproc/jq \
+        textproc/py-sphinx \
         emulators/fuse \
         java/junit \
+        lang/python \
         lang/python27 \
-	devel/py-pip \
+        devel/py-pip \
         devel/py-argparse \
         devel/py-nose \
+        devel/py-prettytable \
         www/py-flask \
         www/fcgi \
         sysutils/flock \
