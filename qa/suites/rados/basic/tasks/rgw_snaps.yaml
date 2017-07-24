@@ -9,15 +9,21 @@ overrides:
 tasks:
 - rgw:
     client.0:
+- ceph_manager.wait_for_pools:
+    kwargs:
+      pools:
+        - .rgw.buckets
+        - .rgw.root
+        - default.rgw.control
+        - default.rgw.meta
+        - default.rgw.log
 - thrash_pool_snaps:
     pools:
     - .rgw.buckets
     - .rgw.root
-    - .rgw.control
-    - .rgw
-    - .users.uid
-    - .users.email
-    - .users
+    - default.rgw.control
+    - default.rgw.meta
+    - default.rgw.log
 - s3readwrite:
     client.0:
       rgw_server: client.0

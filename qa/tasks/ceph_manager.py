@@ -2161,6 +2161,27 @@ class CephManager:
             time.sleep(3)
         self.log("all up!")
 
+    def pool_exists(self, pool):
+        if pool in self.list_pools():
+            return True
+        return False
+
+    def wait_for_pool(self, pool, timeout=300):
+        """
+        Wait for a pool to exist
+        """
+        self.log('waiting for pool %s to exist' % pool)
+        start = time.time()
+        while not self.pool_exists(pool):
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired in wait_for_pool'
+            time.sleep(3)
+
+    def wait_for_pools(self, pools):
+        for pool in pools:
+            self.wait_for_pool(pool)
+
     def wait_for_recovery(self, timeout=None):
         """
         Check peering. When this exists, we have recovered.
@@ -2520,3 +2541,5 @@ remove_pool = utility_task("remove_pool")
 wait_for_clean = utility_task("wait_for_clean")
 set_pool_property = utility_task("set_pool_property")
 do_pg_scrub = utility_task("do_pg_scrub")
+wait_for_pool = utility_task("wait_for_pool")
+wait_for_pools = utility_task("wait_for_pools")
