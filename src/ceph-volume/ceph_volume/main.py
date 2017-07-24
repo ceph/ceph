@@ -88,7 +88,7 @@ Ceph Conf: {ceph_path}
         except exceptions.ConfigurationError as error:
             return terminal.red(error)
 
-    def _get_sanitized_args(self):
+    def _get_split_args(self):
         subcommands = self.mapper.keys()
         slice_on_index = len(self.argv) + 1
         pruned_args = self.argv[1:]
@@ -96,7 +96,7 @@ Ceph Conf: {ceph_path}
             if arg in subcommands:
                 slice_on_index = count
                 break
-        return self.argv[:slice_on_index]
+        return pruned_args[:slice_on_index], pruned_args[slice_on_index:]
 
     @catches()
     def main(self, argv):
@@ -105,7 +105,7 @@ Ceph Conf: {ceph_path}
         self.load_ceph_conf_path()
         self.load_log_path()
         self.enable_plugins()
-        sanitized_args = self._get_sanitized_args()
+        main_args, subcommand_args = self._get_split_args()
         # no flags where passed in, return the help menu instead of waiting for
         # argparse which will end up complaning that there are no args
         if len(argv) <= 1:
@@ -131,7 +131,7 @@ Ceph Conf: {ceph_path}
             default='/var/log/ceph/',
             help='Change the log path (defaults to /var/log/ceph)',
         )
-        args = parser.parse_args(sanitized_args)
+        args = parser.parse_args(main_args)
         conf.log_path = args.log_path
         if os.path.isdir(conf.log_path):
             conf.log_path = os.path.join(args.log_path, 'ceph-volume.log')
@@ -141,7 +141,7 @@ Ceph Conf: {ceph_path}
         self.load_ceph_conf_path(cluster_name=args.cluster)
         conf.ceph = configuration.load(conf.path)
         # dispatch to sub-commands
-        terminal.dispatch(self.mapper, sanitized_args)
+        terminal.dispatch(self.mapper, subcommand_args)
 
 
 def _load_library_extensions():
