@@ -17,28 +17,31 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
-class ImageDeleter;
-
+template <typename> class ImageDeleter;
 template <typename> class ImageReplayer;
 template <typename> class InstanceWatcher;
+template <typename> class ServiceDaemon;
 template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class InstanceReplayer {
 public:
   static InstanceReplayer* create(
-      Threads<ImageCtxT> *threads, std::shared_ptr<ImageDeleter> image_deleter,
+      Threads<ImageCtxT> *threads,
+      ServiceDaemon<ImageCtxT>* service_daemon,
+      ImageDeleter<ImageCtxT>* image_deleter,
       RadosRef local_rados, const std::string &local_mirror_uuid,
       int64_t local_pool_id) {
-    return new InstanceReplayer(threads, image_deleter, local_rados,
-                                local_mirror_uuid, local_pool_id);
+    return new InstanceReplayer(threads, service_daemon, image_deleter,
+                                local_rados, local_mirror_uuid, local_pool_id);
   }
   void destroy() {
     delete this;
   }
 
   InstanceReplayer(Threads<ImageCtxT> *threads,
-		   std::shared_ptr<ImageDeleter> image_deleter,
+                   ServiceDaemon<ImageCtxT>* service_daemon,
+		   ImageDeleter<ImageCtxT>* image_deleter,
 		   RadosRef local_rados, const std::string &local_mirror_uuid,
 		   int64_t local_pool_id);
   ~InstanceReplayer();
@@ -109,7 +112,8 @@ private:
   typedef std::set<Peer> Peers;
 
   Threads<ImageCtxT> *m_threads;
-  std::shared_ptr<ImageDeleter> m_image_deleter;
+  ServiceDaemon<ImageCtxT>* m_service_daemon;
+  ImageDeleter<ImageCtxT>* m_image_deleter;
   RadosRef m_local_rados;
   std::string m_local_mirror_uuid;
   int64_t m_local_pool_id;
@@ -126,7 +130,8 @@ private:
   void handle_wait_for_ops(int r);
 
   void start_image_replayer(ImageReplayer<ImageCtxT> *image_replayer);
-  void start_image_replayers();
+  void queue_start_image_replayers();
+  void start_image_replayers(int r);
 
   void stop_image_replayer(ImageReplayer<ImageCtxT> *image_replayer,
                            Context *on_finish);

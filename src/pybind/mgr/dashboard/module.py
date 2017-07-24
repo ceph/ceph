@@ -32,9 +32,9 @@ from types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
 import rados
+import rbd_mirroring
 from rbd_ls import RbdLs, RbdPoolLs
 from cephfs_clients import CephFSClients
-
 
 log = logging.getLogger("dashboard")
 
@@ -82,6 +82,9 @@ class Module(MgrModule):
         # Stateful instance of RbdPoolLs, hold cached list of RBD
         # pools
         self.rbd_pool_ls = RbdPoolLs(self)
+
+        # Stateful instance of RbdMirroring, hold cached results.
+        self.rbd_mirroring = rbd_mirroring.Controller(self)
 
         # Stateful instances of CephFSClients, hold cached results.  Key to
         # dict is FSCID
@@ -433,10 +436,15 @@ class Module(MgrModule):
                 rbd_pools = sorted([
                     {
                         "name": name,
-                        "url": "/rbd/{0}/".format(name)
+                        "url": "/rbd_pool/{0}/".format(name)
                     }
                     for name in data
                 ], key=lambda k: k['name'])
+
+                status, rbd_mirroring = global_instance().rbd_mirroring.toplevel.get()
+                if rbd_mirroring is None:
+                    log.warning("Failed to get RBD mirroring summary")
+                    rbd_mirroring = {}
 
                 fsmap = global_instance().get_sync_object(FsMap)
                 filesystems = [
@@ -450,6 +458,7 @@ class Module(MgrModule):
 
                 return {
                     'rbd_pools': rbd_pools,
+                    'rbd_mirroring': rbd_mirroring,
                     'health_status': self._health_data()['status'],
                     'filesystems': filesystems
                 }
@@ -467,6 +476,7 @@ class Module(MgrModule):
 
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
@@ -534,6 +544,7 @@ class Module(MgrModule):
                 template = env.get_template("clients.html")
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
@@ -543,7 +554,7 @@ class Module(MgrModule):
             def clients_data(self, fs_id):
                 return self._clients(int(fs_id))
 
-            def _rbd(self, pool_name):
+            def _rbd_pool(self, pool_name):
                 rbd_ls = global_instance().rbd_ls.get(pool_name, None)
                 if rbd_ls is None:
                     rbd_ls = RbdLs(global_instance(), pool_name)
@@ -564,12 +575,12 @@ class Module(MgrModule):
                 return value
 
             @cherrypy.expose
-            def rbd(self, pool_name):
-                template = env.get_template("rbd.html")
+            def rbd_pool(self, pool_name):
+                template = env.get_template("rbd_pool.html")
 
                 toplevel_data = self._toplevel_data()
 
-                images = self._rbd(pool_name)
+                images = self._rbd_pool(pool_name)
                 content_data = {
                     "images": images,
                     "pool_name": pool_name
@@ -577,20 +588,48 @@ class Module(MgrModule):
 
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
 
             @cherrypy.expose
             @cherrypy.tools.json_out()
-            def rbd_data(self, pool_name):
-                return self._rbd(pool_name)
+            def rbd_pool_data(self, pool_name):
+                return self._rbd_pool(pool_name)
+
+            def _rbd_mirroring(self):
+                status, data = global_instance().rbd_mirroring.content_data.get()
+                if data is None:
+                    log.warning("Failed to get RBD mirroring status")
+                    return {}
+                return data
+
+            @cherrypy.expose
+            def rbd_mirroring(self):
+                template = env.get_template("rbd_mirroring.html")
+
+                toplevel_data = self._toplevel_data()
+                content_data = self._rbd_mirroring()
+
+                return template.render(
+                    ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
+                    toplevel_data=json.dumps(toplevel_data, indent=2),
+                    content_data=json.dumps(content_data, indent=2)
+                )
+
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def rbd_mirroring_data(self):
+                return self._rbd_mirroring()
 
             @cherrypy.expose
             def health(self):
                 template = env.get_template("health.html")
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
                     content_data=json.dumps(self._health(), indent=2)
                 )
@@ -600,6 +639,7 @@ class Module(MgrModule):
                 template = env.get_template("servers.html")
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
                     content_data=json.dumps(self._servers(), indent=2)
                 )
@@ -813,6 +853,7 @@ class Module(MgrModule):
 
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info='/osd' + cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(self._osd(osd_id), indent=2)
                 )
@@ -906,6 +947,7 @@ class Module(MgrModule):
 
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info='/osd' + cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )

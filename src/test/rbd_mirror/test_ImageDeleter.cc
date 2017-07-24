@@ -18,6 +18,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
+#include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -61,12 +62,15 @@ public:
 
   void SetUp() override {
     TestFixture::SetUp();
+    m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
+                                                            _rados, m_threads));
 
     librbd::api::Mirror<>::mode_set(m_local_io_ctx, RBD_MIRROR_MODE_IMAGE);
 
-    m_deleter = new rbd::mirror::ImageDeleter(m_threads->work_queue,
-                                              m_threads->timer,
-                                              &m_threads->timer_lock);
+    m_deleter = new rbd::mirror::ImageDeleter<>(m_threads->work_queue,
+                                                m_threads->timer,
+                                                &m_threads->timer_lock,
+                                                m_service_daemon.get());
 
     EXPECT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, 1 << 20));
     ImageCtx *ictx = new ImageCtx(m_image_name, "", "", m_local_io_ctx,
@@ -85,8 +89,10 @@ public:
 
   void TearDown() override {
     remove_image();
-    TestFixture::TearDown();
     delete m_deleter;
+    m_service_daemon.reset();
+
+    TestFixture::TearDown();
   }
 
   void remove_image(bool force=false) {
@@ -210,7 +216,8 @@ public:
 
   librbd::RBD rbd;
   std::string m_local_image_id;
-  rbd::mirror::ImageDeleter *m_deleter;
+  std::unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
+  rbd::mirror::ImageDeleter<> *m_deleter;
 };
 
 int64_t TestImageDeleter::m_local_pool_id;
@@ -238,7 +245,7 @@ TEST_F(TestImageDeleter, Fail_Delete_Primary_Image) {
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
                                          &ctx);
-  EXPECT_EQ(-rbd::mirror::ImageDeleter::EISPRM, ctx.wait());
+  EXPECT_EQ(-rbd::mirror::ImageDeleter<>::EISPRM, ctx.wait());
 
   ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
   ASSERT_EQ(0u, m_deleter->get_failed_queue_items().size());

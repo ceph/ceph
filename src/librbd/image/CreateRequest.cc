@@ -257,7 +257,8 @@ void CreateRequest<I>::send() {
     return;
   }
 
-  if (!validate_layout(m_cct, m_size, m_layout)) {
+  if (((m_features & RBD_FEATURE_OBJECT_MAP) != 0) &&
+      (!validate_layout(m_cct, m_size, m_layout))) {
     complete(-EINVAL);
     return;
   }
