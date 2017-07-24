@@ -155,6 +155,10 @@ public:
 
   void close() override;
 
+  /// FIXME: try to repair database
+  int repair() override {
+  }
+
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(Formatter *f) override;
 

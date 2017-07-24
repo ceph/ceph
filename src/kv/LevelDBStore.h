@@ -184,6 +184,8 @@ public:
 
   void close() override;
 
+  int repair() override;
+
   class LevelDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     leveldb::WriteBatch bat;

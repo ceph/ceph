@@ -146,6 +146,9 @@ public:
   virtual int create_and_open(std::ostream &out) = 0;
   virtual void close() { }
 
+  // try to repair K/V database. leveldb and rocksdb require that database must be not opened.
+  virtual int repair() = 0;
+
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
   virtual int submit_transaction_sync(Transaction t) {

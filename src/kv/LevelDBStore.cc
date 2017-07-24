@@ -173,6 +173,57 @@ void LevelDBStore::close()
     cct->get_perfcounters_collection()->remove(logger);
 }
 
+int LevelDBStore::repair()
+{
+  // FIXME: we could re-use the do_open's logical which loads leveldb::Options
+  leveldb::Options ldoptions;
+
+  if (options.write_buffer_size)
+    ldoptions.write_buffer_size = options.write_buffer_size;
+  if (options.max_open_files)
+    ldoptions.max_open_files = options.max_open_files;
+  if (options.cache_size) {
+    leveldb::Cache *_db_cache = leveldb::NewLRUCache(options.cache_size);
+    db_cache.reset(_db_cache);
+    ldoptions.block_cache = db_cache.get();
+  }
+  if (options.block_size)
+    ldoptions.block_size = options.block_size;
+  if (options.bloom_size) {
+#ifdef HAVE_LEVELDB_FILTER_POLICY
+    const leveldb::FilterPolicy *_filterpolicy =
+	leveldb::NewBloomFilterPolicy(options.bloom_size);
+    filterpolicy.reset(_filterpolicy);
+    ldoptions.filter_policy = filterpolicy.get();
+#else
+    assert(0 == "bloom size set but installed leveldb doesn't support bloom filters");
+#endif
+  }
+  if (options.compression_enabled)
+    ldoptions.compression = leveldb::kSnappyCompression;
+  else
+    ldoptions.compression = leveldb::kNoCompression;
+  if (options.block_restart_interval)
+    ldoptions.block_restart_interval = options.block_restart_interval;
+
+  ldoptions.error_if_exists = options.error_if_exists;
+  ldoptions.paranoid_checks = options.paranoid_checks;
+  ldoptions.create_if_missing = create_if_missing;
+
+  if (g_conf->leveldb_log_to_ceph_log) {
+    ceph_logger = new CephLevelDBLogger(g_ceph_context);
+    ldoptions.info_log = ceph_logger;
+  }
+  
+  if (options.log_file.length()) {
+    leveldb::Env *env = leveldb::Env::Default();
+    env->NewLogger(options.log_file, &ldoptions.info_log);
+  }
+
+  leveldb::Status s = leveldb::RepairDB(path, ldoptions);
+  return s.ok() ? 0 : 1;
+}
+
 int LevelDBStore::submit_transaction(KeyValueDB::Transaction t)
 {
   utime_t start = ceph_clock_now();
