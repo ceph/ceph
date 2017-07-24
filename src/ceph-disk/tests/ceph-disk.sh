@@ -60,6 +60,7 @@ function setup() {
     local dir=$1
     teardown $dir
     mkdir -p $dir/osd
+    mkdir -p $(get_asok_dir)
     touch $dir/ceph.conf # so ceph-disk think ceph is the cluster
 }
 
@@ -78,6 +79,7 @@ function teardown() {
         umount $mounted
     done
     rm -fr $dir
+    rm -rf $(get_asok_dir)
 }
 
 function command_fixture() {
