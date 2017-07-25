@@ -162,6 +162,8 @@ function TEST_mon_classes() {
     if [ "$out" == "" ]; then
         return 1
     fi
+
+    ceph osd crush rule create-replicated foo-rule foo host abc || return 1
 }
 
 main crush-classes "$@"
