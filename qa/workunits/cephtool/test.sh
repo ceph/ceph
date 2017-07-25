@@ -1349,6 +1349,21 @@ function test_mon_osd_create_destroy()
 
 }
 
+function test_mon_config_key()
+{
+  key=asdfasdfqwerqwreasdfuniquesa123df
+  ceph config-key list | grep -c $key | grep 0
+  ceph config-key get $key | grep -c bar | grep 0
+  ceph config-key set $key bar
+  ceph config-key get $key | grep bar
+  ceph config-key list | grep -c $key | grep 1
+  ceph config-key dump | grep $key | grep bar
+  ceph config-key rm $key
+  expect_false ceph config-key get $key
+  ceph config-key list | grep -c $key | grep 0
+  ceph config-key dump | grep -c $key | grep 0
+}
+
 function test_mon_osd()
 {
   #
