@@ -7594,6 +7594,10 @@ struct C_CopyFrom_AsyncReadCb : public Context {
   C_CopyFrom_AsyncReadCb(OSDOp *osd_op, uint64_t features) :
     osd_op(osd_op), features(features), len(0) {}
   void finish(int r) override {
+    if (r < 0) {
+      osd_op->rval = r;
+      return;
+    }
     assert(len > 0);
     assert(len <= reply_obj.data.length());
     bufferlist bl;
