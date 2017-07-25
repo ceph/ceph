@@ -1666,6 +1666,8 @@ OPTION(rgw_sync_log_trim_interval, OPT_INT, 1200) // time in seconds between att
 OPTION(rgw_sync_data_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(rgw_sync_meta_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
 
+OPTION(rgw_bucket_shard_full_sync_window, OPT_INT, 20) // max outstanding sync request number of a bucket shard when doing full sync
+OPTION(rgw_bucket_shard_incremental_sync_window, OPT_INT, 20) // max outstanding sync request number of a bucket shard when doing incremental sync 
 
 OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
