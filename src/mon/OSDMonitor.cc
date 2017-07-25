@@ -7688,7 +7688,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
 	ss << "require_min_compat_client "
 	   << ceph_release_name(osdmap.require_min_compat_client)
-	   << " < luminous, which is required for per-pool weight-sets";
+	   << " < luminous, which is required for per-pool weight-sets. "
+           << "Try 'ceph osd set-require-min-compat-client luminous' "
+           << "before using the new interface";
 	err = -EPERM;
 	goto reply;
       }
