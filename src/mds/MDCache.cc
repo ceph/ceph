@@ -91,6 +91,7 @@
 #include "messages/MMDSSlaveRequest.h"
 
 #include "messages/MMDSFragmentNotify.h"
+#include "messages/MMDSSnapUpdate.h"
 
 #include "messages/MGatherCaps.h"
 
@@ -4927,6 +4928,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   // for sending cache expire message
   set<CInode*> isolated_inodes;
   set<CInode*> refragged_inodes;
+  list<pair<CInode*,int> > updated_realms;
 
   // dirs
   for (map<dirfrag_t, MMDSCacheRejoin::dirfrag_strong>::iterator p = ack->strong_dirfrags.begin();
@@ -5075,7 +5077,14 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     CInode *in = get_inode(ino, last);
     assert(in);
     bufferlist::iterator q = basebl.begin();
+    snapid_t sseq = 0;
+    if (in->snaprealm)
+      sseq = in->snaprealm->srnode.seq;
     in->_decode_base(q);
+    if (in->snaprealm && in->snaprealm->srnode.seq != sseq) {
+      int snap_op = sseq > 0 ? CEPH_SNAP_OP_UPDATE : CEPH_SNAP_OP_SPLIT;
+      updated_realms.push_back(pair<CInode*,int>(in, snap_op));
+    }
     dout(10) << " got inode base " << *in << dendl;
   }
 
@@ -5137,11 +5146,17 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     assert(cap_exports[p->first].empty());
   }
 
+  for (auto p : updated_realms) {
+    // notify clients if I'm survivor
+    bool notify_clients = !mds->is_rejoin();
+    do_realm_invalidate_and_update_notify(p.first, p.second, notify_clients);
+  }
+
   // done?
   assert(rejoin_ack_gather.count(from));
   rejoin_ack_gather.erase(from);
-  if (mds->is_rejoin()) {
 
+  if (mds->is_rejoin()) {
     if (rejoin_gather.empty()) {
       // eval unstable scatter locks after all wrlocks are rejoined.
       while (!rejoin_eval_locks.empty()) {
@@ -5759,6 +5774,9 @@ void MDCache::open_snaprealms()
   send_snaps(splits);
 
   if (gather.has_subs()) {
+    // for multimds, must succeed the first time
+    assert(!recovery_set.empty());
+
     dout(10) << "open_snaprealms - waiting for "
 	     << gather.num_subs_remaining() << dendl;
     gather.set_finisher(new C_MDC_OpenSnapRealms(this));
@@ -7782,6 +7800,10 @@ void MDCache::dispatch(Message *m)
   case MSG_MDS_OPENINOREPLY:
     handle_open_ino_reply(static_cast<MMDSOpenInoReply *>(m));
     break;
+
+  case MSG_MDS_SNAPUPDATE:
+    handle_snap_update(static_cast<MMDSSnapUpdate*>(m));
+    break;
     
   default:
     derr << "cache unknown message " << m->get_type() << dendl;
@@ -9288,28 +9310,29 @@ void MDCache::snaprealm_create(MDRequestRef& mdr, CInode *in)
   mds->mdlog->flush();
 }
 
-
-void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool nosend)
+void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool notify_clients)
 {
   dout(10) << "do_realm_invalidate_and_update_notify " << *in->snaprealm << " " << *in << dendl;
 
   vector<inodeno_t> split_inos;
   vector<inodeno_t> split_realms;
-
-  if (snapop == CEPH_SNAP_OP_SPLIT) {
-    // notify clients of update|split
-    for (elist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(member_offset(CInode, item_caps));
-	 !p.end(); ++p)
-      split_inos.push_back((*p)->ino());
-    
-    for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();
-	 p != in->snaprealm->open_children.end();
-	 ++p)
-      split_realms.push_back((*p)->inode->ino());
-  }
-
   bufferlist snapbl;
-  in->snaprealm->build_snap_trace(snapbl);
+
+  if (notify_clients) {
+    assert(in->snaprealm->have_past_parents_open());
+    if (snapop == CEPH_SNAP_OP_SPLIT) {
+      // notify clients of update|split
+      for (elist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(member_offset(CInode, item_caps));
+	   !p.end(); ++p)
+	split_inos.push_back((*p)->ino());
+
+      for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();
+	   p != in->snaprealm->open_children.end();
+	   ++p)
+	split_realms.push_back((*p)->inode->ino());
+    }
+    in->snaprealm->build_snap_trace(snapbl);
+  }
 
   set<SnapRealm*> past_children;
   map<client_t, MClientSnap*> updates;
@@ -9322,17 +9345,19 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
     dout(10) << " realm " << *realm << " on " << *realm->inode << dendl;
     realm->invalidate_cached_snaps();
 
-    for (map<client_t, xlist<Capability*>* >::iterator p = realm->client_caps.begin();
-	 p != realm->client_caps.end();
-	 ++p) {
-      assert(!p->second->empty());
-      if (!nosend && updates.count(p->first) == 0) {
-	MClientSnap *update = new MClientSnap(snapop);
-	update->head.split = in->ino();
-	update->split_inos = split_inos;
-	update->split_realms = split_realms;
-	update->bl = snapbl;
-	updates[p->first] = update;
+    if (notify_clients) {
+      for (map<client_t, xlist<Capability*>* >::iterator p = realm->client_caps.begin();
+	   p != realm->client_caps.end();
+	   ++p) {
+	assert(!p->second->empty());
+	if (updates.count(p->first) == 0) {
+	  MClientSnap *update = new MClientSnap(snapop);
+	  update->head.split = in->ino();
+	  update->split_inos = split_inos;
+	  update->split_realms = split_realms;
+	  update->bl = snapbl;
+	  updates[p->first] = update;
+	}
       }
     }
 
@@ -9351,7 +9376,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
       q.push_back(*p);
   }
 
-  if (!nosend)
+  if (notify_clients)
     send_snaps(updates);
 
   // notify past children and their descendants if we update/delete old snapshots
@@ -9429,6 +9454,57 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CIno
   dispatch_request(mdr);
 }
 
+void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
+{
+  dout(10) << __func__ << " " << *in << " stid " << stid << dendl;
+
+  bufferlist snap_blob;
+  in->encode_snap(snap_blob);
+
+  set<mds_rank_t> mds_set;
+  mds->mdsmap->get_mds_set_lower_bound(mds_set, MDSMap::STATE_RESOLVE);
+  mds_set.erase(mds->get_nodeid());
+  for (auto p : mds_set) {
+    MMDSSnapUpdate *m = new MMDSSnapUpdate(in->ino(), stid, snap_op);
+    m->snap_blob = snap_blob;
+    mds->send_message_mds(m, p);
+  }
+}
+
+void MDCache::handle_snap_update(MMDSSnapUpdate *m)
+{
+  mds_rank_t from = mds_rank_t(m->get_source().num());
+  dout(10) << __func__ << " " << *m << " from mds." << from << dendl;
+
+  if (mds->get_state() < MDSMap::STATE_RESOLVE &&
+      mds->get_want_state() != CEPH_MDS_STATE_RESOLVE) {
+    m->put();
+    return;
+  }
+
+  mds->snapclient->notify_commit(m->get_table_tid());
+
+  CInode *in = get_inode(m->get_ino());
+  if (in) {
+    assert(!in->is_auth());
+    if (mds->get_state() > MDSMap::STATE_REJOIN ||
+	(mds->is_rejoin() && !in->is_rejoining())) {
+      bufferlist::iterator p = m->snap_blob.begin();
+      in->decode_snap(p);
+
+      bool notify_clients;
+      if (mds->is_rejoin()) {
+	// notify clients if open_snaprealms() has already been called
+	notify_clients = rejoin_gather.empty() && rejoin_ack_gather.empty();
+      } else {
+	notify_clients = true;
+      }
+      do_realm_invalidate_and_update_notify(in, m->get_snap_op(), notify_clients);
+    }
+  }
+
+  m->put();
+}
 
 // -------------------------------------------------------------------------------
 // STRAYS
