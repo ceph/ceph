@@ -47,6 +47,7 @@ def create_id(fsid, json_secrets):
             '--cluster', conf.cluster,
             '--name', 'client.bootstrap-osd',
             '--keyring', bootstrap_keyring,
+            '-i', '-',
             'osd', 'new', fsid
         ],
         stdin=json_secrets
