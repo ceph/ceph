@@ -1088,7 +1088,7 @@ def allocate_osd_id(
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', keyring,
-                '-i', '/dev/fd/0',
+                '-i', '-',
                 'osd', 'new',
                 fsid,
             ] + id_arg,
@@ -2743,7 +2743,7 @@ class Lockbox(object):
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
-                '-i', '/dev/fd/0',
+                '-i', '-',
                 'osd', 'new', self.args.osd_uuid,
             ] + id_arg,
             secrets.get_json()
