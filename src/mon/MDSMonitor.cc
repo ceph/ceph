@@ -1237,17 +1237,6 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
     goto out;
   }
 
-  // Only handle legacy commands if there is a filesystem configured
-  if (pending.legacy_client_fscid == FS_CLUSTER_ID_NONE) {
-    if (pending.filesystems.size() == 0) {
-      ss << "No filesystem configured: use `ceph fs new` to create a filesystem";
-    } else {
-      ss << "No filesystem set for use with legacy commands";
-    }
-    r = -EINVAL;
-    goto out;
-  }
-
   if (r == -ENOSYS && ss.str().empty()) {
     ss << "unrecognized command";
   }
