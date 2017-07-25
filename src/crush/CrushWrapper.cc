@@ -953,6 +953,12 @@ int CrushWrapper::insert_item(
       ldout(cct, 5) << "insert_item max_devices now " << crush->max_devices
 		    << dendl;
     }
+    r = rebuild_roots_with_classes();
+    if (r < 0) {
+      ldout(cct, 0) << __func__ << " unable to rebuild roots with classes: "
+                    << cpp_strerror(r) << dendl;
+      return r;
+    }
     return 0;
   }
 
