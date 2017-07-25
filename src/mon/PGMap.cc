@@ -2562,8 +2562,6 @@ void PGMap::get_health_checks(
   const unsigned max = cct->_conf->mon_health_max_detail;
   const auto& pools = osdmap.get_pools();
 
-  checks->clear();
-
   typedef enum pg_consequence_t {
     UNAVAILABLE = 1,   // Client IO to the pool may block
     DEGRADED = 2,      // Fewer than the requested number of replicas are present
