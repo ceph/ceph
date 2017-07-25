@@ -13,10 +13,10 @@
     (even as standby). Operators may ignore the error messages and continue
     upgrading/restarting or follow this upgrade sequence:
 
-    Reduce the number of ranks to 1 (`ceph fs set <fs_name> max_mds 1`),
-    deactivate all other ranks (`ceph mds deactivate <fs_name>:<n>`), shutdown
-    standbys leaving the one active MDS, upgrade the single active MDS, then
-    upgrade/start standbys. Finally, restore the previous max_mds.
+	 Reduce the number of ranks to 1 (`ceph fs set <fs_name> max_mds 1`), wait
+	 for all other MDS to deactivate, leaving the one active MDS, upgrade the
+	 single active MDS, then upgrade/start standbys. Finally, restore the
+	 previous max_mds.
 
     See also: https://tracker.ceph.com/issues/23172
 

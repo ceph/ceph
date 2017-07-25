@@ -20,7 +20,6 @@
 #include "MgrStatMonitor.h"
 
 
-
 static const string EXPERIMENTAL_WARNING("Warning! This feature is experimental."
 "It may cause problems up to and including data loss."
 "Consult the documentation at ceph.com, and if unsure, do not proceed."
@@ -264,7 +263,9 @@ public:
         return -EINVAL;
       }
 
-      if (!fs->mds_map.allows_multimds() && n > fs->mds_map.get_max_mds() &&
+      mds_rank_t oldmax = fs->mds_map.get_max_mds();
+
+      if (!fs->mds_map.allows_multimds() && n > oldmax &&
 	  n > 1) {
 	ss << "multi-MDS clusters are not enabled; set 'allow_multimds' to enable";
 	return -EINVAL;
@@ -273,6 +274,7 @@ public:
         ss << "may not have more than " << MAX_MDS << " MDS ranks";
         return -EINVAL;
       }
+
       fsmap.modify_filesystem(
           fs->fscid,
           [n](std::shared_ptr<Filesystem> fs)
@@ -437,7 +439,12 @@ public:
         }
       });
 
-      ss << "marked " << (is_down ? "down" : "up");
+      if (is_down) {
+	ss << " marked down. ";
+      } else {
+	ss << " marked up, max_mds = " << fs->mds_map.get_max_mds();
+      }
+
     } else if (var == "standby_count_wanted") {
       if (interr.length()) {
        ss << var << " requires an integer value";
