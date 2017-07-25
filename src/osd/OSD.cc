@@ -4402,6 +4402,10 @@ void OSD::build_initial_pg_history(
     if (acting_primary != new_acting_primary) {
       h->same_primary_since = e;
     }
+    up_primary = new_up_primary;
+    acting_primary = new_acting_primary;
+    up = new_up;
+    acting = new_acting;
     lastmap = osdmap;
   }
   dout(20) << __func__ << " " << debug.str() << dendl;
