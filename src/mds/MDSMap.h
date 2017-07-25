@@ -135,7 +135,7 @@ public:
     fs_cluster_id_t standby_for_fscid;
     bool standby_replay;
     std::set<mds_rank_t> export_targets;
-    uint64_t mds_features;
+    uint64_t mds_features = 0;
 
     mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0),
                    state(STATE_STANDBY), state_seq(0),
