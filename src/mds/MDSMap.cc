@@ -382,6 +382,19 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
     }
   }
 
+  {
+  stringstream ss;
+  ss << fs_name << " max_mds " << max_mds;
+  summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+  }
+
+  if ((mds_rank_t)up.size() < max_mds) {
+    stringstream ss;
+    ss << fs_name << " has " << up.size()
+       << " active MDS(s), but has max_mds of " << max_mds;
+    summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+  }
+
   map<mds_gid_t, mds_info_t>::const_iterator m_end = mds_info.end();
   set<string> laggy;
   for (const auto &u : up) {
@@ -452,6 +465,27 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
       if (ss.str().length())
 	detail.push_back(ss.str());
     }
+  }
+
+  // MDS_UP_LESS_THAN_MAX
+  if ((mds_rank_t)get_num_in_mds() < max_mds) {
+    health_check_t& check = checks->add(
+      "MDS_UP_LESS_THAN_MAX", HEALTH_WARN,
+      "%num% filesystem%plurals% %isorare% online with fewer MDS than max_mds");
+    stringstream ss;
+    ss << "fs " << fs_name << " has " << get_num_in_mds()
+       << " MDS online, but wants " << max_mds;
+    check.detail.push_back(ss.str());
+  }
+
+  // MDS_ALL_DOWN
+  if ((mds_rank_t)get_num_up_mds() == 0) {
+    health_check_t &check = checks->add(
+      "MDS_ALL_DOWN", HEALTH_ERR,
+      "%num% filesystem%plurals% %isorare% offline");
+    stringstream ss;
+    ss << "fs " << fs_name << " is offline because no MDS is active for it.";
+    check.detail.push_back(ss.str());
   }
 }
 
