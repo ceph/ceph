@@ -1803,12 +1803,21 @@ int CrushWrapper::update_device_class(int id,
                                       const string& name,
                                       ostream *ss)
 {
+  assert(item_exists(id));
+  auto old_class_name = get_item_class(id);
+  if (old_class_name && old_class_name != class_name) {
+    *ss << "osd." << id << " has already bound to class '" << old_class_name
+        << "', can not reset class to '" << class_name  << "'; "
+        << "use 'ceph osd crush rm-device-class <osd>' to "
+        << "remove old class first";
+    return -EBUSY;
+  }
+
   int class_id = get_or_create_class_id(class_name);
   if (id < 0) {
     *ss << name << " id " << id << " is negative";
     return -EINVAL;
   }
-  assert(item_exists(id));
 
   if (class_map.count(id) != 0 && class_map[id] == class_id) {
     *ss << name << " already set to class " << class_name;
