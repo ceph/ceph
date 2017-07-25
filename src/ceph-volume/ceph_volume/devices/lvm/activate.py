@@ -2,7 +2,7 @@ from __future__ import print_function
 import argparse
 import os
 from textwrap import dedent
-from ceph_volume import process
+from ceph_volume import process, conf
 from ceph_volume.util import activate as activate_utils
 from ceph_volume.systemd import systemctl
 from . import api
@@ -14,6 +14,9 @@ def activate_filestore(lvs):
     osd_id = osd_lv.tags['ceph.osd_id']
     # it may have a volume with a journal
     osd_journal_lv = lvs.get(lv_tags={'ceph.type': 'journal'})
+    # TODO: add sensible error reporting if this is ever the case
+    # blow up with a KeyError if this doesn't exist
+    osd_fsid = osd_lv.tags['ceph.osd_fsid']
     if not osd_journal_lv:
         osd_journal = osd_lv.tags.get('ceph.journal_device')
     else:
@@ -24,17 +27,17 @@ def activate_filestore(lvs):
 
     # mount the osd
     source = osd_lv.lv_path
-    destination = '/var/lib/ceph/osd/ceph-%s' % osd_id
+    destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
     process.call(['sudo', 'mount', '-v', source, destination])
 
     # ensure that the symlink for the journal is there
     if not os.path.exists(osd_journal):
         source = osd_journal
-        destination = '/var/lib/ceph/osd/ceph-%s/journal' % osd_id
+        destination = '/var/lib/ceph/osd/%s-%s/journal' % (conf.cluster, osd_id)
         process.call(['sudo', 'ln', '-s', source, destination])
 
-    # register the osd
-    activate_utils.add_osd_to_mon(osd_id)
+    # enable the ceph-volume unit for this OSD
+    systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
 
     # start the OSD
     systemctl.start_osd(osd_id)
