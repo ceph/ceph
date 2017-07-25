@@ -352,18 +352,14 @@ struct Condition {
   static boost::optional<MaskedIP> as_network(const std::string& s);
 
 
-  struct ci_equal_to : public std::binary_function<const std::string,
-						   const std::string,
-						   bool> {
+  struct ci_equal_to {
     bool operator ()(const std::string& s1,
 		     const std::string& s2) const {
       return boost::iequals(s1, s2);
     }
   };
 
-  struct string_like : public std::binary_function<const std::string,
-                                                   const std::string,
-                                                   bool> {
+  struct string_like {
     bool operator ()(const std::string& input,
                      const std::string& pattern) const {
       return match_wildcards(pattern, input, 0);

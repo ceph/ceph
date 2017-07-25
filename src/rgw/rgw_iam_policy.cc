@@ -11,6 +11,7 @@
 #include <iostream>
 #include "rapidjson/reader.h"
 
+#include "common/backport14.h"
 #include "rgw_auth.h"
 #include <arpa/inet.h>
 #include "rgw_iam_policy.h"
@@ -947,27 +948,27 @@ bool Condition::eval(const Environment& env) const {
     return orrible(std::equal_to<std::string>(), s, vals);
 
   case TokenID::StringNotEquals:
-    return orrible(std::not2(std::equal_to<std::string>()),
+    return orrible(ceph::not_fn(std::equal_to<std::string>()),
 		   s, vals);
 
   case TokenID::StringEqualsIgnoreCase:
     return orrible(ci_equal_to(), s, vals);
 
   case TokenID::StringNotEqualsIgnoreCase:
-    return orrible(std::not2(ci_equal_to()), s, vals);
+    return orrible(ceph::not_fn(ci_equal_to()), s, vals);
 
   case TokenID::StringLike:
     return orrible(string_like(), s, vals);
 
   case TokenID::StringNotLike:
-    return orrible(std::not2(string_like()), s, vals);
+    return orrible(ceph::not_fn(string_like()), s, vals);
 
     // Numeric
   case TokenID::NumericEquals:
     return shortible(std::equal_to<double>(), as_number, s, vals);
 
   case TokenID::NumericNotEquals:
-    return shortible(std::not2(std::equal_to<double>()),
+    return shortible(ceph::not_fn(std::equal_to<double>()),
 		     as_number, s, vals);
 
 
@@ -989,7 +990,7 @@ bool Condition::eval(const Environment& env) const {
     return shortible(std::equal_to<ceph::real_time>(), as_date, s, vals);
 
   case TokenID::DateNotEquals:
-    return shortible(std::not2(std::equal_to<ceph::real_time>()),
+    return shortible(ceph::not_fn(std::equal_to<ceph::real_time>()),
 		     as_date, s, vals);
 
   case TokenID::DateLessThan:
@@ -1020,7 +1021,7 @@ bool Condition::eval(const Environment& env) const {
     return shortible(std::equal_to<MaskedIP>(), as_network, s, vals);
 
   case TokenID::NotIpAddress:
-    return shortible(std::not2(std::equal_to<MaskedIP>()), as_network, s,
+    return shortible(ceph::not_fn(std::equal_to<MaskedIP>()), as_network, s,
 		     vals);
 
 #if 0
