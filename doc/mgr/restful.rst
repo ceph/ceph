@@ -21,7 +21,7 @@ Securing
 All connections to *restful* are secured with SSL.  You can generate a
 self-signed certificate with the command::
 
-  ceph restful create-self-signed-cert
+  ceph tell mgr restful create-self-signed-cert
 
 Note that with a self-signed certificate most clients will need a flag
 to allow a connection and/or suppress warning messages.  For example,
