@@ -216,7 +216,7 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
     for (auto& op : sdata->ops_in_flight_sharded) {
       if (print_only_blocked && (now - op.get_initiated() <= complaint_time))
-	break;
+        break;
       f->open_object_section("op");
       op.dump(now, f);
       f->close_section(); // this TrackedOp
@@ -401,7 +401,7 @@ void TrackedOp::mark_event_string(const string &event, utime_t stamp)
     events.push_back(Event(stamp, event));
     current = events.back().c_str();
   }
-  dout(6) <<  "seq: " << seq
+  dout(6) << " seq: " << seq
 	  << ", time: " << stamp
 	  << ", event: " << event
 	  << ", op: " << get_desc()
@@ -419,7 +419,7 @@ void TrackedOp::mark_event(const char *event, utime_t stamp)
     events.push_back(Event(stamp, event));
     current = event;
   }
-  dout(6) <<  "seq: " << seq
+  dout(6) << " seq: " << seq
 	  << ", time: " << stamp
 	  << ", event: " << event
 	  << ", op: " << get_desc()
