@@ -1,4 +1,5 @@
 from __future__ import print_function
+import json
 import os
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
@@ -22,11 +23,21 @@ def canonical_device_path(device):
     raise RuntimeError('Selected device does not exist: %s' % device)
 
 
-def prepare_filestore(device, journal, id_=None, fsid=None):
+def prepare_filestore(device, journal, secrets, id_=None, fsid=None):
+    """
+    :param device: The name of the volume group or lvm to work with
+    :param journal: similar to device but can also be a regular/plain disk
+    :param secrets: A dict with the secrets needed to create the osd (e.g. cephx)
+    :param id_: The OSD id
+    :param fsid: The OSD fsid, also known as the OSD UUID
+    """
+    cephx_secret = secrets.get('cephx_secret', prepare_utils.create_key())
+    json_secrets = json.dumps(secrets)
+
     # allow re-using an existing fsid, in case prepare failed
     fsid = fsid or system.generate_uuid()
     # allow re-using an id, in case a prepare failed
-    osd_id = id_ or prepare_utils.create_id(fsid)
+    osd_id = id_ or prepare_utils.create_id(fsid, json_secrets)
     # create the directory
     prepare_utils.create_path(osd_id)
     # format the device
@@ -39,6 +50,8 @@ def prepare_filestore(device, journal, id_=None, fsid=None):
     prepare_utils.get_monmap(osd_id)
     # prepare the osd filesystem
     prepare_utils.osd_mkfs(osd_id, fsid)
+    # write the OSD keyring if it doesn't exist already
+    prepare_utils.write_keyring(osd_id, cephx_secret)
 
 
 def prepare_bluestore():
@@ -53,11 +66,20 @@ class Prepare(object):
         self.argv = argv
 
     def prepare(self, args):
+        # FIXME we don't allow re-using a keyring, we always generate one for the
+        # OSD, this needs to be fixed. This could either be a file (!) or a string
+        # (!!) or some flags that we would need to compound into a dict so that we
+        # can convert to JSON (!!!)
+        secrets = {'cephx_secret': prepare_utils.create_key()}
+
         cluster_fsid = conf.ceph.get('global', 'fsid')
         fsid = args.osd_fsid or system.generate_uuid()
-        osd_id = args.osd_id or prepare_utils.create_id(fsid)
+        #osd_id = args.osd_id or prepare_utils.create_id(fsid)
+        # allow re-using an id, in case a prepare failed
+        osd_id = args.osd_id or prepare_utils.create_id(fsid, json.dumps(secrets))
         journal_name = "journal_%s" % fsid
         osd_name = "osd_%s" % fsid
+
         if args.filestore:
             data_vg = api.get_vg(vg_name=args.data)
             data_lv = api.get_lv(lv_name=args.data)
@@ -113,6 +135,8 @@ class Prepare(object):
                 )
             # we must have either an existing data_lv or a newly created, so lets make
             # sure that the tags are correct
+            if not data_lv:
+                raise RuntimeError('no data logical volume found with: %s' % args.data)
             data_lv.set_tags({
                 'ceph.type': 'data',
                 'ceph.osd_fsid': fsid,
@@ -121,12 +145,11 @@ class Prepare(object):
                 'ceph.journal_device': journal_device,
                 'ceph.data_device': data_lv.lv_path,
             })
-            if not data_lv:
-                raise RuntimeError('no data logical volume found with: %s' % args.data)
 
             prepare_filestore(
                 data_lv.lv_path,
                 journal_device,
+                secrets,
                 id_=osd_id,
                 fsid=fsid,
             )
