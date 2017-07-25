@@ -4,6 +4,8 @@
 #include <string>
 #include <sstream>
 
+#include "include/types.h"
+
 template<typename T>
 inline std::string stringify(const T& a) {
 #if defined(__GNUC__) && !(defined(__clang__) || defined(__INTEL_COMPILER))

@@ -114,8 +114,14 @@ int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_si
 
   param_vec_t params;
   populate_params(params, &uid, self_zone_group);
-  *req = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
-  return (*req)->put_obj_init(key, obj, obj_size, attrs);
+  RGWRESTStreamWriteRequest *wr = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
+  ret = wr->put_obj_init(key, obj, obj_size, attrs);
+  if (ret < 0) {
+    delete wr;
+    return ret;
+  }
+  *req = wr;
+  return 0;
 }
 
 int RGWRESTConn::complete_request(RGWRESTStreamWriteRequest *req, string& etag, real_time *mtime)
@@ -180,15 +186,15 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
   }
   map<string, string> extra_headers;
   if (info) {
-    map<string, string, ltstr_nocase>& orig_map = info->env->get_map();
+    const auto& orig_map = info->env->get_map();
 
     /* add original headers that start with HTTP_X_AMZ_ */
-#define SEARCH_AMZ_PREFIX "HTTP_X_AMZ_"
-    for (map<string, string>::iterator iter = orig_map.lower_bound(SEARCH_AMZ_PREFIX); iter != orig_map.end(); ++iter) {
+    static constexpr char SEARCH_AMZ_PREFIX[] = "HTTP_X_AMZ_";
+    for (auto iter= orig_map.lower_bound(SEARCH_AMZ_PREFIX); iter != orig_map.end(); ++iter) {
       const string& name = iter->first;
       if (name == "HTTP_X_AMZ_DATE") /* dont forward date from original request */
         continue;
-      if (name.compare(0, sizeof(SEARCH_AMZ_PREFIX) - 1, "HTTP_X_AMZ_") != 0)
+      if (name.compare(0, strlen(SEARCH_AMZ_PREFIX), SEARCH_AMZ_PREFIX) != 0)
         break;
       extra_headers[iter->first] = iter->second;
     }

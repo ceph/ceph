@@ -22,7 +22,7 @@
 #  ln -sf /home/ubuntu/ceph/systemd/ceph-disk@.service /usr/lib/systemd/system/ceph-disk@.service
 #  ceph-disk.conf will be silently ignored if it is a symbolic link or a hard link /var/log/upstart for logs
 #  cp /home/ubuntu/ceph/src/upstart/ceph-disk.conf /etc/init/ceph-disk.conf
-#  id=3 ; ceph-disk deactivate --deactivate-by-id $id ; ceph-disk destroy --zap --destroy-by-id $id
+#  id=3 ; ceph-disk deactivate --deactivate-by-id $id ; ceph-disk destroy --purge --zap --destroy-by-id $id
 #  py.test -s -v -k test_activate_dmcrypt_luks ceph-disk-test.py
 #
 #  CentOS 7
@@ -80,20 +80,21 @@ class CephDisk:
             stderr=subprocess.STDOUT,
             shell=True,
             bufsize=1)
-        lines = []
-        with proc.stdout:
-            for line in iter(proc.stdout.readline, b''):
-                line = line.decode('utf-8')
-                if 'dangerous and experimental' in line:
-                    LOG.debug('SKIP dangerous and experimental')
-                    continue
-                lines.append(line)
-                LOG.debug(line.strip().encode('ascii', 'ignore'))
-        if proc.wait() != 0:
+        output, _ = proc.communicate()
+        if proc.poll():
+            LOG.warning(output.decode('utf-8'))
             raise subprocess.CalledProcessError(
                 returncode=proc.returncode,
-                cmd=command
+                cmd=command,
+                output=output,
             )
+        lines = []
+        for line in output.decode('utf-8').split('\n'):
+            if 'dangerous and experimental' in line:
+                LOG.debug('SKIP dangerous and experimental')
+                continue
+            lines.append(line)
+            LOG.debug(line.strip().encode('ascii', 'ignore'))
         return "".join(lines)
 
     def unused_disks(self, pattern='[vs]d.'):
@@ -172,7 +173,7 @@ class CephDisk:
         self.sh("""
         set -xe
         ceph-disk --verbose deactivate --deactivate-by-id {id}
-        ceph-disk --verbose destroy --destroy-by-id {id} --zap
+        ceph-disk --verbose destroy --purge --destroy-by-id {id} --zap
         """.format(id=id))
 
     def deactivate_osd(self, uuid):
@@ -298,7 +299,7 @@ class TestCephDisk(object):
         assert partition['state'] == 'active'
         c.sh("ceph-disk --verbose deactivate " + partition['path'])
         c.wait_for_osd_down(osd_uuid)
-        c.sh("ceph-disk --verbose destroy " + partition['path'] + " --zap")
+        c.sh("ceph-disk --verbose destroy --purge " + partition['path'] + " --zap")
 
     def test_deactivate_reactivate_dmcrypt_plain(self):
         c = CephDisk()

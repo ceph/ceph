@@ -228,6 +228,7 @@ cdef extern from "rbd/librbd.h" nogil:
                             uint8_t enabled)
     int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit)
     int rbd_get_stripe_count(rbd_image_t image, uint64_t *stripe_count)
+    int rbd_get_create_timestamp(rbd_image_t image, timespec *timestamp)
     int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
     int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
     int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
@@ -387,15 +388,18 @@ class Error(Exception):
 
 class OSError(Error):
     """ `OSError` class, derived from `Error` """
-    def __init__(self, errno, strerror):
+    def __init__(self, message, errno=None):
+        super(OSError, self).__init__(message)
         self.errno = errno
-        self.strerror = strerror
 
     def __str__(self):
-        return '[Errno {0}] {1}'.format(self.errno, self.strerror)
+        msg = super(OSError, self).__str__()
+        if self.errno is None:
+            return msg
+        return '[errno {0}] {1}'.format(self.errno, msg)
 
     def __reduce__(self):
-        return (self.__class__, (self.errno, self.strerror))
+        return (self.__class__, (self.message, self.errno))
 
 class PermissionError(OSError):
     pass
@@ -489,9 +493,9 @@ cdef make_ex(ret, msg):
     """
     ret = abs(ret)
     if ret in errno_to_exception:
-        return errno_to_exception[ret](ret, msg)
+        return errno_to_exception[ret](msg, errno=ret)
     else:
-        return Error(ret, msg + (": error code %d" % ret))
+        return OSError(msg, errno=ret)
 
 
 cdef rados_ioctx_t convert_ioctx(rados.Ioctx ioctx) except? NULL:
@@ -2165,6 +2169,18 @@ written." % (self.name, ret, length))
         if ret != 0:
             raise make_ex(ret, 'error getting stripe count for image %s' % (self.name))
         return stripe_count
+
+    def create_timestamp(self):
+        """
+        Returns the create timestamp for the image.
+        """
+        cdef:
+            timespec timestamp
+        with nogil:
+            ret = rbd_get_create_timestamp(self.image, &timestamp)
+        if ret != 0:
+            raise make_ex(ret, 'error getting create timestamp for image: %s' % (self.name))
+        return datetime.fromtimestamp(timestamp.tv_sec)
 
     def flatten(self):
         """

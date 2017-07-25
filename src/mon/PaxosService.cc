@@ -35,7 +35,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   op->mark_event("psvc:dispatch");
 
-  dout(10) << "dispatch " << m << " " << *m
+  dout(10) << __func__ << " " << m << " " << *m
 	   << " from " << m->get_orig_source_inst()
 	   << " con " << m->get_connection() << dendl;
 
@@ -184,7 +184,7 @@ bool PaxosService::should_propose(double& delay)
 
 void PaxosService::propose_pending()
 {
-  dout(10) << "propose_pending" << dendl;
+  dout(10) << __func__ << dendl;
   assert(have_pending);
   assert(!proposing);
   assert(mon->is_leader());
@@ -197,7 +197,7 @@ void PaxosService::propose_pending()
   }
 
   /**
-   * @note What we contirbute to the pending Paxos transaction is
+   * @note What we contribute to the pending Paxos transaction is
    *	   obtained by calling a function that must be implemented by
    *	   the class implementing us.  I.e., the function
    *	   encode_pending will be the one responsible to encode
@@ -262,7 +262,7 @@ bool PaxosService::should_stash_full()
 
 void PaxosService::restart()
 {
-  dout(10) << "restart" << dendl;
+  dout(10) << __func__ << dendl;
   if (proposal_timer) {
     dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
     mon->timer.cancel_event(proposal_timer);
@@ -282,7 +282,7 @@ void PaxosService::restart()
 
 void PaxosService::election_finished()
 {
-  dout(10) << "election_finished" << dendl;
+  dout(10) << __func__ << dendl;
 
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 
@@ -293,11 +293,11 @@ void PaxosService::election_finished()
 void PaxosService::_active()
 {
   if (is_proposing()) {
-    dout(10) << "_acting - proposing" << dendl;
+    dout(10) << __func__ << " - proposing" << dendl;
     return;
   }
   if (!is_active()) {
-    dout(10) << "_active - not active" << dendl;
+    dout(10) << __func__ << " - not active" << dendl;
     /**
      * Callback used to make sure we call the PaxosService::_active function
      * whenever a condition is fulfilled.
@@ -318,11 +318,11 @@ void PaxosService::_active()
     wait_for_active_ctx(new C_Active(this));
     return;
   }
-  dout(10) << "_active" << dendl;
+  dout(10) << __func__ << dendl;
 
   // create pending state?
   if (mon->is_leader()) {
-    dout(7) << "_active creating new pending" << dendl;
+    dout(7) << __func__ << " creating new pending" << dendl;
     if (!have_pending) {
       create_pending();
       have_pending = true;
@@ -431,3 +431,12 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
   }
 }
 
+void PaxosService::load_health()
+{
+  bufferlist bl;
+  mon->store->get("health", service_name, bl);
+  if (bl.length()) {
+    auto p = bl.begin();
+    ::decode(health_checks, p);
+  }
+}

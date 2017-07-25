@@ -76,7 +76,7 @@ that copy. For each placement group mapped to the first OSD (see
 ``ceph pg dump``), you can force the first OSD to notice the placement groups
 it needs by running::
    
-   	ceph pg force_create_pg <pgid>
+   	ceph osd force-create-pg <pgid>
    	
 
 CRUSH Map Errors
@@ -516,7 +516,7 @@ ruleset::
 You can resolve the problem by creating a new pool in which PGs are allowed
 to have OSDs residing on the same host with::
 
-     ceph osd erasure-code-profile set myprofile ruleset-failure-domain=osd
+     ceph osd erasure-code-profile set myprofile crush-failure-domain=osd
      ceph osd pool create erasurepool 16 16 erasure myprofile
 
 CRUSH gives up too soon

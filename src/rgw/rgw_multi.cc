@@ -10,6 +10,7 @@
 
 #include "rgw_xml.h"
 #include "rgw_multi.h"
+#include "rgw_op.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -245,3 +246,58 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
   return ret == -ENOENT?-ERR_NO_SUCH_UPLOAD:ret;
 }
 
+int list_bucket_multiparts(RGWRados *store, RGWBucketInfo& bucket_info,
+                                string& prefix, string& marker, string& delim,
+                                int& max_uploads, vector<rgw_bucket_dir_entry> *objs,
+                                map<string, bool> *common_prefixes, bool *is_truncated)
+{
+  RGWRados::Bucket target(store, bucket_info);
+  RGWRados::Bucket::List list_op(&target);
+  MultipartMetaFilter mp_filter;
+
+  list_op.params.prefix = prefix;
+  list_op.params.delim = delim;
+  list_op.params.marker = marker;
+  list_op.params.ns = RGW_OBJ_NS_MULTIPART;
+  list_op.params.filter = &mp_filter;
+
+  return(list_op.list_objects(max_uploads, objs, common_prefixes,is_truncated));
+}
+
+int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bucket_info,
+				string& prefix, string& delim)
+{
+  int ret, max = 1000, num_deleted = 0;
+  vector<rgw_bucket_dir_entry> objs;
+  RGWObjectCtx obj_ctx(store);
+  string marker;
+  map<string, bool> common_prefixes;
+  bool is_truncated;
+
+  do {
+    ret = list_bucket_multiparts(store, bucket_info, prefix, marker, delim,
+				max, &objs, &common_prefixes, &is_truncated);
+    if (ret < 0) {
+      return ret;
+    }
+    if (!objs.empty()) {
+      RGWMultipartUploadEntry entry;
+      for (const auto& obj : objs) {
+        rgw_obj_key key(obj.key);
+        if (!entry.mp.from_meta(key.name))
+          continue;
+        entry.obj = obj;
+        ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, entry.mp);
+        if (ret < 0) {
+          return ret;
+        }
+        num_deleted++;
+      }
+      if (num_deleted) {
+        ldout(store->ctx(),0) << "WARNING : aborted " << num_deleted << " incomplete multipart uploads" << dendl;
+      }
+    }
+  } while (is_truncated);
+
+  return ret;
+}

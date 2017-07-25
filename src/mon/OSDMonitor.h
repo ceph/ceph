@@ -147,7 +147,7 @@ public:
 
   bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
-  void force_failure(utime_t now, int target_osd, int by);
+  void force_failure(int target_osd, int by);
 
   // the time of last msg(MSG_ALIVE and MSG_PGTEMP) proposed without delay
   utime_t last_attempted_minwait_time;
@@ -316,20 +316,20 @@ private:
 			ErasureCodeProfile &profile,
 			bool force,
 			ostream *ss);
-  int crush_ruleset_create_erasure(const string &name,
-				   const string &profile,
-				   int *ruleset,
-				   ostream *ss);
-  int get_crush_ruleset(const string &ruleset_name,
-			int *crush_ruleset,
+  int crush_rule_create_erasure(const string &name,
+				const string &profile,
+				int *rule,
+				ostream *ss);
+  int get_crush_rule(const string &rule_name,
+			int *crush_rule,
 			ostream *ss);
   int get_erasure_code(const string &erasure_code_profile,
 		       ErasureCodeInterfaceRef *erasure_code,
 		       ostream *ss) const;
-  int prepare_pool_crush_ruleset(const unsigned pool_type,
+  int prepare_pool_crush_rule(const unsigned pool_type,
 				 const string &erasure_code_profile,
-				 const string &ruleset_name,
-				 int *crush_ruleset,
+				 const string &rule_name,
+				 int *crush_rule,
 				 ostream *ss);
   bool erasure_code_profile_in_use(
     const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
@@ -347,8 +347,8 @@ private:
 				unsigned *stripe_width,
 				ostream *ss);
   int prepare_new_pool(string& name, uint64_t auid,
-		       int crush_ruleset,
-		       const string &crush_ruleset_name,
+		       int crush_rule,
+		       const string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
@@ -359,8 +359,6 @@ private:
 
   void update_pool_flags(int64_t pool_id, uint64_t flags);
   bool update_pools_status();
-  void get_pools_health(list<pair<health_status_t,string> >& summary,
-                        list<pair<health_status_t,string> > *detail) const;
 
   bool prepare_set_flag(MonOpRequestRef op, int flag);
   bool prepare_unset_flag(MonOpRequestRef op, int flag);
@@ -430,6 +428,9 @@ private:
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
   void count_metadata(const string& field, Formatter *f);
+public:
+  void count_metadata(const string& field, map<string,int> *out);
+protected:
   int get_osd_objectstore_type(int osd, std::string *type);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
 				       ostream *err);
@@ -516,6 +517,9 @@ public:
 
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
+  int prepare_command_pool_application(const string &prefix,
+                                       map<string,cmd_vartype> &cmdmap,
+                                       stringstream& ss);
 
   bool handle_osd_timeouts(const utime_t &now,
 			   std::map<int,utime_t> &last_osd_report);
@@ -537,6 +541,8 @@ public:
 
   void check_osdmap_sub(Subscription *sub);
   void check_pg_creates_sub(Subscription *sub);
+
+  void do_application_enable(int64_t pool_id, const std::string &app_name);
 
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {

@@ -71,6 +71,7 @@
       nbd unmap                   Unmap a nbd device.
       object-map check            Verify the object map is correct.
       object-map rebuild          Rebuild an invalid object map.
+      pool init                   Initialize pool for use by RBD.
       remove (rm)                 Delete an image.
       rename (mv)                 Rename image within pool.
       resize                      Resize (expand or shrink) image.
@@ -277,7 +278,7 @@
     --journal-splay-width arg number of active journal objects
     --journal-object-size arg size of journal objects
     --journal-pool arg        pool for journal objects
-    -s [ --size ] arg         image size (in M/G/T)
+    -s [ --size ] arg         image size (in M/G/T) [default: M]
   
   Image Features:
     (*) supports enabling/disabling on existing images
@@ -1192,6 +1193,20 @@
     --snap arg            snapshot name
     --no-progress         disable progress output
   
+  rbd help pool init
+  usage: rbd pool init [--pool <pool>] [--force] 
+                       <pool-name> 
+  
+  Initialize pool for use by RBD.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --force              force initialize pool for RBD use if registered by
+                         another application
+  
   rbd help remove
   usage: rbd remove [--pool <pool>] [--image <image>] [--no-progress] 
                     <image-spec> 
@@ -1240,7 +1255,7 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    -s [ --size ] arg    image size (in M/G/T)
+    -s [ --size ] arg    image size (in M/G/T) [default: M]
     --allow-shrink       permit shrinking
     --no-progress        disable progress output
   

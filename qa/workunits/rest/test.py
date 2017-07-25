@@ -330,7 +330,7 @@ if __name__ == '__main__':
 
     expect('pg/debug?debugop=unfound_objects_exist', 'GET', 200, '')
     expect('pg/debug?debugop=degraded_pgs_exist', 'GET', 200, '')
-    expect('pg/deep-scrub?pgid=0.0', 'PUT', 200, '')
+    expect('pg/deep-scrub?pgid=1.0', 'PUT', 200, '')
     r = expect('pg/dump', 'GET', 200, 'json', JSONHDR)
     assert('pg_stats_sum' in r.myjson['output'])
     r = expect('pg/dump', 'GET', 200, 'xml', XMLHDR)
@@ -345,15 +345,15 @@ if __name__ == '__main__':
     r = expect('pg/getmap', 'GET', 200, '')
     assert(len(r.text) != 0)
 
-    r = expect('pg/map?pgid=0.0', 'GET', 200, 'json', JSONHDR)
+    r = expect('pg/map?pgid=1.0', 'GET', 200, 'json', JSONHDR)
     assert('acting' in r.myjson['output'])
-    assert(r.myjson['output']['pgid'] == '0.0')
-    r = expect('pg/map?pgid=0.0', 'GET', 200, 'xml', XMLHDR)
+    assert(r.myjson['output']['pgid'] == '1.0')
+    r = expect('pg/map?pgid=1.0', 'GET', 200, 'xml', XMLHDR)
     assert(r.tree.find('output/pg_map/acting') is not None)
-    assert(r.tree.find('output/pg_map/pgid').text == '0.0')
+    assert(r.tree.find('output/pg_map/pgid').text == '1.0')
 
-    expect('pg/repair?pgid=0.0', 'PUT', 200, '')
-    expect('pg/scrub?pgid=0.0', 'PUT', 200, '')
+    expect('pg/repair?pgid=1.0', 'PUT', 200, '')
+    expect('pg/scrub?pgid=1.0', 'PUT', 200, '')
 
     expect('osd/set-full-ratio?ratio=0.90', 'PUT', 200, '')
     r = expect('osd/dump', 'GET', 200, 'json', JSONHDR)
@@ -373,7 +373,7 @@ if __name__ == '__main__':
     r = expect('pg/stat', 'GET', 200, 'xml', XMLHDR)
     assert(r.tree.find('output/pg_summary/num_pgs') is not None)
 
-    expect('tell/0.0/query', 'GET', 200, 'json', JSONHDR)
+    expect('tell/1.0/query', 'GET', 200, 'json', JSONHDR)
     expect('quorum?quorumcmd=enter', 'PUT', 200, 'json', JSONHDR)
     expect('quorum?quorumcmd=enter', 'PUT', 200, 'xml', XMLHDR)
     expect('quorum_status', 'GET', 200, 'json', JSONHDR)
@@ -403,7 +403,7 @@ if __name__ == '__main__':
     expect('osd/reweight?id=0&weight=1', 'PUT', 200, '')
 
     for v in ['pg_num', 'pgp_num', 'size', 'min_size',
-              'crush_ruleset']:
+              'crush_rule']:
         r = expect('osd/pool/get.json?pool=rbd&var=' + v, 'GET', 200, 'json')
         assert(v in r.myjson['output'])
 
@@ -418,7 +418,7 @@ if __name__ == '__main__':
     r = expect('osd/pool/get.json?pool=rbd&var=size', 'GET', 200, 'json')
     assert(r.myjson['output']['size'] == 2)
 
-    r = expect('osd/pool/get.json?pool=rbd&var=crush_ruleset', 'GET', 200, 'json')
-    assert(r.myjson['output']['crush_ruleset'] == 0)
+    r = expect('osd/pool/get.json?pool=rbd&var=crush_rule', 'GET', 200, 'json')
+    assert(r.myjson['output']['crush_rule'] == "replicated_rule")
 
     print('OK')

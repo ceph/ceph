@@ -35,9 +35,9 @@
 #define ERROR_LRC_COUNT_CONSTRAINT	-(MAX_ERRNO + 11)
 #define ERROR_LRC_CONFIG_OPTIONS	-(MAX_ERRNO + 12)
 #define ERROR_LRC_LAYERS_COUNT		-(MAX_ERRNO + 13)
-#define ERROR_LRC_RULESET_OP		-(MAX_ERRNO + 14)
-#define ERROR_LRC_RULESET_TYPE		-(MAX_ERRNO + 15)
-#define ERROR_LRC_RULESET_N		-(MAX_ERRNO + 16)
+#define ERROR_LRC_RULE_OP		-(MAX_ERRNO + 14)
+#define ERROR_LRC_RULE_TYPE		-(MAX_ERRNO + 15)
+#define ERROR_LRC_RULE_N		-(MAX_ERRNO + 16)
 #define ERROR_LRC_ALL_OR_NOTHING	-(MAX_ERRNO + 17)
 #define ERROR_LRC_GENERATED		-(MAX_ERRNO + 18)
 #define ERROR_LRC_K_M_MODULO		-(MAX_ERRNO + 19)
@@ -62,7 +62,8 @@ public:
   std::string directory;
   unsigned int chunk_count;
   unsigned int data_chunk_count;
-  std::string ruleset_root;
+  std::string rule_root;
+  std::string rule_device_class;
   struct Step {
     Step(std::string _op, std::string _type, int _n) :
       op(_op),
@@ -72,13 +73,13 @@ public:
     std::string type;
     int n;
   };
-  std::vector<Step> ruleset_steps;
+  std::vector<Step> rule_steps;
 
   explicit ErasureCodeLrc(const std::string &dir)
     : directory(dir),
-      chunk_count(0), data_chunk_count(0), ruleset_root("default")
+      chunk_count(0), data_chunk_count(0), rule_root("default")
   {
-    ruleset_steps.push_back(Step("chooseleaf", "host", 0));
+    rule_steps.push_back(Step("chooseleaf", "host", 0));
   }
 
   ~ErasureCodeLrc() override {}
@@ -90,7 +91,7 @@ public:
 				const std::set<int> &available,
 				std::set<int> *minimum) override;
 
-  int create_ruleset(const std::string &name,
+  int create_rule(const std::string &name,
 			     CrushWrapper &crush,
 			     std::ostream *ss) const override;
 
@@ -117,11 +118,11 @@ public:
 
   int parse_kml(ErasureCodeProfile &profile, std::ostream *ss);
 
-  int parse_ruleset(ErasureCodeProfile &profile, std::ostream *ss);
+  int parse_rule(ErasureCodeProfile &profile, std::ostream *ss);
 
-  int parse_ruleset_step(std::string description_string,
-			 json_spirit::mArray description,
-			 std::ostream *ss);
+  int parse_rule_step(std::string description_string,
+		      json_spirit::mArray description,
+		      std::ostream *ss);
 
   int layers_description(const ErasureCodeProfile &profile,
 			 json_spirit::mArray *description,

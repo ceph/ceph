@@ -375,6 +375,20 @@ addresses.
 :Default: ``false``
 :Required: No
 
+``public bind addr``
+
+:Description: In some dynamic deployments the Ceph MON daemon might bind
+              to an IP address locally that is different from the ``public addr``
+              advertised to other peers in the network. The environment must ensure
+              that routing rules are set correclty. If ``public bind addr`` is set
+              the Ceph MON daemon will bind to it locally and use ``public addr``
+              in the monmaps to advertise its address to peers. This behavior is limited
+              to the MON daemon.
+
+:Type: IP Address
+:Required: No
+:Default: N/A
+
 
 
 Hosts
@@ -383,7 +397,9 @@ Hosts
 Ceph expects at least one monitor declared in the Ceph configuration file, with
 a ``mon addr`` setting under each declared monitor. Ceph expects a ``host``
 setting under each declared monitor, metadata server and OSD in the Ceph
-configuration file.
+configuration file. Optionally, a monitor can be assigned with a priority, and
+the clients will always connect to the monitor with lower value of priority if
+specified.
 
 
 ``mon addr``
@@ -396,6 +412,15 @@ configuration file.
 :Required: No
 :Default: N/A
 
+``mon priority``
+
+:Description: The priority of the declared monitor, the lower value the more
+              prefered when a client selects a monitor when trying to connect
+              to the cluster.
+
+:Type: Unsigned 16-bit Integer
+:Required: No
+:Default: 0
 
 ``host``
 

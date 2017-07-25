@@ -32,7 +32,7 @@ class TestFailover(CephFSTestCase):
         # Kill the rank 0 daemon's physical process
         self.fs.mds_stop(original_active)
 
-        grace = int(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
 
         # Wait until the monitor promotes his replacement
         def promoted():
@@ -65,7 +65,7 @@ class TestFailover(CephFSTestCase):
         if not require_active:
             raise case.SkipTest("fuse_require_active_mds is not set")
 
-        grace = int(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
 
         # Check it's not laggy to begin with
         (original_active, ) = self.fs.get_active_names()
@@ -102,7 +102,7 @@ class TestFailover(CephFSTestCase):
         # Need all my standbys up as well as the active daemons
         self.wait_for_daemon_start()
 
-        grace = int(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
 
         standbys = self.mds_cluster.get_standby_daemons()
         self.assertGreaterEqual(len(standbys), 1)
@@ -112,7 +112,7 @@ class TestFailover(CephFSTestCase):
         victim = standbys.pop()
         self.fs.mds_stop(victim)
         log.info("waiting for insufficient standby daemon warning")
-        self.wait_for_health("insufficient standby daemons available", grace*2)
+        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", grace*2)
 
         # restart the standby, see that he becomes a standby, check health clears
         self.fs.mds_restart(victim)
@@ -127,7 +127,7 @@ class TestFailover(CephFSTestCase):
         self.assertGreaterEqual(len(standbys), 1)
         self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', str(len(standbys)+1))
         log.info("waiting for insufficient standby daemon warning")
-        self.wait_for_health("insufficient standby daemons available", grace*2)
+        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", grace*2)
 
         # Set it to 0
         self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', '0')
@@ -257,7 +257,6 @@ class TestStandbyReplay(CephFSTestCase):
 
         # Create FS alpha and get mds_a to come up as active
         fs_a = self.mds_cluster.newfs("alpha")
-        fs_a.set_allow_multimds(True)
         fs_a.set_max_mds(2)
 
         self.mds_cluster.mds_restart(mds_a)
@@ -412,8 +411,6 @@ class TestMultiFilesystems(CephFSTestCase):
     def test_grow_shrink(self):
         # Usual setup...
         fs_a, fs_b = self._setup_two()
-        fs_a.set_allow_multimds(True)
-        fs_b.set_allow_multimds(True)
 
         # Increase max_mds on fs_b, see a standby take up the role
         fs_b.set_max_mds(2)
@@ -570,10 +567,8 @@ class TestMultiFilesystems(CephFSTestCase):
 
         # Create two filesystems which should have two ranks each
         fs_a = self.mds_cluster.newfs("alpha")
-        fs_a.set_allow_multimds(True)
 
         fs_b = self.mds_cluster.newfs("bravo")
-        fs_b.set_allow_multimds(True)
 
         fs_a.set_max_mds(2)
         fs_b.set_max_mds(2)

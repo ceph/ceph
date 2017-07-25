@@ -21,6 +21,7 @@
 #include "include/types.h"
 #include "common/Clock.h"
 #include "msg/Message.h"
+#include "include/health.h"
 
 #include <set>
 #include <map>
@@ -58,6 +59,7 @@
 */
 
 class CephContext;
+class health_check_map_t;
 
 extern CompatSet get_mdsmap_compat_set_all();
 extern CompatSet get_mdsmap_compat_set_default();
@@ -314,7 +316,10 @@ public:
   int64_t get_first_data_pool() const { return *data_pools.begin(); }
   int64_t get_metadata_pool() const { return metadata_pool; }
   bool is_data_pool(int64_t poolid) const {
-    return std::binary_search(data_pools.begin(), data_pools.end(), poolid);
+    auto p = std::find(data_pools.begin(), data_pools.end(), poolid);
+    if (p == data_pools.end())
+      return false;
+    return true;
   }
 
   bool pool_in_use(int64_t poolid) const {
@@ -460,6 +465,8 @@ public:
 
   void get_health(list<pair<health_status_t,std::string> >& summary,
 		  list<pair<health_status_t,std::string> > *detail) const;
+
+  void get_health_checks(health_check_map_t *checks) const;
 
   typedef enum
   {

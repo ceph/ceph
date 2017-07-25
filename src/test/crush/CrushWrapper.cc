@@ -896,7 +896,7 @@ TEST(CrushWrapper, dump_rules) {
 				"osd.0", loc));
   }
 
-  // no ruleset by default
+  // no rule by default
   {
     Formatter *f = Formatter::create("json-pretty");
     f->open_array_section("rules");
@@ -909,9 +909,9 @@ TEST(CrushWrapper, dump_rules) {
   }
 
   string name("NAME");
-  int ruleset = c->add_simple_ruleset(name, root_name, failure_domain_type,
-				      "firstn", pg_pool_t::TYPE_ERASURE);
-  EXPECT_EQ(0, ruleset);
+  int rule = c->add_simple_rule(name, root_name, failure_domain_type, "",
+				   "firstn", pg_pool_t::TYPE_ERASURE);
+  EXPECT_EQ(0, rule);
 
   {
     Formatter *f = Formatter::create("xml");
@@ -924,7 +924,7 @@ TEST(CrushWrapper, dump_rules) {
 
   {
     Formatter *f = Formatter::create("xml");
-    c->dump_rule(ruleset, f);
+    c->dump_rule(rule, f);
     stringstream ss;
     f->flush(ss);
     delete f;
@@ -1032,7 +1032,8 @@ TEST(CrushWrapper, choose_args_compat) {
   item = 2;
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_ruleset("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
+  assert(c.add_simple_rule("rule1", "r11", "host", "",
+			   "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
 
   int id = c.get_item_id("b1");
 
@@ -1052,24 +1053,25 @@ TEST(CrushWrapper, choose_args_compat) {
   arg_map.args = choose_args;
 
   uint64_t features = CEPH_FEATURE_CRUSH_TUNABLES5|CEPH_FEATURE_INCARNATION_2;
+  int64_t caid = CrushWrapper::DEFAULT_CHOOSE_ARGS;
 
   // if the client is capable, encode choose_args
   {
-    c.choose_args[0] = arg_map;
+    c.choose_args[caid] = arg_map;
     bufferlist bl;
     c.encode(bl, features|CEPH_FEATURE_CRUSH_CHOOSE_ARGS);
     bufferlist::iterator i(bl.begin());
     CrushWrapper c_new;
     c_new.decode(i);
     ASSERT_EQ(1u, c_new.choose_args.size());
-    ASSERT_EQ(1u, c_new.choose_args[0].args[-1-id].weight_set_size);
-    ASSERT_EQ(weights, c_new.choose_args[0].args[-1-id].weight_set[0].weights[0]);
+    ASSERT_EQ(1u, c_new.choose_args[caid].args[-1-id].weight_set_size);
+    ASSERT_EQ(weights, c_new.choose_args[caid].args[-1-id].weight_set[0].weights[0]);
     ASSERT_EQ(weight, c_new.get_bucket_item_weightf(id, 0));
   }
 
   // if the client is not compatible, copy choose_arg in the weights
   {
-    c.choose_args[0] = arg_map;
+    c.choose_args[caid] = arg_map;
     bufferlist bl;
     c.encode(bl, features);
     c.choose_args.clear();
@@ -1102,7 +1104,8 @@ TEST(CrushWrapper, remove_unused_root) {
   loc["root"] = "default";
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_ruleset("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
+  assert(c.add_simple_rule("rule1", "r11", "host", "",
+			   "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));
   ASSERT_TRUE(c.name_exists("r12"));
@@ -1346,7 +1349,8 @@ TEST(CrushWrapper, try_remap_rule) {
   {
     cout << "take + choose + emit" << std::endl;
     ostringstream err;
-    int rule = c.add_simple_ruleset("one", "default", "osd", "firstn", 0, &err);
+    int rule = c.add_simple_rule("one", "default", "osd", "",
+				 "firstn", 0, &err);
     ASSERT_EQ(rule, 0);
 
     vector<int> orig = { 0, 3, 9 };
@@ -1382,7 +1386,8 @@ TEST(CrushWrapper, try_remap_rule) {
   {
     cout << "take + chooseleaf + emit" << std::endl;
     ostringstream err;
-    int rule = c.add_simple_ruleset("two", "default", "host", "firstn", 0, &err);
+    int rule = c.add_simple_rule("two", "default", "host", "",
+				 "firstn", 0, &err);
     ASSERT_EQ(rule, 1);
 
     vector<int> orig = { 0, 3, 9 };
@@ -1403,7 +1408,7 @@ TEST(CrushWrapper, try_remap_rule) {
   // choose + choose
   {
     cout << "take + choose + choose + choose + emit" << std::endl;
-    int rule = c.add_rule(5, 2, 0, 1, 10, 2);
+    int rule = c.add_rule(2, 5, 0, 1, 10);
     ASSERT_EQ(2, rule);
     c.set_rule_step_take(rule, 0, bno);
     c.set_rule_step_choose_indep(rule, 1, 2, 2);

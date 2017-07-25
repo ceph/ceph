@@ -132,6 +132,7 @@ public:
   void _set_csum();
   void _set_compression();
   void _set_throttle_params();
+  int _set_cache_sizes();
 
   class TransContext;
 
@@ -262,7 +263,19 @@ public:
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
 	b->data.reassign_to_mempool(mempool::mempool_bluestore_writing);
-        writing.push_back(*b);
+        if (writing.empty() || writing.rbegin()->seq <= b->seq) {
+          writing.push_back(*b);
+        } else {
+          auto it = writing.begin();
+          while (it->seq < b->seq) {
+            ++it;
+          }
+
+          assert(it->seq >= b->seq);
+          // note that this will insert b before it
+          // hence the order is maintained
+          writing.insert(it, *b);
+        }
       } else {
 	b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
 	cache->_add_buffer(b, level, near);
@@ -498,7 +511,7 @@ public:
              get_blob().can_split_at(blob_offset);
     }
 
-    bool try_reuse_blob(uint32_t min_alloc_size,
+    bool can_reuse_blob(uint32_t min_alloc_size,
 			uint32_t target_blob_size,
 			uint32_t b_offset,
 			uint32_t *length0);
@@ -511,10 +524,10 @@ public:
 #endif
     }
 
-    const bluestore_blob_t& get_blob() const {
+    inline const bluestore_blob_t& get_blob() const {
       return blob;
     }
-    bluestore_blob_t& dirty_blob() {
+    inline bluestore_blob_t& dirty_blob() {
 #ifdef CACHE_BLOB_BL
       blob_bl.clear();
 #endif
@@ -775,6 +788,7 @@ public:
     }
 
     void update(KeyValueDB::Transaction t, bool force);
+    decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
     void reshard(
       KeyValueDB *db,
       KeyValueDB::Transaction t);
@@ -829,10 +843,8 @@ public:
     /// ensure a range of the map is marked dirty
     void dirty_range(uint32_t offset, uint32_t length);
 
+    /// for seek_lextent test
     extent_map_t::iterator find(uint64_t offset);
-
-    /// find a lextent that includes offset
-    extent_map_t::iterator find_lextent(uint64_t offset);
 
     /// seek to the first lextent including or after offset
     extent_map_t::iterator seek_lextent(uint64_t offset);
@@ -1067,7 +1079,9 @@ public:
       --num_blobs;
     }
 
-    void trim(uint64_t target_bytes, float target_meta_ratio,
+    void trim(uint64_t target_bytes,
+	      float target_meta_ratio,
+	      float target_data_ratio,
 	      float bytes_per_onode);
 
     void trim_all();
@@ -1829,7 +1843,7 @@ private:
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
 
-  std::mutex deferred_lock;
+  std::mutex deferred_lock, deferred_submit_lock;
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
@@ -1873,24 +1887,26 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  std::atomic<int> deferred_batch_ops = {0}; ///< deferred batch size
-
   ///< bits for min_alloc_size
-  std::atomic<uint8_t> min_alloc_size_order = {0};
+  uint8_t min_alloc_size_order = 0;
   static_assert(std::numeric_limits<uint8_t>::max() >
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
 
-  ///< size threshold for forced deferred writes
-  std::atomic<uint64_t> prefer_deferred_size = {0};
-
   ///< maximum allocation unit (power of 2)
   std::atomic<uint64_t> max_alloc_size = {0};
+
+  ///< number threshold for forced deferred writes
+  std::atomic<int> deferred_batch_ops = {0};
+
+  ///< size threshold for forced deferred writes
+  std::atomic<uint64_t> prefer_deferred_size = {0};
 
   ///< approx cost per io, in bytes
   std::atomic<uint64_t> throttle_cost_per_io = {0};
 
-  std::atomic<Compressor::CompressionMode> comp_mode = {Compressor::COMP_NONE}; ///< compression mode
+  std::atomic<Compressor::CompressionMode> comp_mode =
+    {Compressor::COMP_NONE}; ///< compression mode
   CompressorRef compressor;
   std::atomic<uint64_t> comp_min_blob_size = {0};
   std::atomic<uint64_t> comp_max_blob_size = {0};
@@ -1901,6 +1917,10 @@ private:
   uint64_t kv_throttle_costs = 0;
 
   // cache trim control
+  uint64_t cache_size = 0;      ///< total cache size
+  float cache_meta_ratio = 0;   ///< cache ratio dedicated to metadata
+  float cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
+  float cache_data_ratio = 0;   ///< cache ratio dedicated to object data
 
   std::mutex vstatfs_lock;
   volatile_statfs vstatfs;
@@ -1969,7 +1989,7 @@ private:
 
   int _open_super_meta();
 
-  void open_statfs();
+  void _open_statfs();
 
   int _reconcile_bluefs_freespace();
   int _balance_bluefs_freespace(PExtentVector *extents);
@@ -2017,12 +2037,8 @@ private:
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
   void _deferred_queue(TransContext *txc);
-  void deferred_try_submit() {
-    std::lock_guard<std::mutex> l(deferred_lock);
-    _deferred_try_submit();
-  }
-  void _deferred_try_submit();
-  void _deferred_submit(OpSequencer *osr);
+  void deferred_try_submit();
+  void _deferred_submit_unlock(OpSequencer *osr);
   void _deferred_aio_finish(OpSequencer *osr);
   int _deferred_replay();
 
@@ -2066,7 +2082,6 @@ private:
 
   void _apply_padding(uint64_t head_pad,
 		      uint64_t tail_pad,
-		      bufferlist& bl,
 		      bufferlist& padded);
 
   // -- ondisk version ---
@@ -2096,6 +2111,17 @@ public:
   bool allows_journal() override { return false; };
 
   bool is_rotational() override;
+
+  string get_default_device_class() override {
+    string device_class;
+    map<string, string> metadata;
+    collect_metadata(&metadata);
+    auto it = metadata.find("bluestore_bdev_type");
+    if (it != metadata.end()) {
+      device_class = it->second;
+    }
+    return device_class;
+  }
 
   static int get_block_device_fsid(CephContext* cct, const string& path,
 				   uuid_d *fsid);
@@ -2179,16 +2205,14 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) override;
+    uint32_t op_flags = 0) override;
   int read(
     CollectionHandle &c,
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) override;
+    uint32_t op_flags = 0) override;
   int _do_read(
     Collection *c,
     OnodeRef o,
@@ -2333,8 +2357,8 @@ public:
 
     objectstore_perf_stat_t get_cur_stats() const {
       objectstore_perf_stat_t ret;
-      ret.os_commit_latency = os_commit_latency.avg();
-      ret.os_apply_latency = os_apply_latency.avg();
+      ret.os_commit_latency = os_commit_latency.current_avg();
+      ret.os_apply_latency = os_apply_latency.current_avg();
       return ret;
     }
 
@@ -2364,6 +2388,11 @@ public:
     RWLock::WLocker l(debug_read_error_lock);
     debug_mdata_error_objects.insert(o);
   }
+  void compact() override {
+    assert(db);
+    db->compact();
+  }
+  
 private:
   bool _debug_data_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
@@ -2519,6 +2548,19 @@ private:
 	     uint32_t fadvise_flags);
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
+
+  void _choose_write_options(CollectionRef& c,
+                             OnodeRef o,
+                             uint32_t fadvise_flags,
+                             WriteContext *wctx);
+
+  int _do_gc(TransContext *txc,
+             CollectionRef& c,
+             OnodeRef o,
+             const GarbageCollector& gc,
+             const WriteContext& wctx,
+             uint64_t *dirty_start,
+             uint64_t *dirty_end);
 
   int _do_write(TransContext *txc,
 		CollectionRef &c,

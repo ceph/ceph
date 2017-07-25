@@ -53,11 +53,11 @@ void MDLog::create_logger()
   PerfCountersBuilder plb(g_ceph_context, "mds_log", l_mdl_first, l_mdl_last);
 
   plb.add_u64_counter(l_mdl_evadd, "evadd",
-      "Events submitted", "subm");
+      "Events submitted", "subm", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdl_evex, "evex", "Total expired events");
   plb.add_u64_counter(l_mdl_evtrm, "evtrm", "Trimmed events");
   plb.add_u64(l_mdl_ev, "ev",
-      "Events", "evts");
+      "Events", "evts", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64(l_mdl_evexg, "evexg", "Expiring events");
   plb.add_u64(l_mdl_evexd, "evexd", "Current expired events");
 
@@ -65,7 +65,7 @@ void MDLog::create_logger()
   plb.add_u64_counter(l_mdl_segex, "segex", "Total expired segments");
   plb.add_u64_counter(l_mdl_segtrm, "segtrm", "Trimmed segments");
   plb.add_u64(l_mdl_seg, "seg",
-      "Segments", "segs");
+      "Segments", "segs", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64(l_mdl_segexg, "segexg", "Expiring segments");
   plb.add_u64(l_mdl_segexd, "segexd", "Current expired segments");
 
@@ -782,9 +782,11 @@ void MDLog::_trim_expired_segments()
     // this was the oldest segment, adjust expire pos
     if (journaler->get_expire_pos() < ls->end) {
       journaler->set_expire_pos(ls->end);
+      logger->set(l_mdl_expos, ls->end);
+    } else {
+      logger->set(l_mdl_expos, ls->offset);
     }
     
-    logger->set(l_mdl_expos, ls->offset);
     logger->inc(l_mdl_segtrm);
     logger->inc(l_mdl_evtrm, ls->num_events);
     

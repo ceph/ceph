@@ -7,4 +7,5 @@ tasks:
 - print: "**** done install jewel"
 - ceph:
     skip_mgr_daemons: true
+    add_osds_to_crush: true
 - print: "**** done ceph"

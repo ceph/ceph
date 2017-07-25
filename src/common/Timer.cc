@@ -114,20 +114,24 @@ void SafeTimer::timer_thread()
   lock.Unlock();
 }
 
-void SafeTimer::add_event_after(double seconds, Context *callback)
+bool SafeTimer::add_event_after(double seconds, Context *callback)
 {
   assert(lock.is_locked());
 
   utime_t when = ceph_clock_now();
   when += seconds;
-  add_event_at(when, callback);
+  return add_event_at(when, callback);
 }
 
-void SafeTimer::add_event_at(utime_t when, Context *callback)
+bool SafeTimer::add_event_at(utime_t when, Context *callback)
 {
   assert(lock.is_locked());
-  ldout(cct,10) << "add_event_at " << when << " -> " << callback << dendl;
-
+  ldout(cct,10) << __func__ << " " << when << " -> " << callback << dendl;
+  if (stopping) {
+    ldout(cct,5) << __func__ << " already shutdown, event not added" << dendl;
+    delete callback;
+    return false;
+  }
   scheduled_map_t::value_type s_val(when, callback);
   scheduled_map_t::iterator i = schedule.insert(s_val);
 
@@ -141,7 +145,7 @@ void SafeTimer::add_event_at(utime_t when, Context *callback)
    * adjust our timeout. */
   if (i == schedule.begin())
     cond.Signal();
-
+  return true;
 }
 
 bool SafeTimer::cancel_event(Context *callback)

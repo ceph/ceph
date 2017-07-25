@@ -24,11 +24,6 @@
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
 
-#include "DaemonServer.h"
-#include "PyModules.h"
-
-#include "DaemonState.h"
-#include "ClusterState.h"
 
 class MMgrMap;
 class Mgr;
@@ -63,6 +58,8 @@ protected:
   void handle_mgr_map(MMgrMap *m);
   void _update_log_config();
   void send_beacon();
+
+  bool available_in_map;
 
 public:
   MgrStandby(int argc, const char **argv);

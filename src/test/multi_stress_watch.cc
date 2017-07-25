@@ -42,6 +42,7 @@ test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
     std::cerr << "ioctx_create " << pool_name << " failed with " << ret << std::endl;
     exit(1);
   }
+  ioctx.application_enable("rados", true);
 
   ret = ioctx.create(obj_name, false);
   if (ret < 0) {
@@ -64,6 +65,11 @@ test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
   }
 
   ioctx.close();
+  ret = cluster.pool_delete(pool_name.c_str());
+  if (ret < 0) {
+    std::cerr << "pool_delete failed with " << ret << std::endl;
+    exit(1);
+  }
 }
 
 #pragma GCC diagnostic pop
@@ -85,7 +91,7 @@ test_erasure(Rados &cluster, std::string pool_name, std::string obj_name)
   bufferlist inbl;
   int ret;
   ret = cluster.mon_command(
-    "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile\", \"profile\": [ \"k=2\", \"m=1\", \"ruleset-failure-domain=osd\"]}",
+    "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile\", \"profile\": [ \"k=2\", \"m=1\", \"crush-failure-domain=osd\"]}",
     inbl, NULL, &outs);
   if (ret < 0) {
     std::cerr << "mon_command erasure-code-profile set failed with " << ret << std::endl;

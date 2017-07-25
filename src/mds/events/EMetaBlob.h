@@ -66,14 +66,14 @@ public:
     typedef compact_map<snapid_t, old_inode_t> old_inodes_t;
     string  dn;         // dentry
     snapid_t dnfirst, dnlast;
-    version_t dnv;
+    version_t dnv{0};
     inode_t inode;      // if it's not
     fragtree_t dirfragtree;
     map<string,bufferptr> xattrs;
     string symlink;
     snapid_t oldest_snap;
     bufferlist snapbl;
-    __u8 state;
+    __u8 state{0};
     old_inodes_t old_inodes;
 
     fullbit(const fullbit& o);

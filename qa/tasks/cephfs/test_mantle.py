@@ -9,7 +9,6 @@ success = "mantle balancer version changed: "
 class TestMantle(CephFSTestCase):
     def start_mantle(self):
         self.wait_for_health_clear(timeout=30)
-        self.fs.set_allow_multimds(True)
         self.fs.set_max_mds(2)
         self.wait_until_equal(lambda: len(self.fs.get_active_names()), 2, 30,
                               reject_fn=lambda v: v > 2 or v < 1)

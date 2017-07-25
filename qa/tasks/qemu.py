@@ -170,6 +170,9 @@ def generate_iso(ctx, config):
   /mnt/cdrom/test.sh > /mnt/log/test.log 2>&1 && touch /mnt/log/success
 """ + test_teardown
 
+        user_data = user_data.format(
+            ceph_branch=ctx.config.get('branch'),
+            ceph_sha1=ctx.config.get('sha1'))
         teuthology.write_file(remote, userdata_path, StringIO(user_data))
 
         with file(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
@@ -383,7 +386,7 @@ def run_qemu(ctx, config):
         ceph_config = ctx.ceph['ceph'].conf.get('global', {})
         ceph_config.update(ctx.ceph['ceph'].conf.get('client', {}))
         ceph_config.update(ctx.ceph['ceph'].conf.get(client, {}))
-        if ceph_config.get('rbd cache'):
+        if ceph_config.get('rbd cache', True):
             if ceph_config.get('rbd cache max dirty', 1) > 0:
                 cachemode = 'writeback'
             else:
@@ -424,6 +427,16 @@ def run_qemu(ctx, config):
         log.debug('checking that qemu tests succeeded...')
         for client in config.iterkeys():
             (remote,) = ctx.cluster.only(client).remotes.keys()
+
+            # ensure we have permissions to all the logs
+            log_dir = '{tdir}/archive/qemu/{client}'.format(tdir=testdir,
+                                                            client=client)
+            remote.run(
+                args=[
+                    'sudo', 'chmod', 'a+rw', '-R', log_dir
+                    ]
+                )
+
             # teardown nfs mount
             _teardown_nfs_mount(remote, client)
             # check for test status

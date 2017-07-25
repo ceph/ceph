@@ -37,7 +37,7 @@ displayed with::
     k=2
     m=1
     plugin=jerasure
-    ruleset-failure-domain=host
+    crush-failure-domain=host
     technique=reed_sol_van
 
 Choosing the right profile is important because it cannot be modified
@@ -45,7 +45,7 @@ after the pool is created: a new pool with a different profile needs
 to be created and all objects from the previous pool moved to the new.
 
 The most important parameters of the profile are *K*, *M* and
-*ruleset-failure-domain* because they define the storage overhead and
+*crush-failure-domain* because they define the storage overhead and
 the data durability. For instance, if the desired architecture must
 sustain the loss of two racks with a storage overhead of 40% overhead,
 the following profile can be defined::
@@ -53,7 +53,7 @@ the following profile can be defined::
     $ ceph osd erasure-code-profile set myprofile \
        k=3 \
        m=2 \
-       ruleset-failure-domain=rack
+       crush-failure-domain=rack
     $ ceph osd pool create ecpool 12 12 erasure myprofile
     $ echo ABCDEFGHI | rados --pool ecpool put NYAN -
     $ rados --pool ecpool get NYAN -
@@ -62,7 +62,7 @@ the following profile can be defined::
 The *NYAN* object will be divided in three (*K=3*) and two additional
 *chunks* will be created (*M=2*). The value of *M* defines how many
 OSD can be lost simultaneously without losing any data. The
-*ruleset-failure-domain=rack* will create a CRUSH ruleset that ensures
+*crush-failure-domain=rack* will create a CRUSH ruleset that ensures
 no two *chunks* are stored in the same rack.
 
 .. ditaa::

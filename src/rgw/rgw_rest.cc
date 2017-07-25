@@ -862,7 +862,7 @@ int recv_body(struct req_state* const s,
               const size_t max)
 {
   try {
-    return AWS_AUTHv4_IO(s)->recv_body(buf, max, s->aws4_auth_needs_complete);
+    return RESTFUL_IO(s)->recv_body(buf, max);
   } catch (rgw::io::Exception& e) {
     return -e.code().value();
   }
@@ -1125,49 +1125,6 @@ int RGWPutObj_ObjStore::get_params()
   return 0;
 }
 
-int RGWPutObj_ObjStore::get_padding_last_aws4_chunk_encoded(bufferlist &bl, uint64_t chunk_size) {
-
-  const int chunk_str_min_len = 1 + 17 + 64 + 2; /* len('0') = 1 */
-
-  char *chunk_str = bl.c_str();
-  int budget = bl.length();
-
-  unsigned int chunk_data_size;
-  unsigned int chunk_offset = 0;
-
-  while (1) {
-
-    /* check available metadata */
-    if (budget < chunk_str_min_len) {
-      return -ERR_SIGNATURE_NO_MATCH;
-    }
-
-    chunk_offset = 0;
-
-    /* grab chunk size */
-    while ((*(chunk_str+chunk_offset) != ';') && (chunk_offset < chunk_str_min_len))
-      chunk_offset++;
-    string str = string(chunk_str, chunk_offset);
-    stringstream ss;
-    ss << std::hex << str;
-    ss >> chunk_data_size;
-
-    /* next chunk */
-    chunk_offset += 17 + 64 + 2 + chunk_data_size;
-
-    /* last chunk? */
-    budget -= chunk_offset;
-    if (budget < 0) {
-      budget *= -1;
-      break;
-    }
-
-    chunk_str += chunk_offset;
-  }
-
-  return budget;
-}
-
 int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 {
   size_t cl;
@@ -1193,26 +1150,6 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     len = read_len;
     bl.append(bp, 0, len);
 
-    /* read last aws4 chunk padding */
-    if (s->aws4_auth_streaming_mode && len == (int)chunk_size) {
-      int ret_auth = get_padding_last_aws4_chunk_encoded(bl, chunk_size);
-      if (ret_auth < 0) {
-        return ret_auth;
-      }
-      int len_padding = ret_auth;
-      if (len_padding) {
-        bufferptr bp_extra(len_padding);
-        const auto read_len = recv_body(s, bp_extra.c_str(), len_padding);
-        if (read_len < 0) {
-          return read_len;
-        }
-        if (read_len != len_padding) {
-          return -ERR_SIGNATURE_NO_MATCH;
-        }
-        bl.append(bp_extra.c_str(), len_padding);
-        bl.rebuild();
-      }
-    }
     ACCOUNTING_IO(s)->set_account(false);
   }
 
@@ -1540,6 +1477,8 @@ int RGWPostObj_ObjStore::verify_params()
   if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
     return -ERR_TOO_LARGE;
   }
+
+  supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
   return 0;
 }
@@ -1979,7 +1918,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
 
 int RGWHandler_REST::read_permissions(RGWOp* op_obj)
 {
-  bool only_bucket;
+  bool only_bucket = false;
 
   switch (s->op) {
   case OP_HEAD:
@@ -2004,7 +1943,9 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj)
     only_bucket = true;
     break;
   case OP_DELETE:
-    only_bucket = true;
+    if (!s->info.args.exists("tagging")){
+      only_bucket = true;
+    }
     break;
   case OP_OPTIONS:
     only_bucket = true;
@@ -2098,7 +2039,7 @@ RGWRESTMgr::~RGWRESTMgr()
   delete default_mgr;
 }
 
-static int64_t parse_content_length(const char *content_length)
+int64_t parse_content_length(const char *content_length)
 {
   int64_t len = -1;
 
@@ -2272,7 +2213,11 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
     s->info.domain = s->cct->_conf->rgw_dns_name;
   }
 
-  url_decode(s->info.request_uri, s->decoded_uri);
+  s->decoded_uri = url_decode(s->info.request_uri);
+  /* Validate for being free of the '\0' buried in the middle of the string. */
+  if (std::strlen(s->decoded_uri.c_str()) != s->decoded_uri.length()) {
+    return -ERR_ZERO_IN_URL;
+  }
 
   /* FastCGI specification, section 6.3
    * http://www.fastcgi.com/devkit/doc/fcgi-spec.html#S6.3
@@ -2352,8 +2297,6 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
       s->generic_attrs[giter->second] = env;
     }
   }
-
-  s->http_auth = info.env->get("HTTP_AUTHORIZATION");
 
   if (g_conf->rgw_print_continue) {
     const char *expect = info.env->get("HTTP_EXPECT");

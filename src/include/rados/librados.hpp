@@ -1250,6 +1250,21 @@ namespace librados
     void set_osdmap_full_try();
     void unset_osdmap_full_try();
 
+    int application_enable(const std::string& app_name, bool force);
+    int application_enable_async(const std::string& app_name,
+                                 bool force, PoolAsyncCompletion *c);
+    int application_list(std::set<std::string> *app_names);
+    int application_metadata_get(const std::string& app_name,
+                                 const std::string &key,
+                                 std::string *value);
+    int application_metadata_set(const std::string& app_name,
+                                 const std::string &key,
+                                 const std::string& value);
+    int application_metadata_remove(const std::string& app_name,
+                                    const std::string &key);
+    int application_metadata_list(const std::string& app_name,
+                                  std::map<std::string, std::string> *values);
+
   private:
     /* You can only get IoCtx instances from Rados */
     IoCtx(IoCtxImpl *io_ctx_impl_);
@@ -1297,6 +1312,13 @@ namespace librados
     int conf_parse_env(const char *env) const;
     int conf_set(const char *option, const char *value);
     int conf_get(const char *option, std::string &val);
+
+    int service_daemon_register(
+      const std::string& service,  ///< service name (e.g., 'rgw')
+      const std::string& name,     ///< daemon name (e.g., 'gwfoo')
+      const std::map<std::string,std::string>& metadata); ///< static metadata about daemon
+    int service_daemon_update_status(
+      const std::map<std::string,std::string>& status);
 
     int pool_create(const char *name);
     int pool_create(const char *name, uint64_t auid);

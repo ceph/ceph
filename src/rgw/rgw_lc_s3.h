@@ -42,20 +42,65 @@ public:
   string& to_str() { return data; }
 };
 
-class LCExpiration_S3 : public LCExpiration, public XMLObj
+class LCDate_S3 : public XMLObj
 {
 public:
-  LCExpiration_S3() {}
+  LCDate_S3() {}
+  ~LCDate_S3() override {}
+  string& to_str() { return data; }
+};
+
+class LCDeleteMarker_S3 : public XMLObj
+{
+public:
+  LCDeleteMarker_S3() {}
+  ~LCDeleteMarker_S3() override {}
+  string& to_str() { return data; }
+};
+
+class LCExpiration_S3 : public LCExpiration, public XMLObj
+{
+private:
+  bool dm_expiration;
+public:
+  LCExpiration_S3(): dm_expiration(false) {}
+  LCExpiration_S3(string _days, string _date, bool _dm_expiration) {
+    days = _days;
+    date = _date;
+    dm_expiration = _dm_expiration;
+  }
   ~LCExpiration_S3() override {}
 
   bool xml_end(const char *el) override;
   void to_xml(ostream& out) {
-    out << "<Expiration>" << "<Days>" << days << "</Days>"<< "</Expiration>";
+    out << "<Expiration>";
+    if (dm_expiration) {
+      out << "<ExpiredObjectDeleteMarker>" << "true" << "</ExpiredObjectDeleteMarker>";
+    } else if (!days.empty()){
+      out << "<Days>" << days << "</Days>";
+    } else {
+      out << "<Date>" << date << "</Date>";
+    }
+    out << "</Expiration>";
   }
   void dump_xml(Formatter *f) const {
-	  f->open_object_section("Expiration");
-	  encode_xml("Days", days, f);
-	  f->close_section(); // Expiration
+    f->open_object_section("Expiration");
+    if (dm_expiration) {
+      encode_xml("ExpiredObjectDeleteMarker", "true", f);
+    } else if (!days.empty()) {
+      encode_xml("Days", days, f);
+    } else {
+      encode_xml("Date", date, f);
+    }
+    f->close_section(); // Expiration
+  }
+
+  void set_dm_expiration(bool _dm_expiration) {
+    dm_expiration = _dm_expiration;
+  }
+
+  bool get_dm_expiration() {
+    return dm_expiration;
   }
 };
 
@@ -107,8 +152,8 @@ public:
     encode_xml("ID", id, f);
     encode_xml("Prefix", prefix, f);
     encode_xml("Status", status, f);
-    if (!expiration.empty()) {
-      const LCExpiration_S3& expir = static_cast<const LCExpiration_S3&>(expiration);
+    if (!expiration.empty() || dm_expiration) {
+      LCExpiration_S3 expir(expiration.get_days_str(), expiration.get_date(), dm_expiration);
       expir.dump_xml(f);
     }
     if (!noncur_expiration.empty()) {

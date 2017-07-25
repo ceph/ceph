@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    wait-for-scrub: false
     log-whitelist:
       - candidate had a stat error
       - candidate had a read error
@@ -16,6 +17,10 @@ overrides:
       - 'size 1 != size'
       - attr name mismatch
       - Regular scrub request, losing deep-scrub details
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
     conf:
       osd:
         filestore debug inject read err: true

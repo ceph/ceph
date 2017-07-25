@@ -68,7 +68,7 @@ root root0 {
 
 # rules
 rule choose {
-	ruleset 1
+	id 0
 	type replicated
 	min_size 2
 	max_size 3
@@ -79,7 +79,7 @@ rule choose {
 }
 
 rule choose-two {
-	ruleset 2
+	id 1
 	type replicated
 	min_size 2
 	max_size 3
@@ -89,7 +89,7 @@ rule choose-two {
 }
 
 rule chooseleaf {
-	ruleset 3
+	id 2
 	type replicated
 	min_size 2
 	max_size 3
@@ -99,7 +99,7 @@ rule chooseleaf {
 }
 
 rule choose-set {
-	ruleset 4
+	id 3
 	type replicated
 	min_size 2
 	max_size 3
@@ -114,7 +114,7 @@ rule choose-set {
 }
 
 rule choose-set-two {
-	ruleset 5
+	id 4
 	type replicated
 	min_size 2
 	max_size 3
@@ -128,7 +128,7 @@ rule choose-set-two {
 }
 
 rule chooseleaf-set {
-	ruleset 6
+	id 5
 	type replicated
 	min_size 2
 	max_size 3

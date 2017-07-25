@@ -290,6 +290,7 @@ test_pool_image_args() {
 
     ceph osd pool delete test test --yes-i-really-really-mean-it || true
     ceph osd pool create test 100
+    rbd pool init test
     truncate -s 1 /tmp/empty /tmp/empty@snap
 
     rbd ls | wc -l | grep 0

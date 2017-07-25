@@ -50,7 +50,7 @@ To add a keyring for an OSD, execute the following::
 
 To list the cluster's keys and their capabilities, execute the following::
 
-	ceph auth list
+	ceph auth ls
 
 
 Placement Group Subsystem

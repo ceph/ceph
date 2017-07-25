@@ -209,7 +209,7 @@ void _usage()
   cout << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cout << "                             of read, write, readwrite, full\n";
   cout << "   --display-name=<name>\n";
-  cout << "   --max_buckets             max number of buckets for a user\n";
+  cout << "   --max-buckets             max number of buckets for a user\n";
   cout << "   --admin                   set the admin flag on the user\n";
   cout << "   --system                  set the system flag on the user\n";
   cout << "   --bucket=<bucket>\n";
@@ -252,9 +252,9 @@ void _usage()
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
-  cout << "   --index_pool=<pool>       placement target index pool\n";
-  cout << "   --data_pool=<pool>        placement target data pool\n";
-  cout << "   --data_extra_pool=<pool>  placement target data extra (non-ec) pool\n";
+  cout << "   --index-pool=<pool>       placement target index pool\n";
+  cout << "   --data-pool=<pool>        placement target data pool\n";
+  cout << "   --data-extra-pool=<pool>  placement target data extra (non-ec) pool\n";
   cout << "   --placement-index-type=<type>\n";
   cout << "                             placement target index type (normal, indexless, or #id)\n";
   cout << "   --compression=<type>      placement target compression type (plugin name or empty/none)\n";
@@ -1033,62 +1033,6 @@ static void show_roles_info(vector<RGWRole>& roles, Formatter* formatter)
   formatter->flush(cout);
 }
 
-static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Formatter *formatter)
-{
-  map<RGWObjCategory, RGWStorageStats>::iterator iter;
-
-  formatter->open_object_section("usage");
-  for (iter = stats.begin(); iter != stats.end(); ++iter) {
-    RGWStorageStats& s = iter->second;
-    const char *cat_name = rgw_obj_category_name(iter->first);
-    formatter->open_object_section(cat_name);
-    formatter->dump_int("size", s.size);
-    formatter->dump_int("size_actual", s.size_rounded);
-    formatter->dump_int("size_kb", rgw_rounded_kb(s.size));
-    formatter->dump_int("size_kb_actual", rgw_rounded_kb(s.size_rounded));
-    formatter->dump_int("num_objects", s.num_objects);
-    formatter->close_section();
-    formatter->flush(cout);
-  }
-  formatter->close_section();
-}
-
-int bucket_stats(rgw_bucket& bucket, int shard_id, Formatter *formatter)
-{
-  RGWBucketInfo bucket_info;
-  real_time mtime;
-  RGWObjectCtx obj_ctx(store);
-  int r = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, bucket_info, &mtime);
-  if (r < 0)
-    return r;
-
-  map<RGWObjCategory, RGWStorageStats> stats;
-  string bucket_ver, master_ver;
-  string max_marker;
-  int ret = store->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
-  if (ret < 0) {
-    cerr << "error getting bucket stats ret=" << ret << std::endl;
-    return ret;
-  }
-  formatter->open_object_section("stats");
-  formatter->dump_string("bucket", bucket.name);
-  formatter->dump_string("zonegroup", bucket_info.zonegroup);
-  formatter->dump_string("placement_rule", bucket_info.placement_rule);
-  ::encode_json("explicit_placement", bucket.explicit_placement, formatter);
-  formatter->dump_string("id", bucket.bucket_id);
-  formatter->dump_string("marker", bucket.marker);
-  formatter->dump_stream("index_type") << bucket_info.index_type;
-  ::encode_json("owner", bucket_info.owner, formatter);
-  formatter->dump_int("mtime", utime_t(mtime));
-  formatter->dump_string("ver", bucket_ver);
-  formatter->dump_string("master_ver", master_ver);
-  formatter->dump_string("max_marker", max_marker);
-  dump_bucket_usage(stats, formatter);
-  formatter->close_section();
-
-  return 0;
-}
-
 class StoreDestructor {
   RGWRados *store;
 public:
@@ -1243,7 +1187,7 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
 {
   string val;
   if (bl.length() > 0) {
-    val.assign(bl.c_str(), bl.length());
+    val.assign(bl.c_str());
   }
   f->dump_string(field_name, val);
 
@@ -1585,13 +1529,19 @@ static boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store,
   return conn;
 }
 
-#define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
+// we expect a very small response
+static constexpr size_t MAX_REST_RESPONSE = 128 * 1024;
+
 static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
                                   bufferlist& in_data, JSONParser& parser)
 {
-  bufferlist response;
+  if (!conn) {
+    return -EINVAL;
+  }
+
+  ceph::bufferlist response;
   rgw_user user;
-  int ret = conn->forward(user, info, NULL, MAX_REST_RESPONSE, &in_data, &response);
+  int ret = conn->forward(user, info, nullptr, MAX_REST_RESPONSE, &in_data, &response);
 
   int parse_ret = parser.parse(response.c_str(), response.length());
   if (parse_ret < 0) {
@@ -1848,7 +1798,8 @@ static int do_period_pull(RGWRESTConn *remote_conn, const string& url,
   if (ret < 0) {
     cerr << "Error storing period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
   }
-
+  // store latest epoch (ignore errors)
+  period->update_latest_epoch(period->get_epoch());
   return 0;
 }
 
@@ -2367,7 +2318,6 @@ int main(int argc, const char **argv)
   string bucket_id;
   Formatter *formatter = NULL;
   int purge_data = false;
-  RGWBucketInfo bucket_info;
   int pretty_format = false;
   int show_log_entries = true;
   int show_log_sum = true;
@@ -3454,6 +3404,15 @@ int main(int argc, const char **argv)
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+        if (zone.realm_id != zonegroup.realm_id) {
+          zone.realm_id = zonegroup.realm_id;
+          ret = zone.update();
+          if (ret < 0) {
+            cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+        }
+
         string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
         zone.tier_config = tier_config_add;
 
@@ -3578,7 +3537,6 @@ int main(int argc, const char **argv)
 	}
 	string default_zonegroup;
 	ret = zonegroup.read_default_id(default_zonegroup);
-	cout << "read_default_id : " << ret << std::endl;
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "could not determine default zonegroup: " << cpp_strerror(-ret) << std::endl;
 	}
@@ -5203,12 +5161,6 @@ next:
     if (object.empty()) {
       cerr << "ERROR: object not specified" << std::endl;
       return EINVAL;
-    }
-    RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-    if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
     }
   }
 

@@ -689,6 +689,41 @@ int IoCtx::writesame(const std::string& oid, bufferlist& bl, size_t len,
                      ctx->get_snap_context()));
 }
 
+int IoCtx::application_enable(const std::string& app_name, bool force) {
+  return 0;
+}
+
+int IoCtx::application_enable_async(const std::string& app_name,
+                                    bool force, PoolAsyncCompletion *c) {
+  return -EOPNOTSUPP;
+}
+
+int IoCtx::application_list(std::set<std::string> *app_names) {
+  return -EOPNOTSUPP;
+}
+
+int IoCtx::application_metadata_get(const std::string& app_name,
+                                    const std::string &key,
+                                    std::string *value) {
+  return -EOPNOTSUPP;
+}
+
+int IoCtx::application_metadata_set(const std::string& app_name,
+                                    const std::string &key,
+                                    const std::string& value) {
+  return -EOPNOTSUPP;
+}
+
+int IoCtx::application_metadata_remove(const std::string& app_name,
+                                       const std::string &key) {
+  return -EOPNOTSUPP;
+}
+
+int IoCtx::application_metadata_list(const std::string& app_name,
+                                     std::map<std::string, std::string> *values) {
+  return -EOPNOTSUPP;
+}
+
 static int save_operation_result(int result, int *pval) {
   if (pval != NULL) {
     *pval = result;
@@ -992,6 +1027,18 @@ int Rados::mon_command(std::string cmd, const bufferlist& inbl,
   std::vector<std::string> cmds;
   cmds.push_back(cmd);
   return impl->mon_command(cmds, inbl, outbl, outs);
+}
+
+int Rados::service_daemon_register(const std::string& service,
+                                   const std::string& name,
+                                   const std::map<std::string,std::string>& metadata) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->service_daemon_register(service, name, metadata);
+}
+
+int Rados::service_daemon_update_status(const std::map<std::string,std::string>& status) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->service_daemon_update_status(status);
 }
 
 int Rados::pool_create(const char *name) {

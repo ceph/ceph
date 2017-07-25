@@ -23,7 +23,7 @@
 #include <list>
 
 #include "acconfig.h"
-#include "os/fs/aio.h"
+#include "aio.h"
 
 #define SPDK_PREFIX "spdk:"
 

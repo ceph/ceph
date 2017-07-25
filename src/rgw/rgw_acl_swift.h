@@ -9,6 +9,8 @@
 #include <string>
 #include <include/types.h>
 
+#include <boost/optional.hpp>
+
 #include "rgw_acl.h"
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
@@ -48,6 +50,6 @@ public:
               const rgw_user& id,
               const std::string& name,
               const std::string& acl_str);
-  void to_str(std::string& acl) const;
+  boost::optional<std::string> to_str() const;
 };
 #endif

@@ -50,6 +50,10 @@ public:
     return out;
   }
 
+  const std::string& get_config() {
+    return config;
+  }
+
   std::map<std::string, std::string>& get_config_map() {
     return config_map;
   }
@@ -213,7 +217,7 @@ public:
     if (uid_str.empty()) {
       derr << "ERROR: uid param must be specified for loadgen frontend"
 	   << dendl;
-      return EINVAL;
+      return -EINVAL;
     }
 
     rgw_user uid(uid_str);

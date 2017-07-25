@@ -365,6 +365,10 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       }
       dout(10) << " can't auth_pin (freezing?), waiting to authpin " << *object << dendl;
       object->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+
+      if (!mdr->remote_auth_pins.empty())
+	notify_freeze_waiter(object);
+
       return false;
     }
   }
@@ -615,6 +619,28 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   return result;
 }
 
+void Locker::notify_freeze_waiter(MDSCacheObject *o)
+{
+  CDir *dir = NULL;
+  if (CInode *in = dynamic_cast<CInode*>(o)) {
+    if (!in->is_root())
+      dir = in->get_parent_dir();
+  } else if (CDentry *dn = dynamic_cast<CDentry*>(o)) {
+    dir = dn->get_dir();
+  } else {
+    dir = dynamic_cast<CDir*>(o);
+    assert(dir);
+  }
+  if (dir) {
+    if (dir->is_freezing_dir())
+      mdcache->fragment_freeze_inc_num_waiters(dir);
+    if (dir->is_freezing_tree()) {
+      while (!dir->is_freezing_tree_root())
+	dir = dir->get_parent_dir();
+      mdcache->migrator->export_freeze_inc_num_waiters(dir);
+    }
+  }
+}
 
 void Locker::set_xlocks_done(MutationImpl *mut, bool skip_dentry)
 {
@@ -1306,10 +1332,13 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon)
       // okay, we actually need to kick the head's lock to get ourselves synced up.
       CInode *head = mdcache->get_inode(in->ino());
       assert(head);
-      SimpleLock *hlock = head->get_lock(lock->get_type());
+      SimpleLock *hlock = head->get_lock(CEPH_LOCK_IFILE);
+      if (hlock->get_state() == LOCK_SYNC)
+	hlock = head->get_lock(lock->get_type());
+
       if (hlock->get_state() != LOCK_SYNC) {
 	dout(10) << "rdlock_start trying head inode " << *head << dendl;
-	if (!rdlock_start(head->get_lock(lock->get_type()), mut, true)) // ** as_anon, no rdlock on EXCL **
+	if (!rdlock_start(hlock, mut, true)) // ** as_anon, no rdlock on EXCL **
 	  return false;
 	// oh, check our lock again then
       }
@@ -2270,6 +2299,7 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size,
 	nr.range.last = MAX(ms, oldr.range.last);
 	nr.follows = oldr.follows;
       } else {
+	*max_increased = true;
 	nr.range.last = ms;
 	nr.follows = in->first - 1;
       }
@@ -2505,11 +2535,11 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
 
 
 
-void Locker::_do_null_snapflush(CInode *head_in, client_t client)
+void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t last)
 {
   dout(10) << "_do_null_snapflush client." << client << " on " << *head_in << dendl;
-  compact_map<snapid_t, set<client_t> >::iterator p = head_in->client_need_snapflush.begin();
-  while (p != head_in->client_need_snapflush.end()) {
+  for (auto p = head_in->client_need_snapflush.begin();
+       p != head_in->client_need_snapflush.end() && p->first < last; ) {
     snapid_t snapid = p->first;
     set<client_t>& clients = p->second;
     ++p;  // be careful, q loop below depends on this
@@ -2735,6 +2765,8 @@ void Locker::handle_client_caps(MClientCaps *m)
       // this cap now follows a later snap (i.e. the one initiating this flush, or later)
       if (in == head_in)
 	cap->client_follows = snap < CEPH_NOSNAP ? snap : realm->get_newest_seq();
+      else if (head_in->client_need_snapflush.begin()->first < snap)
+	_do_null_snapflush(head_in, client, snap);
    
       _do_snap_update(in, snap, m->get_dirty(), follows, client, m, ack);
 
@@ -5141,10 +5173,10 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
 	mds->mdlog->flush();
       break;
     } 
-    
+
     // ok
-    lock->decode_locked_state(m->get_data());
     lock->set_state(LOCK_MIX);
+    lock->decode_locked_state(m->get_data());
 
     if (caps)
       issue_caps(in);

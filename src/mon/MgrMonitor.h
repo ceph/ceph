@@ -14,16 +14,22 @@
 #ifndef CEPH_MGRMONITOR_H
 #define CEPH_MGRMONITOR_H
 
+#include <map>
+#include <set>
+
 #include "include/Context.h"
 #include "MgrMap.h"
 #include "PaxosService.h"
-
-class PGStatService;
+#include "MonCommand.h"
 
 class MgrMonitor: public PaxosService
 {
   MgrMap map;
   MgrMap pending_map;
+  bool ever_had_active_mgr = false;
+
+  std::map<std::string, bufferlist> pending_metadata;
+  std::set<std::string>             pending_metadata_rm;
 
   utime_t first_seen_inactive;
 
@@ -43,6 +49,12 @@ class MgrMonitor: public PaxosService
   void cancel_timer();
 
   bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
+
+  health_status_t should_warn_about_mgr_down();
+
+  // Command descriptions we've learned from the active mgr
+  std::vector<MonCommand> command_descs;
+  std::vector<MonCommand> pending_command_descs;
 
 public:
   MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
@@ -78,12 +90,24 @@ public:
   void send_digests();
 
   void on_active() override;
+  void on_restart() override;
+
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail,
 		  CephContext *cct) const override;
   void tick() override;
 
   void print_summary(Formatter *f, std::ostream *ss) const;
+
+  const std::vector<MonCommand> &get_command_descs() const {
+    return command_descs;
+  }
+
+  int load_metadata(const string& name, std::map<string, string>& m,
+		    ostream *err);
+  int dump_metadata(const string& name, Formatter *f, ostream *err);
+  void count_metadata(const string& field, Formatter *f);
+  void count_metadata(const string& field, std::map<string,int> *out);
 
   friend class C_Updated;
 };

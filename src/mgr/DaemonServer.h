@@ -27,6 +27,7 @@
 
 #include "auth/AuthAuthorizeHandler.h"
 
+#include "ServiceMap.h"
 #include "MgrSession.h"
 #include "DaemonState.h"
 
@@ -34,7 +35,7 @@ class MMgrReport;
 class MMgrOpen;
 class MMonMgrReport;
 class MCommand;
-struct MgrCommand;
+struct MonCommand;
 
 
 /**
@@ -66,22 +67,32 @@ protected:
   /// connections for osds
   ceph::unordered_map<int,set<ConnectionRef>> osd_cons;
 
+  ServiceMap pending_service_map;  // uncommitted
+  epoch_t pending_service_map_dirty = 0;
+
   Mutex lock;
 
   static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
                                     map<string,string> &param_str_map);
-  static const MgrCommand *_get_mgrcommand(const string &cmd_prefix,
-                                           MgrCommand *cmds, int cmds_size);
+  static const MonCommand *_get_mgrcommand(const string &cmd_prefix,
+                                           const std::vector<MonCommand> &commands);
   bool _allowed_command(
     MgrSession *s, const string &module, const string &prefix,
     const map<string,cmd_vartype>& cmdmap,
     const map<string,string>& param_str_map,
-    const MgrCommand *this_cmd);
+    const MonCommand *this_cmd);
 
 private:
   friend class ReplyOnFinish;
   bool _reply(MCommand* m,
 	      int ret, const std::string& s, const bufferlist& payload);
+
+  void _prune_pending_service_map();
+
+  utime_t started_at;
+  bool pgmap_ready = false;
+  std::set<int32_t> reported_osds;
+  void maybe_ready(int32_t osd_id);
 
 public:
   int init(uint64_t gid, entity_addr_t client_addr);
@@ -116,6 +127,7 @@ public:
   bool handle_report(MMgrReport *m);
   bool handle_command(MCommand *m);
   void send_report();
+  void got_service_map();
 };
 
 #endif

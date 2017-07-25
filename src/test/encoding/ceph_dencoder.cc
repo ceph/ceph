@@ -142,9 +142,7 @@ public:
       i = m_list.size();
     if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
-    typename list<T*>::iterator p = m_list.begin();
-    for (i--; i > 0 && p != m_list.end(); ++p, --i) ;
-    m_object = *p;
+    m_object = *(std::next(m_list.begin(), i-1));
     return string();
   }
 
@@ -270,10 +268,8 @@ public:
       i = m_list.size();
     if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
-    typename list<T*>::iterator p = m_list.begin();
-    for (i--; i > 0 && p != m_list.end(); ++p, --i) ;
     m_object->put();
-    m_object = *p;
+    m_object = *(std::next(m_list.begin(), i-1));
     return string();
   }
   bool is_deterministic() override {

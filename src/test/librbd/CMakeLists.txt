@@ -5,6 +5,8 @@ set(librbd_test
   test_ImageWatcher.cc
   test_internal.cc
   test_mirroring.cc
+  test_BlockGuard.cc
+  test_Groups.cc
   test_MirroringWatcher.cc
   test_ObjectMap.cc
   test_Operations.cc
@@ -23,8 +25,6 @@ set_target_properties(rbd_test_mock PROPERTIES COMPILE_FLAGS
 # unittest_librbd
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh
 set(unittest_librbd_srcs
-  test_BlockGuard.cc
-  test_Groups.cc
   test_main.cc
   test_mock_fixture.cc
   test_mock_ExclusiveLock.cc
@@ -37,6 +37,7 @@ set(unittest_librbd_srcs
   image/test_mock_RefreshRequest.cc
   image/test_mock_RemoveRequest.cc
   io/test_mock_ImageRequest.cc
+  io/test_mock_ImageRequestWQ.cc
   journal/test_mock_OpenRequest.cc
   journal/test_mock_PromoteRequest.cc
   journal/test_mock_Replay.cc
@@ -107,6 +108,7 @@ target_link_libraries(ceph_test_librbd
   rados_a
   ${UNITTEST_LIBS}
   radostest)
+target_compile_definitions(ceph_test_librbd PUBLIC "-DTEST_LIBRBD_INTERNALS")
 set_target_properties(ceph_test_librbd PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
@@ -114,12 +116,11 @@ add_executable(ceph_test_librbd_api
   test_support.cc
   test_librbd.cc
   test_main.cc
+  $<TARGET_OBJECTS:libradostest_obj>
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_link_libraries(ceph_test_librbd_api
   librbd
   librados
-  ceph-common
-  radostest
   ${UNITTEST_LIBS})
 set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})

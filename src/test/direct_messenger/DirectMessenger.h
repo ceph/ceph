@@ -89,6 +89,7 @@ class DirectMessenger : public SimplePolicyMessenger {
 
   // unimplemented Messenger interface
   void set_addr_unknowns(const entity_addr_t &addr) override {}
+  void set_addr(const entity_addr_t &addr) override {}
   int get_dispatch_queue_len() override { return 0; }
   double get_dispatch_queue_max_age(utime_t now) override { return 0; }
   void set_cluster_protocol(int p) override {}

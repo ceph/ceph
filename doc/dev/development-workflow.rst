@@ -97,12 +97,9 @@ follows:
   assign them a priority
 * The bugs with higher priority are worked on first
 
-Each ``team`` is responsible for a project:
+Each ``team`` is responsible for a project, managed by leads_.
 
-* rgw lead is Yehuda Sadeh
-* CephFS lead is John Spray
-* rados lead is Samuel Just
-* rbd lead is Jason Dillaman
+.. _leads: index#Leads
 
 The ``developer`` assigned to an issue is responsible for it. The
 status of an open issue can be:

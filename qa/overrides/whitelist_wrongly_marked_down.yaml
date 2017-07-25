@@ -1,7 +1,7 @@
 overrides:
   ceph:
     log-whitelist:
-    - wrongly marked me down
+    - but it is still running
     conf:
       mds:
         debug mds: 20

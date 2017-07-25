@@ -219,7 +219,7 @@ TempURLEngine::authenticate(const req_state* const s) const
 
   if (is_expired(temp_url_expires)) {
     ldout(cct, 5) << "temp url link expired" << dendl;
-    return result_t::reject();
+    return result_t::reject(-EPERM);
   }
 
   /* We need to verify two paths because of compliance with Swift, Tempest
@@ -328,17 +328,17 @@ ExternalTokenEngine::authenticate(const std::string& token,
                 ",", swift_groups);
 
     if (0 == swift_groups.size()) {
-      return result_t::deny();
+      return result_t::deny(-EPERM);
     } else {
       swift_user = std::move(swift_groups[0]);
     }
   } catch (std::out_of_range) {
     /* The X-Auth-Groups header isn't present in the response. */
-    return result_t::deny();
+    return result_t::deny(-EPERM);
   }
 
   if (swift_user.empty()) {
-    return result_t::deny();
+    return result_t::deny(-EPERM);
   }
 
   ldout(cct, 10) << "swift user=" << swift_user << dendl;
@@ -416,7 +416,7 @@ SignedTokenEngine::authenticate(const std::string& token,
                                 const req_state* const s) const
 {
   if (! is_applicable(token)) {
-    return result_t::deny();
+    return result_t::deny(-EPERM);
   }
 
   /* Effective token string is the part after the prefix. */
@@ -458,7 +458,7 @@ SignedTokenEngine::authenticate(const std::string& token,
     ldout(cct, 0) << "NOTICE: old timed out token was used now=" << now
 	          << " token.expiration=" << expiration
                   << dendl;
-    return result_t::deny();
+    return result_t::deny(-EPERM);
   }
 
   RGWUserInfo user_info;
@@ -471,7 +471,7 @@ SignedTokenEngine::authenticate(const std::string& token,
 
   const auto siter = user_info.swift_keys.find(swift_user);
   if (siter == std::end(user_info.swift_keys)) {
-    return result_t::deny();
+    return result_t::deny(-EPERM);
   }
 
   const auto swift_key = siter->second;
@@ -487,7 +487,7 @@ SignedTokenEngine::authenticate(const std::string& token,
                   << " tok_bl.length()=" << tok_bl.length()
 	          << " local_tok_bl.length()=" << local_tok_bl.length()
                   << dendl;
-    return result_t::deny();
+    return result_t::deny(-EPERM);
   }
 
   if (memcmp(local_tok_bl.c_str(), tok_bl.c_str(),
@@ -498,7 +498,7 @@ SignedTokenEngine::authenticate(const std::string& token,
                local_tok_bl.length(), buf);
 
     ldout(cct, 0) << "NOTICE: tokens mismatch tok=" << buf << dendl;
-    return result_t::deny();
+    return result_t::deny(-EPERM);
   }
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info,

@@ -101,6 +101,7 @@
 
 #define MSG_OSD_BACKFILL_RESERVE 99
 #define MSG_OSD_RECOVERY_RESERVE 150
+#define MSG_OSD_FORCE_RECOVERY 151
 
 #define MSG_OSD_PG_PUSH        105
 #define MSG_OSD_PG_PULL        106
@@ -118,6 +119,8 @@
 
 #define MSG_OSD_PG_CREATED      116
 #define MSG_OSD_REP_SCRUBMAP    117
+#define MSG_OSD_PG_RECOVERY_DELETE 118
+#define MSG_OSD_PG_RECOVERY_DELETE_REPLY 119
 
 // *** MDS ***
 
@@ -183,6 +186,8 @@
 // Special
 #define MSG_NOP                   0x607
 
+#define MSG_MON_HEALTH_CHECKS     0x608
+
 // *** ceph-mgr <-> OSD/MDS daemons ***
 #define MSG_MGR_OPEN              0x700
 #define MSG_MGR_CONFIGURE         0x701
@@ -198,6 +203,7 @@
 #define MSG_MGR_DIGEST               0x705
 // *** cephmgr -> ceph-mon
 #define MSG_MON_MGR_REPORT        0x706
+#define MSG_SERVICE_MAP           0x707
 
 // ======================================================
 

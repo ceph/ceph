@@ -421,6 +421,21 @@ TEST_F(TestClsRbd, get_object_prefix)
   ioctx.close();
 }
 
+TEST_F(TestClsRbd, get_create_timestamp)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
+
+  utime_t timestamp;
+  ASSERT_EQ(0, get_create_timestamp(&ioctx, oid, &timestamp));
+  ASSERT_LT(0U, timestamp.tv.tv_sec);
+
+  ioctx.close();
+}
+
 TEST_F(TestClsRbd, get_data_pool)
 {
   librados::IoCtx ioctx;
@@ -2233,7 +2248,7 @@ TEST_F(TestClsRbd, trash_methods)
   string id2 = "123456780";
 
   std::map<string, cls::rbd::TrashImageSpec> entries;
-  ASSERT_EQ(-ENOENT, trash_list(&ioctx, &entries));
+  ASSERT_EQ(-ENOENT, trash_list(&ioctx, "", 1024, &entries));
 
   utime_t now1 = ceph_clock_now();
   utime_t now1_delay = now1;
@@ -2252,27 +2267,28 @@ TEST_F(TestClsRbd, trash_methods)
   ASSERT_EQ(0, trash_remove(&ioctx, id));
   ASSERT_EQ(-ENOENT, trash_remove(&ioctx, id));
 
-  ASSERT_EQ(0, trash_list(&ioctx, &entries));
+  ASSERT_EQ(0, trash_list(&ioctx, "", 1024, &entries));
   ASSERT_TRUE(entries.empty());
 
   ASSERT_EQ(0, trash_add(&ioctx, id, trash_spec2));
   ASSERT_EQ(0, trash_add(&ioctx, id2, trash_spec));
 
-  ASSERT_EQ(0, trash_list(&ioctx, &entries));
+  ASSERT_EQ(0, trash_list(&ioctx, "", 1, &entries));
+  ASSERT_TRUE(entries.find(id2) != entries.end());
+  ASSERT_EQ(cls::rbd::TRASH_IMAGE_SOURCE_USER, entries[id2].source);
+  ASSERT_EQ(std::string("name"), entries[id2].name);
+  ASSERT_EQ(now1, entries[id2].deletion_time);
+  ASSERT_EQ(now1_delay, entries[id2].deferment_end_time);
 
-  for (auto& entry : entries) {
-    if (entry.first == id) {
-      ASSERT_EQ(entry.second.source, cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING);
-      ASSERT_EQ(entry.second.name, "name2");
-      ASSERT_EQ(entry.second.deletion_time, now2);
-      ASSERT_EQ(entry.second.deferment_end_time, now2_delay);
-    } else if (entry.first == id2) {
-      ASSERT_EQ(entry.second.source, cls::rbd::TRASH_IMAGE_SOURCE_USER);
-      ASSERT_EQ(entry.second.name, "name");
-      ASSERT_EQ(entry.second.deletion_time, now1);
-      ASSERT_EQ(entry.second.deferment_end_time, now1_delay);
-    }
-  }
+  ASSERT_EQ(0, trash_list(&ioctx, id2, 1, &entries));
+  ASSERT_TRUE(entries.find(id) != entries.end());
+  ASSERT_EQ(cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING, entries[id].source);
+  ASSERT_EQ(std::string("name2"), entries[id].name);
+  ASSERT_EQ(now2, entries[id].deletion_time);
+  ASSERT_EQ(now2_delay, entries[id].deferment_end_time);
+
+  ASSERT_EQ(0, trash_list(&ioctx, id, 1, &entries));
+  ASSERT_TRUE(entries.empty());
 
   cls::rbd::TrashImageSpec spec_res1;
   ASSERT_EQ(0, trash_get(&ioctx, id, &spec_res1));

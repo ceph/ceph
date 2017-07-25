@@ -635,28 +635,6 @@ void RGWRemoteDataLog::finish()
   stop();
 }
 
-int RGWRemoteDataLog::get_shard_info(int shard_id)
-{
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%d", shard_id);
-
-  rgw_http_param_pair pairs[] = { { "type", "data" },
-                                  { "id", buf },
-                                  { "info", NULL },
-                                  { NULL, NULL } };
-
-  RGWDataChangesLogInfo info;
-  int ret = sync_env.conn->get_json_resource("/admin/log", pairs, info);
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to fetch datalog info" << dendl;
-    return ret;
-  }
-
-  ldout(store->ctx(), 20) << "remote datalog, shard_id=" << shard_id << " marker=" << info.marker << dendl;
-
-  return 0;
-}
-
 int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
 {
   // cannot run concurrently with run_sync(), so run in a separate manager
@@ -1084,8 +1062,8 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   set<string> spawned_keys;
 
-  RGWContinuousLeaseCR *lease_cr;
-  RGWCoroutinesStack *lease_stack;
+  boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
+  boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
   string status_oid;
 
 
@@ -1126,7 +1104,6 @@ public:
     delete marker_tracker;
     if (lease_cr) {
       lease_cr->abort();
-      lease_cr->put();
     }
     if (error_repo) {
       error_repo->put();
@@ -1174,14 +1151,12 @@ public:
     string lock_name = "sync_lock";
     if (lease_cr) {
       lease_cr->abort();
-      lease_cr->put();
     }
     RGWRados *store = sync_env->store;
-    lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store,
-                                        rgw_raw_obj(store->get_zone_params().log_pool, status_oid),
-                                        lock_name, lock_duration, this);
-    lease_cr->get();
-    lease_stack = spawn(lease_cr, false);
+    lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
+                                            rgw_raw_obj(store->get_zone_params().log_pool, status_oid),
+                                            lock_name, lock_duration, this));
+    lease_stack.reset(spawn(lease_cr.get(), false));
   }
 
   int full_sync() {
@@ -1358,7 +1333,7 @@ public:
             set_status() << "num_spawned() > spawn_window";
             yield wait_for_child();
             int ret;
-            while (collect(&ret, lease_stack)) {
+            while (collect(&ret, lease_stack.get())) {
               if (ret < 0) {
                 ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
                 /* we have reported this error */
@@ -1466,9 +1441,7 @@ public:
 
       data_sync_module = sync_env->sync_module->get_data_handler();
 
-      if (retcode == -ENOENT) {
-        sync_status.sync_info.num_shards = num_shards;
-      } else if (retcode < 0 && retcode != -ENOENT) {
+      if (retcode < 0 && retcode != -ENOENT) {
         ldout(sync_env->cct, 0) << "ERROR: failed to fetch sync status, retcode=" << retcode << dendl;
         return set_cr_error(retcode);
       }
@@ -1476,6 +1449,7 @@ public:
       /* state: init status */
       if ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateInit) {
         ldout(sync_env->cct, 20) << __func__ << "(): init" << dendl;
+        sync_status.sync_info.num_shards = num_shards;
         uint64_t instance_id;
         get_random_bytes((char *)&instance_id, sizeof(instance_id));
         yield call(new RGWInitDataSyncStatusCoroutine(sync_env, num_shards, instance_id, &sync_status));
@@ -2701,12 +2675,12 @@ int RGWRunBucketSyncCoroutine::operate()
     yield {
       set_status("acquiring sync lock");
       auto store = sync_env->store;
-      lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store,
-                                          rgw_raw_obj(store->get_zone_params().log_pool, status_oid),
-                                          "sync_lock",
-                                          cct->_conf->rgw_sync_lease_period,
-                                          this);
-      lease_stack = spawn(lease_cr.get(), false);
+      lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
+                                              rgw_raw_obj(store->get_zone_params().log_pool, status_oid),
+                                              "sync_lock",
+                                              cct->_conf->rgw_sync_lease_period,
+                                              this));
+      lease_stack.reset(spawn(lease_cr.get(), false));
     }
     while (!lease_cr->is_locked()) {
       if (lease_cr->is_done()) {

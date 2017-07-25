@@ -46,11 +46,12 @@ def download(ctx, config):
         else:
             log.info("Using branch '%s' for s3tests", branch)
         sha1 = cconf.get('sha1')
+        git_remote = cconf.get('git_remote', None) or teuth_config.ceph_git_base_url
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
                 '-b', branch,
-                teuth_config.ceph_git_base_url + 's3-tests.git',
+                git_remote + 's3-tests.git',
                 '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
             )
@@ -97,7 +98,7 @@ def create_users(ctx, config):
     assert isinstance(config, dict)
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
-    users = {'s3 main': 'foo', 's3 alt': 'bar'}
+    users = {'s3 main': 'foo', 's3 alt': 'bar', 's3 tenant': 'testx$tenanteduser'}
     for client in config['clients']:
         s3tests_conf = config['s3tests_conf'][client]
         s3tests_conf.setdefault('fixtures', {})
@@ -364,6 +365,7 @@ def task(ctx, config):
                 'fixtures' : {},
                 's3 main'  : {},
                 's3 alt'   : {},
+		's3 tenant': {},
                 }
             )
 

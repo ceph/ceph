@@ -19,11 +19,8 @@
 #include "include/rbd/librbd.hpp"
 #include "include/event_type.h"
 
-#include "common/Thread.h"
-
 #include "gtest/gtest.h"
 
-#include <chrono>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -32,20 +29,18 @@
 #include <poll.h>
 #include <time.h>
 #include <unistd.h>
-#include <iostream>
 #include <algorithm>
+#include <chrono>
+#include <condition_variable>
+#include <iostream>
 #include <sstream>
 #include <list>
 #include <set>
+#include <thread>
 #include <vector>
 
 #include "test/librados/test.h"
 #include "test/librbd/test_support.h"
-#include "common/Cond.h"
-#include "common/Mutex.h"
-#include "common/config.h"
-#include "common/ceph_context.h"
-#include "common/errno.h"
 #include "common/event_socket.h"
 #include "include/interval_set.h"
 #include "include/stringify.h"
@@ -453,6 +448,49 @@ TEST_F(TestLibRBD, GetBlockNamePrefixPP)
   ASSERT_LT(0U, image.get_block_name_prefix().size());
 }
 
+TEST_F(TestLibRBD, TestGetCreateTimestamp)
+{
+  REQUIRE_FORMAT_V2();
+
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  struct timespec timestamp;
+  ASSERT_EQ(0, rbd_get_create_timestamp(image, &timestamp));
+  ASSERT_LT(0, timestamp.tv_sec);
+
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, GetCreateTimestampPP)
+{
+  REQUIRE_FORMAT_V2();
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  struct timespec timestamp;
+  ASSERT_EQ(0, image.get_create_timestamp(&timestamp));
+  ASSERT_LT(0, timestamp.tv_sec);
+}
+
 TEST_F(TestLibRBD, OpenAio)
 {
   rados_ioctx_t ioctx;
@@ -658,28 +696,28 @@ TEST_F(TestLibRBD, UpdateWatchAndResize)
   std::string name = get_temp_image_name();
   uint64_t size = 2 << 20;
   struct Watcher {
+    rbd_image_t &m_image;
+    mutex m_lock;
+    condition_variable m_cond;
+    size_t m_size = 0;
     static void cb(void *arg) {
       Watcher *watcher = static_cast<Watcher *>(arg);
       watcher->handle_notify();
     }
-    Watcher(rbd_image_t &image) : m_image(image), m_lock("lock") {}
+    Watcher(rbd_image_t &image) : m_image(image) {}
     void handle_notify() {
       rbd_image_info_t info;
       ASSERT_EQ(0, rbd_stat(m_image, &info, sizeof(info)));
-      Mutex::Locker locker(m_lock);
+      lock_guard<mutex> locker(m_lock);
       m_size = info.size;
-      m_cond.Signal();
+      m_cond.notify_one();
     }
     void wait_for_size(size_t size) {
-      Mutex::Locker locker(m_lock);
-      while (m_size != size) {
-	ASSERT_EQ(0, m_cond.WaitInterval(m_lock, seconds(5)));
-      }
+      unique_lock<mutex> locker(m_lock);
+      ASSERT_TRUE(m_cond.wait_for(locker, seconds(5),
+      				  [size, this] {
+				    return this->m_size == size;}));
     }
-    rbd_image_t &m_image;
-    Mutex m_lock;
-    Cond m_cond;
-    size_t m_size = 0;
   } watcher(image);
   uint64_t handle;
 
@@ -712,24 +750,24 @@ TEST_F(TestLibRBD, UpdateWatchAndResizePP)
     std::string name = get_temp_image_name();
     uint64_t size = 2 << 20;
     struct Watcher : public librbd::UpdateWatchCtx {
-      Watcher(librbd::Image &image) : m_image(image), m_lock("lock") {
+      Watcher(librbd::Image &image) : m_image(image) {
       }
       void handle_notify() override {
         librbd::image_info_t info;
 	ASSERT_EQ(0, m_image.stat(info, sizeof(info)));
-        Mutex::Locker locker(m_lock);
+        lock_guard<mutex> locker(m_lock);
         m_size = info.size;
-        m_cond.Signal();
+	m_cond.notify_one();
       }
       void wait_for_size(size_t size) {
-	Mutex::Locker locker(m_lock);
-	while (m_size != size) {
-	  ASSERT_EQ(0, m_cond.WaitInterval(m_lock, seconds(5)));
-	}
+	unique_lock<mutex> locker(m_lock);
+	ASSERT_TRUE(m_cond.wait_for(locker, seconds(5),
+				    [size, this] {
+				      return this->m_size == size;}));
       }
       librbd::Image &m_image;
-      Mutex m_lock;
-      Cond m_cond;
+      mutex m_lock;
+      condition_variable m_cond;
       size_t m_size = 0;
     } watcher(image);
     uint64_t handle;
@@ -1984,13 +2022,13 @@ void aio_read_test_data(librbd::Image& image, const char *expected, off_t off, s
 
 void read_test_data(librbd::Image& image, const char *expected, off_t off, size_t expected_len, uint32_t iohint, bool *passed)
 {
-  int read, total_read = 0;
+  int read;
   size_t len = expected_len;
   ceph::bufferlist bl;
   if (iohint)
-    read = image.read2(off + total_read, len, bl, iohint);
+    read = image.read2(off, len, bl, iohint);
   else
-    read = image.read(off + total_read, len, bl);
+    read = image.read(off, len, bl);
   ASSERT_TRUE(read >= 0);
   std::string bl_str(bl.c_str(), read);
 
@@ -2310,7 +2348,7 @@ TEST_F(TestLibRBD, TestIOToSnapshot)
   r = rbd_write(image, 0, TEST_IO_TO_SNAP_SIZE, test_data);
   printf("write to snapshot returned %d\n", r);
   ASSERT_LT(r, 0);
-  cout << cpp_strerror(-r) << std::endl;
+  cout << strerror(-r) << std::endl;
 
   ASSERT_PASSED(read_test_data, image, orig_data, 0, TEST_IO_TO_SNAP_SIZE, 0);
   rbd_snap_set(image, "written");
@@ -2334,7 +2372,7 @@ TEST_F(TestLibRBD, TestIOToSnapshot)
   r = rbd_write(image_at_snap, 0, TEST_IO_TO_SNAP_SIZE, test_data);
   printf("write to snapshot returned %d\n", r);
   ASSERT_LT(r, 0);
-  cout << cpp_strerror(-r) << std::endl;
+  cout << strerror(-r) << std::endl;
   ASSERT_EQ(0, rbd_close(image_at_snap));
 
   ASSERT_EQ(2, test_ls_snaps(image, 2, "orig", isize, "written", isize));
@@ -4187,26 +4225,6 @@ TEST_F(TestLibRBD, ResizeViaLockOwner)
   ASSERT_PASSED(validate_object_map, image1);
 }
 
-class RBDWriter : public Thread {
- public:
-   explicit RBDWriter(librbd::Image &image) : m_image(image) {};
- protected:
-  void *entry() override {
-    librbd::image_info_t info;
-    int r = m_image.stat(info, sizeof(info));
-    assert(r == 0);
-    bufferlist bl;
-    bl.append("foo");
-    for (unsigned i = 0; i < info.num_objs; ++i) {
-      r = m_image.write((1 << info.order) * i, bl.length(), bl);
-      assert(r == (int) bl.length());
-    }
-    return NULL;
-  }
- private:
-  librbd::Image &m_image;
-};
-
 TEST_F(TestLibRBD, ObjectMapConsistentSnap)
 {
   REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
@@ -4223,15 +4241,24 @@ TEST_F(TestLibRBD, ObjectMapConsistentSnap)
   librbd::Image image1;
   ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
 
-  RBDWriter writer(image1);
-  writer.create("rbd_writer");
-
   int num_snaps = 10;
   for (int i = 0; i < num_snaps; ++i) {
     std::string snap_name = "snap" + stringify(i);
     ASSERT_EQ(0, image1.snap_create(snap_name.c_str()));
   }
 
+
+  thread writer([&image1](){
+      librbd::image_info_t info;
+      int r = image1.stat(info, sizeof(info));
+      assert(r == 0);
+      bufferlist bl;
+      bl.append("foo");
+      for (unsigned i = 0; i < info.num_objs; ++i) {
+	r = image1.write((1 << info.order) * i, bl.length(), bl);
+	assert(r == (int) bl.length());
+      }
+    });
   writer.join();
 
   for (int i = 0; i < num_snaps; ++i) {
@@ -5508,25 +5535,18 @@ TEST_F(TestLibRBD, ExclusiveLock)
   ASSERT_FALSE(lock_owner);
 
   int owner_id = -1;
-  Mutex lock("ping-pong");
-  class PingPong : public Thread {
-  public:
-    explicit PingPong(int id, rbd_image_t &image, int &owner_id, Mutex &lock)
-      : m_id(id), m_image(image), m_owner_id(owner_id), m_lock(lock) {
-  };
-
-  protected:
-    void *entry() override {
+  mutex lock;
+  const auto pingpong = [&,this](int m_id, rbd_image_t &m_image) {
       for (int i = 0; i < 10; i++) {
 	{
-	  Mutex::Locker locker(m_lock);
-	  if (m_owner_id == m_id) {
+	  lock_guard<mutex> locker(lock);
+	  if (owner_id == m_id) {
 	    std::cout << m_id << ": releasing exclusive lock" << std::endl;
 	    EXPECT_EQ(0, rbd_lock_release(m_image));
 	    int lock_owner;
 	    EXPECT_EQ(0, rbd_is_exclusive_lock_owner(m_image, &lock_owner));
 	    EXPECT_FALSE(lock_owner);
-	    m_owner_id = -1;
+	    owner_id = -1;
 	    std::cout << m_id << ": exclusive lock released" << std::endl;
 	    continue;
 	  }
@@ -5547,33 +5567,24 @@ TEST_F(TestLibRBD, ExclusiveLock)
 	EXPECT_TRUE(lock_owner);
 	std::cout << m_id << ": exclusive lock acquired" << std::endl;
 	{
-	  Mutex::Locker locker(m_lock);
-	  m_owner_id = m_id;
+	  lock_guard<mutex> locker(lock);
+	  owner_id = m_id;
 	}
 	usleep(rand() % 50000);
       }
 
-      Mutex::Locker locker(m_lock);
-      if (m_owner_id == m_id) {
+      lock_guard<mutex> locker(lock);
+      if (owner_id == m_id) {
 	EXPECT_EQ(0, rbd_lock_release(m_image));
 	int lock_owner;
 	EXPECT_EQ(0, rbd_is_exclusive_lock_owner(m_image, &lock_owner));
 	EXPECT_FALSE(lock_owner);
-	m_owner_id = -1;
+	owner_id = -1;
       }
+  };
+  thread ping(bind(pingpong, 1, ref(image1)));
+  thread pong(bind(pingpong, 2, ref(image2)));
 
-      return NULL;
-    }
-
-  private:
-    int m_id;
-    rbd_image_t &m_image;
-    int &m_owner_id;
-    Mutex &m_lock;
-  } ping(1, image1, owner_id, lock), pong(2, image2, owner_id, lock);
-
-  ping.create("ping");
-  pong.create("pong");
   ping.join();
   pong.join();
 
@@ -5848,4 +5859,12 @@ TEST_F(TestLibRBD, TestTrashMoveAndRestore) {
     }
   }
   ASSERT_TRUE(found);
+}
+
+// poorman's assert()
+namespace ceph {
+  void __ceph_assert_fail(const char *assertion, const char *file, int line,
+			  const char *func) {
+    assert(false);
+  }
 }

@@ -17,6 +17,7 @@
 #include "common/errno.h"
 #include "include/intarith.h"
 #include "include/stringify.h"
+#include "common/perf_counters.h"
 
 #include <fio.h>
 #include <optgroup.h>
@@ -86,11 +87,17 @@ struct Engine {
     if (!ref_count) {
       ostringstream ostr;
       Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
-      os->dump_perf_counters(f);
+      cct->get_perfcounters_collection()->dump_formatted(f, false);
+      ostr << "FIO plugin ";
       f->flush(ostr);
+      if (g_conf->rocksdb_perf) {
+        os->get_db_statistics(f);
+        ostr << "FIO get_db_statistics ";
+        f->flush(ostr);
+      }
       delete f;
       os->umount();
-      dout(0) << "FIO plugin " << ostr.str() << dendl;
+      dout(0) <<  ostr.str() << dendl;
     }
   }
 };
@@ -124,7 +131,14 @@ Engine::Engine(const thread_data* td) : ref_count(0)
   if (!os)
     throw std::runtime_error("bad objectstore type " + g_conf->osd_objectstore);
 
-  os->set_cache_shards(g_conf->osd_op_num_shards);
+  unsigned num_shards;
+  if(g_conf->osd_op_num_shards)
+    num_shards = g_conf->osd_op_num_shards;
+  else if(os->is_rotational())
+    num_shards = g_conf->osd_op_num_shards_hdd;
+  else
+    num_shards = g_conf->osd_op_num_shards_ssd;
+  os->set_cache_shards(num_shards);
 
   int r = os->mkfs();
   if (r < 0)
@@ -150,7 +164,9 @@ struct Collection {
   static constexpr int64_t MIN_POOL_ID = 0x0000ffffffffffff;
 
   Collection(const spg_t& pg)
-    : pg(pg), cid(pg), sequencer(stringify(pg)) {}
+    : pg(pg), cid(pg), sequencer(stringify(pg)) {
+    sequencer.shard_hint = pg;
+  }
 };
 
 struct Object {

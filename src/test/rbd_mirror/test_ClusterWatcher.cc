@@ -7,6 +7,7 @@
 #include "librbd/internal.h"
 #include "librbd/api/Mirror.h"
 #include "tools/rbd_mirror/ClusterWatcher.h"
+#include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/types.h"
 #include "test/rbd_mirror/test_fixture.h"
 #include "test/librados/test.h"
@@ -34,7 +35,6 @@ public:
   {
     m_cluster = std::make_shared<librados::Rados>();
     EXPECT_EQ("", connect_cluster_pp(*m_cluster));
-    m_cluster_watcher.reset(new ClusterWatcher(m_cluster, m_lock));
   }
 
   ~TestClusterWatcher() override {
@@ -44,6 +44,21 @@ public:
     }
   }
 
+  void SetUp() override {
+    TestFixture::SetUp();
+    m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
+                                                            m_cluster,
+                                                            m_threads));
+    m_cluster_watcher.reset(new ClusterWatcher(m_cluster, m_lock,
+                                               m_service_daemon.get()));
+  }
+
+  void TearDown() override {
+    m_service_daemon.reset();
+    m_cluster_watcher.reset();
+    TestFixture::TearDown();
+  }
+
   void create_pool(bool enable_mirroring, const peer_t &peer,
                    string *uuid = nullptr, string *name=nullptr) {
     string pool_name = get_temp_pool_name("test-rbd-mirror-");
@@ -51,10 +66,13 @@ public:
 
     int64_t pool_id = m_cluster->pool_lookup(pool_name.c_str());
     ASSERT_GE(pool_id, 0);
+
+    librados::IoCtx ioctx;
+    ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
+    ioctx.application_enable("rbd", true);
+
     m_pools.insert(pool_name);
     if (enable_mirroring) {
-      librados::IoCtx ioctx;
-      ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
       ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(ioctx,
                                                    RBD_MIRROR_MODE_POOL));
 
@@ -126,8 +144,9 @@ public:
     ASSERT_EQ(m_pool_peers, m_cluster_watcher->get_pool_peers());
   }
 
-  Mutex m_lock;
   RadosRef m_cluster;
+  Mutex m_lock;
+  unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
   unique_ptr<ClusterWatcher> m_cluster_watcher;
 
   set<string> m_pools;

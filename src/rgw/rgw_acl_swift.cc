@@ -90,11 +90,7 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
       is_negative = false;
     }
 
-    /* We're specially handling the .r:* as the S3 API has a similar concept
-     * and thus we can have a small portion of compatibility here. */
-    if (url_spec == "*") {
-      grant.set_group(ACL_GROUP_ALL_USERS, is_negative ? 0 : perm);
-    } else {
+    if (url_spec != RGW_REFERER_WILDCARD) {
       if ('*' == url_spec[0]) {
         url_spec = url_spec.substr(1);
         boost::algorithm::trim(url_spec);
@@ -103,10 +99,13 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
       if (url_spec.empty() || url_spec == ".") {
         return boost::none;
       }
-
-      grant.set_referer(url_spec, is_negative ? 0 : perm);
+    } else {
+      /* Please be aware we're specially handling the .r:* in _add_grant()
+       * of RGWAccessControlList as the S3 API has a similar concept, and
+       * thus we can have a small portion of compatibility. */
     }
 
+    grant.set_referer(url_spec, is_negative ? 0 : perm);
     return grant;
   } catch (std::out_of_range) {
     return boost::none;
@@ -372,7 +371,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(RGWRados * const store,
   return true;
 }
 
-void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
+boost::optional<std::string> RGWAccessControlPolicy_SWIFTAcct::to_str() const
 {
   std::vector<std::string> admin;
   std::vector<std::string> readwrite;
@@ -404,6 +403,12 @@ void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
     }
   }
 
+  /* If there is no grant to serialize, let's exit earlier to not return
+   * an empty JSON object which brakes the functional tests of Swift. */
+  if (admin.empty() && readwrite.empty() && readonly.empty()) {
+    return boost::none;
+  }
+
   /* Serialize the groups. */
   JSONFormatter formatter;
 
@@ -422,5 +427,5 @@ void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
   std::ostringstream oss;
   formatter.flush(oss);
 
-  acl_str = oss.str();
+  return oss.str();
 }

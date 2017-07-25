@@ -403,13 +403,45 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     if (f) {
       f->open_array_section("tail");
     }
-    auto p = summary.tail.end();
-    while (num > 0 && p != summary.tail.begin()) {
-      num--;
-      --p;
+
+    std::string level_str;
+    clog_type level;
+    if (cmd_getval(g_ceph_context, cmdmap, "level", level_str)) {
+      level = LogEntry::str_to_level(level_str);
+      if (level == CLOG_UNKNOWN) {
+        ss << "Invalid severity '" << level_str << "'";
+        mon->reply_command(op, -EINVAL, ss.str(), get_last_committed());
+        return true;
+      }
+    } else {
+      level = CLOG_INFO;
+    }
+
+    std::string channel;
+    if (!cmd_getval(g_ceph_context, cmdmap, "channel", channel)) {
+      channel = CLOG_CHANNEL_DEFAULT;
+    }
+
+    // We'll apply this twice, once while counting out lines
+    // and once while outputting them.
+    auto match = [level, channel](const LogEntry &entry) {
+      return entry.prio >= level && (entry.channel == channel || channel == "*");
+    };
+
+    auto rp = summary.tail.rbegin();
+    while (num > 0 && rp != summary.tail.rend()) {
+      if (match(*rp)) {
+        num--;
+      }
+      ++rp;
     }
     ostringstream ss;
+    auto p = summary.tail.begin();
     for ( ; p != summary.tail.end(); ++p) {
+      if (!match(*p)) {
+        continue;
+      }
+
       if (f) {
 	f->dump_object("entry", *p);
       } else {
@@ -468,6 +500,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     le.stamp = m->get_recv_stamp();
     le.seq = 0;
     le.prio = CLOG_INFO;
+    le.channel = CLOG_CHANNEL_DEFAULT;
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
     pending_summary.prune(g_conf->mon_log_max_summary);
@@ -485,17 +518,11 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
 
 int LogMonitor::sub_name_to_id(const string& n)
 {
-  if (n == "log-debug")
-    return CLOG_DEBUG;
-  if (n == "log-info")
-    return CLOG_INFO;
-  if (n == "log-sec")
-    return CLOG_SEC;
-  if (n == "log-warn")
-    return CLOG_WARN;
-  if (n == "log-error")
-    return CLOG_ERROR;
-  return CLOG_UNKNOWN;
+  if (n.substr(0, 4) == "log-" && n.size() > 4) {
+    return LogEntry::str_to_level(n.substr(4));
+  } else {
+    return CLOG_UNKNOWN;
+  }
 }
 
 void LogMonitor::check_subs()

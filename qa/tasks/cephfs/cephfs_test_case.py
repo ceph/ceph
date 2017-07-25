@@ -102,6 +102,7 @@ class CephFSTestCase(CephTestCase):
         # To avoid any issues with e.g. unlink bugs, we destroy and recreate
         # the filesystem rather than just doing a rm -rf of files
         self.mds_cluster.mds_stop()
+        self.mds_cluster.mds_fail()
         self.mds_cluster.delete_all_filesystems()
         self.fs = None # is now invalid!
 
@@ -158,7 +159,7 @@ class CephFSTestCase(CephTestCase):
 
         # Load an config settings of interest
         for setting in self.LOAD_SETTINGS:
-            setattr(self, setting, int(self.fs.mds_asok(
+            setattr(self, setting, float(self.fs.mds_asok(
                 ['config', 'get', setting], self.mds_cluster.mds_ids[0]
             )[setting]))
 
@@ -183,10 +184,10 @@ class CephFSTestCase(CephTestCase):
 
     def auth_list(self):
         """
-        Convenience wrapper on "ceph auth list"
+        Convenience wrapper on "ceph auth ls"
         """
         return json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd(
-            "auth", "list", "--format=json-pretty"
+            "auth", "ls", "--format=json-pretty"
         ))['auth_dump']
 
     def assert_session_count(self, expected, ls_data=None, mds_id=None):

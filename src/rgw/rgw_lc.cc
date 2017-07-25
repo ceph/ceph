@@ -27,21 +27,15 @@ const char* LC_STATUS[] = {
 using namespace std;
 using namespace librados;
 
-bool LCRule::validate()
+bool LCRule::valid()
 {
   if (id.length() > MAX_ID_LEN) {
     return false;
   }
-  else if(expiration.empty() && noncur_expiration.empty() && mp_expiration.empty()) {
+  else if(expiration.empty() && noncur_expiration.empty() && mp_expiration.empty() && !dm_expiration) {
     return false;
   }
-  else if (!expiration.empty() && expiration.get_days() <= 0) {
-    return false;
-  }
-  else if (!noncur_expiration.empty() && noncur_expiration.get_days() <=0) {
-    return false;
-  }
-  else if (!mp_expiration.empty() && mp_expiration.get_days() <= 0) {
+  else if (!expiration.valid() || !noncur_expiration.valid() || !mp_expiration.valid()) {
     return false;
   }
   return true;
@@ -60,22 +54,26 @@ bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
   if (rule->get_status().compare("Enabled") == 0) {
     op.status = true;
   }
-  if (!rule->get_expiration().empty()) {
+  if (rule->get_expiration().has_days()) {
     op.expiration = rule->get_expiration().get_days();
   }
-  if (!rule->get_noncur_expiration().empty()) {
+  if (rule->get_expiration().has_date()) {
+    op.expiration_date = ceph::from_iso_8601(rule->get_expiration().get_date());
+  }
+  if (rule->get_noncur_expiration().has_days()) {
     op.noncur_expiration = rule->get_noncur_expiration().get_days();
   }
-  if (!rule->get_mp_expiration().empty()) {
+  if (rule->get_mp_expiration().has_days()) {
     op.mp_expiration = rule->get_mp_expiration().get_days();
   }
+  op.dm_expiration = rule->get_dm_expiration();
   auto ret = prefix_map.insert(pair<string, lc_op>(rule->get_prefix(), op));
   return ret.second;
 }
 
 int RGWLifecycleConfiguration::check_and_add_rule(LCRule *rule)
 {
-  if (!rule->validate()) {
+  if (!rule->valid()) {
     return -EINVAL;
   }
   string id;
@@ -91,9 +89,22 @@ int RGWLifecycleConfiguration::check_and_add_rule(LCRule *rule)
   return 0;
 }
 
+bool RGWLifecycleConfiguration::has_same_action(const lc_op& first, const lc_op& second) {
+  if ((first.expiration > 0 || first.expiration_date != boost::none) && 
+    (second.expiration > 0 || second.expiration_date != boost::none)) {
+    return true;
+  } else if (first.noncur_expiration > 0 && second.noncur_expiration > 0) {
+    return true;
+  } else if (first.mp_expiration > 0 && second.mp_expiration > 0) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 //Rules are conflicted: if one rule's prefix starts with other rule's prefix, and these two rules
 //define same action. 
-bool RGWLifecycleConfiguration::validate() 
+bool RGWLifecycleConfiguration::valid() 
 {
   if (prefix_map.size() < 2) {
     return true;
@@ -106,9 +117,7 @@ bool RGWLifecycleConfiguration::validate()
       string c_pre = cur_iter->first;
       string n_pre = next_iter->first;
       if (n_pre.compare(0, c_pre.length(), c_pre) == 0) {
-        if ((cur_iter->second.expiration > 0 && next_iter->second.expiration > 0) ||
-          (cur_iter->second.noncur_expiration > 0 && next_iter->second.noncur_expiration > 0) || 
-          (cur_iter->second.mp_expiration > 0 && next_iter->second.mp_expiration > 0)) {
+        if (has_same_action(cur_iter->second, next_iter->second)) {
           return false;
         } else {
           ++next_iter;
@@ -138,10 +147,10 @@ void *RGWLC::LCWorker::entry() {
 
     utime_t end = ceph_clock_now();
     int secs = schedule_next_start_time(start, end);
-    time_t next_time = end + secs;
-    char buf[30];
-    char *nt = ctime_r(&next_time, buf);
-    dout(5) << "schedule life cycle next start time: " << nt <<dendl;
+    utime_t next;
+    next.set_from_double(end + secs);
+
+    dout(5) << "schedule life cycle next start time: " << rgw_to_asctime(next) <<dendl;
 
     lock.Lock();
     cond.WaitInterval(lock, utime_t(secs, 0));
@@ -228,17 +237,16 @@ int RGWLC::bucket_lc_prepare(int index)
 
 bool RGWLC::obj_has_expired(double timediff, int days)
 {
-	double cmp;
+  double cmp;
+  if (cct->_conf->rgw_lc_debug_interval <= 0) {
+    /* Normal case, run properly */
+    cmp = days*24*60*60;
+  } else {
+    /* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
+    cmp = days*cct->_conf->rgw_lc_debug_interval;
+  }
 
-	if (cct->_conf->rgw_lc_debug_interval <= 0) {
-		/* Normal case, run properly */
-		cmp = days*24*60*60;
-	} else {
-		/* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
-		cmp = days*cct->_conf->rgw_lc_debug_interval;
-	}
-
-	return (timediff >= cmp);
+  return (timediff >= cmp);
 }
 
 int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, bool remove_indeed)
@@ -346,7 +354,12 @@ int RGWLC::bucket_lc_process(string& shard_id)
   list_op.params.list_versions = bucket_info.versioned();
   if (!bucket_info.versioned()) {
     for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
-      if (!prefix_iter->second.status || prefix_iter->second.expiration <=0) {
+      if (!prefix_iter->second.status || 
+        (prefix_iter->second.expiration <=0 && prefix_iter->second.expiration_date == boost::none)) {
+        continue;
+      }
+      if (prefix_iter->second.expiration_date != boost::none && 
+        ceph_clock_now() < ceph::real_clock::to_time_t(*prefix_iter->second.expiration_date)) {
         continue;
       }
       list_op.params.prefix = prefix_iter->first;
@@ -361,17 +374,22 @@ int RGWLC::bucket_lc_process(string& shard_id)
           ldout(cct, 0) << "ERROR: store->list_objects():" <<dendl;
           return ret;
         }
-
+        
         utime_t now = ceph_clock_now();
-
+        bool is_expired;
         for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
           rgw_obj_key key(obj_iter->key);
 
           if (!key.ns.empty()) {
             continue;
           }
-
-          if (obj_has_expired(now - ceph::real_clock::to_time_t(obj_iter->meta.mtime), prefix_iter->second.expiration)) {
+          if (prefix_iter->second.expiration_date != boost::none) {
+            //we have checked it before
+            is_expired = true;
+          } else {
+            is_expired = obj_has_expired(now - ceph::real_clock::to_time_t(obj_iter->meta.mtime), prefix_iter->second.expiration);
+          }
+          if (is_expired) {
             RGWObjectCtx rctx(store);
             rgw_obj obj(bucket_info.bucket, key);
             RGWObjState *state;
@@ -395,7 +413,9 @@ int RGWLC::bucket_lc_process(string& shard_id)
   //bucket versioning is enabled or suspended
     rgw_obj_key pre_marker;
     for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
-      if (!prefix_iter->second.status || (prefix_iter->second.expiration <= 0 && prefix_iter->second.noncur_expiration <= 0)) {
+      if (!prefix_iter->second.status || (prefix_iter->second.expiration <= 0 
+        && prefix_iter->second.expiration_date == boost::none
+        && prefix_iter->second.noncur_expiration <= 0 && !prefix_iter->second.dm_expiration)) {
         continue;
       }
       if (prefix_iter != prefix_map.begin() && 
@@ -425,9 +445,14 @@ int RGWLC::bucket_lc_process(string& shard_id)
         ceph::real_time mtime;
         bool remove_indeed = true;
         int expiration;
+        bool skip_expiration;
+        bool is_expired;
         for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
+          skip_expiration = false;
+          is_expired = false;
           if (obj_iter->is_current()) {
-            if (prefix_iter->second.expiration <= 0) {
+            if (prefix_iter->second.expiration <= 0 && prefix_iter->second.expiration_date == boost::none
+              && !prefix_iter->second.dm_expiration) {
               continue;
             }
             if (obj_iter->is_delete_marker()) {
@@ -440,12 +465,22 @@ int RGWLC::bucket_lc_process(string& shard_id)
               } else if (obj_iter->key.name.compare((obj_iter + 1)->key.name) == 0) {   //*obj_iter is delete marker and isn't the only version, do nothing.
                 continue;
               }
+              skip_expiration = prefix_iter->second.dm_expiration;
               remove_indeed = true;   //we should remove the delete marker if it's the only version
             } else {
               remove_indeed = false;
             }
             mtime = obj_iter->meta.mtime;
             expiration = prefix_iter->second.expiration;
+            if (!skip_expiration && expiration <= 0 && prefix_iter->second.expiration_date == boost::none) {
+              continue;
+            } else if (!skip_expiration) {
+              if (expiration > 0) {
+                is_expired = obj_has_expired(now - ceph::real_clock::to_time_t(mtime), expiration);
+              } else {
+                is_expired = now >= ceph::real_clock::to_time_t(*prefix_iter->second.expiration_date);
+              }
+            }
           } else {
             if (prefix_iter->second.noncur_expiration <=0) {
               continue;
@@ -453,8 +488,9 @@ int RGWLC::bucket_lc_process(string& shard_id)
             remove_indeed = true;
             mtime = (obj_iter == objs.begin())?pre_obj.meta.mtime:(obj_iter - 1)->meta.mtime;
             expiration = prefix_iter->second.noncur_expiration;
+            is_expired = obj_has_expired(now - ceph::real_clock::to_time_t(mtime), expiration);
           }
-          if (obj_has_expired(now - ceph::real_clock::to_time_t(mtime), expiration)) {
+          if (skip_expiration || is_expired) {
             if (obj_iter->is_visible()) {
               RGWObjectCtx rctx(store);
               rgw_obj obj(bucket_info.bucket, obj_iter->key);
@@ -505,8 +541,8 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry
       ret = cls_rgw_lc_rm_entry(store->lc_pool_ctx, obj_names[index],  entry);
       if (ret < 0) {
         dout(0) << "RGWLC::bucket_lc_post() failed to remove entry " << obj_names[index] << dendl;
-        goto clean;
       }
+      goto clean;
     } else if (result < 0) {
       entry.second = lc_failed;
     } else {

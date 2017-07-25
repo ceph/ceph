@@ -14,10 +14,11 @@ DEVMODEMSG = '*** DEVELOPER MODE: setting PYTHONPATH and LD_LIBRARY_PATH'
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Ceph REST API webapp")
-    parser.add_argument('-c', '--conf', help='Ceph configuration file')
+    parser.add_argument('-c', '--conf', help='Ceph configuration file',
+                        default='/etc/ceph/ceph.conf')
     parser.add_argument('--cluster', help='Ceph cluster name')
     parser.add_argument('-n', '--name', help='Ceph client name')
-    parser.add_argument('-i', '--id', help='Ceph client id')
+    parser.add_argument('-i', '--id', help='Ceph client id', default='admin')
 
     return parser.parse_known_args()
 
@@ -48,4 +49,7 @@ if 'pdb.py' in files:
     app.run(host=app.ceph_addr, port=app.ceph_port,
             debug=True, use_reloader=False, use_debugger=False)
 else:
-    app.run(host=app.ceph_addr, port=app.ceph_port)
+    if __name__ == '__main__':
+        app.run(host=app.ceph_addr, port=app.ceph_port)
+    else:
+        application = app

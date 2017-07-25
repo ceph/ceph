@@ -1089,8 +1089,8 @@ int Pipe::connect()
       ldout(msgr->cct,0) << "connect claims to be " 
 	      << paddr << " not " << peer_addr << " - presumably this is the same node!" << dendl;
     } else {
-      ldout(msgr->cct,0) << "connect claims to be " 
-	      << paddr << " not " << peer_addr << " - wrong node!" << dendl;
+      ldout(msgr->cct,10) << "connect claims to be "
+			  << paddr << " not " << peer_addr << dendl;
       goto fail;
     }
   }

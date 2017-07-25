@@ -431,6 +431,7 @@ void AsyncConnection::process()
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
           ltt_recv_stamp = ceph_clock_now();
 #endif
+          recv_stamp = ceph_clock_now();
           ldout(async_msgr->cct, 20) << __func__ << " begin MSG" << dendl;
           ceph_msg_header header;
           ceph_msg_header_old oldheader;
@@ -486,7 +487,6 @@ void AsyncConnection::process()
           front.clear();
           middle.clear();
           data.clear();
-          recv_stamp = ceph_clock_now();
           current_header = header;
           state = STATE_OPEN_MESSAGE_THROTTLE_MESSAGE;
           break;
@@ -977,9 +977,9 @@ ssize_t AsyncConnection::_process_connection()
                                 << " not " << peer_addr
                                 << " - presumably this is the same node!" << dendl;
           } else {
-            ldout(async_msgr->cct, 0) << __func__ << " connect claims to be "
-                                << paddr << " not " << peer_addr << " - wrong node!" << dendl;
-            goto fail;
+            ldout(async_msgr->cct, 10) << __func__ << " connect claims to be "
+				       << paddr << " not " << peer_addr << dendl;
+	    goto fail;
           }
         }
 
@@ -1538,8 +1538,15 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     // connection's lock
     existing->lock.lock();  // skip lockdep check (we are locking a second AsyncConnection here)
 
-    if (existing->replacing || existing->state == STATE_CLOSED) {
-      ldout(async_msgr->cct, 1) << __func__ << " existing racing replace or mark_down happened while replacing."
+    if (existing->state == STATE_CLOSED) {
+      ldout(async_msgr->cct, 1) << __func__ << " existing already closed." << dendl;
+      existing->lock.unlock();
+      existing = NULL;
+      goto open;
+    }
+
+    if (existing->replacing) {
+      ldout(async_msgr->cct, 1) << __func__ << " existing racing replace happened while replacing."
                                 << " existing_state=" << get_state_name(existing->state) << dendl;
       reply.global_seq = existing->peer_global_seq;
       r = _reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply);
@@ -2233,9 +2240,8 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
                              << " off " << header.data_off << dendl;
 
   if ((bl.length() <= ASYNC_COALESCE_THRESHOLD) && (bl.buffers().size() > 1)) {
-    std::list<buffer::ptr>::const_iterator pb;
-    for (pb = bl.buffers().begin(); pb != bl.buffers().end(); ++pb) {
-      outcoming_bl.append((char*)pb->c_str(), pb->length());
+    for (const auto &pb : bl.buffers()) {
+      outcoming_bl.append((char*)pb.c_str(), pb.length());
     }
   } else {
     outcoming_bl.claim_append(bl);  

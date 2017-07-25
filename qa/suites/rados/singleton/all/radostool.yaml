@@ -13,10 +13,12 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-    - wrongly marked me down
+    - but it is still running
     - had wrong client addr
     - had wrong cluster addr
     - reached quota
+    - overall HEALTH_
+    - (POOL_FULL)
 - workunit:
     clients:
       all:

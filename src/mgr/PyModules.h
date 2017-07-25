@@ -22,6 +22,9 @@
 
 #include "osdc/Objecter.h"
 #include "client/Client.h"
+#include "common/LogClient.h"
+#include "mon/MgrMap.h"
+#include "mon/MonCommand.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -35,11 +38,12 @@ class PyModules
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
+  LogChannelRef clog;
   Objecter &objecter;
   Client   &client;
   Finisher &finisher;
 
-  mutable Mutex lock{"PyModules"};
+  mutable Mutex lock{"PyModules::lock"};
 
   std::string get_site_packages();
 
@@ -49,7 +53,7 @@ public:
   static std::string config_prefix;
 
   PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-            Objecter &objecter_, Client &client_,
+            LogChannelRef clog_, Objecter &objecter_, Client &client_,
             Finisher &f);
 
   ~PyModules();
@@ -62,16 +66,30 @@ public:
   PyObject *get_python(const std::string &what);
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
-  PyObject *get_metadata_python(std::string const &handle,
-      entity_type_t svc_type, const std::string &svc_id);
-  PyObject *get_counter_python(std::string const &handle,
-      entity_type_t svc_type, const std::string &svc_id,
-      const std::string &path);
+  PyObject *get_metadata_python(
+    std::string const &handle,
+    const std::string &svc_name, const std::string &svc_id);
+  PyObject *get_daemon_status_python(
+    std::string const &handle,
+    const std::string &svc_name, const std::string &svc_id);
+  PyObject *get_counter_python(
+    std::string const &handle,
+    const std::string &svc_name,
+    const std::string &svc_id,
+    const std::string &path);
+  PyObject *get_perf_schema_python(
+     const std::string &handle,
+     const std::string svc_type,
+     const std::string &svc_id);
   PyObject *get_context();
 
   std::map<std::string, std::string> config_cache;
 
-  std::vector<ModuleCommand> get_commands();
+  // Python command definitions, including callback
+  std::vector<ModuleCommand> get_py_commands() const;
+
+  // Monitor command definitions, suitable for CLI
+  std::vector<MonCommand> get_commands() const;
 
   void insert_config(const std::map<std::string, std::string> &new_config);
 
@@ -99,6 +117,8 @@ public:
 
   void log(const std::string &handle,
            int level, const std::string &record);
+
+  static void list_modules(std::set<std::string> *modules);
 };
 
 #endif

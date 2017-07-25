@@ -24,14 +24,22 @@ If you had already enabled the module, restart ceph-mgr after installing depende
 Enabling
 ========
 
-Add this to your ceph.conf on nodes where you run ceph-mgr:
+Enable the module with::
+
+  ceph mgr module enable dashboard
+
+You can see currently enabled modules with::
+
+  ceph mgr module ls
+
+If you use any other ceph-mgr modules, make sure they're in the list too.
+
+An address where the dashboard will listen on needs to be configured as well, set this to ``::`` to listen on all
+IPv4 and IPv6 addresses.
 
 ::
 
-    [mgr]                                                                           
-        mgr modules = dashboard
-
-If you use any other ceph-mgr modules, make sure they're in the list too.
+    ceph config-key put mgr/dashboard/server_addr ::
 
 Restart the ceph-mgr daemon after modifying the setting to load the module.
 

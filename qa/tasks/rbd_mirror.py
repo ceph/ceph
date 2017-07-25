@@ -91,7 +91,7 @@ class RBDMirror(Task):
             )
 
         args.extend([
-            'rbd-mirror',
+            'rbd-mirror', '--foreground',
             '--cluster',
             self.cluster_name,
             '--id',

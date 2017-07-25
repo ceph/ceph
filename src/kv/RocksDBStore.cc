@@ -139,7 +139,7 @@ rocksdb::Logger *create_rocksdb_ceph_logger()
   return new CephRocksdbLogger(g_ceph_context);
 }
 
-int string2bool(string val, bool &b_val)
+static int string2bool(const string &val, bool &b_val)
 {
   if (strcasecmp(val.c_str(), "false") == 0) {
     b_val = false;
@@ -157,7 +157,7 @@ int string2bool(string val, bool &b_val)
   }
 }
   
-int RocksDBStore::tryInterpret(const string key, const string val, rocksdb::Options &opt)
+int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Options &opt)
 {
   if (key == "compaction_threads") {
     std::string err;
@@ -188,7 +188,7 @@ int RocksDBStore::tryInterpret(const string key, const string val, rocksdb::Opti
   return 0;
 }
 
-int RocksDBStore::ParseOptionsFromString(const string opt_str, rocksdb::Options &opt)
+int RocksDBStore::ParseOptionsFromString(const string &opt_str, rocksdb::Options &opt)
 {
   map<string, string> str_map;
   int r = get_str_map(opt_str, &str_map, ",\n;");
@@ -297,18 +297,53 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     opt.env = static_cast<rocksdb::Env*>(priv);
   }
 
-  auto cache = rocksdb::NewLRUCache(g_conf->rocksdb_cache_size, g_conf->rocksdb_cache_shard_bits);
+  // caches
+  if (!set_cache_flag) {
+    cache_size = g_conf->rocksdb_cache_size;
+  }
+  uint64_t row_cache_size = cache_size * g_conf->rocksdb_cache_row_ratio;
+  uint64_t block_cache_size = cache_size - row_cache_size;
+
+  if (block_cache_size == 0) {
+    // disable block cache
+    dout(10) << __func__ << " block_cache_size " << block_cache_size
+             << ", setting no_block_cache " << dendl;
+    bbt_opts.no_block_cache = true;
+  } else {
+    if (g_conf->rocksdb_cache_type == "lru") {
+      bbt_opts.block_cache = rocksdb::NewLRUCache(
+        block_cache_size,
+        g_conf->rocksdb_cache_shard_bits);
+    } else if (g_conf->rocksdb_cache_type == "clock") {
+      bbt_opts.block_cache = rocksdb::NewClockCache(
+        block_cache_size,
+        g_conf->rocksdb_cache_shard_bits);
+    } else {
+      derr << "unrecognized rocksdb_cache_type '" << g_conf->rocksdb_cache_type
+  	 << "'" << dendl;
+      return -EINVAL;
+    }
+  }
   bbt_opts.block_size = g_conf->rocksdb_block_size;
-  bbt_opts.block_cache = cache;
+
+  if (row_cache_size > 0)
+    opt.row_cache = rocksdb::NewLRUCache(row_cache_size,
+				       g_conf->rocksdb_cache_shard_bits);
+
   if (g_conf->kstore_rocksdb_bloom_bits_per_key > 0) {
     dout(10) << __func__ << " set bloom filter bits per key to "
 	     << g_conf->kstore_rocksdb_bloom_bits_per_key << dendl;
-    bbt_opts.filter_policy.reset(rocksdb::NewBloomFilterPolicy(g_conf->kstore_rocksdb_bloom_bits_per_key));
+    bbt_opts.filter_policy.reset(rocksdb::NewBloomFilterPolicy(
+				   g_conf->kstore_rocksdb_bloom_bits_per_key));
   }
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
-  dout(10) << __func__ << " set block size to " << g_conf->rocksdb_block_size
-           << " cache size to " << g_conf->rocksdb_cache_size
-           << " num of cache shards to " << (1 << g_conf->rocksdb_cache_shard_bits) << dendl;
+  dout(10) << __func__ << " block size " << g_conf->rocksdb_block_size
+           << ", block_cache size " << prettybyte_t(block_cache_size)
+	   << ", row_cache size " << prettybyte_t(row_cache_size)
+	   << "; shards "
+	   << (1 << g_conf->rocksdb_cache_shard_bits)
+	   << ", type " << g_conf->rocksdb_cache_type
+	   << dendl;
 
   opt.merge_operator.reset(new MergeOperatorRouter(*this));
   status = rocksdb::DB::Open(opt, path, &db);
@@ -690,8 +725,12 @@ int RocksDBStore::get(
     std::string value;
     std::string bound = combine_strings(prefix, *i);
     auto status = db->Get(rocksdb::ReadOptions(), rocksdb::Slice(bound), &value);
-    if (status.ok())
+    if (status.ok()) {
       (*out)[*i].append(value);
+    } else if (status.IsIOError()) {
+      ceph_abort_msg(cct, status.ToString());
+    }
+
   }
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
@@ -713,8 +752,10 @@ int RocksDBStore::get(
   s = db->Get(rocksdb::ReadOptions(), rocksdb::Slice(k), &value);
   if (s.ok()) {
     out->append(value);
-  } else {
+  } else if (s.IsNotFound()) {
     r = -ENOENT;
+  } else {
+    ceph_abort_msg(cct, s.ToString());
   }
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
@@ -737,8 +778,10 @@ int RocksDBStore::get(
   s = db->Get(rocksdb::ReadOptions(), rocksdb::Slice(k), &value);
   if (s.ok()) {
     out->append(value);
-  } else {
+  } else if (s.IsNotFound()) {
     r = -ENOENT;
+  } else {
+    ceph_abort_msg(cct, s.ToString());
   }
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
@@ -856,17 +899,20 @@ RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_first()
 {
   dbiter->SeekToFirst();
+  assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_first(const string &prefix)
 {
   rocksdb::Slice slice_prefix(prefix);
   dbiter->Seek(slice_prefix);
+  assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_last()
 {
   dbiter->SeekToLast();
+  assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_last(const string &prefix)
@@ -908,6 +954,7 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::next()
   if (valid()) {
     dbiter->Next();
   }
+  assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::prev()
@@ -915,6 +962,7 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::prev()
   if (valid()) {
     dbiter->Prev();
   }
+  assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 string RocksDBStore::RocksDBWholeSpaceIteratorImpl::key()

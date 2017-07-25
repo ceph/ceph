@@ -2080,3 +2080,168 @@ void librados::IoCtxImpl::object_list_slice(
       hobject_t::_reverse_bits(rev_finish), poolid, string());
 }
 
+int librados::IoCtxImpl::application_enable(const std::string& app_name,
+                                            bool force)
+{
+  auto c = new PoolAsyncCompletionImpl();
+  application_enable_async(app_name, force, c);
+
+  int r = c->wait();
+  assert(r == 0);
+
+  r = c->get_return_value();
+  c->release();
+  if (r < 0) {
+    return r;
+  }
+
+  return client->wait_for_latest_osdmap();
+}
+
+void librados::IoCtxImpl::application_enable_async(const std::string& app_name,
+                                                   bool force,
+                                                   PoolAsyncCompletionImpl *c)
+{
+  // pre-Luminous clusters will return -EINVAL and application won't be
+  // preserved until Luminous is configured as minimim version.
+  if (!client->get_required_monitor_features().contains_all(
+        ceph::features::mon::FEATURE_LUMINOUS)) {
+    client->finisher.queue(new C_PoolAsync_Safe(c), -EOPNOTSUPP);
+    return;
+  }
+
+  std::stringstream cmd;
+  cmd << "{"
+      << "\"prefix\": \"osd pool application enable\","
+      << "\"pool\": \"" << get_cached_pool_name() << "\","
+      << "\"app\": \"" << app_name << "\"";
+  if (force) {
+    cmd << ",\"force\":\"--yes-i-really-mean-it\"";
+  }
+  cmd << "}";
+
+  std::vector<std::string> cmds;
+  cmds.push_back(cmd.str());
+  bufferlist inbl;
+  client->mon_command_async(cmds, inbl, nullptr, nullptr,
+                            new C_PoolAsync_Safe(c));
+}
+
+int librados::IoCtxImpl::application_list(std::set<std::string> *app_names)
+{
+  int r = 0;
+  app_names->clear();
+  objecter->with_osdmap([&](const OSDMap& o) {
+      auto pg_pool = o.get_pg_pool(poolid);
+      if (pg_pool == nullptr) {
+	r = -ENOENT;
+        return;
+      }
+
+      for (auto &pair : pg_pool->application_metadata) {
+        app_names->insert(pair.first);
+      }
+    });
+  return r;
+}
+
+int librados::IoCtxImpl::application_metadata_get(const std::string& app_name,
+                                                  const std::string &key,
+                                                  std::string* value)
+{
+  int r = 0;
+  objecter->with_osdmap([&](const OSDMap& o) {
+      auto pg_pool = o.get_pg_pool(poolid);
+      if (pg_pool == nullptr) {
+	r = -ENOENT;
+        return;
+      }
+
+      auto app_it = pg_pool->application_metadata.find(app_name);
+      if (app_it == pg_pool->application_metadata.end()) {
+        r = -ENOENT;
+        return;
+      }
+
+      auto it = app_it->second.find(key);
+      if (it == app_it->second.end()) {
+        r = -ENOENT;
+        return;
+      }
+
+      *value = it->second;
+    });
+  return r;
+}
+
+int librados::IoCtxImpl::application_metadata_set(const std::string& app_name,
+                                                  const std::string &key,
+                                                  const std::string& value)
+{
+  std::stringstream cmd;
+  cmd << "{"
+      << "\"prefix\":\"osd pool application set\","
+      << "\"pool\":\"" << get_cached_pool_name() << "\","
+      << "\"app\":\"" << app_name << "\","
+      << "\"key\":\"" << key << "\","
+      << "\"value\":\"" << value << "\""
+      << "}";
+
+  std::vector<std::string> cmds;
+  cmds.push_back(cmd.str());
+  bufferlist inbl;
+  int r = client->mon_command(cmds, inbl, nullptr, nullptr);
+  if (r < 0) {
+    return r;
+  }
+
+  // ensure we have the latest osd map epoch before proceeding
+  return client->wait_for_latest_osdmap();
+}
+
+int librados::IoCtxImpl::application_metadata_remove(const std::string& app_name,
+                                                     const std::string &key)
+{
+  std::stringstream cmd;
+  cmd << "{"
+      << "\"prefix\":\"osd pool application rm\","
+      << "\"pool\":\"" << get_cached_pool_name() << "\","
+      << "\"app\":\"" << app_name << "\","
+      << "\"key\":\"" << key << "\""
+      << "}";
+
+  std::vector<std::string> cmds;
+  cmds.push_back(cmd.str());
+  bufferlist inbl;
+  int r = client->mon_command(cmds, inbl, nullptr, nullptr);
+  if (r < 0) {
+    return r;
+  }
+
+  // ensure we have the latest osd map epoch before proceeding
+  return client->wait_for_latest_osdmap();
+}
+
+int librados::IoCtxImpl::application_metadata_list(const std::string& app_name,
+                                                   std::map<std::string, std::string> *values)
+{
+  int r = 0;
+  values->clear();
+  objecter->with_osdmap([&](const OSDMap& o) {
+      auto pg_pool = o.get_pg_pool(poolid);
+      if (pg_pool == nullptr) {
+        r = -ENOENT;
+        return;
+      }
+
+      auto it = pg_pool->application_metadata.find(app_name);
+      if (it == pg_pool->application_metadata.end()) {
+        r = -ENOENT;
+        return;
+      }
+
+      *values = it->second;
+    });
+  return r;
+}
+

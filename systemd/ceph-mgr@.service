@@ -1,26 +1,14 @@
 [Unit]
 Description=Ceph cluster manager daemon
-After=network-online.target local-fs.target time-sync.target ceph-mon@%i.service
+After=network-online.target local-fs.target time-sync.target
 Wants=network-online.target local-fs.target time-sync.target
-PartOf=ceph-mgr.target ceph-mon@%i.service
+PartOf=ceph-mgr.target
 
 [Service]
 LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
-
-# This ExecStartPre business is a hack to inject a key for the mgr daemon,
-# using whatever key already exists on the mon on this node to gain sufficient
-# permissions to create the mgr key.  Failure is ignored at every step (the
-# '-' prefix) in case someone has already used some other trick to set
-# everything up manually.
-# `sh -c "exec ..."` is required, since different Linux ditributives have different rules on absolute paths of that executables.
-# systemd requires to use absoulte paths.
-ExecStartPre=-/bin/sh -c "exec mkdir -p /var/lib/ceph/mgr/${CLUSTER}-%i"
-ExecStartPre=-/bin/sh -c "[ -f /var/lib/ceph/mgr/${CLUSTER}-%i/keyring ] || /usr/bin/ceph-authtool --create-keyring --gen-key --name=mgr.%i /var/lib/ceph/mgr/${CLUSTER}-%i/keyring"
-ExecStartPre=-/bin/sh -c "exec chown -R ceph.ceph /var/lib/ceph/mgr/${CLUSTER}-%i"
-ExecStartPre=-/usr/bin/ceph -i /var/lib/ceph/mgr/${CLUSTER}-%i/keyring auth add mgr.%i mon 'allow profile mgr' osd 'allow *' mds 'allow *' --keyring=/var/lib/ceph/mon/${CLUSTER}-%i/keyring --name=mon.
 
 ExecStart=/usr/bin/ceph-mgr -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID

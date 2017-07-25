@@ -54,6 +54,7 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_KNOWN_REDIR: return "known_if_redirected";
   case CEPH_OSD_FLAG_FULL_TRY: return "full_try";
   case CEPH_OSD_FLAG_FULL_FORCE: return "full_force";
+  case CEPH_OSD_FLAG_IGNORE_REDIRECT: return "ignore_redirect";
   default: return "???";
   }
 }
@@ -801,6 +802,8 @@ std::string pg_state_string(int state)
     oss << "recovery_toofull+";
   if (state & PG_STATE_RECOVERING)
     oss << "recovering+";
+  if (state & PG_STATE_FORCED_RECOVERY)
+    oss << "forced_recovery+";
   if (state & PG_STATE_DOWN)
     oss << "down+";
   if (state & PG_STATE_UNDERSIZED)
@@ -824,6 +827,8 @@ std::string pg_state_string(int state)
     oss << "backfill_wait+";
   if (state & PG_STATE_BACKFILL)
     oss << "backfilling+";
+  if (state & PG_STATE_FORCED_BACKFILL)
+    oss << "forced_backfill+";
   if (state & PG_STATE_BACKFILL_TOOFULL)
     oss << "backfill_toofull+";
   if (state & PG_STATE_INCOMPLETE)
@@ -834,6 +839,8 @@ std::string pg_state_string(int state)
     oss << "snaptrim+";
   if (state & PG_STATE_SNAPTRIM_WAIT)
     oss << "snaptrim_wait+";
+  if (state & PG_STATE_SNAPTRIM_ERROR)
+    oss << "snaptrim_error+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -863,6 +870,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_REPAIR;
   else if (state == "recovering")
     type = PG_STATE_RECOVERING;
+  else if (state == "forced_recovery")
+    type = PG_STATE_FORCED_RECOVERY;
   else if (state == "backfill_wait")
     type = PG_STATE_BACKFILL_WAIT;
   else if (state == "incomplete")
@@ -875,6 +884,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_DEEP_SCRUB;
   else if (state == "backfill")
     type = PG_STATE_BACKFILL;
+  else if (state == "forced_backfill")
+    type = PG_STATE_FORCED_BACKFILL;
   else if (state == "backfill_toofull")
     type = PG_STATE_BACKFILL_TOOFULL;
   else if (state == "recovery_wait")
@@ -891,6 +902,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_SNAPTRIM;
   else if (state == "snaptrim_wait")
     type = PG_STATE_SNAPTRIM_WAIT;
+  else if (state == "snaptrim_error")
+    type = PG_STATE_SNAPTRIM_ERROR;
   else
     type = -1;
   return type;
@@ -986,7 +999,7 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	     pool_opts_t::CSUM_MIN_BLOCK, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name) {
-    return opt_mapping.find(name) != opt_mapping.end();
+    return opt_mapping.count(name);
 }
 
 pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name) {
@@ -996,7 +1009,7 @@ pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name) {
 }
 
 bool pool_opts_t::is_set(pool_opts_t::key_t key) const {
-    return opts.find(key) != opts.end();
+    return opts.count(key);
 }
 
 const pool_opts_t::value_t& pool_opts_t::get(pool_opts_t::key_t key) const {
@@ -1132,6 +1145,10 @@ ostream& operator<<(ostream& out, const pool_opts_t& opts)
 
 // -- pg_pool_t --
 
+const char *pg_pool_t::APPLICATION_NAME_CEPHFS("cephfs");
+const char *pg_pool_t::APPLICATION_NAME_RBD("rbd");
+const char *pg_pool_t::APPLICATION_NAME_RGW("rgw");
+
 void pg_pool_t::dump(Formatter *f) const
 {
   f->dump_unsigned("flags", get_flags());
@@ -1139,7 +1156,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("type", get_type());
   f->dump_int("size", get_size());
   f->dump_int("min_size", get_min_size());
-  f->dump_int("crush_ruleset", get_crush_ruleset());
+  f->dump_int("crush_rule", get_crush_rule());
   f->dump_int("object_hash", get_object_hash());
   f->dump_unsigned("pg_num", get_pg_num());
   f->dump_unsigned("pg_placement_num", get_pgp_num());
@@ -1201,6 +1218,15 @@ void pg_pool_t::dump(Formatter *f) const
   f->open_object_section("options");
   opts.dump(f);
   f->close_section(); // options
+  f->open_object_section("application_metadata");
+  for (auto &app_pair : application_metadata) {
+    f->open_object_section(app_pair.first.c_str());
+    for (auto &kv_pair : app_pair.second) {
+      f->dump_string(kv_pair.first.c_str(), kv_pair.second);
+    }
+    f->close_section(); // application
+  }
+  f->close_section(); // application_metadata
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -1405,7 +1431,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(struct_v, bl);
     ::encode(type, bl);
     ::encode(size, bl);
-    ::encode(crush_ruleset, bl);
+    ::encode(crush_rule, bl);
     ::encode(object_hash, bl);
     ::encode(pg_num, bl);
     ::encode(pgp_num, bl);
@@ -1433,7 +1459,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(struct_v, bl);
     ::encode(type, bl);
     ::encode(size, bl);
-    ::encode(crush_ruleset, bl);
+    ::encode(crush_rule, bl);
     ::encode(object_hash, bl);
     ::encode(pg_num, bl);
     ::encode(pgp_num, bl);
@@ -1460,7 +1486,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ENCODE_START(14, 5, bl);
     ::encode(type, bl);
     ::encode(size, bl);
-    ::encode(crush_ruleset, bl);
+    ::encode(crush_rule, bl);
     ::encode(object_hash, bl);
     ::encode(pg_num, bl);
     ::encode(pgp_num, bl);
@@ -1500,22 +1526,20 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 25;
+  uint8_t v = 26;
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
     v = 21;
   }
-  if ((features &
-       (CEPH_FEATURE_RESEND_ON_SPLIT|CEPH_FEATURE_SERVER_JEWEL)) !=
-      (CEPH_FEATURE_RESEND_ON_SPLIT|CEPH_FEATURE_SERVER_JEWEL)) {
+  if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
     v = 24;
   }
 
   ENCODE_START(v, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
-  ::encode(crush_ruleset, bl);
+  ::encode(crush_rule, bl);
   ::encode(object_hash, bl);
   ::encode(pg_num, bl);
   ::encode(pgp_num, bl);
@@ -1576,15 +1600,18 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   if (v >= 25) {
     ::encode(last_force_op_resend, bl);
   }
+  if (v >= 26) {
+    ::encode(application_metadata, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(24, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(26, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
-  ::decode(crush_ruleset, bl);
+  ::decode(crush_rule, bl);
   ::decode(object_hash, bl);
   ::decode(pg_num, bl);
   ::decode(pgp_num, bl);
@@ -1620,7 +1647,7 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     // crash_replay_interval appropriately.  unfortunately, we can't
     // be precise here.  this should be good enough to preserve replay
     // on the data pool for the majority of cluster upgrades, though.
-    if (crush_ruleset == 0 && auid == 0)
+    if (crush_rule == 0 && auid == 0)
       crash_replay_interval = 60;
     else
       crash_replay_interval = 0;
@@ -1728,6 +1755,9 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     last_force_op_resend = last_force_op_resend_preluminous;
   }
+  if (struct_v >= 26) {
+    ::decode(application_metadata, bl);
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1740,7 +1770,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
 
   a.type = TYPE_REPLICATED;
   a.size = 2;
-  a.crush_ruleset = 3;
+  a.crush_rule = 3;
   a.object_hash = 4;
   a.pg_num = 6;
   a.pgp_num = 5;
@@ -1791,6 +1821,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
   a.fast_read = false;
+  a.application_metadata = {{"rbd", {{"key", "value"}}}};
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1799,7 +1830,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   out << p.get_type_name()
       << " size " << p.get_size()
       << " min_size " << p.get_min_size()
-      << " crush_ruleset " << p.get_crush_ruleset()
+      << " crush_rule " << p.get_crush_rule()
       << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num()
@@ -1849,6 +1880,15 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   if (p.fast_read)
     out << " fast_read " << p.fast_read;
   out << p.opts;
+  if (!p.application_metadata.empty()) {
+    out << " application ";
+    for (auto it = p.application_metadata.begin();
+         it != p.application_metadata.end(); ++it) {
+      if (it != p.application_metadata.begin())
+        out << ",";
+      out << it->first;
+    }
+  }
   return out;
 }
 
@@ -3391,6 +3431,8 @@ bool PastIntervals::is_new_interval(
   unsigned new_pg_num,
   bool old_sort_bitwise,
   bool new_sort_bitwise,
+  bool old_recovery_deletes,
+  bool new_recovery_deletes,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
@@ -3399,7 +3441,8 @@ bool PastIntervals::is_new_interval(
     old_min_size != new_min_size ||
     old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0) ||
-    old_sort_bitwise != new_sort_bitwise;
+    old_sort_bitwise != new_sort_bitwise ||
+    old_recovery_deletes != new_recovery_deletes;
 }
 
 bool PastIntervals::is_new_interval(
@@ -3431,6 +3474,8 @@ bool PastIntervals::is_new_interval(
 		    osdmap->get_pg_num(pgid.pool()),
 		    lastmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
 		    osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
+		    lastmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
+		    osdmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
 		    pgid);
 }
 
@@ -4252,6 +4297,7 @@ ostream& operator<<(ostream& out, const pg_missing_item& i)
   out << i.need;
   if (i.have != eversion_t())
     out << "(" << i.have << ")";
+  out << " flags = " << i.flag_str();
   return out;
 }
 
@@ -5057,14 +5103,16 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
   ::encode(alloc_hint_flags, bl);
-  ::encode(manifest, bl);
+  if (has_manifest()) {
+    ::encode(manifest, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(16, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(17, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   ::decode(soid, bl);
   ::decode(myoloc, bl);
@@ -5147,7 +5195,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
     alloc_hint_flags = 0;
   }
   if (struct_v >= 17) {
-    ::decode(manifest, bl);
+    if (has_manifest()) {
+      ::decode(manifest, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -5275,6 +5325,7 @@ ostream &ObjectRecoveryProgress::print(ostream &out) const
 	     << ", data_complete:" << ( data_complete ? "true" : "false" )
 	     << ", omap_recovered_to:" << omap_recovered_to
 	     << ", omap_complete:" << ( omap_complete ? "true" : "false" )
+	     << ", error:" << ( error ? "true" : "false" )
 	     << ")";
 }
 
@@ -5944,3 +5995,33 @@ ostream& operator<<(ostream& out, const store_statfs_t &s)
       << ")";
   return out;
 }
+
+void OSDOp::clear_data(vector<OSDOp>& ops)
+{
+  for (unsigned i = 0; i < ops.size(); i++) {
+    OSDOp& op = ops[i];
+    op.outdata.clear();
+    if (ceph_osd_op_type_attr(op.op.op) &&
+        op.op.xattr.name_len &&
+	op.indata.length() >= op.op.xattr.name_len) {
+      bufferptr bp(op.op.xattr.name_len);
+      bufferlist bl;
+      bl.append(bp);
+      bl.copy_in(0, op.op.xattr.name_len, op.indata);
+      op.indata.claim(bl);
+    } else if (ceph_osd_op_type_exec(op.op.op) &&
+               op.op.cls.class_len &&
+	       op.indata.length() >
+	         (op.op.cls.class_len + op.op.cls.method_len)) {
+      __u8 len = op.op.cls.class_len + op.op.cls.method_len;
+      bufferptr bp(len);
+      bufferlist bl;
+      bl.append(bp);
+      bl.copy_in(0, len, op.indata);
+      op.indata.claim(bl);
+    } else {
+      op.indata.clear();
+    }
+  }
+}
+

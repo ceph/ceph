@@ -569,7 +569,6 @@ public:
 	     i != obj.attrs.end();
 	     ++i, ++iter) {
 	  if (!(*iter % 3)) {
-	    //op.rmxattr(i->first.c_str());
 	    to_remove.insert(i->first);
 	    op.rmxattr(i->first.c_str());
 	  }
@@ -799,7 +798,6 @@ public:
     context->seq_num++;
 
     waiting_on = ranges.size();
-    //cout << " waiting_on = " << waiting_on << std::endl;
     ContentsGenerator::iterator gen_pos = cont_gen->get_iterator(cont);
     uint64_t tid = 1;
     for (map<uint64_t, uint64_t>::iterator i = ranges.begin(); 
@@ -2441,7 +2439,7 @@ public:
     // not being particularly specific here about knowing which
     // flushes are on the oldest clean snap and which ones are not.
     can_fail = !blocking || !context->snaps.empty();
-    // FIXME: we can could fail if we've ever removed a snap due to
+    // FIXME: we could fail if we've ever removed a snap due to
     // the async snap trimming.
     can_fail = true;
     cout << num << ": " << (blocking ? "cache_flush" : "cache_try_flush")
@@ -2456,9 +2454,6 @@ public:
 					       new TestOp::CallbackInfo(0));
     completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
 						      &write_callback);
-    // leave object in unused list so that we race with other operations
-    //context->oid_in_use.insert(oid);
-    //context->oid_not_in_use.erase(oid);
     context->oid_flushing.insert(oid);
     context->oid_not_flushing.erase(oid);
     context->state_lock.Unlock();
@@ -2484,8 +2479,6 @@ public:
     context->state_lock.Lock();
     assert(!done);
     assert(completion->is_complete());
-    //context->oid_in_use.erase(oid);
-    //context->oid_not_in_use.insert(oid);
     context->oid_flushing.erase(oid);
     context->oid_not_flushing.insert(oid);
     int r = completion->get_return_value();
@@ -2555,9 +2548,6 @@ public:
 					       new TestOp::CallbackInfo(0));
     completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
 						      &write_callback);
-    // leave object in unused list so that we race with other operations
-    //context->oid_in_use.insert(oid);
-    //context->oid_not_in_use.erase(oid);
     context->state_lock.Unlock();
 
     op.cache_evict();
@@ -2576,8 +2566,7 @@ public:
     context->state_lock.Lock();
     assert(!done);
     assert(completion->is_complete());
-    //context->oid_in_use.erase(oid);
-    //context->oid_not_in_use.insert(oid);
+
     int r = completion->get_return_value();
     cout << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {

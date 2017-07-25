@@ -51,12 +51,16 @@ PRIO_DEBUGONLY = 0
 PRIO_DEFAULT = PRIO_USEFUL
 
 # Make life easier on developers:
-# If in src/, and .libs and pybind exist here, assume we're running
-# from a Ceph source dir and tweak PYTHONPATH and LD_LIBRARY_PATH
-# to use local files
+# If our parent dir contains CMakeCache.txt and bin/init-ceph,
+# assume we're running from a build dir (i.e. src/build/bin/ceph)
+# and tweak sys.path and LD_LIBRARY_PATH to use built files.
+# Since this involves re-execing, if CEPH_DBG is set in the environment
+# re-exec with -mpdb.  Also, if CEPH_DEV is in the env, suppress
+# the warning message about the DEVELOPER MODE.
 
 MYPATH = os.path.abspath(__file__)
 MYDIR = os.path.dirname(MYPATH)
+MYPDIR = os.path.dirname(MYDIR)
 DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***'
 
 
@@ -91,10 +95,10 @@ def get_pythonlib_dir():
     """Returns the name of a distutils build directory"""
     return "lib.{version[0]}".format(version=sys.version_info)
 
-if os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
-     and os.path.exists(os.path.join(os.getcwd(), "bin/init-ceph")):
+if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
+     and os.path.exists(os.path.join(MYPDIR, "bin/init-ceph")):
     src_path = None
-    for l in open("./CMakeCache.txt"):
+    for l in open(os.path.join(MYPDIR, "CMakeCache.txt")):
         if l.startswith("ceph_SOURCE_DIR:STATIC="):
             src_path = l.split("=")[1].strip()
 
@@ -103,8 +107,8 @@ if os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
         pass
     else:
         # Developer mode, but in a cmake build dir instead of the src dir
-        lib_path = os.path.join(os.getcwd(), "lib")
-        bin_path = os.path.join(os.getcwd(), "bin")
+        lib_path = os.path.join(MYPDIR, "lib")
+        bin_path = os.path.join(MYPDIR, "bin")
         pybind_path = os.path.join(src_path, "src", "pybind")
         pythonlib_path = os.path.join(lib_path,
                                       "cython_modules",
@@ -260,9 +264,9 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('-c', '--conf', dest='cephconf',
                         help='ceph configuration file')
     parser.add_argument('-i', '--in-file', dest='input_file',
-                        help='input file')
+                        help='input file, or "-" for stdin')
     parser.add_argument('-o', '--out-file', dest='output_file',
-                        help='output file')
+                        help='output file, or "-" for stdout')
 
     parser.add_argument('--id', '--user', dest='client_id',
                         help='client id for authentication')
@@ -290,6 +294,11 @@ def parse_cmdargs(args=None, target=''):
                         help='watch warn events')
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
+
+    parser.add_argument('--watch-channel', dest="watch_channel",
+                        help="which log channel to follow " \
+                        "when using -w/--watch.  One of ['cluster', 'audit', '*'",
+                        default='cluster')
 
     parser.add_argument('--version', '-v', action="store_true", help="display version")
     parser.add_argument('--verbose', action="store_true", help="make verbose")
@@ -772,7 +781,8 @@ def main():
             i = sys.argv.index("injectargs")
             sys.argv = sys.argv[:i] + ceph_args.split() + sys.argv[i:]
         else:
-            sys.argv.extend(ceph_args.split())
+            sys.argv.extend([arg for arg in ceph_args.split()
+                             if '--admin-socket' not in arg])
     parser, parsed_args, childargs = parse_cmdargs()
 
     if parsed_args.version:
@@ -882,10 +892,7 @@ def main():
         if not timeout:
             timeout = 5
 
-        hdr('Monitor commands:')
-        print('[Contacting monitor, timeout after %d seconds]' % timeout)
-
-    if childargs and childargs[0] == 'ping':
+    if childargs and childargs[0] == 'ping' and not parsed_args.help:
         if len(childargs) < 2:
             print('"ping" requires a monitor name as argument: "ping mon.<id>"', file=sys.stderr)
             return 1
@@ -893,9 +900,12 @@ def main():
         # for completion let timeout be really small
         timeout = 3
     try:
-        if childargs and childargs[0] == 'ping':
+        if childargs and childargs[0] == 'ping' and not parsed_args.help:
             return ping_monitor(cluster_handle, childargs[1], timeout)
-        run_in_thread(cluster_handle.connect, timeout=timeout)
+        result = run_in_thread(cluster_handle.connect, timeout=timeout)
+        if type(result) is tuple and result[0] == -errno.EINTR:
+            print('Cluster connection interrupted or timed out', file=sys.stderr)
+            return 1
     except KeyboardInterrupt:
         print('Cluster connection aborted', file=sys.stderr)
         return 1
@@ -905,7 +915,12 @@ def main():
     except Exception as e:
         print(str(e), file=sys.stderr)
         return 1
+
     if parsed_args.help:
+        hdr('Monitor commands:')
+        if verbose:
+            print('[Contacting monitor, timeout after %d seconds]' % timeout)
+
         return do_extended_help(parser, childargs, ('mon', ''), ' '.join(childargs))
 
     # implement "tell service.id help"
@@ -924,14 +939,16 @@ def main():
         if k.startswith('watch') and v:
             if k == 'watch':
                 level = 'info'
-            else:
+            elif k != "watch_channel":
                 level = k.replace('watch_', '')
     if level:
-
         # an awfully simple callback
-        def watch_cb(arg, line, who, stamp_sec, stamp_nsec, seq, level, msg):
-            print(line)
-            sys.stdout.flush()
+        def watch_cb(arg, line, channel, name, who, stamp_sec, stamp_nsec, seq, level, msg):
+            # Filter on channel
+            if (channel == parsed_args.watch_channel or \
+                           parsed_args.watch_channel == "*"):
+                print(line)
+                sys.stdout.flush()
 
         # first do a ceph status
         ret, outbuf, outs = json_command(cluster_handle, prefix='status')
@@ -942,7 +959,7 @@ def main():
 
         # this instance keeps the watch connection alive, but is
         # otherwise unused
-        run_in_thread(cluster_handle.monitor_log, level, watch_cb, 0)
+        run_in_thread(cluster_handle.monitor_log2, level, watch_cb, 0)
 
         # loop forever letting watch_cb print lines
         try:
@@ -955,8 +972,11 @@ def main():
     inbuf = b''
     if parsed_args.input_file:
         try:
-            with open(parsed_args.input_file, 'rb') as f:
-                inbuf = f.read()
+            if parsed_args.input_file == '-':
+                inbuf = sys.stdin.read()
+            else:
+                with open(parsed_args.input_file, 'rb') as f:
+                    inbuf = f.read()
         except Exception as e:
             print('Can\'t open input file {0}: {1}'.format(parsed_args.input_file, e), file=sys.stderr)
             return 1
@@ -964,7 +984,10 @@ def main():
     # prepare output file, if any
     if parsed_args.output_file:
         try:
-            outf = open(parsed_args.output_file, 'wb')
+            if parsed_args.output_file == '-':
+                outf = sys.stdout
+            else:
+                outf = open(parsed_args.output_file, 'wb')
         except Exception as e:
             print('Can\'t open output file {0}: {1}'.format(parsed_args.output_file, e), file=sys.stderr)
             return 1
@@ -1090,7 +1113,7 @@ def main():
 
         sys.stdout.flush()
 
-    if parsed_args.output_file:
+    if parsed_args.output_file and parsed_args.output_file != '-':
         outf.close()
 
     if final_ret:

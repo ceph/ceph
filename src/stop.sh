@@ -19,8 +19,6 @@
 test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
 if [ -e CMakeCache.txt ]; then
-  [ -z "$CEPH_BIN" ] && CEPH_BIN=src
-else
   [ -z "$CEPH_BIN" ] && CEPH_BIN=bin
 fi
 
@@ -104,6 +102,8 @@ if [ $stop_all -eq 1 ]; then
     pkill -u $MYUID -f valgrind.bin.\*ceph-mon
     $SUDO pkill -u $MYUID -f valgrind.bin.\*ceph-osd
     pkill -u $MYUID -f valgrind.bin.\*ceph-mds
+    asok_dir=`dirname $("${CEPH_BIN}"/ceph-conf --show-config-value admin_socket)`
+    rm -rf "${asok_dir}"
 else
     [ $stop_mon -eq 1 ] && do_killall ceph-mon
     [ $stop_mds -eq 1 ] && do_killall ceph-mds

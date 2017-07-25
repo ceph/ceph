@@ -26,6 +26,10 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    #
+    # Disable auto-class, so we can inject device class manually below
+    #
+    CEPH_ARGS+="--osd-class-update-on-start=false "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -111,8 +115,11 @@ function TEST_set_device_class() {
 
     TEST_classes $dir || return 1
 
-    ceph osd crush set-device-class osd.0 ssd || return 1
-    ceph osd crush set-device-class osd.1 ssd || return 1
+    ceph osd crush set-device-class ssd osd.0 || return 1
+    ceph osd crush class ls-osd ssd | grep 0 || return 1
+    ceph osd crush set-device-class ssd osd.1 || return 1
+    ceph osd crush class ls-osd ssd | grep 1 || return 1
+    ceph osd crush set-device-class ssd 0 1 || return 1 # should be idempotent
 
     ok=false
     for delay in 2 4 8 16 32 64 128 256 ; do
@@ -134,6 +141,10 @@ function TEST_mon_classes() {
     run_mon $dir a || return 1
     ceph osd crush class create CLASS || return 1
     ceph osd crush class create CLASS || return 1 # idempotent
+    ceph osd crush class ls | grep CLASS  || return 1
+    ceph osd crush class rename CLASS TEMP || return 1
+    ceph osd crush class ls | grep TEMP || return 1
+    ceph osd crush class rename TEMP CLASS || return 1
     ceph osd crush class ls | grep CLASS  || return 1
     ceph osd crush class rm CLASS || return 1
     expect_failure $dir ENOENT ceph osd crush class rm CLASS || return 1

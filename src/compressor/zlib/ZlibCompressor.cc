@@ -22,7 +22,7 @@
 #include <zlib.h>
 
 // -----------------------------------------------------------------------------
-#define dout_context g_ceph_context
+#define dout_context cct
 #define dout_subsys ceph_subsys_compressor
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
@@ -59,7 +59,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
   strm.zalloc = Z_NULL;
   strm.zfree = Z_NULL;
   strm.opaque = Z_NULL;
-  ret = deflateInit2(&strm, g_conf->compressor_zlib_level, Z_DEFLATED, ZLIB_DEFAULT_WIN_SIZE, ZLIB_MEMORY_LEVEL, Z_DEFAULT_STRATEGY);
+  ret = deflateInit2(&strm, cct->_conf->compressor_zlib_level, Z_DEFLATED, ZLIB_DEFAULT_WIN_SIZE, ZLIB_MEMORY_LEVEL, Z_DEFAULT_STRATEGY);
   if (ret != Z_OK) {
     dout(1) << "Compression init error: init return "
          << ret << " instead of Z_OK" << dendl;

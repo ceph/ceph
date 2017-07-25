@@ -48,7 +48,8 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   timer(g_ceph_context, lock),
   active_mgr(nullptr),
   orig_argc(argc),
-  orig_argv(argv)
+  orig_argv(argv),
+  available_in_map(false)
 {
 }
 
@@ -148,22 +149,44 @@ void MgrStandby::send_beacon()
 {
   assert(lock.is_locked_by_me());
   dout(1) << state_str() << dendl;
-  dout(10) << "sending beacon as gid " << monc.get_global_id() << dendl;
 
+  set<string> modules;
+  PyModules::list_modules(&modules);
+
+  // Whether I think I am available (request MgrMonitor to set me
+  // as available in the map)
   bool available = active_mgr != nullptr && active_mgr->is_initialized();
+
   auto addr = available ? active_mgr->get_server_addr() : entity_addr_t();
+  dout(10) << "sending beacon as gid " << monc.get_global_id()
+	   << " modules " << modules << dendl;
+
+  map<string,string> metadata;
+  collect_sys_info(&metadata, g_ceph_context);
+
   MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
 				 monc.get_global_id(),
                                  g_conf->name.get_id(),
                                  addr,
-                                 available);
+                                 available,
+				 modules,
+				 std::move(metadata));
+
+  if (available && !available_in_map) {
+    // We are informing the mon that we are done initializing: inform
+    // it of our command set.  This has to happen after init() because
+    // it needs the python modules to have loaded.
+    m->set_command_descs(active_mgr->get_command_set());
+    dout(4) << "going active, including " << m->get_command_descs().size()
+            << " commands in beacon" << dendl;
+  }
                                  
   monc.send_mon_message(m);
 }
 
 void MgrStandby::tick()
 {
-  dout(0) << __func__ << dendl;
+  dout(10) << __func__ << dendl;
   send_beacon();
 
   if (active_mgr) {
@@ -274,7 +297,7 @@ void MgrStandby::_update_log_config()
 
 void MgrStandby::handle_mgr_map(MMgrMap* mmap)
 {
-  auto map = mmap->get_map();
+  auto &map = mmap->get_map();
   dout(4) << "received map epoch " << map.get_epoch() << dendl;
   const bool active_in_map = map.active_gid == monc.get_global_id();
   dout(4) << "active in map: " << active_in_map
@@ -282,12 +305,27 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   if (active_in_map) {
     if (!active_mgr) {
       dout(1) << "Activating!" << dendl;
-      active_mgr.reset(new Mgr(&monc, client_messenger.get(), &objecter,
+      active_mgr.reset(new Mgr(&monc, map, client_messenger.get(), &objecter,
 			       &client, clog, audit_clog));
-      active_mgr->background_init();
-      dout(1) << "I am now active" << dendl;
+      active_mgr->background_init(new FunctionContext(
+            [this](int r){
+              // Advertise our active-ness ASAP instead of waiting for
+              // next tick.
+              Mutex::Locker l(lock);
+              send_beacon();
+            }));
+      dout(1) << "I am now activating" << dendl;
     } else {
       dout(10) << "I was already active" << dendl;
+      bool need_respawn = active_mgr->got_mgr_map(map);
+      if (need_respawn) {
+	respawn();
+      }
+    }
+
+    if (!available_in_map && map.get_available()) {
+      dout(4) << "Map now says I am available" << dendl;
+      available_in_map = true;
     }
   } else {
     if (active_mgr != nullptr) {
@@ -304,23 +342,18 @@ bool MgrStandby::ms_dispatch(Message *m)
   Mutex::Locker l(lock);
   dout(4) << state_str() << " " << *m << dendl;
 
-  switch (m->get_type()) {
-    case MSG_MGR_MAP:
-      handle_mgr_map(static_cast<MMgrMap*>(m));
-      break;
-
-    default:
-      if (active_mgr) {
-	auto am = active_mgr;
-        lock.Unlock();
-        am->ms_dispatch(m);
-        lock.Lock();
-      } else {
-        return false;
-      }
+  if (m->get_type() == MSG_MGR_MAP) {
+    handle_mgr_map(static_cast<MMgrMap*>(m));
+    return true;
+  } else if (active_mgr) {
+    auto am = active_mgr;
+    lock.Unlock();
+    bool handled = am->ms_dispatch(m);
+    lock.Lock();
+    return handled;
+  } else {
+    return false;
   }
-
-  return true;
 }
 
 

@@ -705,12 +705,17 @@ void RGWBWRoutingRules::decode_json(JSONObj *obj) {
 
 void RGWBucketWebsiteConf::dump(Formatter *f) const
 {
-  encode_json("index_doc_suffix", index_doc_suffix, f);
-  encode_json("error_doc", error_doc, f);
-  encode_json("routing_rules", routing_rules, f);
+  if (!redirect_all.hostname.empty()) {
+    encode_json("redirect_all", redirect_all, f);
+  } else {
+    encode_json("index_doc_suffix", index_doc_suffix, f);
+    encode_json("error_doc", error_doc, f);
+    encode_json("routing_rules", routing_rules, f);
+  }
 }
 
 void RGWBucketWebsiteConf::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("redirect_all", redirect_all, obj);
   JSONDecoder::decode_json("index_doc_suffix", index_doc_suffix, obj);
   JSONDecoder::decode_json("error_doc", error_doc, obj);
   JSONDecoder::decode_json("routing_rules", routing_rules, obj);
@@ -899,6 +904,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("log_pool", log_pool, f);
   encode_json("intent_log_pool", intent_log_pool, f);
   encode_json("usage_log_pool", usage_log_pool, f);
+  encode_json("reshard_pool", reshard_pool, f);
   encode_json("user_keys_pool", user_keys_pool, f);
   encode_json("user_email_pool", user_email_pool, f);
   encode_json("user_swift_pool", user_swift_pool, f);
@@ -939,6 +945,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("lc_pool", lc_pool, obj);
   JSONDecoder::decode_json("log_pool", log_pool, obj);
   JSONDecoder::decode_json("intent_log_pool", intent_log_pool, obj);
+  JSONDecoder::decode_json("reshard_pool", reshard_pool, obj);
   JSONDecoder::decode_json("usage_log_pool", usage_log_pool, obj);
   JSONDecoder::decode_json("user_keys_pool", user_keys_pool, obj);
   JSONDecoder::decode_json("user_email_pool", user_email_pool, obj);

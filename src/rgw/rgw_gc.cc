@@ -24,7 +24,7 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
   cct = _cct;
   store = _store;
 
-  max_objs = min(cct->_conf->rgw_gc_max_objs, rgw_shards_max());
+  max_objs = min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max());
 
   obj_names = new string[max_objs];
 
@@ -147,7 +147,7 @@ int RGWGC::process(int index, int max_secs)
 
   int ret = l.lock_exclusive(&store->gc_pool_ctx, obj_names[index]);
   if (ret == -EBUSY) { /* already locked by another gc processor */
-    dout(0) << "RGWGC::process() failed to acquire lock on " << obj_names[index] << dendl;
+    dout(10) << "RGWGC::process() failed to acquire lock on " << obj_names[index] << dendl;
     return 0;
   }
   if (ret < 0)
@@ -199,7 +199,7 @@ int RGWGC::process(int index, int max_secs)
 
         const string& oid = obj.key.name; /* just stored raw oid there */
 
-	dout(0) << "gc::process: removing " << obj.pool << ":" << obj.key.name << dendl;
+	dout(5) << "gc::process: removing " << obj.pool << ":" << obj.key.name << dendl;
 	ObjectWriteOperation op;
 	cls_refcount_put(op, info.tag, true);
         ret = ctx->operate(oid, &op);
@@ -221,6 +221,10 @@ int RGWGC::process(int index, int max_secs)
           remove_tags.clear();
         }
       }
+    }
+    if (!remove_tags.empty()) {
+      RGWGC::remove(index, remove_tags);
+      remove_tags.clear();
     }
   } while (truncated);
 

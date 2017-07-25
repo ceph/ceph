@@ -51,8 +51,8 @@
   }
   
   # rules
-  rule replicated_ruleset {
-  \truleset 0 (esc)
+  rule replicated_rule {
+  \tid 0 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)

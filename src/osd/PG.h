@@ -256,6 +256,7 @@ protected:
   CephContext *cct;
   OSDriver osdriver;
   SnapMapper snap_mapper;
+  bool eio_errors_to_process = false;
 
   virtual PGBackend *get_pgbackend() = 0;
 public:
@@ -402,8 +403,14 @@ public:
 	*v = i->second.need;
       return true;
     }
+    bool is_deleted(const hobject_t &hoid) const {
+      auto i = needs_recovery_map.find(hoid);
+      if (i == needs_recovery_map.end())
+	return false;
+      return i->second.is_delete();
+    }
     bool is_unfound(const hobject_t &hoid) const {
-      return needs_recovery(hoid) && (
+      return needs_recovery(hoid) && !is_deleted(hoid) && (
 	!missing_loc.count(hoid) ||
 	!(*is_recoverable)(missing_loc.find(hoid)->second));
     }
@@ -454,6 +461,9 @@ public:
 	if (j == needs_recovery_map.end()) {
 	  needs_recovery_map.insert(*i);
 	} else {
+	  lgeneric_dout(pg->cct, 0) << this << " " << pg->info.pgid << " unexpected need for "
+				    << i->first << " have " << j->second
+				    << " tried to add " << i->second << dendl;
 	  assert(i->second.need == j->second.need);
 	}
       }
@@ -521,6 +531,8 @@ public:
 	return; // recovered!
 
       needs_recovery_map[hoid] = *item;
+      if (item->is_delete())
+	return;
       auto mliter =
 	missing_loc.insert(make_pair(hoid, set<pg_shard_t>())).first;
       assert(info.last_backfill.is_max());
@@ -904,7 +916,7 @@ protected:
   list<OpRequestRef>            waiting_for_scrub;
 
   list<OpRequestRef>            waiting_for_cache_not_full;
-  list<OpRequestRef>            waiting_for_all_missing;
+  list<OpRequestRef>            waiting_for_clean_to_primary_repair;
   map<hobject_t, list<OpRequestRef>> waiting_for_unreadable_object,
 			     waiting_for_degraded_object,
 			     waiting_for_blocked_object;
@@ -962,12 +974,15 @@ public:
   bool needs_recovery() const;
   bool needs_backfill() const;
 
+  /// clip calculated priority to reasonable range
+  inline int clamp_recovery_priority(int priority);
   /// get log recovery reservation priority
   unsigned get_recovery_priority();
   /// get backfill reservation priority
   unsigned get_backfill_priority();
 
   void mark_clean();  ///< mark an active pg clean
+  void change_recovery_force_mode(int new_mode, bool clear);
 
   /// return [start,end) bounds for required past_intervals
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
@@ -1190,7 +1205,6 @@ public:
 
     // common to both scrubs
     bool active;
-    bool queue_snap_trim;
     int waiting_on;
     set<pg_shard_t> waiting_on_whom;
     int shallow_errors;
@@ -1292,7 +1306,6 @@ public:
     // clear all state
     void reset() {
       active = false;
-      queue_snap_trim = false;
       waiting_on = 0;
       waiting_on_whom.clear();
       if (active_rep_scrub) {
@@ -1344,9 +1357,11 @@ public:
    * return true if any inconsistency/missing is repaired, false otherwise
    */
   bool scrub_process_inconsistent();
+  bool ops_blocked_by_scrub() const;
   void scrub_finish();
   void scrub_clear_state();
   void _scan_snaps(ScrubMap &map);
+  void _repair_oinfo_oid(ScrubMap &map);
   void _scan_rollback_obs(
     const vector<ghobject_t> &rollback_obs,
     ThreadPool::TPHandle &handle);
@@ -1558,11 +1573,13 @@ public:
   TrivialEvent(LocalBackfillReserved)
   TrivialEvent(RemoteBackfillReserved)
   TrivialEvent(RemoteReservationRejected)
+  TrivialEvent(CancelBackfill)
   TrivialEvent(RequestBackfill)
   TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
   TrivialEvent(BackfillTooFull)
   TrivialEvent(RecoveryTooFull)
+  TrivialEvent(CancelRecovery)
 
   TrivialEvent(AllReplicasRecovered)
   TrivialEvent(DoRecovery)
@@ -1855,6 +1872,7 @@ public:
     struct Recovered : boost::statechart::state< Recovered, Active >, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::transition< GoClean, Clean >,
+	boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
 	boost::statechart::custom_reaction< AllReplicasActivated >
       > reactions;
       explicit Recovered(my_context ctx);
@@ -1868,10 +1886,12 @@ public:
     struct Backfilling : boost::statechart::state< Backfilling, Active >, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::transition< Backfilled, Recovered >,
+	boost::statechart::custom_reaction< CancelBackfill >,
 	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       explicit Backfilling(my_context ctx);
       boost::statechart::result react(const RemoteReservationRejected& evt);
+      boost::statechart::result react(const CancelBackfill& evt);
       void exit();
     };
 
@@ -1982,12 +2002,14 @@ public:
     struct Recovering : boost::statechart::state< Recovering, Active >, NamedState {
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AllReplicasRecovered >,
+	boost::statechart::custom_reaction< CancelRecovery >,
 	boost::statechart::custom_reaction< RequestBackfill >
 	> reactions;
       explicit Recovering(my_context ctx);
       void exit();
-      void release_reservations();
+      void release_reservations(bool cancel = false);
       boost::statechart::result react(const AllReplicasRecovered &evt);
+      boost::statechart::result react(const CancelRecovery& evt);
       boost::statechart::result react(const RequestBackfill &evt);
     };
 
@@ -2207,6 +2229,9 @@ public:
 
   uint64_t get_min_acting_features() const { return acting_features; }
   uint64_t get_min_upacting_features() const { return upacting_features; }
+  bool perform_deletes_during_peering() const {
+    return !(get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
+  }
 
   void init_primary_up_acting(
     const vector<int> &newup,
@@ -2372,8 +2397,8 @@ public:
 
   virtual void kick_snap_trim() = 0;
   virtual void snap_trimmer_scrub_complete() = 0;
-  bool requeue_scrub();
-  void queue_recovery(bool front = false);
+  bool requeue_scrub(bool high_priority = false);
+  void queue_recovery();
   bool queue_scrub();
   unsigned get_scrub_priority();
 

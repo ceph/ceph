@@ -109,6 +109,7 @@ setup_osd_data
 POOL="alloc_hint-rep"
 ceph osd pool create "${POOL}" "${NUM_PG}"
 ceph osd pool set "${POOL}" size "${NUM_OSDS}"
+ceph osd pool application enable "${POOL}" rados
 
 OBJ="foo"
 setup_pgid "${POOL}" "${OBJ}"
@@ -153,9 +154,10 @@ ceph osd pool delete "${POOL}" "${POOL}" --yes-i-really-really-mean-it
 
 PROFILE="alloc_hint-ecprofile"
 POOL="alloc_hint-ec"
-ceph osd erasure-code-profile set "${PROFILE}" k=2 m=1 ruleset-failure-domain=osd
+ceph osd erasure-code-profile set "${PROFILE}" k=2 m=1 crush-failure-domain=osd
 ceph osd erasure-code-profile get "${PROFILE}" # just so it's logged
 ceph osd pool create "${POOL}" "${NUM_PG}" "${NUM_PGP}" erasure "${PROFILE}"
+ceph osd pool application enable "${POOL}" rados
 
 OBJ="baz"
 setup_pgid "${POOL}" "${OBJ}"

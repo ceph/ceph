@@ -249,6 +249,7 @@ public:
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info,
     ObjectContextRef obc,
+    bool is_delete,
     ObjectStore::Transaction *t
     ) override;
   void on_peer_recover(
@@ -261,12 +262,19 @@ public:
     const hobject_t oid) override;
   void on_global_recover(
     const hobject_t &oid,
-    const object_stat_sum_t &stat_diff) override;
+    const object_stat_sum_t &stat_diff,
+    bool is_delete) override;
   void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) override;
+  void primary_failed(const hobject_t &soid) override;
+  bool primary_error(const hobject_t& soid, eversion_t v) override;
   void cancel_pull(const hobject_t &soid) override;
   void apply_stats(
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) override;
+  void on_primary_error(const hobject_t &oid, eversion_t v) override;
+  void remove_missing_object(const hobject_t &oid,
+			     eversion_t v,
+			     Context *on_complete) override;
 
   template<class T> class BlessedGenContext;
   class BlessedContext;
@@ -1070,6 +1078,8 @@ protected:
 
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h);
+  int prep_object_replica_deletes(const hobject_t& soid, eversion_t v,
+				  PGBackend::RecoveryHandle *h);
 
   void finish_degraded_object(const hobject_t& oid);
 
@@ -1221,7 +1231,7 @@ protected:
     ThreadPool::TPHandle &handle ///< [in] tp handle
     );
 
-  void prep_backfill_object_push(
+  int prep_backfill_object_push(
     hobject_t oid, eversion_t v, ObjectContextRef obc,
     vector<pg_shard_t> peers,
     PGBackend::RecoveryHandle *h);
@@ -1386,7 +1396,7 @@ public:
 
   void handle_backoff(OpRequestRef& op);
 
-  OpContextUPtr trim_object(bool first, const hobject_t &coid);
+  int trim_object(bool first, const hobject_t &coid, OpContextUPtr *ctxp);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;
@@ -1672,6 +1682,7 @@ private:
       pending = nullptr;
       auto *pg = context< SnapTrimmer >().pg;
       pg->state_clear(PG_STATE_SNAPTRIM_WAIT);
+      pg->state_clear(PG_STATE_SNAPTRIM_ERROR);
       pg->publish_stats_to_osd();
     }
   };
@@ -1731,6 +1742,8 @@ public:
 
   void block_write_on_full_cache(
     const hobject_t& oid, OpRequestRef op);
+  void block_for_clean(
+    const hobject_t& oid, OpRequestRef op);
   void block_write_on_snap_rollback(
     const hobject_t& oid, ObjectContextRef obc, OpRequestRef op);
   void block_write_on_degraded_snap(const hobject_t& oid, OpRequestRef op);
@@ -1756,6 +1769,7 @@ public:
   void on_role_change() override;
   void on_pool_change() override;
   void _on_new_interval() override;
+  void clear_async_reads();
   void on_change(ObjectStore::Transaction *t) override;
   void on_activate() override;
   void on_flushed() override;
@@ -1763,6 +1777,7 @@ public:
   void on_shutdown() override;
   bool check_failsafe_full(ostream &ss) override;
   bool check_osdmap_full(const set<pg_shard_t> &missing_on) override;
+  int rep_repair_primary_object(const hobject_t& soid, OpRequestRef op);
 
   // attr cache handling
   void setattr_maybe_cache(

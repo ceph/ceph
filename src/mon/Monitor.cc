@@ -77,6 +77,7 @@
 #include "MgrMonitor.h"
 #include "MgrStatMonitor.h"
 #include "mon/QuorumService.h"
+#include "mon/OldHealthMonitor.h"
 #include "mon/HealthMonitor.h"
 #include "mon/ConfigKeyService.h"
 #include "common/config.h"
@@ -111,17 +112,6 @@ MonCommand mon_commands[] = {
 #include <mon/MonCommands.h>
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
-
-  // FIXME: slurp up the Mgr commands too
-
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail, FLAG(MGR)},
-#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
-  {parsesig, helptext, modulename, req_perms, avail, flags | FLAG(MGR)},
-#include <mgr/MgrCommands.h>
-#undef COMMAND
-#undef COMMAND_WITH_FLAG
-
 };
 
 
@@ -204,8 +194,9 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
   paxos_service[PAXOS_MGR] = new MgrMonitor(this, paxos, "mgr");
   paxos_service[PAXOS_MGRSTAT] = new MgrStatMonitor(this, paxos, "mgrstat");
+  paxos_service[PAXOS_HEALTH] = new HealthMonitor(this, paxos, "health");
 
-  health_monitor = new HealthMonitor(this);
+  health_monitor = new OldHealthMonitor(this);
   config_key_service = new ConfigKeyService(this, paxos);
 
   mon_caps = new MonCap();
@@ -225,27 +216,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   // note: OSDMonitor may update this based on the luminous flag.
   pgservice = mgrstatmon()->get_pg_stat_service();
-}
-
-PaxosService *Monitor::get_paxos_service_by_name(const string& name)
-{
-  if (name == "mdsmap")
-    return paxos_service[PAXOS_MDSMAP];
-  if (name == "monmap")
-    return paxos_service[PAXOS_MONMAP];
-  if (name == "osdmap")
-    return paxos_service[PAXOS_OSDMAP];
-  if (name == "pgmap")
-    return paxos_service[PAXOS_PGMAP];
-  if (name == "logm")
-    return paxos_service[PAXOS_LOG];
-  if (name == "auth")
-    return paxos_service[PAXOS_AUTH];
-  if (name == "mgr")
-    return paxos_service[PAXOS_MGR];
-
-  assert(0 == "given name does not match known paxos service");
-  return NULL;
 }
 
 Monitor::~Monitor()
@@ -296,7 +266,8 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
   bool read_only = (command == "mon_status" ||
                     command == "mon metadata" ||
                     command == "quorum_status" ||
-                    command == "ops");
+                    command == "ops" ||
+                    command == "sessions");
 
   (read_only ? audit_clog->debug() : audit_clog->info())
     << "from='admin socket' entity='admin socket' "
@@ -334,6 +305,17 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     if (f) {
       f->flush(ss);
     }
+  } else if (command == "sessions") {
+
+    if (f) {
+      f->open_array_section("sessions");
+      for (auto p : session_map.sessions) {
+        f->dump_stream("session") << *p;
+      }
+      f->close_section();
+      f->flush(ss);
+    }
+
   } else {
     assert(0 == "bad AdminSocket command binding");
   }
@@ -768,6 +750,11 @@ int Monitor::preinit()
                                      admin_hook,
                                      "show the ops currently in flight");
   assert(r == 0);
+  r = admin_socket->register_command("sessions",
+                                     "sessions",
+                                     admin_hook,
+                                     "list existing sessions");
+  assert(r == 0);
 
   lock.Lock();
 
@@ -846,6 +833,7 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
   for (int i = 0; i < PAXOS_NUM; ++i) {
     paxos_service[i]->post_refresh();
   }
+  load_metadata();
 }
 
 void Monitor::register_cluster_logger()
@@ -897,6 +885,7 @@ void Monitor::shutdown()
     admin_socket->unregister_command("quorum enter");
     admin_socket->unregister_command("quorum exit");
     admin_socket->unregister_command("ops");
+    admin_socket->unregister_command("sessions");
     delete admin_hook;
     admin_hook = NULL;
   }
@@ -1421,8 +1410,10 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
   while (sp.last_committed < paxos->get_version() && left > 0) {
     bufferlist bl;
     sp.last_committed++;
-    store->get(paxos->get_name(), sp.last_committed, bl);
-    // TODO: what if store->get returns error or empty bl?
+
+    int err = store->get(paxos->get_name(), sp.last_committed, bl);
+    assert(err == 0);
+
     tx->put(paxos->get_name(), sp.last_committed, bl);
     left -= bl.length();
     dout(20) << __func__ << " including paxos state " << sp.last_committed
@@ -1867,12 +1858,16 @@ void Monitor::win_standalone_election()
   set<int> q;
   q.insert(rank);
 
-  const MonCommand *my_cmds;
-  int cmdsize;
+  map<int,Metadata> metadata;
+  collect_metadata(&metadata[0]);
+
+  const MonCommand *my_cmds = nullptr;
+  int cmdsize = 0;
   get_locally_supported_monitor_commands(&my_cmds, &cmdsize);
   win_election(elector.get_epoch(), q,
                CEPH_FEATURES_ALL,
                ceph::features::mon::get_supported(),
+	       metadata,
                my_cmds, cmdsize);
 }
 
@@ -1901,6 +1896,7 @@ void Monitor::_finish_svc_election()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
+			   const map<int,Metadata>& metadata,
                            const MonCommand *cmdset, int cmdsize)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
@@ -1914,6 +1910,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   quorum = active;
   quorum_con_features = features;
   quorum_mon_features = mon_features;
+  pending_metadata = metadata;
   outside_quorum.clear();
 
   clog->info() << "mon." << name << "@" << rank
@@ -1933,6 +1930,27 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 
   logger->inc(l_mon_election_win);
 
+  // inject new metadata in first transaction.
+  {
+    // include previous metadata for missing mons (that aren't part of
+    // the current quorum).
+    map<int,Metadata> m = metadata;
+    for (unsigned rank = 0; rank < monmap->size(); ++rank) {
+      if (m.count(rank) == 0 &&
+	  mon_metadata.count(rank)) {
+	m[rank] = mon_metadata[rank];
+      }
+    }
+
+    // FIXME: This is a bit sloppy because we aren't guaranteed to submit
+    // a new transaction immediately after the election finishes.  We should
+    // do that anyway for other reasons, though.
+    MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+    bufferlist bl;
+    ::encode(m, bl);
+    t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  }
+
   finish_election();
   if (monmap->size() > 1 &&
       monmap->get_epoch() > 0) {
@@ -1941,11 +1959,6 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
     do_health_to_clog_interval();
     scrub_event_start();
   }
-
-  Metadata my_meta;
-  collect_sys_info(&my_meta, g_ceph_context);
-  my_meta["addr"] = stringify(messenger->get_myaddr());
-  update_mon_metadata(rank, std::move(my_meta));
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
@@ -1972,12 +1985,20 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
 
   finish_election();
 
-  if (quorum_con_features & CEPH_FEATURE_MON_METADATA) {
+  if ((quorum_con_features & CEPH_FEATURE_MON_METADATA) &&
+      !HAVE_FEATURE(quorum_con_features, SERVER_LUMINOUS)) {
+    // for pre-luminous mons only
     Metadata sys_info;
-    collect_sys_info(&sys_info, g_ceph_context);
+    collect_metadata(&sys_info);
     messenger->send_message(new MMonMetadata(sys_info),
 			    monmap->get_inst(get_leader()));
   }
+}
+
+void Monitor::collect_metadata(Metadata *m)
+{
+  collect_sys_info(m, g_ceph_context);
+  (*m)["addr"] = stringify(messenger->get_myaddr());
 }
 
 void Monitor::finish_election()
@@ -2392,27 +2413,180 @@ void Monitor::do_health_to_clog(bool force)
 
   dout(10) << __func__ << (force ? " (force)" : "") << dendl;
 
-  list<string> status;
-  health_status_t overall = get_health(status, NULL, NULL);
+  if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    string summary;
+    health_status_t level = get_health_status(false, nullptr, &summary);
+    if (!force &&
+	summary == health_status_cache.summary &&
+	level == health_status_cache.overall)
+      return;
+    if (level == HEALTH_OK)
+      clog->info() << "overall " << summary;
+    else if (level == HEALTH_WARN)
+      clog->warn() << "overall " << summary;
+    else if (level == HEALTH_ERR)
+      clog->error() << "overall " << summary;
+    else
+      ceph_abort();
+    health_status_cache.summary = summary;
+    health_status_cache.overall = level;
+  } else {
+    // for jewel only
+    list<string> status;
+    health_status_t overall = get_health(status, NULL, NULL);
+    dout(25) << __func__
+	     << (force ? " (force)" : "")
+	     << dendl;
 
-  dout(25) << __func__
-           << (force ? " (force)" : "")
-           << dendl;
+    string summary = joinify(status.begin(), status.end(), string("; "));
 
-  string summary = joinify(status.begin(), status.end(), string("; "));
+    if (!force &&
+	overall == health_status_cache.overall &&
+	!health_status_cache.summary.empty() &&
+	health_status_cache.summary == summary) {
+      // we got a dup!
+      return;
+    }
 
-  if (!force &&
-      overall == health_status_cache.overall &&
-      !health_status_cache.summary.empty() &&
-      health_status_cache.summary == summary) {
-    // we got a dup!
-    return;
+    clog->info() << summary;
+
+    health_status_cache.overall = overall;
+    health_status_cache.summary = summary;
+  }
+}
+
+health_status_t Monitor::get_health_status(
+  bool want_detail,
+  Formatter *f,
+  std::string *plain,
+  const char *sep1,
+  const char *sep2)
+{
+  health_status_t r = HEALTH_OK;
+  bool compat = g_conf->mon_health_preluminous_compat;
+  if (f) {
+    f->open_object_section("health");
+    f->open_object_section("checks");
   }
 
-  clog->info() << summary;
+  string summary;
+  string *psummary = f ? nullptr : &summary;
+  for (auto& svc : paxos_service) {
+    r = std::min(r, svc->get_health_checks().dump_summary(
+		   f, psummary, sep2, want_detail));
+  }
 
-  health_status_cache.overall = overall;
-  health_status_cache.summary = summary;
+  if (f) {
+    f->close_section();
+    f->dump_stream("status") << r;
+  } else {
+    // one-liner: HEALTH_FOO[ thing1[; thing2 ...]]
+    *plain = stringify(r);
+    if (summary.size()) {
+      *plain += sep1;
+      *plain += summary;
+    }
+    *plain += "\n";
+  }
+
+  if (f && compat) {
+    f->open_array_section("summary");
+    for (auto& svc : paxos_service) {
+      svc->get_health_checks().dump_summary_compat(f);
+    }
+    f->close_section();
+    f->dump_stream("overall_status") << r;
+  }
+
+  if (want_detail) {
+    if (f && compat) {
+      f->open_array_section("detail");
+    }
+
+    for (auto& svc : paxos_service) {
+      svc->get_health_checks().dump_detail(f, plain, compat);
+    }
+
+    if (f && compat) {
+      f->close_section();
+    }
+  }
+  if (f) {
+    f->close_section();
+  }
+  return r;
+}
+
+void Monitor::log_health(
+  const health_check_map_t& updated,
+  const health_check_map_t& previous,
+  MonitorDBStore::TransactionRef t)
+{
+  if (!g_conf->mon_health_to_clog) {
+    return;
+  }
+  // FIXME: log atomically as part of @t instead of using clog.
+  dout(10) << __func__ << " updated " << updated.checks.size()
+	   << " previous " << previous.checks.size()
+	   << dendl;
+  for (auto& p : updated.checks) {
+    auto q = previous.checks.find(p.first);
+    if (q == previous.checks.end()) {
+      // new
+      ostringstream ss;
+      ss << "Health check failed: " << p.second.summary << " ("
+         << p.first << ")";
+      if (p.second.severity == HEALTH_WARN)
+	clog->warn() << ss.str();
+      else
+	clog->error() << ss.str();
+    } else {
+      if (p.second.summary != q->second.summary ||
+	  p.second.severity != q->second.severity) {
+	// summary or severity changed (ignore detail changes at this level)
+	ostringstream ss;
+        ss << "Health check update: " << p.second.summary << " (" << p.first << ")";
+	if (p.second.severity == HEALTH_WARN)
+	  clog->warn() << ss.str();
+	else
+	  clog->error() << ss.str();
+      }
+    }
+  }
+  for (auto& p : previous.checks) {
+    if (!updated.checks.count(p.first)) {
+      // cleared
+      ostringstream ss;
+      if (p.first == "DEGRADED_OBJECTS") {
+        clog->info() << "All degraded objects recovered";
+      } else if (p.first == "OSD_FLAGS") {
+        clog->info() << "OSD flags cleared";
+      } else {
+        clog->info() << "Health check cleared: " << p.first << " (was: "
+                     << p.second.summary << ")";
+      }
+    }
+  }
+
+  if (previous.checks.size() && updated.checks.size() == 0) {
+    // We might be going into a fully healthy state, check
+    // other subsystems
+    bool any_checks = false;
+    for (auto& svc : paxos_service) {
+      if (&(svc->get_health_checks()) == &(previous)) {
+        // Ignore the ones we're clearing right now
+        continue;
+      }
+
+      if (svc->get_health_checks().checks.size() > 0) {
+        any_checks = true;
+        break;
+      }
+    }
+    if (!any_checks) {
+      clog->info() << "Cluster is now healthy";
+    }
+  }
 }
 
 health_status_t Monitor::get_health(list<string>& status,
@@ -2432,51 +2606,28 @@ health_status_t Monitor::get_health(list<string>& status,
     s->get_health(summary, detailbl ? &detail : NULL, cct);
   }
 
-  health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
-
-  if (f) {
-    f->open_object_section("timechecks");
-    f->dump_unsigned("epoch", get_epoch());
-    f->dump_int("round", timecheck_round);
-    f->dump_stream("round_status")
-      << ((timecheck_round%2) ? "on-going" : "finished");
-  }
+  health_monitor->get_health(summary, (detailbl ? &detail : NULL));
 
   health_status_t overall = HEALTH_OK;
   if (!timecheck_skews.empty()) {
     list<string> warns;
-    if (f)
-      f->open_array_section("mons");
     for (map<entity_inst_t,double>::iterator i = timecheck_skews.begin();
          i != timecheck_skews.end(); ++i) {
       entity_inst_t inst = i->first;
       double skew = i->second;
       double latency = timecheck_latencies[inst];
       string name = monmap->get_name(inst.addr);
-
       ostringstream tcss;
       health_status_t tcstatus = timecheck_status(tcss, skew, latency);
       if (tcstatus != HEALTH_OK) {
         if (overall > tcstatus)
           overall = tcstatus;
         warns.push_back(name);
-
         ostringstream tmp_ss;
         tmp_ss << "mon." << name
                << " addr " << inst.addr << " " << tcss.str()
 	       << " (latency " << latency << "s)";
         detail.push_back(make_pair(tcstatus, tmp_ss.str()));
-      }
-
-      if (f) {
-        f->open_object_section("mon");
-        f->dump_string("name", name.c_str());
-        f->dump_float("skew", skew);
-        f->dump_float("latency", latency);
-        f->dump_stream("health") << tcstatus;
-        if (tcstatus != HEALTH_OK)
-          f->dump_stream("details") << tcss.str();
-        f->close_section();
       }
     }
     if (!warns.empty()) {
@@ -2491,11 +2642,7 @@ health_status_t Monitor::get_health(list<string>& status,
       status.push_back(ss.str());
       summary.push_back(make_pair(HEALTH_WARN, "Monitor clock skew detected "));
     }
-    if (f)
-      f->close_section();
   }
-  if (f)
-    f->close_section();
 
   if (f)
     f->open_array_section("summary");
@@ -2547,12 +2694,9 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
   if (f)
     f->open_object_section("status");
 
-  // reply with the status for all the components
-  list<string> health;
-  get_health(health, NULL, f);
-
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
+    get_health_status(false, f, nullptr);
     f->dump_unsigned("election_epoch", get_epoch());
     {
       f->open_array_section("quorum");
@@ -2568,7 +2712,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     monmap->dump(f);
     f->close_section();
     f->open_object_section("osdmap");
-    osdmon()->osdmap.print_summary(f, cout);
+    osdmon()->osdmap.print_summary(f, cout, string(12, ' '));
     f->close_section();
     f->open_object_section("pgmap");
     pgservice->print_summary(f, NULL);
@@ -2576,43 +2720,67 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     f->open_object_section("fsmap");
     mdsmon()->get_fsmap().print_summary(f, NULL);
     f->close_section();
-
     f->open_object_section("mgrmap");
     mgrmon()->get_map().print_summary(f, nullptr);
     f->close_section();
+
+    f->dump_object("servicemap", mgrstatmon()->get_service_map());
     f->close_section();
   } else {
-
     ss << "  cluster:\n";
     ss << "    id:     " << monmap->get_fsid() << "\n";
-    ss << "    health: " << joinify(health.begin(), health.end(), 
-				  string("\n            ")) << "\n";
+
+    string health;
+    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      get_health_status(false, nullptr, &health,
+			"\n            ", "\n            ");
+    } else {
+      list<string> ls;
+      get_health(ls, NULL, f);
+      health = joinify(ls.begin(), ls.end(),
+		       string("\n            "));
+    }
+    ss << "    health: " << health << "\n";
+
     ss << "\n \n  services:\n";
-    const auto quorum_names = get_quorum_names();
-    const auto mon_count = monmap->mon_info.size();
-    ss << "    mon: " << mon_count << " daemons, quorum "
-       << quorum_names;
-    if (quorum_names.size() != mon_count) {
-      std::list<std::string> out_of_q;
-      for (size_t i = 0; i < monmap->ranks.size(); ++i) {
-        if (quorum.count(i) == 0) {
-          out_of_q.push_back(monmap->ranks[i]);
-        }
+    {
+      size_t maxlen = 3;
+      auto& service_map = mgrstatmon()->get_service_map();
+      for (auto& p : service_map.services) {
+	maxlen = std::max(maxlen, p.first.size());
       }
-      ss << ", out of quorum: " << joinify(out_of_q.begin(),
-                                           out_of_q.end(), std::string(", "));
-    }
-    ss << "\n";
-    if (mgrmon()->in_use()) {
-      ss << "    mgr: ";
-      mgrmon()->get_map().print_summary(nullptr, &ss);
+      string spacing(maxlen - 3, ' ');
+      const auto quorum_names = get_quorum_names();
+      const auto mon_count = monmap->mon_info.size();
+      ss << "    mon: " << spacing << mon_count << " daemons, quorum "
+	 << quorum_names;
+      if (quorum_names.size() != mon_count) {
+	std::list<std::string> out_of_q;
+	for (size_t i = 0; i < monmap->ranks.size(); ++i) {
+	  if (quorum.count(i) == 0) {
+	    out_of_q.push_back(monmap->ranks[i]);
+	  }
+	}
+	ss << ", out of quorum: " << joinify(out_of_q.begin(),
+					     out_of_q.end(), std::string(", "));
+      }
       ss << "\n";
+      if (mgrmon()->in_use()) {
+	ss << "    mgr: " << spacing;
+	mgrmon()->get_map().print_summary(nullptr, &ss);
+	ss << "\n";
+      }
+      if (mdsmon()->get_fsmap().filesystem_count() > 0) {
+	ss << "    mds: " << spacing << mdsmon()->get_fsmap() << "\n";
+      }
+      ss << "    osd: " << spacing;
+      osdmon()->osdmap.print_summary(NULL, ss, string(maxlen + 6, ' '));
+      ss << "\n";
+      for (auto& p : service_map.services) {
+	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
+	   << p.second.get_summary() << "\n";
+      }
     }
-    if (mdsmon()->get_fsmap().filesystem_count() > 0) {
-      ss << "    mds: " << mdsmon()->get_fsmap() << "\n";
-    }
-    ss << "    osd: ";
-    osdmon()->osdmap.print_summary(NULL, ss);
 
     ss << "\n \n  data:\n";
     pgservice->print_summary(NULL, &ss);
@@ -2642,11 +2810,13 @@ void Monitor::_generate_command_map(map<string,cmd_vartype>& cmdmap,
   }
 }
 
-const MonCommand *Monitor::_get_moncommand(const string &cmd_prefix,
-                                           MonCommand *cmds, int cmds_size)
+const MonCommand *Monitor::_get_moncommand(
+  const string &cmd_prefix,
+  const MonCommand *cmds,
+  int cmds_size)
 {
-  MonCommand *this_cmd = NULL;
-  for (MonCommand *cp = cmds;
+  const MonCommand *this_cmd = NULL;
+  for (const MonCommand *cp = cmds;
        cp < &cmds[cmds_size]; cp++) {
     if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
       this_cmd = cp;
@@ -2676,26 +2846,23 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
   return capable;
 }
 
-void Monitor::format_command_descriptions(const MonCommand *commands,
-					  unsigned commands_size,
+void Monitor::format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
 					  bufferlist *rdata,
 					  bool hide_mgr_flag)
 {
   int cmdnum = 0;
   f->open_object_section("command_descriptions");
-  for (const MonCommand *cp = commands;
-       cp < &commands[commands_size]; cp++) {
-
-    unsigned flags = cp->flags;
+  for (const auto &cmd : commands) {
+    unsigned flags = cmd.flags;
     if (hide_mgr_flag) {
       flags &= ~MonCommand::FLAG_MGR;
     }
     ostringstream secname;
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
     dump_cmddesc_to_json(f, secname.str(),
-			 cp->cmdstring, cp->helpstring, cp->module,
-			 cp->req_perms, cp->availability, flags);
+			 cmd.cmdstring, cmd.helpstring, cmd.module,
+			 cmd.req_perms, cmd.availability, flags);
     cmdnum++;
   }
   f->close_section();	// command_descriptions
@@ -2806,9 +2973,16 @@ void Monitor::handle_command(MonOpRequestRef op)
     // hide mgr commands until luminous upgrade is complete
     bool hide_mgr_flag =
       osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS;
-    format_command_descriptions(leader_supported_mon_commands,
-				leader_supported_mon_commands_size, f, &rdata,
-				hide_mgr_flag);
+
+    std::vector<MonCommand> commands;
+    commands = static_cast<MgrMonitor*>(
+        paxos_service[PAXOS_MGR])->get_command_descs();
+
+    for (int i = 0 ; i < leader_supported_mon_commands_size; ++i) {
+      commands.push_back(leader_supported_mon_commands[i]);
+    }
+
+    format_command_descriptions(commands, f, &rdata, hide_mgr_flag);
     delete f;
     reply_command(op, 0, "", rdata, 0);
     return;
@@ -2838,17 +3012,28 @@ void Monitor::handle_command(MonOpRequestRef op)
   // validate command is in leader map
 
   const MonCommand *leader_cmd;
+  const auto& mgr_cmds = mgrmon()->get_command_descs();
+  const MonCommand *mgr_cmd = nullptr;
+  if (!mgr_cmds.empty()) {
+    mgr_cmd = _get_moncommand(prefix, &mgr_cmds.at(0), mgr_cmds.size());
+  }
   leader_cmd = _get_moncommand(prefix,
                                // the boost underlying this isn't const for some reason
                                const_cast<MonCommand*>(leader_supported_mon_commands),
                                leader_supported_mon_commands_size);
   if (!leader_cmd) {
-    reply_command(op, -EINVAL, "command not known", 0);
-    return;
+    leader_cmd = mgr_cmd;
+    if (!leader_cmd) {
+      reply_command(op, -EINVAL, "command not known", 0);
+      return;
+    }
   }
   // validate command is in our map & matches, or forward if it is allowed
   const MonCommand *mon_cmd = _get_moncommand(prefix, mon_commands,
                                               ARRAY_SIZE(mon_commands));
+  if (!mon_cmd) {
+    mon_cmd = mgr_cmd;
+  }
   if (!is_leader()) {
     if (!mon_cmd) {
       if (leader_cmd->is_noforward()) {
@@ -3026,7 +3211,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     end -= start;
     dout(1) << "finished manual compaction in " << end << " seconds" << dendl;
     ostringstream oss;
-    oss << "compacted leveldb in " << end;
+    oss << "compacted " << g_conf->get_val<std::string>("mon_keyvaluedb") << " in " << end << " seconds";
     rs = oss.str();
     r = 0;
   }
@@ -3044,6 +3229,48 @@ void Monitor::handle_command(MonOpRequestRef op)
       rs = "must supply options to be parsed in a single string";
       r = -EINVAL;
     }
+  } else if (prefix == "time-sync-status") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    f->open_object_section("time_sync");
+    if (!timecheck_skews.empty()) {
+      f->open_object_section("time_skew_status");
+      for (auto& i : timecheck_skews) {
+	entity_inst_t inst = i.first;
+	double skew = i.second;
+	double latency = timecheck_latencies[inst];
+	string name = monmap->get_name(inst.addr);
+	ostringstream tcss;
+	health_status_t tcstatus = timecheck_status(tcss, skew, latency);
+	f->open_object_section(name.c_str());
+	f->dump_float("skew", skew);
+	f->dump_float("latency", latency);
+	f->dump_stream("health") << tcstatus;
+	if (tcstatus != HEALTH_OK) {
+	  f->dump_stream("details") << tcss.str();
+	}
+	f->close_section();
+      }
+      f->close_section();
+    }
+    f->open_object_section("timechecks");
+    f->dump_unsigned("epoch", get_epoch());
+    f->dump_int("round", timecheck_round);
+    f->dump_stream("round_status") << ((timecheck_round%2) ?
+				       "on-going" : "finished");
+    f->close_section();
+    f->close_section();
+    f->flush(rdata);
+    r = 0;
+    rs = "";
+  } else if (prefix == "config set") {
+    std::string key;
+    cmd_getval(cct, cmdmap, "key", key);
+    std::string val;
+    cmd_getval(cct, cmdmap, "value", val);
+    r = g_conf->set_val(key, val, true, &ss);
+    rs = ss.str();
+    goto out;
   } else if (prefix == "status" ||
 	     prefix == "health" ||
 	     prefix == "df") {
@@ -3060,25 +3287,35 @@ void Monitor::handle_command(MonOpRequestRef op)
       }
       rdata.append(ds);
     } else if (prefix == "health") {
-      list<string> health_str;
-      get_health(health_str, detail == "detail" ? &rdata : NULL, f.get());
-      if (f) {
-        f->flush(ds);
-        ds << '\n';
-      } else {
-	assert(!health_str.empty());
-	ds << health_str.front();
-	health_str.pop_front();
-	if (!health_str.empty()) {
-	  ds << ' ';
-	  ds << joinify(health_str.begin(), health_str.end(), string("; "));
+      if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+	string plain;
+	get_health_status(detail == "detail", f.get(), f ? nullptr : &plain);
+	if (f) {
+	  f->flush(rdata);
+	} else {
+	  rdata.append(plain);
 	}
+      } else {
+	list<string> health_str;
+	get_health(health_str, detail == "detail" ? &rdata : NULL, f.get());
+	if (f) {
+	  f->flush(ds);
+	  ds << '\n';
+	} else {
+	  assert(!health_str.empty());
+	  ds << health_str.front();
+	  health_str.pop_front();
+	  if (!health_str.empty()) {
+	    ds << ' ';
+	    ds << joinify(health_str.begin(), health_str.end(), string("; "));
+	  }
+	}
+	bufferlist comb;
+	comb.append(ds);
+	if (detail == "detail")
+	  comb.append(rdata);
+	rdata = comb;
       }
-      bufferlist comb;
-      comb.append(ds);
-      if (detail == "detail")
-	comb.append(rdata);
-      rdata = comb;
     } else if (prefix == "df") {
       bool verbose = (detail == "detail");
       if (f)
@@ -3327,6 +3564,65 @@ void Monitor::handle_command(MonOpRequestRef op)
       ds << pretty_version_to_str();
     }
     rdata.append(ds);
+    rs = "";
+    r = 0;
+  } else if (prefix == "versions") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    map<string,int> overall;
+    f->open_object_section("version");
+    map<string,int> mon, mgr, osd, mds;
+
+    count_metadata("ceph_version", &mon);
+    f->open_object_section("mon");
+    for (auto& p : mon) {
+      f->dump_int(p.first.c_str(), p.second);
+      overall[p.first] += p.second;
+    }
+    f->close_section();
+
+    mgrmon()->count_metadata("ceph_version", &mgr);
+    f->open_object_section("mgr");
+    for (auto& p : mgr) {
+      f->dump_int(p.first.c_str(), p.second);
+      overall[p.first] += p.second;
+    }
+    f->close_section();
+
+    osdmon()->count_metadata("ceph_version", &osd);
+    f->open_object_section("osd");
+    for (auto& p : osd) {
+      f->dump_int(p.first.c_str(), p.second);
+      overall[p.first] += p.second;
+    }
+    f->close_section();
+
+    mdsmon()->count_metadata("ceph_version", &mds);
+    f->open_object_section("mds");
+    for (auto& p : mon) {
+      f->dump_int(p.first.c_str(), p.second);
+      overall[p.first] += p.second;
+    }
+    f->close_section();
+
+    for (auto& p : mgrstatmon()->get_service_map().services) {
+      f->open_object_section(p.first.c_str());
+      map<string,int> m;
+      p.second.count_metadata("ceph_version", &m);
+      for (auto& q : m) {
+	f->dump_int(q.first.c_str(), q.second);
+	overall[q.first] += q.second;
+      }
+      f->close_section();
+    }
+
+    f->open_object_section("overall");
+    for (auto& p : overall) {
+      f->dump_int(p.first.c_str(), p.second);
+    }
+    f->close_section();
+    f->close_section();
+    f->flush(rdata);
     rs = "";
     r = 0;
   }
@@ -3648,7 +3944,8 @@ void Monitor::resend_routed_requests()
 
 void Monitor::remove_session(MonSession *s)
 {
-  dout(10) << "remove_session " << s << " " << s->inst << dendl;
+  dout(10) << "remove_session " << s << " " << s->inst
+	   << " features 0x" << std::hex << s->con_features << std::dec << dendl;
   assert(s->con);
   assert(!s->closed);
   for (set<uint64_t>::iterator p = s->routed_request_tids.begin();
@@ -3741,6 +4038,30 @@ void Monitor::_ms_dispatch(Message *m)
   if (s && s->closed) {
     return;
   }
+
+  if (src_is_mon && s) {
+    ConnectionRef con = m->get_connection();
+    if (con->get_messenger() && con->get_features() != s->con_features) {
+      // only update features if this is a non-anonymous connection
+      dout(10) << __func__ << " feature change for " << m->get_source_inst()
+               << " (was " << s->con_features
+               << ", now " << con->get_features() << ")" << dendl;
+      // connection features changed - recreate session.
+      if (s->con && s->con != con) {
+        dout(10) << __func__ << " connection for " << m->get_source_inst()
+                 << " changed from session; mark down and replace" << dendl;
+        s->con->mark_down();
+      }
+      if (s->item.is_on_list()) {
+        // forwarded messages' sessions are not in the sessions map and
+        // exist only while the op is being handled.
+        remove_session(s);
+      }
+      s->put();
+      s = nullptr;
+    }
+  }
+
   if (!s) {
     // if the sender is not a monitor, make sure their first message for a
     // session is an MAuth.  If it is not, assume it's a stray message,
@@ -3762,7 +4083,9 @@ void Monitor::_ms_dispatch(Message *m)
     }
     assert(s);
     con->set_priv(s->get());
-    dout(10) << __func__ << " new session " << s << " " << *s << dendl;
+    dout(10) << __func__ << " new session " << s << " " << *s
+	     << " features 0x" << std::hex
+	     << s->con_features << std::dec << dendl;
     op->set_session(s);
 
     logger->set(l_mon_num_sessions, session_map.get_size());
@@ -4038,6 +4361,11 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 
     case MSG_MON_HEALTH:
       health_monitor->dispatch(op);
+      break;
+
+    case MSG_MON_HEALTH_CHECKS:
+      op->set_type_service();
+      paxos_service[PAXOS_HEALTH]->dispatch(op);
       break;
 
     default:
@@ -4583,6 +4911,8 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       logmon()->check_sub(s->sub_map[p->first]);
     } else if (p->first == "mgrmap" || p->first == "mgrdigest") {
       mgrmon()->check_sub(s->sub_map[p->first]);
+    } else if (p->first == "servicemap") {
+      mgrstatmon()->check_sub(s->sub_map[p->first]);
     }
   }
 
@@ -4705,67 +5035,59 @@ void Monitor::handle_mon_metadata(MonOpRequestRef op)
 
 void Monitor::update_mon_metadata(int from, Metadata&& m)
 {
-  pending_metadata.insert(make_pair(from, std::move(m)));
-
-  bufferlist bl;
-  int err = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
-  map<int, Metadata> last_metadata;
-  if (!err) {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(last_metadata, iter);
-    pending_metadata.insert(last_metadata.begin(), last_metadata.end());
-  }
+  // NOTE: this is now for legacy (kraken or jewel) mons only.
+  pending_metadata[from] = std::move(m);
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-  bl.clear();
+  bufferlist bl;
   ::encode(pending_metadata, bl);
   t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   paxos->trigger_propose();
 }
 
-int Monitor::load_metadata(map<int, Metadata>& metadata)
+int Monitor::load_metadata()
 {
   bufferlist bl;
   int r = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
   if (r)
     return r;
   bufferlist::iterator it = bl.begin();
-  ::decode(metadata, it);
+  ::decode(mon_metadata, it);
+
+  pending_metadata = mon_metadata;
   return 0;
 }
 
 int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
 {
   assert(f);
-  map<int, Metadata> last_metadata;
-  if (int r = load_metadata(last_metadata)) {
-    err << "Unable to load metadata: " << cpp_strerror(r);
-    return r;
-  }
-  if (!last_metadata.count(mon)) {
+  if (!mon_metadata.count(mon)) {
     err << "mon." << mon << " not found";
     return -EINVAL;
   }
-  const Metadata& m = last_metadata[mon];
+  const Metadata& m = mon_metadata[mon];
   for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
     f->dump_string(p->first.c_str(), p->second);
   }
   return 0;
 }
 
-void Monitor::count_metadata(const string& field, Formatter *f)
+void Monitor::count_metadata(const string& field, map<string,int> *out)
 {
-  map<int, Metadata> meta;
-  load_metadata(meta);
-  map<string,int> by_val;
-  for (auto& p : meta) {
+  for (auto& p : mon_metadata) {
     auto q = p.second.find(field);
     if (q == p.second.end()) {
-      by_val["unknown"]++;
+      (*out)["unknown"]++;
     } else {
-      by_val[q->second]++;
+      (*out)[q->second]++;
     }
   }
+}
+
+void Monitor::count_metadata(const string& field, Formatter *f)
+{
+  map<string,int> by_val;
+  count_metadata(field, &by_val);
   f->open_object_section(field.c_str());
   for (auto& p : by_val) {
     f->dump_int(p.first.c_str(), p.second);
@@ -4775,15 +5097,9 @@ void Monitor::count_metadata(const string& field, Formatter *f)
 
 int Monitor::print_nodes(Formatter *f, ostream& err)
 {
-  map<int, Metadata> metadata;
-  if (int r = load_metadata(metadata)) {
-    err << "Unable to load metadata.\n";
-    return r;
-  }
-
   map<string, list<int> > mons;	// hostname => mon
-  for (map<int, Metadata>::iterator it = metadata.begin();
-       it != metadata.end(); ++it) {
+  for (map<int, Metadata>::iterator it = mon_metadata.begin();
+       it != mon_metadata.end(); ++it) {
     const Metadata& m = it->second;
     Metadata::const_iterator hostname = m.find("hostname");
     if (hostname == m.end()) {
@@ -4950,14 +5266,16 @@ bool Monitor::_scrub(ScrubResult *r,
     }
 
     bufferlist bl;
-    //TODO: what when store->get returns error or empty bl?
-    store->get(k.first, k.second, bl);
+    int err = store->get(k.first, k.second, bl);
+    assert(err == 0);
+    
     uint32_t key_crc = bl.crc32c(0);
     dout(30) << __func__ << " " << k << " bl " << bl.length() << " bytes"
                                      << " crc " << key_crc << dendl;
     r->prefix_keys[k.first]++;
-    if (r->prefix_crc.count(k.first) == 0)
+    if (r->prefix_crc.count(k.first) == 0) {
       r->prefix_crc[k.first] = 0;
+    }
     r->prefix_crc[k.first] = bl.crc32c(r->prefix_crc[k.first]);
 
     if (cct->_conf->mon_scrub_inject_crc_mismatch > 0.0 &&

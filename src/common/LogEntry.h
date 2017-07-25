@@ -55,7 +55,7 @@ string clog_type_to_string(clog_type t);
 
 struct LogEntryKey {
 private:
-  uint64_t _hash;
+  uint64_t _hash = 0;
 
   void _calc_hash() {
     hash<entity_inst_t> h;
@@ -115,6 +115,7 @@ struct LogEntry {
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntry*>& o);
+  static clog_type str_to_level(std::string const &str);
 };
 WRITE_CLASS_ENCODER_FEATURES(LogEntry)
 

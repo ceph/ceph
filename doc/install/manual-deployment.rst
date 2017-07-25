@@ -290,6 +290,12 @@ The procedure is as follows:
    **Note:** Once you add OSDs and start them, the placement group health errors
    should disappear. See the next section for details.
 
+Manager daemon configuration
+============================
+
+On each node where you run a ceph-mon daemon, you should also set up a ceph-mgr daemon.
+
+See :doc:`../mgr/administrator`
 
 Adding OSDs
 ===========
@@ -317,7 +323,7 @@ on  ``node2`` and ``node3``:
 #. Prepare the OSD. ::
 
 	ssh {node-name}
-	sudo ceph-disk prepare --cluster {cluster-name} --cluster-uuid {uuid} --fs-type {ext4|xfs|btrfs} {data-path} [{journal-path}]
+	sudo ceph-disk prepare --cluster {cluster-name} --cluster-uuid {uuid} {data-path} [{journal-path}]
 
    For example::
 

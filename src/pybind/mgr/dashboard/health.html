@@ -8,14 +8,6 @@
             // Pre-populated initial data at page load
             var content_data = {{ content_data }};
 
-            var refresh = function() {
-                $.get("/health_data", function(data) {
-                    _.extend(content_data, data);
-                    setTimeout(refresh, 5000);
-                });
-            };
-            setTimeout(refresh, 5000);
-
             rivets.formatters.mon_summary = function(mon_status) {
                 var result = mon_status.monmap.mons.length.toString() + " (quorum ";
                 result += mon_status.quorum.join(", ");
@@ -24,9 +16,46 @@
                 return result;
             };
 
+            rivets.formatters.mds_summary = function(fs_map) {
+                var standbys = 0;
+                var active = 0;
+                var standby_replay = 0;
+                $.each(fs_map.standbys, function(i, s) {
+                    standbys += 1;
+                });
+
+                if (fs_map.standbys && !fs_map.filesystems) {
+                    return standbys + ", no filesystems"
+                } else if (fs_map.filesystems.length == 0) {
+                    return "no filesystems";
+                } else {
+                    $.each(fs_map.filesystems, function(i, fs) {
+                        $.each(fs.mdsmap.info, function(j, mds) {
+                            if (mds.state == "up:standby-replay") {
+                                standby_replay += 1;
+                            } else {
+                                active += 1;
+                            }
+                        });
+                    });
+
+                    return active + " active, " + (standbys + standby_replay) + " standby";
+                }
+            };
+
+            rivets.formatters.mgr_summary = function(mgr_map) {
+                var result = "";
+                result += "active: " + mgr_map.active_name;
+                if (mgr_map.standbys.length) {
+                    result += ", " + mgr_map.standbys.length + " standbys";
+                }
+
+                return result;
+            };
+
             rivets.formatters.log_color = function(log_line) {
                 if (log_line.priority == "[INF]") {
-                    return "color: #000000";
+                    return "";  // Inherit
                 } else if (log_line.priority == "[WRN]") {
                     return "color: #FFC200";
                 } else if (log_line.priority == "[ERR]") {
@@ -83,130 +112,284 @@
                 return strings.join(", ");
             };
 
+            // An extension to Chart.js to enable rendering some
+            // text in the middle of a doughnut
+            Chart.pluginService.register({
+              beforeDraw: function(chart) {
+                if (!chart.options.center_text) {
+                    return;
+                }
+                var width = chart.chart.width,
+                    height = chart.chart.height,
+                    ctx = chart.chart.ctx;
+
+                ctx.restore();
+                var fontSize = (height / 114).toFixed(2);
+                ctx.font = fontSize + "em sans-serif";
+                ctx.fillStyle = "#ddd";
+                ctx.textBaseline = "middle";
+
+
+                var text = chart.options.center_text,
+                    textX = Math.round((width - ctx.measureText(text).width) / 2),
+                    textY = height / 2;
+
+                ctx.fillText(text, textX, textY);
+                ctx.save();
+              }
+            });
+
+            var draw_usage_charts = function() {
+                var raw_usage_text = Math.round(100*(
+                    content_data.df.stats.total_used_bytes
+                    / content_data.df.stats.total_bytes)) + "%";
+                var raw_usage_canvas = $("#raw_usage_chart").get(0).getContext("2d");
+                var raw_usage_chart = new Chart(raw_usage_canvas, {
+                    type: 'doughnut',
+                    data: {
+                        labels:[
+                            "Raw Used",
+                            "Raw Available"
+                        ],
+                        datasets: [
+                            {
+                            'label': null,
+                            borderWidth: 0,
+                            data:[
+                                content_data.df.stats.total_used_bytes,
+                                content_data.df.stats.total_avail_bytes
+                            ],
+                            backgroundColor: ["#424d52", "#222d32"]
+                            }
+                        ]
+                    },
+                    options: {
+                        center_text: raw_usage_text,
+                        responsive: false,
+                        legend: {display: false},
+                        animation: {duration: 0}
+                    }
+                });
+
+                var colors = ['#3366CC','#DC3912','#FF9900','#109618','#990099',
+                    '#3B3EAC','#0099C6','#DD4477','#66AA00','#B82E2E','#316395',
+                    '#994499','#22AA99','#AAAA11','#6633CC','#E67300','#8B0707',
+                    '#329262','#5574A6','#3B3EAC'];
+
+                var pool_usage_canvas = $("#pool_usage_chart").get(0).getContext("2d");
+                var pool_labels = [];
+                var pool_data = [];
+
+                $.each(content_data.df.pools, function(i, pool) {
+                    pool_labels.push(pool['name']);
+                    pool_data.push(pool['stats']['bytes_used']);
+                });
+
+                var pool_usage_chart = new Chart(pool_usage_canvas, {
+                    type: 'doughnut',
+                    data: {
+                        labels:pool_labels,
+                        datasets: [
+                            {
+                            'label': null,
+                            borderWidth: 0,
+                            data:pool_data,
+                            backgroundColor: colors
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: false,
+                        legend: {display: false},
+                        animation: {duration: 0}
+                    }
+                });
+            }
+
+            draw_usage_charts();
             rivets.bind($("#content"), content_data);
+
+            var refresh = function() {
+                $.get("/health_data", function(data) {
+                    _.extend(content_data, data);
+                    draw_usage_charts();
+                    setTimeout(refresh, 5000);
+                });
+            };
+            setTimeout(refresh, 5000);
         });
     </script>
 
-
-    <!-- Content Header (Page header) -->
-    <section class="content-header">
-      <h1>
-        Health
-      </h1>
-
-    </section>
-
     <!-- Main content -->
     <section class="content">
-
-    Overall status: <span rv-style="health.overall_status | health_color">{health.overall_status}</span>
-
-    <ul>
-        <li rv-each-summary="health.summary">
-            {summary.severity}: {summary.summary}
-        </li>
-    </ul>
-
         <div class="row">
+            <div class="col-sm-6">
+                <div class="box">
+                    <div class="box-header">
+                        Health
+                    </div>
+                    <div class="box-body">
+                        Overall status: <span
+                            rv-style="health.status | health_color">{health.status}</span>
+
+                        <ul>
+                            <li rv-each-check="health.checks">
+                                <span rv-style="check.severity | health_color">{check.type}</span>:
+                                {check.message}
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
             <div class="col-sm-3">
                 <div class="info-box">
-                    <span class="info-box-icon bg-aqua"><i
+                    <span class="info-box-icon bg-grey"><i
                             class="fa fa-database"></i></span>
 
                     <div class="info-box-content">
                         <span class="info-box-text">Monitors</span>
                         <span class="info-box-number">{mon_status | mon_summary}</span>
                     </div>
-                    <!-- /.info-box-content -->
                 </div>
-            </div>
-
-            <div class="col-sm-3">
                 <div class="info-box">
-                    <span class="info-box-icon bg-aqua"><i
+                    <span class="info-box-icon bg-grey"><i
                             class="fa fa-hdd-o"></i></span>
 
                     <div class="info-box-content">
                         <span class="info-box-text">OSDs</span>
                         <span class="info-box-number">{osd_map | osd_summary}</span>
                     </div>
-                    <!-- /.info-box-content -->
+                </div>
+            </div>
+
+            <div class="col-sm-3">
+                <div class="info-box">
+                    <span class="info-box-icon bg-grey"><i
+                            class="fa fa-folder"></i></span>
+
+                    <div class="info-box-content">
+                        <span class="info-box-text">Metadata servers</span>
+                        <span class="info-box-number">{fs_map | mds_summary}</span>
+                    </div>
+                </div>
+                <div class="info-box">
+                    <span class="info-box-icon bg-grey"><i
+                            class="fa fa-cog"></i></span>
+
+                    <div class="info-box-content">
+                        <span class="info-box-text">Manager daemons</span>
+                        <span class="info-box-number">{mgr_map | mgr_summary}</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="row">
+            <div class="col-sm-6">
+                <div class="box">
+                    <div class="box-header">
+                        Usage
+                    </div>
+                    <div class="box-body" style="text-align:center;">
+                        <table class="ceph-chartbox">
+                            <tr>
+                                <td>
+                                    <span style="font-size: 45px;">{df.stats.total_objects | dimless}</span>
+                                </td>
+                                <td>
+                                    <canvas id="raw_usage_chart"
+                                            style="height:120px; width:120px;"></canvas>
+                                </td>
+                                <td>
+                                    <canvas id="pool_usage_chart"
+                                            style="height:120px; width: 120px;"></canvas>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Objects</td>
+                                <td>Raw capacity<br>({df.stats.total_used_bytes | dimless_binary} used)</td>
+                                <td>Usage by pool</td>
+                            </tr>
+                        </table>
+
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-sm-6">
+                <div class="box">
+                    <div class="box-header">
+                        Pools
+                    </div>
+                    <div class="box-body">
+                        <table class="table table-condensed">
+                            <thead>
+                            <th>Name</th>
+                            <th>PG status</th>
+                            <th>Usage</th>
+                            <th>Activity</th>
+                            </thead>
+                            <tbody>
+                            <tr rv-each-pool="pools">
+                                <td style="text-align: right;">
+                                    {pool.pool_name}
+                                </td>
+                                <td rv-style="pool.pg_status | pg_status_style">
+                                    {pool.pg_status | pg_status}
+                                </td>
+                                <td>
+                                    {pool.stats.bytes_used.latest | dimless} /
+                                    {pool.stats.max_avail.latest | dimless }
+                                </td>
+                                <td>
+                                    {pool.stats.rd_bytes.rate | dimless } rd, {
+                                    pool.stats.wr_bytes.rate | dimless } wr
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div class="box">
-            <div class="box-header">
-                Pools
-            </div>
             <div class="box-body">
-
-                <table class="table table-condensed">
-                    <thead>
-                    <th>Name</th>
-                    <th>PG status</th>
-                    <th>Usage</th>
-                    <th>Activity</th>
-                    </thead>
-                    <tbody>
-                    <tr rv-each-pool="pools">
-                        <td style="text-align: right;">
-                            {pool.pool_name}
-                        </td>
-                        <td rv-style="pool.pg_status | pg_status_style">
-                            {pool.pg_status | pg_status}
-                        </td>
-                        <td>
-                            {pool.stats.bytes_used.latest | dimless} /
-                            {pool.stats.max_avail.latest | dimless }
-                        </td>
-                        <td>
-                            {pool.stats.rd_bytes.rate | dimless } rd, {
-                            pool.stats.wr_bytes.rate | dimless } wr
-                        </td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-
-        </div>
-
-        <div class="box">
-            <div class="box-header">
-                Cluster log
-            </div>
-            <div class="box-body" style="font-family:monospace; background-color: #ddd; color: #333">
-                <span >
-                    <span rv-each-line="clog">
-                        { line.stamp }&nbsp;{line.priority}&nbsp;
-                        <span  rv-style="line | log_color">
-                            <span style="font-weight: bold;">
-                                { line.message }
-                            </span><br>
+                <ul class="nav nav-tabs">
+                  <li class="active"><a data-toggle="tab" href="#clog">Cluster log</a></li>
+                  <li><a data-toggle="tab" href="#audit_log">Audit log</a></li>
+                </ul>
+                <div class="tab-content ceph-log">
+                    <div id="clog" class="tab-pane fade in active">
+                        <span>
+                            <span rv-each-line="clog">
+                                { line.stamp }&nbsp;{line.priority}&nbsp;
+                                <span  rv-style="line | log_color">
+                                        { line.message }
+                                    <br>
+                                </span>
+                            </span>
                         </span>
-                    </span>
-                </span>
+                    </div>
+                    <div id="audit_log" class="tab-pane fade in">
+                        <span>
+                            <span rv-each-line="audit_log">
+                                { line.stamp }&nbsp;{line.priority}&nbsp;
+                                <span  rv-style="line | log_color">
+                                    <span style="font-weight: bold;">
+                                        { line.message }
+                                    </span><br>
+                                </span>
+                            </span>
+                        </span>
+
+                    </div>
+                </div>
+
             </div>
 
         </div>
-
-        <!--
-
-    cluster ac15351a-571b-4393-9c71-815fc98dacd6
-     health HEALTH_WARN
-            noin,sortbitwise,require_jewel_osds,require_kraken_osds flag(s) set
-     monmap e2: 3 mons at {a=192.168.1.7:6789/0,b=192.168.1.7:6790/0,c=192.168.1.7:6791/0}
-            election epoch 6, quorum 0,1,2 a,b,c
-      fsmap e9: cephfs_a-1/1/1 up cephfs_b-1/1/1 up {[cephfs_a:0]=a=up:active,[cephfs_b:0]=d=up:active}, 2 up:standby
-        mgr active: x
-     osdmap e17: 3 osds: 3 up, 3 in
-            flags noin,sortbitwise,require_jewel_osds,require_kraken_osds
-      pgmap v115: 40 pgs, 5 pools, 4296 bytes data, 40 objects
-            279 GB used, 205 GB / 485 GB avail
-                  40 active+clean
-                  -->
-
-
     </section>
 
 {% endblock %}

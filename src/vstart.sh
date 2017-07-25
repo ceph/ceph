@@ -108,6 +108,7 @@ cache=""
 memstore=0
 bluestore=0
 rgw_frontend="civetweb"
+rgw_compression=""
 lockdep=${LOCKDEP:-1}
 
 filestore_path=
@@ -148,6 +149,7 @@ usage=$usage"\t--rgw_num specify ceph rgw count\n"
 usage=$usage"\t--mgr_num specify ceph mgr count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
 usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
+usage=$usage"\t--rgw_compression specify the rgw compression plugin\n"
 usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
@@ -257,6 +259,10 @@ case $1 in
             rgw_frontend=$2
             shift
             ;;
+    --rgw_compression )
+            rgw_compression=$2
+            shift
+            ;;
     --filestore_path )
 	filestore_path=$2
 	shift
@@ -321,6 +327,8 @@ if [ $kill_all -eq 1 ]; then
 fi
 
 if [ "$overwrite_conf" -eq 0 ]; then
+    CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+    mkdir -p $CEPH_ASOK_DIR
     MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mon 2>/dev/null` && \
         CEPH_NUM_MON="$MON"
     OSD=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_osd 2>/dev/null` && \
@@ -334,8 +342,16 @@ if [ "$overwrite_conf" -eq 0 ]; then
 else
     if [ "$new" -ne 0 ]; then
         # only delete if -n
+        asok_dir=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+        if [ $asok_dir != /var/run/ceph ]; then
+            [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
+        fi
+        if [ -z "$CEPH_ASOK_DIR" ]; then
+            CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
+        fi
         [ -e "$conf_fn" ] && rm -- "$conf_fn"
     else
+        CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
         # -k is implied... (doesn't make sense otherwise)
         overwrite_conf=0
     fi
@@ -380,7 +396,7 @@ wconf() {
 prepare_conf() {
     local DAEMONOPTS="
         log file = $CEPH_OUT_DIR/\$name.log
-        admin socket = $CEPH_OUT_DIR/\$name.asok
+        admin socket = $CEPH_ASOK_DIR/\$name.asok
         chdir = \"\"
         pid file = $CEPH_OUT_DIR/\$name.pid
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
@@ -403,14 +419,20 @@ prepare_conf() {
         osd crush chooseleaf type = 0
         osd pool default min size = 1
         osd failsafe full ratio = .99
+        mon osd nearfull ratio = .99
+        mon osd backfillfull ratio = .99
         mon osd reporter subtree level = osd
         mon osd full ratio = .99
-        mon data avail warn = 10
+        mon data avail warn = 2
         mon data avail crit = 1
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
-        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
+        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
         rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
+        ; needed for s3tests
+        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl = false
+        rgw lc debug interval = 10
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
@@ -441,7 +463,9 @@ EOF
 [client]
         keyring = $keyring_fn
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
-        admin socket = $CEPH_OUT_DIR/\$name.\$pid.asok
+        admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
+
+[client.rgw]
 
 [mds]
 $DAEMONOPTS
@@ -454,7 +478,6 @@ $CMDSDEBUG
         mds root ino gid = `id -g`
 $extra_conf
 [mgr]
-        mgr modules = restful fsstatus dashboard
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
         mon reweight min pgs per osd = 4
@@ -493,9 +516,9 @@ $COSDMEMSTORE
 $COSDSHORT
 $extra_conf
 [mon]
+        mgr initial modules = restful status dashboard
         mon pg warn min per osd = 3
         mon osd allow primary affinity = true
-        mon osd allow pg upmap = true
         mon reweight min pgs per osd = 4
         mon osd prime pg temp = true
         crushtool = $CEPH_BIN/crushtool
@@ -541,6 +564,12 @@ start_mon() {
 			--cap mds 'allow *' \
 			--cap mgr 'allow *' \
 			"$keyring_fn"
+
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.rgw \
+		    --cap mon 'allow rw' \
+		    --cap osd 'allow rwx' \
+		    --cap mgr 'allow rw' \
+		    "$keyring_fn"
 
 		# build a fresh fs monmap, mon fs
 		local str=""
@@ -629,21 +658,11 @@ start_mgr() {
         host = $HOSTNAME
 EOF
 
-	ceph_adm config-key put mgr/dashboard/$name/server_addr $IP
 	ceph_adm config-key put mgr/dashboard/$name/server_port $MGR_PORT
 	DASH_URLS+="http://$IP:$MGR_PORT/"
 	MGR_PORT=$(($MGR_PORT + 1000))
 
-	CERT=`mktemp`
-	PKEY=`mktemp`
-	openssl req -new -nodes -x509 \
-		-subj "/O=IT/CN=ceph-mgr-restful" \
-		-days 3650 -keyout "$PKEY" -out "$CERT" -extensions v3_ca
-	ceph_adm config-key put mgr/restful/$name/server_addr $IP
 	ceph_adm config-key put mgr/restful/$name/server_port $MGR_PORT
-	ceph_adm config-key put mgr/restful/$name/crt -i $CERT
-	ceph_adm config-key put mgr/restful/$name/key -i $PKEY
-	rm $CERT $PKEY
 
 	RESTFUL_URLS+="https://$IP:$MGR_PORT"
 	MGR_PORT=$(($MGR_PORT + 1000))
@@ -652,10 +671,14 @@ EOF
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
-    SF=`mktemp`
-    ceph_adm tell mgr.x restful create-key admin -o $SF
-    RESTFUL_SECRET=`cat $SF`
-    rm $SF
+    if ceph_adm restful create-self-signed-cert; then
+        SF=`mktemp`
+        ceph_adm restful create-key admin -o $SF
+        RESTFUL_SECRET=`cat $SF`
+        rm $SF
+    else 
+        echo MGR Restful is not working, perhaps the package is not installed?
+    fi
 }
 
 start_mds() {
@@ -795,6 +818,7 @@ test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
 
 prun $SUDO rm -f core*
 
+test -d $CEPH_ASOK_DIR || mkdir $CEPH_ASOK_DIR
 test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
 test -d $CEPH_DEV_DIR || mkdir $CEPH_DEV_DIR
 $SUDO rm -rf $CEPH_OUT_DIR/*
@@ -919,7 +943,7 @@ EOF
 }
 do_hitsets $hitset
 
-do_rgw()
+do_rgw_create_users()
 {
     # Create S3 user
     local akey='0555b35654ad1656d804'
@@ -964,9 +988,18 @@ do_rgw()
     echo "  user      : tester"
     echo "  password  : testing"
     echo ""
+}
 
+do_rgw()
+{
+    if [ "$new" -eq 1 ]; then
+	do_rgw_create_users
+        if [ -n "$rgw_compression" ]; then
+            echo "setting compression type=$rgw_compression"
+            $CEPH_BIN/radosgw-admin zone placement modify -c $conf_fn --rgw-zone=default --placement-id=default-placement --compression=$rgw_compression > /dev/null
+        fi
+    fi
     # Start server
-    echo start rgw on http://localhost:$CEPH_RGW_PORT
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
         RGWDEBUG="--debug-rgw=20"
@@ -975,8 +1008,12 @@ do_rgw()
     RGWSUDO=
     [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
     n=$(($CEPH_NUM_RGW - 1))
-    for rgw in `seq 0 $n`; do
-	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1
+    i=0
+    for rgw in j k l m n o p q r s t u v; do
+	echo start rgw on http://localhost:$((CEPH_RGW_PORT + i))
+	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=$((CEPH_RGW_PORT + i))"
+	i=$(($i + 1))
+        [ $i -eq $CEPH_NUM_RGW ] && break
     done
 }
 if [ "$CEPH_NUM_RGW" -gt 0 ]; then

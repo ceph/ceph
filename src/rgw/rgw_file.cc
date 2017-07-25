@@ -92,7 +92,10 @@ namespace rgw {
 	auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	if (ux_key && ux_attrs) {
-	  rgw_fh->decode_attrs(ux_key, ux_attrs);
+	  bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
+	  if (old_key) {
+	    update_fhk(rgw_fh);
+	  }
 	}
 	if (! (flags & RGWFileHandle::FLAG_LOCKED)) {
 	  rgw_fh->mtx.unlock();
@@ -144,7 +147,10 @@ namespace rgw {
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	    if (ux_key && ux_attrs) {
-	      rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      if (old_key) {
+		update_fhk(rgw_fh);
+	      }
 	    }
 	  }
 	  goto done;
@@ -175,7 +181,10 @@ namespace rgw {
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	    if (ux_key && ux_attrs) {
-	      rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      if (old_key) {
+		update_fhk(rgw_fh);
+	      }
 	    }
 	  }
 	  goto done;
@@ -486,9 +495,18 @@ namespace rgw {
   MkObjResult RGWLibFS::mkdir(RGWFileHandle* parent, const char *name,
 			      struct stat *st, uint32_t mask, uint32_t flags)
   {
-    MkObjResult mkr{nullptr, -EINVAL};
     int rc, rc2;
+    rgw_file_handle *lfh;
 
+    rc = rgw_lookup(get_fs(), parent->get_fh(), name, &lfh,
+		    RGW_LOOKUP_FLAG_NONE);
+    if (! rc) {
+      /* conflict! */
+      rc = rgw_fh_rele(get_fs(), lfh, RGW_FH_RELE_FLAG_NONE);
+      return MkObjResult{nullptr, -EEXIST};
+    }
+
+    MkObjResult mkr{nullptr, -EINVAL};
     LookupFHResult fhr;
     RGWFileHandle* rgw_fh = nullptr;
     buffer::list ux_key, ux_attrs;
@@ -725,6 +743,41 @@ namespace rgw {
     return 0;
   } /* RGWLibFS::setattr */
 
+  /* called under rgw_fh->mtx held */
+  void RGWLibFS::update_fhk(RGWFileHandle *rgw_fh)
+  {
+    int rc, rc2;
+    string obj_name{rgw_fh->relative_object_name()};
+    buffer::list ux_key, ux_attrs;
+
+    if (rgw_fh->is_dir() &&
+	(likely(! rgw_fh->is_bucket()))) {
+      obj_name += "/";
+    }
+
+    lsubdout(get_context(), rgw, 17)
+      << __func__
+      << " update old versioned fhk : " << obj_name
+      << dendl;
+
+    RGWSetAttrsRequest req(cct, get_user(), rgw_fh->bucket_name(), obj_name);
+
+    rgw_fh->encode_attrs(ux_key, ux_attrs);
+
+    /* update ux_key only */
+    req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
+
+    rc = rgwlib.get_fe()->execute_req(&req);
+    rc2 = req.get_ret();
+
+    if ((rc != 0) || (rc2 != 0)) {
+      lsubdout(get_context(), rgw, 17)
+	<< __func__
+	<< " update fhk failed : " << obj_name
+	<< dendl;
+    }
+  } /* RGWLibFS::update_fhk */
+
   void RGWLibFS::close()
   {
     state.flags |= FLAG_CLOSED;
@@ -786,8 +839,7 @@ namespace rgw {
       = get_context()->_conf->rgw_nfs_namespace_expire_secs;
 
     /* max events to gc in one cycle */
-    uint32_t max_ev =
-      std::max(1, get_context()->_conf->rgw_nfs_max_gc);
+    uint32_t max_ev = get_context()->_conf->rgw_nfs_max_gc;
 
     struct timespec now, expire_ts;
     event_vector ve;
@@ -924,16 +976,23 @@ namespace rgw {
     rgw::encode(*this, ux_attrs1);
   } /* RGWFileHandle::encode_attrs */
 
-  void RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
+  bool RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
 				   const ceph::buffer::list* ux_attrs1)
   {
+    bool old_key = false;
     fh_key fhk;
     auto bl_iter_key1  = const_cast<buffer::list*>(ux_key1)->begin();
     rgw::decode(fhk, bl_iter_key1);
-    assert(this->fh.fh_hk == fhk.fh_hk);
+    if (fhk.version >= 2) {
+      assert(this->fh.fh_hk == fhk.fh_hk);
+    } else {
+      old_key = true;
+    }
 
     auto bl_iter_unix1 = const_cast<buffer::list*>(ux_attrs1)->begin();
     rgw::decode(*this, bl_iter_unix1);
+
+    return old_key;
   } /* RGWFileHandle::decode_attrs */
 
   bool RGWFileHandle::reclaim() {
@@ -1198,6 +1257,10 @@ namespace rgw {
   int RGWWriteRequest::exec_start() {
     struct req_state* s = get_state();
 
+    auto compression_type =
+      get_store()->get_zone_params().get_compression_type(
+	s->bucket_info.placement_rule);
+
     /* not obviously supportable */
     assert(! dlo_manifest);
     assert(! slo_info);
@@ -1226,6 +1289,23 @@ namespace rgw {
     processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
 				 &multipart);
     op_ret = processor->prepare(get_store(), NULL);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << "processor->prepare() returned ret=" << op_ret
+			<< dendl;
+      goto done;
+    }
+
+    filter = processor;
+    if (compression_type != "none") {
+      plugin = Compressor::create(s->cct, compression_type);
+    if (! plugin) {
+      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+                       << compression_type << dendl;
+    } else {
+      compressor.emplace(s->cct, plugin, filter);
+      filter = &*compressor;
+    }
+  }
 
   done:
     return op_ret;
@@ -1253,8 +1333,7 @@ namespace rgw {
       orig_data = data;
     }
     hash.Update((const byte *)data.c_str(), data.length());
-    op_ret = put_data_and_throttle(processor, data, ofs,
-				   need_to_wait);
+    op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
 	ldout(s->cct, 20) << "processor->thottle_data() returned ret="
@@ -1271,6 +1350,7 @@ namespace rgw {
       dispose_processor(processor);
       processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
 				   &multipart);
+      filter = processor;
 
       string oid_rand;
       char buf[33];
@@ -1284,7 +1364,13 @@ namespace rgw {
 	goto done;
       }
 
-      op_ret = put_data_and_throttle(processor, data, ofs, false);
+      /* restore compression filter, if any */
+      if (compressor) {
+	compressor.emplace(s->cct, plugin, filter);
+	filter = &*compressor;
+      }
+
+      op_ret = put_data_and_throttle(filter, data, ofs, false);
       if (op_ret < 0) {
 	goto done;
       }
@@ -1323,6 +1409,20 @@ namespace rgw {
     }
 
     hash.Final(m);
+
+    if (compressor && compressor->is_compressed()) {
+      bufferlist tmp;
+      RGWCompressionInfo cs_info;
+      cs_info.compression_type = plugin->get_type_name();
+      cs_info.orig_size = s->obj_size;
+      cs_info.blocks = std::move(compressor->get_compression_blocks());
+      ::encode(cs_info, tmp);
+      attrs[RGW_ATTR_COMPRESSION] = tmp;
+      ldout(s->cct, 20) << "storing " << RGW_ATTR_COMPRESSION
+			<< " with type=" << cs_info.compression_type
+			<< ", orig_size=" << cs_info.orig_size
+			<< ", blocks=" << cs_info.blocks.size() << dendl;
+    }
 
     buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
     etag = calc_md5;
@@ -1590,21 +1690,30 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	return -ENOENT;
     }
   } else {
-    /* lookup in a readdir callback */
-    enum rgw_fh_type fh_type = fh_type_of(flags);
+    /* special: after readdir--note extra ref()! */
+    if (unlikely((strcmp(path, "..") == 0))) {
+      rgw_fh = parent;
+      lsubdout(fs->get_context(), rgw, 17)
+	<< __func__ << "BANG"<< *rgw_fh
+	<< dendl;
+      fs->ref(rgw_fh);
+    } else {
+      /* lookup in a readdir callback */
+      enum rgw_fh_type fh_type = fh_type_of(flags);
 
-    uint32_t sl_flags = (flags & RGW_LOOKUP_FLAG_RCB)
-      ? RGWFileHandle::FLAG_NONE
-      : RGWFileHandle::FLAG_EXACT_MATCH;
+      uint32_t sl_flags = (flags & RGW_LOOKUP_FLAG_RCB)
+	? RGWFileHandle::FLAG_NONE
+	: RGWFileHandle::FLAG_EXACT_MATCH;
 
-    fhr = fs->stat_leaf(parent, path, fh_type, sl_flags);
-    if (! get<0>(fhr)) {
-      if (! (flags & RGW_LOOKUP_FLAG_CREATE))
-	return -ENOENT;
-      else
-	fhr = fs->lookup_fh(parent, path, RGWFileHandle::FLAG_CREATE);
+      fhr = fs->stat_leaf(parent, path, fh_type, sl_flags);
+      if (! get<0>(fhr)) {
+	if (! (flags & RGW_LOOKUP_FLAG_CREATE))
+	  return -ENOENT;
+	else
+	  fhr = fs->lookup_fh(parent, path, RGWFileHandle::FLAG_CREATE);
+      }
+      rgw_fh = get<0>(fhr);
     }
-    rgw_fh = get<0>(fhr);
   } /* !root */
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
@@ -1733,6 +1842,22 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     return -EINVAL;
   }
   int rc = parent->readdir(rcb, cb_arg, offset, eof, flags);
+  return rc;
+}
+
+/* project offset of dirent name */
+int rgw_dirent_offset(struct rgw_fs *rgw_fs,
+		      struct rgw_file_handle *parent_fh,
+		      const char *name, int64_t *offset,
+		      uint32_t flags)
+{
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+  if ((! parent)) {
+    /* bad parent */
+    return -EINVAL;
+  }
+  std::string sname{name};
+  int rc = parent->offset_of(sname, offset, flags);
   return rc;
 }
 

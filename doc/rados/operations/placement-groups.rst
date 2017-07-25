@@ -296,6 +296,9 @@ resources. However, if 1,000 pools were created with 512 placement
 groups each, the OSDs will handle ~50,000 placement groups each and it
 would require significantly more resources and time for peering.
 
+You may find the `PGCalc`_ tool helpful.
+
+
 .. _setting the number of placement groups:
 
 Set the Number of Placement Groups
@@ -400,6 +403,36 @@ or mismatched, and their contents are consistent.  Assuming the replicas all
 match, a final semantic sweep ensures that all of the snapshot-related object
 metadata is consistent. Errors are reported via logs.
 
+Prioritize backfill/recovery of a Placement Group(s)
+====================================================
+
+You may run into a situation where a bunch of placement groups will require
+recovery and/or backfill, and some particular groups hold data more important
+than others (for example, those PGs may hold data for images used by running
+machines and other PGs may be used by inactive machines/less relevant data).
+In that case, you may want to prioritize recovery of those groups so
+performance and/or availability of data stored on those groups is restored
+earlier. To do this (mark particular placement group(s) as prioritized during 
+backfill or recovery), execute the following::
+
+        ceph pg force-recovery {pg-id} [{pg-id #2}] [{pg-id #3} ...]
+        ceph pg force-backfill {pg-id} [{pg-id #2}] [{pg-id #3} ...]
+
+This will cause Ceph to perform recovery or backfill on specified placement
+groups first, before other placement groups. This does not interrupt currently
+ongoing backfills or recovery, but causes specified PGs to be processed
+as soon as possible. If you change your mind or prioritize wrong groups,
+use::
+
+        ceph pg cancel-force-recovery {pg-id} [{pg-id #2}] [{pg-id #3} ...]
+        ceph pg cancel-force-backfill {pg-id} [{pg-id #2}] [{pg-id #3} ...]
+
+This will remove "force" flag from those PGs and they will be processed
+in default order. Again, this doesn't affect currently processed placement
+group, only those that are still queued.
+
+The "force" flag is cleared automatically after recovery or backfill of group
+is done.
 
 Revert Lost
 ===========

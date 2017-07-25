@@ -170,6 +170,11 @@ void usage()
        << "                         create crush rule <name> to start from <root>,\n"
        << "                         replicate across buckets of type <type>, using\n"
        << "                         a choose mode of <firstn|indep>\n";
+  cout << "   -i mapfn --create-replicated-rule name root type\n"
+       << "                         create crush rule <name> to start from <root>,\n"
+       << "                         replicate across buckets of type <type>\n";
+  cout << "   --device-class <class>\n";
+  cout << "                         use device class <class> for new rule\n";
   cout << "   -i mapfn --remove-rule name\n"
        << "                         remove the specified crush rule\n";
   cout << "\n";
@@ -259,7 +264,7 @@ int main(int argc, const char **argv)
   int add_item = -1;
   bool update_item = false;
   bool add_rule = false;
-  std::string rule_name, rule_root, rule_type, rule_mode;
+  std::string rule_name, rule_root, rule_type, rule_mode, rule_device_class;
   bool del_rule = false;
   float add_weight = 0;
   map<string,string> add_loc;
@@ -450,6 +455,41 @@ int main(int argc, const char **argv)
            << " mode=" << rule_mode
            << std::endl;
       add_rule = true;
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--create-replicated-rule", (char*)NULL)) {
+      rule_name.assign(val);
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        return EXIT_FAILURE;
+      }
+      if (i == args.end()) {
+        cerr << "expecting additional argument to --create-replicated-rule" << std::endl;
+        return EXIT_FAILURE;
+      }
+
+      rule_root.assign(*i);
+      i = args.erase(i);
+      if (i == args.end()) {
+        cerr << "expecting additional argument to --create-replicated-rule" << std::endl;
+        return EXIT_FAILURE;
+      }
+
+      rule_type.assign(*i);
+      i = args.erase(i);
+      rule_mode = "firstn";
+
+      cout << "--create-replicated-rule:"
+           << " name=" << rule_name
+           << " root=" << rule_root
+           << " type=" << rule_type
+           << std::endl;
+      add_rule = true;
+
+    } else if (ceph_argparse_witharg(args, i, &val, "--device-class", (char*)NULL)) {
+      rule_device_class.assign(val);
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        return EXIT_FAILURE;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--remove-rule", (char*)NULL)) {
       rule_name.assign(val);
       if (!err.str().empty()) {
@@ -799,7 +839,7 @@ int main(int argc, const char **argv)
 		<< dendl;
     }
     
-    if (OSDMap::build_simple_crush_rulesets(g_ceph_context, crush, root, &cerr))
+    if (OSDMap::build_simple_crush_rules(g_ceph_context, crush, root, &cerr))
       return EXIT_FAILURE;
 
     modified = true;
@@ -896,8 +936,9 @@ int main(int argc, const char **argv)
       cerr << "rule " << rule_name << " already exists" << std::endl;
       return EXIT_FAILURE;
     }
-    int r = crush.add_simple_ruleset(rule_name, rule_root, rule_type, rule_mode,
-      pg_pool_t::TYPE_REPLICATED, &err);
+    int r = crush.add_simple_rule(rule_name, rule_root, rule_type,
+				  rule_device_class,
+				  rule_mode, pg_pool_t::TYPE_REPLICATED, &err);
     if (r < 0) {
       cerr << err.str() << std::endl;
       return EXIT_FAILURE;

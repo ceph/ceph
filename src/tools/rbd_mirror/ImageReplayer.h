@@ -18,6 +18,7 @@
 #include "ImageDeleter.h"
 #include "ProgressContext.h"
 #include "types.h"
+#include "tools/rbd_mirror/image_replayer/Types.h"
 
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
@@ -60,20 +61,8 @@ namespace image_replayer { template <typename> class ReplayStatusFormatter; }
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageReplayer {
 public:
-  typedef typename librbd::journal::TypeTraits<ImageCtxT>::ReplayEntry ReplayEntry;
-
-  enum State {
-    STATE_UNKNOWN,
-    STATE_STARTING,
-    STATE_REPLAYING,
-    STATE_REPLAY_FLUSHING,
-    STATE_STOPPING,
-    STATE_STOPPED,
-  };
-
   static ImageReplayer *create(
-    Threads<librbd::ImageCtx> *threads,
-    std::shared_ptr<ImageDeleter> image_deleter,
+    Threads<librbd::ImageCtx> *threads, ImageDeleter<ImageCtxT>* image_deleter,
     InstanceWatcher<ImageCtxT> *instance_watcher,
     RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
     const std::string &global_image_id) {
@@ -86,7 +75,7 @@ public:
   }
 
   ImageReplayer(Threads<librbd::ImageCtx> *threads,
-                std::shared_ptr<ImageDeleter> image_deleter,
+                ImageDeleter<ImageCtxT>* image_deleter,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
                 RadosRef local, const std::string &local_mirror_uuid,
                 int64_t local_pool_id, const std::string &global_image_id);
@@ -94,7 +83,6 @@ public:
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
 
-  State get_state() { Mutex::Locker l(m_lock); return get_state_(); }
   bool is_stopped() { Mutex::Locker l(m_lock); return is_stopped_(); }
   bool is_running() { Mutex::Locker l(m_lock); return is_running_(); }
   bool is_replaying() { Mutex::Locker l(m_lock); return is_replaying_(); }
@@ -106,6 +94,8 @@ public:
     Mutex::Locker locker(m_lock);
     return (m_last_r == -EBLACKLISTED);
   }
+
+  image_replayer::HealthState get_health_state() const;
 
   void add_remote_image(const std::string &remote_mirror_uuid,
                         const std::string &remote_image_id,
@@ -216,6 +206,17 @@ protected:
   bool on_replay_interrupted();
 
 private:
+  typedef typename librbd::journal::TypeTraits<ImageCtxT>::ReplayEntry ReplayEntry;
+
+  enum State {
+    STATE_UNKNOWN,
+    STATE_STARTING,
+    STATE_REPLAYING,
+    STATE_REPLAY_FLUSHING,
+    STATE_STOPPING,
+    STATE_STOPPED,
+  };
+
   struct RemoteImage {
     std::string mirror_uuid;
     std::string image_id;
@@ -249,6 +250,8 @@ private:
 
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
   typedef boost::optional<State> OptionalState;
+  typedef boost::optional<cls::rbd::MirrorImageStatusState>
+      OptionalMirrorImageStatusState;
 
   struct JournalListener : public librbd::journal::Listener {
     ImageReplayer *img_replayer;
@@ -283,7 +286,7 @@ private:
   };
 
   Threads<librbd::ImageCtx> *m_threads;
-  std::shared_ptr<ImageDeleter> m_image_deleter;
+  ImageDeleter<ImageCtxT>* m_image_deleter;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
 
   RemoteImages m_remote_images;
@@ -297,10 +300,13 @@ private:
   std::string m_name;
   mutable Mutex m_lock;
   State m_state = STATE_STOPPED;
-  int m_last_r = 0;
   std::string m_state_desc;
+
+  OptionalMirrorImageStatusState m_mirror_image_status_state = boost::none;
+  int m_last_r = 0;
+
   BootstrapProgressContext m_progress_cxt;
-  bool m_do_resync;
+  bool m_do_resync{false};
   image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
   image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
     nullptr;
@@ -365,9 +371,6 @@ private:
 
   static std::string to_string(const State state);
 
-  State get_state_() const {
-    return m_state;
-  }
   bool is_stopped_() const {
     return m_state == STATE_STOPPED;
   }

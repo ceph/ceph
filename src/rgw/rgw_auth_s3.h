@@ -4,9 +4,17 @@
 #ifndef CEPH_RGW_AUTH_S3_H
 #define CEPH_RGW_AUTH_S3_H
 
+#include <array>
+#include <memory>
 #include <string>
 #include <tuple>
 
+#include <boost/algorithm/string.hpp>
+#include <boost/container/static_vector.hpp>
+#include <boost/utility/string_ref.hpp>
+#include <boost/utility/string_view.hpp>
+
+#include "common/sstring.hh"
 #include "rgw_common.h"
 #include "rgw_rest_s3.h"
 
@@ -38,7 +46,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
                             ) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
-                               false /* no implicit tenants */));
+                               cct->_conf->rgw_keystone_implicit_tenants));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -46,13 +54,13 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
 public:
   ExternalAuthStrategy(CephContext* const cct,
                        RGWRados* const store,
-                       Version2ndEngine::Extractor* const extractor)
+                       AWSEngine::VersionAbstractor* const ver_abstractor)
     : store(store),
-      keystone_engine(cct, extractor,
+      keystone_engine(cct, ver_abstractor,
                       static_cast<rgw::auth::RemoteApplier::Factory*>(this),
                       keystone_config_t::get_instance(),
                       keystone_cache_t::get_instance<keystone_config_t>()),
-      ldap_engine(cct, store, *extractor,
+      ldap_engine(cct, store, *ver_abstractor,
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this)) {
 
     if (cct->_conf->rgw_s3_auth_use_keystone &&
@@ -72,20 +80,20 @@ public:
 };
 
 
-template <class ExtractorT>
-class AWSv2AuthStrategy : public rgw::auth::Strategy,
-                          public rgw::auth::LocalApplier::Factory {
+template <class AbstractorT>
+class AWSAuthStrategy : public rgw::auth::Strategy,
+                        public rgw::auth::LocalApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
 
-  static_assert(std::is_base_of<rgw::auth::s3::Version2ndEngine::Extractor,
-                                ExtractorT>::value,
-                "ExtractorT must be a subclass of rgw::auth::s3::ExtractorT");
+  static_assert(std::is_base_of<rgw::auth::s3::AWSEngine::VersionAbstractor,
+                                AbstractorT>::value,
+                "AbstractorT must be a subclass of rgw::auth::s3::VersionAbstractor");
 
   RGWRados* const store;
-  ExtractorT extractor;
+  AbstractorT ver_abstractor;
 
   ExternalAuthStrategy external_engines;
-  LocalVersion2ndEngine local_engine;
+  LocalEngine local_engine;
 
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
@@ -98,12 +106,12 @@ class AWSv2AuthStrategy : public rgw::auth::Strategy,
   }
 
 public:
-  AWSv2AuthStrategy(CephContext* const cct,
-                    RGWRados* const store)
+  AWSAuthStrategy(CephContext* const cct,
+                  RGWRados* const store)
     : store(store),
-      extractor(cct),
-      external_engines(cct, store, &extractor),
-      local_engine(cct, store, extractor,
+      ver_abstractor(cct),
+      external_engines(cct, store, &ver_abstractor),
+      local_engine(cct, store, ver_abstractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
 
     Control local_engine_mode;
@@ -121,8 +129,160 @@ public:
   }
 
   const char* get_name() const noexcept override {
-    return "rgw::auth::s3::AWSv2AuthStrategy";
+    return "rgw::auth::s3::AWSAuthStrategy";
   }
+};
+
+
+class AWSv4ComplMulti : public rgw::auth::Completer,
+                        public rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>,
+                        public std::enable_shared_from_this<AWSv4ComplMulti> {
+  using io_base_t = rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>;
+  using signing_key_t = std::array<unsigned char,
+                                   CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>;
+
+  CephContext* const cct;
+
+  const boost::string_view date;
+  const boost::string_view credential_scope;
+  const signing_key_t signing_key;
+
+  class ChunkMeta {
+    size_t data_offset_in_stream = 0;
+    size_t data_length = 0;
+    std::string signature;
+
+    ChunkMeta(const size_t data_starts_in_stream,
+              const size_t data_length,
+              const boost::string_ref signature)
+      : data_offset_in_stream(data_starts_in_stream),
+        data_length(data_length),
+        signature(signature.to_string()) {
+    }
+
+    ChunkMeta(const boost::string_view& signature)
+      : signature(signature.to_string()) {
+    }
+
+  public:
+    static constexpr size_t SIG_SIZE = 64;
+
+    /* Let's suppose the data length fields can't exceed uint64_t. */
+    static constexpr size_t META_MAX_SIZE = \
+      sarrlen("\r\nffffffffffffffff;chunk-signature=") + SIG_SIZE + sarrlen("\r\n");
+
+    /* The metadata size of for the last, empty chunk. */
+    static constexpr size_t META_MIN_SIZE = \
+      sarrlen("0;chunk-signature=") + SIG_SIZE + sarrlen("\r\n");
+
+    /* Detect whether a given stream_pos fits in boundaries of a chunk. */
+    bool is_new_chunk_in_stream(size_t stream_pos) const;
+
+    /* Get the remaining data size. */
+    size_t get_data_size(size_t stream_pos) const;
+
+    const std::string& get_signature() const {
+      return signature;
+    }
+
+    /* Factory: create an object representing metadata of first, initial chunk
+     * in a stream. */
+    static ChunkMeta create_first(const boost::string_view& seed_signature) {
+      return ChunkMeta(seed_signature);
+    }
+
+    /* Factory: parse a block of META_MAX_SIZE bytes and creates an object
+     * representing non-first chunk in a stream. As the process is sequential
+     * and depends on the previous chunk, caller must pass it. */
+    static std::pair<ChunkMeta, size_t> create_next(CephContext* cct,
+                                                    ChunkMeta&& prev,
+                                                    const char* metabuf,
+                                                    size_t metabuf_len);
+  } chunk_meta;
+
+  size_t stream_pos;
+  boost::container::static_vector<char, ChunkMeta::META_MAX_SIZE> parsing_buf;
+  ceph::crypto::SHA256* sha256_hash;
+  std::string prev_chunk_signature;
+
+  bool is_signature_mismatched();
+  std::string calc_chunk_signature(const std::string& payload_hash) const;
+
+public:
+  /* We need the constructor to be public because of the std::make_shared that
+   * is employed by the create() method. */
+  AWSv4ComplMulti(const req_state* const s,
+                  boost::string_view date,
+                  boost::string_view credential_scope,
+                  boost::string_view seed_signature,
+                  const signing_key_t& signing_key)
+    : io_base_t(nullptr),
+      cct(s->cct),
+      date(std::move(date)),
+      credential_scope(std::move(credential_scope)),
+      signing_key(signing_key),
+
+      /* The evolving state. */
+      chunk_meta(ChunkMeta::create_first(seed_signature)),
+      stream_pos(0),
+      sha256_hash(calc_hash_sha256_open_stream()),
+      prev_chunk_signature(std::move(seed_signature)) {
+  }
+
+  ~AWSv4ComplMulti() {
+    if (sha256_hash) {
+      calc_hash_sha256_close_stream(&sha256_hash);
+    }
+  }
+
+  /* rgw::io::DecoratedRestfulClient. */
+  size_t recv_body(char* buf, size_t max) override;
+
+  /* rgw::auth::Completer. */
+  void modify_request_state(req_state* s_rw) override;
+  bool complete() override;
+
+  /* Factories. */
+  static cmplptr_t create(const req_state* s,
+                          boost::string_view date,
+                          boost::string_view credential_scope,
+                          boost::string_view seed_signature,
+                          const boost::optional<std::string>& secret_key);
+
+};
+
+class AWSv4ComplSingle : public rgw::auth::Completer,
+                         public rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>,
+                         public std::enable_shared_from_this<AWSv4ComplSingle> {
+  using io_base_t = rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>;
+
+  CephContext* const cct;
+  const char* const expected_request_payload_hash;
+  ceph::crypto::SHA256* sha256_hash = nullptr;
+
+public:
+  /* Defined in rgw_auth_s3.cc because of get_v4_exp_payload_hash(). We need
+   * the constructor to be public because of the std::make_shared employed by
+   * the create() method. */
+  AWSv4ComplSingle(const req_state* const s);
+
+  ~AWSv4ComplSingle() {
+    if (sha256_hash) {
+      calc_hash_sha256_close_stream(&sha256_hash);
+    }
+  }
+
+  /* rgw::io::DecoratedRestfulClient. */
+  size_t recv_body(char* buf, size_t max) override;
+
+  /* rgw::auth::Completer. */
+  void modify_request_state(req_state* s_rw) override;
+  bool complete() override;
+
+  /* Factories. */
+  static cmplptr_t create(const req_state* s,
+                          const boost::optional<std::string>&);
+
 };
 
 } /* namespace s3 */
@@ -151,22 +311,128 @@ rgw_create_s3_canonical_header(const req_info& info, const bool qsr) {
   return std::make_tuple(ok, dest, header_time);
 }
 
-int rgw_get_s3_header_digest(const string& auth_hdr, const string& key,
-			     string& dest);
-int rgw_get_s3_header_digest(const string& auth_hdr, const string& key, string& dest);
+namespace rgw {
+namespace auth {
+namespace s3 {
 
-void rgw_hash_s3_string_sha256(const char *data, int len, string& dest);
-void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canonical_uri,
-                                        const string& canonical_qs, const string& canonical_hdrs,
-                                        const string& signed_hdrs, const string& request_payload,
-                                        bool unsigned_payload,
-                                        string& canonical_req, string& canonical_req_hash);
-void rgw_create_s3_v4_string_to_sign(CephContext *cct, const string& algorithm,
-                                     const string& request_date, const string& credential_scope,
-                                     const string& hashed_qr, string& string_to_sign);
-int rgw_calculate_s3_v4_aws_signature(struct req_state *s, const string& access_key_id,
-                                      const string &date, const string& region,
-                                      const string& service, const string& string_to_sign,
-                                      string& signature);
+static constexpr char AWS4_HMAC_SHA256_STR[] = "AWS4-HMAC-SHA256";
+static constexpr char AWS4_HMAC_SHA256_PAYLOAD_STR[] = "AWS4-HMAC-SHA256-PAYLOAD";
+
+static constexpr char AWS4_EMPTY_PAYLOAD_HASH[] = \
+  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+static constexpr char AWS4_UNSIGNED_PAYLOAD_HASH[] = "UNSIGNED-PAYLOAD";
+
+static constexpr char AWS4_STREAMING_PAYLOAD_HASH[] = \
+  "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
+
+int parse_credentials(const req_info& info,                     /* in */
+                      boost::string_view& access_key_id,        /* out */
+                      boost::string_view& credential_scope,     /* out */
+                      boost::string_view& signedheaders,        /* out */
+                      boost::string_view& signature,            /* out */
+                      boost::string_view& date,                 /* out */
+                      bool& using_qs);                          /* out */
+
+static inline std::string get_v4_canonical_uri(const req_info& info) {
+  /* The code should normalize according to RFC 3986 but S3 does NOT do path
+   * normalization that SigV4 typically does. This code follows the same
+   * approach that boto library. See auth.py:canonical_uri(...). */
+
+  std::string canonical_uri = info.request_uri_aws4;
+
+  if (canonical_uri.empty()) {
+    canonical_uri = "/";
+  } else {
+    boost::replace_all(canonical_uri, "+", "%20");
+  }
+
+  return canonical_uri;
+}
+
+static inline const char* get_v4_exp_payload_hash(const req_info& info)
+{
+  /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
+   * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
+   * header lets get the information very early -- before seeing first byte
+   * of HTTP body. As a consequence, we can decouple Signature verification
+   * from payload's fingerprint check. */
+  const char *expected_request_payload_hash = \
+    info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
+
+  if (!expected_request_payload_hash) {
+    /* An HTTP client MUST send x-amz-content-sha256. The single exception
+     * is the case of using the Query Parameters where "UNSIGNED-PAYLOAD"
+     * literals are used for crafting Canonical Request:
+     *
+     *  You don't include a payload hash in the Canonical Request, because
+     *  when you create a presigned URL, you don't know the payload content
+     *  because the URL is used to upload an arbitrary payload. Instead, you
+     *  use a constant string UNSIGNED-PAYLOAD. */
+    expected_request_payload_hash = AWS4_UNSIGNED_PAYLOAD_HASH;
+  }
+
+  return expected_request_payload_hash;
+}
+
+static inline bool is_v4_payload_unsigned(const char* const exp_payload_hash)
+{
+  return boost::equals(exp_payload_hash, AWS4_UNSIGNED_PAYLOAD_HASH);
+}
+
+static inline bool is_v4_payload_empty(const req_state* const s)
+{
+  /* from rfc2616 - 4.3 Message Body
+   *
+   * "The presence of a message-body in a request is signaled by the inclusion
+   * of a Content-Length or Transfer-Encoding header field in the request's
+   * message-headers." */
+  return s->content_length == 0 &&
+         s->info.env->get("HTTP_TRANSFER_ENCODING") == nullptr;
+}
+
+static inline bool is_v4_payload_streamed(const char* const exp_payload_hash)
+{
+  return boost::equals(exp_payload_hash, AWS4_STREAMING_PAYLOAD_HASH);
+}
+
+std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
+
+boost::optional<std::string>
+get_v4_canonical_headers(const req_info& info,
+                         const boost::string_view& signedheaders,
+                         bool using_qs,
+                         bool force_boto2_compat);
+
+extern sha256_digest_t
+get_v4_canon_req_hash(CephContext* cct,
+                      const boost::string_view& http_verb,
+                      const std::string& canonical_uri,
+                      const std::string& canonical_qs,
+                      const std::string& canonical_hdrs,
+                      const boost::string_view& signed_hdrs,
+                      const boost::string_view& request_payload_hash);
+
+AWSEngine::VersionAbstractor::string_to_sign_t
+get_v4_string_to_sign(CephContext* cct,
+                      const boost::string_view& algorithm,
+                      const boost::string_view& request_date,
+                      const boost::string_view& credential_scope,
+                      const sha256_digest_t& canonreq_hash);
+
+extern AWSEngine::VersionAbstractor::server_signature_t
+get_v4_signature(const boost::string_view& credential_scope,
+                 CephContext* const cct,
+                 const boost::string_view& secret_key,
+                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
+
+extern AWSEngine::VersionAbstractor::server_signature_t
+get_v2_signature(CephContext*,
+                 const std::string& secret_key,
+                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
+
+} /* namespace s3 */
+} /* namespace auth */
+} /* namespace rgw */
 
 #endif

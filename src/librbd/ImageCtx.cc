@@ -210,7 +210,7 @@ struct C_InvalidateCache : public Context {
 
     ThreadPool *thread_pool;
     get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
-    io_work_queue = new io::ImageRequestWQ(
+    io_work_queue = new io::ImageRequestWQ<>(
       this, "librbd::io_work_queue", cct->_conf->rbd_op_thread_timeout,
       thread_pool);
 
@@ -525,6 +525,11 @@ struct C_InvalidateCache : public Context {
   uint64_t ImageCtx::get_stripe_period() const
   {
     return stripe_count * (1ull << order);
+  }
+
+  utime_t ImageCtx::get_create_timestamp() const
+  {
+    return create_timestamp;
   }
 
   int ImageCtx::is_snap_protected(snap_t in_snap_id,

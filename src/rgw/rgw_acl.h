@@ -27,6 +27,8 @@
 #define RGW_PERM_ALL_S3          RGW_PERM_FULL_CONTROL
 #define RGW_PERM_INVALID         0xFF00
 
+static constexpr char RGW_REFERER_WILDCARD[] = "*";
+
 enum ACLGranteeTypeEnum {
 /* numbers are encoded, should not change */
   ACL_TYPE_CANON_USER = 0,
@@ -221,6 +223,10 @@ struct ACLReferer {
       return false;
     }
 
+    if ("*" == url_spec) {
+      return true;
+    }
+
     if (http_host->compare(url_spec) == 0) {
       return true;
     }
@@ -300,7 +306,9 @@ public:
   uint32_t get_perm(const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask);
   uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
-  uint32_t get_referer_perm(const std::string http_referer, uint32_t perm_mask);
+  uint32_t get_referer_perm(uint32_t current_perm,
+                            std::string http_referer,
+                            uint32_t perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 3, bl);
     bool maps_initialized = true;

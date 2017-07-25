@@ -620,7 +620,8 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       auth.key.encode_plaintext(rdata);
     }
     r = 0;
-  } else if (prefix == "auth list") {
+  } else if (prefix == "auth list" ||
+	     prefix == "auth ls") {
     if (f) {
       mon->key_server.encode_formatted("auth", f.get(), rdata);
     } else {
@@ -1463,6 +1464,8 @@ void AuthMonitor::upgrade_format()
       assert(r);
       ::encode("allow profile bootstrap-mgr", auth_inc.auth.caps["mon"]);
       auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      // generate key
+      auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
       push_cephx_inc(auth_inc);
     }
     changed = true;

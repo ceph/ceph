@@ -235,6 +235,7 @@ public:
   void execute() override;
   void send_response() override;
   static void list_swift_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static void list_tempauth_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
   static void list_tempurl_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
   static void list_slo_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
   static bool is_expired(const std::string& expires, CephContext* cct);
@@ -248,6 +249,8 @@ class RGWFormPost : public RGWPostObj_ObjStore {
   bool is_next_file_to_upload() override;
   bool is_integral();
   bool is_non_expired();
+  void get_owner_info(const req_state* s,
+                      RGWUserInfo& owner_info) const;
 
   parts_collection_t ctrl_parts;
   boost::optional<post_form_part> current_data_part;

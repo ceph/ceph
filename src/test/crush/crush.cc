@@ -52,9 +52,7 @@ std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
   }
   int ret;
   int ruleno = 0;
-  int ruleset = 0;
-  ruleno = ruleset;
-  ret = c->add_rule(4, ruleset, 123, 1, 20, ruleno);
+  ret = c->add_rule(ruleno, 4, 123, 1, 20);
   assert(ret == ruleno);
   ret = c->set_rule_step(ruleno, 0, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 10, 0);
   assert(ret == 0);
@@ -271,9 +269,9 @@ TEST(CRUSH, straw_zero) {
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
   string name0("rule0");
-  int ruleset0 = c->add_simple_ruleset(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(0, ruleset0);
+  EXPECT_EQ(0, rule0);
 
   string root_name1("root1");
   int root1;
@@ -282,18 +280,18 @@ TEST(CRUSH, straw_zero) {
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 
   string name1("rule1");
-  int ruleset1 = c->add_simple_ruleset(name1, root_name1, "osd",
+  int rule1 = c->add_simple_rule(name1, root_name1, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(1, ruleset1);
+  EXPECT_EQ(1, rule1);
 
   c->finalize();
 
   vector<unsigned> reweight(n, 0x10000);
   for (int i=0; i<10000; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight, 0);
+    c->do_rule(rule0, i, out0, 1, reweight, 0);
     ASSERT_EQ(1u, out0.size());
-    c->do_rule(ruleset1, i, out1, 1, reweight, 0);
+    c->do_rule(rule1, i, out1, 1, reweight, 0);
     ASSERT_EQ(1u, out1.size());
     ASSERT_EQ(out0[0], out1[0]);
     //cout << i << "\t" << out0 << "\t" << out1 << std::endl;
@@ -336,9 +334,9 @@ TEST(CRUSH, straw_same) {
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
   string name0("rule0");
-  int ruleset0 = c->add_simple_ruleset(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(0, ruleset0);
+  EXPECT_EQ(0, rule0);
 
   for (int i=0; i <n; ++i) {
     items[i] = i;
@@ -352,9 +350,9 @@ TEST(CRUSH, straw_same) {
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 
   string name1("rule1");
-  int ruleset1 = c->add_simple_ruleset(name1, root_name1, "osd",
+  int rule1 = c->add_simple_rule(name1, root_name1, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(1, ruleset1);
+  EXPECT_EQ(1, rule1);
 
   if (0) {
     crush_bucket_straw *sb0 = reinterpret_cast<crush_bucket_straw*>(c->get_crush_map()->buckets[-1-root0]);
@@ -387,9 +385,9 @@ TEST(CRUSH, straw_same) {
   int max = 100000;
   for (int i=0; i<max; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight, 0);
+    c->do_rule(rule0, i, out0, 1, reweight, 0);
     ASSERT_EQ(1u, out0.size());
-    c->do_rule(ruleset1, i, out1, 1, reweight, 0);
+    c->do_rule(rule1, i, out1, 1, reweight, 0);
     ASSERT_EQ(1u, out1.size());
     sum0[out0[0]]++;
     sum1[out1[0]]++;
@@ -436,7 +434,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   c->set_item_name(root0, root_name0);
 
   string name0("rule0");
-  int ruleset0 = c->add_simple_ruleset(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
 
   int sum[n];
@@ -455,7 +453,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   int total = 1000000;
   for (int i=0; i<total; ++i) {
     vector<int> out;
-    c->do_rule(ruleset0, i, out, 1, reweight, 0);
+    c->do_rule(rule0, i, out, 1, reweight, 0);
     sum[out[0]]++;
   }
 
@@ -561,9 +559,9 @@ TEST(CRUSH, straw2_reweight) {
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
   string name0("rule0");
-  int ruleset0 = c->add_simple_ruleset(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(0, ruleset0);
+  EXPECT_EQ(0, rule0);
 
   int changed = 1;
   weights[changed] = weights[changed] / 10 * (rand() % 10);
@@ -577,9 +575,9 @@ TEST(CRUSH, straw2_reweight) {
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 
   string name1("rule1");
-  int ruleset1 = c->add_simple_ruleset(name1, root_name1, "osd",
+  int rule1 = c->add_simple_rule(name1, root_name1, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(1, ruleset1);
+  EXPECT_EQ(1, rule1);
 
   int sum[n];
   double totalweight = 0;
@@ -597,10 +595,10 @@ TEST(CRUSH, straw2_reweight) {
   int total = 1000000;
   for (int i=0; i<total; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight, 0);
+    c->do_rule(rule0, i, out0, 1, reweight, 0);
     ASSERT_EQ(1u, out0.size());
 
-    c->do_rule(ruleset1, i, out1, 1, reweight, 0);
+    c->do_rule(rule1, i, out1, 1, reweight, 0);
     ASSERT_EQ(1u, out1.size());
 
     sum[out1[0]]++;

@@ -339,11 +339,16 @@ void CInode::mark_dirty_rstat()
     dout(10) << "mark_dirty_rstat" << dendl;
     state_set(STATE_DIRTYRSTAT);
     get(PIN_DIRTYRSTAT);
-    CDentry *dn = get_projected_parent_dn();
-    CDir *pdir = dn->dir;
-    pdir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
-
-    mdcache->mds->locker->mark_updated_scatterlock(&pdir->inode->nestlock);
+    CDentry *pdn = get_projected_parent_dn();
+    if (pdn->is_auth()) {
+      CDir *pdir = pdn->dir;
+      pdir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
+      mdcache->mds->locker->mark_updated_scatterlock(&pdir->inode->nestlock);
+    } else {
+      // under cross-MDS rename.
+      // DIRTYRSTAT flag will get cleared when rename finishes
+      assert(state_test(STATE_AMBIGUOUSAUTH));
+    }
   }
 }
 void CInode::clear_dirty_rstat()
@@ -1931,7 +1936,6 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 
       inode_t *pi = get_projected_inode();
       fnode_t *pf = dir->project_fnode();
-      pf->version = dir->pre_dirty();
 
       const char *ename = 0;
       switch (lock->get_type()) {
@@ -1944,11 +1948,19 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 	pf->rstat.version = pi->rstat.version;
 	pf->accounted_rstat = pf->rstat;
 	ename = "lock inest accounted scatter stat update";
+
+	if (!is_auth() && lock->get_state() == LOCK_MIX) {
+	  dout(10) << "finish_scatter_update try to assimilate dirty rstat on " 
+	    << *dir << dendl; 
+	  dir->assimilate_dirty_rstat_inodes();
+       }
+
 	break;
       default:
 	ceph_abort();
       }
 	
+      pf->version = dir->pre_dirty();
       mut->add_projected_fnode(dir);
 
       EUpdate *le = new EUpdate(mdlog, ename);
@@ -1958,6 +1970,22 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
       
       assert(!dir->is_frozen());
       mut->auth_pin(dir);
+
+      if (lock->get_type() == CEPH_LOCK_INEST && 
+	  !is_auth() && lock->get_state() == LOCK_MIX) {
+        dout(10) << "finish_scatter_update finish assimilating dirty rstat on " 
+          << *dir << dendl; 
+        dir->assimilate_dirty_rstat_inodes_finish(mut, &le->metablob);
+
+        if (!(pf->rstat == pf->accounted_rstat)) {
+          if (mut->wrlocks.count(&nestlock) == 0) {
+            mdcache->mds->locker->wrlock_force(&nestlock, mut);
+          }
+
+          mdcache->mds->locker->mark_updated_scatterlock(&nestlock);
+          mut->ls->dirty_dirfrag_nest.push_back(&item_dirty_dirfrag_nest);
+        }
+      }
       
       mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
     } else {
@@ -1971,6 +1999,7 @@ void CInode::_finish_frag_update(CDir *dir, MutationRef& mut)
 {
   dout(10) << "_finish_frag_update on " << *dir << dendl;
   mut->apply();
+  mdcache->mds->locker->drop_locks(mut.get());
   mut->cleanup();
 }
 

@@ -22,8 +22,15 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-ClusterState::ClusterState(MonClient *monc_, Objecter *objecter_)
-  : monc(monc_), objecter(objecter_), lock("ClusterState")
+ClusterState::ClusterState(
+  MonClient *monc_,
+  Objecter *objecter_,
+  const MgrMap& mgrmap)
+  : monc(monc_),
+    objecter(objecter_),
+    lock("ClusterState"),
+    mgr_map(mgrmap),
+    pgservice(pg_map)
 {}
 
 void ClusterState::set_objecter(Objecter *objecter_)
@@ -38,6 +45,18 @@ void ClusterState::set_fsmap(FSMap const &new_fsmap)
   Mutex::Locker l(lock);
 
   fsmap = new_fsmap;
+}
+
+void ClusterState::set_mgr_map(MgrMap const &new_mgrmap)
+{
+  Mutex::Locker l(lock);
+  mgr_map = new_mgrmap;
+}
+
+void ClusterState::set_service_map(ServiceMap const &new_service_map)
+{
+  Mutex::Locker l(lock);
+  servicemap = new_service_map;
 }
 
 void ClusterState::load_digest(MMgrDigest *m)
@@ -79,10 +98,12 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
     }
     // In case we already heard about more recent stats from this PG
     // from another OSD
-    if (pg_map.pg_stat[pgid].get_version_pair() > pg_stats.get_version_pair()) {
+    const auto q = pg_map.pg_stat.find(pgid);
+    if (q != pg_map.pg_stat.end() &&
+	q->second.get_version_pair() > pg_stats.get_version_pair()) {
       dout(15) << " had " << pgid << " from "
-	       << pg_map.pg_stat[pgid].reported_epoch << ":"
-               << pg_map.pg_stat[pgid].reported_seq << dendl;
+	       << q->second.reported_epoch << ":"
+               << q->second.reported_seq << dendl;
       continue;
     }
 

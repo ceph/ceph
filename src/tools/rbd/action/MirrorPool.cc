@@ -528,10 +528,25 @@ int execute_peer_add(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
+  
+  librbd::RBD rbd;
+  rbd_mirror_mode_t mirror_mode;
+  r = rbd.mirror_mode_get(io_ctx, &mirror_mode);
+  if (r < 0) {
+    std::cerr << "rbd: failed to retrieve mirror mode: " 
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  
+  if (mirror_mode == RBD_MIRROR_MODE_DISABLED) {
+    std::cerr << "rbd: failed to add mirror peer: "
+              << "mirroring must be enabled on the pool " 
+              << pool_name << std::endl;
+    return -EINVAL;
+  }
 
   // TODO: temporary restriction to prevent adding multiple peers
   // until rbd-mirror daemon can properly handle the scenario
-  librbd::RBD rbd;
   std::vector<librbd::mirror_peer_t> mirror_peers;
   r = rbd.mirror_peer_list(io_ctx, &mirror_peers);
   if (r < 0) {

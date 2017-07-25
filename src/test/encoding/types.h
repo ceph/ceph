@@ -73,7 +73,7 @@ TYPE(pg_info_t)
 TYPE_FEATUREFUL(pg_query_t)
 TYPE(pg_log_entry_t)
 TYPE(pg_log_t)
-TYPE(pg_missing_item)
+TYPE_FEATUREFUL(pg_missing_item)
 TYPE(pg_missing_t)
 TYPE(pg_ls_response_t)
 TYPE(pg_nls_response_t)
@@ -165,6 +165,11 @@ TYPE(LevelDBStoreStats)
 
 #include "mon/CreatingPGs.h"
 TYPE(creating_pgs_t)
+
+#include "mgr/ServiceMap.h"
+TYPE_FEATUREFUL(ServiceMap)
+TYPE_FEATUREFUL(ServiceMap::Service)
+TYPE_FEATUREFUL(ServiceMap::Daemon)
 
 #include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
@@ -399,6 +404,7 @@ TYPE(cls::rbd::MirrorImage)
 #include "cls/lock/cls_lock_types.h"
 TYPE(rados::cls::lock::locker_id_t)
 TYPE_FEATUREFUL(rados::cls::lock::locker_info_t)
+TYPE_FEATUREFUL(rados::cls::lock::lock_info_t)
 
 #include "cls/lock/cls_lock_ops.h"
 TYPE(cls_lock_lock_op)
@@ -587,6 +593,10 @@ MESSAGE(MOSDPGNotify)
 MESSAGE(MOSDPGQuery)
 #include "messages/MOSDPGRemove.h"
 MESSAGE(MOSDPGRemove)
+#include "messages/MOSDPGRecoveryDelete.h"
+MESSAGE(MOSDPGRecoveryDelete)
+#include "messages/MOSDPGRecoveryDeleteReply.h"
+MESSAGE(MOSDPGRecoveryDeleteReply)
 #include "messages/MOSDPGScan.h"
 MESSAGE(MOSDPGScan)
 #include "messages/MOSDPGTemp.h"
@@ -599,6 +609,8 @@ MESSAGE(MOSDPing)
 MESSAGE(MOSDRepScrub)
 #include "messages/MOSDScrub.h"
 MESSAGE(MOSDScrub)
+#include "messages/MOSDForceRecovery.h"
+MESSAGE(MOSDForceRecovery)
 #include "messages/MOSDSubOp.h"
 MESSAGE(MOSDSubOp)
 #include "messages/MOSDSubOpReply.h"

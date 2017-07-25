@@ -48,6 +48,8 @@ struct RGWUID
 WRITE_CLASS_ENCODER(RGWUID)
 
 extern int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id);
+extern int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>&buckets_usage_map);
+
 /**
  * Get the anonymous (ie, unauthenticated) user info.
  */
@@ -248,10 +250,7 @@ struct RGWUserAdminOpState {
   }
 
   void set_user_email(std::string& email) {
-    if (email.empty())
-      return;
-
-    /* always lowercase email address */
+   /* always lowercase email address */
     boost::algorithm::to_lower(email);
     user_email = email;
     user_email_specified = true;

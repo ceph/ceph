@@ -41,6 +41,7 @@
 
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
+#include "rgw_tag.h"
 
 #include "include/assert.h"
 
@@ -326,6 +327,49 @@ public:
   }
 };
 
+class RGWGetObjTags : public RGWOp {
+ protected:
+  bufferlist tags_bl;
+  bool has_tags{false};
+ public:
+  int verify_permission();
+  void execute();
+  void pre_exec();
+
+  virtual void send_response_data(bufferlist& bl) = 0;
+  virtual const string name() noexcept override { return "get_obj_tags"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+  RGWOpType get_type() { return RGW_OP_GET_OBJ_TAGGING; }
+
+};
+
+class RGWPutObjTags : public RGWOp {
+ protected:
+  bufferlist tags_bl;
+ public:
+  int verify_permission();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual int get_params() = 0;
+  virtual const string name() { return "put_obj_tags"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+  RGWOpType get_type() { return RGW_OP_PUT_OBJ_TAGGING; }
+
+};
+
+class RGWDeleteObjTags: public RGWOp {
+ public:
+  void pre_exec();
+  int verify_permission();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "delete_obj_tags"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
+  RGWOpType get_type() { return RGW_OP_DELETE_OBJ_TAGGING;}
+};
+
 class RGWBulkDelete : public RGWOp {
 public:
   struct acct_path_t {
@@ -594,6 +638,7 @@ protected:
   map<string, bool> categories;
   map<rgw_user_bucket, rgw_usage_log_entry> usage;
   map<string, rgw_usage_log_entry> summary_map;
+  map<string, cls_user_bucket_entry> buckets_usage;
   cls_user_header header;
 public:
   RGWGetUsage() : sent_data(false), show_log_entries(true), show_log_sum(true){
@@ -748,6 +793,7 @@ public:
 
 class RGWSetBucketWebsite : public RGWOp {
 protected:
+  bufferlist in_data;
   RGWBucketWebsiteConf website_conf;
 public:
   RGWSetBucketWebsite() {}
@@ -930,6 +976,7 @@ protected:
   string etag;
   bool chunked_upload;
   RGWAccessControlPolicy policy;
+  std::unique_ptr <RGWObjTags> obj_tags;
   const char *dlo_manifest;
   RGWSLOInfo *slo_info;
   map<string, bufferlist> attrs;
@@ -1422,6 +1469,7 @@ public:
 class RGWPutCORS : public RGWOp {
 protected:
   bufferlist cors_bl;
+  bufferlist in_data;
 
 public:
   RGWPutCORS() {}
@@ -1878,6 +1926,20 @@ static inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete
   ::encode(*delete_at, delatbl);
   attrs[RGW_ATTR_DELETE_AT] = delatbl;
 } /* encode_delete_at_attr */
+
+static inline void encode_obj_tags_attr(RGWObjTags* obj_tags, map<string, bufferlist>& attrs)
+{
+  if (obj_tags == nullptr){
+    // we assume the user submitted a tag format which we couldn't parse since
+    // this wouldn't be parsed later by get/put obj tags, lets delete if the
+    // attr was populated
+    return;
+  }
+
+  bufferlist tagsbl;
+  obj_tags->encode(tagsbl);
+  attrs[RGW_ATTR_TAGS] = tagsbl;
+}
 
 static inline int encode_dlo_manifest_attr(const char * const dlo_manifest,
 					  map<string, bufferlist>& attrs)

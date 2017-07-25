@@ -15,6 +15,8 @@
 #ifndef SCOPE_GUARD
 #define SCOPE_GUARD
 
+#include <utility>
+
 template <typename F>
 struct scope_guard {
   F f;

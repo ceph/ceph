@@ -461,8 +461,7 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) override;
+    uint32_t op_flags = 0) override;
   int _do_read(
     OnodeRef o,
     uint64_t offset,
@@ -565,6 +564,11 @@ public:
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
 
+  void compact () override {
+    assert(db);
+    db->compact();
+  }
+  
 private:
   // --------------------------------------------------------
   // write ops

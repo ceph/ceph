@@ -39,11 +39,11 @@ class ErasureCodeExample : public ErasureCode {
 public:
   ~ErasureCodeExample() override {}
 
-  int create_ruleset(const string &name,
+  int create_rule(const string &name,
 			     CrushWrapper &crush,
 			     ostream *ss) const override {
-    return crush.add_simple_ruleset(name, "default", "host",
-				    "indep", pg_pool_t::TYPE_ERASURE, ss);
+    return crush.add_simple_rule(name, "default", "host", "",
+				 "indep", pg_pool_t::TYPE_ERASURE, ss);
   }
   
   int minimum_to_decode(const set<int> &want_to_read,

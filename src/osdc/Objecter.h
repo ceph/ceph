@@ -1277,6 +1277,7 @@ public:
     int size = -1; ///< the size of the pool when were were last mapped
     int min_size = -1; ///< the min size of the pool when were were last mapped
     bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
+    bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
 
     bool used_replica = false;
     bool paused = false;
@@ -2083,7 +2084,9 @@ private:
     }
   }
   void ms_fast_dispatch(Message *m) override {
-    ms_dispatch(m);
+    if (!ms_dispatch(m)) {
+      m->put();
+    }
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
@@ -2201,7 +2204,7 @@ public:
       onfinish);
     submit_command(c, ptid);
   }
-  void pg_command(pg_t pgid, vector<string>& cmd,
+  void pg_command(pg_t pgid, const vector<string>& cmd,
 		 const bufferlist& inbl, ceph_tid_t *ptid,
 		 bufferlist *poutbl, string *prs, Context *onfinish) {
     CommandOp *c = new CommandOp(

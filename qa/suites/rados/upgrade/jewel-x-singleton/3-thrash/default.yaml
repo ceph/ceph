@@ -5,7 +5,7 @@ meta:
 overrides:
   ceph:
     log-whitelist:
-    - wrongly marked me down
+    - but it is still running
     - objects unfound and apparently lost
     - log bound mismatch
 tasks:
@@ -20,4 +20,5 @@ split_tasks:
         chance_thrash_cluster_full: 0
         chance_thrash_pg_upmap: 0
         chance_thrash_pg_upmap_items: 0
+        chance_force_recovery: 0
     - print: "**** done thrashosds 3-thrash"

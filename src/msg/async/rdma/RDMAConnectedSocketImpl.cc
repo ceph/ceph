@@ -25,7 +25,7 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* i
   : cct(cct), connected(0), error(0), infiniband(ib),
     dispatcher(s), worker(w), lock("RDMAConnectedSocketImpl::lock"),
     is_server(false), con_handler(new C_handle_connection(this)),
-    active(false)
+    active(false), pending(false)
 {
   qp = infiniband->create_queue_pair(
 				     cct, s->get_tx_cq(), s->get_rx_cq(), IBV_QPT_RC);
@@ -201,7 +201,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
 }
 
 void RDMAConnectedSocketImpl::handle_connection() {
-  ldout(cct, 20) << __func__ << " QP: " << my_msg.qpn << " tcp_fd: " << tcp_fd << " fd: " << notify_fd << dendl;
+  ldout(cct, 20) << __func__ << " QP: " << my_msg.qpn << " tcp_fd: " << tcp_fd << " notify_fd: " << notify_fd << dendl;
   int r = infiniband->recv_msg(cct, tcp_fd, peer_msg);
   if (r < 0) {
     if (r != -EAGAIN) {
@@ -256,16 +256,25 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
   uint64_t i = 0;
   int r = ::read(notify_fd, &i, sizeof(i));
   ldout(cct, 20) << __func__ << " notify_fd : " << i << " in " << my_msg.qpn << " r = " << r << dendl;
-  if (error)
-    return -error;
   ssize_t read = 0;
   if (!buffers.empty())
     read = read_buffers(buf,len);
 
   std::vector<ibv_wc> cqe;
   get_wc(cqe);
-  if (cqe.empty())
-    return read == 0 ? -EAGAIN : read;
+  if (cqe.empty()) {
+    if (!buffers.empty()) {
+      notify();
+    }
+    if (read > 0) {
+      return read;
+    }
+    if (error) {
+      return -error;
+    } else {
+      return -EAGAIN;
+    }
+  }
 
   ldout(cct, 20) << __func__ << " poll queue got " << cqe.size() << " responses. QP: " << my_msg.qpn << dendl;
   for (size_t i = 0; i < cqe.size(); ++i) {
@@ -305,6 +314,10 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
     connected = 1; //if so, we don't need the last handshake
     cleanup();
     submit(false);
+  }
+
+  if (!buffers.empty()) {
+    notify();
   }
 
   if (read == 0 && error)

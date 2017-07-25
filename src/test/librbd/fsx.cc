@@ -1522,6 +1522,8 @@ create_image()
 		simple_err("Error creating ioctx", r);
 		goto failed_krbd;
 	}
+        rados_application_enable(ioctx, "rbd", 1);
+
 	if (clone_calls || journal_replay) {
                 uint64_t features = 0;
                 if (clone_calls) {

@@ -467,6 +467,9 @@ void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     return;
   }
 
+  assert(mon->osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS ||
+	 pending_inc.version == 1  /* rebuild-mondb.yaml case */);
+
   version_t version = pending_inc.version;
   dout(10) << __func__ << " v " << version << dendl;
   assert(get_last_committed() + 1 == version);
@@ -555,20 +558,25 @@ version_t PGMonitor::get_trim_to()
 
 bool PGMonitor::preprocess_query(MonOpRequestRef op)
 {
-  if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-    return false;
-  }
-
   op->mark_pgmon_event(__func__);
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
-  dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
+  dout(10) << "preprocess_query " << *m
+	   << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_PGSTATS:
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      return true;
+    }
     return preprocess_pg_stats(op);
 
   case MSG_MON_COMMAND:
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      bufferlist rdata;
+      mon->reply_command(op, -EOPNOTSUPP, "this command is obsolete", rdata,
+			 get_last_committed());
+      return true;
+    }
     return preprocess_command(op);
-
 
   default:
     ceph_abort();
@@ -1055,6 +1063,16 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
     }
     ss << "pg " << pgidstr << " now creating, ok";
     goto update;
+  } else if (prefix == "pg force-recovery" ||
+             prefix == "pg force-backfill" ||
+             prefix == "pg cancel-force-recovery" ||
+             prefix == "pg cancel-force-backfill") {
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using forced recovery";
+      r = -EPERM;
+      goto reply;
+    }
   } else if (prefix == "pg set_full_ratio" ||
              prefix == "pg set_nearfull_ratio") {
     if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
@@ -1169,45 +1187,15 @@ bool PGMonitor::check_sub(Subscription *sub)
   return true;
 }
 
-class PGMapStatService : public PGStatService {
-  const PGMap& pgmap;
+class PGMonStatService : public MonPGStatService, public PGMapStatService {
   PGMonitor *pgmon;
 public:
-  PGMapStatService(const PGMap& o, PGMonitor *pgm)
-    : pgmap(o),
-      pgmon(pgm) {}
+  PGMonStatService(const PGMap& o, PGMonitor *pgm)
+    : MonPGStatService(), PGMapStatService(o), pgmon(pgm) {}
+       
 
   bool is_readable() const override { return pgmon->is_readable(); }
 
-  const pool_stat_t* get_pool_stat(int poolid) const override {
-    auto i = pgmap.pg_pool_sum.find(poolid);
-    if (i != pgmap.pg_pool_sum.end()) {
-      return &i->second;
-    }
-    return nullptr;
-  }
-
-  const osd_stat_t& get_osd_sum() const override { return pgmap.osd_sum; }
-
-  const osd_stat_t *get_osd_stat(int osd) const override {
-    auto i = pgmap.osd_stat.find(osd);
-    if (i == pgmap.osd_stat.end()) {
-      return nullptr;
-    }
-    return &i->second;
-  }
-  const mempool::pgmap::unordered_map<int32_t,osd_stat_t>& get_osd_stat() const override {
-    return pgmap.osd_stat;
-  }
-  float get_full_ratio() const override { return pgmap.full_ratio; }
-  float get_nearfull_ratio() const override { return pgmap.nearfull_ratio; }
-
-  bool have_creating_pgs() const override {
-    return !pgmap.creating_pgs.empty();
-  }
-  bool is_creating_pg(pg_t pgid) const override {
-    return pgmap.creating_pgs.count(pgid);
-  }
   unsigned maybe_add_creating_pgs(epoch_t scan_epoch,
      const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
      creating_pgs_t *pending_creates) const override
@@ -1244,45 +1232,11 @@ public:
       }
     }
   }
-
-  epoch_t get_min_last_epoch_clean() const override {
-    return pgmap.get_min_last_epoch_clean();
-  }
-
-  bool have_full_osds() const override { return !pgmap.full_osds.empty(); }
-  bool have_nearfull_osds() const override {
-    return !pgmap.nearfull_osds.empty();
-  }
-
-  size_t get_num_pg_by_osd(int osd) const override {
-    return pgmap.get_num_pg_by_osd(osd);
-  }
-  ceph_statfs get_statfs() const override {
-    ceph_statfs statfs;
-    statfs.kb = pgmap.osd_sum.kb;
-    statfs.kb_used = pgmap.osd_sum.kb_used;
-    statfs.kb_avail = pgmap.osd_sum.kb_avail;
-    statfs.num_objects = pgmap.pg_sum.stats.sum.num_objects;
-    return statfs;
-  }
-  void print_summary(Formatter *f, ostream *out) const override {
-    pgmap.print_summary(f, out);
-  }
   void dump_info(Formatter *f) const override {
     f->dump_object("pgmap", pgmap);
     f->dump_unsigned("pgmap_first_committed", pgmon->get_first_committed());
     f->dump_unsigned("pgmap_last_committed", pgmon->get_last_committed());
   }
-  void dump_fs_stats(stringstream *ss,
-		     Formatter *f,
-		     bool verbose) const override {
-    pgmap.dump_fs_stats(ss, f, verbose);
-  }
-  void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
-		       bool verbose) const override {
-    pgmap.dump_pool_stats_full(osdm, ss, f, verbose);
-  }
-
   int process_pg_command(const string& prefix,
 			 const map<string,cmd_vartype>& cmdmap,
 			 const OSDMap& osdmap,
@@ -1308,10 +1262,10 @@ public:
   }
 };
 
-PGStatService *PGMonitor::get_pg_stat_service()
+MonPGStatService *PGMonitor::get_pg_stat_service()
 {
   if (!pgservice) {
-    pgservice.reset(new PGMapStatService(pg_map, this));
+    pgservice.reset(new PGMonStatService(pg_map, this));
   }
   return pgservice.get();
 }

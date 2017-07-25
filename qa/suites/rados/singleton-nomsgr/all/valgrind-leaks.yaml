@@ -1,16 +1,23 @@
-os_type: centos   # xenial valgrind buggy, see http://tracker.ceph.com/issues/18126
+# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
+os_type: centos
+
 overrides:
   install:
     ceph:
       flavor: notcmalloc
       debuginfo: true
   ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (PG_
     conf:
       global:
         osd heartbeat grace: 40
         debug deliberately leak memory: true
         osd max object name len: 460
         osd max object namespace len: 64
+      mon:
+        mon osd crush smoke test: false
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]

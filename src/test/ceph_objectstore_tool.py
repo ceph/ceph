@@ -513,8 +513,12 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
                           shell=True)
     weights = []
     for line in output.strip().split('\n'):
-        osd_id, weight, osd_name = re.split('\s+', line)
-        weights.append(float(weight))
+        print(line)
+        linev = re.split('\s+', line)
+        if linev[0] is '':
+            linev.pop(0)
+        print('linev %s' % linev)
+        weights.append(float(linev[1]))
 
     return weights
 
@@ -713,7 +717,7 @@ def main(argv):
 
     print("Created Replicated pool #{repid}".format(repid=REPID))
 
-    cmd = "{path}/ceph osd erasure-code-profile set {prof} ruleset-failure-domain=osd".format(prof=PROFNAME, path=CEPH_BIN)
+    cmd = "{path}/ceph osd erasure-code-profile set {prof} crush-failure-domain=osd".format(prof=PROFNAME, path=CEPH_BIN)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
     cmd = "{path}/ceph osd erasure-code-profile get {prof}".format(prof=PROFNAME, path=CEPH_BIN)

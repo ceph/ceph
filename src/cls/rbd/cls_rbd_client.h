@@ -179,6 +179,11 @@ namespace librbd {
 			       uint64_t stripe_unit, uint64_t stripe_count);
     int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 			      uint64_t stripe_unit, uint64_t stripe_count);
+    void get_create_timestamp_start(librados::ObjectReadOperation *op);
+    int get_create_timestamp_finish(bufferlist::iterator *it,
+                                    utime_t *timestamp);
+    int get_create_timestamp(librados::IoCtx *ioctx, const std::string &oid,
+                             utime_t *timestamp);
     int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
                       const std::string &start, uint64_t max_return,
                       map<string, bufferlist> *pairs);
@@ -413,10 +418,12 @@ namespace librbd {
     void trash_remove(librados::ObjectWriteOperation *op,
                       const std::string &id);
     int trash_remove(librados::IoCtx *ioctx, const std::string &id);
-    void trash_list_start(librados::ObjectReadOperation *op);
+    void trash_list_start(librados::ObjectReadOperation *op,
+                          const std::string &start, uint64_t max_return);
     int trash_list_finish(bufferlist::iterator *it,
                           map<string, cls::rbd::TrashImageSpec> *entries);
     int trash_list(librados::IoCtx *ioctx,
+                   const std::string &start, uint64_t max_return,
                    map<string, cls::rbd::TrashImageSpec> *entries);
     void trash_get_start(librados::ObjectReadOperation *op,
                          const std::string &id);

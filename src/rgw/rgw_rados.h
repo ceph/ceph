@@ -134,6 +134,7 @@ public:
   rgw_obj_select(const rgw_obj& _obj) : obj(_obj), is_raw(false) {}
   rgw_obj_select(const rgw_raw_obj& _raw_obj) : raw_obj(_raw_obj), is_raw(true) {}
   rgw_obj_select(const rgw_obj_select& rhs) {
+    placement_rule = rhs.placement_rule;
     is_raw = rhs.is_raw;
     if (is_raw) {
       raw_obj = rhs.raw_obj;
@@ -799,8 +800,6 @@ public:
     string oid_prefix;
 
     rgw_obj_select cur_obj;
-    rgw_pool pool;
-
 
     RGWObjManifestRule rule;
 
@@ -1268,26 +1267,13 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (struct_v >= 10) {
       ::decode(reshard_pool, bl);
     } else {
-      reshard_pool = name + ".rgw.reshard";
+      reshard_pool = log_pool.name + ":reshard";
     }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<RGWZoneParams*>& o);
-
-  bool find_placement(const rgw_data_placement_target& placement, string *placement_id) {
-    for (const auto& pp : placement_pools) {
-      const RGWZonePlacementInfo& info = pp.second;
-      if (info.index_pool == placement.index_pool.to_str() &&
-          info.data_pool == placement.data_pool.to_str() &&
-          info.data_extra_pool == placement.data_extra_pool.to_str()) {
-        *placement_id = pp.first;
-        return true;
-      }
-    }
-    return false;
-  }
 
   bool get_placement(const string& placement_id, RGWZonePlacementInfo *placement) const {
     auto iter = placement_pools.find(placement_id);
@@ -1807,7 +1793,8 @@ class RGWPeriod
   RGWRados *store;
 
   int read_info();
-  int read_latest_epoch(RGWPeriodLatestEpochInfo& epoch_info);
+  int read_latest_epoch(RGWPeriodLatestEpochInfo& epoch_info,
+                        RGWObjVersionTracker *objv = nullptr);
   int use_latest_epoch();
   int use_current_period();
 
@@ -1869,15 +1856,36 @@ public:
   int get_zonegroup(RGWZoneGroup& zonegroup,
 		    const string& zonegroup_id);
 
-  bool is_single_zonegroup(CephContext *cct, RGWRados *store);
+  bool is_single_zonegroup()
+  {
+      return (period_map.zonegroups.size() == 1);
+  }
+
+  /*
+    returns true if there are several zone groups with a least one zone
+   */
+  bool is_multi_zonegroups_with_zones()
+  {
+    int count = 0;
+    for (const auto& zg:  period_map.zonegroups) {
+      if (zg.second.zones.size() > 0) {
+	if (count++ > 0) {
+	  return true;
+	}
+      }
+    }
+    return false;
+  }
 
   int get_latest_epoch(epoch_t& epoch);
-  int set_latest_epoch(epoch_t epoch, bool exclusive = false);
+  int set_latest_epoch(epoch_t epoch, bool exclusive = false,
+                       RGWObjVersionTracker *objv = nullptr);
+  // update latest_epoch if the given epoch is higher, else return -EEXIST
+  int update_latest_epoch(epoch_t epoch);
 
   int init(CephContext *_cct, RGWRados *_store, const string &period_realm_id, const string &period_realm_name = "",
 	   bool setup_obj = true);
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true);  
-  int use_next_epoch();
 
   int create(bool exclusive = true);
   int delete_obj();
@@ -2046,7 +2054,7 @@ protected:
   rgw_bucket bucket;
   map<RGWObjCategory, RGWStorageStats> *stats;
 public:
-  explicit RGWGetBucketStats_CB(rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
+  explicit RGWGetBucketStats_CB(const rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
   ~RGWGetBucketStats_CB() override {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(map<RGWObjCategory, RGWStorageStats> *_stats) {
@@ -2275,7 +2283,7 @@ class RGWRados
 
   int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx);
   int get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref);
-  int get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_pool *pool = NULL);
+  int get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref);
   uint64_t max_bucket_id;
 
   int get_olh_target_state(RGWObjectCtx& rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
@@ -2313,8 +2321,6 @@ protected:
 
   bool pools_initialized;
 
-  string zonegroup_id;
-  string zone_name;
   string trans_id_suffix;
 
   RGWQuotaHandler *quota_handler;
@@ -2465,6 +2471,16 @@ public:
   const string& get_current_period_id() {
     return current_period.get_id();
   }
+
+  bool has_zonegroup_api(const std::string& api) const {
+    if (!current_period.get_id().empty()) {
+      const auto& zonegroups_by_api = current_period.get_map().zonegroups_by_api;
+      if (zonegroups_by_api.find(api) != zonegroups_by_api.end())
+        return true;
+    }
+    return false;
+  }
+
   // pulls missing periods for period_history
   std::unique_ptr<RGWPeriodPuller> period_puller;
   // maintains a connected history of periods
@@ -2500,7 +2516,7 @@ public:
     return rgw_shards_max();
   }
 
-  int get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_pool *pool = NULL);
+  int get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref);
 
   int list_raw_objects(const rgw_pool& pool, const string& prefix_filter, int max,
                        RGWListRawObjsCtx& ctx, list<string>& oids,
@@ -2536,6 +2552,8 @@ public:
   int initialize();
   void finalize();
 
+  int register_to_service_map(const string& daemon_type, const map<string, string>& meta);
+
   void schedule_context(Context *c);
 
   /** set up a bucket listing. handle is filled in. */
@@ -2565,10 +2583,6 @@ public:
 
   int create_pool(const rgw_pool& pool);
 
-  /**
-   * create a bucket with name bucket and the given list of attrs
-   * returns 0 on success, -ERR# otherwise.
-   */
   int init_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
   int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
                               string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
@@ -2642,7 +2656,7 @@ public:
       } stat_params;
 
       struct ReadParams {
-        rgw_cache_entry_info *cache_info;
+        rgw_cache_entry_info *cache_info{nullptr};
         map<string, bufferlist> *attrs;
 
         ReadParams() : attrs(NULL) {}
@@ -2972,7 +2986,7 @@ public:
     public:
       explicit List(RGWRados::Bucket *_target) : target(_target) {}
 
-      int list_objects(int max, vector<rgw_bucket_dir_entry> *result, map<string, bool> *common_prefixes, bool *is_truncated);
+      int list_objects(int64_t max, vector<rgw_bucket_dir_entry> *result, map<string, bool> *common_prefixes, bool *is_truncated);
       rgw_obj_key& get_next_marker() {
         return next_marker;
       }
@@ -3192,9 +3206,8 @@ public:
   int delete_obj_index(const rgw_obj& obj);
 
   /**
-   * Get the attributes for an object.
-   * bucket: name of the bucket holding the object.
-   * obj: name of the object
+   * Get an attribute for a system object.
+   * obj: the object to get attr
    * name: name of the attr to retrieve
    * dest: bufferlist to store the result in
    * Returns: 0 on success, -ERR# otherwise.
@@ -3499,16 +3512,20 @@ public:
   int complete_sync_user_stats(const rgw_user& user_id);
   int cls_user_add_bucket(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries);
   int cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket);
+  int cls_user_get_bucket_stats(const rgw_bucket& bucket, cls_user_bucket_entry& entry);
 
   int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);
 
-  int check_bucket_shards(const RGWBucketInfo& bucket_info, rgw_bucket& bucket,
+  int check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
 			  RGWQuotaInfo& bucket_quota);
 
   int add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t new_num_shards);
 
   uint64_t instance_id();
+  const string& zone_name() {
+    return get_zone_params().get_name();
+  }
   const string& zone_id() {
     return get_zone_params().get_id();
   }
@@ -3557,7 +3574,8 @@ public:
   }
 
   bool need_to_log_metadata() {
-    return get_zone().log_meta;
+    return is_meta_master() &&
+      (get_zonegroup().zones.size() > 1 || current_period.is_multi_zonegroups_with_zones());
   }
 
   librados::Rados* get_rados_handle();
@@ -3617,11 +3635,12 @@ public:
 
   /**
    * Init pool iteration
-   * bucket: pool name in a bucket object
+   * pool: pool to use for the ctx initialization
    * ctx: context object to use for the iteration
    * Returns: 0 on success, -ERR# otherwise.
    */
   int pool_iterate_begin(const rgw_pool& pool, RGWPoolIterCtx& ctx);
+
   /**
    * Iterate over pool return object names, use optional filter
    * ctx: iteration context, initialized with pool_iterate_begin()

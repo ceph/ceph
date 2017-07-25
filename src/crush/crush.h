@@ -143,7 +143,7 @@ enum crush_algorithm {
          * can contain items with arbitrary weights.  To place a
          * replica, CRUSH begins at the head of the list with the most
          * recently added item and compares its weight to the sum of
-         * all remaining items’ weights.  Depending on the value of
+         * all remaining items' weights.  Depending on the value of
          * hash( x , r , item), either the current item is chosen with
          * the appropriate probability, or the process continues
          * recursively down the list.  This is a natural and intuitive
@@ -174,13 +174,13 @@ enum crush_algorithm {
          * change due an addition, removal, or re-weighting of an
          * item.
          *
-         * The straw2 bucket type allows all items to fairly “compete”
+         * The straw2 bucket type allows all items to fairly "compete"
          * against each other for replica placement through a process
          * analogous to a draw of straws.  To place a replica, a straw
          * of random length is drawn for each item in the bucket.  The
          * item with the longest straw wins.  The length of each straw
          * is initially a value in a fixed range.  Each straw length
-         * is scaled by a factor based on the item’s weight so that
+         * is scaled by a factor based on the item's weight so that
          * heavily weighted items are more likely to win the draw.
          * Although this process is almost twice as slow (on average)
          * than a list bucket and even slower than a tree bucket
@@ -271,7 +271,7 @@ struct crush_weight_set {
  *
  */
 struct crush_choose_arg {
-  int *ids;                             /*!< values to use instead of items */
+  __s32 *ids;                           /*!< values to use instead of items */
   __u32 ids_size;                       /*!< size of the __ids__ array */
   struct crush_weight_set *weight_set;  /*!< weight replacements for a given position */
   __u32 weight_set_size;                /*!< size of the __weight_set__ array */
