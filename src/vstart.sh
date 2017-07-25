@@ -671,6 +671,20 @@ EOF
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
+    wait_active_start=`date +%s`
+    while [ 1 ]; do
+      if ceph_adm -s 2>&1 | grep 'mgr:.*\?(active)' >&/dev/null; then
+        break
+      fi
+      echo "Waiting for MGR to become active."
+      waited_for=$((`date +%s` - wait_active_start))
+      if [[ $waited_for -gt 120 ]]; then
+        echo TIMEOUT waiting for MGR to go active.
+        return 1
+      fi
+      sleep 1
+    done
+
     if ceph_adm restful create-self-signed-cert; then
         SF=`mktemp`
         ceph_adm restful create-key admin -o $SF
