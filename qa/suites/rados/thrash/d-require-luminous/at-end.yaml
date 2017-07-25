@@ -21,5 +21,11 @@ overrides:
     conf:
       global:
         mon debug no require luminous: true
+
+# setting luminous triggers peering, which *might* trigger health alerts
+    log-whitelist:
+      - overall HEALTH_
+      - (PG_AVAILABILITY)
+      - (PG_DEGRADED)
   thrashosds:
     chance_thrash_cluster_full: 0
