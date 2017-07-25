@@ -671,7 +671,9 @@ EOF
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
-    if ceph_adm restful create-self-signed-cert; then
+    # use tell mgr here because the first mgr might not have activated yet
+    # to register the python module commands.
+    if ceph_adm tell mgr restful create-self-signed-cert; then
         SF=`mktemp`
         ceph_adm restful create-key admin -o $SF
         RESTFUL_SECRET=`cat $SF`
