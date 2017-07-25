@@ -55,7 +55,8 @@ MonClient::MonClient(CephContext *cct_) :
   more_log_pending(false),
   want_monmap(true),
   had_a_connection(false),
-  reopen_interval_multiplier(1.0),
+  reopen_interval_multiplier(
+    cct_->_conf->get_val<double>("mon_client_hunt_interval_min_multiple")),
   last_mon_command_tid(0),
   version_req_id(0)
 {
@@ -729,9 +730,7 @@ void MonClient::_finish_hunting()
   }
 
   had_a_connection = true;
-  reopen_interval_multiplier /= 2.0;
-  if (reopen_interval_multiplier < 1.0)
-    reopen_interval_multiplier = 1.0;
+  _un_backoff();
 }
 
 void MonClient::tick()
@@ -773,6 +772,17 @@ void MonClient::tick()
   }
 
   schedule_tick();
+}
+
+void MonClient::_un_backoff()
+{
+  // un-backoff our reconnect interval
+  reopen_interval_multiplier = std::max(
+    cct->_conf->get_val<double>("mon_client_hunt_interval_min_multiple"),
+    reopen_interval_multiplier /
+    cct->_conf->get_val<double>("mon_client_hunt_interval_backoff"));
+  ldout(cct, 20) << __func__ << " reopen_interval_multipler now "
+		 << reopen_interval_multiplier << dendl;
 }
 
 void MonClient::schedule_tick()
