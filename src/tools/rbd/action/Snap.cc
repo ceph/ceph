@@ -177,6 +177,11 @@ int do_clear_limit(librbd::Image& image)
   return image.snap_set_limit(UINT64_MAX);
 }
 
+int do_rename_snap(librbd::Image& image, const char *src_name, const char *dest_name)
+{
+    return image.snap_rename(src_name, dest_name);
+}
+
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -726,7 +731,7 @@ int execute_rename(const po::variables_map &vm) {
     return r;
   }
 
-  r = image.snap_rename(src_snap_name.c_str(), dest_snap_name.c_str());
+  r = do_rename_snap(image, src_snap_name.c_str(), dest_snap_name.c_str());
   if (r < 0) {
     std::cerr << "rbd: renaming snap failed: " << cpp_strerror(r)
               << std::endl;
