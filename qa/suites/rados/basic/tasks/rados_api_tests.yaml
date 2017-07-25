@@ -8,6 +8,7 @@ overrides:
     - (SMALLER_PGP_NUM)
     - (CACHE_POOL_NO_HIT_SET)
     - (CACHE_POOL_NEAR_FULL)
+    - (POOL_APP_NOT_ENABLED)
 tasks:
 - workunit:
     clients:
