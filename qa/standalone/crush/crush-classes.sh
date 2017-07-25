@@ -186,6 +186,10 @@ function TEST_mon_classes() {
     expect_failure $dir EBUSY ceph osd crush class rm abc || return 1 # still referenced by foo-rule
     ceph osd crush rule rm foo-rule || return 1
     ceph osd crush class rm abc || return 1
+
+    # test set-device-class implicitly change class
+    ceph osd crush set-device-class hdd osd.0 || return 1
+    expect_failure $dir EBUSY ceph osd crush set-device-class nvme osd.0 || return 1
 }
 
 main crush-classes "$@"
