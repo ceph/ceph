@@ -162,6 +162,34 @@ void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
 	     flag, s.c_str(), old_flags, hit_flag_points);
 }
 
+bool OpRequest::filter_out(const set<string>& filters)
+{
+  set<entity_addr_t> addrs;
+  for (auto it = filters.begin(); it != filters.end(); it++) {
+    entity_addr_t addr;
+    if (addr.parse((*it).c_str())) {
+      addrs.insert(addr);
+    }
+  }
+  if (addrs.empty())
+    return true;
+
+  entity_addr_t cmp_addr = req_src_inst.addr;
+  if (addrs.count(cmp_addr)) {
+    return true;
+  }
+  cmp_addr.set_nonce(0);
+  if (addrs.count(cmp_addr)) {
+    return true;
+  }
+  cmp_addr.set_port(0);
+  if (addrs.count(cmp_addr)) {
+    return true;
+  }
+
+  return false;
+}
+
 ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i)
 {
   out << "class " << i.name << " rd " << i.read
