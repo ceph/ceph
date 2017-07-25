@@ -658,11 +658,11 @@ start_mgr() {
         host = $HOSTNAME
 EOF
 
-	ceph_adm config-key put mgr/dashboard/$name/server_port $MGR_PORT
+	ceph_adm config-key set mgr/dashboard/$name/server_port $MGR_PORT
 	DASH_URLS+="http://$IP:$MGR_PORT/"
 	MGR_PORT=$(($MGR_PORT + 1000))
 
-	ceph_adm config-key put mgr/restful/$name/server_port $MGR_PORT
+	ceph_adm config-key set mgr/restful/$name/server_port $MGR_PORT
 
 	RESTFUL_URLS+="https://$IP:$MGR_PORT"
 	MGR_PORT=$(($MGR_PORT + 1000))

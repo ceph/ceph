@@ -24,7 +24,7 @@ Configuration
 
 By default the module will accept HTTP requests on port ``9283`` on all
 IPv4 and IPv6 addresses on the host.  The port and listen address are both
-configurable with ``ceph config-key put``, with keys
+configurable with ``ceph config-key set``, with keys
 ``mgr/prometheus/server_addr`` and ``mgr/prometheus/server_port``.
 This port is registered with Prometheus's `registry <https://github.com/prometheus/prometheus/wiki/Default-port-allocations>`_.
 

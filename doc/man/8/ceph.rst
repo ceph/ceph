@@ -207,11 +207,11 @@ Usage::
 
 	ceph config-key dump
 
-Subcommand ``put`` puts configuration key and value.
+Subcommand ``set`` puts configuration key and value.
 
 Usage::
 
-	ceph config-key put <key> {<val>}
+	ceph config-key set <key> {<val>}
 
 
 daemon

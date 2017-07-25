@@ -265,11 +265,11 @@ def test_all():
         ],
       'config-key':[
           {
-            'pre':'config-key put foo bar',
+            'pre':'config-key set foo bar',
             'cmd':('config-key get', 'key=foo', 'r')
             },
           {
-            'pre':'config-key put foo bar',
+            'pre':'config-key set foo bar',
             'cmd':('config-key del', 'key=foo', 'rw')
             }
           ]
