@@ -103,6 +103,7 @@ private:
 protected:
   void _dump_op_descriptor_unlocked(ostream& stream) const override;
   void _unregistered() override;
+  bool filter_out(const set<string>& filters) override;
 
 public:
   ~OpRequest() override {
