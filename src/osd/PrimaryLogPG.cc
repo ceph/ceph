@@ -3833,14 +3833,6 @@ void PrimaryLogPG::snap_trimmer(epoch_t queued)
   if (deleting || pg_has_reset_since(queued)) {
     return;
   }
-  if (g_conf->osd_snap_trim_sleep > 0) {
-    unlock();
-    utime_t t;
-    t.set_from_double(g_conf->osd_snap_trim_sleep);
-    t.sleep();
-    lock();
-    dout(20) << __func__ << " slept for " << t << dendl;
-  }
 
   assert(is_primary());
 
@@ -10147,6 +10139,8 @@ void PrimaryLogPG::on_shutdown()
   cancel_proxy_ops(false);
   apply_and_flush_repops(false);
   cancel_log_updates();
+  // clean up snap trim references
+  snap_trimmer_machine.process_event(Reset());
 
   pgbackend->on_change();
 
@@ -13230,11 +13224,6 @@ void PrimaryLogPG::_scrub_finish()
 #undef dout_prefix
 #define dout_prefix *_dout << pg->gen_prefix() 
 
-PrimaryLogPG::SnapTrimmer::~SnapTrimmer()
-{
-  in_flight.clear();
-}
-
 void PrimaryLogPG::SnapTrimmer::log_enter(const char *state_name)
 {
   dout(20) << "enter " << state_name << dendl;
@@ -13268,24 +13257,40 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
   PrimaryLogPG *pg = context< SnapTrimmer >().pg;
   dout(10) << "NotTrimming react KickTrim" << dendl;
 
-  assert(pg->is_primary() && pg->is_active());
+  if (!(pg->is_primary() && pg->is_active())) {
+    ldout(pg->cct, 10) << "NotTrimming not primary or active" << dendl;
+    return discard_event();
+  }
   if (!pg->is_clean() ||
       pg->snap_trimq.empty()) {
     dout(10) << "NotTrimming not clean or nothing to trim" << dendl;
     return discard_event();
   }
-
   if (pg->scrubber.active) {
     dout(10) << " scrubbing, will requeue snap_trimmer after" << dendl;
     pg->scrubber.queue_snap_trim = true;
     return transit< WaitScrub >();
   } else {
-    context<SnapTrimmer>().snap_to_trim = pg->snap_trimq.range_start();
-    dout(10) << "NotTrimming: trimming "
-	     << pg->snap_trimq.range_start()
-	     << dendl;
-    return transit< AwaitAsyncWork >();
+    return transit< Trimming >();
   }
+}
+
+boost::statechart::result PrimaryLogPG::WaitReservation::react(const SnapTrimReserved&)
+{
+  PrimaryLogPG *pg = context< SnapTrimmer >().pg;
+  ldout(pg->cct, 10) << "WaitReservation react SnapTrimReserved" << dendl;
+
+  pending = nullptr;
+  if (!context< SnapTrimmer >().can_trim()) {
+    post_event(KickTrim());
+    return transit< NotTrimming >();
+  }
+
+  context<Trimming>().snap_to_trim = pg->snap_trimq.range_start();
+  ldout(pg->cct, 10) << "NotTrimming: trimming "
+		     << pg->snap_trimq.range_start()
+		     << dendl;
+  return transit< AwaitAsyncWork >();
 }
 
 /* AwaitAsyncWork */
@@ -13293,28 +13298,25 @@ PrimaryLogPG::AwaitAsyncWork::AwaitAsyncWork(my_context ctx)
   : my_base(ctx),
     NamedState(context< SnapTrimmer >().pg->cct, "Trimming/AwaitAsyncWork")
 {
+  auto *pg = context< SnapTrimmer >().pg;
   context< SnapTrimmer >().log_enter(state_name);
-  context< SnapTrimmer >().pg->osd->queue_for_snap_trim(
-    context< SnapTrimmer >().pg);
-}
-
-void PrimaryLogPG::AwaitAsyncWork::exit()
-{
-  context< SnapTrimmer >().log_exit(state_name, enter_time);
+  context< SnapTrimmer >().pg->osd->queue_for_snap_trim(pg);
+  pg->state_set(PG_STATE_SNAPTRIM);
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 {
   dout(10) << "AwaitAsyncWork react" << dendl;
   PrimaryLogPGRef pg = context< SnapTrimmer >().pg;
-  snapid_t snap_to_trim = context<SnapTrimmer>().snap_to_trim;
-  auto &in_flight = context<SnapTrimmer>().in_flight;
+
+  snapid_t snap_to_trim = context<Trimming>().snap_to_trim;
+  auto &in_flight = context<Trimming>().in_flight;
   assert(in_flight.empty());
 
   assert(pg->is_primary() && pg->is_active());
-  if (!pg->is_clean() ||
-      pg->scrubber.active) {
-    dout(10) << "something changed, reverting to NotTrimming" << dendl;
+  if (!context< SnapTrimmer >().can_trim()) {
+    ldout(pg->cct, 10) << "something changed, reverting to NotTrimming" << dendl;
     post_event(KickTrim());
     return transit< NotTrimming >();
   }

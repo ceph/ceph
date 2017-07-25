@@ -752,7 +752,7 @@ OPTION(osd_op_thread_suicide_timeout, OPT_INT, 150)
 OPTION(osd_recovery_thread_timeout, OPT_INT, 30)
 OPTION(osd_recovery_thread_suicide_timeout, OPT_INT, 300)
 OPTION(osd_recovery_sleep, OPT_FLOAT, 0)         // seconds to sleep between recovery ops
-OPTION(osd_snap_trim_sleep, OPT_FLOAT, 0)
+OPTION(osd_snap_trim_sleep, OPT_DOUBLE, 0)
 OPTION(osd_scrub_invalid_stats, OPT_BOOL, true)
 OPTION(osd_remove_thread_timeout, OPT_INT, 60*60)
 OPTION(osd_remove_thread_suicide_timeout, OPT_INT, 10*60*60)
@@ -766,6 +766,8 @@ OPTION(osd_heartbeat_use_min_delay_socket, OPT_BOOL, false) // prio the heartbea
 
 // max number of parallel snap trims/pg
 OPTION(osd_pg_max_concurrent_snap_trims, OPT_U64, 2)
+// max number of trimming pgs
+OPTION(osd_max_trimming_pgs, OPT_U64, 2)
 
 // minimum number of peers that must be reachable to mark ourselves
 // back up after being wrongly marked down.
@@ -937,6 +939,7 @@ OPTION(osd_recovery_op_warn_multiple, OPT_U32, 16)
 
 // Max time to wait between notifying mon of shutdown and shutting down
 OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
+OPTION(osd_shutdown_pgref_assert, OPT_BOOL, false) // crash if the OSD has stray PG refs on shutdown
 
 OPTION(osd_max_object_size, OPT_U64, 100*1024L*1024L*1024L) // OSD's maximum object size
 OPTION(osd_max_object_name_len, OPT_U32, 2048) // max rados object name len

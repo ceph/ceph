@@ -100,7 +100,7 @@ void PG::put(const char* tag)
   {
     Mutex::Locker l(_ref_id_lock);
     auto tag_counts_entry = _tag_counts.find(tag);
-    assert(_tag_counts_entry != _tag_counts.end());
+    assert(tag_counts_entry != _tag_counts.end());
     --tag_counts_entry->second;
     if (tag_counts_entry->second == 0) {
       _tag_counts.erase(tag_counts_entry);
@@ -120,7 +120,7 @@ uint64_t PG::get_with_id()
   BackTrace bt(0);
   stringstream ss;
   bt.print(ss);
-  dout(20) << __func__ << ": " << info.pgid << " got id " << id << dendl;
+  dout(20) << __func__ << ": " << info.pgid << " got id " << id << " (new) ref==" << ref << dendl;
   assert(!_live_ids.count(id));
   _live_ids.insert(make_pair(id, ss.str()));
   return id;
@@ -128,7 +128,7 @@ uint64_t PG::get_with_id()
 
 void PG::put_with_id(uint64_t id)
 {
-  dout(20) << __func__ << ": " << info.pgid << " put id " << id << dendl;
+  dout(20) << __func__ << ": " << info.pgid << " put id " << id << " (current) ref==" << ref << dendl;
   {
     Mutex::Locker l(_ref_id_lock);
     assert(_live_ids.count(id));
