@@ -19,6 +19,7 @@ tasks:
     - reached quota
     - overall HEALTH_
     - (POOL_FULL)
+    - (POOL_APP_NOT_ENABLED)
 - workunit:
     clients:
       all:
