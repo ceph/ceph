@@ -98,12 +98,10 @@ md_config_t::md_config_t(bool is_daemon)
   // as all loads write to both the values map, and the legacy
   // members if present.
   legacy_values = {
-#define OPTION4(name, type, def_val, safe) \
+#define OPTION(name, type) \
     {std::string(STRINGIFY(name)), &md_config_t::name},
-#define OPTION(name, type, def_val) OPTION4(name, type, def_val, false)
-#define SAFE_OPTION(name, type, def_val) OPTION4(name, type, def_val, true)
+#define SAFE_OPTION(name, type) OPTION(name, type)
 #include "common/legacy_config_opts.h"
-#undef OPTION4
 #undef OPTION
 #undef SAFE_OPTION
   };

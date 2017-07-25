@@ -130,10 +130,8 @@ void Option::dump(Formatter *f) const
   f->close_section();
 }
 
-const std::vector<Option> ceph_options = {
 
-  // ** global basics **
-
+std::vector<Option> global_options = {
   Option("host", Option::TYPE_STR, Option::LEVEL_BASIC)
   .set_description("local hostname")
   .set_long_description("if blank, ceph assumes the short hostname (hostname -s)")
@@ -207,7 +205,8 @@ const std::vector<Option> ceph_options = {
   .add_see_also("admin_socket"),
 
   Option("admin_socket", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("$run_dir/$cluster-$name.asok")
+  .set_default("")
+  .set_daemon_default("$run_dir/$cluster-$name.asok")
   .set_description("path for the runtime control socket file, used by the 'ceph daemon' command")
   .add_service("common"),
 
@@ -223,6 +222,7 @@ const std::vector<Option> ceph_options = {
   // daemon
   Option("daemonize", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
   .set_default(false)
+  .set_daemon_default(true)
   .set_description("whether to daemonize (background) after startup")
   .add_service("mon mgr osd mds")
   .add_tag("service")
@@ -274,8 +274,6 @@ const std::vector<Option> ceph_options = {
   Option("restapi_base_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("default set by python code"),
 
-
-
   Option("erasure_code_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default(CEPH_PKGLIBDIR"/erasure-code")
   .set_description("directory where erasure-code plugins can be found")
@@ -284,7 +282,8 @@ const std::vector<Option> ceph_options = {
 
   // logging
   Option("log_file", Option::TYPE_STR, Option::LEVEL_BASIC)
-  .set_default("/var/log/ceph/$cluster-$name.log")
+  .set_default("")
+  .set_daemon_default("/var/log/ceph/$cluster-$name.log")
   .set_description("path to log file")
   .add_see_also("log_to_stderr")
   .add_see_also("err_to_stderr")
@@ -297,16 +296,19 @@ const std::vector<Option> ceph_options = {
   .add_see_also("log_max_recent"),
 
   Option("log_max_recent", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(10000)
+  .set_default(500)
+  .set_daemon_default(10000)
   .set_description("recent log entries to keep in memory to dump in the event of a crash")
   .set_long_description("The purpose of this option is to log at a higher debug level only to the in-memory buffer, and write out the detailed log messages only if there is a crash.  Only log entries below the lower log level will be written unconditionally to the log.  For example, debug_osd=1/5 will write everything <= 1 to the log unconditionally but keep entries at levels 2-5 in memory.  If there is a seg fault or assertion failure, all entries will be dumped to the log."),
 
   Option("log_to_stderr", Option::TYPE_BOOL, Option::LEVEL_BASIC)
   .set_default(true)
+  .set_daemon_default(false)
   .set_description("send log lines to stderr"),
 
   Option("err_to_stderr", Option::TYPE_BOOL, Option::LEVEL_BASIC)
   .set_default(false)
+  .set_daemon_default(true)
   .set_description("send critical error log lines to stderr"),
 
   Option("log_to_syslog", Option::TYPE_BOOL, Option::LEVEL_BASIC)
@@ -353,90 +355,7 @@ const std::vector<Option> ceph_options = {
   .set_description("port number for the remote graylog server")
   .add_see_also("log_graylog_host"),
 
-  Option("rbd_default_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("rbd")
-  .set_description("")
-  .set_validator([](std::string *value, std::string *error_message){
-    boost::regex pattern("^[^@/]+$");
-    if (!boost::regex_match (*value, pattern)) {
-      *value = "rbd";
-      *error_message = "invalid RBD default pool, resetting to 'rbd'";
-    }
-    return 0;
-  }),
 
-  Option("rbd_default_data_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
-  .set_description("")
-  .set_validator([](std::string *value, std::string *error_message){
-    boost::regex pattern("^[^@/]*$");
-    if (!boost::regex_match (*value, pattern)) {
-      *value = "";
-      *error_message = "ignoring invalid RBD data pool";
-    }
-    return 0;
-  }),
-
-  Option("rbd_default_features", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("layering,exclusive-lock,object-map,fast-diff,deep-flatten")
-  .set_description("")
-  .set_safe()
-  .set_validator([](std::string *value, std::string *error_message){
-    static const std::map<std::string, uint64_t> FEATURE_MAP = {
-      {RBD_FEATURE_NAME_LAYERING, RBD_FEATURE_LAYERING},
-      {RBD_FEATURE_NAME_STRIPINGV2, RBD_FEATURE_STRIPINGV2},
-      {RBD_FEATURE_NAME_EXCLUSIVE_LOCK, RBD_FEATURE_EXCLUSIVE_LOCK},
-      {RBD_FEATURE_NAME_OBJECT_MAP, RBD_FEATURE_OBJECT_MAP},
-      {RBD_FEATURE_NAME_FAST_DIFF, RBD_FEATURE_FAST_DIFF},
-      {RBD_FEATURE_NAME_DEEP_FLATTEN, RBD_FEATURE_DEEP_FLATTEN},
-      {RBD_FEATURE_NAME_JOURNALING, RBD_FEATURE_JOURNALING},
-      {RBD_FEATURE_NAME_DATA_POOL, RBD_FEATURE_DATA_POOL},
-    };
-    static_assert((RBD_FEATURE_DATA_POOL << 1) > RBD_FEATURES_ALL,
-                  "new RBD feature added");
-
-    // convert user-friendly comma delimited feature name list to a bitmask
-    // that is used by the librbd API
-    uint64_t features = 0;
-    error_message->clear();
-
-    try {
-      features = boost::lexical_cast<decltype(features)>(*value);
-
-      uint64_t unsupported_features = (features & ~RBD_FEATURES_ALL);
-      if (unsupported_features != 0ull) {
-        features &= RBD_FEATURES_ALL;
-
-        std::stringstream ss;
-        ss << "ignoring unknown feature mask 0x"
-           << std::hex << unsupported_features;
-        *error_message = ss.str();
-      }
-    } catch (const boost::bad_lexical_cast& ) {
-      int r = 0;
-      std::vector<std::string> feature_names;
-      boost::split(feature_names, *value, boost::is_any_of(","));
-      for (auto feature_name: feature_names) {
-        boost::trim(feature_name);
-        auto feature_it = FEATURE_MAP.find(feature_name);
-        if (feature_it != FEATURE_MAP.end()) {
-          features += feature_it->second;
-        } else {
-          if (!error_message->empty()) {
-            *error_message += ", ";
-          }
-          *error_message += "ignoring unknown feature " + feature_name;
-          r = -EINVAL;
-        }
-      }
-
-      if (features == 0 && r == -EINVAL) {
-        features = RBD_FEATURES_DEFAULT;
-      }
-    }
-    *value = stringify(features);
-    return 0;
-  }),
 
   // unmodified
   Option("clog_to_monitors", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -609,7 +528,15 @@ const std::vector<Option> ceph_options = {
   .set_description(""),
 
   Option("keyring", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin,")
+  .set_default(
+    "/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,"
+    "/etc/ceph/keyring,/etc/ceph/keyring.bin," 
+#if defined(__FreeBSD)
+    "/usr/local/etc/ceph/$cluster.$name.keyring,"
+    "/usr/local/etc/ceph/$cluster.keyring,"
+    "/usr/local/etc/ceph/keyring,/usr/local/etc/ceph/keyring.bin," 
+#endif
+  )
   .set_description(""),
 
   Option("heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -620,7 +547,7 @@ const std::vector<Option> ceph_options = {
   .set_default("")
   .set_description(""),
 
-  Option("heartbeat_inject_failure", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("heartbeat_inject_failure", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -702,11 +629,21 @@ const std::vector<Option> ceph_options = {
   .set_description(""),
 
   Option("ms_bind_retry_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+#if !defined(__FreeBSD__)
   .set_default(3)
+#else
+  // FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
+  .set_default(6)
+#endif
   .set_description(""),
 
   Option("ms_bind_retry_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+#if !defined(__FreeBSD__)
   .set_default(5)
+#else
+  // FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
+  .set_default(6)
+#endif
   .set_description(""),
 
   Option("ms_bind_before_connect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -733,28 +670,28 @@ const std::vector<Option> ceph_options = {
   .set_default(65536)
   .set_description(""),
 
-  Option("ms_inject_socket_failures", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("ms_inject_socket_failures", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("ms_inject_delay_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("ms_inject_delay_type", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("")
   .set_description("")
   .set_safe(),
 
-  Option("ms_inject_delay_msg_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("ms_inject_delay_msg_type", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("")
   .set_description(""),
 
-  Option("ms_inject_delay_max", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("ms_inject_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(1)
   .set_description(""),
 
-  Option("ms_inject_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("ms_inject_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("ms_inject_internal_delays", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("ms_inject_internal_delays", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -874,7 +811,7 @@ const std::vector<Option> ceph_options = {
   .set_default(1)
   .set_description(""),
 
-  Option("ms_dpdk_debug_allow_loopback", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("ms_dpdk_debug_allow_loopback", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -882,7 +819,7 @@ const std::vector<Option> ceph_options = {
   .set_default(8192)
   .set_description(""),
 
-  Option("inject_early_sigterm", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("inject_early_sigterm", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -1270,11 +1207,11 @@ const std::vector<Option> ceph_options = {
   .set_default(100)
   .set_description(""),
 
-  Option("mon_scrub_inject_crc_mismatch", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("mon_scrub_inject_crc_mismatch", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0.0)
   .set_description(""),
 
-  Option("mon_scrub_inject_missing_keys", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("mon_scrub_inject_missing_keys", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0.0)
   .set_description(""),
 
@@ -1294,7 +1231,7 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("mon_inject_sync_get_chunk_delay", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("mon_inject_sync_get_chunk_delay", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -1318,47 +1255,47 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_deprecated_as_obsolete", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_deprecated_as_obsolete", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_dump_transactions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_dump_transactions", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_dump_json", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_dump_json", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_dump_location", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("mon_debug_dump_location", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("/var/log/ceph/$cluster-$name.tdump")
   .set_description(""),
 
-  Option("mon_debug_no_require_luminous", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_no_require_luminous", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_no_require_bluestore_for_ec_overwrites", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_no_require_bluestore_for_ec_overwrites", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_debug_no_initial_persistent_features", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_no_initial_persistent_features", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("mon_inject_transaction_delay_max", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("mon_inject_transaction_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(10.0)
   .set_description(""),
 
-  Option("mon_inject_transaction_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("mon_inject_transaction_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mon_sync_provider_kill_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_sync_provider_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("mon_sync_requester_kill_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_sync_requester_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -1370,7 +1307,7 @@ const std::vector<Option> ceph_options = {
   .set_default("rocksdb")
   .set_description(""),
 
-  Option("mon_debug_unsafe_allow_tier_with_nonempty_snaps", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("mon_debug_unsafe_allow_tier_with_nonempty_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -1418,7 +1355,7 @@ const std::vector<Option> ceph_options = {
   .set_default(500)
   .set_description(""),
 
-  Option("paxos_kill_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("paxos_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -1466,7 +1403,7 @@ const std::vector<Option> ceph_options = {
   .set_default(60*60)
   .set_description(""),
 
-  Option("auth_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("auth_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -1510,206 +1447,6 @@ const std::vector<Option> ceph_options = {
   .set_default(0)
   .set_description(""),
 
-  Option("client_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(16384)
-  .set_description(""),
-
-  Option("client_cache_mid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(.75)
-  .set_description(""),
-
-  Option("client_use_random_mds", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("client_mount_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(300.0)
-  .set_description(""),
-
-  Option("client_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(1.0)
-  .set_description(""),
-
-  Option("client_trace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
-  .set_description(""),
-
-  Option("client_readahead_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(128*1024)
-  .set_description(""),
-
-  Option("client_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("client_readahead_max_periods", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(4)
-  .set_description(""),
-
-  Option("client_reconnect_stale", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("client_snapdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default(".snap")
-  .set_description(""),
-
-  Option("client_mountpoint", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("/")
-  .set_description(""),
-
-  Option("client_mount_uid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(-1)
-  .set_description(""),
-
-  Option("client_mount_gid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(-1)
-  .set_description(""),
-
-  Option("client_notify_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(10)
-  .set_description(""),
-
-  Option("osd_client_watch_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(30)
-  .set_description(""),
-
-  Option("client_caps_release_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("client_quota_df", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("client_oc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("client_oc_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(1024*1024* 200)
-  .set_description(""),
-
-  Option("client_oc_max_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(1024*1024* 100)
-  .set_description(""),
-
-  Option("client_oc_target_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(1024*1024* 8)
-  .set_description(""),
-
-  Option("client_oc_max_dirty_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(5.0)
-  .set_description(""),
-
-  Option("client_oc_max_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(1000)
-  .set_description(""),
-
-  Option("client_debug_getattr_caps", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("client_debug_force_sync_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("client_debug_inject_tick_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("client_max_inline_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(4096)
-  .set_description(""),
-
-  Option("client_inject_release_failure", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("client_inject_fixed_oldest_tid", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("client_metadata", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
-  .set_description(""),
-
-  Option("client_acl_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
-  .set_description(""),
-
-  Option("client_permissions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("client_dirsize_rbytes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("fuse_use_invalidate_cb", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("fuse_disable_pagecache", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("fuse_allow_other", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("fuse_default_permissions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("fuse_big_writes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("fuse_atomic_o_trunc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("fuse_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("fuse_multithreaded", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("fuse_require_active_mds", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("fuse_syncfs_on_mksnap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("fuse_set_user_groups", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("client_try_dentry_invalidate", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("client_die_on_failed_remount", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("client_check_pool_perm", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("client_use_faked_inos", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("client_mds_namespace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
-  .set_description(""),
-
   Option("crush_location", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("")
   .set_description(""),
@@ -1742,7 +1479,7 @@ const std::vector<Option> ceph_options = {
   .set_default(32)
   .set_description(""),
 
-  Option("objecter_inject_no_watch_ping", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("objecter_inject_no_watch_ping", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -1750,7 +1487,7 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("objecter_debug_inject_relock_delay", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("objecter_debug_inject_relock_delay", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -1772,462 +1509,6 @@ const std::vector<Option> ceph_options = {
 
   Option("journaler_prezero_periods", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(5)
-  .set_description(""),
-
-  Option("mds_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("/var/lib/ceph/mds/$cluster-$id")
-  .set_description(""),
-
-  Option("mds_max_file_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(1ULL << 40)
-  .set_description(""),
-
-  Option("mds_max_xattr_pairs_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(64 << 10)
-  .set_description(""),
-
-  Option("mds_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(100000)
-  .set_description(""),
-
-  Option("mds_cache_mid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(.7)
-  .set_description(""),
-
-  Option("mds_max_file_recover", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(32)
-  .set_description(""),
-
-  Option("mds_dir_max_commit_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(10)
-  .set_description(""),
-
-  Option("mds_dir_keys_per_op", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(16384)
-  .set_description(""),
-
-  Option("mds_decay_halflife", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("mds_beacon_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(4)
-  .set_description(""),
-
-  Option("mds_beacon_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(15)
-  .set_description(""),
-
-  Option("mds_enforce_unique_name", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("mds_blacklist_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(24.0*60.0)
-  .set_description(""),
-
-  Option("mds_session_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(60)
-  .set_description(""),
-
-  Option("mds_session_blacklist_on_timeout", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("mds_session_blacklist_on_evict", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("mds_sessionmap_keys_per_op", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(1024)
-  .set_description(""),
-
-  Option("mds_revoke_cap_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(60)
-  .set_description(""),
-
-  Option("mds_recall_state_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(60)
-  .set_description(""),
-
-  Option("mds_freeze_tree_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(30)
-  .set_description(""),
-
-  Option("mds_session_autoclose", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(300)
-  .set_description(""),
-
-  Option("mds_health_summarize_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(10)
-  .set_description(""),
-
-  Option("mds_health_cache_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(1.5)
-  .set_description(""),
-
-  Option("mds_reconnect_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(45)
-  .set_description(""),
-
-  Option("mds_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("mds_dirstat_min_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(1)
-  .set_description(""),
-
-  Option("mds_scatter_nudge_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("mds_client_prealloc_inos", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(1000)
-  .set_description(""),
-
-  Option("mds_early_reply", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("mds_default_dir_hash", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(CEPH_STR_HASH_RJENKINS)
-  .set_description(""),
-
-  Option("mds_log_pause", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("mds_log_skip_corrupt_events", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("mds_log_max_events", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(-1)
-  .set_description(""),
-
-  Option("mds_log_events_per_segment", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(1024)
-  .set_description(""),
-
-  Option("mds_log_segment_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_log_max_segments", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(30)
-  .set_description(""),
-
-  Option("mds_log_max_expiring", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(20)
-  .set_description(""),
-
-  Option("mds_bal_export_pin", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("mds_bal_sample_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(3.0)
-  .set_description(""),
-
-  Option("mds_bal_replicate_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(8000)
-  .set_description(""),
-
-  Option("mds_bal_unreplicate_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_bal_frag", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("mds_bal_split_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(10000)
-  .set_description(""),
-
-  Option("mds_bal_split_rd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(25000)
-  .set_description(""),
-
-  Option("mds_bal_split_wr", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(10000)
-  .set_description(""),
-
-  Option("mds_bal_split_bits", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(3)
-  .set_description(""),
-
-  Option("mds_bal_merge_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(50)
-  .set_description(""),
-
-  Option("mds_bal_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(10)
-  .set_description(""),
-
-  Option("mds_bal_fragment_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("mds_bal_fragment_size_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(10000*10)
-  .set_description(""),
-
-  Option("mds_bal_fragment_fast_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(1.5)
-  .set_description(""),
-
-  Option("mds_bal_idle_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_bal_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(-1)
-  .set_description(""),
-
-  Option("mds_bal_max_until", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(-1)
-  .set_description(""),
-
-  Option("mds_bal_mode", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_bal_min_rebalance", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(.1)
-  .set_description(""),
-
-  Option("mds_bal_min_start", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(.2)
-  .set_description(""),
-
-  Option("mds_bal_need_min", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(.8)
-  .set_description(""),
-
-  Option("mds_bal_need_max", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(1.2)
-  .set_description(""),
-
-  Option("mds_bal_midchunk", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(.3)
-  .set_description(""),
-
-  Option("mds_bal_minchunk", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(.001)
-  .set_description(""),
-
-  Option("mds_bal_target_decay", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(10.0)
-  .set_description(""),
-
-  Option("mds_replay_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(1.0)
-  .set_description(""),
-
-  Option("mds_shutdown_check", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_thrash_exports", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_thrash_fragments", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_dump_cache_on_map", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("mds_dump_cache_after_rejoin", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("mds_verify_scatter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("mds_debug_scatterstat", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("mds_debug_frag", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("mds_debug_auth_pins", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("mds_debug_subtrees", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("mds_kill_mdstable_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_kill_export_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_kill_import_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_kill_link_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_kill_rename_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_kill_openc_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_kill_journal_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_kill_journal_expire_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_kill_journal_replay_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_journal_format", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(1)
-  .set_description(""),
-
-  Option("mds_kill_create_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_inject_traceless_reply_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_wipe_sessions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_wipe_ino_prealloc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_skip_ino", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_standby_for_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
-  .set_description(""),
-
-  Option("mds_standby_for_rank", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(-1)
-  .set_description(""),
-
-  Option("mds_standby_for_fscid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(-1)
-  .set_description(""),
-
-  Option("mds_standby_replay", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("mds_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("mds_op_history_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(20)
-  .set_description(""),
-
-  Option("mds_op_history_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(600)
-  .set_description(""),
-
-  Option("mds_op_complaint_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(30)
-  .set_description(""),
-
-  Option("mds_op_log_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("mds_snap_min_uid", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_snap_max_uid", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(4294967294)
-  .set_description(""),
-
-  Option("mds_snap_rstat", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("mds_verify_backtrace", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(1)
-  .set_description(""),
-
-  Option("mds_max_completed_flushes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(100000)
-  .set_description(""),
-
-  Option("mds_max_completed_requests", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(100000)
-  .set_description(""),
-
-  Option("mds_action_on_write_error", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(1)
-  .set_description(""),
-
-  Option("mds_mon_shutdown_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("mds_max_purge_files", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(64)
-  .set_description(""),
-
-  Option("mds_max_purge_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(8192)
-  .set_description(""),
-
-  Option("mds_max_purge_ops_per_pg", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(0.5)
-  .set_description(""),
-
-  Option("mds_purge_queue_busy_flush_period", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(1.0)
-  .set_description(""),
-
-  Option("mds_root_ino_uid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_root_ino_gid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("mds_max_scrub_ops_in_progress", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("mds_damage_table_max_entries", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(10000)
-  .set_description(""),
-
-  Option("mds_client_writeable_range_max_inc_objs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(1024)
   .set_description(""),
 
   Option("osd_check_max_object_name_len_on_startup", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -2383,11 +1664,15 @@ const std::vector<Option> ceph_options = {
   .set_description(""),
 
   Option("osd_pool_default_erasure_code_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("plugin=jerasure " "technique=reed_sol_van " "k=2 " "m=1 ")
+  .set_default("plugin=jerasure technique=reed_sol_van k=2 m=1")
   .set_description(""),
 
   Option("osd_erasure_code_plugins", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("jerasure" " lrc")
+  .set_default("jerasure lrc"
+#ifdef HAVE_BETTER_YASM_ELF64
+       " isa"
+#endif
+      )
   .set_description(""),
 
   Option("osd_allow_recovery_below_min_size", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -2514,11 +1799,11 @@ const std::vector<Option> ceph_options = {
   .set_default(40)
   .set_description(""),
 
-  Option("osd_inject_bad_map_crc_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_inject_bad_map_crc_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_inject_failure_on_pg_removal", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_inject_failure_on_pg_removal", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -2950,7 +2235,7 @@ const std::vector<Option> ceph_options = {
   .set_default(30)
   .set_description(""),
 
-  Option("osd_kill_backfill_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_kill_backfill_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -3010,71 +2295,71 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_crash_on_ignored_backoff", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_crash_on_ignored_backoff", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_inject_dispatch_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_inject_dispatch_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_inject_dispatch_delay_duration", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_inject_dispatch_delay_duration", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(.1)
   .set_description(""),
 
-  Option("osd_debug_drop_ping_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_drop_ping_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_drop_ping_duration", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_drop_ping_duration", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_op_order", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_op_order", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_verify_missing_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_verify_missing_on_start", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_scrub_chance_rewrite_digest", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_scrub_chance_rewrite_digest", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_verify_snaps_on_info", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_verify_snaps_on_info", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_verify_stray_on_activate", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_verify_stray_on_activate", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_skip_full_check_in_backfill_reservation", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_skip_full_check_in_backfill_reservation", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_reject_backfill_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_reject_backfill_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_inject_copyfrom_error", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_inject_copyfrom_error", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_misdirected_ops", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_misdirected_ops", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_skip_full_check_in_recovery", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_skip_full_check_in_recovery", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_random_push_read_error", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_random_push_read_error", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_debug_verify_cached_snaps", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_verify_cached_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -3130,7 +2415,7 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("osd_debug_pg_log_writeout", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("osd_debug_pg_log_writeout", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -3395,15 +2680,15 @@ const std::vector<Option> ceph_options = {
   .set_default(64 << 10)
   .set_description(""),
 
-  Option("bdev_debug_inflight_ios", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bdev_debug_inflight_ios", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bdev_inject_crash", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bdev_inject_crash", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("bdev_inject_crash_flush_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bdev_inject_crash_flush_delay", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(2)
   .set_description(""),
 
@@ -3427,11 +2712,11 @@ const std::vector<Option> ceph_options = {
   .set_default(4096)
   .set_description(""),
 
-  Option("bdev_debug_aio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bdev_debug_aio", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bdev_debug_aio_suicide_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("bdev_debug_aio_suicide_timeout", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(60.0)
   .set_description(""),
 
@@ -3847,51 +3132,51 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_misc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_misc", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_no_reuse_blocks", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_no_reuse_blocks", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_small_allocations", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_small_allocations", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_debug_freelist", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_freelist", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_prefill", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_prefill", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_debug_prefragment_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_prefragment_max", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(1048576)
   .set_description(""),
 
-  Option("bluestore_debug_inject_read_err", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_inject_read_err", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_randomize_serial_transaction", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_randomize_serial_transaction", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_debug_omit_block_device_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_omit_block_device_write", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_fsck_abort", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_fsck_abort", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_omit_kv_commit", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_omit_kv_commit", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_permit_any_bdev_label", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_permit_any_bdev_label", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -3899,7 +3184,7 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_debug_random_read_err", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("bluestore_debug_random_read_err", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -4019,15 +3304,15 @@ const std::vector<Option> ceph_options = {
   .set_default(0)
   .set_description(""),
 
-  Option("filestore_debug_inject_read_err", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("filestore_debug_inject_read_err", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
-  Option("filestore_debug_random_read_err", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("filestore_debug_random_read_err", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("filestore_debug_omap_check", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("filestore_debug_omap_check", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -4255,11 +3540,11 @@ const std::vector<Option> ceph_options = {
   .set_default("")
   .set_description(""),
 
-  Option("filestore_kill_at", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("filestore_inject_stall", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_inject_stall", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -4267,7 +3552,7 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("filestore_debug_verify_split", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("filestore_debug_verify_split", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -4359,241 +3644,108 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("rbd_op_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(1)
-  .set_description(""),
-
-  Option("rbd_op_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(60)
-  .set_description(""),
-
-  Option("rbd_non_blocking_aio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("rbd_cache", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("rbd_cache_writethrough_until_flush", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("rbd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(32<<20)
-  .set_description(""),
-
-  Option("rbd_cache_max_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(24<<20)
-  .set_description(""),
-
-  Option("rbd_cache_target_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(16<<20)
-  .set_description(""),
-
-  Option("rbd_cache_max_dirty_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(1.0)
-  .set_description(""),
-
-  Option("rbd_cache_max_dirty_object", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("rbd_cache_block_writes_upfront", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("rbd_concurrent_management_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(10)
-  .set_min(1)
-  .set_description(""),
-
-  Option("rbd_balance_snap_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("rbd_localize_snap_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("rbd_balance_parent_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("rbd_localize_parent_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("rbd_readahead_trigger_requests", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(10)
-  .set_description(""),
-
-  Option("rbd_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(512 * 1024)
-  .set_description(""),
-
-  Option("rbd_readahead_disable_after_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(50 * 1024 * 1024)
-  .set_description(""),
-
-  Option("rbd_clone_copy_on_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("rbd_blacklist_on_break_lock", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("rbd_blacklist_expire_seconds", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("rbd_request_timed_out_seconds", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(30)
-  .set_description(""),
-
-  Option("rbd_skip_partial_discard", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("rbd_enable_alloc_hint", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("rbd_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("rbd_blkin_trace_all", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("rbd_validate_pool", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("rbd_validate_names", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("rbd_auto_exclusive_lock_until_manual_request", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("rbd_mirroring_resync_after_disconnect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("rbd_mirroring_replay_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("rbd_default_format", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(2)
-  .set_description(""),
-
-  Option("rbd_default_order", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(22)
-  .set_description(""),
-
-  Option("rbd_default_stripe_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("rbd_default_stripe_unit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("rbd_default_map_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
-  .set_description(""),
-
-  Option("rbd_journal_order", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(24)
-  .set_description(""),
-
-  Option("rbd_journal_splay_width", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(4)
-  .set_description(""),
-
-  Option("rbd_journal_commit_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("rbd_journal_object_flush_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("rbd_journal_object_flush_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("rbd_journal_object_flush_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("rbd_journal_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
-  .set_description(""),
-
-  Option("rbd_journal_max_payload_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(16384)
-  .set_description(""),
-
-  Option("rbd_journal_max_concurrent_object_sets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
-  .set_description(""),
-
-  Option("rbd_mirror_journal_commit_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("rbd_mirror_journal_poll_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(32768)
-  .set_description(""),
-
-  Option("rbd_mirror_sync_point_update_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(30)
-  .set_description(""),
-
-  Option("rbd_mirror_concurrent_image_syncs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("rbd_mirror_pool_replayers_refresh_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(30)
-  .set_description(""),
-
-  Option("rbd_mirror_delete_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(30)
-  .set_description(""),
-
-  Option("rbd_mirror_image_state_check_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(30)
-  .set_min(1)
-  .set_description(""),
-
-  Option("rbd_mirror_leader_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_min(1)
-  .set_description(""),
-
-  Option("rbd_mirror_leader_max_missed_heartbeats", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(2)
-  .set_description(""),
-
-  Option("rbd_mirror_leader_max_acquire_attempts_before_break", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(3)
-  .set_description(""),
-
   Option("nss_db_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("")
   .set_description(""),
 
+  Option("mgr_module_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default(CEPH_PKGLIBDIR "/mgr")
+  .set_description(""),
+
+  Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("restful status")
+  .set_description(""),
+
+  Option("mgr_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("/var/lib/ceph/mgr/$cluster-$id")
+  .set_description(""),
+
+  Option("mgr_tick_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(2)
+  .set_description(""),
+
+  Option("mgr_stats_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("mgr_client_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(128*1048576)
+  .set_description(""),
+
+  Option("mgr_client_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(512)
+  .set_description(""),
+
+  Option("mgr_osd_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(512*1048576)
+  .set_description(""),
+
+  Option("mgr_osd_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(8192)
+  .set_description(""),
+
+  Option("mgr_mds_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(128*1048576)
+  .set_description(""),
+
+  Option("mgr_mds_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(128)
+  .set_description(""),
+
+  Option("mgr_mon_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(128*1048576)
+  .set_description(""),
+
+  Option("mgr_mon_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(128)
+  .set_description(""),
+
+  Option("mgr_connect_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(1.0)
+  .set_description(""),
+
+  Option("mgr_service_beacon_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(60.0)
+  .set_description(""),
+
+  Option("mon_mgr_digest_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("mon_mgr_beacon_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(30)
+  .set_description(""),
+
+  Option("mon_mgr_inactive_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(60)
+  .set_description(""),
+
+  Option("mon_mgr_mkfs_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(60)
+  .set_description(""),
+
+  Option("mutex_perf_counter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("throttler_perf_counter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("event_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("internal_safe_to_start_threads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("debug_deliberately_leak_memory", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(false)
+  .set_description(""),
+};
+
+std::vector<Option> rgw_options = {
   Option("rgw_acl_grants_max_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(100)
   .set_description(""),
@@ -4690,7 +3842,7 @@ const std::vector<Option> ceph_options = {
   .set_default(32)
   .set_description(""),
 
-  Option("rgw_lc_debug_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_lc_debug_interval", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(-1)
   .set_description(""),
 
@@ -5281,11 +4433,11 @@ const std::vector<Option> ceph_options = {
   .set_default(1200)
   .set_description(""),
 
-  Option("rgw_sync_data_inject_err_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("rgw_sync_data_inject_err_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("rgw_sync_meta_inject_err_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("rgw_sync_meta_inject_err_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
@@ -5309,80 +4461,20 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("mgr_module_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default(CEPH_PKGLIBDIR "/mgr")
+  Option("rgw_swift_custom_header", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("")
   .set_description(""),
 
-  Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("restful status")
+  Option("rgw_swift_need_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
   .set_description(""),
 
-  Option("mgr_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("/var/lib/ceph/mgr/$cluster-$id")
+  Option("rgw_reshard_num_logs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(16)
   .set_description(""),
 
-  Option("mgr_tick_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(2)
-  .set_description(""),
-
-  Option("mgr_stats_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("mgr_client_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(128*1048576)
-  .set_description(""),
-
-  Option("mgr_client_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(512)
-  .set_description(""),
-
-  Option("mgr_osd_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(512*1048576)
-  .set_description(""),
-
-  Option("mgr_osd_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(8192)
-  .set_description(""),
-
-  Option("mgr_mds_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(128*1048576)
-  .set_description(""),
-
-  Option("mgr_mds_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(128)
-  .set_description(""),
-
-  Option("mgr_mon_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(128*1048576)
-  .set_description(""),
-
-  Option("mgr_mon_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(128)
-  .set_description(""),
-
-  Option("mgr_connect_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(1.0)
-  .set_description(""),
-
-  Option("mgr_service_beacon_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(60.0)
-  .set_description(""),
-
-  Option("mon_mgr_digest_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(5)
-  .set_description(""),
-
-  Option("mon_mgr_beacon_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(30)
-  .set_description(""),
-
-  Option("mon_mgr_inactive_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(60)
-  .set_description(""),
-
-  Option("mon_mgr_mkfs_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(60)
+  Option("rgw_reshard_bucket_lock_duration", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(120)
   .set_description(""),
 
   Option("rgw_crypt_require_ssl", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -5407,14 +4499,6 @@ const std::vector<Option> ceph_options = {
 
   Option("rgw_rest_getusage_op_compat", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
   .set_default(false)
-  .set_description(""),
-
-  Option("mutex_perf_counter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("throttler_perf_counter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
   .set_description(""),
 
   Option("rgw_torrent_flag", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -5445,34 +4529,6 @@ const std::vector<Option> ceph_options = {
   .set_default(512*1024)
   .set_description(""),
 
-  Option("event_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("internal_safe_to_start_threads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("debug_deliberately_leak_memory", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
-  Option("rgw_swift_custom_header", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
-  .set_description(""),
-
-  Option("rgw_swift_need_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(true)
-  .set_description(""),
-
-  Option("rgw_reshard_num_logs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(16)
-  .set_description(""),
-
-  Option("rgw_reshard_bucket_lock_duration", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(120)
-  .set_description(""),
-
   Option("rgw_dynamic_resharding", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
   .set_default(true)
   .set_description(""),
@@ -5485,3 +4541,1004 @@ const std::vector<Option> ceph_options = {
   .set_default(60 * 10)
   .set_description(""),
 };
+
+std::vector<Option> rbd_options = {
+  Option("rbd_default_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("rbd")
+  .set_description("")
+  .set_validator([](std::string *value, std::string *error_message){
+    boost::regex pattern("^[^@/]+$");
+    if (!boost::regex_match (*value, pattern)) {
+      *value = "rbd";
+      *error_message = "invalid RBD default pool, resetting to 'rbd'";
+    }
+    return 0;
+  }),
+
+  Option("rbd_default_data_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("")
+  .set_description("")
+  .set_validator([](std::string *value, std::string *error_message){
+    boost::regex pattern("^[^@/]*$");
+    if (!boost::regex_match (*value, pattern)) {
+      *value = "";
+      *error_message = "ignoring invalid RBD data pool";
+    }
+    return 0;
+  }),
+
+  Option("rbd_default_features", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("layering,exclusive-lock,object-map,fast-diff,deep-flatten")
+  .set_description("")
+  .set_safe()
+  .set_validator([](std::string *value, std::string *error_message){
+    static const std::map<std::string, uint64_t> FEATURE_MAP = {
+      {RBD_FEATURE_NAME_LAYERING, RBD_FEATURE_LAYERING},
+      {RBD_FEATURE_NAME_STRIPINGV2, RBD_FEATURE_STRIPINGV2},
+      {RBD_FEATURE_NAME_EXCLUSIVE_LOCK, RBD_FEATURE_EXCLUSIVE_LOCK},
+      {RBD_FEATURE_NAME_OBJECT_MAP, RBD_FEATURE_OBJECT_MAP},
+      {RBD_FEATURE_NAME_FAST_DIFF, RBD_FEATURE_FAST_DIFF},
+      {RBD_FEATURE_NAME_DEEP_FLATTEN, RBD_FEATURE_DEEP_FLATTEN},
+      {RBD_FEATURE_NAME_JOURNALING, RBD_FEATURE_JOURNALING},
+      {RBD_FEATURE_NAME_DATA_POOL, RBD_FEATURE_DATA_POOL},
+    };
+    static_assert((RBD_FEATURE_DATA_POOL << 1) > RBD_FEATURES_ALL,
+                  "new RBD feature added");
+
+    // convert user-friendly comma delimited feature name list to a bitmask
+    // that is used by the librbd API
+    uint64_t features = 0;
+    error_message->clear();
+
+    try {
+      features = boost::lexical_cast<decltype(features)>(*value);
+
+      uint64_t unsupported_features = (features & ~RBD_FEATURES_ALL);
+      if (unsupported_features != 0ull) {
+        features &= RBD_FEATURES_ALL;
+
+        std::stringstream ss;
+        ss << "ignoring unknown feature mask 0x"
+           << std::hex << unsupported_features;
+        *error_message = ss.str();
+      }
+    } catch (const boost::bad_lexical_cast& ) {
+      int r = 0;
+      std::vector<std::string> feature_names;
+      boost::split(feature_names, *value, boost::is_any_of(","));
+      for (auto feature_name: feature_names) {
+        boost::trim(feature_name);
+        auto feature_it = FEATURE_MAP.find(feature_name);
+        if (feature_it != FEATURE_MAP.end()) {
+          features += feature_it->second;
+        } else {
+          if (!error_message->empty()) {
+            *error_message += ", ";
+          }
+          *error_message += "ignoring unknown feature " + feature_name;
+          r = -EINVAL;
+        }
+      }
+
+      if (features == 0 && r == -EINVAL) {
+        features = RBD_FEATURES_DEFAULT;
+      }
+    }
+    *value = stringify(features);
+    return 0;
+  }),
+
+  Option("rbd_op_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(1)
+  .set_description(""),
+
+  Option("rbd_op_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(60)
+  .set_description(""),
+
+  Option("rbd_non_blocking_aio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("rbd_cache", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("rbd_cache_writethrough_until_flush", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("rbd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(32<<20)
+  .set_description(""),
+
+  Option("rbd_cache_max_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(24<<20)
+  .set_description(""),
+
+  Option("rbd_cache_target_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(16<<20)
+  .set_description(""),
+
+  Option("rbd_cache_max_dirty_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(1.0)
+  .set_description(""),
+
+  Option("rbd_cache_max_dirty_object", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("rbd_cache_block_writes_upfront", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("rbd_concurrent_management_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(10)
+  .set_min(1)
+  .set_description(""),
+
+  Option("rbd_balance_snap_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("rbd_localize_snap_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("rbd_balance_parent_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("rbd_localize_parent_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("rbd_readahead_trigger_requests", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(10)
+  .set_description(""),
+
+  Option("rbd_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(512 * 1024)
+  .set_description(""),
+
+  Option("rbd_readahead_disable_after_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(50 * 1024 * 1024)
+  .set_description(""),
+
+  Option("rbd_clone_copy_on_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("rbd_blacklist_on_break_lock", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("rbd_blacklist_expire_seconds", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("rbd_request_timed_out_seconds", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(30)
+  .set_description(""),
+
+  Option("rbd_skip_partial_discard", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("rbd_enable_alloc_hint", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("rbd_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("rbd_blkin_trace_all", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("rbd_validate_pool", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("rbd_validate_names", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("rbd_auto_exclusive_lock_until_manual_request", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("rbd_mirroring_resync_after_disconnect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("rbd_mirroring_replay_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("rbd_default_format", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(2)
+  .set_description(""),
+
+  Option("rbd_default_order", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(22)
+  .set_description(""),
+
+  Option("rbd_default_stripe_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("rbd_default_stripe_unit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("rbd_default_map_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("")
+  .set_description(""),
+
+  Option("rbd_journal_order", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(24)
+  .set_description(""),
+
+  Option("rbd_journal_splay_width", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(4)
+  .set_description(""),
+
+  Option("rbd_journal_commit_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("rbd_journal_object_flush_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("rbd_journal_object_flush_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("rbd_journal_object_flush_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("rbd_journal_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("")
+  .set_description(""),
+
+  Option("rbd_journal_max_payload_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(16384)
+  .set_description(""),
+
+  Option("rbd_journal_max_concurrent_object_sets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("rbd_mirror_journal_commit_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("rbd_mirror_journal_poll_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(32768)
+  .set_description(""),
+
+  Option("rbd_mirror_sync_point_update_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(30)
+  .set_description(""),
+
+  Option("rbd_mirror_concurrent_image_syncs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("rbd_mirror_pool_replayers_refresh_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(30)
+  .set_description(""),
+
+  Option("rbd_mirror_delete_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(30)
+  .set_description(""),
+
+  Option("rbd_mirror_image_state_check_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(30)
+  .set_min(1)
+  .set_description(""),
+
+  Option("rbd_mirror_leader_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_min(1)
+  .set_description(""),
+
+  Option("rbd_mirror_leader_max_missed_heartbeats", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(2)
+  .set_description(""),
+
+  Option("rbd_mirror_leader_max_acquire_attempts_before_break", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(3)
+  .set_description(""),
+};
+
+std::vector<Option> mds_options = {
+  Option("mds_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("/var/lib/ceph/mds/$cluster-$id")
+  .set_description(""),
+
+  Option("mds_max_file_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(1ULL << 40)
+  .set_description(""),
+
+  Option("mds_max_xattr_pairs_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(64 << 10)
+  .set_description(""),
+
+  Option("mds_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(100000)
+  .set_description(""),
+
+  Option("mds_cache_mid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(.7)
+  .set_description(""),
+
+  Option("mds_max_file_recover", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(32)
+  .set_description(""),
+
+  Option("mds_dir_max_commit_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(10)
+  .set_description(""),
+
+  Option("mds_dir_keys_per_op", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(16384)
+  .set_description(""),
+
+  Option("mds_decay_halflife", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("mds_beacon_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(4)
+  .set_description(""),
+
+  Option("mds_beacon_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(15)
+  .set_description(""),
+
+  Option("mds_enforce_unique_name", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("mds_blacklist_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(24.0*60.0)
+  .set_description(""),
+
+  Option("mds_session_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(60)
+  .set_description(""),
+
+  Option("mds_session_blacklist_on_timeout", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("mds_session_blacklist_on_evict", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("mds_sessionmap_keys_per_op", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(1024)
+  .set_description(""),
+
+  Option("mds_revoke_cap_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(60)
+  .set_description(""),
+
+  Option("mds_recall_state_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(60)
+  .set_description(""),
+
+  Option("mds_freeze_tree_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(30)
+  .set_description(""),
+
+  Option("mds_session_autoclose", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(300)
+  .set_description(""),
+
+  Option("mds_health_summarize_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(10)
+  .set_description(""),
+
+  Option("mds_health_cache_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(1.5)
+  .set_description(""),
+
+  Option("mds_reconnect_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(45)
+  .set_description(""),
+
+  Option("mds_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("mds_dirstat_min_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(1)
+  .set_description(""),
+
+  Option("mds_scatter_nudge_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("mds_client_prealloc_inos", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(1000)
+  .set_description(""),
+
+  Option("mds_early_reply", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("mds_default_dir_hash", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(CEPH_STR_HASH_RJENKINS)
+  .set_description(""),
+
+  Option("mds_log_pause", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mds_log_skip_corrupt_events", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mds_log_max_events", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(-1)
+  .set_description(""),
+
+  Option("mds_log_events_per_segment", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(1024)
+  .set_description(""),
+
+  Option("mds_log_segment_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_log_max_segments", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(30)
+  .set_description(""),
+
+  Option("mds_log_max_expiring", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(20)
+  .set_description(""),
+
+  Option("mds_bal_export_pin", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("mds_bal_sample_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(3.0)
+  .set_description(""),
+
+  Option("mds_bal_replicate_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(8000)
+  .set_description(""),
+
+  Option("mds_bal_unreplicate_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_bal_frag", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("mds_bal_split_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(10000)
+  .set_description(""),
+
+  Option("mds_bal_split_rd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(25000)
+  .set_description(""),
+
+  Option("mds_bal_split_wr", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(10000)
+  .set_description(""),
+
+  Option("mds_bal_split_bits", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(3)
+  .set_description(""),
+
+  Option("mds_bal_merge_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(50)
+  .set_description(""),
+
+  Option("mds_bal_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(10)
+  .set_description(""),
+
+  Option("mds_bal_fragment_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("mds_bal_fragment_size_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(10000*10)
+  .set_description(""),
+
+  Option("mds_bal_fragment_fast_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(1.5)
+  .set_description(""),
+
+  Option("mds_bal_idle_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_bal_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(-1)
+  .set_description(""),
+
+  Option("mds_bal_max_until", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(-1)
+  .set_description(""),
+
+  Option("mds_bal_mode", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_bal_min_rebalance", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(.1)
+  .set_description(""),
+
+  Option("mds_bal_min_start", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(.2)
+  .set_description(""),
+
+  Option("mds_bal_need_min", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(.8)
+  .set_description(""),
+
+  Option("mds_bal_need_max", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(1.2)
+  .set_description(""),
+
+  Option("mds_bal_midchunk", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(.3)
+  .set_description(""),
+
+  Option("mds_bal_minchunk", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(.001)
+  .set_description(""),
+
+  Option("mds_bal_target_decay", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(10.0)
+  .set_description(""),
+
+  Option("mds_replay_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(1.0)
+  .set_description(""),
+
+  Option("mds_shutdown_check", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_thrash_exports", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_thrash_fragments", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_dump_cache_on_map", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mds_dump_cache_after_rejoin", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mds_verify_scatter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mds_debug_scatterstat", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mds_debug_frag", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mds_debug_auth_pins", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mds_debug_subtrees", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mds_kill_mdstable_at", Option::TYPE_INT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_kill_export_at", Option::TYPE_INT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_kill_import_at", Option::TYPE_INT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_kill_link_at", Option::TYPE_INT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_kill_rename_at", Option::TYPE_INT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_kill_openc_at", Option::TYPE_INT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_kill_journal_at", Option::TYPE_INT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_kill_journal_expire_at", Option::TYPE_INT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_kill_journal_replay_at", Option::TYPE_INT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_journal_format", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(1)
+  .set_description(""),
+
+  Option("mds_kill_create_at", Option::TYPE_INT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_inject_traceless_reply_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_wipe_sessions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_wipe_ino_prealloc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_skip_ino", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_standby_for_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("")
+  .set_description(""),
+
+  Option("mds_standby_for_rank", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(-1)
+  .set_description(""),
+
+  Option("mds_standby_for_fscid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(-1)
+  .set_description(""),
+
+  Option("mds_standby_replay", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mds_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("mds_op_history_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(20)
+  .set_description(""),
+
+  Option("mds_op_history_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(600)
+  .set_description(""),
+
+  Option("mds_op_complaint_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(30)
+  .set_description(""),
+
+  Option("mds_op_log_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("mds_snap_min_uid", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_snap_max_uid", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(4294967294)
+  .set_description(""),
+
+  Option("mds_snap_rstat", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mds_verify_backtrace", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(1)
+  .set_description(""),
+
+  Option("mds_max_completed_flushes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(100000)
+  .set_description(""),
+
+  Option("mds_max_completed_requests", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(100000)
+  .set_description(""),
+
+  Option("mds_action_on_write_error", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(1)
+  .set_description(""),
+
+  Option("mds_mon_shutdown_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("mds_max_purge_files", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(64)
+  .set_description(""),
+
+  Option("mds_max_purge_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(8192)
+  .set_description(""),
+
+  Option("mds_max_purge_ops_per_pg", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(0.5)
+  .set_description(""),
+
+  Option("mds_purge_queue_busy_flush_period", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(1.0)
+  .set_description(""),
+
+  Option("mds_root_ino_uid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_root_ino_gid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("mds_max_scrub_ops_in_progress", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("mds_damage_table_max_entries", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(10000)
+  .set_description(""),
+
+  Option("mds_client_writeable_range_max_inc_objs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(1024)
+  .set_description(""),
+};
+
+std::vector<Option> mds_client_options = {
+  Option("client_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(16384)
+  .set_description(""),
+
+  Option("client_cache_mid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(.75)
+  .set_description(""),
+
+  Option("client_use_random_mds", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("client_mount_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(300.0)
+  .set_description(""),
+
+  Option("client_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(1.0)
+  .set_description(""),
+
+  Option("client_trace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("")
+  .set_description(""),
+
+  Option("client_readahead_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(128*1024)
+  .set_description(""),
+
+  Option("client_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("client_readahead_max_periods", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(4)
+  .set_description(""),
+
+  Option("client_reconnect_stale", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("client_snapdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default(".snap")
+  .set_description(""),
+
+  Option("client_mountpoint", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("/")
+  .set_description(""),
+
+  Option("client_mount_uid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(-1)
+  .set_description(""),
+
+  Option("client_mount_gid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(-1)
+  .set_description(""),
+
+  Option("client_notify_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(10)
+  .set_description(""),
+
+  Option("osd_client_watch_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(30)
+  .set_description(""),
+
+  Option("client_caps_release_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(5)
+  .set_description(""),
+
+  Option("client_quota_df", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("client_oc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("client_oc_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(1024*1024* 200)
+  .set_description(""),
+
+  Option("client_oc_max_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(1024*1024* 100)
+  .set_description(""),
+
+  Option("client_oc_target_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(1024*1024* 8)
+  .set_description(""),
+
+  Option("client_oc_max_dirty_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(5.0)
+  .set_description(""),
+
+  Option("client_oc_max_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(1000)
+  .set_description(""),
+
+  Option("client_debug_getattr_caps", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(false)
+  .set_description(""),
+
+  Option("client_debug_force_sync_read", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(false)
+  .set_description(""),
+
+  Option("client_debug_inject_tick_delay", Option::TYPE_INT, Option::LEVEL_DEV)
+  .set_default(0)
+  .set_description(""),
+
+  Option("client_max_inline_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(4096)
+  .set_description(""),
+
+  Option("client_inject_release_failure", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(false)
+  .set_description(""),
+
+  Option("client_inject_fixed_oldest_tid", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(false)
+  .set_description(""),
+
+  Option("client_metadata", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("")
+  .set_description(""),
+
+  Option("client_acl_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("")
+  .set_description(""),
+
+  Option("client_permissions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("client_dirsize_rbytes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("fuse_use_invalidate_cb", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("fuse_disable_pagecache", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("fuse_allow_other", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("fuse_default_permissions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("fuse_big_writes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("fuse_atomic_o_trunc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("fuse_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("fuse_multithreaded", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("fuse_require_active_mds", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("fuse_syncfs_on_mksnap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("fuse_set_user_groups", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("client_try_dentry_invalidate", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("client_die_on_failed_remount", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("client_check_pool_perm", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
+  Option("client_use_faked_inos", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("client_mds_namespace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("")
+  .set_description(""),
+};
+
+
+static std::vector<Option> build_options()
+{
+  std::vector<Option> result = global_options;
+
+  auto ingest = [&result](std::vector<Option> &options, const std::string &svc) {
+    for (const auto &o_in : options) {
+      Option o(o_in);
+      o.add_service(svc);
+      result.push_back(o);
+    }
+  };
+
+  ingest(rgw_options, "rgw");
+  ingest(rbd_options, "rbd");
+  ingest(mds_options, "mds");
+  ingest(mds_client_options, "mds_client");
+
+  return result;
+}
+
+const std::vector<Option> ceph_options = build_options();

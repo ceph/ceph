@@ -193,7 +193,7 @@ struct Option {
     }
     return *this;
   }
-  Option& add_service(const char* services_str) {
+  Option& add_service(const std::string &services_str) {
     for (const auto s: get_str_vec(services_str)) {
       services.push_back(s);
     }
