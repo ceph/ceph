@@ -50,6 +50,9 @@ class RbdLs(RemoteViewCache):
             i = rbd.Image(self.ioctx, name)
             stat = i.stat()
             stat['name'] = name
+            features = i.features()
+            stat['features'] = features
+            stat['features_name'] = self._format_bitmask(features)
 
             try:
                 parent_info = i.parent_info()
@@ -61,3 +64,26 @@ class RbdLs(RemoteViewCache):
                 pass
             result.append(stat)
         return result
+
+    def _format_bitmask(self, features):
+        names = ""
+        RBD_FEATURES_NAME_MAPPING = {
+            rbd.RBD_FEATURE_LAYERING: "layering",
+            rbd.RBD_FEATURE_STRIPINGV2: "striping",
+            rbd.RBD_FEATURE_EXCLUSIVE_LOCK: "exclusive-lock",
+            rbd.RBD_FEATURE_OBJECT_MAP: "object-map",
+            rbd.RBD_FEATURE_FAST_DIFF: "fast-diff",
+            rbd.RBD_FEATURE_DEEP_FLATTEN: "deep-flatten",
+            rbd.RBD_FEATURE_JOURNALING: "journaling",
+            rbd.RBD_FEATURE_DATA_POOL: "data-pool",
+        }
+
+        for key in RBD_FEATURES_NAME_MAPPING.keys():
+            if (key & features == 0):
+                continue
+
+            if names:
+                names = names + ", "
+            names = names + RBD_FEATURES_NAME_MAPPING.get(key)
+
+        return names
