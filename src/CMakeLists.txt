@@ -454,6 +454,7 @@ set(libcommon_files
   common/SloppyCRCMap.cc
   common/types.cc
   common/iso_8601.cc
+  common/security.cc
   log/Log.cc
   log/SubsystemMap.cc
   mon/MonCap.cc
@@ -682,6 +683,7 @@ add_subdirectory(libradosstriper)
 if (WITH_MGR)
   set(mgr_srcs
       ceph_mgr.cc
+      common/security.cc
       mon/PGMap.cc
       mgr/DaemonState.cc
       mgr/DaemonServer.cc

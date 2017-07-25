@@ -15,6 +15,7 @@
 #ifndef CEPH_MMONCOMMAND_H
 #define CEPH_MMONCOMMAND_H
 
+#include "common/security.h"
 #include "messages/PaxosServiceMessage.h"
 
 #include <vector>
@@ -40,11 +41,11 @@ public:
     o << "mon_command(";
     for (unsigned i=0; i<cmd.size(); i++) {
       if (i) o << ' ';
-      o << cmd[i];
+      o << ceph::security::mask(cmd[i]);
     }
     o << " v " << version << ")";
   }
-  
+
   void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(fsid, payload);

@@ -28,6 +28,7 @@
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub.h"
 #include "common/errno.h"
+#include "common/security.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -645,7 +646,8 @@ bool DaemonServer::handle_command(MCommand *m)
       dout(1) << " access denied" << dendl;
       audit_clog->info() << "from='" << session->inst << "' "
                          << "entity='" << session->entity_name << "' "
-                         << "cmd=" << m->cmd << ":  access denied";
+                         << "cmd=" << ceph::security::mask(m->cmd)
+                         << ":  access denied";
       ss << "access denied' does your client key have mgr caps?"
 	" See http://docs.ceph.com/docs/master/mgr/administrator/#client-authentication";
       cmdctx->reply(-EACCES, ss);
@@ -656,7 +658,7 @@ bool DaemonServer::handle_command(MCommand *m)
   audit_clog->debug()
     << "from='" << session->inst << "' "
     << "entity='" << session->entity_name << "' "
-    << "cmd=" << m->cmd << ": dispatch";
+    << "cmd=" << ceph::security::mask(m->cmd) << ": dispatch";
 
   // ----------------
   // service map commands
