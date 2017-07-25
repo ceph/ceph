@@ -6,29 +6,53 @@ the single-call helper
 """
 import os
 import logging
-from ceph_volume import process, conf, terminal
+from ceph_volume import process, conf
 from ceph_volume.util import system, constants
 
 logger = logging.getLogger(__name__)
 
 
-def create_id(fsid):
+def create_key():
+    stdout, stderr, returncode = process.call(['ceph-authtool', '--gen-print-key'])
+    if returncode != 0:
+        raise RuntimeError('Unable to generate a new auth key')
+    return ' '.join(stdout).strip()
+
+
+def write_keyring(osd_id, secret):
+    # FIXME this only works for cephx, but there will be other types of secrets
+    # later
+    osd_keyring = '/var/lib/ceph/osd/%s-%s/keyring' % (conf.cluster, osd_id)
+    process.run(
+        [
+            'ceph-authtool', osd_keyring,
+            '--create-keyring',
+            '--name', 'osd.%s' % str(osd_id),
+            '--add-key', secret
+        ])
+    system.chown(osd_keyring)
+    # TODO: do the restorecon dance on the osd_keyring path
+
+
+def create_id(fsid, json_secrets):
+    """
+    :param fsid: The osd fsid to create, always required
+    :param json_secrets: a json-ready object with whatever secrets are wanted
+                         to be passed to the monitor
+    """
+    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     stdout, stderr, returncode = process.call(
         [
             'ceph',
             '--cluster', conf.cluster,
             '--name', 'client.bootstrap-osd',
-            '--keyring', '/var/lib/ceph/bootstrap-osd/ceph.keyring',
-            'osd', 'create', fsid
+            '--keyring', bootstrap_keyring,
+            'osd', 'new', fsid
         ],
-        terminal_logging=True
+        stdin=json_secrets
     )
     if returncode != 0:
-        for line in stdout:
-            terminal.write(line)
-        for line in stderr:
-            terminal.write(line)
-        raise RuntimeError()
+        raise RuntimeError('Unable to create a new OSD id')
     return ' '.join(stdout).strip()
 
 
@@ -92,7 +116,7 @@ def get_monmap(osd_id):
              mon getmap -o /var/lib/ceph/osd/ceph-0/activate.monmap
     """
     path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
-    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/ceph.keyring'
+    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     monmap_destination = os.path.join(path, 'activate.monmap')
 
     process.run([
@@ -121,7 +145,6 @@ def osd_mkfs(osd_id, fsid):
     path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
     monmap = os.path.join(path, 'activate.monmap')
     journal = os.path.join(path, 'journal')
-    keyring = os.path.join(path, 'keyring')
 
     system.chown(journal)
     system.chown(path)
@@ -131,13 +154,11 @@ def osd_mkfs(osd_id, fsid):
         'ceph-osd',
         '--cluster', conf.cluster,
         '--mkfs',
-        '--mkkey',
         '-i', osd_id,
         '--monmap', monmap,
         '--osd-data', path,
         '--osd-journal', journal,
         '--osd-uuid', fsid,
-        '--keyring', keyring,
         '--setuser', 'ceph',
         '--setgroup', 'ceph'
     ])
