@@ -16,8 +16,6 @@ class Create(object):
     def create(self, args):
         if not args.osd_fsid:
             args.osd_fsid = system.generate_uuid()
-        if not args.osd_id:
-            args.osd_id = prepare_utils.create_id(args.osd_fsid)
         Prepare([]).prepare(args)
         Activate([]).activate(args)
 
