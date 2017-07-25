@@ -359,8 +359,7 @@ void FSMap::get_health_checks(health_check_map_t *checks) const
       ostringstream ss;
       ss << "fs " << fs->mds_map.fs_name << " has " << stuck_failed.size()
          << " failed mds" << (stuck_failed.size() > 1 ? "s" : "");
-      fscheck.detail.push_back(ss.str());
-    }
+      fscheck.detail.push_back(ss.str()); }
 
     checks->merge(fschecks);
     standby_count_wanted = std::max(
@@ -371,7 +370,7 @@ void FSMap::get_health_checks(health_check_map_t *checks) const
   // MDS_INSUFFICIENT_STANDBY
   if (standby_count_wanted) {
     std::ostringstream oss, dss;
-    oss << "insufficient standby daemons available";
+    oss << "insufficient standby MDS daemons available";
     auto& d = checks->get_or_add("MDS_INSUFFICIENT_STANDBY", HEALTH_WARN, oss.str());
     dss << "have " << standby_daemons.size() << "; want " << standby_count_wanted
 	<< " more";
