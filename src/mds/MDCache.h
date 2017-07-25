@@ -61,6 +61,7 @@ struct MMDSFindIno;
 struct MMDSFindInoReply;
 struct MMDSOpenIno;
 struct MMDSOpenInoReply;
+class MMDSSnapUpdate;
 
 class Message;
 class MClientRequest;
@@ -653,7 +654,6 @@ public:
   void choose_lock_states_and_reconnect_caps();
   void prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
 			   map<client_t,MClientSnap*>& splits);
-  void do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool nosend=false);
   void send_snaps(map<client_t,MClientSnap*>& splits);
   Capability* rejoin_import_cap(CInode *in, client_t client, const cap_reconnect_t& icr, mds_rank_t frommds);
   void finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq,
@@ -1041,6 +1041,9 @@ public:
 public:
   void snaprealm_create(MDRequestRef& mdr, CInode *in);
   void _snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CInode *in);
+  void do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool notify_clients=true);
+  void send_snap_update(CInode *in, version_t stid, int snap_op);
+  void handle_snap_update(MMDSSnapUpdate *m);
 
   // -- stray --
 public:
