@@ -308,7 +308,7 @@ function test_reuse_osd_id() {
     #
     # make sure the OSD is in use by the PGs
     #
-    wait_osd_id_used_by_pgs $osd_id 6 || return 1
+    wait_osd_id_used_by_pgs $osd_id $PG_NUM || return 1
     read_write $dir SOMETHING || return 1
 
     #
