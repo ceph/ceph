@@ -1556,8 +1556,6 @@ public:
     IOContext ioc;
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 
-    CollectionRef first_collection;  ///< first referenced collection
-
     uint64_t seq = 0;
     utime_t start;
     utime_t last_stamp;
