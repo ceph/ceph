@@ -1015,10 +1015,15 @@ COMMAND("osd tier add-cache " \
 COMMAND("config-key get " \
 	"name=key,type=CephString", \
 	"get <key>", "config-key", "r", "cli,rest")
-COMMAND("config-key put " \
+COMMAND("config-key set " \
 	"name=key,type=CephString " \
 	"name=val,type=CephString,req=false", \
-	"put <key>, value <val>", "config-key", "rw", "cli,rest")
+	"set <key> to value <val>", "config-key", "rw", "cli,rest")
+COMMAND_WITH_FLAG("config-key put " \
+		  "name=key,type=CephString " \
+		  "name=val,type=CephString,req=false",			\
+		  "put <key>, value <val>", "config-key", "rw", "cli,rest",
+		  FLAG(DEPRECATED))
 COMMAND("config-key del " \
 	"name=key,type=CephString", \
 	"delete <key>", "config-key", "rw", "cli,rest")
