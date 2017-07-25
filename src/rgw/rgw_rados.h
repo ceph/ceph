@@ -1416,7 +1416,7 @@ struct RGWZoneGroupPlacementTarget {
   string name;
   set<string> tags;
 
-  bool user_permitted(list<string>& user_tags) {
+  bool user_permitted(list<string>& user_tags) const {
     if (tags.empty()) {
       return true;
     }
