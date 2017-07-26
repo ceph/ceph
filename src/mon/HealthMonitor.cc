@@ -198,10 +198,11 @@ void HealthMonitor::tick()
   if (check_member_health()) {
     changed = true;
   }
-  if (mon->is_leader()) {
-    if (check_leader_health()) {
-      changed = true;
-    }
+  if (!mon->is_leader()) {
+    return;
+  }
+  if (check_leader_health()) {
+    changed = true;
   }
   if (changed) {
     propose_pending();

@@ -3054,7 +3054,8 @@ void PGMap::get_health_checks(
   // REQUEST_SLOW
   // REQUEST_STUCK
   if (cct->_conf->mon_osd_warn_op_age > 0 &&
-      osd_sum.op_queue_age_hist.upper_bound() >
+      !osd_sum.op_queue_age_hist.h.empty() &&
+      osd_sum.op_queue_age_hist.upper_bound() / 1000.0 >
       cct->_conf->mon_osd_warn_op_age) {
     list<string> warn_detail, error_detail;
     unsigned warn = 0, error = 0;
@@ -3109,11 +3110,12 @@ void PGMap::get_health_checks(
       for (auto& p : warn_osd_by_max) {
 	ostringstream ss;
 	if (p.second.size() > 1) {
-	  ss << "osds " << p.second;
+	  ss << "osds " << p.second
+             << " have blocked requests > " << p.first << " sec";
 	} else {
-	  ss << "osd." << *p.second.begin();
+	  ss << "osd." << *p.second.begin()
+             << " has blocked requests > " << p.first << " sec";
 	}
-	ss << " have blocked requests > " << p.first << " sec";
 	d.detail.push_back(ss.str());
 	if (--left == 0) {
 	  break;
@@ -3130,11 +3132,12 @@ void PGMap::get_health_checks(
       for (auto& p : error_osd_by_max) {
 	ostringstream ss;
 	if (p.second.size() > 1) {
-	  ss << "osds " << p.second;
+	  ss << "osds " << p.second
+             << " have stuck requests > " << p.first << " sec";
 	} else {
-	  ss << "osd." << *p.second.begin();
+	  ss << "osd." << *p.second.begin()
+             << " has stuck requests > " << p.first << " sec";
 	}
-	ss << " have stuck requests > " << p.first << " sec";
 	d.detail.push_back(ss.str());
 	if (--left == 0) {
 	  break;
@@ -3362,7 +3365,8 @@ void PGMap::get_health(
 
   // slow requests
   if (cct->_conf->mon_osd_warn_op_age > 0 &&
-      osd_sum.op_queue_age_hist.upper_bound() > cct->_conf->mon_osd_warn_op_age) {
+      osd_sum.op_queue_age_hist.upper_bound() / 1000.0  >
+      cct->_conf->mon_osd_warn_op_age) {
     auto sum = _warn_slow_request_histogram(
       cct, osd_sum.op_queue_age_hist, "", summary, NULL);
     if (sum.first > 0 || sum.second > 0) {
@@ -3375,7 +3379,7 @@ void PGMap::get_health(
       }
       if (sum.second > 0) {
 	ostringstream ss;
-	ss << sum.first << " requests are blocked > "
+	ss << sum.second << " requests are blocked > "
 	   << (cct->_conf->mon_osd_warn_op_age *
 	       cct->_conf->mon_osd_err_op_age_ratio)
 	   << " sec";
@@ -3778,7 +3782,8 @@ int process_pg_map_command(
       } else {
         int filter = pg_string_state(state_str);
         if (filter < 0) {
-          *ss << "'" << state_str << "' is not a valid pg state";
+          *ss << "'" << state_str << "' is not a valid pg state,"
+              << " available choices: " << pg_state_string(0xFFFFFFFF);
           return -EINVAL;
         }
         state |= filter;
