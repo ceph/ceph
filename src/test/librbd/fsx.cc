@@ -691,7 +691,9 @@ librbd_compare_and_write(struct rbd_ctx *ctx, uint64_t off, size_t len,
         uint64_t mismatch_off = 0;
 
         n = rbd_compare_and_write(ctx->image, off, len, cmp_buf, buf, &mismatch_off, 0);
-        if (n < 0) {
+        if (n == -EINVAL) {
+                return n;
+        } else if (n < 0) {
                 prt("rbd_compare_and_write mismatch(%llu, %zu, %llu) failed\n",
                     off, len, mismatch_off);
                 return n;
@@ -1962,7 +1964,7 @@ docompareandwrite(unsigned offset, unsigned size)
 
         offset -= offset % writebdy;
         if (o_direct)
-        size -= size % writebdy;
+                size -= size % writebdy;
 
         if (size == 0) {
                 if (!quiet && testcalls > simulatedopcount && !o_direct)
@@ -1978,6 +1980,8 @@ docompareandwrite(unsigned offset, unsigned size)
                 return;
         }
 
+        memcpy(temp_buf + offset, good_buf + offset, size);
+	gendata(original_buf, good_buf, offset, size);
         log4(OP_COMPARE_AND_WRITE, offset, size, 0);
 
         if (testcalls <= simulatedopcount)
@@ -1993,11 +1997,13 @@ docompareandwrite(unsigned offset, unsigned size)
 		prt("%lu compareandwrite\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 
-        ret = ops->compare_and_write(&ctx, offset, size, good_buf + offset,
-                               good_buf + offset);
+        ret = ops->compare_and_write(&ctx, offset, size, temp_buf + offset,
+                                     good_buf + offset);
         if (ret != (ssize_t)size) {
-                if (ret == -EILSEQ || ret == -EINVAL)
+                if (ret == -EINVAL) {
+                        memcpy(good_buf + offset, temp_buf + offset, size);
                         return;
+                }
                 if (ret < 0)
                         prterrcode("docompareandwrite: ops->compare_and_write", ret);
                 else
