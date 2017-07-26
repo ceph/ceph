@@ -7672,60 +7672,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
        << " from crush map";
     goto update;
 
-  } else if (prefix == "osd crush class rename") {
-    string srcname, dstname;
-    if (!cmd_getval(g_ceph_context, cmdmap, "srcname", srcname)) {
-      err = -EINVAL;
-      goto reply;
-    }
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
-	 << "luminous' before using crush device classes";
-      err = -EPERM;
-      goto reply;
-    }
-
-    if (!cmd_getval(g_ceph_context, cmdmap, "dstname", dstname)) {
-      err = -EINVAL;
-      goto reply;
-    }
-
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
-
-    if (!newcrush.class_exists(srcname)) {
-      err = -ENOENT;
-      ss << "class '" << srcname << "' does not exist";
-      goto reply;
-    }
-
-    if (newcrush.class_exists(dstname)) {
-      err = -EEXIST;
-      ss << "class '" << dstname << "' already exists";
-      goto reply;
-    }
-
-    int class_id = newcrush.get_class_id(srcname);
-
-    stringstream ts;
-    if (newcrush.class_is_in_use(class_id, &ts)) {
-      err = -EBUSY;
-      ss << "class '" << srcname << "' " << ts.str();
-      goto reply;
-    }
-
-    err = newcrush.rename_class(srcname, dstname);
-    if (err < 0) {
-      ss << "fail to rename '" << srcname << "' to '" << dstname << "':"
-         << cpp_strerror(err);
-      goto reply;
-    }
-
-    pending_inc.crush.clear();
-    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-    ss << "rename class '" << srcname << "' to '" << dstname << "'";
-    goto update;
-
   } else if (prefix == "osd crush weight-set create" ||
 	     prefix == "osd crush weight-set create-compat") {
     CrushWrapper newcrush;
