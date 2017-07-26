@@ -21,7 +21,7 @@ struct RGWRedirectInfo
 {
   string protocol;
   string hostname;
-  uint16_t http_redirect_code;
+  uint16_t http_redirect_code = 0;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
