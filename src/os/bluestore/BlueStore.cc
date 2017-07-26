@@ -8011,7 +8011,6 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   OpSequencerRef osr = txc->osr;
-  CollectionRef c;
   bool empty = false;
   bool submit_deferred = false;
   OpSequencer::q_list_t releasing_txc;
@@ -8036,9 +8035,6 @@ void BlueStore::_txc_finish(TransContext *txc)
         break;
       }
 
-      if (!c && txc->first_collection) {
-        c = txc->first_collection;
-      }
       osr->q.pop_front();
       releasing_txc.push_back(*txc);
       notify = true;
@@ -8853,10 +8849,6 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
   for (vector<coll_t>::iterator p = i.colls.begin(); p != i.colls.end();
        ++p, ++j) {
     cvec[j] = _get_collection(*p);
-
-    // note first collection we reference
-    if (!txc->first_collection)
-      txc->first_collection = cvec[j];
   }
   vector<OnodeRef> ovec(i.objects.size());
 
