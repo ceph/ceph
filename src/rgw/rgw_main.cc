@@ -374,18 +374,21 @@ int main(int argc, const char **argv)
   get_str_list(g_conf->rgw_enable_apis, apis);
 
   map<string, bool> apis_map;
+  map<string, bool>::iterator valChecker;
+  map<string, bool>::iterator valChecker_s3website;
   for (list<string>::iterator li = apis.begin(); li != apis.end(); ++li) {
     apis_map[*li] = true;
   }
 
   // S3 website mode is a specialization of S3
-  const bool s3website_enabled = apis_map.count("s3website") > 0;
+  valChecker_s3website = apis_map.find("s3website");
   // Swift API entrypoint could placed in the root instead of S3
   const bool swift_at_root = g_conf->rgw_swift_url_prefix == "/";
-  if (apis_map.count("s3") > 0 || s3website_enabled) {
+  valChecker = apis_map.find("s3");
+  if((valChecker != apis_map.end()) || (valChecker_s3website != apis_map.end())){
     if (! swift_at_root) {
       rest.register_default_mgr(set_logging(rest_filter(store, RGW_REST_S3,
-                                                        new RGWRESTMgr_S3(s3website_enabled))));
+                                                        new RGWRESTMgr_S3(1))));
     } else {
       derr << "Cannot have the S3 or S3 Website enabled together with "
            << "Swift API placed in the root of hierarchy" << dendl;
@@ -393,7 +396,8 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (apis_map.count("swift") > 0) {
+    valChecker = apis_map.find("swift");
+    if(valChecker != apis_map.end()){
     RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT;
 
     if (! g_conf->rgw_cross_domain_policy.empty()) {
@@ -422,12 +426,14 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (apis_map.count("swift_auth") > 0) {
+  valChecker = apis_map.find("swift_auth");
+  if(valChecker != apis_map.end()){
     rest.register_resource(g_conf->rgw_swift_auth_entry,
                set_logging(new RGWRESTMgr_SWIFT_Auth));
   }
 
-  if (apis_map.count("admin") > 0) {
+  valChecker = apis_map.find("admin");
+  if(valChecker != apis_map.end()){
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
     admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
     admin_resource->register_resource("user", new RGWRESTMgr_User);
