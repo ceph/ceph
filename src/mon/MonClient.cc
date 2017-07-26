@@ -14,6 +14,8 @@
 
 #include <random>
 
+#include "include/scope_guard.h"
+
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
@@ -737,11 +739,15 @@ void MonClient::tick()
 {
   ldout(cct, 10) << __func__ << dendl;
 
+  auto reschedule_tick = make_scope_guard([this] {
+      schedule_tick();
+    });
+
   _check_auth_tickets();
   
   if (_hunting()) {
     ldout(cct, 1) << "continuing hunt" << dendl;
-    _reopen_session();
+    return _reopen_session();
   } else if (active_con) {
     // just renew as needed
     utime_t now = ceph_clock_now();
@@ -764,16 +770,13 @@ void MonClient::tick()
       if (interval > cct->_conf->mon_client_ping_timeout) {
 	ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
 		      << " seconds), reconnecting" << dendl;
-	_reopen_session();
+	return _reopen_session();
       }
-
       send_log();
     }
 
     _un_backoff();
   }
-
-  schedule_tick();
 }
 
 void MonClient::_un_backoff()
