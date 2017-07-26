@@ -4126,7 +4126,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ds);
     } else if (prefix == "osd tree") {
       vector<string> states;
+      string shadow;
       cmd_getval(g_ceph_context, cmdmap, "states", states);
+      cmd_getval(g_ceph_context, cmdmap, "shadow", shadow);
       unsigned filter = 0;
       for (auto& s : states) {
 	if (s == "up") {
@@ -4151,13 +4153,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	r = -EINVAL;
 	goto reply;
       }
+      bool show_shadow = shadow == "--show-shadow";
       if (f) {
 	f->open_object_section("tree");
-	p->print_tree(f.get(), NULL, filter);
+	p->print_tree(f.get(), NULL, filter, show_shadow);
 	f->close_section();
 	f->flush(ds);
       } else {
-	p->print_tree(NULL, &ds, filter);
+	p->print_tree(NULL, &ds, filter, show_shadow);
       }
       rdata.append(ds);
     } else if (prefix == "osd getmap") {

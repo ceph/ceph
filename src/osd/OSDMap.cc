@@ -3055,6 +3055,12 @@ public:
 		     unsigned f)
     : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
+  OSDTreePlainDumper(const CrushWrapper *crush,
+                     const OSDMap *osdmap_,
+                     unsigned f,
+                     bool show_shadow)
+    : Parent(crush, osdmap_->get_pool_names(), show_shadow), osdmap(osdmap_), filter(f) { }
+
   bool should_dump_leaf(int i) const override {
     if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
 	((filter & OSDMap::DUMP_DOWN) && !osdmap->is_down(i)) ||
@@ -3133,6 +3139,13 @@ public:
 			  unsigned f)
     : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
+
+  OSDTreeFormattingDumper(const CrushWrapper *crush,
+                          const OSDMap *osdmap_,
+                          unsigned f,
+                          bool show_shadow)
+    : Parent(crush, osdmap_->get_pool_names(), show_shadow), osdmap(osdmap_), filter(f) { }
+
   bool should_dump_leaf(int i) const override {
     if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
 	((filter & OSDMap::DUMP_DOWN) && !osdmap->is_down(i)) ||
@@ -3176,14 +3189,17 @@ private:
   const unsigned filter;
 };
 
-void OSDMap::print_tree(Formatter *f, ostream *out, unsigned filter) const
+void OSDMap::print_tree(Formatter *f,
+                        ostream *out,
+                        unsigned filter,
+                        bool show_shadow) const
 {
   if (f) {
-    OSDTreeFormattingDumper(crush.get(), this, filter).dump(f);
+    OSDTreeFormattingDumper(crush.get(), this, filter, show_shadow).dump(f);
   } else {
     assert(out);
     TextTable tbl;
-    OSDTreePlainDumper(crush.get(), this, filter).dump(&tbl);
+    OSDTreePlainDumper(crush.get(), this, filter, show_shadow).dump(&tbl);
     *out << tbl;
   }
 }

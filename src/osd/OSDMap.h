@@ -1350,7 +1350,8 @@ public:
     DUMP_UP = 4,     // only 'up' osds
     DUMP_DOWN = 8,   // only 'down' osds
   };
-  void print_tree(Formatter *f, ostream *out, unsigned dump_flags=0) const;
+  void print_tree(Formatter *f, ostream *out, unsigned dump_flags=0,
+    bool show_shadow = false) const;
 
   int summarize_mapping_stats(
     OSDMap *newmap,
