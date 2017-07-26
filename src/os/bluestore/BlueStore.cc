@@ -11343,96 +11343,107 @@ void BlueStore::DBHistogram::dump(Formatter *f)
   f->close_section();
 }
 
+void BlueStore::_db_stats_entry(
+  const string &key,
+  const bufferlist &value,
+  const pair<string,string> &raw_key,
+  DBHistogramStats &db_stats)
+{
+  dout(30) << __func__ << " Key: " << key << dendl;
+  uint64_t key_size = key.size();
+  uint64_t value_size = value.length();
+  DBHistogram hist = db_stats.hist;
+  hist.value_hist[hist.get_value_slab(value_size)]++;
+  db_stats.max_key_size = MAX(db_stats.max_key_size, key_size);
+  db_stats.max_value_size = MAX(db_stats.max_value_size, value_size);
+  db_stats.total_key_size += key_size;
+  db_stats.total_value_size += value_size;
+
+  if (raw_key.first == PREFIX_SUPER) {
+      hist.update_hist_entry(hist.key_hist, PREFIX_SUPER, key_size, value_size);
+      db_stats.num_super++;
+  } else if (raw_key.first == PREFIX_STAT) {
+      hist.update_hist_entry(hist.key_hist, PREFIX_STAT, key_size, value_size);
+      db_stats.num_stat++;
+  } else if (raw_key.first == PREFIX_COLL) {
+      hist.update_hist_entry(hist.key_hist, PREFIX_COLL, key_size, value_size);
+      db_stats.num_coll++;
+  } else if (raw_key.first == PREFIX_OBJ) {
+    if (raw_key.second.back() == ONODE_KEY_SUFFIX) {
+      hist.update_hist_entry(hist.key_hist, prefix_onode, key_size, value_size);
+      db_stats.num_onodes++;
+    } else {
+      hist.update_hist_entry(hist.key_hist, prefix_onode_shard, key_size, value_size);
+      db_stats.num_shards++;
+    }
+  } else if (raw_key.first == PREFIX_OMAP) {
+      hist.update_hist_entry(hist.key_hist, PREFIX_OMAP, key_size, value_size);
+      db_stats.num_omap++;
+  } else if (raw_key.first == PREFIX_DEFERRED) {
+      hist.update_hist_entry(hist.key_hist, PREFIX_DEFERRED, key_size, value_size);
+      db_stats.num_deferred++;
+  } else if (raw_key.first == PREFIX_ALLOC || raw_key.first == "b" ) {
+      hist.update_hist_entry(hist.key_hist, PREFIX_ALLOC, key_size, value_size);
+      db_stats.num_alloc++;
+  } else if (raw_key.first == PREFIX_SHARED_BLOB) {
+      hist.update_hist_entry(hist.key_hist, PREFIX_SHARED_BLOB, key_size, value_size);
+      db_stats.num_shared_shards++;
+  } else {
+      hist.update_hist_entry(hist.key_hist, prefix_other, key_size, value_size);
+      db_stats.num_others++;
+  }
+}
+
 //Itrerates through the db and collects the stats
 void BlueStore::generate_db_histogram(Formatter *f)
 {
   //globals
-  uint64_t num_onodes = 0;
-  uint64_t num_shards = 0;
-  uint64_t num_super = 0;
-  uint64_t num_coll = 0;
-  uint64_t num_omap = 0;
-  uint64_t num_deferred = 0;
-  uint64_t num_alloc = 0;
-  uint64_t num_stat = 0;
-  uint64_t num_others = 0;
-  uint64_t num_shared_shards = 0;
-  size_t max_key_size =0, max_value_size = 0;
-  uint64_t total_key_size = 0, total_value_size = 0;
-  size_t key_size = 0, value_size = 0;
-  DBHistogram hist;
+  DBHistogramStats db_stats;
 
   utime_t start = ceph_clock_now();
 
+  if(g_conf->bluestore_rocksdb_enable_column_familly) {
+    for (auto & p : cfs) {
+      KeyValueDB::Iterator iter = db->get_iterator(p.name);
+      iter->seek_to_first();
+      while(iter->valid()) {
+        pair<string,string> key(iter->raw_key());
+        _db_stats_entry(iter->key(), iter->value(),
+                        key, db_stats);
+        iter->next();
+      }
+    }
+  }
+
+  // Iterate default column faimily.
   KeyValueDB::WholeSpaceIterator iter = db->get_iterator();
   iter->seek_to_first();
   while (iter->valid()) {
-    dout(30) << __func__ << " Key: " << iter->key() << dendl;
-    key_size = iter->key_size();
-    value_size = iter->value_size();
-    hist.value_hist[hist.get_value_slab(value_size)]++;
-    max_key_size = MAX(max_key_size, key_size);
-    max_value_size = MAX(max_value_size, value_size);
-    total_key_size += key_size;
-    total_value_size += value_size;
-
     pair<string,string> key(iter->raw_key());
-
-    if (key.first == PREFIX_SUPER) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_SUPER, key_size, value_size);
-	num_super++;
-    } else if (key.first == PREFIX_STAT) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_STAT, key_size, value_size);
-	num_stat++;
-    } else if (key.first == PREFIX_COLL) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_COLL, key_size, value_size);
-	num_coll++;
-    } else if (key.first == PREFIX_OBJ) {
-      if (key.second.back() == ONODE_KEY_SUFFIX) {
-	hist.update_hist_entry(hist.key_hist, prefix_onode, key_size, value_size);
-	num_onodes++;
-      } else {
-	hist.update_hist_entry(hist.key_hist, prefix_onode_shard, key_size, value_size);
-	num_shards++;
-      }
-    } else if (key.first == PREFIX_OMAP) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_OMAP, key_size, value_size);
-	num_omap++;
-    } else if (key.first == PREFIX_DEFERRED) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_DEFERRED, key_size, value_size);
-	num_deferred++;
-    } else if (key.first == PREFIX_ALLOC || key.first == "b" ) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_ALLOC, key_size, value_size);
-	num_alloc++;
-    } else if (key.first == PREFIX_SHARED_BLOB) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_SHARED_BLOB, key_size, value_size);
-	num_shared_shards++;
-    } else {
-	hist.update_hist_entry(hist.key_hist, prefix_other, key_size, value_size);
-	num_others++;
-    }
+    _db_stats_entry(iter->key(), iter->value(),
+                    key, db_stats);
     iter->next();
   }
 
   utime_t duration = ceph_clock_now() - start;
   f->open_object_section("rocksdb_key_value_stats");
-  f->dump_unsigned("num_onodes", num_onodes);
-  f->dump_unsigned("num_shards", num_shards);
-  f->dump_unsigned("num_super", num_super);
-  f->dump_unsigned("num_coll", num_coll);
-  f->dump_unsigned("num_omap", num_omap);
-  f->dump_unsigned("num_deferred", num_deferred);
-  f->dump_unsigned("num_alloc", num_alloc);
-  f->dump_unsigned("num_stat", num_stat);
-  f->dump_unsigned("num_shared_shards", num_shared_shards);
-  f->dump_unsigned("num_others", num_others);
-  f->dump_unsigned("max_key_size", max_key_size);
-  f->dump_unsigned("max_value_size", max_value_size);
-  f->dump_unsigned("total_key_size", total_key_size);
-  f->dump_unsigned("total_value_size", total_value_size);
+  f->dump_unsigned("num_onodes", db_stats.num_onodes);
+  f->dump_unsigned("num_shards", db_stats.num_shards);
+  f->dump_unsigned("num_super", db_stats.num_super);
+  f->dump_unsigned("num_coll", db_stats.num_coll);
+  f->dump_unsigned("num_omap", db_stats.num_omap);
+  f->dump_unsigned("num_deferred", db_stats.num_deferred);
+  f->dump_unsigned("num_alloc", db_stats.num_alloc);
+  f->dump_unsigned("num_stat", db_stats.num_stat);
+  f->dump_unsigned("num_shared_shards", db_stats.num_shared_shards);
+  f->dump_unsigned("num_others", db_stats.num_others);
+  f->dump_unsigned("max_key_size", db_stats.max_key_size);
+  f->dump_unsigned("max_value_size", db_stats.max_value_size);
+  f->dump_unsigned("total_key_size", db_stats.total_key_size);
+  f->dump_unsigned("total_value_size", db_stats.total_value_size);
   f->close_section();
 
-  hist.dump(f);
+  db_stats.hist.dump(f);
 
   dout(20) << __func__ << " finished in " << duration << " seconds" << dendl;
 

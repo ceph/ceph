@@ -2161,6 +2161,30 @@ public:
   }
 
   void get_db_statistics(Formatter *f) override;
+
+  struct DBHistogramStats {
+    uint64_t num_onodes = 0;
+    uint64_t num_shards = 0;
+    uint64_t num_super = 0;
+    uint64_t num_coll = 0;
+    uint64_t num_omap = 0;
+    uint64_t num_deferred = 0;
+    uint64_t num_alloc = 0;
+    uint64_t num_stat = 0;
+    uint64_t num_others = 0;
+    uint64_t num_shared_shards = 0;
+    size_t max_key_size =0;
+    size_t max_value_size = 0;
+    uint64_t total_key_size = 0;
+    uint64_t total_value_size = 0;
+    DBHistogram hist;
+  };
+
+  void _db_stats_entry(
+    const string &key,
+    const bufferlist &value,
+    const pair<string,string> &raw_key,
+    DBHistogramStats &db_stats);
   void generate_db_histogram(Formatter *f) override;
   void _flush_cache();
   void flush_cache() override;
