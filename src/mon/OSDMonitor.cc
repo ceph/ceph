@@ -7008,6 +7008,12 @@ int OSDMonitor::prepare_command_osd_new(
     assert(osdmap.is_destroyed(id));
     pending_inc.new_weight[id] = CEPH_OSD_OUT;
     pending_inc.new_state[id] |= CEPH_OSD_DESTROYED | CEPH_OSD_NEW;
+    if (osdmap.get_state(id) & CEPH_OSD_UP) {
+      // due to http://tracker.ceph.com/issues/20751 some clusters may
+      // have UP set for non-existent OSDs; make sure it is cleared
+      // for a newly created osd.
+      pending_inc.new_state[id] |= CEPH_OSD_UP;
+    }
     pending_inc.new_uuid[id] = uuid;
   } else {
     assert(id >= 0);
