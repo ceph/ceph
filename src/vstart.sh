@@ -867,6 +867,10 @@ if [ $CEPH_NUM_MON -gt 0 ]; then
     start_mon
 fi
 
+if [ $CEPH_NUM_MGR -gt 0 ]; then
+    start_mgr
+fi
+
 # osd
 if [ $CEPH_NUM_OSD -gt 0 ]; then
     start_osd
@@ -902,10 +906,6 @@ do
 done
 
 # mgr
-
-if [ $CEPH_NUM_MGR -gt 0 ]; then
-    start_mgr
-fi
 
 if [ "$ec" -eq 1 ]; then
     ceph_adm <<EOF
