@@ -45,6 +45,7 @@ extern "C" {
 #define LIBRBD_SUPPORTS_INVALIDATE 1
 #define LIBRBD_SUPPORTS_IOVEC 1
 #define LIBRBD_SUPPORTS_WATCH 0
+#define LIBRBD_SUPPORTS_WRITESAME 1
 
 #if __GNUC__ >= 4
   #define CEPH_RBD_API    __attribute__ ((visibility ("default")))
