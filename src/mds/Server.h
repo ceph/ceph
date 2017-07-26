@@ -256,7 +256,7 @@ public:
   void handle_client_unlink(MDRequestRef& mdr);
   bool _dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *rmdiri);
   bool _dir_is_nonempty(MDRequestRef& mdr, CInode *rmdiri);
-  void _unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn);
+  void _unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn, snapid_t follows);
   void _unlink_local_finish(MDRequestRef& mdr,
 			    CDentry *dn, CDentry *straydn,
 			    version_t);
