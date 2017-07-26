@@ -256,8 +256,8 @@ class MDSCluster(CephCluster):
 
         self._one_or_all(mds_id, _fail_restart)
 
-    def newfs(self, name):
-        return Filesystem(self._ctx, create=name)
+    def newfs(self, name='cephfs', create=True):
+        return Filesystem(self._ctx, name=name, create=create)
 
     def status(self):
         return FSStatus(self.mon_manager)
@@ -362,9 +362,10 @@ class Filesystem(MDSCluster):
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
     """
-    def __init__(self, ctx, fscid=None, create=None):
+    def __init__(self, ctx, fscid=None, name=None, create=False):
         super(Filesystem, self).__init__(ctx)
 
+        self.name = name
         self.id = None
         self.name = None
         self.metadata_pool_name = None
@@ -374,18 +375,15 @@ class Filesystem(MDSCluster):
         self.client_id = client_list[0]
         self.client_remote = list(misc.get_clients(ctx=ctx, roles=["client.{0}".format(self.client_id)]))[0][1]
 
-        if create is not None:
+        if name is not None:
             if fscid is not None:
                 raise RuntimeError("cannot specify fscid when creating fs")
-            if create is True:
-                self.name = 'cephfs'
-            else:
-                self.name = create
-            if not self.legacy_configured():
+            if create and not self.legacy_configured():
                 self.create()
-        elif fscid is not None:
-            self.id = fscid
-        self.getinfo(refresh = True)
+        else:
+            if fscid is not None:
+                self.id = fscid
+                self.getinfo(refresh = True)
 
         # Stash a reference to the first created filesystem on ctx, so
         # that if someone drops to the interactive shell they can easily
@@ -411,6 +409,11 @@ class Filesystem(MDSCluster):
         self.name = fsmap['mdsmap']['fs_name']
         self.get_pool_names(status = status, refresh = refresh)
         return status
+
+    def set_metadata_overlay(self, overlay):
+        if fscid is not None:
+            raise RuntimeError("cannot specify fscid when configuring overlay")
+        self.metadata_overlay = overlay
 
     def deactivate(self, rank):
         if rank < 0:
