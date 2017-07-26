@@ -408,6 +408,10 @@ void MgrMonitor::check_sub(Subscription *sub)
     }
   } else {
     assert(sub->type == "mgrdigest");
+    if (sub->next == 0) {
+      // new registration; cancel previous timer
+      cancel_timer();
+    }
     if (digest_event == nullptr) {
       send_digests();
     }
