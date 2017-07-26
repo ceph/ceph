@@ -348,116 +348,71 @@ Long Form
 
 Without the benefit of any helper utilities, create an OSD and add it to the
 cluster and CRUSH map with the following procedure. To create the first two
-OSDs with the long form procedure, execute the following on ``node2`` and
-``node3``:
+OSDs with the long form procedure, execute the following steps for each OSD.
 
-#. Connect to the OSD host. :: 
+.. note:: This procedure does not describe deployment on top of dm-crypt
+          making use of the dm-crypt 'lockbox'.
 
-	ssh {node-name}
+#. Connect to the OSD host and become root. ::
+
+     ssh {node-name}
+     sudo bash
 
 #. Generate a UUID for the OSD. ::
 
-	uuidgen
+     UUID=$(uuidgen)
 
+#. Generate a cephx key for the OSD. ::
 
-#. Create the OSD. If no UUID is given, it will be set automatically when the 
-   OSD starts up. The following command will output the OSD number, which you 
-   will need for subsequent steps. ::
+     OSD_SECRET=$(ceph-authtool --gen-print-key)
+
+#. Create the OSD. Note that an OSD ID can be provided as an
+   additional argument to ``ceph osd new`` if you need to reuse a
+   previously-destroyed OSD id. We assume that the
+   ``client.bootstrap-osd`` key is present on the machine.  You may
+   alternatively execute this command as ``client.admin`` on a
+   different host where that key is present.::
 	
-	ceph osd create [{uuid} [{id}]]
+     ID=$(echo "{\"cephx_secret\": \"$OSD_SECRET\"}" | \
+	ceph osd new $UUID -i - \
+	-n client.bootstrap-osd -k /var/lib/ceph/bootstrap-osd/ceph.keyring)
 
+#. Create the default directory on your new OSD. ::
 
-#. Create the default directory on your new OSD. :: 
-
-	ssh {new-osd-host}
-	sudo mkdir /var/lib/ceph/osd/{cluster-name}-{osd-number}
-	
+     mkdir /var/lib/ceph/osd/ceph-$ID
 
 #. If the OSD is for a drive other than the OS drive, prepare it 
-   for use with Ceph, and mount it to the directory you just created:: 
+   for use with Ceph, and mount it to the directory you just created. ::
 
-	ssh {new-osd-host}
-	sudo mkfs -t {fstype} /dev/{hdd}
-	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/{cluster-name}-{osd-number}
+     mkfs.xfs /dev/{DEV}
+     mount /dev/{DEV} /var/lib/ceph/osd/ceph-$ID
 
-	
-#. Initialize the OSD data directory. :: 
+#. Write the secret to the OSD keyring file. ::
 
-	ssh {new-osd-host}
-	sudo ceph-osd -i {osd-num} --mkfs --mkkey --osd-uuid [{uuid}]
-	
-   The directory must be empty before you can run ``ceph-osd`` with the 
-   ``--mkkey`` option. In addition, the ceph-osd tool requires specification
-   of custom cluster names with the ``--cluster`` option.
+     ceph-authtool --create-keyring /var/lib/ceph/osd/ceph-$ID/keyring \
+          --name osd.$ID --add-key $OSD_SECRET
 
+#. Initialize the OSD data directory. ::
 
-#. Register the OSD authentication key. The value of ``ceph`` for 
-   ``ceph-{osd-num}`` in the path is the ``$cluster-$id``.  If your 
-   cluster name differs from ``ceph``, use your cluster name instead.::
+     ceph-osd -i $ID --mkfs --osd-uuid $UUID
 
-	sudo ceph auth add osd.{osd-num} osd 'allow *' mon 'allow profile osd' -i /var/lib/ceph/osd/{cluster-name}-{osd-num}/keyring
+#. Fix ownership. ::
 
-
-#. Add your Ceph Node to the CRUSH map. ::
-
-	ceph [--cluster {cluster-name}] osd crush add-bucket {hostname} host
-
-   For example::
-
-	ceph osd crush add-bucket node1 host
-
-
-#. Place the Ceph Node under the root ``default``. ::
-
-	ceph osd crush move node1 root=default
-
-
-#. Add the OSD to the CRUSH map so that it can begin receiving data. You may
-   also decompile the CRUSH map, add the OSD to the device list, add the host as a
-   bucket (if it's not already in the CRUSH map), add the device as an item in the
-   host, assign it a weight, recompile it and set it. ::
-
-	ceph [--cluster {cluster-name}] osd crush add {id-or-name} {weight} [{bucket-type}={bucket-name} ...]
-
-   For example::
-
-	ceph osd crush add osd.0 1.0 host=node1
-
+     chown -R ceph:ceph /var/lib/ceph/osd/ceph-$ID
 
 #. After you add an OSD to Ceph, the OSD is in your configuration. However, 
-   it is not yet running. The OSD is ``down`` and ``in``. You must start 
+   it is not yet running. You must start 
    your new OSD before it can begin receiving data.
 
-   For Ubuntu, use Upstart::
+   For modern systemd distributions::
 
-	sudo start ceph-osd id={osd-num} [cluster={cluster-name}]
-
+     systemctl enable ceph-osd@$ID
+     systemctl start ceph-osd@$ID
+     
    For example::
 
-	sudo start ceph-osd id=0
-	sudo start ceph-osd id=1
-
-   For Debian/CentOS/RHEL, use sysvinit::
-
-	sudo /etc/init.d/ceph start osd.{osd-num} [--cluster {cluster-name}]
-
-   For example::
-
-	sudo /etc/init.d/ceph start osd.0
-	sudo /etc/init.d/ceph start osd.1
-
-   In this case, to allow the start of the daemon at each reboot you
-   must create an empty file like this::
-
-	sudo touch /var/lib/ceph/osd/{cluster-name}-{osd-num}/sysvinit
-
-   For example::
-
-	sudo touch /var/lib/ceph/osd/ceph-0/sysvinit
-	sudo touch /var/lib/ceph/osd/ceph-1/sysvinit
-
-   Once you start your OSD, it is ``up`` and ``in``.
-
+     systemctl enable ceph-osd@12
+     systemctl start ceph-osd@12
 
 
 Adding MDS
