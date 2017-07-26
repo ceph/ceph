@@ -117,9 +117,9 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     return buffer_c_str_accesses;
   }
 
+#ifdef CEPH_HAVE_SETPIPE_SZ
   static std::atomic<unsigned> buffer_max_pipe_size { 0 };
   int update_max_pipe_size() {
-#ifdef CEPH_HAVE_SETPIPE_SZ
     char buf[32];
     int r;
     std::string err;
@@ -135,21 +135,22 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     if (!err.empty())
       return -EIO;
     buffer_max_pipe_size = size;
-#endif
     return 0;
   }
 
   size_t get_max_pipe_size() {
-#ifdef CEPH_HAVE_SETPIPE_SZ
     size_t size = buffer_max_pipe_size;
     if (size)
       return size;
     if (update_max_pipe_size() == 0)
       return buffer_max_pipe_size;
-#endif
     // this is the max size hardcoded in linux before 2.6.35
     return 65536;
   }
+#else
+  size_t get_max_pipe_size() { return 65536; }
+#endif
+
 
   const char * buffer::error::what() const throw () {
     return "buffer::exception";
