@@ -94,7 +94,7 @@ public:
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
-              RGWGetDataCB *cb, RGWRESTStreamRWRequest **req);
+              bool skip_decrypt, RGWGetDataCB *cb, RGWRESTStreamRWRequest **req);
   int complete_request(RGWRESTStreamRWRequest *req, string& etag, ceph::real_time *mtime, uint64_t *psize, map<string, string>& attrs);
 
   int get_resource(const string& resource,
