@@ -242,7 +242,8 @@ def build_ceph_cluster(ctx, config):
         mon_node = get_nodes_using_role(ctx, 'mon')
         mon_nodes = " ".join(mon_node)
         # skip mgr based on config item
-        # this is needed when test uses latest code to install old ceph versions
+        # this is needed when test uses latest code to install old ceph
+        # versions
         skip_mgr = config.get('skip-mgr', False)
         if not skip_mgr:
             mgr_nodes = get_nodes_using_role(ctx, 'mgr')
@@ -420,7 +421,7 @@ def build_ceph_cluster(ctx, config):
 
             if mds_nodes:
                 log.info('Configuring CephFS...')
-                ceph_fs = Filesystem(ctx, create=True)
+                Filesystem(ctx, create=True)
         elif not config.get('only_mon'):
             raise RuntimeError(
                 "The cluster is NOT operational due to insufficient OSDs")
@@ -530,7 +531,7 @@ def cli_test(ctx, config):
         """Either use git path or repo path """
         args = ['cd', conf_dir, run.Raw(';')]
         if path:
-            args.append('{path}/ceph-deploy/ceph-deploy'.format(path=path));
+            args.append('{path}/ceph-deploy/ceph-deploy'.format(path=path))
         else:
             args.append('ceph-deploy')
         args.append(run.Raw(cmd))
@@ -614,11 +615,11 @@ def cli_test(ctx, config):
     log.info("Waiting for cluster to become healthy")
     with contextutil.safe_while(sleep=10, tries=6,
                                 action='check health') as proceed:
-       while proceed():
-           r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
-           out = r.stdout.getvalue()
-           if (out.split(None,1)[0] == 'HEALTH_OK'):
-               break
+        while proceed():
+            r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
+            out = r.stdout.getvalue()
+            if (out.split(None, 1)[0] == 'HEALTH_OK'):
+                break
     rgw_install = 'install {branch} --rgw {node}'.format(
         branch=test_branch,
         node=nodename,
