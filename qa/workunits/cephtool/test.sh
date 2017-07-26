@@ -1687,10 +1687,10 @@ function test_mon_osd_pool()
   ceph osd pool create ec_test 1 1 erasure
   ceph osd pool application enable ec_test rados
   set +e
-  ceph osd metadata | grep osd_objectstore_type | grep -qc bluestore
-  if [ $? -eq 0 ]; then
+  ceph osd count-metadata osd_objectstore | grep 'bluestore'
+  if [ $? -eq 1 ]; then # enable ec_overwrites on non-bluestore pools should fail
       ceph osd pool set ec_test allow_ec_overwrites true >& $TMPFILE
-      check_response $? 22 "pool must only be stored on bluestore for scrubbing to work"
+      check_response "pool must only be stored on bluestore for scrubbing to work" $? 22
   else
       ceph osd pool set ec_test allow_ec_overwrites true || return 1
       expect_false ceph osd pool set ec_test allow_ec_overwrites false
