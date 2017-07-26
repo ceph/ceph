@@ -120,7 +120,6 @@ PyObject *PyModules::list_servers_python()
 }
 
 PyObject *PyModules::get_metadata_python(
-  std::string const &handle,
   const std::string &svc_type,
   const std::string &svc_id)
 {
@@ -141,7 +140,6 @@ PyObject *PyModules::get_metadata_python(
 }
 
 PyObject *PyModules::get_daemon_status_python(
-  std::string const &handle,
   const std::string &svc_type,
   const std::string &svc_id)
 {
@@ -395,7 +393,6 @@ int PyModules::init()
 {
   Mutex::Locker locker(lock);
 
-  global_handle = this;
   // namespace in config-key prefixed by "mgr/"
   config_prefix = std::string(g_conf->name.get_type_str()) + "/";
 
@@ -429,7 +426,7 @@ int PyModules::init()
   for (const auto& module_name : ls) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
     auto mod = std::unique_ptr<MgrPyModule>(new MgrPyModule(module_name, sys_path, pMainThreadState));
-    int r = mod->load();
+    int r = mod->load(this);
     if (r != 0) {
       // Don't use handle_pyerror() here; we don't have the GIL
       // or the right thread state (this is deliberate).
@@ -495,7 +492,6 @@ void PyModules::start()
 void PyModules::shutdown()
 {
   Mutex::Locker locker(lock);
-  assert(global_handle);
 
   // Signal modules to drop out of serve() and/or tear down resources
   for (auto &i : modules) {
@@ -521,9 +517,6 @@ void PyModules::shutdown()
 
   PyEval_RestoreThread(pMainThreadState);
   Py_Finalize();
-
-  // nobody needs me anymore.
-  global_handle = nullptr;
 }
 
 void PyModules::notify_all(const std::string &notify_type,
@@ -565,14 +558,14 @@ void PyModules::notify_all(const LogEntry &log_entry)
   }
 }
 
-bool PyModules::get_config(const std::string &handle,
+bool PyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  const std::string global_key = config_prefix + handle + "/" + key;
+  const std::string global_key = config_prefix + module_name + "/" + key;
 
   dout(4) << __func__ << "key: " << global_key << dendl;
 
@@ -584,14 +577,14 @@ bool PyModules::get_config(const std::string &handle,
   }
 }
 
-PyObject *PyModules::get_config_prefix(const std::string &handle,
+PyObject *PyModules::get_config_prefix(const std::string &module_name,
     const std::string &prefix) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  const std::string base_prefix = config_prefix + handle + "/";
+  const std::string base_prefix = config_prefix + module_name + "/";
   const std::string global_prefix = base_prefix + prefix;
   dout(4) << __func__ << "prefix: " << global_prefix << dendl;
 
@@ -604,10 +597,10 @@ PyObject *PyModules::get_config_prefix(const std::string &handle,
   return f.get();
 }
 
-void PyModules::set_config(const std::string &handle,
+void PyModules::set_config(const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val)
 {
-  const std::string global_key = config_prefix + handle + "/" + key;
+  const std::string global_key = config_prefix + module_name + "/" + key;
 
   Command set_cmd;
   {
@@ -683,18 +676,17 @@ void PyModules::insert_config(const std::map<std::string,
   config_cache = new_config;
 }
 
-void PyModules::log(const std::string &handle,
+void PyModules::log(const std::string &module_name,
     int level, const std::string &record)
 {
 #undef dout_prefix
-#define dout_prefix *_dout << "mgr[" << handle << "] "
+#define dout_prefix *_dout << "mgr[" << module_name << "] "
   dout(level) << record << dendl;
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 }
 
 PyObject* PyModules::get_counter_python(
-    const std::string &handle,
     const std::string &svc_name,
     const std::string &svc_id,
     const std::string &path)
@@ -736,7 +728,6 @@ PyObject* PyModules::get_counter_python(
 }
 
 PyObject* PyModules::get_perf_schema_python(
-    const std::string &handle,
     const std::string svc_type,
     const std::string &svc_id)
 {
@@ -857,11 +848,11 @@ void PyModules::list_modules(std::set<std::string> *modules)
   _list_modules(g_conf->get_val<std::string>("mgr_module_path"), modules);
 }
 
-void PyModules::set_health_checks(const std::string& handle,
+void PyModules::set_health_checks(const std::string& module_name,
 				  health_check_map_t&& checks)
 {
   Mutex::Locker l(lock);
-  auto p = modules.find(handle);
+  auto p = modules.find(module_name);
   if (p != modules.end()) {
     p->second->set_health_checks(std::move(checks));
   }
