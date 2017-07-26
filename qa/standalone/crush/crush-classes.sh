@@ -229,16 +229,12 @@ function TEST_mon_classes() {
     ceph osd crush rule create-replicated foo-ssd default host ssd || return 1
     expect_failure $dir EBUSY ceph osd crush class rm hdd || return 1
     expect_failure $dir EBUSY ceph osd crush class rm ssd || return 1
-    expect_failure $dir EBUSY ceph osd crush class rename hdd asdf || return 1
-    expect_failure $dir EBUSY ceph osd crush class rename ssd qwer || return 1
     ceph osd crush rule rm foo-hdd1 || return 1
     expect_failure $dir EBUSY ceph osd crush class rm hdd || return 1 # still referenced by foo-hdd2
     ceph osd crush rule rm foo-hdd2 || return 1
     ceph osd crush rule rm foo-ssd || return 1
-    ceph osd crush class rename hdd asdf || return 1
-    ceph osd crush class rename ssd qwer || return 1
-    ceph osd crush class rm asdf || return 1
-    ceph osd crush class rm qwer || return 1
+    ceph osd crush class rm hdd || return 1
+    ceph osd crush class rm ssd || return 1
     expect_failure $dir EBUSY ceph osd crush class rm abc || return 1 # still referenced by foo-rule
     ceph osd crush rule rm foo-rule || return 1
     ceph osd crush class rm abc || return 1

@@ -645,11 +645,6 @@ COMMAND("osd crush class rm " \
 	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
 	"remove crush device class <class>", \
 	"osd", "rw", "cli,rest")
-COMMAND("osd crush class rename " \
-        "name=srcname,type=CephString,goodchars=[A-Za-z0-9-_] " \
-        "name=dstname,type=CephString,goodchars=[A-Za-z0-9-_]", \
-        "rename crush device class <srcname> to <dstname>", \
-        "osd", "rw", "cli,rest")
 COMMAND("osd crush class ls", \
 	"list all crush device classes", \
 	"osd", "r", "cli,rest")
