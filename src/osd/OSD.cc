@@ -5727,6 +5727,8 @@ void OSD::send_full_update()
     state = CEPH_OSD_BACKFILLFULL;
   } else if (service.is_nearfull()) {
     state = CEPH_OSD_NEARFULL;
+  } else {
+    return;
   }
   set<string> s;
   OSDMap::calc_state_set(state, s);
