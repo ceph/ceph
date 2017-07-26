@@ -113,7 +113,9 @@ class Module(MgrModule):
         data = dict()
 
         health = json.loads(self.get('health')['json'])
-        data['overall_status'] = health['overall_status']
+        # 'status' is luminous+, 'overall_status' is legacy mode.
+        data['overall_status'] = health.get('status',
+                                            health.get('overall_status'))
         data['overall_status_int'] = \
             self.ceph_health_mapping.get(data['overall_status'])
 
