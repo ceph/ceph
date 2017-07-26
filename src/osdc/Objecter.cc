@@ -3435,6 +3435,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     // new tid
     s->ops.erase(op->tid);
     op->tid = ++last_tid;
+    s->ops[op->tid] = op; // add op to ops again
 
     _send_op(op);
     sl.unlock();
