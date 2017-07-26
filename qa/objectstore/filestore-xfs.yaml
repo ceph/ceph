@@ -5,3 +5,11 @@ overrides:
       osd:
         osd objectstore: filestore
         osd sloppy crc: true
+  ceph-deploy:
+    fs: xfs
+    filestore: True
+    conf:
+      osd:
+        osd objectstore: filestore
+        osd sloppy crc: true
+
