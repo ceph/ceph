@@ -993,7 +993,7 @@ if(WITH_LIBCEPHFS)
   install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(DIRECTORY
     "${CMAKE_SOURCE_DIR}/src/include/cephfs"
-    DESTINATION include)
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   set(ceph_syn_srcs
     ceph_syn.cc
     client/SyntheticClient.cc)
