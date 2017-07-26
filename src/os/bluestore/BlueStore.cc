@@ -67,9 +67,10 @@ const string PREFIX_DEFERRED = "L";  // id -> deferred_transaction_t
 const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
 const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 
-const std::vector<KeyValueDB::ColumnFamily> cfs = {
-  KeyValueDB::ColumnFamily(PREFIX_SUPER, ""),
-  KeyValueDB::ColumnFamily(PREFIX_STAT, ""),
+const std::vector<KeyValueDB::ColumnFamily> cfs =
+{
+  KeyValueDB::ColumnFamily (PREFIX_SUPER, ""),
+  KeyValueDB::ColumnFamily (PREFIX_STAT, ""),
   KeyValueDB::ColumnFamily(PREFIX_COLL, ""),
   KeyValueDB::ColumnFamily(PREFIX_OBJ, ""),
   KeyValueDB::ColumnFamily(PREFIX_OMAP, ""),
@@ -77,7 +78,6 @@ const std::vector<KeyValueDB::ColumnFamily> cfs = {
   KeyValueDB::ColumnFamily(PREFIX_ALLOC, ""),
   KeyValueDB::ColumnFamily(PREFIX_SHARED_BLOB, "")
 };
-
 
 // write a label in the first block.  always use this size.  note that
 // bluefs makes a matching assumption about the location of its
@@ -4682,10 +4682,17 @@ int BlueStore::_open_db(bool create)
     options = cct->_conf->bluestore_rocksdb_options;
   db->init(options);
 
-  if (create)
-    r = db->create_and_open(err, cfs);
-  else
-    r = db->open(err, cfs);
+  if (g_conf->bluestore_rocksdb_enable_column_familly) {
+    if (create)
+      r = db->create_and_open(err, cfs);
+    else
+      r = db->open(err, cfs);
+  } else {
+    if (create)
+      r = db->create_and_open(err);
+    else
+      r = db->open(err);
+  }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
     if (bluefs) {
