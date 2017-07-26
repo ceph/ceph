@@ -443,13 +443,6 @@ public:
       name_rmap[bn] = a;
     }
   }
-  bool id_has_class(int i) {
-    int idout;
-    int classout;
-    if (split_id_class(i, &idout, &classout) != 0)
-      return false;
-    return classout != -1;
-  }
   int split_id_class(int i, int *idout, int *classout) const;
 
   bool class_exists(const string& name) const {
@@ -600,6 +593,20 @@ public:
    * These are parentless nodes in the map.
    */
   void find_roots(set<int>& roots) const;
+
+
+  /**
+   * find tree roots that contain shadow (device class) items only
+   */
+  void find_shadow_roots(set<int>& roots) const {
+    set<int> all;
+    find_roots(all);
+    for (auto& p: all) {
+      if (is_shadow_item(p)) {
+        roots.insert(p);
+      }
+    }
+  }
 
   /**
    * find tree roots that are not shadow (device class) items
