@@ -138,7 +138,7 @@ class CephFSTestCase(CephTestCase):
                 self.mds_cluster.mon_manager.raw_cluster_cmd("auth", "del", entry['entity'])
 
         if self.REQUIRE_FILESYSTEM:
-            self.fs = self.mds_cluster.newfs(True)
+            self.fs = self.mds_cluster.newfs(create=True)
             self.fs.mds_restart()
 
             # In case some test messed with auth caps, reset them
