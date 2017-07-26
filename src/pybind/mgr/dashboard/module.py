@@ -107,8 +107,7 @@ class Module(MgrModule):
         if self._rados:
             return self._rados
 
-        from mgr_module import ceph_state
-        ctx_capsule = ceph_state.get_context()
+        ctx_capsule = self.get_context()
         self._rados = rados.Rados(context=ctx_capsule)
         self._rados.connect()
 
