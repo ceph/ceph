@@ -387,6 +387,7 @@ int CrushWrapper::remove_root(int item, bool unused)
   }
   if (class_bucket.count(item) != 0)
     class_bucket.erase(item);
+  class_remove_item(item);
   return 0;
 }
 
