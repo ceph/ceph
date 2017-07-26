@@ -1156,6 +1156,8 @@ OPTION(bluestore_debug_omit_kv_commit, OPT_BOOL, false)
 OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL, false)
 OPTION(bluestore_shard_finishers, OPT_BOOL, false)
 OPTION(bluestore_debug_random_read_err, OPT_DOUBLE, 0)
+OPTION(bluestore_rocksdb_enable_column_familly, OPT_BOOL, false) // whether to enable column_family 
+                                                                 // or just use default column in bluestore
 
 OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)

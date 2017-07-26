@@ -3263,6 +3263,10 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
+  Option("bluestore_rocksdb_enable_column_familly", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
   Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("")
   .set_description(""),
