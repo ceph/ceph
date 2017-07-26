@@ -651,7 +651,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 12;
+  __u16 ev = 13;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -672,6 +672,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(damaged, bl);
   encode(balancer, bl);
   encode(standby_count_wanted, bl);
+  encode(old_max_mds, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -800,6 +801,10 @@ void MDSMap::decode(bufferlist::iterator& p)
 
   if (ev >= 12) {
     decode(standby_count_wanted, p);
+  }
+
+  if (ev >= 13) {
+    decode(old_max_mds, p);
   }
 
   DECODE_FINISH(p);
