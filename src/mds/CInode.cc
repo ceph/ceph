@@ -1418,6 +1418,8 @@ void CInode::set_object_info(MDSCacheObjectInfo &info)
 void CInode::encode_lock_state(int type, bufferlist& bl)
 {
   ::encode(first, bl);
+  if (!is_base())
+    ::encode(parent->first, bl);
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
@@ -1586,15 +1588,16 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   snapid_t newfirst;
   ::decode(newfirst, p);
-
   if (!is_auth() && newfirst != first) {
     dout(10) << "decode_lock_state first " << first << " -> " << newfirst << dendl;
-    assert(newfirst > first);
-    if (!is_multiversion() && parent) {
-      assert(parent->first == first);
+    first = newfirst;
+  }
+  if (!is_base()) {
+    ::decode(newfirst, p);
+    if (!parent->is_auth() && newfirst != parent->first) {
+      dout(10) << "decode_lock_state parent first " << first << " -> " << newfirst << dendl;
       parent->first = newfirst;
     }
-    first = newfirst;
   }
 
   switch (type) {
