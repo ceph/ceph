@@ -907,6 +907,10 @@ std::vector<Option> global_options = {
   .set_default(true)
   .set_description(""),
 
+  Option("mon_osd_destroyed_out_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(600)
+  .set_description(""),
+
   Option("mon_osd_down_out_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(600)
   .set_description(""),

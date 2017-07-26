@@ -1618,12 +1618,16 @@ function test_mon_osd()
   ceph osd tree down
   ceph osd tree in
   ceph osd tree out
+  ceph osd tree destroyed
   ceph osd tree up in
   ceph osd tree up out
   ceph osd tree down in
   ceph osd tree down out
   ceph osd tree out down
   expect_false ceph osd tree up down
+  expect_false ceph osd tree up destroyed
+  expect_false ceph osd tree down destroyed
+  expect_false ceph osd tree up down destroyed
   expect_false ceph osd tree in out
   expect_false ceph osd tree up foo
 

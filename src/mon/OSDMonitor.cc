@@ -3362,8 +3362,15 @@ void OSDMonitor::tick()
 	  }
 	}
 
-	if (g_conf->mon_osd_down_out_interval > 0 &&
-	    down.sec() >= grace) {
+        bool down_out = !osdmap.is_destroyed(o) &&
+          g_conf->mon_osd_down_out_interval > 0 && down.sec() >= grace;
+        bool destroyed_out = osdmap.is_destroyed(o) &&
+          g_conf->mon_osd_destroyed_out_interval > 0 &&
+        // this is not precise enough as we did not make a note when this osd
+        // was marked as destroyed, but let's not bother with that
+        // complexity for now.
+          down.sec() >= g_conf->mon_osd_destroyed_out_interval;
+        if (down_out || destroyed_out) {
 	  dout(10) << "tick marking osd." << o << " OUT after " << down
 		   << " sec (target " << grace << " = " << orig_grace << " + " << my_grace << ")" << dendl;
 	  pending_inc.new_weight[o] = CEPH_OSD_OUT;
@@ -4137,6 +4144,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  filter |= OSDMap::DUMP_IN;
 	} else if (s == "out") {
 	  filter |= OSDMap::DUMP_OUT;
+	} else if (s == "destroyed") {
+	  filter |= OSDMap::DUMP_DESTROYED;
 	} else {
 	  ss << "unrecognized state '" << s << "'";
 	  r = -EINVAL;
@@ -4144,10 +4153,18 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	}
       }
       if ((filter & (OSDMap::DUMP_IN|OSDMap::DUMP_OUT)) ==
-	  (OSDMap::DUMP_IN|OSDMap::DUMP_OUT) ||
-	  (filter & (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) ==
-	  (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) {
-	ss << "cannot specify both up and down or both in and out";
+	  (OSDMap::DUMP_IN|OSDMap::DUMP_OUT)) {
+        ss << "cannot specify both 'in' and 'out'";
+        r = -EINVAL;
+        goto reply;
+      }
+      if (((filter & (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) ==
+	   (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) ||
+           ((filter & (OSDMap::DUMP_UP|OSDMap::DUMP_DESTROYED)) ==
+           (OSDMap::DUMP_UP|OSDMap::DUMP_DESTROYED)) ||
+           ((filter & (OSDMap::DUMP_DOWN|OSDMap::DUMP_DESTROYED)) ==
+           (OSDMap::DUMP_DOWN|OSDMap::DUMP_DESTROYED))) {
+	ss << "can specify only one of 'up', 'down' and 'destroyed'";
 	r = -EINVAL;
 	goto reply;
       }

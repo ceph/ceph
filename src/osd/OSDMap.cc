@@ -3056,13 +3056,17 @@ public:
     : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
   bool should_dump_leaf(int i) const override {
-    if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
-	((filter & OSDMap::DUMP_DOWN) && !osdmap->is_down(i)) ||
-	((filter & OSDMap::DUMP_IN) && !osdmap->is_in(i)) ||
-	((filter & OSDMap::DUMP_OUT) && !osdmap->is_out(i))) {
-      return false;
+    if (!filter) {
+      return true; // normal case
     }
-    return true;
+    if (((filter & OSDMap::DUMP_UP) && osdmap->is_up(i)) ||
+	((filter & OSDMap::DUMP_DOWN) && osdmap->is_down(i)) ||
+	((filter & OSDMap::DUMP_IN) && osdmap->is_in(i)) ||
+	((filter & OSDMap::DUMP_OUT) && osdmap->is_out(i)) ||
+        ((filter & OSDMap::DUMP_DESTROYED) && osdmap->is_destroyed(i))) {
+      return true;
+    }
+    return false;
   }
 
   bool should_dump_empty_bucket() const override {
@@ -3074,7 +3078,7 @@ public:
     tbl->define_column("CLASS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
-    tbl->define_column("UP/DOWN", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("STATUS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("PRI-AFF", TextTable::LEFT, TextTable::RIGHT);
 
@@ -3112,7 +3116,15 @@ protected:
 	*tbl << "DNE"
 	     << 0;
       } else {
-	*tbl << (osdmap->is_up(qi.id) ? "up" : "down")
+        string s;
+        if (osdmap->is_up(qi.id)) {
+          s = "up";
+        } else if (osdmap->is_destroyed(qi.id)) {
+          s = "destroyed";
+        } else {
+          s = "down";
+        }
+	*tbl << s
 	     << weightf_t(osdmap->get_weightf(qi.id))
 	     << weightf_t(osdmap->get_primary_affinityf(qi.id));
       }
@@ -3134,13 +3146,17 @@ public:
     : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
   bool should_dump_leaf(int i) const override {
-    if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
-	((filter & OSDMap::DUMP_DOWN) && !osdmap->is_down(i)) ||
-	((filter & OSDMap::DUMP_IN) && !osdmap->is_in(i)) ||
-	((filter & OSDMap::DUMP_OUT) && !osdmap->is_out(i))) {
-      return false;
+    if (!filter) {
+      return true; // normal case
     }
-    return true;
+    if (((filter & OSDMap::DUMP_UP) && osdmap->is_up(i)) ||
+        ((filter & OSDMap::DUMP_DOWN) && osdmap->is_down(i)) ||
+        ((filter & OSDMap::DUMP_IN) && osdmap->is_in(i)) ||
+        ((filter & OSDMap::DUMP_OUT) && osdmap->is_out(i)) ||
+        ((filter & OSDMap::DUMP_DESTROYED) && osdmap->is_destroyed(i))) {
+      return true;
+    }
+    return false;
   }
 
   bool should_dump_empty_bucket() const override {
@@ -3164,8 +3180,16 @@ protected:
     Parent::dump_item_fields(qi, f);
     if (!qi.is_bucket())
     {
+      string s;
+      if (osdmap->is_up(qi.id)) {
+        s = "up";
+      } else if (osdmap->is_destroyed(qi.id)) {
+        s = "destroyed";
+      } else {
+        s = "down";
+      }
       f->dump_unsigned("exists", (int)osdmap->exists(qi.id));
-      f->dump_string("status", osdmap->is_up(qi.id) ? "up" : "down");
+      f->dump_string("status", s);
       f->dump_float("reweight", osdmap->get_weightf(qi.id));
       f->dump_float("primary_affinity", osdmap->get_primary_affinityf(qi.id));
     }
