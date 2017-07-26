@@ -49,6 +49,7 @@ prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
             'rbd', 'rbd-mirror', 'rbd-nbd', 'rgw', 'tests', 'tools']
 signed_off_re = re.compile("Signed-off-by: (.+) <")
 tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
+rst_link_re = re.compile(r"([a-zA-Z0-9])_(\W)")
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 
 
@@ -201,6 +202,8 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
         # escape asterisks, which is used by reStructuredTextrst for inline
         # emphasis
         title = title.replace('*', '\*')
+        # and escape the underscores for noting a link
+        title = rst_link_re.sub(r'\1\_\2', title)
         pr2info[number] = (author, title, message)
 
         for issue in set(issues):
