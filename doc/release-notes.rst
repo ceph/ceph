@@ -65,7 +65,7 @@ Major Changes from Kraken
     distribution* (this requires luminous clients). FIXME DOCS
   * Each OSD now adjusts its default configuration based on whether the
     backing device is an HDD or SSD.  Manual tuning generally not required.
-  * The prototype *mclock QoS queueing algorithm* is now available.  FIXME DOCS
+  * The prototype `mClock QoS queueing algorithm`_ is now available.
   * There is now a *backoff* mechanism that prevents OSDs from being
     overloaded by requests to objects or PGs that are not currently able to
     process IO.
@@ -246,6 +246,7 @@ Major Changes from Kraken
     - ``ceph tell <daemon> help`` will now return a usage summary.
 
 .. _Read more about EC overwrites: ../rados/operations/erasure-code/#erasure-coding-with-overwrites
+.. _mClock QoS queueing algorithm: /rados/configuration/osd-config-ref#qos-based-on-mclock
 .. _simplified OSD replacement process: ../rados/operations/add-or-rm-osds/#replacing-an-osd
 
 Major Changes from Jewel
