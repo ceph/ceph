@@ -476,7 +476,8 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing,
 	derr << status.ToString() << dendl;
 	return -EINVAL;
       }
-      //store the opened CF handles, except for the default CF.
+      
+      add_column_family(rocksdb::kDefaultColumnFamilyName, static_cast<void*>(handles[0]));
       for (unsigned i=0; i<(*cfs).size(); i++)
 	  add_column_family((*cfs)[i].name, static_cast<void*>(handles[i+1]));
     } else {
