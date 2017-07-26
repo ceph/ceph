@@ -324,4 +324,19 @@ private:
   PerfCounters *m_perf_counters;
 };
 
+class PerfCountersDeleter {
+  CephContext* cct;
+
+public:
+  PerfCountersDeleter() noexcept : cct(nullptr) {}
+  PerfCountersDeleter(CephContext* cct) noexcept : cct(cct) {}
+  void operator()(PerfCounters* p) noexcept {
+    if (cct)
+      cct->get_perfcounters_collection()->remove(p);
+    delete p;
+  }
+};
+
+using PerfCountersRef = std::unique_ptr<PerfCounters, PerfCountersDeleter>;
+
 #endif
