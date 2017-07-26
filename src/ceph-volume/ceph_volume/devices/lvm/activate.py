@@ -4,6 +4,7 @@ import os
 from textwrap import dedent
 from ceph_volume import process, conf
 from ceph_volume.util import activate as activate_utils
+from ceph_volume.util import system
 from ceph_volume.systemd import systemctl
 from . import api
 
@@ -35,6 +36,9 @@ def activate_filestore(lvs):
         source = osd_journal
         destination = '/var/lib/ceph/osd/%s-%s/journal' % (conf.cluster, osd_id)
         process.call(['sudo', 'ln', '-s', source, destination])
+
+    # make sure that the journal has proper permissions
+    system.chown(osd_journal)
 
     # enable the ceph-volume unit for this OSD
     systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
