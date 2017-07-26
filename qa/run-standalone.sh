@@ -5,7 +5,12 @@ if [ ! -e Makefile ]; then
     exit 1
 fi
 
-for f in `find ../qa//standalone -executable -type f`
+if [ `uname` = FreeBSD ]; then
+  # otherwise module prettytable will not be found
+  export PYTHONPATH=/usr/local/lib/python2.7/site-packages
+fi
+
+for f in `find ../qa/standalone -perm +111 -type f`
 do
     echo '--- $f ---'
     PATH=$PATH:bin \
