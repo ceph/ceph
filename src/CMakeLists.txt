@@ -983,7 +983,6 @@ endif(${ENABLE_SHARED})
 endif(WITH_LIBCEPHFS)
 
 set(journal_srcs
-  journal/AsyncOpTracker.cc
   journal/Entry.cc
   journal/Future.cc
   journal/FutureImpl.cc
