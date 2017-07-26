@@ -6,8 +6,8 @@ from remote_view_cache import RemoteViewCache
 
 class RbdPoolLs(RemoteViewCache):
     def _get(self):
-        from mgr_module import ceph_state
-        ctx_capsule = ceph_state.get_context()
+        ctx_capsule = self._module.get_context()
+
 
         osd_map = self._module.get_sync_object(OsdMap).data
         osd_pools = [pool['pool_name'] for pool in osd_map['pools']]
