@@ -52,7 +52,8 @@ CephContext *common_preinit(const CephInitParameters &iparams,
     conf->set_val("keyring", "$osd_data/keyring", false);
   }
 
-  if (code_env == CODE_ENVIRONMENT_LIBRARY) {
+  if (code_env == CODE_ENVIRONMENT_LIBRARY ||
+      code_env == CODE_ENVIRONMENT_UTILITY_NODOUT) {
     conf->set_val_or_die("log_to_stderr", "false");
     conf->set_val_or_die("err_to_stderr", "false");
     conf->set_val_or_die("log_flush_on_exit", "false");
