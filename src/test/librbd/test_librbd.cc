@@ -1657,11 +1657,11 @@ TEST_F(TestLibRBD, TestIO)
 
   ASSERT_PASSED(write_test_data, image, zero_data, 0, TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
   ASSERT_EQ(-EILSEQ, rbd_compare_and_write(image, 0, TEST_IO_SIZE, mismatch_data, mismatch_data, &mismatch_offset, 0));
-  ASSERT_EQ(0, mismatch_offset);
+  ASSERT_EQ(0U, mismatch_offset);
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
   ASSERT_EQ(0, rbd_aio_compare_and_write(image, 0, TEST_IO_SIZE, mismatch_data, mismatch_data, comp, &mismatch_offset, 0));
   ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
-  ASSERT_EQ(0, mismatch_offset);
+  ASSERT_EQ(0U, mismatch_offset);
   rbd_aio_release(comp);
 
   ASSERT_PASSED(validate_object_map, image);
@@ -1798,12 +1798,12 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
   ASSERT_PASSED(write_test_data, image, zero_data, 0, TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
   ASSERT_EQ(-EILSEQ, rbd_compare_and_write(image, 0, TEST_IO_SIZE, mismatch_data, mismatch_data,
                                            &mismatch_offset, LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
-  ASSERT_EQ(0, mismatch_offset);
+  ASSERT_EQ(0U, mismatch_offset);
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
   ASSERT_EQ(0, rbd_aio_compare_and_write(image, 0, TEST_IO_SIZE, mismatch_data, mismatch_data,
                                          comp, &mismatch_offset, LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
   ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
-  ASSERT_EQ(0, mismatch_offset);
+  ASSERT_EQ(0U, mismatch_offset);
   rbd_aio_release(comp);
 
   ASSERT_PASSED(validate_object_map, image);
@@ -2240,7 +2240,7 @@ void compare_and_write_test_data(librbd::Image& image, const char *cmp_data, con
   printf("start compare and write\n");
   written = image.compare_and_write(off, len, cmp_bl, test_bl, mismatch_off, iohint);
   printf("compare and  wrote: %d\n", (int) written);
-  ASSERT_EQ(len, static_cast<size_t>(written));
+  ASSERT_EQ(len, static_cast<ssize_t>(written));
   *passed = true;
 }
 
