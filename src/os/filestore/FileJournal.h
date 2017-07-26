@@ -16,6 +16,7 @@
 #ifndef CEPH_FILEJOURNAL_H
 #define CEPH_FILEJOURNAL_H
 
+#include <stdlib.h>
 #include <deque>
 using std::deque;
 
@@ -433,7 +434,7 @@ private:
         aio = false;
       }
 #ifndef HAVE_LIBAIO
-      if (aio) {
+      if (aio && ::getenv("CEPH_DEV") == NULL) {
 	lderr(cct) << "FileJournal::_open_any: libaio not compiled in; disabling aio" << dendl;
         aio = false;
       }
