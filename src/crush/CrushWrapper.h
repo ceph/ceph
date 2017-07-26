@@ -1481,8 +1481,10 @@ public:
   void dump_choose_args(Formatter *f) const;
   void list_rules(Formatter *f) const;
   void list_rules(ostream *ss) const;
-  void dump_tree(ostream *out, Formatter *f,
-		 const CrushTreeDumper::name_map_t& ws) const;
+  void dump_tree(ostream *out,
+                 Formatter *f,
+		 const CrushTreeDumper::name_map_t& ws,
+                 bool show_shadow = false) const;
   void dump_tree(ostream *out, Formatter *f) {
     dump_tree(out, f, CrushTreeDumper::name_map_t());
   }

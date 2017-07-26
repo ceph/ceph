@@ -2587,6 +2587,11 @@ public:
   explicit CrushTreePlainDumper(const CrushWrapper *crush,
 				const CrushTreeDumper::name_map_t& wsnames)
     : Parent(crush, wsnames) {}
+  explicit CrushTreePlainDumper(const CrushWrapper *crush,
+                                const CrushTreeDumper::name_map_t& wsnames,
+                                bool show_shadow)
+    : Parent(crush, wsnames, show_shadow) {}
+
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
@@ -2656,6 +2661,12 @@ public:
     const CrushTreeDumper::name_map_t& wsnames)
     : Parent(crush, wsnames) {}
 
+  explicit CrushTreeFormattingDumper(
+    const CrushWrapper *crush,
+    const CrushTreeDumper::name_map_t& wsnames,
+    bool show_shadow)
+    : Parent(crush, wsnames, show_shadow) {}
+
   void dump(Formatter *f) {
     f->open_array_section("nodes");
     Parent::dump(f);
@@ -2667,16 +2678,18 @@ public:
 
 
 void CrushWrapper::dump_tree(
-  ostream *out, Formatter *f,
-  const CrushTreeDumper::name_map_t& weight_set_names) const
+  ostream *out,
+  Formatter *f,
+  const CrushTreeDumper::name_map_t& weight_set_names,
+  bool show_shadow) const
 {
   if (out) {
     TextTable tbl;
-    CrushTreePlainDumper(this, weight_set_names).dump(&tbl);
+    CrushTreePlainDumper(this, weight_set_names, show_shadow).dump(&tbl);
     *out << tbl;
   }
   if (f) {
-    CrushTreeFormattingDumper(this, weight_set_names).dump(f);
+    CrushTreeFormattingDumper(this, weight_set_names, show_shadow).dump(f);
   }
 }
 

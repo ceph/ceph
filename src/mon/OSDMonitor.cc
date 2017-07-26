@@ -5113,13 +5113,22 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     rs << "\n";
     rdata.append(rs.str());
   } else if (prefix == "osd crush tree") {
+    string shadow;
+    cmd_getval(g_ceph_context, cmdmap, "shadow", shadow);
+    bool show_shadow = shadow == "--show-shadow";
     boost::scoped_ptr<Formatter> f(Formatter::create(format));
     if (f) {
-      osdmap.crush->dump_tree(nullptr, f.get(), osdmap.get_pool_names());
+      osdmap.crush->dump_tree(nullptr,
+                              f.get(),
+                              osdmap.get_pool_names(),
+                              show_shadow);
       f->flush(rdata);
     } else {
       ostringstream ss;
-      osdmap.crush->dump_tree(&ss, nullptr, osdmap.get_pool_names());
+      osdmap.crush->dump_tree(&ss,
+                              nullptr,
+                              osdmap.get_pool_names(),
+                              show_shadow);
       rdata.append(ss.str());
     }
   } else if (prefix == "osd crush class ls") {
