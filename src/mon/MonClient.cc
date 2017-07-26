@@ -774,6 +774,7 @@ void MonClient::tick()
       }
       send_log();
     }
+    _un_backoff();
   }
 }
 
