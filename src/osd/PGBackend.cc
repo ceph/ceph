@@ -817,6 +817,25 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       goto out;
     }
 
+    // We won't pick an auth copy if the snapset is missing or won't decode.
+    if (obj.is_head() || obj.is_snapdir()) {
+      k = i->second.attrs.find(SS_ATTR);
+      if (k == i->second.attrs.end()) {
+	shard_info.set_ss_attr_missing();
+	error_string += " ss_attr_missing";
+      } else {
+        ss_bl.push_back(k->second);
+        try {
+	  bufferlist::iterator bliter = ss_bl.begin();
+	  ::decode(ss, bliter);
+        } catch (...) {
+	  // invalid snapset, probably corrupt
+	  shard_info.set_ss_attr_corrupted();
+	  error_string += " ss_attr_corrupted";
+        }
+      }
+    }
+
     k = i->second.attrs.find(OI_ATTR);
     if (k == i->second.attrs.end()) {
       // no object info on object, probably corrupt
@@ -849,32 +868,11 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       dout(5) << __func__ << " size " << i->second.size << " oi size " << oi.size << dendl;
       shard_info.set_obj_size_oi_mismatch();
       error_string += " obj_size_oi_mismatch";
-      goto out;
     }
 
-    // We won't pick an auth copy if the snapset is missing or won't decode.
-    if (obj.is_head() || obj.is_snapdir()) {
-      k = i->second.attrs.find(SS_ATTR);
-      if (k == i->second.attrs.end()) {
-	shard_info.set_ss_attr_missing();
-	error_string += " ss_attr_missing";
-	goto out;
-      }
-      ss_bl.push_back(k->second);
-      try {
-	bufferlist::iterator bliter = ss_bl.begin();
-	::decode(ss, bliter);
-      } catch (...) {
-	// invalid snapset, probably corrupt
-	shard_info.set_ss_attr_corrupted();
-	error_string += " ss_attr_corrupted";
-	goto out;
-      }
-    }
-
-    // Don't use this particular shard because it won't be able to repair data
-    // XXX: For now we can't pick one shard for repair and another's object info
-    if (i->second.read_error || i->second.ec_hash_mismatch || i->second.ec_size_mismatch)
+    // Don't use this particular shard due to previous errors
+    // XXX: For now we can't pick one shard for repair and another's object info or snapset
+    if (shard_info.errors)
       goto out;
 
     if (auth_version == eversion_t() || oi.version > auth_version ||
