@@ -1092,8 +1092,8 @@ Usage::
 	ceph osd setmaxosd <int[0-]>
 
 Subcommand ``set-require-min-compat-client`` enforces the cluster to be backward
-compatible with the specified client version. This subcommand prevent you from
-makeing making any changes (e.g., crush tunables, or using new features) that
+compatible with the specified client version. This subcommand prevents you from
+making any changes (e.g., crush tunables, or using new features) that
 would violate the current setting. Please note, This subcommand will fail if
 any connected daemon or client is not compatible with the features offered by
 the given <version>. To see the features and releases of all clients connected
