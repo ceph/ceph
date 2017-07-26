@@ -213,7 +213,7 @@ protected:
   /// return a unique descriptor of the Op; eg the message it's attached to
   virtual void _dump_op_descriptor_unlocked(ostream& stream) const = 0;
   /// called when the last non-OpTracker reference is dropped
-  virtual void _unregistered() {};
+  virtual void _unregistered() {}
 
   virtual bool filter_out(const set<string>& filters) { return true; }
 
