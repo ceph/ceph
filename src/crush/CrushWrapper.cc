@@ -1393,11 +1393,9 @@ bool CrushWrapper::class_is_in_use(int class_id, ostream *ss)
 int CrushWrapper::populate_classes()
 {
   set<int> roots;
-  find_roots(roots);
+  find_nonshadow_roots(roots);
   for (auto &r : roots) {
     if (r >= 0)
-      continue;
-    if (id_has_class(r))
       continue;
     for (auto &c : class_name) {
       int clone;
@@ -1417,11 +1415,9 @@ int CrushWrapper::cleanup_classes()
 int CrushWrapper::trim_roots_with_class(bool unused)
 {
   set<int> roots;
-  find_roots(roots);
+  find_shadow_roots(roots);
   for (auto &r : roots) {
     if (r >= 0)
-      continue;
-    if (!id_has_class(r))
       continue;
     int res = remove_root(r, unused);
     if (res)
