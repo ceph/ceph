@@ -2109,6 +2109,7 @@ public:
   bool allows_journal() override { return false; };
 
   bool is_rotational() override;
+  bool is_journal_rotational() override;
 
   string get_default_device_class() override {
     string device_class;

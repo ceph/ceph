@@ -484,6 +484,7 @@ public:
   }
 
   bool is_rotational() override;
+  bool is_journal_rotational() override;
 
   void dump_perf_counters(Formatter *f) override {
     f->open_object_section("perf_counters");
@@ -837,6 +838,9 @@ protected:
   const string& get_basedir_path() {
     return filestore->basedir;
   }
+  const string& get_journal_path() {
+    return filestore->journalpath;
+  }
   const string& get_current_path() {
     return filestore->current_fn;
   }
@@ -874,6 +878,7 @@ public:
   virtual bool has_fiemap() = 0;
   virtual bool has_seek_data_hole() = 0;
   virtual bool is_rotational() = 0;
+  virtual bool is_journal_rotational() = 0;
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
   virtual int set_alloc_hint(int fd, uint64_t hint) = 0;
