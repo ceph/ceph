@@ -62,7 +62,7 @@ def main(args=None):
         ceph-volume lvm 0 8715BEB4-15C5-49DE-BA6F-401086EC7B41
 
     """
-    log.setup(name='ceph-volume-systemd.log')
+    log.setup(name='ceph-volume-systemd.log', log_path='/var/log/ceph/ceph-volume-systemd.log')
     logger = logging.getLogger('systemd')
 
     args = args or sys.argv
