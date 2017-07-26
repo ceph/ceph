@@ -47,7 +47,7 @@ public:
 
     // Acquire the GIL, set the current thread state
     PyEval_RestoreThread(pThreadState);
-    dout(20) << "GIL acquired for thread state " << pThreadState << dendl;
+    dout(25) << "GIL acquired for thread state " << pThreadState << dendl;
 
     //
     // If called from a separate OS thread (i.e. a thread not created
@@ -84,7 +84,7 @@ public:
     }
     // Release the GIL, reset the thread state to NULL
     PyEval_SaveThread();
-    dout(20) << "GIL released for thread state " << pThreadState << dendl;
+    dout(25) << "GIL released for thread state " << pThreadState << dendl;
   }
 
 private:
