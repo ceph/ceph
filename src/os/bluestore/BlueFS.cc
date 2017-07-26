@@ -129,7 +129,7 @@ void BlueFS::_update_logger_stats()
   }
 }
 
-int BlueFS::add_block_device(unsigned id, string path)
+int BlueFS::add_block_device(unsigned id, const string& path)
 {
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   assert(id < bdev.size());
