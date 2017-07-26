@@ -37,6 +37,10 @@ enum {
   l_librbd_ws_bytes,
   l_librbd_ws_latency,
 
+  l_librbd_cmp,
+  l_librbd_cmp_bytes,
+  l_librbd_cmp_latency,
+
   l_librbd_snap_create,
   l_librbd_snap_remove,
   l_librbd_snap_rollback,

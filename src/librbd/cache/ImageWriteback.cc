@@ -98,6 +98,27 @@ void ImageWriteback<I>::aio_writesame(uint64_t offset, uint64_t length,
   req.send();
 }
 
+template <typename I>
+void ImageWriteback<I>::aio_compare_and_write(Extents &&image_extents,
+                                              ceph::bufferlist&& cmp_bl,
+                                              ceph::bufferlist&& bl,
+                                              uint64_t *mismatch_offset,
+                                              int fadvise_flags,
+                                              Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "image_extents=" << image_extents << ", "
+                 << "on_finish=" << on_finish << dendl;
+
+  auto aio_comp = io::AioCompletion::create_and_start(on_finish, &m_image_ctx,
+                                                      io::AIO_TYPE_COMPARE_AND_WRITE);
+  io::ImageCompareAndWriteRequest<I> req(m_image_ctx, aio_comp,
+                                         std::move(image_extents),
+                                         std::move(cmp_bl), std::move(bl),
+                                         mismatch_offset, fadvise_flags, {});
+  req.set_bypass_image_cache();
+  req.send();
+}
+
 } // namespace cache
 } // namespace librbd
 

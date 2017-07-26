@@ -81,6 +81,16 @@ public:
 					 int op_flags,
 					 const ZTracer::Trace &parent_trace,
                                          Context *completion);
+  static ObjectRequest* create_compare_and_write(ImageCtxT *ictx,
+                                                 const std::string &oid,
+                                                 uint64_t object_no,
+                                                 uint64_t object_off,
+                                                 const ceph::bufferlist &cmp_data,
+                                                 const ceph::bufferlist &write_data,
+                                                 const ::SnapContext &snapc,
+                                                 uint64_t *mismatch_offset, int op_flags,
+                                                 const ZTracer::Trace &parent_trace,
+                                                 Context *completion);
 
   ObjectRequest(ImageCtx *ictx, const std::string &oid,
                 uint64_t objectno, uint64_t off, uint64_t len,
@@ -95,7 +105,7 @@ public:
                               bool set_hints) {
   };
 
-  void complete(int r) override;
+  virtual void complete(int r);
 
   virtual bool should_complete(int r) = 0;
   void send() override = 0;
@@ -518,6 +528,48 @@ protected:
 
 private:
   ceph::bufferlist m_write_data;
+  int m_op_flags;
+};
+
+class ObjectCompareAndWriteRequest : public AbstractObjectWriteRequest {
+public:
+  typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
+
+  ObjectCompareAndWriteRequest(ImageCtx *ictx, const std::string &oid,
+                               uint64_t object_no, uint64_t object_off,
+                               const ceph::bufferlist &cmp_bl,
+                               const ceph::bufferlist &write_bl,
+                               const ::SnapContext &snapc,
+                               uint64_t *mismatch_offset, int op_flags,
+                               const ZTracer::Trace &parent_trace,
+                               Context *completion)
+   : AbstractObjectWriteRequest(ictx, oid, object_no, object_off,
+                                cmp_bl.length(), snapc, false, "compare_and_write",
+                                parent_trace, completion),
+    m_cmp_bl(cmp_bl), m_write_bl(write_bl),
+    m_mismatch_offset(mismatch_offset), m_op_flags(op_flags) {
+  }
+
+  const char *get_op_type() const override {
+    return "compare_and_write";
+  }
+
+  bool pre_object_map_update(uint8_t *new_state) override {
+    *new_state = OBJECT_EXISTS;
+    return true;
+  }
+
+  void complete(int r) override;
+protected:
+  void add_write_ops(librados::ObjectWriteOperation *wr,
+                     bool set_hints) override;
+
+  void send_write() override;
+
+private:
+  ceph::bufferlist m_cmp_bl;
+  ceph::bufferlist m_write_bl;
+  uint64_t *m_mismatch_offset;
   int m_op_flags;
 };
 

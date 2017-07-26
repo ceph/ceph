@@ -164,6 +164,37 @@ ssize_t ImageRequestWQ<I>::writesame(uint64_t off, uint64_t len,
 }
 
 template <typename I>
+ssize_t ImageRequestWQ<I>::compare_and_write(uint64_t off, uint64_t len,
+                                             bufferlist &&cmp_bl,
+                                             bufferlist &&bl,
+                                             uint64_t *mismatch_off,
+                                             int op_flags){
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "compare_and_write ictx=" << &m_image_ctx << ", off="
+                 << off << ", " << "len = " << len << dendl;
+
+  m_image_ctx.snap_lock.get_read();
+  int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len);
+  m_image_ctx.snap_lock.put_read();
+  if (r < 0) {
+    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  C_SaferCond cond;
+  AioCompletion *c = AioCompletion::create(&cond);
+  aio_compare_and_write(c, off, len, std::move(cmp_bl), std::move(bl),
+                        mismatch_off, op_flags, false);
+
+  r = cond.wait();
+  if (r < 0) {
+    return r;
+  }
+
+  return len;
+}
+
+template <typename I>
 void ImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
 				 ReadResult &&read_result, int op_flags,
 				 bool native_async) {
@@ -342,6 +373,48 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
     c->start_op();
     ImageRequest<I>::aio_writesame(&m_image_ctx, c, off, len, std::move(bl),
 				   op_flags, trace);
+    finish_in_flight_io();
+  }
+  trace.event("finish");
+}
+
+template <typename I>
+void ImageRequestWQ<I>::aio_compare_and_write(AioCompletion *c,
+                                              uint64_t off, uint64_t len,
+                                              bufferlist &&cmp_bl,
+                                              bufferlist &&bl,
+                                              uint64_t *mismatch_off,
+                                              int op_flags, bool native_async) {
+  CephContext *cct = m_image_ctx.cct;
+  ZTracer::Trace trace;
+  if (cct->_conf->rbd_blkin_trace_all) {
+    trace.init("wq: compare_and_write", &m_image_ctx.trace_endpoint);
+    trace.event("init");
+  }
+
+  c->init_time(util::get_image_ctx(&m_image_ctx), AIO_TYPE_COMPARE_AND_WRITE);
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
+                 << "completion=" << c << ", off=" << off << ", "
+                 << "len=" << len << dendl;
+
+  if (native_async && m_image_ctx.event_socket.is_valid()) {
+    c->set_event_notify(true);
+  }
+
+  if (!start_in_flight_io(c)) {
+    return;
+  }
+
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  if (m_image_ctx.non_blocking_aio || writes_blocked()) {
+    queue(ImageRequest<I>::create_compare_and_write_request(
+            m_image_ctx, c, {{off, len}}, std::move(cmp_bl), std::move(bl),
+            mismatch_off, op_flags, trace));
+  } else {
+    c->start_op();
+    ImageRequest<I>::aio_compare_and_write(&m_image_ctx, c, {{off, len}},
+                                           std::move(cmp_bl), std::move(bl),
+                                           mismatch_off, op_flags, trace);
     finish_in_flight_io();
   }
   trace.event("finish");
