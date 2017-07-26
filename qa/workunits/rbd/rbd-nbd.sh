@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 
-. $(dirname $0)/../ceph-helpers.sh
+source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 POOL=rbd
 IMAGE=testrbdnbd$$
