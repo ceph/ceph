@@ -126,6 +126,29 @@ void AioWriteSameEvent::dump(Formatter *f) const {
   f->dump_unsigned("length", length);
 }
 
+uint32_t AioCompareAndWriteEvent::get_fixed_size() {
+  return EventEntry::get_fixed_size() + 32 /* offset, length */;
+}
+
+void AioCompareAndWriteEvent::encode(bufferlist& bl) const {
+  ::encode(offset, bl);
+  ::encode(length, bl);
+  ::encode(cmp_data, bl);
+  ::encode(write_data, bl);
+}
+
+void AioCompareAndWriteEvent::decode(__u8 version, bufferlist::iterator& it) {
+  ::decode(offset, it);
+  ::decode(length, it);
+  ::decode(cmp_data, it);
+  ::decode(write_data, it);
+}
+
+void AioCompareAndWriteEvent::dump(Formatter *f) const {
+  f->dump_unsigned("offset", offset);
+  f->dump_unsigned("length", length);
+}
+
 void AioFlushEvent::encode(bufferlist& bl) const {
 }
 
@@ -414,6 +437,9 @@ void EventEntry::decode(bufferlist::iterator& it) {
     break;
   case EVENT_TYPE_AIO_WRITESAME:
     event = AioWriteSameEvent();
+    break;
+  case EVENT_TYPE_AIO_COMPARE_AND_WRITE:
+    event = AioCompareAndWriteEvent();
     break;
   default:
     event = UnknownEvent();
@@ -763,6 +789,9 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
     break;
   case EVENT_TYPE_AIO_WRITESAME:
     out << "AioWriteSame";
+    break;
+  case EVENT_TYPE_AIO_COMPARE_AND_WRITE:
+    out << "AioCompareAndWrite";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";
