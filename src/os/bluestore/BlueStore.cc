@@ -4396,6 +4396,13 @@ bool BlueStore::is_rotational()
   return rotational;
 }
 
+bool BlueStore::is_journal_rotational()
+{
+  assert(bluefs);
+  dout(10) << __func__ << " " << (int)bluefs->wal_is_rotational() << dendl;
+  return bluefs->wal_is_rotational();
+}
+
 bool BlueStore::test_mount_in_use()
 {
   // most error conditions mean the mount is not in use (e.g., because
