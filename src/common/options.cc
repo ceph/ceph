@@ -1431,6 +1431,10 @@ std::vector<Option> global_options = {
   .set_default(2.0)
   .set_description(""),
 
+  Option("mon_client_hunt_interval_min_multiple", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(1.0)
+  .set_description(""),
+
   Option("mon_client_hunt_interval_max_multiple", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(10.0)
   .set_description(""),
