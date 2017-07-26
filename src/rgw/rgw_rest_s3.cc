@@ -246,7 +246,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 
   if (! op_ret) {
     if (! lo_etag.empty()) {
-      /* Handle etag of Swift API's large objects (DLO/SLO). It's entirerly
+      /* Handle etag of Swift API's large objects (DLO/SLO). It's entirely
        * legit to perform GET on them through S3 API. In such situation,
        * a client should receive the composited content with corresponding
        * etag value. */
