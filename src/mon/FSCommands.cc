@@ -279,6 +279,7 @@ public:
           fs->fscid,
           [n](std::shared_ptr<Filesystem> fs)
       {
+	fs->mds_map.clear_flag(CEPH_MDSMAP_DOWN);
         fs->mds_map.set_max_mds(n);
       });
     } else if (var == "inline_data") {
@@ -428,15 +429,21 @@ public:
         return r;
       }
 
+      ss << fs->mds_map.get_fs_name();
+
       fsmap.modify_filesystem(
           fs->fscid,
           [is_down](std::shared_ptr<Filesystem> fs)
       {
-        if (is_down) {
-          fs->mds_map.set_flag(CEPH_MDSMAP_DOWN);
-        } else {
-          fs->mds_map.clear_flag(CEPH_MDSMAP_DOWN);
-        }
+	if (is_down) {
+	  fs->mds_map.set_flag(CEPH_MDSMAP_DOWN);
+	  fs->mds_map.set_old_max_mds();
+	  fs->mds_map.set_max_mds(0);
+	} else {
+	  mds_rank_t oldmax = fs->mds_map.get_old_max_mds();
+	  fs->mds_map.clear_flag(CEPH_MDSMAP_DOWN);
+	  fs->mds_map.set_max_mds(oldmax ? oldmax : 1);
+	}
       });
 
       if (is_down) {
