@@ -12,6 +12,6 @@ openstack:
 tasks:
 - install:
 - workunit:
-    client.0:
+    client:
       all:
         - erasure-code/encode-decode-non-regression.sh
