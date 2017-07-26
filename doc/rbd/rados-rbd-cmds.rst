@@ -88,7 +88,21 @@ but replace ``{poolname}`` with the name of the pool::
 For example::
 
 	rbd ls swimmingpool
-	
+
+To list deferred delete block devices in the ``rbd`` pool, execute the 
+following:: 
+
+        rbd trash ls
+
+To list deferred delete block devices in a particular pool, execute the 
+following, but replace ``{poolname}`` with the name of the pool:: 
+
+        rbd trash ls {poolname}
+
+For example::
+
+        rbd trash ls swimmingpool
+
 Retrieving Image Information
 ============================
 
@@ -131,20 +145,76 @@ To remove a block device, execute the following, but replace ``{image-name}``
 with the name of the image you want to remove:: 
 
 	rbd rm {image-name}
-	
+
 For example:: 
 
 	rbd rm foo
-	
+ 
 To remove a block device from a pool, execute the following, but replace 
 ``{image-name}`` with the name of the image to remove and replace 
 ``{pool-name}`` with the name of the pool:: 
 
 	rbd rm {pool-name}/{image-name}
-	
+
 For example:: 
 
 	rbd rm swimmingpool/bar
+
+To defer delete a block device from a pool, execute the following, but 
+replace ``{image-name}`` with the name of the image to move and replace 
+``{pool-name}`` with the name of the pool:: 
+
+        rbd trash mv {pool-name}/{image-name}
+
+For example:: 
+
+        rbd trash mv swimmingpool/bar
+
+To remove a deferred block device from a pool, execute the following, but 
+replace ``{image-id}`` with the id of the image to remove and replace 
+``{pool-name}`` with the name of the pool:: 
+
+        rbd trash rm {pool-name}/{image-id}
+
+For example:: 
+
+        rbd trash rm swimmingpool/2bf4474b0dc51
+
+.. note::
+
+  * You can move an image to the trash even it has shapshot(s) or actively 
+    in-use by clones, but can not be removed from trash.
+
+  * You can use *--delay* to set the defer time (default is 0), and if its 
+    deferment time has not expired, it can not be removed unless you use 
+    force.
+
+Restoring a Block Device Image
+=============================
+
+To restore a deferred delete block device in the rbd pool, execute the 
+following, but replace ``{image-id}`` with the id of the image::
+
+        rbd trash restore {image-d}
+
+For example:: 
+
+        rbd trash restore 2bf4474b0dc51
+
+To restore a deferred delete block device in a particular pool, execute 
+the following, but replace ``{image-id}`` with the id of the image and 
+replace ``{pool-name}`` with the name of the pool::
+
+        rbd trash restore {pool-name}/{image-id}
+
+For example:: 
+
+        rbd trash restore swimmingpool/2bf4474b0dc51
+
+Also you can use *--image* to rename the iamge when restore it, for 
+example::
+
+        rbd trash restore swimmingpool/2bf4474b0dc51 --image new-name
 
 
 .. _create a pool: ../../rados/operations/pools/#create-a-pool
