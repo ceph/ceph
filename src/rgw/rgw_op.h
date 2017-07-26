@@ -203,6 +203,7 @@ protected:
   bool partial_content;
   bool range_parsed;
   bool skip_manifest;
+  bool skip_decrypt{false};
   rgw_obj obj;
   utime_t gc_invalidate_time;
   bool is_slo;
