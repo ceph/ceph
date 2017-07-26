@@ -2512,7 +2512,7 @@ ESubtreeMap *MDCache::create_subtree_map()
   map<dirfrag_t, CDir*> dirs_to_add;
 
   if (myin) {
-    CDir* mydir = myin->get_dirfrag(frag_t());
+    CDir* mydir = myin->get_or_open_dirfrag(this, frag_t());
     dirs_to_add[mydir->dirfrag()] = mydir;
   }
 
