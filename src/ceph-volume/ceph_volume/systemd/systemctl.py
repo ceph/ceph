@@ -36,8 +36,13 @@ def disable_osd(id_):
     return disable(osd_unit % id_)
 
 
+def enable_volume(id_, fsid, device_type='lvm'):
+    return enable(volume_unit % (device_type, id_, fsid))
+
+
 #
 # templates
 #
 
 osd_unit = "ceph-osd@%s"
+volume_unit = "ceph-volume@%s-%s-%s"
