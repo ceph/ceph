@@ -107,13 +107,31 @@ MgrPyModule::MgrPyModule(const std::string &module_name_, const std::string &sys
       PySys_SetObject(const_cast<char*>("stdout"), py_logger);
 #endif
     }
+
+    PySys_SetPath(const_cast<char*>(sys_path.c_str()));
+
     // Populate python namespace with callable hooks
-    Py_InitModule("ceph_state", CephStateMethods);
     Py_InitModule("ceph_osdmap", OSDMapMethods);
     Py_InitModule("ceph_osdmap_incremental", OSDMapIncrementalMethods);
     Py_InitModule("ceph_crushmap", CRUSHMapMethods);
 
-    PySys_SetPath(const_cast<char*>(sys_path.c_str()));
+    PyMethodDef ModuleMethods[] = {
+      {nullptr}
+    };
+
+    // Initialize module
+    PyObject *ceph_module = Py_InitModule("ceph_module", ModuleMethods);
+    assert(ceph_module != nullptr);
+
+    // Initialize base class
+    BaseMgrModuleType.tp_new = PyType_GenericNew;
+    if (PyType_Ready(&BaseMgrModuleType) < 0) {
+        assert(0);
+    }
+
+    Py_INCREF(&BaseMgrModuleType);
+    PyModule_AddObject(ceph_module, "BaseMgrModule",
+                       (PyObject *)&BaseMgrModuleType);
   }
 }
 
@@ -150,7 +168,7 @@ MgrPyModule::~MgrPyModule()
   }
 }
 
-int MgrPyModule::load()
+int MgrPyModule::load(PyModules *py_modules)
 {
   if (pMyThreadState.ts == nullptr) {
     derr << "No python sub-interpreter exists for module '" << module_name << "'" << dendl;
@@ -166,6 +184,8 @@ int MgrPyModule::load()
   if (pModule == nullptr) {
     derr << "Module not found: '" << module_name << "'" << dendl;
     derr << handle_pyerror() << dendl;
+
+    assert(0);
     return -ENOENT;
   }
 
@@ -178,15 +198,18 @@ int MgrPyModule::load()
     derr << handle_pyerror() << dendl;
     return -EINVAL;
   }
-
   
-  // Just using the module name as the handle, replace with a
-  // uuidish thing if needed
-  auto pyHandle = PyString_FromString(module_name.c_str());
-  auto pArgs = PyTuple_Pack(1, pyHandle);
+  // We tell the module how we name it, so that it can be consistent
+  // with us in logging etc.
+  
+  auto pThisPtr = PyCapsule_New(this, nullptr, nullptr);
+  auto pPyModules = PyCapsule_New(py_modules, nullptr, nullptr);
+  
+  auto pModuleName = PyString_FromString(module_name.c_str());
+  auto pArgs = PyTuple_Pack(3, pModuleName, pPyModules, pThisPtr);
   pClassInstance = PyObject_CallObject(pClass, pArgs);
   Py_DECREF(pClass);
-  Py_DECREF(pyHandle);
+  Py_DECREF(pModuleName);
   Py_DECREF(pArgs);
   if (pClassInstance == nullptr) {
     derr << "Failed to construct class in '" << module_name << "'" << dendl;

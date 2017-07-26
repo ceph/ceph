@@ -68,22 +68,32 @@ public:
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
   PyObject *get_metadata_python(
-    std::string const &handle,
     const std::string &svc_type, const std::string &svc_id);
   PyObject *get_daemon_status_python(
-    std::string const &handle,
     const std::string &svc_type, const std::string &svc_id);
   PyObject *get_counter_python(
-    std::string const &handle,
-    const std::string &svc_name,
+    const std::string &svc_type,
     const std::string &svc_id,
     const std::string &path);
   PyObject *get_perf_schema_python(
-     const std::string &handle,
      const std::string svc_type,
      const std::string &svc_id);
   PyObject *get_context();
   PyObject *get_osdmap();
+
+  bool get_config(const std::string &module_name,
+      const std::string &key, std::string *val) const;
+  PyObject *get_config_prefix(const std::string &module_name,
+			      const std::string &prefix) const;
+  void set_config(const std::string &module_name,
+      const std::string &key, const boost::optional<std::string> &val);
+
+  void set_health_checks(const std::string& module_name,
+			 health_check_map_t&& checks);
+  void get_health_checks(health_check_map_t *checks);
+
+  void log(const std::string &module_name,
+           int level, const std::string &record);
 
   std::map<std::string, std::string> config_cache;
 
@@ -109,20 +119,6 @@ public:
   void dump_server(const std::string &hostname,
                    const DaemonStateCollection &dmc,
                    Formatter *f);
-
-  bool get_config(const std::string &handle,
-      const std::string &key, std::string *val) const;
-  PyObject *get_config_prefix(const std::string &handle,
-			      const std::string &prefix) const;
-  void set_config(const std::string &handle,
-      const std::string &key, const boost::optional<std::string> &val);
-
-  void set_health_checks(const std::string& handle,
-			 health_check_map_t&& checks);
-  void get_health_checks(health_check_map_t *checks);
-
-  void log(const std::string &handle,
-           int level, const std::string &record);
 
   static void list_modules(std::set<std::string> *modules);
 };

@@ -30,6 +30,7 @@
 
 
 class MgrPyModule;
+class PyModules;
 
 /**
  * A Ceph CLI command description provided from a Python module
@@ -60,7 +61,7 @@ public:
   MgrPyModule(const std::string &module_name, const std::string &sys_path, PyThreadState *main_ts);
   ~MgrPyModule();
 
-  int load();
+  int load(PyModules *py_modules);
   int serve();
   void shutdown();
   void notify(const std::string &notify_type, const std::string &notify_id);

@@ -6,7 +6,7 @@
 class PyModules;
 
 extern PyModules *global_handle;
-extern PyMethodDef CephStateMethods[];
+extern PyTypeObject BaseMgrModuleType;
 
 #endif
 

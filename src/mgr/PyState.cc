@@ -13,7 +13,9 @@
 
 /**
  * The interface we present to python code that runs within
- * ceph-mgr.
+ * ceph-mgr.  This is implemented as a Python class from which
+ * all modules must inherit -- access to the Ceph state is then
+ * available as methods on that object.
  */
 
 #include "Mgr.h"
@@ -28,8 +30,14 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 
-PyModules *global_handle = NULL;
+#define PLACEHOLDER ""
 
+
+typedef struct {
+  PyObject_HEAD
+  PyModules *py_modules;
+  MgrPyModule *this_module;
+} BaseMgrModule;
 
 class MonCommandCompletion : public Context
 {
@@ -79,16 +87,14 @@ public:
       }
       Py_DECREF(args);
     }
-    global_handle->notify_all("command", tag);
+    //global_handle->notify_all("command", tag);
   }
 };
 
 
 static PyObject*
-ceph_send_command(PyObject *self, PyObject *args)
+ceph_send_command(BaseMgrModule *self, PyObject *args)
 {
-  char *handle = nullptr;
-
   // Like mon, osd, mds
   char *type = nullptr;
 
@@ -98,8 +104,8 @@ ceph_send_command(PyObject *self, PyObject *args)
   char *cmd_json = nullptr;
   char *tag = nullptr;
   PyObject *completion = nullptr;
-  if (!PyArg_ParseTuple(args, "sOssss:ceph_send_command",
-        &handle, &completion, &type, &name, &cmd_json, &tag)) {
+  if (!PyArg_ParseTuple(args, "Ossss:ceph_send_command",
+        &completion, &type, &name, &cmd_json, &tag)) {
     return nullptr;
   }
 
@@ -113,7 +119,7 @@ ceph_send_command(PyObject *self, PyObject *args)
 
   auto c = new MonCommandCompletion(completion, tag, PyThreadState_Get());
   if (std::string(type) == "mon") {
-    global_handle->get_monc().start_mon_command(
+    self->py_modules->get_monc().start_mon_command(
         {cmd_json},
         {},
         &c->outbl,
@@ -131,7 +137,7 @@ ceph_send_command(PyObject *self, PyObject *args)
     }
 
     ceph_tid_t tid;
-    global_handle->get_objecter().osd_command(
+    self->py_modules->get_objecter().osd_command(
         osd_id,
         {cmd_json},
         {},
@@ -140,7 +146,7 @@ ceph_send_command(PyObject *self, PyObject *args)
         &c->outs,
         c);
   } else if (std::string(type) == "mds") {
-    int r = global_handle->get_client().mds_command(
+    int r = self->py_modules->get_client().mds_command(
         name,
         {cmd_json},
         {},
@@ -164,7 +170,7 @@ ceph_send_command(PyObject *self, PyObject *args)
     }
 
     ceph_tid_t tid;
-    global_handle->get_objecter().pg_command(
+    self->py_modules->get_objecter().pg_command(
         pgid,
         {cmd_json},
         {},
@@ -185,11 +191,10 @@ ceph_send_command(PyObject *self, PyObject *args)
 }
 
 static PyObject*
-ceph_set_health_checks(PyObject *self, PyObject *args)
+ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
 {
-  char *handle = nullptr;
   PyObject *checks = NULL;
-  if (!PyArg_ParseTuple(args, "sO:ceph_set_health_checks", &handle, &checks)) {
+  if (!PyArg_ParseTuple(args, "O:ceph_set_health_checks", &checks)) {
     return NULL;
   }
   if (!PyDict_Check(checks)) {
@@ -275,64 +280,64 @@ ceph_set_health_checks(PyObject *self, PyObject *args)
   }
 
   JSONFormatter jf(true);
-  dout(10) << "module " << handle << " health checks:\n";
+  dout(10) << "module " << self->this_module->get_name()
+          << " health checks:\n";
   out_checks.dump(&jf);
   jf.flush(*_dout);
   *_dout << dendl;
 
-  global_handle->set_health_checks(handle, std::move(out_checks));
+  self->py_modules->set_health_checks(self->this_module->get_name(),
+                                      std::move(out_checks));
   
   Py_RETURN_NONE;
 }
 
 
 static PyObject*
-ceph_state_get(PyObject *self, PyObject *args)
+ceph_state_get(BaseMgrModule *self, PyObject *args)
 {
-  char *handle = nullptr;
   char *what = NULL;
-  if (!PyArg_ParseTuple(args, "ss:ceph_state_get", &handle, &what)) {
+  if (!PyArg_ParseTuple(args, "s:ceph_state_get", &what)) {
     return NULL;
   }
 
-  return global_handle->get_python(what);
+  return self->py_modules->get_python(what);
 }
 
 
 static PyObject*
-ceph_get_server(PyObject *self, PyObject *args)
+ceph_get_server(BaseMgrModule *self, PyObject *args)
 {
-  char *handle = nullptr;
   char *hostname = NULL;
-  if (!PyArg_ParseTuple(args, "sz:ceph_get_server", &handle, &hostname)) {
+  if (!PyArg_ParseTuple(args, "z:ceph_get_server", &hostname)) {
     return NULL;
   }
 
   if (hostname) {
-    return global_handle->get_server_python(hostname);
+    return self->py_modules->get_server_python(hostname);
   } else {
-    return global_handle->list_servers_python();
+    return self->py_modules->list_servers_python();
   }
 }
 
 static PyObject*
-ceph_get_mgr_id(PyObject *self, PyObject *args)
+ceph_get_mgr_id(BaseMgrModule *self, PyObject *args)
 {
   return PyString_FromString(g_conf->name.get_id().c_str());
 }
 
 static PyObject*
-ceph_config_get(PyObject *self, PyObject *args)
+ceph_config_get(BaseMgrModule *self, PyObject *args)
 {
-  char *handle = nullptr;
   char *what = nullptr;
-  if (!PyArg_ParseTuple(args, "ss:ceph_config_get", &handle, &what)) {
+  if (!PyArg_ParseTuple(args, "s:ceph_config_get", &what)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
 
   std::string value;
-  bool found = global_handle->get_config(handle, what, &value);
+  bool found = self->py_modules->get_config(self->this_module->get_name(),
+      what, &value);
   if (found) {
     dout(10) << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
     return PyString_FromString(value.c_str());
@@ -343,157 +348,245 @@ ceph_config_get(PyObject *self, PyObject *args)
 }
 
 static PyObject*
-ceph_config_get_prefix(PyObject *self, PyObject *args)
+ceph_config_get_prefix(BaseMgrModule *self, PyObject *args)
 {
-  char *handle = nullptr;
   char *prefix = nullptr;
-  if (!PyArg_ParseTuple(args, "ss:ceph_config_get", &handle, &prefix)) {
+  if (!PyArg_ParseTuple(args, "s:ceph_config_get", &prefix)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
 
-  return global_handle->get_config_prefix(handle, prefix);
+  return self->py_modules->get_config_prefix(self->this_module->get_name(),
+      prefix);
 }
 
 static PyObject*
-ceph_config_set(PyObject *self, PyObject *args)
+ceph_config_set(BaseMgrModule *self, PyObject *args)
 {
-  char *handle = nullptr;
   char *key = nullptr;
   char *value = nullptr;
-  if (!PyArg_ParseTuple(args, "ssz:ceph_config_set", &handle, &key, &value)) {
+  if (!PyArg_ParseTuple(args, "sz:ceph_config_set", &key, &value)) {
     return nullptr;
   }
   boost::optional<string> val;
   if (value) {
     val = value;
   }
-  global_handle->set_config(handle, key, val);
+  global_handle->set_config(self->this_module->get_name(), key, val);
 
   Py_RETURN_NONE;
 }
 
 static PyObject*
-get_metadata(PyObject *self, PyObject *args)
+get_metadata(BaseMgrModule *self, PyObject *args)
 {
-  char *handle = nullptr;
   char *svc_name = NULL;
   char *svc_id = NULL;
-  if (!PyArg_ParseTuple(args, "sss:get_metadata", &handle, &svc_name, &svc_id)) {
+  if (!PyArg_ParseTuple(args, "ss:get_metadata", &svc_name, &svc_id)) {
     return nullptr;
   }
-  return global_handle->get_metadata_python(handle, svc_name, svc_id);
+  return self->py_modules->get_metadata_python(svc_name, svc_id);
 }
 
 static PyObject*
-get_daemon_status(PyObject *self, PyObject *args)
+get_daemon_status(BaseMgrModule *self, PyObject *args)
 {
-  char *handle = nullptr;
   char *svc_name = NULL;
   char *svc_id = NULL;
-  if (!PyArg_ParseTuple(args, "sss:get_daemon_status", &handle, &svc_name,
+  if (!PyArg_ParseTuple(args, "ss:get_daemon_status", &svc_name,
 			&svc_id)) {
     return nullptr;
   }
-  return global_handle->get_daemon_status_python(handle, svc_name, svc_id);
+  return self->py_modules->get_daemon_status_python(svc_name, svc_id);
 }
 
 static PyObject*
-ceph_log(PyObject *self, PyObject *args)
+ceph_log(BaseMgrModule *self, PyObject *args)
 {
   int level = 0;
   char *record = nullptr;
-  char *handle = nullptr;
-  if (!PyArg_ParseTuple(args, "sis:log", &handle, &level, &record)) {
+  if (!PyArg_ParseTuple(args, "is:log", &level, &record)) {
     return nullptr;
   }
 
-  global_handle->log(handle, level, record);
+  assert(self->this_module);
+
+  self->py_modules->log(self->this_module->get_name(), level, record);
 
   Py_RETURN_NONE;
 }
 
 static PyObject *
-ceph_get_version(PyObject *self, PyObject *args)
+ceph_get_version(BaseMgrModule *self, PyObject *args)
 {
   return PyString_FromString(pretty_version_to_str().c_str());
 }
 
 static PyObject *
-ceph_get_context(PyObject *self, PyObject *args)
+ceph_get_context(BaseMgrModule *self, PyObject *args)
 {
-  return global_handle->get_context();
+  return self->py_modules->get_context();
 }
 
 static PyObject*
-get_counter(PyObject *self, PyObject *args)
+get_counter(BaseMgrModule *self, PyObject *args)
 {
-  char *handle = nullptr;
   char *svc_name = nullptr;
   char *svc_id = nullptr;
   char *counter_path = nullptr;
-  if (!PyArg_ParseTuple(args, "ssss:get_counter", &handle, &svc_name,
+  if (!PyArg_ParseTuple(args, "sss:get_counter", &svc_name,
                                                   &svc_id, &counter_path)) {
     return nullptr;
   }
-  return global_handle->get_counter_python(
-      handle, svc_name, svc_id, counter_path);
+  return self->py_modules->get_counter_python(
+      svc_name, svc_id, counter_path);
 }
 
 static PyObject*
-get_perf_schema(PyObject *self, PyObject *args)
+get_perf_schema(BaseMgrModule *self, PyObject *args)
 {
-  char *handle = nullptr;
   char *type_str = nullptr;
   char *svc_id = nullptr;
-  if (!PyArg_ParseTuple(args, "sss:get_perf_schema", &handle, &type_str,
-                                                     &svc_id)) {
+  if (!PyArg_ParseTuple(args, "ss:get_perf_schema", &type_str,
+                                                    &svc_id)) {
     return nullptr;
   }
 
-  return global_handle->get_perf_schema_python(handle, type_str, svc_id);
+  return self->py_modules->get_perf_schema_python(type_str, svc_id);
 }
+
 
 static PyObject *
-ceph_get_osdmap(PyObject *self, PyObject *args)
+ceph_get_osdmap(BaseMgrModule *self, PyObject *args)
 {
-  return global_handle->get_osdmap();
+  return self->py_modules->get_osdmap();
 }
 
 
-PyMethodDef CephStateMethods[] = {
-    {"get", ceph_state_get, METH_VARARGS,
-     "Get a cluster object"},
-    {"get_server", ceph_get_server, METH_VARARGS,
-     "Get a server object"},
-    {"get_metadata", get_metadata, METH_VARARGS,
-     "Get a service's metadata"},
-    {"get_daemon_status", get_daemon_status, METH_VARARGS,
-     "Get a service's status"},
-    {"send_command", ceph_send_command, METH_VARARGS,
-     "Send a mon command"},
-    {"set_health_checks", ceph_set_health_checks, METH_VARARGS,
-     "Set health checks for this module"},
-    {"get_mgr_id", ceph_get_mgr_id, METH_NOARGS,
-     "Get the mgr id"},
-    {"get_config", ceph_config_get, METH_VARARGS,
-     "Get a configuration value"},
-    {"get_config_prefix", ceph_config_get_prefix, METH_VARARGS,
-     "Get all configuration values with a given prefix"},
-    {"set_config", ceph_config_set, METH_VARARGS,
-     "Set a configuration value"},
-    {"get_counter", get_counter, METH_VARARGS,
-      "Get a performance counter"},
-    {"get_perf_schema", get_perf_schema, METH_VARARGS,
-      "Get the performance counter schema"},
-    {"log", ceph_log, METH_VARARGS,
-     "Emit a (local) log message"},
-    {"get_version", ceph_get_version, METH_VARARGS,
-     "Get the ceph version of this process"},
-    {"get_context", ceph_get_context, METH_NOARGS,
-      "Get a CephContext* in a python capsule"},
-    {"get_osdmap", ceph_get_osdmap, METH_NOARGS,
-     "Get an OSDMap handle"},
-    {NULL, NULL, 0, NULL}
+
+PyMethodDef BaseMgrModule_methods[] = {
+  {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
+   "Get a cluster object"},
+
+  {"_ceph_get_server", (PyCFunction)ceph_get_server, METH_VARARGS,
+   "Get a server object"},
+
+  {"_ceph_get_metadata", (PyCFunction)get_metadata, METH_VARARGS,
+   "Get a service's metadata"},
+
+  {"_ceph_get_daemon_status", (PyCFunction)get_daemon_status, METH_VARARGS,
+   "Get a service's status"},
+
+  {"_ceph_send_command", (PyCFunction)ceph_send_command, METH_VARARGS,
+   "Send a mon command"},
+
+  {"_ceph_set_health_checks", (PyCFunction)ceph_set_health_checks, METH_VARARGS,
+   "Set health checks for this module"},
+
+  {"_ceph_get_mgr_id", (PyCFunction)ceph_get_mgr_id, METH_NOARGS,
+   "Get the name of the Mgr daemon where we are running"},
+
+  {"_ceph_get_config", (PyCFunction)ceph_config_get, METH_VARARGS,
+   "Get a configuration value"},
+
+  {"_ceph_get_config_prefix", (PyCFunction)ceph_config_get_prefix, METH_VARARGS,
+   "Get all configuration values with a given prefix"},
+
+  {"_ceph_set_config", (PyCFunction)ceph_config_set, METH_VARARGS,
+   "Set a configuration value"},
+
+  {"_ceph_get_counter", (PyCFunction)get_counter, METH_VARARGS,
+    "Get a performance counter"},
+
+  {"_ceph_get_perf_schema", (PyCFunction)get_perf_schema, METH_VARARGS,
+    "Get the performance counter schema"},
+
+  {"_ceph_log", (PyCFunction)ceph_log, METH_VARARGS,
+   "Emit a (local) log message"},
+
+  {"_ceph_get_version", (PyCFunction)ceph_get_version, METH_VARARGS,
+   "Get the ceph version of this process"},
+
+  {"_ceph_get_context", (PyCFunction)ceph_get_context, METH_NOARGS,
+    "Get a CephContext* in a python capsule"},
+
+  {"_ceph_get_osdmap", (PyCFunction)ceph_get_osdmap, METH_NOARGS,
+    "Get an OSDMap* in a python capsule"},
+
+  {NULL, NULL, 0, NULL}
+};
+
+
+static PyObject *
+BaseMgrModule_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    BaseMgrModule *self;
+
+    self = (BaseMgrModule *)type->tp_alloc(type, 0);
+
+    return (PyObject *)self;
+}
+
+static int
+BaseMgrModule_init(BaseMgrModule *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *py_modules_capsule = nullptr;
+    PyObject *this_module_capsule = nullptr;
+    static const char *kwlist[] = {"py_modules", "this_module", NULL};
+
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "OO",
+                                      const_cast<char**>(kwlist),
+                                      &py_modules_capsule,
+                                      &this_module_capsule)) {
+        return -1;
+    }
+
+    self->py_modules = (PyModules*)PyCapsule_GetPointer(py_modules_capsule, nullptr);
+    assert(self->py_modules);
+    self->this_module = (MgrPyModule*)PyCapsule_GetPointer(this_module_capsule, nullptr);
+    assert(self->this_module);
+
+    return 0;
+}
+
+PyTypeObject BaseMgrModuleType = {
+  PyVarObject_HEAD_INIT(NULL, 0)
+  "ceph_module.BaseMgrModule", /* tp_name */
+  sizeof(BaseMgrModule),     /* tp_basicsize */
+  0,                         /* tp_itemsize */
+  0,                         /* tp_dealloc */
+  0,                         /* tp_print */
+  0,                         /* tp_getattr */
+  0,                         /* tp_setattr */
+  0,                         /* tp_compare */
+  0,                         /* tp_repr */
+  0,                         /* tp_as_number */
+  0,                         /* tp_as_sequence */
+  0,                         /* tp_as_mapping */
+  0,                         /* tp_hash */
+  0,                         /* tp_call */
+  0,                         /* tp_str */
+  0,                         /* tp_getattro */
+  0,                         /* tp_setattro */
+  0,                         /* tp_as_buffer */
+  Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,        /* tp_flags */
+  "ceph-mgr Python Plugin", /* tp_doc */
+  0,                         /* tp_traverse */
+  0,                         /* tp_clear */
+  0,                         /* tp_richcompare */
+  0,                         /* tp_weaklistoffset */
+  0,                         /* tp_iter */
+  0,                         /* tp_iternext */
+  BaseMgrModule_methods,     /* tp_methods */
+  0,                         /* tp_members */
+  0,                         /* tp_getset */
+  0,                         /* tp_base */
+  0,                         /* tp_dict */
+  0,                         /* tp_descr_get */
+  0,                         /* tp_descr_set */
+  0,                         /* tp_dictoffset */
+  (initproc)BaseMgrModule_init,                         /* tp_init */
+  0,                         /* tp_alloc */
+  BaseMgrModule_new,     /* tp_new */
 };
 
