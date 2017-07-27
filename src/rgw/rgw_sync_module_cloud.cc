@@ -64,16 +64,17 @@ public:
 int RGWCloudSyncObj::get_obj_range(RGWRESTConn *conn, RGWGetRemoteObjCB& cb, uint64_t begin, uint64_t end, uint64_t* obj_size) {
   rgw_obj obj(bucket_info.bucket, key);
   
-  string url;
+  std::string url;
   int ret = conn->get_url(url);
-  if (ret < 0)
+  if (ret < 0) {
     ldout(store->ctx(), 0) << "RGWCloudSyncObj error: conn get url failed." << ret << dendl;
     return ret;
+  }
 
   param_vec_t params;
   params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
-  map<string, string> extra_headers;
-  string range("bytes=");
+  map<std::string, std::string> extra_headers;
+  std::string range("bytes=");
   range += (std::to_string(begin)+"-"+std::to_string(end));
   extra_headers["HTTP_RANGE"] = range;
 

@@ -150,8 +150,8 @@ int RGWRESTUfileRequest::init_upload_multipart(const std::string& bucket, const 
   auth.append(":");
   auth.append(sign);
 
-  headers.push_back(pair<std::string, string>("Authorization", auth));
-  headers.push_back(pair<std::string, string>("Content-Type", content_type));
+  headers.push_back(pair<std::string, std::string>("Authorization", auth));
+  headers.push_back(pair<std::string, std::string>("Content-Type", content_type));
   retcode = 0;
 
   int r = http_manager.add_request(this, "POST", new_url.c_str());
@@ -186,7 +186,8 @@ int RGWRESTUfileRequest::init_upload_multipart(const std::string& bucket, const 
 }
 
 int RGWRESTUfileRequest::upload_multipart(const std::string& bucket, const std::string& obj, 
-              const std::string& upload_id, uint64_t seq, bufferlist& bl, uint64_t obj_size, std::string& etag) {
+                                          const std::string& upload_id, uint64_t seq,
+                                          bufferlist& bl, uint64_t obj_size, std::string& etag) {
   std::string new_url = "http://" + bucket + "." + cloud_info.domain_name + "/" + obj + 
                         "?uploadId=" + upload_id + "&partNumber="+ std::to_string(seq);
   std::string string2sign;
@@ -200,8 +201,8 @@ int RGWRESTUfileRequest::upload_multipart(const std::string& bucket, const std::
   auth.append(":");
   auth.append(sign);
 
-  headers.push_back(pair<std::string, string>("Authorization", auth));
-  headers.push_back(pair<std::string, string>("Content-Type", content_type));
+  headers.push_back(pair<std::string, std::string>("Authorization", auth));
+  headers.push_back(pair<std::string, std::string>("Content-Type", content_type));
   
   set_send_length(obj_size);
   int r = http_manager.add_request(this, "PUT", new_url.c_str());
@@ -209,7 +210,7 @@ int RGWRESTUfileRequest::upload_multipart(const std::string& bucket, const std::
     return r;
   
   add_output_data(bl, obj_size);
-
+ 
   r = complete();
   if (r < 0)
     return r;
@@ -238,8 +239,8 @@ int RGWRESTUfileRequest::finish_upload_multipart(const std::string& bucket, cons
   auth.append(":");
   auth.append(sign);
 
-  headers.push_back(pair<std::string, string>("Authorization", auth));
-  headers.push_back(pair<std::string, string>("Content-Type", content_type));
+  headers.push_back(pair<std::string, std::string>("Authorization", auth));
+  headers.push_back(pair<std::string, std::string>("Content-Type", content_type));
 
   int r = http_manager.add_request(this, "POST", new_url.c_str());
   if (r < 0)
@@ -268,8 +269,8 @@ int RGWRESTUfileRequest::abort_upload_multipart(const std::string& bucket, const
   auth.append(":");
   auth.append(sign);
 
-  headers.push_back(pair<std::string, string>("Authorization", auth));
-  headers.push_back(pair<std::string, string>("Content-Type", content_type));
+  headers.push_back(pair<std::string, std::string>("Authorization", auth));
+  headers.push_back(pair<std::string, std::string>("Content-Type", content_type));
 
   int r = http_manager.add_request(this, "DELETE", new_url.c_str());
   if (r < 0)
@@ -294,8 +295,8 @@ int RGWRESTUfileRequest::put_obj(const std::string& bucket, const string& obj, b
   auth.append(":");
   auth.append(sign);
 
-  headers.push_back(pair<std::string, string>("Authorization", auth));
-  headers.push_back(pair<std::string, string>("Content-Type", content_type));
+  headers.push_back(pair<std::string, std::string>("Authorization", auth));
+  headers.push_back(pair<std::string, std::string>("Content-Type", content_type));
 
   set_send_length(obj_size);
 
@@ -330,8 +331,8 @@ int RGWRESTUfileRequest::rm_obj(const std::string& bucket, const string& obj) {
   auth.append(":");
   auth.append(sign);
 
-  headers.push_back(pair<std::string, string>("Authorization", auth));
-  headers.push_back(pair<std::string, string>("Content-Type", content_type));
+  headers.push_back(pair<std::string, std::string>("Authorization", auth));
+  headers.push_back(pair<std::string, std::string>("Content-Type", content_type));
 
   int r = http_manager.add_request(this, "DELETE", new_url.c_str());
   if (r < 0)
@@ -343,7 +344,7 @@ int RGWRESTUfileRequest::rm_obj(const std::string& bucket, const string& obj) {
 
 int RGWRESTUfileRequest::create_bucket(const std::string& bucket) {
   std::string url = "http://"+ cloud_info.bucket_host +"/?";
-  std::map<std::string, string> querys;
+  std::map<std::string, std::string> querys;
   querys["BucketName"] = bucket;
   querys["PublicKey"] = cloud_info.public_key;
   querys["Action"] = "CreateBucket";
@@ -351,7 +352,7 @@ int RGWRESTUfileRequest::create_bucket(const std::string& bucket) {
   querys["Region"]= cloud_info.bucket_region;
   std::string str2sign;
   
-  map<std::string, string>::iterator iter = querys.begin();
+  map<std::string, std::string>::iterator iter = querys.begin();
   while(iter != querys.end())
   {
     str2sign += (iter->first + iter->second);
@@ -487,7 +488,7 @@ int RGWCloudUfile::upload_multipart(const std::string& bucket, const string& key
     etags = (etags + "," + etag_part);
   }
   ++part_number;
-
+  
   delete req;
   if (ret < 0) {
     dout(0) << "cloud error upload multipart ret:" << ret << " "
