@@ -4491,9 +4491,13 @@ struct C_ChecksumRead : public Context {
 					     &read_bl, maybe_crc, size,
 					     osd, soid, flags)) {
   }
+  ~C_ChecksumRead() override {
+    delete fill_extent_ctx;
+  }
 
   void finish(int r) override {
     fill_extent_ctx->complete(r);
+    fill_extent_ctx = nullptr;
 
     if (osd_op.rval >= 0) {
       bufferlist::iterator init_value_bl_it = init_value_bl.begin();
@@ -4685,9 +4689,13 @@ struct C_ExtentCmpRead : public Context {
 					     &read_bl, maybe_crc, size,
 					     osd, soid, flags)) {
   }
+  ~C_ExtentCmpRead() override {
+    delete fill_extent_ctx;
+  }
 
   void finish(int r) override {
     fill_extent_ctx->complete(r);
+    fill_extent_ctx = nullptr;
 
     if (osd_op.rval >= 0) {
       osd_op.rval = primary_log_pg->finish_extent_cmp(osd_op, read_bl);
