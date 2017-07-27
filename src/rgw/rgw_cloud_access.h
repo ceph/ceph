@@ -18,18 +18,30 @@ struct RGWCloudInfo {
 
 class RGWCloudAccess {
 protected:
+  std::string upload_id;
+  std::string etags;              //hash value of  every part data
+  uint64_t block_size = 0;
+  uint64_t part_number = 0;
+
+protected:
   CephContext *cct;
   RGWCloudInfo& cloud_info;
 public:
   RGWCloudAccess(RGWCloudInfo& _cloud_info) :cct(nullptr), cloud_info(_cloud_info)
   { }
-  virtual ~RGWCloudSyncAccess() { }
+  virtual ~RGWCloudAccess() { }
   
   void set_ceph_context(CephContext* _cct) { cct = _cct; }
+
+  virtual int init_multipart(const std::string& bucket, const std::string& key) = 0;
+  virtual int upload_multipart(const std::string& bucket, const std::string& key, bufferlist& buf, uint64_t size) = 0;
+  virtual int finish_multipart(const std::string& bucket, const std::string& key) = 0;  
+  virtual int abort_multipart(const std::string& bucket, const std::string& key) = 0;
   
-  virtual int put_obj(std::string& bucket, std::string& key, bufferlist *data, off_t len) = 0;
-  virtual int remove_obj(std::string& bucket, std::string& key) = 0;
-  
+  virtual int put_obj(const std::string& bucket, const std::string& key, bufferlist *data, off_t len) = 0;
+  virtual int remove_obj(const std::string& bucket, const std::string& key) = 0;
+
+  uint64_t get_block_size(){ return block_size; }  
 };
 
 #endif
