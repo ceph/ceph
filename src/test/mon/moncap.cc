@@ -237,6 +237,8 @@ TEST(MonCap, ProfileOSD) {
   ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
 			     name, "", "config-key put", ca, true, true, true));
   ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key set", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
 			     name, "", "config-key exists", ca, true, true, true));
   ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
 			     name, "", "config-key delete", ca, true, true, true));

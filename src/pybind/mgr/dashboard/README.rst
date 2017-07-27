@@ -39,7 +39,7 @@ IPv4 and IPv6 addresses.
 
 ::
 
-    ceph config-key put mgr/dashboard/server_addr ::
+    ceph config-key set mgr/dashboard/server_addr ::
 
 Restart the ceph-mgr daemon after modifying the setting to load the module.
 

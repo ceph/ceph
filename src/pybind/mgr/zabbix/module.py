@@ -87,7 +87,7 @@ class Module(MgrModule):
             value = self.get_localized_config(key, default)
             if value is None:
                 raise RuntimeError('Configuration key {0} not set; "ceph '
-                                   'config-key put mgr/zabbix/{0} '
+                                   'config-key set mgr/zabbix/{0} '
                                    '<value>"'.format(key))
 
             self.set_config_option(key, value)

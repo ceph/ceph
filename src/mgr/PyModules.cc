@@ -592,7 +592,7 @@ void PyModules::set_config(const std::string &handle,
 
     JSONFormatter jf;
     jf.open_object_section("cmd");
-    jf.dump_string("prefix", "config-key put");
+    jf.dump_string("prefix", "config-key set");
     jf.dump_string("key", global_key);
     jf.dump_string("val", val);
     jf.close_section();
@@ -603,10 +603,10 @@ void PyModules::set_config(const std::string &handle,
   set_cmd.wait();
 
   if (set_cmd.r != 0) {
-    // config-key put will fail if mgr's auth key has insufficient
+    // config-key set will fail if mgr's auth key has insufficient
     // permission to set config keys
     // FIXME: should this somehow raise an exception back into Python land?
-    dout(0) << "`config-key put " << global_key << " " << val << "` failed: "
+    dout(0) << "`config-key set " << global_key << " " << val << "` failed: "
       << cpp_strerror(set_cmd.r) << dendl;
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
   }
