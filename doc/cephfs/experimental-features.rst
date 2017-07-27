@@ -4,7 +4,7 @@ Experimental Features
 
 CephFS includes a number of experimental features which are not fully stabilized
 or qualified for users to turn on in real deployments. We generally do our best
-to clearly demarcate these and fence them off so they can't be used by mistake.
+to clearly demarcate these and fence them off so they cannot be used by mistake.
 
 Some of these features are closer to being done than others, though. We describe
 each of them with an approximation of how risky they are and briefly describe
