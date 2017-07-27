@@ -166,6 +166,10 @@ public:
 
   void close() override;
 
+  rocksdb::ColumnFamilyHandle* get_column_family_handle(
+    const string &prefix,
+    bool &is_default_cf);
+
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(Formatter *f) override;
 

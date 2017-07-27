@@ -527,6 +527,22 @@ int RocksDBStore::_test_init(const string& dir)
   return status.ok() ? 0 : -EIO;
 }
 
+rocksdb::ColumnFamilyHandle* RocksDBStore::get_column_family_handle(
+  const string &prefix,
+  bool &is_default_cf)
+{
+  is_default_cf = true;
+  rocksdb::ColumnFamilyHandle* cf_handle =
+    static_cast<rocksdb::ColumnFamilyHandle*>(get_cf_handle(prefix));
+  if (nullptr == cf_handle) {
+    cf_handle = db->DefaultColumnFamily();
+  }
+  else if(cf_handle != db->DefaultColumnFamily()) {
+    is_default_cf = false;
+  }
+  return cf_handle;
+}
+
 RocksDBStore::~RocksDBStore()
 {
   close();
@@ -740,26 +756,21 @@ void RocksDBStore::RocksDBTransactionImpl::set(
   const string &k,
   const bufferlist &to_set_bl)
 {
-  bool def_cf = false;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(db->get_cf_handle(prefix));
-  if (nullptr == cf_handle) {
-    cf_handle = db->db->DefaultColumnFamily();
-    def_cf = true;
-  }
+  bool is_default_cf;
+  rocksdb::ColumnFamilyHandle* cf_handle =
+    db->get_column_family_handle(prefix, is_default_cf);
 
   string key = combine_strings(prefix, k);
 
   // bufferlist::c_str() is non-constant, so we can't call c_str()
   if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
-    bat.Put(cf_handle, rocksdb::Slice(def_cf ? key : k),
+    bat.Put(cf_handle, rocksdb::Slice(is_default_cf ? key : k),
 	     rocksdb::Slice(to_set_bl.buffers().front().c_str(),
 			    to_set_bl.length()));
   } else {
-    rocksdb::Slice key_slice1(key);
-    rocksdb::Slice key_slice2(k);
+    rocksdb::Slice key_slice(is_default_cf ? key : k);
     rocksdb::Slice value_slices[to_set_bl.buffers().size()];
-    bat.Put(cf_handle, rocksdb::SliceParts(def_cf ? &key_slice1 : &key_slice2, 1),
+    bat.Put(cf_handle, rocksdb::SliceParts(&key_slice, 1),
             prepare_sliceparts(to_set_bl, value_slices));
   }
 }
@@ -769,27 +780,22 @@ void RocksDBStore::RocksDBTransactionImpl::set(
   const char *k, size_t keylen,
   const bufferlist &to_set_bl)
 {
-  bool def_cf = false;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(db->get_cf_handle(prefix));
-  if (nullptr == cf_handle) {
-    cf_handle = db->db->DefaultColumnFamily();
-    def_cf = true;
-  }
+  bool is_default_cf;
+  rocksdb::ColumnFamilyHandle* cf_handle =
+    db->get_column_family_handle(prefix, is_default_cf);
 
   string key;
   combine_strings(prefix, k, keylen, &key);
 
   // bufferlist::c_str() is non-constant, so we can't call c_str()
   if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
-    bat.Put(cf_handle, rocksdb::Slice(def_cf ? key : k),
+    bat.Put(cf_handle, rocksdb::Slice(is_default_cf ? key : string(k, keylen)),
 	     rocksdb::Slice(to_set_bl.buffers().front().c_str(),
 			    to_set_bl.length()));
   } else {
-    rocksdb::Slice key_slice1(key);
-    rocksdb::Slice key_slice2(k);
+    rocksdb::Slice key_slice(is_default_cf ? key : string(k, keylen));
     rocksdb::Slice value_slices[to_set_bl.buffers().size()];
-    bat.Put(cf_handle, rocksdb::SliceParts(def_cf ? &key_slice1 : &key_slice2, 1),
+    bat.Put(cf_handle, rocksdb::SliceParts(&key_slice, 1),
             prepare_sliceparts(to_set_bl, value_slices));
   }
 }
@@ -797,68 +803,60 @@ void RocksDBStore::RocksDBTransactionImpl::set(
 void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
 					         const string &k)
 {
-  bool def_cf = false;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(db->get_cf_handle(prefix));
-  if (nullptr == cf_handle) {
-    cf_handle = db->db->DefaultColumnFamily();
-    def_cf = true;
-  }
-  bat.Delete(cf_handle, def_cf ? combine_strings(prefix, k) : k);
+  bool is_default_cf;
+  rocksdb::ColumnFamilyHandle* cf_handle =
+    db->get_column_family_handle(prefix, is_default_cf);
+
+  string key = combine_strings(prefix, k);
+  bat.Delete(
+    cf_handle, rocksdb::Slice(is_default_cf ? key : k));
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
 					         const char *k,
 						 size_t keylen)
 {
-  bool def_cf = false;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(db->get_cf_handle(prefix));
-  if (nullptr == cf_handle) {
-    cf_handle = db->db->DefaultColumnFamily();
-    def_cf = true;
-  }
+  bool is_default_cf;
+  rocksdb::ColumnFamilyHandle* cf_handle = 
+    db->get_column_family_handle(prefix, is_default_cf);
 
   string key;
   combine_strings(prefix, k, keylen, &key);
-  bat.Delete(cf_handle, def_cf ? key : k);
+  bat.Delete(
+    cf_handle, rocksdb::Slice(is_default_cf ? key : string(k, keylen)));
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rm_single_key(const string &prefix,
 					                 const string &k)
 {
-  bool def_cf = false;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(db->get_cf_handle(prefix));
-  if (nullptr == cf_handle) {
-    cf_handle = db->db->DefaultColumnFamily();
-    def_cf = true;
-  }
-  bat.SingleDelete(cf_handle, def_cf ? combine_strings(prefix, k) : k);
+  bool is_default_cf;
+  rocksdb::ColumnFamilyHandle* cf_handle =
+    db->get_column_family_handle(prefix, is_default_cf);
+
+  string key = combine_strings(prefix, k); 
+  bat.SingleDelete(cf_handle, rocksdb::Slice(is_default_cf ? key : k));
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
 {
-  bool def_cf = false;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(db->get_cf_handle(prefix));
-  if (nullptr == cf_handle) {
-    cf_handle = db->db->DefaultColumnFamily();
-    def_cf = true;
-  }    
+  bool is_default_cf;
+  rocksdb::ColumnFamilyHandle* cf_handle =
+    db->get_column_family_handle(prefix, is_default_cf);
 
   if (db->enable_rmrange) {
+    //TODO: delete a cf
     string endprefix = prefix;
     endprefix.push_back('\x01');
     bat.DeleteRange(combine_strings(prefix, string()),
 		    combine_strings(endprefix, string()));
   } else {
-    KeyValueDB::Iterator it = db->get_iterator(prefix);
+    auto it = db->get_iterator(prefix);
     for (it->seek_to_first();
 	 it->valid();
 	 it->next()) {
+      string key = combine_strings(prefix, it->key());
       bat.Delete(cf_handle, 
-                 def_cf ? combine_strings(prefix, it->key()) : it->key());
+                 rocksdb::Slice(is_default_cf ? key : it->key()));
     }
   }
 }
@@ -867,16 +865,15 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
                                                          const string &start,
                                                          const string &end)
 {
-  bool def_cf = false;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(db->get_cf_handle(prefix));
-  if (nullptr == cf_handle) {
-    cf_handle = db->db->DefaultColumnFamily();
-    def_cf = true;
-  }
+  bool is_default_cf;
+  rocksdb::ColumnFamilyHandle* cf_handle =
+    db->get_column_family_handle(prefix, is_default_cf);
 
   if (db->enable_rmrange) {
-    bat.DeleteRange(def_cf ? combine_strings(prefix, start) : start, def_cf ? combine_strings(prefix, end) : end);
+    bat.DeleteRange(
+      cf_handle,
+      rocksdb::Slice(is_default_cf ? combine_strings(prefix, start) : start),
+      rocksdb::Slice(is_default_cf ? combine_strings(prefix, end) : end));
   } else {
     auto it = db->get_iterator(prefix);
     it->lower_bound(start);
@@ -884,8 +881,9 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
       if (it->key() >= end) {
         break;
       }
-      bat.Delete(cf_handle, 
-                 def_cf ? combine_strings(prefix, it->key()) : it->key());
+      string key = combine_strings(prefix, it->key());
+      bat.Delete(cf_handle,
+                 rocksdb::Slice(is_default_cf ? key : it->key()));
       it->next();
     }
   }
@@ -896,26 +894,21 @@ void RocksDBStore::RocksDBTransactionImpl::merge(
   const string &k,
   const bufferlist &to_set_bl)
 {
-  bool def_cf = false;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(db->get_cf_handle(prefix));
-  if (nullptr == cf_handle) {
-    cf_handle = db->db->DefaultColumnFamily();
-    def_cf = true;
-  }
+  bool is_default_cf;
+  rocksdb::ColumnFamilyHandle* cf_handle =
+    db->get_column_family_handle(prefix, is_default_cf);
 
   string key = combine_strings(prefix, k);
 
   // bufferlist::c_str() is non-constant, so we can't call c_str()
   if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
-    bat.Merge(cf_handle, rocksdb::Slice(def_cf ? combine_strings(prefix, k) : k),
+    bat.Merge(cf_handle, rocksdb::Slice(is_default_cf ? key : k),
 	       rocksdb::Slice(to_set_bl.buffers().front().c_str(), to_set_bl.length()));
   } else {
     // make a copy
-    rocksdb::Slice key_slice1(key);
-    rocksdb::Slice key_slice2(k);
+    rocksdb::Slice key_slice(is_default_cf ? key : k);
     rocksdb::Slice value_slices[to_set_bl.buffers().size()];
-    bat.Merge(nullptr, rocksdb::SliceParts(def_cf ? &key_slice1 : &key_slice2, 1),
+    bat.Merge(nullptr, rocksdb::SliceParts(&key_slice, 1),
               prepare_sliceparts(to_set_bl, value_slices));
   }
 }
@@ -926,19 +919,16 @@ int RocksDBStore::get(
     std::map<string, bufferlist> *out)
 {
   utime_t start = ceph_clock_now();
-  bool def_cf = false;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(get_cf_handle(prefix));
-  if (nullptr == cf_handle) {
-    cf_handle = db->DefaultColumnFamily();
-    def_cf = true;
-  }
+  bool is_default_cf;
+  rocksdb::ColumnFamilyHandle* cf_handle = 
+    get_column_family_handle(prefix, is_default_cf);
 
   for (std::set<string>::const_iterator i = keys.begin();
        i != keys.end(); ++i) {
     std::string value;
+    string key = combine_strings(prefix, *i);
     auto status = db->Get(rocksdb::ReadOptions(), cf_handle,
-			  rocksdb::Slice(def_cf ? combine_strings(prefix, *i) : *i),
+			  rocksdb::Slice(is_default_cf ? key : *i),
 			  &value);
     if (status.ok()) {
       (*out)[*i].append(value);
@@ -960,19 +950,16 @@ int RocksDBStore::get(
 {
   assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
-  bool def_cf = false;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(get_cf_handle(prefix));
-  if (nullptr == cf_handle) {
-    cf_handle = db->DefaultColumnFamily();
-    def_cf = true;
-  }
+  bool is_default_cf;
+  rocksdb::ColumnFamilyHandle* cf_handle =
+    get_column_family_handle(prefix, is_default_cf);
 
   int r = 0;
   string value;
   rocksdb::Status s;
+  string k = combine_strings(prefix, key);
   s = db->Get(rocksdb::ReadOptions(), cf_handle,
-	      rocksdb::Slice(def_cf ? combine_strings(prefix, key) : key),
+	      rocksdb::Slice(is_default_cf ? k : key),
 	      &value);
   if (s.ok()) {
     out->append(value);
@@ -995,20 +982,16 @@ int RocksDBStore::get(
 {
   assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
-  bool def_cf = false;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(get_cf_handle(prefix));
-  if (nullptr == cf_handle) {
-    cf_handle = db->DefaultColumnFamily();
-    def_cf = true;
-  }
+  bool is_default_cf;
+  rocksdb::ColumnFamilyHandle* cf_handle =
+    get_column_family_handle(prefix, is_default_cf);
 
   int r = 0;
   string value, k;
   combine_strings(prefix, key, keylen, &k);
   rocksdb::Status s;
   s = db->Get(rocksdb::ReadOptions(), cf_handle,
-              rocksdb::Slice(def_cf ? k : string(key, keylen)),
+              rocksdb::Slice(is_default_cf ? k : string(key, keylen)),
               &value);
   if (s.ok()) {
     out->append(value);
