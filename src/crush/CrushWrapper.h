@@ -662,15 +662,7 @@ public:
    */
   pair<string,string> get_immediate_parent(int id, int *ret = NULL);
 
-  typedef enum {
-    PARENT_NONSHADOW,
-    PARENT_SHADOW,
-    PARENT_ALL,
-  } parent_type_t;
-
-  int get_immediate_parent_id(int id,
-                              int *parent,
-                              parent_type_t choice = PARENT_NONSHADOW) const;
+  int get_immediate_parent_id(int id, int *parent) const;
 
   /**
    * return ancestor of the given type, or 0 if none
