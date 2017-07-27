@@ -1122,8 +1122,11 @@ function get_num_active_clean() {
     local expression
     expression+="select(contains(\"active\") and contains(\"clean\")) | "
     expression+="select(contains(\"stale\") | not)"
-    ceph --format json pg dump pgs 2>/dev/null | \
-        jq "[.[] | .state | $expression] | length"
+    ceph --format json pg dump pgs 2>/dev/null > /tmp/$$
+    if ! jq "[.[] | .state | $expression] | length"; then
+	cat /tmp/$$
+	exit 1
+    fi
 }
 
 function test_get_num_active_clean() {
