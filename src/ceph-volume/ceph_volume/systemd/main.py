@@ -3,8 +3,9 @@ This file is used only by systemd units that are passing their instance suffix
 as arguments to this script so that it can parse the suffix into arguments that
 ``ceph-volume <sub command>`` can consume
 """
-
+import os
 import sys
+import time
 import logging
 from ceph_volume import log, process
 from ceph_volume.exceptions import SuffixParsingError
@@ -74,5 +75,17 @@ def main(args=None):
     logger.info('osd id: %s, osd uuid: %s, sub-command: %s', osd_id, osd_uuid, sub_command)
     command = ['ceph-volume', sub_command, 'activate', osd_id, osd_uuid]
 
-    # don't log any output to the terminal, just rely on stderr/stdout going to logging
-    process.run(command, terminal_logging=False)
+    tries = os.environ.get('CEPH_VOLUME_SYSTEMD_TRIES', 30)
+    interval = os.environ.get('CEPH_VOLUME_SYSTEMD_INTERVAL', 5)
+    while tries > 0:
+        try:
+            # don't log any output to the terminal, just rely on stderr/stdout
+            # going to logging
+            process.run(command, terminal_logging=False)
+            logger.info('successfully activated OSD %s %s', osd_id, osd_uuid)
+            break
+        except RuntimeError as error:
+            logger.warning(error)
+            logger.warning('failed activating OSD, retries left: %s', tries)
+            tries -= 1
+            time.sleep(interval)
