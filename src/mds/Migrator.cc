@@ -1087,12 +1087,10 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   MExportDirPrep *prep = new MExportDirPrep(dir->dirfrag(), it->second.tid);
 
   // include list of bystanders
-  for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
-       p != dir->replicas_end();
-       ++p) {
-    if (p->first != it->second.peer) {
-      dout(10) << "bystander mds." << p->first << dendl;
-      prep->add_bystander(p->first);
+  for (const auto &p : dir->get_replicas()) {
+    if (p.first != it->second.peer) {
+      dout(10) << "bystander mds." << p.first << dendl;
+      prep->add_bystander(p.first);
     }
   }
 
@@ -1272,22 +1270,20 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
 	  it->second.warning_ack_waiting.count(MDS_RANK_NONE) > 0));
   assert(it->second.notify_ack_waiting.empty());
 
-  for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
-       p != dir->replicas_end();
-       ++p) {
-    if (p->first == it->second.peer) continue;
+  for (const auto &p : dir->get_replicas()) {
+    if (p.first == it->second.peer) continue;
     if (mds->is_cluster_degraded() &&
-	!mds->mdsmap->is_clientreplay_or_active_or_stopping(p->first))
+	!mds->mdsmap->is_clientreplay_or_active_or_stopping(p.first))
       continue;  // only if active
-    it->second.warning_ack_waiting.insert(p->first);
-    it->second.notify_ack_waiting.insert(p->first);  // we'll eventually get a notifyack, too!
+    it->second.warning_ack_waiting.insert(p.first);
+    it->second.notify_ack_waiting.insert(p.first);  // we'll eventually get a notifyack, too!
 
     MExportDirNotify *notify = new MExportDirNotify(dir->dirfrag(), it->second.tid, true,
 						    mds_authority_t(mds->get_nodeid(),CDIR_AUTH_UNKNOWN),
 						    mds_authority_t(mds->get_nodeid(),it->second.peer));
     for (set<CDir*>::iterator q = bounds.begin(); q != bounds.end(); ++q)
       notify->get_bounds().push_back((*q)->dirfrag());
-    mds->send_message_mds(notify, p->first);
+    mds->send_message_mds(notify, p.first);
     
   }
 

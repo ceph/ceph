@@ -373,10 +373,9 @@ public:
   }
 
   void init_gather() {
-    for (compact_map<mds_rank_t,unsigned>::iterator p = parent->replicas_begin();
-	 p != parent->replicas_end();
-	 ++p)
-      more()->gather_set.insert(p->first);
+    for (const auto p : parent->get_replicas()) {
+      more()->gather_set.insert(p.first);
+    }
   }
   bool is_gathering() const {
     return have_more() && !more()->gather_set.empty();
