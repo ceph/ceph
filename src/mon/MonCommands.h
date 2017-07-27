@@ -546,6 +546,11 @@ COMMAND("osd crush set-device-class " \
 	"set the <class> of the osd(s) <id> [<id>...]," \
         "or use <all|any|*> to set all.", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush rm-device-class " \
+        "name=ids,type=CephString,n=N", \
+        "remove class of the osd(s) <id> [<id>...]," \
+        "or use <all|any|*> to remove all.", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd crush create-or-move " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
@@ -632,22 +637,14 @@ COMMAND("osd crush rule create-erasure " \
 COMMAND("osd crush rule rm " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",	\
 	"remove crush rule <name>", "osd", "rw", "cli,rest")
-COMMAND("osd crush tree",
+COMMAND("osd crush tree "
+        "name=shadow,type=CephChoices,strings=--show-shadow,req=false", \
 	"dump crush buckets and items in a tree view",
 	"osd", "r", "cli,rest")
-COMMAND("osd crush class create " \
-	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
-	"create crush device class <class>", \
-	"osd", "rw", "cli,rest")
 COMMAND("osd crush class rm " \
 	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
 	"remove crush device class <class>", \
 	"osd", "rw", "cli,rest")
-COMMAND("osd crush class rename " \
-        "name=srcname,type=CephString,goodchars=[A-Za-z0-9-_] " \
-        "name=dstname,type=CephString,goodchars=[A-Za-z0-9-_]", \
-        "rename crush device class <srcname> to <dstname>", \
-        "osd", "rw", "cli,rest")
 COMMAND("osd crush class ls", \
 	"list all crush device classes", \
 	"osd", "r", "cli,rest")

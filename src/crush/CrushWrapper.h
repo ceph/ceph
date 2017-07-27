@@ -443,13 +443,6 @@ public:
       name_rmap[bn] = a;
     }
   }
-  bool id_has_class(int i) {
-    int idout;
-    int classout;
-    if (split_id_class(i, &idout, &classout) != 0)
-      return false;
-    return classout != -1;
-  }
   int split_id_class(int i, int *idout, int *classout) const;
 
   bool class_exists(const string& name) const {
@@ -478,21 +471,6 @@ public:
       return -ENOENT;
     class_rname.erase(name);
     class_name.erase(class_id);
-    return 0;
-  }
-
-  int rename_class(const string& srcname, const string& dstname) {
-    auto p = class_rname.find(srcname);
-    if (p == class_rname.end())
-      return -ENOENT;
-    int class_id = p->second;
-    auto q = class_name.find(class_id);
-    if (q == class_name.end())
-      return -ENOENT;
-    class_rname.erase(srcname);
-    class_name.erase(class_id);
-    class_rname[dstname] = class_id;
-    class_name[class_id] = dstname;
     return 0;
   }
 
@@ -581,6 +559,10 @@ public:
     if (have_rmaps)
       rule_name_rmap[name] = i;
   }
+  bool is_shadow_item(int id) const {
+    const char *name = get_item_name(id);
+    return name && !is_valid_crush_name(name);
+  }
 
 
   /**
@@ -597,13 +579,35 @@ public:
    */
   void find_roots(set<int>& roots) const;
 
+
+  /**
+   * find tree roots that contain shadow (device class) items only
+   */
+  void find_shadow_roots(set<int>& roots) const {
+    set<int> all;
+    find_roots(all);
+    for (auto& p: all) {
+      if (is_shadow_item(p)) {
+        roots.insert(p);
+      }
+    }
+  }
+
   /**
    * find tree roots that are not shadow (device class) items
    *
    * These are parentless nodes in the map that are not shadow
    * items for device classes.
    */
-  void find_nonshadow_roots(set<int>& roots) const;
+  void find_nonshadow_roots(set<int>& roots) const {
+    set<int> all;
+    find_roots(all);
+    for (auto& p: all) {
+      if (!is_shadow_item(p)) {
+        roots.insert(p);
+      }
+    }
+  }
 
   /**
    * see if an item is contained within a subtree
@@ -657,7 +661,16 @@ public:
    * FIXME: ambiguous for items that occur multiple times in the map
    */
   pair<string,string> get_immediate_parent(int id, int *ret = NULL);
-  int get_immediate_parent_id(int id, int *parent) const;
+
+  typedef enum {
+    PARENT_NONSHADOW,
+    PARENT_SHADOW,
+    PARENT_ALL,
+  } parent_type_t;
+
+  int get_immediate_parent_id(int id,
+                              int *parent,
+                              parent_type_t choice = PARENT_NONSHADOW) const;
 
   /**
    * return ancestor of the given type, or 0 if none
@@ -1202,8 +1215,9 @@ public:
   }
 
   int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
+  int remove_device_class(CephContext *cct, int id, ostream *ss);
   int device_class_clone(int original, int device_class, int *clone);
-  bool class_is_in_use(int class_id);
+  bool class_is_in_use(int class_id, ostream *ss = nullptr);
   int populate_classes();
   int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
@@ -1481,8 +1495,10 @@ public:
   void dump_choose_args(Formatter *f) const;
   void list_rules(Formatter *f) const;
   void list_rules(ostream *ss) const;
-  void dump_tree(ostream *out, Formatter *f,
-		 const CrushTreeDumper::name_map_t& ws) const;
+  void dump_tree(ostream *out,
+                 Formatter *f,
+		 const CrushTreeDumper::name_map_t& ws,
+                 bool show_shadow = false) const;
   void dump_tree(ostream *out, Formatter *f) {
     dump_tree(out, f, CrushTreeDumper::name_map_t());
   }

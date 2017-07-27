@@ -33,8 +33,8 @@
 #include "crush/CrushWrapper.h"
 
 TEST(CrushWrapper, get_immediate_parent) {
-  CrushWrapper *c = new CrushWrapper;
-  
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+
   const int ROOT_TYPE = 1;
   c->set_type_name(ROOT_TYPE, "root");
   const int OSD_TYPE = 0;
@@ -64,12 +64,10 @@ TEST(CrushWrapper, get_immediate_parent) {
   EXPECT_EQ(0, ret);
   EXPECT_EQ("root", loc.first);
   EXPECT_EQ("default", loc.second);
-
-  delete c;
 }
 
 TEST(CrushWrapper, move_bucket) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -124,12 +122,10 @@ TEST(CrushWrapper, move_bucket) {
     EXPECT_EQ("root", loc.first);
     EXPECT_EQ("root1", loc.second);
   }
-
-  delete c;
 }
 
 TEST(CrushWrapper, swap_bucket) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -192,7 +188,7 @@ TEST(CrushWrapper, swap_bucket) {
 }
 
 TEST(CrushWrapper, rename_bucket_or_item) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -256,12 +252,10 @@ TEST(CrushWrapper, rename_bucket_or_item) {
   int osd0id = c->get_item_id("osd0");
   EXPECT_EQ(0, c->rename_item("osd.0", "osd0renamed", &ss));
   EXPECT_EQ(osd0id, c->get_item_id("osd0renamed"));
-
-  delete c;
 }
 
 TEST(CrushWrapper, check_item_loc) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   int item = 0;
   float expected_weight = 1.0;
 
@@ -323,12 +317,10 @@ TEST(CrushWrapper, check_item_loc) {
     EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, loc, &weight));
     EXPECT_EQ(expected_weight, weight);
   }
-
-  delete c;
 }
 
 TEST(CrushWrapper, update_item) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -419,12 +411,10 @@ TEST(CrushWrapper, update_item) {
   EXPECT_EQ(modified_weight, c->get_item_weightf(item));
   EXPECT_FALSE(c->check_item_loc(g_ceph_context, item, loc, &weight));
   EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, other_loc, &weight));
-
-  delete c;
 }
 
 TEST(CrushWrapper, adjust_item_weight) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -540,12 +530,10 @@ TEST(CrushWrapper, adjust_item_weight) {
   EXPECT_EQ(1, c->adjust_item_weightf_in_loc(g_ceph_context, item, modified_weight, loc_two));
   EXPECT_EQ(original_weight, c->get_item_weightf_in_loc(item, loc_one));
   EXPECT_EQ(modified_weight, c->get_item_weightf_in_loc(item, loc_two));
-
-  delete c;
 }
 
 TEST(CrushWrapper, adjust_subtree_weight) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -635,12 +623,10 @@ TEST(CrushWrapper, adjust_subtree_weight) {
   ASSERT_EQ(c->get_bucket_weight(host0), 262144);
   ASSERT_EQ(c->get_item_weight(host0), 262144);
   ASSERT_EQ(c->get_bucket_weight(rootno), 262144 + 131072);
-
-  delete c;
 }
 
 TEST(CrushWrapper, insert_item) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -771,12 +757,10 @@ TEST(CrushWrapper, insert_item) {
     EXPECT_EQ(-EINVAL, c->insert_item(g_ceph_context, item, 1.0,
 				      "osd." + stringify(item), loc));
   }
-
-  delete c;
 }
 
 TEST(CrushWrapper, remove_item) {
-  auto *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -815,12 +799,10 @@ TEST(CrushWrapper, remove_item) {
   ASSERT_EQ(0, c->remove_item(g_ceph_context, item_to_remove, true));
   float weight;
   EXPECT_FALSE(c->check_item_loc(g_ceph_context, item_to_remove, loc, &weight));
-
-  delete c;
 }
 
 TEST(CrushWrapper, item_bucket_names) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   int index = 123;
   string name = "NAME";
   EXPECT_EQ(-EINVAL, c->set_item_name(index, "\001"));
@@ -829,18 +811,16 @@ TEST(CrushWrapper, item_bucket_names) {
   EXPECT_TRUE(c->item_exists(index));
   EXPECT_EQ(index, c->get_item_id(name));
   EXPECT_EQ(name, c->get_item_name(index));
-  delete c;
 }
 
 TEST(CrushWrapper, bucket_types) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   int index = 123;
   string name = "NAME";
   c->set_type_name(index, name);
   EXPECT_EQ(1, c->get_num_type_names());
   EXPECT_EQ(index, c->get_type_id(name));
   EXPECT_EQ(name, c->get_type_name(index));
-  delete c;
 }
 
 TEST(CrushWrapper, is_valid_crush_name) {
@@ -867,7 +847,7 @@ TEST(CrushWrapper, is_valid_crush_loc) {
 }
 
 TEST(CrushWrapper, dump_rules) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 1;
   c->set_type_name(ROOT_TYPE, "root");
@@ -937,8 +917,6 @@ TEST(CrushWrapper, dump_rules) {
   c->get_rule_weight_osd_map(0, &wm);
   ASSERT_TRUE(wm.size() == 1);
   ASSERT_TRUE(wm[0] == 1.0);
-
-  delete c;
 }
 
 TEST(CrushWrapper, distance) {
@@ -1234,27 +1212,6 @@ TEST(CrushWrapper, populate_and_cleanup_classes) {
   c.class_bucket.clear();
   ASSERT_EQ(c.cleanup_classes(), 0);
   ASSERT_FALSE(c.name_exists("default~ssd"));
-}
-
-TEST(CrushWrapper, class_is_in_use) {
-  CrushWrapper c;
-  c.create();
-  c.set_type_name(1, "root");
-
-  int weight = 1;
-  map<string,string> loc;
-  loc["root"] = "default";
-
-  ASSERT_FALSE(c.class_is_in_use(0));
-
-  int item = 1;
-  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
-  int class_id = c.get_or_create_class_id("ssd");
-  c.class_map[item] = class_id;
-
-  ASSERT_TRUE(c.class_is_in_use(c.get_class_id("ssd")));
-  ASSERT_EQ(0, c.remove_class_name("ssd"));
-  ASSERT_FALSE(c.class_is_in_use(c.get_class_id("ssd")));
 }
 
 TEST(CrushWrapper, remove_class_name) {

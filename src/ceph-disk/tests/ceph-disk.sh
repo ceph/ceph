@@ -409,8 +409,6 @@ function test_crush_device_class() {
     test -f $osd_data/crush_device_class || return 1
     test $(cat $osd_data/crush_device_class) = CRUSH_CLASS || return 1
 
-    ceph osd crush class create CRUSH_CLASS || return 1
-
     CEPH_ARGS="--crush-location=root=default $CEPH_ARGS" \
       ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \

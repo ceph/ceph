@@ -216,7 +216,7 @@ device in the CRUSH map are set based on the device size and indicate
 how much data we *should* be storing where.  However, because CRUSH is
 based on a pseudorandom placement process, there is always some
 variation from this ideal distribution, the same way that rolling a
-die sixty times will not result in rolling exactly 10 ones and 10
+dice sixty times will not result in rolling exactly 10 ones and 10
 sixes.  Weight sets allow the cluster to do a numerical optimization
 based on the specifics of your cluster (hierarchy, pools, etc.) to achieve
 a balanced distribution.
