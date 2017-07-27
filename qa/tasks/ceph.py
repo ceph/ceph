@@ -1222,7 +1222,13 @@ def healthy(ctx, config):
     """
     config = config if isinstance(config, dict) else dict()
     cluster_name = config.get('cluster', 'ceph')
-    log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
+    log.info('Waiting until %s daemons up and pgs clean...', cluster_name)
+    manager = ctx.managers[cluster_name]
+    try:
+        manager.wait_for_mgr_available()
+    except run.CommandFailedError:
+        log.info('ignoring mgr wait error, probably testing upgrade')
+
     firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
     (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     teuthology.wait_until_osds_up(
@@ -1231,6 +1237,14 @@ def healthy(ctx, config):
         remote=mon0_remote,
         ceph_cluster=cluster_name,
     )
+
+    try:
+        manager.flush_all_pg_stats()
+    except run.CommandFailedError:
+        log.info('ignoring flush pg stats error, probably testing upgrade')
+    manager.wait_for_clean()
+
+    log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
     teuthology.wait_until_healthy(
         ctx,
         remote=mon0_remote,
