@@ -320,7 +320,7 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
         g_conf->rocksdb_cache_shard_bits);
     } else {
       derr << "unrecognized rocksdb_cache_type '" << g_conf->rocksdb_cache_type
-  	 << "'" << dendl;
+        << "'" << dendl;
       return -EINVAL;
     }
   }
@@ -328,14 +328,29 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
 
   if (row_cache_size > 0)
     opt.row_cache = rocksdb::NewLRUCache(row_cache_size,
-				       g_conf->rocksdb_cache_shard_bits);
-
-  if (g_conf->kstore_rocksdb_bloom_bits_per_key > 0) {
+				     g_conf->rocksdb_cache_shard_bits);
+  uint64_t bloom_bits = g_conf->get_val<uint64_t>("rocksdb_bloom_bits_per_key");
+  if (bloom_bits > 0) {
     dout(10) << __func__ << " set bloom filter bits per key to "
-	     << g_conf->kstore_rocksdb_bloom_bits_per_key << dendl;
-    bbt_opts.filter_policy.reset(rocksdb::NewBloomFilterPolicy(
-				   g_conf->kstore_rocksdb_bloom_bits_per_key));
+	     << bloom_bits << dendl;
+    bbt_opts.filter_policy.reset(rocksdb::NewBloomFilterPolicy(bloom_bits));
   }
+  if (g_conf->get_val<std::string>("rocksdb_index_type") == "binary_search")
+    bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kBinarySearch;
+  if (g_conf->get_val<std::string>("rocksdb_index_type") == "hash_search")
+    bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kHashSearch;
+  if (g_conf->get_val<std::string>("rocksdb_index_type") == "two_level")
+    bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kTwoLevelIndexSearch;
+  bbt_opts.cache_index_and_filter_blocks = 
+      g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks");
+  bbt_opts.cache_index_and_filter_blocks_with_high_priority = 
+      g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks_with_high_priority");
+  bbt_opts.partition_filters = g_conf->get_val<bool>("rocksdb_partition_filters");
+  if (g_conf->get_val<uint64_t>("rocksdb_metadata_block_size") > 0)
+    bbt_opts.metadata_block_size = g_conf->get_val<uint64_t>("rocksdb_metadata_block_size");
+  bbt_opts.pin_l0_filter_and_index_blocks_in_cache = 
+      g_conf->get_val<bool>("rocksdb_pin_l0_filter_and_index_blocks_in_cache");
+
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
   dout(10) << __func__ << " block size " << g_conf->rocksdb_block_size
            << ", block_cache size " << prettybyte_t(block_cache_size)
