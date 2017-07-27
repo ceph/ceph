@@ -15,6 +15,7 @@ from teuthology.config import config as teuth_config
 from teuthology.task import install as install_fn
 from teuthology.orchestra import run
 from tasks.cephfs.filesystem import Filesystem
+from teuthology.misc import wait_until_healthy
 
 log = logging.getLogger(__name__)
 
@@ -684,6 +685,81 @@ def single_node_test(ctx, config):
             lambda: cli_test(ctx=ctx, config=config),
         ):
             yield
+
+
+@contextlib.contextmanager
+def upgrade(ctx, config):
+    """
+     Upgrade using ceph-deploy
+     eg:
+       ceph-deploy.upgrade:
+          # to upgrade to specific branch, use
+          branch:
+             stable: jewel
+           # to setup mgr node, use
+           setup-mgr-node: True
+           # to wait for cluster to be healthy after all upgrade, use
+           wait-for-healthy: True
+           role: (upgrades the below roles serially)
+              mon.a
+              mon.b
+              osd.0
+     """
+    roles = config.get('roles')
+    if config.get('branch'):
+        branch = config.get('branch')
+        (var, val) = branch.items()[0]
+        ceph_branch = '--{var}={val}'.format(var=var, val=val)
+    else:
+        # default to master
+        ceph_branch = '--dev=master'
+    # get the node used for initial deployment which is mon.a
+    (ceph_admin,) = ctx.cluster.only(
+        teuthology.get_first_mon(ctx, config)).remotes.iterkeys()
+    testdir = teuthology.get_testdir(ctx)
+    cmd = './ceph-deploy install ' + ceph_branch
+    for role in roles:
+        remotes_and_roles = ctx.cluster.only(role).remotes
+        for remote, roles in remotes_and_roles.iteritems():
+            nodename = remote.shortname
+            cmd = cmd + ' ' + nodename
+            log.info("Upgrading ceph on  %s", nodename)
+            ceph_admin.run(
+                args=[
+                    'cd',
+                    '{tdir}/ceph-deploy'.format(tdir=testdir),
+                    run.Raw('&&'),
+                    run.Raw(cmd),
+                ],
+            )
+            ceph_admin.run(args=['sudo', 'ceph', '-s'])
+    if config.get('setup-mgr-node', None):
+        mgr_nodes = get_nodes_using_role(ctx, 'mgr')
+        mgr_nodes = " ".join(mgr_nodes)
+        mgr_install = './ceph-deploy install --mgr ' + ceph_branch + " " + mgr_nodes
+        mgr_create = './ceph-deploy mgr create' + " " + mgr_nodes
+        # install mgr
+        ceph_admin.run(
+            args=[
+                'cd',
+                '{tdir}/ceph-deploy'.format(tdir=testdir),
+                run.Raw('&&'),
+                run.Raw(mgr_install),
+                ],
+            )
+        # create mgr
+        ceph_admin.run(
+            args=[
+                'cd',
+                '{tdir}/ceph-deploy'.format(tdir=testdir),
+                run.Raw('&&'),
+                run.Raw(mgr_create),
+                ],
+            )
+        ceph_admin.run(args=['sudo', 'ceph', '-s'])
+    if config.get('wait-for-healthy', None):
+        wait_until_healthy(ctx, ceph_admin, use_sudo=True)
+    yield
 
 
 @contextlib.contextmanager
