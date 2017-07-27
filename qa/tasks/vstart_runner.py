@@ -910,7 +910,7 @@ def exec_test():
 
         # Wait for OSD to come up so that subsequent injectargs etc will
         # definitely succeed
-        LocalCephCluster(LocalContext()).mon_manager.wait_for_all_up(timeout=30)
+        LocalCephCluster(LocalContext()).mon_manager.wait_for_all_osds_up(timeout=30)
 
     # List of client mounts, sufficient to run the selected tests
     clients = [i.__str__() for i in range(0, max_required_clients)]

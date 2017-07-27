@@ -806,7 +806,7 @@ class Thrasher:
         while len(self.in_osds) < (self.minin + 1):
             self.in_osd()
         self.log("Waiting for recovery")
-        self.ceph_manager.wait_for_all_up(
+        self.ceph_manager.wait_for_all_osds_up(
             timeout=self.config.get('timeout')
             )
         # now we wait 20s for the pg status to change, if it takes longer,
@@ -1989,6 +1989,10 @@ class CephManager:
         """
         return self.get_osd_dump_json()['osds']
 
+    def get_mgr_dump(self):
+        out = self.raw_cluster_cmd('mgr', 'dump', '--format=json')
+        return json.loads(out)
+
     def get_stuck_pgs(self, type_, threshold):
         """
         :returns: stuck pg information from the cluster
@@ -2147,7 +2151,7 @@ class CephManager:
         x = self.get_osd_dump()
         return (len(x) == sum([(y['up'] > 0) for y in x]))
 
-    def wait_for_all_up(self, timeout=None):
+    def wait_for_all_osds_up(self, timeout=None):
         """
         When this exits, either the timeout has expired, or all
         osds are up.
@@ -2157,7 +2161,7 @@ class CephManager:
         while not self.are_all_osds_up():
             if timeout is not None:
                 assert time.time() - start < timeout, \
-                    'timeout expired in wait_for_all_up'
+                    'timeout expired in wait_for_all_osds_up'
             time.sleep(3)
         self.log("all up!")
 
@@ -2181,6 +2185,20 @@ class CephManager:
     def wait_for_pools(self, pools):
         for pool in pools:
             self.wait_for_pool(pool)
+
+    def is_mgr_available(self):
+        x = self.get_mgr_dump()
+        return x.get('available', False)
+
+    def wait_for_mgr_available(self, timeout=None):
+        self.log("waiting for mgr available")
+        start = time.time()
+        while not self.is_mgr_available():
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired in wait_for_mgr_available'
+            time.sleep(3)
+        self.log("mgr available!")
 
     def wait_for_recovery(self, timeout=None):
         """
@@ -2539,6 +2557,7 @@ kill_mon = utility_task("kill_mon")
 create_pool = utility_task("create_pool")
 remove_pool = utility_task("remove_pool")
 wait_for_clean = utility_task("wait_for_clean")
+flush_all_pg_stats = utility_task("flush_all_pg_stats")
 set_pool_property = utility_task("set_pool_property")
 do_pg_scrub = utility_task("do_pg_scrub")
 wait_for_pool = utility_task("wait_for_pool")
