@@ -1639,6 +1639,8 @@ OPTION(rgw_sync_log_trim_interval, OPT_INT) // time in seconds between attempts 
 OPTION(rgw_sync_data_inject_err_probability, OPT_DOUBLE) // range [0, 1]
 OPTION(rgw_sync_meta_inject_err_probability, OPT_DOUBLE) // range [0, 1]
 
+OPTION(rgw_bucket_shard_full_sync_window, OPT_INT, 20) // max outstanding sync request number of a bucket shard when doing full sync
+OPTION(rgw_bucket_shard_incremental_sync_window, OPT_INT, 20) // max outstanding sync request number of a bucket shard when doing incremental sync 
 
 OPTION(rgw_period_push_interval, OPT_DOUBLE) // seconds to wait before retrying "period push"
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE) // maximum interval after exponential backoff
