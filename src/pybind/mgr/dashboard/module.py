@@ -22,6 +22,7 @@ import json
 import sys
 import time
 import threading
+import socket
 
 import cherrypy
 import jinja2
@@ -833,6 +834,13 @@ class Module(MgrModule):
 
         osdmap = self.get_osdmap()
         log.info("latest osdmap is %d" % osdmap.get_epoch())
+
+        # Publish the URI that others may use to access the service we're
+        # about to start serving
+        self.set_uri("http://{0}:{1}/".format(
+            socket.gethostname() if server_addr == "::" else server_addr,
+            server_port
+        ))
 
         static_dir = os.path.join(current_dir, 'static')
         conf = {
