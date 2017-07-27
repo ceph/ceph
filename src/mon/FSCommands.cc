@@ -126,11 +126,7 @@ class FsNewHandler : public FileSystemCommandHandler
       ss << "pool '" << data_name << "' does not exist";
       return -ENOENT;
     }
-    if (data == 0) {
-      ss << "pool '" << data_name << "' has id 0, which CephFS does not allow. Use another pool or recreate it to get a non-zero pool id.";
-      return -EINVAL;
-    }
-
+    
     string fs_name;
     cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
     if (fs_name.empty()) {
