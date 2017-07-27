@@ -995,11 +995,21 @@ int RocksDBStore::get(
 {
   assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
+  bool def_cf = false;
+  rocksdb::ColumnFamilyHandle* cf_handle;
+  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(get_cf_handle(prefix));
+  if (nullptr == cf_handle) {
+    cf_handle = db->DefaultColumnFamily();
+    def_cf = true;
+  }
+
   int r = 0;
   string value, k;
   combine_strings(prefix, key, keylen, &k);
   rocksdb::Status s;
-  s = db->Get(rocksdb::ReadOptions(), rocksdb::Slice(k), &value);
+  s = db->Get(rocksdb::ReadOptions(), cf_handle,
+              rocksdb::Slice(def_cf ? k : string(key, keylen)),
+              &value);
   if (s.ok()) {
     out->append(value);
   } else if (s.IsNotFound()) {
