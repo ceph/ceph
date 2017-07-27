@@ -15,8 +15,6 @@ set(merge_libs
   cephd_cls
   cephd_cls_kvs
   cephd_rados
-  cephd_rbd
-  cephd_rgw
   common
   common_utf8
   erasure_code
@@ -32,6 +30,14 @@ set(merge_libs
 if(NOT WITH_SYSTEM_ROCKSDB)
   list(APPEND merge_libs ${ROCKSDB_LIBRARIES})
 endif(NOT WITH_SYSTEM_ROCKSDB)
+
+if(WITH_RADOSGW)
+  list(APPEND merge_libs cephd_rgw)
+endif(WITH_RADOSGW)
+
+if(WITH_RBD)
+  list(APPEND merge_libs cephd_rbd)
+endif(WITH_RBD)
 
 if(HAVE_ARMV8_CRC)
   list(APPEND merge_libs common_crc_aarch64)
