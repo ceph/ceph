@@ -274,18 +274,6 @@ void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
   }
 }
 
-struct OpFinisher {
-  OSDOp &osd_op;
-
-  OpFinisher(OSDOp &osd_op) : osd_op(osd_op) {
-  }
-  virtual ~OpFinisher() {
-    osd_op.op_finisher = nullptr;
-  }
-
-  virtual int execute() = 0;
-};
-
 class CopyFromCallback : public PrimaryLogPG::CopyCallback {
 public:
   PrimaryLogPG::CopyResults *results = nullptr;
@@ -326,14 +314,15 @@ public:
   }
 };
 
-struct CopyFromFinisher : public OpFinisher {
-  CopyFromCallback *copy_from_callback;  
+struct CopyFromFinisher : public PrimaryLogPG::OpFinisher {
+  CopyFromCallback *copy_from_callback;
 
-  CopyFromFinisher(OSDOp &osd_op, CopyFromCallback *copy_from_callback)
-    : OpFinisher(osd_op), copy_from_callback(copy_from_callback) {
+  CopyFromFinisher(CopyFromCallback *copy_from_callback)
+    : copy_from_callback(copy_from_callback) {
   }
 
   int execute() override {
+    // instance will be destructed after this method completes
     copy_from_callback->ctx->pg->finish_copyfrom(copy_from_callback);
     return 0;
   }
@@ -3393,11 +3382,6 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 void PrimaryLogPG::close_op_ctx(OpContext *ctx) {
   release_object_locks(ctx->lock_manager);
 
-  if (ctx->ops != nullptr) {
-    for (auto &osd_op : *ctx->ops) {
-      delete osd_op.op_finisher;
-    }
-  }
   ctx->op_t.reset();
 
   for (auto p = ctx->on_finish.begin(); p != ctx->on_finish.end();
@@ -4477,8 +4461,10 @@ void PrimaryLogPG::maybe_create_new_object(
   }
 }
 
-struct ReadFinisher : public OpFinisher {
-  ReadFinisher(OSDOp& osd_op) : OpFinisher(osd_op) {
+struct ReadFinisher : public PrimaryLogPG::OpFinisher {
+  OSDOp& osd_op;
+
+  ReadFinisher(OSDOp& osd_op) : osd_op(osd_op) {
   }
 
   int execute() override {
@@ -4591,7 +4577,8 @@ int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
       {&checksum_ctx->read_bl, checksum_ctx}});
 
     dout(10) << __func__ << ": async_read noted for " << soid << dendl;
-    osd_op.op_finisher = new ReadFinisher(osd_op);
+    ctx->op_finishers[ctx->current_osd_subop_num].reset(
+      new ReadFinisher(osd_op));
     return -EINPROGRESS;
   }
 
@@ -4733,7 +4720,8 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
 
     dout(10) << __func__ << ": async_read noted for " << soid << dendl;
 
-    osd_op.op_finisher = new ReadFinisher(osd_op);
+    ctx->op_finishers[ctx->current_osd_subop_num].reset(
+      new ReadFinisher(osd_op));
     return -EINPROGRESS;
   }
 
@@ -4815,7 +4803,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
 					 osd, soid, op.flags))));
     dout(10) << " async_read noted for " << soid << dendl;
 
-    osd_op.op_finisher = new ReadFinisher(osd_op);
+    ctx->op_finishers[ctx->current_osd_subop_num].reset(
+      new ReadFinisher(osd_op));
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -4884,7 +4873,8 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
 				   &op.extent.length))));
       dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
 
-      osd_op.op_finisher = new ReadFinisher(osd_op);
+      ctx->op_finishers[ctx->current_osd_subop_num].reset(
+        new ReadFinisher(osd_op));
     } else {
       dout(10) << " sparse read ended up empty for " << soid << dendl;
       map<uint64_t, uint64_t> extents;
@@ -5007,9 +4997,18 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
   dout(10) << "do_osd_op " << soid << " " << ops << dendl;
 
+  ctx->current_osd_subop_num = 0;
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p, ctx->current_osd_subop_num++) {
     OSDOp& osd_op = *p;
     ceph_osd_op& op = osd_op.op;
+
+    OpFinisher* op_finisher = nullptr;
+    {
+      auto op_finisher_it = ctx->op_finishers.find(ctx->current_osd_subop_num);
+      if (op_finisher_it != ctx->op_finishers.end()) {
+        op_finisher = op_finisher_it->second.get();
+      }
+    }
 
     // TODO: check endianness (__le32 vs uint32_t, etc.)
     // The fields in ceph_osd_op are little-endian (according to the definition in rados.h),
@@ -5074,10 +5073,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		 op.extent.length, op.extent.truncate_size,
 		 op.extent.truncate_seq);
 
-      if (osd_op.op_finisher == nullptr) {
+      if (op_finisher == nullptr) {
 	result = do_extent_cmp(ctx, osd_op);
       } else {
-	result = osd_op.op_finisher->execute();
+	result = op_finisher->execute();
       }
       break;
 
@@ -5093,13 +5092,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		 soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset,
 		 op.extent.length, op.extent.truncate_size,
 		 op.extent.truncate_seq);
-      if (osd_op.op_finisher == nullptr) {
+      if (op_finisher == nullptr) {
 	if (!ctx->data_off) {
 	  ctx->data_off = op.extent.offset;
 	}
 	result = do_read(ctx, osd_op);
       } else {
-	result = osd_op.op_finisher->execute();
+	result = op_finisher->execute();
       }
       break;
 
@@ -5111,10 +5110,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		   op.checksum.offset, op.checksum.length,
 		   op.checksum.chunk_size);
 
-	if (osd_op.op_finisher == nullptr) {
+	if (op_finisher == nullptr) {
 	  result = do_checksum(ctx, osd_op, &bp);
 	} else {
-	  result = osd_op.op_finisher->execute();
+	  result = op_finisher->execute();
 	}
       }
       break;
@@ -5149,10 +5148,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		 soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset,
 		 op.extent.length, op.extent.truncate_size,
 		 op.extent.truncate_seq);
-      if (osd_op.op_finisher == nullptr) {
+      if (op_finisher == nullptr) {
 	result = do_sparse_read(ctx, osd_op);
       } else {
-	result = osd_op.op_finisher->execute();
+	result = op_finisher->execute();
       }
       break;
 
@@ -6664,10 +6663,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_copy_get, soid.oid.name.c_str(),
 		 soid.snap.val);
-      if (osd_op.op_finisher == nullptr) {
+      if (op_finisher == nullptr) {
 	result = do_copy_get(ctx, bp, osd_op, ctx->obc);
       } else {
-	result = osd_op.op_finisher->execute();
+	result = op_finisher->execute();
       }
       break;
 
@@ -6708,7 +6707,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		   src_oloc.hash,
 		   src_snapid,
 		   src_version);
-	if (osd_op.op_finisher == nullptr) {
+	if (op_finisher == nullptr) {
 	  // start
 	  pg_t raw_pg;
 	  get_osdmap()->object_locator_to_pg(src_name, src_oloc, raw_pg);
@@ -6721,7 +6720,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    break;
 	  }
 	  CopyFromCallback *cb = new CopyFromCallback(ctx, osd_op);
-	  osd_op.op_finisher = new CopyFromFinisher(osd_op, cb);
+          ctx->op_finishers[ctx->current_osd_subop_num].reset(
+            new CopyFromFinisher(cb));
 	  start_copy(cb, ctx->obc, src, src_oloc, src_version,
 		     op.copy_from.flags,
 		     false,
@@ -6730,8 +6730,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
-	  result = osd_op.op_finisher->execute();
+	  result = op_finisher->execute();
 	  assert(result == 0);
+
+          // COPY_FROM cannot be executed multiple times -- it must restart
+          ctx->op_finishers.erase(ctx->current_osd_subop_num);
 	}
       }
       break;
@@ -7845,7 +7848,8 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
 	    make_pair(&bl, cb)));
 	cb->len = max_read;
 
-	osd_op.op_finisher = new ReadFinisher(osd_op);
+        ctx->op_finishers[ctx->current_osd_subop_num].reset(
+          new ReadFinisher(osd_op));
 	result = -EINPROGRESS;
 
 	dout(10) << __func__ << ": async_read noted for " << soid << dendl;
