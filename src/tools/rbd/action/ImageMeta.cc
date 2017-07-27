@@ -97,9 +97,12 @@ static int do_metadata_set(librbd::Image& image, const char *key,
 static int do_metadata_remove(librbd::Image& image, const char *key)
 {
   int r = image.metadata_remove(key);
-  if (r < 0) {
-    std::cerr << "failed to remove metadata " << key << " of image : "
-              << cpp_strerror(r) << std::endl;
+  if (r == -ENOENT) {
+      std::cerr << "rbd: no existing metadata key " << key << " of image : "
+                << cpp_strerror(r) << std::endl;
+  } else if(r < 0) {
+      std::cerr << "failed to remove metadata " << key << " of image : "
+                << cpp_strerror(r) << std::endl;
   }
   return r;
 }
