@@ -23,7 +23,7 @@
 
 class MMgrBeacon : public PaxosServiceMessage {
 
-  static const int HEAD_VERSION = 5;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 1;
 
 protected:
@@ -34,6 +34,9 @@ protected:
   uuid_d fsid;
   std::set<std::string> available_modules;
   map<string,string> metadata; ///< misc metadata about this osd
+
+  // From active daemon to populate MgrMap::services
+  std::map<std::string, std::string> services;
 
   // Only populated during activation
   std::vector<MonCommand> command_descs;
@@ -63,6 +66,15 @@ public:
   std::set<std::string>& get_available_modules() { return available_modules; }
   const std::map<std::string,std::string>& get_metadata() const {
     return metadata;
+  }
+
+  const std::map<std::string,std::string>& get_services() const {
+    return services;
+  }
+
+  void set_services(const std::map<std::string, std::string> &svcs)
+  {
+    services = svcs;
   }
 
   void set_command_descs(const std::vector<MonCommand> &cmds)
@@ -98,6 +110,7 @@ public:
     ::encode(available_modules, payload);
     ::encode(command_descs, payload);
     ::encode(metadata, payload);
+    ::encode(services, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
@@ -117,6 +130,9 @@ public:
     }
     if (header.version >= 5) {
       ::decode(metadata, p);
+    }
+    if (header.version >= 6) {
+      ::decode(services, p);
     }
   }
 };
