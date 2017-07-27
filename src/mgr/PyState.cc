@@ -41,6 +41,7 @@ typedef struct {
 
 class MonCommandCompletion : public Context
 {
+  PyModules *py_modules;
   PyObject *python_completion;
   const std::string tag;
   SafeThreadState pThreadState;
@@ -49,8 +50,11 @@ public:
   std::string outs;
   bufferlist outbl;
 
-  MonCommandCompletion(PyObject* ev, const std::string &tag_, PyThreadState *ts_)
-    : python_completion(ev), tag(tag_), pThreadState(ts_)
+  MonCommandCompletion(
+      PyModules *py_modules_, PyObject* ev,
+      const std::string &tag_, PyThreadState *ts_)
+    : py_modules(py_modules_), python_completion(ev),
+      tag(tag_), pThreadState(ts_)
   {
     assert(python_completion != nullptr);
     Py_INCREF(python_completion);
@@ -87,7 +91,7 @@ public:
       }
       Py_DECREF(args);
     }
-    //global_handle->notify_all("command", tag);
+    py_modules->notify_all("command", tag);
   }
 };
 
@@ -117,7 +121,8 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
   }
   Py_DECREF(set_fn);
 
-  auto c = new MonCommandCompletion(completion, tag, PyThreadState_Get());
+  auto c = new MonCommandCompletion(self->py_modules,
+      completion, tag, PyThreadState_Get());
   if (std::string(type) == "mon") {
     self->py_modules->get_monc().start_mon_command(
         {cmd_json},
