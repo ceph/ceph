@@ -8,6 +8,7 @@ overrides:
       - (SMALLER_PGP_NUM)
       - (REQUEST_SLOW)
       - (CACHE_POOL_NEAR_FULL)
+      - (POOL_APP_NOT_ENABLED)
     conf:
       client:
         debug ms: 1
