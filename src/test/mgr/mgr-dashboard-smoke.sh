@@ -33,7 +33,7 @@ function run() {
 
     timeout 360 ceph --mon-host $MON mon stat || return 1
     export CEPH_ARGS="--mon_host $MON "
-    ceph config-key put mgr/x/dashboard/server_port 7001
+    ceph config-key set mgr/x/dashboard/server_port 7001
     MGR_ARGS+="--mgr_module_path=${CEPH_ROOT}/src/pybind/mgr "
     run_mgr $dir x ${MGR_ARGS} || return 1
 

@@ -1349,6 +1349,21 @@ function test_mon_osd_create_destroy()
 
 }
 
+function test_mon_config_key()
+{
+  key=asdfasdfqwerqwreasdfuniquesa123df
+  ceph config-key list | grep -c $key | grep 0
+  ceph config-key get $key | grep -c bar | grep 0
+  ceph config-key set $key bar
+  ceph config-key get $key | grep bar
+  ceph config-key list | grep -c $key | grep 1
+  ceph config-key dump | grep $key | grep bar
+  ceph config-key rm $key
+  expect_false ceph config-key get $key
+  ceph config-key list | grep -c $key | grep 0
+  ceph config-key dump | grep -c $key | grep 0
+}
+
 function test_mon_osd()
 {
   #
@@ -2403,7 +2418,7 @@ function test_mon_tell_help_command()
 
 function test_mon_stdin_stdout()
 {
-  echo foo | ceph config-key put test_key -i -
+  echo foo | ceph config-key set test_key -i -
   ceph config-key get test_key -o - | grep -c foo | grep -q 1
 }
 
@@ -2476,6 +2491,7 @@ MON_TESTS+=" auth_profiles"
 MON_TESTS+=" mon_misc"
 MON_TESTS+=" mon_mon"
 MON_TESTS+=" mon_osd"
+MON_TESTS+=" mon_config_key"
 MON_TESTS+=" mon_crush"
 MON_TESTS+=" mon_osd_create_destroy"
 MON_TESTS+=" mon_osd_pool"

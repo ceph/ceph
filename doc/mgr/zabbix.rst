@@ -79,14 +79,14 @@ these are usually Monitors where the *client.admin* key is present.
 
 ::
 
-    ceph config-key put <key> <value>
+    ceph config-key set <key> <value>
 
 For example:
 
 ::
 
-    ceph config-key put mgr/zabbix/zabbix_host zabbix.localdomain
-    ceph config-key put mgr/zabbix/identifier ceph.eu-ams02.local
+    ceph config-key set mgr/zabbix/zabbix_host zabbix.localdomain
+    ceph config-key set mgr/zabbix/identifier ceph.eu-ams02.local
 
 Debugging
 ---------

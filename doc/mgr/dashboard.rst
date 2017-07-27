@@ -23,8 +23,8 @@ Since each ``ceph-mgr`` hosts its own instance of dashboard, it may
 also be necessary to configure them separately. The hostname and port
 can be changed via the configuration key facility::
 
-  ceph config-key put mgr/dashboard/$name/server_addr $IP
-  ceph config-key put mgr/dashboard/$name/server_port $PORT
+  ceph config-key set mgr/dashboard/$name/server_addr $IP
+  ceph config-key set mgr/dashboard/$name/server_port $PORT
 
 where ``$name`` is the ID of the ceph-mgr who is hosting this
 dashboard web app.
@@ -32,8 +32,8 @@ dashboard web app.
 These settings can also be configured cluster-wide and not manager
 specific.  For example,::
 
-  ceph config-key put mgr/dashboard/server_addr $IP
-  ceph config-key put mgr/dashboard/server_port $PORT
+  ceph config-key set mgr/dashboard/server_addr $IP
+  ceph config-key set mgr/dashboard/server_port $PORT
 
 If the port is not configured, the web app will bind to port ``7000``.
 If the address it not configured, the web app will bind to ``::``,

@@ -201,6 +201,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
                                 "daemon-private/mgr/");
     profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
+    profile_grants.push_back(MonCapGrant("config-key set", "key", constraint));
     profile_grants.push_back(MonCapGrant("config-key put", "key", constraint));
     profile_grants.push_back(MonCapGrant("config-key exists", "key", constraint));
     profile_grants.push_back(MonCapGrant("config-key delete", "key", constraint));
@@ -213,6 +214,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     string prefix = string("daemon-private/") + stringify(name) + string("/");
     profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
     profile_grants.push_back(MonCapGrant("config-key put", "key", constraint));
+    profile_grants.push_back(MonCapGrant("config-key set", "key", constraint));
     profile_grants.push_back(MonCapGrant("config-key exists", "key", constraint));
     profile_grants.push_back(MonCapGrant("config-key delete", "key", constraint));
   }
