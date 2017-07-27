@@ -5119,13 +5119,22 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     rs << "\n";
     rdata.append(rs.str());
   } else if (prefix == "osd crush tree") {
+    string shadow;
+    cmd_getval(g_ceph_context, cmdmap, "shadow", shadow);
+    bool show_shadow = shadow == "--show-shadow";
     boost::scoped_ptr<Formatter> f(Formatter::create(format));
     if (f) {
-      osdmap.crush->dump_tree(nullptr, f.get(), osdmap.get_pool_names());
+      osdmap.crush->dump_tree(nullptr,
+                              f.get(),
+                              osdmap.get_pool_names(),
+                              show_shadow);
       f->flush(rdata);
     } else {
       ostringstream ss;
-      osdmap.crush->dump_tree(&ss, nullptr, osdmap.get_pool_names());
+      osdmap.crush->dump_tree(&ss,
+                              nullptr,
+                              osdmap.get_pool_names(),
+                              show_shadow);
       rdata.append(ss.str());
     }
   } else if (prefix == "osd crush class ls") {
@@ -7500,6 +7509,69 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return true;
     }
 
+ } else if (prefix == "osd crush rm-device-class") {
+    bool stop = false;
+    vector<string> idvec;
+    cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    set<int> updated;
+
+    for (unsigned j = 0; j < idvec.size() && !stop; j++) {
+      set<int> osds;
+
+      // wildcard?
+      if (j == 0 &&
+          (idvec[0] == "any" || idvec[0] == "all" || idvec[0] == "*")) {
+        osdmap.get_all_osds(osds);
+        stop = true;
+      } else {
+        // try traditional single osd way
+        long osd = parse_osd_id(idvec[j].c_str(), &ss);
+        if (osd < 0) {
+          // ss has reason for failure
+          ss << ", unable to parse osd id:\"" << idvec[j] << "\". ";
+          err = -EINVAL;
+          goto reply;
+        }
+        osds.insert(osd);
+      }
+
+      for (auto &osd : osds) {
+        if (!osdmap.exists(osd)) {
+          ss << "osd." << osd << " does not exist. ";
+          continue;
+        }
+
+        auto class_name = newcrush.get_item_class(osd);
+        stringstream ts;
+        if (!class_name) {
+          ss << "osd." << osd << " belongs to no class, ";
+          continue;
+        }
+        // note that we do not verify if class_is_in_use here
+        // in case the device is misclassified and user wants
+        // to overridely reset...
+
+        err = newcrush.remove_device_class(g_ceph_context, osd, &ss);
+        if (err < 0) {
+          // ss has reason for failure
+          goto reply;
+        }
+        updated.insert(osd);
+      }
+    }
+
+    if (!updated.empty()) {
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+      ss << "done removing class of osd(s): " << updated;
+      getline(ss, rs);
+      wait_for_finished_proposal(op,
+        new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
+      return true;
+    }
+
   } else if (prefix == "osd crush add-bucket") {
     // os crush add-bucket <name> <type>
     string name, typestr;
@@ -7561,40 +7633,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     else
       goto update;
-  } else if (prefix == "osd crush class create") {
-    string device_class;
-    if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
-      err = -EINVAL; // no value!
-      goto reply;
-    }
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
-	 << "luminous' before using crush device classes";
-      err = -EPERM;
-      goto reply;
-    }
-    if (!_have_pending_crush() &&
-	_get_stable_crush().class_exists(device_class)) {
-      ss << "class '" << device_class << "' already exists";
-      goto reply;
-    }
-
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
-
-    if (newcrush.class_exists(name)) {
-      ss << "class '" << device_class << "' already exists";
-      goto update;
-    }
-
-    int class_id = newcrush.get_or_create_class_id(device_class);
-
-    pending_inc.crush.clear();
-    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-    ss << "created class " << device_class << " with id " << class_id
-       << " to crush map";
-    goto update;
-    
   } else if (prefix == "osd crush class rm") {
     string device_class;
     if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
@@ -7619,76 +7657,37 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     int class_id = newcrush.get_class_id(device_class);
 
-    if (newcrush.class_is_in_use(class_id)) {
+    stringstream ts;
+    if (newcrush.class_is_in_use(class_id, &ts)) {
       err = -EBUSY;
-      ss << "class '" << device_class << "' is in use";
+      ss << "class '" << device_class << "' " << ts.str();
       goto reply;
     }
 
-    err = newcrush.remove_class_name(device_class);
-    if (err < 0) {
-      ss << "class '" << device_class << "' cannot be removed '"
-	 << cpp_strerror(err) << "'";
-      goto reply;
+    set<int> osds;
+    newcrush.get_devices_by_class(device_class, &osds);
+    for (auto& p: osds) {
+      err = newcrush.remove_device_class(g_ceph_context, p, &ss);
+      if (err < 0) {
+        // ss has reason for failure
+        goto reply;
+      }
+    }
+
+    if (osds.empty()) {
+      // empty class, remove directly
+      err = newcrush.remove_class_name(device_class);
+      if (err < 0) {
+        ss << "class '" << device_class << "' cannot be removed '"
+           << cpp_strerror(err) << "'";
+        goto reply;
+      }
     }
 
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
     ss << "removed class " << device_class << " with id " << class_id
        << " from crush map";
-    goto update;
-
-  } else if (prefix == "osd crush class rename") {
-    string srcname, dstname;
-    if (!cmd_getval(g_ceph_context, cmdmap, "srcname", srcname)) {
-      err = -EINVAL;
-      goto reply;
-    }
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
-	 << "luminous' before using crush device classes";
-      err = -EPERM;
-      goto reply;
-    }
-
-    if (!cmd_getval(g_ceph_context, cmdmap, "dstname", dstname)) {
-      err = -EINVAL;
-      goto reply;
-    }
-
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
-
-    if (!newcrush.class_exists(srcname)) {
-      err = -ENOENT;
-      ss << "class '" << srcname << "' does not exist";
-      goto reply;
-    }
-
-    if (newcrush.class_exists(dstname)) {
-      err = -EEXIST;
-      ss << "class '" << dstname << "' already exists";
-      goto reply;
-    }
-
-    int class_id = newcrush.get_class_id(srcname);
-
-    if (newcrush.class_is_in_use(class_id)) {
-      err = -EBUSY;
-      ss << "class '" << srcname << "' is in use";
-      goto reply;
-    }
-
-    err = newcrush.rename_class(srcname, dstname);
-    if (err < 0) {
-      ss << "fail to rename '" << srcname << "' to '" << dstname << "':"
-         << cpp_strerror(err);
-      goto reply;
-    }
-
-    pending_inc.crush.clear();
-    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-    ss << "rename class '" << srcname << "' to '" << dstname << "'";
     goto update;
 
   } else if (prefix == "osd crush weight-set create" ||
@@ -7707,7 +7706,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
 	ss << "require_min_compat_client "
 	   << ceph_release_name(osdmap.require_min_compat_client)
-	   << " < luminous, which is required for per-pool weight-sets";
+	   << " < luminous, which is required for per-pool weight-sets. "
+           << "Try 'ceph osd set-require-min-compat-client luminous' "
+           << "before using the new interface";
 	err = -EPERM;
 	goto reply;
       }

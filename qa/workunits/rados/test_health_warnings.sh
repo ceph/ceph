@@ -55,8 +55,6 @@ test_mark_all_but_last_osds_down() {
 
 test_mark_two_osds_same_host_down_with_classes() {
     ceph osd set noup
-    ceph osd crush class create ssd
-    ceph osd crush class create hdd
     ceph osd crush set-device-class ssd osd.0 osd.2 osd.4 osd.6 osd.8
     ceph osd crush set-device-class hdd osd.1 osd.3 osd.5 osd.7 osd.9
     ceph osd down osd.0 osd.1

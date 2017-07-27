@@ -315,21 +315,6 @@ void CrushWrapper::find_roots(set<int>& roots) const
   }
 }
 
-void CrushWrapper::find_nonshadow_roots(set<int>& roots) const
-{
-  for (int i = 0; i < crush->max_buckets; i++) {
-    if (!crush->buckets[i])
-      continue;
-    crush_bucket *b = crush->buckets[i];
-    if (_search_item_exists(b->id))
-      continue;
-    const char *name = get_item_name(b->id);
-    if (name && !is_valid_crush_name(name))
-      continue;
-    roots.insert(b->id);
-  }
-}
-
 bool CrushWrapper::subtree_contains(int root, int item) const
 {
   if (root == item)
@@ -371,7 +356,9 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
     ldout(cct, 5) << "_maybe_remove_last_instance removing name for item " << item << dendl;
     name_map.erase(item);
     have_rmaps = false;
-    class_remove_item(item);
+    if (item >= 0 && !unlink_only) {
+      class_remove_item(item);
+    }
   }
   return true;
 }
@@ -400,6 +387,7 @@ int CrushWrapper::remove_root(int item, bool unused)
   }
   if (class_bucket.count(item) != 0)
     class_bucket.erase(item);
+  class_remove_item(item);
   return 0;
 }
 
@@ -951,6 +939,12 @@ int CrushWrapper::insert_item(
       ldout(cct, 5) << "insert_item max_devices now " << crush->max_devices
 		    << dendl;
     }
+    r = rebuild_roots_with_classes();
+    if (r < 0) {
+      ldout(cct, 0) << __func__ << " unable to rebuild roots with classes: "
+                    << cpp_strerror(r) << dendl;
+      return r;
+    }
     return 0;
   }
 
@@ -1315,8 +1309,7 @@ pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
     crush_bucket *b = crush->buckets[bidx];
     if (b == 0)
       continue;
-    const char *n = get_item_name(b->id);
-    if (n && !is_valid_crush_name(n))
+   if (is_shadow_item(b->id))
       continue;
     for (unsigned i = 0; i < b->size; i++)
       if (b->items[i] == id) {
@@ -1334,15 +1327,19 @@ pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
   return pair<string, string>();
 }
 
-int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
+int CrushWrapper::get_immediate_parent_id(int id,
+                                          int *parent,
+                                          parent_type_t choice) const
 {
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
     if (b == 0)
       continue;
-    const char *n = get_item_name(b->id);
-    if (n && !is_valid_crush_name(n))
+    if (choice == PARENT_NONSHADOW && is_shadow_item(b->id)) {
       continue;
+    } else if (choice == PARENT_SHADOW && !is_shadow_item(b->id)) {
+      continue;
+    }
     for (unsigned i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
 	*parent = b->id;
@@ -1364,28 +1361,47 @@ int CrushWrapper::get_parent_of_type(int item, int type) const
   return item;
 }
 
-bool CrushWrapper::class_is_in_use(int class_id)
+
+bool CrushWrapper::class_is_in_use(int class_id, ostream *ss)
 {
-  for (auto &i : class_bucket)
-    for (auto &j : i.second)
-      if (j.first == class_id)
-	return true;
-
-  for (auto &i : class_map)
-    if (i.second == class_id)
-      return true;
-
-  return false;
+  list<unsigned> rules;
+  for (unsigned i = 0; i < crush->max_rules; ++i) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j = 0; j < r->len; ++j) {
+      if (r->steps[j].op == CRUSH_RULE_TAKE) {
+        int root = r->steps[j].arg1;
+        for (auto &p : class_bucket) {
+          auto& q = p.second;
+          if (q.count(class_id) && q[class_id] == root) {
+            rules.push_back(i);
+          }
+        }
+      }
+    }
+  }
+  if (rules.empty()) {
+    return false;
+  }
+  if (ss) {
+    ostringstream os;
+    for (auto &p: rules) {
+      os << "'" << get_rule_name(p) <<"',";
+    }
+    string out(os.str());
+    out.resize(out.size() - 1); // drop last ','
+    *ss << "still referenced by crush_rule(s): " << out;
+  }
+  return true;
 }
 
 int CrushWrapper::populate_classes()
 {
   set<int> roots;
-  find_roots(roots);
+  find_nonshadow_roots(roots);
   for (auto &r : roots) {
     if (r >= 0)
-      continue;
-    if (id_has_class(r))
       continue;
     for (auto &c : class_name) {
       int clone;
@@ -1405,11 +1421,9 @@ int CrushWrapper::cleanup_classes()
 int CrushWrapper::trim_roots_with_class(bool unused)
 {
   set<int> roots;
-  find_roots(roots);
+  find_shadow_roots(roots);
   for (auto &r : roots) {
     if (r >= 0)
-      continue;
-    if (!id_has_class(r))
       continue;
     int res = remove_root(r, unused);
     if (res)
@@ -1774,12 +1788,21 @@ int CrushWrapper::update_device_class(int id,
                                       const string& name,
                                       ostream *ss)
 {
+  assert(item_exists(id));
+  auto old_class_name = get_item_class(id);
+  if (old_class_name && old_class_name != class_name) {
+    *ss << "osd." << id << " has already bound to class '" << old_class_name
+        << "', can not reset class to '" << class_name  << "'; "
+        << "use 'ceph osd crush rm-device-class <osd>' to "
+        << "remove old class first";
+    return -EBUSY;
+  }
+
   int class_id = get_or_create_class_id(class_name);
   if (id < 0) {
     *ss << name << " id " << id << " is negative";
     return -EINVAL;
   }
-  assert(item_exists(id));
 
   if (class_map.count(id) != 0 && class_map[id] == class_id) {
     *ss << name << " already set to class " << class_name;
@@ -1792,6 +1815,43 @@ int CrushWrapper::update_device_class(int id,
   if (r < 0)
     return r;
   return 1;
+}
+
+int CrushWrapper::remove_device_class(CephContext *cct, int id, ostream *ss)
+{
+  assert(ss);
+  const char *name = get_item_name(id);
+  if (!name) {
+    *ss << "osd." << id << " does not have a name";
+    return -ENOENT;
+  }
+
+  const char *class_name = get_item_class(id);
+  if (!class_name) {
+    *ss << "osd." << id << " has not been bound to a specific class yet";
+    return 0;
+  }
+  class_remove_item(id);
+
+  // note that there is no need to remove ourselves from shadow parent
+  // and reweight because we are going to destroy all shadow trees
+  // rebuild them all (if necessary) later.
+
+  // see if there is any osds that still reference this class
+  set<int> devices;
+  get_devices_by_class(class_name, &devices);
+  if (devices.empty()) {
+    // class has no more devices
+    remove_class_name(class_name);
+  }
+
+  int r = rebuild_roots_with_classes();
+  if (r < 0) {
+    *ss << "unable to rebuild roots with class '" << class_name << "' "
+        << "of osd." << id << ": " << cpp_strerror(r);
+    return r;
+  }
+  return 0;
 }
 
 int CrushWrapper::device_class_clone(int original_id, int device_class, int *clone)
@@ -2587,6 +2647,11 @@ public:
   explicit CrushTreePlainDumper(const CrushWrapper *crush,
 				const CrushTreeDumper::name_map_t& wsnames)
     : Parent(crush, wsnames) {}
+  explicit CrushTreePlainDumper(const CrushWrapper *crush,
+                                const CrushTreeDumper::name_map_t& wsnames,
+                                bool show_shadow)
+    : Parent(crush, wsnames, show_shadow) {}
+
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
@@ -2656,6 +2721,12 @@ public:
     const CrushTreeDumper::name_map_t& wsnames)
     : Parent(crush, wsnames) {}
 
+  explicit CrushTreeFormattingDumper(
+    const CrushWrapper *crush,
+    const CrushTreeDumper::name_map_t& wsnames,
+    bool show_shadow)
+    : Parent(crush, wsnames, show_shadow) {}
+
   void dump(Formatter *f) {
     f->open_array_section("nodes");
     Parent::dump(f);
@@ -2667,16 +2738,18 @@ public:
 
 
 void CrushWrapper::dump_tree(
-  ostream *out, Formatter *f,
-  const CrushTreeDumper::name_map_t& weight_set_names) const
+  ostream *out,
+  Formatter *f,
+  const CrushTreeDumper::name_map_t& weight_set_names,
+  bool show_shadow) const
 {
   if (out) {
     TextTable tbl;
-    CrushTreePlainDumper(this, weight_set_names).dump(&tbl);
+    CrushTreePlainDumper(this, weight_set_names, show_shadow).dump(&tbl);
     *out << tbl;
   }
   if (f) {
-    CrushTreeFormattingDumper(this, weight_set_names).dump(f);
+    CrushTreeFormattingDumper(this, weight_set_names, show_shadow).dump(f);
   }
 }
 
