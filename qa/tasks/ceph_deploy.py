@@ -28,7 +28,8 @@ def download_ceph_deploy(ctx, config):
     will use that instead. The `bootstrap` script is ran, with the argument
     obtained from `python_version`, if specified.
     """
-    ceph_admin = ctx.cluster.only(teuthology.get_first_mon(ctx, config))
+    # use mon.a for ceph_admin
+    (ceph_admin,) = ctx.cluster.only('mon.a').remotes.iterkeys()
 
     try:
         py_ver = str(config['python_version'])
@@ -214,8 +215,8 @@ def build_ceph_cluster(ctx, config):
     # Expect to find ceph_admin on the first mon by ID, same place that the download task
     # puts it.  Remember this here, because subsequently IDs will change from those in
     # the test config to those that ceph-deploy invents.
-    (ceph_admin,) = ctx.cluster.only(
-        teuthology.get_first_mon(ctx, config)).remotes.iterkeys()
+
+    (ceph_admin,) = ctx.cluster.only('mon.a').remotes.iterkeys()
 
     def execute_ceph_deploy(cmd):
         """Remotely execute a ceph_deploy command"""
@@ -714,8 +715,7 @@ def upgrade(ctx, config):
         # default to master
         ceph_branch = '--dev=master'
     # get the node used for initial deployment which is mon.a
-    (ceph_admin,) = ctx.cluster.only(
-        teuthology.get_first_mon(ctx, config)).remotes.iterkeys()
+    (ceph_admin,) = ctx.cluster.only('mon.a').remotes.iterkeys()
     testdir = teuthology.get_testdir(ctx)
     cmd = './ceph-deploy install ' + ceph_branch
     for role in roles:
