@@ -44,7 +44,7 @@ public:
 
   MOSDPGRecoveryDelete()
     : MOSDFastDispatchOp(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
-			COMPAT_VERSION) {}
+			 COMPAT_VERSION), cost(0) {}
 
   MOSDPGRecoveryDelete(pg_shard_t from, spg_t pgid, epoch_t map_epoch,
 		       epoch_t min_epoch)
@@ -53,7 +53,8 @@ public:
       from(from),
       pgid(pgid),
       map_epoch(map_epoch),
-      min_epoch(min_epoch) {}
+      min_epoch(min_epoch),
+      cost(0) {}
 
 private:
   ~MOSDPGRecoveryDelete() {}
