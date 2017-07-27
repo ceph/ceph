@@ -181,7 +181,7 @@ Commands
   associated snapshots within the specified pool.  It can also be used against
   individual images and snapshots.
 
-  If the RBD fast-diff feature isn't enabled on images, this operation will
+  If the RBD fast-diff feature is not enabled on images, this operation will
   require querying the OSDs for every potential object within the image.
 
 :command:`info` *image-spec* | *snap-spec*

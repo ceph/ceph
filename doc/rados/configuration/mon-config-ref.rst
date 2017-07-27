@@ -144,10 +144,10 @@ state of the Ceph Storage Cluster.
 
 If Ceph Monitors discovered each other through the Ceph configuration file
 instead of through the monmap, it would introduce additional risks because the
-Ceph configuration files aren't updated and distributed automatically. Ceph
+Ceph configuration files are not updated and distributed automatically. Ceph
 Monitors might inadvertently use an older Ceph configuration file, fail to
 recognize a Ceph Monitor, fall out of a quorum, or develop a situation where
-`Paxos`_ isn't able to determine the current state of the system accurately.
+`Paxos`_ is not able to determine the current state of the system accurately.
 
 
 .. index:: Ceph Monitor; bootstrapping monitors
@@ -877,7 +877,7 @@ See `Monitor Store Synchronization`_ for details.
 .. tip:: You SHOULD install NTP on your Ceph monitor hosts to 
          ensure that the monitor cluster operates with synchronized clocks.
 
-Clock drift may still be noticeable with NTP even though the discrepancy isn't
+Clock drift may still be noticeable with NTP even though the discrepancy is not
 yet harmful. Ceph's clock drift / clock skew warnings may get triggered even 
 though NTP maintains a reasonable level of synchronization. Increasing your 
 clock drift may be tolerable under such circumstances; however, a number of 

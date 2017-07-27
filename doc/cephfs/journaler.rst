@@ -35,7 +35,7 @@
 
 ``journaler batch max``
 
-:Description: Maximum bytes we'll delay flushing. 
+:Description: Maximum bytes we will delay flushing. 
 :Type: 64-bit Unsigned Integer 
 :Required: No
 :Default: ``0``

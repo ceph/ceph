@@ -172,7 +172,7 @@ How to troubleshoot this?
 
   Second, make sure you are able to connect to ``mon.a``'s server from the
   other monitors' servers. Check the ports as well. Check ``iptables`` on
-  all your monitor nodes and make sure you're not dropping/rejecting
+  all your monitor nodes and make sure you are not dropping/rejecting
   connections.
 
   If this initial troubleshooting doesn't solve your problems, then it's
@@ -204,7 +204,7 @@ What if the state is ``probing``?
 
   If you have a quorum, however, the monitor should be able to find the
   remaining monitors pretty fast, as long as they can be reached. If your
-  monitor is stuck probing and you've gone through with all the communication
+  monitor is stuck probing and you have gone through with all the communication
   troubleshooting, then there is a fair chance that the monitor is trying
   to reach the other monitors on a wrong address. ``mon_status`` outputs the
   ``monmap`` known to the monitor: check if the other monitor's locations
@@ -224,7 +224,7 @@ What if state is ``electing``?
   `Clock Skews`_ for more infos on that. If all your clocks are properly
   synchronized, it is best if you prepare some logs and reach out to the
   community. This is not a state that is likely to persist and aside from
-  (*really*) old bugs there isn't an obvious reason besides clock skews on
+  (*really*) old bugs there is not an obvious reason besides clock skews on
   why this would happen.
 
 What if state is ``synchronizing``?
@@ -246,7 +246,7 @@ What if state is ``synchronizing``?
 What if state is ``leader`` or ``peon``?
 
   This should not happen. There is a chance this might happen however, and
-  it has a lot to do with clock skews -- see `Clock Skews`_. If you're not
+  it has a lot to do with clock skews -- see `Clock Skews`_. If you are not
   suffering from clock skews, then please prepare your logs (see
   `Preparing your logs`_) and reach out to us.
 
@@ -300,12 +300,12 @@ Inject a monmap into the monitor
       $ ceph mon getmap -o /tmp/monmap
 
   2. No quorum? Grab the monmap directly from another monitor (this
-     assumes the monitor you're grabbing the monmap from has id ID-FOO
+     assumes the monitor you are grabbing the monmap from has id ID-FOO
      and has been stopped)::
 
       $ ceph-mon -i ID-FOO --extract-monmap /tmp/monmap
 
-  3. Stop the monitor you're going to inject the monmap into.
+  3. Stop the monitor you are going to inject the monmap into.
 
   4. Inject the monmap::
 

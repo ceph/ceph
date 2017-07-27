@@ -60,7 +60,7 @@ Note:
 
 The crush location for an OSD is normally expressed via the ``crush location``
 config option being set in the ``ceph.conf`` file.  Each time the OSD starts,
-it verifies it is in the correct location in the CRUSH map and, if it isn't,
+it verifies it is in the correct location in the CRUSH map and, if it is not,
 it moved itself.  To disable this automatic CRUSH map management, add the
 following to your configuration file in the ``[osd]`` section::
 
@@ -79,7 +79,7 @@ location is based on, in order of preference:
 #. A default of ``root=default host=HOSTNAME`` where the hostname is
    generated with the ``hostname -s`` command.
 
-This isn't useful by itself, as the OSD itself has the exact same
+This is not useful by itself, as the OSD itself has the exact same
 behavior.  However, the script can be modified to provide additional
 location fields (for example, the rack or datacenter), and then the
 hook enabled via the config option::
@@ -901,7 +901,7 @@ Primary Affinity
 
 When a Ceph Client reads or writes data, it always contacts the primary OSD in
 the acting set. For set ``[2, 3, 4]``, ``osd.2`` is the primary. Sometimes an
-OSD isn't well suited to act as a primary compared to other OSDs (e.g., it has
+OSD is not well suited to act as a primary compared to other OSDs (e.g., it has
 a slow disk or a slow controller). To prevent performance bottlenecks
 (especially on read operations) while maximizing utilization of your hardware,
 you can set a Ceph OSD's primary affinity so that CRUSH is less likely to use
