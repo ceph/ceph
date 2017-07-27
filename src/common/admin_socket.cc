@@ -443,7 +443,7 @@ int AdminSocket::register_command(std::string command, std::string cmddesc, Admi
 {
   int ret;
   m_lock.Lock();
-  if (m_hooks.count(command)) {
+  if (m_hooks.find(command) != m_hooks.end()) {
     ldout(m_cct, 5) << "register_command " << command << " hook " << hook << " EEXIST" << dendl;
     ret = -EEXIST;
   } else {
