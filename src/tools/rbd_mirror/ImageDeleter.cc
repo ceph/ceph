@@ -206,7 +206,8 @@ void ImageDeleter<I>::run() {
 template <typename I>
 void ImageDeleter<I>::schedule_image_delete(RadosRef local_rados,
                                             int64_t local_pool_id,
-                                            const std::string& global_image_id) {
+                                            const std::string& global_image_id,
+                                            bool ignore_orphaned) {
   dout(20) << "enter" << dendl;
 
   Mutex::Locker locker(m_delete_lock);
@@ -215,12 +216,15 @@ void ImageDeleter<I>::schedule_image_delete(RadosRef local_rados,
   if (del_info != nullptr) {
     dout(20) << "image " << global_image_id << " "
              << "was already scheduled for deletion" << dendl;
+    if (ignore_orphaned) {
+      (*del_info)->ignore_orphaned = true;
+    }
     return;
   }
 
   m_delete_queue.push_front(
     unique_ptr<DeleteInfo>(new DeleteInfo(local_rados, local_pool_id,
-                                          global_image_id)));
+                                          global_image_id, ignore_orphaned)));
   m_delete_queue_cond.Signal();
 }
 
@@ -304,25 +308,30 @@ bool ImageDeleter<I>::process_image_delete() {
     return true;
   }
 
-  bool is_primary = false;
+  std::string mirror_uuid;
   C_SaferCond tag_owner_ctx;
-  Journal<>::is_tag_owner(ioctx, local_image_id, &is_primary,
-                          m_work_queue, &tag_owner_ctx);
+  Journal<>::get_tag_owner(ioctx, local_image_id, &mirror_uuid, m_work_queue,
+                           &tag_owner_ctx);
   r = tag_owner_ctx.wait();
   if (r < 0 && r != -ENOENT) {
     derr << "error retrieving image primary info for image " << global_image_id
          << ": " << cpp_strerror(r) << dendl;
     enqueue_failed_delete(r);
     return true;
-  }
-  if (is_primary) {
-    dout(10) << "image " << global_image_id << " is local primary" << dendl;
-    complete_active_delete(-EISPRM);
-    return true;
+  } else if (r != -ENOENT) {
+    if (mirror_uuid == Journal<>::LOCAL_MIRROR_UUID) {
+      dout(10) << "image " << global_image_id << " is local primary" << dendl;
+      complete_active_delete(-EISPRM);
+      return true;
+    } else if (mirror_uuid == Journal<>::ORPHAN_MIRROR_UUID &&
+               !m_active_delete->ignore_orphaned) {
+      dout(10) << "image " << global_image_id << " is orphaned" << dendl;
+      complete_active_delete(-EISPRM);
+      return true;
+    }
   }
 
   dout(20) << "local image is not the primary" << dendl;
-
   bool has_snapshots;
   r = image_has_snapshots_and_children(&ioctx, local_image_id, &has_snapshots);
   if (r < 0) {

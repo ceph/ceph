@@ -421,13 +421,14 @@ void CloneRequest<I>::handle_get_mirror_mode(int r) {
   ldout(m_cct, 20) << this << " " << __func__ << " r=" << r << dendl;
 
   if (r == 0) {
-    lderr(m_cct) << "failed to retrieve mirror mode: " << cpp_strerror(r)
-	       << dendl;
     bufferlist::iterator it = m_out_bl.begin();
     r = cls_client::mirror_mode_get_finish(&it, &m_mirror_mode);
   }
 
   if (r < 0 && r != -ENOENT) {
+    lderr(m_cct) << "failed to retrieve mirror mode: " << cpp_strerror(r)
+                 << dendl;
+
     m_r_saved = r;
     send_remove_child();
   } else {

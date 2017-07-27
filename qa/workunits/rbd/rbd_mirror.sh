@@ -117,8 +117,8 @@ start_mirror ${CLUSTER2}
 # demote and promote same cluster
 demote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
-wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
@@ -130,15 +130,16 @@ compare_images ${POOL} ${image}
 # failover (unmodified)
 demote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
-wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER2} ${POOL} ${image}
 
 # failback (unmodified)
 demote_image ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
@@ -149,8 +150,8 @@ compare_images ${POOL} ${image}
 # failover
 demote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
-wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER2} ${POOL} ${image}
 write_image ${CLUSTER1} ${POOL} ${image} 100
@@ -162,7 +163,8 @@ compare_images ${POOL} ${image}
 # failback
 demote_image ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
@@ -378,7 +380,7 @@ image=split-brain
 create_image ${CLUSTER2} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 demote_image ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER1} ${POOL} ${image} 10
 demote_image ${CLUSTER1} ${POOL} ${image}
