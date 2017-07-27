@@ -2565,9 +2565,39 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
-  .set_description(""),
+  Option("rocksdb_bloom_bits_per_key", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(20)
+  .set_description("Number of bits per key to use for RocksDB's bloom filters.")
+  .set_long_description("RocksDB bloom filters can be used to quickly answer the question of whether or not a key may exist or definitely does not exist in a given RocksDB SST file without having to read all keys into memory.  Using a higher bit value decreases the likelihood of false positives at the expense of additional disk space and memory consumption when the filter is loaded into RAM.  The current default value of 20 was found to provide significant performance gains when getattr calls are made (such as during new object creation in bluestore) without significant memory overhead or cache pollution when combined with rocksdb partitioned index filters.  See: https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters for more information."),
+
+  Option("rocksdb_cache_index_and_filter_blocks", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(true)
+  .set_description("Whether to cache indices and filters in block cache")
+  .set_long_description("By default RocksDB will load an SST file's index and bloom filters into memory when it is opened and remove them from memory when an SST file is closed.  Thus, memory consumption by indices and bloom filters is directly tied to the number of concurrent SST files allowed to be kept open.  This option instead stores cached indicies and filters in the block cache where they directly compete with other cached data.  By default we set this option to true to better account for and bound rocksdb memory usage and keep filters in memory even when an SST file is closed."),
+
+  Option("rocksdb_cache_index_and_filter_blocks_with_high_priority", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(true)
+  .set_description("Whether to cache indices and filters in the block cache with high priority")
+  .set_long_description("A downside of setting rocksdb_cache_index_and_filter_blocks to true is that regular data can push indices and filters out of memory.  Setting this option to true means they are cached with higher priority than other data and should typically stay in the block cache."),
+
+  Option("rocksdb_pin_l0_filter_and_index_blocks_in_cache", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(true)
+  .set_description("Whether to pin Level 0 indices and bloom filters in the block cache")
+  .set_long_description("A downside of setting rocksdb_cache_index_and_filter_blocks to true is that regular data can push indices and filters out of memory.  Setting this option to true means that level 0 SST files will always have their indices and filters pinned in the block cache."),
+
+  Option("rocksdb_index_type", Option::TYPE_STR, Option::LEVEL_DEV)
+  .set_default("binary_search")
+  .set_description("Type of index for SST files: binary_search, hash_search, two_level")
+  .set_long_description("This option controls the table index type.  binary_search is a space efficient index block that is optimized for block-search-based index. hash_search may improve prefix lookup performance at the expense of higher disk and memory usage and potentially slower compactions.  two_level is an experimental index type that uses two binary search indexes and works in conjunction with partition filters.  See: http://rocksdb.org/blog/2017/05/12/partitioned-index-filter.html"),
+
+  Option("rocksdb_partition_filters", Option::TYPE_BOOL, Option::LEVEL_DEV)
+  .set_default(false)
+  .set_description("(experimental) partition SST index/filters into smaller blocks")
+  .set_long_description("This is an experimental option for rocksdb that works in conjunction with two_level indices to avoid having to keep the entire filter/index in cache when cache_index_and_filter_blocks is true.  The idea is to keep a much smaller top-level index in heap/cache and then opportunistically cache the lower level indices.  See: https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters"),
+
+  Option("rocksdb_metadata_block_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+  .set_default(4096)
+  .set_description("The block size for index partitions. (0 = rocksdb default)"),
 
   Option("mon_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("write_buffer_size=33554432,compression=kNoCompression")
@@ -3209,6 +3239,10 @@ std::vector<Option> global_options = {
   .set_default(0)
   .set_description(""),
 
+  Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("")
+  .set_description(""),
+
   Option("kstore_max_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512)
   .set_description(""),
@@ -3223,10 +3257,6 @@ std::vector<Option> global_options = {
 
   Option("kstore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("compression=kNoCompression")
-  .set_description(""),
-
-  Option("kstore_rocksdb_bloom_bits_per_key", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(0)
   .set_description(""),
 
   Option("kstore_fsck_on_mount", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
