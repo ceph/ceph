@@ -1294,12 +1294,12 @@ public:
     return result;
   }
 
-  bool have_choose_args(uint64_t choose_args_index) const {
+  bool have_choose_args(int64_t choose_args_index) const {
     return choose_args.count(choose_args_index);
   }
 
   crush_choose_arg_map choose_args_get_with_fallback(
-    uint64_t choose_args_index) const {
+    int64_t choose_args_index) const {
     auto i = choose_args.find(choose_args_index);
     if (i == choose_args.end()) {
       i = choose_args.find(DEFAULT_CHOOSE_ARGS);
@@ -1313,7 +1313,7 @@ public:
       return i->second;
     }
   }
-  crush_choose_arg_map choose_args_get(uint64_t choose_args_index) const {
+  crush_choose_arg_map choose_args_get(int64_t choose_args_index) const {
     auto i = choose_args.find(choose_args_index);
     if (i == choose_args.end()) {
       crush_choose_arg_map arg_map;
@@ -1340,7 +1340,7 @@ public:
     free(arg_map.args);
   }
 
-  void create_choose_args(int id, int positions) {
+  void create_choose_args(int64_t id, int positions) {
     if (choose_args.count(id))
       return;
     assert(positions);
@@ -1373,7 +1373,7 @@ public:
     }
   }
 
-  void rm_choose_args(int id) {
+  void rm_choose_args(int64_t id) {
     auto p = choose_args.find(id);
     if (p != choose_args.end()) {
       destroy_choose_args(p->second);
