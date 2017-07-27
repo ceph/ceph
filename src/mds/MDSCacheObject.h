@@ -286,14 +286,12 @@ protected:
       put(PIN_REPLICATED);
     replica_map.clear();
   }
-  compact_map<mds_rank_t,unsigned>::iterator replicas_begin() { return replica_map.begin(); }
-  compact_map<mds_rank_t,unsigned>::iterator replicas_end() { return replica_map.end(); }
+  compact_map<mds_rank_t,unsigned>& get_replicas() { return replica_map; }
   const compact_map<mds_rank_t,unsigned>& get_replicas() const { return replica_map; }
   void list_replicas(std::set<mds_rank_t>& ls) const {
-    for (compact_map<mds_rank_t,unsigned>::const_iterator p = replica_map.begin();
-	 p != replica_map.end();
-	 ++p)
-      ls.insert(p->first);
+    for (const auto &p : replica_map) {
+      ls.insert(p.first);
+    }
   }
 
   unsigned get_replica_nonce() const { return replica_nonce; }
