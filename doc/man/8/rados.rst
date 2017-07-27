@@ -159,12 +159,12 @@ Pool specific commands
 
 :command:`getomapval` [ --omap-key-file *file* ] *name* *key* [ *out-file* ]
   Dump the hexadecimal value of key in the object map of object name.
-  If the optional *out-file* argument isn't provided, the value will be
+  If the optional *out-file* argument is not provided, the value will be
   written to standard output.
 
 :command:`setomapval` [ --omap-key-file *file* ] *name* *key* [ *value* ]
   Set the value of key in the object map of object name. If the optional
-  *value* argument isn't provided, the value will be read from standard
+  *value* argument is not provided, the value will be read from standard
   input.
 
 :command:`rmomapkey` [ --omap-key-file *file* ] *name* *key*

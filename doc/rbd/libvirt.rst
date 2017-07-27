@@ -47,7 +47,7 @@ You can also use Ceph block devices with ``libvirt``, ``virsh`` and the
 
 
 To create VMs that use Ceph block devices, use the procedures in the following
-sections. In the exemplary embodiment, we've used ``libvirt-pool`` for the pool
+sections. In the exemplary embodiment, we have used ``libvirt-pool`` for the pool
 name, ``client.libvirt`` for the user name, and ``new-libvirt-image`` for  the
 image name. You may use any value you like, but ensure you replace those values
 when executing commands in the subsequent procedures.

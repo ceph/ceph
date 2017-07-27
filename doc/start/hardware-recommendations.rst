@@ -111,7 +111,7 @@ SSDs often cost more than 10x as much per gigabyte when compared to a hard disk
 drive, but SSDs often exhibit access times that are at least 100x faster than a
 hard disk drive.
 
-SSDs do not have moving mechanical parts so they aren't necessarily subject to
+SSDs do not have moving mechanical parts so they are not necessarily subject to
 the same types of limitations as hard disk drives. SSDs do have significant
 limitations though. When evaluating SSDs, it is important to consider the
 performance of sequential reads and writes. An SSD that has 400MB/s sequential
