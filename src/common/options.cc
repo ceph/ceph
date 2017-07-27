@@ -2252,12 +2252,25 @@ std::vector<Option> global_options = {
   .set_description(""),
 
   Option("osd_min_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(3000)
-  .set_description(""),
+  .set_default(1500)
+  .set_description("minimum number of entries to maintain in the PG log")
+  .add_service("osd")
+  .add_see_also("osd_max_pg_log_entries")
+  .add_see_also("osd_pg_log_dups_tracked"),
 
   Option("osd_max_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(10000)
-  .set_description(""),
+  .set_description("maximum number of entries to maintain in the PG log when degraded before we trim")
+  .add_service("osd")
+  .add_see_also("osd_min_pg_log_entries")
+  .add_see_also("osd_pg_log_dups_tracked"),
+
+  Option("osd_pg_log_dups_tracked", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(3000)
+  .set_description("how many versions back to track in order to detect duplicate ops; this is combined with both the regular pg log entries and additional minimal dup detection entries")
+  .add_service("osd")
+  .add_see_also("osd_min_pg_log_entries")
+  .add_see_also("osd_max_pg_log_entries"),
 
   Option("osd_force_recovery_pg_log_entries_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(1.3)
