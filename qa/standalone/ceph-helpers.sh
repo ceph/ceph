@@ -1368,6 +1368,7 @@ function wait_for_clean() {
         # Comparing get_num_active_clean & get_num_pgs is used to determine
         # if the cluster is clean. That's almost an inline of is_clean() to
         # get more performance by avoiding multiple calls of get_num_active_clean.
+	ceph pg stat # for benefit of someone reading the log
         cur_active_clean=$(get_num_active_clean)
         test $cur_active_clean = $(get_num_pgs) && break
         if test $cur_active_clean != $num_active_clean ; then
