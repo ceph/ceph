@@ -3712,22 +3712,22 @@ int PrimaryLogPG::trim_object(
   } else {
     auto p = snapset.clone_snaps.find(coid.snap);
     if (p == snapset.clone_snaps.end()) {
-      osd->clog->error() << __func__ << " No clone_snaps in snapset " << snapset
-			 << " for " << coid << "\n";
+      osd->clog->error() << "No clone_snaps in snapset " << snapset
+			 << " for object " << coid << "\n";
       return -ENOENT;
     }
     old_snaps.insert(snapset.clone_snaps[coid.snap].begin(),
 		     snapset.clone_snaps[coid.snap].end());
   }
   if (old_snaps.empty()) {
-    osd->clog->error() << __func__ << " No object info snaps for " << coid;
+    osd->clog->error() << "No object info snaps for object " << coid;
     return -ENOENT;
   }
 
   dout(10) << coid << " old_snaps " << old_snaps
 	   << " old snapset " << snapset << dendl;
   if (snapset.seq == 0) {
-    osd->clog->error() << __func__ << " No snapset.seq for " << coid;
+    osd->clog->error() << "No snapset.seq for object " << coid;
     return -ENOENT;
   }
 
@@ -3744,7 +3744,7 @@ int PrimaryLogPG::trim_object(
   if (new_snaps.empty()) {
     p = std::find(snapset.clones.begin(), snapset.clones.end(), coid.snap);
     if (p == snapset.clones.end()) {
-      osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones";
+      osd->clog->error() << "Snap " << coid.snap << " not in clones";
       return -ENOENT;
     }
   }
@@ -11379,15 +11379,16 @@ bool PrimaryLogPG::start_recovery_ops(
 
   if (missing.num_missing() > 0) {
     // this shouldn't happen!
-    osd->clog->error() << info.pgid << " recovery ending with " << missing.num_missing()
-		       << ": " << missing.get_items();
+    osd->clog->error() << info.pgid << " Unexpected Error: recovery ending with "
+		       << missing.num_missing() << ": " << missing.get_items();
     return work_in_progress;
   }
 
   if (needs_recovery()) {
     // this shouldn't happen!
     // We already checked num_missing() so we must have missing replicas
-    osd->clog->error() << info.pgid << " recovery ending with missing replicas";
+    osd->clog->error() << info.pgid 
+                       << " Unexpected Error: recovery ending with missing replicas";
     return work_in_progress;
   }
 
@@ -13623,7 +13624,8 @@ unsigned PrimaryLogPG::process_clones_to(const boost::optional<hobject_t> &head,
     if (!allow_incomplete_clones) {
       next_clone.snap = **curclone;
       clog->error() << mode << " " << pgid << " " << head.get()
-			 << " expected clone " << next_clone;
+			 << " expected clone " << next_clone << " " << missing
+                         << " missing";
       ++scrubber.shallow_errors;
       e.set_clone_missing(next_clone.snap);
     }
@@ -14002,7 +14004,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
     ObjectContextRef obc = get_object_context(p->first, false);
     if (!obc) {
       osd->clog->error() << info.pgid << " " << mode
-			 << " cannot get object context for "
+			 << " cannot get object context for object "
 			 << p->first;
       continue;
     } else if (obc->obs.oi.soid != p->first) {
@@ -14059,7 +14061,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
     ObjectContextRef obc = get_object_context(p.first, true);
     if (!obc) {
       osd->clog->error() << info.pgid << " " << mode
-			 << " cannot get object context for "
+			 << " cannot get object context for object "
 			 << p.first;
       continue;
     } else if (obc->obs.oi.soid != p.first) {

@@ -275,7 +275,7 @@ def task(ctx, config):
           - 'scrub [0-9]+ errors'
           - 'size 1 != size'
           - 'attr name mismatch'
-          - 'Regular scrub request, losing deep-scrub details'
+          - 'Regular scrub request, deep-scrub details will be lost'
         conf:
           osd:
             filestore debug inject read err: true
