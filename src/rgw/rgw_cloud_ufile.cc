@@ -4,6 +4,7 @@
 #include "rgw_rados.h"
 #include "common/armor.h"
 #include "common/ceph_crypto.h"
+#include "common/ceph_json.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -16,6 +17,7 @@ class RGWRESTUfileRequest : public RGWRESTSimpleRequest {
   uint64_t pos;
   std::list<bufferptr>::const_iterator cur_it;
   std::list<bufferptr>::const_iterator end_it;
+
 protected:
   RGWGetDataCB *cb;
   RGWHTTPManager http_manager;
@@ -43,6 +45,11 @@ public:
   int put_obj(const std::string& bucket, const string& obj, bufferlist* bl, uint64_t obj_size);
   int rm_obj(const std::string& bucket, const string& obj);
   int create_bucket(const std::string& bucket);
+
+  int init_upload_multipart(const std::string& bucket, const std::string& key, std::string& upload_id, uint64_t& block_size, int32_t& retcode);
+  int upload_multipart(const std::string& bucket, const std::string& key, const std::string& uplaod_id, uint64_t seq, bufferlist& bl, uint64_t obj_size, std::string& etag);
+  int finish_upload_multipart(const std::string& bucket, const std::string& key, const std::string& upload_id, const std::string& etag);
+  int abort_upload_multipart(const std::string& bucket, const std::string& key, const std::string& upload_id); 
 };
 
 RGWRESTUfileRequest::~RGWRESTUfileRequest() {
@@ -129,6 +136,149 @@ int RGWRESTUfileRequest::get_ufile_header_digest(const std::string& auth_hdr, co
   return 0;
 }
 
+int RGWRESTUfileRequest::init_upload_multipart(const std::string& bucket, const std::string& obj, 
+                                     std::string& upload_id, uint64_t& block_size, int32_t& retcode) {
+  std::string new_url = "http://" + bucket + "." + cloud_info.domain_name + "/" + obj + "?uploads";
+  std::string string2sign;
+  std::string sign;
+  std::string auth;
+  std::string content_type = "application/octet-stream";
+  create_ufile_canonical_header("POST", bucket, obj,content_type, string2sign);
+  get_ufile_header_digest(string2sign ,cloud_info.private_key, sign);
+  auth = "UCloud ";
+  auth.append(cloud_info.public_key);
+  auth.append(":");
+  auth.append(sign);
+
+  headers.push_back(pair<std::string, string>("Authorization", auth));
+  headers.push_back(pair<std::string, string>("Content-Type", content_type));
+  retcode = 0;
+
+  int r = http_manager.add_request(this, "POST", new_url.c_str());
+  if (r < 0)
+    return r;
+
+  r = complete();
+  auto& buflist = get_response();
+  string resp(buflist.c_str(), buflist.length());
+  if (r < 0) {
+    std::string error_code;
+    JSONParser json;
+    bool ret = json.parse(resp.c_str(), resp.length());
+    if (ret) {
+      if (json.get_data("RetCode", &error_code))
+        retcode = std::stoi(error_code);
+    }
+    return r;
+  }
+
+  JSONParser json;
+  json.parse(resp.c_str(), resp.length());
+  if (!json.get_data("UploadId", &upload_id)) {
+    return -EINVAL;
+  }
+  std::string blk_size;
+  if (!json.get_data("BlkSize", &blk_size)) {
+    return -EINVAL;
+  }
+  block_size = std::stoll(blk_size);
+  return r;
+}
+
+int RGWRESTUfileRequest::upload_multipart(const std::string& bucket, const std::string& obj, 
+              const std::string& upload_id, uint64_t seq, bufferlist& bl, uint64_t obj_size, std::string& etag) {
+  std::string new_url = "http://" + bucket + "." + cloud_info.domain_name + "/" + obj + 
+                        "?uploadId=" + upload_id + "&partNumber="+ std::to_string(seq);
+  std::string string2sign;
+  std::string sign;
+  std::string auth;
+  std::string content_type = "application/octet-stream";
+  create_ufile_canonical_header("PUT", bucket, obj,content_type, string2sign);
+  get_ufile_header_digest(string2sign ,cloud_info.private_key, sign);
+  auth = "UCloud ";
+  auth.append(cloud_info.public_key);
+  auth.append(":");
+  auth.append(sign);
+
+  headers.push_back(pair<std::string, string>("Authorization", auth));
+  headers.push_back(pair<std::string, string>("Content-Type", content_type));
+  
+  set_send_length(obj_size);
+  int r = http_manager.add_request(this, "PUT", new_url.c_str());
+  if (r < 0)
+    return r;
+  
+  add_output_data(bl, obj_size);
+
+  r = complete();
+  if (r < 0)
+    return r;
+
+  auto& headers = get_out_headers();
+  auto it = headers.find("ETAG");
+  if (it != headers.end()) {
+    etag = it->second;
+  }else {
+    r = -EINVAL;
+  }
+  return r;
+}
+
+int RGWRESTUfileRequest::finish_upload_multipart(const std::string& bucket, const std::string& obj, const std::string& upload_id, const std::string& etag) {
+  std::string new_url = "http://" + bucket + "." + cloud_info.domain_name + "/" + obj +
+                        "?uploadId=" + upload_id;
+  std::string string2sign;
+  std::string sign;
+  std::string auth;
+  std::string content_type = "application/octet-stream";
+  create_ufile_canonical_header("POST", bucket, obj,content_type, string2sign);
+  get_ufile_header_digest(string2sign ,cloud_info.private_key, sign);
+  auth = "UCloud ";
+  auth.append(cloud_info.public_key);
+  auth.append(":");
+  auth.append(sign);
+
+  headers.push_back(pair<std::string, string>("Authorization", auth));
+  headers.push_back(pair<std::string, string>("Content-Type", content_type));
+
+  int r = http_manager.add_request(this, "POST", new_url.c_str());
+  if (r < 0)
+    return r;
+ 
+  bufferptr bp(etag.c_str(), etag.length());
+  bufferlist data;
+  data.push_back(bp);
+  add_output_data(data, etag.length());
+
+  r = complete();
+  return r;
+}
+
+int RGWRESTUfileRequest::abort_upload_multipart(const std::string& bucket, const std::string& obj, const std::string& upload_id) {
+  std::string new_url = "http://" + bucket + "." + cloud_info.domain_name + "/" + obj +
+                        "?uploadId=" + upload_id;
+  std::string string2sign;
+  std::string sign;
+  std::string auth;
+  std::string content_type = "application/octet-stream";
+  create_ufile_canonical_header("DELETE", bucket, obj,content_type, string2sign);
+  get_ufile_header_digest(string2sign ,cloud_info.private_key, sign);
+  auth = "UCloud ";
+  auth.append(cloud_info.public_key);
+  auth.append(":");
+  auth.append(sign);
+
+  headers.push_back(pair<std::string, string>("Authorization", auth));
+  headers.push_back(pair<std::string, string>("Content-Type", content_type));
+
+  int r = http_manager.add_request(this, "DELETE", new_url.c_str());
+  if (r < 0)
+    return r;
+
+  r = complete();
+  return r;
+}
+
 int RGWRESTUfileRequest::put_obj(const std::string& bucket, const string& obj, bufferlist* bl, uint64_t obj_size) {
   
   std::string new_url = "http://" + bucket + "." + cloud_info.domain_name + "/" + obj;
@@ -158,8 +308,10 @@ int RGWRESTUfileRequest::put_obj(const std::string& bucket, const string& obj, b
   add_output_data(*bl, obj_size);
   
   r = complete();
+  if (r < 0) {
+    dout(0)<<"ufile request put_obj complete ret:"<<r<<dendl;
+  }
   reset();
-  dout(0)<<"ufile request put_obj complete ret:"<<r<<dendl;
   return r;
 }
     
@@ -236,25 +388,115 @@ int RGWRESTUfileRequest::create_bucket(const std::string& bucket) {
   return r;
 }
 
-int RGWCloudUfile::get_ufile_retcode(std::string& http_response, int* retcode) {
-  std::string::size_type pos = http_response.find("RetCode");
-  if (pos == std::string::npos)
-    return -1;
-  pos = http_response.find(":", pos);
-  if (pos == std::string::npos)
-    return -1;
-  std::string::size_type end_pos = http_response.find(",", pos+1);
-  if(end_pos == std::string::npos) {
-    end_pos = http_response.find("}", pos+1);
-    if (end_pos == std::string::npos)
-      return -1;
+int RGWCloudUfile::init_multipart(const std::string& bucket, const string& key) {
+  param_vec_t _headers;
+  param_vec_t _params;
+  std::string url = "";
+  std::string dest_bucket = cloud_info.dest_bucket.empty() ? bucket : cloud_info.dest_bucket;
+  dest_bucket = cloud_info.bucket_prefix + dest_bucket;
+
+  int32_t retcode = 0;  
+
+  RGWRESTUfileRequest* req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
+  int ret = req->init_upload_multipart(dest_bucket, key, upload_id, block_size, retcode);
+  delete req;
+  if (ret >= 0)
+    return ret;
+ 
+
+  // if bucket not exist, create it
+  if(retcode == RGWCloudUfile::UFILE_BUCKET_NOT_EXIST) {
+    req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
+    ret = req->create_bucket(dest_bucket);
+    delete req;
+    if(ret < 0) {
+      dout(0) << "ufile create_bucket:"<<bucket<<" failed:" << ret<< dendl;
+      return ret;
+    }
+
+    req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
+    ret = req->init_upload_multipart(dest_bucket, key, upload_id, block_size, retcode);
+    delete req;
+    if (ret < 0) {
+      dout(0) <<"ufile init upload multipart failed:"<<ret<<" bucket:"<<bucket<<" file:"<<key<<dendl;
+    }
+    return ret;
   }
-  std::string ret = http_response.substr(pos+1, end_pos);
-  *retcode = std::stoi(ret);
-  return 0;
+  else {
+    dout(0) << "ufile init upload multipart failed:" << ret<<" bucket:"<<bucket<<" file:"<<key<<dendl;
+    return ret;
+  }
 }
 
-int RGWCloudUfile::put_obj(std::string& bucket, string& key, bufferlist *bl, off_t bl_len) {
+int RGWCloudUfile::finish_multipart(const std::string& bucket, const string& key) {
+  param_vec_t _headers;
+  param_vec_t _params;
+  std::string url = "";
+  std::string dest_bucket = cloud_info.dest_bucket.empty() ? bucket : cloud_info.dest_bucket;
+  dest_bucket = cloud_info.bucket_prefix + dest_bucket;
+
+  RGWRESTUfileRequest* req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);  
+  int ret = req->finish_upload_multipart(dest_bucket, key, upload_id, etags);
+
+  delete req;
+  if (ret < 0) {
+    dout(0) << "cloud error finish upload multipart ret:" << ret << " "
+                          << dest_bucket << " file:" << key << dendl;
+    req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
+    int r = req->abort_upload_multipart(dest_bucket, key, upload_id);
+    delete req;
+    if (r < 0) {
+      dout(0) << "cloud error abort upload multipart when finish ret:" << ret << " "
+                            << dest_bucket << " file:" << key << dendl;
+    }
+    return ret;
+  }
+  return ret;
+}
+
+int RGWCloudUfile::abort_multipart(const std::string& bucket, const string& key) {
+  param_vec_t _headers;
+  param_vec_t _params;
+  std::string url = "";
+  std::string dest_bucket = cloud_info.dest_bucket.empty() ? bucket : cloud_info.dest_bucket;
+  dest_bucket = cloud_info.bucket_prefix + dest_bucket;
+
+  RGWRESTUfileRequest* req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
+  int ret = req->abort_upload_multipart(dest_bucket, key, upload_id);
+  delete req;
+  if (ret < 0) {
+    dout(0) << "cloud error abort upload multipart when finish ret:" << ret << " "
+                            << dest_bucket << " file:" << key << dendl;
+  }
+  return ret;
+}
+
+int RGWCloudUfile::upload_multipart(const std::string& bucket, const string& key, bufferlist& buf, uint64_t size) {
+  param_vec_t _headers;
+  param_vec_t _params;
+  std::string url = "";
+  std::string dest_bucket = cloud_info.dest_bucket.empty() ? bucket : cloud_info.dest_bucket;
+  dest_bucket = cloud_info.bucket_prefix + dest_bucket;
+  
+  RGWRESTUfileRequest* req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
+  string etag_part;
+  int ret = req->upload_multipart(dest_bucket, key, upload_id, part_number, buf, size, etag_part);
+  if (etags.empty()) {
+    etags = etag_part;
+  } else {
+    etags = (etags + "," + etag_part);
+  }
+  ++part_number;
+
+  delete req;
+  if (ret < 0) {
+    dout(0) << "cloud error upload multipart ret:" << ret << " "
+                          << dest_bucket << " file:" << key << dendl;
+  }
+  return ret;
+}
+
+int RGWCloudUfile::put_obj(const std::string& bucket, const string& key, bufferlist *bl, off_t bl_len) {
   param_vec_t _headers;
   param_vec_t _params;
   std::string url = "";
@@ -267,21 +509,22 @@ int RGWCloudUfile::put_obj(std::string& bucket, string& key, bufferlist *bl, off
     delete req;
     return ret;
   }
-  auto& resp = req->get_response();
-  int resp_len = resp.length();
-  if (resp_len <= 0) {
-    delete req;
-    return ret;
+  
+  int retcode = 0;
+  auto& buflist = req->get_response();
+  string resp(buflist.c_str(), buflist.length());
+  std::string error_code;
+  JSONParser json;
+  bool json_ret = json.parse(resp.c_str(), resp.length());
+  if (json_ret) {
+    if (json.get_data("RetCode", &error_code))
+      retcode = std::stoi(error_code);
   }
-  std::string msg(resp.c_str(), resp_len);
+  
   delete req;
-  int ret_code;
-  if (get_ufile_retcode(msg, &ret_code) < 0) {
-    return ret;
-  }
 
   // if bucket not exist, create it
-  if(ret_code == RGWCloudUfile::UFILE_BUCKET_NOT_EXIST) {
+  if(retcode == RGWCloudUfile::UFILE_BUCKET_NOT_EXIST) {
     req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
     ret = req->create_bucket(dest_bucket);
     delete req;
@@ -303,7 +546,7 @@ int RGWCloudUfile::put_obj(std::string& bucket, string& key, bufferlist *bl, off
   return ret;
 }
 
-int RGWCloudUfile::remove_obj(std::string& bucket, string& key) {
+int RGWCloudUfile::remove_obj(const std::string& bucket, const string& key) {
   param_vec_t _headers;
   param_vec_t _params;
   std::string url = "";

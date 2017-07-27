@@ -6,7 +6,7 @@
 
 #include "rgw_sync_module_log.h"
 #include "rgw_sync_module_es.h"
-#include "rgw_sync_module_custom.h"
+#include "rgw_sync_module_cloud.h"
 #include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
@@ -64,6 +64,6 @@ void rgw_register_sync_modules(RGWSyncModulesManager *modules_manager)
   RGWSyncModuleRef es_module(std::make_shared<RGWElasticSyncModule>());
   modules_manager->register_module("elasticsearch", es_module);
 
-  RGWSyncModuleRef custom_module(std::make_shared<RGWCustomSyncModule>());
-  modules_manager->register_module("custom", custom_module);
+  RGWSyncModuleRef cloud_module(std::make_shared<RGWCloudSyncModule>());
+  modules_manager->register_module("cloud", cloud_module);
 }
