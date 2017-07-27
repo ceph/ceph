@@ -262,7 +262,14 @@ PyObject *PyModules::get_python(const std::string &what)
         }
     );
     return f.get();
-
+  } else if (what == "pg_dump") {
+    PyFormatter f;
+        cluster_state.with_pgmap(
+        [&f](const PGMap &pg_map) {
+	  pg_map.dump(&f);
+        }
+    );
+    return f.get();
   } else if (what == "df") {
     PyFormatter f;
 
