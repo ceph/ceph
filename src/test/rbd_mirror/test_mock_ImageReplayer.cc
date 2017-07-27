@@ -63,8 +63,8 @@ namespace mirror {
 
 template <>
 struct ImageDeleter<librbd::MockTestImageCtx> {
-  MOCK_METHOD3(schedule_image_delete, void(RadosRef, int64_t,
-                                           const std::string&));
+  MOCK_METHOD4(schedule_image_delete, void(RadosRef, int64_t,
+                                           const std::string&, bool));
 };
 
 template<>

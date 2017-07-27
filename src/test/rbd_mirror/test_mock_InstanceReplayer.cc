@@ -42,8 +42,8 @@ struct Threads<librbd::MockTestImageCtx> {
 
 template <>
 struct ImageDeleter<librbd::MockTestImageCtx> {
-  MOCK_METHOD3(schedule_image_delete, void(RadosRef, int64_t,
-                                           const std::string&));
+  MOCK_METHOD4(schedule_image_delete, void(RadosRef, int64_t,
+                                           const std::string&, bool));
   MOCK_METHOD4(wait_for_scheduled_deletion,
                void(int64_t, const std::string&, Context*, bool));
 };
