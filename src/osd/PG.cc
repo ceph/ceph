@@ -225,6 +225,7 @@ void PG::dump_live_ids()
 }
 #endif
 
+
 void PGPool::update(OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);
@@ -296,7 +297,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   dirty_info(false), dirty_big_info(false),
   info(p),
   info_struct_v(0),
-  coll(p), pg_log(cct),
+  coll(p),
+  pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
   past_intervals(
@@ -3186,7 +3188,7 @@ void PG::append_log(
   auto last = logv.rbegin();
   if (is_primary() && last != logv.rend()) {
     projected_log.skip_can_rollback_to_to_head();
-    projected_log.trim(cct, last->version, nullptr);
+    projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
   }
 
   if (transaction_applied && roll_forward_to > pg_log.get_can_rollback_to()) {
