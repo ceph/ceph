@@ -286,7 +286,7 @@ completes. (Control-c to exit.)
    After that, you can observe the data migration which should come to its
    end. The difference between marking ``out`` the OSD and reweighting it
    to 0 is that in the first case the weight of the bucket which contains
-   the OSD isn't changed whereas in the second case the weight of the bucket
+   the OSD is not changed whereas in the second case the weight of the bucket
    is updated (and decreased of the OSD weight). The reweight command could
    be sometimes favoured in the case of a "small" cluster.
 

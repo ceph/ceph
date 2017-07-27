@@ -102,7 +102,7 @@ Async messenger options
 
 :Description: Initial number of worker threads used by each Async Messenger instance.
               Should be at least equal to highest number of replicas, but you can
-              decrease it if you're low on CPU core count and/or you host a lot of
+              decrease it if you are low on CPU core count and/or you host a lot of
               OSDs on single server.
 :Type: 64-bit Unsigned Integer
 :Required: No
@@ -135,7 +135,7 @@ Async messenger options
               workers #1 and #2 to CPU cores #0 and #2, respectively.
               NOTE: when manually setting affinity, make sure to not assign workers to
               processors that are virtual CPUs created as an effect of Hyperthreading
-              or similar technology, because they're slower than regular CPU cores.
+              or similar technology, because they are slower than regular CPU cores.
 :Type: String
 :Required: No
 :Default: ``(empty)``
