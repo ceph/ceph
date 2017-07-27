@@ -423,6 +423,8 @@ private:
   void handle_process_entry_ready(int r);
   void handle_process_entry_safe(const ReplayEntry& replay_entry, int r);
 
+  void register_admin_socket_hook();
+  void unregister_admin_socket_hook();
 };
 
 } // namespace mirror

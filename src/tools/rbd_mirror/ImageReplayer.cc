@@ -161,46 +161,56 @@ class ImageReplayerAdminSocketHook : public AdminSocketHook {
 public:
   ImageReplayerAdminSocketHook(CephContext *cct, const std::string &name,
 			       ImageReplayer<I> *replayer)
-    : admin_socket(cct->get_admin_socket()),
+    : admin_socket(cct->get_admin_socket()), name(name), replayer(replayer),
       lock("ImageReplayerAdminSocketHook::lock " +
              replayer->get_global_image_id()) {
+  }
+
+  int register_commands() {
     std::string command;
     int r;
 
     command = "rbd mirror status " + name;
     r = admin_socket->register_command(command, command, this,
 				       "get status for rbd mirror " + name);
-    if (r == 0) {
-      commands[command] = new StatusCommand<I>(replayer);
+    if (r < 0) {
+      return r;
     }
+    commands[command] = new StatusCommand<I>(replayer);
 
     command = "rbd mirror start " + name;
     r = admin_socket->register_command(command, command, this,
 				       "start rbd mirror " + name);
-    if (r == 0) {
-      commands[command] = new StartCommand<I>(replayer);
+    if (r < 0) {
+      return r;
     }
+    commands[command] = new StartCommand<I>(replayer);
 
     command = "rbd mirror stop " + name;
     r = admin_socket->register_command(command, command, this,
 				       "stop rbd mirror " + name);
-    if (r == 0) {
-      commands[command] = new StopCommand<I>(replayer);
+    if (r < 0) {
+      return r;
     }
+    commands[command] = new StopCommand<I>(replayer);
 
     command = "rbd mirror restart " + name;
     r = admin_socket->register_command(command, command, this,
 				       "restart rbd mirror " + name);
-    if (r == 0) {
-      commands[command] = new RestartCommand<I>(replayer);
+    if (r < 0) {
+      return r;
     }
+    commands[command] = new RestartCommand<I>(replayer);
 
     command = "rbd mirror flush " + name;
     r = admin_socket->register_command(command, command, this,
 				       "flush rbd mirror " + name);
-    if (r == 0) {
-      commands[command] = new FlushCommand<I>(replayer);
+    if (r < 0) {
+      return r;
     }
+    commands[command] = new FlushCommand<I>(replayer);
+
+    return 0;
   }
 
   ~ImageReplayerAdminSocketHook() override {
@@ -230,6 +240,8 @@ private:
   typedef std::map<std::string, ImageReplayerAdminSocketCommand*> Commands;
 
   AdminSocket *admin_socket;
+  std::string name;
+  ImageReplayer<I> *replayer;
   Mutex lock;
   Commands commands;
 };
@@ -305,14 +317,13 @@ ImageReplayer<I>::ImageReplayer(Threads<I> *threads,
   }
 
   m_name = pool_name + "/" + m_global_image_id;
-  dout(20) << "registered asok hook: " << m_name << dendl;
-  m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
-                                                    this);
+  register_admin_socket_hook();
 }
 
 template <typename I>
 ImageReplayer<I>::~ImageReplayer()
 {
+  unregister_admin_socket_hook();
   assert(m_event_preprocessor == nullptr);
   assert(m_replay_status_formatter == nullptr);
   assert(m_local_image_ctx == nullptr);
@@ -325,7 +336,6 @@ ImageReplayer<I>::~ImageReplayer()
   assert(m_in_flight_status_updates == 0);
 
   delete m_journal_listener;
-  delete m_asok_hook;
 }
 
 template <typename I>
@@ -606,11 +616,7 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
 	m_asok_hook = nullptr;
       }
     }
-    if (!m_asok_hook) {
-      dout(20) << "registered asok hook: " << m_name << dendl;
-      m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
-                                                        this);
-    }
+    register_admin_socket_hook();
   }
 
   update_mirror_image_status(false, boost::none);
@@ -1683,10 +1689,17 @@ void ImageReplayer<I>::handle_shut_down(int r) {
                                              m_local_pool_id,
                                              m_global_image_id,
                                              m_resync_requested);
+
+      m_local_image_id = "";
       m_resync_requested = false;
+      if (m_delete_requested) {
+        unregister_admin_socket_hook();
+        m_delete_requested = false;
+      }
     } else if (m_last_r == -ENOENT &&
                m_local_image_id.empty() && m_remote_image.image_id.empty()) {
       dout(0) << "mirror image no longer exists" << dendl;
+      unregister_admin_socket_hook();
       m_finished = true;
     }
   }
@@ -1769,6 +1782,34 @@ void ImageReplayer<I>::resync_image(Context *on_finish) {
 
   m_resync_requested = true;
   stop(on_finish);
+}
+
+template <typename I>
+void ImageReplayer<I>::register_admin_socket_hook() {
+  if (m_asok_hook != nullptr) {
+    return;
+  }
+
+  dout(20) << "registered asok hook: " << m_name << dendl;
+  auto asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
+                                                       this);
+  int r = asok_hook->register_commands();
+  if (r < 0) {
+    derr << "error registering admin socket commands" << dendl;
+    delete asok_hook;
+    asok_hook = nullptr;
+    return;
+  }
+
+  m_asok_hook = asok_hook;
+}
+
+template <typename I>
+void ImageReplayer<I>::unregister_admin_socket_hook() {
+  dout(20) << dendl;
+
+  delete m_asok_hook;
+  m_asok_hook = nullptr;
 }
 
 template <typename I>
