@@ -2017,12 +2017,10 @@ update:
     msg->quota = i->quota;
     mds->send_message_client_counted(msg, session->connection);
   }
-  for (compact_map<mds_rank_t, unsigned>::iterator it = in->replicas_begin();
-       it != in->replicas_end();
-       ++it) {
+  for (const auto &it : in->get_replicas()) {
     MGatherCaps *msg = new MGatherCaps;
     msg->ino = in->ino();
-    mds->send_message_mds(msg, it->first);
+    mds->send_message_mds(msg, it.first);
   }
 }
 
@@ -5953,13 +5951,11 @@ void MDCache::rejoin_send_acks()
       dq.pop_front();
       
       // dir
-      for (compact_map<mds_rank_t,unsigned>::iterator r = dir->replicas_begin();
-	   r != dir->replicas_end();
-	   ++r) {
-	auto it = acks.find(r->first);
+      for (auto &r : dir->get_replicas()) {
+	auto it = acks.find(r.first);
 	if (it == acks.end())
 	  continue;
-	it->second->add_strong_dirfrag(dir->dirfrag(), ++r->second, dir->dir_rep);
+	it->second->add_strong_dirfrag(dir->dirfrag(), ++r.second, dir->dir_rep);
 	it->second->add_dirfrag_base(dir);
       }
 	   
@@ -5975,36 +5971,32 @@ void MDCache::rejoin_send_acks()
 	  in = dnl->get_inode();
 
 	// dentry
-	for (compact_map<mds_rank_t,unsigned>::iterator r = dn->replicas_begin();
-	     r != dn->replicas_end();
-	     ++r) {
-	  auto it = acks.find(r->first);
+	for (auto &r : dn->get_replicas()) {
+	  auto it = acks.find(r.first);
 	  if (it == acks.end())
 	    continue;
 	  it->second->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
 					   dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_d_type():0,
-					   ++r->second,
+					   ++r.second,
 					   dn->lock.get_replica_state());
 	  // peer missed MDentrylink message ?
-	  if (in && !in->is_replica(r->first))
-	    in->add_replica(r->first);
+	  if (in && !in->is_replica(r.first))
+	    in->add_replica(r.first);
 	}
 	
 	if (!in)
 	  continue;
 
-	for (compact_map<mds_rank_t,unsigned>::iterator r = in->replicas_begin();
-	     r != in->replicas_end();
-	     ++r) {
-	  auto it = acks.find(r->first);
+	for (auto &r : in->get_replicas()) {
+	  auto it = acks.find(r.first);
 	  if (it == acks.end())
 	    continue;
 	  it->second->add_inode_base(in, mds->mdsmap->get_up_features());
 	  bufferlist bl;
-	  in->_encode_locks_state_for_rejoin(bl, r->first);
-	  it->second->add_inode_locks(in, ++r->second, bl);
+	  in->_encode_locks_state_for_rejoin(bl, r.first);
+	  it->second->add_inode_locks(in, ++r.second, bl);
 	}
 	
 	// subdirs in this subtree?
@@ -6015,28 +6007,24 @@ void MDCache::rejoin_send_acks()
 
   // base inodes too
   if (root && root->is_auth()) 
-    for (compact_map<mds_rank_t,unsigned>::iterator r = root->replicas_begin();
-	 r != root->replicas_end();
-	 ++r) {
-      auto it = acks.find(r->first);
+    for (auto &r : root->get_replicas()) {
+      auto it = acks.find(r.first);
       if (it == acks.end())
 	continue;
       it->second->add_inode_base(root, mds->mdsmap->get_up_features());
       bufferlist bl;
-      root->_encode_locks_state_for_rejoin(bl, r->first);
-      it->second->add_inode_locks(root, ++r->second, bl);
+      root->_encode_locks_state_for_rejoin(bl, r.first);
+      it->second->add_inode_locks(root, ++r.second, bl);
     }
   if (myin)
-    for (compact_map<mds_rank_t,unsigned>::iterator r = myin->replicas_begin();
-	 r != myin->replicas_end();
-	 ++r) {
-      auto it = acks.find(r->first);
+    for (auto &r : myin->get_replicas()) {
+      auto it = acks.find(r.first);
       if (it == acks.end())
 	continue;
       it->second->add_inode_base(myin, mds->mdsmap->get_up_features());
       bufferlist bl;
-      myin->_encode_locks_state_for_rejoin(bl, r->first);
-      it->second->add_inode_locks(myin, ++r->second, bl);
+      myin->_encode_locks_state_for_rejoin(bl, r.first);
+      it->second->add_inode_locks(myin, ++r.second, bl);
     }
 
   // include inode base for any inodes whose scatterlocks may have updated
@@ -6044,10 +6032,8 @@ void MDCache::rejoin_send_acks()
        p != rejoin_potential_updated_scatterlocks.end();
        ++p) {
     CInode *in = *p;
-    for (compact_map<mds_rank_t,unsigned>::iterator r = in->replicas_begin();
-	 r != in->replicas_end();
-	 ++r) {
-      auto it = acks.find(r->first);
+    for (const auto &r : in->get_replicas()) {
+      auto it = acks.find(r.first);
       if (it == acks.end())
 	continue;
       it->second->add_inode_base(in, mds->mdsmap->get_up_features());
@@ -7251,7 +7237,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       if (nonce == dir->get_replica_nonce(from)) {
 	// remove from our cached_by
 	dout(7) << " dir expire on " << *dir << " from mds." << from
-		<< " replicas was " << dir->replica_map << dendl;
+		<< " replicas was " << dir->get_replicas() << dendl;
 	dir->remove_replica(from);
       } 
       else {
@@ -10295,10 +10281,9 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
   if (bcast) {
     mds->get_mds_map()->get_active_mds_set(who);
   } else {
-    for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
-	 p != dir->replicas_end();
-	 ++p)
-      who.insert(p->first);
+    for (const auto &p : dir->get_replicas()) {
+      who.insert(p.first);
+    }
   }
   
   dout(7) << "sending dir_update on " << *dir << " bcast " << bcast << " to " << who << dendl;
@@ -10381,22 +10366,20 @@ void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
   dout(7) << "send_dentry_link " << *dn << dendl;
 
   CDir *subtree = get_subtree_root(dn->get_dir());
-  for (compact_map<mds_rank_t,unsigned>::iterator p = dn->replicas_begin();
-       p != dn->replicas_end();
-       ++p) {
+  for (const auto &p : dn->get_replicas()) {
     // don't tell (rename) witnesses; they already know
-    if (mdr.get() && mdr->more()->witnessed.count(p->first))
+    if (mdr.get() && mdr->more()->witnessed.count(p.first))
       continue;
-    if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN ||
-	(mds->mdsmap->get_state(p->first) == MDSMap::STATE_REJOIN &&
-	 rejoin_gather.count(p->first)))
+    if (mds->mdsmap->get_state(p.first) < MDSMap::STATE_REJOIN ||
+	(mds->mdsmap->get_state(p.first) == MDSMap::STATE_REJOIN &&
+	 rejoin_gather.count(p.first)))
       continue;
     CDentry::linkage_t *dnl = dn->get_linkage();
     MDentryLink *m = new MDentryLink(subtree->dirfrag(), dn->get_dir()->dirfrag(),
 				     dn->name, dnl->is_primary());
     if (dnl->is_primary()) {
       dout(10) << "  primary " << *dnl->get_inode() << dendl;
-      replicate_inode(dnl->get_inode(), p->first, m->bl,
+      replicate_inode(dnl->get_inode(), p.first, m->bl,
 		      mds->mdsmap->get_up_features());
     } else if (dnl->is_remote()) {
       inodeno_t ino = dnl->get_remote_ino();
@@ -10406,7 +10389,7 @@ void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
       ::encode(d_type, m->bl);
     } else
       ceph_abort();   // aie, bad caller!
-    mds->send_message_mds(m, p->first);
+    mds->send_message_mds(m, p.first);
   }
 }
 
@@ -11322,12 +11305,10 @@ void MDCache::_fragment_stored(MDRequestRef& mdr)
 
   // tell peers
   CDir *first = *info.resultfrags.begin();
-  for (compact_map<mds_rank_t,unsigned>::iterator p = first->replicas_begin();
-       p != first->replicas_end();
-       ++p) {
-    if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN ||
-	(mds->mdsmap->get_state(p->first) == MDSMap::STATE_REJOIN &&
-	 rejoin_gather.count(p->first)))
+  for (const auto &p : first->get_replicas()) {
+    if (mds->mdsmap->get_state(p.first) < MDSMap::STATE_REJOIN ||
+	(mds->mdsmap->get_state(p.first) == MDSMap::STATE_REJOIN &&
+	 rejoin_gather.count(p.first)))
       continue;
 
     MMDSFragmentNotify *notify = new MMDSFragmentNotify(basedirfrag, info.bits);
@@ -11336,9 +11317,9 @@ void MDCache::_fragment_stored(MDRequestRef& mdr)
     for (list<CDir*>::iterator q = info.resultfrags.begin();
 	 q != info.resultfrags.end();
 	 ++q)
-      replicate_dir(*q, p->first, notify->basebl);
+      replicate_dir(*q, p.first, notify->basebl);
 
-    mds->send_message_mds(notify, p->first);
+    mds->send_message_mds(notify, p.first);
   }
 
   // journal commit
