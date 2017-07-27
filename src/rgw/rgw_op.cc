@@ -2239,6 +2239,19 @@ int RGWListBucket::verify_permission()
   if (op_ret < 0) {
     return op_ret;
   }
+  if (!prefix.empty())
+    s->env.emplace(std::piecewise_construct,
+		   std::forward_as_tuple("s3:prefix"),
+		   std::forward_as_tuple(prefix));
+
+  if (!delimiter.empty())
+    s->env.emplace(std::piecewise_construct,
+		   std::forward_as_tuple("s3:delimiter"),
+		   std::forward_as_tuple(delimiter));
+
+  s->env.emplace(std::piecewise_construct,
+		 std::forward_as_tuple("s3:max-keys"),
+		 std::forward_as_tuple(to_string(max)));
 
   if (!verify_bucket_permission(s,
 				list_versions ?
