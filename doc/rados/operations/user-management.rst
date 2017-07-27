@@ -120,7 +120,7 @@ Capability syntax follows the form::
 
 
 .. note:: The Ceph Object Gateway daemon (``radosgw``) is a client of the 
-          Ceph Storage Cluster, so it isn't represented as a Ceph Storage 
+          Ceph Storage Cluster, so it is not represented as a Ceph Storage 
           Cluster daemon type.
 
 The following entries describe each capability.
@@ -318,7 +318,7 @@ save the output to a file. Developers may also execute the following::
 	ceph auth export {TYPE.ID}
 
 The ``auth export`` command is identical to ``auth get``, but also prints
-out the internal ``auid``, which isn't relevant to end users.
+out the internal ``auid``, which is not relevant to end users.
 
 
 

@@ -306,7 +306,7 @@ Set the Number of Placement Groups
 
 To set the number of placement groups in a pool, you must specify the
 number of placement groups at the time you create the pool.
-See `Create a Pool`_ for details. Once you've set placement groups for a
+See `Create a Pool`_ for details. Once you have set placement groups for a
 pool, you may increase the number of placement groups (but you cannot
 decrease the number of placement groups). To increase the number of
 placement groups, execute the following::
