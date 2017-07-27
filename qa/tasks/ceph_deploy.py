@@ -342,7 +342,7 @@ def build_ceph_cluster(ctx, config):
             # first check for filestore, default is bluestore with ceph-deploy
             if config.get('filestore') is not None:
                 osd_create_cmd += '--filestore '
-            else:
+            elif config.get('bluestore') is not None:
                 osd_create_cmd += '--bluestore '
             if config.get('dmcrypt') is not None:
                 osd_create_cmd += '--dmcrypt '
