@@ -3048,7 +3048,21 @@ void PGMap::get_health_checks(
     ostringstream ss;
     ss << pg_sum.stats.sum.num_objects_unfound
        << "/" << pg_sum.stats.sum.num_objects << " unfound (" << b << "%)";
-    checks->add("OBJECT_UNFOUND", HEALTH_WARN, ss.str());
+    auto& d = checks->add("OBJECT_UNFOUND", HEALTH_WARN, ss.str());
+
+    for (auto& p : pg_stat) {
+      if (p.second.stats.sum.num_objects_unfound) {
+	ostringstream ss;
+	ss << "pg " << p.first
+	   << " has " << p.second.stats.sum.num_objects_unfound
+	   << " unfound objects";
+	d.detail.push_back(ss.str());
+	if (d.detail.size() > max) {
+	  d.detail.push_back("(additional pgs left out for brevity)");
+	  break;
+	}
+      }
+    }
   }
 
   // REQUEST_SLOW
