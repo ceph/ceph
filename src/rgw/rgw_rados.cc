@@ -3713,14 +3713,14 @@ void RGWRados::finalize()
     delete async_rados;
   }
   
+  delete lc;
+  lc = NULL; 
+
   delete gc;
   gc = NULL;
 
   delete obj_expirer;
   obj_expirer = NULL;
-  
-  delete lc;
-  lc = NULL;
 
   delete rest_master_conn;
 
