@@ -323,7 +323,7 @@
                         Pools
                     </div>
                     <div class="box-body">
-                        <table class="table table-condensed">
+                        <table id="pools-table" class="sorting_asc table table-condensed">
                             <thead>
                             <th>Name</th>
                             <th>PG status</th>
@@ -390,6 +390,15 @@
             </div>
 
         </div>
+
+    <script>
+      $(function () {
+        $("#pools-table").DataTable({
+            paging: false
+        });
+      });
+    </script>
+
     </section>
 
 {% endblock %}
