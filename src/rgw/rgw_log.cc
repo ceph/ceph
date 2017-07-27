@@ -327,7 +327,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   }
   rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, entry.bucket);
 
-  if (check_utf8(s->bucket_name.c_str(), entry.bucket.size()) != 0) {
+  if (check_utf8(entry.bucket.c_str(), entry.bucket.size()) != 0) {
     ldout(s->cct, 5) << "not logging op on bucket with non-utf8 name" << dendl;
     return 0;
   }
