@@ -3342,8 +3342,8 @@ void PG::log_weirdness()
     // sloppy check
     if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()))
       osd->clog->error() << info.pgid
-			<< " log bound mismatch, info (" << pg_log.get_tail() << ","
-			<< pg_log.get_head() << "]"
+			<< " log bound mismatch, info (tail,head] ("
+			<< pg_log.get_tail() << "," << pg_log.get_head() << "]"
 			<< " actual ["
 			<< pg_log.get_log().log.begin()->version << ","
 			 << pg_log.get_log().log.rbegin()->version << "]";
@@ -3625,7 +3625,7 @@ bool PG::sched_scrub()
 	} else {
 	  osd->clog->error() << "osd." << osd->whoami
 			     << " pg " << info.pgid
-			     << " Regular scrub request, losing deep-scrub details";
+			     << " Regular scrub request, deep-scrub details will be lost";
 	}
       }
       queue_scrub();
@@ -7131,9 +7131,12 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
       pg->all_unfound_are_queried_or_lost(pg->get_osdmap())) {
     if (pg->cct->_conf->osd_auto_mark_unfound_lost) {
       pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound
-			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED";
+			    << " objects unfound and apparently lost, would automatically "
+			    << "mark these objects lost but this feature is not yet implemented "
+			    << "(osd_auto_mark_unfound_lost)";
     } else
-      pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound << " objects unfound and apparently lost";
+      pg->osd->clog->error() << pg->info.pgid.pgid << " has "
+                             << unfound << " objects unfound and apparently lost";
   }
 
   if (pg->is_active()) {
