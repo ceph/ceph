@@ -172,13 +172,17 @@ void MgrStandby::send_beacon()
 				 modules,
 				 std::move(metadata));
 
-  if (available && !available_in_map) {
-    // We are informing the mon that we are done initializing: inform
-    // it of our command set.  This has to happen after init() because
-    // it needs the python modules to have loaded.
-    m->set_command_descs(active_mgr->get_command_set());
-    dout(4) << "going active, including " << m->get_command_descs().size()
-            << " commands in beacon" << dendl;
+  if (available) {
+    if (!available_in_map) {
+      // We are informing the mon that we are done initializing: inform
+      // it of our command set.  This has to happen after init() because
+      // it needs the python modules to have loaded.
+      m->set_command_descs(active_mgr->get_command_set());
+      dout(4) << "going active, including " << m->get_command_descs().size()
+              << " commands in beacon" << dendl;
+    }
+
+    m->set_services(active_mgr->get_services());
   }
                                  
   monc.send_mon_message(m);
