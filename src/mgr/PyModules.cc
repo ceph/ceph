@@ -667,6 +667,22 @@ std::vector<MonCommand> PyModules::get_commands() const
   return result;
 }
 
+
+std::map<std::string, std::string> PyModules::get_services() const
+{
+  std::map<std::string, std::string> result;
+  Mutex::Locker l(lock);
+  for (const auto& i : modules) {
+    const auto &module = i.second.get();
+    std::string svc_str = module->get_uri();
+    if (!svc_str.empty()) {
+      result[module->get_name()] = svc_str;
+    }
+  }
+
+  return result;
+}
+
 void PyModules::insert_config(const std::map<std::string,
                               std::string> &new_config)
 {
@@ -865,3 +881,14 @@ void PyModules::get_health_checks(health_check_map_t *checks)
     p.second->get_health_checks(checks);
   }
 }
+
+void PyModules::set_uri(const std::string& module_name,
+                        const std::string &uri)
+{
+  Mutex::Locker l(lock);
+
+  dout(4) << " module " << module_name << " set URI '" << uri << "'" << dendl;
+
+  modules[module_name]->set_uri(uri);
+}
+

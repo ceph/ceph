@@ -460,13 +460,28 @@ get_perf_schema(BaseMgrModule *self, PyObject *args)
   return self->py_modules->get_perf_schema_python(type_str, svc_id);
 }
 
-
 static PyObject *
 ceph_get_osdmap(BaseMgrModule *self, PyObject *args)
 {
   return self->py_modules->get_osdmap();
 }
 
+static PyObject*
+ceph_set_uri(BaseMgrModule *self, PyObject *args)
+{
+  char *svc_str = nullptr;
+  if (!PyArg_ParseTuple(args, "s:ceph_advertize_service",
+        &svc_str)) {
+    return nullptr;
+  }
+
+  // We call down into PyModules even though we have a MgrPyModule
+  // reference here, because MgrPyModule's fields are protected
+  // by PyModules' lock.
+  self->py_modules->set_uri(self->this_module->get_name(), svc_str);
+
+  Py_RETURN_NONE;
+}
 
 
 PyMethodDef BaseMgrModule_methods[] = {
@@ -517,6 +532,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_get_osdmap", (PyCFunction)ceph_get_osdmap, METH_NOARGS,
     "Get an OSDMap* in a python capsule"},
+
+  {"_ceph_set_uri", (PyCFunction)ceph_set_uri, METH_VARARGS,
+    "Advertize a service URI served by this module"},
 
   {NULL, NULL, 0, NULL}
 };
