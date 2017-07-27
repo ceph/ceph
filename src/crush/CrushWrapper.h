@@ -984,6 +984,17 @@ public:
       return true;
     return false;
   }
+  bool rule_has_take(unsigned ruleno, int take) const {
+    if (!crush) return false;
+    crush_rule *rule = get_rule(ruleno);
+    for (unsigned i = 0; i < rule->len; ++i) {
+      if (rule->steps[i].op == CRUSH_RULE_TAKE &&
+	  rule->steps[i].arg1 == take) {
+	return true;
+      }
+    }
+    return false;
+  }
   int get_rule_len(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return PTR_ERR(r);
