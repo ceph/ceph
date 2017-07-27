@@ -50,7 +50,7 @@ function TEST_pidfile() {
 
     # no daemon can use a pidfile that is owned by another daemon
     run_mon $dir a || return 1
-    run_mon $dir a 2>&1 | grep "failed to lock pidfile" || return 1
+    run_mon $dir a --log-to-stderr -f 2>&1 | grep "failed to lock pidfile" || return 1
 
     run_osd $dir 0 || return 1
     activate_osd $dir 0 --log-to-stderr -f 2>&1 | grep "failed to lock pidfile" || return 1
