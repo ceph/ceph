@@ -3,7 +3,6 @@ import argparse
 import os
 from textwrap import dedent
 from ceph_volume import process, conf
-from ceph_volume.util import activate as activate_utils
 from ceph_volume.util import system
 from ceph_volume.systemd import systemctl
 from . import api
