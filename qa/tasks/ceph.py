@@ -1222,6 +1222,7 @@ def healthy(ctx, config):
     """
     config = config if isinstance(config, dict) else dict()
     cluster_name = config.get('cluster', 'ceph')
+    check_daemon_status(ctx, 'osd', cluster_name)
     log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
     firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
     (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
@@ -1241,6 +1242,26 @@ def healthy(ctx, config):
         # Some MDSs exist, wait for them to be healthy
         ceph_fs = Filesystem(ctx) # TODO: make Filesystem cluster-aware
         ceph_fs.wait_for_daemons(timeout=300)
+
+
+def check_daemon_status(ctx, type_, cluster_name=None):
+    daemons = ctx.daemons.iter_daemons_of_role(type_, cluster_name)
+    if not daemons:
+        log.info("No %s daemons; skipping status check", type_)
+        return
+    log.info("Checking %s %s daemons for failure...", len(daemons), type_)
+    # Wait a few seconds to allow the daemons to fail to start up - if they're
+    # going to.
+    time.sleep(5)
+    for daemon in daemons:
+        msg = "{node} {role} {id_} poll(): {rc}"
+        rc = daemon.check_status()
+        log.debug(msg.format(
+            node=daemon.remote.shortname,
+            role=daemon.role,
+            id_=daemon.id_,
+            rc=rc,
+        ))
 
 
 def wait_for_osds_up(ctx, config):
