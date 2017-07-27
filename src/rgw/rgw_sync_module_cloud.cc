@@ -1,14 +1,13 @@
 
 #include <algorithm>
 #include <cstddef>
-
+#include <thread>
 #include "rgw_common.h"
 #include "rgw_coroutine.h"
 #include "rgw_cr_rados.h"
-#include "rgw_sync_module.h"
+#include "rgw_sync_module_cloud.h"
 #include "rgw_data_sync.h"
-#include "rgw_sync_cloud_cloud.h"
-#include "rgw_cloud_access.h"
+#include "rgw_cloud_ufile.h"
 #include "rgw_rest_client.h"
 #include "rgw_rest_conn.h"
 
@@ -46,6 +45,8 @@ class RGWCloudSyncObj : public RGWAsyncRadosRequest {
   ceph::real_time *pmtime;
   uint64_t *psize;
   RGWCloudAccess* cloud_access;
+private:
+  int get_obj_range(RGWRESTConn *conn, RGWGetRemoteObjCB& cb, uint64_t begin, uint64_t end, uint64_t* obj_size);
 protected:
   int _send_request();
 public:
@@ -60,12 +61,64 @@ public:
                                                       cloud_access(_cloud_access){}
 };
 
+int RGWCloudSyncObj::get_obj_range(RGWRESTConn *conn, RGWGetRemoteObjCB& cb, uint64_t begin, uint64_t end, uint64_t* obj_size) {
+  rgw_obj obj(bucket_info.bucket, key);
+  
+  string url;
+  int ret = conn->get_url(url);
+  if (ret < 0)
+    ldout(store->ctx(), 0) << "RGWCloudSyncObj error: conn get url failed." << ret << dendl;
+    return ret;
+
+  param_vec_t params;
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
+  map<string, string> extra_headers;
+  string range("bytes=");
+  range += (std::to_string(begin)+"-"+std::to_string(end));
+  extra_headers["HTTP_RANGE"] = range;
+
+  RGWRESTStreamRWRequest* req = new RGWRESTStreamReadRequest(store->ctx(), url, &cb, nullptr, &params);
+  int r = req->send_request(conn->get_key(), extra_headers, obj);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
+
+  std::string etag;
+  map<std::string, std::string> req_headers;
+  r = req->complete_request(etag, nullptr, nullptr, req_headers);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
+
+  if (obj_size) {
+    auto& headers = req->get_out_headers();
+    auto it = headers.find("CONTENT_RANGE");
+    if (it != headers.end()) {
+      size_t pos = it->second.find('/');
+      if (pos == std::string::npos) {
+        ldout(store->ctx(), 0) << "RGWCloudSyncObj error: content range has no obj size." << ret << dendl;
+        r = -EINVAL;
+      }
+      else{
+        std::string size = it->second.substr(pos+1);
+        *obj_size = std::stoll(size);
+      }
+    }else {
+       ldout(store->ctx(), 0) << "RGWCloudSyncObj error: response header has no content range." << ret << dendl;
+      r = -EINVAL;
+    }
+  }
+
+  delete req;
+  return r;
+}
+
 int RGWCloudSyncObj::_send_request()
 {
   std::string user_id;
   rgw_obj src_obj(bucket_info.bucket, key);
-
-  RGWRESTStreamRWRequest *in_stream_req;
  
   RGWRESTConn *conn;
   if (source_zone.empty()) {
@@ -89,41 +142,44 @@ int RGWCloudSyncObj::_send_request()
     conn = iter->second;
   }
 
-  std::string etag;
-  map<std::string, std::string> req_headers;
-  real_time set_mtime;
-
-  //obj_time_weight dest_mtime_weight;
-  uint32_t mod_zone_id = 0; 
-  uint64_t mod_pg_ver = 0;
-  
-  RGWGetRemoteObjCB cb;
-  int ret = conn->get_obj(user_id, NULL, src_obj, NULL, NULL,
-                      mod_zone_id, mod_pg_ver,
-                      false /* prepend_meta */, true /* GET */, false /* rgwx-stat */,
-                      true /* sync manifest */, &cb, &in_stream_req);
+  int ret = cloud_access->init_multipart(bucket_info.bucket.name, key.name);
   if (ret < 0) {
-    ldout(store->ctx(),0) << "cloud error get_obj ret:" << ret << " "
-                          << bucket_info.bucket.name << "file:" << key.name << dendl;
-    return ret;
+    return 0;
   }
 
-  ret = conn->complete_request(in_stream_req, etag, &set_mtime, nullptr, req_headers);
-  if (ret < 0) {
-    ldout(store->ctx(),0) << "cloud error complete_request ret:" << ret << " "
-                          << bucket_info.bucket.name << "file:" << key.name << dendl;
-    return ret;
-  }
+  uint64_t block_size = cloud_access->get_block_size();
+  uint64_t begin = 0;
+  uint64_t end = block_size -1;
+  uint64_t totall_read = 0;
+  uint64_t obj_size = 0;
+  uint64_t* p_size = &obj_size;
   
-  ldout(store->ctx(), 0) <<"cloud get obj len="<< cb.get_len() << dendl;
-  ret = cloud_access->put_obj(bucket_info.bucket.name, key.name, &(cb.get_data()), cb.get_len());
-  if (ret < 0) {
-    ldout(store->ctx(),0) << "cloud error put_obj ret:" << ret << " "
-                          << bucket_info.bucket.name << " file:" << key.name << dendl;
-  }else
-    ldout(store->ctx(),0) << "cloud success ret:"<<ret<<" bucket:" 
-                          << bucket_info.bucket.name << " file:" << key.name << dendl;
-  return ret;
+  while(true) {
+    RGWGetRemoteObjCB cb;
+    ret = get_obj_range(conn, cb, begin, end, p_size);
+    p_size = nullptr;
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "RGWCloudSyncObj:get obj range error:" << ret << dendl;
+      cloud_access->abort_multipart(bucket_info.bucket.name, key.name);
+      return ret;
+    }
+    begin = end+1;
+    end += block_size;
+    ret = cloud_access->upload_multipart(bucket_info.bucket.name, key.name, cb.get_data(), cb.get_len());
+    if (ret < 0) {
+      cloud_access->abort_multipart(bucket_info.bucket.name, key.name);
+      return ret;
+    }
+
+    totall_read += cb.get_len();
+    if(totall_read == obj_size) {
+      return cloud_access->finish_multipart(bucket_info.bucket.name, key.name);
+    } 
+    else if(totall_read > obj_size) {
+      ldout(store->ctx(), 0) << "RGWCloudSyncObj error: send size is bigger than obj size." << ret << dendl;
+      return cloud_access->abort_multipart(bucket_info.bucket.name, key.name);
+    }
+  }
 }
 
 class RGWCloudSyncObjCR : public RGWSimpleCoroutine {
@@ -284,6 +340,7 @@ class RGWCloudDataSyncModule : public RGWDataSyncModule {
   map<std::string, std::string, ltstr_nocase>& config;
   set<std::string> bucket_filter;
   RGWCloudInfo cloud_info;
+  bool valid_config;
   
   bool check_bucket_filter(std::string& bucket_name) {
     if (bucket_filter.empty()) {
@@ -296,62 +353,57 @@ class RGWCloudDataSyncModule : public RGWDataSyncModule {
   
 public:
   RGWCloudDataSyncModule(const std::string& _prefix, map<std::string, std::string, ltstr_nocase>& _config) 
-                          : prefix(_prefix), config(_config) {
+                          : prefix(_prefix), config(_config), valid_config(true) {
     auto iter = config.find("src_bucket");
-    if (iter == config.end())
-      return;
-
-    if(iter->second =="*" || iter->second.empty()) {
-      return;
+    if (iter != config.end()) {
+      if(iter->second =="*" || iter->second.empty()) {
+        return;
+      }
+      bucket_filter.insert(iter->second);
     }
-    bucket_filter.insert(iter->second);
+    
+    init_cloud_info();
   }
   
   ~RGWCloudDataSyncModule() { }
   
   std::shared_ptr<RGWCloudAccess> create_cloud_access() {
-    int ret = init_cloud_info();
-    if (ret < 0) {
-      return nullptr;
-    }
-    
-    if (cloud_info.access_type == "ufile") {
-      if (cloud_info.bucket_host.empty()) {
-        dout(0) << "ERROR: bucket host of ufile is unknown." << dendl;
-        return nullptr;
-      }
-      if (cloud_info.bucket_region.empty()) {
-        dout(0) << "ERROR: bucket region of ufile is unknown." << dendl;
-        return nullptr;
-      }
-      return std::make_shared<RGWUfileAccess>(cloud_info);
-    }
-    else {
-      dout(0) << "ERROR: cloud sync target interface type is invalid." << dendl;
-      return nullptr;
-    }
+    return valid_config ? std::make_shared<RGWCloudUfile>(cloud_info) : nullptr;
   }
   
   int init_cloud_info() {
     auto iter = config.find("cloud_type");
     if (iter == config.end() ) {
       dout(0) << "ERROR: cloud sync target interface type is unknown." << dendl;
+      valid_config = false;
       return -EINVAL;
     }
     cloud_info.access_type = iter->second;
     transform(cloud_info.access_type.begin(), cloud_info.access_type.end(), cloud_info.access_type.begin(), ::tolower);  
-  
+
     iter = config.find("domain_name");
     if (iter == config.end()) {
       dout(0) << "ERROR: the domain name of cloud sync target is unknown." << dendl;
+      valid_config = false;      
       return -EINVAL;
     }
     
     cloud_info.domain_name = iter->second;
     
+    std::string region;
+    std::string::size_type pos= cloud_info.domain_name.find('.');
+    if(pos == std::string::npos) {
+      dout(0) << "ERROR: the domain name of cloud sync has no region." << dendl;
+      valid_config = false;
+      return -EINVAL;
+    }
+
+    cloud_info.bucket_region = cloud_info.domain_name.substr(0, pos);
+
     iter = config.find("public_key");
     if (iter == config.end()) {
       dout(0) << "ERROR: the public key of cloud sync target is unknown." << dendl;
+      valid_config = false;
       return -EINVAL;
     }
     cloud_info.public_key = iter->second;
@@ -359,6 +411,7 @@ public:
     iter = config.find("private_key");
     if (iter == config.end()) {
       dout(0) << "ERROR: the private key of cloud sync target is unknown." << dendl;
+      valid_config = false;
       return -EINVAL;
     }
     cloud_info.private_key = iter->second;
@@ -379,17 +432,30 @@ public:
     if (iter != config.end()) {
       cloud_info.bucket_host = iter->second;
     }
-    
-    iter = config.find("bucket_region");
-    if (iter != config.end()) {
-      cloud_info.bucket_region = iter->second;
+
+    if (cloud_info.access_type == "ufile") {
+      if (cloud_info.bucket_host.empty()) {
+        dout(0) << "ERROR: bucket host of ufile is unknown." << dendl;
+        valid_config = false;
+        return -EINVAL;
+      }
+      if (cloud_info.bucket_region.empty()) {
+        dout(0) << "ERROR: bucket region of ufile is unknown." << dendl;
+        valid_config = false;
+        return -EINVAL;
+      }
+    }
+    else {
+      valid_config = false;
+      dout(0) << "ERROR: cloud sync target interface type is invalid." << dendl;
+      return -EINVAL;
     }
     
     return 0;
   }
 
   RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 0) << prefix << ": SYNC_CUSTOM: sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
+    ldout(sync_env->cct, 20) << prefix << ": SYNC_CLOUD: sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
     std::shared_ptr<RGWCloudAccess> cloud_access = create_cloud_access();
     if (cloud_access != nullptr && check_bucket_filter(bucket_info.bucket.name)) {
       cloud_access->set_ceph_context(sync_env->cct);
@@ -398,7 +464,7 @@ public:
     return nullptr;
   }
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 0) << prefix << ": SYNC_CUSTOM: rm_object: b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
+    ldout(sync_env->cct, 20) << prefix << ": SYNC_CLOUD: rm_object: b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     std::shared_ptr<RGWCloudAccess> cloud_access = create_cloud_access();
     if (cloud_access != nullptr && check_bucket_filter(bucket_info.bucket.name)) {
       cloud_access->set_ceph_context(sync_env->cct);
@@ -408,7 +474,7 @@ public:
   }
   RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 0) << prefix << ": SYNC_CUSTOM: create_delete_marker: b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime
+    ldout(sync_env->cct, 20) << prefix << ": SYNC_CLOUD: create_delete_marker: b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime
                             << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     return NULL;
   }
