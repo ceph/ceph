@@ -267,12 +267,12 @@ TempURLEngine::authenticate(const req_state* const s) const
     get_owner_info(s, owner_info);
   } catch (...) {
     ldout(cct, 5) << "cannot get user_info of account's owner" << dendl;
-    return result_t::reject();
+    return result_t::reject(-EPERM);
   }
 
   if (owner_info.temp_url_keys.empty()) {
     ldout(cct, 5) << "user does not have temp url key set, aborting" << dendl;
-    return result_t::reject();
+    return result_t::reject(-EPERM);
   }
 
   if (is_expired(temp_url_expires)) {
@@ -342,7 +342,7 @@ TempURLEngine::authenticate(const req_state* const s) const
     }
   }
 
-  return result_t::reject();
+  return result_t::reject(-EPERM);
 }
 
 
