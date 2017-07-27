@@ -72,7 +72,7 @@ private:
   Pools m_pools;
   uint64_t m_callout_id = service_daemon::CALLOUT_ID_NONE;
 
-  Context* m_timer_ctx;
+  Context* m_timer_ctx = nullptr;
 
   void schedule_update_status();
   void update_status();
