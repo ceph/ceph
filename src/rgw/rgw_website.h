@@ -15,13 +15,16 @@
 #ifndef RGW_WEBSITE_H
 #define RGW_WEBSITE_H
 
+#include <list>
+#include <string>
+
 #include "rgw_xml.h"
 
 struct RGWRedirectInfo
 {
-  string protocol;
-  string hostname;
-  uint16_t http_redirect_code;
+  std::string protocol;
+  std::string hostname;
+  uint16_t http_redirect_code = 0;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -47,8 +50,8 @@ WRITE_CLASS_ENCODER(RGWRedirectInfo)
 struct RGWBWRedirectInfo
 {
   RGWRedirectInfo redirect;
-  string replace_key_prefix_with;
-  string replace_key_with;
+  std::string replace_key_prefix_with;
+  std::string replace_key_with;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -74,7 +77,7 @@ WRITE_CLASS_ENCODER(RGWBWRedirectInfo)
 
 struct RGWBWRoutingRuleCondition
 {
-  string key_prefix_equals;
+  std::string key_prefix_equals;
   uint16_t http_error_code_returned_equals;
 
   void encode(bufferlist& bl) const {
@@ -95,7 +98,7 @@ struct RGWBWRoutingRuleCondition
   void decode_json(JSONObj *obj);
   void decode_xml(XMLObj *obj);
 
-  bool check_key_condition(const string& key);
+  bool check_key_condition(const std::string& key);
   bool check_error_code_condition(const int error_code) {
     return (uint16_t)error_code == http_error_code_returned_equals;
   }
@@ -125,20 +128,24 @@ struct RGWBWRoutingRule
   void decode_json(JSONObj *obj);
   void decode_xml(XMLObj *obj);
 
-  bool check_key_condition(const string& key) {
+  bool check_key_condition(const std::string& key) {
     return condition.check_key_condition(key);
   }
   bool check_error_code_condition(int error_code) {
     return condition.check_error_code_condition(error_code);
   }
 
-  void apply_rule(const string& default_protocol, const string& default_hostname, const string& key, string *redirect, int *redirect_code);
+  void apply_rule(const std::string& default_protocol,
+                  const std::string& default_hostname,
+                  const std::string& key,
+                  std::string *redirect,
+                  int *redirect_code);
 };
 WRITE_CLASS_ENCODER(RGWBWRoutingRule)
 
 struct RGWBWRoutingRules
 {
-  list<RGWBWRoutingRule> rules;
+  std::list<RGWBWRoutingRule> rules;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -155,9 +162,11 @@ struct RGWBWRoutingRules
   void dump_xml(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
-  bool check_key_condition(const string& key, RGWBWRoutingRule **rule);
+  bool check_key_condition(const std::string& key, RGWBWRoutingRule **rule);
   bool check_error_code_condition(int error_code, RGWBWRoutingRule **rule);
-  bool check_key_and_error_code_condition(const string& key, const int error_code, RGWBWRoutingRule **rule);
+  bool check_key_and_error_code_condition(const std::string& key,
+                                          const int error_code,
+                                          RGWBWRoutingRule **rule);
 };
 WRITE_CLASS_ENCODER(RGWBWRoutingRules)
 
