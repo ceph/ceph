@@ -1078,6 +1078,9 @@ COMMAND("mgr fail name=who,type=CephString", \
 	"treat the named manager daemon as failed", "mgr", "rw", "cli,rest")
 COMMAND("mgr module ls",
 	"list active mgr modules", "mgr", "r", "cli,rest")
+COMMAND("mgr services",
+	"list service endpoints provided by mgr modules",
+        "mgr", "r", "cli,rest")
 COMMAND("mgr module enable "						\
 	"name=module,type=CephString "					\
 	"name=force,type=CephChoices,strings=--force,req=false",
