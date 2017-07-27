@@ -57,6 +57,9 @@ private:
 
   int load_commands();
 
+  // Optional, URI exposed by plugins that implement serve()
+  std::string uri;
+
 public:
   MgrPyModule(const std::string &module_name, const std::string &sys_path, PyThreadState *main_ts);
   ~MgrPyModule();
@@ -86,6 +89,16 @@ public:
     health_checks = std::move(c);
   }
   void get_health_checks(health_check_map_t *checks);
+
+  void set_uri(const std::string &str)
+  {
+    uri = str;
+  }
+
+  std::string get_uri() const
+  {
+    return uri;
+  }
 };
 
 std::string handle_pyerror();

@@ -658,3 +658,10 @@ std::vector<MonCommand> Mgr::get_command_set() const
   return commands;
 }
 
+std::map<std::string, std::string> Mgr::get_services() const
+{
+  Mutex::Locker l(lock);
+
+  return py_modules.get_services();
+}
+

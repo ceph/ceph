@@ -433,7 +433,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         OSDMap.
         :return: OSDMap
         """
-        return OSDMap(ceph_state.get_osdmap())
+        return OSDMap(self._ceph_get_osdmap())
 
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL):
         """
@@ -491,3 +491,12 @@ class MgrModule(ceph_module.BaseMgrModule):
         self.log.debug("returning {0} counter".format(len(result)))
 
         return result
+
+    def set_uri(self, uri):
+        """
+        If the module exposes a service, then call this to publish the
+        address once it is available.
+
+        :return: a string
+        """
+        return self._ceph_set_uri(uri)

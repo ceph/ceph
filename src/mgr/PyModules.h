@@ -92,6 +92,8 @@ public:
 			 health_check_map_t&& checks);
   void get_health_checks(health_check_map_t *checks);
 
+  void set_uri(const std::string& module_name, const std::string &uri);
+
   void log(const std::string &module_name,
            int level, const std::string &record);
 
@@ -104,6 +106,8 @@ public:
   std::vector<MonCommand> get_commands() const;
 
   void insert_config(const std::map<std::string, std::string> &new_config);
+
+  std::map<std::string, std::string> get_services() const;
 
   // Public so that MonCommandCompletion can use it
   // FIXME: for send_command completion notifications,
