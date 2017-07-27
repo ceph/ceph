@@ -15,6 +15,8 @@
 #ifndef CEPH_COUNTER_H
 #define CEPH_COUNTER_H
 
+#include <atomic>
+
 template <typename T>
 class Counter {
 public:
@@ -30,23 +32,23 @@ public:
   ~Counter() {
     _count()--;
   }
-  static unsigned long count() {
+  static uint64_t count() {
     return _count();
   }
-  static unsigned long increments() {
+  static uint64_t increments() {
     return _increments();
   }
-  static unsigned long decrements() {
+  static uint64_t decrements() {
     return increments()-count();
   }
 
 private:
-  static unsigned long &_count() {
-    static unsigned long c;
+  static std::atomic<uint64_t> &_count() {
+    static std::atomic<uint64_t> c;
     return c;
   }
-  static unsigned long &_increments() {
-    static unsigned long i;
+  static std::atomic<uint64_t> &_increments() {
+    static std::atomic<uint64_t> i;
     return i;
   }
 };
