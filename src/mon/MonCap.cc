@@ -258,6 +258,17 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.back().command_args["caps_osd"] = StringConstraint(
       StringConstraint::MATCH_TYPE_EQUAL, "allow rwx");
   }
+  if (profile == "bootstrap-rbd") {
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
+    profile_grants.push_back(MonCapGrant("auth get-or-create"));  // FIXME: this can expose other mds keys
+    profile_grants.back().command_args["entity"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_PREFIX, "client.");
+    profile_grants.back().command_args["caps_mon"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_EQUAL, "profile rbd");
+    profile_grants.back().command_args["caps_osd"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_REGEX,
+      "^([ ,]*profile(=|[ ]+)['\"]?rbd[^ ,'\"]*['\"]?([ ]+pool(=|[ ]+)['\"]?[^,'\"]+['\"]?)?)+$");
+  }
   if (profile == "fs-client") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_R));
