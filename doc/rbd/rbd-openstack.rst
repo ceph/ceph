@@ -114,7 +114,7 @@ The nodes running ``glance-api``, ``cinder-volume``, ``nova-compute`` and
 Install Ceph client packages
 ----------------------------
 
-On the ``glance-api`` node, you'll need the Python bindings for ``librbd``::
+On the ``glance-api`` node, you will need the Python bindings for ``librbd``::
 
   sudo apt-get install python-rbd
   sudo yum install python-rbd
@@ -304,7 +304,7 @@ specify the pool name for the block device. On your OpenStack node, edit
     rados_connect_timeout = -1
     glance_api_version = 2
 
-If you're using `cephx authentication`_, also configure the user and uuid of
+If you are using `cephx authentication`_, also configure the user and uuid of
 the secret you added to ``libvirt`` as documented earlier::
 
     [ceph]
