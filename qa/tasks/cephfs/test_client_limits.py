@@ -123,7 +123,7 @@ class TestClientLimits(CephFSTestCase):
         # After mds_revoke_cap_timeout, we should see a health warning (extra lag from
         # MDS beacon period)
         mds_revoke_cap_timeout = float(self.fs.get_config("mds_revoke_cap_timeout"))
-        self.wait_for_health("MDS_CLIENT_RECALL", mds_revoke_cap_timeout + 10)
+        self.wait_for_health("MDS_CLIENT_LATE_RELEASE", mds_revoke_cap_timeout + 10)
 
         # Client B should still be stuck
         self.assertFalse(rproc.finished)
