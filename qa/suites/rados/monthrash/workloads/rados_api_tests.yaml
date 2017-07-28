@@ -8,6 +8,7 @@ overrides:
       - (REQUEST_SLOW)
       - (MON_DOWN)
       - (PG_
+      - (POOL_APP_NOT_ENABLED)
     conf:
       global:
         debug objecter: 20

@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-whitelist:
       - reached quota
+      - (POOL_APP_NOT_ENABLED)
     conf:
       global:
         ms inject delay max: 1

@@ -128,6 +128,24 @@ MANY_OBJECTS_PER_PG
 ___________________
 
 
+POOL_APP_NOT_ENABLED
+____________________
+
+A pool exists that contains one or more objects but has not been
+tagged for use by a particular application.
+
+Resolve this warning by labeling the pool for use by an application.  For
+example, if the pool is used by RBD,::
+
+  rbd pool init <poolname>
+
+If the pool is being used by a custom application 'foo', you can also label
+via the low-level command::
+
+  ceph osd pool application enable foo
+
+For more information, see :doc:`pools.rst#associate-pool-to-application`.
+
 POOL_FULL
 _________
 
