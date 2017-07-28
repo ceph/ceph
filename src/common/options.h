@@ -79,16 +79,16 @@ struct Option {
   // Additionally: "common" for settings that exist in any Ceph code.  Do
   // not use common for settings that are just shared some places: for those
   // places, list them.
-  std::list<std::string> services;
+  std::list<const char*> services;
 
   // Topics like:
   // "service": a catchall for the boring stuff like log/asok paths.
   // "network"
   // "performance": a setting that may need adjustment depending on
   //                environment/workload to get best performance.
-  std::list<std::string> tags;
+  std::list<const char*> tags;
 
-  std::list<std::string> see_also;
+  std::list<const char*> see_also;
 
   value_t min, max;
   std::list<std::string> enum_allowed;
@@ -187,20 +187,28 @@ struct Option {
   Option& set_daemon_default(const T& v) {
     return set_value(daemon_value, v);
   }
-  Option& add_tag(const char* tags_str) {
-    for (const auto t: get_str_vec(tags_str)) {
-      tags.push_back(t);
-    }
+  Option& add_tag(const char* tag) {
+    tags.push_back(tag);
     return *this;
   }
-  Option& add_service(const std::string &services_str) {
-    for (const auto s: get_str_vec(services_str)) {
-      services.push_back(s);
-    }
+  Option& add_tag(std::initializer_list<const char*> ts) {
+    tags.insert(tags.end(), ts);
+    return *this;
+  }
+  Option& add_service(const char* service) {
+    services.push_back(service);
+    return *this;
+  }
+  Option& add_service(std::initializer_list<const char*> ss) {
+    services.insert(services.end(), ss);
     return *this;
   }
   Option& add_see_also(const char* t) {
     see_also.push_back(t);
+    return *this;
+  }
+  Option& add_see_also(std::initializer_list<const char*> ts) {
+    see_also.insert(see_also.end(), ts);
     return *this;
   }
   Option& set_description(const char* new_desc) {

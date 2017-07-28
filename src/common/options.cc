@@ -145,7 +145,7 @@ std::vector<Option> global_options = {
 
   Option("public_addr", Option::TYPE_ADDR, Option::LEVEL_BASIC)
   .set_description("public-facing address to bind to")
-  .add_service("mon mds osd mgr"),
+  .add_service({"mon", "mds", "osd", "mgr"}),
 
   Option("public_bind_addr", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
   .set_default(entity_addr_t())
@@ -158,7 +158,7 @@ std::vector<Option> global_options = {
   .add_tag("network"),
 
   Option("public_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .add_service("mon mds osd mgr")
+  .add_service({"mon", "mds", "osd", "mgr"})
   .add_tag("network")
   .set_description(""),
 
@@ -224,39 +224,39 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_daemon_default(true)
   .set_description("whether to daemonize (background) after startup")
-  .add_service("mon mgr osd mds")
+  .add_service({"mon", "mgr", "osd", "mds"})
   .add_tag("service")
-  .add_see_also("pid_file").add_see_also("chdir"),
+  .add_see_also({"pid_file", "chdir"}),
 
   Option("setuser", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("uid or user name to switch to on startup")
   .set_long_description("This is normally specified by the systemd unit file.")
-  .add_service("mon mgr osd mds")
+  .add_service({"mon", "mgr", "osd", "mds"})
   .add_tag("service")
   .add_see_also("setgroup"),
 
   Option("setgroup", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("gid or group name to switch to on startup")
   .set_long_description("This is normally specified by the systemd unit file.")
-  .add_service("mon mgr osd mds")
+  .add_service({"mon", "mgr", "osd", "mds"})
   .add_tag("service")
   .add_see_also("setuser"),
 
   Option("setuser_match_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("if set, setuser/setgroup is condition on this path matching ownership")
   .set_long_description("If setuser or setgroup are specified, and this option is non-empty, then the uid/gid of the daemon will only be changed if the file or directory specified by this option has a matching uid and/or gid.  This exists primarily to allow switching to user ceph for OSDs to be conditional on whether the osd data contents have also been chowned after an upgrade.  This is normally specified by the systemd unit file.")
-  .add_service("mon mgr osd mds")
+  .add_service({"mon", "mgr", "osd", "mds"})
   .add_tag("service")
-  .add_see_also("setuser").add_see_also("setgroup"),
+  .add_see_also({"setuser", "setgroup"}),
 
   Option("pid_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("path to write a pid file (if any)")
-  .add_service("mon mgr osd mds")
+  .add_service({"mon", "mgr", "osd", "mds"})
   .add_tag("service"),
 
   Option("chdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("path to chdir(2) to after daemonizing")
-  .add_service("mon mgr osd mds")
+  .add_service({"mon", "mgr", "osd", "mds"})
   .add_tag("service")
   .add_see_also("daemonize"),
 
@@ -264,7 +264,7 @@ std::vector<Option> global_options = {
   .set_default(true)
   .set_description("whether to register signal handlers for SIGABRT etc that dump a stack trace")
   .set_long_description("This is normally true for daemons and values for libraries.")
-  .add_service("mon mgr osd mds")
+  .add_service({"mon", "mgr", "osd", "mds"})
   .add_tag("service"),
 
   // restapi
@@ -277,7 +277,7 @@ std::vector<Option> global_options = {
   Option("erasure_code_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default(CEPH_PKGLIBDIR"/erasure-code")
   .set_description("directory where erasure-code plugins can be found")
-  .add_service("mon osd")
+  .add_service({"mon", "osd"})
   .set_safe(),
 
   // logging
@@ -285,10 +285,10 @@ std::vector<Option> global_options = {
   .set_default("")
   .set_daemon_default("/var/log/ceph/$cluster-$name.log")
   .set_description("path to log file")
-  .add_see_also("log_to_stderr")
-  .add_see_also("err_to_stderr")
-  .add_see_also("log_to_syslog")
-  .add_see_also("err_to_syslog"),
+  .add_see_also({"log_to_stderr",
+                 "err_to_stderr",
+                 "log_to_syslog",
+                 "err_to_syslog"}),
 
   Option("log_max_new", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(1000)
@@ -332,23 +332,23 @@ std::vector<Option> global_options = {
   Option("log_to_graylog", Option::TYPE_BOOL, Option::LEVEL_BASIC)
   .set_default(false)
   .set_description("send log lines to remote graylog server")
-  .add_see_also("err_to_graylog")
-  .add_see_also("log_graylog_host")
-  .add_see_also("log_graylog_port"),
+  .add_see_also({"err_to_graylog",
+                 "log_graylog_host",
+                 "log_graylog_port"}),
 
   Option("err_to_graylog", Option::TYPE_BOOL, Option::LEVEL_BASIC)
   .set_default(false)
   .set_description("send critical error log lines to remote graylog server")
-  .add_see_also("log_to_graylog")
-  .add_see_also("log_graylog_host")
-  .add_see_also("log_graylog_port"),
+  .add_see_also({"log_to_graylog",
+                 "log_graylog_host",
+                 "log_graylog_port"}),
 
   Option("log_graylog_host", Option::TYPE_STR, Option::LEVEL_BASIC)
   .set_default("127.0.0.1")
   .set_description("address or hostname of graylog server to log to")
-  .add_see_also("log_to_graylog")
-  .add_see_also("err_to_graylog")
-  .add_see_also("log_graylog_port"),
+  .add_see_also({"log_to_graylog",
+                 "err_to_graylog",
+                 "log_graylog_port"}),
 
   Option("log_graylog_port", Option::TYPE_INT, Option::LEVEL_BASIC)
   .set_default(12201)
@@ -5576,7 +5576,7 @@ static std::vector<Option> build_options()
 {
   std::vector<Option> result = global_options;
 
-  auto ingest = [&result](std::vector<Option> &options, const std::string &svc) {
+  auto ingest = [&result](std::vector<Option> &options, const char* svc) {
     for (const auto &o_in : options) {
       Option o(o_in);
       o.add_service(svc);
