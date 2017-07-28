@@ -407,7 +407,7 @@ class Module(MgrModule):
         elif command['prefix'] == "restful delete-key":
             if command['key_name'] in self.keys:
                 del self.keys[command['key_name']]
-                self.set_config('keys/' + command['key_name'], None)
+                self.del_config('keys/' + command['key_name'])
 
             return (
                 0,

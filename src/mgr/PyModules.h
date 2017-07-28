@@ -114,6 +114,8 @@ public:
 			      const std::string &prefix) const;
   void set_config(const std::string &handle,
       const std::string &key, const std::string &val);
+  void del_config(const std::string &handle,
+      const std::string &key);
 
   void log(const std::string &handle,
            int level, const std::string &record);
@@ -122,4 +124,3 @@ public:
 };
 
 #endif
-
