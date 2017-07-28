@@ -234,7 +234,7 @@ ceph_config_get(PyObject *self, PyObject *args)
     dout(10) << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
     return PyString_FromString(value.c_str());
   } else {
-    derr << "ceph_config_get " << what << " not found " << dendl;
+    dout(4) << "ceph_config_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
   }
 }
