@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <array>
+#include <algorithm>
 
 #include <boost/utility/string_view.hpp>
 #include <boost/container/static_vector.hpp>
@@ -140,7 +141,20 @@ bool TempURLEngine::is_expired(const std::string& expires) const
   return false;
 }
 
-std::string extract_swift_subuser(const std::string& swift_user_name) {
+bool TempURLEngine::is_disallowed_header_present(const req_info& info) const
+{
+  static const auto headers = {
+    "HTTP_X_OBJECT_MANIFEST",
+  };
+
+  return std::any_of(std::begin(headers), std::end(headers),
+                     [&info](const char* header) {
+                       return info.env->exists(header);
+                     });
+}
+
+std::string extract_swift_subuser(const std::string& swift_user_name)
+{
   size_t pos = swift_user_name.find(':');
   if (std::string::npos == pos) {
     return swift_user_name;
@@ -282,6 +296,11 @@ TempURLEngine::authenticate(const req_state* const s) const
   if (is_expired(temp_url_expires)) {
     ldout(cct, 5) << "temp url link expired" << dendl;
     return result_t::reject(-EPERM);
+  }
+
+  if (is_disallowed_header_present(s->info)) {
+    ldout(cct, 5) << "temp url rejected due to disallowed header" << dendl;
+    return result_t::reject(-EINVAL);
   }
 
   /* We need to verify two paths because of compliance with Swift, Tempest
