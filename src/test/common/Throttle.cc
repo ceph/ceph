@@ -56,7 +56,6 @@ protected:
       return NULL;
     }
   };
-
 };
 
 TEST_F(ThrottleTest, Throttle) {
@@ -220,42 +219,41 @@ TEST_F(ThrottleTest, wait) {
   } while(!waited);
 }
 
+namespace ceph {
+template<typename T>
+struct uniquity {
+  using datum = std::unique_ptr<T>;
+};
+
+template<typename T, typename... Args>
+inline typename uniquity<T>::datum make_unique(Args&&... args) {
+  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+}
+
 TEST_F(ThrottleTest, destructor) {
-  Thread_get *t;
-  {
-    int64_t throttle_max = 10;
-    Throttle *throttle = new Throttle(g_ceph_context, "throttle", throttle_max);
+  EXPECT_DEATH({
+      int64_t throttle_max = 10;
+      auto throttle = ceph::make_unique<Throttle>(g_ceph_context, "throttle",
+						  throttle_max);
 
-    ASSERT_FALSE(throttle->get(5));
 
-    t = new Thread_get(*throttle, 7);
-    t->create("t_throttle");
-    bool blocked;
-    useconds_t delay = 1;
-    do {
-      usleep(delay);
-      if (throttle->get_or_fail(1)) {
-	throttle->put(1);
-	blocked = false;
-      } else {
-	blocked = true;
-      }
-      delay *= 2;
-    } while(!blocked);
-    delete throttle;
-  }
-
-  { //
-    // The thread is left hanging, otherwise it will abort().
-    // Deleting the Throttle on which it is waiting creates a
-    // inconsistency that will be detected: the Throttle object that
-    // it references no longer exists.
-    //
-    pthread_t id = t->get_thread_id();
-    ASSERT_EQ(pthread_kill(id, 0), 0);
-    delete t;
-    ASSERT_EQ(pthread_kill(id, 0), 0);
-  }
+      ASSERT_FALSE(throttle->get(5));
+      unique_ptr<Thread_get> t = ceph::make_unique<Thread_get>(*throttle, 7);
+      t->create("t_throttle");
+      bool blocked;
+      useconds_t delay = 1;
+      do {
+	usleep(delay);
+	if (throttle->get_or_fail(1)) {
+	  throttle->put(1);
+	  blocked = false;
+	} else {
+	  blocked = true;
+	}
+	delay *= 2;
+      } while (!blocked);
+    }, ".*");
 }
 
 std::pair<double, std::chrono::duration<double> > test_backoff(
@@ -357,6 +355,24 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
     wait_time / waits);
 }
 
+TEST(BackoffThrottle, destruct) {
+  EXPECT_DEATH({
+      auto throttle = ceph::make_unique<BackoffThrottle>(10);
+      ASSERT_TRUE(throttle->set_params(0.4, 0.6, 1000, 2, 10, 6, nullptr));
+
+      throttle->get(5);
+      {
+	auto& t = *throttle;
+	std::thread([&t]() {
+	    usleep(5);
+	    t.get(6);
+	  });
+      }
+      // No equivalent of get_or_fail()
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }, ".*");
+}
+
 TEST(BackoffThrottle, undersaturated)
 {
   auto results = test_backoff(
@@ -411,6 +427,22 @@ TEST(BackoffThrottle, oversaturated)
   ASSERT_GT(results.second.count(), 0.0005);
 }
 
+TEST(OrderedThrottle, destruct) {
+  EXPECT_DEATH({
+      auto throttle = ceph::make_unique<OrderedThrottle>(1, false);
+      throttle->start_op(nullptr);
+      {
+	auto& t = *throttle;
+	std::thread([&t]() {
+	    usleep(5);
+	    t.start_op(nullptr);
+	  });
+      }
+      // No equivalent of get_or_fail()
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }, ".*");
+}
+
 /*
  * Local Variables:
  * compile-command: "cd ../.. ;
@@ -420,4 +452,3 @@ TEST(BackoffThrottle, oversaturated)
  * "
  * End:
  */
-

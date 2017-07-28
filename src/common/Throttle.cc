@@ -63,10 +63,9 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m, bool _use_
 
 Throttle::~Throttle()
 {
-  while (!cond.empty()) {
-    Cond *cv = cond.front();
-    delete cv;
-    cond.pop_front();
+  {
+    Mutex::Locker l(lock);
+    assert(cond.empty());
   }
 
   if (!use_perf)
@@ -90,34 +89,51 @@ void Throttle::_reset_max(int64_t m)
   max.set((size_t)m);
 }
 
+template <typename F>
+struct scope_guard {
+  F f;
+  scope_guard() = delete;
+  scope_guard(const scope_guard &) = delete;
+  scope_guard(scope_guard &&) = default;
+  scope_guard & operator=(const scope_guard &) = delete;
+  scope_guard & operator=(scope_guard &&) = default;
+  scope_guard(F &&f) : f(std::move(f)) {}
+  ~scope_guard() {
+    f();
+  }
+};
+
+template <typename F>
+scope_guard<F> make_scope_guard(F &&f) {
+  return scope_guard<F>(std::forward<F>(f));
+}
+
 bool Throttle::_wait(int64_t c)
 {
   utime_t start;
   bool waited = false;
   if (_should_wait(c) || !cond.empty()) { // always wait behind other waiters.
-    Cond *cv = new Cond;
-    cond.push_back(cv);
-    do {
-      if (!waited) {
-	ldout(cct, 2) << "_wait waiting..." << dendl;
-	if (logger)
-	  start = ceph_clock_now(cct);
-      }
+    {
+      auto cv = cond.insert(cond.end(), new Cond);
+      auto w = make_scope_guard([this, cv]() {
+	  delete *cv;
+	  cond.erase(cv);
+	});
       waited = true;
-      cv->Wait(lock);
-    } while (_should_wait(c) || cv != cond.front());
+      ldout(cct, 2) << "_wait waiting..." << dendl;
+      if (logger)
+	start = ceph_clock_now(cct);
 
-    if (waited) {
-      ldout(cct, 3) << "_wait finished waiting" << dendl;
+      do {
+	(*cv)->Wait(lock);
+      } while ((_should_wait(c) || cv != cond.begin()));
+
+      ldout(cct, 2) << "_wait finished waiting" << dendl;
       if (logger) {
 	utime_t dur = ceph_clock_now(cct) - start;
-        logger->tinc(l_throttle_wait, dur);
+	logger->tinc(l_throttle_wait, dur);
       }
     }
-
-    delete cv;
-    cond.pop_front();
-
     // wake up the next guy
     if (!cond.empty())
       cond.front()->SignalOne();
@@ -236,6 +252,14 @@ int64_t Throttle::put(int64_t c)
     }
   }
   return count.read();
+}
+
+BackoffThrottle::~BackoffThrottle()
+{
+  {
+    locker l(lock);
+    assert(waiters.empty());
+  }
 }
 
 bool BackoffThrottle::set_params(
@@ -435,13 +459,17 @@ SimpleThrottle::~SimpleThrottle()
 {
   Mutex::Locker l(m_lock);
   assert(m_current == 0);
+  assert(waiters == 0);
 }
 
 void SimpleThrottle::start_op()
 {
   Mutex::Locker l(m_lock);
-  while (m_max == m_current)
+  while (m_max == m_current) {
+    waiters++;
     m_cond.Wait(m_lock);
+    waiters--;
+  }
   ++m_current;
 }
 
@@ -463,8 +491,11 @@ bool SimpleThrottle::pending_error() const
 int SimpleThrottle::wait_for_ret()
 {
   Mutex::Locker l(m_lock);
-  while (m_current > 0)
+  while (m_current > 0) {
+    waiters++;
     m_cond.Wait(m_lock);
+    waiters--;
+  }
   return m_ret;
 }
 
@@ -477,6 +508,11 @@ OrderedThrottle::OrderedThrottle(uint64_t max, bool ignore_enoent)
     m_ignore_enoent(ignore_enoent), m_next_tid(0), m_complete_tid(0) {
 }
 
+OrderedThrottle::~OrderedThrottle() {
+  Mutex::Locker locker(m_lock);
+  assert(waiters == 0);
+}
+
 C_OrderedThrottle *OrderedThrottle::start_op(Context *on_finish) {
   assert(on_finish != NULL);
 
@@ -487,7 +523,9 @@ C_OrderedThrottle *OrderedThrottle::start_op(Context *on_finish) {
 
   complete_pending_ops();
   while (m_max == m_current) {
+    ++waiters;
     m_cond.Wait(m_lock);
+    --waiters;
     complete_pending_ops();
   }
   ++m_current;
@@ -527,7 +565,9 @@ int OrderedThrottle::wait_for_ret() {
   complete_pending_ops();
 
   while (m_current > 0) {
+    ++waiters;
     m_cond.Wait(m_lock);
+    --waiters;
     complete_pending_ops();
   }
   return m_ret_val;

@@ -11,7 +11,10 @@
 #include <iostream>
 #include <condition_variable>
 #include <chrono>
+#include <stdexcept>
 #include "include/atomic.h"
+
+#include "Cond.h"
 #include "include/Context.h"
 
 class CephContext;
@@ -33,6 +36,8 @@ class Throttle {
   Mutex lock;
   list<Cond*> cond;
   const bool use_perf;
+  bool shutting_down = false;
+  Cond shutdown_clear;
 
 public:
   Throttle(CephContext *cct, const std::string& n, int64_t m = 0, bool _use_perf = true);
@@ -211,6 +216,7 @@ public:
   BackoffThrottle(
     unsigned expected_concurrency ///< [in] determines size of conds
     ) : conds(expected_concurrency) {}
+  ~BackoffThrottle();
 };
 
 
@@ -240,6 +246,7 @@ private:
   uint64_t m_current;
   int m_ret;
   bool m_ignore_enoent;
+  uint32_t waiters = 0;
 };
 
 class C_SimpleThrottle : public Context {
@@ -280,6 +287,7 @@ private:
 class OrderedThrottle {
 public:
   OrderedThrottle(uint64_t max, bool ignore_enoent);
+  ~OrderedThrottle();
 
   C_OrderedThrottle *start_op(Context *on_finish);
   void end_op(int r);
@@ -318,6 +326,7 @@ private:
   TidResult m_tid_result;
 
   void complete_pending_ops();
+  uint32_t waiters = 0;
 };
 
 #endif
