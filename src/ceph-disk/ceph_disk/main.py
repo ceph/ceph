@@ -215,11 +215,13 @@ if platform.system() == 'FreeBSD':
     PROCDIR = '/compat/linux/proc'
     # FreeBSD does not have blockdevices any more
     BLOCKDIR = '/dev'
+    ROOTGROUP = 'wheel'
 else:
     FREEBSD = False
     DEFAULT_FS_TYPE = 'xfs'
     PROCDIR = '/proc'
     BLOCKDIR = '/sys/block'
+    ROOTGROUP = 'root'
 
 """
 OSD STATUS Definition
@@ -4857,11 +4859,11 @@ def main_trigger(args):
 def main_fix(args):
     # A hash table containing 'path': ('uid', 'gid', blocking, recursive)
     fix_table = [
-        ('/usr/bin/ceph-mon', 'root', 'root', True, False),
-        ('/usr/bin/ceph-mds', 'root', 'root', True, False),
-        ('/usr/bin/ceph-osd', 'root', 'root', True, False),
-        ('/usr/bin/radosgw', 'root', 'root', True, False),
-        ('/etc/ceph', 'root', 'root', True, True),
+        ('/usr/bin/ceph-mon', 'root', ROOTGROUP, True, False),
+        ('/usr/bin/ceph-mds', 'root', ROOTGROUP, True, False),
+        ('/usr/bin/ceph-osd', 'root', ROOTGROUP, True, False),
+        ('/usr/bin/radosgw', 'root', ROOTGROUP, True, False),
+        ('/etc/ceph', 'root', ROOTGROUP, True, True),
         ('/var/run/ceph', 'ceph', 'ceph', True, True),
         ('/var/log/ceph', 'ceph', 'ceph', True, True),
         ('/var/log/radosgw', 'ceph', 'ceph', True, True),
