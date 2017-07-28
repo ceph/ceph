@@ -6,11 +6,14 @@ if [ ! -e Makefile ]; then
 fi
 
 if [ `uname` = FreeBSD ]; then
-  # otherwise module prettytable will not be found
-  export PYTHONPATH=/usr/local/lib/python2.7/site-packages
+    # otherwise module prettytable will not be found
+    export PYTHONPATH=/usr/local/lib/python2.7/site-packages
+    exec_mode=+111
+else
+    exec_mode=/111
 fi
 
-for f in `find ../qa/standalone -perm +111 -type f`
+for f in `find ../qa/standalone -perm $exec_mode -type f`
 do
     echo '--- $f ---'
     PATH=$PATH:bin \
