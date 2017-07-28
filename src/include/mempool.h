@@ -160,6 +160,7 @@ namespace mempool {
   f(osdmap)			      \
   f(osdmap_mapping)		      \
   f(pgmap)			      \
+  f(mds_co)			      \
   f(unittest_1)			      \
   f(unittest_2)
 
