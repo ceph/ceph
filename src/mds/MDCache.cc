@@ -8616,7 +8616,13 @@ void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
       info.last_err = err;
   }
 
-  if (info.check_peers) {
+  if (info.check_peers || info.discover) {
+    if (info.discover) {
+      // got backtrace from peer, but failed to find inode. re-check peers
+      info.discover = false;
+      info.ancestors.clear();
+      info.checked.clear();
+    }
     info.check_peers = false;
     info.checking = MDS_RANK_NONE;
     do_open_ino_peer(ino, info);
