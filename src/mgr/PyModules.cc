@@ -800,3 +800,21 @@ void PyModules::list_modules(std::set<std::string> *modules)
 {
   _list_modules(g_conf->mgr_module_path, modules);
 }
+
+void PyModules::set_health_checks(const std::string& handle,
+				  health_check_map_t&& checks)
+{
+  Mutex::Locker l(lock);
+  auto p = modules.find(handle);
+  if (p != modules.end()) {
+    p->second->set_health_checks(std::move(checks));
+  }
+}
+
+void PyModules::get_health_checks(health_check_map_t *checks)
+{
+  Mutex::Locker l(lock);
+  for (auto& p : modules) {
+    p.second->get_health_checks(checks);
+  }
+}
