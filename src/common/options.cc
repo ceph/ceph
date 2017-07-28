@@ -2823,7 +2823,7 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("bluefs_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("bluefs_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("bitmap")
   .set_description(""),
 
@@ -3079,7 +3079,7 @@ std::vector<Option> global_options = {
   .set_default("rocksdb")
   .set_description(""),
 
-  Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("bitmap")
   .set_description(""),
 
