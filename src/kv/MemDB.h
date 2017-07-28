@@ -122,8 +122,16 @@ public:
   int _init(bool format);
 
   int do_open(ostream &out, bool create);
+
   int open(ostream &out) override { return do_open(out, false); }
+  int open(ostream &out, const std::vector<ColumnFamily>& cfs) override {
+    return KeyValueDB::open(out, cfs);
+  }
+
   int create_and_open(ostream &out) override { return do_open(out, true); }
+  int create_and_open(ostream& out, const std::vector<ColumnFamily>& cfs) override {
+    return KeyValueDB::create_and_open(out, cfs);
+  }
 
   KeyValueDB::Transaction get_transaction() override {
     return std::shared_ptr<MDBTransactionImpl>(new MDBTransactionImpl(this));

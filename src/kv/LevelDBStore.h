@@ -177,9 +177,18 @@ public:
   int open(ostream &out) override {
     return do_open(out, false);
   }
+
+  int open(ostream &out, const std::vector<ColumnFamily> &cfs) override {
+    return KeyValueDB::open(out, cfs);
+  }
+
   /// Creates underlying db if missing and opens it
   int create_and_open(ostream &out) override {
     return do_open(out, true);
+  }
+
+  int create_and_open(ostream& out, const std::vector<ColumnFamily>& cfs) override {
+    return KeyValueDB::create_and_open(out, cfs);
   }
 
   void close() override;

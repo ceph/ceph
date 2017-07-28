@@ -25,7 +25,16 @@ public:
   int open(ostream &out) override {
     return 0;
   }
+
+  int open(ostream &out, const std::vector<ColumnFamily> &cfs) override {
+    return 0;
+  } 
+
   int create_and_open(ostream &out) override {
+    return 0;
+  }
+
+  int create_and_open(ostream &out, const std::vector<ColumnFamily> &cfs) override {
     return 0;
   }
 
