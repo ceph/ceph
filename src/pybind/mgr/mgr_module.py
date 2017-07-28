@@ -65,6 +65,8 @@ class OSDMap(object):
             inc._handle,
             max_deviation, max_iterations, pools)
 
+    def map_pool_pgs_up(self, poolid):
+        return ceph_osdmap.map_pool_pgs_up(self._handle, poolid)
 
 class OSDMapIncremental(object):
     def __init__(self, handle):
@@ -100,6 +102,9 @@ class CRUSHMap(object):
 
     def dump(self):
         return ceph_crushmap.dump(self._handle)
+
+    def get_item_name(self, item):
+        return ceph_crushmap.get_item_name(self._handle, item)
 
     def find_takes(self):
         return ceph_crushmap.find_takes(self._handle).get('takes',[])
