@@ -2628,10 +2628,7 @@ int OSD::init()
   if (r < 0) {
     derr << __func__ << " authentication failed: " << cpp_strerror(r)
          << dendl;
-    osd_lock.Lock(); // locker is going to unlock this on function exit
-    if (is_stopping())
-      r = 0;
-    goto monout;
+    exit(1);
   }
 
   while (monc->wait_auth_rotating(30.0) < 0) {
@@ -2639,11 +2636,7 @@ int OSD::init()
     ++rotating_auth_attempts;
     if (rotating_auth_attempts > g_conf->max_rotating_auth_attempts) {
         derr << __func__ << " wait_auth_rotating timed out" << dendl;
-        osd_lock.Lock(); // make locker happy
-        if (!is_stopping()) {
-            r = -ETIMEDOUT;
-        }
-        goto monout;
+	exit(1);
     }
   }
 
@@ -2651,16 +2644,14 @@ int OSD::init()
   if (r < 0) {
     derr << __func__ << " unable to update_crush_device_class: "
 	 << cpp_strerror(r) << dendl;
-    osd_lock.Lock();
-    goto monout;
+    exit(1);
   }
 
   r = update_crush_location();
   if (r < 0) {
     derr << __func__ << " unable to update_crush_location: "
          << cpp_strerror(r) << dendl;
-    osd_lock.Lock();
-    goto monout;
+    exit(1);
   }
 
   osd_lock.Lock();
@@ -2693,8 +2684,6 @@ int OSD::init()
   start_boot();
 
   return 0;
-monout:
-  exit(1);
 
 out:
   enable_disable_fuse(true);
