@@ -47,6 +47,7 @@ class TempURLEngine : public rgw::auth::Engine {
                       RGWUserInfo& owner_info) const;
   bool is_applicable(const req_state* s) const noexcept;
   bool is_expired(const std::string& expires) const;
+  bool is_disallowed_header_present(const req_info& info) const;
 
   class SignatureHelper;
   class PrefixableSignatureHelper;
