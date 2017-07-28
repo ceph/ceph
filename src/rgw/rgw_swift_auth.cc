@@ -121,6 +121,19 @@ void TempURLEngine::get_owner_info(const req_state* const s,
   }
 }
 
+std::string TempURLEngine::convert_from_iso8601(std::string expires) const
+{
+  /* Swift's TempURL allows clients to send the expiration as ISO8601-
+   * compatible strings. Though, only plain UNIX timestamp are taken
+   * for the HMAC calculations. We need to make the conversion. */
+  struct tm date_t;
+  if (!parse_iso8601(expires.c_str(), &date_t, nullptr, true)) {
+    return std::move(expires);
+  } else {
+    return std::to_string(internal_timegm(&date_t));
+  }
+}
+
 bool TempURLEngine::is_expired(const std::string& expires) const
 {
   string err;
@@ -254,7 +267,8 @@ TempURLEngine::authenticate(const req_state* const s) const
    * never returns nullptr. If the requested parameter is absent, we will
    * get the empty string. */
   const std::string& temp_url_sig = s->info.args.get("temp_url_sig");
-  const std::string& temp_url_expires = s->info.args.get("temp_url_expires");
+  const std::string& temp_url_expires = \
+    convert_from_iso8601(s->info.args.get("temp_url_expires"));
 
   if (temp_url_sig.empty() || temp_url_expires.empty()) {
     return result_t::deny();
