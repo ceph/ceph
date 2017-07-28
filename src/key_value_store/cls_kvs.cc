@@ -30,7 +30,9 @@ static int get_idata_from_key(cls_method_context_t hctx, const string &key,
   int r = 0;
   std::map<std::string, bufferlist> kvmap;
 
-  r = cls_cxx_map_get_vals(hctx, key_data(key).encoded(), "", 2, &kvmap);
+  bool more;
+
+  r = cls_cxx_map_get_vals(hctx, key_data(key).encoded(), "", 2, &kvmap, &more);
   if (r < 0) {
     CLS_LOG(20, "error reading index for range %s: %d", key.c_str(), r);
     return r;
@@ -99,7 +101,8 @@ static int get_next_idata(cls_method_context_t hctx, const index_data &idata,
     index_data &out_data) {
   int r = 0;
   std::map<std::string, bufferlist> kvs;
-  r = cls_cxx_map_get_vals(hctx, idata.kdata.encoded(), "", 1, &kvs);
+  bool more;
+  r = cls_cxx_map_get_vals(hctx, idata.kdata.encoded(), "", 1, &kvs, &more);
   if (r < 0){
     CLS_LOG(20, "getting kvs failed with error %d", r);
     return r;
@@ -150,7 +153,8 @@ static int get_prev_idata(cls_method_context_t hctx, const index_data &idata,
     index_data &out_data) {
   int r = 0;
   std::map<std::string, bufferlist> kvs;
-  r = cls_cxx_map_get_vals(hctx, "", "", LONG_MAX, &kvs);
+  bool more;
+  r = cls_cxx_map_get_vals(hctx, "", "", LONG_MAX, &kvs, &more);
   if (r < 0){
     CLS_LOG(20, "getting kvs failed with error %d", r);
     return r;
@@ -202,10 +206,11 @@ static int get_prev_idata_op(cls_method_context_t hctx,
 static int read_many(cls_method_context_t hctx, const set<string> &keys,
     map<string, bufferlist> * out) {
   int r = 0;
+  bool more;
   CLS_ERR("reading from a map of size %d, first key encoded is %s",
       (int)keys.size(), key_data(*keys.begin()).encoded().c_str());
   r = cls_cxx_map_get_vals(hctx, key_data(*keys.begin()).encoded().c_str(),
-      "", LONG_MAX, out);
+      "", LONG_MAX, out, &more);
   if (r < 0) {
     CLS_ERR("getting omap vals failed with error %d", r);
   }
@@ -599,7 +604,8 @@ static int maybe_read_for_balance(cls_method_context_t hctx,
   }
 
   //if the assert succeeded, it needs to be balanced
-  r = cls_cxx_map_get_vals(hctx, "", "", LONG_MAX, &odata.omap);
+  bool more;
+  r = cls_cxx_map_get_vals(hctx, "", "", LONG_MAX, &odata.omap, &more);
   if (r < 0){
     CLS_LOG(20, "rebalance read: getting kvs failed with error %d", r);
     return r;
