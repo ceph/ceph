@@ -43,10 +43,14 @@ class RGWCloudSyncObj : public RGWAsyncRadosRequest {
   rgw_obj_key key;
 
   ceph::real_time *pmtime;
-  uint64_t *psize;
   RGWCloudAccess* cloud_access;
+  const uint64_t threshold = 16*1024*1024;
 private:
-  int get_obj_range(RGWRESTConn *conn, RGWGetRemoteObjCB& cb, uint64_t begin, uint64_t end, uint64_t* obj_size);
+  int get_obj_size(RGWRESTConn *conn, uint64_t* obj_size);
+  int get_obj_range(RGWRESTConn *conn, RGWGetRemoteObjCB& cb, uint64_t begin, uint64_t end);
+  int sync_entire_obj(RGWRESTConn *conn);
+  int sync_part_obj(RGWRESTConn *conn, uint64_t obj_size);
+
 protected:
   int _send_request();
 public:
@@ -61,7 +65,44 @@ public:
                                                       cloud_access(_cloud_access){}
 };
 
-int RGWCloudSyncObj::get_obj_range(RGWRESTConn *conn, RGWGetRemoteObjCB& cb, uint64_t begin, uint64_t end, uint64_t* obj_size) {
+int RGWCloudSyncObj::get_obj_size(RGWRESTConn *conn, uint64_t* obj_size) {
+  rgw_obj obj(bucket_info.bucket, key);
+
+  std::string url;
+  int ret = conn->get_url(url);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "RGWCloudSyncObj error: conn get url failed." << ret << dendl;
+    return ret;
+  }
+
+  std::map<std::string, std::string> extra_headers;
+  param_vec_t params;
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "prepend-metadata", conn->get_self_zonegroup()));  
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "stat", "true"));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "sync-manifest", ""));
+
+  if (!obj.key.instance.empty()) {
+    const string& instance = obj.key.instance;
+    params.push_back(param_pair_t("versionId", instance));
+  }
+
+  RGWGetRemoteObjCB cb;  
+  RGWRESTStreamRWRequest* req = new RGWRESTStreamReadRequest(store->ctx(), url, &cb, nullptr, &params);
+  int r = req->send_request(conn->get_key(), extra_headers, obj);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
+
+  std::string etag;
+  std::map<std::string, std::string> req_headers;
+  r = req->complete_request(etag, nullptr, obj_size, req_headers);
+  delete req;
+  return r;
+}
+
+int RGWCloudSyncObj::get_obj_range(RGWRESTConn *conn, RGWGetRemoteObjCB& cb, uint64_t begin, uint64_t end) {
   rgw_obj obj(bucket_info.bucket, key);
   
   std::string url;
@@ -73,7 +114,11 @@ int RGWCloudSyncObj::get_obj_range(RGWRESTConn *conn, RGWGetRemoteObjCB& cb, uin
 
   param_vec_t params;
   params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
-  map<std::string, std::string> extra_headers;
+  if (!obj.key.instance.empty()) {
+    const string& instance = obj.key.instance;
+    params.push_back(param_pair_t("versionId", instance));
+  }
+  std::map<std::string, std::string> extra_headers;
   std::string range("bytes=");
   range += (std::to_string(begin)+"-"+std::to_string(end));
   extra_headers["HTTP_RANGE"] = range;
@@ -86,79 +131,57 @@ int RGWCloudSyncObj::get_obj_range(RGWRESTConn *conn, RGWGetRemoteObjCB& cb, uin
   }
 
   std::string etag;
-  map<std::string, std::string> req_headers;
+  std::map<std::string, std::string> req_headers;
   r = req->complete_request(etag, nullptr, nullptr, req_headers);
-  if (r < 0) {
-    delete req;
-    return r;
-  }
-
-  if (obj_size) {
-    auto& headers = req->get_out_headers();
-    auto it = headers.find("CONTENT_RANGE");
-    if (it != headers.end()) {
-      size_t pos = it->second.find('/');
-      if (pos == std::string::npos) {
-        ldout(store->ctx(), 0) << "RGWCloudSyncObj error: content range has no obj size." << ret << dendl;
-        r = -EINVAL;
-      }
-      else{
-        std::string size = it->second.substr(pos+1);
-        *obj_size = std::stoll(size);
-      }
-    }else {
-       ldout(store->ctx(), 0) << "RGWCloudSyncObj error: response header has no content range." << ret << dendl;
-      r = -EINVAL;
-    }
-  }
-
   delete req;
   return r;
 }
 
-int RGWCloudSyncObj::_send_request()
-{
+int RGWCloudSyncObj::sync_entire_obj(RGWRESTConn *conn) {
   std::string user_id;
-  rgw_obj src_obj(bucket_info.bucket, key);
+  std::string etag;
+  std::map<std::string, std::string> req_headers;
+  real_time set_mtime;
+  uint32_t mod_zone_id = 0;
+  uint64_t mod_pg_ver = 0;
  
-  RGWRESTConn *conn;
-  if (source_zone.empty()) {
-    if (bucket_info.zonegroup.empty()) {
-      /* source is in the master zonegroup */
-      conn = store->rest_master_conn;
-    } else {
-      map<std::string, RGWRESTConn *>::iterator iter = store->zonegroup_conn_map.find(bucket_info.zonegroup);
-      if (iter == store->zonegroup_conn_map.end()) {
-        ldout(store->ctx(), 0) << "RGWCloudSyncObj:could not find zonegroup connection to zonegroup: " << source_zone << dendl;
-        return -ENOENT;
-      }
-      conn = iter->second;
-    }
-  } else {
-    map<std::string, RGWRESTConn *>::iterator iter = store->zone_conn_map.find(source_zone);
-    if (iter == store->zone_conn_map.end()) {
-      ldout(store->ctx(), 0) << "RGWCloudSyncObj:could not find zone connection to zone: " << source_zone << dendl;
-      return -ENOENT;
-    }
-    conn = iter->second;
+  RGWGetRemoteObjCB cb;
+  RGWRESTStreamRWRequest *in_stream_req;
+  rgw_obj obj(bucket_info.bucket, key);
+  int ret = conn->get_obj(user_id, NULL, obj, NULL, NULL,
+                      mod_zone_id, mod_pg_ver,
+                      false, true, false,
+                      true, &cb, &in_stream_req);
+  if (ret < 0) {
+    ldout(store->ctx(),0) << "cloud error get_obj ret:" << ret << " "
+                          << bucket_info.bucket.name << "file:" << key.name << dendl;
+    return ret;
   }
 
+  ret = conn->complete_request(in_stream_req, etag, &set_mtime, nullptr, req_headers);
+  if (ret < 0) {
+    ldout(store->ctx(),0) << "cloud error complete_request ret:" << ret << " "
+                          << bucket_info.bucket.name << "file:" << key.name << dendl;
+    return ret;
+  }
+
+  return cloud_access->put_obj(bucket_info.bucket.name, key.name, &(cb.get_data()), cb.get_len());
+}
+
+int RGWCloudSyncObj::sync_part_obj(RGWRESTConn *conn, uint64_t obj_size) {
   int ret = cloud_access->init_multipart(bucket_info.bucket.name, key.name);
   if (ret < 0) {
-    return 0;
+    return ret;
   }
 
   uint64_t block_size = cloud_access->get_block_size();
   uint64_t begin = 0;
   uint64_t end = block_size -1;
   uint64_t totall_read = 0;
-  uint64_t obj_size = 0;
-  uint64_t* p_size = &obj_size;
-  
+
   while(true) {
     RGWGetRemoteObjCB cb;
-    ret = get_obj_range(conn, cb, begin, end, p_size);
-    p_size = nullptr;
+    ret = get_obj_range(conn, cb, begin, end);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "RGWCloudSyncObj:get obj range error:" << ret << dendl;
       cloud_access->abort_multipart(bucket_info.bucket.name, key.name);
@@ -175,12 +198,66 @@ int RGWCloudSyncObj::_send_request()
     totall_read += cb.get_len();
     if(totall_read == obj_size) {
       return cloud_access->finish_multipart(bucket_info.bucket.name, key.name);
-    } 
+    }
     else if(totall_read > obj_size) {
       ldout(store->ctx(), 0) << "RGWCloudSyncObj error: send size is bigger than obj size." << ret << dendl;
       return cloud_access->abort_multipart(bucket_info.bucket.name, key.name);
     }
   }
+
+}
+
+int RGWCloudSyncObj::_send_request()
+{
+  std::string user_id;
+  rgw_obj src_obj(bucket_info.bucket, key);
+ 
+  RGWRESTConn *conn;
+  if (source_zone.empty()) {
+    if (bucket_info.zonegroup.empty()) {
+      /* source is in the master zonegroup */
+      conn = store->rest_master_conn;
+    } else {
+      std::map<std::string, RGWRESTConn *>::iterator iter = store->zonegroup_conn_map.find(bucket_info.zonegroup);
+      if (iter == store->zonegroup_conn_map.end()) {
+        ldout(store->ctx(), 0) << "RGWCloudSyncObj:could not find zonegroup connection to zonegroup: " << source_zone << dendl;
+        return -ENOENT;
+      }
+      conn = iter->second;
+    }
+  } else {
+    std::map<std::string, RGWRESTConn *>::iterator iter = store->zone_conn_map.find(source_zone);
+    if (iter == store->zone_conn_map.end()) {
+      ldout(store->ctx(), 0) << "RGWCloudSyncObj:could not find zone connection to zone: " << source_zone << dendl;
+      return -ENOENT;
+    }
+    conn = iter->second;
+  }
+
+  uint64_t obj_size = 0;
+  int ret = get_obj_size(conn, &obj_size);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "RGWCloudSyncObj:get obj size failed." << source_zone << dendl;
+    return ret;
+  }
+
+  std::string sync_type;
+  if (obj_size <= threshold) {
+    ret = sync_entire_obj(conn);
+    sync_type = "entire obj";
+  } else {
+    ret = sync_part_obj(conn, obj_size);
+    sync_type = "part obj";
+  }
+
+  if (ret < 0) {
+    ldout(store->ctx(),0) << "cloud sync "<<sync_type<< " failed. bucket:"
+                          << bucket_info.bucket.name << " file:" << key.name << dendl;
+  } else {
+    ldout(store->ctx(),0) << "cloud sync "<<sync_type<<" success. bucket:"
+                          << bucket_info.bucket.name << " file:" << key.name << dendl;
+  }
+  return ret;
 }
 
 class RGWCloudSyncObjCR : public RGWSimpleCoroutine {
@@ -338,7 +415,7 @@ public:
 
 class RGWCloudDataSyncModule : public RGWDataSyncModule {
   std::string prefix;
-  map<std::string, std::string, ltstr_nocase>& config;
+  std::map<std::string, std::string, ltstr_nocase>& config;
   set<std::string> bucket_filter;
   RGWCloudInfo cloud_info;
   bool valid_config;
@@ -353,7 +430,7 @@ class RGWCloudDataSyncModule : public RGWDataSyncModule {
   }
   
 public:
-  RGWCloudDataSyncModule(const std::string& _prefix, map<std::string, std::string, ltstr_nocase>& _config) 
+  RGWCloudDataSyncModule(const std::string& _prefix, std::map<std::string, std::string, ltstr_nocase>& _config) 
                           : prefix(_prefix), config(_config), valid_config(true) {
     auto iter = config.find("src_bucket");
     if (iter != config.end()) {
@@ -484,13 +561,13 @@ public:
 class RGWCloudSyncModuleInstance : public RGWSyncModuleInstance {
   RGWCloudDataSyncModule data_handler;
 public:
-  RGWCloudSyncModuleInstance(const std::string& _prefix, map<std::string, std::string, ltstr_nocase>& _config) : data_handler(_prefix, _config) {}
+  RGWCloudSyncModuleInstance(const std::string& _prefix, std::map<std::string, std::string, ltstr_nocase>& _config) : data_handler(_prefix, _config) {}
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
 };
 
-int RGWCloudSyncModule::create_instance(CephContext *cct, map<std::string, std::string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
+int RGWCloudSyncModule::create_instance(CephContext *cct, std::map<std::string, std::string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
   std::string prefix;
   auto i = config.find("prefix");
   if (i != config.end()) {

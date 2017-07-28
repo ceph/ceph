@@ -352,7 +352,7 @@ int RGWRESTUfileRequest::create_bucket(const std::string& bucket) {
   querys["Region"]= cloud_info.bucket_region;
   std::string str2sign;
   
-  map<std::string, std::string>::iterator iter = querys.begin();
+  std::map<std::string, std::string>::iterator iter = querys.begin();
   while(iter != querys.end())
   {
     str2sign += (iter->first + iter->second);
