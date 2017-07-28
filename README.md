@@ -25,23 +25,29 @@ contributed under the terms of the applicable license.
 
 You can clone from github with
 
-	git clone git@github.com:ceph/ceph
+```bash
+git clone git@github.com:ceph/ceph
+```
 
 or, if you are not a github user,
 
-	git clone git://github.com/ceph/ceph
+```bash
+git clone git://github.com/ceph/ceph
+```
 
 Ceph contains many git submodules that need to be checked out with
 
-	git submodule update --init --recursive
-
+```bash
+git submodule update --init --recursive
+```
 
 ## Build Prerequisites
 
 The list of Debian or RPM packages dependencies can be installed with:
 
-	./install-deps.sh
-
+```bash
+./install-deps.sh
+```
 
 ## Building Ceph
 
@@ -55,9 +61,11 @@ Prerequisite: CMake 2.8.11
 
 Build instructions:
 
-	./do_cmake.sh
-	cd build
-	make
+```bash
+./do_cmake.sh
+cd build
+make
+```
 
 This assumes you make your build dir a subdirectory of the ceph.git
 checkout. If you put it elsewhere, just replace .. in do_cmake.sh with a
@@ -65,40 +73,54 @@ correct path to the checkout.
 
 To build only certain targets use:
 
-        make [target name]
+```bash
+make [target name]
+```
 
 To install:
 
-        make install
- 
+```bash
+make install
+```
+
 ### CMake Options
 
 If you run the `cmake` command by hand, there are many options you can
 set with "-D". For example the option to build the RADOS Gateway is
 defaulted to ON. To build without the RADOS Gateway:
 
-        cmake -DWITH_RADOSGW=OFF [path to top level ceph directory]
+```
+cmake -DWITH_RADOSGW=OFF [path to top level ceph directory]
+```
 
 Another example below is building with debugging and alternate locations 
 for a couple of external dependencies:
 
-        cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" -DOFED_PREFIX="/opt/ofed" \
-        -DCMAKE_INSTALL_PREFIX=/opt/accelio -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
-        ..
+```
+cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" -DOFED_PREFIX="/opt/ofed" \
+-DCMAKE_INSTALL_PREFIX=/opt/accelio -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
+..
+```
 
 To view an exhaustive list of -D options, you can invoke `cmake` with:
 
-        cmake -LH
+```
+cmake -LH
+```
 
 If you often pipe `make` to `less` and would like to maintain the
 diagnostic colors for errors and warnings (and if your compiler
 supports it), you can invoke `cmake` with:
 
-        cmake -DDIAGNOSTICS_COLOR=always ..
+```
+cmake -DDIAGNOSTICS_COLOR=always ..
+```
 
 Then you'll get the diagnostic colors when you execute:
 
-        make | less -R
+```bash
+make | less -R
+```
 
 Other available values for 'DIAGNOSTICS_COLOR' are 'auto' (default) and
 'never'.
@@ -109,7 +131,9 @@ Other available values for 'DIAGNOSTICS_COLOR' are 'auto' (default) and
 To build a complete source tarball with everything needed to build from
 source and/or build a (deb or rpm) package, run
 
-	./make-dist
+```bash
+./make-dist
+```
 
 This will create a tarball like ceph-$version.tar.bz2 from git.
 (Ensure that any changes you want to include in your working directory
@@ -120,34 +144,42 @@ are committed to git.)
 
 To run a functional test cluster,
 
-	cd build
-	make vstart        # builds just enough to run vstart
-	../src/vstart.sh -d -n -x -l
-	./bin/ceph -s
+```bash
+cd build
+make vstart        # builds just enough to run vstart
+../src/vstart.sh -d -n -x -l
+./bin/ceph -s
+```
 
 Almost all of the usual commands are available in the bin/ directory.
 For example,
 
-	./bin/rados -p rbd bench 30 write
-	./bin/rbd create foo --size 1000
-
+```bash
+./bin/rados -p rbd bench 30 write
+./bin/rbd create foo --size 1000
+```
 To shut down the test cluster,
 
-	../src/stop.sh
+```bash
+../src/stop.sh
+```
 
 To start or stop individual daemons, the sysvinit script can be used:
 
-	./bin/init-ceph restart osd.0
-	./bin/init-ceph stop
-
+```bash
+./bin/init-ceph restart osd.0
+./bin/init-ceph stop
+```
 
 ## Running unit tests
 
 To build and run all tests (in parallel using all processors), use `ctest`:
 
-	cd build
-	make
-	ctest -j$(nproc)
+```bash
+cd build
+make
+ctest -j$(nproc)
+```
 
 (Note: Many targets built from src/test are not run using `ctest`.
 Targets starting with "unittest" are run in `make check` and thus can
@@ -159,12 +191,16 @@ When failures occur, look in build/Testing/Temporary for logs.
 To build and run all tests and their dependencies without other
 unnecessary targets in Ceph:
 
-        cd build
-        make check -j$(nproc)
+```bash
+cd build
+make check -j$(nproc)
+```
 
 To run an individual test manually, run `ctest` with -R (regex matching):
 
-	ctest -R [regex matching test name(s)]
+```bash
+ctest -R [regex matching test name(s)]
+```
 
 (Note: `ctest` does not build the test it's running or the dependencies needed
 to run it)
@@ -172,18 +208,23 @@ to run it)
 To run an individual test manually and see all the tests output, run
 `ctest` with the -V (verbose) flag:
 
-	ctest -V -R [regex matching test name(s)]
+```bash
+ctest -V -R [regex matching test name(s)]
+```
 
 To run an tests manually and run the jobs in parallel, run `ctest` with 
 the -j flag:
 
-	ctest -j [number of jobs]
+```bash
+ctest -j [number of jobs]
+```
 
 There are many other flags you can give `ctest` for better control
 over manual test execution. To view these options run:
 
-	man ctest
-
+```bash
+man ctest
+```
 
 ## Building the Documentation
 
@@ -192,12 +233,15 @@ over manual test execution. To view these options run:
 The list of package dependencies for building the documentation can be
 found in doc_deps.deb.txt:
 
-	sudo apt-get install `cat doc_deps.deb.txt`
+```bash
+sudo apt-get install `cat doc_deps.deb.txt`
+```
 
 ### Building the Documentation
 
 To build the documentation, ensure that you are in the top-level
 `/ceph directory, and execute the build script. For example:
 
-	admin/build-doc
-
+```bash
+admin/build-doc
+```
