@@ -152,10 +152,14 @@ function test_setup() {
 #
 function teardown() {
     local dir=$1
+    local dumplogs=$2
     kill_daemons $dir KILL
     if [ `uname` != FreeBSD ] \
         && [ $(stat -f -c '%T' .) == "btrfs" ]; then
         __teardown_btrfs $dir
+    fi
+    if [ "$dumplogs" = "1" ]; then
+        display_logs $dir
     fi
     rm -fr $dir
     rm -rf $(get_asok_dir)
@@ -1840,10 +1844,9 @@ function main() {
     if run $dir "$@" ; then
         code=0
     else
-        display_logs $dir
         code=1
     fi
-    teardown $dir || return 1
+    teardown $dir $code || return 1
     return $code
 }
 
