@@ -977,15 +977,22 @@ void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
     dout(7) << "must have aborted" << dendl;
   } else {
     assert(it->second.state == EXPORT_DISCOVERING);
-    // release locks to avoid deadlock
-    MDRequestRef mdr = static_cast<MDRequestImpl*>(it->second.mut.get());
-    assert(mdr);
-    mds->mdcache->request_finish(mdr);
-    it->second.mut.reset();
-    // freeze the subtree
-    it->second.state = EXPORT_FREEZING;
-    dir->auth_unpin(this);
-    assert(g_conf->mds_kill_export_at != 3);
+
+    if (m->is_success()) {
+      // release locks to avoid deadlock
+      MDRequestRef mdr = static_cast<MDRequestImpl*>(it->second.mut.get());
+      assert(mdr);
+      mds->mdcache->request_finish(mdr);
+      it->second.mut.reset();
+      // freeze the subtree
+      it->second.state = EXPORT_FREEZING;
+      dir->auth_unpin(this);
+      assert(g_conf->mds_kill_export_at != 3);
+
+    } else {
+      dout(7) << "peer failed to discover (not active?), canceling" << dendl;
+      export_try_cancel(dir, false);
+    }
   }
   
   m->put();  // done
@@ -1249,7 +1256,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
   assert(it->second.state == EXPORT_PREPPING);
 
   if (!m->is_success()) {
-    dout(7) << "peer couldn't acquire all needed locks, canceling" << dendl;
+    dout(7) << "peer couldn't acquire all needed locks or wasn't active, canceling" << dendl;
     export_try_cancel(dir, false);
     m->put();
     return;
@@ -2037,6 +2044,14 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
 
   // note import state
   dirfrag_t df = m->get_dirfrag();
+
+  if (!mds->is_active()) {
+    dout(7) << " not active, send NACK " << dendl;
+    mds->send_message_mds(new MExportDirDiscoverAck(df, m->get_tid(), false), from);
+    m->put();
+    return;
+  }
+
   // only start discovering on this message once.
   map<dirfrag_t,import_state_t>::iterator it = import_state.find(df);
   if (!m->started) {
@@ -2278,67 +2293,74 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
     mds->queue_waiters(finished);
 
 
-  // open all bounds
-  set<CDir*> import_bounds;
-  for (map<inodeno_t,fragset_t>::iterator p = import_bound_fragset.begin();
-       p != import_bound_fragset.end();
-       ++p) {
-    CInode *in = cache->get_inode(p->first);
-    assert(in);
-
-    // map fragset into a frag_t list, based on the inode fragtree
-    list<frag_t> fglist;
-    for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
-      in->dirfragtree.get_leaves_under(*q, fglist);
-    dout(10) << " bound inode " << p->first << " fragset " << p->second << " maps to " << fglist << dendl;
-    
-    for (list<frag_t>::iterator q = fglist.begin();
-	 q != fglist.end();
-	 ++q) {
-      CDir *bound = cache->get_dirfrag(dirfrag_t(p->first, *q));
-      if (!bound) {
-	dout(7) << "  opening bounding dirfrag " << *q << " on " << *in << dendl;
-	cache->open_remote_dirfrag(in, *q,
-				   new C_MDS_RetryMessage(mds, m));
-	return;
-      }
-
-      if (!bound->state_test(CDir::STATE_IMPORTBOUND)) {
-	dout(7) << "  pinning import bound " << *bound << dendl;
-	bound->get(CDir::PIN_IMPORTBOUND);
-	bound->state_set(CDir::STATE_IMPORTBOUND);
-      } else {
-	dout(7) << "  already pinned import bound " << *bound << dendl;
-      }
-      import_bounds.insert(bound);
-    }
-  }
-
-  dout(7) << " all ready, noting auth and freezing import region" << dendl;
-
   bool success = true;
-  if (!mds->mdcache->is_readonly() &&
-      dir->get_inode()->filelock.can_wrlock(-1) &&
-      dir->get_inode()->nestlock.can_wrlock(-1)) {
-    it->second.mut = new MutationImpl();
-    // force some locks.  hacky.
-    mds->locker->wrlock_force(&dir->inode->filelock, it->second.mut);
-    mds->locker->wrlock_force(&dir->inode->nestlock, it->second.mut);
+  if (mds->is_active()) {
+    // open all bounds
+    set<CDir*> import_bounds;
+    for (map<inodeno_t,fragset_t>::iterator p = import_bound_fragset.begin();
+	 p != import_bound_fragset.end();
+	 ++p) {
+      CInode *in = cache->get_inode(p->first);
+      assert(in);
 
-    // note that i am an ambiguous auth for this subtree.
-    // specify bounds, since the exporter explicitly defines the region.
-    cache->adjust_bounded_subtree_auth(dir, import_bounds,
-				       pair<int,int>(oldauth, mds->get_nodeid()));
-    cache->verify_subtree_bounds(dir, import_bounds);
-    // freeze.
-    dir->_freeze_tree();
-    // note new state
-    it->second.state = IMPORT_PREPPED;
+      // map fragset into a frag_t list, based on the inode fragtree
+      list<frag_t> fglist;
+      for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
+	in->dirfragtree.get_leaves_under(*q, fglist);
+      dout(10) << " bound inode " << p->first << " fragset " << p->second << " maps to " << fglist << dendl;
+
+      for (list<frag_t>::iterator q = fglist.begin();
+	   q != fglist.end();
+	   ++q) {
+	CDir *bound = cache->get_dirfrag(dirfrag_t(p->first, *q));
+	if (!bound) {
+	  dout(7) << "  opening bounding dirfrag " << *q << " on " << *in << dendl;
+	  cache->open_remote_dirfrag(in, *q,
+	      new C_MDS_RetryMessage(mds, m));
+	  return;
+	}
+
+	if (!bound->state_test(CDir::STATE_IMPORTBOUND)) {
+	  dout(7) << "  pinning import bound " << *bound << dendl;
+	  bound->get(CDir::PIN_IMPORTBOUND);
+	  bound->state_set(CDir::STATE_IMPORTBOUND);
+	} else {
+	  dout(7) << "  already pinned import bound " << *bound << dendl;
+	}
+	import_bounds.insert(bound);
+      }
+    }
+
+    dout(7) << " all ready, noting auth and freezing import region" << dendl;
+
+    if (!mds->mdcache->is_readonly() &&
+	dir->get_inode()->filelock.can_wrlock(-1) &&
+	dir->get_inode()->nestlock.can_wrlock(-1)) {
+      it->second.mut = new MutationImpl();
+      // force some locks.  hacky.
+      mds->locker->wrlock_force(&dir->inode->filelock, it->second.mut);
+      mds->locker->wrlock_force(&dir->inode->nestlock, it->second.mut);
+
+      // note that i am an ambiguous auth for this subtree.
+      // specify bounds, since the exporter explicitly defines the region.
+      cache->adjust_bounded_subtree_auth(dir, import_bounds,
+					 pair<int,int>(oldauth, mds->get_nodeid()));
+      cache->verify_subtree_bounds(dir, import_bounds);
+      // freeze.
+      dir->_freeze_tree();
+      // note new state
+      it->second.state = IMPORT_PREPPED;
+    } else {
+      dout(7) << " couldn't acquire all needed locks, failing. " << *dir << dendl;
+      success = false;
+    }
   } else {
-    dout(7) << " couldn't acquire all needed locks, failing. " << *dir << dendl;
+    dout(7) << " not active, failing. " << *dir << dendl;
     success = false;
-    import_reverse_prepping(dir);
   }
+
+  if (!success)
+    import_reverse_prepping(dir);
 
   // ok!
   dout(7) << " sending export_prep_ack on " << *dir << dendl;
