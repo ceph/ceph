@@ -1169,6 +1169,8 @@ void DaemonServer::send_report()
   }
 
   auto m = new MMonMgrReport();
+  py_modules.get_health_checks(&m->health_checks);
+
   cluster_state.with_pgmap([&](const PGMap& pg_map) {
       cluster_state.update_delta_stats();
 
@@ -1191,6 +1193,7 @@ void DaemonServer::send_report()
 
 	  pg_map.get_health_checks(g_ceph_context, osdmap,
 				   &m->health_checks);
+
 	  dout(10) << m->health_checks.checks.size() << " health checks"
 		   << dendl;
 	  dout(20) << "health checks:\n";

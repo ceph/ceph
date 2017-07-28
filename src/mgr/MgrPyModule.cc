@@ -365,3 +365,7 @@ int MgrPyModule::handle_command(
   return r;
 }
 
+void MgrPyModule::get_health_checks(health_check_map_t *checks)
+{
+  checks->merge(health_checks);
+}
