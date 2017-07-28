@@ -1217,13 +1217,11 @@ void ECBackend::handle_sub_read_reply(
 	    }
 	    // Couldn't read any additional shards so handle as completed with errors
 	  }
-	  if (rop.complete[iter->first].errors.empty()) {
-	    dout(20) << __func__ << " simply not enough copies err=" << err << dendl;
-	  } else {
-	    // Grab the first error
-	    err = rop.complete[iter->first].errors.begin()->second;
-	    dout(20) << __func__ << ": Use one of the shard errors err=" << err << dendl;
-	  }
+	  // We don't want to confuse clients / RBD with objectstore error
+	  // values in particular ENOENT.  We may have different error returns
+	  // from different shards, so we'll return minimum_to_decode() error
+	  // (usually EIO) to reader.  It is likely an error here is due to a
+	  // damaged pg.
 	  rop.complete[iter->first].r = err;
 	  ++is_complete;
 	}
