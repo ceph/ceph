@@ -1936,6 +1936,7 @@ public:
       explicit NotRecovering(my_context ctx);
       boost::statechart::result react(const CancelRecovery& evt) {
 	/* no-op */
+	return discard_event();
       }
       void exit();
     };
