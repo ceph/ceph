@@ -49,6 +49,7 @@ bool operator<(const CDentry& l, const CDentry& r);
 // dentry
 class CDentry : public MDSCacheObject, public LRUObject, public Counter<CDentry> {
 public:
+  MEMPOOL_CLASS_HELPERS();
   friend class CDir;
 
   struct linkage_t {
