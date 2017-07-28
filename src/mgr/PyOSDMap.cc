@@ -150,6 +150,37 @@ static PyObject *osdmap_calc_pg_upmaps(PyObject *self, PyObject *args)
   return PyInt_FromLong(r);
 }
 
+static PyObject *osdmap_map_pool_pgs_up(PyObject *self, PyObject *args)
+{
+  PyObject *mapobj;
+  int poolid;
+  if (!PyArg_ParseTuple(args, "Oi:map_pool_pgs_up",
+			&mapobj, &poolid)) {
+    return nullptr;
+  }
+  OSDMap *osdmap = static_cast<OSDMap*>(PyCapsule_GetPointer(mapobj, nullptr));
+  if (!osdmap)
+    return nullptr;
+  auto pi = osdmap->get_pg_pool(poolid);
+  if (!pi)
+    return nullptr;
+  map<pg_t,vector<int>> pm;
+  for (unsigned ps = 0; ps < pi->get_pg_num(); ++ps) {
+    pg_t pgid(ps, poolid);
+    osdmap->pg_to_up_acting_osds(pgid, &pm[pgid], nullptr, nullptr, nullptr);
+  }
+  PyFormatter f;
+  for (auto p : pm) {
+    string pg = stringify(p.first);
+    f.open_array_section(pg.c_str());
+    for (auto o : p.second) {
+      f.dump_int("osd", o);
+    }
+    f.close_section();
+  }
+  return f.get();
+}
+
 PyMethodDef OSDMapMethods[] = {
   {"get_epoch", osdmap_get_epoch, METH_O, "Get OSDMap epoch"},
   {"get_crush_version", osdmap_get_crush_version, METH_O, "Get CRUSH version"},
@@ -163,6 +194,8 @@ PyMethodDef OSDMapMethods[] = {
    "Get pools that have CRUSH rules that TAKE the given root"},
   {"calc_pg_upmaps", osdmap_calc_pg_upmaps, METH_VARARGS,
    "Calculate new pg-upmap values"},
+  {"map_pool_pgs_up", osdmap_map_pool_pgs_up, METH_VARARGS,
+   "Calculate up set mappings for all PGs in a pool"},
   {NULL, NULL, 0, NULL}
 };
 
@@ -282,6 +315,22 @@ static PyObject *crush_dump(PyObject *self, PyObject *obj)
   return f.get();
 }
 
+static PyObject *crush_get_item_name(PyObject *self, PyObject *args)
+{
+  PyObject *obj;
+  int item;
+  if (!PyArg_ParseTuple(args, "Oi:get_item_name",
+			&obj, &item)) {
+    return nullptr;
+  }
+  CrushWrapper *crush = static_cast<CrushWrapper*>(
+    PyCapsule_GetPointer(obj, nullptr));
+  if (!crush->item_exists(item)) {
+    Py_RETURN_NONE;
+  }
+  return PyString_FromString(crush->get_item_name(item));
+}
+
 static PyObject *crush_find_takes(PyObject *self, PyObject *obj)
 {
   CrushWrapper *crush = static_cast<CrushWrapper*>(
@@ -322,6 +371,7 @@ static PyObject *crush_get_take_weight_osd_map(PyObject *self, PyObject *args)
 
 PyMethodDef CRUSHMapMethods[] = {
   {"dump", crush_dump, METH_O, "Dump map"},
+  {"get_item_name", crush_get_item_name, METH_VARARGS, "Get item name"},
   {"find_takes", crush_find_takes, METH_O, "Find distinct TAKE roots"},
   {"get_take_weight_osd_map", crush_get_take_weight_osd_map, METH_VARARGS,
    "Get OSD weight map for a given TAKE root node"},
