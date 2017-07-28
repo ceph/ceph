@@ -40,15 +40,15 @@ can be generated with a command similar to::
 The ``restful.crt`` should then be signed by your organization's CA
 (certificate authority).  Once that is done, you can set it with::
 
-  ceph config-key put mgr/restful/$name/crt -i restful.crt
-  ceph config-key put mgr/restful/$name/key -i restful.key
+  ceph config-key set mgr/restful/$name/crt -i restful.crt
+  ceph config-key set mgr/restful/$name/key -i restful.key
 
 where ``$name`` is the name of the ``ceph-mgr`` instance (usually the
 hostname). If all manager instances are to share the same certificate,
 you can leave off the ``$name`` portion::
 
-  ceph config-key put mgr/restful/crt -i restful.crt
-  ceph config-key put mgr/restful/key -i restful.key
+  ceph config-key set mgr/restful/crt -i restful.crt
+  ceph config-key set mgr/restful/key -i restful.key
 
 
 Configuring IP and port
@@ -62,16 +62,16 @@ Since each ``ceph-mgr`` hosts its own instance of *restful*, it may
 also be necessary to configure them separately. The IP and port
 can be changed via the configuration key facility::
 
-  ceph config-key put mgr/restful/$name/server_addr $IP
-  ceph config-key put mgr/restful/$name/server_port $PORT
+  ceph config-key set mgr/restful/$name/server_addr $IP
+  ceph config-key set mgr/restful/$name/server_port $PORT
 
 where ``$name`` is the ID of the ceph-mgr daemon (usually the hostname).
 
 These settings can also be configured cluster-wide and not manager
 specific.  For example,::
 
-  ceph config-key put mgr/restful/server_addr $IP
-  ceph config-key put mgr/restful/server_port $PORT
+  ceph config-key set mgr/restful/server_addr $IP
+  ceph config-key set mgr/restful/server_port $PORT
 
 If the port is not configured, *restful* will bind to port ``8003``.
 If the address it not configured, the *restful* will bind to ``::``,

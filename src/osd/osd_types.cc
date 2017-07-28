@@ -802,6 +802,8 @@ std::string pg_state_string(int state)
     oss << "recovery_toofull+";
   if (state & PG_STATE_RECOVERING)
     oss << "recovering+";
+  if (state & PG_STATE_FORCED_RECOVERY)
+    oss << "forced_recovery+";
   if (state & PG_STATE_DOWN)
     oss << "down+";
   if (state & PG_STATE_UNDERSIZED)
@@ -825,6 +827,8 @@ std::string pg_state_string(int state)
     oss << "backfill_wait+";
   if (state & PG_STATE_BACKFILL)
     oss << "backfilling+";
+  if (state & PG_STATE_FORCED_BACKFILL)
+    oss << "forced_backfill+";
   if (state & PG_STATE_BACKFILL_TOOFULL)
     oss << "backfill_toofull+";
   if (state & PG_STATE_INCOMPLETE)
@@ -866,6 +870,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_REPAIR;
   else if (state == "recovering")
     type = PG_STATE_RECOVERING;
+  else if (state == "forced_recovery")
+    type = PG_STATE_FORCED_RECOVERY;
   else if (state == "backfill_wait")
     type = PG_STATE_BACKFILL_WAIT;
   else if (state == "incomplete")
@@ -878,6 +884,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_DEEP_SCRUB;
   else if (state == "backfill")
     type = PG_STATE_BACKFILL;
+  else if (state == "forced_backfill")
+    type = PG_STATE_FORCED_BACKFILL;
   else if (state == "backfill_toofull")
     type = PG_STATE_BACKFILL_TOOFULL;
   else if (state == "recovery_wait")
@@ -1137,6 +1145,10 @@ ostream& operator<<(ostream& out, const pool_opts_t& opts)
 
 // -- pg_pool_t --
 
+const char *pg_pool_t::APPLICATION_NAME_CEPHFS("cephfs");
+const char *pg_pool_t::APPLICATION_NAME_RBD("rbd");
+const char *pg_pool_t::APPLICATION_NAME_RGW("rgw");
+
 void pg_pool_t::dump(Formatter *f) const
 {
   f->dump_unsigned("flags", get_flags());
@@ -1206,6 +1218,15 @@ void pg_pool_t::dump(Formatter *f) const
   f->open_object_section("options");
   opts.dump(f);
   f->close_section(); // options
+  f->open_object_section("application_metadata");
+  for (auto &app_pair : application_metadata) {
+    f->open_object_section(app_pair.first.c_str());
+    for (auto &kv_pair : app_pair.second) {
+      f->dump_string(kv_pair.first.c_str(), kv_pair.second);
+    }
+    f->close_section(); // application
+  }
+  f->close_section(); // application_metadata
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -1505,15 +1526,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 25;
+  uint8_t v = 26;
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
     v = 21;
   }
-  if ((features &
-       (CEPH_FEATURE_RESEND_ON_SPLIT|CEPH_FEATURE_SERVER_JEWEL)) !=
-      (CEPH_FEATURE_RESEND_ON_SPLIT|CEPH_FEATURE_SERVER_JEWEL)) {
+  if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
     v = 24;
   }
 
@@ -1581,12 +1600,15 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   if (v >= 25) {
     ::encode(last_force_op_resend, bl);
   }
+  if (v >= 26) {
+    ::encode(application_metadata, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(25, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(26, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_rule, bl);
@@ -1733,6 +1755,9 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     last_force_op_resend = last_force_op_resend_preluminous;
   }
+  if (struct_v >= 26) {
+    ::decode(application_metadata, bl);
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1796,6 +1821,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
   a.fast_read = false;
+  a.application_metadata = {{"rbd", {{"key", "value"}}}};
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1854,6 +1880,15 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   if (p.fast_read)
     out << " fast_read " << p.fast_read;
   out << p.opts;
+  if (!p.application_metadata.empty()) {
+    out << " application ";
+    for (auto it = p.application_metadata.begin();
+         it != p.application_metadata.end(); ++it) {
+      if (it != p.application_metadata.begin())
+        out << ",";
+      out << it->first;
+    }
+  }
   return out;
 }
 
@@ -3396,6 +3431,8 @@ bool PastIntervals::is_new_interval(
   unsigned new_pg_num,
   bool old_sort_bitwise,
   bool new_sort_bitwise,
+  bool old_recovery_deletes,
+  bool new_recovery_deletes,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
@@ -3404,7 +3441,8 @@ bool PastIntervals::is_new_interval(
     old_min_size != new_min_size ||
     old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0) ||
-    old_sort_bitwise != new_sort_bitwise;
+    old_sort_bitwise != new_sort_bitwise ||
+    old_recovery_deletes != new_recovery_deletes;
 }
 
 bool PastIntervals::is_new_interval(
@@ -3436,6 +3474,8 @@ bool PastIntervals::is_new_interval(
 		    osdmap->get_pg_num(pgid.pool()),
 		    lastmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
 		    osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
+		    lastmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
+		    osdmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
 		    pgid);
 }
 
@@ -4078,6 +4118,61 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
   return out;
 }
 
+// -- pg_log_dup_t --
+
+string pg_log_dup_t::get_key_name() const
+{
+  return "dup_" + version.get_key_name();
+}
+
+void pg_log_dup_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(reqid, bl);
+  ::encode(version, bl);
+  ::encode(user_version, bl);
+  ::encode(return_code, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_log_dup_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(reqid, bl);
+  ::decode(version, bl);
+  ::decode(user_version, bl);
+  ::decode(return_code, bl);
+  DECODE_FINISH(bl);
+}
+
+void pg_log_dup_t::dump(Formatter *f) const
+{
+  f->dump_stream("reqid") << reqid;
+  f->dump_stream("version") << version;
+  f->dump_stream("user_version") << user_version;
+  f->dump_stream("return_code") << return_code;
+}
+
+void pg_log_dup_t::generate_test_instances(list<pg_log_dup_t*>& o)
+{
+  o.push_back(new pg_log_dup_t());
+  o.push_back(new pg_log_dup_t(eversion_t(1,2),
+			       1,
+			       osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+			       0));
+  o.push_back(new pg_log_dup_t(eversion_t(1,2),
+			       2,
+			       osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+			       -ENOENT));
+}
+
+
+std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e) {
+  return out << "log_dup(reqid=" << e.reqid <<
+    " v=" << e.version << " uv=" << e.user_version <<
+    " rc=" << e.return_code << ")";
+}
+
 
 // -- pg_log_t --
 
@@ -4119,18 +4214,19 @@ void pg_log_t::filter_log(spg_t import_pgid, const OSDMap &curmap,
 
 void pg_log_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(6, 3, bl);
+  ENCODE_START(7, 3, bl);
   ::encode(head, bl);
   ::encode(tail, bl);
   ::encode(log, bl);
   ::encode(can_rollback_to, bl);
   ::encode(rollback_info_trimmed_to, bl);
+  ::encode(dups, bl);
   ENCODE_FINISH(bl);
 }
  
 void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
   ::decode(head, bl);
   ::decode(tail, bl);
   if (struct_v < 2) {
@@ -4145,6 +4241,10 @@ void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
     ::decode(rollback_info_trimmed_to, bl);
   else
     rollback_info_trimmed_to = tail;
+
+  if (struct_v >= 7)
+    ::decode(dups, bl);
+
   DECODE_FINISH(bl);
 
   // handle hobject_t format change
@@ -4166,6 +4266,13 @@ void pg_log_t::dump(Formatter *f) const
   for (list<pg_log_entry_t>::const_iterator p = log.begin(); p != log.end(); ++p) {
     f->open_object_section("entry");
     p->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("dups");
+  for (const auto& entry : dups) {
+    f->open_object_section("entry");
+    entry.dump(f);
     f->close_section();
   }
   f->close_section();
@@ -4240,13 +4347,16 @@ void pg_log_t::copy_up_to(const pg_log_t &other, int max)
   }
 }
 
-ostream& pg_log_t::print(ostream& out) const 
+ostream& pg_log_t::print(ostream& out) const
 {
   out << *this << std::endl;
   for (list<pg_log_entry_t>::const_iterator p = log.begin();
        p != log.end();
-       ++p) 
+       ++p)
     out << *p << std::endl;
+  for (const auto& entry : dups) {
+    out << " dup entry: " << entry << std::endl;
+  }
   return out;
 }
 
@@ -4257,6 +4367,7 @@ ostream& operator<<(ostream& out, const pg_missing_item& i)
   out << i.need;
   if (i.have != eversion_t())
     out << "(" << i.have << ")";
+  out << " flags = " << i.flag_str();
   return out;
 }
 

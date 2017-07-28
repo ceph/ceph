@@ -69,7 +69,7 @@ write into an object called ``greeting`` with
 		exit(1);
 	}
 
-In the end, you'll want to close your IO context and connection to RADOS with :c:func:`rados_ioctx_destroy()` and :c:func:`rados_shutdown()`::
+In the end, you will want to close your IO context and connection to RADOS with :c:func:`rados_ioctx_destroy()` and :c:func:`rados_shutdown()`::
 
 	rados_ioctx_destroy(io);
 	rados_shutdown(cluster);

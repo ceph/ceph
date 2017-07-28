@@ -3178,13 +3178,12 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 
     if (!waitfor_caps && !waitfor_commit) {
       if ((have & need) == need) {
-	int butnot = want & ~(have & need);
 	int revoking = implemented & ~have;
 	ldout(cct, 10) << "get_caps " << *in << " have " << ccap_string(have)
 		 << " need " << ccap_string(need) << " want " << ccap_string(want)
-		 << " but not " << ccap_string(butnot) << " revoking " << ccap_string(revoking)
+		 << " revoking " << ccap_string(revoking)
 		 << dendl;
-	if ((revoking & butnot) == 0) {
+	if ((revoking & want) == 0) {
 	  *phave = need | (have & want);
 	  in->get_cap_ref(need);
 	  return 0;
@@ -6466,8 +6465,13 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
     }
     //make new dir
     r = _mkdir(cur.get(), path[i].c_str(), mode, perms, &next);
+    
     //check proper creation/existence
-    if (r < 0) return r;
+    if(-EEXIST == r && i < path.depth() - 1) {
+      r = _lookup(cur.get(), path[i].c_str(), CEPH_CAP_AUTH_SHARED, &next, perms);
+    }	
+    if (r < 0) 
+      return r;
     //move to new dir and continue
     cur.swap(next);
     ldout(cct, 20) << "mkdirs: successfully created directory "
@@ -8564,17 +8568,22 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 
   if (in->inline_version == 0) {
     int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
-    if (r < 0)
+    if (r < 0) {
+      if (movepos)
+        unlock_fh_pos(f);
       return r;
+    }
     assert(in->inline_version > 0);
   }
 
 retry:
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &have, -1);
-  if (r < 0)
+  if (r < 0) {
+    if (movepos)
+        unlock_fh_pos(f);
     return r;
-
+  }
   if (f->flags & O_DIRECT)
     have &= ~CEPH_CAP_FILE_CACHE;
 
@@ -8676,7 +8685,12 @@ done:
 
   if (have)
     put_cap_ref(in, CEPH_CAP_FILE_RD);
-  return r < 0 ? r : bl->length();
+  if (r < 0) {
+    if (movepos)
+        unlock_fh_pos(f);
+    return r;
+  } else
+    return bl->length();
 }
 
 Client::C_Readahead::C_Readahead(Client *c, Fh *f) :

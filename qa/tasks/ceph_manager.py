@@ -126,6 +126,7 @@ class Thrasher:
         self.chance_thrash_pg_upmap = self.config.get('chance_thrash_pg_upmap', 1.0)
         self.chance_thrash_pg_upmap_items = self.config.get('chance_thrash_pg_upmap', 1.0)
         self.random_eio = self.config.get('random_eio')
+        self.chance_force_recovery = self.config.get('chance_force_recovery', 0.3)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -603,6 +604,39 @@ class Thrasher:
         except CommandFailedError:
             self.log('Failed to rm-pg-upmap-items, ignoring')
 
+    def force_recovery(self):
+        """
+        Force recovery on some of PGs
+        """
+        backfill = random.random() >= 0.5
+        j = self.ceph_manager.get_pgids_to_force(backfill)
+        if j:
+            if backfill:
+                self.ceph_manager.raw_cluster_cmd('pg', 'force-backfill', *j)
+            else:
+                self.ceph_manager.raw_cluster_cmd('pg', 'force-recovery', *j)
+
+    def cancel_force_recovery(self):
+        """
+        Force recovery on some of PGs
+        """
+        backfill = random.random() >= 0.5
+        j = self.ceph_manager.get_pgids_to_cancel_force(backfill)
+        if j:
+            if backfill:
+                self.ceph_manager.raw_cluster_cmd('pg', 'cancel-force-backfill', *j)
+            else:
+                self.ceph_manager.raw_cluster_cmd('pg', 'cancel-force-recovery', *j)
+
+    def force_cancel_recovery(self):
+        """
+        Force or cancel forcing recovery
+        """
+        if random.random() >= 0.4:
+           self.force_recovery()
+        else:
+           self.cancel_force_recovery()
+
     def all_up(self):
         """
         Make sure all osds are up and not out.
@@ -772,7 +806,7 @@ class Thrasher:
         while len(self.in_osds) < (self.minin + 1):
             self.in_osd()
         self.log("Waiting for recovery")
-        self.ceph_manager.wait_for_all_up(
+        self.ceph_manager.wait_for_all_osds_up(
             timeout=self.config.get('timeout')
             )
         # now we wait 20s for the pg status to change, if it takes longer,
@@ -841,6 +875,8 @@ class Thrasher:
             actions.append((self.thrash_pg_upmap, self.chance_thrash_pg_upmap,))
         if self.chance_thrash_pg_upmap_items > 0:
             actions.append((self.thrash_pg_upmap_items, self.chance_thrash_pg_upmap_items,))
+        if self.chance_force_recovery > 0:
+            actions.append((self.force_cancel_recovery, self.chance_force_recovery))
 
         for key in ['heartbeat_inject_failure', 'filestore_inject_stall']:
             for scenario in [
@@ -1074,6 +1110,7 @@ class ObjectStoreTool:
         finally:
             if self.do_revive:
                 self.manager.revive_osd(self.osd)
+                self.manager.wait_till_osd_is_up(self.osd, 300)
 
 
 class CephManager:
@@ -1620,6 +1657,10 @@ class CephManager:
                     'osd', 'pool', 'set', pool_name,
                     'allow_ec_overwrites',
                     'true')
+            self.raw_cluster_cmd(
+                'osd', 'pool', 'application', 'enable',
+                pool_name, 'rados', '--yes-i-really-mean-it',
+                run.Raw('||'), 'true')
             self.pools[pool_name] = pg_num
         time.sleep(1)
 
@@ -1782,6 +1823,40 @@ class CephManager:
         j = json.loads('\n'.join(out.split('\n')[1:]))
         return j['pg_stats']
 
+    def get_pgids_to_force(self, backfill):
+        """
+        Return the randomized list of PGs that can have their recovery/backfill forced
+        """
+        j = self.get_pg_stats();
+        pgids = []
+        if backfill:
+            wanted = ['degraded', 'backfilling', 'backfill_wait']
+        else:
+            wanted = ['recovering', 'degraded', 'recovery_wait']
+        for pg in j:
+            status = pg['state'].split('+')
+            for t in wanted:
+                if random.random() > 0.5 and not ('forced_backfill' in status or 'forced_recovery' in status) and t in status:
+                    pgids.append(pg['pgid'])
+                    break
+        return pgids
+
+    def get_pgids_to_cancel_force(self, backfill):
+       """
+       Return the randomized list of PGs whose recovery/backfill priority is forced
+       """
+       j = self.get_pg_stats();
+       pgids = []
+       if backfill:
+           wanted = 'forced_backfill'
+       else:
+           wanted = 'forced_recovery'
+       for pg in j:
+           status = pg['state'].split('+')
+           if wanted in status and random.random() > 0.5:
+               pgids.append(pg['pgid'])
+       return pgids
+
     def compile_pg_status(self):
         """
         Return a histogram of pg state values
@@ -1913,6 +1988,10 @@ class CephManager:
         :returns: all osds
         """
         return self.get_osd_dump_json()['osds']
+
+    def get_mgr_dump(self):
+        out = self.raw_cluster_cmd('mgr', 'dump', '--format=json')
+        return json.loads(out)
 
     def get_stuck_pgs(self, type_, threshold):
         """
@@ -2072,7 +2151,7 @@ class CephManager:
         x = self.get_osd_dump()
         return (len(x) == sum([(y['up'] > 0) for y in x]))
 
-    def wait_for_all_up(self, timeout=None):
+    def wait_for_all_osds_up(self, timeout=None):
         """
         When this exits, either the timeout has expired, or all
         osds are up.
@@ -2082,9 +2161,44 @@ class CephManager:
         while not self.are_all_osds_up():
             if timeout is not None:
                 assert time.time() - start < timeout, \
-                    'timeout expired in wait_for_all_up'
+                    'timeout expired in wait_for_all_osds_up'
             time.sleep(3)
         self.log("all up!")
+
+    def pool_exists(self, pool):
+        if pool in self.list_pools():
+            return True
+        return False
+
+    def wait_for_pool(self, pool, timeout=300):
+        """
+        Wait for a pool to exist
+        """
+        self.log('waiting for pool %s to exist' % pool)
+        start = time.time()
+        while not self.pool_exists(pool):
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired in wait_for_pool'
+            time.sleep(3)
+
+    def wait_for_pools(self, pools):
+        for pool in pools:
+            self.wait_for_pool(pool)
+
+    def is_mgr_available(self):
+        x = self.get_mgr_dump()
+        return x.get('available', False)
+
+    def wait_for_mgr_available(self, timeout=None):
+        self.log("waiting for mgr available")
+        start = time.time()
+        while not self.is_mgr_available():
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired in wait_for_mgr_available'
+            time.sleep(3)
+        self.log("mgr available!")
 
     def wait_for_recovery(self, timeout=None):
         """
@@ -2443,5 +2557,8 @@ kill_mon = utility_task("kill_mon")
 create_pool = utility_task("create_pool")
 remove_pool = utility_task("remove_pool")
 wait_for_clean = utility_task("wait_for_clean")
+flush_all_pg_stats = utility_task("flush_all_pg_stats")
 set_pool_property = utility_task("set_pool_property")
 do_pg_scrub = utility_task("do_pg_scrub")
+wait_for_pool = utility_task("wait_for_pool")
+wait_for_pools = utility_task("wait_for_pools")

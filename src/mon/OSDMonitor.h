@@ -428,6 +428,9 @@ private:
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
   void count_metadata(const string& field, Formatter *f);
+public:
+  void count_metadata(const string& field, map<string,int> *out);
+protected:
   int get_osd_objectstore_type(int osd, std::string *type);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
 				       ostream *err);
@@ -514,6 +517,9 @@ public:
 
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
+  int prepare_command_pool_application(const string &prefix,
+                                       map<string,cmd_vartype> &cmdmap,
+                                       stringstream& ss);
 
   bool handle_osd_timeouts(const utime_t &now,
 			   std::map<int,utime_t> &last_osd_report);
@@ -535,6 +541,8 @@ public:
 
   void check_osdmap_sub(Subscription *sub);
   void check_pg_creates_sub(Subscription *sub);
+
+  void do_application_enable(int64_t pool_id, const std::string &app_name);
 
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {

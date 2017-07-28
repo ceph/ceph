@@ -1176,6 +1176,9 @@ public:
     assert(i != pool_name.end());
     return i->second;
   }
+  const mempool::osdmap::map<int64_t,string>& get_pool_names() const {
+    return pool_name;
+  }
   bool have_pg_pool(int64_t p) const {
     return pools.count(p);
   }
@@ -1342,10 +1345,11 @@ public:
   void print_oneline_summary(ostream& out) const;
 
   enum {
-    DUMP_IN = 1,     // only 'in' osds
-    DUMP_OUT = 2,    // only 'out' osds
-    DUMP_UP = 4,     // only 'up' osds
-    DUMP_DOWN = 8,   // only 'down' osds
+    DUMP_IN = 1,         // only 'in' osds
+    DUMP_OUT = 2,        // only 'out' osds
+    DUMP_UP = 4,         // only 'up' osds
+    DUMP_DOWN = 8,       // only 'down' osds
+    DUMP_DESTROYED = 16, // only 'destroyed' osds
   };
   void print_tree(Formatter *f, ostream *out, unsigned dump_flags=0) const;
 

@@ -10,6 +10,7 @@ import logging
 import time
 from cStringIO import StringIO
 
+from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from util.rados import rados
 import os
@@ -55,6 +56,9 @@ def task(ctx, config):
     # create 1 pg pool
     log.info('creating foo')
     manager.raw_cluster_cmd('osd', 'pool', 'create', 'foo', '1')
+    manager.raw_cluster_cmd(
+        'osd', 'pool', 'application', 'enable',
+        'foo', 'rados', run.Raw('||'), 'true')
 
     # Remove extra pool to simlify log output
     manager.raw_cluster_cmd('osd', 'pool', 'delete', 'rbd', 'rbd', '--yes-i-really-really-mean-it')
@@ -189,12 +193,11 @@ def task(ctx, config):
     manager.mark_down_osd(non_divergent[0])
     # manager.mark_out_osd(non_divergent[0])
 
-    # An empty collection for pg 2.0 needs to be cleaned up
+    # An empty collection for pg 2.0 might need to be cleaned up
     cmd = ((prefix + "--op remove --pgid 2.0").
            format(id=non_divergent[0]))
     proc = exp_remote.run(args=cmd, wait=True,
                           check_status=False, stdout=StringIO())
-    assert proc.exitstatus == 0
 
     cmd = ((prefix + "--op import --file {file}").
            format(id=non_divergent[0], file=expfile))

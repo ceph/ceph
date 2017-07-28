@@ -93,6 +93,8 @@ class DaemonPerfCounters
 class DaemonState
 {
   public:
+  Mutex lock = {"DaemonState::lock"};
+
   DaemonKey key;
 
   // The hostname where daemon was last seen running (extracted

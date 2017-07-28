@@ -25,28 +25,33 @@
 #include <vector>
 #include <atomic>
 
+class AdminSocketHook;
 class ContextWQ;
+namespace librbd { struct ImageCtx; }
 
 namespace rbd {
 namespace mirror {
 
-class ImageDeleterAdminSocketHook;
+template <typename> class ServiceDaemon;
 
 /**
  * Manage deletion of non-primary images.
  */
+template <typename ImageCtxT = librbd::ImageCtx>
 class ImageDeleter {
 public:
   static const int EISPRM = 1000;
 
-  ImageDeleter(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock);
+  ImageDeleter(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+               ServiceDaemon<librbd::ImageCtx>* service_daemon);
   ~ImageDeleter();
   ImageDeleter(const ImageDeleter&) = delete;
   ImageDeleter& operator=(const ImageDeleter&) = delete;
 
   void schedule_image_delete(RadosRef local_rados,
                              int64_t local_pool_id,
-                             const std::string& global_image_id);
+                             const std::string& global_image_id,
+                             bool ignore_orphaned);
   void wait_for_scheduled_deletion(int64_t local_pool_id,
                                    const std::string &global_image_id,
                                    Context *ctx,
@@ -78,15 +83,17 @@ private:
     RadosRef local_rados;
     int64_t local_pool_id;
     std::string global_image_id;
+    bool ignore_orphaned;
     int error_code = 0;
     int retries = 0;
     bool notify_on_failed_retry = true;
     Context *on_delete = nullptr;
 
     DeleteInfo(RadosRef local_rados, int64_t local_pool_id,
-               const std::string& global_image_id) :
-      local_rados(local_rados), local_pool_id(local_pool_id),
-      global_image_id(global_image_id) {
+               const std::string& global_image_id,
+               bool ignore_orphaned)
+      : local_rados(local_rados), local_pool_id(local_pool_id),
+        global_image_id(global_image_id), ignore_orphaned(ignore_orphaned) {
     }
 
     bool match(int64_t local_pool_id, const std::string &global_image_id) {
@@ -99,9 +106,10 @@ private:
                       bool print_failure_info=false);
   };
 
-  std::atomic<unsigned> m_running { 0 };
+  std::atomic<unsigned> m_running { 1 };
 
   ContextWQ *m_work_queue;
+  ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
 
   std::deque<std::unique_ptr<DeleteInfo> > m_delete_queue;
   Mutex m_delete_lock;
@@ -116,7 +124,7 @@ private:
   SafeTimer *m_failed_timer;
   Mutex *m_failed_timer_lock;
 
-  ImageDeleterAdminSocketHook *m_asok_hook;
+  AdminSocketHook *m_asok_hook;
 
   void run();
   bool process_image_delete();
@@ -135,5 +143,7 @@ private:
 
 } // namespace mirror
 } // namespace rbd
+
+extern template class rbd::mirror::ImageDeleter<librbd::ImageCtx>;
 
 #endif // CEPH_RBD_MIRROR_IMAGEDELETER_H

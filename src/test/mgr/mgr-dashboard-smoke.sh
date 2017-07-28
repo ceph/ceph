@@ -13,7 +13,7 @@
 # GNU Library Public License for more details.
 #
 source $(dirname $0)/../detect-build-env-vars.sh
-source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
+source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -33,7 +33,7 @@ function run() {
 
     timeout 360 ceph --mon-host $MON mon stat || return 1
     export CEPH_ARGS="--mon_host $MON "
-    ceph config-key put mgr/x/dashboard/server_port 7001
+    ceph config-key set mgr/x/dashboard/server_port 7001
     MGR_ARGS+="--mgr_module_path=${CEPH_ROOT}/src/pybind/mgr "
     run_mgr $dir x ${MGR_ARGS} || return 1
 

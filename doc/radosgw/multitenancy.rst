@@ -38,7 +38,9 @@ Create a user testx$tester to be accessed with Swift::
   # radosgw-admin --tenant testx --uid tester --display-name "Test User" --subuser tester:test --key-type swift --access full user create
   # radosgw-admin --subuser 'testx$tester:test' --key-type swift --secret test123
 
-Note that the subuser with explicit tenant had to be quoted in the shell.
+.. note:: The subuser with explicit tenant has to be quoted in the shell.
+
+   Tenant names may contain only alphanumeric characters and underscores.
 
 Accessing Buckets with Explicit Tenants
 =======================================

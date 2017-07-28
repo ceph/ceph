@@ -358,6 +358,7 @@ Red Hat <contact@redhat.com> Alexandre Marangone <amarango@redhat.com>
 Red Hat <contact@redhat.com> Alex Elder <aelder@redhat.com>
 Red Hat <contact@redhat.com> Alfredo Deza <adeza@redhat.com>
 Red Hat <contact@redhat.com> Ali Maredia <amaredia@redhat.com>
+Red Hat <contact@redhat.com> Amit Kumar <amitkuma@redhat.com>
 Red Hat <contact@redhat.com> Andrew Schoen <aschoen@redhat.com>
 Red Hat <contact@redhat.com> Barbora Ančincová <bara@redhat.com>
 Red Hat <contact@redhat.com> Boris Ranto <branto@redhat.com>
@@ -521,7 +522,7 @@ The Linux Box <contact@linuxbox.com> Matt Benjamin <matt@linuxbox.com>
 The University of Arizona <contact@arizona.edu> James Ryan Cresawn <jrcresawn@gmail.com>
 Time Warner Cable Inc. <contact@twcable.com> Bryan Stillwell <bryan.stillwell@twcable.com>
 Trendy Tech <contact@trendytech.com.cn> shiqi <m13913886148@gmail.com>
-Trendy Tech <contact@trendytech.com.cn> Lei Zhang <243290414@qq.com>
+Trendy Tech <contact@trendytech.com.cn> Zhang Lei <zhanglei@trendytech.com.cn>
 Uber Technologies Inc. <contact@uber.com> Henrik Korkuc <henrik@uber.com>
 Ubuntu Kylin <contact@ubuntukylin.com> Min Chen <minchen@ubuntukylin.com>
 UMCloud <contact@umcloud.com> Jiaying Ren <mikulely@gmail.com>
@@ -783,16 +784,17 @@ ZTE <contact@zte.com.cn> Chuanhong Wang <wang.chuanhong@zte.com.cn>
 ZTE <contact@zte.com.cn> Gong Chuang <gong.chuang@zte.com.cn>
 ZTE <contact@zte.com.cn> Lan De <lan.de3@zte.com.cn>
 ZTE <contact@zte.com.cn> Luo Kexue <luo.kexue@zte.com.cn>
-ZTE <contact@zte.com.cn> Ren Huanwen <ren.huanwen@zte.com.cn>
 ZTE <contact@zte.com.cn> Luo Runbing <runsisi@zte.com.cn>
-ZTE <contact@zte.com.cn> Xie Xingguo <xie.xingguo@zte.com.cn>
-ZTE <contact@zte.com.cn> Shun Song <song.shun3@zte.com.cn>
+ZTE <contact@zte.com.cn> Ren Huanwen <ren.huanwen@zte.com.cn>
 ZTE <contact@zte.com.cn> Song Baisen <song.baisen@zte.com.cn>
+ZTE <contact@zte.com.cn> Song Shun <song.shun3@zte.com.cn>
 ZTE <contact@zte.com.cn> Song Weibin <song.weibin@zte.com.cn>
 ZTE <contact@zte.com.cn> Tang Wenjun <tang.wenjun3@zte.com.cn>
 ZTE <contact@zte.com.cn> Wei Qiaomiao <wei.qiaomiao@zte.com.cn>
+ZTE <contact@zte.com.cn> Xie Xingguo <xie.xingguo@zte.com.cn>
 ZTE <contact@zte.com.cn> Yan Jun <yan.jun8@zte.com.cn>
 ZTE <contact@zte.com.cn> Zhang Zezhu <zhang.zezhu@zte.com.cn>
+ZTE <contact@zte.com.cn> Zhu Shangzhong <zhu.shangzhong@zte.com.cn>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \

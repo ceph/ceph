@@ -477,11 +477,13 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   if (!divergent.empty()) {
     assert(missing.get_items().empty());
     PGLog::write_log_and_missing_wo_missing(
-      t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent, true);
+      t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent, true, true);
   } else {
     pg_missing_tracker_t tmissing(missing);
+    bool rebuilt_missing_set_with_deletes = missing.may_include_deletes;
     PGLog::write_log_and_missing(
-      t, &km, log, coll, info.pgid.make_pgmeta_oid(), tmissing, true);
+      t, &km, log, coll, info.pgid.make_pgmeta_oid(), tmissing, true, true,
+      &rebuilt_missing_set_with_deletes);
   }
   t.omap_setkeys(coll, info.pgid.make_pgmeta_oid(), km);
   return 0;

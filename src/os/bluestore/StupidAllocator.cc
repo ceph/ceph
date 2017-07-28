@@ -158,7 +158,7 @@ int64_t StupidAllocator::allocate_int(
   if (skew)
     skew = alloc_unit - skew;
   *offset = p.get_start() + skew;
-  *length = MIN(MAX(alloc_unit, want_size), p.get_len() - skew);
+  *length = MIN(MAX(alloc_unit, want_size), P2ALIGN((p.get_len() - skew), alloc_unit));
   if (cct->_conf->bluestore_debug_small_allocations) {
     uint64_t max =
       alloc_unit * (rand() % cct->_conf->bluestore_debug_small_allocations);

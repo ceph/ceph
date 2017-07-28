@@ -16,8 +16,7 @@ set(libos_srcs
   memstore/MemStore.cc
   kstore/KStore.cc
   kstore/kstore_types.cc
-  fs/FS.cc
-  fs/aio.cc)
+  fs/FS.cc)
 
 if(HAVE_LIBAIO)
   list(APPEND libos_srcs
@@ -34,6 +33,7 @@ if(HAVE_LIBAIO)
     bluestore/StupidAllocator.cc
     bluestore/BitMapAllocator.cc
     bluestore/BitAllocator.cc
+    bluestore/aio.cc
   )
 endif(HAVE_LIBAIO)
 

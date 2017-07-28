@@ -61,7 +61,7 @@
   
   # rules
   rule replicated_rule {
-  \truleset 0 (esc)
+  \tid 0 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -84,7 +84,7 @@
   nearfull_ratio 0
   min_compat_client jewel
   
-  pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0
+  pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0 application rbd
   
   max_osd 3
   
@@ -93,5 +93,5 @@
   osdmaptool: writing epoch 1 to myosdmap
   $ osdmaptool --print myosdmap | grep 'pool 1'
   osdmaptool: osdmap file 'myosdmap'
-  pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0
+  pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0 application rbd
   $ rm -f myosdmap

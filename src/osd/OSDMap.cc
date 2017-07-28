@@ -917,6 +917,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
     for (auto &state : st)
       f->dump_string("state", state);
     f->close_section();
+    f->close_section();
   }
   f->close_section();
 
@@ -1312,8 +1313,9 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_V4;
   if (crush->has_nondefault_tunables5())
     features |= CEPH_FEATURE_CRUSH_TUNABLES5;
-  if (crush->has_incompat_choose_args())
-    features |= CEPH_FEATURE_CRUSH_CHOOSE_ARGS;
+  if (crush->has_incompat_choose_args()) {
+    features |= CEPH_FEATUREMASK_CRUSH_CHOOSE_ARGS;
+  }
   mask |= CEPH_FEATURES_CRUSH;
 
   if (!pg_upmap.empty() || !pg_upmap_items.empty())
@@ -1795,6 +1797,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
     require_osd_release = inc.new_require_osd_release;
     if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+      flags |= CEPH_OSDMAP_RECOVERY_DELETES;
     }
   }
 
@@ -2336,7 +2339,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     if (v < 4) {
       decltype(flags) f = flags;
       if (require_osd_release >= CEPH_RELEASE_LUMINOUS)
-	f |= CEPH_OSDMAP_REQUIRE_LUMINOUS;
+	f |= CEPH_OSDMAP_REQUIRE_LUMINOUS | CEPH_OSDMAP_RECOVERY_DELETES;
       else if (require_osd_release == CEPH_RELEASE_KRAKEN)
 	f |= CEPH_OSDMAP_REQUIRE_KRAKEN;
       else if (require_osd_release == CEPH_RELEASE_JEWEL)
@@ -2689,12 +2692,14 @@ void OSDMap::decode(bufferlist::iterator& bl)
       ::decode(require_osd_release, bl);
       if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
 	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+	flags |= CEPH_OSDMAP_RECOVERY_DELETES;
       }
     } else {
       if (flags & CEPH_OSDMAP_REQUIRE_LUMINOUS) {
 	// only for compat with post-kraken pre-luminous test clusters
 	require_osd_release = CEPH_RELEASE_LUMINOUS;
 	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+	flags |= CEPH_OSDMAP_RECOVERY_DELETES;
       } else if (flags & CEPH_OSDMAP_REQUIRE_KRAKEN) {
 	require_osd_release = CEPH_RELEASE_KRAKEN;
       } else if (flags & CEPH_OSDMAP_REQUIRE_JEWEL) {
@@ -2940,6 +2945,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",require_kraken_osds";
   if (f & CEPH_OSDMAP_REQUIRE_LUMINOUS)
     s += ",require_luminous_osds";
+  if (f & CEPH_OSDMAP_RECOVERY_DELETES)
+    s += ",recovery_deletes";
   if (s.length())
     s.erase(0, 1);
   return s;
@@ -3046,16 +3053,20 @@ public:
 
   OSDTreePlainDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
 		     unsigned f)
-    : Parent(crush), osdmap(osdmap_), filter(f) { }
+    : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
   bool should_dump_leaf(int i) const override {
-    if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
-	((filter & OSDMap::DUMP_DOWN) && !osdmap->is_down(i)) ||
-	((filter & OSDMap::DUMP_IN) && !osdmap->is_in(i)) ||
-	((filter & OSDMap::DUMP_OUT) && !osdmap->is_out(i))) {
-      return false;
+    if (!filter) {
+      return true; // normal case
     }
-    return true;
+    if (((filter & OSDMap::DUMP_UP) && osdmap->is_up(i)) ||
+	((filter & OSDMap::DUMP_DOWN) && osdmap->is_down(i)) ||
+	((filter & OSDMap::DUMP_IN) && osdmap->is_in(i)) ||
+	((filter & OSDMap::DUMP_OUT) && osdmap->is_out(i)) ||
+        ((filter & OSDMap::DUMP_DESTROYED) && osdmap->is_destroyed(i))) {
+      return true;
+    }
+    return false;
   }
 
   bool should_dump_empty_bucket() const override {
@@ -3067,7 +3078,7 @@ public:
     tbl->define_column("CLASS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
-    tbl->define_column("UP/DOWN", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("STATUS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("PRI-AFF", TextTable::LEFT, TextTable::RIGHT);
 
@@ -3075,7 +3086,7 @@ public:
 
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i)) {
-	dump_item(CrushTreeDumper::Item(i, 0, 0), tbl);
+	dump_item(CrushTreeDumper::Item(i, 0, 0, 0), tbl);
       }
     }
   }
@@ -3105,7 +3116,15 @@ protected:
 	*tbl << "DNE"
 	     << 0;
       } else {
-	*tbl << (osdmap->is_up(qi.id) ? "up" : "down")
+        string s;
+        if (osdmap->is_up(qi.id)) {
+          s = "up";
+        } else if (osdmap->is_destroyed(qi.id)) {
+          s = "destroyed";
+        } else {
+          s = "down";
+        }
+	*tbl << s
 	     << weightf_t(osdmap->get_weightf(qi.id))
 	     << weightf_t(osdmap->get_primary_affinityf(qi.id));
       }
@@ -3124,16 +3143,20 @@ public:
 
   OSDTreeFormattingDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
 			  unsigned f)
-    : Parent(crush), osdmap(osdmap_), filter(f) { }
+    : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
   bool should_dump_leaf(int i) const override {
-    if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
-	((filter & OSDMap::DUMP_DOWN) && !osdmap->is_down(i)) ||
-	((filter & OSDMap::DUMP_IN) && !osdmap->is_in(i)) ||
-	((filter & OSDMap::DUMP_OUT) && !osdmap->is_out(i))) {
-      return false;
+    if (!filter) {
+      return true; // normal case
     }
-    return true;
+    if (((filter & OSDMap::DUMP_UP) && osdmap->is_up(i)) ||
+        ((filter & OSDMap::DUMP_DOWN) && osdmap->is_down(i)) ||
+        ((filter & OSDMap::DUMP_IN) && osdmap->is_in(i)) ||
+        ((filter & OSDMap::DUMP_OUT) && osdmap->is_out(i)) ||
+        ((filter & OSDMap::DUMP_DESTROYED) && osdmap->is_destroyed(i))) {
+      return true;
+    }
+    return false;
   }
 
   bool should_dump_empty_bucket() const override {
@@ -3147,7 +3170,7 @@ public:
     f->open_array_section("stray");
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i))
-	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
+	dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
     }
     f->close_section();
   }
@@ -3157,8 +3180,16 @@ protected:
     Parent::dump_item_fields(qi, f);
     if (!qi.is_bucket())
     {
+      string s;
+      if (osdmap->is_up(qi.id)) {
+        s = "up";
+      } else if (osdmap->is_destroyed(qi.id)) {
+        s = "destroyed";
+      } else {
+        s = "down";
+      }
       f->dump_unsigned("exists", (int)osdmap->exists(qi.id));
-      f->dump_string("status", osdmap->is_up(qi.id) ? "up" : "down");
+      f->dump_string("status", s);
       f->dump_float("reweight", osdmap->get_weightf(qi.id));
       f->dump_float("primary_affinity", osdmap->get_primary_affinityf(qi.id));
     }
@@ -3309,6 +3340,8 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
       pools[pool].set_pg_num(poolbase << pg_bits);
       pools[pool].set_pgp_num(poolbase << pgp_bits);
       pools[pool].last_change = epoch;
+      pools[pool].application_metadata.insert(
+        {pg_pool_t::APPLICATION_NAME_RBD, {}});
       pool_name[pool] = plname;
       name_pool[plname] = pool;
     }
@@ -3934,7 +3967,7 @@ public:
 
   OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
 		       const PGStatService *pgs_, bool tree_) :
-    Parent(crush),
+    Parent(crush, osdmap_->get_pool_names()),
     osdmap(osdmap_),
     pgs(pgs_),
     tree(tree_),
@@ -3949,7 +3982,7 @@ protected:
   void dump_stray(F *f) {
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (osdmap->exists(i) && !this->is_touched(i))
-	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
+	dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
     }
   }
 
@@ -4206,7 +4239,7 @@ protected:
 			 const size_t num_pgs,
 			 Formatter *f) override {
     f->open_object_section("item");
-    CrushTreeDumper::dump_item_fields(crush, qi, f);
+    CrushTreeDumper::dump_item_fields(crush, weight_set_names, qi, f);
     f->dump_float("reweight", reweight);
     f->dump_int("kb", kb);
     f->dump_int("kb_used", kb_used);

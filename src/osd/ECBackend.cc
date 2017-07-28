@@ -352,12 +352,14 @@ void ECBackend::handle_recovery_push(
 	op.soid,
 	op.recovery_info,
 	recovery_ops[op.soid].obc,
+	false,
 	&m->t);
     } else {
       get_parent()->on_local_recover(
 	op.soid,
 	op.recovery_info,
 	ObjectContextRef(),
+	false,
 	&m->t);
     }
   }
@@ -650,7 +652,7 @@ void ECBackend::continue_recovery_op(
 	  stat.num_bytes_recovered = op.recovery_info.size;
 	  stat.num_keys_recovered = 0; // ??? op ... omap_entries.size(); ?
 	  stat.num_objects_recovered = 1;
-	  get_parent()->on_global_recover(op.hoid, stat);
+	  get_parent()->on_global_recover(op.hoid, stat, false);
 	  dout(10) << __func__ << ": WRITING return " << op << dendl;
 	  recovery_ops.erase(op.hoid);
 	  return;
@@ -685,7 +687,9 @@ void ECBackend::run_recovery_op(
     RecoveryOp &op = recovery_ops.insert(make_pair(i->hoid, *i)).first->second;
     continue_recovery_op(op, &m);
   }
+
   dispatch_recovery_messages(m, priority);
+  send_recovery_deletes(priority, h->deletes);
   delete _h;
 }
 
@@ -739,7 +743,7 @@ bool ECBackend::can_handle_while_inactive(
   return false;
 }
 
-bool ECBackend::handle_message(
+bool ECBackend::_handle_message(
   OpRequestRef _op)
 {
   dout(10) << __func__ << ": " << *_op->get_req() << dendl;
@@ -992,7 +996,8 @@ void ECBackend::handle_sub_read(
       hinfo = get_hash_info(i->first);
       if (!hinfo) {
 	r = -EIO;
-	get_parent()->clog_error() << __func__ << ": No hinfo for " << i->first;
+	get_parent()->clog_error() << "Corruption detected: object " << i->first
+                                   << " is missing hash_info";
 	dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
 	goto error;
       }
@@ -1006,9 +1011,8 @@ void ECBackend::handle_sub_read(
 	j->get<1>(),
 	bl, j->get<2>());
       if (r < 0) {
-	get_parent()->clog_error() << __func__
-				   << ": Error " << r
-				   << " reading "
+	get_parent()->clog_error() << "Error " << r
+				   << " reading object "
 				   << i->first;
 	dout(5) << __func__ << ": Error " << r
 		<< " reading " << i->first << dendl;
@@ -1034,7 +1038,7 @@ void ECBackend::handle_sub_read(
 	  bufferhash h(-1);
 	  h << bl;
 	  if (h.digest() != hinfo->get_chunk_hash(shard)) {
-	    get_parent()->clog_error() << __func__ << ": Bad hash for " << i->first << " digest 0x"
+	    get_parent()->clog_error() << "Bad hash for " << i->first << " digest 0x"
 				       << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec;
 	    dout(5) << __func__ << ": Bad hash for " << i->first << " digest 0x"
 		    << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << dendl;
@@ -1231,7 +1235,7 @@ void ECBackend::handle_sub_read_reply(
 	    err = rop.complete[iter->first].errors.begin()->second;
             rop.complete[iter->first].r = err;
 	  } else {
-	    get_parent()->clog_error() << __func__ << ": Error(s) ignored for "
+	    get_parent()->clog_warn() << "Error(s) ignored for "
 				       << iter->first << " enough copies available";
 	    dout(10) << __func__ << " Error(s) ignored for " << iter->first
 		     << " enough copies available" << dendl;

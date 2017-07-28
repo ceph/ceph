@@ -62,6 +62,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INVALID_DIGEST, {400, "InvalidDigest" }},
     { ERR_BAD_DIGEST, {400, "BadDigest" }},
     { ERR_INVALID_LOCATION_CONSTRAINT, {400, "InvalidLocationConstraint" }},
+    { ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION, {400, "ZonegroupDefaultPlacementMisconfiguration" }},
     { ERR_INVALID_BUCKET_NAME, {400, "InvalidBucketName" }},
     { ERR_INVALID_OBJECT_NAME, {400, "InvalidObjectName" }},
     { ERR_UNRESOLVABLE_EMAIL, {400, "UnresolvableGrantByEmailAddress" }},
@@ -274,8 +275,6 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   content_started = false;
   format = 0;
   formatter = NULL;
-  bucket_acl = NULL;
-  object_acl = NULL;
   expect_cont = false;
 
   obj_size = 0;
@@ -297,8 +296,6 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
 
 req_state::~req_state() {
   delete formatter;
-  delete bucket_acl;
-  delete object_acl;
 }
 
 bool search_err(rgw_http_errors& errs, int err_no, bool is_website_redirect, int& http_ret, string& code)
@@ -661,6 +658,14 @@ void rgw_to_iso8601(const real_time& t, string *dest)
   char buf[TIME_BUF_SIZE];
   rgw_to_iso8601(t, buf, sizeof(buf));
   *dest = buf;
+}
+
+
+string rgw_to_asctime(const utime_t& t)
+{
+  stringstream s;
+  t.asctime(s);
+  return s.str();
 }
 
 /*
@@ -1144,18 +1149,18 @@ bool verify_bucket_permission_no_policy(struct req_state * const s, const int pe
     return false;
 
   return verify_bucket_permission_no_policy(s,
-					    s->user_acl.get(),
-					    s->bucket_acl,
-					    perm);
+                                            s->user_acl.get(),
+                                            s->bucket_acl.get(),
+                                            perm);
 }
 
 bool verify_bucket_permission(struct req_state * const s, const uint64_t op)
 {
   return verify_bucket_permission(s,
-				  s->bucket,
+                                  s->bucket,
                                   s->user_acl.get(),
-                                  s->bucket_acl,
-				  s->iam_policy,
+                                  s->bucket_acl.get(),
+                                  s->iam_policy,
                                   op);
 }
 
@@ -1299,19 +1304,21 @@ bool verify_object_permission_no_policy(struct req_state *s, int perm)
   if (!verify_requester_payer_permission(s))
     return false;
 
-  return verify_object_permission_no_policy(s, s->user_acl.get(),
-					    s->bucket_acl, s->object_acl,
-					    perm);
+  return verify_object_permission_no_policy(s,
+                                            s->user_acl.get(),
+                                            s->bucket_acl.get(),
+                                            s->object_acl.get(),
+                                            perm);
 }
 
 bool verify_object_permission(struct req_state *s, uint64_t op)
 {
   return verify_object_permission(s,
-				  rgw_obj(s->bucket, s->object),
-				  s->user_acl.get(),
-                                  s->bucket_acl,
-                                  s->object_acl,
-				  s->iam_policy,
+                                  rgw_obj(s->bucket, s->object),
+                                  s->user_acl.get(),
+                                  s->bucket_acl.get(),
+                                  s->object_acl.get(),
+                                  s->iam_policy,
                                   op);
 }
 

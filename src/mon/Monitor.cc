@@ -112,17 +112,6 @@ MonCommand mon_commands[] = {
 #include <mon/MonCommands.h>
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
-
-  // FIXME: slurp up the Mgr commands too
-
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail, FLAG(MGR)},
-#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
-  {parsesig, helptext, modulename, req_perms, avail, flags | FLAG(MGR)},
-#include <mgr/MgrCommands.h>
-#undef COMMAND
-#undef COMMAND_WITH_FLAG
-
 };
 
 
@@ -2821,11 +2810,13 @@ void Monitor::_generate_command_map(map<string,cmd_vartype>& cmdmap,
   }
 }
 
-const MonCommand *Monitor::_get_moncommand(const string &cmd_prefix,
-                                           MonCommand *cmds, int cmds_size)
+const MonCommand *Monitor::_get_moncommand(
+  const string &cmd_prefix,
+  const MonCommand *cmds,
+  int cmds_size)
 {
-  MonCommand *this_cmd = NULL;
-  for (MonCommand *cp = cmds;
+  const MonCommand *this_cmd = NULL;
+  for (const MonCommand *cp = cmds;
        cp < &cmds[cmds_size]; cp++) {
     if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
       this_cmd = cp;
@@ -2855,26 +2846,23 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
   return capable;
 }
 
-void Monitor::format_command_descriptions(const MonCommand *commands,
-					  unsigned commands_size,
+void Monitor::format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
 					  bufferlist *rdata,
 					  bool hide_mgr_flag)
 {
   int cmdnum = 0;
   f->open_object_section("command_descriptions");
-  for (const MonCommand *cp = commands;
-       cp < &commands[commands_size]; cp++) {
-
-    unsigned flags = cp->flags;
+  for (const auto &cmd : commands) {
+    unsigned flags = cmd.flags;
     if (hide_mgr_flag) {
       flags &= ~MonCommand::FLAG_MGR;
     }
     ostringstream secname;
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
     dump_cmddesc_to_json(f, secname.str(),
-			 cp->cmdstring, cp->helpstring, cp->module,
-			 cp->req_perms, cp->availability, flags);
+			 cmd.cmdstring, cmd.helpstring, cmd.module,
+			 cmd.req_perms, cmd.availability, flags);
     cmdnum++;
   }
   f->close_section();	// command_descriptions
@@ -2985,9 +2973,16 @@ void Monitor::handle_command(MonOpRequestRef op)
     // hide mgr commands until luminous upgrade is complete
     bool hide_mgr_flag =
       osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS;
-    format_command_descriptions(leader_supported_mon_commands,
-				leader_supported_mon_commands_size, f, &rdata,
-				hide_mgr_flag);
+
+    std::vector<MonCommand> commands;
+    commands = static_cast<MgrMonitor*>(
+        paxos_service[PAXOS_MGR])->get_command_descs();
+
+    for (int i = 0 ; i < leader_supported_mon_commands_size; ++i) {
+      commands.push_back(leader_supported_mon_commands[i]);
+    }
+
+    format_command_descriptions(commands, f, &rdata, hide_mgr_flag);
     delete f;
     reply_command(op, 0, "", rdata, 0);
     return;
@@ -3017,17 +3012,28 @@ void Monitor::handle_command(MonOpRequestRef op)
   // validate command is in leader map
 
   const MonCommand *leader_cmd;
+  const auto& mgr_cmds = mgrmon()->get_command_descs();
+  const MonCommand *mgr_cmd = nullptr;
+  if (!mgr_cmds.empty()) {
+    mgr_cmd = _get_moncommand(prefix, &mgr_cmds.at(0), mgr_cmds.size());
+  }
   leader_cmd = _get_moncommand(prefix,
                                // the boost underlying this isn't const for some reason
                                const_cast<MonCommand*>(leader_supported_mon_commands),
                                leader_supported_mon_commands_size);
   if (!leader_cmd) {
-    reply_command(op, -EINVAL, "command not known", 0);
-    return;
+    leader_cmd = mgr_cmd;
+    if (!leader_cmd) {
+      reply_command(op, -EINVAL, "command not known", 0);
+      return;
+    }
   }
   // validate command is in our map & matches, or forward if it is allowed
   const MonCommand *mon_cmd = _get_moncommand(prefix, mon_commands,
                                               ARRAY_SIZE(mon_commands));
+  if (!mon_cmd) {
+    mon_cmd = mgr_cmd;
+  }
   if (!is_leader()) {
     if (!mon_cmd) {
       if (leader_cmd->is_noforward()) {
@@ -3257,6 +3263,14 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->flush(rdata);
     r = 0;
     rs = "";
+  } else if (prefix == "config set") {
+    std::string key;
+    cmd_getval(cct, cmdmap, "key", key);
+    std::string val;
+    cmd_getval(cct, cmdmap, "value", val);
+    r = g_conf->set_val(key, val, true, &ss);
+    rs = ss.str();
+    goto out;
   } else if (prefix == "status" ||
 	     prefix == "health" ||
 	     prefix == "df") {
@@ -3550,6 +3564,65 @@ void Monitor::handle_command(MonOpRequestRef op)
       ds << pretty_version_to_str();
     }
     rdata.append(ds);
+    rs = "";
+    r = 0;
+  } else if (prefix == "versions") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    map<string,int> overall;
+    f->open_object_section("version");
+    map<string,int> mon, mgr, osd, mds;
+
+    count_metadata("ceph_version", &mon);
+    f->open_object_section("mon");
+    for (auto& p : mon) {
+      f->dump_int(p.first.c_str(), p.second);
+      overall[p.first] += p.second;
+    }
+    f->close_section();
+
+    mgrmon()->count_metadata("ceph_version", &mgr);
+    f->open_object_section("mgr");
+    for (auto& p : mgr) {
+      f->dump_int(p.first.c_str(), p.second);
+      overall[p.first] += p.second;
+    }
+    f->close_section();
+
+    osdmon()->count_metadata("ceph_version", &osd);
+    f->open_object_section("osd");
+    for (auto& p : osd) {
+      f->dump_int(p.first.c_str(), p.second);
+      overall[p.first] += p.second;
+    }
+    f->close_section();
+
+    mdsmon()->count_metadata("ceph_version", &mds);
+    f->open_object_section("mds");
+    for (auto& p : mon) {
+      f->dump_int(p.first.c_str(), p.second);
+      overall[p.first] += p.second;
+    }
+    f->close_section();
+
+    for (auto& p : mgrstatmon()->get_service_map().services) {
+      f->open_object_section(p.first.c_str());
+      map<string,int> m;
+      p.second.count_metadata("ceph_version", &m);
+      for (auto& q : m) {
+	f->dump_int(q.first.c_str(), q.second);
+	overall[q.first] += q.second;
+      }
+      f->close_section();
+    }
+
+    f->open_object_section("overall");
+    for (auto& p : overall) {
+      f->dump_int(p.first.c_str(), p.second);
+    }
+    f->close_section();
+    f->close_section();
+    f->flush(rdata);
     rs = "";
     r = 0;
   }
@@ -4999,17 +5072,22 @@ int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
   return 0;
 }
 
-void Monitor::count_metadata(const string& field, Formatter *f)
+void Monitor::count_metadata(const string& field, map<string,int> *out)
 {
-  map<string,int> by_val;
   for (auto& p : mon_metadata) {
     auto q = p.second.find(field);
     if (q == p.second.end()) {
-      by_val["unknown"]++;
+      (*out)["unknown"]++;
     } else {
-      by_val[q->second]++;
+      (*out)[q->second]++;
     }
   }
+}
+
+void Monitor::count_metadata(const string& field, Formatter *f)
+{
+  map<string,int> by_val;
+  count_metadata(field, &by_val);
   f->open_object_section(field.c_str());
   for (auto& p : by_val) {
     f->dump_int(p.first.c_str(), p.second);

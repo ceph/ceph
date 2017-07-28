@@ -63,6 +63,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_PGMETA CompatSet::Feature(13, "pg meta object")
 #define CEPH_OSD_FEATURE_INCOMPAT_MISSING CompatSet::Feature(14, "explicit missing set")
 #define CEPH_OSD_FEATURE_INCOMPAT_FASTINFO CompatSet::Feature(15, "fastinfo pg attr")
+#define CEPH_OSD_FEATURE_INCOMPAT_RECOVERY_DELETES CompatSet::Feature(16, "deletes in missing set")
 
 
 /// min recovery priority for MBackfillReserve
@@ -80,8 +81,11 @@
 /// base backfill priority for MBackfillReserve (inactive PG)
 #define OSD_BACKFILL_INACTIVE_PRIORITY_BASE 220
 
-/// max recovery priority for MBackfillReserve
-#define OSD_RECOVERY_PRIORITY_MAX 255
+/// max manually/automatically set recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_MAX 254
+
+/// max recovery priority for MBackfillReserve, only when forced manually
+#define OSD_RECOVERY_PRIORITY_FORCED 255
 
 
 typedef hobject_t collection_list_handle_t;
@@ -106,13 +110,18 @@ string ceph_osd_alloc_hint_flag_string(unsigned flags);
  */
 struct osd_reqid_t {
   entity_name_t name; // who
-  ceph_tid_t         tid;
+  ceph_tid_t    tid;
   int32_t       inc;  // incarnation
 
   osd_reqid_t()
-    : tid(0), inc(0) {}
+    : tid(0), inc(0)
+  {}
+  osd_reqid_t(const osd_reqid_t& other)
+    : name(other.name), tid(other.tid), inc(other.inc)
+  {}
   osd_reqid_t(const entity_name_t& a, int i, ceph_tid_t t)
-    : name(a), tid(t), inc(i) {}
+    : name(a), tid(t), inc(i)
+  {}
 
   DENC(osd_reqid_t, v, p) {
     DENC_START(2, 2, p);
@@ -779,7 +788,7 @@ public:
   eversion_t(epoch_t e, version_t v) : version(v), epoch(e), __pad(0) {}
 
   // cppcheck-suppress noExplicitConstructor
-  eversion_t(const ceph_eversion& ce) : 
+  eversion_t(const ceph_eversion& ce) :
     version(ce.version),
     epoch(ce.epoch),
     __pad(0) { }
@@ -982,6 +991,8 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_SNAPTRIM_WAIT (1<<27) // queued to trim snaps
 #define PG_STATE_RECOVERY_TOOFULL (1<<28) // recovery can't proceed: too full
 #define PG_STATE_SNAPTRIM_ERROR (1<<29) // error stopped trimming snaps
+#define PG_STATE_FORCED_RECOVERY (1<<30) // force recovery of this pg before any other
+#define PG_STATE_FORCED_BACKFILL (1<<31) // force backfill of this pg before any other
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);
@@ -1099,6 +1110,10 @@ WRITE_CLASS_ENCODER(pool_opts_t)
  * pg_pool
  */
 struct pg_pool_t {
+  static const char *APPLICATION_NAME_CEPHFS;
+  static const char *APPLICATION_NAME_RBD;
+  static const char *APPLICATION_NAME_RGW;
+
   enum {
     TYPE_REPLICATED = 1,     // replication
     //TYPE_RAID4 = 2,   // raid4 (never implemented)
@@ -1347,6 +1362,9 @@ public:
   bool fast_read;            ///< whether turn on fast read on the pool or not
 
   pool_opts_t opts; ///< options
+
+  /// application -> key/value metadata
+  map<string, std::map<string, string>> application_metadata;
 
 private:
   vector<uint32_t> grade_table;
@@ -2679,6 +2697,8 @@ public:
     unsigned new_pg_num,
     bool old_sort_bitwise,
     bool new_sort_bitwise,
+    bool old_recovery_deletes,
+    bool new_recovery_deletes,
     pg_t pgid
     );
 
@@ -2721,6 +2741,7 @@ public:
     PastIntervals *past_intervals,              ///< [out] intervals
     ostream *out = 0                            ///< [out] debug ostream
     );
+
   friend ostream& operator<<(ostream& out, const PastIntervals &i);
 
   template <typename F>
@@ -3389,7 +3410,36 @@ WRITE_CLASS_ENCODER(pg_log_entry_t)
 
 ostream& operator<<(ostream& out, const pg_log_entry_t& e);
 
+struct pg_log_dup_t {
+  osd_reqid_t reqid;  // caller+tid to uniquely identify request
+  eversion_t version;
+  version_t user_version; // the user version for this entry
+  int32_t return_code; // only stored for ERRORs for dup detection
 
+  pg_log_dup_t()
+    : user_version(0), return_code(0)
+  {}
+  explicit pg_log_dup_t(const pg_log_entry_t& entry)
+    : reqid(entry.reqid), version(entry.version),
+      user_version(entry.user_version), return_code(entry.return_code)
+  {}
+  pg_log_dup_t(const eversion_t& v, version_t uv,
+	       const osd_reqid_t& rid, int return_code)
+    : reqid(rid), version(v), user_version(uv),
+      return_code(return_code)
+  {}
+
+  string get_key_name() const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_log_dup_t*>& o);
+
+  friend std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e);
+};
+WRITE_CLASS_ENCODER(pg_log_dup_t)
+
+std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e);
 
 /**
  * pg_log_t - incremental log of recent pg changes.
@@ -3415,26 +3465,35 @@ protected:
   eversion_t rollback_info_trimmed_to;
 
 public:
-  mempool::osd_pglog::list<pg_log_entry_t> log;  // the actual log.
-  
+  // the actual log
+  mempool::osd_pglog::list<pg_log_entry_t> log;
+
+  // entries just for dup op detection ordered oldest to newest
+  mempool::osd_pglog::list<pg_log_dup_t> dups;
+
   pg_log_t() = default;
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
 	   const eversion_t &can_rollback_to,
 	   const eversion_t &rollback_info_trimmed_to,
-	   mempool::osd_pglog::list<pg_log_entry_t> &&entries)
+	   mempool::osd_pglog::list<pg_log_entry_t> &&entries,
+	   mempool::osd_pglog::list<pg_log_dup_t> &&dup_entries)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
       rollback_info_trimmed_to(rollback_info_trimmed_to),
-      log(std::move(entries)) {}
+      log(std::move(entries)), dups(std::move(dup_entries)) {}
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
 	   const eversion_t &can_rollback_to,
 	   const eversion_t &rollback_info_trimmed_to,
-	   const std::list<pg_log_entry_t> &entries)
+	   const std::list<pg_log_entry_t> &entries,
+	   const std::list<pg_log_dup_t> &dup_entries)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
       rollback_info_trimmed_to(rollback_info_trimmed_to) {
     for (auto &&entry: entries) {
       log.push_back(entry);
+    }
+    for (auto &&entry: dup_entries) {
+      dups.push_back(entry);
     }
   }
 
@@ -3442,6 +3501,7 @@ public:
     eversion_t z;
     rollback_info_trimmed_to = can_rollback_to = head = tail = z;
     log.clear();
+    dups.clear();
   }
 
   eversion_t get_rollback_info_trimmed_to() const {
@@ -3469,13 +3529,19 @@ public:
       oldlog.erase(i++);
     }
 
+    // osd_reqid is unique, so it doesn't matter if there are extra
+    // dup entries in each pg. To avoid storing oid with the dup
+    // entries, just copy the whole list.
+    auto childdups(dups);
+
     return pg_log_t(
       head,
       tail,
       can_rollback_to,
       rollback_info_trimmed_to,
-      std::move(childlog));
-  }
+      std::move(childlog),
+      std::move(childdups));
+    }
 
   mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
     assert(newhead >= tail);
@@ -3566,7 +3632,7 @@ public:
 };
 WRITE_CLASS_ENCODER(pg_log_t)
 
-inline ostream& operator<<(ostream& out, const pg_log_t& log) 
+inline ostream& operator<<(ostream& out, const pg_log_t& log)
 {
   out << "log((" << log.tail << "," << log.head << "], crt="
       << log.get_can_rollback_to() << ")";
@@ -3582,36 +3648,88 @@ inline ostream& operator<<(ostream& out, const pg_log_t& log)
  */
 struct pg_missing_item {
   eversion_t need, have;
-  pg_missing_item() {}
-  explicit pg_missing_item(eversion_t n) : need(n) {}  // have no old version
-  pg_missing_item(eversion_t n, eversion_t h) : need(n), have(h) {}
+  enum missing_flags_t {
+    FLAG_NONE = 0,
+    FLAG_DELETE = 1,
+  } flags;
+  pg_missing_item() : flags(FLAG_NONE) {}
+  explicit pg_missing_item(eversion_t n) : need(n), flags(FLAG_NONE) {}  // have no old version
+  pg_missing_item(eversion_t n, eversion_t h, bool is_delete=false) : need(n), have(h) {
+    set_delete(is_delete);
+  }
 
-  void encode(bufferlist& bl) const {
-    ::encode(need, bl);
-    ::encode(have, bl);
+  void encode(bufferlist& bl, uint64_t features) const {
+    if (HAVE_FEATURE(features, OSD_RECOVERY_DELETES)) {
+      // encoding a zeroed eversion_t to differentiate between this and
+      // legacy unversioned encoding - a need value of 0'0 is not
+      // possible. This can be replaced with the legacy encoding
+      // macros post-luminous.
+      eversion_t e;
+      ::encode(e, bl);
+      ::encode(need, bl);
+      ::encode(have, bl);
+      ::encode(static_cast<uint8_t>(flags), bl);
+    } else {
+      // legacy unversioned encoding
+      ::encode(need, bl);
+      ::encode(have, bl);
+    }
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(need, bl);
-    ::decode(have, bl);
+    eversion_t e;
+    ::decode(e, bl);
+    if (e != eversion_t()) {
+      // legacy encoding, this is the need value
+      need = e;
+      ::decode(have, bl);
+    } else {
+      ::decode(need, bl);
+      ::decode(have, bl);
+      uint8_t f;
+      ::decode(f, bl);
+      flags = static_cast<missing_flags_t>(f);
+    }
   }
+
+  void set_delete(bool is_delete) {
+    flags = is_delete ? FLAG_DELETE : FLAG_NONE;
+  }
+
+  bool is_delete() const {
+    return (flags & FLAG_DELETE) == FLAG_DELETE;
+  }
+
+  string flag_str() const {
+    if (flags == FLAG_NONE) {
+      return "none";
+    } else {
+      return "delete";
+    }
+  }
+
   void dump(Formatter *f) const {
     f->dump_stream("need") << need;
     f->dump_stream("have") << have;
+    f->dump_stream("flags") << flag_str();
   }
   static void generate_test_instances(list<pg_missing_item*>& o) {
     o.push_back(new pg_missing_item);
     o.push_back(new pg_missing_item);
     o.back()->need = eversion_t(1, 2);
     o.back()->have = eversion_t(1, 1);
+    o.push_back(new pg_missing_item);
+    o.back()->need = eversion_t(3, 5);
+    o.back()->have = eversion_t(3, 4);
+    o.back()->flags = FLAG_DELETE;
   }
   bool operator==(const pg_missing_item &rhs) const {
-    return need == rhs.need && have == rhs.have;
+    return need == rhs.need && have == rhs.have && flags == rhs.flags;
   }
   bool operator!=(const pg_missing_item &rhs) const {
     return !(*this == rhs);
   }
 };
-WRITE_CLASS_ENCODER(pg_missing_item)
+WRITE_CLASS_ENCODER_FEATURES(pg_missing_item)
 ostream& operator<<(ostream& out, const pg_missing_item &item);
 
 class pg_missing_const_i {
@@ -3619,6 +3737,7 @@ public:
   virtual const map<hobject_t, pg_missing_item> &
     get_items() const = 0;
   virtual const map<version_t, hobject_t> &get_rmissing() const = 0;
+  virtual bool get_may_include_deletes() const = 0;
   virtual unsigned int num_missing() const = 0;
   virtual bool have_missing() const = 0;
   virtual bool is_missing(const hobject_t& oid, pg_missing_item *out = nullptr) const = 0;
@@ -3674,15 +3793,21 @@ public:
   pg_missing_set(const missing_type &m) {
     missing = m.get_items();
     rmissing = m.get_rmissing();
+    may_include_deletes = m.get_may_include_deletes();
     for (auto &&i: missing)
       tracker.changed(i.first);
   }
+
+  bool may_include_deletes = false;
 
   const map<hobject_t, item> &get_items() const override {
     return missing;
   }
   const map<version_t, hobject_t> &get_rmissing() const override {
     return rmissing;
+  }
+  bool get_may_include_deletes() const override {
+    return may_include_deletes;
   }
   unsigned int num_missing() const override {
     return missing.size();
@@ -3728,43 +3853,40 @@ public:
    * assumes missing is accurate up through the previous log entry.
    */
   void add_next_event(const pg_log_entry_t& e) {
-    if (e.is_update()) {
-      map<hobject_t, item>::iterator missing_it;
-      missing_it = missing.find(e.soid);
-      bool is_missing_divergent_item = missing_it != missing.end();
-      if (e.prior_version == eversion_t() || e.is_clone()) {
-	// new object.
-	if (is_missing_divergent_item) {  // use iterator
-	  rmissing.erase((missing_it->second).need.version);
-	  missing_it->second = item(e.version, eversion_t());  // .have = nil
-	} else  // create new element in missing map
-	  missing[e.soid] = item(e.version, eversion_t());     // .have = nil
-      } else if (is_missing_divergent_item) {
-	// already missing (prior).
+    map<hobject_t, item>::iterator missing_it;
+    missing_it = missing.find(e.soid);
+    bool is_missing_divergent_item = missing_it != missing.end();
+    if (e.prior_version == eversion_t() || e.is_clone()) {
+      // new object.
+      if (is_missing_divergent_item) {  // use iterator
 	rmissing.erase((missing_it->second).need.version);
-	(missing_it->second).need = e.version;  // leave .have unchanged.
-      } else if (e.is_backlog()) {
-	// May not have prior version
-	assert(0 == "these don't exist anymore");
-      } else {
-	// not missing, we must have prior_version (if any)
-	assert(!is_missing_divergent_item);
-	missing[e.soid] = item(e.version, e.prior_version);
-      }
-      rmissing[e.version.version] = e.soid;
-    } else if (e.is_delete()) {
-      rm(e.soid, e.version);
+	missing_it->second = item(e.version, eversion_t(), e.is_delete());  // .have = nil
+      } else  // create new element in missing map
+	missing[e.soid] = item(e.version, eversion_t(), e.is_delete());     // .have = nil
+    } else if (is_missing_divergent_item) {
+      // already missing (prior).
+      rmissing.erase((missing_it->second).need.version);
+      (missing_it->second).need = e.version;  // leave .have unchanged.
+      missing_it->second.set_delete(e.is_delete());
+    } else if (e.is_backlog()) {
+      // May not have prior version
+      assert(0 == "these don't exist anymore");
+    } else {
+      // not missing, we must have prior_version (if any)
+      assert(!is_missing_divergent_item);
+      missing[e.soid] = item(e.version, e.prior_version, e.is_delete());
     }
-
+    rmissing[e.version.version] = e.soid;
     tracker.changed(e.soid);
   }
 
-  void revise_need(hobject_t oid, eversion_t need) {
+  void revise_need(hobject_t oid, eversion_t need, bool is_delete) {
     if (missing.count(oid)) {
       rmissing.erase(missing[oid].need.version);
       missing[oid].need = need;            // no not adjust .have
+      missing[oid].set_delete(is_delete);
     } else {
-      missing[oid] = item(need, eversion_t());
+      missing[oid] = item(need, eversion_t(), is_delete);
     }
     rmissing[need.version] = oid;
 
@@ -3778,8 +3900,9 @@ public:
     }
   }
 
-  void add(const hobject_t& oid, eversion_t need, eversion_t have) {
-    missing[oid] = item(need, have);
+  void add(const hobject_t& oid, eversion_t need, eversion_t have,
+	   bool is_delete) {
+    missing[oid] = item(need, have, is_delete);
     rmissing[need.version] = oid;
     tracker.changed(oid);
   }
@@ -3799,7 +3922,7 @@ public:
   void got(const hobject_t& oid, eversion_t v) {
     std::map<hobject_t, item>::iterator p = missing.find(oid);
     assert(p != missing.end());
-    assert(p->second.need <= v);
+    assert(p->second.need <= v || p->second.is_delete());
     got(p);
   }
 
@@ -3813,12 +3936,14 @@ public:
     pg_t child_pgid,
     unsigned split_bits,
     pg_missing_set *omissing) {
+    omissing->may_include_deletes = may_include_deletes;
     unsigned mask = ~((~0)<<split_bits);
     for (map<hobject_t, item>::iterator i = missing.begin();
 	 i != missing.end();
       ) {
       if ((i->first.get_hash() & mask) == child_pgid.m_seed) {
-	omissing->add(i->first, i->second.need, i->second.have);
+	omissing->add(i->first, i->second.need, i->second.have,
+		      i->second.is_delete());
 	rm(i++);
       } else {
 	++i;
@@ -3834,15 +3959,19 @@ public:
   }
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(3, 2, bl);
-    ::encode(missing, bl);
+    ENCODE_START(4, 2, bl);
+    ::encode(missing, bl, may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : 0);
+    ::encode(may_include_deletes, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl, int64_t pool = -1) {
     for (auto const &i: missing)
       tracker.changed(i.first);
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     ::decode(missing, bl);
+    if (struct_v >= 4) {
+      ::decode(may_include_deletes, bl);
+    }
     DECODE_FINISH(bl);
 
     if (struct_v < 3) {
@@ -3882,6 +4011,7 @@ public:
       f->close_section();
     }
     f->close_section();
+    f->dump_bool("may_include_deletes", may_include_deletes);
   }
   template <typename F>
   void filter_objects(F &&f) {
@@ -3898,7 +4028,12 @@ public:
     o.push_back(new pg_missing_set);
     o.back()->add(
       hobject_t(object_t("foo"), "foo", 123, 456, 0, ""),
-      eversion_t(5, 6), eversion_t(5, 1));
+      eversion_t(5, 6), eversion_t(5, 1), false);
+    o.push_back(new pg_missing_set);
+    o.back()->add(
+      hobject_t(object_t("foo"), "foo", 123, 456, 0, ""),
+      eversion_t(5, 6), eversion_t(5, 1), true);
+    o.back()->may_include_deletes = true;
   }
   template <typename F>
   void get_changed(F &&f) const {
@@ -3967,7 +4102,8 @@ void decode(pg_missing_set<TrackChanges> &c, bufferlist::iterator &p) {
 template <bool TrackChanges>
 ostream& operator<<(ostream& out, const pg_missing_set<TrackChanges> &missing)
 {
-  out << "missing(" << missing.num_missing();
+  out << "missing(" << missing.num_missing()
+      << " may_include_deletes = " << missing.may_include_deletes;
   //if (missing.num_lost()) out << ", " << missing.num_lost() << " lost";
   out << ")";
   return out;
@@ -4257,10 +4393,6 @@ inline ostream& operator<<(ostream& out, const ObjectExtent &ex)
 	     << " -> " << ex.buffer_extents
              << ")";
 }
-
-
-
-
 
 
 // ---------------------------------------
@@ -4788,6 +4920,7 @@ struct ScrubMap {
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
 
+struct OpFinisher;
 
 struct OSDOp {
   ceph_osd_op op;
@@ -4795,6 +4928,8 @@ struct OSDOp {
 
   bufferlist indata, outdata;
   errorcode32_t rval;
+
+  OpFinisher *op_finisher = nullptr;
 
   OSDOp() : rval(0) {
     memset(&op, 0, sizeof(ceph_osd_op));

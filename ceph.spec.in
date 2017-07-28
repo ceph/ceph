@@ -21,7 +21,6 @@
 %bcond_without ceph_test_package
 %endif
 %bcond_with make_check
-%bcond_with xio
 %ifarch s390 s390x
 %bcond_with tcmalloc
 %else
@@ -227,10 +226,6 @@ BuildRequires:	expat-devel
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  redhat-rpm-config
 %endif
-# Accelio IB/RDMA
-%if 0%{with xio}
-BuildRequires:  libxio-devel
-%endif
 
 %description
 Ceph is a massively scalable, open-source, distributed storage system that runs
@@ -267,9 +262,6 @@ Requires:      which
 %if 0%{?suse_version}
 Recommends:    ntp-daemon
 %endif
-%if 0%{with xio}
-Requires:      libxio
-%endif
 %description base
 Base is the package that includes all the files shared amongst ceph servers
 
@@ -296,9 +288,6 @@ Requires:	python-requests
 %if 0%{?suse_version}
 PreReq:         permissions
 Requires(pre):	shadow
-%endif
-%if 0%{with xio}
-Requires:       libxio
 %endif
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster.
@@ -699,6 +688,7 @@ Group:		System/Benchmark
 Requires:	ceph-common
 Requires:	xmlstarlet
 Requires:	jq
+Requires:	socat
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 %endif
@@ -842,15 +832,13 @@ cmake .. \
     -DCMAKE_INSTALL_SYSCONFDIR=%{_sysconfdir} \
     -DCMAKE_INSTALL_MANDIR=%{_mandir} \
     -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
+    -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
     -DWITH_EMBEDDED=OFF \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=ON \
     -DWITH_SYSTEMD=ON \
 %if 0%{?rhel} && ! 0%{?centos}
     -DWITH_SUBMAN=ON \
-%endif
-%if 0%{with xio}
-    -DWITH_XIO=ON \
 %endif
 %if 0%{without ceph_test_package}
     -DWITH_TESTS=OFF \

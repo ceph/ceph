@@ -599,9 +599,8 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       if (leaderinfo && (leaderinfo->rank >= 0)) {
         auto fscid = pending_fsmap.mds_roles.at(leaderinfo->global_id);
         auto fs = pending_fsmap.get_filesystem(fscid);
-        bool followable = fs->mds_map.is_followable(leaderinfo->rank);
 
-        pending_fsmap.modify_daemon(gid, [fscid, leaderinfo, followable](
+        pending_fsmap.modify_daemon(gid, [fscid, leaderinfo](
               MDSMap::mds_info_t *info) {
             info->standby_for_rank = leaderinfo->rank;
             info->standby_for_fscid = fscid;
@@ -946,11 +945,11 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       } else {
 	mdsmap->print(ds);
 	r = 0;
-      } 
-      if (r == 0) {
-	rdata.append(ds);
-	ss << "dumped fsmap epoch " << p->get_epoch();
       }
+
+      rdata.append(ds);
+      ss << "dumped fsmap epoch " << p->get_epoch();
+
       if (p != &fsmap) {
 	delete p;
       }
@@ -985,11 +984,11 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       } else {
 	p->print(ds);
 	r = 0;
-      } 
-      if (r == 0) {
-	rdata.append(ds);
-	ss << "dumped fsmap epoch " << p->get_epoch();
       }
+
+      rdata.append(ds);
+      ss << "dumped fsmap epoch " << p->get_epoch();
+
       if (p != &fsmap)
 	delete p;
     }
@@ -1021,6 +1020,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
           derr << "Unexpected error reading metadata: " << cpp_strerror(r)
                << dendl;
           ss << get_err.str();
+          f->close_section();
           break;
         }
         f->close_section();
@@ -1284,9 +1284,18 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
+  bool batched_propose = false;
   for (auto h : handlers) {
     if (h->can_handle(prefix)) {
+      batched_propose = h->batched_propose();
+      if (batched_propose) {
+        paxos->plug();
+      }
       r = h->handle(mon, pending_fsmap, op, cmdmap, ss);
+      if (batched_propose) {
+        paxos->unplug();
+      }
+
       if (r == -EAGAIN) {
         // message has been enqueued for retry; return.
         dout(4) << __func__ << " enqueue for retry by prepare_command" << dendl;
@@ -1340,6 +1349,9 @@ out:
     // success.. delay reply
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
+    if (batched_propose) {
+      force_immediate_propose();
+    }
     return true;
   } else {
     // reply immediately
@@ -1852,19 +1864,24 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
   return 0;
 }
 
-void MDSMonitor::count_metadata(const string& field, Formatter *f)
+void MDSMonitor::count_metadata(const string& field, map<string,int> *out)
 {
-  map<string,int> by_val;
   map<mds_gid_t,Metadata> meta;
   load_metadata(meta);
   for (auto& p : meta) {
     auto q = p.second.find(field);
     if (q == p.second.end()) {
-      by_val["unknown"]++;
+      (*out)["unknown"]++;
     } else {
-      by_val[q->second]++;
+      (*out)[q->second]++;
     }
   }
+}
+
+void MDSMonitor::count_metadata(const string& field, Formatter *f)
+{
+  map<string,int> by_val;
+  count_metadata(field, &by_val);
   f->open_object_section(field.c_str());
   for (auto& p : by_val) {
     f->dump_int(p.first.c_str(), p.second);
@@ -1969,20 +1986,13 @@ bool MDSMonitor::maybe_expand_cluster(std::shared_ptr<Filesystem> fs)
  * is available, fail this daemon (remove from map) and pass its
  * role to another daemon.
  */
-void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
-    const beacon_info_t &beacon,
+void MDSMonitor::maybe_replace_gid(mds_gid_t gid, const MDSMap::mds_info_t& info,
     bool *mds_propose, bool *osd_propose)
 {
   assert(mds_propose != nullptr);
   assert(osd_propose != nullptr);
 
-  const MDSMap::mds_info_t info = pending_fsmap.get_info_gid(gid);
   const auto fscid = pending_fsmap.mds_roles.at(gid);
-
-  dout(10) << "no beacon from " << gid << " " << info.addr << " mds."
-    << info.rank << "." << info.inc
-    << " " << ceph_mds_state_name(info.state)
-    << " since " << beacon.stamp << dendl;
 
   // We will only take decisive action (replacing/removing a daemon)
   // if we have some indicating that some other daemon(s) are successfully
@@ -2207,31 +2217,35 @@ void MDSMonitor::tick()
     }
   }
 
-  // If the OSDMap is writeable, we can blacklist things, so we can
-  // try failing any laggy MDS daemons.  Consider each one for failure.
-  if (mon->osdmon()->is_writeable()) {
-    bool propose_osdmap = false;
+  bool propose_osdmap = false;
+  bool osdmap_writeable = mon->osdmon()->is_writeable();
+  auto p = last_beacon.begin();
+  while (p != last_beacon.end()) {
+    mds_gid_t gid = p->first;
+    auto beacon_info = p->second;
+    ++p;
 
-    map<mds_gid_t, beacon_info_t>::iterator p = last_beacon.begin();
-    while (p != last_beacon.end()) {
-      mds_gid_t gid = p->first;
-      auto beacon_info = p->second;
-      ++p;
-
-      if (!pending_fsmap.gid_exists(gid)) {
-	// clean it out
-	last_beacon.erase(gid);
-	continue;
-      }
-
-      if (beacon_info.stamp < cutoff) {
-        maybe_replace_gid(gid, beacon_info, &do_propose, &propose_osdmap);
-      }
+    if (!pending_fsmap.gid_exists(gid)) {
+      // clean it out
+      last_beacon.erase(gid);
+      continue;
     }
 
-    if (propose_osdmap) {
-      request_proposal(mon->osdmon());
+    if (beacon_info.stamp < cutoff) {
+      auto &info = pending_fsmap.get_info_gid(gid);
+      dout(1) << "no beacon from mds." << info.rank << "." << info.inc
+              << " (gid: " << gid << " addr: " << info.addr
+              << " state: " << ceph_mds_state_name(info.state) << ")"
+              << " since " << beacon_info.stamp << dendl;
+      // If the OSDMap is writeable, we can blacklist things, so we can
+      // try failing any laggy MDS daemons.  Consider each one for failure.
+      if (osdmap_writeable) {
+        maybe_replace_gid(gid, info, &do_propose, &propose_osdmap);
+      }
     }
+  }
+  if (propose_osdmap) {
+    request_proposal(mon->osdmon());
   }
 
   for (auto i : pending_fsmap.filesystems) {
@@ -2271,7 +2285,7 @@ bool MDSMonitor::try_standby_replay(
 MDSMonitor::MDSMonitor(Monitor *mn, Paxos *p, string service_name)
   : PaxosService(mn, p, service_name)
 {
-  handlers = FileSystemCommandHandler::load();
+  handlers = FileSystemCommandHandler::load(p);
 }
 
 void MDSMonitor::on_restart()

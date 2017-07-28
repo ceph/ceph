@@ -10,6 +10,7 @@ elif [ -e $script_root/../build/CMakeCache.txt ]; then
     cd $script_root/../build
     script_root=$PWD
 fi
+ceph_bin=$script_root/bin
 vstart_path=`dirname $0`
 
 [ "$#" -lt 2 ] && echo "usage: $0 <name> <port> [params...]" && exit 1

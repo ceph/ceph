@@ -1063,6 +1063,16 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
     }
     ss << "pg " << pgidstr << " now creating, ok";
     goto update;
+  } else if (prefix == "pg force-recovery" ||
+             prefix == "pg force-backfill" ||
+             prefix == "pg cancel-force-recovery" ||
+             prefix == "pg cancel-force-backfill") {
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using forced recovery";
+      r = -EPERM;
+      goto reply;
+    }
   } else if (prefix == "pg set_full_ratio" ||
              prefix == "pg set_nearfull_ratio") {
     if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {

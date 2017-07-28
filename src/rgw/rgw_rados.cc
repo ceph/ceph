@@ -41,6 +41,7 @@
 #include "cls/timeindex/cls_timeindex_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/user/cls_user_client.h"
+#include "osd/osd_types.h"
 
 #include "rgw_tools.h"
 #include "rgw_coroutine.h"
@@ -175,8 +176,15 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool, IoCtx& ioctx, b
     }
 
     r = rados->ioctx_create(pool.name.c_str(), ioctx);
-  }
-  if (r < 0) {
+    if (r < 0) {
+      return r;
+    }
+
+    r = ioctx.application_enable(pg_pool_t::APPLICATION_NAME_RGW, false);
+    if (r < 0 && r != -EOPNOTSUPP) {
+      return r;
+    }
+  } else if (r < 0) {
     return r;
   }
   if (!pool.ns.empty()) {
@@ -3705,14 +3713,14 @@ void RGWRados::finalize()
     delete async_rados;
   }
   
+  delete lc;
+  lc = NULL; 
+
   delete gc;
   gc = NULL;
 
   delete obj_expirer;
   obj_expirer = NULL;
-  
-  delete lc;
-  lc = NULL;
 
   delete rest_master_conn;
 
@@ -4811,7 +4819,14 @@ int RGWRados::open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx)
   if (r < 0 && r != -EEXIST)
     return r;
 
-  return rgw_init_ioctx(rad, pool, io_ctx);
+  r = rgw_init_ioctx(rad, pool, io_ctx);
+  if (r < 0)
+    return r;
+
+  r = io_ctx.application_enable(pg_pool_t::APPLICATION_NAME_RGW, false);
+  if (r < 0 && r != -EOPNOTSUPP)
+    return r;
+  return 0;
 }
 
 void RGWRados::build_bucket_index_marker(const string& shard_id_str, const string& shard_marker,
@@ -5019,12 +5034,12 @@ static void usage_log_hash(CephContext *cct, const string& name, string& hash, u
   uint32_t val = index;
 
   if (!name.empty()) {
-    int max_user_shards = max(cct->_conf->rgw_usage_max_user_shards, 1);
+    int max_user_shards = cct->_conf->rgw_usage_max_user_shards;
     val %= max_user_shards;
     val += ceph_str_hash_linux(name.c_str(), name.size());
   }
   char buf[17];
-  int max_shards = max(cct->_conf->rgw_usage_max_shards, 1);
+  int max_shards = cct->_conf->rgw_usage_max_shards;
   snprintf(buf, sizeof(buf), RGW_USAGE_OBJ_PREFIX "%u", (unsigned)(val % max_shards));
   hash = buf;
 }
@@ -5525,7 +5540,8 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
  * common_prefixes: if delim is filled in, any matching prefixes are placed here.
  * is_truncated: if number of objects in the bucket is bigger than max, then truncated.
  */
-int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *result,
+int RGWRados::Bucket::List::list_objects(int64_t max,
+                                         vector<rgw_bucket_dir_entry> *result,
                                          map<string, bool> *common_prefixes,
                                          bool *is_truncated)
 {
@@ -5713,6 +5729,14 @@ int RGWRados::create_pool(const rgw_pool& pool)
   if (ret < 0)
     return ret;
 
+  librados::IoCtx io_ctx;
+  ret = rad->ioctx_create(pool.name.c_str(), io_ctx);
+  if (ret < 0)
+    return ret;
+
+  ret = io_ctx.application_enable(pg_pool_t::APPLICATION_NAME_RGW, false);
+  if (ret < 0 && ret != -EOPNOTSUPP)
+    return ret;
   return 0;
 }
 
@@ -5861,7 +5885,7 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
                                          string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
 
 {
-  /* first check that rule exists within the specific zonegroup */
+  /* first check that zonegroup exists within current period. */
   RGWZoneGroup zonegroup;
   int ret = get_zonegroup(zonegroup_id, zonegroup);
   if (ret < 0) {
@@ -5869,37 +5893,48 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
     return ret;
   }
 
-  /* now check that tag exists within zonegroup */
   /* find placement rule. Hierarchy: request rule > user default rule > zonegroup default rule */
-  string rule = request_rule;
-  if (rule.empty()) {
-    rule = user_info.default_placement;
-    if (rule.empty())
-      rule = zonegroup.default_placement;
-  }
+  std::map<std::string, RGWZoneGroupPlacementTarget>::const_iterator titer;
 
-  if (rule.empty()) {
-    ldout(cct, 0) << "misconfiguration, should not have an empty placement rule name" << dendl;
-    return -EIO;
-  }
-
-  map<string, RGWZoneGroupPlacementTarget>::iterator titer = zonegroup.placement_targets.find(rule);
-  if (titer == zonegroup.placement_targets.end()) {
-    ldout(cct, 0) << "could not find placement rule " << rule << " within zonegroup " << dendl;
-    return -EINVAL;
+  if (!request_rule.empty()) {
+    titer = zonegroup.placement_targets.find(request_rule);
+    if (titer == zonegroup.placement_targets.end()) {
+      ldout(cct, 0) << "could not find requested placement id " << request_rule 
+                    << " within zonegroup " << dendl;
+      return -ERR_INVALID_LOCATION_CONSTRAINT;
+    }
+  } else if (!user_info.default_placement.empty()) {
+    titer = zonegroup.placement_targets.find(user_info.default_placement);
+    if (titer == zonegroup.placement_targets.end()) {
+      ldout(cct, 0) << "could not find user default placement id " << user_info.default_placement
+                    << " within zonegroup " << dendl;
+      return -ERR_INVALID_LOCATION_CONSTRAINT;
+    }
+  } else {
+    if (zonegroup.default_placement.empty()) { // zonegroup default rule as fallback, it should not be empty.
+      ldout(cct, 0) << "misconfiguration, zonegroup default placement id should not be empty." << dendl;
+      return -ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION;
+    } else {
+      titer = zonegroup.placement_targets.find(zonegroup.default_placement);
+      if (titer == zonegroup.placement_targets.end()) {
+        ldout(cct, 0) << "could not find zonegroup default placement id " << zonegroup.default_placement
+                      << " within zonegroup " << dendl;
+        return -ERR_INVALID_LOCATION_CONSTRAINT;
+      }
+    }
   }
 
   /* now check tag for the rule, whether user is permitted to use rule */
-  RGWZoneGroupPlacementTarget& target_rule = titer->second;
+  const auto& target_rule = titer->second;
   if (!target_rule.user_permitted(user_info.placement_tags)) {
-    ldout(cct, 0) << "user not permitted to use placement rule" << dendl;
+    ldout(cct, 0) << "user not permitted to use placement rule " << titer->first  << dendl;
     return -EPERM;
   }
 
   if (pselected_rule_name)
-    *pselected_rule_name = rule;
+    *pselected_rule_name = titer->first;
 
-  return select_bucket_location_by_rule(rule, rule_info);
+  return select_bucket_location_by_rule(titer->first, rule_info);
 }
 
 int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info)
@@ -6129,6 +6164,7 @@ int RGWRados::create_pools(vector<rgw_pool>& pools, vector<int>& retcodes)
   vector<int>::iterator riter;
   vector<librados::PoolAsyncCompletion *>::iterator citer;
 
+  bool error = false;
   assert(rets.size() == completions.size());
   for (riter = rets.begin(), citer = completions.begin(); riter != rets.end(); ++riter, ++citer) {
     int r = *riter;
@@ -6138,10 +6174,54 @@ int RGWRados::create_pools(vector<rgw_pool>& pools, vector<int>& retcodes)
       r = c->get_return_value();
       if (r < 0) {
         ldout(cct, 0) << "WARNING: async pool_create returned " << r << dendl;
+        error = true;
       }
     }
     c->release();
     retcodes.push_back(r);
+  }
+  if (error) {
+    return 0;
+  }
+
+  std::vector<librados::IoCtx> io_ctxs;
+  retcodes.clear();
+  for (auto pool : pools) {
+    io_ctxs.emplace_back();
+    int ret = rad->ioctx_create(pool.name.c_str(), io_ctxs.back());
+    if (ret < 0) {
+      ldout(cct, 0) << "WARNING: ioctx_create returned " << ret << dendl;
+      error = true;
+    }
+    retcodes.push_back(ret);
+  }
+  if (error) {
+    return 0;
+  }
+
+  completions.clear();
+  for (auto &io_ctx : io_ctxs) {
+    librados::PoolAsyncCompletion *c =
+      librados::Rados::pool_async_create_completion();
+    completions.push_back(c);
+    int ret = io_ctx.application_enable_async(pg_pool_t::APPLICATION_NAME_RGW,
+                                              false, c);
+    assert(ret == 0);
+  }
+
+  retcodes.clear();
+  for (auto c : completions) {
+    c->wait();
+    int ret = c->get_return_value();
+    if (ret == -EOPNOTSUPP) {
+      ret = 0;
+    } else if (ret < 0) {
+      ldout(cct, 0) << "WARNING: async application_enable returned " << ret
+                    << dendl;
+      error = true;
+    }
+    c->release();
+    retcodes.push_back(ret);
   }
   return 0;
 }
@@ -11588,16 +11668,16 @@ public:
 int RGWRados::get_bucket_stats_async(RGWBucketInfo& bucket_info, int shard_id, RGWGetBucketStats_CB *ctx)
 {
   int num_aio = 0;
-  RGWGetBucketStatsContext *get_ctx = new RGWGetBucketStatsContext(ctx, bucket_info.num_shards);
+  RGWGetBucketStatsContext *get_ctx = new RGWGetBucketStatsContext(ctx, bucket_info.num_shards ? : 1);
   assert(get_ctx);
   int r = cls_bucket_head_async(bucket_info, shard_id, get_ctx, &num_aio);
-  get_ctx->put();
   if (r < 0) {
     ctx->put();
     if (num_aio) {
       get_ctx->unset_cb();
     }
   }
+  get_ctx->put();
   return r;
 }
 
@@ -12970,11 +13050,9 @@ int RGWRados::cls_user_sync_bucket_stats(rgw_raw_obj& user_obj, const RGWBucketI
 
   bucket_info.bucket.convert(&entry.bucket);
 
-  map<string, struct rgw_bucket_dir_header>::iterator hiter = headers.begin();
-  for (; hiter != headers.end(); ++hiter) {
-    map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = hiter->second.stats.begin();
-    for (; iter != hiter->second.stats.end(); ++iter) {
-      struct rgw_bucket_category_stats& header_stats = iter->second;
+  for (const auto& hiter : headers) {
+    for (const auto& iter : hiter.second.stats) {
+      const struct rgw_bucket_category_stats& header_stats = iter.second;
       entry.size += header_stats.total_size;
       entry.size_rounded += header_stats.total_size_rounded;
       entry.count += header_stats.num_entries;
@@ -12988,6 +13066,36 @@ int RGWRados::cls_user_sync_bucket_stats(rgw_raw_obj& user_obj, const RGWBucketI
   if (r < 0) {
     ldout(cct, 20) << "cls_user_update_buckets() returned " << r << dendl;
     return r;
+  }
+
+  return 0;
+}
+
+int RGWRados::cls_user_get_bucket_stats(const rgw_bucket& bucket, cls_user_bucket_entry& entry)
+{
+  map<string, struct rgw_bucket_dir_header> headers;
+  RGWBucketInfo bucket_info;
+  RGWObjectCtx obj_ctx(this);
+  int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = cls_bucket_head(bucket_info, RGW_NO_SHARD, headers);
+  if (ret < 0) {
+    ldout(cct, 20) << "cls_bucket_header() returned " << ret << dendl;
+    return ret;
+  }
+
+  bucket.convert(&entry.bucket);
+
+  for (const auto& hiter : headers) {
+    for (const auto& iter : hiter.second.stats) {
+      const struct rgw_bucket_category_stats& header_stats = iter.second;
+      entry.size += header_stats.total_size;
+      entry.size_rounded += header_stats.total_size_rounded;
+      entry.count += header_stats.num_entries;
+    }
   }
 
   return 0;

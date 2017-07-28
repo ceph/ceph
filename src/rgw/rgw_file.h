@@ -505,6 +505,14 @@ namespace rgw {
       return nullptr;
     }
 
+    int offset_of(const std::string& name, int64_t *offset, uint32_t flags) {
+      if (unlikely(! is_dir())) {
+	return -EINVAL;
+      }
+      *offset = XXH64(name.c_str(), name.length(), fh_key::seed);
+      return 0;
+    }
+
     bool is_open() const { return flags & FLAG_OPEN; }
     bool is_root() const { return flags & FLAG_ROOT; }
     bool is_bucket() const { return flags & FLAG_BUCKET; }

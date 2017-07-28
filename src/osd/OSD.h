@@ -947,9 +947,10 @@ public:
     }
   }
   // delayed pg activation
-  void queue_for_recovery(PG *pg, bool front = false) {
+  void queue_for_recovery(PG *pg) {
     Mutex::Locker l(recovery_lock);
-    if (front) {
+
+    if (pg->get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL)) {
       awaiting_throttle.push_front(make_pair(pg->get_osdmap()->get_epoch(), pg));
     } else {
       awaiting_throttle.push_back(make_pair(pg->get_osdmap()->get_epoch(), pg));
@@ -961,6 +962,7 @@ public:
     _queue_for_recovery(make_pair(queued, pg), reserved_pushes);
   }
 
+  void adjust_pg_priorities(vector<PG*> pgs, int newflags);
 
   // osd map cache (past osd maps)
   Mutex map_cache_lock;
@@ -2169,6 +2171,8 @@ protected:
   void handle_pg_backfill_reserve(OpRequestRef op);
   void handle_pg_recovery_reserve(OpRequestRef op);
 
+  void handle_force_recovery(Message *m);
+
   void handle_pg_remove(OpRequestRef op);
   void _remove_pg(PG *pg);
 
@@ -2301,6 +2305,8 @@ private:
     case MSG_OSD_REP_SCRUBMAP:
     case MSG_OSD_PG_UPDATE_LOG_MISSING:
     case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+    case MSG_OSD_PG_RECOVERY_DELETE:
+    case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
       return true;
     default:
       return false;
@@ -2398,6 +2404,8 @@ private:
 
   int get_num_op_shards();
   int get_num_op_threads();
+
+  float get_osd_recovery_sleep();
 
 public:
   static int peek_meta(ObjectStore *store, string& magic,

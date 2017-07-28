@@ -839,8 +839,7 @@ namespace rgw {
       = get_context()->_conf->rgw_nfs_namespace_expire_secs;
 
     /* max events to gc in one cycle */
-    uint32_t max_ev =
-      std::max(1, get_context()->_conf->rgw_nfs_max_gc);
+    uint32_t max_ev = get_context()->_conf->rgw_nfs_max_gc;
 
     struct timespec now, expire_ts;
     event_vector ve;
@@ -1843,6 +1842,22 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     return -EINVAL;
   }
   int rc = parent->readdir(rcb, cb_arg, offset, eof, flags);
+  return rc;
+}
+
+/* project offset of dirent name */
+int rgw_dirent_offset(struct rgw_fs *rgw_fs,
+		      struct rgw_file_handle *parent_fh,
+		      const char *name, int64_t *offset,
+		      uint32_t flags)
+{
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+  if ((! parent)) {
+    /* bad parent */
+    return -EINVAL;
+  }
+  std::string sname{name};
+  int rc = parent->offset_of(sname, offset, flags);
   return rc;
 }
 

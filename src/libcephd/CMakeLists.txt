@@ -15,8 +15,6 @@ set(merge_libs
   cephd_cls
   cephd_cls_kvs
   cephd_rados
-  cephd_rbd
-  cephd_rgw
   common
   common_utf8
   erasure_code
@@ -33,6 +31,14 @@ if(NOT WITH_SYSTEM_ROCKSDB)
   list(APPEND merge_libs ${ROCKSDB_LIBRARIES})
 endif(NOT WITH_SYSTEM_ROCKSDB)
 
+if(WITH_RADOSGW)
+  list(APPEND merge_libs cephd_rgw)
+endif(WITH_RADOSGW)
+
+if(WITH_RBD)
+  list(APPEND merge_libs cephd_rbd)
+endif(WITH_RBD)
+
 if(HAVE_ARMV8_CRC)
   list(APPEND merge_libs common_crc_aarch64)
 endif(HAVE_ARMV8_CRC)
@@ -41,4 +47,5 @@ merge_static_libraries(cephd ${merge_libs})
 
 # TODO: install these libraries and add them to rpm and deb packages
 #install(TARGETS cephd DESTINATION ${CMAKE_INSTALL_LIBDIR})
-#install(FILES ../include/cephd/libcephd.h DESTINATION include/cephd)
+#install(FILES ../include/cephd/libcephd.h
+#  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cephd)

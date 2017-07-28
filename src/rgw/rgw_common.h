@@ -214,6 +214,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_TAG          2210
 #define ERR_ZERO_IN_URL          2211
 #define ERR_MALFORMED_ACL_ERROR  2212
+#define ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION 2213
 
 #define ERR_BUSY_RESHARDING      2300
 
@@ -1803,8 +1804,8 @@ struct req_state {
   } auth;
 
   std::unique_ptr<RGWAccessControlPolicy> user_acl;
-  RGWAccessControlPolicy *bucket_acl;
-  RGWAccessControlPolicy *object_acl;
+  std::unique_ptr<RGWAccessControlPolicy> bucket_acl;
+  std::unique_ptr<RGWAccessControlPolicy> object_acl;
 
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
@@ -2183,6 +2184,7 @@ extern string rgw_trim_quotes(const string& val);
 
 extern void rgw_to_iso8601(const real_time& t, char *dest, int buf_size);
 extern void rgw_to_iso8601(const real_time& t, string *dest);
+extern std::string rgw_to_asctime(const utime_t& t);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */

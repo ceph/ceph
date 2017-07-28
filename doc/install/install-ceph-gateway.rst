@@ -169,8 +169,8 @@ http and https, you must pick only one.  So::
 Migrating from Apache to Civetweb
 ---------------------------------
 
-If you're running the Ceph Object Gateway on Apache and FastCGI with Ceph
-Storage v0.80 or above, you're already running Civetweb--it starts with the
+If you are running the Ceph Object Gateway on Apache and FastCGI with Ceph
+Storage v0.80 or above, you are already running Civetweb--it starts with the
 ``ceph-radosgw`` daemon and it's running on port 7480 by default so that it
 doesn't conflict with your Apache and FastCGI installation and other commonly
 used web service ports. Migrating to use Civetweb basically involves removing
@@ -277,7 +277,7 @@ example::
 
    radosgw-admin region set < region.json
 
-Once you've updated your region, update the region map. For example::
+Once you have updated your region, update the region map. For example::
 
    radosgw-admin regionmap update --name client.rgw.ceph-client
 

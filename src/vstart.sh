@@ -327,6 +327,8 @@ if [ $kill_all -eq 1 ]; then
 fi
 
 if [ "$overwrite_conf" -eq 0 ]; then
+    CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+    mkdir -p $CEPH_ASOK_DIR
     MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mon 2>/dev/null` && \
         CEPH_NUM_MON="$MON"
     OSD=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_osd 2>/dev/null` && \
@@ -340,8 +342,16 @@ if [ "$overwrite_conf" -eq 0 ]; then
 else
     if [ "$new" -ne 0 ]; then
         # only delete if -n
+        asok_dir=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+        if [ $asok_dir != /var/run/ceph ]; then
+            [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
+        fi
+        if [ -z "$CEPH_ASOK_DIR" ]; then
+            CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
+        fi
         [ -e "$conf_fn" ] && rm -- "$conf_fn"
     else
+        CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
         # -k is implied... (doesn't make sense otherwise)
         overwrite_conf=0
     fi
@@ -386,7 +396,7 @@ wconf() {
 prepare_conf() {
     local DAEMONOPTS="
         log file = $CEPH_OUT_DIR/\$name.log
-        admin socket = $CEPH_OUT_DIR/\$name.asok
+        admin socket = $CEPH_ASOK_DIR/\$name.asok
         chdir = \"\"
         pid file = $CEPH_OUT_DIR/\$name.pid
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
@@ -453,7 +463,7 @@ EOF
 [client]
         keyring = $keyring_fn
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
-        admin socket = $CEPH_OUT_DIR/\$name.\$pid.asok
+        admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
 
 [client.rgw]
 
@@ -648,11 +658,11 @@ start_mgr() {
         host = $HOSTNAME
 EOF
 
-	ceph_adm config-key put mgr/dashboard/$name/server_port $MGR_PORT
+	ceph_adm config-key set mgr/dashboard/$name/server_port $MGR_PORT
 	DASH_URLS+="http://$IP:$MGR_PORT/"
 	MGR_PORT=$(($MGR_PORT + 1000))
 
-	ceph_adm config-key put mgr/restful/$name/server_port $MGR_PORT
+	ceph_adm config-key set mgr/restful/$name/server_port $MGR_PORT
 
 	RESTFUL_URLS+="https://$IP:$MGR_PORT"
 	MGR_PORT=$(($MGR_PORT + 1000))
@@ -661,9 +671,11 @@ EOF
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
+    # use tell mgr here because the first mgr might not have activated yet
+    # to register the python module commands.
     if ceph_adm tell mgr restful create-self-signed-cert; then
         SF=`mktemp`
-        ceph_adm tell mgr restful create-key admin -o $SF
+        ceph_adm restful create-key admin -o $SF
         RESTFUL_SECRET=`cat $SF`
         rm $SF
     else 
@@ -808,6 +820,7 @@ test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
 
 prun $SUDO rm -f core*
 
+test -d $CEPH_ASOK_DIR || mkdir $CEPH_ASOK_DIR
 test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
 test -d $CEPH_DEV_DIR || mkdir $CEPH_DEV_DIR
 $SUDO rm -rf $CEPH_OUT_DIR/*
@@ -854,6 +867,10 @@ if [ $CEPH_NUM_MON -gt 0 ]; then
     start_mon
 fi
 
+if [ $CEPH_NUM_MGR -gt 0 ]; then
+    start_mgr
+fi
+
 # osd
 if [ $CEPH_NUM_OSD -gt 0 ]; then
     start_osd
@@ -889,10 +906,6 @@ do
 done
 
 # mgr
-
-if [ $CEPH_NUM_MGR -gt 0 ]; then
-    start_mgr
-fi
 
 if [ "$ec" -eq 1 ]; then
     ceph_adm <<EOF

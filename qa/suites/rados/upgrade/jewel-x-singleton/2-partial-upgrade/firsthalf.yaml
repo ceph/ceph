@@ -9,6 +9,8 @@ tasks:
 - print: "**** done install.upgrade osd.0"
 - ceph.restart:
     daemons: [mon.a, mon.b, mon.c]
+    wait-for-healthy: false
 - ceph.restart:
     daemons: [osd.0, osd.1, osd.2]
+    wait-for-healthy: false
 - print: "**** done ceph.restart 1st half"

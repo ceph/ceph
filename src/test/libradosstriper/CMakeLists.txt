@@ -13,8 +13,6 @@ set_target_properties(ceph_test_rados_striper_api_striping PROPERTIES COMPILE_FL
 install(TARGETS ceph_test_rados_striper_api_striping
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-add_ceph_test(rados-striper.sh ${CMAKE_SOURCE_DIR}/src/test/libradosstriper/rados-striper.sh)
-
 add_executable(ceph_test_rados_striper_api_io
   io.cc)
 target_link_libraries(ceph_test_rados_striper_api_io librados radosstriper

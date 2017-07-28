@@ -1110,12 +1110,16 @@ def run_daemon(ctx, config, type_):
     if config.get('coverage') or config.get('valgrind') is not None:
         daemon_signal = 'term'
 
+    # create osds in order.  (this only matters for pre-luminous, which might
+    # be hammer, which doesn't take an id_ argument to legacy 'osd create').
+    osd_uuids  = {}
     for remote, roles_for_host in daemons.remotes.iteritems():
         is_type_ = teuthology.is_type(type_, cluster_name)
         for role in roles_for_host:
             if not is_type_(role):
                 continue
             _, _, id_ = teuthology.split_role(role)
+
 
             if type_ == 'osd':
                 datadir='/var/lib/ceph/osd/{cluster}-{id}'.format(
@@ -1125,29 +1129,40 @@ def run_daemon(ctx, config, type_):
                     path=datadir + '/fsid',
                     sudo=True,
                 ).strip()
-                try:
-                    remote.run(
-                        args=[
-                            'sudo', 'ceph', '--cluster', cluster_name,
-                            'osd', 'new', osd_uuid, id_,
-                        ]
-                    )
-                except:
-                    # fallback to pre-luminous (hammer or jewel)
-                    remote.run(
-                        args=[
-                            'sudo', 'ceph', '--cluster', cluster_name,
-                            'osd', 'create', osd_uuid,
-                        ]
-                    )
-                if config.get('add_osds_to_crush'):
-                    remote.run(
-                        args=[
-                            'sudo', 'ceph', '--cluster', cluster_name,
-                            'osd', 'crush', 'create-or-move', 'osd.' + id_,
-                            '1.0', 'host=localhost', 'root=default',
-                        ]
-                    )
+                osd_uuids[id_] = osd_uuid
+    for osd_id in range(len(osd_uuids)):
+        id_ = str(osd_id)
+        osd_uuid = osd_uuids.get(id_)
+        try:
+            remote.run(
+                args=[
+                'sudo', 'ceph', '--cluster', cluster_name,
+                    'osd', 'new', osd_uuid, id_,
+                ]
+            )
+        except:
+            # fallback to pre-luminous (hammer or jewel)
+            remote.run(
+                args=[
+                'sudo', 'ceph', '--cluster', cluster_name,
+                    'osd', 'create', osd_uuid,
+                ]
+            )
+            if config.get('add_osds_to_crush'):
+                remote.run(
+                args=[
+                    'sudo', 'ceph', '--cluster', cluster_name,
+                    'osd', 'crush', 'create-or-move', 'osd.' + id_,
+                    '1.0', 'host=localhost', 'root=default',
+                ]
+            )
+
+    for remote, roles_for_host in daemons.remotes.iteritems():
+        is_type_ = teuthology.is_type(type_, cluster_name)
+        for role in roles_for_host:
+            if not is_type_(role):
+                continue
+            _, _, id_ = teuthology.split_role(role)
 
             run_cmd = [
                 'sudo',
@@ -1207,7 +1222,13 @@ def healthy(ctx, config):
     """
     config = config if isinstance(config, dict) else dict()
     cluster_name = config.get('cluster', 'ceph')
-    log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
+    log.info('Waiting until %s daemons up and pgs clean...', cluster_name)
+    manager = ctx.managers[cluster_name]
+    try:
+        manager.wait_for_mgr_available()
+    except run.CommandFailedError:
+        log.info('ignoring mgr wait error, probably testing upgrade')
+
     firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
     (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     teuthology.wait_until_osds_up(
@@ -1216,6 +1237,14 @@ def healthy(ctx, config):
         remote=mon0_remote,
         ceph_cluster=cluster_name,
     )
+
+    try:
+        manager.flush_all_pg_stats()
+    except run.CommandFailedError:
+        log.info('ignoring flush pg stats error, probably testing upgrade')
+    manager.wait_for_clean()
+
+    log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
     teuthology.wait_until_healthy(
         ctx,
         remote=mon0_remote,

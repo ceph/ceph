@@ -50,7 +50,7 @@ To add a keyring for an OSD, execute the following::
 
 To list the cluster's keys and their capabilities, execute the following::
 
-	ceph auth list
+	ceph auth ls
 
 
 Placement Group Subsystem
@@ -207,7 +207,7 @@ sets an override weight on the OSD. This value is in the range 0 to 1,
 and forces CRUSH to re-place (1-weight) of the data that would
 otherwise live on this drive. It does not change the weights assigned
 to the buckets above the OSD in the crush map, and is a corrective
-measure in case the normal CRUSH distribution isn't working out quite
+measure in case the normal CRUSH distribution is not working out quite
 right. For instance, if one of your OSDs is at 90% and the others are
 at 50%, you could reduce this weight to try and compensate for it. ::
 

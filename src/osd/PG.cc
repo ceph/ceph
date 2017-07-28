@@ -55,6 +55,8 @@
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDRepScrubMap.h"
+#include "messages/MOSDPGRecoveryDelete.h"
+#include "messages/MOSDPGRecoveryDeleteReply.h"
 
 #include "common/BackTrace.h"
 #include "common/EventTrace.h"
@@ -223,6 +225,7 @@ void PG::dump_live_ids()
 }
 #endif
 
+
 void PGPool::update(OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);
@@ -294,7 +297,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   dirty_info(false), dirty_big_info(false),
   info(p),
   info_struct_v(0),
-  coll(p), pg_log(cct),
+  coll(p),
+  pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
   past_intervals(
@@ -572,9 +576,13 @@ bool PG::search_for_missing(
 bool PG::MissingLoc::readable_with_acting(
   const hobject_t &hoid,
   const set<pg_shard_t> &acting) const {
-  if (!needs_recovery(hoid)) return true;
+  if (!needs_recovery(hoid))
+    return true;
+  if (is_deleted(hoid))
+    return false;
   auto missing_loc_entry = missing_loc.find(hoid);
-  if (missing_loc_entry == missing_loc.end()) return false;
+  if (missing_loc_entry == missing_loc.end())
+    return false;
   const set<pg_shard_t> &locs = missing_loc_entry->second;
   ldout(pg->cct, 10) << __func__ << ": locs:" << locs << dendl;
   set<pg_shard_t> have_acting;
@@ -600,6 +608,8 @@ void PG::MissingLoc::add_batch_sources_info(
       handle->reset_tp_timeout();
       loop = 0;
     }
+    if (i->second.is_delete())
+      continue;
     missing_loc[i->first].insert(sources.begin(), sources.end());
     missing_loc_sources.insert(sources.begin(), sources.end());
   }
@@ -622,6 +632,12 @@ bool PG::MissingLoc::add_source_info(
     if (handle && ++loop >= pg->cct->_conf->osd_loop_before_reset_tphandle) {
       handle->reset_tp_timeout();
       loop = 0;
+    }
+    if (p->second.is_delete()) {
+      ldout(pg->cct, 10) << __func__ << " " << soid
+			 << " delete, ignoring source" << dendl;
+      found_missing = true;
+      continue;
     }
     if (oinfo.last_update < need) {
       ldout(pg->cct, 10) << "search_for_missing " << soid << " " << need
@@ -1724,12 +1740,18 @@ void PG::activate(ObjectStore::Transaction& t,
       if (m && pi.last_backfill != hobject_t()) {
         for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
              p != m->log.log.end();
-             ++p)
+             ++p) {
 	  if (p->soid <= pi.last_backfill &&
-	      !p->is_error())
-	    pm.add_next_event(*p);
+	      !p->is_error()) {
+	    if (perform_deletes_during_peering() && p->is_delete()) {
+	      pm.rm(p->soid, p->version);
+	    } else {
+	      pm.add_next_event(*p);
+	    }
+	  }
+	}
       }
-      
+
       if (m) {
 	dout(10) << "activate peer osd." << peer << " sending " << m->log << dendl;
 	//m->log.print(cout);
@@ -1753,6 +1775,7 @@ void PG::activate(ObjectStore::Transaction& t,
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
 	 ++i) {
+      dout(20) << __func__ << " setting up missing_loc from shard " << *i << " " << dendl;
       if (*i == get_primary()) {
 	missing_loc.add_active_missing(missing);
         if (!missing.have_missing())
@@ -1856,8 +1879,10 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
 			     op->need_write_cap(),
 			     op->classes());
 
-  dout(20) << "op_has_sufficient_caps pool=" << pool.id << " (" << pool.name
-		   << " " << req->get_hobj().nspace
+  dout(20) << "op_has_sufficient_caps "
+           << "session=" << session
+           << " pool=" << pool.id << " (" << pool.name
+           << " " << req->get_hobj().nspace
 	   << ") owner=" << pool.auid
 	   << " need_read_cap=" << op->need_read_cap()
 	   << " need_write_cap=" << op->need_write_cap()
@@ -1949,7 +1974,7 @@ bool PG::requeue_scrub(bool high_priority)
   }
 }
 
-void PG::queue_recovery(bool front)
+void PG::queue_recovery()
 {
   if (!is_primary() || !is_peered()) {
     dout(10) << "queue_recovery -- not primary or not peered " << dendl;
@@ -1959,7 +1984,7 @@ void PG::queue_recovery(bool front)
   } else {
     dout(10) << "queue_recovery -- queuing" << dendl;
     recovery_queued = true;
-    osd->queue_for_recovery(this, front);
+    osd->queue_for_recovery(this);
   }
 }
 
@@ -2004,6 +2029,7 @@ struct C_PG_FinishRecovery : public Context {
 void PG::mark_clean()
 {
   if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid)) {
+    state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
     state_set(PG_STATE_CLEAN);
     info.history.last_epoch_clean = get_osdmap()->get_epoch();
     info.history.last_interval_clean = info.history.same_interval_since;
@@ -2015,57 +2041,75 @@ void PG::mark_clean()
   kick_snap_trim();
 }
 
-unsigned PG::get_recovery_priority()
+void PG::change_recovery_force_mode(int new_mode, bool clear)
 {
-  // a higher value -> a higher priority
-
-  int pool_recovery_priority = 0;
-  pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
-
-  int ret = OSD_RECOVERY_PRIORITY_BASE + pool_recovery_priority;
-
-  // Clamp to valid range
-  if (ret > OSD_RECOVERY_PRIORITY_MAX) {
-    ret = OSD_RECOVERY_PRIORITY_MAX;
-  } else if (ret < OSD_RECOVERY_PRIORITY_MIN) {
-    ret = OSD_RECOVERY_PRIORITY_MIN;
+  lock(true);
+  if (clear) {
+    state_clear(new_mode);
+  } else {
+    state_set(new_mode);
   }
+  publish_stats_to_osd();
 
+  unlock();
+}
+
+inline int PG::clamp_recovery_priority(int priority)
+{
   static_assert(OSD_RECOVERY_PRIORITY_MIN < OSD_RECOVERY_PRIORITY_MAX, "Invalid priority range");
   static_assert(OSD_RECOVERY_PRIORITY_MIN >= 0, "Priority range must match unsigned type");
 
+  // Clamp to valid range
+  if (priority > OSD_RECOVERY_PRIORITY_MAX) {
+    return OSD_RECOVERY_PRIORITY_MAX;
+  } else if (priority < OSD_RECOVERY_PRIORITY_MIN) {
+    return OSD_RECOVERY_PRIORITY_MIN;
+  } else {
+    return priority;
+  }
+}
+
+unsigned PG::get_recovery_priority()
+{
+  // a higher value -> a higher priority
+  int ret = 0;
+
+  if (state & PG_STATE_FORCED_RECOVERY) {
+    ret = OSD_RECOVERY_PRIORITY_FORCED;
+  } else {
+    pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &ret);
+    ret = clamp_recovery_priority(OSD_RECOVERY_PRIORITY_BASE + ret);
+  }
+  dout(20) << __func__ << " recovery priority for " << *this << " is " << ret << ", state is " << state << dendl;
   return static_cast<unsigned>(ret);
 }
 
 unsigned PG::get_backfill_priority()
 {
   // a higher value -> a higher priority
-
   int ret = OSD_BACKFILL_PRIORITY_BASE;
-  if (acting.size() < pool.info.min_size) {
-    // inactive: no. of replicas < min_size, highest priority since it blocks IO
-    ret = OSD_BACKFILL_INACTIVE_PRIORITY_BASE + (pool.info.min_size - acting.size());
+  if (state & PG_STATE_FORCED_BACKFILL) {
+    ret = OSD_RECOVERY_PRIORITY_FORCED;
+  } else {
+    if (acting.size() < pool.info.min_size) {
+      // inactive: no. of replicas < min_size, highest priority since it blocks IO
+      ret = OSD_BACKFILL_INACTIVE_PRIORITY_BASE + (pool.info.min_size - acting.size());
 
-  } else if (is_undersized()) {
-    // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
-    assert(pool.info.size > actingset.size());
-    ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE + (pool.info.size - actingset.size());
+    } else if (is_undersized()) {
+      // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
+      assert(pool.info.size > actingset.size());
+      ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE + (pool.info.size - actingset.size());
 
-  } else if (is_degraded()) {
-    // degraded: baseline degraded
-    ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
-  }
+    } else if (is_degraded()) {
+      // degraded: baseline degraded
+      ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
+    }
 
-  // Adjust with pool's recovery priority
-  int pool_recovery_priority = 0;
-  pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
-  ret += pool_recovery_priority;
+    // Adjust with pool's recovery priority
+    int pool_recovery_priority = 0;
+    pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
-  // Clamp to valid range
-  if (ret > OSD_RECOVERY_PRIORITY_MAX) {
-    ret = OSD_RECOVERY_PRIORITY_MAX;
-  } else if (ret < OSD_RECOVERY_PRIORITY_MIN) {
-    ret = OSD_RECOVERY_PRIORITY_MIN;
+    ret = clamp_recovery_priority(pool_recovery_priority + ret);
   }
 
   return static_cast<unsigned>(ret);
@@ -3144,7 +3188,7 @@ void PG::append_log(
   auto last = logv.rbegin();
   if (is_primary() && last != logv.rend()) {
     projected_log.skip_can_rollback_to_to_head();
-    projected_log.trim(cct, last->version, nullptr);
+    projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
   }
 
   if (transaction_applied && roll_forward_to > pg_log.get_can_rollback_to()) {
@@ -3298,8 +3342,8 @@ void PG::log_weirdness()
     // sloppy check
     if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()))
       osd->clog->error() << info.pgid
-			<< " log bound mismatch, info (" << pg_log.get_tail() << ","
-			<< pg_log.get_head() << "]"
+			<< " log bound mismatch, info (tail,head] ("
+			<< pg_log.get_tail() << "," << pg_log.get_head() << "]"
 			<< " actual ["
 			<< pg_log.get_log().log.begin()->version << ","
 			 << pg_log.get_log().log.rbegin()->version << "]";
@@ -3581,7 +3625,7 @@ bool PG::sched_scrub()
 	} else {
 	  osd->clog->error() << "osd." << osd->whoami
 			     << " pg " << info.pgid
-			     << " Regular scrub request, losing deep-scrub details";
+			     << " Regular scrub request, deep-scrub details will be lost";
 	}
       }
       queue_scrub();
@@ -4145,7 +4189,7 @@ void PG::repair_object(
     assert(0);
   }
   if (bad_peer != primary) {
-    peer_missing[bad_peer].add(soid, oi.version, eversion_t());
+    peer_missing[bad_peer].add(soid, oi.version, eversion_t(), false);
   } else {
     // We should only be scrubbing if the PG is clean.
     assert(waiting_for_unreadable_object.empty());
@@ -5689,6 +5733,11 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_replica_op<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op);
   case MSG_OSD_REPOPREPLY:
     return can_discard_replica_op<MOSDRepOpReply, MSG_OSD_REPOPREPLY>(op);
+  case MSG_OSD_PG_RECOVERY_DELETE:
+    return can_discard_replica_op<MOSDPGRecoveryDelete, MSG_OSD_PG_RECOVERY_DELETE>(op);
+
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    return can_discard_replica_op<MOSDPGRecoveryDeleteReply, MSG_OSD_PG_RECOVERY_DELETE_REPLY>(op);
 
   case MSG_OSD_EC_WRITE:
     return can_discard_replica_op<MOSDECSubOpWrite, MSG_OSD_EC_WRITE>(op);
@@ -6377,6 +6426,7 @@ void PG::RecoveryState::Backfilling::exit()
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
   pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_backfilling_latency, dur);
 }
@@ -6840,6 +6890,7 @@ PG::RecoveryState::Recovering::react(const AllReplicasRecovered &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERING);
+  pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
   return transit<Recovered>();
 }
@@ -6849,6 +6900,7 @@ PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERING);
+  pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
   return transit<WaitRemoteBackfillReserved>();
 }
@@ -6891,6 +6943,7 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <=
       pg->actingbackfill.size()) {
     pg->state_clear(PG_STATE_DEGRADED);
+    pg->state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
     pg->publish_stats_to_osd();
   }
 
@@ -7078,9 +7131,12 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
       pg->all_unfound_are_queried_or_lost(pg->get_osdmap())) {
     if (pg->cct->_conf->osd_auto_mark_unfound_lost) {
       pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound
-			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED";
+			    << " objects unfound and apparently lost, would automatically "
+			    << "mark these objects lost but this feature is not yet implemented "
+			    << "(osd_auto_mark_unfound_lost)";
     } else
-      pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound << " objects unfound and apparently lost";
+      pg->osd->clog->error() << pg->info.pgid.pgid << " has "
+                             << unfound << " objects unfound and apparently lost";
   }
 
   if (pg->is_active()) {

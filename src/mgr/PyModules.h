@@ -24,6 +24,7 @@
 #include "client/Client.h"
 #include "common/LogClient.h"
 #include "mon/MgrMap.h"
+#include "mon/MonCommand.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -42,7 +43,7 @@ class PyModules
   Client   &client;
   Finisher &finisher;
 
-  mutable Mutex lock{"PyModules"};
+  mutable Mutex lock{"PyModules::lock"};
 
   std::string get_site_packages();
 
@@ -76,11 +77,19 @@ public:
     const std::string &svc_name,
     const std::string &svc_id,
     const std::string &path);
+  PyObject *get_perf_schema_python(
+     const std::string &handle,
+     const std::string svc_type,
+     const std::string &svc_id);
   PyObject *get_context();
 
   std::map<std::string, std::string> config_cache;
 
-  std::vector<ModuleCommand> get_commands();
+  // Python command definitions, including callback
+  std::vector<ModuleCommand> get_py_commands() const;
+
+  // Monitor command definitions, suitable for CLI
+  std::vector<MonCommand> get_commands() const;
 
   void insert_config(const std::map<std::string, std::string> &new_config);
 

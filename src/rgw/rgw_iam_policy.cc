@@ -473,6 +473,7 @@ struct ParseState {
 
   bool arraying = false;
   bool objecting = false;
+  bool cond_ifexists = false;
 
   void reset();
 
@@ -645,13 +646,22 @@ bool ParseState::obj_end() {
 }
 
 bool ParseState::key(const char* s, size_t l) {
-  auto k = pp->tokens.lookup(s, l);
+  auto token_len = l;
+  bool ifexists = false;
+  if (w->id == TokenID::Condition && w->kind == TokenKind::statement) {
+    static constexpr char IfExists[] = "IfExists";
+    if (boost::algorithm::ends_with(boost::string_view{s, l}, IfExists)) {
+      ifexists = true;
+      token_len -= sizeof(IfExists)-1;
+    }
+  }
+  auto k = pp->tokens.lookup(s, token_len);
 
   if (!k) {
     if (w->kind == TokenKind::cond_op) {
       auto& t = pp->policy.statements.back();
       pp->s.emplace_back(pp, cond_key);
-      t.conditions.emplace_back(w->id, s, l);
+      t.conditions.emplace_back(w->id, s, l, cond_ifexists);
       return true;
     } else {
       return false;
@@ -680,6 +690,7 @@ bool ParseState::key(const char* s, size_t l) {
   } else if ((w->id == TokenID::Condition) &&
 	     (k->kind == TokenKind::cond_op)) {
     pp->s.emplace_back(pp, k);
+    pp->s.back().cond_ifexists = ifexists;
     return true;
   }
   return false;
@@ -901,7 +912,7 @@ bool Condition::eval(const Environment& env) const {
   }
 
   if (i == env.end()) {
-    return false;
+    return ifexists;
   }
   const auto& s = i->second;
 

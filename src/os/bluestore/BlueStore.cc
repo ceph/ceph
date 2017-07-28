@@ -8011,7 +8011,6 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   OpSequencerRef osr = txc->osr;
-  CollectionRef c;
   bool empty = false;
   bool submit_deferred = false;
   OpSequencer::q_list_t releasing_txc;
@@ -8036,9 +8035,6 @@ void BlueStore::_txc_finish(TransContext *txc)
         break;
       }
 
-      if (!c && txc->first_collection) {
-        c = txc->first_collection;
-      }
       osr->q.pop_front();
       releasing_txc.push_back(*txc);
       notify = true;
@@ -8344,26 +8340,29 @@ void BlueStore::_kv_sync_thread()
 	t->set(PREFIX_SUPER, "blobid_max", bl);
 	dout(10) << __func__ << " new_blobid_max " << new_blobid_max << dendl;
       }
-      for (auto txc : kv_submitting) {
-	assert(txc->state == TransContext::STATE_KV_QUEUED);
-	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
-	int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
-	assert(r == 0);
-	_txc_applied_kv(txc);
-	--txc->osr->kv_committing_serially;
-	txc->state = TransContext::STATE_KV_SUBMITTED;
-	if (txc->osr->kv_submitted_waiters) {
-	  std::lock_guard<std::mutex> l(txc->osr->qlock);
-	  if (txc->osr->_is_all_kv_submitted()) {
-	    txc->osr->qcond.notify_all();
-	  }
-	}
-      }
+
       for (auto txc : kv_committing) {
+	if (txc->state == TransContext::STATE_KV_QUEUED) {
+	  txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
+	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
+	  assert(r == 0);
+	  _txc_applied_kv(txc);
+	  --txc->osr->kv_committing_serially;
+	  txc->state = TransContext::STATE_KV_SUBMITTED;
+	  if (txc->osr->kv_submitted_waiters) {
+	    std::lock_guard<std::mutex> l(txc->osr->qlock);
+	    if (txc->osr->_is_all_kv_submitted()) {
+	      txc->osr->qcond.notify_all();
+	    }
+	  }
+
+	} else {
+	  assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+	  txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
+	}
 	if (txc->had_ios) {
 	  --txc->osr->txc_with_unstable_io;
 	}
-	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
       }
 
       // release throttle *before* we commit.  this allows new ops
@@ -8850,10 +8849,6 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
   for (vector<coll_t>::iterator p = i.colls.begin(); p != i.colls.end();
        ++p, ++j) {
     cvec[j] = _get_collection(*p);
-
-    // note first collection we reference
-    if (!txc->first_collection)
-      txc->first_collection = cvec[j];
   }
   vector<OnodeRef> ovec(i.objects.size());
 

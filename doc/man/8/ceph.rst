@@ -143,11 +143,11 @@ Usage::
 
 	ceph auth import
 
-Subcommand ``list`` lists authentication state.
+Subcommand ``ls`` lists authentication state.
 
 Usage::
 
-	ceph auth list
+	ceph auth ls
 
 Subcommand ``print-key`` displays requested key.
 
@@ -199,7 +199,7 @@ Subcommand ``list`` lists configuration keys.
 
 Usage::
 
-	ceph config-key list
+	ceph config-key ls
 
 Subcommand ``dump`` dumps configuration keys and values.
 
@@ -207,11 +207,11 @@ Usage::
 
 	ceph config-key dump
 
-Subcommand ``put`` puts configuration key and value.
+Subcommand ``set`` puts configuration key and value.
 
 Usage::
 
-	ceph config-key put <key> {<val>}
+	ceph config-key set <key> {<val>}
 
 
 daemon
@@ -247,6 +247,22 @@ Usage::
 
 	ceph df {detail}
 
+.. _ceph features:
+
+features
+--------
+
+Show the releases and features of all connected daemons and clients connected
+to the cluster, along with the numbers of them in each bucket grouped by the
+corresponding features/releases. Each release of Ceph supports a different set
+of features, expressed by the features bitmask. New cluster features require
+that clients support the feature, or else they are not allowed to connect to
+these new features. As new features or capabilities are enabled after an
+upgrade, older clients are prevented from connecting.
+
+Usage::
+
+    ceph features
 
 fs
 --
@@ -442,6 +458,63 @@ Usage::
 
 	ceph mon_status
 
+mgr
+---
+
+Ceph manager daemon configuration and management.
+
+Subcommand ``dump`` dumps the latest MgrMap, which describes the active
+and standby manager daemons.
+
+Usage::
+
+  ceph mgr dump
+
+Subcommand ``fail`` will mark a manager daemon as failed, removing it
+from the manager map.  If it is the active manager daemon a standby
+will take its place.
+
+Usage::
+
+  ceph mgr fail <name>
+
+Subcommand ``module ls`` will list currently enabled manager modules (plugins).
+
+Usage::
+
+  ceph mgr module ls
+
+Subcommand ``module enable`` will enable a manager module.  Available modules are included in MgrMap and visible via ``mgr dump``.
+
+Usage::
+
+  ceph mgr module enable <module>
+
+Subcommand ``module disable`` will disable an active manager module.
+
+Usage::
+
+  ceph mgr module disable <module>
+
+Subcommand ``metadata`` will report metadata about all manager daemons or, if the name is specified, a single manager daemon.
+
+Usage::
+
+  ceph mgr metadata [name]
+
+Subcommand ``versions`` will report a count of running daemon versions.
+
+Usage::
+
+  ceph mgr versions
+
+Subcommand ``count-metadata`` will report a count of any daemon metadata field.
+
+Usage::
+
+  ceph mgr count-metadata <field>
+
+
 osd
 ---
 
@@ -624,12 +697,6 @@ Subcommand ``dump`` dumps crush rule <name> (default all).
 Usage::
 
 	ceph osd crush rule dump {<name>}
-
-Subcommand ``list`` lists crush rules.
-
-Usage::
-
-	ceph osd crush rule list
 
 Subcommand ``ls`` lists crush rules.
 
@@ -969,7 +1036,8 @@ Usage::
 	ceph osd reweight-by-utilization {<int[100-]>}
 	{--no-increasing}
 
-Subcommand ``rm`` removes osd(s) <id> [<id>...] in the cluster.
+Subcommand ``rm`` removes osd(s) <id> [<id>...] from the OSD map.
+
 
 Usage::
 
@@ -1022,6 +1090,18 @@ Subcommand ``setmaxosd`` sets new maximum osd value.
 Usage::
 
 	ceph osd setmaxosd <int[0-]>
+
+Subcommand ``set-require-min-compat-client`` enforces the cluster to be backward
+compatible with the specified client version. This subcommand prevents you from
+making any changes (e.g., crush tunables, or using new features) that
+would violate the current setting. Please note, This subcommand will fail if
+any connected daemon or client is not compatible with the features offered by
+the given <version>. To see the features and releases of all clients connected
+to cluster, please see `ceph features`_.
+
+Usage::
+
+    ceph osd set-require-min-compat-client <version>
 
 Subcommand ``stat`` prints summary of OSD map.
 

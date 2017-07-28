@@ -350,7 +350,10 @@ int CrushCompiler::decompile(ostream &out)
     if (crush.get_rule_name(i))
       print_rule_name(out, i, crush);
     out << " {\n";
-    out << "\truleset " << crush.get_rule_mask_ruleset(i) << "\n";
+    out << "\tid " << i << "\n";
+    if (i != crush.get_rule_mask_ruleset(i)) {
+      out << "\t# WARNING: ruleset " << crush.get_rule_mask_ruleset(i) << " != id " << i << "; this will not recompile to the same map\n";
+    }
 
     switch (crush.get_rule_mask_type(i)) {
     case CEPH_PG_TYPE_REPLICATED:
@@ -754,8 +757,6 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 
 int CrushCompiler::parse_rule(iter_t const& i)
 {
-  crush.populate_classes();
-
   int start;  // rule name is optional!
  
   string rname = string_node(i->children[1]);
@@ -770,7 +771,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
     start = 3;
   }
 
-  int ruleset = int_node(i->children[start]);
+  int ruleno = int_node(i->children[start]);
 
   string tname = string_node(i->children[start+2]);
   int type;
@@ -786,8 +787,17 @@ int CrushCompiler::parse_rule(iter_t const& i)
   
   int steps = i->children.size() - start - 8;
   //err << "num steps " << steps << std::endl;
-  
-  int ruleno = crush.add_rule(steps, ruleset, type, minsize, maxsize, -1);
+
+  if (crush.rule_exists(ruleno)) {
+    err << "rule " << ruleno << " already exists" << std::endl;
+    return -1;
+  }
+  int r = crush.add_rule(ruleno, steps, type, minsize, maxsize);
+  if (r != ruleno) {
+    err << "unable to add rule id " << ruleno << " for rule '" << rname
+	<< "'" << std::endl;
+    return -1;
+  }
   if (rname.length()) {
     crush.set_rule_name(ruleno, rname.c_str());
     rule_id[rname] = ruleno;
@@ -1051,7 +1061,7 @@ void CrushCompiler::find_used_bucket_ids(iter_t const& i)
 int CrushCompiler::parse_crush(iter_t const& i) 
 { 
   find_used_bucket_ids(i);
-
+  bool saw_rule = false;
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
     int r = 0;
     switch (p->value.id().to_long()) {
@@ -1064,10 +1074,18 @@ int CrushCompiler::parse_crush(iter_t const& i)
     case crush_grammar::_bucket_type: 
       r = parse_bucket_type(p);
       break;
-    case crush_grammar::_bucket: 
+    case crush_grammar::_bucket:
+      if (saw_rule) {
+	err << "buckets must be defined before rules" << std::endl;
+	return -1;
+      }
       r = parse_bucket(p);
       break;
-    case crush_grammar::_crushrule: 
+    case crush_grammar::_crushrule:
+      if (!saw_rule) {
+	saw_rule = true;
+	crush.populate_classes();
+      }
       r = parse_rule(p);
       break;
     case crush_grammar::_choose_args:

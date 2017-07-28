@@ -1267,7 +1267,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (struct_v >= 10) {
       ::decode(reshard_pool, bl);
     } else {
-      reshard_pool = name + ".rgw.reshard";
+      reshard_pool = log_pool.name + ":reshard";
     }
     DECODE_FINISH(bl);
   }
@@ -1416,7 +1416,7 @@ struct RGWZoneGroupPlacementTarget {
   string name;
   set<string> tags;
 
-  bool user_permitted(list<string>& user_tags) {
+  bool user_permitted(list<string>& user_tags) const {
     if (tags.empty()) {
       return true;
     }
@@ -2986,7 +2986,7 @@ public:
     public:
       explicit List(RGWRados::Bucket *_target) : target(_target) {}
 
-      int list_objects(int max, vector<rgw_bucket_dir_entry> *result, map<string, bool> *common_prefixes, bool *is_truncated);
+      int list_objects(int64_t max, vector<rgw_bucket_dir_entry> *result, map<string, bool> *common_prefixes, bool *is_truncated);
       rgw_obj_key& get_next_marker() {
         return next_marker;
       }
@@ -3512,6 +3512,7 @@ public:
   int complete_sync_user_stats(const rgw_user& user_id);
   int cls_user_add_bucket(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries);
   int cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket);
+  int cls_user_get_bucket_stats(const rgw_bucket& bucket, cls_user_bucket_entry& entry);
 
   int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);

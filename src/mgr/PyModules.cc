@@ -57,6 +57,7 @@ void PyModules::dump_server(const std::string &hostname,
   std::string ceph_version;
 
   for (const auto &i : dmc) {
+    Mutex::Locker l(i.second->lock);
     const auto &key = i.first;
     const std::string &str_type = key.first;
     const std::string &svc_name = key.second;
@@ -122,6 +123,7 @@ PyObject *PyModules::get_metadata_python(
   const std::string &svc_id)
 {
   auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
+  Mutex::Locker l(metadata->lock);
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
   for (const auto &i : metadata->metadata) {
@@ -137,6 +139,7 @@ PyObject *PyModules::get_daemon_status_python(
   const std::string &svc_id)
 {
   auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
+  Mutex::Locker l(metadata->lock);
   PyFormatter f;
   for (const auto &i : metadata->service_status) {
     f.dump_string(i.first.c_str(), i.second);
@@ -199,6 +202,7 @@ PyObject *PyModules::get_python(const std::string &what)
     PyFormatter f;
     auto dmc = daemon_state.get_by_service("osd");
     for (const auto &i : dmc) {
+      Mutex::Locker l(i.second->lock);
       f.open_object_section(i.first.second.c_str());
       f.dump_string("hostname", i.second->hostname);
       for (const auto &j : i.second->metadata) {
@@ -588,7 +592,7 @@ void PyModules::set_config(const std::string &handle,
 
     JSONFormatter jf;
     jf.open_object_section("cmd");
-    jf.dump_string("prefix", "config-key put");
+    jf.dump_string("prefix", "config-key set");
     jf.dump_string("key", global_key);
     jf.dump_string("val", val);
     jf.close_section();
@@ -599,21 +603,21 @@ void PyModules::set_config(const std::string &handle,
   set_cmd.wait();
 
   if (set_cmd.r != 0) {
-    // config-key put will fail if mgr's auth key has insufficient
+    // config-key set will fail if mgr's auth key has insufficient
     // permission to set config keys
     // FIXME: should this somehow raise an exception back into Python land?
-    dout(0) << "`config-key put " << global_key << " " << val << "` failed: "
+    dout(0) << "`config-key set " << global_key << " " << val << "` failed: "
       << cpp_strerror(set_cmd.r) << dendl;
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
   }
 }
 
-std::vector<ModuleCommand> PyModules::get_commands()
+std::vector<ModuleCommand> PyModules::get_py_commands() const
 {
   Mutex::Locker l(lock);
 
   std::vector<ModuleCommand> result;
-  for (auto& i : modules) {
+  for (const auto& i : modules) {
     auto module = i.second.get();
     auto mod_commands = module->get_commands();
     for (auto j : mod_commands) {
@@ -621,6 +625,17 @@ std::vector<ModuleCommand> PyModules::get_commands()
     }
   }
 
+  return result;
+}
+
+std::vector<MonCommand> PyModules::get_commands() const
+{
+  std::vector<ModuleCommand> commands = get_py_commands();
+  std::vector<MonCommand> result;
+  for (auto &pyc: commands) {
+    result.push_back({pyc.cmdstring, pyc.helpstring, "mgr",
+                        pyc.perm, "cli", MonCommand::FLAG_MGR});
+  }
   return result;
 }
 
@@ -658,8 +673,7 @@ PyObject* PyModules::get_counter_python(
 
   auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
 
-  // FIXME: this is unsafe, I need to either be inside DaemonStateIndex's
-  // lock or put a lock on individual DaemonStates
+  Mutex::Locker l2(metadata->lock);
   if (metadata) {
     if (metadata->perf_counters.instances.count(path)) {
       auto counter_instance = metadata->perf_counters.instances.at(path);
@@ -682,6 +696,63 @@ PyObject* PyModules::get_counter_python(
   } else {
     dout(4) << "No daemon state for "
               << svc_name << "." << svc_id << ")" << dendl;
+  }
+  f.close_section();
+  return f.get();
+}
+
+PyObject* PyModules::get_perf_schema_python(
+    const std::string &handle,
+    const std::string svc_type,
+    const std::string &svc_id)
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
+  DaemonStateCollection states;
+
+  if (svc_type == "") {
+    states = daemon_state.get_all();
+  } else if (svc_id.empty()) {
+    states = daemon_state.get_by_service(svc_type);
+  } else {
+    auto key = DaemonKey(svc_type, svc_id);
+    // so that the below can be a loop in all cases
+    if (daemon_state.exists(key)) {
+      states[key] = daemon_state.get(key);
+    }
+  }
+
+  PyFormatter f;
+  f.open_object_section("perf_schema");
+
+  // FIXME: this is unsafe, I need to either be inside DaemonStateIndex's
+  // lock or put a lock on individual DaemonStates
+  if (!states.empty()) {
+    for (auto statepair : states) {
+      std::ostringstream daemon_name;
+      auto key = statepair.first;
+      auto state = statepair.second;
+      Mutex::Locker l(state->lock);
+      daemon_name << key.first << "." << key.second;
+      f.open_object_section(daemon_name.str().c_str());
+
+      for (auto typestr : state->perf_counters.declared_types) {
+	f.open_object_section(typestr.c_str());
+	auto type = state->perf_counters.types[typestr];
+	f.dump_string("description", type.description);
+	if (!type.nick.empty()) {
+	  f.dump_string("nick", type.nick);
+	}
+	f.dump_unsigned("type", type.type);
+	f.close_section();
+      }
+      f.close_section();
+    }
+  } else {
+    dout(4) << __func__ << ": No daemon state found for "
+              << svc_type << "." << svc_id << ")" << dendl;
   }
   f.close_section();
   return f.get();

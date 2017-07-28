@@ -85,6 +85,7 @@ public:
   void set_stats(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, RGWStorageStats& stats);
   int async_refresh(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs);
   void async_refresh_response(const rgw_user& user, rgw_bucket& bucket, RGWStorageStats& stats);
+  void async_refresh_fail(const rgw_user& user, rgw_bucket& bucket);
 
   class AsyncRefreshHandler {
   protected:
@@ -155,6 +156,14 @@ int RGWQuotaCache<T>::async_refresh(const rgw_user& user, const rgw_bucket& buck
   }
 
   return 0;
+}
+
+template<class T>
+void RGWQuotaCache<T>::async_refresh_fail(const rgw_user& user, rgw_bucket& bucket)
+{
+  ldout(store->ctx(), 20) << "async stats refresh response for bucket=" << bucket << dendl;
+
+  async_refcount->put();
 }
 
 template<class T>
@@ -232,9 +241,23 @@ public:
     const uint64_t rounded_added = rgw_rounded_objsize(added_bytes);
     const uint64_t rounded_removed = rgw_rounded_objsize(removed_bytes);
 
-    entry->stats.size += added_bytes - removed_bytes;
-    entry->stats.size_rounded += rounded_added - rounded_removed;
-    entry->stats.num_objects += objs_delta;
+    if ((entry->stats.size + added_bytes - removed_bytes) >= 0) {
+      entry->stats.size += added_bytes - removed_bytes;
+    } else {
+      entry->stats.size = 0;
+    }
+
+    if ((entry->stats.size_rounded + rounded_added - rounded_removed) >= 0) {
+      entry->stats.size_rounded += rounded_added - rounded_removed;
+    } else {
+      entry->stats.size_rounded = 0;
+    }
+
+    if ((entry->stats.num_objects + objs_delta) >= 0) {
+      entry->stats.num_objects += objs_delta;
+    } else {
+      entry->stats.num_objects = 0;
+    }
 
     return true;
   }
@@ -294,7 +317,8 @@ void BucketAsyncRefreshHandler::handle_response(const int r)
 {
   if (r < 0) {
     ldout(store->ctx(), 20) << "AsyncRefreshHandler::handle_response() r=" << r << dendl;
-    return; /* nothing to do here */
+    cache->async_refresh_fail(user, bucket);
+    return;
   }
 
   RGWStorageStats bs;
@@ -405,7 +429,8 @@ void UserAsyncRefreshHandler::handle_response(int r)
 {
   if (r < 0) {
     ldout(store->ctx(), 20) << "AsyncRefreshHandler::handle_response() r=" << r << dendl;
-    return; /* nothing to do here */
+    cache->async_refresh_fail(user, bucket);
+    return;
   }
 
   cache->async_refresh_response(user, bucket, stats);

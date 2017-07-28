@@ -49,6 +49,8 @@ Major Changes from Kraken
     - The *ceph-mgr* daemon includes a REST-based management API.  The
       API is still experimental and somewhat limited but will form the basis
       for API-based management of Ceph going forward.  FIXME DOCS
+    - *ceph-mgr* also includes a Prometheus exporter plugin, which can
+      provide Ceph perfcounters to Prometheus.  See ceph-mgr docs.
 
   * The overall *scalability* of the cluster has improved. We have
     successfully tested clusters with up to 10,000 OSDs.
@@ -63,17 +65,17 @@ Major Changes from Kraken
     distribution* (this requires luminous clients). FIXME DOCS
   * Each OSD now adjusts its default configuration based on whether the
     backing device is an HDD or SSD.  Manual tuning generally not required.
-  * The prototype *mclock QoS queueing algorithm* is now available.  FIXME DOCS
+  * The prototype `mClock QoS queueing algorithm`_ is now available.
   * There is now a *backoff* mechanism that prevents OSDs from being
     overloaded by requests to objects or PGs that are not currently able to
     process IO.
-  * There is a *simplified OSD replacement process* that is more robust.  FIXME DOCS
+  * There is a `simplified OSD replacement process`_ that is more robust.
   * You can query the supported features and (apparent) releases of
-    all connected daemons and clients with ``ceph features``. FIXME DOCS
+    all connected daemons and clients with `ceph features </man/8/ceph#features>`_.
   * You can configure the oldest Ceph client version you wish to allow to
     connect to the cluster via ``ceph osd set-require-min-compat-client`` and
     Ceph will prevent you from enabling features that will break compatibility
-    with those clients.  FIXME DOCS
+    with those clients.
   * Several `sleep` settings, include ``osd_recovery_sleep``,
     ``osd_snap_trim_sleep``, and ``osd_scrub_sleep`` have been
     reimplemented to work efficiently.  (These are used in some cases
@@ -127,7 +129,7 @@ Major Changes from Kraken
   * Improved discard handling when the object map feature is enabled.
   * rbd CLI ``import`` and ``copy`` commands now detect sparse and
     preserve sparse regions.
-  * Images and Snapshots will now include a creation timestamp
+  * Images and Snapshots will now include a creation timestamp.
 
 - *CephFS*:
 
@@ -158,10 +160,13 @@ Major Changes from Kraken
   * *CLI changes*:
 
     - The ``ceph -s`` or ``ceph status`` command has a fresh look.
-    - ``ceph {osd,mds,mon} versions`` summarizes versions of running daemons.
-    - ``ceph {osd,mds,mon} count-metadata <property>`` similarly
+    - ``ceph mgr metadata`` will dump metadata associated with each mgr
+      daemon.
+    - ``ceph versions`` or ``ceph {osd,mds,mon,mgr} versions``
+      summarize versions of running daemons.
+    - ``ceph {osd,mds,mon,mgr} count-metadata <property>`` similarly
       tabulates any other daemon metadata visible via the ``ceph
-      {osd,mds,mon} metadata`` commands.
+      {osd,mds,mon,mgr} metadata`` commands.
     - ``ceph features`` summarizes features and releases of connected
       clients and daemons.
     - ``ceph osd require-osd-release <release>`` replaces the old
@@ -190,7 +195,7 @@ Major Changes from Kraken
       for applying changes to entire subtrees.  For example, ``ceph
       osd down `ceph osd ls-tree rack1```.
     - ``ceph osd {add,rm}-{noout,noin,nodown,noup}`` allow the
-      `noout`, `nodown`, `noin`, and `noup` flags to be applied to
+      `noout`, `noin`, `nodown`, and `noup` flags to be applied to
       specific OSDs.
     - ``ceph log last [n]`` will output the last *n* lines of the cluster
       log.
@@ -216,6 +221,9 @@ Major Changes from Kraken
     - ``ceph config-key dump`` dumps config-key entries and their
       contents.  (The existing ``ceph config-key list`` only dumps the key
       names, not the values.)
+    - ``ceph config-key list`` is deprecated in favor of ``ceph config-key ls``.
+    - ``ceph auth list`` is deprecated in favor of ``ceph auth ls``.
+    - ``ceph osd crush rule list`` is deprecated in favor of ``ceph osd crush rule ls``.
     - ``ceph osd set-{full,nearfull,backfillfull}-ratio`` sets the
       cluster-wide ratio for various full thresholds (when the cluster
       refuses IO, when the cluster warns about being close to full,
@@ -224,9 +232,14 @@ Major Changes from Kraken
     - ``ceph osd reweightn`` will specify the `reweight` values for
       multiple OSDs in a single command.  This is equivalent to a series of
       ``ceph osd reweight`` commands.
-    - ``ceph osd crush class {create,rm,ls,rename}`` manage the new
+    - ``ceph osd crush class {rm,ls,ls-osd}`` manage the new
       CRUSH *device class* feature.  ``ceph crush set-device-class
       <class> <osd> [<osd>...]`` will set the class for particular devices.
+      Note that if you specify a non-existent class, it will be created
+      automatically. ``ceph crush rm-device-class <osd> [<osd>...]``
+      will instead remove the class for particular devices.
+      And if a class contains no more devices, it will be automatically
+      destoryed.
     - ``ceph osd crush rule create-replicated`` replaces the old
       ``ceph osd crush rule create-simple`` command to create a CRUSH
       rule for a replicated pool.  Notably it takes a `class` argument
@@ -238,6 +251,8 @@ Major Changes from Kraken
     - ``ceph tell <daemon> help`` will now return a usage summary.
 
 .. _Read more about EC overwrites: ../rados/operations/erasure-code/#erasure-coding-with-overwrites
+.. _mClock QoS queueing algorithm: /rados/configuration/osd-config-ref#qos-based-on-mclock
+.. _simplified OSD replacement process: ../rados/operations/add-or-rm-osds/#replacing-an-osd
 
 Major Changes from Jewel
 ------------------------
@@ -311,6 +326,10 @@ Upgrade from Jewel or Kraken
 
 #. Do not create any new erasure-code pools while upgrading the monitors.
 
+#. You can monitor the progress of your upgrade at each stage with the
+   ``ceph versions`` command, which will tell you what ceph version is
+   running for each type of daemon.
+
 #. Set the ``noout`` flag for the duration of the upgrade. (Optional
    but recommended.)::
 
@@ -318,7 +337,7 @@ Upgrade from Jewel or Kraken
 
 #. Upgrade monitors by installing the new packages and restarting the
    monitor daemons.  Note that, unlike prior releases, the ceph-mon
-   daemons *must* be upgraded first.::
+   daemons *must* be upgraded first::
 
      # systemctl restart ceph-mon.target
 
@@ -342,7 +361,7 @@ Upgrade from Jewel or Kraken
    If you are upgrading from kraken, you may already have ceph-mgr
    daemons deployed.  If not, or if you are upgrading from jewel, you
    can deploy new daemons with tools like ceph-deploy or ceph-ansible.
-   For example,::
+   For example::
 
      # ceph-deploy mgr create HOST
 
@@ -357,12 +376,12 @@ Upgrade from Jewel or Kraken
      ...
 
 #. Upgrade all OSDs by installing the new packages and restarting the
-   ceph-osd daemons on all hosts.::
+   ceph-osd daemons on all hosts::
 
      # systemctl restart ceph-osd.target
 
    You can monitor the progress of the OSD upgrades with the new
-   ``ceph osd versions`` command.::
+   ``ceph versions`` or ``ceph osd versions`` command::
 
      # ceph osd versions
      {
@@ -371,12 +390,12 @@ Upgrade from Jewel or Kraken
      }
 
 #. Upgrade all CephFS daemons by upgrading packages and restarting
-   daemons on all hosts.::
+   daemons on all hosts::
 
      # systemctl restart ceph-mds.target
 
 #. Upgrade all radosgw daemons by upgrading packages and restarting
-   daemons on all hosts.::
+   daemons on all hosts::
 
      # systemctl restart radosgw.target
 
@@ -420,6 +439,9 @@ Upgrade compatibility notes, Kraken to Luminous
   (when the ``ceph osd require-osd-release luminous`` command is run)
   but any provisioning tools that create erasure coded pools may need
   to be updated.
+* The structure of the XML output for ``osd crush tree`` has changed
+  slightly to better match the ``osd tree`` output.  The top level
+  structure is now ``nodes`` instead of ``crush_map_roots``.
 * When assigning a network to the public network and not to
   the cluster network the network specification of the public
   network will be used for the cluster network as well.
@@ -1011,7 +1033,7 @@ Notable Changes
 * bluestore: os/bluestore: fix typo(s/trasnaction/transaction/) (`pr#14890 <https://github.com/ceph/ceph/pull/14890>`_, xie xingguo)
 * bluestore: os/bluestore: fix use after free race with aio_wait (`pr#14956 <https://github.com/ceph/ceph/pull/14956>`_, Sage Weil)
 * bluestore: os/bluestore: pre-calculate number of ghost buffers to evict (`pr#15029 <https://github.com/ceph/ceph/pull/15029>`_, xie xingguo)
-* bluestore: os/bluestore: Record l_bluestore_state_kv_queued_lat for sync_submit_… (`pr#14448 <https://github.com/ceph/ceph/pull/14448>`_, Jianpeng Ma)
+* bluestore: os/bluestore: Record l_bluestore_state_kv_queued_lat for sync\_submit\_… (`pr#14448 <https://github.com/ceph/ceph/pull/14448>`_, Jianpeng Ma)
 * bluestore: os/bluestore: Remove ExtentFreeListManager. (`pr#14772 <https://github.com/ceph/ceph/pull/14772>`_, Jianpeng Ma)
 * bluestore: os/bluestore: remove unused condition variable (`pr#14973 <https://github.com/ceph/ceph/pull/14973>`_, Igor Fedotov)
 * bluestore: os/bluestore: rename/fix throttle options (`pr#14717 <https://github.com/ceph/ceph/pull/14717>`_, Sage Weil)
@@ -1785,7 +1807,7 @@ Other Notable Changes
 * crush: add devices class that rules can use as a filter (`issue#18943 <http://tracker.ceph.com/issues/18943>`_, `pr#13444 <http://github.com/ceph/ceph/pull/13444>`_, Loic Dachary)
 * crush: add --dump to crushtool (`pr#13726 <http://github.com/ceph/ceph/pull/13726>`_, Loic Dachary)
 * crush: allow uniform buckets with no items (`pr#13521 <http://github.com/ceph/ceph/pull/13521>`_, Loic Dachary)
-* crush: document tunables and rule step set_ (`pr#13722 <http://github.com/ceph/ceph/pull/13722>`_, Loic Dachary)
+* crush: document tunables and rule step set\_ (`pr#13722 <http://github.com/ceph/ceph/pull/13722>`_, Loic Dachary)
 * crush: do is_out test only if we do not collide (`pr#13326 <http://github.com/ceph/ceph/pull/13326>`_, xie xingguo)
 * crush: fix dprintk compilation (`pr#13424 <http://github.com/ceph/ceph/pull/13424>`_, Loic Dachary)
 * debian: Add missing tp files in deb packaging (`pr#13526 <http://github.com/ceph/ceph/pull/13526>`_, Ganesh Mahalingam)
@@ -2310,7 +2332,7 @@ Notable Changes
 * cleanup: common/config: fix return type of string::find and use string::npos (`pr#9924 <http://github.com/ceph/ceph/pull/9924>`_, Yan Jun)
 * cleanup: common/config_opts.h: remove obsolete configuration option (`pr#12659 <http://github.com/ceph/ceph/pull/12659>`_, Li Wang)
 * cleanup,common: global: we need to handle the init_on_startup return value when global_init. (`pr#13018 <http://github.com/ceph/ceph/pull/13018>`_, song baisen)
-* cleanup,common: msg/async: assert if compiled code doesn't support the configured ms_… (`pr#12559 <http://github.com/ceph/ceph/pull/12559>`_, Avner BenHanoch)
+* cleanup,common: msg/async: assert if compiled code doesn't support the configured ms\_… (`pr#12559 <http://github.com/ceph/ceph/pull/12559>`_, Avner BenHanoch)
 * cleanup,common: msg/async/rdma: clean line endings (`pr#12688 <http://github.com/ceph/ceph/pull/12688>`_, Adir Lev)
 * cleanup,common: msg/async/rdma: Remove compilation warning (`pr#13142 <http://github.com/ceph/ceph/pull/13142>`_, Sarit Zubakov)
 * cleanup,common: osd/OSDMap: get_previous_up_osd_before() may run into endless loop (`pr#12976 <http://github.com/ceph/ceph/pull/12976>`_, Mingxin Liu)
@@ -2839,7 +2861,7 @@ Upgrade notes
 * The 'ceph osd perf' command will display 'commit_latency(ms)' and
   'apply_latency(ms)'. Previously, the names of these two columns are
   'fs_commit_latency(ms)' and 'fs_apply_latency(ms)'. We remove the
-  prefix 'fs_', because they are not filestore specific.
+  prefix 'fs\_', because they are not filestore specific.
 
 * Monitors will no longer allow pools to be removed by default.  The
   setting mon_allow_pool_delete has to be set to true (defaults to
@@ -3031,7 +3053,7 @@ Notable Changes
 * build/ops: rpm: Remove trailing whitespace in usermod command (SUSE) (`pr#10707 <http://github.com/ceph/ceph/pull/10707>`_, Tim Serong)
 * build/ops: scripts/release-notes: allow title guesses from gh tags & description update (`pr#11399 <http://github.com/ceph/ceph/pull/11399>`_, Abhishek Lekshmanan)
 * build/ops: systemd: Fix startup of ceph-mgr on Debian 8 (`pr#12555 <http://github.com/ceph/ceph/pull/12555>`_, Mark Korenberg)
-* build/ops: tracing/objectstore.tp: add missing move_ranges_... tp (`pr#11484 <http://github.com/ceph/ceph/pull/11484>`_, Sage Weil)
+* build/ops: tracing/objectstore.tp: add missing move_ranges\_... tp (`pr#11484 <http://github.com/ceph/ceph/pull/11484>`_, Sage Weil)
 * build/ops: upstart: fix ceph-crush-location default (`issue#6698 <http://tracker.ceph.com/issues/6698>`_, `pr#803 <http://github.com/ceph/ceph/pull/803>`_, Jason Dillaman)
 * build/ops: upstart: start ceph-all after static-network-up (`issue#17689 <http://tracker.ceph.com/issues/17689>`_, `pr#11631 <http://github.com/ceph/ceph/pull/11631>`_, Billy Olsen)
 * cephfs: add gid to asok status (`pr#11487 <http://github.com/ceph/ceph/pull/11487>`_, Patrick Donnelly)
@@ -3509,7 +3531,7 @@ Notable Changes
 * osd: print log when osd want to kill self (`pr#9288 <http://github.com/ceph/ceph/pull/9288>`_, Haomai Wang)
 * osd: Remove extra call to reg_next_scrub() during splits (`issue#16474 <http://tracker.ceph.com/issues/16474>`_, `pr#11206 <http://github.com/ceph/ceph/pull/11206>`_, David Zafman)
 * osd: remove redudant call of heartbeat_check (`pr#12130 <http://github.com/ceph/ceph/pull/12130>`_, Pan Liu)
-* osd: remove the lock heartbeat_update_lock, and change heatbeat_need_… (`pr#12461 <http://github.com/ceph/ceph/pull/12461>`_, Pan Liu)
+* osd: remove the lock heartbeat_update_lock, and change heatbeat_need\_… (`pr#12461 <http://github.com/ceph/ceph/pull/12461>`_, Pan Liu)
 * osd:  remove the redundant clear method in consume_map function (`pr#10553 <http://github.com/ceph/ceph/pull/10553>`_, song baisen)
 * osd: Remove unused '_lsb_release_' declarations (`pr#11364 <http://github.com/ceph/ceph/pull/11364>`_, Brad Hubbard)
 * osd: replace hb_out and hb_in with a single hb_peers (`issue#18057 <http://tracker.ceph.com/issues/18057>`_, `pr#12178 <http://github.com/ceph/ceph/pull/12178>`_, Pan Liu)
@@ -4577,7 +4599,7 @@ Notable Changes
 * rgw: merge setting flags operation together and cleanups (`pr#10203 <http://github.com/ceph/ceph/pull/10203>`_, Yan Jun)
 * rgw: miscellaneous cleanups (`pr#10299 <http://github.com/ceph/ceph/pull/10299>`_, Yan Jun)
 * rgw: multiple fixes for Swift's object expiration (`issue#16705 <http://tracker.ceph.com/issues/16705>`_, `issue#16684 <http://tracker.ceph.com/issues/16684>`_, `pr#10330 <http://github.com/ceph/ceph/pull/10330>`_, Radoslaw Zarzynski)
-* rgw: need to 'open_object_section' before dump stats in 'RGWGetUsage_… (`issue#17499 <http://tracker.ceph.com/issues/17499>`_, `pr#11325 <http://github.com/ceph/ceph/pull/11325>`_, weiqiaomiao)
+* rgw: need to 'open_object_section' before dump stats in 'RGWGetUsage\_… (`issue#17499 <http://tracker.ceph.com/issues/17499>`_, `pr#11325 <http://github.com/ceph/ceph/pull/11325>`_, weiqiaomiao)
 * rgw: obsolete 'radosgw-admin period prepare' command (`issue#17387 <http://tracker.ceph.com/issues/17387>`_, `pr#11278 <http://github.com/ceph/ceph/pull/11278>`_, Gaurav Kumar Garg)
 * rgw: radosgw-admin: add "--orphan-stale-secs" to --help (`issue#17280 <http://tracker.ceph.com/issues/17280>`_, `pr#11098 <http://github.com/ceph/ceph/pull/11098>`_, Ken Dreyer)
 * rgw: radosgw-admin: zone[group] modify can change realm id (`issue#16839 <http://tracker.ceph.com/issues/16839>`_, `pr#10477 <http://github.com/ceph/ceph/pull/10477>`_, Casey Bodley)
@@ -4806,7 +4828,7 @@ Other Notable Changes
 * osd: reindex properly on pg log split (`issue#18975 <http://tracker.ceph.com/issues/18975>`_, `pr#14047 <https://github.com/ceph/ceph/pull/14047>`_, Alexey Sheplyakov)
 * osd: restrict want_acting to up+acting on recovery completion (`issue#18929 <http://tracker.ceph.com/issues/18929>`_, `pr#13541 <https://github.com/ceph/ceph/pull/13541>`_, Sage Weil)
 * rbd-nbd: check /sys/block/nbdX/size to ensure kernel mapped correctly (`issue#18335 <http://tracker.ceph.com/issues/18335>`_, `pr#13932 <https://github.com/ceph/ceph/pull/13932>`_, Mykola Golub, Alexey Sheplyakov)
-* rbd: [api] temporarily restrict (rbd_)mirror_peer_add from adding multiple peers (`issue#19256 <http://tracker.ceph.com/issues/19256>`_, `pr#14664 <https://github.com/ceph/ceph/pull/14664>`_, Jason Dillaman)
+* rbd: [api] temporarily restrict (rbd\_)mirror_peer_add from adding multiple peers (`issue#19256 <http://tracker.ceph.com/issues/19256>`_, `pr#14664 <https://github.com/ceph/ceph/pull/14664>`_, Jason Dillaman)
 * rbd: qemu crash triggered by network issues (`issue#18436 <http://tracker.ceph.com/issues/18436>`_, `pr#13244 <https://github.com/ceph/ceph/pull/13244>`_, Jason Dillaman)
 * rbd: rbd --pool=x rename y z does not work (`issue#18326 <http://tracker.ceph.com/issues/18326>`_, `pr#14148 <https://github.com/ceph/ceph/pull/14148>`_, Gaurav Kumar Garg)
 * rbd: systemctl stop rbdmap unmaps all rbds and not just the ones in /etc/ceph/rbdmap (`issue#18884 <http://tracker.ceph.com/issues/18884>`_, `issue#18262 <http://tracker.ceph.com/issues/18262>`_, `pr#14083 <https://github.com/ceph/ceph/pull/14083>`_, David Disseldorp, Nathan Cutler)
@@ -5807,7 +5829,7 @@ Upgrading from Hammer
 
 * For all distributions that support systemd (CentOS 7, Fedora, Debian
   Jessie 8.x, OpenSUSE), ceph daemons are now managed using native systemd
-  files instead of the legacy sysvinit scripts.  For example,::
+  files instead of the legacy sysvinit scripts.  For example::
 
     systemctl start ceph.target       # start all daemons
     systemctl status ceph-osd@12      # check status of osd.12
@@ -5848,7 +5870,7 @@ Upgrading from Hammer
 
 	   ceph-deploy install --stable jewel HOST
 
-      #. Stop the daemon(s).::
+      #. Stop the daemon(s)::
 
 	   service ceph stop           # fedora, centos, rhel, debian
 	   stop ceph-all               # ubuntu
@@ -5858,7 +5880,7 @@ Upgrading from Hammer
 	   chown -R ceph:ceph /var/lib/ceph
            chown -R ceph:ceph /var/log/ceph
 
-      #. Restart the daemon(s).::
+      #. Restart the daemon(s)::
 
 	   start ceph-all                # ubuntu
 	   systemctl start ceph.target   # debian, centos, fedora, rhel
@@ -9419,7 +9441,7 @@ Upgrading from Hammer
 
 * For all distributions that support systemd (CentOS 7, Fedora, Debian
   Jessie 8.x, OpenSUSE), ceph daemons are now managed using native systemd
-  files instead of the legacy sysvinit scripts.  For example,::
+  files instead of the legacy sysvinit scripts.  For example::
 
     systemctl start ceph.target       # start all daemons
     systemctl status ceph-osd@12      # check status of osd.12
@@ -9459,7 +9481,7 @@ Upgrading from Hammer
 
 	   ceph-deploy install --stable infernalis HOST
 
-      #. Stop the daemon(s).::
+      #. Stop the daemon(s)::
 
 	   service ceph stop           # fedora, centos, rhel, debian
 	   stop ceph-all               # ubuntu
@@ -9469,7 +9491,7 @@ Upgrading from Hammer
 	   chown -R ceph:ceph /var/lib/ceph
            chown -R ceph:ceph /var/log/ceph
 
-      #. Restart the daemon(s).::
+      #. Restart the daemon(s)::
 
 	   start ceph-all                # ubuntu
 	   systemctl start ceph.target   # debian, centos, fedora, rhel
@@ -10110,7 +10132,7 @@ Upgrading from Hammer
 
 * For all distributions that support systemd (CentOS 7, Fedora, Debian
   Jessie 8.x, OpenSUSE), ceph daemons are now managed using native systemd
-  files instead of the legacy sysvinit scripts.  For example,::
+  files instead of the legacy sysvinit scripts.  For example::
 
     systemctl start ceph.target       # start all daemons
     systemctl status ceph-osd@12      # check status of osd.12
@@ -10149,7 +10171,7 @@ Upgrading from Hammer
 
 	   ceph-deploy install --stable infernalis HOST
 
-      #. Stop the daemon(s).::
+      #. Stop the daemon(s)::
 
 	   service ceph stop           # fedora, centos, rhel, debian
 	   stop ceph-all               # ubuntu
@@ -10159,7 +10181,7 @@ Upgrading from Hammer
 	   chown -R ceph:ceph /var/lib/ceph
            chown -R ceph:ceph /var/log/ceph
 
-      #. Restart the daemon(s).::
+      #. Restart the daemon(s)::
 
 	   start ceph-all                # ubuntu
 	   systemctl start ceph.target   # debian, centos, fedora, rhel
@@ -18716,7 +18738,7 @@ Please refer to the document `Upgrading from Argonaut to Bobtail`_ for details.
   Upgrading a cluster without adjusting the Ceph configuration will
   likely prevent the system from starting up on its own.  We recommend
   first modifying the configuration to indicate that authentication is
-  disabled, and only then upgrading to the latest version.::
+  disabled, and only then upgrading to the latest version::
 
      auth client required = none
      auth service required = none

@@ -22,6 +22,7 @@
 #include "global/signal_handler.h"
 
 #include "mgr/MgrContext.h"
+#include "mgr/mgr_commands.h"
 
 #include "MgrPyModule.h"
 #include "DaemonServer.h"
@@ -117,7 +118,7 @@ public:
         DaemonStatePtr state;
         if (daemon_state.exists(key)) {
           state = daemon_state.get(key);
-          // TODO lock state
+	  Mutex::Locker l(state->lock);
           daemon_meta.erase("name");
           daemon_meta.erase("hostname");
           state->metadata.clear();
@@ -332,7 +333,7 @@ void Mgr::load_config()
 
   dout(10) << "listing keys" << dendl;
   JSONCommand cmd;
-  cmd.run(monc, "{\"prefix\": \"config-key list\"}");
+  cmd.run(monc, "{\"prefix\": \"config-key ls\"}");
   lock.Unlock();
   cmd.wait();
   lock.Lock();
@@ -414,6 +415,7 @@ void Mgr::handle_osd_map()
 
       if (daemon_state.exists(k)) {
         auto metadata = daemon_state.get(k);
+	Mutex::Locker l(metadata->lock);
         auto addr_iter = metadata->metadata.find("front_addr");
         if (addr_iter != metadata->metadata.end()) {
           const std::string &metadata_addr = addr_iter->second;
@@ -551,6 +553,7 @@ void Mgr::handle_fs_map(MFSMap* m)
     bool update = false;
     if (daemon_state.exists(k)) {
       auto metadata = daemon_state.get(k);
+      Mutex::Locker l(metadata->lock);
       if (metadata->metadata.empty() ||
 	  metadata->metadata.count("addr") == 0) {
         update = true;
@@ -632,3 +635,14 @@ void Mgr::tick()
   dout(10) << dendl;
   server.send_report();
 }
+
+std::vector<MonCommand> Mgr::get_command_set() const
+{
+  Mutex::Locker l(lock);
+
+  std::vector<MonCommand> commands = mgr_commands;
+  std::vector<MonCommand> py_commands = py_modules.get_commands();
+  commands.insert(commands.end(), py_commands.begin(), py_commands.end());
+  return commands;
+}
+

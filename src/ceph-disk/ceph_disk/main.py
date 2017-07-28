@@ -215,11 +215,13 @@ if platform.system() == 'FreeBSD':
     PROCDIR = '/compat/linux/proc'
     # FreeBSD does not have blockdevices any more
     BLOCKDIR = '/dev'
+    ROOTGROUP = 'wheel'
 else:
     FREEBSD = False
     DEFAULT_FS_TYPE = 'xfs'
     PROCDIR = '/proc'
     BLOCKDIR = '/sys/block'
+    ROOTGROUP = 'root'
 
 """
 OSD STATUS Definition
@@ -1088,7 +1090,7 @@ def allocate_osd_id(
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', keyring,
-                '-i', '/dev/fd/0',
+                '-i', '-',
                 'osd', 'new',
                 fsid,
             ] + id_arg,
@@ -2707,7 +2709,7 @@ class Lockbox(object):
 
     def create_partition(self):
         self.device = Device.factory(self.args.lockbox, argparse.Namespace())
-        partition_number = 3
+        partition_number = 5
         self.device.create_partition(uuid=self.args.lockbox_uuid,
                                      name='lockbox',
                                      num=partition_number,
@@ -2743,7 +2745,7 @@ class Lockbox(object):
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
-                '-i', '/dev/fd/0',
+                '-i', '-',
                 'osd', 'new', self.args.osd_uuid,
             ] + id_arg,
             secrets.get_json()
@@ -3110,36 +3112,6 @@ class PrepareBluestoreData(PrepareData):
         write_one_line(path, 'type', 'bluestore')
 
 
-#
-# Temporary workaround: if ceph-osd --mkfs does not
-# complete within 5 minutes, assume it is blocked
-# because of http://tracker.ceph.com/issues/13522
-# and retry a few times.
-#
-# Remove this function calls with command_check_call
-# when http://tracker.ceph.com/issues/13522 is fixed
-#
-def ceph_osd_mkfs(arguments):
-    timeout = _get_command_executable(['timeout'])
-    mkfs_ok = False
-    error = 'unknown error'
-    for delay in os.environ.get('CEPH_OSD_MKFS_DELAYS',
-                                '300 300 300 300 300').split():
-        try:
-            _check_output(timeout + [delay] + arguments)
-            mkfs_ok = True
-            break
-        except subprocess.CalledProcessError as e:
-            error = e.output
-            if e.returncode == 124:  # timeout fired, retry
-                LOG.debug('%s timed out : %s (retry)'
-                          % (str(arguments), error))
-            else:
-                break
-    if not mkfs_ok:
-        raise Error('%s failed : %s' % (str(arguments), error))
-
-
 def mkfs(
     path,
     cluster,
@@ -3161,7 +3133,7 @@ def mkfs(
     osd_type = read_one_line(path, 'type')
 
     if osd_type == 'bluestore':
-        ceph_osd_mkfs(
+        command_check_call(
             [
                 'ceph-osd',
                 '--cluster', cluster,
@@ -3175,7 +3147,7 @@ def mkfs(
             ],
         )
     elif osd_type == 'filestore':
-        ceph_osd_mkfs(
+        command_check_call(
             [
                 'ceph-osd',
                 '--cluster', cluster,
@@ -4097,7 +4069,7 @@ def get_space_osd_uuid(name, path):
     if not os.path.exists(path):
         raise Error('%s does not exist' % path)
 
-    if path_is_diskdevice(path):
+    if not path_is_diskdevice(path):
         raise Error('%s is not a block device' % path)
 
     if (is_partition(path) and
@@ -4129,6 +4101,10 @@ def get_space_osd_uuid(name, path):
 def main_activate_space(name, args):
     if not os.path.exists(args.dev):
         raise Error('%s does not exist' % args.dev)
+
+    if is_suppressed(args.dev):
+        LOG.info('suppressed activate request on space %s', args.dev)
+        return
 
     cluster = None
     osd_id = None
@@ -4701,7 +4677,7 @@ def set_suppress(path):
     disk = os.path.realpath(path)
     if not os.path.exists(disk):
         raise Error('does not exist', path)
-    if ldev_is_diskdevice(path):
+    if not ldev_is_diskdevice(path):
         raise Error('not a block device', path)
     base = get_dev_name(disk)
 
@@ -4883,11 +4859,11 @@ def main_trigger(args):
 def main_fix(args):
     # A hash table containing 'path': ('uid', 'gid', blocking, recursive)
     fix_table = [
-        ('/usr/bin/ceph-mon', 'root', 'root', True, False),
-        ('/usr/bin/ceph-mds', 'root', 'root', True, False),
-        ('/usr/bin/ceph-osd', 'root', 'root', True, False),
-        ('/usr/bin/radosgw', 'root', 'root', True, False),
-        ('/etc/ceph', 'root', 'root', True, True),
+        ('/usr/bin/ceph-mon', 'root', ROOTGROUP, True, False),
+        ('/usr/bin/ceph-mds', 'root', ROOTGROUP, True, False),
+        ('/usr/bin/ceph-osd', 'root', ROOTGROUP, True, False),
+        ('/usr/bin/radosgw', 'root', ROOTGROUP, True, False),
+        ('/etc/ceph', 'root', ROOTGROUP, True, True),
         ('/var/run/ceph', 'ceph', 'ceph', True, True),
         ('/var/log/ceph', 'ceph', 'ceph', True, True),
         ('/var/log/radosgw', 'ceph', 'ceph', True, True),

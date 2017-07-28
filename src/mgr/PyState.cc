@@ -334,6 +334,20 @@ get_counter(PyObject *self, PyObject *args)
       handle, svc_name, svc_id, counter_path);
 }
 
+static PyObject*
+get_perf_schema(PyObject *self, PyObject *args)
+{
+  char *handle = nullptr;
+  char *type_str = nullptr;
+  char *svc_id = nullptr;
+  if (!PyArg_ParseTuple(args, "sss:get_perf_schema", &handle, &type_str,
+                                                     &svc_id)) {
+    return nullptr;
+  }
+
+  return global_handle->get_perf_schema_python(handle, type_str, svc_id);
+}
+
 PyMethodDef CephStateMethods[] = {
     {"get", ceph_state_get, METH_VARARGS,
      "Get a cluster object"},
@@ -355,6 +369,8 @@ PyMethodDef CephStateMethods[] = {
      "Set a configuration value"},
     {"get_counter", get_counter, METH_VARARGS,
       "Get a performance counter"},
+    {"get_perf_schema", get_perf_schema, METH_VARARGS,
+      "Get the performance counter schema"},
     {"log", ceph_log, METH_VARARGS,
      "Emit a (local) log message"},
     {"get_version", ceph_get_version, METH_VARARGS,

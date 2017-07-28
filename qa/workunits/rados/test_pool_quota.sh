@@ -5,6 +5,7 @@ p=`uuidgen`
 # objects
 ceph osd pool create $p 12
 ceph osd pool set-quota $p max_objects 10
+ceph osd pool application enable $p rados
 
 for f in `seq 1 10` ; do
  rados -p $p put obj$f /etc/passwd
@@ -41,6 +42,7 @@ rados -p $p put three /etc/passwd
 pp=`uuidgen`
 
 ceph osd pool create $pp 12
+ceph osd pool application enable $pp rados
 
 # set objects quota 
 ceph osd pool set-quota $pp max_objects 10

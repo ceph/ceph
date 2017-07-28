@@ -32,7 +32,7 @@
   
   # rules
   rule data {
-  \truleset 0 (esc)
+  \tid 0 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -41,7 +41,7 @@
   \tstep emit (esc)
   }
   rule metadata {
-  \truleset 1 (esc)
+  \tid 1 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -50,7 +50,7 @@
   \tstep emit (esc)
   }
   rule rbd {
-  \truleset 2 (esc)
+  \tid 2 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -59,7 +59,7 @@
   \tstep emit (esc)
   }
   rule simple-rule {
-  \truleset 3 (esc)
+  \tid 3 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -101,7 +101,7 @@
   
   # rules
   rule data {
-  \truleset 0 (esc)
+  \tid 0 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -110,7 +110,7 @@
   \tstep emit (esc)
   }
   rule metadata {
-  \truleset 1 (esc)
+  \tid 1 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -119,7 +119,7 @@
   \tstep emit (esc)
   }
   rule rbd {
-  \truleset 2 (esc)
+  \tid 2 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)

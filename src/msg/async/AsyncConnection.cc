@@ -978,8 +978,8 @@ ssize_t AsyncConnection::_process_connection()
                                 << " - presumably this is the same node!" << dendl;
           } else {
             ldout(async_msgr->cct, 10) << __func__ << " connect claims to be "
-                                << paddr << " not " << peer_addr
-                                << " (peer is possibly using public_bind_addr?) " << dendl;
+				       << paddr << " not " << peer_addr << dendl;
+	    goto fail;
           }
         }
 
@@ -2240,9 +2240,8 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
                              << " off " << header.data_off << dendl;
 
   if ((bl.length() <= ASYNC_COALESCE_THRESHOLD) && (bl.buffers().size() > 1)) {
-    std::list<buffer::ptr>::const_iterator pb;
-    for (pb = bl.buffers().begin(); pb != bl.buffers().end(); ++pb) {
-      outcoming_bl.append((char*)pb->c_str(), pb->length());
+    for (const auto &pb : bl.buffers()) {
+      outcoming_bl.append((char*)pb.c_str(), pb.length());
     }
   } else {
     outcoming_bl.claim_append(bl);  

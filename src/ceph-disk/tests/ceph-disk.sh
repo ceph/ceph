@@ -25,7 +25,7 @@ if [ -z "$CEPH_ROOT" ] || [ -z "$CEPH_BIN" ] || [ -z "$CEPH_LIB" ]; then
     CEPH_BIN=$CEPH_ROOT
     CEPH_LIB=$CEPH_ROOT/.libs
 fi
-source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
+source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 set -x
 
@@ -60,6 +60,7 @@ function setup() {
     local dir=$1
     teardown $dir
     mkdir -p $dir/osd
+    mkdir -p $(get_asok_dir)
     touch $dir/ceph.conf # so ceph-disk think ceph is the cluster
 }
 
@@ -78,6 +79,7 @@ function teardown() {
         umount $mounted
     done
     rm -fr $dir
+    rm -rf $(get_asok_dir)
 }
 
 function command_fixture() {
@@ -169,6 +171,7 @@ function test_mark_init() {
     shift
 
     run_mon $dir a
+    create_rbd_pool
 
     local osd_data=$dir/dir
     $mkdir -p $osd_data
@@ -290,6 +293,7 @@ function test_reuse_osd_id() {
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
+    create_rbd_pool
 
     test_activate $dir $dir/dir1 --osd-uuid $(uuidgen) || return 1
 
@@ -304,7 +308,7 @@ function test_reuse_osd_id() {
     #
     # make sure the OSD is in use by the PGs
     #
-    wait_osd_id_used_by_pgs $osd_id 6 || return 1
+    wait_osd_id_used_by_pgs $osd_id $PG_NUM || return 1
     read_write $dir SOMETHING || return 1
 
     #
@@ -333,6 +337,7 @@ function test_activate_dir() {
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
+    create_rbd_pool
     $@
 
     test_activate $dir $dir/dir || return 1
@@ -343,6 +348,7 @@ function test_activate_dir_bluestore() {
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
+    create_rbd_pool
 
     local osd_data=$dir/dir
     $mkdir -p $osd_data
@@ -382,38 +388,12 @@ function test_keyring_path() {
     grep --quiet "keyring $dir/bootstrap-osd/ceph.keyring" $dir/test_keyring || return 1
 }
 
-# http://tracker.ceph.com/issues/13522
-function ceph_osd_fail_once_fixture() {
-    local dir=$1
-    local command=ceph-osd
-    local fpath=`readlink -f $(which $command)`
-    [ "$fpath" = `readlink -f $CEPH_BIN/$command` ] || [ "$fpath" = `readlink -f $(pwd)/$command` ] || return 1
-
-    cat > $dir/$command <<EOF
-#!/bin/bash
-if echo "\$@" | grep -e --mkfs && ! test -f $dir/used-$command ; then
-   touch $dir/used-$command
-   # sleep longer than the first CEPH_OSD_MKFS_DELAYS value (5) below
-   sleep 600
-else
-   exec $CEPH_BIN/$command "\$@"
-fi
-EOF
-    chmod +x $dir/$command
-}
-
-function test_ceph_osd_mkfs() {
-    local dir=$1
-    ceph_osd_fail_once_fixture $dir || return 1
-    CEPH_OSD_MKFS_DELAYS='5 300 300' use_path $dir test_activate_dir || return 1
-    [ -f $dir/used-ceph-osd ] || return 1
-}
-
 function test_crush_device_class() {
     local dir=$1
     shift
 
     run_mon $dir a
+    create_rbd_pool
 
     local osd_data=$dir/dir
     $mkdir -p $osd_data
@@ -428,8 +408,6 @@ function test_crush_device_class() {
                 $osd_data || return 1
     test -f $osd_data/crush_device_class || return 1
     test $(cat $osd_data/crush_device_class) = CRUSH_CLASS || return 1
-
-    ceph osd crush class create CRUSH_CLASS || return 1
 
     CEPH_ARGS="--crush-location=root=default $CEPH_ARGS" \
       ${CEPH_DISK} $CEPH_DISK_ARGS \
@@ -489,7 +467,6 @@ function run() {
     default_actions+="test_zap "
     [ `uname` != FreeBSD ] && \
       default_actions+="test_activate_dir_bluestore "
-    default_actions+="test_ceph_osd_mkfs "
     default_actions+="test_crush_device_class "
     default_actions+="test_reuse_osd_id "
     local actions=${@:-$default_actions}

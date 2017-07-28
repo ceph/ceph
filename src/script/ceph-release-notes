@@ -36,6 +36,7 @@ from git import Repo
 
 
 fixes_re = re.compile(r"Fixes\:? #(\d+)")
+reviewed_by_re = re.compile(r"Rev(.*)By", re.IGNORECASE)
 # labels is the list of relevant labels defined for github.com/ceph/ceph
 labels = ['bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
           'mon', 'performance', 'pybind', 'rdma', 'rgw', 'rbd', 'tests',
@@ -48,6 +49,7 @@ prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
             'rbd', 'rbd-mirror', 'rbd-nbd', 'rgw', 'tests', 'tools']
 signed_off_re = re.compile("Signed-off-by: (.+) <")
 tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
+rst_link_re = re.compile(r"([a-zA-Z0-9])_(\W)")
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 
 
@@ -117,7 +119,7 @@ def _title_message(commit, pr, strict):
         return (title, None)
     lines = []
     for line in message_lines[1:]:
-        if 'Reviewed-by' in line:
+        if reviewed_by_re.match(line):
             continue
         line = line.strip()
         if line:
@@ -200,6 +202,8 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
         # escape asterisks, which is used by reStructuredTextrst for inline
         # emphasis
         title = title.replace('*', '\*')
+        # and escape the underscores for noting a link
+        title = rst_link_re.sub(r'\1\_\2', title)
         pr2info[number] = (author, title, message)
 
         for issue in set(issues):
@@ -218,7 +222,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
                        issue + " " + str(prs))
 
     for (pr, (author, title, message)) in sorted(
-        pr2info.items(), key=lambda k, v: (v[2], v[1])
+        pr2info.items(), key=lambda title: title[1][1]
     ):
         if pr in pr2issues:
             if plaintext:

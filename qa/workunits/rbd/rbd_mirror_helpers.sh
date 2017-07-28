@@ -69,6 +69,8 @@ CLUSTER2=cluster2
 POOL=mirror
 PARENT_POOL=mirror_parent
 TEMPDIR=
+USER_ID=mirror
+export CEPH_ARGS="--id ${USER_ID}"
 
 CEPH_ROOT=$(readlink -f $(dirname $0)/../../../src)
 CEPH_BIN=.
@@ -190,8 +192,15 @@ setup()
 
     if [ -z "${RBD_MIRROR_USE_EXISTING_CLUSTER}" ]; then
         cd ${CEPH_ROOT}
-        ${CEPH_SRC}/mstart.sh ${CLUSTER1} -n ${RBD_MIRROR_VARGS}
-        ${CEPH_SRC}/mstart.sh ${CLUSTER2} -n ${RBD_MIRROR_VARGS}
+        CEPH_ARGS='' ${CEPH_SRC}/mstart.sh ${CLUSTER1} -n ${RBD_MIRROR_VARGS}
+        CEPH_ARGS='' ${CEPH_SRC}/mstart.sh ${CLUSTER2} -n ${RBD_MIRROR_VARGS}
+
+        CEPH_ARGS='' ceph --conf run/${CLUSTER1}/ceph.conf \
+            auth get-or-create client.${USER_ID} mon 'profile rbd' osd 'profile rbd' >> \
+            run/${CLUSTER1}/keyring
+        CEPH_ARGS='' ceph --conf run/${CLUSTER2}/ceph.conf \
+            auth get-or-create client.${USER_ID} mon 'profile rbd' osd 'profile rbd' >> \
+            run/${CLUSTER2}/keyring
 
 	rm -f ${TEMPDIR}/${CLUSTER1}.conf
         ln -s $(readlink -f run/${CLUSTER1}/ceph.conf) \
@@ -203,10 +212,10 @@ setup()
         cd ${TEMPDIR}
     fi
 
-    ceph --cluster ${CLUSTER1} osd pool create ${POOL} 64 64
-    ceph --cluster ${CLUSTER1} osd pool create ${PARENT_POOL} 64 64
-    ceph --cluster ${CLUSTER2} osd pool create ${PARENT_POOL} 64 64
-    ceph --cluster ${CLUSTER2} osd pool create ${POOL} 64 64
+    CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool create ${POOL} 64 64
+    CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool create ${PARENT_POOL} 64 64
+    CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool create ${PARENT_POOL} 64 64
+    CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool create ${POOL} 64 64
 
     rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} pool
     rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} pool
@@ -234,13 +243,13 @@ cleanup()
 
     if [ -z "${RBD_MIRROR_USE_EXISTING_CLUSTER}" ]; then
         cd ${CEPH_ROOT}
-        ${CEPH_SRC}/mstop.sh ${CLUSTER1}
-        ${CEPH_SRC}/mstop.sh ${CLUSTER2}
+        CEPH_ARGS='' ${CEPH_SRC}/mstop.sh ${CLUSTER1}
+        CEPH_ARGS='' ${CEPH_SRC}/mstop.sh ${CLUSTER2}
     else
-        ceph --cluster ${CLUSTER1} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
-        ceph --cluster ${CLUSTER2} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
-        ceph --cluster ${CLUSTER1} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
-        ceph --cluster ${CLUSTER2} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
+        CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
+        CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
+        CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
+        CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
     fi
     test "${RBD_MIRROR_TEMDIR}" = "${TEMPDIR}" ||
     rm -Rf ${TEMPDIR}
@@ -257,6 +266,7 @@ start_mirror()
 
     rbd-mirror \
 	--cluster ${cluster} \
+        --id mirror \
 	--pid-file=$(daemon_pid_file "${cluster}:${instance}") \
 	--log-file=${TEMPDIR}/rbd-mirror.${cluster}_daemon.${instance}.log \
 	--admin-socket=${TEMPDIR}/rbd-mirror.${cluster}_daemon.${instance}.\$cluster.asok \
