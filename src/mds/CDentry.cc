@@ -620,3 +620,5 @@ std::string CDentry::linkage_t::get_remote_d_type_string() const
     default: ceph_abort(); return "";
   }
 }
+
+MEMPOOL_DEFINE_OBJECT_FACTORY(CDentry, co_dentry, mds_co);

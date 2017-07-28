@@ -11820,6 +11820,18 @@ void MDCache::show_cache()
     show_func(p.second);
 }
 
+int MDCache::cache_status(Formatter *f)
+{
+  f->open_object_section("cache");
+
+  f->open_object_section("pool");
+  mempool::get_pool(mempool::mds_co::id).dump(f);
+  f->close_section();
+
+  f->close_section();
+  return 0;
+}
+
 int MDCache::dump_cache(std::string const &file_name)
 {
   return dump_cache(file_name.c_str(), NULL);

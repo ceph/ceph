@@ -3293,3 +3293,4 @@ bool CDir::should_split_fast() const
   return effective_size > fast_limit;
 }
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(CDir, co_dir, mds_co);
