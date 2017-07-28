@@ -295,7 +295,9 @@ void MgrClient::send_report()
 void MgrClient::send_pgstats()
 {
   if (pgstats_cb && session) {
-    session->con->send_message(pgstats_cb());
+    if (auto pgstats = pgstats_cb()) {
+      session->con->send_message(pgstats);
+    }
   }
 }
 

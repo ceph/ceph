@@ -2548,12 +2548,19 @@ int OSD::init()
    */
   mgrc.set_pgstats_cb([this](){
       RWLock::RLocker l(map_lock);
-      
+      MPGStats *m = nullptr;
+      if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	// mgrc tried to send a pgstats to mgr when it's updated with
+	// a mgrconfigure, but osd does not update mgr with pgstats unless
+	// require_osd_release >= luminous, so avoid updating mgr with stale
+	// info.
+	return m;
+      }
       utime_t had_for = ceph_clock_now() - had_map_since;
       osd_stat_t cur_stat = service.get_osd_stat();
       cur_stat.os_perf_stat = store->get_cur_stats();
 
-      MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
+      m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
       m->osd_stat = cur_stat;
 
       Mutex::Locker lec{min_last_epoch_clean_lock};
