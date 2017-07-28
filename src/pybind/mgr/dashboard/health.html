@@ -235,7 +235,7 @@
                         <ul>
                             <li rv-each-check="health.checks">
                                 <span rv-style="check.severity | health_color">{check.type}</span>:
-                                {check.message}
+                                {check.summary.message}
                             </li>
                         </ul>
                     </div>
