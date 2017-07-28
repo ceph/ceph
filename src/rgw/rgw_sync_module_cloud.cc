@@ -254,7 +254,7 @@ int RGWCloudSyncObj::_send_request()
     ldout(store->ctx(),0) << "cloud sync "<<sync_type<< " failed. bucket:"
                           << bucket_info.bucket.name << " file:" << key.name << dendl;
   } else {
-    ldout(store->ctx(),0) << "cloud sync "<<sync_type<<" success. bucket:"
+    ldout(store->ctx(),20) << "cloud sync "<<sync_type<<" success. bucket:"
                           << bucket_info.bucket.name << " file:" << key.name << dendl;
   }
   return ret;
