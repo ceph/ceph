@@ -222,6 +222,15 @@ class FuseMount(CephFSMount):
         except run.CommandFailedError:
             log.info('Failed to unmount ceph-fuse on {name}, aborting...'.format(name=self.client_remote.name))
 
+            self.client_remote.run(args=[
+                'sudo',
+                run.Raw('PATH=/usr/sbin:$PATH'),
+                'lsof',
+                run.Raw(';'),
+                'ps',
+                'auxf',
+            ])
+
             # abort the fuse mount, killing all hung processes
             if self._fuse_conn:
                 self.run_python(dedent("""
