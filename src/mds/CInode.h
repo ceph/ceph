@@ -143,6 +143,7 @@ WRITE_CLASS_ENCODER_FEATURES(InodeStoreBare)
 // cached inode wrapper
 class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CInode> {
  public:
+  MEMPOOL_CLASS_HELPERS();
   // -- pins --
   static const int PIN_DIRFRAG =         -1; 
   static const int PIN_CAPS =             2;  // client caps

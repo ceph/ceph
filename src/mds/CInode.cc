@@ -4523,3 +4523,5 @@ bool CInode::is_exportable(mds_rank_t dest) const
     return true;
   }
 }
+
+MEMPOOL_DEFINE_OBJECT_FACTORY(CInode, co_inode, mds_co);
