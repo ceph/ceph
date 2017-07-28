@@ -34,15 +34,16 @@ using std::string;
 #undef dout_prefix
 #define dout_prefix *_dout << "rocksdb: "
 
-static rocksdb::SliceParts prepare_sliceparts(const bufferlist &bl, rocksdb::Slice *slices)
+static rocksdb::SliceParts prepare_sliceparts(const bufferlist &bl,
+					      vector<rocksdb::Slice> *slices)
 {
   unsigned n = 0;
-  for (std::list<buffer::ptr>::const_iterator p = bl.buffers().begin();
-       p != bl.buffers().end(); ++p, ++n) {
-    slices[n].data_ = p->c_str();
-    slices[n].size_ = p->length();
+  for (auto& buf : bl.buffers()) {
+    (*slices)[n].data_ = buf.c_str();
+    (*slices)[n].size_ = buf.length();
+    n++;
   }
-  return rocksdb::SliceParts(slices, n);
+  return rocksdb::SliceParts(slices->data(), slices->size());
 }
 
 //
@@ -623,9 +624,9 @@ void RocksDBStore::RocksDBTransactionImpl::set(
 			    to_set_bl.length()));
   } else {
     rocksdb::Slice key_slice(key);
-    rocksdb::Slice value_slices[to_set_bl.buffers().size()];
+    vector<rocksdb::Slice> value_slices(to_set_bl.buffers().size());
     bat.Put(nullptr, rocksdb::SliceParts(&key_slice, 1),
-            prepare_sliceparts(to_set_bl, value_slices));
+            prepare_sliceparts(to_set_bl, &value_slices));
   }
 }
 
@@ -644,9 +645,9 @@ void RocksDBStore::RocksDBTransactionImpl::set(
 			    to_set_bl.length()));
   } else {
     rocksdb::Slice key_slice(key);
-    rocksdb::Slice value_slices[to_set_bl.buffers().size()];
+    vector<rocksdb::Slice> value_slices(to_set_bl.buffers().size());
     bat.Put(nullptr, rocksdb::SliceParts(&key_slice, 1),
-            prepare_sliceparts(to_set_bl, value_slices));
+            prepare_sliceparts(to_set_bl, &value_slices));
   }
 }
 
@@ -722,9 +723,9 @@ void RocksDBStore::RocksDBTransactionImpl::merge(
   } else {
     // make a copy
     rocksdb::Slice key_slice(key);
-    rocksdb::Slice value_slices[to_set_bl.buffers().size()];
+    vector<rocksdb::Slice> value_slices(to_set_bl.buffers().size());
     bat.Merge(nullptr, rocksdb::SliceParts(&key_slice, 1),
-              prepare_sliceparts(to_set_bl, value_slices));
+              prepare_sliceparts(to_set_bl, &value_slices));
   }
 }
 
