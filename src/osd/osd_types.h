@@ -4920,16 +4920,12 @@ struct ScrubMap {
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
 
-struct OpFinisher;
-
 struct OSDOp {
   ceph_osd_op op;
   sobject_t soid;
 
   bufferlist indata, outdata;
   errorcode32_t rval;
-
-  OpFinisher *op_finisher = nullptr;
 
   OSDOp() : rval(0) {
     memset(&op, 0, sizeof(ceph_osd_op));

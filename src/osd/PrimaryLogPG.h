@@ -473,6 +473,13 @@ public:
     ObjectContextRef obc,
     const list<watch_disconnect_t> &to_disconnect);
 
+  struct OpFinisher {
+    virtual ~OpFinisher() {
+    }
+
+    virtual int execute() = 0;
+  };
+
   /*
    * Capture all object state associated with an in-progress read or write.
    */
@@ -581,6 +588,8 @@ public:
 
     ObjectContext::RWState::State lock_type;
     ObcLockManager lock_manager;
+
+    std::map<int, std::unique_ptr<OpFinisher>> op_finishers;
 
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
