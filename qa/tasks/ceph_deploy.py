@@ -147,7 +147,7 @@ def get_nodes_using_role(ctx, target_role):
 
     # Prepare a modified version of cluster.remotes with ceph-deploy-ized names
     modified_remotes = {}
-
+    ceph_deploy_mapped = dict()
     for _remote, roles_for_host in ctx.cluster.remotes.iteritems():
         modified_remotes[_remote] = []
         for svc_id in roles_for_host:
@@ -158,13 +158,16 @@ def get_nodes_using_role(ctx, target_role):
                     nodes_of_interest.append(fqdn)
                 else:
                     nodes_of_interest.append(nodename)
-
-                modified_remotes[_remote].append(
-                    "{0}.{1}".format(target_role, nodename))
+                mapped_role = "{0}.{1}".format(target_role, nodename)
+                modified_remotes[_remote].append(mapped_role)
+                # keep dict of mapped role for later use by tasks
+                # eg. mon.a => mon.node1
+                ceph_deploy_mapped[svc_id] = mapped_role
             else:
                 modified_remotes[_remote].append(svc_id)
 
     ctx.cluster.remotes = modified_remotes
+    ctx.cluster.mapped_role = ceph_deploy_mapped
 
     return nodes_of_interest
 
@@ -707,6 +710,9 @@ def upgrade(ctx, config):
               osd.0
      """
     roles = config.get('roles')
+    # get the roles that are mapped as per ceph-deploy
+    # roles are mapped for mon/mds eg: mon.a  => mon.host_short_name
+    mapped_role = ctx.cluster.mapped_role
     if config.get('branch'):
         branch = config.get('branch')
         (var, val) = branch.items()[0]
@@ -715,10 +721,14 @@ def upgrade(ctx, config):
         # default to master
         ceph_branch = '--dev=master'
     # get the node used for initial deployment which is mon.a
-    (ceph_admin,) = ctx.cluster.only('mon.a').remotes.iterkeys()
+    mon_a = mapped_role.get('mon.a')
+    (ceph_admin,) = ctx.cluster.only(mon_a).remotes.iterkeys()
     testdir = teuthology.get_testdir(ctx)
     cmd = './ceph-deploy install ' + ceph_branch
     for role in roles:
+        # check if this role is mapped (mon or mds)
+        if mapped_role.get(role):
+            role = mapped_role.get(role)
         remotes_and_roles = ctx.cluster.only(role).remotes
         for remote, roles in remotes_and_roles.iteritems():
             nodename = remote.shortname
