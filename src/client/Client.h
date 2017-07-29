@@ -1101,6 +1101,9 @@ public:
   int get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address);
   int get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds);
   int get_osd_addr(int osd, entity_addr_t& addr);
+  
+  // expose mdsmap
+  int64_t get_default_pool_id();
 
   // expose osdmap
   int get_local_osd();
