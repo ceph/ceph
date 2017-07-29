@@ -130,16 +130,19 @@ extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferli
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
 extern int cls_cxx_map_clear(cls_method_context_t hctx);
 extern int cls_cxx_map_get_all_vals(cls_method_context_t hctx,
-                                    std::map<string, bufferlist> *vals);
+                                    std::map<string, bufferlist> *vals,
+                                    bool *more);
 extern int cls_cxx_map_get_keys(cls_method_context_t hctx,
                                 const string &start_after,
                                 uint64_t max_to_get,
-                                std::set<string> *keys);
+                                std::set<string> *keys,
+                                bool *more);
 extern int cls_cxx_map_get_vals(cls_method_context_t hctx,
                                 const string &start_after,
                                 const string &filter_prefix,
                                 uint64_t max_to_get,
-                                std::map<string, bufferlist> *vals);
+                                std::map<string, bufferlist> *vals,
+                                bool *more);
 extern int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl);
 extern int cls_cxx_map_set_vals(cls_method_context_t hctx,
                                 const std::map<string, bufferlist> *map);

@@ -1123,18 +1123,23 @@ WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_op)
 
 struct cls_rgw_lc_list_entries_ret {
   map<string, int> entries;
+  bool is_truncated{false};
 
   cls_rgw_lc_list_entries_ret() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(entries, bl);
+    ::encode(is_truncated, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(entries, bl);
+    if (struct_v >= 2) {
+      ::decode(is_truncated, bl);
+    }
     DECODE_FINISH(bl);
   }
 

@@ -405,7 +405,8 @@ int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid)
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
-int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>* vals)
+int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>* vals,
+                             bool *more)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -429,6 +430,7 @@ int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>*
   bufferlist::iterator iter = op.outdata.begin();
   try {
     ::decode(*vals, iter);
+    ::decode(*more, iter);
   } catch (buffer::error& err) {
     return -EIO;
   }
@@ -436,7 +438,8 @@ int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>*
 }
 
 int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
-			 uint64_t max_to_get, set<string> *keys)
+			 uint64_t max_to_get, set<string> *keys,
+                         bool *more)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -455,6 +458,7 @@ int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
   bufferlist::iterator iter = op.outdata.begin();
   try {
     ::decode(*keys, iter);
+    ::decode(*more, iter);
   } catch (buffer::error& err) {
     return -EIO;
   }
@@ -463,7 +467,7 @@ int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
 
 int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
 			 const string &filter_prefix, uint64_t max_to_get,
-			 map<string, bufferlist> *vals)
+			 map<string, bufferlist> *vals, bool *more)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -483,6 +487,7 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
   bufferlist::iterator iter = op.outdata.begin();
   try {
     ::decode(*vals, iter);
+    ::decode(*more, iter);
   } catch (buffer::error& err) {
     return -EIO;
   }
