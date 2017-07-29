@@ -12693,6 +12693,12 @@ int Client::fdescribe_layout(int fd, file_layout_t *lp)
   return 0;
 }
 
+int64_t Client::get_default_pool_id()
+{
+  Mutex::Locker lock(client_lock);
+  /* first data pool is the default */ 
+  return mdsmap->get_first_data_pool(); 
+}
 
 // expose osdmap
 
