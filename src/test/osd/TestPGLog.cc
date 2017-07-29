@@ -2793,7 +2793,7 @@ TEST_F(PGLogTrimTest, TestTrimNoDups)
 
   log.trim(cct, mk_evt(19, 157), &trimmed, &trimmed_dups, &dirty_dups);
 
-  EXPECT_EQ(false, dirty_dups);
+  EXPECT_FALSE(dirty_dups);
   EXPECT_EQ(3u, log.log.size());
   EXPECT_EQ(3u, trimmed.size());
   EXPECT_EQ(0u, log.dups.size());
@@ -2821,7 +2821,7 @@ TEST_F(PGLogTrimTest, TestNoTrim)
 
   log.trim(cct, mk_evt(9, 99), &trimmed, &trimmed_dups, &dirty_dups);
 
-  EXPECT_EQ(false, dirty_dups);
+  EXPECT_FALSE(dirty_dups);
   EXPECT_EQ(6u, log.log.size());
   EXPECT_EQ(0u, trimmed.size());
   EXPECT_EQ(0u, log.dups.size());
@@ -2906,7 +2906,7 @@ TEST_F(PGLogTrimTest, TestGetRequest) {
   EXPECT_EQ(mk_evt(15, 155), version);
 
   result = log.get_request(bad_reqid, &version, &user_version, &return_code);
-  EXPECT_EQ(false, result);
+  EXPECT_FALSE(result);
 }
 
 
