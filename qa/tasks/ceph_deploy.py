@@ -777,6 +777,7 @@ def task(ctx, config):
              branch:
                 stable: bobtail
              mon_initial_members: 1
+             ceph-deploy-branch: my-ceph-deploy-branch
              only_mon: true
              keep_running: true
              # either choose bluestore or filestore, default is bluestore
