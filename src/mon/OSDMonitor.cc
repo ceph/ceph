@@ -3253,7 +3253,7 @@ void OSDMonitor::update_creating_pgs()
   creating_pgs_epoch = mapping.get_epoch();
 }
 
-epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
+epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) const
 {
   dout(30) << __func__ << " osd." << osd << " next=" << next
 	   << " " << creating_pgs_by_osd_epoch << dendl;
@@ -3277,11 +3277,12 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
 	m = new MOSDPGCreate(creating_pgs_epoch);
       // Need the create time from the monitor using its clock to set
       // last_scrub_stamp upon pg creation.
-      const auto& creation = creating_pgs.pgs[pg];
-      m->mkpg.emplace(pg, pg_create_t{creation.first, pg, 0});
-      m->ctimes.emplace(pg, creation.second);
+      auto create = creating_pgs.pgs.find(pg);
+      assert(create != creating_pgs.pgs.end());
+      m->mkpg.emplace(pg, pg_create_t{create->second.first, pg, 0});
+      m->ctimes.emplace(pg, create->second.second);
       dout(20) << __func__ << " will create " << pg
-	       << " at " << creation.first << dendl;
+	       << " at " << create->second.first << dendl;
     }
   }
   if (!m) {

@@ -451,7 +451,7 @@ protected:
   // the epoch when the pg mapping was calculated
   epoch_t creating_pgs_epoch = 0;
   creating_pgs_t creating_pgs;
-  std::mutex creating_pgs_lock;
+  mutable std::mutex creating_pgs_lock;
 
   creating_pgs_t update_pending_pgs(const OSDMap::Incremental& inc);
   void trim_creating_pgs(creating_pgs_t *creating_pgs,
@@ -464,7 +464,7 @@ protected:
   pair<int32_t, pg_t> get_parent_pg(pg_t pgid) const;
   void update_creating_pgs();
   void check_pg_creates_subs();
-  epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
+  epoch_t send_pg_creates(int osd, Connection *con, epoch_t next) const;
 
   int32_t _allocate_osd_id(int32_t* existing_id);
 
