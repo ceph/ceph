@@ -258,6 +258,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   _reset_faked_inos();
   //
   root = 0;
+  root_ancestor = 0;
 
   num_flushing_caps = 0;
 
@@ -1730,7 +1731,6 @@ int Client::make_request(MetaRequest *request,
     r = request->get_abort_code();
     request->item.remove_myself();
     unregister_request(request);
-    put_request(request); // ours
     return r;
   }
 
