@@ -242,6 +242,7 @@ void ProtocolV1::send_message(Message *m) {
                    << " Drop message " << m << dendl;
     m->put();
   } else {
+    m->queue_start = ceph::mono_clock::now();
     m->trace.event("async enqueueing message");
     out_q[m->get_priority()].emplace_back(std::move(bl), m);
     ldout(cct, 15) << __func__ << " inline write is denied, reschedule m=" << m
@@ -336,6 +337,11 @@ void ProtocolV1::write_event() {
       // send_message or requeue messages may not encode message
       if (!data.length()) {
         prepare_send_message(connection->get_features(), m, data);
+      }
+
+      if (m->queue_start != ceph::mono_time()) {
+        connection->logger->tinc(l_msgr_send_messages_queue_lat,
+				 ceph::mono_clock::now() - m->queue_start);
       }
 
       r = write_message(m, data, more);
@@ -590,6 +596,7 @@ CtPtr ProtocolV1::handle_tag_ack(char *buffer, int r) {
   // trim sent list
   static const int max_pending = 128;
   int i = 0;
+  auto now = ceph::mono_clock::now();
   Message *pending[max_pending];
   connection->write_lock.lock();
   while (!sent.empty() && sent.front()->get_seq() <= seq && i < max_pending) {
@@ -601,6 +608,7 @@ CtPtr ProtocolV1::handle_tag_ack(char *buffer, int r) {
                    << dendl;
   }
   connection->write_lock.unlock();
+  connection->logger->tinc(l_msgr_handle_ack_lat, ceph::mono_clock::now() - now);
   for (int k = 0; k < i; k++) {
     pending[k]->put();
   }
