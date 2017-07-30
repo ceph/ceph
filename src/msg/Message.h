@@ -280,6 +280,7 @@ public:
 				   boost::intrusive::list_member_hook<>,
 				   &Message::dispatch_q>> Queue;
 
+  ceph::mono_time queue_start;
 protected:
   CompletionHook* completion_hook = nullptr; // owned by Messenger
 
