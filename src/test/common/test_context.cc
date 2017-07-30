@@ -42,7 +42,7 @@ TEST(CephContext, do_command)
     bufferlist out;
     cct->do_command("config get", cmdmap, "xml", &out);
     string s(out.c_str(), out.length());
-    EXPECT_EQ("<config_get><key>" + value + "</key></config_get>", s);
+    EXPECT_EQ("<config_get><key>" + value + "</key></config_get>\n", s);
   }
 
   {
@@ -57,7 +57,7 @@ TEST(CephContext, do_command)
     cct->do_command("config diff get", cmdmap, "xml", &out);
     string s(out.c_str(), out.length());
     EXPECT_EQ("<config_diff_get><diff><current><key>" + value + 
-      "</key></current><defaults><key></key></defaults></diff></config_diff_get>", s);
+      "</key></current><defaults><key></key></defaults></diff></config_diff_get>\n", s);
   }
   cct->put();
 }
