@@ -333,28 +333,28 @@ int main(int argc, const char **argv)
   }
   if (check_wants_journal) {
     if (store->wants_journal()) {
-      cout << "yes" << std::endl;
+      cout << "wants journal: yes" << std::endl;
       exit(0);
     } else {
-      cout << "no" << std::endl;
+      cout << "wants journal: no" << std::endl;
       exit(1);
     }
   }
   if (check_allows_journal) {
     if (store->allows_journal()) {
-      cout << "yes" << std::endl;
+      cout << "allows journal: yes" << std::endl;
       exit(0);
     } else {
-      cout << "no" << std::endl;
+      cout << "allows journal: no" << std::endl;
       exit(1);
     }
   }
   if (check_needs_journal) {
     if (store->needs_journal()) {
-      cout << "yes" << std::endl;
+      cout << "needs journal: yes" << std::endl;
       exit(0);
     } else {
-      cout << "no" << std::endl;
+      cout << "needs journal: no" << std::endl;
       exit(1);
     }
   }
