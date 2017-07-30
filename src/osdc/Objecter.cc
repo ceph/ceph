@@ -3415,30 +3415,17 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   if (rc == -EAGAIN) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
-
-    if ((op->target.flags & CEPH_OSD_FLAG_BALANCE_READS) 
-	&& (op->target.acting_primary != op->target.osd)) {
-      if (op->onfinish)
-	num_in_flight--;
-      _session_op_remove(s, op);
-      sl.unlock();
-      put_session(s);
-
-      op->tid = 0;
-      op->target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
-      op->target.pgid = pg_t();
-      _op_submit(op, sul, NULL);
-      m->put();
-      return;
-    }
-
-    // new tid
-    s->ops.erase(op->tid);
-    op->tid = ++last_tid;
-
-    _send_op(op);
+    if (op->onfinish)
+      num_in_flight--;
+    _session_op_remove(s, op);
     sl.unlock();
     put_session(s);
+
+    op->tid = 0;
+    op->target.flags &= ~(CEPH_OSD_FLAG_BALANCE_READS |
+			  CEPH_OSD_FLAG_LOCALIZE_READS);
+    op->target.pgid = pg_t();
+    _op_submit(op, sul, NULL);
     m->put();
     return;
   }
