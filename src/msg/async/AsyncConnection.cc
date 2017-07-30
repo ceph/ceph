@@ -1950,6 +1950,7 @@ int AsyncConnection::send_message(Message *m)
                                << " Drop message " << m << dendl;
     m->put();
   } else {
+    m->queue_start = ceph::mono_clock::now();
     m->trace.event("async enqueueing message");
     out_q[m->get_priority()].emplace_back(std::move(bl), m);
     ldout(async_msgr->cct, 15) << __func__ << " inline write is denied, reschedule m=" << m << dendl;
@@ -2329,6 +2330,7 @@ void AsyncConnection::handle_ack(uint64_t seq)
 {
   ldout(async_msgr->cct, 15) << __func__ << " got ack seq " << seq << dendl;
   // trim sent list
+  auto now = ceph::mono_clock::now();
   std::lock_guard<std::mutex> l(write_lock);
   while (!sent.empty() && sent.front()->get_seq() <= seq) {
     Message* m = sent.front();
@@ -2338,6 +2340,8 @@ void AsyncConnection::handle_ack(uint64_t seq)
                                << m << " " << *m << dendl;
     m->put();
   }
+
+  logger->tinc(l_msgr_handle_ack_lat, ceph::mono_clock::now() - now);
 }
 
 void AsyncConnection::DelayedDelivery::do_request(int id)
@@ -2457,6 +2461,10 @@ void AsyncConnection::handle_write()
       // send_message or requeue messages may not encode message
       if (!data.length())
         prepare_send_message(get_features(), m, data);
+
+      if (m->queue_start != ceph::mono_time()) {
+        logger->tinc(l_msgr_send_messages_queue_lat, ceph::mono_clock::now() - m->queue_start);
+      }
 
       r = write_message(m, data, more);
       if (r < 0) {
