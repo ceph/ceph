@@ -750,7 +750,9 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
   }
   dout(10) << __func__ << " queue remaining: " << pending_creatings.queue.size()
 	   << " pools" << dendl;
-  dout(10) << __func__ << " " << pending_creatings.pgs.size() - total
+  dout(10) << __func__
+	   << " " << (pending_creatings.pgs.size() - total)
+	   << "/" << pending_creatings.pgs.size()
 	   << " pgs added from queued pools" << dendl;
   return pending_creatings;
 }
@@ -3215,11 +3217,11 @@ void OSDMonitor::update_creating_pgs()
 	   << creating_pgs.queue.size() << " pools in queue" << dendl;
   decltype(creating_pgs_by_osd_epoch) new_pgs_by_osd_epoch;
   std::lock_guard<std::mutex> l(creating_pgs_lock);
-  for (auto& pg : creating_pgs.pgs) {
+  for (const auto& pg : creating_pgs.pgs) {
     int acting_primary = -1;
     auto pgid = pg.first;
     auto mapped = pg.second.first;
-    dout(20) << __func__ << " looking up " << pgid << dendl;
+    dout(20) << __func__ << " looking up " << pgid << "@" << mapped << dendl;
     mapping.get(pgid, nullptr, nullptr, nullptr, &acting_primary);
     // check the previous creating_pgs, look for the target to whom the pg was
     // previously mapped
@@ -3244,7 +3246,7 @@ void OSDMonitor::update_creating_pgs()
       }
     }
     dout(10) << __func__ << " will instruct osd." << acting_primary
-	     << " to create " << pgid << dendl;
+	     << " to create " << pgid << "@" << mapped << dendl;
     new_pgs_by_osd_epoch[acting_primary][mapped].insert(pgid);
   }
   creating_pgs_by_osd_epoch = std::move(new_pgs_by_osd_epoch);
