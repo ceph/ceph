@@ -55,8 +55,12 @@ void PrepareRemoteImageRequest<I>::handle_get_remote_mirror_uuid(int r) {
 
   dout(20) << "r=" << r << dendl;
   if (r < 0) {
-    derr << "failed to retrieve remote mirror uuid: " << cpp_strerror(r)
-         << dendl;
+    if (r == -ENOENT) {
+      dout(5) << "remote mirror uuid missing" << dendl;
+    } else {
+      derr << "failed to retrieve remote mirror uuid: " << cpp_strerror(r)
+           << dendl;
+    }
     finish(r);
     return;
   }
