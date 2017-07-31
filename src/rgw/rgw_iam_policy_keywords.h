@@ -87,6 +87,7 @@ enum class TokenID {
   s3authType,
   s3signatureAge,
   s3x_amz_content_sha256,
+  s3RequestObjectTag,
 #else
   CondKey,
 #endif
