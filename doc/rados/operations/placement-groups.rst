@@ -113,7 +113,7 @@ Data durability
 ---------------
 
 After an OSD fails, the risk of data loss increases until the data it
-contained is fully recovered. Let's imagine a scenario that causes
+contained is fully recovered. Let us imagine a scenario that causes
 permanent data loss in a single placement group:
 
 - The OSD fails and all copies of the object it contains are lost.
@@ -428,7 +428,7 @@ use::
         ceph pg cancel-force-backfill {pg-id} [{pg-id #2}] [{pg-id #3} ...]
 
 This will remove "force" flag from those PGs and they will be processed
-in default order. Again, this doesn't affect currently processed placement
+in default order. Again, this does not affect currently processed placement
 group, only those that are still queued.
 
 The "force" flag is cleared automatically after recovery or backfill of group

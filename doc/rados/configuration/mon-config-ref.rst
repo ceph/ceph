@@ -299,7 +299,7 @@ store is co-located with the OSD Daemons.
 
 In Ceph versions 0.58 and earlier, Ceph Monitors store their data in files. This 
 approach allows users to inspect monitor data with common tools like ``ls``
-and ``cat``. However, it doesn't provide strong consistency.
+and ``cat``. However, it does not provide strong consistency.
 
 In Ceph versions 0.59 and later, Ceph Monitors store their data as key/value
 pairs. Ceph Monitors require `ACID`_ transactions. Using a data store prevents
@@ -387,7 +387,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 
 :Description: Issue a ``HEALTH_WARN`` in cluster log if
               ``mon osd down out interval`` is zero. Having this option set to
-              zero on the leader acts much like the ``noout`` flag. It's hard
+              zero on the leader acts much like the ``noout`` flag. It is hard
               to figure out what's going wrong with clusters witout the
               ``noout`` flag set but acting like that just the same, so we
               report a warning in this case.
@@ -588,7 +588,7 @@ purposes of synchronization, monitors may assume one of three roles:
    Paxos version of the cluster map.
 
 #. **Provider**: The `Provider` is a monitor that has the most recent version
-   of the cluster map, but wasn't the first to achieve the most recent version.
+   of the cluster map, but was not the first to achieve the most recent version.
 
 #. **Requester:** A `Requester` is a monitor that has fallen behind the leader
    and must synchronize in order to retrieve the most recent information about
@@ -869,7 +869,7 @@ before daemons reach a timeout threshold. If the clocks in Ceph monitors
 are not synchronized, it can lead to a number of anomalies. For example:
 
 - Daemons ignoring received messages (e.g., timestamps outdated)
-- Timeouts triggered too soon/late when a message wasn't received in time.
+- Timeouts triggered too soon/late when a message was not received in time.
 
 See `Monitor Store Synchronization`_ for details.
 

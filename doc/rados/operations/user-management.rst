@@ -448,7 +448,7 @@ Keyring Management
 
 When you access Ceph via a Ceph client, the Ceph client will look for a local 
 keyring. Ceph presets the ``keyring`` setting with the following four keyring 
-names by default so you don't have to set them in your Ceph configuration file 
+names by default so you do not have to set them in your Ceph configuration file 
 unless you want to override the defaults (not recommended): 
 
 - ``/etc/ceph/$cluster.$name.keyring``

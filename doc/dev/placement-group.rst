@@ -22,7 +22,7 @@ calculate the initial PG number from a cluster description.
 
 There are a couple of different categories of PGs; the 6 that exist
 (in the original emailer's ``ceph -s`` output) are "local" PGs which
-are tied to a specific OSD. However, those aren't actually used in a
+are tied to a specific OSD. However, those are not actually used in a
 standard Ceph configuration.
 
 

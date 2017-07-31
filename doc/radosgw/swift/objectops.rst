@@ -64,7 +64,7 @@ Copy an Object
 ==============
 
 Copying an object allows you to make a server-side copy of an object, so that
-you don't have to download it and upload it under another container/name.
+you do not have to download it and upload it under another container/name.
 To copy the contents of one object to another object, you may make either a
 ``PUT`` request or a ``COPY`` request with the API version, account, and the 
 container name. For a ``PUT`` request, use the destination container and object

@@ -524,7 +524,7 @@ cluster and how your hierarchy is structured.
 Normally, the entire cluster hierarchy is nested beneath a root node
 named ``default``.  If you have customized your hierarchy, you may
 want to create a rule nested at some other node in the hierarchy.  It
-doesn't matter what type is associated with that node (it doesn't have
+does not matter what type is associated with that node (it does not have
 to be a ``root`` node).
 
 It is also possible to create a rule that restricts data placement to
@@ -816,7 +816,7 @@ Warning when tunables are non-optimal
 -------------------------------------
 
 Starting with version v0.74, Ceph will issue a health warning if the
-current CRUSH tunables don't include all the optimal values from the
+current CRUSH tunables do not include all the optimal values from the
 ``default`` profile (see below for the meaning of the ``default`` profile).
 To make this warning go away, you have two options:
 

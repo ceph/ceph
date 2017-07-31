@@ -10,7 +10,7 @@ with an OS and any relevant software in an ideal configuration. Then, the user
 takes a snapshot of the image. Finally, the user clones the snapshot (usually
 many times). See `Snapshots`_ for details. The ability to make copy-on-write
 clones of a snapshot means that Ceph can provision block device images to
-virtual machines quickly, because the client doesn't have to download an entire
+virtual machines quickly, because the client does not have to download an entire
 image each time it spins up a new virtual machine.
 
 

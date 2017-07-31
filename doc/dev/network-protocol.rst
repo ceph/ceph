@@ -87,7 +87,7 @@ message type via information in the ``data`` array itself.
 
 The message tags are defined in ``src/include/msgr.h`` and the current ones
 are listed below along with the data they include.  Note that the defined
-structures don't exist in the source and are merely for representing the
+structures do not exist in the source and are merely for representing the
 protocol.
 
 CEPH_MSGR_TAG_CLOSE (0x06)

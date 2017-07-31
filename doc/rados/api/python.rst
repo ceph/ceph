@@ -104,7 +104,7 @@ information about the cluster.
 
 
 By default, Ceph authentication is ``on``. Your application will need to know
-the location of the keyring. The ``python-ceph`` module doesn't have the default
+the location of the keyring. The ``python-ceph`` module does not have the default
 location, so you need to specify the keyring path. The easiest way to specify
 the keyring is to add it to the Ceph configuration file. The following Ceph
 configuration file example uses the ``client.admin`` keyring you generated with
@@ -187,7 +187,7 @@ Writing, Reading and Removing Objects
 -------------------------------------
 
 Once you create an I/O context, you can write objects to the cluster. If you
-write to an object that doesn't exist, Ceph creates it. If you write to an
+write to an object that does not exist, Ceph creates it. If you write to an
 object that exists, Ceph overwrites it (except when you specify a range, and
 then it only overwrites the range). You may read objects (and object ranges)
 from the cluster. You may also remove objects from the cluster. For example: 
@@ -332,7 +332,7 @@ method. The remaining ``ioctx`` operations involve invoking methods of the
 .. Ioctx.lookup_snap(self, snap_name)
 .. Ioctx.remove_snap(self, snap_name)
 
-.. not published. This doesn't seem ready yet.
+.. not published. This does not seem ready yet.
 
 Object Operations
 -----------------

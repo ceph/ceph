@@ -15,6 +15,6 @@ called rados_create more than once.
 A ceph context is required to issue log messages. Why is this? Well, without
 the CephContext, we would not know which log messages were disabled and which
 were enabled.  The dout() macro implicitly references g_ceph_context, so it
-can't be used in library code.  It is fine to use dout and derr in daemons, but
+cannot be used in library code.  It is fine to use dout and derr in daemons, but
 in library code, you must use ldout and lderr, and pass in your own CephContext
 object. The compiler will enforce this restriction.

@@ -5,7 +5,7 @@ When a client wants to operate on an inode, it will query the MDS in various
 ways, which will then grant the client a set of **capabilities**. These
 grant the client permissions to operate on the inode in various ways. One
 of the major differences from other network filesystems (e.g NFS or SMB) is
-that the capabilities granted are quite granular, and it's possible that
+that the capabilities granted are quite granular, and it is possible that
 multiple clients can hold different capabilities on the same inodes.
 
 Types of Capabilities
@@ -91,7 +91,7 @@ bit is what they actually allow the client to do:
 * LINK: the link count of the inode
 
 * XATTR: ability to access or manipulate xattrs. Note that since ACLs are
-  stored in xattrs, it's also sometimes necessary to access them when checking
+  stored in xattrs, it is also sometimes necessary to access them when checking
   permissions.
 
 * FILE: this is the big one. These allow the client to access and manipulate

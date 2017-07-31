@@ -200,7 +200,7 @@ The most common way to provide these keys to the ``ceph`` administrative
 commands and clients is to include a Ceph keyring under the ``/etc/ceph``
 directory. For Cuttlefish and later releases using ``ceph-deploy``, the filename
 is usually ``ceph.client.admin.keyring`` (or ``$cluster.client.admin.keyring``).
-If you include the keyring under the ``/etc/ceph`` directory, you don't need to
+If you include the keyring under the ``/etc/ceph`` directory, you do not need to
 specify a ``keyring`` entry in your Ceph configuration file.
 
 We recommend copying the Ceph Storage Cluster's keyring file to nodes where you
@@ -389,7 +389,7 @@ authentication has the unfortunate security effect that an attacker with control
 of some of your machines or some access to your network can disable session
 security simply by claiming to be unable to sign messages.  
 
-.. note:: Even if you don't actually run any old versions of Ceph, 
+.. note:: Even if you do not actually run any old versions of Ceph, 
    the attacker may be able to force some messages to be accepted unsigned in the 
    default scenario. While running Cephx with the default scenario, Ceph still
    authenticates the initial communication, but you lose desirable session security.

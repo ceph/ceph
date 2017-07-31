@@ -20,7 +20,7 @@ Following these operations:
 
 Test:
 
-1. Verify that 'usage show' with delete_obj category isn't empty after no more than 45 seconds (wait to flush)
+1. Verify that 'usage show' with delete_obj category is not empty after no more than 45 seconds (wait to flush)
 2. Check the following
 
   - 'usage show'

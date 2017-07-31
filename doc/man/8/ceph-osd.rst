@@ -89,9 +89,9 @@ Options
 .. option:: --flush-journal
 
    Flush the journal to permanent store. This runs in the foreground
-   so you know when it's completed. This can be useful if you want to
+   so you know when it is completed. This can be useful if you want to
    resize the journal or need to otherwise destroy it: this guarantees
-   you won't lose data.
+   you will not lose data.
 
 .. option:: --get-cluster-fsid
 

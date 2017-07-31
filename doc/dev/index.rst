@@ -177,7 +177,7 @@ do ::
   $ make clean
 
   # note the following will nuke everything in the source tree that
-  # isn't tracked by git, so make sure to backup any log files /conf options
+  # is not tracked by git, so make sure to backup any log files /conf options
 
   $ git clean -fdx; git submodule foreach git clean -fdx
 
@@ -372,7 +372,7 @@ on the issues progresses.
 Issue tracker conventions
 -------------------------
 
-When you start working on an existing issue, it's nice to let the other
+When you start working on an existing issue, it is nice to let the other
 developers know this - to avoid duplication of labor. Typically, this is
 done by changing the :code:`Assignee` field (to yourself) and changing the
 :code:`Status` to *In progress*. Newcomers to the Ceph community typically do not
@@ -529,7 +529,7 @@ Fix bug locally
 
 At this point, change the status of the tracker issue to "In progress" to
 communicate to the other Ceph developers that you have begun working on a
-fix. If you don't have permission to change that field, your comment that
+fix. If you do not have permission to change that field, your comment that
 you are working on the issue is sufficient.
 
 Possibly, your fix is very simple and requires only minimal testing.
@@ -560,7 +560,7 @@ will review it and may do additional testing on it.
 
 In short, this is the point where you "go public" with your modifications.
 Psychologically, you should be prepared to receive suggestions and
-constructive criticism. Don't worry! In our experience, the Ceph project is
+constructive criticism. Do not worry! In our experience, the Ceph project is
 a friendly place!
 
 If you are uncertain how to use pull requests, you may read
@@ -605,14 +605,14 @@ Notes on PR make check test
 The GitHub `make check`_ test is driven by a Jenkins instance.
 
 Jenkins merges the PR branch into the latest version of the base branch before
-starting the build, so you don't have to rebase the PR to pick up any fixes.
+starting the build, so you do not have to rebase the PR to pick up any fixes.
 
 You can trigger the PR tests at any time by adding a comment to the PR - the
 comment should contain the string "test this please". Since a human subscribed
-to the PR might interpret that as a request for him or her to test the PR, it's
+to the PR might interpret that as a request for him or her to test the PR, it is
 good to write the request as "Jenkins, test this please".
 
-The `make check`_ log is the place to go if there is a failure and you're not
+The `make check`_ log is the place to go if there is a failure and you are not
 sure what caused it. To reach it, first click on "details" (next to the `make
 check`_ test in the PR) to get into the Jenkins web GUI, and then click on
 "Console Output" (on the left).
@@ -721,7 +721,7 @@ top-level directory of the Ceph source tree by doing::
 You will need a minimum of 8GB of RAM and 32GB of free disk space for this
 command to complete successfully on x86_64 (other architectures may have
 different constraints). Depending on your hardware, it can take from 20
-minutes to three hours to complete, but it's worth the wait.
+minutes to three hours to complete, but it is worth the wait.
 
 Caveats
 -------
@@ -1224,7 +1224,7 @@ Getting ceph-workbench
 
 Since testing in the cloud is done using the `ceph-workbench
 ceph-qa-suite`_ tool, you will need to install that first. It is designed
-to be installed via Docker, so if you don't have Docker running on your
+to be installed via Docker, so if you do not have Docker running on your
 development machine, take care of that first. You can follow `the official
 tutorial <https://docs.docker.com/engine/installation/>`_ to install if
 you have not installed yet.
@@ -1354,7 +1354,7 @@ where ``$RUN`` is the name of the run. It will be a string like this::
 
     ubuntu-2016-07-23_16:08:12-rados-hammer-backports---basic-openstack
 
-Even if you don't providing the ``--upload`` option, however, all the logs can
+Even if you do not providing the ``--upload`` option, however, all the logs can
 still be found on the teuthology machine in the directory
 ``/usr/share/nginx/html``.
 

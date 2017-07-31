@@ -67,7 +67,7 @@ approach. You must:
 	git config --global user.email johndoe@example.com
 
 
-#. Create a  `github`_ account (if you don't have one).
+#. Create a  `github`_ account (if you do not have one).
 
 #. Fork the Ceph project. See https://github.com/ceph/ceph.
 
@@ -135,14 +135,14 @@ http://tracker.ceph.com/issues/4000.
    contributions in a single pull request. Editors review the documentation
    and engineers review source code changes. When you keep documentation 
    pull requests separate from source code pull requests, it simplifies the 
-   process and we won't have to ask you to resubmit the requests separately.
+   process and we will not have to ask you to resubmit the requests separately.
 
-Before you create your branch name, ensure that it doesn't already exist in the
+Before you create your branch name, ensure that it does not already exist in the
 local or remote repository. ::
 
 	git branch -a | grep wip-doc-{your-branch-name}
 
-If it doesn't exist, create your branch::
+If it does not exist, create your branch::
 
 	git checkout -b wip-doc-{your-branch-name}
 
@@ -161,7 +161,7 @@ or a table of contents entry. The ``index.rst`` file of a top-level directory
 usually contains a TOC, where you can add the new file name. All documents must
 have a title. See `Headings`_ for details.
 
-Your new document doesn't get tracked by ``git`` automatically. When you want 
+Your new document does not get tracked by ``git`` automatically. When you want 
 to add the document to the repository,  you must use ``git add 
 {path-to-filename}``. For example, from the top level  directory of the
 repository, adding an ``example.rst`` file to the ``rados`` subdirectory would

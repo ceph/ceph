@@ -43,7 +43,7 @@ setup for CloudStack Primary Storage.
    you can use package installation instead of having to compile 
    libvirt from source.
 
-Installing and configuring QEMU for use with CloudStack doesn't require any
+Installing and configuring QEMU for use with CloudStack does not require any
 special handling. Ensure that you have a running Ceph Storage Cluster. Install
 QEMU and configure it for use with Ceph; then, install ``libvirt`` version
 0.9.13 or higher (you may need to compile from source) and ensure it is running
@@ -78,7 +78,7 @@ Create a Ceph User
 
 To access the Ceph cluster we require a Ceph user which has the correct
 credentials to access the ``cloudstack`` pool we just created. Although we could
-use ``client.admin`` for this, it's recommended to create a user with only
+use ``client.admin`` for this, it is recommended to create a user with only
 access to the ``cloudstack`` pool. ::
 
   ceph auth get-or-create client.cloudstack mon 'profile rbd' osd 'profile rbd pool=cloudstack'
@@ -113,7 +113,7 @@ Create a Disk Offering
 To create a new disk offering, refer to `Create a New Disk Offering (4.2.0)`_.
 Create a disk offering so that it matches the ``rbd`` tag.
 The ``StoragePoolAllocator`` will choose the  ``rbd``
-pool when searching for a suitable storage pool. If the disk offering doesn't
+pool when searching for a suitable storage pool. If the disk offering does not
 match the ``rbd`` tag, the ``StoragePoolAllocator`` may select the pool you
 created (e.g., ``cloudstack``).
 

@@ -24,7 +24,7 @@ returned 0), the ENOSPC error may not be seen until the application
 calls ``fsync`` or ``fclose`` (or equivalent) on the file handle.
 
 Calling ``fsync`` is guaranteed to reliably indicate whether the data
-made it to disk, and will return an error if it doesn't.  ``fclose`` will
+made it to disk, and will return an error if it does not.  ``fclose`` will
 only return an error if buffered data happened to be flushed since
 the last write -- a successful ``fclose`` does not guarantee that the
 data made it to disk, and in a full-space situation, buffered data

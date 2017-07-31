@@ -17,7 +17,7 @@ into K data chunks and M coding chunks. The pool is configured to have
 a size of K+M so that each chunk is stored in an OSD in the acting
 set. The rank of the chunk is stored as an attribute of the object.
 
-Let's say an erasure coded pool is created to use five OSDs ( K+M =
+Let us say an erasure coded pool is created to use five OSDs ( K+M =
 5 ) and sustain the loss of two of them ( M = 2 ).
 
 When the object *NYAN* containing *ABCDEFGHI* is written to it, the

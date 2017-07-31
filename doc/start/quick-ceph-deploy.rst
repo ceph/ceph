@@ -2,7 +2,7 @@
  Storage Cluster Quick Start
 =============================
 
-If you haven't completed your `Preflight Checklist`_, do that first. This
+If you have not completed your `Preflight Checklist`_, do that first. This
 **Quick Start** sets up a :term:`Ceph Storage Cluster` using ``ceph-deploy``
 on your admin node. Create a three Ceph Node cluster so you can
 explore Ceph functionality.

@@ -66,7 +66,7 @@ device.
 In order for mounting/unmounting to succeed, the friendly device name must
 have a corresponding entry in ``/etc/fstab``.
 
-When writing ``/etc/fstab`` entries for RBD images, it's a good idea to specify
+When writing ``/etc/fstab`` entries for RBD images, it is a good idea to specify
 the "noauto" (or "nofail") mount option. This prevents the init system from
 trying to mount the device too early - before the device in question even
 exists. (Since ``rbdmap.service``

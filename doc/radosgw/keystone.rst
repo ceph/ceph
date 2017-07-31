@@ -5,7 +5,7 @@
 It is possible to integrate the Ceph Object Gateway with Keystone, the OpenStack
 identity service. This sets up the gateway to accept Keystone as the users
 authority. A user that Keystone authorizes to access the gateway will also be
-automatically created on the Ceph Object Gateway (if didn't exist beforehand). A
+automatically created on the Ceph Object Gateway (if did not exist beforehand). A
 token that Keystone validates will be considered as valid by the gateway.
 
 The following configuration options are available for Keystone integration::

@@ -231,7 +231,7 @@ connecting to any OSD. Blacklisting is most often used to prevent a
 lagging metadata server from making bad changes to data on the OSDs.
 
 These commands are mostly only useful for failure testing, as
-blacklists are normally maintained automatically and shouldn't need
+blacklists are normally maintained automatically and should not need
 manual intervention. ::
 
 	ceph osd blacklist add ADDRESS[:source_port] [TIME]

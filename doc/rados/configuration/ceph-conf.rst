@@ -366,7 +366,7 @@ foregoing directory would evaluate to::
 
 	/var/lib/ceph/osd/ceph-0
 	
-You may override this path using the ``osd data`` setting. We don't recommend 
+You may override this path using the ``osd data`` setting. We do not recommend 
 changing the default location. Create the default directory on your OSD host.
 
 :: 

@@ -120,7 +120,7 @@ Where:
           ruleset must exist.
           For **erasure** pools it is ``erasure-code`` if the ``default``
           `erasure code profile`_ is used or ``{pool-name}`` otherwise.  This
-          ruleset will be created implicitly if it doesn't exist already.
+          ruleset will be created implicitly if it does not exist already.
 
 
 ``[erasure-code-profile=profile]``
@@ -213,7 +213,7 @@ If the ruleset was "123", for example, you can check the other pools like so::
 
 	ceph osd dump | grep "^pool" | grep "crush_ruleset 123"
 
-If no other pools use that custom ruleset, then it's safe to delete that
+If no other pools use that custom ruleset, then it is safe to delete that
 ruleset from the cluster.
 
 If you created users with permissions strictly for a pool that no longer
@@ -411,7 +411,7 @@ You may set values for the following keys:
               the number, the more RAM consumed by the ``ceph-osd`` daemon.
 
 :Type: Integer
-:Valid Range: ``1``. Agent doesn't handle > 1 yet.
+:Valid Range: ``1``. Agent does not handle > 1 yet.
 
 .. _hit_set_period:
 

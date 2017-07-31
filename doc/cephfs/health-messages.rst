@@ -88,7 +88,7 @@ complete and may therefore be forgotten about by the MDS.  If a buggy
 client is failing to advance this field, then the MDS may be prevented
 from properly cleaning up resources used by client requests.  This message
 appears if a client appears to have more than ``max_completed_requests``
-(default 100000) requests that are complete on the MDS side but haven't
+(default 100000) requests that are complete on the MDS side but have not
 yet been accounted for in the client's *oldest tid* value.
 
 Message: "Metadata damage detected"

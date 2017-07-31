@@ -112,7 +112,7 @@ Delete a Container
 
 .. note::
 
-   The container must be empty! Otherwise the request won't work!
+   The container must be empty! Otherwise the request will not work!
 
 .. code-block:: ruby
 

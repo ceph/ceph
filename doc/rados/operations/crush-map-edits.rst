@@ -214,7 +214,7 @@ and two node buckets named ``host`` and ``rack`` respectively.
 Since leaf nodes reflect storage devices declared under the ``#devices`` list
 at the beginning of the CRUSH map, you do not need to declare them as bucket
 instances. The second lowest bucket type in your hierarchy usually aggregates
-the devices (i.e., it's usually the computer containing the storage media, and
+the devices (i.e., it is usually the computer containing the storage media, and
 uses whatever term you prefer to describe it, such as  "node", "computer",
 "server," "host", "machine", etc.). In high density environments, it is
 increasingly common to see multiple hosts/nodes per chassis. You should account
@@ -484,7 +484,7 @@ Placing Different Pools on Different OSDS:
 
 Suppose you want to have most pools default to OSDs backed by large hard drives,
 but have some pools mapped to OSDs backed by fast solid-state drives (SSDs).
-It's possible to have multiple independent CRUSH hierarchies within the same
+It is possible to have multiple independent CRUSH hierarchies within the same
 CRUSH map. Define two hierarchies with two different root nodes--one for hard
 disks (e.g., "root platter") and one for SSDs (e.g., "root ssd") as shown
 below::

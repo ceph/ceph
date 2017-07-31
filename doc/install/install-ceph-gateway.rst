@@ -171,8 +171,8 @@ Migrating from Apache to Civetweb
 
 If you are running the Ceph Object Gateway on Apache and FastCGI with Ceph
 Storage v0.80 or above, you are already running Civetweb--it starts with the
-``ceph-radosgw`` daemon and it's running on port 7480 by default so that it
-doesn't conflict with your Apache and FastCGI installation and other commonly
+``ceph-radosgw`` daemon and it is running on port 7480 by default so that it
+does not conflict with your Apache and FastCGI installation and other commonly
 used web service ports. Migrating to use Civetweb basically involves removing
 your Apache installation. Then, you must remove Apache and FastCGI settings
 from your Ceph configuration file and reset ``rgw_frontends`` to Civetweb.
@@ -592,7 +592,7 @@ Replace ``{IP ADDRESS}`` with the public IP address of the gateway server and
 ``{swift_secret_key}`` with its value from the output of ``radosgw-admin key
 create`` command executed for the ``swift`` user. Replace {port} with the port
 number you are using with Civetweb (e.g., ``7480`` is the default). If you
-don't replace the port, it will default to port ``80``.
+do not replace the port, it will default to port ``80``.
 
 For example::
 

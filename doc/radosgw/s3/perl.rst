@@ -27,7 +27,7 @@ Listing Owned Buckets
 ---------------------
 
 This gets a list of `Amazon::S3::Bucket`_ objects that you own.
-We'll also print out the bucket name and creation date of each bucket.
+We will also print out the bucket name and creation date of each bucket.
 
 .. code-block:: perl
 
@@ -57,7 +57,7 @@ Listing a Bucket's Content
 --------------------------
 
 This gets a list of hashes with info about each object in the bucket.
-We'll also print out each object's name, the file size, and last
+We will also print out each object's name, the file size, and last
 modified date.
 
 .. code-block:: perl
@@ -77,7 +77,7 @@ Deleting a Bucket
 -----------------
 
 .. note::
-   The Bucket must be empty! Otherwise it won't work!
+   The Bucket must be empty! Otherwise it will not work!
 
 .. code-block:: perl
 

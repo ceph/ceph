@@ -73,7 +73,7 @@ You can use Graphviz_, as explained in the `Graphviz extension documentation`_.
      bar -> th
    }
 
-Most of the time, you'll want to put the actual DOT source in a
+Most of the time, you will want to put the actual DOT source in a
 separate file, like this::
 
   .. graphviz:: myfile.dot

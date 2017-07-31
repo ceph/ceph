@@ -162,7 +162,7 @@ will place data in the storage cluster. Via the I/O context, the client
 provides the object name to ``librados``, which takes the object name
 and the cluster map (i.e., the topology of the cluster) and `computes`_ the
 placement group and `OSD`_  for locating the data. Then the client application
-can read or write data. The client app doesn't need to learn about the topology
+can read or write data. The client app does not need to learn about the topology
 of the cluster directly.
 
 .. ditaa:: 
@@ -284,7 +284,7 @@ it and connecting to the cluster might look something like this:
 		err = rados_create2(&cluster, cluster_name, user_name, flags);
 
 		if (err < 0) {
-			fprintf(stderr, "%s: Couldn't create the cluster handle! %s\n", argv[0], strerror(-err));
+			fprintf(stderr, "%s: Could not create the cluster handle! %s\n", argv[0], strerror(-err));
 			exit(EXIT_FAILURE);
 		} else {
 			printf("\nCreated a cluster handle.\n");
@@ -353,7 +353,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 		{
 			ret = cluster.init2(user_name, cluster_name, flags);
 			if (ret < 0) {
-				std::cerr << "Couldn't initialize the cluster handle! error " << ret << std::endl;
+				std::cerr << "Could not initialize the cluster handle! error " << ret << std::endl;
 				return EXIT_FAILURE;
 			} else {
 				std::cout << "Created a cluster handle." << std::endl;
@@ -364,7 +364,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 		{	
 			ret = cluster.conf_read_file("/etc/ceph/ceph.conf");	
 			if (ret < 0) {
-				std::cerr << "Couldn't read the Ceph configuration file! error " << ret << std::endl;
+				std::cerr << "Could not read the Ceph configuration file! error " << ret << std::endl;
 				return EXIT_FAILURE;
 			} else {
 				std::cout << "Read the Ceph configuration file." << std::endl;
@@ -375,7 +375,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 		{
 			ret = cluster.conf_parse_argv(argc, argv);
 			if (ret < 0) {
-				std::cerr << "Couldn't parse command line options! error " << ret << std::endl;
+				std::cerr << "Could not parse command line options! error " << ret << std::endl;
 				return EXIT_FAILURE;
 			} else {
 				std::cout << "Parsed command line options." << std::endl;
@@ -386,7 +386,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 		{
 			ret = cluster.connect();
 			if (ret < 0) {
-				std::cerr << "Couldn't connect to cluster! error " << ret << std::endl;
+				std::cerr << "Could not connect to cluster! error " << ret << std::endl;
 				return EXIT_FAILURE;
 			} else {
 				std::cout << "Connected to the cluster." << std::endl;
@@ -476,7 +476,7 @@ binding converts C++-based errors into exceptions.
 
 
 Compile the source; then, run it. If you have copied the JAR to
-``/usr/share/java`` and sym linked from your ``ext`` directory, you won't need
+``/usr/share/java`` and sym linked from your ``ext`` directory, you will not need
 to specify the classpath. For example::
 
 	javac CephClient.java
@@ -715,7 +715,7 @@ C++ Example
 		{
 			ret = cluster.ioctx_create(pool_name, io_ctx);
 			if (ret < 0) {
-				std::cerr << "Couldn't set up ioctx! error " << ret << std::endl;
+				std::cerr << "Could not set up ioctx! error " << ret << std::endl;
 				exit(EXIT_FAILURE);
 			} else {
 				std::cout << "Created an ioctx for the pool." << std::endl;
@@ -729,7 +729,7 @@ C++ Example
 			bl.append("Hello World!");
 			ret = io_ctx.write_full("hw", bl);
 			if (ret < 0) {
-				std::cerr << "Couldn't write object! error " << ret << std::endl;
+				std::cerr << "Could not write object! error " << ret << std::endl;
 				exit(EXIT_FAILURE);
 			} else {
 				std::cout << "Wrote new object 'hw' " << std::endl;
@@ -767,7 +767,7 @@ C++ Example
 			//Send read request.
 			ret = io_ctx.aio_read("hw", read_completion, &read_buf, read_len, 0);
 			if (ret < 0) {
-				std::cerr << "Couldn't start read object! error " << ret << std::endl;
+				std::cerr << "Could not start read object! error " << ret << std::endl;
 				exit(EXIT_FAILURE);
 			}
 
@@ -775,7 +775,7 @@ C++ Example
 			read_completion->wait_for_complete();
 			ret = read_completion->get_return_value();
 			if (ret < 0) {
-				std::cerr << "Couldn't read object! error " << ret << std::endl;
+				std::cerr << "Could not read object! error " << ret << std::endl;
 				exit(EXIT_FAILURE);
 			} else {
 				std::cout << "Read object hw asynchronously with contents.\n"
@@ -821,7 +821,7 @@ C++ Example
 		{
 			ret = io_ctx.remove("hw");
 			if (ret < 0) {
-				std::cerr << "Couldn't remove object! error " << ret << std::endl;
+				std::cerr << "Could not remove object! error " << ret << std::endl;
 				exit(EXIT_FAILURE);
 			} else {
 				std::cout << "Removed object 'hw'." << std::endl;

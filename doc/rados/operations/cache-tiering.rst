@@ -170,7 +170,7 @@ Setting up a cache pool follows the same procedure as the standard storage
 scenario, but with this difference: the drives for the cache tier are typically
 high performance drives that reside in their own servers and have their own
 ruleset.  When setting up a ruleset, it should take account of the hosts that
-have the high performance drives while omitting the hosts that don't. See
+have the high performance drives while omitting the hosts that do not. See
 `Placing Different Pools on Different OSDs`_ for details.
 
 
@@ -252,9 +252,9 @@ accessed an object at least once, or more than once over a time period
 The ``min_read_recency_for_promote`` defines how many HitSets to check for the
 existence of an object when handling a read operation. The checking result is
 used to decide whether to promote the object asynchronously. Its value should be
-between 0 and ``hit_set_count``. If it's set to 0, the object is always promoted.
-If it's set to 1, the current HitSet is checked. And if this object is in the
-current HitSet, it's promoted. Otherwise not. For the other values, the exact
+between 0 and ``hit_set_count``. If it is set to 0, the object is always promoted.
+If it is set to 1, the current HitSet is checked. And if this object is in the
+current HitSet, it is promoted. Otherwise not. For the other values, the exact
 number of archive HitSets are checked. The object is promoted if the object is
 found in any of the most recent ``min_read_recency_for_promote`` HitSets.
 
@@ -280,7 +280,7 @@ The cache tiering agent performs two main functions:
 - **Flushing:** The agent identifies modified (or dirty) objects and forwards
   them to the storage pool for long-term storage.
   
-- **Evicting:** The agent identifies objects that haven't been modified 
+- **Evicting:** The agent identifies objects that have not been modified 
   (or clean) and evicts the least recently used among them from the cache.
 
 

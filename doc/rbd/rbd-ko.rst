@@ -18,7 +18,7 @@ Map a Block Device
 
 Use ``rbd`` to map an image name to a kernel module. You must specify the 
 image name, the pool name, and the user name. ``rbd`` will load RBD kernel
-module on your behalf if it's not already loaded. ::
+module on your behalf if it is not already loaded. ::
 
   sudo rbd map {pool-name}/{image-name} --id {user-name}
 

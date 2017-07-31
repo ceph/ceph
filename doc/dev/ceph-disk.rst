@@ -43,7 +43,7 @@ under which, settings are stored using plain files:
 - journal_uuid: the partition uuid for the journal device
 - block.db_uuid: the partition uuid for the block.db device
 - block.wal_uuid: the partition uuid for the block.wal device
-- magic: a magic string indicating that this partition is a lockbox. It's not used currently.
+- magic: a magic string indicating that this partition is a lockbox. It is not used currently.
 - ``${space_uuid}``: symbolic links named after the uuid of space partitions pointing to  ``/var/lib/ceph/osd-lockbox/$uuid``. in the case of FileStore, the space partitions are ``data`` and ``journal`` partitions, for BlueStore, they are ``data``, ``block.db`` and ``block.wal``.
 
 Currently, ``ceph-mon v1`` is the only supported key-management-mode. In that case, the LUKS key is stored using the config-key in the monitor store with the key of ``dm-crypt/osd/$uuid/luks``.

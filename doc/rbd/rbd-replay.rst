@@ -27,7 +27,7 @@ Capture and replay takes three steps:
     rbd-replay-prep traces/ust/uid/*/* replay.bin
 
 #. Replay the trace with `rbd-replay`_. Use read-only until you know 
-   it's doing what you want::
+   it is doing what you want::
 
     rbd-replay --read-only replay.bin
 

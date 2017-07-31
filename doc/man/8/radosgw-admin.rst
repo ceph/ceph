@@ -358,7 +358,7 @@ Options
 
 .. option:: --skip-zero-entries
 
-	Log show only dumps entries that don't have zero value in one of the numeric
+	Log show only dumps entries that do not have zero value in one of the numeric
 	field.
 
 .. option:: --infile

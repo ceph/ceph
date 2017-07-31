@@ -353,7 +353,7 @@ Operations
 Operations settings allow you to configure the number of threads for servicing
 requests. If you set ``osd op threads`` to ``0``, it disables multi-threading.
 By default, Ceph  uses two threads with a 30 second timeout and a 30 second
-complaint time if an operation doesn't complete within those time parameters.
+complaint time if an operation does not complete within those time parameters.
 You can set operations priority weights between client operations and
 recovery operations to ensure optimal performance during recovery.
 
@@ -561,11 +561,11 @@ as long as it requires. Assuming there are 2 services: recovery and client ops:
 - recovery: (r:1, l:5, w:1)
 - client ops: (r:2, l:0, w:9)
 
-The settings above ensure that the recovery won't take never more than 5 units
+The settings above ensure that the recovery will not take never more than 5 units
 of resources even if it requires so, and no other services are competing with
 it. But if the clients start to issue large amount of I/O requests, neither
 will they exhaust all the I/O resources. 1 unit of resources is always
-allocated for recovery jobs. So the recovery jobs won't be starved even in
+allocated for recovery jobs. So the recovery jobs will not be starved even in
 a cluster with high load. And in the meantime, the client ops can enjoy
 a larger portion of the I/O resource, because its weight is "9", while its
 competitor "1". In the case of client ops, it is not clamped by the limit

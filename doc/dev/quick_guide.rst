@@ -34,7 +34,7 @@ You can also configure ``vstart.sh`` to use only one monitor and one metadata se
 
 	$ MON=1 MDS=1 ../src/vstart.sh -d -n -x
 
-The system creates three pools on startup: `cephfs_data`, `cephfs_metadata`, and `rbd`.  Let's get some stats on
+The system creates three pools on startup: `cephfs_data`, `cephfs_metadata`, and `rbd`.  Let us get some stats on
 the current pools:
 
 .. code::

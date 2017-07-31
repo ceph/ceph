@@ -61,25 +61,25 @@ When a prepare operation is performed, the new data is written into a
 temporary object. The PG log for the
 operation will contain a reference to the temporary object so that it
 can be located for recovery purposes as well as a record of all of the
-shards which are involved in the operation. 
+shards which are involved in the operation.
 
 In order to avoid fragmentation (and hence, future read performance),
 creation of the temporary object needs special attention. The name of
 the temporary object affects its location within the KV store. Right
-now its unclear whether it's desirable for the name to locate near the
+now it is unclear whether it is desirable for the name to locate near the
 base object or whether a separate subset of keyspace should be used
 for temporary objects. Sam believes that colocation with the base
 object is preferred (he suggests using the generation counter of the
 ghobject for temporaries).  Whereas Allen believes that using a
 separate subset of keyspace is desirable since these keys are
-ephemeral and we don't want to actually colocate them with the base
+ephemeral and we do not want to actually colocate them with the base
 object keys. Perhaps some modeling here can help resolve this
 issue. The data of the temporary object wants to be located as close
 to the data of the base object as possible. This may be best performed
 by adding a new ObjectStore creation primitive that takes the base
 object as an addtional parameter that is a hint to the allocator.
 
-Sam: I think that the short lived thing may be a red herring.  We'll
+Sam: I think that the short lived thing may be a red herring.  We will
 be updating the donor and primary objects atomically, so it seems like
 we'd want them adjacent in the key space, regardless of the donor's
 lifecycle.
@@ -111,7 +111,7 @@ data. It should explicitly recognized that it is likely that there
 will be multiple prepare operations against a single base object and
 the code must handle this case correctly. This code is implemented as
 a layer between ObjectStore and all existing readers.  Annoyingly,
-we'll want to trash this state when the interval changes, so the first
+we will want to trash this state when the interval changes, so the first
 thing that needs to happen after activation is that the primary and
 replicas apply up to last_update so that the empty cache will be
 correct.
@@ -166,7 +166,7 @@ to the client -- and the last entry gives us our last_update.
 Deep scrub support
 ------------------
 
-The simple answer here is probably our best bet.  EC pools can't use
+The simple answer here is probably our best bet.  EC pools cannot use
 the omap namespace at all right now.  The simplest solution would be
 to take a prefix of the omap space and pack N M byte L bit checksums
 into each key/value.  The prefixing seems like a sensible precaution
@@ -174,7 +174,7 @@ against eventually wanting to store something else in the omap space.
 It seems like any write will need to read at least the blocks
 containing the modified range.  However, with a code able to compute
 parity deltas, we may not need to read a whole stripe.  Even without
-that, we don't want to have to write to blocks not participating in
+that, we do not want to have to write to blocks not participating in
 the write.  Thus, each shard should store checksums only for itself.
 It seems like you'd be able to store checksums for all shards on the
 parity blocks, but there may not be distinguished parity blocks which
@@ -208,14 +208,14 @@ Inconsistent object_info_t versions
 ===================================
 
 A natural consequence of only writing the blocks which actually
-changed is that we don't want to update the object_info_t of the
-objects which didn't.  I actually think it would pose a problem to do
+changed is that we do not want to update the object_info_t of the
+objects which did not.  I actually think it would pose a problem to do
 so: pg ghobject namespaces are generally large, and unless the osd is
-seeing a bunch of overwrites on a small set of objects, I'd expect
+seeing a bunch of overwrites on a small set of objects, I would expect
 each write to be far enough apart in the backing ghobject_t->data
 mapping to each constitute a random metadata update.  Thus, we have to
 accept that not every shard will have the current version in its
-object_info_t.  We can't even bound how old the version on a
+object_info_t.  We cannot even bound how old the version on a
 particular shard will happen to be.  In particular, the primary does
 not necessarily have the current version.  One could argue that the
 parity shards would always have the current version, but not every
@@ -226,7 +226,7 @@ if you chose to designate a shard as witnessing all writes, the pg
 might be degraded with that particular shard missing.  This is a bit
 tricky, currently reads and writes implicitely return the most recent
 version of the object written.  On reads, we'd have to read K shards
-to answer that question.  We can get around that by adding a "don't
+to answer that question.  We can get around that by adding a "do not
 tell me the current version" flag.  Writes are more problematic: we
 need an object_info from the most recent write in order to form the
 new object_info and log_entry.
@@ -245,7 +245,7 @@ specific purposes it serves:
    assert it atomically on writesto allow the user to deal with write
    races (used extensively by rbd).
 
-Case (3) isn't actually essential, just convenient.  Oh well.  (4)
+Case (3) is not actually essential, just convenient.  Oh well.  (4)
 is more annoying. Writes are easy since we know the version.  Reads
 are tricky because we may not need to read from all of the replicas.
 Simplest solution is to add a flag to rados operations to just not
@@ -254,7 +254,7 @@ user version assert on ec for now (I think?  Only user is rgw bucket
 indices iirc, and those will always be on replicated because they use
 omap).
 
-We can avoid (1) by maintaining the missing set explicitely.  It's
+We can avoid (1) by maintaining the missing set explicitely.  It is
 already possible for there to be a missing object without a
 corresponding log entry (Consider the case where the most recent write
 is to an object which has not been updated in weeks.  If that write
@@ -262,22 +262,22 @@ becomes divergent, the written object needs to be marked missing based
 on the prior_version which is not in the log.)  THe PGLog already has
 a way of handling those edge cases (see divergent_priors).  We'd
 simply expand that to contain the entire missing set and maintain it
-atomically with the log and the objects.  This isn't really an
+atomically with the log and the objects.  This is not really an
 unreasonable option, the addiitonal keys would be fewer than the
-existing log keys + divergent_priors and aren't updated in the fast
+existing log keys + divergent_priors and are not updated in the fast
 write path anyway.
 
-The second case is a bit trickier.  It's really an optimization for
+The second case is a bit trickier.  It is really an optimization for
 the case where a pg became not in the acting set long enough for the
 logs to no longer overlap but not long enough for the PG to have
 healed and removed the old copy.  Unfortunately, this describes the
-case where a node was taken down for maintenance with noout set. It's
+case where a node was taken down for maintenance with noout set. It is
 probably not acceptable to re-backfill the whole OSD in such a case,
 so we need to be able to quickly determine whether a particular shard
 is up to date given a valid acting set of other shards.
 
 Let ordinary writes which do not change the object size not touch the
-object_info at all.  That means that the object_info version won't
+object_info at all.  That means that the object_info version will not
 match the pg log entry version.  Include in the pg_log_entry_t the
 current object_info version as well as which shards participated (as
 mentioned above).  In addition to the object_info_t attr, record on
@@ -293,7 +293,7 @@ recovery, we set the attribute on the recovery target to that max
 vector (Question: with LRC, we may not need to touch much of the
 acting set to recover a particular shard -- can we just use the max of
 the shards we used to recovery, or do we need to grab the version
-vector from the rest of the acting set as well?  I'm not sure, not a
+vector from the rest of the acting set as well?  I am not sure, not a
 big deal anyway, I think).
 
 The above lets us perform blind writes without knowing the current
@@ -311,28 +311,28 @@ Implementation Strategy
 =======================
 
 It goes without saying that it would be unwise to attempt to do all of
-this in one massive PR.  It's also not a good idea to merge code which
-isn't being tested.  To that end, it's worth thinking a bit about
+this in one massive PR.  It is also not a good idea to merge code which
+is not being tested.  To that end, it is worth thinking a bit about
 which bits can be tested on their own (perhaps with a bit of temporary
 scaffolding).
 
 We can implement the overwrite friendly checksumming scheme easily
-enough with the current implementation.  We'll want to enable it on a
-per-pool basis (probably using a flag which we'll later repurpose for
+enough with the current implementation.  We will want to enable it on a
+per-pool basis (probably using a flag which we will later repurpose for
 actual overwrite support).  We can enable it in some of the ec
 thrashing tests in the suite.  We can also add a simple test
 validating the behavior of turning it on for an existing ec pool
-(later, we'll want to be able to convert append-only ec pools to
+(later, we will want to be able to convert append-only ec pools to
 overwrite ec pools, so that test will simply be expanded as we go).
 The flag should be gated by the experimental feature flag since we
-won't want to support this as a valid configuration -- testing only.
+will not want to support this as a valid configuration -- testing only.
 We need to upgrade append only ones in place during deep scrub.
 
 Similarly, we can implement the unstable extent cache with the current
 implementation, it even lets us cut out the readable ack the replicas
 send to the primary after the commit which lets it release the lock.
 Same deal, implement, gate with experimental flag, add to some of the
-automated tests.  I don't really see a reason not to use the same flag
+automated tests.  I do not really see a reason not to use the same flag
 as above.
 
 We can certainly implement the move-range primitive with unit tests
@@ -351,17 +351,17 @@ implemented immediately.  Mostly just needs unit tests.
 The version vector problem is an interesting one.  For append only EC
 pools, it would be pointless since all writes increase the size and
 therefore update the object_info.  We could do it for replicated pools
-though.  It's a bit silly since all "shards" see all writes, but it
+though.  It is a bit silly since all "shards" see all writes, but it
 would still let us implement and partially test the augmented backfill
 code as well as the extra pg log entry fields -- this depends on the
-explicit pg log entry branch having already merged.  It's not entirely
-clear to me that this one is worth doing seperately.  It's enough code
-that I'd really prefer to get it done independently, but it's also a
+explicit pg log entry branch having already merged.  It is not entirely
+clear to me that this one is worth doing seperately.  It is enough code
+that I would really prefer to get it done independently, but it is also a
 fair amount of scaffolding that will be later discarded.
 
 PGLog entries need to be able to record the participants and log
 comparison needs to be modified to extend logs with entries they
-wouldn't have witnessed.  This logic should be abstracted behind
+would not have witnessed.  This logic should be abstracted behind
 PGLog so it can be unittested -- that would let us test it somewhat
 before the actual ec overwrites code merges.
 
@@ -370,7 +370,7 @@ done independently of the rest of this (pending resolution of
 questions below).
 
 The actual nuts and bolts of performing the ec overwrite it seems to
-me can't be productively tested (and therefore implemented) until the
+me cannot be productively tested (and therefore implemented) until the
 above are complete, so best to get all of the supporting code in
 first.
 

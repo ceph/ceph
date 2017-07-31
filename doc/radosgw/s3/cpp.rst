@@ -175,7 +175,7 @@ Deleting a Bucket
 
 .. note::
 
-   The Bucket must be empty! Otherwise it won't work!
+   The Bucket must be empty! Otherwise it will not work!
 
 .. code-block:: cpp
 

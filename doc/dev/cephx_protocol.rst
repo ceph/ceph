@@ -91,10 +91,10 @@ The client is set up to know that it needs certain things, using a variable call
 which is part of the ``AuthClientHandler`` class, which the ``CephxClientHandler`` inherits 
 from.  At this point, one thing that's encoded in the ``need`` variable is 
 ``CEPH_ENTITY_TYPE_AUTH``, indicating that we need to start the authentication protocol 
-from scratch.  Since we're always talking to the same authorization server, if we've gone 
-through this step of the protocol before (and the resulting ticket/session hasn't timed out), 
+from scratch.  Since we are always talking to the same authorization server, if we have gone 
+through this step of the protocol before (and the resulting ticket/session has not timed out), 
 we can skip this step and just ask for client tickets.  But it must be done initially, and 
-we'll assume that we are in that state.
+we will assume that we are in that state.
 
 The message C sends to A in phase I is build in ``CephxClientHandler::build_request()`` (in 
 ``auth/cephx/CephxClientHandler.cc``).  This routine is used for more than one purpose.  
@@ -109,15 +109,15 @@ cases.  The case here is when we still need to authenticate to A (the
 ``if (need & CEPH_ENTITY_TYPE_AUTH)`` branch).
 
 We now create a message of type ``CEPH_AUTH_UNKNOWN``.  We need to authenticate 
-this message with C's secret key, so we fetch that from the local key repository.  (It's 
-called a key server in the code, but it's not really a separate machine or processing entity.
-It's more like the place where locally used keys are kept.)  We create a 
+this message with C's secret key, so we fetch that from the local key repository.  (It is 
+called a key server in the code, but it is not really a separate machine or processing entity.
+It is more like the place where locally used keys are kept.)  We create a 
 random challenge, whose purpose is to prevent replays.  We encrypt that challenge.  We already 
 have a server challenge (a similar set of random bytes, but created by the server and sent to
 the client) from our pre-cephx stage.  We take both challenges and our secret key and 
 produce a combined encrypted challenge value, which goes into ``req.key``.
 
-If we have an old ticket, we store it in ``req.old_ticket``.  We're about to get a new one.
+If we have an old ticket, we store it in ``req.old_ticket``.  We are about to get a new one.
 
 The entire ``req`` structure, including the old ticket and the cryptographic hash of the two 
 challenges, gets put into the message.  Then we return from this function, and the 
@@ -134,13 +134,13 @@ secret key A shares with C, so we call ``get_secret()`` from out local key repos
 it.  We should have set up a server challenge already with this client, so we make sure 
 we really do have one.  (This variable is specific to a ``CephxServiceHandler``, so there 
 is a different one for each such structure we create, presumably one per client A is 
-dealing with.)  If there is no challenge, we'll need to start over, since we need to 
+dealing with.)  If there is no challenge, we will need to start over, since we need to 
 check the client's crypto hash, which depends on a server challenge, in part.
 
 We now call the same routine the client used to calculate the hash, based on the same values: 
 the client challenge (which is in the incoming message), the server challenge (which we saved), 
 and the client's key (which we just obtained).  We check to see if the client sent the same 
-thing we expected.  If so, we know we're talking to the right client.  We know the session is 
+thing we expected.  If so, we know we are talking to the right client.  We know the session is 
 fresh, because it used the challenge we sent it to calculate its crypto hash.  So we can
 give it an authentication ticket.
 
@@ -148,7 +148,7 @@ We fetch C's ``eauth`` structure.  This contains an ID, a key, and a set of caps
 
 The client sent us its old ticket in the message, if it had one.  If so, we set a flag,
 ``should_enc_ticket``, to true and set the global ID to the global ID in that old ticket.  
-If the attempt to decode its old ticket fails (most probably because it didn't have one),
+If the attempt to decode its old ticket fails (most probably because it did not have one),
 ``should_enc_ticket`` remains false.  Now we set up the new ticket, filling in timestamps, 
 the name of C, the global ID provided in the method call (unless there was an old ticket), and 
 his ``auid``, obtained from the ``eauth`` structure obtained above.  We need a new session key 
@@ -168,14 +168,14 @@ permanent keys.
 
 Then we call the key server's ``get_service_caps()`` routine on the entity name, with a 
 flag ``CEPH_ENTITY_TYPE_MON``, and capabilities, which will be filled in by this routine.  
-The use of that constant flag means we're going to get the client's caps for A, not for some 
+The use of that constant flag means we are going to get the client's caps for A, not for some 
 other data server.  The ticket here is to access the authorizer A, not the service S.  The 
-result of this call is that the caps variable  (a parameter to the routine we're in) is 
+result of this call is that the caps variable  (a parameter to the routine we are in) is 
 filled in with the monitor capabilities that will allow C to  access A's authorization services.
 
 ``handle_request()`` itself does not send the response message.  It builds up the 
 ``result_bl``, which basically holds that message's contents, and the capabilities structure, 
-but it doesn't send the message.  We go back to ``prep_auth()``, in ``mon/AuthMonitor.cc``, 
+but it does not send the message.  We go back to ``prep_auth()``, in ``mon/AuthMonitor.cc``, 
 for that.    This routine does some fiddling around with the caps structure that just got 
 filled in.  There's a global ID that comes up as a result of this fiddling that is put into 
 the reply message.  The reply message is built here (mostly from the ``response_bl`` buffer) 
@@ -208,7 +208,7 @@ structure with the current session key and stuff it into the authorizer's buffer
 return the authorizer.
 
 Back in ``build_request()``, we take the part of the authorizer that was just built (its 
-buffer, not the session key or anything else) and shove it into the buffer we're creating 
+buffer, not the session key or anything else) and shove it into the buffer we are creating 
 for the message that will go to A.  Then we delete the authorizer.  We put the requirements 
 for what we want in ``req.keys``, and we put ``req`` into the buffer.  Then we return, and 
 the message gets sent.
@@ -244,8 +244,8 @@ Having verified that the message is valid and from C, now we need to build it a 
 We need to know what S it wants to communicate with and what services it wants.  Pull the
 ticket request that describes those things out of its message.  Now run through the ticket
 request to see what it wanted.  (He could potentially be asking for multiple different
-services in the same request, but we will assume it's just one, for this discussion.)  Once we 
-know which service ID it's after, call ``build_session_auth_info()``.
+services in the same request, but we will assume it is just one, for this discussion.)  Once we 
+know which service ID it is after, call ``build_session_auth_info()``.
 
 ``build_session_auth_info()`` is in ``CephxKeyServer.cc``.  It checks to see if the 
 secret for the ``service_ID`` of S is available and puts it into the subfield of one of 
@@ -302,7 +302,7 @@ We then call ``verify_service_ticket_reply()``, in ``CephxProtocol.cc``.  This r
 needs to determine if the ticket is OK and also obtain the session key associated with this 
 ticket.  It decrypts the encrypted portion of the message buffer, using the session key 
 shared with A.  This ticket was not encrypted (well, not twice - tickets are always encrypted, 
-but sometimes double encrypted, which this one isn't).  So it can be stored in a service 
+but sometimes double encrypted, which this one is not).  So it can be stored in a service 
 ticket buffer directly.  We now grab the ticket out of that buffer.  
 
 The stuff we decrypted with the session key shared between C and A included the new session 
@@ -310,12 +310,12 @@ key.  That's our current session key for this ticket, so set it.  Check validity
 set the expiration times.  Now return true, if we got this far.  
 
 Back in ``handle_response()``, we now call ``validate_tickets()`` to adjust what we think 
-we need, since we now have a ticket we didn't have before.  If we've taken care of 
-everything we need, we'll return 0.
+we need, since we now have a ticket we did not have before.  If we have taken care of 
+everything we need, we will return 0.
 
 This ends phase II of the protocol.  We have now successfully set up a ticket and session key 
 for client C to talk to server S.  S will know that C is who it claims to be, since A will
-verify it.  C will know it is S it's talking to, again because A verified it.  The only
+verify it.  C will know it is S it is talking to, again because A verified it.  The only
 copies of the session key for C and S to communicate were sent encrypted under the permanent
 keys of C and S, respectively, so no other party (excepting A, who is trusted by all) knows
 that session key.  The ticket will securely indicate to S what C is allowed to do, attested 
@@ -332,4 +332,4 @@ keys until S's permanent key is changed or the old tickets time out.
 Compromise of S's key means that the attacker can pose as S to anyone, and can eavesdrop on 
 any user's conversation with S.  Unless some client's key is also compromised, the attacker
 cannot generate new fake client tickets for S, since doing so requires it to authenticate
-himself as A, using the client key it doesn't know.
+himself as A, using the client key it does not know.

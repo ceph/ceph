@@ -4,7 +4,7 @@
  Internal developer documentation
 ==================================
 
-.. note:: If you're looking for how to use Ceph as a library from your
+.. note:: If you are looking for how to use Ceph as a library from your
    own software, please see :doc:`/api/index`.
 
 You can start a development mode Ceph cluster, after compiling the source, with::
@@ -12,7 +12,7 @@ You can start a development mode Ceph cluster, after compiling the source, with:
 	cd src
 	install -d -m0755 out dev/osd0
 	./vstart.sh -n -x -l
-	# check that it's there
+	# check that it is there
 	./ceph health
 
 .. todo:: vstart is woefully undocumented and full of sharp sticks to poke yourself with.

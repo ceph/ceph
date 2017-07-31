@@ -63,7 +63,7 @@ There are several reasons to consider operating two separate networks:
    attack. When traffic between Ceph OSD Daemons gets disrupted, placement 
    groups may no longer reflect an ``active + clean`` state, which may prevent 
    users from reading and writing data. A great way to defeat this type of 
-   attack is to maintain a completely separate cluster network that doesn't 
+   attack is to maintain a completely separate cluster network that does not 
    connect directly to the internet. Also, consider using `Message Signatures`_ 
    to defeat spoofing attacks.
 
@@ -171,7 +171,7 @@ with client and server on the same network and subnet. Ceph functions just fine
 with a public network only. However, Ceph allows you to establish much more
 specific criteria, including multiple IP network and subnet masks for your
 public network. You can also establish a separate cluster network to handle OSD
-heartbeat, object replication and recovery traffic. Don't confuse the IP
+heartbeat, object replication and recovery traffic. Do not confuse the IP
 addresses you set in your configuration with the public-facing IP addresses
 network clients may use to access your service. Typical internal IP networks are
 often ``192.168.0.0`` or ``10.0.0.0``.
@@ -269,7 +269,7 @@ the daemon instance sections of your ``ceph.conf`` file.
    to the ``[osd.n]`` section of the Ceph configuration file, where ``n`` 
    refers to the number of the OSD with one NIC. Additionally, the public
    network and cluster network must be able to route traffic to each other, 
-   which we don't recommend for security reasons.
+   which we do not recommend for security reasons.
 
 
 Network Config Settings

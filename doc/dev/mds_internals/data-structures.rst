@@ -11,7 +11,7 @@ MDS internal data structures
   to any CInode). A CInode may be linked by multiple CDentries.
 
 *CDir*
-  CDir only exists for directory inode, it's used to link CDentries under the
+  CDir only exists for directory inode, it is used to link CDentries under the
   directory. A CInode can have multiple CDir when the directory is fragmented.
 
 These data structures are linked together as::

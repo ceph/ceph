@@ -172,4 +172,4 @@ This deletes a container named "my-new-container":
        Container container = account.getContainer("my-new-container");
        container.delete();
 	
-.. note:: The container must be empty! Otherwise it won't work!
+.. note:: The container must be empty! Otherwise it will not work!

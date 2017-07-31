@@ -1,31 +1,31 @@
-=================================
+==========================
  Troubleshooting Monitors
-=================================
+==========================
 
 .. index:: monitor, high availability
 
 When a cluster encounters monitor-related troubles there's a tendency to
 panic, and some times with good reason. You should keep in mind that losing
-a monitor, or a bunch of them, don't necessarily mean that your cluster is
+a monitor, or a bunch of them, do not necessarily mean that your cluster is
 down, as long as a majority is up, running and with a formed quorum.
 Regardless of how bad the situation is, the first thing you should do is to
 calm down, take a breath and try answering our initial troubleshooting script.
 
 
 Initial Troubleshooting
-========================
+=======================
 
 
 **Are the monitors running?**
 
   First of all, we need to make sure the monitors are running. You would be
   amazed by how often people forget to run the monitors, or restart them after
-  an upgrade. There's no shame in that, but let's try not losing a couple of
+  an upgrade. There's no shame in that, but let us try not losing a couple of
   hours chasing an issue that is not there.
 
 **Are you able to connect to the monitor's servers?**
 
-  Doesn't happen often, but sometimes people do have ``iptables`` rules that
+  Does not happen often, but sometimes people do have ``iptables`` rules that
   block accesses to monitor servers or monitor ports. Usually leftovers from
   monitor stress-testing that were forgotten at some point. Try ssh'ing into
   the server and, if that succeeds, try connecting to the monitor's port
@@ -43,9 +43,9 @@ Initial Troubleshooting
   enough to form a quorum (keep in mind that a quorum if formed by a majority
   of monitors).
 
-**What if ceph -s doesn't finish?**
+**What if ceph -s does not finish?**
 
-  If you haven't gone through all the steps so far, please go back and do.
+  If you have not gone through all the steps so far, please go back and do.
 
   For those running on Emperor 0.72-rc1 and forward, you will be able to
   contact each monitor individually asking them for their status, regardless
@@ -54,7 +54,7 @@ Initial Troubleshooting
   in the cluster. In section `Understanding mon_status`_ we will explain how
   to interpret the output of this command.
 
-  For the rest of you who don't tread on the bleeding edge, you will need to
+  For the rest of you who do not tread on the bleeding edge, you will need to
   ssh into the server and use the monitor's admin socket. Please jump to
   `Using the monitor's admin socket`_.
 
@@ -62,12 +62,12 @@ For other specific issues, keep on reading.
 
 
 Using the monitor's admin socket
-=================================
+================================
 
 The admin socket allows you to interact with a given daemon directly using a
 Unix socket file. This file can be found in your monitor's ``run`` directory.
 By default, the admin socket will be kept in ``/var/run/ceph/ceph-mon.ID.asok``
-but this can vary if you defined it otherwise. If you don't find it there,
+but this can vary if you defined it otherwise. If you do not find it there,
 please check your ``ceph.conf`` for an alternative path or run::
 
   ceph-conf --name mon.ID --show-config-value admin_socket
@@ -96,16 +96,16 @@ as those can be enlightening when troubleshooting a monitor.
 
 
 Understanding mon_status
-=========================
+========================
 
 ``mon_status`` can be obtained through the ``ceph`` tool when you have
-a formed quorum, or via the admin socket if you don't. This command will
+a formed quorum, or via the admin socket if you do not. This command will
 output a multitude of information about the monitor, including the same
 output you would get with ``quorum_status``.
 
 Take the following example of ``mon_status``::
 
-  
+
   { "name": "c",
     "rank": 2,
     "state": "peon",
@@ -154,7 +154,7 @@ By the way, how are ranks established?
   the remaining ``IP:PORT`` combinations, ``mon.a`` has rank 0.
 
 Most Common Monitor Issues
-===========================
+==========================
 
 Have Quorum but at least one Monitor is down
 ---------------------------------------------
@@ -175,7 +175,7 @@ How to troubleshoot this?
   all your monitor nodes and make sure you are not dropping/rejecting
   connections.
 
-  If this initial troubleshooting doesn't solve your problems, then it's
+  If this initial troubleshooting does not solve your problems, then it is
   time to go deeper.
 
   First, check the problematic monitor's ``mon_status`` via the admin
@@ -208,10 +208,10 @@ What if the state is ``probing``?
   troubleshooting, then there is a fair chance that the monitor is trying
   to reach the other monitors on a wrong address. ``mon_status`` outputs the
   ``monmap`` known to the monitor: check if the other monitor's locations
-  match reality. If they don't, jump to
+  match reality. If they do not, jump to
   `Recovering a Monitor's Broken monmap`_; if they do, then it may be related
   to severe clock skews amongst the monitor nodes and you should refer to
-  `Clock Skews`_ first, but if that doesn't solve your problem then it is
+  `Clock Skews`_ first, but if that does not solve your problem then it is
   the time to prepare some logs and reach out to the community (please refer
   to `Preparing your logs`_ on how to best prepare your logs).
 
@@ -232,7 +232,7 @@ What if state is ``synchronizing``?
   This means the monitor is synchronizing with the rest of the cluster in
   order to join the quorum. The synchronization process is as faster as
   smaller your monitor store is, so if you have a big store it may
-  take a while. Don't worry, it should be finished soon enough.
+  take a while. Do not worry, it should be finished soon enough.
 
   However, if you notice that the monitor jumps from ``synchronizing`` to
   ``electing`` and then back to ``synchronizing``, then you do have a
@@ -252,7 +252,7 @@ What if state is ``leader`` or ``peon``?
 
 
 Recovering a Monitor's Broken monmap
--------------------------------------
+------------------------------------
 
 This is how a ``monmap`` usually looks like, depending on the number of
 monitors::
@@ -265,7 +265,7 @@ monitors::
       0: 127.0.0.1:6789/0 mon.a
       1: 127.0.0.1:6790/0 mon.b
       2: 127.0.0.1:6795/0 mon.c
-      
+
 This may not be what you have however. For instance, in some versions of
 early Cuttlefish there was this one bug that could cause your ``monmap``
 to be nullified.  Completely filled with zeros. This means that not even
@@ -281,7 +281,7 @@ In this sort of situations, you have two possible solutions:
 
 Scrap the monitor and create a new one
 
-  You should only take this route if you are positive that you won't
+  You should only take this route if you are positive that you will not
   lose the information kept by that monitor; that you have other monitors
   and that they are running just fine so that your new monitor is able
   to synchronize from the remaining monitors. Keep in mind that destroying
@@ -319,7 +319,7 @@ Inject a monmap into the monitor
 
 
 Clock Skews
-------------
+-----------
 
 Monitors can be severely affected by significant clock skews across the
 monitor nodes. This usually translates into weird behavior with no obvious
@@ -335,7 +335,7 @@ What's the maximum tolerated clock skew?
 Can I increase the maximum tolerated clock skew?
 
   This value is configurable via the ``mon-clock-drift-allowed`` option, and
-  although you *CAN* it doesn't mean you *SHOULD*. The clock skew mechanism
+  although you *CAN* it does not mean you *SHOULD*. The clock skew mechanism
   is in place because clock skewed monitor may not properly behave. We, as
   developers and QA afficcionados, are comfortable with the current default
   value, as it will alert the user before the monitors get out hand. Changing
@@ -363,7 +363,7 @@ What should I do if there's a clock skew?
   monitor clock skews.
 
 
-Client Can't Connect or Mount
+Client Cannot Connect or Mount
 ------------------------------
 
 Check your IP tables. Some OS install utilities add a ``REJECT`` rule to
@@ -467,7 +467,7 @@ Following information are not recoverable using the steps above:
 
 
 Everything Failed! Now What?
-=============================
+============================
 
 Reaching out for help
 ----------------------
@@ -480,11 +480,11 @@ time is optimized.
 
 
 Preparing your logs
----------------------
+-------------------
 
 Monitor logs are, by default, kept in ``/var/log/ceph/ceph-mon.FOO.log*``. We
 may want them. However, your logs may not have the necessary information. If
-you don't find your monitor logs at their default location, you can check
+you do not find your monitor logs at their default location, you can check
 where they should be by running::
 
   ceph-conf --name mon.FOO --show-config-value log_file
@@ -547,11 +547,11 @@ or::
 
 
 Reproduced the problem with appropriate debug levels. Now what?
-----------------------------------------------------------------
+---------------------------------------------------------------
 
 Ideally you would send us only the relevant portions of your logs.
 We realise that figuring out the corresponding portion may not be the
-easiest of tasks. Therefore, we won't hold it to you if you provide the
+easiest of tasks. Therefore, we will not hold it to you if you provide the
 full log, but common sense should be employed. If your log has hundreds
 of thousands of lines, it may get tricky to go through the whole thing,
 specially if we are not aware at which point, whatever your issue is,
