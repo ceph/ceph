@@ -310,15 +310,9 @@ TempURLEngine::authenticate(const req_state* const s) const
   boost::container::static_vector<boost::string_view, 3> allowed_methods;
   if (strcmp("HEAD", s->info.method) == 0) {
     /* HEAD requests are specially handled. */
-    /* TODO: after getting a newer boost (with static_vector supporting
-     * initializers lists), get back to the good notation:
-     *   allowed_methods = {"HEAD", "GET", "PUT" };
-     * Just for now let's use emplace_back to construct the vector. */
-    allowed_methods.emplace_back("HEAD");
-    allowed_methods.emplace_back("GET");
-    allowed_methods.emplace_back("PUT");
+    allowed_methods = { "HEAD", "GET", "PUT" };
   } else if (strlen(s->info.method) > 0) {
-    allowed_methods.emplace_back(s->info.method);
+    allowed_methods = { s->info.method };
   }
 
   /* Need to try each combination of keys, allowed path and methods. */

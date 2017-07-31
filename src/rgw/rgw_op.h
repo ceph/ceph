@@ -1147,9 +1147,6 @@ public:
 
   virtual int get_params() = 0;
   void send_response() override = 0;
-  virtual void filter_out_temp_url(map<string, bufferlist>& add_attrs,
-                                   const set<string>& rmattr_names,
-                                   map<int, string>& temp_url_keys);
   const string name() override { return "put_account_metadata"; }
   RGWOpType get_type() override { return RGW_OP_PUT_METADATA_ACCOUNT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }

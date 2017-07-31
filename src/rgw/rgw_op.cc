@@ -7,6 +7,9 @@
 #include <unistd.h>
 
 #include <sstream>
+#include <map>
+#include <set>
+#include <string>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/bind.hpp>
@@ -3781,33 +3784,35 @@ void RGWPostObj::execute()
   } while (is_next_file_to_upload());
 }
 
-
-void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_attrs,
-                                                const set<string>& rmattr_names,
-                                                map<int, string>& temp_url_keys)
+static std::map<int, std::string>
+filter_out_temp_url(std::map<std::string, ceph::bufferlist>& add_attrs,
+                    const std::set<std::string>& rmattr_names)
 {
-  map<string, bufferlist>::iterator iter;
+  std::map<int, std::string> temp_url_keys;
+  std::map<std::string, ceph::bufferlist>::iterator iter;
 
   iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY1);
-  if (iter != add_attrs.end()) {
+  if (iter != std::end(add_attrs)) {
     temp_url_keys[0] = iter->second.c_str();
     add_attrs.erase(iter);
   }
 
   iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY2);
-  if (iter != add_attrs.end()) {
+  if (iter != std::end(add_attrs)) {
     temp_url_keys[1] = iter->second.c_str();
     add_attrs.erase(iter);
   }
 
-  for (const string& name : rmattr_names) {
+  for (const auto& name : rmattr_names) {
     if (name.compare(RGW_ATTR_TEMPURL_KEY1) == 0) {
-      temp_url_keys[0] = string();
+      temp_url_keys[0] = std::string();
     }
     if (name.compare(RGW_ATTR_TEMPURL_KEY2) == 0) {
-      temp_url_keys[1] = string();
+      temp_url_keys[1] = std::string();
     }
   }
+
+  return temp_url_keys;
 }
 
 int RGWPutMetadataAccount::init_processing()
@@ -3844,7 +3849,7 @@ int RGWPutMetadataAccount::init_processing()
 
   /* Try extract the TempURL-related stuff now to allow verify_permission
    * evaluate whether we need FULL_CONTROL or not. */
-  filter_out_temp_url(attrs, rmattr_names, temp_url_keys);
+  temp_url_keys = filter_out_temp_url(attrs, rmattr_names);
 
   /* The same with quota except a client needs to be reseller admin. */
   op_ret = filter_out_quota_info(attrs, rmattr_names, new_quota,
