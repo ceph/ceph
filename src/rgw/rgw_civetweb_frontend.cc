@@ -63,32 +63,30 @@ int RGWCivetWebFrontend::run()
 
   /* Prepare options for CivetWeb. */
   const std::set<boost::string_ref> rgw_opts = { "port", "prefix" };
-  const size_t CW_NUM_OPTS = 2 * (conf_map.size() - rgw_opts.size()) + 1;
-  const char *options[CW_NUM_OPTS];
-  size_t i = 0;
+
+  std::vector<const char*> options;
 
   for (const auto& pair : conf_map) {
     if (! rgw_opts.count(pair.first)) {
       /* CivetWeb doesn't understand configurables of the glue layer between
        * it and RadosGW. We need to strip them out. Otherwise CivetWeb would
        * signalise an error. */
-      options[i + 0] = pair.first.c_str();
-      options[i + 1] = pair.second.c_str();
+      options.push_back(pair.first.c_str());
+      options.push_back(pair.second.c_str());
 
-      dout(20) << "civetweb config: " << options[i] << ": "
-               << (options[i + 1] ? options[i + 1] : "<null>") << dendl;
-      i += 2;
+      dout(20) << "civetweb config: " << pair.first
+               << ": " << pair.second << dendl;
     }
   }
-  options[i] = nullptr;
 
+  options.push_back(nullptr);
   /* Initialize the CivetWeb right now. */
   struct mg_callbacks cb;
   memset((void *)&cb, 0, sizeof(cb));
   cb.begin_request = civetweb_callback;
   cb.log_message = rgw_civetweb_log_callback;
   cb.log_access = rgw_civetweb_log_access_callback;
-  ctx = mg_start(&cb, this, (const char **)&options);
+  ctx = mg_start(&cb, this, options.data());
 
   return ! ctx ? -EIO : 0;
 } /* RGWCivetWebFrontend::run */
