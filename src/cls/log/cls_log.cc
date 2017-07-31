@@ -170,24 +170,22 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   if (!max_entries || max_entries > MAX_ENTRIES)
     max_entries = MAX_ENTRIES;
 
-  int rc = cls_cxx_map_get_vals(hctx, from_index, log_index_prefix, max_entries + 1, &keys);
+  cls_log_list_ret ret;
+
+  int rc = cls_cxx_map_get_vals(hctx, from_index, log_index_prefix, max_entries, &keys, &ret.truncated);
   if (rc < 0)
     return rc;
-
-  cls_log_list_ret ret;
 
   list<cls_log_entry>& entries = ret.entries;
   map<string, bufferlist>::iterator iter = keys.begin();
 
-  bool done = false;
   string marker;
 
-  size_t i;
-  for (i = 0; i < max_entries && iter != keys.end(); ++i, ++iter) {
+  for (; iter != keys.end(); ++iter) {
     const string& index = iter->first;
     marker = index;
     if (use_time_boundary && index.compare(0, to_index.size(), to_index) >= 0) {
-      done = true;
+      ret.truncated = false;
       break;
     }
 
@@ -202,11 +200,9 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
     }
   }
 
-  if (iter == keys.end())
-    done = true;
-
-  ret.marker = marker;
-  ret.truncated = !done;
+  if (ret.truncated) {
+    ret.marker = marker;
+  }
 
   ::encode(ret, *out);
 
@@ -244,16 +240,16 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
 #define MAX_TRIM_ENTRIES 1000
   size_t max_entries = MAX_TRIM_ENTRIES;
+  bool more;
 
-  int rc = cls_cxx_map_get_vals(hctx, from_index, log_index_prefix, max_entries, &keys);
+  int rc = cls_cxx_map_get_vals(hctx, from_index, log_index_prefix, max_entries, &keys, &more);
   if (rc < 0)
     return rc;
 
   map<string, bufferlist>::iterator iter = keys.begin();
 
-  size_t i;
   bool removed = false;
-  for (i = 0; i < max_entries && iter != keys.end(); ++i, ++iter) {
+  for (; iter != keys.end(); ++iter) {
     const string& index = iter->first;
 
     CLS_LOG(20, "index=%s to_index=%s", index.c_str(), to_index.c_str());

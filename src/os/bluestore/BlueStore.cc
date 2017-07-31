@@ -3531,6 +3531,7 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_compression_max_blob_size",
     "bluestore_compression_max_blob_size_ssd",
     "bluestore_compression_max_blob_size_hdd",
+    "bluestore_compression_required_ratio",
     "bluestore_max_alloc_size",
     "bluestore_prefer_deferred_size",
     "bluestore_deferred_batch_ops",

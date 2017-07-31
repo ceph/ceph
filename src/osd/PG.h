@@ -1930,9 +1930,14 @@ public:
 
     struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >
+	boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
+	boost::statechart::custom_reaction< CancelRecovery >
 	> reactions;
       explicit NotRecovering(my_context ctx);
+      boost::statechart::result react(const CancelRecovery& evt) {
+	/* no-op */
+	return discard_event();
+      }
       void exit();
     };
 

@@ -2731,6 +2731,13 @@ std::vector<Option> global_options = {
   .set_default(64 << 10)
   .set_description(""),
 
+  Option("objectstore_blackhole", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  // --------------------------
+  // bluestore
+
   Option("bdev_debug_inflight_ios", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
@@ -2779,10 +2786,6 @@ std::vector<Option> global_options = {
   .set_default(-1)
   .set_description(""),
 
-  Option("objectstore_blackhole", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_default(false)
-  .set_description(""),
-
   Option("bluefs_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1048576)
   .set_description(""),
@@ -2823,7 +2826,7 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("bluefs_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("bluefs_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("bitmap")
   .set_description(""),
 
@@ -2831,357 +2834,426 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(true)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Use BlueFS to back rocksdb")
+  .set_long_description("BlueFS allows rocksdb to share the same physical device(s) as the rest of BlueStore.  It should be used in all cases unless testing/developing an alternative metadata database for BlueStore."),
 
-  Option("bluestore_bluefs_env_mirror", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_bluefs_env_mirror", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Mirror bluefs data to file system for testing/validation"),
 
   Option("bluestore_bluefs_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1*1024*1024*1024)
-  .set_description(""),
+  .set_description("minimum disk space allocated to BlueFS (e.g., at mkfs)"),
 
   Option("bluestore_bluefs_min_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(.02)
-  .set_description(""),
+  .set_description("Minimum fraction of free space devoted to BlueFS"),
 
   Option("bluestore_bluefs_max_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(.90)
-  .set_description(""),
+  .set_description("Maximum fraction of free storage devoted to BlueFS"),
 
   Option("bluestore_bluefs_gift_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(.02)
-  .set_description(""),
+  .set_description("Maximum fraction of free space to give to BlueFS at once"),
 
   Option("bluestore_bluefs_reclaim_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(.20)
-  .set_description(""),
+  .set_description("Maximum fraction of free space to reclaim from BlueFS at once"),
 
   Option("bluestore_bluefs_balance_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(1)
-  .set_description(""),
+  .set_description("How frequently (in seconds) to balance free space between BlueFS and BlueStore"),
 
-  Option("bluestore_spdk_mem", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_spdk_mem", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(512)
   .set_description(""),
 
-  Option("bluestore_spdk_coremask", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("bluestore_spdk_coremask", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("0x3")
   .set_description(""),
 
-  Option("bluestore_spdk_max_io_completion", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_spdk_max_io_completion", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_block_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_path", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("")
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Path to block device/file"),
 
-  Option("bluestore_block_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_size", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(10ull * 1024*1024*1024)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Size of file to create for backing bluestore"),
 
-  Option("bluestore_block_create", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(true)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Create bluestore_block_path if it doesn't exist")
+  .add_see_also("bluestore_block_path").add_see_also("bluestore_block_size"),
 
-  Option("bluestore_block_db_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_db_path", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("")
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Path for db block device"),
 
-  Option("bluestore_block_db_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_db_size", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(0)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Size of file to create for bluestore_block_db_path"),
 
-  Option("bluestore_block_db_create", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_db_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Create bluestore_block_db_path if it doesn't exist")
+  .add_see_also("bluestore_block_db_path")
+  .add_see_also("bluestore_block_db_size"),
 
-  Option("bluestore_block_wal_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_wal_path", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("")
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Path to block device/file backing bluefs wal"),
 
-  Option("bluestore_block_wal_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_wal_size", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(96 * 1024*1024)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Size of file to create for bluestore_block_wal_path"),
 
-  Option("bluestore_block_wal_create", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_wal_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Create bluestore_block_wal_path if it doesn't exist")
+  .add_see_also("bluestore_block_wal_path")
+  .add_see_also("bluestore_block_wal_size"),
 
-  Option("bluestore_block_preallocate_file", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_preallocate_file", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Preallocate file created via bluestore_block*_create"),
 
   Option("bluestore_csum_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("crc32c")
-  .set_description(""),
+  .set_enum_allowed({"none", "crc32c", "crc32c_16", "crc32c_8", "xxhash32", "xxhash64"})
+  .set_safe()
+  .set_description("Default checksum algorithm to use")
+  .set_long_description("crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants use only a subset of the bits for more compact (but less reliable) checksumming."),
 
   Option("bluestore_csum_min_block", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(4096)
-  .set_description(""),
+  .set_safe()
+  .set_description("Minimum block size to checksum")
+  .set_long_description("A larger checksum block means less checksum metadata to store, but results in read amplification when doing a read smaller than this size (because the entire block must be read to verify the checksum).")
+  .add_see_also("bluestore_csum_max_block"),
 
   Option("bluestore_csum_max_block", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64*1024)
-  .set_description(""),
+  .set_safe()
+  .set_description("Maximum block size to checksum")
+  .add_see_also("bluestore_csum_min_block"),
 
   Option("bluestore_min_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Minimum allocation size to allocate for an object")
+  .set_long_description("A smaller allocation size generally means less data is read and then rewritten when a copy-on-write operation is triggered (e.g., when writing to something that was recently snapshotted).  Similarly, less data is journaled before performing an overwrite (writes smaller than min_alloc_size must first pass through the BlueStore journal).  Larger values of min_alloc_size reduce the amount of metadata required to describe the on-disk layout and reduce overall fragmentation."),
 
   Option("bluestore_min_alloc_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64*1024)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Default min_alloc_size value for rotational media"),
 
   Option("bluestore_min_alloc_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(16*1024)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Default min_alloc_size value for non-rotational (solid state)  media"),
 
   Option("bluestore_max_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Maximum size of a single allocation (0 for no max)"),
 
   Option("bluestore_prefer_deferred_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
-  .set_description(""),
+  .set_safe()
+  .set_description("Writes smaller than this size will be written to the journal and then asynchronously written to the device.  This can be beneficial when using rotational media where seeks are expensive, and is helpful both with and without solid state journal/wal devices."),
 
   Option("bluestore_prefer_deferred_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(32768)
-  .set_description(""),
+  .set_safe()
+  .set_description("Default bluestore_prefer_deferred_size for rotational media"),
 
   Option("bluestore_prefer_deferred_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
-  .set_description(""),
+  .set_safe()
+  .set_description("Default bluestore_prefer_deferred_size for non-rotational (solid state) media"),
 
   Option("bluestore_compression_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("none")
-  .set_description(""),
+  .set_enum_allowed({"none", "passive", "aggressive", "force"})
+  .set_safe()
+  .set_description("Default policy for using compression when pool does not specify")
+  .set_long_description("'none' means never use compression.  'passive' means use compression when clients hint that data is compressible.  'aggressive' means use compression unless clients hint that data is not compressible.  This option is used when the per-pool property for the compression mode is not present."),
 
   Option("bluestore_compression_algorithm", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("snappy")
-  .set_description(""),
+  .set_enum_allowed({"", "snappy", "zlib", "zstd", "lz4"})
+  .set_safe()
+  .set_description("Default compression algorithm to use when writing object data")
+  .set_long_description("This controls the default compressor to use (if any) if the per-pool property is not set.  Note that zstd is *not* recommended for bluestore due to high CPU overhead when compressing small amounts of data."),
 
   Option("bluestore_compression_min_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
-  .set_description(""),
+  .set_safe()
+  .set_description("Chunks smaller than this are never compressed"),
 
   Option("bluestore_compression_min_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128*1024)
-  .set_description(""),
+  .set_safe()
+  .set_description("Default value of bluestore_compression_min_blob_size for rotational media"),
 
   Option("bluestore_compression_min_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(8*1024)
-  .set_description(""),
+  .set_safe()
+  .set_description("Default value of bluestore_compression_min_blob_size for non-rotational (solid state) media"),
 
   Option("bluestore_compression_max_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
-  .set_description(""),
+  .set_safe()
+  .set_description("Chunks larger than this are broken into smaller chunks before being compressed"),
 
   Option("bluestore_compression_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512*1024)
-  .set_description(""),
+  .set_safe()
+  .set_description("Default value of bluestore_compression_max_blob_size for rotational media"),
 
   Option("bluestore_compression_max_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64*1024)
-  .set_description(""),
+  .set_safe()
+  .set_description("Default value of bluestore_compression_max_blob_size for non-rotational (solid state) media"),
 
-  Option("bluestore_gc_enable_blob_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_gc_enable_blob_threshold", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
+  .set_safe()
   .set_description(""),
 
-  Option("bluestore_gc_enable_total_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_gc_enable_total_threshold", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(0)
+  .set_safe()
   .set_description(""),
 
-  Option("bluestore_max_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_max_blob_size", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(0)
+  .set_safe()
   .set_description(""),
 
-  Option("bluestore_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(512*1024)
+  .set_safe()
   .set_description(""),
 
-  Option("bluestore_max_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_max_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(64*1024)
+  .set_safe()
   .set_description(""),
 
   Option("bluestore_compression_required_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(.875)
-  .set_description(""),
+  .set_safe()
+  .set_description("Compression ratio required to store compressed data")
+  .set_long_description("If we compress data and get less than this we discard the result and store the original uncompressed data."),
 
-  Option("bluestore_extent_map_shard_max_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_extent_map_shard_max_size", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(1200)
-  .set_description(""),
+  .set_description("Max size (bytes) for a single extent map shard before splitting"),
 
-  Option("bluestore_extent_map_shard_target_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_extent_map_shard_target_size", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(500)
-  .set_description(""),
+  .set_description("Target size (bytes) for a single extent map shard"),
 
-  Option("bluestore_extent_map_shard_min_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_extent_map_shard_min_size", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(150)
-  .set_description(""),
+  .set_description("Min size (bytes) for a single extent map shard before merging"),
 
-  Option("bluestore_extent_map_shard_target_size_slop", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("bluestore_extent_map_shard_target_size_slop", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(.2)
-  .set_description(""),
+  .set_description("Ratio above/below target for a shard when trying to align to an existing extent or blob boundary"),
 
-  Option("bluestore_extent_map_inline_shard_prealloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_extent_map_inline_shard_prealloc_size", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(256)
-  .set_description(""),
+  .set_description("Preallocated buffer for inline shards"),
 
   Option("bluestore_cache_trim_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(.2)
-  .set_description(""),
+  .set_description("How frequently we trim the bluestore cache"),
 
-  Option("bluestore_cache_trim_max_skip_pinned", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_cache_trim_max_skip_pinned", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(64)
-  .set_description(""),
+  .set_description("Max pinned cache entries we consider before giving up"),
 
-  Option("bluestore_cache_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("bluestore_cache_type", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("2q")
-  .set_description(""),
+  .set_enum_allowed({"2q", "lru"})
+  .set_description("Cache replacement algorithm"),
 
-  Option("bluestore_2q_cache_kin_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("bluestore_2q_cache_kin_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(.5)
-  .set_description(""),
+  .set_description("2Q paper suggests .5"),
 
-  Option("bluestore_2q_cache_kout_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  Option("bluestore_2q_cache_kout_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(.5)
-  .set_description(""),
+  .set_description("2Q paper suggests .5"),
 
   Option("bluestore_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
-  .set_description(""),
+  .set_description("Cache size (in bytes) for BlueStore")
+  .set_long_description("This includes data and metadata cached by BlueStore as well as memory devoted to rocksdb's cache(s)."),
 
   Option("bluestore_cache_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1ull*1024*1024*1024)
-  .set_description(""),
+  .set_description("Default bluestore_cache_size for rotational media"),
 
   Option("bluestore_cache_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(3ull*1024*1024*1024)
-  .set_description(""),
+  .set_description("Default bluestore_cache_size for non-rotational (solid state) media"),
 
   Option("bluestore_cache_meta_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(.01)
-  .set_description(""),
+  .set_description("Ratio of bluestore cache to devote to metadata"),
 
   Option("bluestore_cache_kv_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(.99)
-  .set_description(""),
+  .set_description("Ratio of bluestore cache to devote to kv database (rocksdb)"),
 
   Option("bluestore_cache_kv_max", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512*1024*1024)
-  .set_description(""),
+  .set_description("Max memory (bytes) to devote to kv database (rocksdb)"),
 
-  Option("bluestore_kvbackend", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("bluestore_kvbackend", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("rocksdb")
-  .set_description(""),
+  .add_tag("mkfs")
+  .set_description("Key value database to use for bluestore"),
 
-  Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
   .set_default("bitmap")
+  .add_tag("mkfs")
   .set_description(""),
 
-  Option("bluestore_freelist_blocks_per_key", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_freelist_blocks_per_key", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(128)
-  .set_description(""),
+  .set_description("Block (and bits) per database key"),
 
-  Option("bluestore_bitmapallocator_blocks_per_zone", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_bitmapallocator_blocks_per_zone", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(1024)
   .set_description(""),
 
-  Option("bluestore_bitmapallocator_span_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_bitmapallocator_span_size", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(1024)
   .set_description(""),
 
   Option("bluestore_max_deferred_txc", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(32)
-  .set_description(""),
+  .set_description("Max transactions with deferred writes that can accumulate before we force flush deferred writes"),
 
   Option("bluestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0,compaction_readahead_size=2097152")
-  .set_description(""),
+  .set_description("Rocksdb options"),
 
-  Option("bluestore_fsck_on_mount", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_fsck_on_mount", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
-  .set_description(""),
+  .set_description("Run fsck at mount"),
 
-  Option("bluestore_fsck_on_mount_deep", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_fsck_on_mount_deep", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(true)
-  .set_description(""),
+  .set_description("Run deep fsck at mount"),
 
-  Option("bluestore_fsck_on_umount", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_fsck_on_umount", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
-  .set_description(""),
+  .set_description("Run fsck at umount"),
 
-  Option("bluestore_fsck_on_umount_deep", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_fsck_on_umount_deep", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(true)
-  .set_description(""),
+  .set_description("Run deep fsck at umount"),
 
-  Option("bluestore_fsck_on_mkfs", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_fsck_on_mkfs", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(true)
-  .set_description(""),
+  .set_description("Run fsck after mkfs"),
 
-  Option("bluestore_fsck_on_mkfs_deep", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_fsck_on_mkfs_deep", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
-  .set_description(""),
+  .set_description("Run deep fsck after mkfs"),
 
-  Option("bluestore_sync_submit_transaction", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_sync_submit_transaction", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
-  .set_description(""),
+  .set_description("Try to submit metadata transaction to rocksdb in queuing thread context"),
 
   Option("bluestore_throttle_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64*1024*1024)
-  .set_description(""),
+  .set_safe()
+  .set_description("Maximum bytes in flight before we throttle IO submission"),
 
   Option("bluestore_throttle_deferred_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128*1024*1024)
-  .set_description(""),
-
-  Option("bluestore_throttle_cost_per_io_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(670000)
-  .set_description(""),
-
-  Option("bluestore_throttle_cost_per_io_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(4000)
-  .set_description(""),
+  .set_safe()
+  .set_description("Maximum bytes for deferred writes before we throttle IO submission"),
 
   Option("bluestore_throttle_cost_per_io", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
-  .set_description(""),
+  .set_safe()
+  .set_description("Overhead added to transaction cost (in bytes) for each IO"),
+
+Option("bluestore_throttle_cost_per_io_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(670000)
+  .set_safe()
+  .set_description("Default bluestore_throttle_cost_per_io for rotational media"),
+
+  Option("bluestore_throttle_cost_per_io_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(4000)
+  .set_safe()
+  .set_description("Default bluestore_throttle_cost_per_io for non-rotation (solid state) media"),
+
 
   Option("bluestore_deferred_batch_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
-  .set_description(""),
+  .set_safe()
+  .set_description("Max number of deferred writes before we flush the deferred write queue"),
 
   Option("bluestore_deferred_batch_ops_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64)
-  .set_description(""),
+  .set_safe()
+  .set_description("Default bluestore_deferred_batch_ops for rotational media"),
 
   Option("bluestore_deferred_batch_ops_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(16)
-  .set_description(""),
+  .set_safe()
+  .set_description("Default bluestore_deferred_batch_ops for non-rotational (solid state) media"),
 
-  Option("bluestore_nid_prealloc", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_nid_prealloc", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(1024)
-  .set_description(""),
+  .set_description("Number of unique object ids to preallocate at a time"),
 
-  Option("bluestore_blobid_prealloc", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  Option("bluestore_blobid_prealloc", Option::TYPE_UINT, Option::LEVEL_DEV)
   .set_default(10240)
-  .set_description(""),
+  .set_description("Number of unique blob ids to preallocate at a time"),
 
   Option("bluestore_clone_cow", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
   .set_default(true)
-  .set_description(""),
+  .set_safe()
+  .set_description("Use copy-on-write when cloning objects (versus reading and rewriting them at clone time)"),
 
   Option("bluestore_default_buffered_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
   .set_default(true)
-  .set_description(""),
+  .set_safe()
+  .set_description("Cache read results by default (unless hinted NOCACHE or WONTNEED)"),
 
   Option("bluestore_default_buffered_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
   .set_default(false)
-  .set_description(""),
+  .set_safe()
+  .set_description("Cache writes by default (unless hinted NOCACHE or WONTNEED)"),
 
   Option("bluestore_debug_misc", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
@@ -3201,7 +3273,7 @@ std::vector<Option> global_options = {
 
   Option("bluestore_debug_prefill", Option::TYPE_FLOAT, Option::LEVEL_DEV)
   .set_default(0)
-  .set_description(""),
+  .set_description("simulate fragmentation"),
 
   Option("bluestore_debug_prefragment_max", Option::TYPE_INT, Option::LEVEL_DEV)
   .set_default(1048576)
@@ -3231,7 +3303,7 @@ std::vector<Option> global_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_shard_finishers", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  Option("bluestore_shard_finishers", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_default(false)
   .set_description(""),
 
@@ -3239,9 +3311,8 @@ std::vector<Option> global_options = {
   .set_default(0)
   .set_description(""),
 
-  Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
-  .set_description(""),
+  // -----------------------------------------
+  // kstore
 
   Option("kstore_max_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512)
@@ -3285,6 +3356,13 @@ std::vector<Option> global_options = {
 
   Option("kstore_default_stripe_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(65536)
+  .set_description(""),
+
+  // ---------------------
+  // filestore
+
+  Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("")
   .set_description(""),
 
   Option("filestore_omap_backend", Option::TYPE_STR, Option::LEVEL_ADVANCED)

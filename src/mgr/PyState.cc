@@ -182,6 +182,107 @@ ceph_send_command(PyObject *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
+static PyObject*
+ceph_set_health_checks(PyObject *self, PyObject *args)
+{
+  char *handle = nullptr;
+  PyObject *checks = NULL;
+  if (!PyArg_ParseTuple(args, "sO:ceph_set_health_checks", &handle, &checks)) {
+    return NULL;
+  }
+  if (!PyDict_Check(checks)) {
+    derr << __func__ << " arg not a dict" << dendl;
+    Py_RETURN_NONE;
+  }
+  PyObject *checksls = PyDict_Items(checks);
+  health_check_map_t out_checks;
+  for (int i = 0; i < PyList_Size(checksls); ++i) {
+    PyObject *kv = PyList_GET_ITEM(checksls, i);
+    char *check_name = nullptr;
+    PyObject *check_info = nullptr;
+    if (!PyArg_ParseTuple(kv, "sO:pair", &check_name, &check_info)) {
+      derr << __func__ << " dict item " << i
+	   << " not a size 2 tuple" << dendl;
+      continue;
+    }
+    if (!PyDict_Check(check_info)) {
+      derr << __func__ << " item " << i << " " << check_name
+	   << " value not a dict" << dendl;
+      continue;
+    }
+    health_status_t severity = HEALTH_OK;
+    string summary;
+    list<string> detail;
+    PyObject *infols = PyDict_Items(check_info);
+    for (int j = 0; j < PyList_Size(infols); ++j) {
+      PyObject *pair = PyList_GET_ITEM(infols, j);
+      if (!PyTuple_Check(pair)) {
+	derr << __func__ << " item " << i << " pair " << j
+	     << " not a tuple" << dendl;
+	continue;
+      }
+      char *k = nullptr;
+      PyObject *v = nullptr;
+      if (!PyArg_ParseTuple(pair, "sO:pair", &k, &v)) {
+	derr << __func__ << " item " << i << " pair " << j
+	     << " not a size 2 tuple" << dendl;
+	continue;
+      }
+      string ks(k);
+      if (ks == "severity") {
+	if (!PyString_Check(v)) {
+	  derr << __func__ << " check " << check_name
+	       << " severity value not string" << dendl;
+	  continue;
+	}
+	string vs(PyString_AsString(v));
+	if (vs == "warning") {
+	  severity = HEALTH_WARN;
+	} else if (vs == "error") {
+	  severity = HEALTH_ERR;
+	}
+      } else if (ks == "summary") {
+	if (!PyString_Check(v)) {
+	  derr << __func__ << " check " << check_name
+	       << " summary value not string" << dendl;
+	  continue;
+	}
+	summary = PyString_AsString(v);
+      } else if (ks == "detail") {
+	if (!PyList_Check(v)) {
+	  derr << __func__ << " check " << check_name
+	       << " detail value not list" << dendl;
+	  continue;
+	}
+	for (int k = 0; k < PyList_Size(v); ++k) {
+	  PyObject *di = PyList_GET_ITEM(v, k);
+	  if (!PyString_Check(di)) {
+	    derr << __func__ << " check " << check_name
+		 << " detail item " << k << " not a string" << dendl;
+	    continue;
+	  }
+	  detail.push_back(PyString_AsString(di));
+	}
+      } else {
+	derr << __func__ << " check " << check_name
+	     << " unexpected key " << k << dendl;
+      }
+    }
+    auto& d = out_checks.add(check_name, severity, summary);
+    d.detail.swap(detail);
+  }
+
+  JSONFormatter jf(true);
+  dout(10) << "module " << handle << " health checks:\n";
+  out_checks.dump(&jf);
+  jf.flush(*_dout);
+  *_dout << dendl;
+
+  global_handle->set_health_checks(handle, std::move(out_checks));
+  
+  Py_RETURN_NONE;
+}
+
 
 static PyObject*
 ceph_state_get(PyObject *self, PyObject *args)
@@ -234,7 +335,7 @@ ceph_config_get(PyObject *self, PyObject *args)
     dout(10) << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
     return PyString_FromString(value.c_str());
   } else {
-    derr << "ceph_config_get " << what << " not found " << dendl;
+    dout(4) << "ceph_config_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
   }
 }
@@ -359,6 +460,8 @@ PyMethodDef CephStateMethods[] = {
      "Get a service's status"},
     {"send_command", ceph_send_command, METH_VARARGS,
      "Send a mon command"},
+    {"set_health_checks", ceph_set_health_checks, METH_VARARGS,
+     "Set health checks for this module"},
     {"get_mgr_id", ceph_get_mgr_id, METH_NOARGS,
      "Get the mgr id"},
     {"get_config", ceph_config_get, METH_VARARGS,

@@ -120,21 +120,20 @@ static int cls_timeindex_list(cls_method_context_t hctx,
     max_entries = MAX_LIST_ENTRIES;
   }
 
+  cls_timeindex_list_ret ret;
+
   int rc = cls_cxx_map_get_vals(hctx, from_index, TIMEINDEX_PREFIX,
-          max_entries + 1, &keys);
+          max_entries, &keys, &ret.truncated);
   if (rc < 0) {
     return rc;
   }
 
-  cls_timeindex_list_ret ret;
-
   list<cls_timeindex_entry>& entries = ret.entries;
   map<string, bufferlist>::iterator iter = keys.begin();
 
-  bool done = false;
   string marker;
 
-  for (size_t i = 0; i < max_entries && iter != keys.end(); ++i, ++iter) {
+  for (; iter != keys.end(); ++iter) {
     const string& index = iter->first;
     bufferlist& bl = iter->second;
 
@@ -142,7 +141,7 @@ static int cls_timeindex_list(cls_method_context_t hctx,
     if (use_time_boundary && index.compare(0, to_index.size(), to_index) >= 0) {
       CLS_LOG(20, "DEBUG: cls_timeindex_list: finishing on to_index=%s",
               to_index.c_str());
-      done = true;
+      ret.truncated = false;
       break;
     }
 
@@ -159,12 +158,7 @@ static int cls_timeindex_list(cls_method_context_t hctx,
     }
   }
 
-  if (iter == keys.end()) {
-    done = true;
-  }
-
   ret.marker = marker;
-  ret.truncated = !done;
 
   ::encode(ret, *out);
 
@@ -203,8 +197,10 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
     to_index = op.to_marker;
   }
 
+  bool more;
+
   int rc = cls_cxx_map_get_vals(hctx, from_index, TIMEINDEX_PREFIX,
-          MAX_TRIM_ENTRIES, &keys);
+          MAX_TRIM_ENTRIES, &keys, &more);
   if (rc < 0) {
     return rc;
   }
@@ -212,7 +208,7 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
   map<string, bufferlist>::iterator iter = keys.begin();
 
   bool removed = false;
-  for (size_t i = 0; i < MAX_TRIM_ENTRIES && iter != keys.end(); ++i, ++iter) {
+  for (; iter != keys.end(); ++iter) {
     const string& index = iter->first;
 
     CLS_LOG(20, "index=%s to_index=%s", index.c_str(), to_index.c_str());
