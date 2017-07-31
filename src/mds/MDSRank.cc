@@ -1144,8 +1144,14 @@ void MDSRank::starting_done()
 
   mdcache->open_root();
 
-  // start new segment
-  mdlog->start_new_segment();
+  if (mdcache->is_open()) {
+    mdlog->start_new_segment();
+  } else {
+    mdcache->wait_for_open(new MDSInternalContextWrapper(this,
+			   new FunctionContext([this] (int r) {
+			       mdlog->start_new_segment();
+			   })));
+  }
 }
 
 
