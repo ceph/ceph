@@ -1852,8 +1852,10 @@ class DevicePartition(object):
     @staticmethod
     def factory(path, dev, args):
         dmcrypt_type = CryptHelpers.get_dmcrypt_type(args)
-        if ((path is not None and is_mpath(path)) or
-                (dev is not None and is_mpath(dev))):
+        if path is None and dev is None:
+            raise Error("device is None")
+
+        if is_mpath(path) or is_mpath(dev):
             partition = DevicePartitionMultipath(args)
         elif dmcrypt_type == 'luks':
             partition = DevicePartitionCryptLuks(args)
