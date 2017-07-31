@@ -59,6 +59,7 @@ protected:
   Mutex lock = {"MgrClient::lock"};
 
   uint32_t stats_period = 0;
+  uint32_t stats_threshold = 0;
   SafeTimer timer;
 
   CommandTable<MgrCommand> command_table;
