@@ -65,6 +65,7 @@ public:
   }
 };
 
+sr_t* const CInode::projected_inode::UNDEF_SRNODE = (sr_t*)(unsigned long)-1;
 
 LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
 LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
@@ -406,9 +407,8 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
     xattrs = *front.xattrs;
   }
 
-  auto &snapnode = front.snapnode;
-  if (snapnode) {
-    pop_projected_snaprealm(snapnode.get());
+  if (projected_nodes.front().snapnode != projected_inode::UNDEF_SRNODE) {
+    pop_projected_snaprealm(projected_nodes.front().snapnode);
     --num_projected_srnodes;
   }
 
@@ -433,8 +433,8 @@ sr_t *CInode::prepare_new_srnode(snapid_t snapid)
 void CInode::project_snaprealm(sr_t *new_srnode)
 {
   dout(10) << __func__ << " " << new_srnode << dendl;
-  assert(!projected_nodes.back().snapnode);
-  projected_nodes.back().snapnode.reset(new_srnode);
+  assert(projected_nodes.back().snapnode == projected_inode::UNDEF_SRNODE);
+  projected_nodes.back().snapnode = new_srnode;
   ++num_projected_srnodes;
 }
 
@@ -488,32 +488,38 @@ void CInode::record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent)
 
 void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
 {
-  assert(next_snaprealm);
-  dout(10) << __func__ << " " << next_snaprealm
-          << " seq" << next_snaprealm->seq << dendl;
-  bool invalidate_cached_snaps = false;
-  if (!snaprealm) {
-    open_snaprealm();
-  } else if (next_snaprealm->past_parents.size() !=
-	     snaprealm->srnode.past_parents.size()) {
-    invalidate_cached_snaps = true;
-    // re-open past parents
-    snaprealm->_close_parents();
+  if (next_snaprealm) {
+    dout(10) << __func__ << " " << next_snaprealm
+	     << " seq" << next_snaprealm->seq << dendl;
+    bool invalidate_cached_snaps = false;
+    if (!snaprealm) {
+      open_snaprealm();
+    } else if (next_snaprealm->past_parents.size() !=
+	       snaprealm->srnode.past_parents.size()) {
+      invalidate_cached_snaps = true;
+      // re-open past parents
+      snaprealm->_close_parents();
 
-    dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
-	     << " -> " << next_snaprealm->past_parents << dendl;
+      dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
+	       << " -> " << next_snaprealm->past_parents << dendl;
+    }
+    snaprealm->srnode = *next_snaprealm;
+    delete next_snaprealm;
+
+    // we should be able to open these up (or have them already be open).
+    bool ok = snaprealm->_open_parents(NULL);
+    assert(ok);
+
+    if (invalidate_cached_snaps)
+      snaprealm->invalidate_cached_snaps();
+
+    if (snaprealm->parent)
+      dout(10) << " realm " << *snaprealm << " parent " << *snaprealm->parent << dendl;
+  } else {
+    dout(10) << __func__ << " null" << dendl;
+    assert(snaprealm);
+    snaprealm->merge_to(NULL);
   }
-  snaprealm->srnode = *next_snaprealm;
-
-  // we should be able to open these up (or have them already be open).
-  bool ok = snaprealm->_open_parents(NULL);
-  assert(ok);
-
-  if (invalidate_cached_snaps)
-    snaprealm->invalidate_cached_snaps();
-
-  if (snaprealm->parent)
-    dout(10) << " realm " << *snaprealm << " parent " << *snaprealm->parent << dendl;
 }
 
 
@@ -2724,6 +2730,9 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
       assert(ok);
     }
     dout(20) << __func__ << " " << *snaprealm << dendl;
+  } else if (snaprealm) {
+    assert(mdcache->mds->is_any_replay());
+    snaprealm->merge_to(NULL);
   }
 }
 

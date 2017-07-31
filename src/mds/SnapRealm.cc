@@ -553,7 +553,34 @@ void SnapRealm::split_at(SnapRealm *child)
       dout(20) << "    keeping " << *in << dendl;
     }
   }
+}
 
+void SnapRealm::merge_to(SnapRealm *newparent)
+{
+  if (!newparent)
+    newparent = parent;
+  dout(10) << "merge to " << *newparent << " on " << *newparent->inode << dendl;
+
+  assert(open_past_children.empty());
+
+  dout(10) << " open_children are " << open_children << dendl;
+  for (auto realm : open_children) {
+    dout(20) << " child realm " << *realm << " on " << *realm->inode << dendl;
+    newparent->open_children.insert(realm);
+    realm->parent = newparent;
+  }
+  open_children.clear();
+
+  elist<CInode*>::iterator p = inodes_with_caps.begin(member_offset(CInode, item_caps));
+  while (!p.end()) {
+    CInode *in = *p;
+    ++p;
+    in->move_to_realm(newparent);
+  }
+  assert(inodes_with_caps.empty());
+
+  // delete this
+  inode->close_snaprealm();
 }
 
 const bufferlist& SnapRealm::get_snap_trace()

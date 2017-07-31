@@ -148,7 +148,7 @@ public:
   void adjust_parent();
 
   void split_at(SnapRealm *child);
-  void join(SnapRealm *child);
+  void merge_to(SnapRealm *newparent);
 
   void add_cap(client_t client, Capability *cap) {
     auto client_caps_entry = client_caps.find(client);
@@ -164,7 +164,6 @@ public:
       client_caps.erase(client);
     }
   }
-
 };
 
 ostream& operator<<(ostream& out, const SnapRealm &realm);

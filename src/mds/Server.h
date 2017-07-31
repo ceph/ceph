@@ -307,7 +307,8 @@ public:
   void _commit_slave_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr, bool finish_mdr=false);
   void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
-			       CDentry *destdn, CDentry *staydn, bool finish_mdr);
+			       CDentry *destdn, CDentry *staydn, map<client_t,MClientSnap*> splits[2],
+			       bool finish_mdr);
 
 private:
   void reply_client_request(MDRequestRef& mdr, MClientReply *reply);

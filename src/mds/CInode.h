@@ -417,9 +417,11 @@ public:
 
   class projected_inode {
   public:
+    static sr_t* const UNDEF_SRNODE;
+
     mempool_inode inode;
     std::unique_ptr<mempool_xattr_map> xattrs;
-    std::unique_ptr<sr_t> snapnode;
+    sr_t *snapnode = UNDEF_SRNODE;
 
     projected_inode() = delete;
     projected_inode(const mempool_inode &in) : inode(in) {}
@@ -500,8 +502,8 @@ public:
   const sr_t *get_projected_srnode() const {
     if (num_projected_srnodes > 0) {
       for (auto it = projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
-	if (it->snapnode)
-	  return it->snapnode.get();
+	if (it->snapnode != projected_inode::UNDEF_SRNODE)
+	  return it->snapnode;
     }
     if (snaprealm)
       return &snaprealm->srnode;

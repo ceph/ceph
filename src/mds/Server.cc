@@ -939,8 +939,12 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     if (in && in->state_test(CInode::STATE_PURGING))
       continue;
     if (in) {
-      assert(in->snaprealm || !in->is_auth());
-      dout(15) << "open snaprealm (w inode) on " << *in << dendl;
+      if (in->snaprealm) {
+	dout(15) << "open snaprealm (w inode) on " << *in << dendl;
+      } else {
+	// this can happen if we are non-auth or we rollback snaprealm
+	dout(15) << "open snaprealm (null snaprealm) on " << *in << dendl;
+      }
       mdcache->add_reconnected_snaprealm(from, inodeno_t(p->ino), snapid_t(p->seq));
     } else {
       dout(15) << "open snaprealm (w/o inode) on " << inodeno_t(p->ino)
@@ -5989,9 +5993,12 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     wrlocks.insert(&straydn->get_dir()->inode->nestlock);
     xlocks.insert(&straydn->lock);
   }
-  if (in->is_dir())
+  mds->locker->include_snap_rdlocks(rdlocks, diri);
+  if (dnl->is_primary() && in->is_dir()) {
     rdlocks.insert(&in->filelock);   // to verify it's empty
-  mds->locker->include_snap_rdlocks(rdlocks, dnl->get_inode());
+    xlocks.insert(&in->snaplock);
+  } else
+    rdlocks.insert(&in->snaplock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -6298,6 +6305,14 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   rollback.src_dname = dn->get_name();
   rollback.dest_dir = straydn->get_dir()->dirfrag();
   rollback.dest_dname = straydn->get_name();
+  if (mdr->slave_request->desti_snapbl.length()) {
+    if (in->snaprealm) {
+      encode(true, rollback.snapbl);
+      in->encode_snap_blob(rollback.snapbl);
+    } else {
+      encode(false, rollback.snapbl);
+    }
+  }
   encode(rollback, mdr->more()->rollback_bl);
   // FIXME: rollback snaprealm
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
@@ -6461,28 +6476,34 @@ void Server::do_rmdir_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef&
   CDentry *dn = dir->lookup(rollback.src_dname);
   assert(dn);
   dout(10) << " dn " << *dn << dendl;
-  dir = mdcache->get_dirfrag(rollback.dest_dir);
-  assert(dir);
-  CDentry *straydn = dir->lookup(rollback.dest_dname);
+  CDir *straydir = mdcache->get_dirfrag(rollback.dest_dir);
+  assert(straydir);
+  CDentry *straydn = straydir->lookup(rollback.dest_dname);
   assert(straydn);
-  dout(10) << " straydn " << *dn << dendl;
+  dout(10) << " straydn " << *straydn << dendl;
   CInode *in = straydn->get_linkage()->get_inode();
+
+  dn->push_projected_linkage(in);
+  straydn->push_projected_linkage();
+
+  if (rollback.snapbl.length() && in->snaprealm) {
+    bool hadrealm;
+    bufferlist::iterator p = rollback.snapbl.begin();
+    decode(hadrealm, p);
+    if (hadrealm) {
+      decode(in->snaprealm->srnode, p);
+    } else {
+      in->snaprealm->merge_to(dir->get_inode()->find_snaprealm());
+    }
+  }
 
   if (mdr && !mdr->more()->slave_update_journaled) {
     assert(!in->has_subtree_root_dirfrag(mds->get_nodeid()));
 
-    straydn->get_dir()->unlink_inode(straydn);
-    dn->get_dir()->link_primary_inode(dn, in);
-
-    mdcache->adjust_subtree_after_rename(in, straydn->get_dir(), false);
-
-    mdcache->request_finish(mdr);
-    mdcache->finish_rollback(rollback.reqid);
+    _rmdir_rollback_finish(mdr, rollback.reqid, dn, straydn);
     return;
   }
 
-  dn->push_projected_linkage(in);
-  straydn->push_projected_linkage();
 
   ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rmdir_rollback", rollback.reqid, master,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::RMDIR);
@@ -6513,7 +6534,9 @@ void Server::_rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentr
   straydn->pop_projected_linkage();
 
   CInode *in = dn->get_linkage()->get_inode();
-  mdcache->adjust_subtree_after_rename(in, straydn->get_dir(), true);
+  mdcache->adjust_subtree_after_rename(in, straydn->get_dir(),
+				       !mdr || mdr->more()->slave_update_journaled);
+
   if (mds->is_resolve()) {
     CDir *root = mdcache->get_subtree_root(straydn->get_dir());
     mdcache->try_trim_non_auth_subtree(root);
@@ -6857,21 +6880,20 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 
   // we need to update srci's ctime.  xlock its least contended lock to do that...
   xlocks.insert(&srci->linklock);
-
-  // xlock oldin (for nlink--)
-  if (oldin) {
-    xlocks.insert(&oldin->linklock);
-    if (oldin->is_dir())
-      rdlocks.insert(&oldin->filelock);
-  }
-  if (srcdnl->is_primary() && srci->is_dir())  
-    // FIXME: this should happen whenever we are renamning between
-    // realms, regardless of the file type
-    // FIXME: If/when this changes, make sure to update the
-    // "allowance" in handle_slave_rename_prep
-    xlocks.insert(&srci->snaplock);  // FIXME: an auth bcast could be sufficient?
+  if (srcdnl->is_primary() && srci->is_dir())
+    xlocks.insert(&srci->snaplock);
   else
     rdlocks.insert(&srci->snaplock);
+
+  if (oldin) {
+    // xlock oldin (for nlink--)
+    xlocks.insert(&oldin->linklock);
+    if (destdnl->is_primary() && oldin->is_dir()) {
+      rdlocks.insert(&oldin->filelock);   // to verify it's empty
+      xlocks.insert(&oldin->snaplock);
+    } else
+      rdlocks.insert(&oldin->snaplock);
+  }
 
   CInode *auth_pin_freeze = !srcdn->is_auth() && srcdnl->is_primary() ? srci : NULL;
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks,
@@ -7921,6 +7943,25 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
     rollback.stray.dirfrag_old_rctime = straydn->get_dir()->get_projected_fnode()->rstat.rctime;
     rollback.stray.dname = straydn->get_name();
   }
+  if (mdr->slave_request->desti_snapbl.length()) {
+    assert(destdnl->is_primary());
+    CInode *oldin = destdnl->get_inode();
+    if (oldin->snaprealm) {
+      encode(true, rollback.desti_snapbl);
+      oldin->encode_snap_blob(rollback.desti_snapbl);
+    } else {
+      encode(false, rollback.desti_snapbl);
+    }
+  }
+  if (mdr->slave_request->srci_snapbl.length()) {
+    assert(srcdnl->is_primary());
+    if (srci->snaprealm) {
+      encode(true, rollback.srci_snapbl);
+      srci->encode_snap_blob(rollback.srci_snapbl);
+    } else {
+      encode(false, rollback.srci_snapbl);
+    }
+  }
   encode(rollback, mdr->more()->rollback_bl);
   // FIXME: rollback snaprealm
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
@@ -8161,15 +8202,19 @@ struct C_MDS_LoggedRenameRollback : public ServerLogContext {
   version_t srcdnpv;
   CDentry *destdn;
   CDentry *straydn;
+  map<client_t,MClientSnap*> splits[2];
   bool finish_mdr;
   C_MDS_LoggedRenameRollback(Server *s, MutationRef& m, MDRequestRef& r,
-			     CDentry *sd, version_t pv, CDentry *dd,
-			     CDentry *st, bool f) :
+			     CDentry *sd, version_t pv, CDentry *dd, CDentry *st,
+			     map<client_t,MClientSnap*> _splits[2], bool f) :
     ServerLogContext(s, r), mut(m), srcdn(sd), srcdnpv(pv), destdn(dd),
-    straydn(st), finish_mdr(f) {}
+    straydn(st), finish_mdr(f) {
+      splits[0].swap(_splits[0]);
+      splits[1].swap(_splits[1]);
+    }
   void finish(int r) override {
     server->_rename_rollback_finish(mut, mdr, srcdn, srcdnpv,
-				    destdn, straydn, finish_mdr);
+				    destdn, straydn, splits, finish_mdr);
   }
 };
 
@@ -8274,17 +8319,51 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
 				    rollback.orig_src.remote_d_type);
   }
 
-  CInode::mempool_inode *pip = 0;
+  map<client_t,MClientSnap*> splits[2];
+
+  CInode::mempool_inode *pip = nullptr;
   if (in) {
-    if (in->authority().first == whoami) {
+    bool projected;
+    if (in->get_projected_parent_dn()->authority().first == whoami) {
       auto &pi = in->project_inode();
-      mut->add_projected_inode(in);
-      pi.inode.version = in->pre_dirty();
       pip = &pi.inode;
-    } else
+      mut->add_projected_inode(in);
+      pip->version = in->pre_dirty();
+      projected = true;
+    } else {
       pip = in->get_projected_inode();
+      projected = false;
+    }
     if (pip->ctime == rollback.ctime)
       pip->ctime = rollback.orig_src.old_ctime;
+
+    if (rollback.srci_snapbl.length() && in->snaprealm) {
+      bool hadrealm;
+      bufferlist::iterator p = rollback.srci_snapbl.begin();
+      decode(hadrealm, p);
+      if (hadrealm) {
+	if (projected && !mds->is_resolve()) {
+	  sr_t *new_srnode = new sr_t();
+	  decode(*new_srnode, p);
+	  in->project_snaprealm(new_srnode);
+	} else
+	  decode(in->snaprealm->srnode, p);
+      } else {
+	SnapRealm *realm;
+	if (rollback.orig_src.ino) {
+	  assert(srcdir);
+	  realm = srcdir->get_inode()->find_snaprealm();
+	} else {
+	  realm = in->snaprealm->parent;
+	}
+	if (!mds->is_resolve())
+	  mdcache->prepare_realm_merge(in->snaprealm, realm, splits[0]);
+	if (projected)
+	  in->project_snaprealm(NULL);
+	else
+	  in->snaprealm->merge_to(realm);
+      }
+    }
   }
 
   if (srcdn && srcdn->authority().first == whoami) {
@@ -8312,14 +8391,18 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
     straydn->push_projected_linkage();
 
   if (target) {
-    CInode::mempool_inode *ti = NULL;
-    if (target->authority().first == whoami) {
+    bool projected;
+    CInode::mempool_inode *ti = nullptr;
+    if (target->get_projected_parent_dn()->authority().first == whoami) {
       auto &pi = target->project_inode();
-      mut->add_projected_inode(target);
-      pi.inode.version = target->pre_dirty();
       ti = &pi.inode;
-    } else 
+      mut->add_projected_inode(target);
+      ti->version = target->pre_dirty();
+      projected = true;
+    } else {
       ti = target->get_projected_inode();
+      projected = false;
+    }
     if (ti->ctime == rollback.ctime)
       ti->ctime = rollback.orig_dest.old_ctime;
     if (MDS_INO_IS_STRAY(rollback.orig_src.dirfrag.ino)) {
@@ -8330,6 +8413,34 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
 	       rollback.orig_dest.remote_ino == rollback.orig_src.ino);
     } else
       ti->nlink++;
+
+    if (rollback.desti_snapbl.length() && target->snaprealm) {
+      bool hadrealm;
+      bufferlist::iterator p = rollback.desti_snapbl.begin();
+      decode(hadrealm, p);
+      if (hadrealm) {
+	if (projected && !mds->is_resolve()) {
+	  sr_t *new_srnode = new sr_t();
+	  decode(*new_srnode, p);
+	  target->project_snaprealm(new_srnode);
+	} else
+	  decode(target->snaprealm->srnode, p);
+      } else {
+	SnapRealm *realm;
+	if (rollback.orig_dest.ino) {
+	  assert(destdir);
+	  realm = destdir->get_inode()->find_snaprealm();
+	} else {
+	  realm = target->snaprealm->parent;
+	}
+	if (!mds->is_resolve())
+	  mdcache->prepare_realm_merge(target->snaprealm, realm, splits[1]);
+	if (projected)
+	  target->project_snaprealm(NULL);
+	else
+	  target->snaprealm->merge_to(realm);
+      }
+    }
   }
 
   if (srcdn)
@@ -8406,21 +8517,22 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
     assert(le->commit.empty());
     mdlog->cancel_entry(le);
     mut->ls = NULL;
-    _rename_rollback_finish(mut, mdr, srcdn, srcdnpv, destdn, straydn, finish_mdr);
+    _rename_rollback_finish(mut, mdr, srcdn, srcdnpv, destdn, straydn, splits, finish_mdr);
   } else {
     assert(!le->commit.empty());
     if (mdr)
       mdr->more()->slave_update_journaled = false;
-    MDSLogContextBase *fin = new C_MDS_LoggedRenameRollback(this, mut, mdr, srcdn, srcdnpv,
-						  destdn, straydn, finish_mdr);
+    MDSLogContextBase *fin = new C_MDS_LoggedRenameRollback(this, mut, mdr,
+							    srcdn, srcdnpv, destdn, straydn,
+							    splits, finish_mdr);
     submit_mdlog_entry(le, fin, mdr, __func__);
     mdlog->flush();
   }
 }
 
 void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn,
-				     version_t srcdnpv, CDentry *destdn,
-				     CDentry *straydn, bool finish_mdr)
+				     version_t srcdnpv, CDentry *destdn, CDentry *straydn,
+				     map<client_t,MClientSnap*> splits[2], bool finish_mdr)
 {
   dout(10) << "_rename_rollback_finish " << mut->reqid << dendl;
 
@@ -8434,17 +8546,17 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
   }
   if (srcdn) {
     srcdn->pop_projected_linkage();
-    if (srcdn->authority().first == mds->get_nodeid())
+    if (srcdn->authority().first == mds->get_nodeid()) {
       srcdn->mark_dirty(srcdnpv, mut->ls);
+      if (srcdn->get_linkage()->is_primary())
+	srcdn->get_linkage()->get_inode()->state_set(CInode::STATE_AUTH);
+    }
   }
 
   mut->apply();
 
   if (srcdn && srcdn->get_linkage()->is_primary()) {
     CInode *in = srcdn->get_linkage()->get_inode();
-    if (srcdn->authority().first == mds->get_nodeid())
-      in->state_set(CInode::STATE_AUTH);
-    // update subtree map?
     if (in && in->is_dir()) {
       assert(destdn);
       mdcache->adjust_subtree_after_rename(in, destdn->get_dir(), true);
@@ -8468,6 +8580,9 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
       root = mdcache->get_subtree_root(destdn->get_dir());
     if (root)
       mdcache->try_trim_non_auth_subtree(root);
+  } else {
+    mdcache->send_snaps(splits[1]);
+    mdcache->send_snaps(splits[0]);
   }
 
   if (mdr) {

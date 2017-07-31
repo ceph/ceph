@@ -2301,23 +2301,26 @@ void link_rollback::generate_test_instances(list<link_rollback*>& ls)
 
 void rmdir_rollback::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   encode(reqid, bl);
   encode(src_dir, bl);
   encode(src_dname, bl);
   encode(dest_dir, bl);
   encode(dest_dname, bl);
+  encode(snapbl, bl);
   ENCODE_FINISH(bl);
 }
 
 void rmdir_rollback::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(reqid, bl);
   decode(src_dir, bl);
   decode(src_dname, bl);
   decode(dest_dir, bl);
   decode(dest_dname, bl);
+  if (struct_v >= 3)
+    decode(snapbl, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2395,23 +2398,29 @@ void rename_rollback::drec::generate_test_instances(list<drec*>& ls)
 
 void rename_rollback::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   encode(reqid, bl);
   encode(orig_src, bl);
   encode(orig_dest, bl);
   encode(stray, bl);
   encode(ctime, bl);
+  encode(srci_snapbl, bl);
+  encode(desti_snapbl, bl);
   ENCODE_FINISH(bl);
 }
 
 void rename_rollback::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(reqid, bl);
   decode(orig_src, bl);
   decode(orig_dest, bl);
   decode(stray, bl);
   decode(ctime, bl);
+  if (struct_v >= 3) {
+    decode(srci_snapbl, bl);
+    decode(desti_snapbl, bl);
+  }
   DECODE_FINISH(bl);
 }
 
