@@ -183,7 +183,7 @@ function create_ec_pool() {
 
     ceph osd erasure-code-profile set myprofile crush-failure-domain=osd $3 $4 $5 $6 $7 || return 1
 
-    ceph osd pool create "$poolname" 1 1 erasure myprofile || return 1
+    create_pool "$poolname" 1 1 erasure myprofile || return 1
 
     if [ "$allow_overwrites" = "true" ]; then
         ceph osd pool set "$poolname" allow_ec_overwrites true || return 1
@@ -487,8 +487,8 @@ function TEST_corrupt_scrub_replicated() {
     create_rbd_pool || return 1
     wait_for_clean || return 1
 
-    ceph osd pool create foo 1 || return 1
-    ceph osd pool create $poolname 1 1 || return 1
+    create_pool foo 1 || return 1
+    create_pool $poolname 1 1 || return 1
     wait_for_clean || return 1
 
     for i in $(seq 1 $total_objs) ; do
@@ -1615,7 +1615,7 @@ function corrupt_scrub_erasure() {
 	fi
     done
     create_rbd_pool || return 1
-    ceph osd pool create foo 1
+    create_pool foo 1
 
     create_ec_pool $poolname $allow_overwrites k=2 m=1 stripe_unit=2K --force || return 1
     wait_for_clean || return 1
@@ -2549,7 +2549,7 @@ function TEST_periodic_scrub_replicated() {
     create_rbd_pool || return 1
     wait_for_clean || return 1
 
-    ceph osd pool create $poolname 1 1 || return 1
+    create_pool $poolname 1 1 || return 1
     wait_for_clean || return 1
 
     local osd=0
