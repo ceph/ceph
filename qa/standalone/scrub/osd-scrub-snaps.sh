@@ -46,7 +46,8 @@ function TEST_scrub_snaps() {
     wait_for_clean || return 1
 
     # Create a pool with a single pg
-    ceph osd pool create $poolname 1 1
+    create_pool $poolname 1 1
+    wait_for_clean || return 1
     poolid=$(ceph osd dump | grep "^pool.*[']test[']" | awk '{ print $2 }')
 
     dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
