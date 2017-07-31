@@ -60,7 +60,7 @@ function create_erasure_coded_pool() {
         plugin=jerasure \
         k=2 m=1 \
         crush-failure-domain=osd || return 1
-    ceph osd pool create $poolname 1 1 erasure myprofile \
+    create_pool $poolname 1 1 erasure myprofile \
         || return 1
     wait_for_clean || return 1
 }

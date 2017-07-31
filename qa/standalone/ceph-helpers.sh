@@ -476,8 +476,13 @@ function test_run_mon() {
 
 function create_rbd_pool() {
     ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
-    ceph osd pool create rbd $PG_NUM || return 1
+    create_pool rbd $PG_NUM || return 1
     rbd pool init rbd
+}
+
+function create_pool() {
+    ceph osd pool create "$@"
+    sleep 1
 }
 
 #######################################################################
