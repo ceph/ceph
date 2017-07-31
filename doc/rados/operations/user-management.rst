@@ -113,10 +113,8 @@ Capability syntax follows the form::
 	osd 'allow {access} [pool={pool-name} [namespace={namespace-name}]]'
 	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]]'
 
-- **Metadata Server Caps:** Metadata server capability simply requires ``allow``, 
-  or blank and does not parse anything further. :: 
-
-	mds 'allow'
+- **Metadata Server Caps:** For administrators, use ``allow *``.  For all
+  other users, such as CephFS clients, consult :doc:`/cephfs/client-auth`
 
 
 .. note:: The Ceph Object Gateway daemon (``radosgw``) is a client of the 
