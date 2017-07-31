@@ -364,6 +364,33 @@ struct TrashImageSpec {
 };
 WRITE_CLASS_ENCODER(TrashImageSpec);
 
+struct MirrorImageMap {
+  MirrorImageMap() {
+  }
+
+  MirrorImageMap(const std::string &instance_id,
+                 const bufferlist &data)
+    : instance_id(instance_id),
+      data(data) {
+  }
+
+  std::string instance_id;
+  bufferlist data;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<MirrorImageMap*> &o);
+
+  bool operator==(const MirrorImageMap &rhs) const;
+  bool operator<(const MirrorImageMap &rhs) const;
+};
+
+std::ostream& operator<<(std::ostream& os, const MirrorImageMap &image_map);
+
+WRITE_CLASS_ENCODER(MirrorImageMap);
+
 } // namespace rbd
 } // namespace cls
 
