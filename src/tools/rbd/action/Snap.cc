@@ -742,10 +742,10 @@ Shell::Action action_create(
   {"snap", "create"}, {"snap", "add"}, "Create a snapshot.", "",
   &get_create_arguments, &execute_create);
 Shell::Action action_remove(
-  {"snap", "remove"}, {"snap", "rm"}, "Deletes a snapshot.", "",
+  {"snap", "remove"}, {"snap", "rm"}, "Delete a snapshot.", "",
   &get_remove_arguments, &execute_remove);
 Shell::Action action_purge(
-  {"snap", "purge"}, {}, "Deletes all snapshots.", "",
+  {"snap", "purge"}, {}, "Delete all snapshots.", "",
   &get_purge_arguments, &execute_purge);
 Shell::Action action_rollback(
   {"snap", "rollback"}, {"snap", "revert"}, "Rollback image to snapshot.", "",
