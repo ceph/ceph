@@ -926,7 +926,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
       uint64_t cur_total_len = obj_ofs;
       uint64_t start_ofs = 0, end_ofs = ent.size;
 
-      if (!found_start && cur_total_len + ent.size > (uint64_t)ofs) {
+      if ((ptotal_len || cb) && !found_start && cur_total_len + ent.size > (uint64_t)ofs) {
 	start_ofs = ofs - obj_ofs;
 	found_start = true;
       }
@@ -937,7 +937,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                         ent.etag.length());
       }
 
-      if (!found_end && obj_ofs > (uint64_t)end) {
+      if ((ptotal_len || cb) && !found_end && obj_ofs > (uint64_t)end) {
 	end_ofs = end - cur_total_len + 1;
 	found_end = true;
       }
@@ -1125,6 +1125,19 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     return r;
   }
 
+  r = RGWRados::Object::Read::range_to_ofs(s->obj_size, ofs, end);
+  if (r < 0) {
+    return r;
+  }
+
+  r = iterate_user_manifest_parts(s->cct, store, ofs, end,
+        pbucket_info, obj_prefix, bucket_acl, *bucket_policy,
+        &total_len, nullptr, nullptr,
+        nullptr, nullptr);
+  if (r < 0) {
+    return r;
+  }
+
   if (!get_data) {
     bufferlist bl;
     send_response_data(bl, 0, 0);
@@ -1257,17 +1270,14 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
   s->obj_size = slo_info.total_size;
   ldout(s->cct, 20) << "s->obj_size=" << s->obj_size << dendl;
 
-  if (ofs < 0) {
-    ofs = total_len - std::min(-ofs, static_cast<off_t>(total_len));
-  }
-
-  if (end < 0 || end >= static_cast<off_t>(total_len)) {
-    end = total_len - 1;
+  int r = RGWRados::Object::Read::range_to_ofs(total_len, ofs, end);
+  if (r < 0) {
+    return r;
   }
 
   total_len = end - ofs + 1;
 
-  int r = iterate_slo_parts(s->cct, store, ofs, end, slo_parts,
+  r = iterate_slo_parts(s->cct, store, ofs, end, slo_parts,
         get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0) {
     return r;
@@ -1452,6 +1462,18 @@ void RGWGetObj::execute()
     }
     return;
   }
+
+  // for range requests with obj size 0
+  if (range_str && !(s->obj_size)) {
+    total_len = 0;
+    op_ret = -ERANGE;
+    goto done_err;
+  }
+
+  op_ret = read_op.range_to_ofs(s->obj_size, ofs, end);
+  if (op_ret < 0)
+    goto done_err;
+  total_len = (ofs <= end ? end + 1 - ofs : 0);
 
   /* Check whether the object has expired. Swift API documentation
    * stands that we should return 404 Not Found in such case. */
