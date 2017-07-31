@@ -1208,8 +1208,12 @@ struct RGWBucketInfo
   uint8_t reshard_status;
   string new_bucket_instance_id;
 
+  /* Swift's Container TempUrls. We store them separately to not request
+   * bucket/container attrs each time we just authorize a request. */
+  std::map<int, std::string> temp_url_keys;
+
   void encode(bufferlist& bl) const {
-     ENCODE_START(19, 4, bl);
+     ENCODE_START(20, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner.id, bl);
      ::encode(flags, bl);
@@ -1236,6 +1240,7 @@ struct RGWBucketInfo
      ::encode(mdsearch_config, bl);
      ::encode(reshard_status, bl);
      ::encode(new_bucket_instance_id, bl);
+     ::encode(temp_url_keys, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -1302,6 +1307,9 @@ struct RGWBucketInfo
      if (struct_v >= 19) {
        ::decode(reshard_status, bl);
        ::decode(new_bucket_instance_id, bl);
+     }
+     if (struct_v >= 20) {
+       ::decode(temp_url_keys, bl);
      }
      DECODE_FINISH(bl);
   }

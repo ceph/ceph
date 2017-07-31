@@ -745,6 +745,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("mdsearch_config", mdsearch_config, f);
   encode_json("reshard_status", (int)reshard_status, f);
   encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
+  encode_json("temp_url_keys", temp_url_keys, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -780,7 +781,9 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   int rs;
   JSONDecoder::decode_json("reshard_status", rs, obj);
   reshard_status = (cls_rgw_reshard_status)rs;
-  JSONDecoder::decode_json("new_bucket_instance_id",new_bucket_instance_id, obj);
+  JSONDecoder::decode_json("new_bucket_instance_id",
+                           new_bucket_instance_id, obj);
+  JSONDecoder::decode_json("temp_url_keys", temp_url_keys, obj);
 }
 
 void rgw_obj_key::dump(Formatter *f) const
