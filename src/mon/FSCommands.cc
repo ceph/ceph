@@ -263,13 +263,6 @@ public:
         return -EINVAL;
       }
 
-      mds_rank_t oldmax = fs->mds_map.get_max_mds();
-
-      if (!fs->mds_map.allows_multimds() && n > oldmax &&
-	  n > 1) {
-	ss << "multi-MDS clusters are not enabled; set 'allow_multimds' to enable";
-	return -EINVAL;
-      }
       if (n > MAX_MDS) {
         ss << "may not have more than " << MAX_MDS << " MDS ranks";
         return -EINVAL;
@@ -377,28 +370,7 @@ public:
 	ss << "enabled new snapshots";
       }
     } else if (var == "allow_multimds") {
-      bool enable_multimds = false;
-      int r = parse_bool(val, &enable_multimds, ss);
-      if (r != 0) {
-	return r;
-      }
-
-      if (!enable_multimds) {
-	fsmap.modify_filesystem(fs->fscid,
-	     [](std::shared_ptr<Filesystem> fs)
-		{
-		  fs->mds_map.clear_multimds_allowed();
-		});
-	ss << "disallowed increasing the cluster size past 1";
-      } else {
-        fsmap.modify_filesystem(
-            fs->fscid,
-            [](std::shared_ptr<Filesystem> fs)
-        {
-          fs->mds_map.set_multimds_allowed();
-        });
-	ss << "enabled creation of more than 1 active MDS";
-      }
+	   ss << "Multiple MDS is always enabled. Use the max_mds parameter to control the number of active MDSs allowed. This command is DEPRECATED and will be REMOVED from future releases.";
     } else if (var == "allow_dirfrags") {
       bool enable_dirfrags = false;
       int r = parse_bool(val, &enable_dirfrags, ss);

@@ -282,14 +282,6 @@ public:
   void clear_snaps_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
   bool allows_snaps() const { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
 
-  void set_multimds_allowed() {
-    set_flag(CEPH_MDSMAP_ALLOW_MULTIMDS);
-    ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS;
-    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS;
-  }
-  void clear_multimds_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_MULTIMDS); }
-  bool allows_multimds() const { return test_flag(CEPH_MDSMAP_ALLOW_MULTIMDS); }
-
   void set_dirfrags_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_DIRFRAGS);
     ever_allowed_features |= CEPH_MDSMAP_ALLOW_DIRFRAGS;

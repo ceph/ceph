@@ -755,12 +755,9 @@ void MDSMap::decode(bufferlist::iterator& p)
       bool flag;
       decode(flag, p);
       ever_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
-      ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS|CEPH_MDSMAP_ALLOW_DIRFRAGS;
+      ever_allowed_features |= CEPH_MDSMAP_ALLOW_DIRFRAGS;
       decode(flag, p);
       explicitly_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
-      if (max_mds > 1) {
-	set_multimds_allowed();
-      }
     } else {
       decode(ever_allowed_features, p);
       decode(explicitly_allowed_features, p);
@@ -768,9 +765,6 @@ void MDSMap::decode(bufferlist::iterator& p)
   } else {
     ever_allowed_features = CEPH_MDSMAP_ALLOW_CLASSICS;
     explicitly_allowed_features = 0;
-    if (max_mds > 1) {
-      set_multimds_allowed();
-    }
   }
   if (ev >= 7)
     decode(inline_data_enabled, p);

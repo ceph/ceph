@@ -385,7 +385,7 @@ COMMAND("fs get name=fs_name,type=CephString", \
 COMMAND("fs set " \
 	"name=fs_name,type=CephString " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
-        "|allow_new_snaps|inline_data|cluster_down|allow_multimds|allow_dirfrags|balancer" \
+        "|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer" \
         "|standby_count_wanted|session_timeout|session_autoclose " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
