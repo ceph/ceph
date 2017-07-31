@@ -60,6 +60,11 @@ do
             continue
         fi
     fi
+    # Don't run test-failure.sh unless explicitly specified
+    if [ "$all" = "true" -a "$f" = "special/test-failure.sh" ]; then
+        continue
+    fi
+
     count=$(expr $count + 1)
     echo "--- $f ---"
     if [[ "$dryrun" != "true" ]]; then
