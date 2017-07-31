@@ -2154,7 +2154,6 @@ static void sync_status(Formatter *formatter)
 
   for (auto iter : store->zone_conn_map) {
     const string& source_id = iter.first;
-    string zone_name;
     string source_str = "source: ";
     string s = source_str + source_id;
     auto siter = store->zone_by_id.find(source_id);

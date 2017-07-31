@@ -8122,7 +8122,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     if (tail_placement.bucket.name.empty()) {
       manifest.set_tail_placement(tail_placement.placement_rule, src_obj.bucket);
     }
-    string oid, key;
     for (; miter != astate->manifest.obj_end(); ++miter) {
       ObjectWriteOperation op;
       cls_refcount_get(op, tag, true);
@@ -8175,8 +8174,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 done_ret:
   if (!copy_itself) {
     vector<rgw_raw_obj>::iterator riter;
-
-    string oid, key;
 
     /* rollback reference */
     for (riter = ref_objs.begin(); riter != ref_objs.end(); ++riter) {
@@ -10084,7 +10081,6 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
   RGWRados *store = source->get_store();
   CephContext *cct = store->ctx();
 
-  std::string oid, key;
   rgw_raw_obj read_obj;
   uint64_t read_ofs = ofs;
   uint64_t len, read_len;
@@ -11580,7 +11576,6 @@ int RGWRados::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string 
   BucketIndexShardsManager ver_mgr;
   BucketIndexShardsManager master_ver_mgr;
   BucketIndexShardsManager marker_mgr;
-  string shard_marker;
   char buf[64];
   for(; iter != headers.end(); ++iter, ++viter) {
     accumulate_raw_stats(iter->second, stats);
