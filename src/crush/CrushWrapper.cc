@@ -369,8 +369,15 @@ int CrushWrapper::remove_root(int item, bool unused)
     return 0;
 
   crush_bucket *b = get_bucket(item);
-  if (IS_ERR(b))
-    return -ENOENT;
+  if (IS_ERR(b)) {
+    // should be idempotent
+    // e.g.: we use 'crush link' to link same host into
+    // different roots, which as a result can cause different
+    // shadow trees reference same hosts too. This means
+    // we may need to destory the same buckets(hosts, racks, etc.)
+    // multiple times during rebuilding all shadow trees.
+    return 0;
+  }
 
   for (unsigned n = 0; n < b->size; n++) {
     if (b->items[n] >= 0)
