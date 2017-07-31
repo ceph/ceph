@@ -317,6 +317,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 
   auto configure = new MMgrConfigure();
   configure->stats_period = g_conf->mgr_stats_period;
+  configure->stats_threshold = g_conf->get_val<int64_t>("mgr_stats_threshold");
   m->get_connection()->send_message(configure);
 
   DaemonStatePtr daemon;

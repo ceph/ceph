@@ -227,9 +227,15 @@ void MgrClient::send_report()
   pcc->with_counters([this, report](
         const PerfCountersCollection::CounterMap &by_path)
   {
+    auto include_counter = [this](
+        const PerfCounters::perf_counter_data_any_d &ctr)
+    {
+      return ctr.prio >= (int)stats_threshold;
+    };
+
     ENCODE_START(1, 1, report->packed);
     for (auto p = session->declared.begin(); p != session->declared.end(); ) {
-      if (by_path.count(*p) == 0) {
+      if (by_path.count(*p) == 0 || !include_counter(*(by_path.at(*p)))) {
 	report->undeclare_types.push_back(*p);
 	ldout(cct,20) << __func__ << " undeclare " << *p << dendl;
 	p = session->declared.erase(p);
@@ -241,8 +247,12 @@ void MgrClient::send_report()
       auto& path = i.first;
       auto& data = *(i.second);
 
+      if (!include_counter(data)) {
+        continue;
+      }
+
       if (session->declared.count(path) == 0) {
-	ldout(cct,20) << __func__ << " declare " << path << dendl;
+	ldout(cct,20) << " declare " << path << dendl;
 	PerfCounterType type;
 	type.path = path;
 	if (data.description) {
@@ -264,8 +274,11 @@ void MgrClient::send_report()
     }
     ENCODE_FINISH(report->packed);
 
-    ldout(cct, 20) << by_path.size() << " counters, of which "
-		   << report->declare_types.size() << " new" << dendl;
+    ldout(cct, 20) << "sending " << session->declared.size() << " counters ("
+                      "of possible " << by_path.size() << "), "
+		   << report->declare_types.size() << " new, "
+                   << report->undeclare_types.size() << " removed"
+                   << dendl;
   });
 
   ldout(cct, 20) << "encoded " << report->packed.length() << " bytes" << dendl;
@@ -312,6 +325,11 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
   }
 
   ldout(cct, 4) << "stats_period=" << m->stats_period << dendl;
+
+  if (stats_threshold != m->stats_threshold) {
+    ldout(cct, 4) << "updated stats threshold: " << m->stats_threshold << dendl;
+    stats_threshold = m->stats_threshold;
+  }
 
   bool starting = (stats_period == 0) && (m->stats_period != 0);
   stats_period = m->stats_period;

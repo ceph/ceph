@@ -11,6 +11,9 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/regex.hpp>
 
+// Definitions for enums
+#include "common/perf_counters.h"
+
 
 void Option::dump_value(const char *field_name,
     const Option::value_t &v, Formatter *f) const
@@ -4041,6 +4044,14 @@ std::vector<Option> get_global_options() {
     Option("journal_replay_from", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description(""),
+
+  Option("mgr_stats_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default((int64_t)PerfCountersBuilder::PRIO_USEFUL)
+  .set_description("Lowest perfcounter priority collected by mgr")
+  .set_long_description("Daemons only set perf counter data to the manager "
+    "daemon if the counter has a priority higher than this.")
+  .set_min_max((int64_t)PerfCountersBuilder::PRIO_DEBUGONLY,
+               (int64_t)PerfCountersBuilder::PRIO_CRITICAL),
 
     Option("journal_zero_on_create", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
