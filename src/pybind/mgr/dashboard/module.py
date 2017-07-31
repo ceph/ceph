@@ -32,6 +32,7 @@ from types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
 import rados
+import rbd_iscsi
 import rbd_mirroring
 from rbd_ls import RbdLs, RbdPoolLs
 from cephfs_clients import CephFSClients
@@ -82,6 +83,9 @@ class Module(MgrModule):
         # Stateful instance of RbdPoolLs, hold cached list of RBD
         # pools
         self.rbd_pool_ls = RbdPoolLs(self)
+
+        # Stateful instance of RbdISCSI
+        self.rbd_iscsi = rbd_iscsi.Controller(self)
 
         # Stateful instance of RbdMirroring, hold cached results.
         self.rbd_mirroring = rbd_mirroring.Controller(self)
@@ -623,6 +627,32 @@ class Module(MgrModule):
             @cherrypy.tools.json_out()
             def rbd_mirroring_data(self):
                 return self._rbd_mirroring()
+
+            def _rbd_iscsi(self):
+                status, data = global_instance().rbd_iscsi.content_data.get()
+                if data is None:
+                    log.warning("Failed to get RBD iSCSI status")
+                    return {}
+                return data
+
+            @cherrypy.expose
+            def rbd_iscsi(self):
+                template = env.get_template("rbd_iscsi.html")
+
+                toplevel_data = self._toplevel_data()
+                content_data = self._rbd_iscsi()
+
+                return template.render(
+                    ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
+                    toplevel_data=json.dumps(toplevel_data, indent=2),
+                    content_data=json.dumps(content_data, indent=2)
+                )
+
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def rbd_iscsi_data(self):
+                return self._rbd_iscsi()
 
             @cherrypy.expose
             def health(self):

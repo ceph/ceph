@@ -71,12 +71,40 @@ class DaemonsAndPools(RemoteViewCache):
     def get_pools(self, daemons):
         status, pool_names = self._module.rbd_pool_ls.get()
         if pool_names is None:
-            log.warning("Failed to get RBD pool list")
+            self.log.warning("Failed to get RBD pool list")
             return {}
 
         pool_stats = {}
+        rbdctx = rbd.RBD()
         for pool_name in pool_names:
-            pool_stats[pool_name] = {}
+            self.log.debug("Constructing IOCtx " + pool_name)
+            try:
+                ioctx = self._module.rados.open_ioctx(pool_name)
+            except:
+                self.log.exception("Failed to open pool " + pool_name)
+                continue
+
+            try:
+                mirror_mode = rbdctx.mirror_mode_get(ioctx)
+            except:
+                self.log.exception("Failed to query mirror mode " + pool_name)
+
+            stats = {}
+            if mirror_mode == rbd.RBD_MIRROR_MODE_DISABLED:
+                continue
+            elif mirror_mode == rbd.RBD_MIRROR_MODE_IMAGE:
+                mirror_mode = "image"
+            elif mirror_mode == rbd.RBD_MIRROR_MODE_POOL:
+                mirror_mode = "pool"
+            else:
+                mirror_mode = "unknown"
+                stats['health_color'] = "warning"
+                stats['health'] = "Warning"
+
+            pool_stats[pool_name] = dict(stats, **{
+                'mirror_mode': mirror_mode
+            })
+
         for daemon in daemons:
             for pool_id, pool_data in daemon['status'].items():
                 stats = pool_stats.get(pool_data['name'], None)
@@ -127,19 +155,6 @@ class PoolDatum(RemoteViewCache):
             self.log.exception("Failed to open pool " + pool_name)
             return None
 
-        rbdctx = rbd.RBD()
-        try:
-            mirror_mode = rbdctx.mirror_mode_get(ioctx)
-        except:
-            self.log.exception("Failed to query mirror mode " + pool_name)
-        if mirror_mode == rbd.RBD_MIRROR_MODE_IMAGE:
-            mirror_mode = "image"
-        elif mirror_mode == rbd.RBD_MIRROR_MODE_POOL:
-            mirror_mode = "pool"
-        else:
-            mirror_mode = None
-        data['mirror_mode'] = mirror_mode
-
         mirror_state = {
             'down': {
                 'health': 'issue',
@@ -182,6 +197,7 @@ class PoolDatum(RemoteViewCache):
             }
         }
 
+        rbdctx = rbd.RBD()
         try:
             mirror_image_status = rbdctx.mirror_image_status_list(ioctx)
             data['mirror_images'] = sorted([
@@ -191,9 +207,10 @@ class PoolDatum(RemoteViewCache):
                 }, **mirror_state['down' if not image['up'] else image['state']])
                 for image in mirror_image_status
             ], key=lambda k: k['name'])
+        except rbd.ImageNotFound:
+            pass
         except:
             self.log.exception("Failed to list mirror image status " + self.pool_name)
-            return None
 
         return data
 
@@ -205,7 +222,7 @@ class Toplevel(RemoteViewCache):
     def _get(self):
         status, data = self.daemons_and_pools.get()
         if data is None:
-            log.warning("Failed to get rbd-mirror daemons and pools")
+            self.log.warning("Failed to get rbd-mirror daemons and pools")
             daemons = {}
         daemons = data.get('daemons', [])
         pools = data.get('pools', {})
@@ -235,12 +252,12 @@ class ContentData(RemoteViewCache):
     def _get(self):
         status, pool_names = self._module.rbd_pool_ls.get()
         if pool_names is None:
-            log.warning("Failed to get RBD pool list")
+            self.log.warning("Failed to get RBD pool list")
             return None
 
         status, data = self.daemons_and_pools.get()
         if data is None:
-            log.warning("Failed to get rbd-mirror daemons list")
+            self.log.warning("Failed to get rbd-mirror daemons list")
             data = {}
         daemons = data.get('daemons', [])
         pool_stats = data.get('pools', {})
@@ -250,11 +267,13 @@ class ContentData(RemoteViewCache):
         image_syncing = []
         image_ready = []
         for pool_name in pool_names:
-            pool = self.get_pool_datum(pool_name)
-            if pool is None:
+            pool = self.get_pool_datum(pool_name) or {}
+            stats = pool_stats.get(pool_name, {})
+            if stats.get('mirror_mode', None) is None:
                 continue
 
-            for mirror_image in pool['mirror_images']:
+            mirror_images = pool.get('mirror_images', [])
+            for mirror_image in mirror_images:
                 image = {
                     'pool_name': pool_name,
                     'name': mirror_image['name']
@@ -282,10 +301,8 @@ class ContentData(RemoteViewCache):
                     image_error.append(image)
 
             pools.append(dict({
-                'name': pool_name,
-                'mirror_mode': pool['mirror_mode']
-            }, **pool_stats.get(pool_name, {})))
-
+                'name': pool_name
+            }, **stats))
 
         return {
             'daemons': daemons,
