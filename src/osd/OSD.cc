@@ -6402,6 +6402,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     cmd_getval(cct, cmdmap, "value", val);
     osd_lock.Unlock();
     r = cct->_conf->set_val(key, val, true, &ss);
+    if (r == 0) {
+      cct->_conf->apply_changes(nullptr);
+    }
     osd_lock.Lock();
   }
   else if (prefix == "cluster_log") {
