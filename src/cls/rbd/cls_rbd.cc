@@ -5046,7 +5046,6 @@ int trash_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   map<string, cls::rbd::TrashImageSpec> data;
   string last_read = trash::image_key(start_after);
-  int max_read = RBD_MAX_KEYS_READ;
   bool more = true;
 
   CLS_LOG(20, "trash_get_images");
