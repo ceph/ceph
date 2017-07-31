@@ -351,11 +351,11 @@ int execute_restore(const po::variables_map &vm) {
 
 
 Shell::Action action_move(
-    {"trash", "move"}, {"trash", "mv"}, "Moves an image to the trash.", "",
+    {"trash", "move"}, {"trash", "mv"}, "Move an image to the trash.", "",
     &get_move_arguments, &execute_move);
 
 Shell::Action action_remove(
-  {"trash", "remove"}, {"trash", "rm"}, "Removes an image from trash.", "",
+  {"trash", "remove"}, {"trash", "rm"}, "Remove an image from trash.", "",
   &get_remove_arguments, &execute_remove);
 
 Shell::SwitchArguments switched_arguments({"long", "l"});
@@ -364,7 +364,7 @@ Shell::Action action_list(
   &get_list_arguments, &execute_list);
 
 Shell::Action action_restore(
-    {"trash", "restore"}, {}, "Restores an image from trash.", "",
+    {"trash", "restore"}, {}, "Restore an image from trash.", "",
     &get_restore_arguments, &execute_restore);
 
 } // namespace trash
