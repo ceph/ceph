@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-whitelist:
       - overall HEALTH_
+      - \(CACHE_POOL_NEAR_FULL\)
       - \(CACHE_POOL_NO_HIT_SET\)
 tasks:
 - exec:
