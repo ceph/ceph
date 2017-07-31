@@ -27,25 +27,6 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
-    #
-    # Disable device auto class feature for this testing,
-    # as it will automatically make root clones based on new class types
-    # and hence affect the down osd counting.
-    # E.g.,
-    #
-    # ID WEIGHT  TYPE NAME                                            UP/DOWN REWEIGHT PRIMARY-AFFINITY
-    # -4 3.00000 root default~hdd
-    # -3 3.00000     host gitbuilder-ceph-rpm-centos7-amd64-basic~hdd
-    #  0 1.00000         osd.0                                           down  1.00000          1.00000
-    #  1 1.00000         osd.1                                             up  1.00000          1.00000
-    #  2 1.00000         osd.2                                             up  1.00000          1.00000
-    # -1 3.00000 root default
-    # -2 3.00000     host gitbuilder-ceph-rpm-centos7-amd64-basic
-    #  0 1.00000         osd.0                                           down  1.00000          1.00000
-    #  1 1.00000         osd.1                                             up  1.00000          1.00000
-    #  2 1.00000         osd.2                                             up  1.00000          1.00000
-    #
-    CEPH_ARGS+="--osd-class-update-on-start=false "
 
     OLD_ARGS=$CEPH_ARGS
     CEPH_ARGS+="--osd-fast-fail-on-connection-refused=false "
