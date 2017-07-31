@@ -27,7 +27,7 @@ extern "C" {
 
 #define LIBRGW_FILE_VER_MAJOR 1
 #define LIBRGW_FILE_VER_MINOR 1
-#define LIBRGW_FILE_VER_EXTRA 0
+#define LIBRGW_FILE_VER_EXTRA 3
 
 #define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
@@ -36,7 +36,8 @@ extern "C" {
  * object types
  */
 enum rgw_fh_type {
-  RGW_FS_TYPE_FILE = 0,
+  RGW_FS_TYPE_NIL = 0,
+  RGW_FS_TYPE_FILE,
   RGW_FS_TYPE_DIRECTORY,
 };
 
@@ -91,6 +92,12 @@ void rgwfile_version(int *major, int *minor, int *extra);
 */
 #define RGW_LOOKUP_FLAG_NONE    0x0000
 #define RGW_LOOKUP_FLAG_CREATE  0x0001
+#define RGW_LOOKUP_FLAG_RCB     0x0002 /* readdir callback hint */
+#define RGW_LOOKUP_FLAG_DIR     0x0004
+#define RGW_LOOKUP_FLAG_FILE    0x0008
+
+#define RGW_LOOKUP_TYPE_FLAGS \
+  (RGW_LOOKUP_FLAG_DIR|RGW_LOOKUP_FLAG_FILE)
 
 int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh, const char *path,
@@ -118,6 +125,16 @@ int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 int rgw_mount(librgw_t rgw, const char *uid, const char *key,
 	      const char *secret, struct rgw_fs **rgw_fs,
 	      uint32_t flags);
+
+/*
+ register invalidate callbacks
+*/
+#define RGW_REG_INVALIDATE_FLAG_NONE    0x0000
+
+typedef void (*rgw_fh_callback_t)(void *handle, struct rgw_fh_hk fh_hk);
+
+int rgw_register_invalidate(struct rgw_fs *rgw_fs, rgw_fh_callback_t cb,
+			    void *arg, uint32_t flags);
 
 /*
  detach rgw namespace
@@ -189,7 +206,8 @@ int rgw_unlink(struct rgw_fs *rgw_fs,
 /*
     read  directory content
 */
-typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset);
+typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset,
+			       uint32_t flags);
 
 #define RGW_READDIR_FLAG_NONE      0x0000
 #define RGW_READDIR_FLAG_DOTDOT    0x0001 /* send dot names */

@@ -24,9 +24,9 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/variant.hpp>
 #include <boost/utility/string_ref.hpp>
+#include <boost/optional.hpp>
 #include "xxhash.h"
 #include "include/buffer.h"
-#include "common/sstring.hh"
 #include "common/cohort_lru.h"
 #include "common/ceph_timer.h"
 #include "rgw_common.h"
@@ -60,6 +60,20 @@ namespace rgw {
   class RGWLibFS;
   class RGWFileHandle;
   class RGWWriteRequest;
+
+  static inline bool operator <(const struct timespec& lhs,
+				const struct timespec& rhs) {
+    if (lhs.tv_sec == rhs.tv_sec)
+      return lhs.tv_nsec < rhs.tv_nsec;
+    else
+      return lhs.tv_sec < rhs.tv_sec;
+  }
+
+  static inline bool operator ==(const struct timespec& lhs,
+				 const struct timespec& rhs) {
+    return ((lhs.tv_sec == rhs.tv_sec) &&
+	    (lhs.tv_nsec == rhs.tv_nsec));
+  }
 
   /*
    * XXX
@@ -164,12 +178,12 @@ namespace rgw {
     using lock_guard = std::lock_guard<std::mutex>;
     using unique_lock = std::unique_lock<std::mutex>;
 
-    /* median file name length (HPC) has been found to be 16,
-     * w/90% of file names <= 31 (Yifan Wang, CMU) */
-    using dirent_string = basic_sstring<char, uint16_t, 32>;
-
-    using marker_cache_t = flat_map<uint64_t, dirent_string>;
-    using name_cache_t = flat_map<dirent_string, uint8_t>;
+    /* TODO: keeping just the last marker is sufficient for
+     * nfs-ganesha 2.4.5; in the near future, nfs-ganesha will
+     * be able to hint the name of the next dirent required,
+     * from which we can directly synthesize a RADOS marker.
+     * using marker_cache_t = flat_map<uint64_t, rgw_obj_key>;
+     */
 
     struct State {
       uint64_t dev;
@@ -194,25 +208,15 @@ namespace rgw {
     struct directory {
 
       static constexpr uint32_t FLAG_NONE =     0x0000;
-      static constexpr uint32_t FLAG_CACHED =   0x0001;
-      static constexpr uint32_t FLAG_OVERFLOW = 0x0002;
 
       uint32_t flags;
-      marker_cache_t marker_cache;
-      name_cache_t name_cache;
+      rgw_obj_key last_marker;
+      struct timespec last_readdir;
 
-      directory() : flags(FLAG_NONE) {}
-
-      void clear_state() {
-	marker_cache.clear();
-	name_cache.clear();
-      }
-
-      void set_overflow() {
-	clear_state();
-	flags |= FLAG_OVERFLOW;
-      }
+      directory() : flags(FLAG_NONE), last_readdir{0,0} {}
     };
+
+    void clear_state();
 
     boost::variant<file, directory> variant_type;
 
@@ -356,6 +360,13 @@ namespace rgw {
 	break;
 	}
       }
+
+      if (mask & RGW_SETATTR_ATIME)
+	state.atime = st->st_atim;
+      if (mask & RGW_SETATTR_MTIME)
+	state.mtime = st->st_mtim;
+      if (mask & RGW_SETATTR_CTIME)
+	state.ctime = st->st_ctim;
     }
 
     int stat(struct stat* st) {
@@ -381,7 +392,7 @@ namespace rgw {
 
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
-	st->st_nlink = 3;
+	st->st_nlink = state.nlink;
 	break;
       case RGW_FS_TYPE_FILE:
 	st->st_nlink = 1;
@@ -405,11 +416,11 @@ namespace rgw {
 
     const std::string& object_name() const { return name; }
 
-    std::string full_object_name(bool omit_bucket = false) {
+    std::string full_object_name(bool omit_bucket = false) const {
       std::string path;
       std::vector<const std::string*> segments;
       int reserve = 0;
-      RGWFileHandle* tfh = this;
+      const RGWFileHandle* tfh = this;
       while (tfh && !tfh->is_root() && !(tfh->is_bucket() && omit_bucket)) {
 	segments.push_back(&tfh->object_name());
 	reserve += (1 + tfh->object_name().length());
@@ -430,11 +441,11 @@ namespace rgw {
       return path;
     }
 
-    inline std::string relative_object_name() {
+    inline std::string relative_object_name() const {
       return full_object_name(true /* omit_bucket */);
     }
 
-    inline std::string format_child_name(const std::string& cbasename) {
+    inline std::string format_child_name(const std::string& cbasename) const {
       std::string child_name{relative_object_name()};
       if ((child_name.size() > 0) &&
 	  (child_name.back() != '/'))
@@ -443,7 +454,7 @@ namespace rgw {
       return child_name;
     }
 
-    inline std::string make_key_name(const char *name) {
+    inline std::string make_key_name(const char *name) const {
       std::string key_name{full_object_name()};
       if (key_name.length() > 0)
 	key_name += "/";
@@ -451,7 +462,7 @@ namespace rgw {
       return key_name;
     }
 
-    fh_key make_fhk(const std::string& name) {
+    fh_key make_fhk(const std::string& name) const {
       if (depth <= 1)
 	return fh_key(fhk.fh_hk.object, name.c_str());
       else {
@@ -460,38 +471,27 @@ namespace rgw {
       }
     }
 
-    void add_marker(uint64_t off, const boost::string_ref& marker,
+    void add_marker(uint64_t off, const rgw_obj_key& marker,
 		    uint8_t obj_type) {
       using std::get;
       directory* d = get<directory>(&variant_type);
       if (d) {
 	unique_lock guard(mtx);
-	// XXXX check for failure (dup key)
-	d->marker_cache.insert(
-	  marker_cache_t::value_type(off, marker.data()));
-	/* 90% of directories hold <= 32 entries (Yifan Wang, CMU),
-	 * but go big */
-	if (d->name_cache.size() < 128) {
-	  d->name_cache.insert(
-	    name_cache_t::value_type(marker.data(), obj_type));
-	} else {
-	  d->set_overflow(); // too many
-	}
+	d->last_marker = marker;
       }
     }
 
-    /* XXX */
-    std::string find_marker(uint64_t off) { // XXX copy
+    const rgw_obj_key* find_marker(uint64_t off) const {
       using std::get;
-      directory* d = get<directory>(&variant_type);
-      if (d) {
-	const auto& iter = d->marker_cache.find(off);
-	if (iter != d->marker_cache.end())
-	  return iter->second;
+      if (off > 0) {
+	const directory* d = get<directory>(&variant_type);
+	if (d ) {
+	  return &d->last_marker;
+	}
       }
-      return "";
+      return nullptr;
     }
-    
+
     bool is_open() const { return flags & FLAG_OPEN; }
     bool is_root() const { return flags & FLAG_ROOT; }
     bool is_bucket() const { return flags & FLAG_BUCKET; }
@@ -501,6 +501,7 @@ namespace rgw {
     bool creating() const { return flags & FLAG_CREATING; }
     bool deleted() const { return flags & FLAG_DELETED; }
     bool stateless_open() const { return flags & FLAG_STATELESS_OPEN; }
+    bool has_children() const;
 
     uint32_t open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
@@ -539,6 +540,10 @@ namespace rgw {
     void clear_creating() {
       lock_guard guard(mtx);
       flags &= ~FLAG_CREATING;
+    }
+
+    void inc_nlink(const uint64_t n) {
+      state.nlink += n;
     }
 
     void set_nlink(const uint64_t n) {
@@ -607,6 +612,8 @@ namespace rgw {
     void decode_attrs(const ceph::buffer::list* ux_key1,
 		      const ceph::buffer::list* ux_attrs1);
 
+    void invalidate();
+
     virtual bool reclaim();
 
     typedef cohort::lru::LRU<std::mutex> FhLRU;
@@ -657,7 +664,10 @@ namespace rgw {
     typedef cohort::lru::TreeX<RGWFileHandle, FhTree, FhLT, FhEQ, fh_key,
 			       std::mutex> FHCache;
 
-    virtual ~RGWFileHandle() {}
+    virtual ~RGWFileHandle();
+
+    friend std::ostream& operator<<(std::ostream &os,
+				    RGWFileHandle const &rgw_fh);
 
     class Factory : public cohort::lru::ObjectFactory
     {
@@ -696,6 +706,22 @@ namespace rgw {
     return static_cast<RGWFileHandle*>(fh->fh_private);
   }
 
+  static inline enum rgw_fh_type fh_type_of(uint32_t flags) {
+    enum rgw_fh_type fh_type;
+    switch(flags & RGW_LOOKUP_TYPE_FLAGS)
+    {
+    case RGW_LOOKUP_FLAG_DIR:
+      fh_type = RGW_FS_TYPE_DIRECTORY;
+      break;
+    case RGW_LOOKUP_FLAG_FILE:
+      fh_type = RGW_FS_TYPE_FILE;
+      break;
+    default:
+      fh_type = RGW_FS_TYPE_NIL;
+    };
+    return fh_type;
+  }
+
   typedef std::tuple<RGWFileHandle*, uint32_t> LookupFHResult;
   typedef std::tuple<RGWFileHandle*, int> MkObjResult;
 
@@ -704,6 +730,9 @@ namespace rgw {
     CephContext* cct;
     struct rgw_fs fs;
     RGWFileHandle root_fh;
+    rgw_fh_callback_t invalidate_cb;
+    void *invalidate_arg;
+    bool shutdown;
 
     mutable std::atomic<uint64_t> refcnt;
 
@@ -732,6 +761,9 @@ namespace rgw {
 	: t(t), fhk(k), ts(ts) {}
     };
 
+    friend std::ostream& operator<<(std::ostream &os,
+				    RGWLibFS::event const &ev);
+
     using event_vector = /* boost::small_vector<event, 16> */
       std::vector<event>;
 
@@ -759,7 +791,6 @@ namespace rgw {
       State() : flags(0) {}
 
       void push_event(const event& ev) {
-	lock_guard guard(mtx);
 	events.push_back(ev);
       }
     } state;
@@ -774,7 +805,8 @@ namespace rgw {
 
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
 	    const char* _key)
-      : cct(_cct), root_fh(this, get_inst()), refcnt(1),
+      : cct(_cct), root_fh(this, get_inst()), invalidate_cb(nullptr),
+	invalidate_arg(nullptr), shutdown(false), refcnt(1),
 	fh_cache(cct->_conf->rgw_nfs_fhcache_partitions,
 		 cct->_conf->rgw_nfs_fhcache_size),
 	fh_lru(cct->_conf->rgw_nfs_lru_lanes,
@@ -817,10 +849,12 @@ namespace rgw {
       intrusive_ptr_release(this);
     }
 
+    void stop() { shutdown = true; }
+
     void release_evict(RGWFileHandle* fh) {
       /* remove from cache, releases sentinel ref */
       fh_cache.remove(fh->fh.fh_hk.object, fh,
-		      RGWFileHandle::FHCache::FLAG_NONE);
+		      RGWFileHandle::FHCache::FLAG_LOCK);
       /* release call-path ref */
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
@@ -860,6 +894,12 @@ namespace rgw {
       return ret;
     } /* authorize */
 
+    int register_invalidate(rgw_fh_callback_t cb, void *arg, uint32_t flags) {
+      invalidate_cb = cb;
+      invalidate_arg = arg;
+      return 0;
+    }
+
     /* find RGWFileHandle by id  */
     LookupFHResult lookup_fh(const fh_key& fhk,
 			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
@@ -892,6 +932,11 @@ namespace rgw {
       }
       lat.lock->unlock(); /* !LATCHED */
       get<0>(fhr) = fh;
+      if (fh) {
+	    lsubdout(get_context(), rgw, 17)
+	      << __func__ << " 1 " << *fh
+	      << dendl;
+      }
       return fhr;
     } /* lookup_fh(const fh_key&) */
 
@@ -961,6 +1006,10 @@ namespace rgw {
 	  /* inserts, releasing latch */
 	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
 	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
+	  /* ref parent (non-initial ref cannot fail on valid object) */
+	  if (! parent->is_root()) {
+	    (void) fh_lru.ref(parent, cohort::lru::FLAG_NONE);
+	  }
 	  goto out; /* !LATCHED */
 	} else {
 	  lat.lock->unlock();
@@ -970,15 +1019,24 @@ namespace rgw {
       lat.lock->unlock(); /* !LATCHED */
     out:
       get<0>(fhr) = fh;
+      if (fh) {
+	    lsubdout(get_context(), rgw, 17)
+	      << __func__ << " 2 " << *fh
+	      << dendl;
+      }
       return fhr;
     } /*  lookup_fh(RGWFileHandle*, const char *, const uint32_t) */
 
     inline void unref(RGWFileHandle* fh) {
-      (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+      if (likely(! fh->is_root())) {
+	(void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+      }
     }
 
     inline RGWFileHandle* ref(RGWFileHandle* fh) {
-      fh_lru.ref(fh, cohort::lru::FLAG_NONE);
+      if (likely(! fh->is_root())) {
+	fh_lru.ref(fh, cohort::lru::FLAG_NONE);
+      }
       return fh;
     }
 
@@ -991,7 +1049,8 @@ namespace rgw {
 			       const char *path, uint32_t flags);
 
     LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
-			     uint32_t flags);
+			     enum rgw_fh_type type = RGW_FS_TYPE_NIL,
+			     uint32_t flags = RGWFileHandle::FLAG_NONE);
 
     int read(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
 	     size_t* bytes_read, void* buffer, uint32_t flags);
@@ -1050,6 +1109,15 @@ namespace rgw {
       fh->mtx.unlock(); /* !LOCKED */
     out:
       lat.lock->unlock(); /* !LATCHED */
+
+      /* special case:  lookup root_fh */
+      if (! fh) {
+	if (unlikely(fh_hk == root_fh.fh.fh_hk)) {
+	  fh = &root_fh;
+	  ref(fh);
+	}
+      }
+
       return fh;
     }
 
@@ -1090,19 +1158,16 @@ public:
   void* cb_arg;
   rgw_readdir_cb rcb;
   size_t ix;
+  uint32_t d_count;
 
   RGWListBucketsRequest(CephContext* _cct, RGWUserInfo *_user,
 			RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 			void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
-      cb_arg(_cb_arg), rcb(_rcb), ix(0) {
-    const std::string& sm = rgw_fh->find_marker(*offset);
-    if (sm.size() > 0) {
-      RGWListBuckets::marker =
-	rgw_fh->relative_object_name();
-      if (marker.back() != '/')
-	marker += "/";
-      marker += sm;
+      cb_arg(_cb_arg), rcb(_rcb), ix(0), d_count(0) {
+    const auto& mk = rgw_fh->find_marker(*offset);
+    if (mk) {
+      marker = mk->name;
     }
     op = this;
   }
@@ -1154,8 +1219,14 @@ public:
     for (const auto& iter : m) {
       boost::string_ref marker{iter.first};
       const RGWBucketEnt& ent = iter.second;
-      /* call me maybe */
-      this->operator()(ent.bucket.name, marker);
+      if (! this->operator()(ent.bucket.name, marker)) {
+	/* caller cannot accept more */
+	lsubdout(cct, rgw, 5) << "ListBuckets rcb failed"
+			      << " dirent=" << ent.bucket.name
+			      << " call count=" << ix
+			      << dendl;
+	return;
+      }
       ++ix;
     }
   } /* send_response_data */
@@ -1164,13 +1235,15 @@ public:
     // do nothing
   }
 
-  int operator()(const boost::string_ref& name, const boost::string_ref& marker) {
+  int operator()(const boost::string_ref& name,
+		 const boost::string_ref& marker) {
     uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
     *offset = off;
     /* update traversal cache */
-    rgw_fh->add_marker(off, marker, RGW_FS_TYPE_DIRECTORY);
-    rcb(name.data(), cb_arg, off);
-    return 0;
+    rgw_fh->add_marker(off, rgw_obj_key{marker.data(), ""},
+		       RGW_FS_TYPE_DIRECTORY);
+    ++d_count;
+    return rcb(name.data(), cb_arg, off, RGW_LOOKUP_FLAG_DIR);
   }
 
   bool eof() {
@@ -1186,8 +1259,8 @@ public:
   read directory content (bucket objects)
 */
 
-  class RGWReaddirRequest : public RGWLibRequest,
-			    public RGWListBucket /* RGWOp */
+class RGWReaddirRequest : public RGWLibRequest,
+			  public RGWListBucket /* RGWOp */
 {
 public:
   RGWFileHandle* rgw_fh;
@@ -1195,18 +1268,16 @@ public:
   void* cb_arg;
   rgw_readdir_cb rcb;
   size_t ix;
+  uint32_t d_count;
 
   RGWReaddirRequest(CephContext* _cct, RGWUserInfo *_user,
 		    RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 		    void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
-      cb_arg(_cb_arg), rcb(_rcb), ix(0) {
-    const std::string& sm{rgw_fh->find_marker(*offset)};
-    if (sm.size() > 0) {
-      RGWListBucket::marker = {rgw_fh->relative_object_name(), ""};
-      if (marker.name.back() != '/')
-	marker.name += "/";
-      marker.name += sm;
+      cb_arg(_cb_arg), rcb(_rcb), ix(0), d_count(0) {
+    const auto& mk = rgw_fh->find_marker(*offset);
+    if (mk) {
+      marker = *mk;
     }
     default_max = 1000; // XXX was being omitted
     op = this;
@@ -1249,7 +1320,7 @@ public:
     return 0;
   }
 
-  int operator()(const boost::string_ref name, const boost::string_ref marker,
+  int operator()(const boost::string_ref name, const rgw_obj_key& marker,
 		uint8_t type) {
 
     assert(name.length() > 0); // XXX
@@ -1259,8 +1330,11 @@ public:
     *offset = off;
     /* update traversal cache */
     rgw_fh->add_marker(off, marker, type);
-    rcb(name.data(), cb_arg, off); // XXX has to be legit C-style string
-    return 0;
+    ++d_count;
+    return rcb(name.data(), cb_arg, off,
+	       (type == RGW_FS_TYPE_DIRECTORY) ?
+	       RGW_LOOKUP_FLAG_DIR :
+	       RGW_LOOKUP_FLAG_FILE);
   }
 
   virtual int get_params() {
@@ -1293,8 +1367,14 @@ public:
 			     << " (" << sref << ")" << ""
 			     << dendl;
 
-      /* call me maybe */
-      this->operator()(sref, sref, RGW_FS_TYPE_FILE);
+      if(! this->operator()(sref, next_marker, RGW_FS_TYPE_FILE)) {
+	/* caller cannot accept more */
+	lsubdout(cct, rgw, 5) << "readdir rcb failed"
+			      << " dirent=" << sref.data()
+			      << " call count=" << ix
+			      << dendl;
+	return;
+      }
       ++ix;
     }
     for (auto& iter : common_prefixes) {
@@ -1327,7 +1407,7 @@ public:
 			     << " cpref=" << sref
 			     << dendl;
 
-      this->operator()(sref, sref, RGW_FS_TYPE_DIRECTORY);
+      this->operator()(sref, next_marker, RGW_FS_TYPE_DIRECTORY);
       ++ix;
     }
   }
@@ -1345,6 +1425,89 @@ public:
   }
 
 }; /* RGWReaddirRequest */
+
+/*
+  dir has-children predicate (bucket objects)
+*/
+
+class RGWRMdirCheck : public RGWLibRequest,
+		      public RGWListBucket /* RGWOp */
+{
+public:
+  const RGWFileHandle* rgw_fh;
+  bool valid;
+  bool has_children;
+
+  RGWRMdirCheck (CephContext* _cct, RGWUserInfo *_user,
+		 const RGWFileHandle* _rgw_fh)
+    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), valid(false),
+      has_children(false) {
+    default_max = 2;
+    op = this;
+  }
+
+  virtual bool only_bucket() override { return false; }
+
+  virtual int op_init() override {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() override {
+    struct req_state* s = get_state();
+    s->info.method = "GET";
+    s->op = OP_GET;
+
+    std::string uri = "/" + rgw_fh->bucket_name() + "/";
+    s->relative_uri = uri;
+    s->info.request_uri = uri;
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    s->user = user;
+
+    prefix = rgw_fh->relative_object_name();
+    if (prefix.length() > 0)
+      prefix += "/";
+    delimiter = '/';
+
+    return 0;
+  }
+
+  virtual int get_params() override {
+    max = default_max;
+    return 0;
+  }
+
+  virtual void send_response() override {
+    valid = true;
+    if ((objs.size() > 1) ||
+	(! objs.empty() &&
+	 (objs.front().key.name != prefix))) {
+      has_children = true;
+      return;
+    }
+    for (auto& iter : common_prefixes) {
+      /* readdir never produces a name for this case */
+      if (iter.first == "/")
+	continue;
+      has_children = true;
+      break;
+    }
+  }
+
+  virtual void send_versioned_response() {
+    send_response();
+  }
+
+}; /* RGWRMdirCheck */
 
 /*
   create bucket
