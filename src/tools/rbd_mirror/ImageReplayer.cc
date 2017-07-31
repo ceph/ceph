@@ -742,7 +742,7 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
         Mutex::Locker locker(m_lock);
         assert(m_state == STATE_STARTING);
         m_state = STATE_STOPPING;
-        if (r < 0 && r != -ECANCELED && r != -EREMOTEIO) {
+        if (r < 0 && r != -ECANCELED && r != -EREMOTEIO && r != -ENOENT) {
           derr << "start failed: " << cpp_strerror(r) << dendl;
         } else {
           dout(20) << "start canceled" << dendl;
