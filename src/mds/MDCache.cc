@@ -9715,7 +9715,7 @@ void MDCache::handle_discover(MDiscover *dis)
 
   if (mds->get_state() <= MDSMap::STATE_REJOIN) {
     if (mds->get_state() < MDSMap::STATE_REJOIN &&
-	mds->get_want_state() != CEPH_MDS_STATE_REJOIN) {
+	mds->get_want_state() < CEPH_MDS_STATE_REJOIN) {
       dis->put();
       return;
     }
