@@ -52,6 +52,7 @@ struct rmdir_rollback {
   string src_dname;
   dirfrag_t dest_dir;
   string dest_dname;
+  bufferlist snapbl;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -83,6 +84,8 @@ struct rename_rollback {
   drec orig_src, orig_dest;
   drec stray; // we know this is null, but we want dname, old mtime/rctime
   utime_t ctime;
+  bufferlist srci_snapbl;
+  bufferlist desti_snapbl;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);

@@ -5565,6 +5565,38 @@ void MDCache::prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t i
   snap->split_inos.push_back(ino);	
 }
 
+void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
+				  map<client_t,MClientSnap*>& splits)
+{
+  assert(parent_realm);
+
+  vector<inodeno_t> split_inos;
+  vector<inodeno_t> split_realms;
+  bufferlist snapbl;
+
+  for (elist<CInode*>::iterator p = realm->inodes_with_caps.begin(member_offset(CInode, item_caps));
+       !p.end();
+       ++p)
+    split_inos.push_back((*p)->ino());
+  for (set<SnapRealm*>::iterator p = realm->open_children.begin();
+       p != realm->open_children.end();
+       ++p)
+    split_realms.push_back((*p)->inode->ino());
+  parent_realm->build_snap_trace(snapbl);
+
+  for (auto p : realm->client_caps) {
+    assert(!p.second->empty());
+    if (splits.count(p.first) == 0) {
+      MClientSnap *update = new MClientSnap(CEPH_SNAP_OP_SPLIT);
+      splits[p.first] = update;
+      update->head.split = parent_realm->inode->ino();
+      update->split_inos = split_inos;
+      update->split_realms = split_realms;
+      update->bl = snapbl;
+    }
+  }
+}
+
 void MDCache::send_snaps(map<client_t,MClientSnap*>& splits)
 {
   dout(10) << "send_snaps" << dendl;
