@@ -562,6 +562,12 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
   return ret;
 }
 
+void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const std::string& key, const std::string& val){
+  e.emplace(std::piecewise_construct,
+	    std::forward_as_tuple(key),
+	    std::forward_as_tuple(val));
+}
+
 rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						struct req_state* s)
 {
@@ -2950,6 +2956,7 @@ int RGWPutObj::verify_permission()
       return -EACCES;
     }
 
+    rgw_add_to_iam_environment(s->env, "s3:x-amz-copy-source", copy_source);
     /* admin request overrides permission checks */
     if (! s->auth.identity->is_admin_of(cs_acl.get_owner().get_id())) {
       if (policy) {
@@ -2972,7 +2979,39 @@ int RGWPutObj::verify_permission()
     }
   }
 
+
+  auto op_ret = get_params();
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "get_params() returned ret=" << op_ret << dendl;
+    return op_ret;
+  }
+
   if (s->iam_policy) {
+    if (!s->canned_acl.empty()){
+      rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
+    }
+
+    if (obj_tags != nullptr && obj_tags->count() > 0){
+      auto tags = obj_tags->get_tags();
+      for (const auto& kv: tags){
+        rgw_add_to_iam_environment(s->env, "s3:RequestObjectTag/"+kv.first, kv.second);
+      }
+    }
+
+    constexpr auto encrypt_attr = "x-amz-server-side-encryption";
+    constexpr auto s3_encrypt_attr = "s3:x-amz-server-side-encryption";
+    auto enc_header = s->info.x_meta_map.find(encrypt_attr);
+    if (enc_header != s->info.x_meta_map.end()){
+      rgw_add_to_iam_environment(s->env, s3_encrypt_attr, enc_header->second);
+    }
+
+    constexpr auto kms_attr = "x-amz-server-side-encryption-aws-kms-key-id";
+    constexpr auto s3_kms_attr = "s3:x-amz-server-side-encryption-aws-kms-key-id";
+    auto kms_header = s->info.x_meta_map.find(kms_attr);
+    if (kms_header != s->info.x_meta_map.end()){
+      rgw_add_to_iam_environment(s->env, s3_kms_attr, kms_header->second);
+    }
+
     auto e = s->iam_policy->eval(s->env, *s->auth.identity,
 				 rgw::IAM::s3PutObject,
 				 rgw_obj(s->bucket, s->object));
@@ -3306,11 +3345,6 @@ void RGWPutObj::execute()
     return;
   }
 
-  op_ret = get_params();
-  if (op_ret < 0) {
-    ldout(s->cct, 20) << "get_params() returned ret=" << op_ret << dendl;
-    goto done;
-  }
 
   op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
   if (op_ret < 0) {
