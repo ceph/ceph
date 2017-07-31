@@ -540,6 +540,11 @@ set(libcommon_files
   ${auth_files}
   ${mds_files})
 
+if(HAS_VTA)
+  set_source_files_properties(common/config.cc
+    PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
+endif()
+
 if(FREEBSD)
   list(APPEND libcommon_files common/freebsd_errno.cc)
 elseif(DARWIN)
