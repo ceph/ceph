@@ -217,6 +217,11 @@ setup()
     CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool create ${PARENT_POOL} 64 64
     CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool create ${POOL} 64 64
 
+    CEPH_ARGS='' rbd --cluster ${CLUSTER1} pool init ${POOL}
+    CEPH_ARGS='' rbd --cluster ${CLUSTER2} pool init ${POOL}
+    CEPH_ARGS='' rbd --cluster ${CLUSTER1} pool init ${PARENT_POOL}
+    CEPH_ARGS='' rbd --cluster ${CLUSTER2} pool init ${PARENT_POOL}
+
     rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} pool
     rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} pool
     rbd --cluster ${CLUSTER1} mirror pool enable ${PARENT_POOL} image
