@@ -8730,6 +8730,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
+    if (rel == osdmap.require_osd_release) {
+      // idempotent
+      err = 0;
+      goto reply;
+    }
     if (rel == CEPH_RELEASE_LUMINOUS) {
       if (!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS)) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_LUMINOUS feature";
