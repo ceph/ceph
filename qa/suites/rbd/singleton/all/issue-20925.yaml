@@ -1,0 +1,14 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+- [mon.b, mgr.y, osd.3, osd.4, osd.5]
+- [mon.c, mgr.z, osd.6, osd.7, osd.8]
+- [osd.9, osd.10, osd.11]
+tasks:
+- install:
+- ceph:
+- exec:
+    client.0:
+      - ceph osd pool create ecpool 12 12 erasure
+      - ceph osd pool set ecpool allow_ec_overwrites true
+      - rbd --data-pool ecpool create --size 1024G test1
+      - rbd bench-write test1 --io-pattern=rand
