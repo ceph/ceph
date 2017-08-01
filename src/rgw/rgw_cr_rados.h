@@ -23,10 +23,16 @@ protected:
 public:
   RGWAsyncRadosRequest(RGWCoroutine *_caller, RGWAioCompletionNotifier *_cn) : caller(_caller), notifier(_cn), retcode(0),
                                                                                lock("RGWAsyncRadosRequest::lock") {
+    if (caller) {
+      caller->get();
+    }
   }
   ~RGWAsyncRadosRequest() override {
     if (notifier) {
       notifier->put();
+    }
+    if (caller) {
+      caller->put();
     }
   }
 
