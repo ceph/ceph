@@ -94,7 +94,7 @@ Defining config options
 =======================
 
 New-style config options are defined in common/options.cc. All new config
-options should go here (and not into legacy config_opts.h).
+options should go here (and not into legacy_config_opts.h).
 
 Levels
 ------
