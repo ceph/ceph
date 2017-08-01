@@ -690,7 +690,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return rc;
   }
 
-  if (op.log_op) {
+  if (op.log_op && !header.syncstopped) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
                              entry.ver, info.state, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
     if (rc < 0)
@@ -847,7 +847,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   bufferlist op_bl;
   if (cancel) {
-    if (op.log_op) {
+    if (op.log_op && !header.syncstopped) {
       rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
                                CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
       if (rc < 0)
@@ -909,7 +909,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     break;
   }
 
-  if (op.log_op) {
+  if (op.log_op && !header.syncstopped) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
                              CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
     if (rc < 0)
@@ -934,7 +934,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
             remove_entry.key.name.c_str(), remove_entry.key.instance.c_str(), remove_entry.meta.category);
     unaccount_entry(header, remove_entry);
 
-    if (op.log_op) {
+    if (op.log_op && !header.syncstopped) {
       rc = log_index_operation(hctx, remove_key, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
                                remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
       if (rc < 0)
@@ -1522,7 +1522,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
-  if (op.log_op) {
+  if (op.log_op && !header.syncstopped) {
     rgw_bucket_dir_entry& entry = obj.get_dir_entry();
 
     rgw_bucket_entry_ver ver;
@@ -1678,7 +1678,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
-  if (op.log_op) {
+  if (op.log_op && !header.syncstopped) {
     rgw_bucket_entry_ver ver;
     ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
 
@@ -1946,7 +1946,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
 	ret = cls_cxx_map_remove_key(hctx, cur_change_key);
 	if (ret < 0)
 	  return ret;
-        if (log_op && cur_disk.exists) {
+        if (log_op && cur_disk.exists && !header.syncstopped) {
           ret = log_index_operation(hctx, cur_disk.key, CLS_RGW_OP_DEL, cur_disk.tag, cur_disk.meta.mtime,
                                     cur_disk.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL, NULL);
           if (ret < 0) {
@@ -1969,7 +1969,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         ret = cls_cxx_map_set_val(hctx, cur_change_key, &cur_state_bl);
         if (ret < 0)
 	  return ret;
-        if (log_op) {
+        if (log_op && !header.syncstopped) {
           ret = log_index_operation(hctx, cur_change.key, CLS_RGW_OP_ADD, cur_change.tag, cur_change.meta.mtime,
                                     cur_change.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL, NULL);
           if (ret < 0) {
@@ -2718,6 +2718,74 @@ static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   return 0;
 }
+
+static int rgw_bi_log_resync(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  struct rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
+    return rc;
+  }
+
+  bufferlist bl;
+
+  struct rgw_bi_log_entry entry;
+
+  entry.timestamp = real_clock::now();
+  entry.op = RGWModifyOp::CLS_RGW_OP_RESYNC;
+  entry.state = RGWPendingState::CLS_RGW_STATE_COMPLETE;
+
+  string key;
+  bi_log_index_key(hctx, key, entry.id, header.ver);
+
+  ::encode(entry, bl);
+
+  if (entry.id > header.max_marker)
+    header.max_marker = entry.id;
+
+  header.syncstopped = false;
+
+  rc = cls_cxx_map_set_val(hctx, key, &bl);
+  if (rc < 0)
+    return rc;
+
+  return write_bucket_header(hctx, &header);
+}
+
+static int rgw_bi_log_stop(cls_method_context_t hctx, bufferlist *in, bufferlist *out) 
+{
+  struct rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
+    return rc;
+  }
+
+  bufferlist bl;
+
+  struct rgw_bi_log_entry entry;
+
+  entry.timestamp = real_clock::now();
+  entry.op = RGWModifyOp::CLS_RGW_OP_SYNCSTOP;
+  entry.state = RGWPendingState::CLS_RGW_STATE_COMPLETE;
+
+  string key;
+  bi_log_index_key(hctx, key, entry.id, header.ver);
+
+  ::encode(entry, bl);
+
+  if (entry.id > header.max_marker)
+    header.max_marker = entry.id;
+  header.syncstopped = true;
+
+  rc = cls_cxx_map_set_val(hctx, key, &bl);
+  if (rc < 0)
+    return rc;
+
+  return write_bucket_header(hctx, &header);
+}
+
 
 static void usage_record_prefix_by_time(uint64_t epoch, string& key)
 {
@@ -3728,6 +3796,8 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_bi_put_op;
   cls_method_handle_t h_rgw_bi_list_op;
   cls_method_handle_t h_rgw_bi_log_list_op;
+  cls_method_handle_t h_rgw_bi_log_resync_op;
+  cls_method_handle_t h_rgw_bi_log_stop_op;
   cls_method_handle_t h_rgw_dir_suggest_changes;
   cls_method_handle_t h_rgw_user_usage_log_add;
   cls_method_handle_t h_rgw_user_usage_log_read;
@@ -3780,6 +3850,9 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_BI_LOG_LIST, CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, RGW_BI_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, RGW_DIR_SUGGEST_CHANGES, CLS_METHOD_RD | CLS_METHOD_WR, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
+
+  cls_register_cxx_method(h_class, "bi_log_resync", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_resync, &h_rgw_bi_log_resync_op);
+  cls_register_cxx_method(h_class, "bi_log_stop", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_stop, &h_rgw_bi_log_stop_op);
 
   /* usage logging */
   cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_ADD, CLS_METHOD_RD | CLS_METHOD_WR, rgw_user_usage_log_add, &h_rgw_user_usage_log_add);
