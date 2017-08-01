@@ -105,7 +105,8 @@ struct MockImageCtx {
       mirroring_resync_after_disconnect(
           image_ctx.mirroring_resync_after_disconnect),
       mirroring_replay_delay(image_ctx.mirroring_replay_delay),
-      non_blocking_aio(image_ctx.non_blocking_aio)
+      non_blocking_aio(image_ctx.non_blocking_aio),
+      blkin_trace_all(image_ctx.blkin_trace_all)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -297,6 +298,7 @@ struct MockImageCtx {
   bool mirroring_resync_after_disconnect;
   int mirroring_replay_delay;
   bool non_blocking_aio;
+  bool blkin_trace_all;
 };
 
 } // namespace librbd

@@ -256,7 +256,7 @@ void ObjectMapIterateRequest<I>::send_verify_objects() {
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, m_image_ctx, context_factory, this->create_callback_context(),
     &m_prog_ctx, 0, num_objects);
-  throttle->start_ops(cct->_conf->rbd_concurrent_management_ops);
+  throttle->start_ops(m_image_ctx.concurrent_management_ops);
 }
 
 template <typename I>

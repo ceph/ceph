@@ -290,7 +290,9 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_list(pool_name, vm["long"].as<bool>(), g_conf->rbd_concurrent_management_ops, formatter.get());
+  r = do_list(pool_name, vm["long"].as<bool>(),
+              g_conf->get_val<int64_t>("rbd_concurrent_management_ops"),
+              formatter.get());
   if (r < 0) {
     std::cerr << "rbd: list: " << cpp_strerror(r) << std::endl;
     return r;

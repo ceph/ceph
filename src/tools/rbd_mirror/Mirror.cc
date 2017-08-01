@@ -264,7 +264,7 @@ void Mirror::run()
     }
     m_cond.WaitInterval(
       m_lock,
-      utime_t(m_cct->_conf->rbd_mirror_pool_replayers_refresh_interval, 0));
+      utime_t(m_cct->_conf->get_val<int64_t>("rbd_mirror_pool_replayers_refresh_interval"), 0));
   }
 
   // stop all pool replayers in parallel
