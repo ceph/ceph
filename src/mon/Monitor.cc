@@ -3269,6 +3269,9 @@ void Monitor::handle_command(MonOpRequestRef op)
     std::string val;
     cmd_getval(cct, cmdmap, "value", val);
     r = g_conf->set_val(key, val, true, &ss);
+    if (r == 0) {
+      g_conf->apply_changes(nullptr);
+    }
     rs = ss.str();
     goto out;
   } else if (prefix == "status" ||
