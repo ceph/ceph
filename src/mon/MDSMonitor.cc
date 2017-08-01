@@ -660,6 +660,13 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 	     << "  standby_for_rank=" << m->get_standby_for_rank()
 	     << dendl;
     if (state == MDSMap::STATE_STOPPED) {
+      const auto fscid = pending_fsmap.mds_roles.at(gid);
+      auto fs = pending_fsmap.get_filesystem(fscid);
+      mon->clog->info() << info.human_name() << " finished "
+                        << "deactivating rank " << info.rank << " in filesystem "
+                        << fs->mds_map.fs_name << " (now has "
+                        << fs->mds_map.get_num_in_mds() << " ranks)";
+
       auto erased = pending_fsmap.stop(gid);
       erased.push_back(gid);
 
@@ -671,12 +678,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
         }
       }
 
-      auto fscid = pending_fsmap.mds_roles.at(gid);
-      auto fs = pending_fsmap.get_filesystem(fscid);
-      mon->clog->info() << info.human_name() << " finished "
-                        << "deactivating rank " << info.rank << " in filesystem "
-                        << fs->mds_map.fs_name << " (now has "
-                        << fs->mds_map.get_num_in_mds() << " ranks)";
+
     } else if (state == MDSMap::STATE_DAMAGED) {
       if (!mon->osdmon()->is_writeable()) {
         dout(4) << __func__ << ": DAMAGED from rank " << info.rank
