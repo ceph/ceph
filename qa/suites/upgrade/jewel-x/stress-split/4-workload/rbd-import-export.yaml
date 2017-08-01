@@ -1,7 +1,7 @@
 meta:
 - desc: |
    run basic import/export cli tests for rbd
-tasks:
+stress-tasks:
 - workunit:
     branch: jewel
     clients:
