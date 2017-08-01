@@ -57,7 +57,7 @@ Reading configuration values
 There are two ways for Ceph code to get configuration values. One way is to
 read it directly from a variable named "g_conf," or equivalently,
 "g_ceph_ctx->_conf." The other is to register an observer that will be called
-every time the relevant configuration values changes.  This observer will be
+every time the relevant configuration values changes. This observer will be
 called soon after the initial configuration is read, and every time after that
 when one of the relevant values changes. Each observer tracks a set of keys
 and is invoked only when one of the relevant keys changes.
@@ -93,8 +93,8 @@ calling these functions to make sure your changes get applied.
 Defining config options
 =======================
 
-New-style config options are defined in common/options.cc.  All new config
-options should go here (and not into legacy_config_opts.h).
+New-style config options are defined in common/options.cc. All new config
+options should go here (and not into legacy config_opts.h).
 
 Levels
 ------
@@ -102,13 +102,13 @@ Levels
 The Option constructor takes a "level" value:
 
 * *LEVEL_BASIC* is for basic config options that a normal operator is likely to adjust.
-* *LEVEL_ADVANCED* is for options that an operator *can* adjust, but should not touch unless they understand what they are doing.  Adjusting advanced options poorly can lead to problems (performance or even data loss) if done incorrectly.
+* *LEVEL_ADVANCED* is for options that an operator *can* adjust, but should not touch unless they understand what they are doing. Adjusting advanced options poorly can lead to problems (performance or even data loss) if done incorrectly.
 * *LEVEL_DEV* is for options in place for use by developers only, either for testing purposes, or to describe constants that no user should adjust but we prefer not to compile into the code.
 
 Description and long description
 --------------------------------
 
-Short description of the option.  Sentence fragment.  e.g.,::
+Short description of the option. Sentence fragment. e.g.::
 
   .set_description("Default checksum algorithm to use")
 
@@ -120,24 +120,24 @@ paragraphs, and may include other detailed information or notes.::
 Default values
 --------------
 
-There is a default value for every config option.  In some cases, there may
+There is a default value for every config option. In some cases, there may
 also be a *daemon default* that only applies to code that declares itself
 as a daemon (in thise case, the regular default only applies to non-daemons).
 
 Safety
 ------
 
-If an option can be safely changed at runtime,::
+If an option can be safely changed at runtime::
 
   .set_safe()
 
 Service
 -------
 
-Service is a component name, like "common", "osd", "rgw", "mds", etc.  It may
+Service is a component name, like "common", "osd", "rgw", "mds", etc. It may
 be a list of components, like::
 
-  .add_service("mon mds osd mgr"),
+  .add_service("mon mds osd mgr")
 
 For example, the rocksdb options affect both the osd and mon.
 
@@ -149,10 +149,9 @@ Tags identify options across services that relate in some way. Example include;
   - network -- options affecting network configuration
   - mkfs -- options that only matter at mkfs time
 
-
 Enums
 -----
 
 For options with a defined set of allowed values::
 
-  .set_enum_allowed({"none", "crc32c", "crc32c_16", "crc32c_8", "xxhash32", "xxhash64"}),
+  .set_enum_allowed({"none", "crc32c", "crc32c_16", "crc32c_8", "xxhash32", "xxhash64"})
