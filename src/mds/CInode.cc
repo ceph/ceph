@@ -361,27 +361,6 @@ void CInode::clear_dirty_rstat()
   }
 }
 
-/* Ideally this function would be subsumed by project_inode but it is also
- * needed by CInode::project_past_snaprealm_parent so we keep it.
- */
-sr_t &CInode::project_snaprealm(projected_inode &pi)
-{
-  const sr_t *cur_srnode = get_projected_srnode();
-
-  assert(!pi.snapnode);
-  if (cur_srnode) {
-    pi.snapnode.reset(new sr_t(*cur_srnode));
-  } else {
-    pi.snapnode.reset(new sr_t());
-    pi.snapnode->created = 0;
-    pi.snapnode->current_parent_since = get_oldest_snap();
-  }
-  ++num_projected_srnodes;
-
-  dout(10) << __func__ << " " << pi.snapnode.get() << dendl;
-  return *pi.snapnode.get();
-}
-
 CInode::projected_inode &CInode::project_inode(bool xattr, bool snap)
 {
   auto &pi = projected_nodes.empty() ?
@@ -401,7 +380,7 @@ CInode::projected_inode &CInode::project_inode(bool xattr, bool snap)
   }
 
   if (snap) {
-    project_snaprealm(pi);
+    project_snaprealm();
   }
 
   dout(15) << __func__ << " " << pi.inode.ino << dendl;
@@ -436,46 +415,74 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   projected_nodes.pop_front();
 }
 
+sr_t *CInode::prepare_new_srnode(snapid_t snapid)
+{
+  const sr_t *cur_srnode = get_projected_srnode();
+  sr_t *new_srnode;
+
+  if (cur_srnode) {
+    new_srnode = new sr_t(*cur_srnode);
+  } else {
+    new_srnode = new sr_t();
+    new_srnode->created = snapid;
+    new_srnode->current_parent_since = get_oldest_snap();
+  }
+  return new_srnode;
+}
+
+void CInode::project_snaprealm(sr_t *new_srnode)
+{
+  dout(10) << __func__ << " " << new_srnode << dendl;
+  assert(!projected_nodes.back().snapnode);
+  projected_nodes.back().snapnode.reset(new_srnode);
+  ++num_projected_srnodes;
+}
+
+void CInode::project_snaprealm_past_parent(SnapRealm *newparent)
+{
+  sr_t *new_snap = project_snaprealm();
+  record_snaprealm_past_parent(new_snap, newparent);
+}
+
+
 /* if newparent != parent, add parent to past_parents
  if parent DNE, we need to find what the parent actually is and fill that in */
-void CInode::project_past_snaprealm_parent(SnapRealm *newparent)
+void CInode::record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent)
 {
-  assert(!projected_nodes.empty());
-  sr_t &new_snap = project_snaprealm(projected_nodes.back());
   SnapRealm *oldparent;
   if (!snaprealm) {
     oldparent = find_snaprealm();
-    new_snap.seq = oldparent->get_newest_seq();
+    new_snap->seq = oldparent->get_newest_seq();
   } else {
     oldparent = snaprealm->parent;
   }
 
   if (newparent != oldparent) {
     // convert past_parents to past_parent_snaps
-    if (!new_snap.past_parents.empty()) {
+    if (!new_snap->past_parents.empty()) {
       assert(snaprealm);
       const set<snapid_t>& snaps = snaprealm->get_snaps();
       for (auto p = snaps.begin();
-	   p != snaps.end() && *p < new_snap.current_parent_since;
+	   p != snaps.end() && *p < new_snap->current_parent_since;
 	   ++p) {
-	if (!new_snap.snaps.count(*p))
-	  new_snap.past_parent_snaps.insert(*p);
+	if (!new_snap->snaps.count(*p))
+	  new_snap->past_parent_snaps.insert(*p);
       }
-      new_snap.seq = snaprealm->get_newest_seq();
-      new_snap.past_parents.clear();
+      new_snap->seq = snaprealm->get_newest_seq();
+      new_snap->past_parents.clear();
     }
 
     snapid_t oldparentseq = oldparent->get_newest_seq();
-    if (oldparentseq + 1 > new_snap.current_parent_since) {
+    if (oldparentseq + 1 > new_snap->current_parent_since) {
       // copy old parent's snaps
       const set<snapid_t>& snaps = oldparent->get_snaps();
-      auto p = snaps.lower_bound(new_snap.current_parent_since);
+      auto p = snaps.lower_bound(new_snap->current_parent_since);
       if (p != snaps.end())
-	new_snap.past_parent_snaps.insert(p, snaps.end());
-      if (oldparentseq > new_snap.seq)
-	new_snap.seq = oldparentseq;
+	new_snap->past_parent_snaps.insert(p, snaps.end());
+      if (oldparentseq > new_snap->seq)
+	new_snap->seq = oldparentseq;
     }
-    new_snap.current_parent_since = std::max(oldparentseq, newparent->get_last_created()) + 1;
+    new_snap->current_parent_since = std::max(oldparentseq, newparent->get_last_created()) + 1;
   }
 }
 
