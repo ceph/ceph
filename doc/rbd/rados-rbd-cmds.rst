@@ -190,7 +190,7 @@ For example::
     force.
 
 Restoring a Block Device Image
-=============================
+==============================
 
 To restore a deferred delete block device in the rbd pool, execute the 
 following, but replace ``{image-id}`` with the id of the image::
