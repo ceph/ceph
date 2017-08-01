@@ -1275,7 +1275,7 @@ function test_get_last_scrub_stamp() {
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
-    stamp=$(get_last_scrub_stamp 2.0)
+    stamp=$(get_last_scrub_stamp 1.0)
     test -n "$stamp" || return 1
     teardown $dir || return 1
 }
@@ -1475,9 +1475,9 @@ function test_repair() {
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
-    repair 2.0 || return 1
+    repair 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=1 repair 2.0 || return 1
+    ! TIMEOUT=1 repair 1.0 || return 1
     teardown $dir || return 1
 }
 #######################################################################
@@ -1515,9 +1515,9 @@ function test_pg_scrub() {
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
-    pg_scrub 2.0 || return 1
+    pg_scrub 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=1 pg_scrub 2.0 || return 1
+    ! TIMEOUT=1 pg_scrub 1.0 || return 1
     teardown $dir || return 1
 }
 
@@ -1607,7 +1607,7 @@ function test_wait_for_scrub() {
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
-    local pgid=2.0
+    local pgid=1.0
     ceph pg repair $pgid
     local last_scrub=$(get_last_scrub_stamp $pgid)
     wait_for_scrub $pgid "$last_scrub" || return 1
@@ -1805,6 +1805,7 @@ function test_flush_pg_stats()
     bytes_used=`ceph df detail --format=json | jq "$jq_filter.bytes_used"`
     test $raw_bytes_used > 0 || return 1
     test $raw_bytes_used == $bytes_used || return 1
+    teardown $dir
 }
 
 #######################################################################
@@ -1881,6 +1882,7 @@ function run_tests() {
 if test "$1" = TESTS ; then
     shift
     run_tests "$@"
+    exit $?
 fi
 
 # NOTE:
