@@ -1985,15 +1985,19 @@ std::vector<Option> get_global_options() {
 
     Option("osd_recovery_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("Time in seconds to sleep before next recovery or backfill op"),
 
     Option("osd_recovery_sleep_hdd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.1)
-    .set_description(""),
+    .set_description("Time in seconds to sleep before next recovery or backfill op for HDDs"),
 
     Option("osd_recovery_sleep_ssd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("Time in seconds to sleep before next recovery or backfill op for SSDs"),
+
+    Option("osd_recovery_sleep_hybrid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.025)
+    .set_description("Time in seconds to sleep before next recovery or backfill op when data is on HDD and journal is on SSD"),
 
     Option("osd_snap_trim_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
