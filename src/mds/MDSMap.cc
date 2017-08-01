@@ -410,7 +410,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 {
   // MDS_DAMAGED
   if (!damaged.empty()) {
-    health_check_t& check = checks->add("MDS_DAMAGED", HEALTH_ERR,
+    health_check_t& check = checks->get_or_add("MDS_DAMAGED", HEALTH_ERR,
 					"%num% mds daemon%plurals% damaged");
     for (auto p : damaged) {
       std::ostringstream oss;
@@ -421,7 +421,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 
   // FS_DEGRADED
   if (is_degraded()) {
-    health_check_t& fscheck = checks->add(
+    health_check_t& fscheck = checks->get_or_add(
       "FS_DEGRADED", HEALTH_WARN,
       "%num% filesystem%plurals% %isorare% degraded");
     ostringstream ss;
