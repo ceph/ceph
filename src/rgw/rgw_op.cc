@@ -2597,7 +2597,7 @@ protected:
   int do_complete(size_t accounted_size, const string& etag, real_time *mtime,
                   real_time set_mtime, map<string, bufferlist>& attrs,
                   real_time delete_at, const char *if_match,
-                  const char *if_nomatch) override;
+                  const char *if_nomatch, const string *user_data) override;
 
 public:
   bool immutable_head() { return true; }
@@ -2675,7 +2675,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
                                               map<string, bufferlist>& attrs,
                                               real_time delete_at,
                                               const char *if_match,
-                                              const char *if_nomatch)
+                                              const char *if_nomatch, const string *user_data)
 {
   complete_writing_data();
 
@@ -3189,7 +3189,8 @@ void RGWPutObj::execute()
   }
 
   op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
-                               (delete_at ? *delete_at : real_time()), if_match, if_nomatch);
+                               (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
+                               (user_data.empty() ? nullptr : &user_data));
 
   /* produce torrent */
   if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
