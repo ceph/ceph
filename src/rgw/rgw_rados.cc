@@ -5374,6 +5374,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             obj_version *pep_objv,
                             real_time creation_time,
                             rgw_bucket *pmaster_bucket,
+                            uint32_t *pmaster_num_shards,
 			    bool exclusive)
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
@@ -5395,8 +5396,13 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       bucket.marker = pmaster_bucket->marker;
       bucket.bucket_id = pmaster_bucket->bucket_id;
     }
+    if (pmaster_num_shards) {
+      info.num_shards = *pmaster_num_shards;
+    } else {
+      info.num_shards = bucket_index_max_shards;
+    }
 
-    int r = init_bucket_index(bucket, bucket_index_max_shards);
+    int r = init_bucket_index(bucket, info.num_shards);
     if (r < 0)
       return r;
 
@@ -5415,7 +5421,6 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.index_type = rule_info.index_type;
     info.swift_ver_location = swift_ver_location;
     info.swift_versioning = (!swift_ver_location.empty());
-    info.num_shards = bucket_index_max_shards;
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     info.requester_pays = false;
     if (real_clock::is_zero(creation_time)) {
