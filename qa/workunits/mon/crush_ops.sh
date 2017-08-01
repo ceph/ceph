@@ -21,10 +21,14 @@ ceph osd crush rule create-simple bar default host
 
 # make sure we're at luminous+ before using crush device classes
 ceph osd require-osd-release luminous
-ceph osd crush set-device-class ssd osd.0
-ceph osd crush set-device-class hdd osd.1
+o0=`ceph osd create`
+ceph osd crush set-device-class ssd $o0
+expect_false ceph osd crush set-device-class hdd $o0
 ceph osd crush rule create-replicated foo-ssd default host ssd
+ceph osd crush rm-device-class $o0
+ceph osd crush set-device-class hdd $o0
 ceph osd crush rule create-replicated foo-hdd default host hdd
+ceph osd purge $o0 --yes-i-really-mean-it
 
 ceph osd erasure-code-profile set ec-foo-ssd crush-device-class=ssd m=2 k=2
 ceph osd pool create ec-foo 2 erasure ec-foo-ssd
