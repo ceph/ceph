@@ -2041,17 +2041,17 @@ void PG::mark_clean()
   kick_snap_trim();
 }
 
-void PG::change_recovery_force_mode(int new_mode, bool clear)
+void PG::_change_recovery_force_mode(int new_mode, bool clear)
 {
-  lock(true);
-  if (clear) {
-    state_clear(new_mode);
-  } else {
-    state_set(new_mode);
+  if (!deleting) {
+    // we can't and shouldn't do anything if the PG is being deleted locally
+    if (clear) {
+      state_clear(new_mode);
+    } else {
+      state_set(new_mode);
+    }
+    publish_stats_to_osd();
   }
-  publish_stats_to_osd();
-
-  unlock();
 }
 
 inline int PG::clamp_recovery_priority(int priority)
