@@ -30,7 +30,7 @@ ________
 
 One or more OSDs are marked down
 
-OSD_<crush type>_DOWN 
+OSD_<crush type>_DOWN
 _____________________
 
 (e.g. OSD_HOST_DOWN, OSD_ROOT_DOWN)

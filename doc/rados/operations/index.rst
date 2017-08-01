@@ -14,6 +14,7 @@ and, monitoring an operating cluster.
 	:maxdepth: 1 
 	
 	operating
+	health-checks
 	monitoring
 	monitoring-osd-pg
 	user-management
