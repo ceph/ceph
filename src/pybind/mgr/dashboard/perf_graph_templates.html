@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<section class="content-header">
+    <h1>OSD Performance Graphs</h1>
+</section>
+<section class="content">
+    <div class="row">
+        <div id="minmax1" class="col-md-6"></div>
+        <div id="minmax2" class="col-md-6"></div>
+    </div>
+    <hr>
+    <div class="row">
+        <div id="avg-stdev" class="col-md-8"></div>
+    </div>
+    <hr>
+    <div class="row">
+        <div id="all" class="col-md-10"></div>
+    </div>
+
+<script type="text/javascript">
+
+    var content_data = {{ content_data }};
+
+    var refresh = function() {
+        $.get("/get_counter_stats/" + content_data["perf_counter"] + "/", function(data) {
+            content_data = data;
+            plot_graphs();
+            setTimeout(refresh, 5000);
+        });
+    };
+
+    var convert_timeseries = function(source_series)
+    {
+        var data = [];
+        _.each(source_series, function(dp) {
+            data.push({
+                x: dp[0] * 1000,
+                y: dp[1]
+            });
+        });
+        return data;
+    };
+
+    var minmax_dataset;
+    var avg_dataset;
+    var stdev_dataset;
+    var osd_dataset;
+
+    //Plot all the graphs of the page
+    var plot_graphs = function() {
+        set_datasets();
+        plot_minmax();
+        plot_avgstdev();
+        plot_all();
+    };
+
+    //Setting the values in the datasets. These datasets then can be referenced directly while creating the object of any chart. 
+    var set_datasets = function() {
+        var min_values = convert_timeseries(content_data["min"]);
+        var max_values = convert_timeseries(content_data["max"]);
+        minmax_dataset = [
+            {
+                data: min_values,
+                label: "Minimum ",
+                borderColor: "rgb(102, 229, 28)",
+                fill: false,
+            },
+            {
+                data: max_values,
+                label: "Maximum",
+                borderColor: "rgb(102, 229, 28)",
+                fill: false,
+            }
+        ];
+        var avg_values = convert_timeseries(content_data["avg"]);
+        avg_dataset = [
+            {
+                data: avg_values,
+                label: "Average",
+                borderColor: "rgb(229, 113, 29)",
+                fill: false,
+            }
+        ];
+        var plus_onehalf_values = convert_timeseries(content_data["stdevs"]["plus_onehalf"]);
+        var plus_half_values = convert_timeseries(content_data["stdevs"]["plus_half"]);
+        var minus_half_values = convert_timeseries(content_data["stdevs"]["minus_half"]);
+        var minus_onehalf_values = convert_timeseries(content_data["stdevs"]["minus_onehalf"]);
+        stdev_dataset = [
+            {
+                data: plus_onehalf_values,
+                label: "Avg+1.5*Stdev",
+                borderColor: "#000",
+                fill: false,
+            },
+            {
+                data: plus_half_values,
+                label: "Avg+0.5*Stdev",
+                borderColor: "#000",
+                fill: false,
+            },
+            {
+                data: minus_half_values,
+                label: "Avg-0.5*Stdev",
+                borderColor: "#000",
+                fill: false,
+            },
+            {
+                data: minus_onehalf_values,
+                label: "Avg-1.5*Stdev",
+                borderColor: "#000",
+                fill: false,
+            }
+        ];
+        osd_dataset = [];
+        _.each( content_data["osds"], function( values, osd_id) {
+            osd_data = {
+                data : convert_timeseries(values),
+                label : osd_id,
+                borderColor : "#fff",
+                borderWidth : 1,
+                fill: false,
+            }
+            _.each(content_data["osds_out_sync"], function(value) {
+                if(osd_id == value)
+                {
+                    osd_data.borderColor = "rgb(255,255,0)";
+                }
+            });   
+            osd_dataset.push(osd_data);
+        } );
+    };
+
+    //Plot the minimum and maximum value graphs (both with and without OSD values)
+    var plot_minmax = function() {
+        $('#minmax-chart-w-osd').remove();
+        $('#minmax1').append('<canvas id="minmax-chart-w-osd"></canvas>');
+        $('#minmax-chart-wo-osd').remove();
+        $('#minmax2').append('<canvas id="minmax-chart-wo-osd"></canvas>');
+        var data_wo_osd = _.union(minmax_dataset, avg_dataset); 
+        var data_w_osd = _.union(osd_dataset, minmax_dataset, avg_dataset);
+        var minmax_chart_w_osd = new Chart($("#minmax-chart-w-osd"), {
+            type: 'line',
+            data: {
+                datasets: data_w_osd
+            },
+            options: {
+                tooltips: {
+                    mode: 'point'
+                },
+                animation : {
+                    duration : 0
+                },
+                title: {
+                    display: true,
+                    text: 'Template for Minimum and Maximum values (with OSD values)',
+                    fontStyle: 'bold',
+                    fontSize: 20
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 5,
+                        fontColor: 'rgb(240,255,240)'
+                    }
+                },
+                scales: {
+                    xAxes: [{
+                        type: 'time',
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Time',
+                        },
+                        position: 'bottom',
+                        time: {
+                            displayFormats: {
+                                quarter: 'MMM YYYY'
+                            }
+                        }
+                    }],
+                    yAxes: [{
+                        type: 'linear',
+                        position: 'left',
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Values',
+                        },
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        min: 0
+                    }]
+                }
+            }
+        });
+
+       var minmax_chart_wo_osd = new Chart($("#minmax-chart-wo-osd"), {
+            type: 'line',
+            data: {
+                datasets: data_wo_osd
+            },
+            options: {
+                tooltips: {
+                    mode: 'point'
+                },
+                animation : {
+                    duration : 0
+                },
+                title: {
+                    display: true,
+                    text: 'Template for Minimum and Maximum values (without OSD values)',
+                    fontStyle: 'bold',
+                    fontSize: 20
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 5,
+                        fontColor: 'rgb(240,255,240)'
+                    }
+                },
+                scales: {
+                    xAxes: [{
+                        type: 'time',
+                        position: 'bottom',
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Time',
+                        },
+                        time: {
+                            displayFormats: {
+                                quarter: 'MMM YYYY'
+                            }
+                        }
+                    }],
+                    yAxes: [{
+                        type: 'linear',
+                        position: 'left',
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Values',
+                        },
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        min: 0
+                    }]
+                }
+            }
+        });
+    };
+
+    //Plot the average and four standard deviations to get a proper distribution of OSD values.
+    var plot_avgstdev = function() {
+        $('#avg-stdev-chart').remove();
+        $('#avg-stdev').append('<canvas id="avg-stdev-chart"></canvas>');
+        var data = _.union(osd_dataset, avg_dataset, stdev_dataset);
+        var avg_stdev_chart = new Chart($("#avg-stdev-chart"), {
+            type: 'line',
+            data: {
+                datasets: data
+            },
+            options: {
+                tooltips: {
+                    mode: 'point'
+                },
+                animation : {
+                    duration: 0
+                },
+                title: {
+                    display: true,
+                    text: 'Template for Average and Stdev values',
+                    fontStyle: 'bold',
+                    fontSize: 20
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                            boxWidth: 5,
+                            fontColor: 'rgb(240,255,240)'
+                        }
+                },
+                scales: {
+                    xAxes: [{
+                        type: 'time',
+                        position: 'bottom',
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        scaleLabel: {
+                                display: true,
+                                labelString: 'Time',
+                            },
+                        time: {
+                            displayFormats: {
+                                quarter: 'MMM YYYY'
+                            },
+                        ticks: {fontColor:"rgb(221,221,221)"}
+                        }
+                    }],
+                    yAxes: [{
+                        type: 'linear',
+                        position: 'left',
+                        scaleLabel: {
+                                display: true,
+                                labelString: 'Values',
+                            },
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        min: 0
+                    }]
+                }      
+            }
+        });
+    }
+
+    //Plot the chart containing all the statistical values i.e. Minimum, maximum, average and standard deviations along with the OSD values.
+    var plot_all = function() {
+        $('#all-chart').remove();
+        $('#all').append('<canvas id="all-chart"></canvas>');
+        var data = _.union(osd_dataset, minmax_dataset, avg_dataset, stdev_dataset);
+        var all_chart = new Chart($("#all-chart"), {   
+            type: 'line', 
+            data: {
+                datasets: data
+            },
+            options: {
+                tooltips: {
+                    mode: 'point'
+                },
+                animation : {
+                    duration: 0
+                },
+                title: {
+                    display: true,
+                    text: 'Template for Statistics',
+                    fontStyle: 'bold',
+                    fontSize: 20
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                            boxWidth: 5,
+                            fontColor: 'rgb(240,255,240)'
+                        }
+                },
+                scales: {
+                    xAxes: [{
+                        type: 'time',
+                        position: 'bottom',
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        scaleLabel: {
+                                display: true,
+                                labelString: 'Time',
+                            },
+                        time: {
+                            displayFormats: {
+                                quarter: 'MMM YYYY'
+                            }
+                        }
+                    }],
+                    yAxes: [{
+                        type: 'linear',
+                        position: 'left',
+                        scaleLabel: {
+                                display: true,
+                                labelString: 'Values',
+                            },
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        min: 0
+                    }]
+                }          
+            }
+        });
+    }
+
+    $(document).ready(function() {
+        plot_graphs();
+        setTimeout(refresh, 5000);
+    }); 
+</script>
+</section>
+
+{% endblock %}

@@ -22,6 +22,7 @@ import json
 import sys
 import time
 import threading
+import math
 
 import cherrypy
 import jinja2
@@ -750,6 +751,128 @@ class Module(MgrModule):
                         )
                         ret[k1][k2] = sorted_dict
                 return ret
+
+            # Method to consolidate the data of all osd into a single JSON formatted object.
+            def get_counter_allosd(self, path):
+                osd_map = global_instance().get("osd_map")
+                time_seqs = {}
+                for osd in osd_map['osds']:
+                    osd_id = str(osd['osd'])
+                    counter_data = global_instance().get_counter('osd', osd_id, path)
+                    osd_id = "osd-" + osd_id
+                    time_seqs[osd_id] = counter_data[path]
+                return time_seqs
+
+            # Method to get the overall statistical distribution of a given perf counter.
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def get_counter_stats(self, path):
+                
+                counters = self.get_counter_allosd(path)
+                counter_stats_data = {
+                    "perf_counter" : path,
+                    "osds" : counters,
+                    "min" : [],
+                    "max" : [],
+                    "avg" : [],
+                    "stdev" : [],
+                    "stdevs" : {
+                        "plus_onehalf" : [],
+                        "plus_half" : [],
+                        "minus_half" : [],
+                        "minus_onehalf" : []
+                    },
+                    "osds_out_sync" : []
+                    }
+
+                time_seqs = []
+                sync_data = []
+                osd_count = len(counters)
+
+                ref_osd = None
+                epoch_set = {}
+                for osd_id in counters:
+                    epoch = str(counters[osd_id][0][0])
+                    if epoch not in epoch_set:
+                        epoch_set[epoch] = []
+                    epoch_set[epoch].append(osd_id)
+                max_sync = 0
+                for epoch in epoch_set:
+                    sync_count = len(epoch_set[epoch])
+                    if sync_count > max_sync:
+                        ref_osd = epoch_set[epoch][0]
+                        max_sync = sync_count
+
+                for i in range(0,len(counters[ref_osd])):
+                      epoch = counters[ref_osd][i][0]
+                      values = []
+                      outsync_osds = []
+
+                      for osd_id in counters:
+                            if counters[osd_id][i][0] != epoch:
+                                outsync_osds.append(osd_id)
+                            values.append(counters[osd_id][i][1])
+
+                      time_seqs.append(
+                            [epoch, values])
+                      counter_stats_data["osds_out_sync"].append(
+                            [epoch, outsync_osds])
+
+                for tseq in time_seqs:
+                    length = len(tseq[1])
+                    avg = sum(tseq[1])/length
+                    counter_stats_data["avg"].append([tseq[0], avg])
+                    diff = [(x-avg)**2 for x in tseq[1]]
+                    var = sum(diff)/length
+                    stdev = math.sqrt(var)
+                    counter_stats_data["stdev"].append([tseq[0], stdev])
+                    counter_stats_data["stdevs"]["plus_onehalf"].append([tseq[0], avg+(1.5*stdev)])
+                    counter_stats_data["stdevs"]["plus_half"].append([tseq[0], avg+(0.5*stdev)])
+                    counter_stats_data["stdevs"]["minus_half"].append([tseq[0], avg-(0.5*stdev)])
+                    counter_stats_data["stdevs"]["minus_onehalf"].append([tseq[0], avg-(1.5*stdev)])
+                    counter_stats_data["max"].append([tseq[0], max(tseq[1])])
+                    counter_stats_data["min"].append([tseq[0], min(tseq[1])])
+
+                return counter_stats_data
+
+            @cherrypy.expose
+            def perf_graph_templates(self, path):
+                template = env.get_template("perf_graph_templates.html")
+                toplevel_data = self._toplevel_data()
+
+                content_data = self.get_counter_stats(path)
+
+                return template.render(
+                    ceph_version=global_instance().version,
+                    toplevel_data=json.dumps(toplevel_data, indent=2),
+                    content_data=json.dumps(content_data, indent=2),
+                )
+
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def get_perf_graph_data(self):
+                perf_counters = ["osd.op_r_latency","osd.op_r_process_latency","osd.op_r_prepare_latency","osd.op_w_latency","osd.op_w_process_latency","osd.op_w_prepare_latency"]
+                stats = ["min", "max", "avg"]
+                time_seqs = {}
+                for counter in perf_counters:
+                    time_seqs[counter] = {}
+                    data = self.get_counter_stats(counter)
+                    for s in stats:
+                        time_seqs[counter][s] = data[s]
+                return time_seqs
+
+            @cherrypy.expose
+            def osd_perf_graph(self):
+                template = env.get_template("osd_perf_graph.html")
+                toplevel_data = self._toplevel_data()
+
+                content_data = self.get_perf_graph_data()
+
+                return template.render(
+                    ceph_version=global_instance().version,
+                    toplevel_data=json.dumps(toplevel_data, indent=2),
+                    content_data=json.dumps(content_data, indent=2)
+                )
 
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '7000')

@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<section class="content-header">
+    <h1>OSD Performance Graphs</h1>
+</section>
+<section class="content">
+    <h3>Read Latencies</h3>
+    <div class="row">
+        <div id="read1" class="col-md-6"></div>
+        <div id="read2" class="col-md-6"></div>
+    </div>
+    <hr>
+    <h3>Write Latencies</h3>
+    <div class="row">
+        <div id="write1" class="col-md-6"></div>
+        <div id="write2" class="col-md-6"></div>
+    </div>
+
+<script type="text/javascript">
+
+    var content_data = {{ content_data }};
+
+    var refresh = function() {
+        $.get("/get_perf_graph_data/", function(data) {
+            content_data = data;
+            plot_graphs();
+            setTimeout(refresh, 5000);
+        });
+    };
+
+    var convert_timeseries = function(source_series) {
+        var data = [];
+        _.each(source_series, function(dp) {
+            data.push({
+                x: dp[0] * 1000,
+                y: dp[1]
+            });
+        });
+        return data;
+    };
+
+    var plot_graphs = function() {
+        plot_read();
+        plot_read_dist();
+        plot_write();
+        plot_write_dist();
+    };
+
+    var plot_read = function() {
+        $('#r-stats-chart').remove();
+        $('#read1').append('<canvas id="r-stats-chart"></canvas>');
+        var min_values = convert_timeseries(content_data["osd.op_r_latency"]["min"]);
+        var max_values = convert_timeseries(content_data["osd.op_r_latency"]["max"]);
+        var avg_values = convert_timeseries(content_data["osd.op_r_latency"]["avg"]);
+        var r_stats = new Chart($("#r-stats-chart"), {
+            type: 'line',  
+            data: {
+                datasets: [
+                {
+                    data: min_values,
+                    label: "Minimum",
+                    borderColor: "rgb(102, 229, 28)",
+                    fill: false
+                },
+                {
+                    data: max_values,
+                    label: "Maximum",
+                    borderColor: "rgb(102, 229, 28)",
+                    fill: false,
+                },
+                {
+                    data: avg_values,
+                    label: "Average",
+                    borderColor: "rgb(229, 113, 29)",
+                    fill: false
+                }
+                ]
+            },
+            options: {
+                tooltips: {
+                    mode: 'point'
+                },
+                animation : {
+                    duration : 0
+                },
+                title: {
+                    display: true,
+                    text: 'Read Latency Statistics',
+                    fontStyle: 'bold',
+                    fontSize: 20
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 5,
+                        fontColor: 'rgb(240,255,240)'
+                    }
+                },
+                scales: {
+                    xAxes: [{
+                        type: 'time',
+                        position: 'bottom',
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Time',
+                        },
+                        time: {
+                            displayFormats: {
+                                quarter: 'MMM YYYY'
+                            }
+                        }
+                    }],
+                    yAxes: [{
+                        type: 'linear',
+                        position: 'left',
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Values',
+                        },
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        min: 0
+                    }]
+                }
+            }
+        });
+    }
+
+    var plot_read_dist = function() {
+        $('#r-chart').remove();
+        $('#read2').append('<canvas id="r-chart"></canvas>');
+        var latency_values = convert_timeseries(content_data["osd.op_r_latency"]["avg"]);
+        var prepare_values = convert_timeseries(content_data["osd.op_r_prepare_latency"]["avg"]);
+        var process_values = convert_timeseries(content_data["osd.op_r_process_latency"]["avg"]);
+        var r_stats = new Chart($("#r-chart"), {
+            type: 'line',
+            data: {
+                datasets: [
+                {
+                    data: latency_values,
+                    label: "Latency",
+                    borderColor: "rgb(229, 113, 29)",
+                    fill: false
+                },
+                {
+                    data: prepare_values,
+                    label: "Prepare latency",
+                    borderColor: "rgb(30,144,255)",
+                    fill: false,
+                },
+                {
+                    data: process_values,
+                    label: "Process latency",
+                    borderColor: "rgb(50,205,50)",
+                    fill: false
+                }
+                ]
+            },
+            options: {  
+                tooltips: {
+                    mode: 'point'
+                },
+                animation : {
+                    duration : 0
+                },
+                title: {
+                    display: true,
+                    text: 'Read Latency Distribution',
+                    fontStyle: 'bold',
+                    fontSize: 20
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 5,
+                        fontColor: 'rgb(240,255,240)'
+                    }
+                },
+                scales: {
+                    xAxes: [{
+                        type: 'time',
+                        position: 'bottom',
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Time',
+                        },
+                        time: {
+                            displayFormats: {
+                                quarter: 'MMM YYYY'
+                            }
+                        }
+                    }],
+                    yAxes: [{
+                        type: 'linear',
+                        position: 'left',
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Values',
+                        },
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        min: 0
+                    }]
+                }
+            }
+        });
+    }
+
+    var plot_write = function() {
+        $('#w-stats-chart').remove();
+        $('#write1').append('<canvas id="w-stats-chart"></canvas>');
+        var min_values = convert_timeseries(content_data["osd.op_w_latency"]["min"]);
+        var max_values = convert_timeseries(content_data["osd.op_w_latency"]["max"]);
+        var avg_values = convert_timeseries(content_data["osd.op_w_latency"]["avg"]);
+        var w_stats = new Chart($("#w-stats-chart"), {
+            type: 'line',
+            data: {
+                datasets: [
+                {
+                    data: min_values,
+                    label: "Minimum",
+                    borderColor: "rgb(102, 229, 28)",
+                    fill: false
+                },
+                {
+                    data: max_values,
+                    label: "Maximum",
+                    borderColor: "rgb(102, 229, 28)",
+                    fill: false,
+                },
+                {
+                    data: avg_values,
+                    label: "Average",
+                    borderColor: "rgb(229, 113, 29)",
+                    fill: false
+                }
+                ]
+            },
+            options: {
+                tooltips: {
+                    mode: 'point'
+                },
+                animation : {
+                    duration : 0
+                },
+                title: {
+                    display: true,
+                    text: 'Write Latency Statistics',
+                    fontStyle: 'bold',
+                    fontSize: 20
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 5,
+                        fontColor: 'rgb(240,255,240)'
+                    }
+                },
+                scales: {
+                    xAxes: [{
+                        type: 'time',
+                        position: 'bottom',
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Time',
+                        },
+                        time: {
+                            displayFormats: {
+                                quarter: 'MMM YYYY'
+                            }
+                        }
+                    }],
+                    yAxes: [{
+                        type: 'linear',
+                        position: 'left',
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Values',
+                        },
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        min: 0
+                    }]
+                }
+            }
+        });
+    }
+
+    var plot_write_dist = function() {
+        $('#w-chart').remove();
+        $('#write2').append('<canvas id="w-chart"></canvas>');
+        var latency_values = convert_timeseries(content_data["osd.op_w_latency"]["avg"]);
+        var prepare_values = convert_timeseries(content_data["osd.op_w_prepare_latency"]["avg"]);
+        var process_values = convert_timeseries(content_data["osd.op_w_process_latency"]["avg"]);
+        var r_stats = new Chart($("#w-chart"), {
+            type: 'line',
+            data: {
+                datasets: [
+                {
+                    data: latency_values,
+                    label: "Latency",
+                    borderColor: "rgb(229, 113, 29)",
+                    fill: false
+                },
+                {
+                    data: prepare_values,
+                    label: "Prepare latency",
+                    borderColor: "rgb(30,144,255)",
+                    fill: false,
+                },
+                {
+                    data: process_values,
+                    label: "Process latency",
+                    borderColor: "rgb(50,205,50)",
+                    fill: false
+                }
+                ]
+            },
+            options: {
+                tooltips: {
+                    mode: 'point'
+                },
+                animation : {
+                    duration : 0
+                },
+                title: {
+                    display: true,
+                    text: 'Write Latency Distribution',
+                    fontStyle: 'bold',
+                    fontSize: 20
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 5,
+                        fontColor: 'rgb(240,255,240)'
+                    }
+                },
+                scales: {
+                    xAxes: [{
+                        type: 'time',
+                        position: 'bottom',
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Time',
+                        },
+                        time: {
+                            displayFormats: {
+                                quarter: 'MMM YYYY'
+                            }
+                        }
+                    }],
+                    yAxes: [{
+                        type: 'linear',
+                        position: 'left',
+                        ticks: {fontColor:"rgb(221,221,221)"},
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Values',
+                        },
+                        min: 0
+                    }]
+                }
+            }
+        });
+    }
+
+    $(document).ready(function() {
+        plot_graphs();
+        setTimeout(refresh, 5000);
+    });
+
+</script>
+</section>
+ 
+{% endblock %}

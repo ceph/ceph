@@ -42,7 +42,6 @@
                     });
                 });
 
-
                 $.each(data.values, function(i, row) {
                     var tr = $("<tr style='height: 10px;'></tr>").appendTo(hist_table);
                     $.each(row, function(j, col) {
@@ -121,24 +120,19 @@
 
 <section class="content">
 
-    <div class="row">
-        
-        <div class="col-md-4">
-            <h3>Writes</h3>
-            <table id="heatmap_write">
-            </table>
-        </div>
-
-        <div class="col-md-4">
-            <h3>Reads</h3>
-            <table id="heatmap_read">
-            </table>
-        </div>
-            
+<div class="row">
+    <div class="col-md-4">
+        <h3>Writes</h3>
+        <table id="heatmap_write">
+        </table>
     </div>
-
+    <div class="col-md-4">
+        <h3>Reads</h3>
+        <table id="heatmap_read">
+        </table>
+    </div>
+</div>
 <hr>
-
 
 <div class="row">
 
@@ -189,7 +183,6 @@
     </div>
 </div>
 </div>
-
 </div>
 
 <script>
@@ -202,7 +195,6 @@
     });
   });
 </script>
-
 
 </section>
 <!-- /.content -->
