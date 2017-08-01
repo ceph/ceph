@@ -37,7 +37,7 @@ Major Changes from Kraken
       BlueStore for performance reasons.)  FIXME DOCS
 
   * *Erasure coded* pools now have full support for *overwrites*,
-    allowing them to be used with RBD and CephFS.  `Read more about EC overwrites`_.
+    allowing them to be used with RBD and CephFS.  See :doc:`/rados/operations/erasure-code/#erasure-coding-with-overwrites`.
 
   * *ceph-mgr*:
 
@@ -67,11 +67,11 @@ Major Changes from Kraken
     :doc:`/rados/operations/upmap`.
   * Each OSD now adjusts its default configuration based on whether the
     backing device is an HDD or SSD.  Manual tuning generally not required.
-  * The prototype `mClock QoS queueing algorithm`_ is now available.
+  * The prototype `mClock QoS queueing algorithm </rados/configuration/osd-config-ref/#qos-based-on-mclock>` is now available.
   * There is now a *backoff* mechanism that prevents OSDs from being
     overloaded by requests to objects or PGs that are not currently able to
     process IO.
-  * There is a `simplified OSD replacement process`_ that is more robust.
+  * There is a simplified OSD replacement process that is more robust (see :doc:`/rados/operations/add-or-rm-osds/#replacing-an-osd`).
   * You can query the supported features and (apparent) releases of
     all connected daemons and clients with `ceph features </man/8/ceph#features>`_.
   * You can configure the oldest Ceph client version you wish to allow to
@@ -175,7 +175,7 @@ Major Changes from Kraken
       ``require_RELEASE_osds`` flags.
     - ``ceph osd pg-upmap``, ``ceph osd rm-pg-upmap``, ``ceph osd
       pg-upmap-items``, ``ceph osd rm-pg-upmap-items`` can explicitly
-      manage `upmap` items (FIXME DOCS).
+      manage `upmap` items (see :doc:`/rados/operations/upmap`).
     - ``ceph osd getcrushmap`` returns a crush map version number on
       stderr, and ``ceph osd setcrushmap [version]`` will only inject
       an updated crush map if the version matches.  This allows crush
@@ -251,10 +251,6 @@ Major Changes from Kraken
       MonMap.  ``ceph mon feature set`` will set an optional feature (none of
       these exist yet).
     - ``ceph tell <daemon> help`` will now return a usage summary.
-
-.. _Read more about EC overwrites: ../rados/operations/erasure-code/#erasure-coding-with-overwrites
-.. _mClock QoS queueing algorithm: /rados/configuration/osd-config-ref#qos-based-on-mclock
-.. _simplified OSD replacement process: ../rados/operations/add-or-rm-osds/#replacing-an-osd
 
 Major Changes from Jewel
 ------------------------
