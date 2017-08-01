@@ -141,15 +141,11 @@ Remove an existing bucket from the CRUSH map. ::
 
 Move an existing bucket from one position in the hierarchy to another.  ::
 
-   ceph osd crush move {id} {loc1} [{loc2} ...]
+	ceph osd crush move {id} {loc1} [{loc2} ...]
 
 Set the weight of the item given by ``{name}`` to ``{weight}``. ::
 
 	ceph osd crush reweight {name} {weight}
-
-Create a cluster snapshot. ::
-
-	ceph osd cluster_snap {name}
 
 Mark an OSD as lost. This may result in permanent data loss. Use with caution. ::
 
@@ -188,10 +184,6 @@ Mark OSD ``{osd-num}`` out of the distribution (i.e. allocated no data). ::
 Mark ``{osd-num}`` in the distribution (i.e. allocated data). ::
 
 	ceph osd in {osd-num}
-
-List classes that are loaded in the ceph cluster. ::
-
-	ceph class list
 
 Set or clear the pause flags in the OSD map. If set, no IO requests
 will be sent to any OSD. Clearing the flags via unpause results in
