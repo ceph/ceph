@@ -2403,6 +2403,36 @@ static void populate_with_generic_attrs(const req_state * const s,
   }
 }
 
+static std::map<int, std::string>
+filter_out_temp_url(std::map<std::string, ceph::bufferlist>& add_attrs,
+                    const std::set<std::string>& rmattr_names)
+{
+  std::map<int, std::string> temp_url_keys;
+  std::map<std::string, ceph::bufferlist>::iterator iter;
+
+  iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY1);
+  if (iter != std::end(add_attrs)) {
+    temp_url_keys[0] = iter->second.c_str();
+    add_attrs.erase(iter);
+  }
+
+  iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY2);
+  if (iter != std::end(add_attrs)) {
+    temp_url_keys[1] = iter->second.c_str();
+    add_attrs.erase(iter);
+  }
+
+  for (const auto& name : rmattr_names) {
+    if (name.compare(RGW_ATTR_TEMPURL_KEY1) == 0) {
+      temp_url_keys[0] = std::string();
+    }
+    if (name.compare(RGW_ATTR_TEMPURL_KEY2) == 0) {
+      temp_url_keys[1] = std::string();
+    }
+  }
+
+  return temp_url_keys;
+}
 
 static int filter_out_quota_info(std::map<std::string, bufferlist>& add_attrs,
                                  const std::set<std::string>& rmattr_names,
@@ -2640,6 +2670,16 @@ void RGWCreateBucket::execute()
     prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
     populate_with_generic_attrs(s, attrs);
 
+    /* Try extract the TempURL-related stuff now to allow verify_permission
+     * evaluate whether we need FULL_CONTROL or not. */
+    auto temp_url_keys = filter_out_temp_url(attrs, rmattr_names);
+    /* Handle the TempURL-related stuff. */
+    if (!temp_url_keys.empty()) {
+      for (auto& pair : temp_url_keys) {
+        info.temp_url_keys[pair.first] = std::move(pair.second);
+      }
+    }
+
     op_ret = filter_out_quota_info(attrs, rmattr_names, quota_info);
     if (op_ret < 0) {
       return;
@@ -2732,6 +2772,15 @@ void RGWCreateBucket::execute()
       rgw_get_request_metadata(s->cct, s->info, attrs, false);
       prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
       populate_with_generic_attrs(s, attrs);
+
+      auto temp_url_keys = filter_out_temp_url(attrs, rmattr_names);
+      /* Handle the TempURL-related stuff. */
+      if (!temp_url_keys.empty()) {
+        for (auto& pair : temp_url_keys) {
+          s->bucket_info.temp_url_keys[pair.first] = std::move(pair.second);
+        }
+      }
+
       op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket_info.quota);
       if (op_ret < 0) {
         return;
@@ -3784,37 +3833,6 @@ void RGWPostObj::execute()
   } while (is_next_file_to_upload());
 }
 
-static std::map<int, std::string>
-filter_out_temp_url(std::map<std::string, ceph::bufferlist>& add_attrs,
-                    const std::set<std::string>& rmattr_names)
-{
-  std::map<int, std::string> temp_url_keys;
-  std::map<std::string, ceph::bufferlist>::iterator iter;
-
-  iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY1);
-  if (iter != std::end(add_attrs)) {
-    temp_url_keys[0] = iter->second.c_str();
-    add_attrs.erase(iter);
-  }
-
-  iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY2);
-  if (iter != std::end(add_attrs)) {
-    temp_url_keys[1] = iter->second.c_str();
-    add_attrs.erase(iter);
-  }
-
-  for (const auto& name : rmattr_names) {
-    if (name.compare(RGW_ATTR_TEMPURL_KEY1) == 0) {
-      temp_url_keys[0] = std::string();
-    }
-    if (name.compare(RGW_ATTR_TEMPURL_KEY2) == 0) {
-      temp_url_keys[1] = std::string();
-    }
-  }
-
-  return temp_url_keys;
-}
-
 int RGWPutMetadataAccount::init_processing()
 {
   /* First, go to the base class. At the time of writing the method was
@@ -3969,6 +3987,17 @@ void RGWPutMetadataBucket::execute()
    * attributes (like RGW_ATTR_ACL) if they are already present in attrs. */
   prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
+
+  /* Try extract the TempURL-related stuff now to allow verify_permission
+   * evaluate whether we need FULL_CONTROL or not. */
+  temp_url_keys = filter_out_temp_url(attrs, rmattr_names);
+  /* Handle the TempURL-related stuff. */
+  if (!temp_url_keys.empty()) {
+    for (auto& pair : temp_url_keys) {
+      s->bucket_info.temp_url_keys[pair.first] = std::move(pair.second);
+    }
+  }
+
 
   /* According  to the Swift's behaviour and its container_quota WSGI middleware
    * implementation: anyone with write permissions is able to set the bucket

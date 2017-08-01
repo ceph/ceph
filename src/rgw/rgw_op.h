@@ -1154,8 +1154,9 @@ public:
 
 class RGWPutMetadataBucket : public RGWOp {
 protected:
-  map<string, buffer::list> attrs;
-  set<string> rmattr_names;
+  std::map<string, ceph::buffer::list> attrs;
+  std::set<std::string> rmattr_names;
+  std::map<int, std::string> temp_url_keys;
   bool has_policy, has_cors;
   uint32_t policy_rw_mask;
   RGWAccessControlPolicy policy;
