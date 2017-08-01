@@ -1423,7 +1423,7 @@ function test_mon_osd_pool_set()
   ceph --format=xml osd pool get $TEST_POOL_GETSET auid | grep $auid
   ceph osd pool set $TEST_POOL_GETSET auid 0
 
-  for flag in hashpspool nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
+  for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
       ceph osd pool set $TEST_POOL_GETSET $flag false
       ceph osd pool get $TEST_POOL_GETSET $flag | grep "$flag: false"
       ceph osd pool set $TEST_POOL_GETSET $flag true
@@ -1487,6 +1487,12 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET size 2
   wait_for_clean
   ceph osd pool set $TEST_POOL_GETSET min_size 2
+  
+  expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool 0
+  ceph osd pool set $TEST_POOL_GETSET hashpspool 0 --yes-i-really-mean-it
+  
+  expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool 1
+  ceph osd pool set $TEST_POOL_GETSET hashpspool 1 --yes-i-really-mean-it
 
   ceph osd pool set $TEST_POOL_GETSET nodelete 1
   expect_false ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
