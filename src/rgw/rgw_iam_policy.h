@@ -323,7 +323,7 @@ struct Condition {
     try {
       double d = std::stod(s, &p);
       if (p == s.length()) {
-	return !((d == +0.0) || (d = -0.0) || std::isnan(d));
+	return !((d == +0.0) || (d == -0.0) || std::isnan(d));
       }
     } catch (const std::logic_error& e) {
       // Fallthrough
