@@ -452,6 +452,10 @@ TEST_F(TestLFNIndex, get_mangled_name) {
 
 int main(int argc, char **argv) {
   int fd = ::creat("detect", 0600);
+  if (fd < 0){
+    cerr << "failed to create file detect" << std::endl;
+    return EXIT_FAILURE;
+  }
   int ret = chain_fsetxattr(fd, "user.test", "A", 1);
   ::close(fd);
   ::unlink("detect");
