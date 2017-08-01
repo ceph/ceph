@@ -19,7 +19,7 @@ Major Changes from Kraken
 - *General*:
 
   * Ceph now has a simple, built-in web-based dashboard for monitoring
-    cluster status.  FIXME DOCS.
+    cluster status.  See :doc:`/mgr/dashboard/`.
 
 - *RADOS*:
 
@@ -48,21 +48,23 @@ Major Changes from Kraken
       *ceph-mgr* for reliability.  See the notes on `Upgrading`_ below.
     - The *ceph-mgr* daemon includes a REST-based management API.  The
       API is still experimental and somewhat limited but will form the basis
-      for API-based management of Ceph going forward.  FIXME DOCS
+      for API-based management of Ceph going forward.  See :doc:`/mgr/restful`.
     - *ceph-mgr* also includes a Prometheus exporter plugin, which can
-      provide Ceph perfcounters to Prometheus.  See ceph-mgr docs.
+      provide Ceph perfcounters to Prometheus.  See :doc:`/mgr/prometheus`.
 
   * The overall *scalability* of the cluster has improved. We have
     successfully tested clusters with up to 10,000 OSDs.
-  * Each OSD can now have a *device class* associated with it (e.g., `hdd` or
-    `ssd`), allowing CRUSH rules to trivially map data to a subset of devices
-    in the system.  Manually writing CRUSH rules or manual editing of the CRUSH
-    is normally not required. FIXME DOCS
-  * You can now *optimize CRUSH weights* can now be optimized to
-    maintain a *near-perfect distribution of data* across OSDs.  FIXME DOCS
+  * Each OSD can now have a *device class* associated with it (e.g.,
+    `hdd` or `ssd`), allowing CRUSH rules to trivially map data to a
+    subset of devices in the system.  Manually writing CRUSH rules or
+    manual editing of the CRUSH is normally not required.  See
+    :doc:`/rados/operations/crush-map/#crush-structure`.
+  * You can now *optimize CRUSH weights* to maintain a *near-perfect
+    distribution of data* across OSDs.  FIXME DOCS
   * There is also a new `upmap` exception mechanism that allows
     individual PGs to be moved around to achieve a *perfect
-    distribution* (this requires luminous clients). FIXME DOCS
+    distribution* (this requires luminous clients). See
+    :doc:`/rados/operations/upmap`.
   * Each OSD now adjusts its default configuration based on whether the
     backing device is an HDD or SSD.  Manual tuning generally not required.
   * The prototype `mClock QoS queueing algorithm`_ is now available.
