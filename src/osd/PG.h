@@ -34,6 +34,7 @@
 #include "osd_types.h"
 #include "include/xlist.h"
 #include "SnapMapper.h"
+#include "common/Timer.h"
 
 #include "PGLog.h"
 #include "OSDMap.h"
@@ -872,7 +873,6 @@ protected:
 public:
   void clear_primary_state();
 
- public:
   bool is_actingbackfill(pg_shard_t osd) const {
     return actingbackfill.count(osd);
   }
@@ -1101,6 +1101,11 @@ public:
     OpRequestRef active_rep_scrub;
     utime_t scrub_reg_stamp;  // stamp we registered for
 
+    // For async sleep
+    bool sleeping = false;
+    bool needs_sleep = true;
+    utime_t sleep_start;
+
     // flags to indicate explicitly requested scrubs (by admin)
     bool must_scrub, must_deep_scrub, must_repair;
 
@@ -1219,6 +1224,9 @@ public:
       authoritative.clear();
       num_digest_updates_pending = 0;
       cleaned_meta_map = ScrubMap();
+      sleeping = false;
+      needs_sleep = true;
+      sleep_start = utime_t();
     }
 
     void create_results(const hobject_t& obj);

@@ -4065,22 +4065,49 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
 {
   if (g_conf->osd_scrub_sleep > 0 &&
       (scrubber.state == PG::Scrubber::NEW_CHUNK ||
-       scrubber.state == PG::Scrubber::INACTIVE)) {
+       scrubber.state == PG::Scrubber::INACTIVE) &&
+       scrubber.needs_sleep) {
+    ceph_assert(!scrubber.sleeping);
     dout(20) << __func__ << " state is INACTIVE|NEW_CHUNK, sleeping" << dendl;
-    unlock();
-    utime_t t;
-    t.set_from_double(g_conf->osd_scrub_sleep);
-    handle.suspend_tp_timeout();
-    t.sleep();
-    handle.reset_tp_timeout();
-    lock();
-    dout(20) << __func__ << " slept for " << t << dendl;
+
+    // Do an async sleep so we don't block the op queue
+    OSDService *osds = osd;
+    spg_t pgid = get_pgid();
+    int state = scrubber.state;
+    auto scrub_requeue_callback =
+        new FunctionContext([osds, pgid, state](int r) {
+          PG *pg = osds->osd->lookup_lock_pg(pgid);
+          if (pg == nullptr) {
+            lgeneric_dout(osds->osd->cct, 20)
+                << "scrub_requeue_callback: Could not find "
+                << "PG " << pgid << " can't complete scrub requeue after sleep"
+                << dendl;
+            return;
+          }
+          pg->scrubber.sleeping = false;
+          pg->scrubber.needs_sleep = false;
+          lgeneric_dout(pg->cct, 20)
+              << "scrub_requeue_callback: slept for "
+              << ceph_clock_now() - pg->scrubber.sleep_start
+              << ", re-queuing scrub with state " << state << dendl;
+          pg->scrub_queued = false;
+          pg->requeue_scrub();
+          pg->scrubber.sleep_start = utime_t();
+          pg->unlock();
+        });
+    Mutex::Locker l(osd->scrub_sleep_lock);
+    osd->scrub_sleep_timer.add_event_after(cct->_conf->osd_scrub_sleep,
+                                           scrub_requeue_callback);
+    scrubber.sleeping = true;
+    scrubber.sleep_start = ceph_clock_now();
+    return;
   }
   if (pg_has_reset_since(queued)) {
     return;
   }
   assert(scrub_queued);
   scrub_queued = false;
+  scrubber.needs_sleep = true;
 
   if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {
     dout(10) << "scrub -- not primary or active or not clean" << dendl;
