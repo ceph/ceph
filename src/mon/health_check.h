@@ -35,10 +35,16 @@ struct health_check_t {
 
   void dump(Formatter *f) const {
     f->dump_stream("severity") << severity;
-    f->dump_string("summary", summary);
+
+    f->open_object_section("summary");
+    f->dump_string("message", summary);
+    f->close_section();
+
     f->open_array_section("detail");
     for (auto& p : detail) {
-      f->dump_string("item", p);
+      f->open_object_section("detail_item");
+      f->dump_string("message", p);
+      f->close_section();
     }
     f->close_section();
   }
@@ -138,11 +144,17 @@ struct health_check_map_t {
       if (f) {
 	f->open_object_section(p.first.c_str());
 	f->dump_stream("severity") << p.second.severity;
-	f->dump_string("message", p.second.summary);
+
+        f->open_object_section("summary");
+        f->dump_string("message", p.second.summary);
+        f->close_section();
+
 	if (detail) {
 	  f->open_array_section("detail");
 	  for (auto& d : p.second.detail) {
-	    f->dump_string("item", d);
+            f->open_object_section("detail_item");
+            f->dump_string("message", d);
+            f->close_section();
 	  }
 	  f->close_section();
 	}
