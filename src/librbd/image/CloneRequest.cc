@@ -316,7 +316,7 @@ template <typename I>
 void CloneRequest<I>::handle_refresh(int r) {
   ldout(m_cct, 20) << this << " " << __func__ << " r=" << r << dendl;
 
-  bool snap_protected;
+  bool snap_protected = false;
   if (r == 0) {
     m_p_imctx->snap_lock.get_read();
     r = m_p_imctx->is_snap_protected(m_p_imctx->snap_id, &snap_protected);
