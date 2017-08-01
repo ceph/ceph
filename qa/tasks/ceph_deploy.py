@@ -742,6 +742,12 @@ def upgrade(ctx, config):
                     run.Raw(cmd),
                 ],
             )
+            # restart all ceph services, ideally upgrade should but it does not
+            remote.run(
+                args=[
+                    'sudo', 'systemctl', 'restart', 'ceph.target'
+                ]
+            )
             ceph_admin.run(args=['sudo', 'ceph', '-s'])
     if config.get('setup-mgr-node', None):
         mgr_nodes = get_nodes_using_role(ctx, 'mgr')
