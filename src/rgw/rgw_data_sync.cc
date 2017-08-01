@@ -1731,11 +1731,13 @@ struct bucket_index_marker_info {
   string bucket_ver;
   string master_ver;
   string max_marker;
+  bool syncstopped{false};
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("bucket_ver", bucket_ver, obj);
     JSONDecoder::decode_json("master_ver", master_ver, obj);
     JSONDecoder::decode_json("max_marker", max_marker, obj);
+    JSONDecoder::decode_json("syncstopped", syncstopped, obj);
   }
 };
 
@@ -1799,14 +1801,18 @@ public:
         return set_cr_error(retcode);
       }
       yield {
-	status.state = rgw_bucket_shard_sync_info::StateFullSync;
-        status.inc_marker.position = info.max_marker;
-        map<string, bufferlist> attrs;
-        status.encode_all_attrs(attrs);
         auto store = sync_env->store;
-        call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store,
-                                            rgw_raw_obj(store->get_zone_params().log_pool, sync_status_oid),
-                                            attrs));
+        rgw_raw_obj obj(store->get_zone_params().log_pool, sync_status_oid);
+
+        if (info.syncstopped) {
+          call(new RGWRadosRemoveCR(store, obj));
+        } else {
+          status.state = rgw_bucket_shard_sync_info::StateFullSync;
+          status.inc_marker.position = info.max_marker;
+          map<string, bufferlist> attrs;
+          status.encode_all_attrs(attrs);
+          call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store, obj, attrs));
+        }
       }
       return set_cr_done();
     }
@@ -2453,12 +2459,14 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   bool updated_status{false};
   const string& status_oid;
   const string& zone_id;
+  ceph::real_time sync_modify_time;
 
   string cur_id;
 
   RGWDataSyncDebugLogger logger;
 
   int sync_status{0};
+  bool syncstopped{false};
 
 public:
   RGWBucketShardIncrementalSyncCR(RGWDataSyncEnv *_sync_env,
@@ -2488,17 +2496,34 @@ int RGWBucketShardIncrementalSyncCR::operate()
         drain_all();
         return set_cr_error(-ECANCELED);
       }
-      ldout(sync_env->cct, 20) << __func__ << "(): listing bilog for incremental sync" << dendl;
+      ldout(sync_env->cct, 20) << __func__ << "(): listing bilog for incremental sync" << inc_marker.position << dendl;
       set_status() << "listing bilog; position=" << inc_marker.position;
       yield call(new RGWListBucketIndexLogCR(sync_env, bs, inc_marker.position,
                                              &list_result));
-      if (retcode < 0 && retcode != -ENOENT) {
-        /* wait for all operations to complete */
+      if (retcode < 0 && retcode != -ENOENT ) {
         drain_all();
-        return set_cr_error(retcode);
+        if (!syncstopped) {
+          /* wait for all operations to complete */
+          return set_cr_error(retcode);
+        } else {
+          /* no need to retry */
+          break;	
+	}
       }
       squash_map.clear();
       for (auto& e : list_result) {
+        if (e.op == RGWModifyOp::CLS_RGW_OP_SYNCSTOP && (sync_modify_time < e.timestamp)) {
+          ldout(sync_env->cct, 20) << " syncstop on " << e.timestamp << dendl;
+          sync_modify_time = e.timestamp;
+          syncstopped = true;
+          continue;
+        }
+        if (e.op == RGWModifyOp::CLS_RGW_OP_RESYNC && (sync_modify_time < e.timestamp)) {
+          ldout(sync_env->cct, 20) << " resync on " << e.timestamp << dendl;
+          sync_modify_time = e.timestamp;
+          syncstopped = false;
+          continue;
+        }
         if (e.state != CLS_RGW_STATE_COMPLETE) {
           continue;
         }
@@ -2510,6 +2535,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           squash_entry = make_pair<>(e.timestamp, e.op);
         }
       }
+
       entries_iter = list_result.begin();
       for (; entries_iter != list_result.end(); ++entries_iter) {
         if (!lease_cr->is_locked()) {
@@ -2526,6 +2552,12 @@ int RGWBucketShardIncrementalSyncCR::operate()
           }
         }
         inc_marker.position = cur_id;
+
+        if (entry->op == RGWModifyOp::CLS_RGW_OP_SYNCSTOP || entry->op == RGWModifyOp::CLS_RGW_OP_RESYNC) {
+          ldout(sync_env->cct, 20) << "detected syncstop or resync  on " << entries_iter->timestamp << " , skipping entry" << dendl;
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
+          continue;
+        }
 
         if (!key.set(rgw_obj_index_key{entry->object, entry->instance})) {
           set_status() << "parse_raw_oid() on " << entry->object << " returned false, skipping entry";
@@ -2633,6 +2665,18 @@ int RGWBucketShardIncrementalSyncCR::operate()
         }
       }
     } while (!list_result.empty() && sync_status == 0);
+
+    if (syncstopped) {
+      drain_all();
+
+      yield {
+        const string& oid = RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs);
+        RGWRados *store = sync_env->store;
+        call(new RGWRadosRemoveCR(store, rgw_raw_obj{store->get_zone_params().log_pool, oid}));
+      }
+      lease_cr->abort();
+      return set_cr_done();
+    }
 
     while (num_spawned()) {
       yield wait_for_child();

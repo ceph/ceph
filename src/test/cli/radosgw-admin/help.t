@@ -25,6 +25,8 @@
     bucket rm                  remove bucket
     bucket check               check bucket index
     bucket reshard             reshard bucket
+    bucket sync disable        disable bucket sync
+    bucket sync enable         enable bucket sync
     bi get                     retrieve bucket index object entries
     bi put                     store bucket index object entries
     bi list                    list raw bucket index entries

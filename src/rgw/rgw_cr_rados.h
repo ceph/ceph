@@ -177,7 +177,6 @@ public:
 		        const string& _name, const string& _cookie);
 };
 
-
 template <class T>
 class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
