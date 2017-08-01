@@ -13,7 +13,7 @@ tasks:
     log-whitelist:
       - but it is still running
       - overall HEALTH_
-      - (OSDMAP_FLAGS)
-      - (OSD_
-      - (PG_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
 - dump_stuck:

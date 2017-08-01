@@ -7,8 +7,8 @@ tasks:
       wait-for-scrub: false
       log-whitelist:
         - overall HEALTH_
-        - (MGR_DOWN)
-        - (PG_
+        - \(MGR_DOWN\)
+        - \(PG_
   - cephfs_test_runner:
       modules:
         - tasks.mgr.test_failover

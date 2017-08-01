@@ -24,9 +24,9 @@ tasks:
     log-whitelist:
       - objects unfound and apparently lost
       - overall HEALTH_
-      - (OSDMAP_FLAGS)
-      - (OSD_
-      - (PG_
-      - (OBJECT_DEGRADED)
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(OBJECT_DEGRADED\)
 - watch_notify_same_primary:
     clients: [client.0]

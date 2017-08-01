@@ -25,7 +25,7 @@ overrides:
 # setting luminous triggers peering, which *might* trigger health alerts
     log-whitelist:
       - overall HEALTH_
-      - (PG_AVAILABILITY)
-      - (PG_DEGRADED)
+      - \(PG_AVAILABILITY\)
+      - \(PG_DEGRADED\)
   thrashosds:
     chance_thrash_cluster_full: 0

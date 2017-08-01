@@ -16,10 +16,10 @@ tasks:
     log-whitelist:
       - but it is still running
       - overall HEALTH_
-      - (OSDMAP_FLAGS)
-      - (OSD_
-      - (PG_
-      - (OBJECT_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(OBJECT_
     conf:
       osd:
         osd min pg log entries: 5

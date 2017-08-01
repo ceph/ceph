@@ -8,9 +8,9 @@ tasks:
     fs: xfs
     log-whitelist:
       - overall HEALTH_
-      - (OSDMAP_FLAGS)
-      - (OSD_
-      - (PG_
-      - (OBJECT_DEGRADED)
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(OBJECT_DEGRADED\)
 - resolve_stuck_peering:
 

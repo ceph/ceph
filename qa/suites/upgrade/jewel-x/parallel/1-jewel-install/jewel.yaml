@@ -13,8 +13,8 @@ tasks:
     add_osds_to_crush: true
     log-whitelist:
       - overall HEALTH_
-      - (FS_
-      - (MDS_
+      - \(FS_
+      - \(MDS_
 - print: "**** done ceph"
 - install.upgrade:
     mon.a:
