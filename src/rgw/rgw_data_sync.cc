@@ -1060,8 +1060,8 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   set<string> spawned_keys;
 
-  RGWContinuousLeaseCR *lease_cr;
-  RGWCoroutinesStack *lease_stack;
+  boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
+  boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
   string status_oid;
 
 
@@ -1102,7 +1102,6 @@ public:
     delete marker_tracker;
     if (lease_cr) {
       lease_cr->abort();
-      lease_cr->put();
     }
     if (error_repo) {
       error_repo->put();
@@ -1150,13 +1149,12 @@ public:
     string lock_name = "sync_lock";
     if (lease_cr) {
       lease_cr->abort();
-      lease_cr->put();
     }
     RGWRados *store = sync_env->store;
-    lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, store->get_zone_params().log_pool, status_oid,
-                                        lock_name, lock_duration, this);
-    lease_cr->get();
-    lease_stack = spawn(lease_cr, false);
+    lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
+                                            store->get_zone_params().log_pool, status_oid,
+                                            lock_name, lock_duration, this));
+    lease_stack.reset(spawn(lease_cr.get(), false));
   }
 
   int full_sync() {
@@ -1328,7 +1326,7 @@ public:
             set_status() << "num_spawned() > spawn_window";
             yield wait_for_child();
             int ret;
-            while (collect(&ret, lease_stack)) {
+            while (collect(&ret, lease_stack.get())) {
               if (ret < 0) {
                 ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
                 /* we have reported this error */
@@ -2660,12 +2658,12 @@ int RGWRunBucketSyncCoroutine::operate()
     yield {
       set_status("acquiring sync lock");
       auto store = sync_env->store;
-      lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store,
-                                          store->get_zone_params().log_pool,
-                                          status_oid, "sync_lock",
-                                          cct->_conf->rgw_sync_lease_period,
-                                          this);
-      lease_stack = spawn(lease_cr.get(), false);
+      lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
+                                              store->get_zone_params().log_pool,
+                                              status_oid, "sync_lock",
+                                              cct->_conf->rgw_sync_lease_period,
+                                              this));
+      lease_stack.reset(spawn(lease_cr.get(), false));
     }
     while (!lease_cr->is_locked()) {
       if (lease_cr->is_done()) {
