@@ -326,7 +326,7 @@ InstanceWatcher<I>::InstanceWatcher(librados::IoCtx &io_ctx,
     m_lock(unique_lock_name("rbd::mirror::InstanceWatcher::m_lock", this)),
     m_instance_lock(librbd::ManagedLock<I>::create(
       m_ioctx, m_work_queue, m_oid, this, librbd::managed_lock::EXCLUSIVE, true,
-      m_cct->_conf->rbd_blacklist_expire_seconds)) {
+      m_cct->_conf->get_val<int64_t>("rbd_blacklist_expire_seconds"))) {
 }
 
 template <typename I>

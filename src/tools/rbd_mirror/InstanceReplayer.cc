@@ -483,7 +483,8 @@ void InstanceReplayer<I>::schedule_image_state_check_task() {
       queue_start_image_replayers();
     });
 
-  int after = g_ceph_context->_conf->rbd_mirror_image_state_check_interval;
+  int after = g_ceph_context->_conf->get_val<int64_t>(
+    "rbd_mirror_image_state_check_interval");
 
   dout(20) << "scheduling image state check after " << after << " sec (task "
            << m_image_state_check_task << ")" << dendl;
