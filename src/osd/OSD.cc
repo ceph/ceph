@@ -2357,8 +2357,10 @@ float OSD::get_osd_recovery_sleep()
 {
   if (cct->_conf->osd_recovery_sleep)
     return cct->_conf->osd_recovery_sleep;
-  if (store_is_rotational)
+  if (store_is_rotational && journal_is_rotational)
     return cct->_conf->osd_recovery_sleep_hdd;
+  else if (store_is_rotational && !journal_is_rotational)
+    return cct->_conf->get_val<double>("osd_recovery_sleep_hybrid");
   else
     return cct->_conf->osd_recovery_sleep_ssd;
 }
