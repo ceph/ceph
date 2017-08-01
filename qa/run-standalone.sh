@@ -40,6 +40,7 @@ location="../qa/standalone"
 
 count=0
 errors=0
+userargs=""
 for f in $(cd $location ; find . -perm $exec_mode -type f)
 do
     f=$(echo $f | sed 's/\.\///')
@@ -51,11 +52,16 @@ do
         found=false
         for c in "${!select[@]}"
         do
-            if [[ "${select[$c]}" = $(basename $f) ]]; then
+            # Get command and any arguments of subset of tests ro tun
+            allargs="${select[$c]}"
+            arg1=$(echo "$allargs" | cut --delimiter " " --field 1)
+            # Get user args for this selection for use below
+            userargs="$(echo $allargs | cut -s --delimiter " " --field 2-)"
+            if [[ "$arg1" = $(basename $f) ]]; then
                 found=true
                 break
             fi
-            if [[ "${select[$c]}" = "$f" ]]; then
+            if [[ "$arg1" = "$f" ]]; then
                 found=true
                 break
             fi
@@ -69,13 +75,14 @@ do
         continue
     fi
 
+    cmd="$location/$f $userargs"
     count=$(expr $count + 1)
-    echo "--- $f ---"
+    echo "--- $cmd ---"
     if [[ "$dryrun" != "true" ]]; then
         if ! PATH=$PATH:bin \
 	    CEPH_ROOT=.. \
 	    CEPH_LIB=lib \
-	    $location/$f ; then
+	    $cmd ; then
           echo "$f .............. FAILED"
           errors=$(expr $errors + 1)
         fi

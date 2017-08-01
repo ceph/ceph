@@ -16,3 +16,8 @@ You can run them in a git checkout + build directory as well:
     qa/standalone as arguments to qa/run-standalone.sh.
 
 ../qa/run-standalone.sh misc.sh osd/osd-dup.sh
+
+  * Add support for specifying arguments to selected tests by simply adding
+    list of tests to each argument.
+
+../qa/run-standalone.sh "test-ceph-helpers.sh test_get_last_scrub_stamp"
