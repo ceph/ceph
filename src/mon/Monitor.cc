@@ -3128,7 +3128,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  if (module == "mds" || module == "fs") {
+  if ((module == "mds" || module == "fs")  &&
+      prefix != "fs authorize") {
     mdsmon()->dispatch(op);
     return;
   }
@@ -3157,7 +3158,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     monmon()->dispatch(op);
     return;
   }
-  if (module == "auth") {
+  if (module == "auth" || prefix == "fs authorize") {
     authmon()->dispatch(op);
     return;
   }

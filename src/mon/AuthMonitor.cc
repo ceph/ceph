@@ -19,6 +19,7 @@
 #include "mon/MonitorDBStore.h"
 #include "mon/ConfigKeyService.h"
 #include "mon/OSDMonitor.h"
+#include "mon/MDSMonitor.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MAuth.h"
@@ -538,6 +539,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       prefix == "auth rm" ||
       prefix == "auth get-or-create" ||
       prefix == "auth get-or-create-key" ||
+      prefix == "fs authorize" ||
       prefix == "auth import" ||
       prefix == "auth caps") {
     return false;
@@ -1270,6 +1272,98 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
 					      get_last_committed() + 1));
+    return true;
+  } else if (prefix == "fs authorize") {
+    string filesystem;
+    cmd_getval(g_ceph_context, cmdmap, "filesystem", filesystem);
+    string mds_cap_string, osd_cap_string;
+    string osd_cap_wanted = "r";
+
+    for (auto it = caps_vec.begin();
+	 it != caps_vec.end() && (it + 1) != caps_vec.end();
+	 it += 2) {
+      const string &path = *it;
+      const string &cap = *(it+1);
+      if (cap != "r" && cap != "rw" && cap != "rwp") {
+	ss << "Only 'r', 'rw', and 'rwp' permissions are allowed for filesystems.";
+	err = -EINVAL;
+	goto done;
+      }
+      if (cap.find('w') != string::npos) {
+	osd_cap_wanted = "rw";
+      }
+
+      mds_cap_string += mds_cap_string.empty() ? "" : ", ";
+      mds_cap_string += "allow " + cap;
+      if (path != "/") {
+	mds_cap_string += " path=" + path;
+      }
+    }
+
+    auto fs = mon->mdsmon()->get_fsmap().get_filesystem(filesystem);
+    if (!fs) {
+      ss << "filesystem " << filesystem << " does not exist.";
+      err = -EINVAL;
+      goto done;
+    }
+
+    auto data_pools = fs->mds_map.get_data_pools();
+    for (auto p : data_pools) {
+      const string &pool_name = mon->osdmon()->osdmap.get_pool_name(p);
+      osd_cap_string += osd_cap_string.empty() ? "" : ", ";
+      osd_cap_string += "allow " + osd_cap_wanted + " pool=" + pool_name;
+    }
+
+    std::map<string, bufferlist> wanted_caps = {
+      { "mon", _encode_cap("allow r") },
+      { "osd", _encode_cap(osd_cap_string) },
+      { "mds", _encode_cap(mds_cap_string) }
+    };
+
+    EntityAuth entity_auth;
+    if (mon->key_server.get_auth(entity, entity_auth)) {
+      for (const auto &sys_cap : wanted_caps) {
+	if (entity_auth.caps.count(sys_cap.first) == 0 ||
+	    !entity_auth.caps[sys_cap.first].contents_equal(sys_cap.second)) {
+	  ss << "key for " << entity << " exists but cap " << sys_cap.first
+	     << " does not match";
+	  err = -EINVAL;
+	  goto done;
+	}
+      }
+
+      KeyRing kr;
+      kr.add(entity, entity_auth.key);
+      if (f) {
+	kr.set_caps(entity, entity_auth.caps);
+	kr.encode_formatted("auth", f.get(), rdata);
+      } else {
+	kr.encode_plaintext(rdata);
+      }
+      err = 0;
+      goto done;
+    }
+
+    KeyServerData::Incremental auth_inc;
+    auth_inc.op = KeyServerData::AUTH_INC_ADD;
+    auth_inc.name = entity;
+    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    auth_inc.auth.caps = wanted_caps;
+
+    push_cephx_inc(auth_inc);
+    KeyRing kr;
+    kr.add(entity, auth_inc.auth.key);
+    if (f) {
+      kr.set_caps(entity, wanted_caps);
+      kr.encode_formatted("auth", f.get(), rdata);
+    } else {
+      kr.encode_plaintext(rdata);
+    }
+
+    rdata.append(ds);
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
+						  get_last_committed() + 1));
     return true;
   } else if (prefix == "auth caps" && !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
