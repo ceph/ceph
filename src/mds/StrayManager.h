@@ -63,7 +63,7 @@ class StrayManager
   /**
    * Completion handler for a Filer::purge on a stray inode.
    */
-  void _purge_stray_purged(CDentry *dn, uint32_t ops, bool only_head);
+  void _purge_stray_purged(CDentry *dn, bool only_head);
 
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
 
