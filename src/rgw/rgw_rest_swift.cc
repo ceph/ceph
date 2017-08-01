@@ -371,7 +371,7 @@ next:
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static void dump_container_metadata(struct req_state *s,
+static void dump_container_metadata(struct req_state* const s,
                                     const RGWBucketEnt& bucket,
                                     const RGWQuotaInfo& quota,
                                     const RGWBucketWebsiteConf& ws_conf)
@@ -383,7 +383,21 @@ static void dump_container_metadata(struct req_state *s,
   dump_header(s, "X-Container-Bytes-Used", bucket.size);
   dump_header(s, "X-Container-Bytes-Used-Actual", bucket.size_rounded);
 
+  /* Dump TempURL-related stuff */
+  if (s->perm_mask == RGW_PERM_FULL_CONTROL) {
+    auto iter = s->bucket_info.temp_url_keys.find(0);
+    if (iter != std::end(s->bucket_info.temp_url_keys) && ! iter->second.empty()) {
+      dump_header(s, "X-Container-Meta-Temp-Url-Key", iter->second);
+    }
+
+    iter = s->bucket_info.temp_url_keys.find(1);
+    if (iter != std::end(s->bucket_info.temp_url_keys) && ! iter->second.empty()) {
+      dump_header(s, "X-Container-Meta-Temp-Url-Key-2", iter->second);
+    }
+  }
+
   if (s->object.empty()) {
+    /* ACLs. */
     auto swift_policy = \
       static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
     std::string read_acl, write_acl;
