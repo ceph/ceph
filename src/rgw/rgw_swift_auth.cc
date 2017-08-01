@@ -65,12 +65,11 @@ bool TempURLEngine::is_applicable(const req_state* const s) const noexcept
          s->info.args.exists("temp_url_expires");
 }
 
-void TempURLEngine::get_owner_info(const req_state* const s,
-                                   RGWUserInfo& owner_info) const
+RGWBucketInfo TempURLEngine::get_bucket_info(const req_state* const s) const
 {
   /* We cannot use req_state::bucket_name because it isn't available
    * now. It will be initialized in RGWHandler_REST_SWIFT::postauth_init(). */
-  const string& bucket_name = s->init_state.url_bucket;
+  const std::string& bucket_name = s->init_state.url_bucket;
 
   /* TempURL requires that bucket and object names are specified. */
   if (bucket_name.empty() || s->object.empty()) {
@@ -81,7 +80,7 @@ void TempURLEngine::get_owner_info(const req_state* const s,
    * get account name only through extraction from URL. In turn, knowledge
    * about account is neccessary to obtain its bucket tenant. Without that,
    * the access would be limited to accounts with empty tenant. */
-  string bucket_tenant;
+  std::string bucket_tenant;
   if (!s->account_name.empty()) {
     RGWUserInfo uinfo;
     bool found = false;
@@ -113,12 +112,24 @@ void TempURLEngine::get_owner_info(const req_state* const s,
     throw ret;
   }
 
+  return bucket_info;
+}
+
+RGWUserInfo TempURLEngine::get_owner_info(const req_state* const s,
+                                          const RGWBucketInfo& bucket_info) const
+{
+
   ldout(cct, 20) << "temp url user (bucket owner): " << bucket_info.owner
                  << dendl;
 
+  RGWUserInfo owner_info;
   if (rgw_get_user_info_by_uid(store, bucket_info.owner, owner_info) < 0) {
+    ldout(cct, 20) << "can't get RGWUserInfo for temp url user: "
+                   << bucket_info.owner << dendl;
     throw -EPERM;
   }
+
+  return owner_info;
 }
 
 std::string TempURLEngine::convert_from_iso8601(std::string expires) const
@@ -276,11 +287,12 @@ TempURLEngine::authenticate(const req_state* const s) const
   const boost::optional<const std::string&> temp_url_prefix = \
     s->info.args.get_optional("temp_url_prefix");
 
+  RGWBucketInfo bucket_info;
   RGWUserInfo owner_info;
   try {
-    get_owner_info(s, owner_info);
+    bucket_info = get_bucket_info(s);
+    owner_info = get_owner_info(s, bucket_info);
   } catch (...) {
-    ldout(cct, 5) << "cannot get user_info of account's owner" << dendl;
     return result_t::reject(-EPERM);
   }
 
@@ -322,9 +334,14 @@ TempURLEngine::authenticate(const req_state* const s) const
     temp_url_prefix
   };
 
-  for (const auto& kv : owner_info.temp_url_keys) {
-    const int temp_url_key_num = kv.first;
-    const string& temp_url_key = kv.second;
+  const std::array<std::string, 4> temp_url_keys {
+    bucket_info.temp_url_keys[0],
+    bucket_info.temp_url_keys[1],
+    owner_info.temp_url_keys[0],
+    owner_info.temp_url_keys[1]
+  };
+
+  for (const auto& temp_url_key : temp_url_keys) {
 
     if (temp_url_key.empty()) {
       continue;
@@ -335,7 +352,7 @@ TempURLEngine::authenticate(const req_state* const s) const
         const char* const local_sig = sig_helper.calc(temp_url_key, method,
                                                       path, temp_url_expires);
 
-        ldout(s->cct, 20) << "temp url signature [" << temp_url_key_num
+        ldout(s->cct, 20) << "temp url signature [" << 0
                           << "] (calculated): " << local_sig
                           << dendl;
 

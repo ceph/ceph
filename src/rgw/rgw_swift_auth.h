@@ -43,8 +43,9 @@ class TempURLEngine : public rgw::auth::Engine {
   const TempURLApplier::Factory* const apl_factory;
 
   /* Helper methods. */
-  void get_owner_info(const req_state* s,
-                      RGWUserInfo& owner_info) const;
+  RGWBucketInfo get_bucket_info(const req_state* const s) const;
+  RGWUserInfo get_owner_info(const req_state* s,
+                             const RGWBucketInfo& bucket_info) const;
   std::string convert_from_iso8601(std::string expires) const;
   bool is_applicable(const req_state* s) const noexcept;
   bool is_expired(const std::string& expires) const;
