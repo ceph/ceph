@@ -2637,15 +2637,15 @@ int OSD::init()
 
   r = update_crush_device_class();
   if (r < 0) {
-    derr << __func__ <<" unable to update_crush_device_class: "
-         << cpp_strerror(r) << dendl;
+    derr << __func__ << " unable to update_crush_device_class: "
+	 << cpp_strerror(r) << dendl;
     osd_lock.Lock();
     goto monout;
   }
 
   r = update_crush_location();
   if (r < 0) {
-    derr << __func__ <<" unable to update_crush_location: "
+    derr << __func__ << " unable to update_crush_location: "
          << cpp_strerror(r) << dendl;
     osd_lock.Lock();
     goto monout;
@@ -3526,6 +3526,7 @@ int OSD::update_crush_device_class()
   }
 
   if (device_class.empty()) {
+    dout(20) << __func__ << " no device class stored locally" << dendl;
     return 0;
   }
 
@@ -3535,7 +3536,10 @@ int OSD::update_crush_device_class()
     string("\"ids\": [\"") + stringify(whoami) + string("\"]}");
 
   r = mon_cmd_maybe_osd_create(cmd);
-  if (r == -EPERM) {
+  // we may not have a real osdmap on first boot, so we can't check if
+  // require-osd-release is set to luminous yet. Instead, ignore
+  // EINVAL.
+  if (r == -EPERM || r == -EINVAL) {
     r = 0;
   }
 
