@@ -1230,6 +1230,23 @@ TEST_F(LibRadosIoPP, CmpExtPP) {
   ASSERT_EQ(0, memcmp(bl.c_str(), "CEPH", 4));
 }
 
+TEST_F(LibRadosIoPP, CmpExtDNEPP) {
+  bufferlist bl;
+  bl.append(std::string(4, '\0'));
+
+  bufferlist new_bl;
+  new_bl.append("CEPH");
+  ObjectWriteOperation write;
+  write.cmpext(0, bl, nullptr);
+  write.write(0, new_bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &write));
+
+  ObjectReadOperation read;
+  read.read(0, bl.length(), NULL, NULL);
+  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "CEPH", 4));
+}
+
 TEST_F(LibRadosIoPP, CmpExtMismatchPP) {
   bufferlist bl;
   bl.append("ceph");
@@ -1263,6 +1280,23 @@ TEST_F(LibRadosIoECPP, CmpExtPP) {
   write2.cmpext(0, bl, nullptr);
   write2.write_full(new_bl);
   ASSERT_EQ(0, ioctx.operate("foo", &write2));
+
+  ObjectReadOperation read;
+  read.read(0, bl.length(), NULL, NULL);
+  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "CEPH", 4));
+}
+
+TEST_F(LibRadosIoECPP, CmpExtDNEPP) {
+  bufferlist bl;
+  bl.append(std::string(4, '\0'));
+
+  bufferlist new_bl;
+  new_bl.append("CEPH");
+  ObjectWriteOperation write;
+  write.cmpext(0, bl, nullptr);
+  write.write_full(new_bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &write));
 
   ObjectReadOperation read;
   read.read(0, bl.length(), NULL, NULL);

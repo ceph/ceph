@@ -4694,7 +4694,13 @@ struct C_ExtentCmpRead : public Context {
   }
 
   void finish(int r) override {
-    fill_extent_ctx->complete(r);
+    if (r == -ENOENT) {
+      osd_op.rval = 0;
+      read_bl.clear();
+      delete fill_extent_ctx;
+    } else {
+      fill_extent_ctx->complete(r);
+    }
     fill_extent_ctx = nullptr;
 
     if (osd_op.rval >= 0) {
@@ -4708,7 +4714,10 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
   dout(20) << __func__ << dendl;
   ceph_osd_op& op = osd_op.op;
 
-  if (pool.info.require_rollback()) {
+  if (!ctx->obs->exists || ctx->obs->oi.is_whiteout()) {
+    dout(20) << __func__ << " object DNE" << dendl;
+    return finish_extent_cmp(osd_op, {});
+  } else if (pool.info.require_rollback()) {
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.
     auto& oi = ctx->new_obs.oi;
@@ -4745,7 +4754,7 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
 
   int result = do_osd_ops(ctx, read_ops);
   if (result < 0) {
-    derr << "do_extent_cmp do_osd_ops failed " << result << dendl;
+    derr << __func__ << " failed " << result << dendl;
     return result;
   }
   return finish_extent_cmp(osd_op, read_op.outdata);
