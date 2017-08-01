@@ -34,25 +34,11 @@ protected:
   CryptoKey key;
 
 public:
-  // Keep stats on how many messages were signed, how many messages were encrypted, how many 
-  // signatures were properly checked, and how many messages were decrypted. PLR
-  int messages_signed;
-  int signatures_checked;
-  int signatures_matched;
-  int signatures_failed;
-  int messages_encrypted;
-  int messages_decrypted;
-
-  explicit AuthSessionHandler(CephContext *cct_) : cct(cct_), protocol(CEPH_AUTH_UNKNOWN), messages_signed(0),
-    signatures_checked(0), signatures_matched(0), signatures_failed(0), messages_encrypted(0),
-    messages_decrypted(0) {}
+  explicit AuthSessionHandler(CephContext *cct_) : cct(cct_), protocol(CEPH_AUTH_UNKNOWN) {}
 
   AuthSessionHandler(CephContext *cct_, int protocol_, CryptoKey key_) : cct(cct_), 
-    protocol(protocol_), key(key_), messages_signed(0), signatures_checked(0), signatures_matched(0), 
-    signatures_failed(0), messages_encrypted(0), messages_decrypted(0) {}
+    protocol(protocol_), key(key_) {}
   virtual ~AuthSessionHandler() { }
-
-  void print_auth_session_handler_stats() ;
 
   virtual bool no_security() = 0;
   virtual int sign_message(Message *message) = 0;
