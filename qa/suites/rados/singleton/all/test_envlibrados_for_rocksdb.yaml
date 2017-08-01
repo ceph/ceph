@@ -12,7 +12,7 @@ tasks:
 - ceph:
     log-whitelist:
       - overall HEALTH_
-      - (POOL_APP_NOT_ENABLED)
+      - \(POOL_APP_NOT_ENABLED\)
 - workunit:
     clients:
       all:

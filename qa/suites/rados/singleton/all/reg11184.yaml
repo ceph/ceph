@@ -17,11 +17,11 @@ overrides:
         debug osd: 5
     log-whitelist:
       - overall HEALTH_
-      - (OSDMAP_FLAGS)
-      - (OSD_
-      - (PG_
-      - (SMALLER_PGP_NUM)
-      - (OBJECT_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
 tasks:
 - install:
 - ceph:
