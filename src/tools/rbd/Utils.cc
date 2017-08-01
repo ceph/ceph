@@ -832,6 +832,10 @@ int get_formatter(const po::variables_map &vm,
                 << "is json or xml" << std::endl;
       return -EINVAL;
     }
+  } else if (vm[at::PRETTY_FORMAT].as<bool>()) {
+    std::cerr << "rbd: --pretty-format only works when --format "
+              << "is json or xml" << std::endl;
+    return -EINVAL;
   }
   return 0;
 }
