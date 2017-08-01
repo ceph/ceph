@@ -7627,6 +7627,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -ENOENT;
 	goto reply;
       }
+      auto arg_map = newcrush.choose_args_get(pool);
+      int positions = newcrush.get_choose_args_positions(arg_map);
+      if (weight.size() != (size_t)positions) {
+         ss << "must specify exact " << positions << " weight values";
+         err = -EINVAL;
+         goto reply;
+      }
     } else {
       pool = CrushWrapper::DEFAULT_CHOOSE_ARGS;
       if (!newcrush.have_choose_args(pool)) {
