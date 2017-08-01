@@ -1,8 +1,8 @@
 #!/bin/bash
-if [ -f $(dirname $0)/../../standalone/ceph-helpers-root.sh ]; then
-    source $(dirname $0)/../../standalone/ceph-helpers-root.sh
+if [ -f $(dirname $0)/../ceph-helpers-root.sh ]; then
+    source $(dirname $0)/../ceph-helpers-root.sh
 else
-    echo "$(dirname $0)/../../standalone/ceph-helpers-root.sh does not exist."
+    echo "$(dirname $0)/../ceph-helpers-root.sh does not exist."
     exit 1
 fi
 
