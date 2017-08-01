@@ -781,6 +781,9 @@ int MDSDaemon::_handle_command(
     std::string val;
     cmd_getval(cct, cmdmap, "value", val);
     r = cct->_conf->set_val(key, val, true, &ss);
+    if (r == 0) {
+      cct->_conf->apply_changes(nullptr);
+    }
   } else if (prefix == "exit") {
     // We will send response before executing
     ss << "Exiting...";
