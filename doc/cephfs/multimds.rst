@@ -81,7 +81,7 @@ Note that we still have two active MDSs: the ranks still exist even though
 we have decreased max_mds, because max_mds only restricts creation
 of new ranks.
 
-Next, use the ``ceph mds deactivate <rank>`` command to remove the
+Next, use the ``ceph mds deactivate <role>`` command to remove the
 unneeded rank:
 
 ::
@@ -92,6 +92,9 @@ unneeded rank:
     # fsmap e11: 2/2/1 up {0=a=up:active,1=c=up:stopping}, 1 up:standby
     # fsmap e12: 1/1/1 up {0=a=up:active}, 1 up:standby
     # fsmap e13: 1/1/1 up {0=a=up:active}, 2 up:standby
+
+See :doc:`/cephfs/administration` for more details which forms ``<role>`` can
+take.
 
 The deactivated rank will first enter the stopping state for a period
 of time while it hands off its share of the metadata to the remaining
