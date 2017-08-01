@@ -10628,8 +10628,12 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
   // share unlink news with replicas
   set<mds_rank_t> replicas;
   dn->list_replicas(replicas);
-  if (straydn)
+  bufferlist snapbl;
+  if (straydn) {
     straydn->list_replicas(replicas);
+    CInode *strayin = straydn->get_linkage()->get_inode();
+    strayin->encode_snap_blob(snapbl);
+  }
   for (set<mds_rank_t>::iterator it = replicas.begin();
        it != replicas.end();
        ++it) {
@@ -10643,8 +10647,10 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
       continue;
 
     MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->get_name());
-    if (straydn)
+    if (straydn) {
       replicate_stray(straydn, *it, unlink->straybl);
+      unlink->snapbl = snapbl;
+    }
     mds->send_message_mds(unlink, *it);
   }
 }
@@ -10683,6 +10689,15 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	// update subtree map?
 	if (in->is_dir()) 
 	  adjust_subtree_after_rename(in, dir, false);
+
+	if (m->snapbl.length()) {
+	  bool hadrealm = (in->snaprealm ? true : false);
+	  in->decode_snap_blob(m->snapbl);
+	  assert(in->snaprealm);
+	  assert(in->snaprealm->have_past_parents_open());
+	  if (!hadrealm)
+	    do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT, false);
+	}
 
 	// send caps to auth (if we're not already)
 	if (in->is_any_caps() &&

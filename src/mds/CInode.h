@@ -430,7 +430,6 @@ private:
   size_t num_projected_xattrs = 0;
   size_t num_projected_srnodes = 0;
 
-  sr_t &project_snaprealm(projected_inode &pi);
 public:
   CInode::projected_inode &project_inode(bool xattr = false, bool snap = false);
   void pop_and_dirty_projected_inode(LogSegment *ls);
@@ -491,6 +490,13 @@ public:
     return &xattrs;
   }
 
+  sr_t *prepare_new_srnode(snapid_t snapid);
+  void project_snaprealm(sr_t *new_srnode);
+  sr_t *project_snaprealm(snapid_t snapid=0) {
+    sr_t* new_srnode = prepare_new_srnode(snapid);
+    project_snaprealm(new_srnode);
+    return new_srnode;
+  }
   const sr_t *get_projected_srnode() const {
     if (num_projected_srnodes > 0) {
       for (auto it = projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
@@ -502,7 +508,8 @@ public:
     else
       return NULL;
   }
-  void project_past_snaprealm_parent(SnapRealm *newparent);
+  void record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent);
+  void project_snaprealm_past_parent(SnapRealm *newparent);
 
 private:
   void pop_projected_snaprealm(sr_t *next_snaprealm);
