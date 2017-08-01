@@ -2650,6 +2650,7 @@ public:
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("CLASS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
     for (auto& p : crush->choose_args) {
       if (p.first == CrushWrapper::DEFAULT_CHOOSE_ARGS) {
@@ -2668,7 +2669,11 @@ public:
 
 protected:
   void dump_item(const CrushTreeDumper::Item &qi, TextTable *tbl) override {
+    const char *c = crush->get_item_class(qi.id);
+    if (!c)
+      c = "";
     *tbl << qi.id
+	 << c
 	 << weightf_t(qi.weight);
     for (auto& p : crush->choose_args) {
       if (qi.parent < 0) {
