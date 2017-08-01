@@ -104,7 +104,6 @@ struct C_AioCompletion : public Context {
 struct C_OpenComplete : public C_AioCompletion {
   librbd::ImageCtx *ictx;
   void **ictxp;
-  bool reopen;
   C_OpenComplete(librbd::ImageCtx *ictx, librbd::io::AioCompletion* comp,
 		 void **ictxp)
     : C_AioCompletion(ictx, librbd::io::AIO_TYPE_OPEN, comp),
