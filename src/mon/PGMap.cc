@@ -2607,11 +2607,11 @@ void PGMap::get_health_checks(
   std::map<unsigned, PgStateResponse> state_to_response = {
     // Immediate reports
     { PG_STATE_INCONSISTENT,     {DAMAGED,     {}} },
-    { PG_STATE_INCOMPLETE,       {DEGRADED,    {}} },
+    { PG_STATE_INCOMPLETE,       {UNAVAILABLE, {}} },
     { PG_STATE_REPAIR,           {DAMAGED,     {}} },
     { PG_STATE_SNAPTRIM_ERROR,   {DAMAGED,     {}} },
-    { PG_STATE_BACKFILL_TOOFULL, {DEGRADED,    {}} },
-    { PG_STATE_RECOVERY_TOOFULL, {DEGRADED,    {}} },
+    { PG_STATE_BACKFILL_TOOFULL, {DEGRADED_FULL, {}} },
+    { PG_STATE_RECOVERY_TOOFULL, {DEGRADED_FULL, {}} },
     { PG_STATE_DEGRADED,         {DEGRADED,    {}} },
     { PG_STATE_DOWN,             {UNAVAILABLE, {}} },
     // Delayed (wait until stuck) reports
@@ -3046,7 +3046,21 @@ void PGMap::get_health_checks(
     ostringstream ss;
     ss << pg_sum.stats.sum.num_objects_unfound
        << "/" << pg_sum.stats.sum.num_objects << " unfound (" << b << "%)";
-    checks->add("OBJECT_UNFOUND", HEALTH_WARN, ss.str());
+    auto& d = checks->add("OBJECT_UNFOUND", HEALTH_WARN, ss.str());
+
+    for (auto& p : pg_stat) {
+      if (p.second.stats.sum.num_objects_unfound) {
+	ostringstream ss;
+	ss << "pg " << p.first
+	   << " has " << p.second.stats.sum.num_objects_unfound
+	   << " unfound objects";
+	d.detail.push_back(ss.str());
+	if (d.detail.size() > max) {
+	  d.detail.push_back("(additional pgs left out for brevity)");
+	  break;
+	}
+      }
+    }
   }
 
   // REQUEST_SLOW
