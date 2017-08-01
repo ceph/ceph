@@ -162,6 +162,10 @@ usage_exit() {
 	exit
 }
 
+if [ $# -eq 0 ]; then
+    usage_exit
+fi
+
 while [ $# -ge 1 ]; do
 case $1 in
     -d | --debug )
@@ -185,8 +189,8 @@ case $1 in
 	    new=1
 	    ;;
     --not-new | -N )
-	new=0
-	;;
+            new=0
+            ;;
     --short )
 	    short=1
 	    ;;
@@ -196,9 +200,9 @@ case $1 in
 	    shift
 	    ;;
     --valgrind_args )
-	valgrind_args="$2"
-	shift
-	;;
+            valgrind_args="$2"
+            shift
+            ;;
     --valgrind_mds )
 	    [ -z "$2" ] && usage_exit
 	    valgrind_mds=$2
@@ -264,9 +268,9 @@ case $1 in
             shift
             ;;
     --filestore_path )
-	filestore_path=$2
-	shift
-	;;
+            filestore_path=$2
+            shift
+            ;;
     -m )
 	    [ -z "$2" ] && usage_exit
 	    MON_ADDR=$2
@@ -297,8 +301,7 @@ case $1 in
 	    shift
 	    ;;
     -o )
-	    extra_conf="$extra_conf	$2
-"
+	    extra_conf="$extra_conf $2"
 	    shift
 	    ;;
     --cache )
@@ -313,9 +316,9 @@ case $1 in
             lockdep=0
             ;;
     --multimds)
-        CEPH_MAX_MDS="$2"
-        shift
-        ;;
+            CEPH_MAX_MDS="$2"
+            shift
+            ;;
     * )
 	    usage_exit
 esac
