@@ -6058,8 +6058,9 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 	stats_ack_timeout * cct->_conf->osd_stats_ack_timeout_decay);
   dout(20) << __func__ << "  timeout now " << stats_ack_timeout << dendl;
 
-  if (ack->get_tid() > pg_stat_tid_flushed) {
-    pg_stat_tid_flushed = ack->get_tid();
+  const uint64_t ack_tid = ack->get_tid();
+  if (ack_tid > pg_stat_tid_flushed) {
+    pg_stat_tid_flushed = ack_tid;
     pg_stat_queue_cond.Signal();
   }
 
@@ -6090,7 +6091,16 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     }
   }
 
-  outstanding_pg_stats.erase(ack->get_tid());
+  // if there are earlier pg-stats not yet acked, 
+  // this happens if they are not sent successfully.
+  for (auto tid = outstanding_pg_stats.cbegin();
+        tid != outstanding_pg_stats.cend(); ) {
+    if (*tid <= ack_tid) {
+      tid = outstanding_pg_stats.erase(tid);
+    } else {
+      break;
+    }
+  }
   dout(20) << __func__ << "  still pending: " << outstanding_pg_stats << dendl;
 
   pg_stat_queue_lock.Unlock();
