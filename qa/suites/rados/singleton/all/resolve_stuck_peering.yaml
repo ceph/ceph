@@ -12,5 +12,6 @@ tasks:
       - \(OSD_
       - \(PG_
       - \(OBJECT_DEGRADED\)
+      - \(POOL_APP_NOT_ENABLED\)
 - resolve_stuck_peering:
 
