@@ -1141,6 +1141,7 @@ enum RGWBucketFlags {
   BUCKET_SUSPENDED = 0x1,
   BUCKET_VERSIONED = 0x2,
   BUCKET_VERSIONS_SUSPENDED = 0x4,
+  BUCKET_DATASYNC_DISABLED = 0X8,
 };
 
 enum RGWBucketIndexType {
@@ -1310,6 +1311,7 @@ struct RGWBucketInfo
   bool versioned() const { return (flags & BUCKET_VERSIONED) != 0; }
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
+  bool datasync_flag_enabled() const { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
 
   bool has_swift_versioning() const {
     /* A bucket may be versioned through one mechanism only. */

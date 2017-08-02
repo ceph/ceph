@@ -798,7 +798,7 @@ int Mirror<I>::image_status_list(librados::IoCtx& io_ctx,
 
   r = librbd::cls_client::mirror_image_status_list(&io_ctx, start_id, max,
       					           &images_, &statuses_);
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to list mirror image statuses: "
                << cpp_strerror(r) << dendl;
     return r;

@@ -217,20 +217,20 @@ Commands
   This requires image format 2.
 
 :command:`resize` (-s | --size *size-in-M/G/T*) [--allow-shrink] *image-spec*
-  Resizes rbd image. The size parameter also needs to be specified.
+  Resize rbd image. The size parameter also needs to be specified.
   The --allow-shrink option lets the size be reduced.
 
 :command:`rm` *image-spec*
-  Deletes an rbd image (including all data blocks). If the image has
+  Delete an rbd image (including all data blocks). If the image has
   snapshots, this fails and nothing is deleted.
 
 :command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
-  Exports image to dest path (use - for stdout).
+  Export image to dest path (use - for stdout).
   The --export-format accepts '1' or '2' currently. Format 2 allow us to export not only the content
   of image, but also the snapshots and other properties, such as image_order, features.
 
 :command:`import` [--export-format *format (1 or 2)*] [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
-  Creates a new image and imports its data from path (use - for
+  Create a new image and imports its data from path (use - for
   stdin).  The import operation will try to create sparse rbd images 
   if possible.  For import from stdin, the sparsification unit is
   the data block size of the destination image (object size).
@@ -242,7 +242,7 @@ Commands
   of image, but also the snapshots and other properties, such as image_order, features.
 
 :command:`export-diff` [--from-snap *snap-name*] [--whole-object] (*image-spec* | *snap-spec*) *dest-path*
-  Exports an incremental diff for an image to dest path (use - for stdout).  If
+  Export an incremental diff for an image to dest path (use - for stdout).  If
   an initial snapshot is specified, only changes since that snapshot are included; otherwise,
   any regions of the image that contain data are included.  The end snapshot is specified
   using the standard --snap option or @snap syntax (see below).  The image diff format includes
@@ -258,7 +258,7 @@ Commands
   currently only support the source incremental diff with stripe_count == 1
 
 :command:`import-diff` *src-path* *image-spec*
-  Imports an incremental diff of an image and applies it to the current image.  If the diff
+  Import an incremental diff of an image and applies it to the current image.  If the diff
   was generated relative to a start snapshot, we verify that snapshot already exists before
   continuing.  If there was an end snapshot we verify it does not already exist before
   applying the changes, and create the snapshot when we are done.
@@ -270,11 +270,11 @@ Commands
   whether the region is known to be zeros or may contain other data.
 
 :command:`cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
-  Copies the content of a src-image into the newly created dest-image.
+  Copy the content of a src-image into the newly created dest-image.
   dest-image will have the same size, object size, and image format as src-image.
 
 :command:`mv` *src-image-spec* *dest-image-spec*
-  Renames an image.  Note: rename across pools is not supported.
+  Rename an image.  Note: rename across pools is not supported.
 
 :command:`image-meta list` *image-spec*
   Show metadata held on the image. The first column is the key
@@ -290,24 +290,24 @@ Commands
   Remove metadata key with the value.
 
 :command:`object-map rebuild` *image-spec* | *snap-spec*
-  Rebuilds an invalid object map for the specified image. An image snapshot can be
+  Rebuild an invalid object map for the specified image. An image snapshot can be
   specified to rebuild an invalid object map for a snapshot.
 
 :command:`snap ls` *image-spec*
-  Dumps the list of snapshots inside a specific image.
+  Dump the list of snapshots inside a specific image.
 
 :command:`snap create` *snap-spec*
-  Creates a new snapshot. Requires the snapshot name parameter specified.
+  Create a new snapshot. Requires the snapshot name parameter specified.
 
 :command:`snap rollback` *snap-spec*
   Rollback image content to snapshot. This will iterate through the entire blocks
   array and update the data head content to the snapshotted version.
 
 :command:`snap rm` [--force] *snap-spec*
-  Removes the specified snapshot.
+  Remove the specified snapshot.
 
 :command:`snap purge` *image-spec*
-  Removes all snapshots from an image.
+  Remove all snapshots from an image.
 
 :command:`snap protect` *snap-spec*
   Protect a snapshot from deletion, so that clones can be made of it
@@ -333,19 +333,19 @@ Commands
   an image.
 
 :command:`map` [-o | --options *krbd-options* ] [--read-only] *image-spec* | *snap-spec*
-  Maps the specified image to a block device via the rbd kernel module.
+  Map the specified image to a block device via the rbd kernel module.
 
 :command:`unmap` [-o | --options *krbd-options* ] *image-spec* | *snap-spec* | *device-path*
-  Unmaps the block device that was mapped via the rbd kernel module.
+  Unmap the block device that was mapped via the rbd kernel module.
 
 :command:`showmapped`
   Show the rbd images that are mapped via the rbd kernel module.
 
 :command:`nbd map` [--device *device-path*] [--read-only] *image-spec* | *snap-spec*
-  Maps the specified image to a block device via the rbd-nbd tool.
+  Map the specified image to a block device via the rbd-nbd tool.
 
 :command:`nbd unmap` *device-path*
-  Unmaps the block device that was mapped via the rbd-nbd tool.
+  Unmap the block device that was mapped via the rbd-nbd tool.
 
 :command:`nbd list`
   Show the list of used nbd devices via the rbd-nbd tool.
@@ -354,11 +354,11 @@ Commands
   Show the status of the image, including which clients have it open.
 
 :command:`feature disable` *image-spec* *feature-name*...
-  Disables the specified feature on the specified image. Multiple features can
+  Disable the specified feature on the specified image. Multiple features can
   be specified.
 
 :command:`feature enable` *image-spec* *feature-name*...
-  Enables the specified feature on the specified image. Multiple features can
+  Enable the specified feature on the specified image. Multiple features can
   be specified.
 
 :command:`lock list` *image-spec*

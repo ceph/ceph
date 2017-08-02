@@ -1327,19 +1327,14 @@ pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
   return pair<string, string>();
 }
 
-int CrushWrapper::get_immediate_parent_id(int id,
-                                          int *parent,
-                                          parent_type_t choice) const
+int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
 {
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
     if (b == 0)
       continue;
-    if (choice == PARENT_NONSHADOW && is_shadow_item(b->id)) {
+    if (is_shadow_item(b->id))
       continue;
-    } else if (choice == PARENT_SHADOW && !is_shadow_item(b->id)) {
-      continue;
-    }
     for (unsigned i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
 	*parent = b->id;

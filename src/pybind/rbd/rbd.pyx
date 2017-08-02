@@ -897,7 +897,7 @@ class RBD(object):
 
     def trash_move(self, ioctx, name, delay=0):
         """
-        Moves an RBD image to the trash.
+        Move an RBD image to the trash.
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param name: the name of the image to remove
@@ -919,7 +919,7 @@ class RBD(object):
 
     def trash_remove(self, ioctx, image_id, force=False):
         """
-        Deletes an RBD image from trash. If image deferment time has not
+        Delete an RBD image from trash. If image deferment time has not
         expired :class:`PermissionError` is raised.
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
@@ -984,7 +984,7 @@ class RBD(object):
 
     def trash_list(self, ioctx):
         """
-        Lists all entries from trash.
+        List all entries from trash.
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :returns: :class:`TrashIterator`
@@ -993,7 +993,7 @@ class RBD(object):
 
     def trash_restore(self, ioctx, image_id, name):
         """
-        Restores an RBD image from trash.
+        Restore an RBD image from trash.
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param image_id: the id of the image to restore
@@ -1637,7 +1637,7 @@ cdef class Image(object):
 
     def features(self):
         """
-        Gets the features bitmask of the image.
+        Get the features bitmask of the image.
 
         :returns: int - the features bitmask of the image
         """
@@ -1650,7 +1650,7 @@ cdef class Image(object):
 
     def update_features(self, features, enabled):
         """
-        Updates the features bitmask of the image by enabling/disabling
+        Update the features bitmask of the image by enabling/disabling
         a single feature.  The feature must support the ability to be
         dynamically enabled/disabled.
 
@@ -1671,7 +1671,7 @@ cdef class Image(object):
 
     def overlap(self):
         """
-        Gets the number of overlapping bytes between the image and its parent
+        Get the number of overlapping bytes between the image and its parent
         image. If open to a snapshot, returns the overlap between the snapshot
         and the parent image.
 
@@ -1687,7 +1687,7 @@ cdef class Image(object):
 
     def flags(self):
         """
-        Gets the flags bitmask of the image.
+        Get the flags bitmask of the image.
 
         :returns: int - the flags bitmask of the image
         """
@@ -1700,7 +1700,7 @@ cdef class Image(object):
 
     def is_exclusive_lock_owner(self):
         """
-        Gets the status of the image exclusive lock.
+        Get the status of the image exclusive lock.
 
         :returns: bool - true if the image is exclusively locked
         """
@@ -2150,7 +2150,7 @@ written." % (self.name, ret, length))
 
     def stripe_unit(self):
         """
-        Returns the stripe unit used for the image.
+        Return the stripe unit used for the image.
         """
         cdef uint64_t stripe_unit
         with nogil:
@@ -2161,7 +2161,7 @@ written." % (self.name, ret, length))
 
     def stripe_count(self):
         """
-        Returns the stripe count used for the image.
+        Return the stripe count used for the image.
         """
         cdef uint64_t stripe_count
         with nogil:
@@ -2172,7 +2172,7 @@ written." % (self.name, ret, length))
 
     def create_timestamp(self):
         """
-        Returns the create timestamp for the image.
+        Return the create timestamp for the image.
         """
         cdef:
             timespec timestamp
@@ -2193,7 +2193,7 @@ written." % (self.name, ret, length))
 
     def rebuild_object_map(self):
         """
-        Rebuilds the object map for the image HEAD or currently set snapshot
+        Rebuild the object map for the image HEAD or currently set snapshot
         """
         cdef librbd_progress_fn_t prog_cb = &no_op_progress_callback
         with nogil:

@@ -99,7 +99,15 @@ available, then the "failed" daemon will return as a standby.
 Deactivate an MDS, causing it to flush its entire journal to
 backing RADOS objects and close all open client sessions. Deactivating an MDS
 is primarily intended for bringing down a rank after reducing the number of
-active MDS (max_mds).
+active MDS (max_mds). Once the rank is deactivated, the MDS daemon will rejoin the
+cluster as a standby.
+``<role>`` can take one of three forms:
+
+::
+
+    <fs_name>:<rank>
+    <fs_id>:<rank>
+    <rank>
 
 Use ``mds deactivate`` in conjunction with adjustments to ``max_mds`` to
 shrink an MDS cluster.  See :doc:`/cephfs/multimds`

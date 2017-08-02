@@ -18,60 +18,60 @@ Major Changes from Kraken
 
 - *General*:
 
-  * Ceph now has a simple, built-in web-based dashboard for monitoring
-    cluster status.  FIXME DOCS.
+  * Ceph now has a simple, `built-in web-based dashboard
+    <../mgr/dashboard>`_ for monitoring cluster status.
 
 - *RADOS*:
 
-  * *BlueStore*:
-
-    - The new *BlueStore* backend for *ceph-osd* is now stable and the new
-      default for newly created OSDs.  BlueStore manages data stored by each OSD
-      by directly managing the physical HDDs or SSDs without the use of an
-      intervening file system like XFS.  This provides greater performance
-      and features. FIXME DOCS
-    - BlueStore supports *full data and metadata checksums* of all
-      data stored by Ceph.
-    - BlueStore supports inline compression using zlib, snappy, or LZ4.  (Ceph
-      also supports zstd for RGW compression but zstd is not recommended for
-      BlueStore for performance reasons.)  FIXME DOCS
-
-  * *Erasure coded* pools now have full support for *overwrites*,
-    allowing them to be used with RBD and CephFS.  `Read more about EC overwrites`_.
-
-  * *ceph-mgr*:
-
-    - There is a new daemon, *ceph-mgr*, which is a required part of any
-      Ceph deployment.  Although IO can continue when *ceph-mgr* is
-      down, metrics will not refresh and some metrics-related calls
-      (e.g., ``ceph df``) may block.  We recommend deploying several instances of
-      *ceph-mgr* for reliability.  See the notes on `Upgrading`_ below.
-    - The *ceph-mgr* daemon includes a REST-based management API.  The
-      API is still experimental and somewhat limited but will form the basis
-      for API-based management of Ceph going forward.  FIXME DOCS
-    - *ceph-mgr* also includes a Prometheus exporter plugin, which can
-      provide Ceph perfcounters to Prometheus.  See ceph-mgr docs.
-
+  * The new *BlueStore* backend for *ceph-osd* is now stable and the new
+    default for newly created OSDs.  BlueStore manages data stored by each OSD
+    by directly managing the physical HDDs or SSDs without the use of an
+    intervening file system like XFS.  This provides greater performance
+    and features. FIXME DOCS
+  * BlueStore supports *full data and metadata checksums* of all
+    data stored by Ceph.
+  * BlueStore supports `inline compression <../rados/configuration/bluestore-config-ref/#inline-compression>`_
+    using zlib, snappy, or LZ4.  (Ceph also supports zstd for `RGW compression <../man/8/radosgw-admin/#options>`_
+    but zstd is not recommended for BlueStore for performance reasons.)
+  * *Erasure coded* pools now have `full support for overwrites <../rados/operations/erasure-code/#erasure-coding-with-overwrites>`_,
+    allowing them to be used with RBD and CephFS.
+  * There is a new daemon, *ceph-mgr*, which is a required part of any
+    Ceph deployment.  Although IO can continue when *ceph-mgr* is
+    down, metrics will not refresh and some metrics-related calls
+    (e.g., ``ceph df``) may block.  We recommend deploying several instances of
+    *ceph-mgr* for reliability.  See the notes on `Upgrading`_ below.
+  * The *ceph-mgr* daemon includes a `REST-based management API
+    <../mgr/restful>`_.  The API is still experimental and somewhat
+    limited but will form the basis for API-based management of Ceph
+    going forward.
+  * *ceph-mgr* also includes a `Prometheus exporter <../mgr/prometheus>`_
+    plugin, which can provide Ceph perfcounters to Prometheus.
   * The overall *scalability* of the cluster has improved. We have
     successfully tested clusters with up to 10,000 OSDs.
-  * Each OSD can now have a *device class* associated with it (e.g., `hdd` or
-    `ssd`), allowing CRUSH rules to trivially map data to a subset of devices
-    in the system.  Manually writing CRUSH rules or manual editing of the CRUSH
-    is normally not required. FIXME DOCS
-  * You can now *optimize CRUSH weights* can now be optimized to
-    maintain a *near-perfect distribution of data* across OSDs.  FIXME DOCS
-  * There is also a new `upmap` exception mechanism that allows
-    individual PGs to be moved around to achieve a *perfect
-    distribution* (this requires luminous clients). FIXME DOCS
+  * Each OSD can now have a `device class
+    <../rados/operations/crush-map/#device-classes>`_ associated with
+    it (e.g., `hdd` or `ssd`), allowing CRUSH rules to trivially map
+    data to a subset of devices in the system.  Manually writing CRUSH
+    rules or manual editing of the CRUSH is normally not required.
+  * You can now *optimize CRUSH weights* to maintain a *near-perfect
+    distribution of data* across OSDs.  FIXME DOCS
+  * There is also a new `upmap <../rados/operations/upmap>`_ exception
+    mechanism that allows individual PGs to be moved around to achieve
+    a *perfect distribution* (this requires luminous clients).
   * Each OSD now adjusts its default configuration based on whether the
     backing device is an HDD or SSD.  Manual tuning generally not required.
-  * The prototype `mClock QoS queueing algorithm`_ is now available.
+  * The prototype `mClock QoS queueing algorithm
+    <../rados/configuration/osd-config-ref/#qos-based-on-mclock>`_ is now
+    available.
   * There is now a *backoff* mechanism that prevents OSDs from being
     overloaded by requests to objects or PGs that are not currently able to
     process IO.
-  * There is a `simplified OSD replacement process`_ that is more robust.
+  * There is a simplified `OSD replacement process
+    <../rados/operations/add-or-rm-osds/#replacing-an-osd>`_ that is more
+    robust.
   * You can query the supported features and (apparent) releases of
-    all connected daemons and clients with `ceph features </man/8/ceph#features>`_.
+    all connected daemons and clients with `ceph features
+    <../man/8/ceph#features>`_.
   * You can configure the oldest Ceph client version you wish to allow to
     connect to the cluster via ``ceph osd set-require-min-compat-client`` and
     Ceph will prevent you from enabling features that will break compatibility
@@ -146,7 +146,8 @@ Major Changes from Kraken
 
 - *Miscellaneous*:
 
-  * Release packages are now being built for *Debian Stretch*.  The
+  * Release packages are now being built for *Debian Stretch*.  Note
+    that QA is limited to CentOS and Ubuntu (xenial and trusty).  The
     distributions we build for now includes:
 
     - CentOS 7 (x86_64 and aarch64)
@@ -154,8 +155,6 @@ Major Changes from Kraken
     - Debian 9 Stretch (x86_64)
     - Ubuntu 16.04 Xenial (x86_64 and aarch64)
     - Ubuntu 14.04 Trusty (x86_64)
-
-    Note that QA is limited to CentOS and Ubuntu (xenial and trusty).
 
   * *CLI changes*:
 
@@ -173,7 +172,7 @@ Major Changes from Kraken
       ``require_RELEASE_osds`` flags.
     - ``ceph osd pg-upmap``, ``ceph osd rm-pg-upmap``, ``ceph osd
       pg-upmap-items``, ``ceph osd rm-pg-upmap-items`` can explicitly
-      manage `upmap` items (FIXME DOCS).
+      manage `upmap` items (see :doc:`/rados/operations/upmap`).
     - ``ceph osd getcrushmap`` returns a crush map version number on
       stderr, and ``ceph osd setcrushmap [version]`` will only inject
       an updated crush map if the version matches.  This allows crush
@@ -249,10 +248,6 @@ Major Changes from Kraken
       MonMap.  ``ceph mon feature set`` will set an optional feature (none of
       these exist yet).
     - ``ceph tell <daemon> help`` will now return a usage summary.
-
-.. _Read more about EC overwrites: ../rados/operations/erasure-code/#erasure-coding-with-overwrites
-.. _mClock QoS queueing algorithm: /rados/configuration/osd-config-ref#qos-based-on-mclock
-.. _simplified OSD replacement process: ../rados/operations/add-or-rm-osds/#replacing-an-osd
 
 Major Changes from Jewel
 ------------------------

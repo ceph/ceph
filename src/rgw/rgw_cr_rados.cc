@@ -201,7 +201,6 @@ RGWAsyncUnlockSystemObj::RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCom
 {
 }
 
-
 RGWRadosSetOmapKeysCR::RGWRadosSetOmapKeysCR(RGWRados *_store,
                       const rgw_raw_obj& _obj,
                       map<string, bufferlist>& _entries) : RGWSimpleCoroutine(_store->ctx()),
@@ -419,7 +418,6 @@ int RGWSimpleRadosUnlockCR::request_complete()
   set_status() << "request complete; ret=" << req->get_ret_status();
   return req->get_ret_status();
 }
-
 
 int RGWOmapAppend::operate() {
   reenter(this) {

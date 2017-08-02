@@ -524,6 +524,32 @@ int CLSRGWIssueGetDirHeader::issue_op(int shard_id, const string& oid)
   return issue_bucket_list_op(io_ctx, oid, nokey, "", 0, false, &manager, &result[shard_id]);
 }
 
+static bool issue_resync_bi_log(librados::IoCtx& io_ctx, const string& oid, BucketIndexAioManager *manager)
+{
+  bufferlist in;
+  librados::ObjectWriteOperation op;
+  op.exec("rgw", "bi_log_resync", in);
+  return manager->aio_operate(io_ctx, oid, &op);
+}
+
+int CLSRGWIssueResyncBucketBILog::issue_op(int shard_id, const string& oid)
+{
+  return issue_resync_bi_log(io_ctx, oid, &manager);
+}
+
+static bool issue_bi_log_stop(librados::IoCtx& io_ctx, const string& oid, BucketIndexAioManager *manager)
+{
+  bufferlist in;
+  librados::ObjectWriteOperation op;
+  op.exec("rgw", "bi_log_stop", in);
+  return manager->aio_operate(io_ctx, oid, &op); 
+}
+
+int CLSRGWIssueBucketBILogStop::issue_op(int shard_id, const string& oid)
+{
+  return issue_bi_log_stop(io_ctx, oid, &manager);
+}
+
 class GetDirHeaderCompletion : public ObjectOperationCompletion {
   RGWGetDirHeader_CB *ret_ctx;
 public:
