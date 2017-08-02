@@ -321,6 +321,11 @@ generated key is added to the keyring without replacing an existing key pair.
 If ``access-key`` is specified and refers to an existing key owned by the user
 then it will be modified.
 
+.. versionadded:: Luminous
+
+A ``tenant`` may either be specified as a part of uid or as an additional
+request param.
+
 :caps: users=write
 
 Syntax
@@ -342,6 +347,7 @@ Request Parameters
 :Type: String
 :Example: ``foo_user``
 :Required: Yes
+A tenant name may also specified as a part of ``uid``, by following the syntax ``tenant$user``, refer to `Multitenancy`_ for more details.
 
 ``display-name``
 
@@ -408,6 +414,14 @@ Request Parameters
 :Example: False [False]
 :Required: No
 
+.. versionadded:: Jewel
+``tenant``
+
+:Description: the Tenant under which a user is a part of.
+:Type: string
+:Example: tenant1
+:Required: No
+
 Response Entities
 ~~~~~~~~~~~~~~~~~
 
@@ -417,6 +431,11 @@ If successful, the response contains the user information.
 
 :Description: A container for the user data information.
 :Type: Container
+
+``tenant``
+:Description: The tenant which user is a part of
+:Type: String
+:Parent: ``user``
 
 ``user_id``
 
@@ -1924,3 +1943,4 @@ Standard Error Responses
 
 .. _Admin Guide: ../admin
 .. _Quota Management: ../admin#quota-management
+.. _Multitenancy: ./multitenancy

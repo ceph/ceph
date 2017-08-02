@@ -578,6 +578,18 @@ uint32_t rgw_str_to_perm(const char *str)
   return RGW_PERM_INVALID;
 }
 
+int rgw_validate_tenant_name(const string& t)
+{
+  struct tench {
+    static bool is_good(char ch) {
+      return isalnum(ch) || ch == '_';
+    }
+  };
+  std::string::const_iterator it =
+    std::find_if_not(t.begin(), t.end(), tench::is_good);
+  return (it == t.end())? 0: -ERR_INVALID_TENANT_NAME;
+}
+
 static bool validate_access_key(string& key)
 {
   const char *p = key.c_str();
@@ -1884,6 +1896,13 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
             + " does not match: " + user_id.to_str());
 
     return -EINVAL;
+  }
+
+  int ret = rgw_validate_tenant_name(op_id.tenant);
+  if (ret) {
+    set_err_msg(err_msg,
+		"invalid tenant only alphanumeric and _ characters are allowed");
+    return ret;
   }
 
   //set key type when it not set or set by context
