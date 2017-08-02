@@ -7251,6 +7251,8 @@ class RGWRadosPutObj : public RGWGetDataCB
   bufferlist extra_data_bl;
   uint64_t extra_data_len;
   uint64_t data_len;
+  bool is_compressed;
+  RGWCompressionInfo cs_info;
   map<string, bufferlist> src_attrs;
 public:
   RGWRadosPutObj(CephContext* cct,
@@ -7269,9 +7271,10 @@ public:
                        progress_cb(_progress_cb),
                        progress_data(_progress_data),
                        extra_data_len(0),
-                       data_len(0) {}
+                       data_len(0),
+                       is_compressed(false) {}
 
-  int process_attrs(void) {
+  int process_extra_data(void) {
     if (extra_data_bl.length()) {
       JSONParser jp;
       if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
@@ -7281,7 +7284,9 @@ public:
 
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
 
-      src_attrs.erase(RGW_ATTR_COMPRESSION);
+      if (cct->_conf->get_val<bool>("rgw_enable_compressed_transmission") == false) {
+        src_attrs.erase(RGW_ATTR_COMPRESSION);
+      }
       src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
     }
 
@@ -7308,15 +7313,31 @@ public:
 
       extra_data_len -= extra_len;
       if (extra_data_len == 0) {
-        int res = process_attrs();
+        int res = process_extra_data();
         if (res < 0)
           return res;
       }
+
+      // compression attrs
+      int ret = rgw_compression_info_from_attrset(src_attrs, is_compressed, cs_info);
+      if (ret < 0) {
+        ldout(cct, 5) << "ERROR: RGWRadosPutObj::handle_data failed to decode compression info" << dendl;
+        return ret;
+      }
+
+      if (is_compressed) {
+        data_len = cs_info.orig_size;
+      }
+
       if (bl.length() == 0) {
         return 0;
       }
     }
-    data_len += bl.length();
+
+    if (!is_compressed) {
+      data_len += bl.length();
+    }
+
     bool again = false;
 
     bool need_opstate = true;
