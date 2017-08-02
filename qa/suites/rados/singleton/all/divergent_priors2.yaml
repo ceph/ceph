@@ -18,6 +18,7 @@ overrides:
       - \(OSD_
       - \(PG_
       - \(OBJECT_DEGRADED\)
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
         debug osd: 5
