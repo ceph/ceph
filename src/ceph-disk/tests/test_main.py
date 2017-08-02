@@ -1300,11 +1300,19 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
             commands.append(" ".join(x))
             return ("", "", None)
 
+        class Os(object):
+            F_OK = 0
+
+            @staticmethod
+            def access(x, y):
+                return True
+
         with patch.multiple(
             main,
             command=_command,
             command_init=lambda x: commands.append(x),
             command_wait=lambda x: None,
+            os=Os,
         ):
             main.main_fix(args)
             commands = " ".join(commands)

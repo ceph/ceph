@@ -4719,9 +4719,14 @@ def main_trigger(args):
 def main_fix(args):
     # A hash table containing 'path': ('uid', 'gid', blocking, recursive)
     fix_table = [
-        ('/etc/ceph', 'ceph', 'ceph', True, True),
+        ('/usr/bin/ceph-mon', 'root', 'root', True, False),
+        ('/usr/bin/ceph-mds', 'root', 'root', True, False),
+        ('/usr/bin/ceph-osd', 'root', 'root', True, False),
+        ('/usr/bin/radosgw', 'root', 'root', True, False),
+        ('/etc/ceph', 'root', 'root', True, True),
         ('/var/run/ceph', 'ceph', 'ceph', True, True),
         ('/var/log/ceph', 'ceph', 'ceph', True, True),
+        ('/var/log/radosgw', 'ceph', 'ceph', True, True),
         ('/var/lib/ceph', 'ceph', 'ceph', True, False),
     ]
 
@@ -4776,6 +4781,10 @@ def main_fix(args):
     # Use find to relabel + chown ~simultaenously
     if args.all:
         for directory, uid, gid, blocking, recursive in fix_table:
+            # Skip directories/files that are not installed
+            if not os.access(directory, os.F_OK):
+                continue
+
             c = [
                 'find',
                 directory,
@@ -4815,6 +4824,10 @@ def main_fix(args):
     # Fix permissions
     if args.permissions:
         for directory, uid, gid, blocking, recursive in fix_table:
+            # Skip directories/files that are not installed
+            if not os.access(directory, os.F_OK):
+                continue
+
             if recursive:
                 c = [
                     'chown',
@@ -4850,6 +4863,10 @@ def main_fix(args):
     # Fix SELinux labels
     if args.selinux:
         for directory, uid, gid, blocking, recursive in fix_table:
+            # Skip directories/files that are not installed
+            if not os.access(directory, os.F_OK):
+                continue
+
             if recursive:
                 c = [
                     'restorecon',
