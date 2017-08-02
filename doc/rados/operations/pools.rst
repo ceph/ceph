@@ -275,6 +275,37 @@ To set a value to a pool, execute the following::
 	
 You may set values for the following keys: 
 
+.. _compression_algorithm:
+
+``compression_algorithm``
+:Description: Sets inline compression algorithm to use for underlying BlueStore.
+              This setting overrides the `global setting <rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression algorithm``.
+
+:Type: String
+:Valid Settings: ``lz4``, ``snappy``, ``zlib``, ``zstd``
+
+``compression_mode``
+
+:Description: Sets the policy for the inline compression algorithm for underlying BlueStore.
+              This setting overrides the `global setting <rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression mode``.
+
+:Type: String
+:Valid Settings: ``none``, ``passive``, ``aggressive``, ``force``
+
+``compression_min_blob_size``
+
+:Description: Chunks smaller than this are never compressed.
+              This setting overrides the `global setting <rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression min blob *``.
+
+:Type: Unsigned Integer
+
+``compression_max_blob_size``
+
+:Description: Chunks larger than this are broken into smaller blobs sizing
+              ``compression_max_blob_size`` before being compressed.
+
+:Type: Unsigned Integer
+
 .. _size:
 
 ``size``
