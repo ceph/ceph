@@ -476,13 +476,13 @@ public:
     }
 
     void index(pg_log_dup_t& e) {
-      if (PGLOG_INDEXED_DUPS) {
+      if (indexed_data & PGLOG_INDEXED_DUPS) {
 	dup_index[e.reqid] = &e;
       }
     }
 
     void unindex(const pg_log_dup_t& e) {
-      if (PGLOG_INDEXED_DUPS) {
+      if (indexed_data & PGLOG_INDEXED_DUPS) {
 	auto i = dup_index.find(e.reqid);
 	if (i != dup_index.end()) {
 	  dup_index.erase(i);
