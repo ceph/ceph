@@ -507,7 +507,7 @@ public:
     if (command == "0") {
       out.append(CEPH_ADMIN_SOCK_VERSION);
     } else {
-      JSONFormatter jf;
+      JSONFormatter jf(true);
       jf.open_object_section("version");
       if (command == "version")
 	jf.dump_string("version", ceph_version_to_str());
