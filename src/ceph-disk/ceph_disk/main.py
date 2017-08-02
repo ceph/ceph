@@ -1450,6 +1450,7 @@ def mount(
 
 def unmount(
     path,
+    do_rm=True,
 ):
     """
     Unmount and removes the given mount point.
@@ -1473,7 +1474,8 @@ def unmount(
             else:
                 time.sleep(0.5 + retries * 1.0)
                 retries += 1
-
+    if not do_rm:
+        return
     os.rmdir(path)
 
 
@@ -3942,7 +3944,7 @@ def main_deactivate_locked(args):
         with open(os.path.join(mounted_path, 'deactive'), 'w'):
             path_set_context(os.path.join(mounted_path, 'deactive'))
 
-    unmount(mounted_path)
+    unmount(mounted_path, do_rm=not args.once)
     LOG.info("Umount `%s` successfully.", mounted_path)
 
     if dmcrypt:
