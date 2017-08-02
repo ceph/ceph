@@ -4,6 +4,7 @@ from ceph_volume import terminal
 from . import activate
 from . import prepare
 from . import create
+from . import trigger
 
 
 class LVM(object):
@@ -20,6 +21,7 @@ class LVM(object):
         'activate': activate.Activate,
         'prepare': prepare.Prepare,
         'create': create.Create,
+        'trigger': trigger.Trigger,
     }
 
     def __init__(self, argv):
