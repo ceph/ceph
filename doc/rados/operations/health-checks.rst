@@ -220,7 +220,7 @@ or delete some existing data to reduce utilization.
 
 
 Data health (pools & placement groups)
-------------------------------
+--------------------------------------
 
 PG_AVAILABILITY
 _______________
