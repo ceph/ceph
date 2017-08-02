@@ -1630,7 +1630,6 @@ struct rgw_obj_key {
    * part of the given namespace, it returns false.
    */
   static bool oid_to_key_in_ns(const string& oid, rgw_obj_key *key, const string& ns) {
-    string obj_ns;
     bool ret = parse_raw_oid(oid, key);
     if (!ret) {
       return ret;
