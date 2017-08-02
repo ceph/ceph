@@ -48,8 +48,8 @@ public:
 
   int init_upload_multipart(const std::string& bucket, const std::string& key, std::string& upload_id, uint64_t& block_size, int32_t& retcode);
   int upload_multipart(const std::string& bucket, const std::string& key, const std::string& uplaod_id, uint64_t seq, bufferlist& bl, uint64_t obj_size, std::string& etag);
-  int finish_upload_multipart(const std::string& bucket, const std::string& key, const std::string& upload_id, const std::string& etag);
-  int abort_upload_multipart(const std::string& bucket, const std::string& key, const std::string& upload_id); 
+  int finish_upload_multipart(const std::string& bucket, const std::string& key, const std::string& upload_id, std::map<uint64_t,std::string>& etags);
+  int abort_upload_multipart(const std::string& bucket, const std::string& key, const std::string& upload_id);
 };
 
 RGWRESTUfileRequest::~RGWRESTUfileRequest() {
@@ -225,7 +225,8 @@ int RGWRESTUfileRequest::upload_multipart(const std::string& bucket, const std::
   return r;
 }
 
-int RGWRESTUfileRequest::finish_upload_multipart(const std::string& bucket, const std::string& obj, const std::string& upload_id, const std::string& etag) {
+int RGWRESTUfileRequest::finish_upload_multipart(const std::string& bucket, const std::string& obj, 
+                         const std::string& upload_id, std::map<uint64_t, std::string>& etags) {
   std::string new_url = "http://" + bucket + "." + cloud_info.domain_name + "/" + obj +
                         "?uploadId=" + upload_id;
   std::string string2sign;
@@ -245,7 +246,20 @@ int RGWRESTUfileRequest::finish_upload_multipart(const std::string& bucket, cons
   int r = http_manager.add_request(this, "POST", new_url.c_str());
   if (r < 0)
     return r;
- 
+  
+  if (etags.empty()) {
+    return -EINVAL;
+  }
+
+  auto it = etags.begin();
+  std::string etag = it->second;
+  ++it;
+  while(it != etags.end()) {
+    etag += ",";
+    etag += it->second;
+    ++it;
+  }
+
   bufferptr bp(etag.c_str(), etag.length());
   bufferlist data;
   data.push_back(bp);
@@ -482,11 +496,7 @@ int RGWCloudUfile::upload_multipart(const std::string& bucket, const string& key
   RGWRESTUfileRequest* req = new RGWRESTUfileRequest(cct, url, &_headers, &_params, cloud_info);
   string etag_part;
   int ret = req->upload_multipart(dest_bucket, key, upload_id, part_number, buf, size, etag_part);
-  if (etags.empty()) {
-    etags = etag_part;
-  } else {
-    etags = (etags + "," + etag_part);
-  }
+  etags.insert(std::make_pair(part_number, etag_part));
   ++part_number;
   
   delete req;

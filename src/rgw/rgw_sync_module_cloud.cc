@@ -8,6 +8,7 @@
 #include "rgw_sync_module_cloud.h"
 #include "rgw_data_sync.h"
 #include "rgw_cloud_ufile.h"
+#include "rgw_cloud_oss.h"
 #include "rgw_rest_client.h"
 #include "rgw_rest_conn.h"
 
@@ -446,7 +447,19 @@ public:
   ~RGWCloudDataSyncModule() { }
   
   std::shared_ptr<RGWCloudAccess> create_cloud_access() {
-    return valid_config ? std::make_shared<RGWCloudUfile>(cloud_info) : nullptr;
+    if (valid_config) {
+      if (cloud_info.access_type == "ufile") {
+        return std::make_shared<RGWCloudUfile>(cloud_info);
+      }
+      else if (cloud_info.access_type == "oss") {
+        return std::make_shared<RGWCloudOSS>(cloud_info);
+      }
+      else {
+        dout(0) << "ERROR: cloud sync target interface type is invalid." << dendl;
+      }
+    }
+    
+    return nullptr;
   }
   
   int init_cloud_info() {
@@ -510,22 +523,10 @@ public:
     if (iter != config.end()) {
       cloud_info.bucket_host = iter->second;
     }
-
-    if (cloud_info.access_type == "ufile") {
-      if (cloud_info.bucket_host.empty()) {
-        dout(0) << "ERROR: bucket host of ufile is unknown." << dendl;
-        valid_config = false;
-        return -EINVAL;
-      }
-      if (cloud_info.bucket_region.empty()) {
-        dout(0) << "ERROR: bucket region of ufile is unknown." << dendl;
-        valid_config = false;
-        return -EINVAL;
-      }
-    }
-    else {
+    
+    if (cloud_info.access_type=="ufile" && cloud_info.bucket_host.empty()) {
+      dout(0) << "ERROR: bucket host of ufile is unknown." << dendl;
       valid_config = false;
-      dout(0) << "ERROR: cloud sync target interface type is invalid." << dendl;
       return -EINVAL;
     }
     

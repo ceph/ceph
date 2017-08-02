@@ -2,6 +2,7 @@
 #define CEPH_RGW_CLOUD_ACCESS_H
 
 #include <string>
+#include <map>
 
 #include "include/buffer.h"
 
@@ -19,8 +20,8 @@ struct RGWCloudInfo {
 class RGWCloudAccess {
 protected:
   std::string upload_id;
-  std::string etags;              //hash value of  every part data
-  uint64_t block_size = 0;
+  std::map<uint64_t, std::string> etags;              //hash value of  every part data
+  uint64_t block_size = 4*1024*1024;
   uint64_t part_number = 0;
 
 protected:

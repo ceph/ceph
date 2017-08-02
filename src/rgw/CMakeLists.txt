@@ -77,6 +77,7 @@ set(rgw_a_srcs
   rgw_sync_module_es_rest.cc
   rgw_sync_module_log.cc
   rgw_cloud_ufile.cc
+  rgw_cloud_oss.cc
   rgw_sync_module_cloud.cc
   rgw_period_history.cc
   rgw_period_puller.cc
