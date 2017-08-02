@@ -19,7 +19,7 @@ tasks:
     log-whitelist:
       - objects unfound and apparently lost
       - overall HEALTH_
-      - (OSDMAP_FLAGS)
-      - (OSD_
-      - (PG_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
 - peer:
