@@ -470,10 +470,6 @@ public:
 };
 
 class RGW_Auth_S3 {
-private:
-  static int authorize_v2(RGWRados *store,
-                          const rgw::auth::StrategyRegistry& auth_registry,
-                          struct req_state *s);
 public:
   static int authorize(RGWRados *store,
                        const rgw::auth::StrategyRegistry& auth_registry,
@@ -883,6 +879,19 @@ public:
 
   const char* get_name() const noexcept override {
     return "rgw::auth::s3::LocalEngine";
+  }
+};
+
+
+class S3AnonymousEngine : public rgw::auth::AnonymousEngine {
+  bool is_applicable(const req_state* s) const noexcept override;
+
+public:
+  /* Let's reuse the parent class' constructor. */
+  using rgw::auth::AnonymousEngine::AnonymousEngine;
+
+  const char* get_name() const noexcept override {
+    return "rgw::auth::s3::S3AnonymousEngine";
   }
 };
 
