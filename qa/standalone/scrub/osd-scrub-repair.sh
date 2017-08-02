@@ -30,7 +30,11 @@ fi
 getjson="no"
 
 # Ignore the epoch and filter out the attr '_' value because it has date information and won't match
-jqfilter='.inconsistents | (.[].shards[].attrs[]? | select(.name == "_") | .value) |= "----Stripped-by-test----"'
+if [ "$(jq --version 2>&1 | awk '{ print $3}')" = "1.3" ]; then # Not sure all versions that apply here
+    jqfilter='.inconsistents | (.[].shards[].attrs[] | select(.name == "_") | .value) |= "----Stripped-by-test----"'
+else
+    jqfilter='.inconsistents | (.[].shards[].attrs[]? | select(.name == "_") | .value) |= "----Stripped-by-test----"'
+fi
 sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
 
 # Remove items are not consistent across runs, the pg interval and client
