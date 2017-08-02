@@ -1830,18 +1830,21 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share_max, bo
     bool gather = false;
     compact_map<int,set<client_t> >::iterator p = in->client_snap_caps.begin();
     while (p != in->client_snap_caps.end()) {
-      SimpleLock *lock = in->get_lock(p->first);
-      assert(lock);
-      dout(10) << " completing client_snap_caps for " << ccap_string(p->first)
-	       << " lock " << *lock << " on " << *in << dendl;
-      lock->put_wrlock();
+      auto q = p->second.find(client);
+      if (q != p->second.end()) {
+	SimpleLock *lock = in->get_lock(p->first);
+	assert(lock);
+	dout(10) << " completing client_snap_caps for " << ccap_string(p->first)
+		 << " lock " << *lock << " on " << *in << dendl;
+	lock->put_wrlock();
 
-      p->second.erase(client);
-      if (p->second.empty()) {
-	gather = true;
-	in->client_snap_caps.erase(p++);
-      } else
-	++p;
+	p->second.erase(q);
+	if (p->second.empty()) {
+	  gather = true;
+	  in->client_snap_caps.erase(p++);
+	} else
+	  ++p;
+      }
     }
     if (gather) {
       if (in->client_snap_caps.empty())
