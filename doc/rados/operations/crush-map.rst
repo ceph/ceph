@@ -206,6 +206,43 @@ You can view the contents of the rules with::
 
   ceph osd crush rule dump
 
+Device classes
+--------------
+
+Each device can optionally have a *class* associated with it.  By
+default, OSDs automatically set their class on startup to either
+`hdd`, `ssd`, or `nvme` based on the type of device they are backed
+by.
+
+The device class for one or more OSDs can be explicitly set with::
+
+  ceph osd crush set-device-class <class> <osd-name> [...]
+
+Once a device class is set, it cannot be changed to another class
+until the old class is unset with::
+
+  ceph osd crush rm-device-class <osd-name> [...]
+
+This allows administrators to set device classes without the class
+being changed on OSD restart or by some other script.
+
+A placement rule that targets a specific device class can be created with::
+
+  ceph osd crush rule create-replicated <rule-name> <root> <failure-domain> <class>
+
+A pool can then be changed to use the new rule with::
+
+  ceph osd pool set <pool-name> crush_rule <rule-name>
+
+Device classes are implemented by creating a "shadow" CRUSH hierarchy
+for each device class in use that contains only devices of that class.
+Rules can then distributed data over the shadow hierarchy.  One nice
+thing about this approach is that it is fully backward compatible with
+old Ceph clients.  You can view the CRUSH hierarchy with shadow items
+with::
+
+  ceph osd crush tree --show-shadow
+
 
 Weights sets
 ------------
