@@ -1925,6 +1925,37 @@ function jq_success() {
   return 1
 }
 
+function inject_eio() {
+    local pooltype=$1
+    shift
+    local which=$1
+    shift
+    local poolname=$1
+    shift
+    local objname=$1
+    shift
+    local dir=$1
+    shift
+    local shard_id=$1
+    shift
+
+    local -a initial_osds=($(get_osds $poolname $objname))
+    local osd_id=${initial_osds[$shard_id]}
+    if [ "$pooltype" != "ec" ]; then
+        shard_id=""
+    fi
+    set_config osd $osd_id filestore_debug_inject_read_err true || return 1
+    local loop=0
+    while ( CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.$osd_id) \
+             inject${which}err $poolname $objname $shard_id | grep -q Invalid ); do
+        loop=$(expr $loop + 1)
+        if [ $loop = "10" ]; then
+            return 1
+        fi
+        sleep 1
+    done
+}
+
 # Local Variables:
 # compile-command: "cd ../../src ; make -j4 && ../qa/standalone/ceph-helpers.sh TESTS # test_get_config"
 # End:
