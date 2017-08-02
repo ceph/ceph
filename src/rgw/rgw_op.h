@@ -203,6 +203,7 @@ protected:
   bool partial_content;
   bool range_parsed;
   bool skip_manifest;
+  bool skip_decompress{false};
   rgw_obj obj;
   utime_t gc_invalidate_time;
   bool is_slo;
@@ -324,6 +325,34 @@ public:
    */
   int fixup_range(off_t& ofs, off_t& end) override {
     return next->fixup_range(ofs, end);
+  }
+};
+
+class RGWSkipDecompressCB : public RGWGetObj_Filter
+{
+  RGWCompressionInfo cs_info;
+  unsigned int compressed_block_num;
+public:
+  explicit RGWSkipDecompressCB(RGWCompressionInfo _cs_info, RGWGetDataCB* next)
+                              : RGWGetObj_Filter(next),
+                                cs_info(_cs_info),
+                                compressed_block_num(0) {}
+  ~RGWSkipDecompressCB() override {}
+
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+    int ret = next->handle_data(bl, bl_ofs, bl_len);
+    if (ret < 0) {
+      return ret;
+    }
+
+    compressed_block_num++;
+
+    if (compressed_block_num < cs_info.blocks.size()) {
+      bufferlist end_bl;
+      ret = next->handle_data(end_bl, 0, 0);
+    }
+
+    return ret;
   }
 };
 

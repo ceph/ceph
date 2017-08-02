@@ -1591,6 +1591,7 @@ void RGWGetObj::execute()
   boost::optional<RGWGetObj_Decompress> decompress;
   std::unique_ptr<RGWGetDataCB> decrypt;
   map<string, bufferlist>::iterator attr_iter;
+  boost::optional<RGWSkipDecompressCB> skip_decompress_cb;
 
   perfcounter->inc(l_rgw_get);
 
@@ -1648,15 +1649,26 @@ void RGWGetObj::execute()
   }
   /* end gettorrent */
 
+  // whether skip decompress to get object keeping compressed or not
+  ldout(s->cct, 15) << "INFO: skip decompress? " << skip_decompress << dendl;
+
   op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
   if (op_ret < 0) {
     lderr(s->cct) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
     goto done_err;
   }
-  if (need_decompress) {
+
+  if (!skip_decompress) {
+    if (need_decompress) {
       s->obj_size = cs_info.orig_size;
       decompress.emplace(s->cct, &cs_info, partial_content, filter);
       filter = &*decompress;
+    }
+  } else {
+    if (need_decompress) {
+      skip_decompress_cb.emplace(cs_info, filter);
+      filter = &*skip_decompress_cb;
+    }
   }
 
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);

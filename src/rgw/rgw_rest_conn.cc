@@ -179,6 +179,10 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
     const string& instance = obj.key.instance;
     params.push_back(param_pair_t("versionId", instance));
   }
+  if (cct->_conf->get_val<bool>("rgw_enable_compressed_transmission")) {
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "skip-decompress", ""));
+  }
+
   if (get_op) {
     *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
   } else {

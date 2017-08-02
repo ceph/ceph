@@ -129,6 +129,11 @@ int RGWGetObj_ObjStore_S3::get_params()
   // all of the data from its parts. the parts will sync as separate objects
   skip_manifest = s->info.args.exists(RGW_SYS_PARAM_PREFIX "sync-manifest");
 
+  // For transferring compressed data during multisite sync
+  if (s->system_request) {
+    skip_decompress = s->info.args.exists(RGW_SYS_PARAM_PREFIX "skip-decompress");
+  }
+
   return RGWGetObj_ObjStore::get_params();
 }
 
@@ -168,6 +173,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   map<string, string> response_attrs;
   map<string, string>::iterator riter;
   bufferlist metadata_bl;
+  long long object_size = 0;
 
   if (sent_header)
     goto send_data;
@@ -189,8 +195,13 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 
   if (s->system_request &&
       s->info.args.exists(RGW_SYS_PARAM_PREFIX "prepend-metadata")) {
+    if (skip_decompress) {
+      object_size = cs_info.orig_size;   // rgwx-object-size save object original size
+    } else {
+      object_size = (long long)total_len;
+    }
 
-    dump_header(s, "Rgwx-Object-Size", (long long)total_len);
+    dump_header(s, "Rgwx-Object-Size", object_size);
 
     if (rgwx_stat) {
       /*

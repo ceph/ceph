@@ -4540,6 +4540,10 @@ std::vector<Option> rgw_options = {
   Option("rgw_reshard_thread_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(60 * 10)
   .set_description(""),
+
+  Option("rgw_enable_compressed_transmission", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
 };
 
 std::vector<Option> rbd_options = {
