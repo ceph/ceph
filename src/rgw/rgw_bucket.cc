@@ -422,16 +422,9 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
 static void dump_mulipart_index_results(list<rgw_obj_index_key>& objs_to_unlink,
         Formatter *f)
 {
-  // make sure that an appropiately titled header has been opened previously
-  auto oiter = objs_to_unlink.begin();
-
-  f->open_array_section("invalid_multipart_entries");
-
-  for ( ; oiter != objs_to_unlink.end(); ++oiter) {
-    f->dump_string("object",  oiter->name);
+  for (const auto& o : objs_to_unlink) {
+    f->dump_string("object",  o.name);
   }
-
-  f->close_section();
 }
 
 void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
@@ -1005,12 +998,12 @@ static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats
 }
 
 int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-        list<rgw_obj_index_key>& objs_to_unlink, std::string *err_msg)
+               RGWFormatterFlusher& flusher ,std::string *err_msg)
 {
   bool fix_index = op_state.will_fix_index();
   rgw_bucket bucket = op_state.get_bucket();
 
-  int max = 1000;
+  size_t max = 1000;
 
   map<string, bool> common_prefixes;
 
@@ -1067,16 +1060,33 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   } while (is_truncated);
 
+  list<rgw_obj_index_key> objs_to_unlink;
+  Formatter *f =  flusher.get_formatter();
+
+  f->open_array_section("invalid_multipart_entries");
+
   for (auto aiter = all_objs.begin(); aiter != all_objs.end(); ++aiter) {
     string& name = aiter->second;
 
     if (meta_objs.find(name) == meta_objs.end()) {
       objs_to_unlink.push_back(aiter->first);
     }
-  }
 
-  if (objs_to_unlink.empty())
-    return 0;
+    if (objs_to_unlink.size() > max) {
+      if (fix_index) {
+	int r = store->remove_objs_from_index(bucket_info, objs_to_unlink);
+	if (r < 0) {
+	  set_err_msg(err_msg, "ERROR: remove_obj_from_index() returned error: " +
+		      cpp_strerror(-r));
+	  return r;
+	}
+      }
+
+      dump_mulipart_index_results(objs_to_unlink, flusher.get_formatter());
+      flusher.flush();
+      objs_to_unlink.clear();
+    }
+  }
 
   if (fix_index) {
     int r = store->remove_objs_from_index(bucket_info, objs_to_unlink);
@@ -1087,6 +1097,10 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
       return r;
     }
   }
+
+  dump_mulipart_index_results(objs_to_unlink, f);
+  f->close_section();
+  flusher.flush();
 
   return 0;
 }
@@ -1312,7 +1326,7 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
   map<string, rgw_bucket_dir_entry> result;
   map<RGWObjCategory, RGWStorageStats> existing_stats;
   map<RGWObjCategory, RGWStorageStats> calculated_stats;
-  list<rgw_obj_index_key> objs_to_unlink;
+
 
   RGWBucket bucket;
 
@@ -1323,12 +1337,9 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
-  ret = bucket.check_bad_index_multipart(op_state, objs_to_unlink);
+  ret = bucket.check_bad_index_multipart(op_state, flusher);
   if (ret < 0)
     return ret;
-
-  dump_mulipart_index_results(objs_to_unlink, formatter);
-  flusher.flush();
 
   ret = bucket.check_object_index(op_state, flusher);
   if (ret < 0)
