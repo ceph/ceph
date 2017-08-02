@@ -4680,14 +4680,16 @@ struct C_ExtentCmpRead : public Context {
   ceph_le64 read_length;
   bufferlist read_bl;
   Context *fill_extent_ctx;
+  bool munged;
 
   C_ExtentCmpRead(PrimaryLogPG *primary_log_pg, OSDOp &osd_op,
 		  boost::optional<uint32_t> maybe_crc, uint64_t size,
-		  OSDService *osd, hobject_t soid, __le32 flags)
+		  OSDService *osd, hobject_t soid, __le32 flags, bool munged)
     : primary_log_pg(primary_log_pg), osd_op(osd_op),
       fill_extent_ctx(new FillInVerifyExtent(&read_length, &osd_op.rval,
 					     &read_bl, maybe_crc, size,
-					     osd, soid, flags)) {
+					     osd, soid, flags)),
+      munged(munged) {
   }
   ~C_ExtentCmpRead() override {
     delete fill_extent_ctx;
@@ -4704,19 +4706,19 @@ struct C_ExtentCmpRead : public Context {
     fill_extent_ctx = nullptr;
 
     if (osd_op.rval >= 0) {
-      osd_op.rval = primary_log_pg->finish_extent_cmp(osd_op, read_bl);
+      osd_op.rval = primary_log_pg->finish_extent_cmp(osd_op, read_bl, munged);
     }
   }
 };
 
-int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
+int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op, bool munged)
 {
   dout(20) << __func__ << dendl;
   ceph_osd_op& op = osd_op.op;
 
   if (!ctx->obs->exists || ctx->obs->oi.is_whiteout()) {
     dout(20) << __func__ << " object DNE" << dendl;
-    return finish_extent_cmp(osd_op, {});
+    return finish_extent_cmp(osd_op, {}, munged);
   } else if (pool.info.require_rollback()) {
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.
@@ -4730,7 +4732,7 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
     // async read
     auto& soid = oi.soid;
     auto extent_cmp_ctx = new C_ExtentCmpRead(this, osd_op, maybe_crc, oi.size,
-					      osd, soid, op.flags);
+					      osd, soid, op.flags, munged);
     ctx->pending_async_reads.push_back({
       {op.extent.offset, op.extent.length, op.flags},
       {&extent_cmp_ctx->read_bl, extent_cmp_ctx}});
@@ -4757,15 +4759,21 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
     derr << __func__ << " failed " << result << dendl;
     return result;
   }
-  return finish_extent_cmp(osd_op, read_op.outdata);
+  return finish_extent_cmp(osd_op, read_op.outdata, munged);
 }
 
-int PrimaryLogPG::finish_extent_cmp(OSDOp& osd_op, const bufferlist &read_bl)
+int PrimaryLogPG::finish_extent_cmp(OSDOp& osd_op, const bufferlist &read_bl, bool munged)
 {
   for (uint64_t idx = 0; idx < osd_op.indata.length(); ++idx) {
     char read_byte = (idx < read_bl.length() ? read_bl[idx] : 0);
     if (osd_op.indata[idx] != read_byte) {
-        return (-MAX_ERRNO - idx);
+        if (munged) {
+	  dout(10) << "munging mismatch: " << idx << dendl;
+	  // SES < 5 mismatch returns -EILSEQ, with offset sent as response data
+	  ::encode(idx, osd_op.outdata);
+	  return -EILSEQ;
+	}
+	return (-MAX_ERRNO - idx);
     }
   }
 
@@ -5106,13 +5114,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		 op.extent.truncate_seq);
 
       if (op_finisher == nullptr) {
-	result = do_extent_cmp(ctx, osd_op);
-        if (cmpext_munged && (result <= -MAX_ERRNO)) {
-	  dout(10) << "munging mismatch: " << (-result - MAX_ERRNO) << dendl;
-	  // SES < 5 mismatch returns -EILSEQ, with offset sent as response data
-	  ::encode(-result - MAX_ERRNO, osd_op.outdata);
-	  result = -EILSEQ;
-	}
+	result = do_extent_cmp(ctx, osd_op, cmpext_munged);
       } else {
 	result = op_finisher->execute();
       }
@@ -5141,11 +5143,6 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_CHECKSUM:
-      derr << "CEPH_OSD_OP_CHECKSUM: datalen:"
-	       << osd_op.indata.length() << " payloadlen:"
-	       << op.payload_len << " sizeof(struct):"
-	       << sizeof(op.checksum) << dendl;
-
       ++ctx->num_read;
       {
 	tracepoint(osd, do_osd_op_pre_checksum, soid.oid.name.c_str(),
