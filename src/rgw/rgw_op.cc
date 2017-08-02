@@ -5276,6 +5276,33 @@ void RGWCompleteMultipart::execute()
   meta_obj.set_in_extra_data(true);
   meta_obj.index_hash_source = s->object.name;
 
+  /*take a cls lock on meta_obj to prevent racing completions (or retries)
+    from deleting the parts*/
+  rgw_pool meta_pool;
+  rgw_raw_obj raw_obj;
+  librados::ObjectWriteOperation op;
+  librados::IoCtx ioctx;
+  rados::cls::lock::Lock l("RGWCompleteMultipart");
+  int max_lock_secs_mp = s->cct->_conf->get_val<int64_t>("rgw_mp_lock_max_time");
+
+  op.assert_exists();
+  store->obj_to_raw((s->bucket_info).placement_rule, meta_obj, &raw_obj);
+  store->get_obj_data_pool((s->bucket_info).placement_rule,meta_obj,&meta_pool);
+  store->open_pool_ctx(meta_pool, ioctx);
+
+  const string raw_meta_oid = raw_obj.oid;
+  utime_t time(max_lock_secs_mp, 0);
+  l.set_duration(time);
+  l.lock_exclusive(&op);
+  op_ret = ioctx.operate(raw_meta_oid, &op);
+
+  if (op_ret < 0) {
+    dout(0) << "RGWCompleteMultipart::execute() failed to acquire lock " << dendl;
+    op_ret = -ERR_INTERNAL_ERROR;
+    s->err.message = "This multipart completion is already in progress";
+    return;
+  }
+
   op_ret = get_obj_attrs(store, s, meta_obj, attrs);
 
   if (op_ret < 0) {
@@ -5426,6 +5453,10 @@ void RGWCompleteMultipart::execute()
 			    s->bucket_info, meta_obj, 0);
   if (r < 0) {
     ldout(store->ctx(), 0) << "WARNING: failed to remove object " << meta_obj << dendl;
+    r = l.unlock(&ioctx, raw_meta_oid);
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "WARNING: failed to unlock " << raw_meta_oid << dendl;
+    }
   }
 }
 
