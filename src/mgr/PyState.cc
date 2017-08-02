@@ -369,6 +369,20 @@ ceph_config_set(PyObject *self, PyObject *args)
 }
 
 static PyObject*
+ceph_config_del(PyObject *self, PyObject *args)
+{
+  char *handle = nullptr;
+  char *key = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:ceph_config_del", &handle, &key)) {
+    return nullptr;
+  }
+
+  global_handle->del_config(handle, key);
+
+  Py_RETURN_NONE;
+}
+
+static PyObject*
 get_metadata(PyObject *self, PyObject *args)
 {
   char *handle = nullptr;
@@ -470,6 +484,8 @@ PyMethodDef CephStateMethods[] = {
      "Get all configuration values with a given prefix"},
     {"set_config", ceph_config_set, METH_VARARGS,
      "Set a configuration value"},
+    {"del_config", ceph_config_del, METH_VARARGS,
+     "Delete a configuration value"},
     {"get_counter", get_counter, METH_VARARGS,
       "Get a performance counter"},
     {"get_perf_schema", get_perf_schema, METH_VARARGS,
@@ -482,4 +498,3 @@ PyMethodDef CephStateMethods[] = {
       "Get a CephContext* in a python capsule"},
     {NULL, NULL, 0, NULL}
 };
-

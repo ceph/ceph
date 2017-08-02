@@ -115,6 +115,8 @@ public:
 			      const std::string &prefix) const;
   void set_config(const std::string &handle,
       const std::string &key, const std::string &val);
+  void del_config(const std::string &handle,
+      const std::string &key);
 
   void set_health_checks(const std::string& handle,
 			 health_check_map_t&& checks);
@@ -127,4 +129,3 @@ public:
 };
 
 #endif
-

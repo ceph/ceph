@@ -279,6 +279,14 @@ class MgrModule(object):
         """
         self.set_config(key, json.dumps(val))
 
+    def del_config(self, key):
+        """
+        Delete a persistent configuration setting
+
+        :param key: str
+        """
+        ceph_state.del_config(self._handle, key)
+
     def get_config_json(self, key):
         """
         Helper for getting json-serialized config

@@ -612,6 +612,41 @@ void PyModules::set_config(const std::string &handle,
   }
 }
 
+void PyModules::del_config(const std::string &handle,
+    const std::string &key)
+{
+  const std::string global_key = config_prefix + handle + "/" + key;
+
+  Command set_cmd;
+  {
+    PyThreadState *tstate = PyEval_SaveThread();
+    Mutex::Locker l(lock);
+    PyEval_RestoreThread(tstate);
+    config_cache.erase(global_key);
+
+    std::ostringstream cmd_json;
+
+    JSONFormatter jf;
+    jf.open_object_section("cmd");
+    jf.dump_string("prefix", "config-key del");
+    jf.dump_string("key", global_key);
+    jf.close_section();
+    jf.flush(cmd_json);
+
+    set_cmd.run(&monc, cmd_json.str());
+  }
+  set_cmd.wait();
+
+  if (set_cmd.r != 0) {
+    // config-key del will fail if mgr's auth key has insufficient
+    // permission to delete config keys
+    // FIXME: should this somehow raise an exception back into Python land?
+    dout(0) << "`config-key del " << global_key << "` failed: "
+      << cpp_strerror(set_cmd.r) << dendl;
+    dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
+  }
+}
+
 std::vector<ModuleCommand> PyModules::get_py_commands() const
 {
   Mutex::Locker l(lock);
