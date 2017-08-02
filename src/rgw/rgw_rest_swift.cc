@@ -2558,7 +2558,7 @@ int RGWHandler_REST_SWIFT::postauth_init()
 	   << dendl;
 
   int ret;
-  ret = validate_tenant_name(s->bucket_tenant);
+  ret = rgw_validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
   ret = validate_bucket_name(s->bucket_name);
