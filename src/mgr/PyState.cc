@@ -359,11 +359,14 @@ ceph_config_set(PyObject *self, PyObject *args)
   char *handle = nullptr;
   char *key = nullptr;
   char *value = nullptr;
-  if (!PyArg_ParseTuple(args, "sss:ceph_config_set", &handle, &key, &value)) {
+  if (!PyArg_ParseTuple(args, "ssz:ceph_config_set", &handle, &key, &value)) {
     return nullptr;
   }
-
-  global_handle->set_config(handle, key, value);
+  boost::optional<string> val;
+  if (value) {
+    val = value;
+  }
+  global_handle->set_config(handle, key, val);
 
   Py_RETURN_NONE;
 }
