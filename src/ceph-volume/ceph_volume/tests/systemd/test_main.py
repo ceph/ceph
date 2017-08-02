@@ -10,42 +10,8 @@ class TestParseSubcommand(object):
             main.parse_subcommand('')
 
     def test_sub_command_is_found(self):
-        result = main.parse_subcommand('0-1-sha-1-something-lvm')
+        result = main.parse_subcommand('lvm-1-sha-1-something-0')
         assert result == 'lvm'
-
-
-class TestParseOSDid(object):
-
-    def test_no_id_found_if_no_digit(self):
-        with pytest.raises(exceptions.SuffixParsingError):
-            main.parse_osd_id('asdlj-ljahsdfaslkjhdfa')
-
-    def test_no_id_found(self):
-        with pytest.raises(exceptions.SuffixParsingError):
-            main.parse_osd_id('ljahsdfaslkjhdfa')
-
-    def test_id_found(self):
-        result = main.parse_osd_id('1-ljahsdfaslkjhdfa')
-        assert result == '1'
-
-
-class TestParseOSDUUID(object):
-
-    def test_uuid_is_parsed(self):
-        result = main.parse_osd_uuid('1-asdf-ljkh-asdf-ljkh-asdf-lvm')
-        assert result == 'asdf-ljkh-asdf-ljkh-asdf'
-
-    def test_uuid_is_parsed_longer_sha1(self):
-        result = main.parse_osd_uuid('1-foo-bar-asdf-ljkh-asdf-ljkh-asdf-lvm')
-        assert result == 'foo-bar-asdf-ljkh-asdf-ljkh-asdf'
-
-    def test_uuid_is_not_found(self):
-        with pytest.raises(exceptions.SuffixParsingError):
-            main.parse_osd_uuid('ljahsdfaslkjhdfa')
-
-    def test_uuid_is_not_found_missing_id(self):
-        with pytest.raises(exceptions.SuffixParsingError):
-            main.parse_osd_uuid('ljahs-dfa-slkjhdfa-lvm')
 
 
 class Capture(object):
@@ -65,17 +31,21 @@ class TestMain(object):
     def setup(self):
         conf.log_path = '/tmp/'
 
-    def test_parsing_error(self):
-        with pytest.raises(exceptions.SuffixParsingError):
+    def test_no_arguments_parsing_error(self):
+        with pytest.raises(RuntimeError):
             main.main(args=[])
+
+    def test_parsing_suffix_error(self):
+        with pytest.raises(exceptions.SuffixParsingError):
+            main.main(args=['asdf'])
 
     def test_correct_command(self, monkeypatch):
         run = Capture()
         monkeypatch.setattr(main.process, 'run', run)
-        main.main(args=['ceph-volume-systemd', '0-8715BEB4-15C5-49DE-BA6F-401086EC7B41-lvm' ])
+        main.main(args=['ceph-volume-systemd', 'lvm-8715BEB4-15C5-49DE-BA6F-401086EC7B41-0' ])
         command = run.calls[0][0]
         assert command == [
             'ceph-volume',
-            'lvm', 'activate',
-            '0', '8715BEB4-15C5-49DE-BA6F-401086EC7B41'
+            'lvm', 'trigger',
+            '8715BEB4-15C5-49DE-BA6F-401086EC7B41-0'
         ]
