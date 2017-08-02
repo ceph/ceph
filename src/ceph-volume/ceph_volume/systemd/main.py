@@ -12,10 +12,21 @@ from ceph_volume.exceptions import SuffixParsingError
 
 
 def parse_subcommand(string):
-    subcommand = string.rsplit('-', 1)[-1]
+    subcommand = string.split('-', 1)[0]
     if not subcommand:
         raise SuffixParsingError('subcommand', string)
     return subcommand
+
+
+def parse_extra_data(string):
+    # get the subcommand to split on that
+    sub_command = parse_subcommand(string)
+
+    # the split will leave data with a dash, so remove that
+    data = string.split(sub_command)[-1]
+    if not data:
+        raise SuffixParsingError('data', string)
+    return data.lstrip('-')
 
 
 def parse_osd_id(string):
@@ -47,33 +58,40 @@ def main(args=None):
     Expected input is similar to::
 
         ['/path/to/ceph-volume-systemd', '<osd id>-<osd uuid>-<device type>']
+        ['/path/to/ceph-volume-systemd', '<type>-<extra metadata>']
 
     For example::
 
         [
             '/usr/bin/ceph-volume-systemd',
-            '0-8715BEB4-15C5-49DE-BA6F-401086EC7B41-lvm'
+            'lvm-0-8715BEB4-15C5-49DE-BA6F-401086EC7B41'
         ]
 
-    The last part of the argument is the only interesting bit, which contains
+    The first part of the argument is the only interesting bit, which contains
     the metadata needed to proxy the call to ``ceph-volume`` itself.
 
     Reusing the example, the proxy call to ``ceph-volume`` would look like::
 
-        ceph-volume lvm 0 8715BEB4-15C5-49DE-BA6F-401086EC7B41
+        ceph-volume lvm trigger 0-8715BEB4-15C5-49DE-BA6F-401086EC7B41
+
+    That means that ``lvm`` is used as the subcommand and it is **expected**
+    that a ``trigger`` sub-commmand will be present to make sense of the extra
+    piece of the string.
 
     """
     log.setup(name='ceph-volume-systemd.log', log_path='/var/log/ceph/ceph-volume-systemd.log')
     logger = logging.getLogger('systemd')
 
-    args = args or sys.argv
-    suffix = args[-1]
+    args = args if args is not None else sys.argv
+    try:
+        suffix = args[-1]
+    except IndexError:
+        raise RuntimeError('no arguments supplied')
     sub_command = parse_subcommand(suffix)
-    osd_id = parse_osd_id(suffix)
-    osd_uuid = parse_osd_uuid(suffix)
+    extra_data = parse_extra_data(suffix)
     logger.info('raw systemd input received: %s', suffix)
-    logger.info('osd id: %s, osd uuid: %s, sub-command: %s', osd_id, osd_uuid, sub_command)
-    command = ['ceph-volume', sub_command, 'activate', osd_id, osd_uuid]
+    logger.info('parsed sub-command: %s, extra data: %s', sub_command, extra_data)
+    command = ['ceph-volume', sub_command, 'trigger', extra_data]
 
     tries = os.environ.get('CEPH_VOLUME_SYSTEMD_TRIES', 30)
     interval = os.environ.get('CEPH_VOLUME_SYSTEMD_INTERVAL', 5)
@@ -82,7 +100,7 @@ def main(args=None):
             # don't log any output to the terminal, just rely on stderr/stdout
             # going to logging
             process.run(command, terminal_logging=False)
-            logger.info('successfully activated OSD %s %s', osd_id, osd_uuid)
+            logger.info('successfully trggered activation for: %s', extra_data)
             break
         except RuntimeError as error:
             logger.warning(error)
