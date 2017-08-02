@@ -999,6 +999,18 @@ const string& RGWHTTPArgs::get(const string& name, bool *exists) const
   return empty_str;
 }
 
+boost::optional<const std::string&>
+RGWHTTPArgs::get_optional(const std::string& name) const
+{
+  bool exists;
+  const std::string& value = get(name, &exists);
+  if (exists) {
+    return value;
+  } else {
+    return boost::none;
+  }
+}
+
 int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists)
 {
   map<string, string>::iterator iter;

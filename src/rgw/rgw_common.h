@@ -337,6 +337,8 @@ class RGWHTTPArgs
   void append(const string& name, const string& val);
   /** Get the value for a specific argument parameter */
   const string& get(const string& name, bool *exists = NULL) const;
+  boost::optional<const std::string&>
+  get_optional(const std::string& name) const;
   int get_bool(const string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
