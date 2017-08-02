@@ -256,8 +256,15 @@ bool MDCache::shutdown()
 void MDCache::add_inode(CInode *in) 
 {
   // add to lru, inode map
-  assert(inode_map.count(in->vino()) == 0);  // should be no dup inos!
-  inode_map[ in->vino() ] = in;
+  if (in->last == CEPH_NOSNAP) {
+    auto &p = inode_map[in->ino()];
+    assert(!p); // should be no dup inos!
+    p = in;
+  } else {
+    auto &p = snap_inode_map[in->vino()];
+    assert(!p); // should be no dup inos!
+    p = in;
+  }
 
   if (in->ino() < MDS_INO_SYSTEM_BASE) {
     if (in->ino() == MDS_INO_ROOT)
@@ -302,7 +309,10 @@ void MDCache::remove_inode(CInode *o)
     export_pin_queue.erase(o);
 
   // remove from inode map
-  inode_map.erase(o->vino());    
+  if (o->last == CEPH_NOSNAP)
+    inode_map.erase(o->ino());
+  else
+    snap_inode_map.erase(o->vino());
 
   if (o->ino() < MDS_INO_SYSTEM_BASE) {
     if (o == root) root = 0;
@@ -1459,24 +1469,12 @@ CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
   dout(10) << "pick_inode_snap follows " << follows << " on " << *in << dendl;
   assert(in->last == CEPH_NOSNAP);
 
-  SnapRealm *realm = in->find_snaprealm();
-  const set<snapid_t>& snaps = realm->get_snaps();
-  dout(10) << " realm " << *realm << " " << *realm->inode << dendl;
-  dout(10) << " snaps " << snaps << dendl;
-
-  if (snaps.empty())
-    return in;
-
-  for (set<snapid_t>::const_iterator p = snaps.upper_bound(follows);  // first item > follows
-       p != snaps.end();
-       ++p) {
-    CInode *t = get_inode(in->ino(), *p);
-    if (t) {
-      in = t;
-      dout(10) << "pick_inode_snap snap " << *p << " found " << *in << dendl;
-      break;
-    }
+  auto p = snap_inode_map.upper_bound(vinodeno_t(in->ino(), follows));
+  if (p != snap_inode_map.end() && p->second->ino() == in->ino()) {
+    dout(10) << "pick_inode_snap found " << *p->second << dendl;
+    in = p->second;
   }
+
   return in;
 }
 
@@ -1493,22 +1491,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 {
   assert(last >= in->first);
 
-  SnapRealm *realm = in->find_snaprealm();
-  const set<snapid_t>& snaps = realm->get_snaps();
-
-  // make sure snap inode's last match existing snapshots.
-  // MDCache::pick_inode_snap() requires this.
-  snapid_t last_snap = last;
-  if (snaps.count(last) == 0) {
-    set<snapid_t>::const_iterator p = snaps.upper_bound(last);
-    if (p != snaps.begin()) {
-      --p;
-      if (*p >= in->first)
-	last_snap = *p;
-    }
-  }
-
-  CInode *oldin = new CInode(this, true, in->first, last_snap);
+  CInode *oldin = new CInode(this, true, in->first, last);
   oldin->inode = *in->get_previous_projected_inode();
   oldin->symlink = in->symlink;
   oldin->xattrs = *in->get_previous_projected_xattrs();
@@ -1542,43 +1525,43 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
     return oldin;
   }
 
-  // clone caps?
-  for (map<client_t,Capability*>::iterator p = in->client_caps.begin();
-      p != in->client_caps.end();
-      ++p) {
-    client_t client = p->first;
-    Capability *cap = p->second;
-    int issued = cap->issued();
-    if ((issued & CEPH_CAP_ANY_WR) &&
-	cap->client_follows < last) {
-      // note in oldin
-      for (int i = 0; i < num_cinode_locks; i++) {
-	if (issued & cinode_lock_info[i].wr_caps) {
-	  int lockid = cinode_lock_info[i].lock;
-	  SimpleLock *lock = oldin->get_lock(lockid);
-	  assert(lock);
-	  oldin->client_snap_caps[lockid].insert(client);
-	  oldin->auth_pin(lock);
-	  lock->set_state(LOCK_SNAP_SYNC);  // gathering
-	  lock->get_wrlock(true);
-	  dout(10) << " client." << client << " cap " << ccap_string(issued & cinode_lock_info[i].wr_caps)
-		   << " wrlock lock " << *lock << " on " << *oldin << dendl;
+  if (!in->client_caps.empty()) {
+    const set<snapid_t>& snaps = in->find_snaprealm()->get_snaps();
+    // clone caps?
+    for (auto p : in->client_caps) {
+      client_t client = p.first;
+      Capability *cap = p.second;
+      int issued = cap->issued();
+      if ((issued & CEPH_CAP_ANY_WR) &&
+	  cap->client_follows < last) {
+	// note in oldin
+	for (int i = 0; i < num_cinode_locks; i++) {
+	  if (issued & cinode_lock_info[i].wr_caps) {
+	    int lockid = cinode_lock_info[i].lock;
+	    SimpleLock *lock = oldin->get_lock(lockid);
+	    assert(lock);
+	    oldin->client_snap_caps[lockid].insert(client);
+	    oldin->auth_pin(lock);
+	    lock->set_state(LOCK_SNAP_SYNC);  // gathering
+	    lock->get_wrlock(true);
+	    dout(10) << " client." << client << " cap " << ccap_string(issued & cinode_lock_info[i].wr_caps)
+		     << " wrlock lock " << *lock << " on " << *oldin << dendl;
+	  }
 	}
+	cap->client_follows = last;
+
+	// we need snapflushes for any intervening snaps
+	dout(10) << "  snaps " << snaps << dendl;
+	for (auto q = snaps.lower_bound(oldin->first);
+	     q != snaps.end() && *q <= last;
+	     ++q) {
+	  in->add_need_snapflush(oldin, *q, client);
+	}
+      } else {
+	dout(10) << " ignoring client." << client << " cap follows " << cap->client_follows << dendl;
       }
-      cap->client_follows = last;
-      
-      // we need snapflushes for any intervening snaps
-      dout(10) << "  snaps " << snaps << dendl;
-      for (set<snapid_t>::const_iterator q = snaps.lower_bound(oldin->first);
-	   q != snaps.end() && *q <= last;
-	   ++q) {
-	in->add_need_snapflush(oldin, *q, client);
-      }
-    } else {
-      dout(10) << " ignoring client." << client << " cap follows " << cap->client_follows << dendl;
     }
   }
-
   return oldin;
 }
 
@@ -3737,10 +3720,8 @@ void MDCache::trim_unlinked_inodes()
 {
   dout(7) << "trim_unlinked_inodes" << dendl;
   list<CInode*> q;
-  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
-       p != inode_map.end();
-       ++p) {
-    CInode *in = p->second;
+  for (auto p : inode_map) {
+    CInode *in = p.second;
     if (in->get_parent_dn() == NULL && !in->is_base()) {
       dout(7) << " will trim from " << *in << dendl;
       q.push_back(in);
@@ -4540,20 +4521,17 @@ void MDCache::rejoin_scour_survivor_replicas(mds_rank_t from, MMDSCacheRejoin *a
 {
   dout(10) << "rejoin_scour_survivor_replicas from mds." << from << dendl;
 
-  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
-       p != inode_map.end();
-       ++p) {
-    CInode *in = p->second;
-    
+  auto scour_func = [this, from, ack, &acked_inodes, &gather_locks] (CInode *in) {
     // inode?
     if (in->is_auth() &&
 	in->is_replica(from) &&
-	(ack == NULL || acked_inodes.count(p->second->vino()) == 0)) {
+	(ack == NULL || acked_inodes.count(in->vino()) == 0)) {
       inode_remove_replica(in, from, false, gather_locks);
       dout(10) << " rem " << *in << dendl;
     }
 
-    if (!in->is_dir()) continue;
+    if (!in->is_dir())
+      return;
     
     list<CDir*> dfs;
     in->get_dirfrags(dfs);
@@ -4585,7 +4563,12 @@ void MDCache::rejoin_scour_survivor_replicas(mds_rank_t from, MMDSCacheRejoin *a
 	}
       }
     }
-  }
+  };
+
+  for (auto p : inode_map)
+    scour_func(p.second);
+  for (auto p : snap_inode_map)
+    scour_func(p.second);
 }
 
 
@@ -5470,10 +5453,8 @@ void MDCache::choose_lock_states_and_reconnect_caps()
 
   map<client_t,MClientSnap*> splits;
 
-  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator i = inode_map.begin();
-       i != inode_map.end();
-       ++i) {
-    CInode *in = i->second;
+  for (auto i : inode_map) {
+    CInode *in = i.second;
 
     if (in->last != CEPH_NOSNAP)
       continue;
@@ -5481,9 +5462,8 @@ void MDCache::choose_lock_states_and_reconnect_caps()
     if (in->is_auth() && !in->is_base() && in->inode.is_dirty_rstat())
       in->mark_dirty_rstat();
 
-    auto p = reconnected_caps.find(in->ino());
-
     int dirty_caps = 0;
+    auto p = reconnected_caps.find(in->ino());
     if (p != reconnected_caps.end()) {
       for (const auto &it : p->second)
 	dirty_caps |= it.second.dirty_caps;
@@ -6089,10 +6069,8 @@ void MDCache::reissue_all_caps()
 {
   dout(10) << "reissue_all_caps" << dendl;
 
-  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
-       p != inode_map.end();
-       ++p) {
-    CInode *in = p->second;
+  for (auto p : inode_map) {
+    CInode *in = p.second;
     if (in->is_head() && in->is_any_caps()) {
       // called by MDSRank::active_start(). There shouldn't be any frozen subtree.
       if (in->is_frozen_inode()) {
@@ -6179,10 +6157,8 @@ void MDCache::_queued_file_recover_cow(CInode *in, MutationRef& mut)
 void MDCache::identify_files_to_recover()
 {
   dout(10) << "identify_files_to_recover" << dendl;
-  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
-       p != inode_map.end();
-       ++p) {
-    CInode *in = p->second;
+  for (auto p : inode_map) {
+    CInode *in = p.second;
     if (!in->is_auth())
       continue;
 
@@ -6943,11 +6919,10 @@ void MDCache::trim_non_auth()
   if (lru.lru_get_size() == 0 &&
       bottom_lru.lru_get_size() == 0) {
     // root, stray, etc.?
-    ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+    auto p = inode_map.begin();
     while (p != inode_map.end()) {
-      ceph::unordered_map<vinodeno_t,CInode*>::iterator next = p;
-      ++next;
       CInode *in = p->second;
+      ++p;
       if (!in->is_auth()) {
 	list<CDir*> ls;
 	in->get_dirfrags(ls);
@@ -6964,7 +6939,6 @@ void MDCache::trim_non_auth()
 	assert(in->get_num_ref() == 0);
 	remove_inode(in);
       }
-      p = next;
     }
   }
 
@@ -11676,10 +11650,8 @@ void MDCache::force_readonly()
   mds->server->force_clients_readonly();
 
   // revoke write caps
-  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
-       p != inode_map.end();
-       ++p) {
-    CInode *in = p->second;
+  for (auto p : inode_map) {
+    CInode *in = p.second;
     if (in->is_head())
       mds->locker->eval(in, CEPH_CAP_LOCKS);
   }
@@ -11827,25 +11799,22 @@ void MDCache::show_subtrees(int dbl)
   assert(lost == 0);
 }
 
-
 void MDCache::show_cache()
 {
   dout(7) << "show_cache" << dendl;
-  
-  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
-       it != inode_map.end();
-       ++it) {
+
+  auto show_func = [this](CInode *in) {
     // unlinked?
-    if (!it->second->parent)
-      dout(7) << " unlinked " << *it->second << dendl;
-    
+    if (!in->parent)
+      dout(7) << " unlinked " << *in << dendl;
+
     // dirfrags?
     list<CDir*> dfs;
-    it->second->get_dirfrags(dfs);
+    in->get_dirfrags(dfs);
     for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
       CDir *dir = *p;
       dout(7) << "  dirfrag " << *dir << dendl;
-	    
+
       for (CDir::map_t::iterator p = dir->items.begin();
 	   p != dir->items.end();
 	   ++p) {
@@ -11856,7 +11825,12 @@ void MDCache::show_cache()
 	  dout(7) << "    inode " << *dnl->get_inode() << dendl;
       }
     }
-  }
+  };
+
+  for (auto p : inode_map)
+    show_func(p.second);
+  for (auto p : snap_inode_map)
+    show_func(p.second);
 }
 
 int MDCache::cache_status(Formatter *f)
@@ -11914,11 +11888,8 @@ int MDCache::dump_cache(const char *fn, Formatter *f,
     }
   }
 
-  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
-       it != inode_map.end();
-       ++it) {
-    CInode *in = it->second;
-
+  auto dump_func = [this, fd, f, depth, &dump_root](CInode *in) {
+    int r;
     if (!dump_root.empty()) {
       string ipath;
       if (in->is_root())
@@ -11928,11 +11899,11 @@ int MDCache::dump_cache(const char *fn, Formatter *f,
 
       if (dump_root.length() > ipath.length() ||
 	  !equal(dump_root.begin(), dump_root.end(), ipath.begin()))
-	continue;
+	return 0;
 
       if (depth >= 0 &&
 	  count(ipath.begin() + dump_root.length(), ipath.end(), '/') > depth)
-	continue;
+	return 0;
     }
 
     if (f) {
@@ -11943,9 +11914,8 @@ int MDCache::dump_cache(const char *fn, Formatter *f,
       ss << *in << std::endl;
       std::string s = ss.str();
       r = safe_write(fd, s.c_str(), s.length());
-      if (r < 0) {
-	goto out;
-      }
+      if (r < 0)
+	return r;
     }
 
     list<CDir*> dfs;
@@ -11963,9 +11933,8 @@ int MDCache::dump_cache(const char *fn, Formatter *f,
         tt << " " << *dir << std::endl;
         string t = tt.str();
         r = safe_write(fd, t.c_str(), t.length());
-        if (r < 0) {
-          goto out;
-        }
+        if (r < 0)
+	  return r;
       }
       
       if (f) {
@@ -11984,9 +11953,8 @@ int MDCache::dump_cache(const char *fn, Formatter *f,
           uu << "  " << *dn << std::endl;
           string u = uu.str();
           r = safe_write(fd, u.c_str(), u.length());
-          if (r < 0) {
-            goto out;
-          }
+          if (r < 0)
+	    return r;
         }
       }
       if (f) {
@@ -12004,6 +11972,18 @@ int MDCache::dump_cache(const char *fn, Formatter *f,
     if (f) {
       f->close_section();  // inode
     }
+    return 1;
+  };
+
+  for (auto p : inode_map) {
+    r = dump_func(p.second);
+    if (r < 0)
+      goto out;
+  }
+  for (auto p : snap_inode_map) {
+    r = dump_func(p.second);
+    if (r < 0)
+      goto out;
   }
 
  out:
