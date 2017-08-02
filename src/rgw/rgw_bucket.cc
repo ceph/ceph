@@ -1323,7 +1323,6 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
                   RGWFormatterFlusher& flusher)
 {
   int ret;
-  map<string, rgw_bucket_dir_entry> result;
   map<RGWObjCategory, RGWStorageStats> existing_stats;
   map<RGWObjCategory, RGWStorageStats> calculated_stats;
 

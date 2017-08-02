@@ -88,7 +88,6 @@ void Option::dump(Formatter *f) const
   f->dump_string("name", name);
 
   f->dump_string("type", type_to_str(type));
-  std::string level_str;
 
   f->dump_string("level", level_to_str(level));
 
