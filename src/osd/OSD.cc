@@ -2515,6 +2515,9 @@ int OSD::init()
 
   clear_temp_objects();
 
+  // initialize osdmap references in sharded wq
+  op_shardedwq.prune_pg_waiters(osdmap, whoami);
+
   // load up pgs (as they previously existed)
   load_pgs();
 
