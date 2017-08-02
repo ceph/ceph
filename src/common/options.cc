@@ -3977,6 +3977,10 @@ std::vector<Option> get_rgw_options() {
     .set_default(-1)
     .set_description(""),
 
+    Option("rgw_mp_lock_max_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(600)
+    .set_description(""),
+
     Option("rgw_script_uri", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description(""),

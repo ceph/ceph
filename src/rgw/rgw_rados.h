@@ -2213,6 +2213,7 @@ class RGWRados
   friend class RGWReshard;
   friend class RGWBucketReshard;
   friend class BucketIndexLockGuard;
+  friend class RGWCompleteMultipart;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
