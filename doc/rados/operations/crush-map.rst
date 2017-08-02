@@ -236,7 +236,7 @@ A pool can then be changed to use the new rule with::
 
 Device classes are implemented by creating a "shadow" CRUSH hierarchy
 for each device class in use that contains only devices of that class.
-Rules can then distributed data over the shadow hierarchy.  One nice
+Rules can then distribute data over the shadow hierarchy.  One nice
 thing about this approach is that it is fully backward compatible with
 old Ceph clients.  You can view the CRUSH hierarchy with shadow items
 with::
