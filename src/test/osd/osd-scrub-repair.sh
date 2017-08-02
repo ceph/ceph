@@ -505,16 +505,10 @@ function TEST_corrupt_scrub_replicated() {
 
     local pg=$(get_pg $poolname ROBJ0)
 
-    set_config osd 0 filestore_debug_inject_read_err true || return 1
-    set_config osd 1 filestore_debug_inject_read_err true || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.1.asok \
-             injectdataerr $poolname ROBJ11 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok \
-             injectmdataerr $poolname ROBJ12 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok \
-             injectmdataerr $poolname ROBJ13 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.1.asok \
-             injectdataerr $poolname ROBJ13 || return 1
+    inject_eio rep data $poolname ROBJ11 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
+    inject_eio rep mdata $poolname ROBJ12 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
+    inject_eio rep mdata $poolname ROBJ13 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
+    inject_eio rep data $poolname ROBJ13 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
 
     pg_scrub $pg
 
@@ -877,16 +871,10 @@ EOF
     objectstore_tool $dir 1 $objname set-attr _ $dir/oi
     rm $dir/oi
 
-    set_config osd 0 filestore_debug_inject_read_err true || return 1
-    set_config osd 1 filestore_debug_inject_read_err true || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.1.asok \
-             injectdataerr $poolname ROBJ11 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok \
-             injectmdataerr $poolname ROBJ12 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok \
-             injectmdataerr $poolname ROBJ13 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.1.asok \
-             injectdataerr $poolname ROBJ13 || return 1
+    inject_eio rep data $poolname ROBJ11 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
+    inject_eio rep mdata $poolname ROBJ12 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
+    inject_eio rep mdata $poolname ROBJ13 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
+    inject_eio rep data $poolname ROBJ13 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
     pg_deep_scrub $pg
 
     rados list-inconsistent-pg $poolname > $dir/json || return 1
