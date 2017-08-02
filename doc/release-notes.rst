@@ -30,9 +30,8 @@ Major Changes from Kraken
     and features. FIXME DOCS
   * BlueStore supports *full data and metadata checksums* of all
     data stored by Ceph.
-  * BlueStore supports inline compression using zlib, snappy, or LZ4.  (Ceph
-    also supports zstd for RGW compression but zstd is not recommended for
-    BlueStore for performance reasons.)  FIXME DOCS
+  * BlueStore supports inline compression using zlib, snappy, or LZ4.  (Ceph also supports zstd for `RGW compression <../man/8/radosgw-admin/#options>`_
+    but zstd is not recommended for BlueStore for performance reasons.)  FIXME DOCS
   * *Erasure coded* pools now have `full support for overwrites <../rados/operations/erasure-code/#erasure-coding-with-overwrites>`_,
     allowing them to be used with RBD and CephFS.
   * There is a new daemon, *ceph-mgr*, which is a required part of any
