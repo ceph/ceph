@@ -334,14 +334,17 @@ TempURLEngine::authenticate(const req_state* const s) const
     temp_url_prefix
   };
 
-  const std::array<std::string, 4> temp_url_keys {
-    bucket_info.temp_url_keys[0],
-    bucket_info.temp_url_keys[1],
-    owner_info.temp_url_keys[0],
-    owner_info.temp_url_keys[1]
+  enum class Scope { CONTAINER, ACCOUNT };
+  const auto scoped_temp_url_keys = {
+    std::make_pair(std::cref(owner_info.temp_url_keys[0]), Scope::ACCOUNT),
+    std::make_pair(std::cref(owner_info.temp_url_keys[1]), Scope::ACCOUNT),
+    std::make_pair(std::cref(bucket_info.temp_url_keys[0]), Scope::CONTAINER),
+    std::make_pair(std::cref(bucket_info.temp_url_keys[1]), Scope::CONTAINER),
   };
 
-  for (const auto& temp_url_key : temp_url_keys) {
+  for (const auto& scoped_temp_url_key : scoped_temp_url_keys) {
+    const auto& temp_url_key = scoped_temp_url_key.first;
+    const auto& temp_url_scope = scoped_temp_url_key.second;
 
     if (temp_url_key.empty()) {
       continue;
@@ -357,8 +360,14 @@ TempURLEngine::authenticate(const req_state* const s) const
                           << dendl;
 
         if (sig_helper.is_equal_to(temp_url_sig)) {
-          auto apl = apl_factory->create_apl_turl(cct, s, owner_info);
-          return result_t::grant(std::move(apl));
+          if (Scope::CONTAINER == temp_url_scope) {
+            auto apl = apl_factory->create_apl_turl(cct, s, owner_info,
+                                                    std::move(bucket_info.bucket));
+            return result_t::grant(std::move(apl));
+          } else {
+            auto apl = apl_factory->create_apl_turl(cct, s, owner_info, boost::none);
+            return result_t::grant(std::move(apl));
+          }
         } else {
           ldout(s->cct,  5) << "temp url signature mismatch: " << local_sig
                             << " != " << temp_url_sig  << dendl;

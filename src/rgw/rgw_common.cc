@@ -1116,8 +1116,13 @@ bool verify_bucket_permission(struct req_state * const s,
 			      const optional<Policy>& bucket_policy,
                               const uint64_t op)
 {
-  if (!verify_requester_payer_permission(s))
+  if (s->auth.identity->is_denied_to(bucket)) {
     return false;
+  }
+
+  if (!verify_requester_payer_permission(s)) {
+    return false;
+  }
 
   if (bucket_policy) {
     auto r = bucket_policy->eval(s->env, *s->auth.identity, op, ARN(bucket));
@@ -1131,14 +1136,18 @@ bool verify_bucket_permission(struct req_state * const s,
 
   const auto perm = op_to_perm(op);
 
-  return verify_bucket_permission_no_policy(s, user_acl, bucket_acl, perm);
+  return verify_bucket_permission_no_policy(s, bucket, user_acl, bucket_acl, perm);
 }
 
 bool verify_bucket_permission_no_policy(struct req_state * const s,
+                                        const rgw_bucket& bucket,
 					RGWAccessControlPolicy * const user_acl,
 					RGWAccessControlPolicy * const bucket_acl,
 					const int perm)
 {
+  if (s->auth.identity->is_denied_to(bucket))
+    return false;
+
   if (!bucket_acl)
     return false;
 
@@ -1161,6 +1170,7 @@ bool verify_bucket_permission_no_policy(struct req_state * const s, const int pe
     return false;
 
   return verify_bucket_permission_no_policy(s,
+                                            s->bucket,
                                             s->user_acl.get(),
                                             s->bucket_acl.get(),
                                             perm);
@@ -1188,14 +1198,17 @@ static inline bool check_deferred_bucket_perms(struct req_state * const s,
 	  && verify_bucket_permission(s, bucket, user_acl, bucket_acl, bucket_policy, op));
 }
 
-static inline bool check_deferred_bucket_only_acl(struct req_state * const s,
-						  RGWAccessControlPolicy * const user_acl,
-						  RGWAccessControlPolicy * const bucket_acl,
-						  const uint8_t deferred_check,
-						  const int perm)
+static inline
+bool check_deferred_bucket_only_acl(struct req_state * const s,
+                                    const rgw_bucket& bucket,
+                                    RGWAccessControlPolicy * const user_acl,
+                                    RGWAccessControlPolicy * const bucket_acl,
+                                    const uint8_t deferred_check,
+                                    const int perm)
 {
   return (s->defer_to_bucket_acls == deferred_check \
-	  && verify_bucket_permission_no_policy(s, user_acl, bucket_acl, perm));
+         && verify_bucket_permission_no_policy(s, bucket, user_acl,
+                                               bucket_acl, perm));
 }
 
 bool verify_object_permission(struct req_state * const s,
@@ -1206,8 +1219,13 @@ bool verify_object_permission(struct req_state * const s,
                               const optional<Policy>& bucket_policy,
                               const uint64_t op)
 {
-  if (!verify_requester_payer_permission(s))
+  if (s->auth.identity->is_denied_to(obj.bucket)) {
     return false;
+  }
+
+  if (!verify_requester_payer_permission(s)) {
+    return false;
+  }
 
   if (bucket_policy) {
     auto r = bucket_policy->eval(s->env, *s->auth.identity, op, ARN(obj));
@@ -1265,13 +1283,21 @@ bool verify_object_permission(struct req_state * const s,
 }
 
 bool verify_object_permission_no_policy(struct req_state * const s,
+	                                const rgw_obj& obj,
 					RGWAccessControlPolicy * const user_acl,
 					RGWAccessControlPolicy * const bucket_acl,
 					RGWAccessControlPolicy * const object_acl,
 					const int perm)
 {
-  if (check_deferred_bucket_only_acl(s, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
-      check_deferred_bucket_only_acl(s, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
+  if (s->auth.identity->is_denied_to(obj.bucket)) {
+    return false;
+  }
+
+  if (check_deferred_bucket_only_acl(s, obj.bucket, user_acl, bucket_acl,
+                                     RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
+      check_deferred_bucket_only_acl(s, obj.bucket, user_acl, bucket_acl,
+                                     RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL,
+                                     RGW_PERM_FULL_CONTROL)) {
     return true;
   }
 
@@ -1317,6 +1343,7 @@ bool verify_object_permission_no_policy(struct req_state *s, int perm)
     return false;
 
   return verify_object_permission_no_policy(s,
+                                            rgw_obj(s->bucket, s->object),
                                             s->user_acl.get(),
                                             s->bucket_acl.get(),
                                             s->object_acl.get(),

@@ -2214,6 +2214,7 @@ bool verify_bucket_permission(
 bool verify_bucket_permission(struct req_state * const s, const uint64_t op);
 bool verify_bucket_permission_no_policy(
   struct req_state * const s,
+  const rgw_bucket& bucket,
   RGWAccessControlPolicy * const user_acl,
   RGWAccessControlPolicy * const bucket_acl,
   const int perm);
@@ -2230,6 +2231,7 @@ extern bool verify_object_permission(
 extern bool verify_object_permission(struct req_state *s, uint64_t op);
 extern bool verify_object_permission_no_policy(
   struct req_state * const s,
+  const rgw_obj& obj,
   RGWAccessControlPolicy * const user_acl,
   RGWAccessControlPolicy * const bucket_acl,
   RGWAccessControlPolicy * const object_acl,

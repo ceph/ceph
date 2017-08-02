@@ -50,6 +50,10 @@ public:
    * rgw::auth::Exception storing the reason. */
   virtual bool is_owner_of(const rgw_user& uid) const = 0;
 
+  virtual bool is_denied_to(const rgw_bucket& bucket) const {
+    return false;
+  }
+
   /* Return the permission mask that is used to narrow down the set of
    * operations allowed for a given identity. This method reflects the idea
    * of subuser tied to RGWUserInfo. On  error throws rgw::auth::Exception

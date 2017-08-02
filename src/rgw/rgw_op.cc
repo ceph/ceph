@@ -1337,6 +1337,11 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     bucket_policy = &s->iam_policy;
   }
 
+  if (!verify_bucket_permission(s, bucket, s->user_acl.get(), bucket_acl,
+                               *bucket_policy, rgw::IAM::s3ListBucket)) {
+    return -EPERM;
+  }
+
   /* dry run to find out:
    * - total length (of the parts we are going to send to client),
    * - overall DLO's content size,
@@ -6230,7 +6235,7 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
     }
   }
     
-  return verify_bucket_permission_no_policy(s, s->user_acl.get(),
+  return verify_bucket_permission_no_policy(s, obj.bucket, s->user_acl.get(),
 					    &bacl, RGW_PERM_WRITE);
 }
 

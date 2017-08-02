@@ -18,11 +18,19 @@ namespace swift {
 
 /* TempURL: applier. */
 class TempURLApplier : public rgw::auth::LocalApplier {
+  boost::optional<rgw_bucket> bucket_jail;
+
 public:
   TempURLApplier(CephContext* const cct,
-                 const RGWUserInfo& user_info)
-    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER) {
+                 const RGWUserInfo& user_info,
+                 boost::optional<rgw_bucket> bucket_jail)
+    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER),
+      bucket_jail(std::move(bucket_jail)) {
   };
+
+  bool is_denied_to(const rgw_bucket& bucket) const override {
+    return bucket_jail && !(bucket == *bucket_jail);
+  }
 
   void modify_request_state(req_state * s) const override; /* in/out */
 
@@ -30,7 +38,8 @@ public:
     virtual ~Factory() {}
     virtual aplptr_t create_apl_turl(CephContext* cct,
                                      const req_state* s,
-                                     const RGWUserInfo& user_info) const = 0;
+                                     const RGWUserInfo& user_info,
+                                     boost::optional<rgw_bucket>&& bucket_jail) const = 0;
   };
 };
 
@@ -213,11 +222,13 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_turl(CephContext* const cct,
                            const req_state* const s,
-                           const RGWUserInfo& user_info) const override {
+                           const RGWUserInfo& user_info,
+                           boost::optional<rgw_bucket>&& bucket_jail) const override {
     /* TempURL doesn't need any user account override. It's a Swift-specific
      * mechanism that requires  account name internally, so there is no
      * business with delegating the responsibility outside. */
-    return aplptr_t(new rgw::auth::swift::TempURLApplier(cct, user_info));
+    return aplptr_t(
+      new rgw::auth::swift::TempURLApplier(cct, user_info, std::move(bucket_jail)));
   }
 
 public:
