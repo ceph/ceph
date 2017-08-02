@@ -18,8 +18,8 @@ tasks:
     - had wrong cluster addr
     - reached quota
     - overall HEALTH_
-    - (POOL_FULL)
-    - (POOL_APP_NOT_ENABLED)
+    - \(POOL_FULL\)
+    - \(POOL_APP_NOT_ENABLED\)
 - workunit:
     clients:
       all:

@@ -9,7 +9,7 @@ overrides:
   ceph:
     log-whitelist:
       - overall HEALTH_
-      - (CACHE_POOL_NO_HIT_SET)
+      - \(CACHE_POOL_NO_HIT_SET\)
     conf:
       client:
         rbd clone copy on read: true

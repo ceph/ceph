@@ -3,8 +3,8 @@ overrides:
     log-whitelist:
     - but it is still running
     - overall HEALTH_
-    - (PG_
-    - (MON_DOWN)
+    - \(PG_
+    - \(MON_DOWN\)
 tasks:
 - workunit:
     clients:

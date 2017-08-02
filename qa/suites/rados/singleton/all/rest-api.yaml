@@ -19,10 +19,10 @@ tasks:
       - but it is still running
       - had wrong client addr
       - overall HEALTH_
-      - (OSDMAP_FLAGS)
-      - (OSD_
-      - (PG_
-      - (OBJECT_DEGRADED)
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(OBJECT_DEGRADED\)
     conf:
       client.rest0:
         debug ms: 1

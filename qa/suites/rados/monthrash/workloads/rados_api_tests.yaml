@@ -3,12 +3,12 @@ overrides:
     log-whitelist:
       - reached quota
       - overall HEALTH_
-      - (CACHE_POOL_NO_HIT_SET)
-      - (POOL_FULL)
-      - (REQUEST_SLOW)
-      - (MON_DOWN)
-      - (PG_
-      - (POOL_APP_NOT_ENABLED)
+      - \(CACHE_POOL_NO_HIT_SET\)
+      - \(POOL_FULL\)
+      - \(REQUEST_SLOW\)
+      - \(MON_DOWN\)
+      - \(PG_
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       global:
         debug objecter: 20
