@@ -1,2 +1,11 @@
 >= 12.1.2
 ---------
+
+* Added new commands "pg force-recovery" and "pg-force-backfill". Use them
+  to boost recovery or backfill priority of specified pgs, so they're
+  recovered/backfilled before any other. Note that these commands don't
+  interrupt ongoing recovery/backfill, but merely queue specified pgs
+  before others so they're recovered/backfilled as soon as possible.
+  New commands "pg cancel-force-recovery" and "pg cancel-force-backfill"
+  restore default recovery/backfill priority of previously forced pgs.
+
