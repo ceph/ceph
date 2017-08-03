@@ -2,6 +2,8 @@
 
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
+[ `uname` = FreeBSD ] && exit 0
+
 function run() {
     local dir=$1
     shift
