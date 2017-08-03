@@ -24,5 +24,6 @@ overrides:
     - scrub mismatch
     - ScrubResult
     - wrongly marked
+    - (MDS_FAILED)
     conf:
     fs: xfs
