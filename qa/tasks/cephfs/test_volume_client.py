@@ -230,13 +230,16 @@ vc.disconnect()
 
             # Write something outside volume to check this space usage is
             # not reported in the volume's DF.
-            other_bin_mb = 6
+            other_bin_mb = 8
             self.mount_a.write_n_mb("other.bin", other_bin_mb)
 
             # global: df should see all the writes (data + other).  This is a >
             # rather than a == because the global spaced used includes all pools
-            self.assertGreater(self.mount_a.df()['used'],
-                               (data_bin_mb + other_bin_mb) * 1024 * 1024)
+            def check_df():
+                used = self.mount_a.df()['used']
+                return used >= (other_bin_mb * 1024 * 1024)
+
+            self.wait_until_true(check_df, timeout=30)
 
             # Hack: do a metadata IO to kick rstats
             self.mounts[2].run_shell(["touch", "foo"])
