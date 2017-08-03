@@ -71,6 +71,8 @@ function run() {
     $DRY_RUN ./do_cmake.sh $@ || return 1
     $DRY_RUN cd build
     $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
+    # prevent OSD EMFILE death on tests
+    $DRY_RUN sudo ulimit -n 32768
     if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
         rm -f ${TMPDIR:-/tmp}/ceph-asok.*
         return 1

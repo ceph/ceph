@@ -29,8 +29,8 @@ test_object() {
     local failed=0
     local numtests=0
 
-    tmp1=`mktemp /tmp/typ-XXXXXXXXX`
-    tmp2=`mktemp /tmp/typ-XXXXXXXXX`
+    tmp1=`mktemp /tmp/test_object_1-XXXXXXXXX`
+    tmp2=`mktemp /tmp/test_object_2-XXXXXXXXX`
 
     rm -f $output_file
     if $CEPH_DENCODER type $type 2>/dev/null; then
@@ -62,6 +62,7 @@ test_object() {
         fi
 
         if [ "$iv" = "$version" ]; then
+          rm -rf $tmp1 $tmp2
           break
         fi
       done
@@ -69,6 +70,7 @@ test_object() {
       if [ -n "$incompat" ]; then
         if [ -z "$incompat_paths" ]; then
           echo "skipping incompat $type version $arversion, changed at $incompat < code $myversion"
+          rm -rf $tmp1 $tmp2
 	  return
         else
           # If we are ignoring not whole type, but objects that are in $incompat_path,
@@ -132,14 +134,15 @@ test_object() {
           failed=$(($failed + 1))
         fi
         numtests=$(($numtests + 1))
+	rm -f $tmp1 $tmp2
       done
     else
       echo "skipping unrecognized type $type"
+      rm -f $tmp1 $tmp2
     fi
 
     echo "failed=$failed" > $output_file
     echo "numtests=$numtests" >> $output_file
-    rm -f $tmp1 $tmp2
 }
 
 waitall() { # PID...
@@ -197,7 +200,7 @@ else
   max_parallel_jobs=${MAX_PARALLEL_JOBS:-$(nproc)}
 fi
 
-output_file=`mktemp /tmp/typ-XXXXXXXXX`
+output_file=`mktemp /tmp/output_file-XXXXXXXXX`
 running_jobs=0
 
 for arversion in `ls $dir/archive | sort -n`; do
@@ -219,6 +222,7 @@ for arversion in `ls $dir/archive | sort -n`; do
     if [ "$running_jobs" -eq "$max_parallel_jobs" ]; then
 	do_join
     fi
+    rm -f ${output_file}*
   done
 done
 
