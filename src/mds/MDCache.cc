@@ -8605,7 +8605,6 @@ void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
 {
   if (err < 0 && err != -EAGAIN) {
     info.checked.clear();
-    info.checked.insert(mds->get_nodeid());
     info.checking = MDS_RANK_NONE;
     info.check_peers = true;
     info.fetch_backtrace = true;
@@ -8617,7 +8616,13 @@ void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
       info.last_err = err;
   }
 
-  if (info.check_peers) {
+  if (info.check_peers || info.discover) {
+    if (info.discover) {
+      // got backtrace from peer, but failed to find inode. re-check peers
+      info.discover = false;
+      info.ancestors.clear();
+      info.checked.clear();
+    }
     info.check_peers = false;
     info.checking = MDS_RANK_NONE;
     do_open_ino_peer(ino, info);
@@ -8626,7 +8631,6 @@ void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
     info.fetch_backtrace = false;
     info.checking = mds->get_nodeid();
     info.checked.clear();
-    info.checked.insert(mds->get_nodeid());
     C_IO_MDC_OpenInoBacktraceFetched *fin =
       new C_IO_MDC_OpenInoBacktraceFetched(this, ino);
     fetch_backtrace(ino, info.pool, fin->bl,
@@ -8664,7 +8668,8 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
       }
   }
   if (peer < 0) {
-    if (all.size() > active.size() && all != info.checked) {
+    all.erase(mds->get_nodeid());
+    if (all != info.checked) {
       dout(10) << " waiting for more peers to be active" << dendl;
     } else {
       dout(10) << " all MDS peers have been checked " << dendl;
@@ -8813,7 +8818,6 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSInternalContextBase* fin,
     info.waiters.push_back(fin);
   } else {
     open_ino_info_t& info = opening_inodes[ino];
-    info.checked.insert(mds->get_nodeid());
     info.want_replica = want_replica;
     info.want_xlocked = want_xlocked;
     info.tid = ++open_ino_last_tid;
@@ -8845,7 +8849,6 @@ void MDCache::find_ino_peers(inodeno_t ino, MDSInternalContextBase *c, mds_rank_
   fip.tid = tid;
   fip.fin = c;
   fip.hint = hint;
-  fip.checked.insert(mds->get_nodeid());
   _do_find_ino_peer(fip);
 }
 
@@ -8873,7 +8876,8 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
       }
   }
   if (m == MDS_RANK_NONE) {
-    if (all.size() > active.size()) {
+    all.erase(mds->get_nodeid());
+    if (all != fip.checked) {
       dout(10) << "_do_find_ino_peer waiting for more peers to be active" << dendl;
     } else {
       dout(10) << "_do_find_ino_peer failed on " << fip.ino << dendl;
