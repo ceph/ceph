@@ -9,6 +9,7 @@ tasks:
         - overall HEALTH_
         - \(MGR_DOWN\)
         - \(PG_
+        - No standby daemons available
   - cephfs_test_runner:
       modules:
         - tasks.mgr.test_failover
