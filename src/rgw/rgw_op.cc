@@ -2523,7 +2523,7 @@ void RGWCreateBucket::execute()
       return;
   }
 
-  if (!store->get_zonegroup().is_master_zonegroup() &&
+  if (!store->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
       store->get_zonegroup().api_name != location_constraint) {
     ldout(s->cct, 0) << "location constraint (" << location_constraint << ")"
                      << " doesn't match zonegroup" << " (" << store->get_zonegroup().api_name << ")"
