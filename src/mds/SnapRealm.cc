@@ -187,7 +187,7 @@ bool SnapRealm::open_parents(MDSInternalContextBase *retryorfinish) {
   return true;
 }
 
-bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last)
+bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last) const
 {
   dout(10) << "have_past_parents_open [" << first << "," << last << "]" << dendl;
   if (open)
@@ -196,18 +196,19 @@ bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last)
   if (!srnode.past_parent_snaps.empty())
     assert(mdcache->mds->snapclient->get_cached_version() > 0);
 
-  for (map<snapid_t, snaplink_t>::iterator p = srnode.past_parents.lower_bound(first);
+  for (auto p = srnode.past_parents.lower_bound(first);
        p != srnode.past_parents.end();
        ++p) {
     if (p->second.first > last)
       break;
     dout(10) << " past parent [" << p->second.first << "," << p->first << "] was "
 	     << p->second.ino << dendl;
-    if (open_past_parents.count(p->second.ino) == 0) {
+    auto q = open_past_parents.find(p->second.ino);
+    if (q == open_past_parents.end()) {
       dout(10) << " past parent " << p->second.ino << " is not open" << dendl;
       return false;
     }
-    SnapRealm *parent_realm = open_past_parents[p->second.ino].first;
+    SnapRealm *parent_realm = q->second.first;
     if (!parent_realm->have_past_parents_open(std::max(first, p->second.first),
 					      std::min(last, p->first)))
       return false;
@@ -282,7 +283,7 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
 
 void SnapRealm::check_cache() const
 {
-  assert(open);
+  assert(have_past_parents_open());
   uint64_t destroy_seq = mdcache->mds->snapclient->get_destroy_seq();
   if (cached_seq >= srnode.seq &&
       cached_destroy_seq == destroy_seq)
@@ -632,7 +633,6 @@ void SnapRealm::prune_past_parents()
 {
   dout(10) << "prune_past_parents" << dendl;
   check_cache();
-  assert(open);
 
   // convert past_parents to past_parent_snaps
   if (!srnode.past_parents.empty()) {
