@@ -4,11 +4,13 @@ overrides:
       - reached quota
       - overall HEALTH_
       - \(CACHE_POOL_NO_HIT_SET\)
+      - \(CACHE_POOL_NEAR_FULL\)
       - \(POOL_FULL\)
       - \(REQUEST_SLOW\)
       - \(MON_DOWN\)
       - \(PG_
       - \(POOL_APP_NOT_ENABLED\)
+      - \(SMALLER_PGP_NUM\)
     conf:
       global:
         debug objecter: 20
