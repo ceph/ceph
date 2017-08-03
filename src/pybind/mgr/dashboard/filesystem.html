@@ -246,8 +246,8 @@
                         <tr rv-each-pool="filesystem.pools">
                             <td>{pool.pool}</td>
                             <td>{pool.type}</td>
-                            <td>{pool.used | dimless}</td>
-                            <td>{pool.avail | dimless}</td>
+                            <td>{pool.used | dimless_binary}</td>
+                            <td>{pool.avail | dimless_binary}</td>
                             <td>
                                 <div class="progress"
                                      style="width: 100px; height: 20px;">
