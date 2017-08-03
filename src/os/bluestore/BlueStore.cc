@@ -10928,7 +10928,7 @@ int BlueStore::_do_clone_range(
       // make sure it is shared
       if (!blob.is_shared()) {
 	c->make_blob_shared(_assign_blobid(txc), e.blob);
-	if (dirty_range_begin == 0) {
+	if (dirty_range_begin == 0 && dirty_range_end == 0) {
           dirty_range_begin = e.logical_offset;
         }
         assert(e.logical_end() > 0);
