@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/bind.hpp>
+
 #include "include/scope_guard.h"
 
 #include "common/Throttle.h"
@@ -649,4 +651,130 @@ void OrderedThrottle::complete_pending_ops(UNIQUE_LOCK_T(m_lock)& l) {
 
     ++m_complete_tid;
   }
+}
+
+void TokenBucketThrottle::add_tokens() {
+    throttle.put(m_avg);
+
+    m_token_ctx = new FunctionContext(
+      boost::bind(&TokenBucketThrottle::add_tokens, this));
+
+    m_timer->add_event_after(1, m_token_ctx);
+    return;
+}
+
+void TokenBucketThrottle::cancel_tokens() {
+    m_timer->cancel_event(m_token_ctx);
+}
+
+int TokenBucketThrottle::get(int64_t c) {
+  return throttle.get(c);
+}
+
+void TokenBucketThrottle::set_max(int64_t m) {
+  throttle.set_max(m);
+}
+
+void TokenBucketThrottle::set_avg(int64_t avg) {
+  m_avg = avg;
+}
+
+Bucket::Bucket(CephContext *cct, const std::string& n, int64_t m)
+  : cct(cct), name(n),
+    remain(m), max(m),
+    lock("Bucket::lock")
+{
+}
+
+Bucket::~Bucket()
+{
+  while (!cond.empty()) {
+    Cond *cv = cond.front();
+    delete cv;
+    cond.pop_front();
+  }
+
+}
+
+bool Bucket::_wait(int64_t c)
+{
+  utime_t start;
+  bool waited = false;
+  if (_should_wait(c) || !cond.empty()) { // always wait behind other waiters.
+    Cond *cv = new Cond;
+    cond.push_back(cv);
+    waited = true;
+    ldout(cct, 2) << "_wait waiting..." << dendl;
+
+    do {
+      cv->Wait(lock);
+    } while (_should_wait(c) || cv != cond.front());
+
+    ldout(cct, 2) << "_wait finished waiting" << dendl;
+
+    delete cv;
+    cond.pop_front();
+
+    // wake up the next guy
+    if (!cond.empty())
+      cond.front()->SignalOne();
+  }
+  return waited;
+}
+
+bool Bucket::get(int64_t c)
+{
+  if (0 == max) {
+    return false;
+  }
+
+  assert(c >= 0);
+  bool waited = false;
+  {
+    Mutex::Locker l(lock);
+    int64_t cur, sum;
+    cur = remain;
+    sum = 0;
+    while (sum < c) {
+      waited = _wait(1);
+      cur = remain;
+      if (sum + cur <= c) {
+	remain -= (cur);
+	sum += cur;
+      } else {
+	remain -= (c - sum);
+	sum = c;
+      }
+    }
+  }
+  return waited;
+}
+
+int64_t Bucket::put(int64_t c)
+{
+  if (0 == max) {
+    return 0;
+  }
+
+  assert(c >= 0);
+  Mutex::Locker l(lock);
+  if (c) {
+    int64_t current = remain;
+    if ((current + c) <= (int64_t)max) {
+      remain += c;
+    } else {
+      remain = (int64_t)max;
+    }
+    if (!cond.empty())
+      cond.front()->SignalOne();
+  }
+  return remain;
+}
+
+void Bucket::set_max(int64_t m)
+{
+  Mutex::Locker l(lock);
+  if (remain > m)
+    remain = m;
+  max = m;
 }
