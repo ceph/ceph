@@ -90,7 +90,8 @@ class MDSMonitor : public PaxosService {
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail,
 		  CephContext *cct) const override;
-  int fail_mds(std::ostream &ss, const std::string &arg);
+  int fail_mds(std::ostream &ss, const std::string &arg,
+      MDSMap::mds_info_t *failed_info);
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
@@ -146,6 +147,7 @@ protected:
   // MDS daemon GID to latest health state from that GID
   std::map<uint64_t, MDSHealth> pending_daemon_health;
   std::set<uint64_t> pending_daemon_health_rm;
+
 
   map<mds_gid_t, Metadata> pending_metadata;
 
