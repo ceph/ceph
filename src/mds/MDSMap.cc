@@ -408,29 +408,9 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
 
 void MDSMap::get_health_checks(health_check_map_t *checks) const
 {
-  // FS_WITH_FAILED_MDS
-  // MDS_FAILED
-  if (!failed.empty()) {
-    health_check_t& fscheck = checks->add(
-      "FS_WITH_FAILED_MDS", HEALTH_WARN,
-      "%num% filesystem%plurals% %isorare% have a failed mds daemon");
-    ostringstream ss;
-    ss << "fs " << fs_name << " has " << failed.size() << " failed mds"
-       << (failed.size() > 1 ? "s" : "");
-    fscheck.detail.push_back(ss.str());
-
-    health_check_t& check = checks->add("MDS_FAILED", HEALTH_ERR,
-					 "%num% mds daemon%plurals% down");
-    for (auto p : failed) {
-      std::ostringstream oss;
-      oss << "fs " << fs_name << " mds." << p << " has failed";
-      check.detail.push_back(oss.str());
-    }
-  }
-
   // MDS_DAMAGED
   if (!damaged.empty()) {
-    health_check_t& check = checks->add("MDS_DAMAGED", HEALTH_ERR,
+    health_check_t& check = checks->get_or_add("MDS_DAMAGED", HEALTH_ERR,
 					"%num% mds daemon%plurals% damaged");
     for (auto p : damaged) {
       std::ostringstream oss;
@@ -440,9 +420,8 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
   }
 
   // FS_DEGRADED
-  // MDS_DEGRADED
   if (is_degraded()) {
-    health_check_t& fscheck = checks->add(
+    health_check_t& fscheck = checks->get_or_add(
       "FS_DEGRADED", HEALTH_WARN,
       "%num% filesystem%plurals% %isorare% degraded");
     ostringstream ss;
@@ -468,12 +447,6 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 	ss << " is reconnecting to clients";
       if (ss.str().length())
 	detail.push_back(ss.str());
-    }
-    if (!detail.empty()) {
-      health_check_t& check = checks->add(
-	"MDS_DEGRADED", HEALTH_WARN,
-	"%num% mds daemon%plurals% %isorare% degraded");
-      check.detail.insert(check.detail.end(), detail.begin(), detail.end());
     }
   }
 }
@@ -541,7 +514,13 @@ void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
   DECODE_FINISH(bl);
 }
 
-
+std::string MDSMap::mds_info_t::human_name() const
+{
+  // Like "daemon mds.myhost restarted", "Activating daemon mds.myhost"
+  std::ostringstream out;
+  out << "daemon mds." << name;
+  return out.str();
+}
 
 void MDSMap::encode(bufferlist& bl, uint64_t features) const
 {
