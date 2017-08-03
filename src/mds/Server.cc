@@ -921,6 +921,13 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     return;
   }
 
+  // opening snaprealm past parents needs to use snaptable
+  if (!mds->snapclient->is_synced()) {
+    dout(10) << " snaptable isn't synced, waiting" << dendl;
+    mds->snapclient->wait_for_sync(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
   // notify client of success with an OPEN
   m->get_connection()->send_message(new MClientSession(CEPH_SESSION_OPEN));
   session->last_cap_renew = ceph_clock_now();
@@ -935,13 +942,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       continue;
     if (in) {
       assert(in->snaprealm);
-      if (in->snaprealm->have_past_parents_open()) {
-	dout(15) << "open snaprealm (w/ past parents) on " << *in << dendl;
-	mdcache->finish_snaprealm_reconnect(from, in->snaprealm, snapid_t(p->seq));
-      } else {
-	dout(15) << "open snaprealm (w/o past parents) on " << *in << dendl;
-	mdcache->add_reconnected_snaprealm(from, inodeno_t(p->ino), snapid_t(p->seq));
-      }
+      dout(15) << "open snaprealm (w inode) on " << *in << dendl;
+      mdcache->add_reconnected_snaprealm(from, inodeno_t(p->ino), snapid_t(p->seq));
     } else {
       dout(15) << "open snaprealm (w/o inode) on " << inodeno_t(p->ino)
 	       << " seq " << p->seq << dendl;
@@ -999,7 +1001,15 @@ void Server::reconnect_gather_finish()
 {
   dout(7) << "reconnect_gather_finish.  failed on " << failed_reconnects << " clients" << dendl;
   assert(reconnect_done);
-  reconnect_done->complete(0);
+
+  if (!mds->snapclient->is_synced()) {
+    // make sure snaptable cache is populated. snaprealms will be
+    // extensively used in rejoin stage.
+    dout(7) << " snaptable cache isn't synced, delaying state transition" << dendl;
+    mds->snapclient->wait_for_sync(reconnect_done);
+  } else {
+    reconnect_done->complete(0);
+  }
   reconnect_done = NULL;
 }
 
@@ -6007,7 +6017,7 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   mdr->apply();
 
   if (snap_is_new) //only new if strayin exists
-    mdcache->do_realm_invalidate_and_update_notify(strayin, CEPH_SNAP_OP_SPLIT, true);
+    mdcache->do_realm_invalidate_and_update_notify(strayin, CEPH_SNAP_OP_SPLIT, false);
   
   mdcache->send_dentry_unlink(dn, straydn, mdr);
   
@@ -7305,7 +7315,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
 	bool hadrealm = (oldin->snaprealm ? true : false);
 	oldin->pop_and_dirty_projected_inode(mdr->ls);
 	if (oldin->snaprealm && !hadrealm)
-	  mdcache->do_realm_invalidate_and_update_notify(oldin, CEPH_SNAP_OP_SPLIT);
+	  mdcache->do_realm_invalidate_and_update_notify(oldin, CEPH_SNAP_OP_SPLIT, false);
       } else {
 	// FIXME this snaprealm is not filled out correctly
 	//oldin->open_snaprealm();  might be sufficient..	
@@ -8327,7 +8337,7 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
     return;
 
   SnapRealm *realm = diri->find_snaprealm();
-  map<snapid_t,SnapInfo*> infomap;
+  map<snapid_t,const SnapInfo*> infomap;
   realm->get_snap_info(infomap, diri->get_oldest_snap());
 
   unsigned max_entries = req->head.args.readdir.max_entries;
@@ -8350,7 +8360,7 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
 
   __u32 num = 0;
   bufferlist dnbl;
-  map<snapid_t,SnapInfo*>::iterator p = infomap.upper_bound(last_snapid);
+  auto p = infomap.upper_bound(last_snapid);
   for (; p != infomap.end() && num < max_entries; ++p) {
     dout(10) << p->first << " -> " << *p->second << dendl;
 
@@ -8489,6 +8499,8 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   ::decode(snapid, p);
   dout(10) << " stid " << stid << " snapid " << snapid << dendl;
 
+  assert(mds->snapclient->get_cached_version() >= stid);
+
   // journal
   SnapInfo info;
   info.ino = diri->ino();
@@ -8535,6 +8547,9 @@ void Server::_mksnap_finish(MDRequestRef& mdr, CInode *diri, SnapInfo &info)
 
   // create snap
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
+
+  // notify other mds
+  mdcache->send_snap_update(diri, mdr->more()->stid, op);
 
   mdcache->do_realm_invalidate_and_update_notify(diri, op);
 
@@ -8623,6 +8638,8 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   ::decode(seq, p);  
   dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
 
+  assert(mds->snapclient->get_cached_version() >= stid);
+
   // journal
   inode_t *pi = diri->project_inode();
   pi->version = diri->pre_dirty();
@@ -8662,6 +8679,9 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
   mds->snapclient->commit(stid, mdr->ls);
 
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
+
+  // notify other mds
+  mdcache->send_snap_update(diri, mdr->more()->stid, CEPH_SNAP_OP_DESTROY);
 
   mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_DESTROY);
 
@@ -8766,6 +8786,8 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
   ::decode(seq, p);
   dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
 
+  assert(mds->snapclient->get_cached_version() >= stid);
+
   // journal
   inode_t *pi = diri->project_inode();
   pi->ctime = mdr->get_op_stamp();
@@ -8803,7 +8825,10 @@ void Server::_renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid
 
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_UPDATE, true);
+  // notify other mds
+  mdcache->send_snap_update(diri, mdr->more()->stid, CEPH_SNAP_OP_UPDATE);
+
+  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_UPDATE);
 
   // yay
   mdr->in[0] = diri;

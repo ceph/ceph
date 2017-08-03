@@ -58,6 +58,7 @@ void SnapServer::reset_state()
     if (first_free > last_snap)
       last_snap = first_free;
   }
+  version++;
 }
 
 
@@ -72,8 +73,6 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
   switch (op) {
   case TABLE_OP_CREATE:
     {
-      version++;
-
       SnapInfo info;
       ::decode(info.ino, p);
       if (!p.end()) {
@@ -98,7 +97,6 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       snapid_t snapid;
       ::decode(ino, p);    // not used, currently.
       ::decode(snapid, p);
-      version++;
 
       // bump last_snap... we use it as a version value on the snaprealm.
       ++last_snap;
@@ -120,7 +118,6 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       ::decode(info.stamp, p);
       info.long_name = "update";
 
-      version++;
       // bump last_snap... we use it as a version value on the snaprealm.
       ++last_snap;
       pending_update[version] = info;
@@ -144,7 +141,7 @@ bool SnapServer::_is_prepared(version_t tid) const
     pending_destroy.count(tid);
 }
 
-bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
+void SnapServer::_commit(version_t tid, MMDSTableRequest *req)
 {
   if (pending_update.count(tid)) {
     SnapInfo &info = pending_update[tid];
@@ -180,10 +177,7 @@ bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
   else
     ceph_abort();
 
-  // bump version.
-  version++;
   //dump();
-  return true;
 }
 
 void SnapServer::_rollback(version_t tid) 
@@ -212,8 +206,6 @@ void SnapServer::_rollback(version_t tid)
   else
     ceph_abort();
 
-  // bump version.
-  version++;
   //dump();
 }
 
@@ -234,16 +226,58 @@ void SnapServer::_server_update(bufferlist& bl)
     if (need_to_purge[p->first].empty())
       need_to_purge.erase(p->first);
   }
+}
 
-  version++;
+bool SnapServer::_notify_prep(version_t tid)
+{
+  bufferlist bl;
+  char type = 'F';
+  ::encode(type, bl);
+  ::encode(snaps, bl);
+  ::encode(pending_update, bl);
+  ::encode(pending_destroy, bl);
+  assert(version == tid);
+
+  for (auto p : active_clients) {
+    MMDSTableRequest *m = new MMDSTableRequest(table, TABLESERVER_OP_NOTIFY_PREP, 0, version);
+    m->bl = bl;
+    mds->send_message_mds(m, p);
+  }
+  return true;
 }
 
 void SnapServer::handle_query(MMDSTableRequest *req)
 {
+  char op;
+  bufferlist::iterator p = req->bl.begin();
+  ::decode(op, p);
+
+  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_QUERY_REPLY, req->reqid, version);
+
+  switch (op) {
+    case 'F': // full
+      version_t have_version;
+      ::decode(have_version, p);
+      assert(have_version <= version);
+      if (have_version == version) {
+	char type = 'U';
+	::encode(type, reply->bl);
+      } else {
+	char type = 'F';
+	::encode(type, reply->bl);
+	::encode(snaps, reply->bl);
+	::encode(pending_update, reply->bl);
+	::encode(pending_destroy, reply->bl);
+      }
+      // FIXME: implement incremental change
+      break;
+    default:
+      ceph_abort();
+  };
+
+  mds->send_message(reply, req->get_connection());
   req->put();
 }
-
-
 
 void SnapServer::check_osd_map(bool force)
 {
@@ -373,5 +407,4 @@ void SnapServer::generate_test_instances(list<SnapServer*>& ls)
   populated->pending_noop.insert(890);
 
   ls.push_back(populated);
-
 }

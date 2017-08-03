@@ -60,6 +60,10 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
   case TABLESERVER_OP_QUERY_REPLY:
     handle_query_result(m);
     break;
+
+  case TABLESERVER_OP_NOTIFY_PREP:
+    handle_notify_prep(m);
+    break;
     
   case TABLESERVER_OP_AGREE:
     if (pending_prepare.count(reqid)) {
@@ -187,6 +191,8 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
   pending_commit[tid] = ls;
   ls->pending_commit_tids[table].insert(tid);
 
+  notify_commit(tid);
+
   assert(g_conf->mds_kill_mdstable_at != 4);
 
   if (server_ready) {
@@ -206,6 +212,8 @@ void MDSTableClient::got_journaled_agree(version_t tid, LogSegment *ls)
   dout(10) << "got_journaled_agree " << tid << dendl;
   ls->pending_commit_tids[table].insert(tid);
   pending_commit[tid] = ls;
+
+  notify_commit(tid);
 }
 
 void MDSTableClient::got_journaled_ack(version_t tid)

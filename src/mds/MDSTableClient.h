@@ -61,6 +61,13 @@ public:
     mds(m), table(tab), last_reqid(~0ULL), server_ready(false) {}
   virtual ~MDSTableClient() {}
 
+  set<version_t> get_pending_commits() const {
+    set<version_t> tids;
+    for (auto p : pending_commit)
+      tids.insert(p.first);
+    return tids;
+  }
+
   void handle_request(MMDSTableRequest *m);
 
   void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, MDSInternalContextBase *onfinish);
@@ -85,6 +92,8 @@ public:
   // child must implement
   virtual void resend_queries() = 0;
   virtual void handle_query_result(MMDSTableRequest *m) = 0;
+  virtual void handle_notify_prep(MMDSTableRequest *m) = 0;
+  virtual void notify_commit(version_t tid) = 0;
 
   // and friendly front-end for _prepare.
 
