@@ -158,8 +158,7 @@ void MgrStandby::send_beacon()
   bool available = active_mgr != nullptr && active_mgr->is_initialized();
 
   auto addr = available ? active_mgr->get_server_addr() : entity_addr_t();
-  dout(10) << "sending beacon as gid " << monc.get_global_id()
-	   << " modules " << modules << dendl;
+  dout(10) << "sending beacon as gid " << monc.get_global_id() << dendl;
 
   map<string,string> metadata;
   collect_sys_info(&metadata, g_ceph_context);
