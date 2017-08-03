@@ -1066,10 +1066,16 @@ struct rgw_bucket {
   static void generate_test_instances(list<rgw_bucket*>& o);
 
   bool operator<(const rgw_bucket& b) const {
-    return name.compare(b.name) < 0;
+    if (tenant == b.tenant) {
+      return name < b.name;
+    } else {
+      return tenant < b.tenant;
+    }
   }
+
   bool operator==(const rgw_bucket& b) const {
-    return (name == b.name) && (bucket_id == b.bucket_id);
+    return (tenant == b.tenant) && (name == b.name) && \
+           (bucket_id == b.bucket_id);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
