@@ -1398,8 +1398,16 @@ bool CrushWrapper::class_is_in_use(int class_id, ostream *ss)
   return true;
 }
 
-int CrushWrapper::populate_classes()
+int CrushWrapper::populate_classes(
+  const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket)
 {
+  // build set of previous used shadow ids
+  set<int32_t> used_ids;
+  for (auto& p : old_class_bucket) {
+    for (auto& q : p.second) {
+      used_ids.insert(q.second);
+    }
+  }
   set<int> roots;
   find_nonshadow_roots(roots);
   for (auto &r : roots) {
@@ -1407,7 +1415,8 @@ int CrushWrapper::populate_classes()
       continue;
     for (auto &c : class_name) {
       int clone;
-      int res = device_class_clone(r, c.first, &clone);
+      int res = device_class_clone(r, c.first, old_class_bucket, used_ids,
+				   &clone);
       if (res < 0)
 	return res;
     }
@@ -1856,7 +1865,11 @@ int CrushWrapper::remove_device_class(CephContext *cct, int id, ostream *ss)
   return 0;
 }
 
-int CrushWrapper::device_class_clone(int original_id, int device_class, int *clone)
+int CrushWrapper::device_class_clone(
+  int original_id, int device_class,
+  const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket,
+  const std::set<int32_t>& used_ids,
+  int *clone)
 {
   const char *item_name = get_item_name(original_id);
   if (item_name == NULL)
@@ -1870,15 +1883,13 @@ int CrushWrapper::device_class_clone(int original_id, int device_class, int *clo
     return 0;
   }
   crush_bucket *original = get_bucket(original_id);
-  if (IS_ERR(original))
-    return -ENOENT;
+  assert(!IS_ERR(original));
   crush_bucket *copy = crush_make_bucket(crush,
 					 original->alg,
 					 original->hash,
 					 original->type,
 					 0, NULL, NULL);
-  if(copy == NULL)
-    return -ENOMEM;
+  assert(copy);
   for (unsigned i = 0; i < original->size; i++) {
     int item = original->items[i];
     int weight = crush_get_bucket_item_weight(original, i);
@@ -1890,20 +1901,34 @@ int CrushWrapper::device_class_clone(int original_id, int device_class, int *clo
       }
     } else {
       int child_copy_id;
-      int res = device_class_clone(item, device_class, &child_copy_id);
+      int res = device_class_clone(item, device_class, old_class_bucket,
+				   used_ids, &child_copy_id);
       if (res < 0)
 	return res;
       crush_bucket *child_copy = get_bucket(child_copy_id);
-      if (IS_ERR(child_copy))
-	return -ENOENT;
+      assert(!IS_ERR(child_copy));
       res = bucket_add_item(copy, child_copy_id, child_copy->weight);
       if (res)
 	return res;
     }
   }
-  int res = crush_add_bucket(crush, 0, copy, clone);
+  int bno = 0;
+  if (old_class_bucket.count(original_id) &&
+      old_class_bucket.at(original_id).count(device_class)) {
+    bno = old_class_bucket.at(original_id).at(device_class);
+  } else {
+    // pick a new shadow bucket id that is not used by the current map
+    // *or* any previous shadow buckets.
+    bno = -1;
+    while (crush->buckets[-1-bno] ||
+	   used_ids.count(bno)) {
+      --bno;
+    }
+  }
+  int res = crush_add_bucket(crush, bno, copy, clone);
   if (res)
     return res;
+  assert(!bno || bno == *clone);
   res = set_item_class(*clone, device_class);
   if (res < 0)
     return res;
@@ -1917,10 +1942,12 @@ int CrushWrapper::device_class_clone(int original_id, int device_class, int *clo
 
 int CrushWrapper::rebuild_roots_with_classes()
 {
+  std::map<int32_t, map<int32_t, int32_t> > old_class_bucket = class_bucket;
   int r = trim_roots_with_class(false);
   if (r < 0)
     return r;
-  r = populate_classes();
+  class_bucket.clear();
+  r = populate_classes(old_class_bucket);
   if (r < 0)
     return r;
   return trim_roots_with_class(true);

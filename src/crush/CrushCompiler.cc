@@ -734,7 +734,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   }
 
   for (auto &i : class_id)
-    crush.class_bucket[id][i.first] = i.second;
+    class_bucket[id][i.first] = i.second;
 
   if (verbose) err << "bucket " << name << " (" << id << ") " << size << " items and weight "
 		   << (float)bucketweight / (float)0x10000 << std::endl;
@@ -1084,7 +1084,7 @@ int CrushCompiler::parse_crush(iter_t const& i)
     case crush_grammar::_crushrule:
       if (!saw_rule) {
 	saw_rule = true;
-	crush.populate_classes();
+	crush.populate_classes(class_bucket);
       }
       r = parse_rule(p);
       break;
