@@ -136,7 +136,9 @@ Pool specific commands
   Note: *write* and *seq* must be run on the same host otherwise the
   objects created by *write* will have names that will fail *seq*.
 
-:command:`cleanup`
+:command:`cleanup` [ --run-name *run_name* ] [ --prefix *prefix* ]
+  Clean up a previous benchmark operation.
+  Note: the default run-name is "benchmark_last_metadata"
 
 :command:`listxattr` *name*
   List all extended attributes of an object.
