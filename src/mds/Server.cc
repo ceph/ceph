@@ -3095,7 +3095,7 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     return;
   }
 
-  if (mdr && in->snaprealm && !in->snaprealm->is_open() &&
+  if (mdr && in->snaprealm && !in->snaprealm->have_past_parents_open() &&
       !in->snaprealm->open_parents(new C_MDS_RetryRequest(mdcache, mdr))) {
     return;
   }
