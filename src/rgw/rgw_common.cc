@@ -1861,77 +1861,28 @@ int rgw_parse_op_type_list(const string& str, uint32_t *perm)
   return parse_list_of_flags(op_type_mapping, str, perm);
 }
 
-static int match_internal(boost::string_ref pattern, boost::string_ref input, int (*function)(const char&, const char&))
+bool match_policy(boost::string_view pattern, boost::string_view input,
+                  uint32_t flag)
 {
-  boost::string_ref::iterator it1 = pattern.begin();
-  boost::string_ref::iterator it2 = input.begin();
-  while(true) {
-    if (it1 == pattern.end() && it2 == input.end())
-        return 1;
-    if (it1 == pattern.end() || it2 == input.end())
-        return 0;
-    if (*it1 == '*' && (it1 + 1) == pattern.end() && it2 != input.end())
-      return 1;
-    if (*it1 == '*' && (it1 + 1) == pattern.end() && it2 == input.end())
-      return 0;
-    if (function(*it1, *it2) || *it1 == '?') {
-      ++it1;
-      ++it2;
-      continue;
-    }
-    if (*it1 == '*') {
-      if (function(*(it1 + 1), *it2))
-        ++it1;
-      else
-        ++it2;
-      continue;
-    }
-    return 0;
-  }
-  return 0;
-}
+  const uint32_t flag2 = flag & (MATCH_POLICY_ACTION|MATCH_POLICY_ARN) ?
+      MATCH_CASE_INSENSITIVE : 0;
 
-static int matchcase(const char& c1, const char& c2)
-{
-  if (c1 == c2)
-      return 1;
-  return 0;
-}
-
-static int matchignorecase(const char& c1, const char& c2)
-{
-  if (tolower(c1) == tolower(c2))
-      return 1;
-  return 0;
-}
-
-int match(const string& pattern, const string& input, uint32_t flag)
-{
-  auto last_pos_input = 0, last_pos_pattern = 0;
-
-  while(true) {
+  const auto npos = boost::string_view::npos;
+  boost::string_view::size_type last_pos_input = 0, last_pos_pattern = 0;
+  while (true) {
     auto cur_pos_input = input.find(":", last_pos_input);
     auto cur_pos_pattern = pattern.find(":", last_pos_pattern);
 
-    string substr_input = input.substr(last_pos_input, cur_pos_input);
-    string substr_pattern = pattern.substr(last_pos_pattern, cur_pos_pattern);
+    auto substr_input = input.substr(last_pos_input, cur_pos_input);
+    auto substr_pattern = pattern.substr(last_pos_pattern, cur_pos_pattern);
 
-    int res;
-    if (substr_pattern == "*") {
-      res = 1;
-    } else if (flag & MATCH_POLICY_ACTION || flag & MATCH_POLICY_ARN) {
-      res = match_internal(substr_pattern, substr_input, &matchignorecase);
-    } else {
-      res = match_internal(substr_pattern, substr_input, &matchcase);
-    }
-    if (res == 0)
-      return 0;
+    if (!match_wildcards(substr_pattern, substr_input, flag2))
+      return false;
 
-    if (cur_pos_pattern == string::npos && cur_pos_input == string::npos)
-      return 1;
-    else if ((cur_pos_pattern == string::npos && cur_pos_input != string::npos) ||
-	     (cur_pos_pattern != string::npos && cur_pos_input == string::npos))
-      return 0;
+    if (cur_pos_pattern == npos)
+      return cur_pos_input == npos;
+    if (cur_pos_input == npos)
+      return false;
 
     last_pos_pattern = cur_pos_pattern + 1;
     last_pos_input = cur_pos_input + 1;
