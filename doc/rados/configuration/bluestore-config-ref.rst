@@ -12,12 +12,14 @@ In the simplest case, BlueStore consumes a single (primary) storage
 device.  The storage device is normally partitioned into two parts:
 
 #. A small partition is formatted with XFS and contains basic metadata
-for the OSD.  This *data directory* includes information about the OSD
-(its identifier, which cluster it belongs to, and its private keyring.
+   for the OSD.  This *data directory* includes information about the
+   OSD (its identifier, which cluster it belongs to, and its private
+   keyring.
+
 #. The rest of the device is normally a large partition occupying the
-rest of the device that is managed directly by BlueStore contains all
-of the actual data.  This *main device* is normally identifed by a
-``block`` symlink in data directory.
+   rest of the device that is managed directly by BlueStore contains
+   all of the actual data.  This *primary device* is normally identifed
+   by a ``block`` symlink in data directory.
 
 It is also possible to deploy BlueStore across two additional devices:
 
