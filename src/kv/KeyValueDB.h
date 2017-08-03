@@ -350,10 +350,6 @@ public:
   typedef ceph::shared_ptr< IteratorImpl > Iterator;
 
   WholeSpaceIterator get_iterator() {
-    // a whole-space iterator cannot be used in combination with
-    // column families because it is not smart enough to traverse
-    // across all of them.
-    assert(cf_handles.empty());
     return _get_iterator();
   }
 

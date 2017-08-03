@@ -66,17 +66,19 @@ const string PREFIX_OMAP = "M";    // u64 + keyname -> value
 const string PREFIX_DEFERRED = "L";  // id -> deferred_transaction_t
 const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
 const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
+const string PREFIX_BITMAP = "b";
 
 const std::vector<KeyValueDB::ColumnFamily> cfs =
 {
-  KeyValueDB::ColumnFamily (PREFIX_SUPER, ""),
-  KeyValueDB::ColumnFamily (PREFIX_STAT, ""),
-  KeyValueDB::ColumnFamily(PREFIX_COLL, ""),
+  //KeyValueDB::ColumnFamily(PREFIX_SUPER, ""),
+  //KeyValueDB::ColumnFamily(PREFIX_STAT, ""),
+  //KeyValueDB::ColumnFamily(PREFIX_COLL, ""),
   KeyValueDB::ColumnFamily(PREFIX_OBJ, ""),
-  KeyValueDB::ColumnFamily(PREFIX_OMAP, ""),
-  KeyValueDB::ColumnFamily(PREFIX_DEFERRED, ""),
-  KeyValueDB::ColumnFamily(PREFIX_ALLOC, ""),
-  KeyValueDB::ColumnFamily(PREFIX_SHARED_BLOB, "")
+  //KeyValueDB::ColumnFamily(PREFIX_OMAP, ""),
+  //KeyValueDB::ColumnFamily(PREFIX_DEFERRED, ""),
+  //KeyValueDB::ColumnFamily(PREFIX_ALLOC, ""),
+  KeyValueDB::ColumnFamily(PREFIX_BITMAP, ""),
+  //KeyValueDB::ColumnFamily(PREFIX_SHARED_BLOB, "")
 };
 
 // write a label in the first block.  always use this size.  note that
