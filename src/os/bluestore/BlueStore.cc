@@ -8808,9 +8808,13 @@ int BlueStore::queue_transactions(
   if (txc->deferred_txn) {
     // ensure we do not block here because of deferred writes
     if (!throttle_deferred_bytes.get_or_fail(txc->cost)) {
+      dout(10) << __func__ << " failed get throttle_deferred_bytes, aggressive"
+	       << dendl;
+      ++deferred_aggressive;
       deferred_submit_all();
       throttle_deferred_bytes.get(txc->cost);
-    }
+      --deferred_aggressive;
+   }
   }
   utime_t tend = ceph_clock_now();
 
