@@ -1144,8 +1144,14 @@ void MDSRank::starting_done()
 
   mdcache->open_root();
 
-  // start new segment
-  mdlog->start_new_segment();
+  if (mdcache->is_open()) {
+    mdlog->start_new_segment();
+  } else {
+    mdcache->wait_for_open(new MDSInternalContextWrapper(this,
+			   new FunctionContext([this] (int r) {
+			       mdlog->start_new_segment();
+			   })));
+  }
 }
 
 
@@ -1660,7 +1666,7 @@ void MDSRankDispatcher::handle_mds_map(
 
   // REJOIN
   // is everybody finally rejoining?
-  if (is_rejoin() || is_clientreplay() || is_active() || is_stopping()) {
+  if (is_starting() || is_rejoin() || is_clientreplay() || is_active() || is_stopping()) {
     // did we start?
     if (!oldmap->is_rejoining() && mdsmap->is_rejoining())
       rejoin_joint_start();
@@ -1670,7 +1676,8 @@ void MDSRankDispatcher::handle_mds_map(
 	oldmap->is_rejoining() && !mdsmap->is_rejoining())
       mdcache->dump_cache();      // for DEBUG only
 
-    if (oldstate >= MDSMap::STATE_REJOIN) {
+    if (oldstate >= MDSMap::STATE_REJOIN ||
+	oldstate == MDSMap::STATE_STARTING) {
       // ACTIVE|CLIENTREPLAY|REJOIN => we can discover from them.
       set<mds_rank_t> olddis, dis;
       oldmap->get_mds_set(olddis, MDSMap::STATE_ACTIVE);
