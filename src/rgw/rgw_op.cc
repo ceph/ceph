@@ -2369,6 +2369,21 @@ static void get_bl_oid(struct req_state *s, string& oid)
   return;
 }
 
+int RGWPutBL::validate_prefix(const std::string& prefix, int object_len)
+{
+  int prefix_len = prefix.size();
+  if (prefix_len > (RGWHandler_REST::MAX_OBJ_NAME_LEN - object_len)) {
+    // Prefix too long
+    return -ERR_INVALID_PREFIX;
+  }
+
+  if (check_utf8(prefix.c_str(), prefix_len)) {
+    // Prefix must be valid UTF-8
+    return -ERR_INVALID_PREFIX;
+  }
+  return 0;
+}
+
 void RGWPutBL::execute()
 {
   bufferlist bl;
@@ -2419,7 +2434,7 @@ void RGWPutBL::execute()
        return;
      }
 
-     string tbucket_name = status->get_target_bucket();
+     std::string tbucket_name = status->get_target_bucket();
      if (tbucket_name.empty()) {
        ldout(s->cct, 0) << "PutBL TargetBucket should not be empty." << dendl;
        op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
@@ -2433,6 +2448,15 @@ void RGWPutBL::execute()
        ldout(s->cct, 0) << "PutBL TargetPrefix should be specified." << dendl;
        op_ret = -ERR_MALFORMED_XML;
        s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
+       return;
+     }
+
+#define BUCKET_LOG_OBJ_LEN 36
+     std::string target_prefix = status->get_target_prefix();
+     op_ret = validate_prefix(target_prefix, BUCKET_LOG_OBJ_LEN);
+     if (op_ret) {
+       ldout(s->cct, 0) << "PutBL invalid TargetPrefix" << dendl;
+       s->err.message = "The target prefix for logging is invalid";
        return;
      }
 

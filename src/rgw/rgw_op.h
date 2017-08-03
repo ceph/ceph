@@ -772,6 +772,7 @@ public:
   const string name() override { return "put_bucket_logging"; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_LOGGING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  int validate_prefix(const std::string& prefix, int object_len);
 };
 
 class RGWGetBucketLocation : public RGWOp {
