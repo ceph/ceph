@@ -80,15 +80,41 @@ bool LCRule_S3::xml_end(const char *el) {
   status.clear();
   dm_expiration = false;
 
-  lc_id = static_cast<LCID_S3 *>(find_first("ID"));
-  if (!lc_id)
-    return false;
-  id = lc_id->get_data();
+  // S3 generates a 48 bit random ID, maybe we could generate shorter IDs
+  static constexpr auto LC_ID_LENGTH = 48;
 
-  lc_prefix = static_cast<LCPrefix_S3 *>(find_first("Prefix"));
-  if (!lc_prefix)
-    return false;
-  prefix = lc_prefix->get_data();
+  lc_id = static_cast<LCID_S3 *>(find_first("ID"));
+  if (lc_id){
+    id = lc_id->get_data();
+  } else {
+    gen_rand_alphanumeric_lower(nullptr, &id, LC_ID_LENGTH);
+  }
+
+
+  XMLObj *obj = find_first("Filter");
+
+  if (obj){
+    string _prefix;
+    RGWXMLDecoder::decode_xml("Prefix", _prefix, obj);
+    filter.set_prefix(std::move(_prefix));
+  } else {
+    // Ideally the following code should be deprecated and we should return
+    // False here, The new S3 LC configuration xml spec. makes Filter mandatory
+    // and Prefix optional. However older clients including boto2 still generate
+    // xml according to the older spec, where Prefix existed outside of Filter
+    // and S3 itself seems to be sloppy on enforcing the mandatory Filter
+    // argument. A day will come when S3 enforces their own xml-spec, but it is
+    // not this day
+
+    lc_prefix = static_cast<LCPrefix_S3 *>(find_first("Prefix"));
+
+    if (!lc_prefix){
+      return false;
+    }
+
+    prefix = lc_prefix->get_data();
+  }
+
 
   lc_status = static_cast<LCStatus_S3 *>(find_first("Status"));
   if (!lc_status)
@@ -126,7 +152,12 @@ bool LCRule_S3::xml_end(const char *el) {
 void LCRule_S3::to_xml(CephContext *cct, ostream& out) {
   out << "<Rule>" ;
   out << "<ID>" << id << "</ID>";
-  out << "<Prefix>" << prefix << "</Prefix>";
+  if (!filter.empty()) {
+    LCFilter_S3& lc_filter = static_cast<LCFilter_S3&>(filter);
+    lc_filter.to_xml(out);
+  } else {
+    out << "<Prefix>" << prefix << "</Prefix>";
+  }
   out << "<Status>" << status << "</Status>";
   if (!expiration.empty() || dm_expiration) {
     LCExpiration_S3 expir(expiration.get_days_str(), expiration.get_date(), dm_expiration);
