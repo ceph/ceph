@@ -410,6 +410,7 @@ function run_mon() {
         --id $id \
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
+        --mon-data-avail-warn=5 \
         --paxos-propose-interval=0.1 \
         --osd-crush-chooseleaf-type=0 \
         $EXTRA_OPTS \
