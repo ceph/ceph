@@ -758,6 +758,7 @@ public:
 	   missing.get_items().at(
 	     missing.get_rmissing().begin()->second
 	     ).need) {
+      assert(log.complete_to != log.log.end());
       ++log.complete_to;
     }
     assert(log.complete_to != log.log.end());
