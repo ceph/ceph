@@ -60,4 +60,4 @@ oss tier-confg
   private_key    #[forcible] ufile cloud private key
   bucket_host    #[optional] same as domain_name
   prefix_bucket  #[optional] the prefix of ufile bucket name,reduce the ufile bucket names conflict.
-  dest_bucket    #[optional] the dest bucket name in ufile.if not specify,the ufile bucket name is rgw bucket name.
+  dest_bucket    #[optional] the dest bucket name in oss.if not specify,the oss bucket name is rgw bucket name.
