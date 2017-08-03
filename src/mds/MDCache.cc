@@ -9085,6 +9085,27 @@ void MDCache::request_finish(MDRequestRef& mdr)
     return; 
   }
 
+  switch(mdr->internal_op) {
+    case CEPH_MDS_OP_FRAGMENTDIR:
+      logger->inc(l_mdss_ireq_fragmentdir);
+      break;
+    case CEPH_MDS_OP_EXPORTDIR:
+      logger->inc(l_mdss_ireq_exportdir);
+      break;
+    case CEPH_MDS_OP_ENQUEUE_SCRUB:
+      logger->inc(l_mdss_ireq_enqueue_scrub);
+      break;
+    case CEPH_MDS_OP_FLUSH:
+      logger->inc(l_mdss_ireq_flush);
+      break;
+    case CEPH_MDS_OP_REPAIR_FRAGSTATS:
+      logger->inc(l_mdss_ireq_fragstats);
+      break;
+    case CEPH_MDS_OP_REPAIR_INODESTATS:
+      logger->inc(l_mdss_ireq_inodestats);
+      break;
+  }
+
   request_cleanup(mdr);
 }
 
@@ -12365,6 +12386,19 @@ void MDCache::register_perfcounters()
     pcb.add_u64_counter(l_mdc_recovery_started, "recovery_started", "File recoveries started");
     pcb.add_u64_counter(l_mdc_recovery_completed, "recovery_completed",
         "File recoveries completed", "recd", PerfCountersBuilder::PRIO_INTERESTING);
+
+    pcb.add_u64_counter(l_mdss_ireq_enqueue_scrub, "ireq_enqueue_scrub",
+        "Internal Request type enqueue scrub");
+    pcb.add_u64_counter(l_mdss_ireq_exportdir, "ireq_exportdir",
+        "Internal Request type export dir");
+    pcb.add_u64_counter(l_mdss_ireq_flush, "ireq_flush",
+        "Internal Request type flush");
+    pcb.add_u64_counter(l_mdss_ireq_fragmentdir, "ireq_fragmentdir",
+        "Internal Request type fragmentdir");
+    pcb.add_u64_counter(l_mdss_ireq_fragstats, "ireq_fragstats",
+        "Internal Request type frag stats");
+    pcb.add_u64_counter(l_mdss_ireq_inodestats, "ireq_inodestats",
+        "Internal Request type inode stats");
 
     logger.reset(pcb.create_perf_counters());
     g_ceph_context->get_perfcounters_collection()->add(logger.get());
