@@ -68,8 +68,8 @@ class TestFragmentation(CephFSTestCase):
 
         frags = self.get_dir_ino("/splitdir")['dirfrags']
         self.assertEqual(len(frags), 2)
-        self.assertEqual(frags[0]['dirfrag'], "10000000000.0*")
-        self.assertEqual(frags[1]['dirfrag'], "10000000000.1*")
+        self.assertEqual(frags[0]['dirfrag'], "0x10000000000.0*")
+        self.assertEqual(frags[1]['dirfrag'], "0x10000000000.1*")
         self.assertEqual(
             sum([len(f['dentries']) for f in frags]),
             split_size + 1

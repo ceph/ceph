@@ -216,6 +216,12 @@ The rest (including the actual backporting) will be taken care of by the
 .. _`tracker issue`: http://tracker.ceph.com/
 .. _`Stable Releases and Backports`: http://tracker.ceph.com/projects/ceph-releases/wiki
 
+Guidance for use of cluster log
+-------------------------------
+
+If your patches emit messages to the Ceph cluster log, please consult
+this guidance: :doc:`/dev/logging`.
+
 
 What is merged where and when ?
 ===============================

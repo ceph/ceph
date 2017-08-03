@@ -997,8 +997,8 @@ void CInode::_stored(int r, version_t v, Context *fin)
 {
   if (r < 0) {
     dout(1) << "store error " << r << " v " << v << " on " << *this << dendl;
-    mdcache->mds->clog->error() << "failed to store ino " << ino() << " object,"
-				<< " errno " << r;
+    mdcache->mds->clog->error() << "failed to store inode " << ino()
+                                << " object: " << cpp_strerror(r);
     mdcache->mds->handle_write_error(r);
     fin->complete(r);
     return;
@@ -1078,8 +1078,7 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
   } else if (bl.length()) {
     p = bl.begin();
   } else {
-    derr << "No data while reading inode 0x" << std::hex << ino()
-      << std::dec << dendl;
+    derr << "No data while reading inode " << ino() << dendl;
     fin->complete(-ENOENT);
     return;
   }
@@ -1100,8 +1099,7 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
       fin->complete(0);
     }
   } catch (buffer::error &err) {
-    derr << "Corrupt inode 0x" << std::hex << ino() << std::dec
-      << ": " << err << dendl;
+    derr << "Corrupt inode " << ino() << ": " << err << dendl;
     fin->complete(-EINVAL);
     return;
   }
@@ -1297,7 +1295,7 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
 
   if (err) {
     MDSRank *mds = mdcache->mds;
-    mds->clog->error() << "bad backtrace on dir ino " << ino();
+    mds->clog->error() << "bad backtrace on directory inode " << ino();
     assert(!"bad backtrace" == (g_conf->mds_verify_backtrace > 1));
 
     _mark_dirty_parent(mds->mdlog->get_current_segment(), false);
@@ -2124,10 +2122,12 @@ void CInode::finish_scatter_gather_update(int type)
 	}
       }
 
-      if (pi->dirstat.nfiles < 0 ||
-	  pi->dirstat.nsubdirs < 0) {
-	clog->error() << "bad/negative fragstat on " << ino()
-	    << ", inode has " << pi->dirstat;
+      if (pi->dirstat.nfiles < 0 || pi->dirstat.nsubdirs < 0)
+      {
+        std::string path;
+        make_path_string(path);
+	clog->error() << "Inconsistent statistics detected: fragstat on inode "
+                      << ino() << " (" << path << "), inode has " << pi->dirstat;
 	assert(!"bad/negative fragstat" == g_conf->mds_verify_scatter);
 
 	if (pi->dirstat.nfiles < 0)
@@ -2216,8 +2216,9 @@ void CInode::finish_scatter_gather_update(int type)
 	  if (state_test(CInode::STATE_REPAIRSTATS)) {
 	    dout(20) << " rstat mismatch, fixing" << dendl;
 	  } else {
-	    clog->error() << "unmatched rstat on " << ino() << ", inode has "
-			  << pi->rstat << ", dirfrags have " << rstat;
+	    clog->error() << "inconsistent rstat on inode " << ino()
+                          << ", inode has " << pi->rstat
+                          << ", directory fragments have " << rstat;
 	    assert(!"unmatched rstat" == g_conf->mds_verify_scatter);
 	  }
 	  // trust the dirfrag for now
@@ -3923,8 +3924,8 @@ next:
       if (!results->backtrace.passed && in->scrub_infop->header->get_repair()) {
         std::string path;
         in->make_path_string(path);
-        in->mdcache->mds->clog->warn() << "bad backtrace on inode " << *in
-                           << ", rewriting it at " << path;
+        in->mdcache->mds->clog->warn() << "bad backtrace on inode " << in->ino()
+                                       << "(" << path << "), rewriting it";
         in->_mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
                            false);
       }
@@ -3934,7 +3935,7 @@ next:
       {
         InoTable *inotable = mdcache->mds->inotable;
 
-        dout(10) << "scrub: inotable ino = 0x" << std::hex << inode.ino << dendl;
+        dout(10) << "scrub: inotable ino = " << inode.ino << dendl;
         dout(10) << "scrub: inotable free says "
           << inotable->is_marked_free(inode.ino) << dendl;
 
