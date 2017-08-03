@@ -577,7 +577,7 @@ PyObject *PyModules::get_config_prefix(const std::string &handle,
 }
 
 void PyModules::set_config(const std::string &handle,
-    const std::string &key, const std::string &val)
+    const std::string &key, const boost::optional<std::string>& val)
 {
   const std::string global_key = config_prefix + handle + "/" + key;
 
@@ -586,18 +586,25 @@ void PyModules::set_config(const std::string &handle,
     PyThreadState *tstate = PyEval_SaveThread();
     Mutex::Locker l(lock);
     PyEval_RestoreThread(tstate);
-    config_cache[global_key] = val;
+    if (val) {
+      config_cache[global_key] = *val;
+    } else {
+      config_cache.erase(global_key);
+    }
 
     std::ostringstream cmd_json;
-
     JSONFormatter jf;
     jf.open_object_section("cmd");
-    jf.dump_string("prefix", "config-key set");
-    jf.dump_string("key", global_key);
-    jf.dump_string("val", val);
+    if (val) {
+      jf.dump_string("prefix", "config-key set");
+      jf.dump_string("key", global_key);
+      jf.dump_string("val", *val);
+    } else {
+      jf.dump_string("prefix", "config-key del");
+      jf.dump_string("key", global_key);
+    }
     jf.close_section();
     jf.flush(cmd_json);
-
     set_cmd.run(&monc, cmd_json.str());
   }
   set_cmd.wait();
