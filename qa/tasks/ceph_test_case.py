@@ -84,7 +84,7 @@ class CephTestCase(unittest.TestCase):
         def seen_health_warning():
             health = self.ceph_cluster.mon_manager.get_mon_health()
             codes = [s for s in health['checks']]
-            summary_strings = [s[1]['message'] for s in health['checks'].iteritems()]
+            summary_strings = [s[1]['summary']['message'] for s in health['checks'].iteritems()]
             if len(summary_strings) == 0:
                 log.debug("Not expected number of summary strings ({0})".format(summary_strings))
                 return False
