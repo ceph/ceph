@@ -13,6 +13,7 @@
 
 #include <Python.h>
 
+#include "global/pidfile.h"
 #include "common/errno.h"
 #include "common/signal.h"
 #include "include/compat.h"
@@ -205,7 +206,13 @@ void MgrStandby::handle_signal(int signum)
   Mutex::Locker l(lock);
   assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
-  shutdown();
+
+  // FIXME: we can't reliably shut down the python environment.  Just exit.
+  pidfile_remove();
+  g_ceph_context->_log->flush();
+  _exit(0);
+
+  //shutdown();
 }
 
 void MgrStandby::shutdown()
