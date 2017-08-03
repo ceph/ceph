@@ -2710,6 +2710,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     return;
   }
 
+  bool need_unpin = false;
   int op = m->get_op();
 
   // flushsnap?
@@ -2722,6 +2723,13 @@ void Locker::handle_client_caps(MClientCaps *m)
     SnapRealm *realm = head_in->find_snaprealm();
     snapid_t snap = realm->get_snap_following(follows);
     dout(10) << "  flushsnap follows " << follows << " -> snap " << snap << dendl;
+
+    auto p = head_in->client_need_snapflush.begin();
+    if (p != head_in->client_need_snapflush.end() && p->first < snap) {
+      head_in->auth_pin(this); // prevent subtree frozen
+      need_unpin = true;
+      _do_null_snapflush(head_in, client, snap);
+    }
 
     CInode *in = head_in;
     if (snap != CEPH_NOSNAP) {
@@ -2750,8 +2758,6 @@ void Locker::handle_client_caps(MClientCaps *m)
       // this cap now follows a later snap (i.e. the one initiating this flush, or later)
       if (in == head_in)
 	cap->client_follows = snap < CEPH_NOSNAP ? snap : realm->get_newest_seq();
-      else if (head_in->client_need_snapflush.begin()->first < snap)
-	_do_null_snapflush(head_in, client, snap);
    
       _do_snap_update(in, snap, m->get_dirty(), follows, client, m, ack);
 
@@ -2807,6 +2813,8 @@ void Locker::handle_client_caps(MClientCaps *m)
     //  update/release).
     if (!head_in->client_need_snapflush.empty()) {
       if ((cap->issued() & CEPH_CAP_ANY_FILE_WR) == 0) {
+	head_in->auth_pin(this); // prevent subtree frozen
+	need_unpin = true;
 	_do_null_snapflush(head_in, client);
       } else {
 	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
@@ -2862,6 +2870,8 @@ void Locker::handle_client_caps(MClientCaps *m)
   }
 
  out:
+  if (need_unpin)
+    head_in->auth_unpin(this);
   m->put();
 }
 
