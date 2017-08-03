@@ -91,6 +91,47 @@ public:
 };
 WRITE_CLASS_ENCODER(LCExpiration)
 
+class LCFilter
+{
+ protected:
+  std::string prefix;
+  // TODO add support for tagging
+ public:
+  const std::string& get_prefix() const{
+    return prefix;
+  }
+
+  void set_prefix(const string& _prefix){
+    prefix = _prefix;
+  }
+
+  void set_prefix(std::string&& _prefix){
+    prefix = std::move(_prefix);
+  }
+
+  bool empty() const {
+    return prefix.empty();
+  }
+
+  bool has_prefix() const {
+    return !prefix.empty();
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(prefix, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(prefix, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(LCFilter);
+
+
+
 class LCRule
 {
 protected:
@@ -100,6 +141,7 @@ protected:
   LCExpiration expiration;
   LCExpiration noncur_expiration;
   LCExpiration mp_expiration;
+  LCFilter filter;
   bool dm_expiration = false;
 
 public:
@@ -115,9 +157,13 @@ public:
   string& get_status() {
       return status;
   }
-  
+
   string& get_prefix() {
       return prefix;
+  }
+
+  LCFilter& get_filter() {
+    return filter;
   }
 
   LCExpiration& get_expiration() {
@@ -167,7 +213,7 @@ public:
   bool valid();
   
   void encode(bufferlist& bl) const {
-     ENCODE_START(4, 1, bl);
+     ENCODE_START(5, 1, bl);
      ::encode(id, bl);
      ::encode(prefix, bl);
      ::encode(status, bl);
@@ -175,10 +221,11 @@ public:
      ::encode(noncur_expiration, bl);
      ::encode(mp_expiration, bl);
      ::encode(dm_expiration, bl);
+     ::encode(filter, bl);
      ENCODE_FINISH(bl);
    }
    void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN(4, 1, 1, bl);
+     DECODE_START_LEGACY_COMPAT_LEN(5, 1, 1, bl);
      ::decode(id, bl);
      ::decode(prefix, bl);
      ::decode(status, bl);
@@ -191,6 +238,9 @@ public:
      }
      if (struct_v >= 4) {
         ::decode(dm_expiration, bl);
+     }
+     if (struct_v >= 5) {
+       ::decode(filter, bl);
      }
      DECODE_FINISH(bl);
    }
