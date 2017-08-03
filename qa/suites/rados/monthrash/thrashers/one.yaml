@@ -3,6 +3,7 @@ overrides:
     log-whitelist:
       - overall HEALTH_
       - \(MON_DOWN\)
+      - \(SMALLER_PGP_NUM\)
 tasks:
 - mon_thrash:
     revive_delay: 20

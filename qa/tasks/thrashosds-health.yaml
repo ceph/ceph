@@ -11,3 +11,5 @@ overrides:
       - \(OBJECT_
       - \(REQUEST_SLOW\)
       - \(TOO_FEW_PGS\)
+      - \(FS_DEGRADED\)
+
