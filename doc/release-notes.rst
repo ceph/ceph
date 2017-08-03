@@ -44,52 +44,6 @@ Major Changes from Kraken
   * *Erasure coded* pools now have `full support for overwrites <../rados/operations/erasure-code/#erasure-coding-with-overwrites>`_,
     allowing them to be used with RBD and CephFS.
 
-  * The configuration option "osd pool erasure code stripe width" has
-    been replaced by "osd pool erasure code stripe unit", and given the
-    ability to be overridden by the erasure code profile setting
-    "stripe_unit". For more details see "Erasure Code Profiles" in the
-    documentation.
-
-  * rbd and cephfs can use erasure coding with bluestore. This may be
-    enabled by setting 'allow_ec_overwrites' to 'true' for a pool. Since
-    this relies on bluestore's checksumming to do deep scrubbing,
-    enabling this on a pool stored on filestore is not allowed.
-
-  * The 'rados df' JSON output now prints numeric values as numbers instead of
-    strings.
-
-  * The ``mon_osd_max_op_age`` option has been renamed to
-    ``mon_osd_warn_op_age`` (default: 32 seconds), to indicate we
-    generate a warning at this age.  There is also a new
-    ``mon_osd_err_op_age_ratio`` that is a expressed as a multitple of
-    ``mon_osd_warn_op_age`` (default: 128, for roughly 60 minutes) to
-    control when an error is generated.
-
-  * The default maximum size for a single RADOS object has been reduced from
-    100GB to 128MB.  The 100GB limit was completely impractical in practice
-    while the 128MB limit is a bit high but not unreasonable.  If you have an
-    application written directly to librados that is using objects larger than
-    128MB you may need to adjust ``osd_max_object_size``.
-
-  * The semantics of the 'rados ls' and librados object listing
-    operations have always been a bit confusing in that "whiteout"
-    objects (which logically don't exist and will return ENOENT if you
-    try to access them) are included in the results.  Previously
-    whiteouts only occurred in cache tier pools.  In luminous, logically
-    deleted but snapshotted objects now result in a whiteout object, and
-    as a result they will appear in 'rados ls' results, even though
-    trying to read such an object will result in ENOENT.  The 'rados
-    listsnaps' operation can be used in such a case to enumerate which
-    snapshots are present.
-
-    This may seem a bit strange, but is less strange than having a
-    deleted-but-snapshotted object not appear at all and be completely
-    hidden from librados's ability to enumerate objects.  Future
-    versions of Ceph will likely include an alternative object
-    enumeration interface that makes it more natural and efficient to
-    enumerate all objects along with their snapshot and clone metadata.
-
-
   * *ceph-mgr*:
 
     - There is a new daemon, *ceph-mgr*, which is a required part of any
@@ -102,12 +56,6 @@ Major Changes from Kraken
       will form the basis for API-based management of Ceph going forward.
     - *ceph-mgr* also includes a `Prometheus exporter <../mgr/prometheus>`_
        plugin, which can provide Ceph perfcounters to Prometheus.
-
-
-    - The `status` ceph-mgr module is enabled by default, and initially provides two
-      commands: `ceph tell mgr osd status` and `ceph tell mgr fs status`.  These
-      are high level colorized views to complement the existing CLI.
-
 
   * The overall *scalability* of the cluster has improved. We have
     successfully tested clusters with up to 10,000 OSDs.
@@ -143,16 +91,6 @@ Major Changes from Kraken
     ``osd_snap_trim_sleep``, and ``osd_scrub_sleep`` have been
     reimplemented to work efficiently.  (These are used in some cases
     to work around issues throttling background work.)
-
-  * The deprecated 'crush_ruleset' property has finally been removed; please use
-    'crush_rule' instead for the 'osd pool get ...' and 'osd pool set ..' commands.
-
-   * The 'osd pool default crush replicated ruleset' option has been
-     removed and replaced by the 'osd pool default crush rule' option.
-     By default it is -1, which means the mon will pick the first type
-     replicated rule in the CRUSH map for replicated pools.  Erasure
-     coded pools have rules that are automatically created for them if they are
-     not specified at pool creation time.
 
 - *RGW*:
 
@@ -488,8 +426,64 @@ upgrade to Luminous.
 Upgrade compatibility notes, Kraken to Luminous
 -----------------------------------------------
 
+* The configuration option ``osd pool erasure code stripe width`` has
+  been replaced by ``osd pool erasure code stripe unit``, and given
+  the ability to be overridden by the erasure code profile setting
+  ``stripe_unit``. For more details see
+  :doc:`/rados/operations/erasure-code/#erasure-code-profiles`.
+
+* rbd and cephfs can use erasure coding with bluestore. This may be
+  enabled by setting ``allow_ec_overwrites`` to ``true`` for a pool. Since
+  this relies on bluestore's checksumming to do deep scrubbing,
+  enabling this on a pool stored on filestore is not allowed.
+
+* The ``rados df`` JSON output now prints numeric values as numbers instead of
+  strings.
+
+* The ``mon_osd_max_op_age`` option has been renamed to
+  ``mon_osd_warn_op_age`` (default: 32 seconds), to indicate we
+  generate a warning at this age.  There is also a new
+  ``mon_osd_err_op_age_ratio`` that is a expressed as a multitple of
+  ``mon_osd_warn_op_age`` (default: 128, for roughly 60 minutes) to
+  control when an error is generated.
+
+* The default maximum size for a single RADOS object has been reduced from
+  100GB to 128MB.  The 100GB limit was completely impractical in practice
+  while the 128MB limit is a bit high but not unreasonable.  If you have an
+  application written directly to librados that is using objects larger than
+  128MB you may need to adjust ``osd_max_object_size``.
+
+* The semantics of the ``rados ls`` and librados object listing
+  operations have always been a bit confusing in that "whiteout"
+  objects (which logically don't exist and will return ENOENT if you
+  try to access them) are included in the results.  Previously
+  whiteouts only occurred in cache tier pools.  In luminous, logically
+  deleted but snapshotted objects now result in a whiteout object, and
+  as a result they will appear in ``rados ls`` results, even though
+  trying to read such an object will result in ENOENT.  The ``rados
+  listsnaps`` operation can be used in such a case to enumerate which
+  snapshots are present.
+
+  This may seem a bit strange, but is less strange than having a
+  deleted-but-snapshotted object not appear at all and be completely
+  hidden from librados's ability to enumerate objects.  Future
+  versions of Ceph will likely include an alternative object
+  enumeration interface that makes it more natural and efficient to
+  enumerate all objects along with their snapshot and clone metadata.
+
+* The deprecated ``crush_ruleset`` property has finally been removed;
+  please use  ``crush_rule`` instead for the ``osd pool get ...`` and ``osd
+  pool set ...`` commands.
+
+* The ``osd pool default crush replicated ruleset`` option has been
+  removed and replaced by the ``psd pool default crush rule`` option.
+  By default it is -1, which means the mon will pick the first type
+  replicated rule in the CRUSH map for replicated pools.  Erasure
+  coded pools have rules that are automatically created for them if
+  they are not specified at pool creation time.
+
 * We no longer test the FileStore ceph-osd backend in combination with
-  ``btrfs``.  We recommend against using btrfs.  If you are using
+  btrfs.  We recommend against using btrfs.  If you are using
   btrfs-based OSDs and want to upgrade to luminous you will need to
   add the follwing to your ceph.conf::
 
