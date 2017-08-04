@@ -841,23 +841,38 @@ protected:
     // strip out and ignore ERROR entries
     mempool::osd_pglog::list<pg_log_entry_t> entries;
     eversion_t last;
+    bool seen_non_error = false;
     for (list<pg_log_entry_t>::const_iterator i = orig_entries.begin();
 	 i != orig_entries.end();
 	 ++i) {
       // all entries are on hoid
       assert(i->soid == hoid);
-      if (i != orig_entries.begin() && i->prior_version != eversion_t()) {
+      // did not see error entries before this entry and this entry is not error
+      // then this entry is the first non error entry
+      bool first_non_error = ! seen_non_error && ! i->is_error();
+      if (! i->is_error() ) {
+        // see a non error entry now
+        seen_non_error = true;
+      }
+      
+      // No need to check the first entry since it prior_version is unavailable
+      // in the list
+      // No need to check if the prior_version is the minimal version
+      // No need to check the first non-error entry since the leading error
+      // entries are not its prior version
+      if (i != orig_entries.begin() && i->prior_version != eversion_t() &&
+          ! first_non_error) {
 	// in increasing order of version
 	assert(i->version > last);
 	// prior_version correct (unless it is an ERROR entry)
 	assert(i->prior_version == last || i->is_error());
       }
-      last = i->version;
       if (i->is_error()) {
 	ldpp_dout(dpp, 20) << __func__ << ": ignoring " << *i << dendl;
       } else {
 	ldpp_dout(dpp, 20) << __func__ << ": keeping " << *i << dendl;
 	entries.push_back(*i);
+	last = i->version;
       }
     }
     if (entries.empty()) {

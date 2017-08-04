@@ -93,6 +93,16 @@ struct PGLogTestBase {
     e.reqid = reqid;
     return e;
   }
+  static pg_log_entry_t mk_ple_err(
+    const hobject_t &hoid, eversion_t v, osd_reqid_t reqid) {
+    pg_log_entry_t e;
+    e.op = pg_log_entry_t::ERROR;
+    e.soid = hoid;
+    e.version = v;
+    e.prior_version = eversion_t(0, 0);
+    e.reqid = reqid;
+    return e;
+  }
   static pg_log_entry_t mk_ple_mod(
     const hobject_t &hoid, eversion_t v, eversion_t pv) {
     return mk_ple_mod(hoid, v, pv, osd_reqid_t());
@@ -108,6 +118,10 @@ struct PGLogTestBase {
   static pg_log_entry_t mk_ple_dt_rb(
     const hobject_t &hoid, eversion_t v, eversion_t pv) {
     return mk_ple_dt_rb(hoid, v, pv, osd_reqid_t());
+  }
+  static pg_log_entry_t mk_ple_err(
+    const hobject_t &hoid, eversion_t v) {
+    return mk_ple_err(hoid, v, osd_reqid_t());
   }
 }; // PGLogTestBase
 
@@ -2909,6 +2923,62 @@ TEST_F(PGLogTrimTest, TestGetRequest) {
   EXPECT_FALSE(result);
 }
 
+TEST_F(PGLogTest, _merge_object_divergent_entries) {
+  {
+    // Test for issue 20843
+    clear();
+    hobject_t hoid(object_t(/*name*/"notify.7"),
+                   /*key*/string(""),
+                   /*snap*/7,
+                   /*hash*/77,
+                   /*pool*/5,
+                   /*nspace*/string(""));
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    orig_entries.push_back(mk_ple_mod(hoid, eversion_t(8336, 957), eversion_t(8336, 952)));
+    orig_entries.push_back(mk_ple_err(hoid, eversion_t(8336, 958)));
+    orig_entries.push_back(mk_ple_err(hoid, eversion_t(8336, 959)));
+    orig_entries.push_back(mk_ple_mod(hoid, eversion_t(8336, 960), eversion_t(8336, 957)));
+    log.add(mk_ple_mod(hoid, eversion_t(8973, 1075), eversion_t(8971, 1070)));
+    missing.add(hoid,
+                /*need*/eversion_t(8971, 1070),
+                /*have*/eversion_t(8336, 952),
+                false);
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    _merge_object_divergent_entries(log, hoid,
+                                    orig_entries, oinfo,
+                                    log.get_can_rollback_to(),
+                                    missing, &rollbacker,
+                                    this);
+    // No core dump
+  }
+  {
+    // skip leading error entries
+    clear();
+    hobject_t hoid(object_t(/*name*/"notify.7"),
+                   /*key*/string(""),
+                   /*snap*/7,
+                   /*hash*/77,
+                   /*pool*/5,
+                   /*nspace*/string(""));
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    orig_entries.push_back(mk_ple_err(hoid, eversion_t(8336, 956)));
+    orig_entries.push_back(mk_ple_mod(hoid, eversion_t(8336, 957), eversion_t(8336, 952)));
+    log.add(mk_ple_mod(hoid, eversion_t(8973, 1075), eversion_t(8971, 1070)));
+    missing.add(hoid,
+                /*need*/eversion_t(8971, 1070),
+                /*have*/eversion_t(8336, 952),
+                false);
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    _merge_object_divergent_entries(log, hoid,
+                                    orig_entries, oinfo,
+                                    log.get_can_rollback_to(),
+                                    missing, &rollbacker,
+                                    this);
+    // No core dump
+  }
+}
 
 // Local Variables:
 // compile-command: "cd ../.. ; make unittest_pglog ; ./unittest_pglog --log-to-stderr=true  --debug-osd=20 # --gtest_filter=*.* "
