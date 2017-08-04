@@ -1204,7 +1204,7 @@ TEST(CrushWrapper, split_id_class) {
   ASSERT_EQ(-1, retrieved_class_id);
 }
 
-TEST(CrushWrapper, populate_and_cleanup_classes) {
+TEST(CrushWrapper, populate_classes) {
   CrushWrapper c;
   c.create();
   c.set_type_name(1, "root");
@@ -1226,10 +1226,6 @@ TEST(CrushWrapper, populate_and_cleanup_classes) {
   old_class_bucket = c.class_bucket;
   ASSERT_EQ(c.populate_classes(old_class_bucket), 0);
   ASSERT_EQ(old_class_bucket, c.class_bucket);
-  
-  c.class_bucket.clear();
-  ASSERT_EQ(c.cleanup_classes(), 0);
-  ASSERT_FALSE(c.name_exists("default~ssd"));
 }
 
 TEST(CrushWrapper, remove_class_name) {

@@ -1425,11 +1425,6 @@ int CrushWrapper::populate_classes(
   return 0;
 }
 
-int CrushWrapper::cleanup_classes()
-{
-  return trim_roots_with_class(true);
-}
-
 int CrushWrapper::trim_roots_with_class(bool unused)
 {
   set<int> roots;
@@ -1948,10 +1943,7 @@ int CrushWrapper::rebuild_roots_with_classes()
   if (r < 0)
     return r;
   class_bucket.clear();
-  r = populate_classes(old_class_bucket);
-  if (r < 0)
-    return r;
-  return trim_roots_with_class(true);
+  return populate_classes(old_class_bucket);
 }
 
 void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
@@ -2206,7 +2198,6 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
       for (auto &c : class_name)
 	class_rname[c.second] = c.first;
       ::decode(class_bucket, blp);
-      cleanup_classes();
     }
     if (!blp.end()) {
       __u32 choose_args_size;
