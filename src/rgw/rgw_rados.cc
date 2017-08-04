@@ -7739,6 +7739,13 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   obj_time_weight dest_mtime_weight;
 
   if (copy_if_newer) {
+    rgw_cls_bi_entry dummy;                                                                  
+    ret = bi_get(dest_bucket_info.bucket, dest_obj, PlainIdx, &dummy);                
+    if (ret)                                                                                 
+      copy_if_newer = false;                                                                 
+  } 
+
+  if (copy_if_newer) {
     /* need to get mtime for destination */
     ret = get_obj_state(&obj_ctx, dest_bucket_info, dest_obj, &dest_state, false);
     if (ret < 0)
