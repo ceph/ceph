@@ -175,6 +175,12 @@ COMMAND("auth get-or-create " \
 	"name=caps,type=CephString,n=N,req=false", \
 	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command", \
 	"auth", "rwx", "cli,rest")
+COMMAND("fs authorize " \
+   "name=filesystem,type=CephString " \
+   "name=entity,type=CephString " \
+	"name=caps,type=CephString,n=N", \
+	"add auth for <entity> to access file system <filesystem> based on following directory and permissions pairs", \
+	"auth", "rwx", "cli,rest")
 COMMAND("auth caps " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N", \
