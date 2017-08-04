@@ -291,8 +291,6 @@ int CrushCompiler::decompile_choose_args(const std::pair<const long unsigned int
 
 int CrushCompiler::decompile(ostream &out)
 {
-  crush.cleanup_classes();
-
   out << "# begin crush map\n";
 
   // only dump tunables if they differ from the defaults
@@ -734,7 +732,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   }
 
   for (auto &i : class_id)
-    crush.class_bucket[id][i.first] = i.second;
+    class_bucket[id][i.first] = i.second;
 
   if (verbose) err << "bucket " << name << " (" << id << ") " << size << " items and weight "
 		   << (float)bucketweight / (float)0x10000 << std::endl;
@@ -1084,7 +1082,7 @@ int CrushCompiler::parse_crush(iter_t const& i)
     case crush_grammar::_crushrule:
       if (!saw_rule) {
 	saw_rule = true;
-	crush.populate_classes();
+	crush.populate_classes(class_bucket);
       }
       r = parse_rule(p);
       break;
@@ -1100,7 +1098,6 @@ int CrushCompiler::parse_crush(iter_t const& i)
   }
 
   //err << "max_devices " << crush.get_max_devices() << std::endl;
-  crush.cleanup_classes();
   crush.finalize();
 
   return 0;

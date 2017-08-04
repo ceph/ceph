@@ -7391,7 +7391,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         }
 
         auto class_name = newcrush.get_item_class(osd);
-        stringstream ts;
         if (!class_name) {
           ss << "osd." << osd << " belongs to no class, ";
           continue;

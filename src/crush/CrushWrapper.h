@@ -65,6 +65,7 @@ public:
   std::map<int32_t, string> type_map; /* bucket/device type names */
   std::map<int32_t, string> name_map; /* bucket/device names */
   std::map<int32_t, string> rule_name_map;
+
   std::map<int32_t, int32_t> class_map; /* item id -> class id */
   std::map<int32_t, string> class_name; /* class id -> class name */
   std::map<string, int32_t> class_rname; /* class name -> class id */
@@ -1208,13 +1209,17 @@ public:
 
   int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
   int remove_device_class(CephContext *cct, int id, ostream *ss);
-  int device_class_clone(int original, int device_class, int *clone);
+  int device_class_clone(
+    int original, int device_class,
+    const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket,
+    const std::set<int32_t>& used_ids,
+    int *clone);
   bool class_is_in_use(int class_id, ostream *ss = nullptr);
-  int populate_classes();
+  int populate_classes(
+    const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
   int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
   int trim_roots_with_class(bool unused);
-  int cleanup_classes();
 
   void start_choose_profile() {
     free(crush->choose_tries);
