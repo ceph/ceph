@@ -30,7 +30,7 @@ class MOSDSubOp : public MOSDFastDispatchOp {
   static const int COMPAT_VERSION = 7;
 
 public:
-  epoch_t map_epoch;
+  epoch_t map_epoch = 0;
   
   // metadata from original request
   osd_reqid_t reqid;
@@ -41,14 +41,14 @@ public:
   hobject_t poid;
   object_locator_t oloc;
   
-  __u8 acks_wanted;
+  __u8 acks_wanted = 0;
 
   // op to exec
   vector<OSDOp> ops;
   utime_t mtime;
 
-  bool old_exists;
-  uint64_t old_size;
+  bool old_exists = false;
+  uint64_t old_size = 0;
   eversion_t old_version;
 
   SnapSet snapset;
@@ -71,7 +71,7 @@ public:
   interval_set<uint64_t> data_subset;
   map<hobject_t, interval_set<uint64_t>> clone_subsets;
 
-  bool first, complete;
+  bool first = false, complete = false;
 
   interval_set<uint64_t> data_included;
   ObjectRecoveryInfo recovery_info;

@@ -23,7 +23,7 @@ public:
   uuid_d fsid;
   map<pg_t,pg_stat_t> pg_stat;
   osd_stat_t osd_stat;
-  epoch_t epoch;
+  epoch_t epoch = 0;
   utime_t had_map_for;
   
   MPGStats() : PaxosServiceMessage(MSG_PGSTATS, 0) {}

@@ -33,7 +33,7 @@ class MOSDSubOpReply : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 public:
-  epoch_t map_epoch;
+  epoch_t map_epoch = 0;
   
   // subop metadata
   osd_reqid_t reqid;
@@ -44,8 +44,8 @@ public:
   vector<OSDOp> ops;
 
   // result
-  __u8 ack_type;
-  int32_t result;
+  __u8 ack_type = 0;
+  int32_t result = 0;
   
   // piggybacked osd state
   eversion_t last_complete_ondisk;
