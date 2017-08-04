@@ -103,9 +103,7 @@ void PGLog::IndexedLog::trim(
     generic_dout(20) << "trim dup " << e << dendl;
     if (trimmed_dups)
       trimmed_dups->insert(e.get_key_name());
-    if (indexed_data & PGLOG_INDEXED_DUPS) {
-      dup_index.erase(e.reqid);
-    }
+    unindex(e);
     dups.pop_front();
   }
 
