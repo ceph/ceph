@@ -4,7 +4,7 @@ import os
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import system
-from ceph_volume import conf
+from ceph_volume import conf, decorators
 from . import api
 from .common import prepare_parser
 
@@ -65,6 +65,7 @@ class Prepare(object):
     def __init__(self, argv):
         self.argv = argv
 
+    @decorators.needs_root
     def prepare(self, args):
         # FIXME we don't allow re-using a keyring, we always generate one for the
         # OSD, this needs to be fixed. This could either be a file (!) or a string
