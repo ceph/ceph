@@ -202,7 +202,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       health.decode(bl_i);
     }
     for (const auto &metric : health.metrics) {
-      int const rank = info.rank;
+      const int rank = info.rank;
       health_check_t *check = &new_checks.get_or_add(
 	mds_metric_name(metric.type),
 	metric.sev,
@@ -850,7 +850,7 @@ void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
     health.decode(bl_i);
 
     for (const auto &metric : health.metrics) {
-      int const rank = info.rank;
+      const int rank = info.rank;
       std::ostringstream message;
       message << "mds" << rank << ": " << metric.message;
       summary.push_back(std::make_pair(metric.sev, message.str()));

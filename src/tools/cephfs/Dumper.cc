@@ -63,7 +63,7 @@ int Dumper::recover_journal(Journaler *journaler)
   lock.Lock();
   journaler->recover(&cond);
   lock.Unlock();
-  int const r = cond.wait();
+  const int r = cond.wait();
 
   if (r < 0) { // Error
     derr << "error on recovery: " << cpp_strerror(r) << dendl;
