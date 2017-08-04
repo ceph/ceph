@@ -360,6 +360,7 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
       class_remove_item(item);
     }
   }
+  rebuild_roots_with_classes();
   return true;
 }
 
