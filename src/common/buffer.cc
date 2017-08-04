@@ -2382,7 +2382,7 @@ int buffer::list::write_fd(int fd) const
     }
     ++p;
 
-    if (iovlen == IOV_MAX-1 ||
+    if (iovlen == IOV_MAX ||
 	p == _buffers.end()) {
       iovec *start = iov;
       int num = iovlen;
