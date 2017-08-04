@@ -355,6 +355,9 @@ def do_extended_help(parser, args, target, partial):
                          partial=partial))
 
     def help_for_target(target, partial=None):
+        # wait for osdmap because we know this is sent after the mgrmap
+        # and monmap (it's alphabetical).
+        cluster_handle.wait_for_latest_osdmap()
         ret, outbuf, outs = json_command(cluster_handle, target=target,
                                          prefix='get_command_descriptions',
                                          timeout=10)

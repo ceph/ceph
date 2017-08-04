@@ -337,6 +337,8 @@ class RGWHTTPArgs
   void append(const string& name, const string& val);
   /** Get the value for a specific argument parameter */
   const string& get(const string& name, bool *exists = NULL) const;
+  boost::optional<const std::string&>
+  get_optional(const std::string& name) const;
   int get_bool(const string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
@@ -1630,7 +1632,6 @@ struct rgw_obj_key {
    * part of the given namespace, it returns false.
    */
   static bool oid_to_key_in_ns(const string& oid, rgw_obj_key *key, const string& ns) {
-    string obj_ns;
     bool ret = parse_raw_oid(oid, key);
     if (!ret) {
       return ret;
@@ -2307,12 +2308,12 @@ extern std::string calc_hash_sha256_restart_stream(ceph::crypto::SHA256** phash)
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
-namespace {
-  constexpr uint32_t MATCH_POLICY_ACTION = 0x01;
-  constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;
-  constexpr uint32_t MATCH_POLICY_ARN = 0x04;
-  constexpr uint32_t MATCH_POLICY_STRING = 0x08;
-}
+static constexpr uint32_t MATCH_POLICY_ACTION = 0x01;
+static constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;
+static constexpr uint32_t MATCH_POLICY_ARN = 0x04;
+static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
 
-int match(const std::string& pattern, const std::string& input, uint32_t flag);
+extern bool match_policy(boost::string_view pattern, boost::string_view input,
+                         uint32_t flag);
+
 #endif

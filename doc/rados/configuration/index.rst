@@ -32,7 +32,7 @@ For general object store configuration, refer to the following:
 .. toctree::
    :maxdepth: 1
 
-   Disks and Filesystems <filesystem-recommendations>
+   Storage devices <storage-devices>
    ceph-conf
 
 

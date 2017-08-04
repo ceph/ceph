@@ -88,7 +88,6 @@ void Option::dump(Formatter *f) const
   f->dump_string("name", name);
 
   f->dump_string("type", type_to_str(type));
-  std::string level_str;
 
   f->dump_string("level", level_to_str(level));
 
@@ -3976,6 +3975,10 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_lc_debug_interval", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(-1)
+    .set_description(""),
+
+    Option("rgw_mp_lock_max_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(600)
     .set_description(""),
 
     Option("rgw_script_uri", Option::TYPE_STR, Option::LEVEL_ADVANCED)

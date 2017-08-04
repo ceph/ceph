@@ -40,3 +40,5 @@ tasks:
 - exec:
     client.0:
       - sudo ceph osd pool set foo size 2
+- sleep:
+    duration: 300

@@ -53,7 +53,7 @@ using namespace std;
 
 static RGWRados *store = NULL;
 
-void _usage()
+void usage()
 {
   cout << "usage: radosgw-admin <cmd> [options...]" << std::endl;
   cout << "commands:\n";
@@ -325,12 +325,6 @@ void _usage()
   cout << "   --path-prefix             path prefix for filtering roles\n";
   cout << "\n";
   generic_client_usage();
-}
-
-int usage()
-{
-  _usage();
-  return 1;
 }
 
 enum {
@@ -2215,7 +2209,6 @@ static void sync_status(Formatter *formatter)
 
   for (auto iter : store->zone_conn_map) {
     const string& source_id = iter.first;
-    string zone_name;
     string source_str = "source: ";
     string s = source_str + source_id;
     auto siter = store->zone_by_id.find(source_id);
@@ -2478,7 +2471,7 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      return 0;
+      assert(false);
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
       user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
@@ -2519,7 +2512,8 @@ int main(int argc, const char **argv)
         key_type = KEY_TYPE_S3;
       } else {
         cerr << "bad key type: " << key_type_str << std::endl;
-        return usage();
+        usage();
+	assert(false);
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
       job_id = val;
@@ -2632,7 +2626,8 @@ int main(int argc, const char **argv)
       bucket_id = val;
       if (bucket_id.empty()) {
         cerr << "bad bucket-id" << std::endl;
-        return usage();
+        usage();
+	assert(false);
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
@@ -2806,7 +2801,8 @@ int main(int argc, const char **argv)
   }
 
   if (args.empty()) {
-    return usage();
+    usage();
+    assert(false);
   }
   else {
     const char *prev_cmd = NULL;
@@ -2816,7 +2812,8 @@ int main(int argc, const char **argv)
       opt_cmd = get_cmd(*i, prev_cmd, prev_prev_cmd, &need_more);
       if (opt_cmd < 0) {
 	cerr << "unrecognized arg " << *i << std::endl;
-	return usage();
+	usage();
+	assert(false);
       }
       if (!need_more) {
 	++i;
@@ -2826,8 +2823,10 @@ int main(int argc, const char **argv)
       prev_cmd = *i;
     }
 
-    if (opt_cmd == OPT_NO_CMD)
-      return usage();
+    if (opt_cmd == OPT_NO_CMD) {
+      usage();
+      assert(false);
+    }
 
     /* some commands may have an optional extra param */
     if (i != args.end()) {
@@ -2883,7 +2882,8 @@ int main(int argc, const char **argv)
     formatter = new JSONFormatter(pretty_format);
   else {
     cerr << "unrecognized format: " << format << std::endl;
-    return usage();
+    usage();
+    assert(false);
   }
 
   realm_name = g_conf->rgw_realm;
@@ -4436,6 +4436,9 @@ int main(int argc, const char **argv)
     ret = user.add(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not create user: " << err_msg << std::endl;
+      if (ret == -ERR_INVALID_TENANT_NAME)
+	ret = -EINVAL;
+
       return -ret;
     }
     if (!subuser.empty()) {
@@ -5013,7 +5016,8 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_LOG_SHOW || opt_cmd == OPT_LOG_RM) {
     if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
       cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
-      return usage();
+      usage();
+      assert(false);
     }
 
     string oid;
@@ -5111,7 +5115,8 @@ next:
   if (opt_cmd == OPT_POOL_ADD) {
     if (pool_name.empty()) {
       cerr << "need to specify pool to add!" << std::endl;
-      return usage();
+      usage();
+      assert(false);
     }
 
     int ret = store->add_bucket_placement(pool);
@@ -5122,7 +5127,8 @@ next:
   if (opt_cmd == OPT_POOL_RM) {
     if (pool_name.empty()) {
       cerr << "need to specify pool to remove!" << std::endl;
-      return usage();
+      usage();
+      assert(false);
     }
 
     int ret = store->remove_bucket_placement(pool);
