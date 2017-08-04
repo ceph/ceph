@@ -2357,10 +2357,12 @@ float OSD::get_osd_recovery_sleep()
 {
   if (cct->_conf->osd_recovery_sleep)
     return cct->_conf->osd_recovery_sleep;
-  if (store_is_rotational)
-    return cct->_conf->osd_recovery_sleep_hdd;
-  else
+  if (!store_is_rotational && !journal_is_rotational)
     return cct->_conf->osd_recovery_sleep_ssd;
+  else if (store_is_rotational && !journal_is_rotational)
+    return cct->_conf->get_val<double>("osd_recovery_sleep_hybrid");
+  else
+    return cct->_conf->osd_recovery_sleep_hdd;
 }
 
 int OSD::init()
@@ -2379,6 +2381,7 @@ int OSD::init()
   dout(2) << "init " << dev_path
 	  << " (looks like " << (store_is_rotational ? "hdd" : "ssd") << ")"
 	  << dendl;
+  dout(2) << "journal " << journal_path << dendl;
   assert(store);  // call pre_init() first!
 
   store->set_cache_shards(get_num_op_shards());
@@ -2388,6 +2391,9 @@ int OSD::init()
     derr << "OSD:init: unable to mount object store" << dendl;
     return r;
   }
+  journal_is_rotational = store->is_journal_rotational();
+  dout(2) << "journal looks like " << (journal_is_rotational ? "hdd" : "ssd")
+          << dendl;
 
   enable_disable_fuse(false);
 
@@ -5887,6 +5893,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
   // backend
   (*pm)["osd_objectstore"] = store->get_type();
   (*pm)["rotational"] = store_is_rotational ? "1" : "0";
+  (*pm)["journal_rotational"] = journal_is_rotational ? "1" : "0";
   (*pm)["default_device_class"] = store->get_default_device_class();
   store->collect_metadata(pm);
 
