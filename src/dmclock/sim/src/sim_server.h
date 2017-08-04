@@ -147,14 +147,15 @@ namespace crimson {
 	delete priority_queue;
       }
 
-      void post(const TestRequest& request,
+      void post(TestRequest&& request,
 		const ClientId& client_id,
 		const ReqPm& req_params)
       {
 	time_stats(internal_stats.mtx,
 		   internal_stats.add_request_time,
 		   [&](){
-		     priority_queue->add_request(request, client_id, req_params);
+		     priority_queue->add_request(std::move(request),
+						 client_id, req_params);
 		   });
 	count_stats(internal_stats.mtx,
 		    internal_stats.add_request_count);
@@ -202,10 +203,9 @@ namespace crimson {
 	    // notify server of completion
 	    std::this_thread::sleep_for(op_time);
 
-	    TestResponse resp(req->epoch);
 	    // TODO: rather than assuming this constructor exists, perhaps
 	    // pass in a function that does this mapping?
-	    client_resp_f(client, resp, id, additional);
+	    client_resp_f(client, TestResponse{req->epoch}, id, additional);
 
 	    time_stats(internal_stats.mtx,
 		       internal_stats.request_complete_time,
