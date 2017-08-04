@@ -19,8 +19,6 @@
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
 
-#include "gtest/gtest_prod.h"
-
 
 namespace crimson {
   namespace dmclock {
@@ -57,7 +55,8 @@ namespace crimson {
     // S is server identifier type
     template<typename S>
     class ServiceTracker {
-      FRIEND_TEST(dmclock_client, server_erase);
+      // we don't want to include gtest.h just for FRIEND_TEST
+      friend class dmclock_client_server_erase_Test;
 
       using TimePoint = decltype(std::chrono::steady_clock::now());
       using Duration = std::chrono::milliseconds;
