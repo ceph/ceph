@@ -1865,11 +1865,13 @@ std::vector<Option> get_global_options() {
 
     Option("osd_op_num_threads_per_shard_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description(""),
+    .set_description("")
+    .add_see_also("osd_op_num_threads_per_shard"),
 
     Option("osd_op_num_threads_per_shard_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2)
-    .set_description(""),
+    .set_description("")
+    .add_see_also("osd_op_num_threads_per_shard"),
 
     Option("osd_op_num_shards", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -1877,11 +1879,13 @@ std::vector<Option> get_global_options() {
 
     Option("osd_op_num_shards_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("")
+    .add_see_also("osd_op_num_shards"),
 
     Option("osd_op_num_shards_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(8)
     .set_description(""),
+    .add_see_also("osd_op_num_shards"),
 
     Option("osd_op_queue", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("wpq")
@@ -2243,11 +2247,13 @@ std::vector<Option> get_global_options() {
 
     Option("osd_recovery_sleep_ssd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description("Time in seconds to sleep before next recovery or backfill op for SSDs"),
+    .set_description("Time in seconds to sleep before next recovery or backfill op for SSDs")
+    .add_see_also("osd_recovery_sleep"),
 
     Option("osd_recovery_sleep_hybrid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.025)
-    .set_description("Time in seconds to sleep before next recovery or backfill op when data is on HDD and journal is on SSD"),
+    .set_description("Time in seconds to sleep before next recovery or backfill op when data is on HDD and journal is on SSD")
+    .add_see_also("osd_recovery_sleep"),
 
     Option("osd_snap_trim_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -3219,12 +3225,14 @@ std::vector<Option> get_global_options() {
     Option("bluestore_min_alloc_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64*1024)
     .add_tag("mkfs")
-    .set_description("Default min_alloc_size value for rotational media"),
+    .set_description("Default min_alloc_size value for rotational media")
+    .add_see_also("bluestore_min_alloc_size"),
 
     Option("bluestore_min_alloc_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(16*1024)
     .add_tag("mkfs")
-    .set_description("Default min_alloc_size value for non-rotational (solid state)  media"),
+    .set_description("Default min_alloc_size value for non-rotational (solid state)  media")
+    .add_see_also("bluestore_min_alloc_size"),
 
     Option("bluestore_max_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -3239,12 +3247,15 @@ std::vector<Option> get_global_options() {
     Option("bluestore_prefer_deferred_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(32768)
     .set_safe()
-    .set_description("Default bluestore_prefer_deferred_size for rotational media"),
+    .set_description("Default bluestore_prefer_deferred_size for rotational media")
+    .add_see_also("bluestore_prefer_deferred_size"),
 
     Option("bluestore_prefer_deferred_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_safe()
-    .set_description("Default bluestore_prefer_deferred_size for non-rotational (solid state) media"),
+    .set_description("Default bluestore_prefer_deferred_size for non-rotational (solid state) media")
+    .add_see_also("bluestore_prefer_deferred_size"),
+
 
     Option("bluestore_compression_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("none")
@@ -3268,12 +3279,15 @@ std::vector<Option> get_global_options() {
     Option("bluestore_compression_min_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128*1024)
     .set_safe()
-    .set_description("Default value of bluestore_compression_min_blob_size for rotational media"),
+    .set_description("Default value of bluestore_compression_min_blob_size for rotational media")
+    .add_see_also("bluestore_compression_min_blob_size"),
 
     Option("bluestore_compression_min_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(8*1024)
     .set_safe()
-    .set_description("Default value of bluestore_compression_min_blob_size for non-rotational (solid state) media"),
+    .set_description("Default value of bluestore_compression_min_blob_size for non-rotational (solid state) media")
+    .add_see_also("bluestore_compression_min_blob_size"),
+
 
     Option("bluestore_compression_max_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -3283,12 +3297,14 @@ std::vector<Option> get_global_options() {
     Option("bluestore_compression_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(512*1024)
     .set_safe()
-    .set_description("Default value of bluestore_compression_max_blob_size for rotational media"),
+    .set_description("Default value of bluestore_compression_max_blob_size for rotational media")
+    .add_see_also("bluestore_compression_max_blob_size"),
 
     Option("bluestore_compression_max_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64*1024)
     .set_safe()
-    .set_description("Default value of bluestore_compression_max_blob_size for non-rotational (solid state) media"),
+    .set_description("Default value of bluestore_compression_max_blob_size for non-rotational (solid state) media")
+    .add_see_also("bluestore_compression_max_blob_size"),
 
     Option("bluestore_gc_enable_blob_threshold", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
@@ -3303,17 +3319,20 @@ std::vector<Option> get_global_options() {
     Option("bluestore_max_blob_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
     .set_safe()
-    .set_description(""),
+    .set_description("")
+    .set_long_description("Bluestore blobs are collections of extents (ie on-disk data) originating from one or more objects.  Blobs can be compressed, typically have checksum data, may be overwritten, may be shared (with an extent ref map), or split.  This setting controls the maximum size a blob is allowed to be."),
 
     Option("bluestore_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512*1024)
     .set_safe()
-    .set_description(""),
+    .set_description("")
+    .add_see_also("bluestore_max_blob_sized"),
 
     Option("bluestore_max_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(64*1024)
     .set_safe()
-    .set_description(""),
+    .set_description("")
+    .add_see_also("bluestore_max_blob_size"),
 
     Option("bluestore_compression_required_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.875)
@@ -3369,11 +3388,13 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_cache_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1ull*1024*1024*1024)
-    .set_description("Default bluestore_cache_size for rotational media"),
+    .set_description("Default bluestore_cache_size for rotational media")
+    .add_see_also("bluestore_cache_size"),
 
     Option("bluestore_cache_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3ull*1024*1024*1024)
-    .set_description("Default bluestore_cache_size for non-rotational (solid state) media"),
+    .set_description("Default bluestore_cache_size for non-rotational (solid state) media")
+    .add_see_also("bluestore_cache_size"),
 
     Option("bluestore_cache_meta_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.01)
@@ -3394,8 +3415,10 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("bitmap")
+    .set_enum_allowed({"bitmap", "stupid"})
     .add_tag("mkfs")
-    .set_description(""),
+    .set_description("")
+    .set_description("Allocator to use for bluestore.  Stupid should only be used for testing."),
 
     Option("bluestore_freelist_blocks_per_key", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(128)
@@ -3463,13 +3486,14 @@ std::vector<Option> get_global_options() {
   Option("bluestore_throttle_cost_per_io_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(670000)
     .set_safe()
-    .set_description("Default bluestore_throttle_cost_per_io for rotational media"),
+    .set_description("Default bluestore_throttle_cost_per_io for rotational media")
+    .add_see_also("bluestore_throttle_cost_per_io"),
 
     Option("bluestore_throttle_cost_per_io_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(4000)
     .set_safe()
-    .set_description("Default bluestore_throttle_cost_per_io for non-rotation (solid state) media"),
-
+    .set_description("Default bluestore_throttle_cost_per_io for non-rotation (solid state) media")
+    .add_see_also("bluestore_throttle_cost_per_io"),
 
     Option("bluestore_deferred_batch_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -3479,12 +3503,14 @@ std::vector<Option> get_global_options() {
     Option("bluestore_deferred_batch_ops_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64)
     .set_safe()
-    .set_description("Default bluestore_deferred_batch_ops for rotational media"),
+    .set_description("Default bluestore_deferred_batch_ops for rotational media")
+    .add_see_also("bluestore_deferred_batch_ops"),
 
     Option("bluestore_deferred_batch_ops_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(16)
     .set_safe()
-    .set_description("Default bluestore_deferred_batch_ops for non-rotational (solid state) media"),
+    .set_description("Default bluestore_deferred_batch_ops for non-rotational (solid state) media")
+    .add_see_also("bluestore_deferred_batch_ops"),
 
     Option("bluestore_nid_prealloc", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(1024)
@@ -3582,15 +3608,15 @@ std::vector<Option> get_global_options() {
 
     Option("kstore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("compression=kNoCompression")
-    .set_description(""),
+    .set_description("Options to pass through when RocksDB is used as the KeyValueDB for kstore."),
 
     Option("kstore_fsck_on_mount", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Whether or not to run fsck on mount for kstore."),
 
     Option("kstore_fsck_on_mount_deep", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Whether or not to run deep fsck on mount for kstore"),
 
     Option("kstore_nid_prealloc", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1024)
@@ -3617,19 +3643,19 @@ std::vector<Option> get_global_options() {
 
     Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("Options to pass through when RocksDB is used as the KeyValueDB for filestore."),
 
     Option("filestore_omap_backend", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_enum_allowed({"rocksdb", "leveldb"})
     .set_default("rocksdb")
-    .set_description(""),
-
+    .set_description("The KeyValueDB to use for filestore metadata (ie omap).  Choices are: rocksdb (preferred) and leveldb"),
     Option("filestore_omap_backend_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("The path where the filestore KeyValueDB should store it's database(s)."),
 
     Option("filestore_wbthrottle_enable", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Enable or disable writeback journal throttling in Filestore."),
 
     Option("filestore_wbthrottle_btrfs_bytes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(41943040)
