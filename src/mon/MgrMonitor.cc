@@ -938,3 +938,12 @@ int MgrMonitor::dump_metadata(const string& name, Formatter *f, ostream *err)
   return 0;
 }
 
+const std::vector<MonCommand> &MgrMonitor::get_command_descs() const
+{
+  if (command_descs.empty()) {
+    // must have just upgraded; fallback to static commands
+    return mgr_commands;
+  } else {
+    return command_descs;
+  }
+}
