@@ -15,5 +15,6 @@ install(FILES
   ceph-radosgw@.service
   ceph-rbd-mirror@.service
   ceph-disk@.service
+  ceph-volume@.service
   rbdmap.service
   DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/systemd/system)
