@@ -4753,12 +4753,6 @@ void RGWPutLC::execute()
     return;
   }
 
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
-    ldout(s->cct, 15) << "Old LifecycleConfiguration:";
-    config->to_xml(*_dout);
-    *_dout << dendl;
-  }
-
   op_ret = config->rebuild(store, new_config);
   if (op_ret < 0)
     return;
