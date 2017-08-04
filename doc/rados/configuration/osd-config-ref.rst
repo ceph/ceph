@@ -988,6 +988,15 @@ perform well in a degraded state.
 :Type: Float
 :Default: ``0``
 
+
+``osd recovery sleep hybrid``
+
+:Description: Time in seconds to sleep before next recovery or backfill op
+              when osd data is on HDD and osd journal is on SSD.
+
+:Type: Float
+:Default: ``0.025``
+
 Tiering
 =======
 
