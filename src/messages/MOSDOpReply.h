@@ -38,13 +38,13 @@ class MOSDOpReply : public Message {
   object_t oid;
   pg_t pgid;
   vector<OSDOp> ops;
-  int64_t flags;
+  int64_t flags = 0;
   errorcode32_t result;
   eversion_t bad_replay_version;
   eversion_t replay_version;
-  version_t user_version;
-  epoch_t osdmap_epoch;
-  int32_t retry_attempt;
+  version_t user_version = 0;
+  epoch_t osdmap_epoch = 0;
+  int32_t retry_attempt = -1;
   bool do_redirect;
   request_redirect_t redirect;
 
