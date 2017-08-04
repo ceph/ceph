@@ -1,13 +1,15 @@
 include(CMakeParseArguments)
 
 function(distutils_install_module name)
-  set(py_srcs setup.py README.rst requirements.txt test-requirements.txt ${name})
+  set(py_srcs setup.py README.rst requirements.txt test-requirements.txt bin ${name})
   foreach(src ${py_srcs})
-    list(APPEND py_clone ${CMAKE_CURRENT_BINARY_DIR}/${src})
-    add_custom_command(
-      OUTPUT ${src}
-      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${src}
-      COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/${src} ${src})
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${src})
+      list(APPEND py_clone ${CMAKE_CURRENT_BINARY_DIR}/${src})
+      add_custom_command(
+        OUTPUT ${src}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${src}
+        COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/${src} ${src})
+    endif()
   endforeach()
   add_custom_target(${name}-clone ALL
     DEPENDS ${py_clone})

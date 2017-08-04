@@ -10,6 +10,8 @@ usr/lib/libos_tp.so*
 usr/lib/libosd_tp.so*
 usr/lib/python*/dist-packages/ceph_disk*
 usr/sbin/ceph-disk
+usr/sbin/ceph-volume
+usr/lib/python*/dist-packages/ceph_disk*
 usr/share/man/man8/ceph-clsinfo.8
 usr/share/man/man8/ceph-disk.8
 usr/share/man/man8/ceph-osd.8
