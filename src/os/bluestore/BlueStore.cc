@@ -3736,17 +3736,17 @@ int BlueStore::_set_cache_sizes()
     (double)1.0 - (double)cache_meta_ratio - (double)cache_kv_ratio;
 
   if (cache_meta_ratio < 0 || cache_meta_ratio > 1.0) {
-    derr << __func__ << "bluestore_cache_meta_ratio (" << cache_meta_ratio
+    derr << __func__ << " bluestore_cache_meta_ratio (" << cache_meta_ratio
 	 << ") must be in range [0,1.0]" << dendl;
     return -EINVAL;
   }
   if (cache_kv_ratio < 0 || cache_kv_ratio > 1.0) {
-    derr << __func__ << "bluestore_cache_kv_ratio (" << cache_kv_ratio
+    derr << __func__ << " bluestore_cache_kv_ratio (" << cache_kv_ratio
 	 << ") must be in range [0,1.0]" << dendl;
     return -EINVAL;
   }
   if (cache_meta_ratio + cache_kv_ratio > 1.0) {
-    derr << __func__ << "bluestore_cache_meta_ratio (" << cache_meta_ratio
+    derr << __func__ << " bluestore_cache_meta_ratio (" << cache_meta_ratio
 	 << ") + bluestore_cache_kv_ratio (" << cache_kv_ratio
 	 << ") = " << cache_meta_ratio + cache_kv_ratio << "; must be <= 1.0"
 	 << dendl;
