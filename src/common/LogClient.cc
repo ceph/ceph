@@ -269,8 +269,8 @@ bool LogClient::are_pending()
 Message *LogClient::_get_mon_log_message()
 {
   assert(log_lock.is_locked());
-   if (log_queue.empty())
-     return NULL;
+  if (log_queue.empty())
+    return NULL;
 
   // only send entries that haven't been sent yet during this mon
   // session!  monclient needs to call reset_session() on mon session
