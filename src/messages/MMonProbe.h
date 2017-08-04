@@ -47,14 +47,14 @@ public:
   }
   
   uuid_d fsid;
-  int32_t op;
+  int32_t op = 0;
   string name;
   set<int32_t> quorum;
   bufferlist monmap_bl;
-  version_t paxos_first_version;
-  version_t paxos_last_version;
-  bool has_ever_joined;
-  uint64_t required_features;
+  version_t paxos_first_version = 0;
+  version_t paxos_last_version = 0;
+  bool has_ever_joined = 0;
+  uint64_t required_features = 0;
 
   MMonProbe()
     : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
