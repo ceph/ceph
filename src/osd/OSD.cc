@@ -3539,14 +3539,12 @@ int OSD::update_crush_device_class()
     string("\"ids\": [\"") + stringify(whoami) + string("\"]}");
 
   r = mon_cmd_maybe_osd_create(cmd);
-  // we may not have a real osdmap on first boot, so we can't check if
-  // require-osd-release is set to luminous yet. Instead, ignore
-  // EINVAL.
-  if (r == -EPERM || r == -EINVAL) {
-    r = 0;
-  }
-
-  return r;
+  // the above cmd can fail for various reasons, e.g.:
+  //   (1) we are connecting to a pre-luminous monitor
+  //   (2) user manually specify a class other than
+  //       'ceph-disk prepare --crush-device-class'
+  // simply skip result-checking for now
+  return 0;
 }
 
 void OSD::write_superblock(ObjectStore::Transaction& t)
