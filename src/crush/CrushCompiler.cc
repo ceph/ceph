@@ -291,8 +291,6 @@ int CrushCompiler::decompile_choose_args(const std::pair<const long unsigned int
 
 int CrushCompiler::decompile(ostream &out)
 {
-  crush.cleanup_classes();
-
   out << "# begin crush map\n";
 
   // only dump tunables if they differ from the defaults
@@ -1100,7 +1098,6 @@ int CrushCompiler::parse_crush(iter_t const& i)
   }
 
   //err << "max_devices " << crush.get_max_devices() << std::endl;
-  crush.cleanup_classes();
   crush.finalize();
 
   return 0;

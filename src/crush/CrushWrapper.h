@@ -1220,7 +1220,6 @@ public:
   int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
   int trim_roots_with_class(bool unused);
-  int cleanup_classes();
 
   void start_choose_profile() {
     free(crush->choose_tries);
