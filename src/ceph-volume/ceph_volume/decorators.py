@@ -13,7 +13,7 @@ def needs_root(func):
     def is_root(*a, **kw):
         if not os.getuid() == 0:
             raise exceptions.SuperUserError()
-        return func
+        return func(*a, **kw)
     return is_root
 
 
