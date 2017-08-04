@@ -1,6 +1,7 @@
 from __future__ import print_function
 from textwrap import dedent
 from ceph_volume.util import system
+from ceph_volume import decorators
 from .common import create_parser
 from .prepare import Prepare
 from .activate import Activate
@@ -13,6 +14,7 @@ class Create(object):
     def __init__(self, argv):
         self.argv = argv
 
+    @decorators.needs_root
     def create(self, args):
         if not args.osd_fsid:
             args.osd_fsid = system.generate_uuid()
