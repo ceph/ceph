@@ -59,7 +59,7 @@ class Plan:
                   self.initial.osdmap.get_crush_version())
         ls.append('# mode %s' % self.mode)
         if len(self.compat_ws) and \
-           '-1' in self.crush_dump.get('choose_args', {}):
+           '-1' not in self.initial.crush_dump.get('choose_args', {}):
             ls.append('ceph osd crush weight-set create-compat')
         for osd, weight in self.compat_ws.iteritems():
             ls.append('ceph osd crush weight-set reweight-compat %s %f' %
@@ -82,6 +82,7 @@ class Eval:
     pool_name = {}       # pool id -> pool name
     pool_id = {}         # pool name -> id
     pool_roots = {}      # pool name -> root name
+    root_pools = {}      # root name -> pools
     target_by_root = {}  # root name -> target weight map
     count_by_pool = {}
     count_by_root = {}
@@ -316,28 +317,33 @@ class Module(MgrModule):
 
         # get expected distributions by root
         actual_by_root = {}
-        roots = ms.crush.find_takes()
-        for root in roots:
-            rname = ms.crush.get_item_name(root)
-            ls = ms.osdmap.get_pools_by_take(root)
+        rootids = ms.crush.find_takes()
+        roots = []
+        for rootid in rootids:
+            root = ms.crush.get_item_name(rootid)
+            roots.append(root)
+            ls = ms.osdmap.get_pools_by_take(rootid)
+            pe.root_pools[root] = []
             for poolid in ls:
-                pe.pool_roots[pe.pool_name[poolid]].append(rname)
-            pe.target_by_root[rname] = ms.crush.get_take_weight_osd_map(root)
-            actual_by_root[rname] = {
+                pe.pool_roots[pe.pool_name[poolid]].append(root)
+                pe.root_pools[root].append(pe.pool_name[poolid])
+            pe.target_by_root[root] = ms.crush.get_take_weight_osd_map(rootid)
+            actual_by_root[root] = {
                 'pgs': {},
                 'objects': {},
                 'bytes': {},
             }
-            for osd in pe.target_by_root[rname].iterkeys():
-                actual_by_root[rname]['pgs'][osd] = 0
-                actual_by_root[rname]['objects'][osd] = 0
-                actual_by_root[rname]['bytes'][osd] = 0
-            pe.total_by_root[rname] = {
+            for osd in pe.target_by_root[root].iterkeys():
+                actual_by_root[root]['pgs'][osd] = 0
+                actual_by_root[root]['objects'][osd] = 0
+                actual_by_root[root]['bytes'][osd] = 0
+            pe.total_by_root[root] = {
                 'pgs': 0,
                 'objects': 0,
                 'bytes': 0,
             }
         self.log.debug('pool_roots %s' % pe.pool_roots)
+        self.log.debug('root_pools %s' % pe.root_pools)
         self.log.debug('target_by_root %s' % pe.target_by_root)
 
         # pool and root actual
@@ -500,12 +506,8 @@ class Module(MgrModule):
         else:
             if plan.mode == 'upmap':
                 self.do_upmap(plan)
-            elif plan.mode == 'crush':
-                self.do_crush()
             elif plan.mode == 'crush-compat':
-                self.do_crush_compat()
-            elif plan.mode == 'osd_weight':
-                self.osd_weight()
+                self.do_crush_compat(plan)
             elif plan.mode == 'none':
                 self.log.info('Idle')
             else:
@@ -544,21 +546,20 @@ class Module(MgrModule):
         crush = osdmap.get_crush()
 
         # get current compat weight-set weights
-        weight_set = self.get_compat_weight_set_weights()
+        old_ws = self.get_compat_weight_set_weights()
 
         ms = plan.initial
         pe = self.calc_eval(ms)
 
-        # get subtree weight maps, check for overlap
-        roots = crush.find_takes()
+        # Make sure roots don't overlap their devices.  If so, we
+        # can't proceed.
+        roots = pe.target_by_root.keys()
         self.log.debug('roots %s', roots)
-        weight_maps = {}
         visited = {}
         overlap = {}
-        for root in roots:
-            weight_maps[root] = crush.get_take_weight_osd_map(root)
-            self.log.debug(' map for %d: %s' % (root, weight_maps[root]))
-            for osd in weight_maps[root].iterkeys():
+        root_ids = {}
+        for root, wm in pe.target_by_root.iteritems():
+            for osd in wm.iterkeys():
                 if osd in visited:
                     overlap[osd] = 1
                 visited[osd] = 1
@@ -567,42 +568,30 @@ class Module(MgrModule):
                          overlap)
             return
 
-        # select a cost mode: pg, pgsize, or utilization
-        # FIXME: when we add utilization support, we need to throttle back
-        # so that we don't run if *any* objects are misplaced.  with 'pgs' we
-        # can look at up mappings, which lets us look ahead a bit.
-        cost_mode = 'pg'
+        key = 'pgs'  # pgs objects or bytes
 
         # go
         random.shuffle(roots)
         for root in roots:
-            pools = osdmap.get_pools_by_take(root)
-            self.log.info('Balancing root %s pools %s' % (root, pools))
-            wm = weight_maps[root]
-            util = self.get_util(cost_mode, pools, wm.keys())
-            self.log.info('wm %s util %s' % (wm, util))
-            if len(util) == 0:
-                self.log.info('no utilization information, stopping')
-                return
-            target = self.get_target(util)
-            self.log.info('target %s' % target)
-            if target == 0:
-                continue
-
-            queue = sorted(util, key=lambda osd: -abs(target - util[osd]))
-            self.log.info('queue %s' % queue)
-
+            pools = pe.root_pools[root]
+            self.log.info('Balancing root %s (pools %s) by %s' %
+                          (root, pools, key))
+            target = pe.target_by_root[root]
+            actual = pe.actual_by_root[root][key]
+            queue = sorted(actual.keys(),
+                           key=lambda osd: -abs(target[osd] - actual[osd]))
+            self.log.debug('queue %s' % queue)
             for osd in queue:
-                deviation = float(util[osd]) - float(target)
+                deviation = target[osd] - actual[osd]
                 if deviation == 0:
                     break
                 self.log.debug('osd.%d deviation %f', osd, deviation)
-                weight = weight_set[osd]
-                calc_weight = (float(target) / float(util[osd])) * weight
+                weight = old_ws[osd]
+                calc_weight = target[osd] / actual[osd] * weight
                 new_weight = weight * .7 + calc_weight * .3
                 self.log.debug('Reweight osd.%d %f -> %f', osd, weight,
                                new_weight)
-                self.compat_weight_set_reweight(osd, new_weight)
+                plan.compat_ws[osd] = new_weight
 
     def compat_weight_set_reweight(self, osd, new_weight):
         self.log.debug('ceph osd crush weight-set reweight-compat')
@@ -719,7 +708,7 @@ class Module(MgrModule):
 
         # compat weight-set
         if len(plan.compat_ws) and \
-           '-1' in plan.crush_dump.get('choose_args', {}):
+           '-1' not in plan.initial.crush_dump.get('choose_args', {}):
             self.log.debug('ceph osd crush weight-set create-compat')
             result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
@@ -785,8 +774,10 @@ class Module(MgrModule):
             commands.append(result)
 
         # wait for commands
+        self.log.debug('commands %s' % commands)
         for result in commands:
             r, outb, outs = result.wait()
             if r != 0:
                 self.log.error('Error on command')
                 return
+        self.log.debug('done')
