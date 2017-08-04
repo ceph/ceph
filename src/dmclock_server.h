@@ -880,7 +880,9 @@ namespace crimson {
 	ClientRec& top = heap.top();
 
 	RequestRef request = std::move(top.next_request().request);
+#ifndef DO_NOT_DELAY_TAG_CALC
 	RequestTag tag = top.next_request().tag;
+#endif
 
 	// pop request and adjust heaps
 	top.pop_request();
