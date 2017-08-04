@@ -47,18 +47,18 @@ class MMonPaxos : public Message {
     }
   }
 
-  epoch_t epoch;   // monitor epoch
-  __s32 op;          // paxos op
+  epoch_t epoch = 0;   // monitor epoch
+  __s32 op = 0;          // paxos op
 
-  version_t first_committed;  // i've committed to
-  version_t last_committed;  // i've committed to
-  version_t pn_from;         // i promise to accept after
-  version_t pn;              // with with proposal
-  version_t uncommitted_pn;     // previous pn, if we are a LAST with an uncommitted value
+  version_t first_committed = 0;  // i've committed to
+  version_t last_committed = 0;  // i've committed to
+  version_t pn_from = 0;         // i promise to accept after
+  version_t pn = 0;              // with with proposal
+  version_t uncommitted_pn = 0;     // previous pn, if we are a LAST with an uncommitted value
   utime_t lease_timestamp;
   utime_t sent_timestamp;
 
-  version_t latest_version;
+  version_t latest_version = 0;
   bufferlist latest_value;
 
   map<version_t,bufferlist> values;
