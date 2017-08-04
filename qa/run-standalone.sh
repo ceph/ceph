@@ -15,9 +15,13 @@ if [ `uname` = FreeBSD ]; then
     # otherwise module prettytable will not be found
     export PYTHONPATH=/usr/local/lib/python2.7/site-packages
     exec_mode=+111
+    KERNCORE="kern.corefile"
+    COREPATTERN="core.%N.%P"
 else
     export PYTHONPATH=/usr/lib/python2.7/dist-packages
     exec_mode=/111
+    KERNCORE="kernel.core_pattern"
+    COREPATTERN="core.%e.%p.%t"
 fi
 
 PATH=$(pwd)/bin:$PATH
@@ -41,6 +45,9 @@ location="../qa/standalone"
 count=0
 errors=0
 userargs=""
+precore="$(sysctl -n $KERNCORE)"
+sudo sysctl -w ${KERNCORE}=${COREPATTERN}
+ulimit -c unlimited
 for f in $(cd $location ; find . -perm $exec_mode -type f)
 do
     f=$(echo $f | sed 's/\.\///')
@@ -82,12 +89,14 @@ do
         if ! PATH=$PATH:bin \
 	    CEPH_ROOT=.. \
 	    CEPH_LIB=lib \
+	    LOCALRUN=yes \
 	    $cmd ; then
           echo "$f .............. FAILED"
           errors=$(expr $errors + 1)
         fi
     fi
 done
+sudo sysctl -w ${KERNCORE}=${precore}
 
 if [ "$errors" != "0" ]; then
     echo "$errors TESTS FAILED, $count TOTAL TESTS"

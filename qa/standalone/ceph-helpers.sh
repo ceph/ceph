@@ -33,6 +33,7 @@ fi
 if [ `uname` = FreeBSD ]; then
     SED=gsed
     DIFFCOLOPTS=""
+    KERNCORE="kern.corefile"
 else
     SED=sed
     termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
@@ -40,6 +41,7 @@ else
         termwidth="-W ${termwidth}"
     fi
     DIFFCOLOPTS="-y $termwidth"
+    KERNCORE="kernel.core_pattern"
 fi
 
 EXTRA_OPTS=""
@@ -158,11 +160,37 @@ function teardown() {
         && [ $(stat -f -c '%T' .) == "btrfs" ]; then
         __teardown_btrfs $dir
     fi
-    if [ "$dumplogs" = "1" ]; then
+    local cores="no"
+    local pattern="$(sysctl -n $KERNCORE)"
+    # See if we have apport core handling
+    if [ "${pattern:0:1}" = "|" ]; then
+      # TODO: Where can we get the dumps?
+      # Not sure where the dumps really are so this will look in the CWD
+      pattern=""
+    fi
+    # Local we start with core and teuthology ends with core
+    if ls $(dirname $pattern) | grep -q '^core\|core$' ; then
+        cores="yes"
+        if [ -n "$LOCALRUN" ]; then
+	    mkdir /tmp/cores.$$ 2> /dev/null || true
+	    for i in $(ls $(dirname $(sysctl -n $KERNCORE)) | grep '^core\|core$'); do
+		mv $i /tmp/cores.$$
+	    done
+        fi
+    fi
+    if [ "$cores" = "yes" -o "$dumplogs" = "1" ]; then
         display_logs $dir
     fi
     rm -fr $dir
     rm -rf $(get_asok_dir)
+    if [ "$cores" = "yes" ]; then
+        echo "ERROR: Failure due to cores found"
+        if [ -n "$LOCALRUN" ]; then
+	    echo "Find saved core files in /tmp/cores.$$"
+        fi
+        return 1
+    fi
+    return 0
 }
 
 function __teardown_btrfs() {
