@@ -2,6 +2,7 @@ from __future__ import print_function
 import argparse
 from textwrap import dedent
 from ceph_volume.exceptions import SuffixParsingError
+from ceph_volume import decorators
 from .activate import Activate
 
 
@@ -30,6 +31,7 @@ class Trigger(object):
     def __init__(self, argv):
         self.argv = argv
 
+    @decorators.needs_root
     def main(self):
         sub_command_help = dedent("""
         ** DO NOT USE DIRECTLY **
