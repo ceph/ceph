@@ -15,6 +15,7 @@ tasks:
       - overall HEALTH_
       - \(FS_
       - \(MDS_
+      - \(OSD_
 - print: "**** done ceph"
 - install.upgrade:
     mon.a:
