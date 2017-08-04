@@ -1703,6 +1703,7 @@ void PG::activate(ObjectStore::Transaction& t,
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
       MOSDPGLog *m = 0;
+      assert(peer_missing.count(peer));
       pg_missing_t& pm = peer_missing[peer];
 
       bool needs_past_intervals = pi.dne();
@@ -4873,6 +4874,7 @@ void PG::merge_new_log_entries(
     assert(peer_missing.count(peer));
     assert(peer_info.count(peer));
     pg_missing_t& pmissing(peer_missing[peer]);
+    dout(20) << __func__ << " peer_missing for " << peer << " = " << pmissing << dendl;
     pg_info_t& pinfo(peer_info[peer]);
     PGLog::append_log_entries_update_missing(
       pinfo.last_backfill,
@@ -7877,18 +7879,23 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
        ++i) {
     if (*i == pg->get_primary()) continue;
     const pg_info_t& pi = pg->peer_info[*i];
+    // reset this so to make sure the pg_missing_t is initialized and
+    // has the correct semantics even if we don't need to get a
+    // missing set from a shard. This way later additions due to
+    // lost+unfound delete work properly.
+    pg->peer_missing[*i].may_include_deletes = !pg->perform_deletes_during_peering();
 
     if (pi.is_empty())
       continue;                                // no pg data, nothing divergent
 
     if (pi.last_update < pg->pg_log.get_tail()) {
       dout(10) << " osd." << *i << " is not contiguous, will restart backfill" << dendl;
-      pg->peer_missing[*i];
+      pg->peer_missing[*i].clear();
       continue;
     }
     if (pi.last_backfill == hobject_t()) {
       dout(10) << " osd." << *i << " will fully backfill; can infer empty missing set" << dendl;
-      pg->peer_missing[*i];
+      pg->peer_missing[*i].clear();
       continue;
     }
 
@@ -7899,7 +7906,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
       // FIXME: we can do better here.  if last_update==last_complete we
       //        can infer the rest!
       dout(10) << " osd." << *i << " has no missing, identical log" << dendl;
-      pg->peer_missing[*i];
+      pg->peer_missing[*i].clear();
       continue;
     }
 
