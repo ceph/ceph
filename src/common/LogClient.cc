@@ -337,6 +337,7 @@ version_t LogClient::queue(LogEntry &entry)
 
 uint64_t LogClient::get_next_seq()
 {
+  Mutex::Locker l(log_lock);
   return ++last_log;
 }
 
