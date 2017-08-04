@@ -7,6 +7,7 @@ overrides:
     - \(PG_
     - \(OSD_
     - \(OBJECT_
+    - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - workunit:
     clients:
