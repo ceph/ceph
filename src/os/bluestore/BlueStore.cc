@@ -2676,7 +2676,10 @@ void BlueStore::ExtentMap::dirty_range(
     return;
   }
   auto start = seek_shard(offset);
-  auto last = seek_shard(offset + length);
+  if (length == 0) {
+    length = 1;
+  }
+  auto last = seek_shard(offset + length - 1);
   if (start < 0)
     return;
 
