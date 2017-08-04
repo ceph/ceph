@@ -89,7 +89,7 @@ namespace crimson {
 
       using SubmitFunc =
 	std::function<void(const ServerId&,
-			   const TestRequest&,
+			   TestRequest&&,
 			   const ClientId&,
 			   const ReqPm&)>;
 
@@ -240,8 +240,9 @@ namespace crimson {
 	      count_stats(internal_stats.mtx,
 			  internal_stats.get_req_params_count);
 
-	      TestRequest req(server, o, 12);
-	      submit_f(server, req, id, rp);
+	      submit_f(server,
+		       TestRequest{server, static_cast<uint32_t>(o), 12},
+		       id, rp);
 	      ++outstanding_ops;
 	      l.lock(); // lock for return to top of loop
 
