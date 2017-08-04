@@ -2,6 +2,12 @@ meta:
 - desc: |
     install upgrade on remaining node
     restartin remaining osds
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(FS_DEGRADED\)
+      - \(MDS_
 tasks:
 - install.upgrade:
     osd.3:
