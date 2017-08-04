@@ -37,11 +37,11 @@ class MOSDOp : public MOSDFastDispatchOp {
   static const int COMPAT_VERSION = 3;
 
 private:
-  uint32_t client_inc;
-  __u32 osdmap_epoch;
-  __u32 flags;
+  uint32_t client_inc = 0;
+  __u32 osdmap_epoch = 0;
+  __u32 flags = 0;
   utime_t mtime;
-  int32_t retry_attempt;   // 0 is first attempt.  -1 if we don't know.
+  int32_t retry_attempt = -1;   // 0 is first attempt.  -1 if we don't know.
 
   hobject_t hobj;
   spg_t pgid;
