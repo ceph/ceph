@@ -95,6 +95,11 @@ struct Engine {
         ostr << "FIO get_db_statistics ";
         f->flush(ostr);
       }
+      
+      ostr << "Generate db histogram: ";
+      os->generate_db_histogram(f);
+      f->flush(ostr);
+
       delete f;
       os->umount();
       dout(0) <<  ostr.str() << dendl;
