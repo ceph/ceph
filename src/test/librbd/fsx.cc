@@ -2393,12 +2393,14 @@ test(void)
 			log4(OP_SKIPPED, OP_WRITESAME, offset, size);
 			goto out;
 		}
+		break;
         case OP_COMPARE_AND_WRITE:
                 /* compare_and_write not implemented */
                 if (!ops->compare_and_write) {
                         log4(OP_SKIPPED, OP_COMPARE_AND_WRITE, offset, size);
                         goto out;
                 }
+		break;
 	}
 
 	switch (op) {
