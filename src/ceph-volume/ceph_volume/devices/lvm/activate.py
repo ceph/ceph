@@ -2,7 +2,7 @@ from __future__ import print_function
 import argparse
 import os
 from textwrap import dedent
-from ceph_volume import process, conf
+from ceph_volume import process, conf, decorators
 from ceph_volume.util import system
 from ceph_volume.systemd import systemctl
 from . import api
@@ -58,6 +58,7 @@ class Activate(object):
     def __init__(self, argv):
         self.argv = argv
 
+    @decorators.needs_root
     def activate(self, args):
         lvs = api.Volumes()
         # filter them down for the OSD ID and FSID we need to activate
