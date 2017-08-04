@@ -25,23 +25,24 @@ Major Changes from Kraken
 
   * *BlueStore*:
 
-    - The new *BlueStore* backend for *ceph-osd* is now stable and the new
-      default for newly created OSDs.  BlueStore manages data stored by each OSD
-      by directly managing the physical HDDs or SSDs without the use of an
-      intervening file system like XFS.  This provides greater performance
-      and features. FIXME DOCS
-    - BlueStore supports *full data and metadata checksums* of all
+    - The new *BlueStore* backend for *ceph-osd* is now stable and the
+      new default for newly created OSDs.  BlueStore manages data
+      stored by each OSD by directly managing the physical HDDs or
+      SSDs without the use of an intervening file system like XFS.
+      This provides greater performance and features. See
+      :doc:`/rados/configuration/storage-devices` and
+      :doc:`/rados/configuration/bluestore-config-ref`.
+    - BlueStore supports `full data and metadata checksums
+      <../rados/configuration/bluestore-config-ref/#checksums`_ of all
       data stored by Ceph.
-    - BlueStore supports inline compression using zlib, snappy, or LZ4.  (Ceph
-      also supports zstd for RGW compression but zstd is not recommended for
-      BlueStore for performance reasons.)  FIXME DOCS
     - BlueStore supports `inline compression
       <../rados/configuration/bluestore-config-ref/#inline-compression>`_ using
       zlib, snappy, or LZ4. (Ceph also supports zstd for `RGW compression
       <../man/8/radosgw-admin/#options>`_ but zstd is not recommended for
       BlueStore for performance reasons.)
 
-  * *Erasure coded* pools now have `full support for overwrites <../rados/operations/erasure-code/#erasure-coding-with-overwrites>`_,
+  * *Erasure coded* pools now have `full support for overwrites
+    <../rados/operations/erasure-code/#erasure-coding-with-overwrites>`_,
     allowing them to be used with RBD and CephFS.
 
   * *ceph-mgr*:
