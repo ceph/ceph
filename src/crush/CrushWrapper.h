@@ -851,6 +851,8 @@ private:
   bool _maybe_remove_last_instance(CephContext *cct, int id, bool unlink_only);
   int _remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
   bool _bucket_is_in_use(int id);
+  int _get_rules_with_class(list<pair<int, list<string>>> *rules);
+  int _rebuild_rules_with_class(list<pair<int, list<string>>> &rules);
 public:
   int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 

@@ -369,8 +369,15 @@ int CrushWrapper::remove_root(int item, bool unused)
     return 0;
 
   crush_bucket *b = get_bucket(item);
-  if (IS_ERR(b))
-    return -ENOENT;
+  if (IS_ERR(b)) {
+    // should be idempotent
+    // e.g.: we use 'crush link' to link same host into
+    // different roots, which as a result can cause different
+    // shadow trees reference same hosts too. This means
+    // we may need to destory the same buckets(hosts, racks, etc.)
+    // multiple times during rebuilding all shadow trees.
+    return 0;
+  }
 
   for (unsigned n = 0; n < b->size; n++) {
     if (b->items[n] >= 0)
@@ -482,6 +489,69 @@ bool CrushWrapper::_bucket_is_in_use(int item)
     }
   }
   return false;
+}
+
+int CrushWrapper::_get_rules_with_class(list<pair<int, list<string>>> *rules)
+{
+  assert(rules);
+  rules->empty();
+  for (unsigned i = 0; i < crush->max_rules; ++i) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    list<string> shadow_item_names;
+    for (unsigned j = 0; j < r->len; ++j) {
+      if (r->steps[j].op == CRUSH_RULE_TAKE) {
+        int step_item = r->steps[j].arg1;
+        if (is_shadow_item(step_item))
+          shadow_item_names.push_back(get_item_name(step_item));
+      }
+    }
+    if (!shadow_item_names.empty())
+      rules->push_back(make_pair(i, shadow_item_names));
+  }
+  return 0;
+}
+
+int CrushWrapper::_rebuild_rules_with_class(list<pair<int, list<string>>> &rules)
+{
+  if (rules.empty()) {
+    return 0;
+  }
+  for (auto &p: rules) {
+    assert((size_t)p.first < crush->max_rules);
+    crush_rule *original_rule = crush->rules[p.first];
+    auto &shadow_item_names = p.second;
+
+    for (unsigned i = 0; i < original_rule->len; ++i) {
+      if (original_rule->steps[i].op == CRUSH_RULE_TAKE) {
+        assert(!shadow_item_names.empty());
+        string shadow_item_name = shadow_item_names.front();
+        shadow_item_names.pop_front();
+
+        // decompose shadow name to restore original root and class
+        size_t pos = shadow_item_name.find("~");
+        assert(pos != string::npos);
+        string original_root_name = shadow_item_name.substr(0, pos);
+        if (!name_exists(original_root_name))
+          return -ENOENT;
+        string class_name = shadow_item_name.substr(pos + 1);
+        if (!class_exists(class_name))
+          return -ENOENT;
+        int original_root = get_item_id(original_root_name);
+        int class_id = get_class_id(class_name);
+        if (class_bucket.count(original_root) == 0 ||
+            class_bucket[original_root].count(class_id) == 0) {
+          // no more shadow roots of the required class..
+          return -EINVAL;
+        }
+        // fix original rule
+        original_rule->steps[i].arg1 = class_bucket[original_root][class_id];
+      }
+    }
+    assert(shadow_item_names.empty());
+  }
+  return 0;
 }
 
 int CrushWrapper::_remove_item_under(
@@ -1910,10 +1980,17 @@ int CrushWrapper::device_class_clone(int original_id, int device_class, int *clo
 
 int CrushWrapper::rebuild_roots_with_classes()
 {
-  int r = trim_roots_with_class(false);
+  list<pair<int, list<string>>> rules_with_class;
+  int r = _get_rules_with_class(&rules_with_class);
+  if (r < 0)
+    return r;
+  r = trim_roots_with_class(false);
   if (r < 0)
     return r;
   r = populate_classes();
+  if (r < 0)
+    return r;
+  r = _rebuild_rules_with_class(rules_with_class);
   if (r < 0)
     return r;
   return trim_roots_with_class(true);
