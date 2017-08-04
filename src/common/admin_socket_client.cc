@@ -16,8 +16,12 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/admin_socket_client.h"
+#include "include/compat.h"
+
+#include <boost/filesystem/path.hpp>
 
 #include <sys/un.h>
+#include <sys/wait.h>
 
 using std::ostringstream;
 
@@ -39,28 +43,127 @@ const char* get_rand_socket_path()
   return g_socket_path;
 }
 
-static std::string asok_connect(const std::string &path, int *fd)
+static std::string do_connect(int fd, const std::string &path)
 {
-  int socket_fd = socket(PF_UNIX, SOCK_STREAM, 0);
-  if(socket_fd < 0) {
+  struct sockaddr_un address;
+  if (path.size() > sizeof(address.sun_path) - 1) {
+    ostringstream oss;
+    oss << "AdminSocket::: "
+	<< "The UNIX domain socket path " << path << " is too long! The "
+	<< "maximum length on this system is "
+	<< (sizeof(address.sun_path) - 1);
+    return oss.str();
+  }
+  memset(&address, 0, sizeof(struct sockaddr_un));
+  address.sun_family = AF_UNIX;
+  snprintf(address.sun_path, sizeof(address.sun_path),
+	   "%s", path.c_str());
+  if (::connect(fd, (struct sockaddr*)&address, sizeof address) == -1) {
     int err = errno;
     ostringstream oss;
-    oss << "socket(PF_UNIX, SOCK_STREAM, 0) failed: " << cpp_strerror(err);
+    oss << "connect(" << fd << ") failed: " << cpp_strerror(err);
     return oss.str();
   }
 
-  struct sockaddr_un address;
-  memset(&address, 0, sizeof(struct sockaddr_un));
-  address.sun_family = AF_UNIX;
-  snprintf(address.sun_path, sizeof(address.sun_path), "%s", path.c_str());
+  return "";
+}
 
-  if (::connect(socket_fd, (struct sockaddr *) &address, 
-	sizeof(struct sockaddr_un)) != 0) {
+static std::string asok_connect(const std::string &sock_path, int *fd)
+{
+  int socket_fd = ::socket(PF_UNIX, SOCK_STREAM, 0);
+  if(socket_fd < 0) {
     int err = errno;
     ostringstream oss;
-    oss << "connect(" << socket_fd << ") failed: " << cpp_strerror(err);
-    close(socket_fd);
+    oss << "asok_connect: socket(PF_UNIX, SOCK_STREAM, 0) failed: " << cpp_strerror(err);
     return oss.str();
+  }
+  if (::fcntl(socket_fd, F_SETFD, FD_CLOEXEC) == -1) {
+    int err = errno;
+    VOID_TEMP_FAILURE_RETRY(::close(socket_fd));
+    ostringstream oss;
+    oss << "asok_connect: failed to fcntl on socket: " << cpp_strerror(err);
+    return oss.str();
+  }
+
+  if (sock_path.size() < sizeof(((struct sockaddr_un*)0)->sun_path)) {
+    const auto &status = do_connect(socket_fd, sock_path);
+    if (status.size()) {
+      VOID_TEMP_FAILURE_RETRY(::close(socket_fd));
+      return status;
+    }
+  } else {
+    int p[2];
+    if (::pipe(p) == -1) {
+      int err = errno;
+      VOID_TEMP_FAILURE_RETRY(::close(socket_fd));
+      ostringstream oss;
+      oss << "asok_connect: failed to create pipe: " << cpp_strerror(err);
+      return oss.str();
+    }
+    if (::fcntl(p[0], F_SETFD, FD_CLOEXEC) == -1 || ::fcntl(p[1], F_SETFD, FD_CLOEXEC) == -1) {
+      int err = errno;
+      VOID_TEMP_FAILURE_RETRY(::close(socket_fd));
+      VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+      VOID_TEMP_FAILURE_RETRY(::close(p[1]));
+      ostringstream oss;
+      oss << "asok_connect: failed to fcntl on socket: " << cpp_strerror(err);
+      return oss.str();
+    }
+
+    pid_t child = ::fork();
+    if (child == 0) {
+      VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+      boost::filesystem::path path(sock_path);
+      auto dirname = path.parent_path();
+      auto basename = path.filename();
+      if (::chdir(dirname.c_str()) == -1) {
+        int err = errno;
+        ostringstream oss;
+        oss << "asok_connect: failed to chdir to socket dir '" << dirname << "': " << cpp_strerror(err);
+        const auto &s = oss.str();
+        auto _ = safe_write(p[1], s.c_str(), s.size());
+        (void)_;
+        ::_exit(EXIT_FAILURE);
+      }
+      const auto &status = do_connect(socket_fd, basename.string());
+      if (status.size() > 0) {
+        auto _ = safe_write(p[1], status.c_str(), status.size());
+        (void)_;
+        ::_exit(EXIT_FAILURE);
+      }
+      ::_exit(EXIT_SUCCESS);
+    } else if (child > 0) {
+      int status;
+      VOID_TEMP_FAILURE_RETRY(::close(p[1]));
+      int result = TEMP_FAILURE_RETRY(::waitpid(child, &status, 0));
+      if (result == -1) {
+        int err = errno;
+        VOID_TEMP_FAILURE_RETRY(::close(socket_fd));
+        VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+        VOID_TEMP_FAILURE_RETRY(::unlink(sock_path.c_str()));
+        ostringstream oss;
+        oss << "bind_and_listen: failed to wait for helper process: " << cpp_strerror(err);
+        return oss.str();
+      }
+      if (status) {
+        char buf[4096];
+        ssize_t r = safe_read(p[0], buf, sizeof buf);
+        if (r > 0) {
+          VOID_TEMP_FAILURE_RETRY(::close(socket_fd));
+          VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+          VOID_TEMP_FAILURE_RETRY(::unlink(sock_path.c_str()));
+          return std::string(buf, (size_t)r);
+        }
+      }
+      VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+    } else {
+      VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+      VOID_TEMP_FAILURE_RETRY(::close(p[1]));
+      const auto &status = do_connect(socket_fd, sock_path);
+      if (status.size()) {
+        return status;
+      }
+    }
   }
 
   struct timeval timer;
