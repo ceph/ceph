@@ -25,12 +25,12 @@ class MPoolOp : public PaxosServiceMessage {
 
 public:
   uuid_d fsid;
-  __u32 pool;
+  __u32 pool = 0;
   string name;
-  __u32 op;
-  uint64_t auid;
+  __u32 op = 0;
+  uint64_t auid = 0;
   snapid_t snapid;
-  __s16 crush_rule;
+  __s16 crush_rule = 0;
 
   MPoolOp()
     : PaxosServiceMessage(CEPH_MSG_POOLOP, 0, HEAD_VERSION, COMPAT_VERSION) { }
