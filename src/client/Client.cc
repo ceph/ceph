@@ -12906,6 +12906,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 	}
       }
       if (mds >= 0) {
+	assert (s != NULL);
 	switch (s->state) {
 	case MetaSession::STATE_CLOSING:
 	  ldout(cct, 1) << "reset from mds we were closing; we'll call that closed" << dendl;
