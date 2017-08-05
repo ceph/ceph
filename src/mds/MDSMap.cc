@@ -408,9 +408,9 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
 
 void MDSMap::get_health_checks(health_check_map_t *checks) const
 {
-  // MDS_DAMAGED
+  // MDS_DAMAGE
   if (!damaged.empty()) {
-    health_check_t& check = checks->get_or_add("MDS_DAMAGED", HEALTH_ERR,
+    health_check_t& check = checks->get_or_add("MDS_DAMAGE", HEALTH_ERR,
 					"%num% mds daemon%plurals% damaged");
     for (auto p : damaged) {
       std::ostringstream oss;
