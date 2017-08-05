@@ -16,6 +16,9 @@ tasks:
       - \(FS_
       - \(MDS_
       - \(OSD_
+      - \(MON_DOWN\)
+      - \(CACHE_POOL_NO_HIT_SET\)
+      - Monitor daemon marked osd
     conf:
       mon:
         mon warn on pool no app: false
