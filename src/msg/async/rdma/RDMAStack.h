@@ -300,7 +300,6 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
 class RDMAStack : public NetworkStack {
   vector<std::thread> threads;
   RDMADispatcher *dispatcher;
-  PerfCounters *perf_counter;
 
   std::atomic<bool> fork_finished = {false};
 
