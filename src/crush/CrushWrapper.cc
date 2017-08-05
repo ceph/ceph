@@ -1840,18 +1840,6 @@ int CrushWrapper::remove_device_class(CephContext *cct, int id, ostream *ss)
   }
   class_remove_item(id);
 
-  // note that there is no need to remove ourselves from shadow parent
-  // and reweight because we are going to destroy all shadow trees
-  // rebuild them all (if necessary) later.
-
-  // see if there is any osds that still reference this class
-  set<int> devices;
-  get_devices_by_class(class_name, &devices);
-  if (devices.empty()) {
-    // class has no more devices
-    remove_class_name(class_name);
-  }
-
   int r = rebuild_roots_with_classes();
   if (r < 0) {
     *ss << "unable to rebuild roots with class '" << class_name << "' "

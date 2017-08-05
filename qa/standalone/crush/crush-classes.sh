@@ -162,27 +162,19 @@ function TEST_mon_classes() {
     ceph osd crush tree --show-shadow | grep -q '~ccc' || return 1
     ceph osd crush rm-device-class 0 || return 1
     ceph osd tree | grep -q 'aaa' && return 1
-    ceph osd crush dump | grep -q '~aaa' && return 1
-    ceph osd crush tree --show-shadow | grep -q '~aaa' && return 1
-    ceph osd crush class ls | grep -q 'aaa' && return 1
+    ceph osd crush class ls | grep -q 'aaa' || return 1
     ceph osd crush rm-device-class 1 || return 1
     ceph osd tree | grep -q 'bbb' && return 1
-    ceph osd crush dump | grep -q '~bbb' && return 1
-    ceph osd crush tree --show-shadow | grep -q '~bbb' && return 1
-    ceph osd crush class ls | grep -q 'bbb' && return 1
+    ceph osd crush class ls | grep -q 'bbb' || return 1
     ceph osd crush rm-device-class 2 || return 1
     ceph osd tree | grep -q 'ccc' && return 1
-    ceph osd crush dump | grep -q '~ccc' && return 1
-    ceph osd crush tree --show-shadow | grep -q '~ccc' && return 1
-    ceph osd crush class ls | grep -q 'ccc' && return 1
+    ceph osd crush class ls | grep -q 'ccc' || return 1
     ceph osd crush set-device-class asdf all || return 1
     ceph osd tree | grep -q 'asdf' || return 1
     ceph osd crush dump | grep -q '~asdf' || return 1
     ceph osd crush tree --show-shadow | grep -q '~asdf' || return 1
     ceph osd crush rm-device-class all || return 1
     ceph osd tree | grep -q 'asdf' && return 1
-    ceph osd crush dump | grep -q '~asdf' && return 1
-    ceph osd crush tree --show-shadow | grep -q '~asdf' && return 1
 
     # test 'class rm' automatically recycles shadow trees
     ceph osd crush set-device-class asdf 0 1 2 || return 1
@@ -211,12 +203,6 @@ function TEST_mon_classes() {
     ceph osd crush dump | grep -q 'foo-host~abc' || return 1
     ceph osd crush tree --show-shadow | grep -q 'foo-host~abc' || return 1
     ceph osd crush rm-device-class osd.2 || return 1
-    ceph osd crush dump | grep -q 'foo~abc' && return 1
-    ceph osd crush tree --show-shadow | grep -q 'foo~abc' && return 1
-    ceph osd crush dump | grep -q 'foo-rack~abc' && return 1
-    ceph osd crush tree --show-shadow | grep -q 'foo-rack~abc' && return 1
-    ceph osd crush dump | grep -q 'foo-host~abc' && return 1
-    ceph osd crush tree --show-shadow | grep -q 'foo-host~abc' && return 1
     # restore class, so we can continue to test create-replicated
     ceph osd crush set-device-class abc osd.2 || return 1
 
