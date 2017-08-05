@@ -2336,14 +2336,15 @@ private:
       srand(time(NULL));
       unsigned which = rand() % (sizeof(index_lookup) / sizeof(index_lookup[0]));
       return index_lookup[which];
-    } else if (cct->_conf->osd_op_queue == "wpq") {
-      return io_queue::weightedpriority;
+    } else if (cct->_conf->osd_op_queue == "prioritized") {
+      return io_queue::prioritized;
     } else if (cct->_conf->osd_op_queue == "mclock_opclass") {
       return io_queue::mclock_opclass;
     } else if (cct->_conf->osd_op_queue == "mclock_client") {
       return io_queue::mclock_client;
     } else {
-      return io_queue::prioritized;
+      // default / catch-all is 'wpq'
+      return io_queue::weightedpriority;
     }
   }
 
@@ -2351,10 +2352,11 @@ private:
     if (cct->_conf->osd_op_queue_cut_off == "debug_random") {
       srand(time(NULL));
       return (rand() % 2 < 1) ? CEPH_MSG_PRIO_HIGH : CEPH_MSG_PRIO_LOW;
-    } else if (cct->_conf->osd_op_queue_cut_off == "low") {
-      return CEPH_MSG_PRIO_LOW;
-    } else {
+    } else if (cct->_conf->osd_op_queue_cut_off == "high") {
       return CEPH_MSG_PRIO_HIGH;
+    } else {
+      // default / catch-all is 'low'
+      return CEPH_MSG_PRIO_LOW;
     }
   }
 
