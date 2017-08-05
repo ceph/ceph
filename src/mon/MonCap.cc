@@ -260,6 +260,17 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.back().command_args["caps_osd"] = StringConstraint(
       StringConstraint::MATCH_TYPE_EQUAL, "allow rwx");
   }
+  if (profile == "bootstrap-rbd") {
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
+    profile_grants.push_back(MonCapGrant("auth get-or-create"));  // FIXME: this can expose other mds keys
+    profile_grants.back().command_args["entity"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_PREFIX, "client.");
+    profile_grants.back().command_args["caps_mon"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_EQUAL, "profile rbd");
+    profile_grants.back().command_args["caps_osd"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_REGEX,
+      "^([ ,]*profile(=|[ ]+)['\"]?rbd[^ ,'\"]*['\"]?([ ]+pool(=|[ ]+)['\"]?[^,'\"]+['\"]?)?)+$");
+  }
   if (profile == "fs-client") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_R));
@@ -281,7 +292,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.back().command_args["blacklistop"] = StringConstraint(
       StringConstraint::MATCH_TYPE_EQUAL, "add");
     profile_grants.back().command_args["addr"] = StringConstraint(
-      StringConstraint::MATCH_TYPE_REGEX, "^[^/]/[0-9]*$");
+      StringConstraint::MATCH_TYPE_REGEX, "^[^/]+/[0-9]+$");
   }
 
   if (profile == "role-definer") {
@@ -330,8 +341,8 @@ mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
         break;
       case StringConstraint::MATCH_TYPE_REGEX:
         {
-	  boost::regex pattern(p->second.value,
-                               boost::regex::basic | boost::regex::no_except);
+	  boost::regex pattern(
+            p->second.value, boost::regex::extended | boost::regex::no_except);
           if (pattern.empty() || !boost::regex_match(q->second, pattern))
 	    return 0;
         }
