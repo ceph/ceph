@@ -3094,9 +3094,11 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
-    // need read access to directory inode
-    if (!check_access(mdr, diri, MAY_READ))
-      return;
+    if (diri != NULL) {
+      // need read access to directory inode
+      if (!check_access(mdr, diri, MAY_READ))
+        return;
+    }
   }
 
   if (want_parent) {
