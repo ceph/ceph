@@ -17,7 +17,10 @@ tasks:
       - \(MDS_
       - \(OSD_
       - \(MON_DOWN\)
-      - \(CACHE_POOL_NO_HIT_SET\)
+      - \(CACHE_POOL_
+      - \(POOL_
+      - \(MGR_DOWN\)
+      - \(PG_
       - Monitor daemon marked osd
     conf:
       mon:
