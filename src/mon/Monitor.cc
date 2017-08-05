@@ -103,16 +103,19 @@ const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 #undef FLAG
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
-MonCommand mon_commands[] = {
 #define FLAG(f) (MonCommand::FLAG_##f)
 #define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
   {parsesig, helptext, modulename, req_perms, avail, FLAG(NONE)},
 #define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
   {parsesig, helptext, modulename, req_perms, avail, flags},
+MonCommand mon_commands[] = {
 #include <mon/MonCommands.h>
+};
+MonCommand pgmonitor_commands[] = {
+#include <mon/PGMonitorCommands.h>
+};
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
-};
 
 
 void C_MonContext::finish(int r) {
@@ -209,6 +212,13 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
     local_mon_commands[i] = mon_commands[i];
   }
   MonCommand::encode_vector(local_mon_commands, local_mon_commands_bl);
+
+  local_upgrading_mon_commands = local_mon_commands;
+  for (unsigned i = 0; i < ARRAY_SIZE(pgmonitor_commands); ++i) {
+    local_upgrading_mon_commands.push_back(pgmonitor_commands[i]);
+  }
+  MonCommand::encode_vector(local_upgrading_mon_commands,
+			    local_upgrading_mon_commands_bl);
 
   // assume our commands until we have an election.  this only means
   // we won't reply with EINVAL before the election; any command that
@@ -1904,7 +1914,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   clog->info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum;
 
-  set_leader_commands(get_local_commands());
+  set_leader_commands(get_local_commands(mon_features));
 
   paxos->leader_init();
   // NOTE: tell monmap monitor first.  This is important for the
@@ -2945,8 +2955,13 @@ void Monitor::handle_command(MonOpRequestRef op)
       osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS;
 
     std::vector<MonCommand> commands;
-    commands = static_cast<MgrMonitor*>(
+
+    // only include mgr commands once all mons are upgrade (and we've dropped
+    // the hard-coded PGMonitor commands)
+    if (quorum_mon_features.contains_all(ceph::features::mon::FEATURE_LUMINOUS)) {
+      commands = static_cast<MgrMonitor*>(
         paxos_service[PAXOS_MGR])->get_command_descs();
+    }
 
     for (auto& c : leader_mon_commands) {
       commands.push_back(c);
@@ -2996,7 +3011,9 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
   }
   // validate command is in our map & matches, or forward if it is allowed
-  const MonCommand *mon_cmd = _get_moncommand(prefix, get_local_commands());
+  const MonCommand *mon_cmd = _get_moncommand(
+    prefix,
+    get_local_commands(quorum_mon_features));
   if (!mon_cmd) {
     mon_cmd = mgr_cmd;
   }
