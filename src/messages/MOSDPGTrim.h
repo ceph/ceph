@@ -23,7 +23,7 @@ class MOSDPGTrim : public Message {
   static const int COMPAT_VERSION = 2;
 
 public:
-  epoch_t epoch;
+  epoch_t epoch = 0;
   spg_t pgid;
   eversion_t trim_to;
 
