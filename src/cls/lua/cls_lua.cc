@@ -643,7 +643,7 @@ static const luaL_Reg clslua_lib[] = {
 };
 
 /*
- * Set int const in table at top of stack
+ * Set const int in table at top of stack
  */
 #define SET_INT_CONST(var) do { \
   lua_pushinteger(L, var); \

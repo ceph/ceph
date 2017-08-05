@@ -1326,7 +1326,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     if (!op->session) {
       _calc_target(&op->target, nullptr);
       OSDSession *s = NULL;
-      int const r = _get_session(op->target.osd, &s, sul);
+      const int r = _get_session(op->target.osd, &s, sul);
       assert(r == 0);
       assert(s != NULL);
       op->session = s;
