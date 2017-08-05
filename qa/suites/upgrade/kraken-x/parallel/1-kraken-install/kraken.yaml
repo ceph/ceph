@@ -8,6 +8,9 @@ tasks:
     branch: kraken
 - print: "**** done installing kraken"
 - ceph:
+    conf:
+      mon:
+        mon warn on pool no app: false
 - print: "**** done ceph"
 - install.upgrade:
     mon.a:
