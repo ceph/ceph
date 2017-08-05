@@ -693,6 +693,7 @@ def cluster(ctx, config):
                     '-p',
                     mnt_point,
                 ])
+            log.info(str(roles_to_devs))
             log.info(str(roles_to_journals))
             log.info(role)
             if roles_to_devs.get(role):
