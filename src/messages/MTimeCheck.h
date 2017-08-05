@@ -25,9 +25,9 @@ struct MTimeCheck : public Message
     OP_REPORT = 3,
   };
 
-  int op;
-  version_t epoch;
-  version_t round;
+  int op = 0;
+  version_t epoch = 0;
+  version_t round = 0;
 
   utime_t timestamp;
   map<entity_inst_t, double> skews;

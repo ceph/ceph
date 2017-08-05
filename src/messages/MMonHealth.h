@@ -26,8 +26,8 @@ struct MMonHealth : public MMonQuorumService
     OP_TELL = 1,
   };
 
-  int service_type;
-  int service_op;
+  int service_type = 0;
+  int service_op = 0;
 
   // service specific data
   DataStats data_stats;
