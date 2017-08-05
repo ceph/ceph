@@ -78,8 +78,8 @@ protected:
 private:
   TestMemIoCtxImpl(const TestMemIoCtxImpl&);
 
-  TestMemRadosClient *m_client;
-  TestMemCluster::Pool *m_pool;
+  TestMemRadosClient *m_client = nullptr;
+  TestMemCluster::Pool *m_pool = nullptr;
 
   void append_clone(bufferlist& src, bufferlist* dest);
   size_t clip_io(size_t off, size_t len, size_t bl_len);
