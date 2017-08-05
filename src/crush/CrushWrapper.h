@@ -1262,7 +1262,7 @@ public:
     }
   }
 
-  bool ruleset_exists(int const ruleset) const {
+  bool ruleset_exists(const int ruleset) const {
     for (size_t i = 0; i < crush->max_rules; ++i) {
       if (rule_exists(i) && crush->rules[i]->mask.ruleset == ruleset) {
 	return true;
