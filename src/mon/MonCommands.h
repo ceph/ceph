@@ -123,8 +123,9 @@
  */
 
 // note: this should be replaced shortly!
-COMMAND("pg force_create_pg name=pgid,type=CephPgid", \
-	"force creation of pg <pgid>", "pg", "rw", "cli,rest")
+COMMAND_WITH_FLAG("pg force_create_pg name=pgid,type=CephPgid", \
+		  "force creation of pg <pgid>", "pg", "rw", "cli,rest",
+		  FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("pg set_full_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
 		  "set ratio at which pgs are considered full", \
 		  "pg", "rw", "cli,rest", FLAG(DEPRECATED))
