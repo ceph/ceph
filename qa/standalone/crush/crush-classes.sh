@@ -162,19 +162,21 @@ function TEST_mon_classes() {
     ceph osd crush tree --show-shadow | grep -q '~ccc' || return 1
     ceph osd crush rm-device-class 0 || return 1
     ceph osd tree | grep -q 'aaa' && return 1
-    ceph osd crush class ls | grep -q 'aaa' || return 1
+    ceph osd crush class ls | grep -q 'aaa' && return 1 # class 'aaa' should gone
     ceph osd crush rm-device-class 1 || return 1
     ceph osd tree | grep -q 'bbb' && return 1
-    ceph osd crush class ls | grep -q 'bbb' || return 1
+    ceph osd crush class ls | grep -q 'bbb' && return 1 # class 'bbb' should gone
     ceph osd crush rm-device-class 2 || return 1
     ceph osd tree | grep -q 'ccc' && return 1
-    ceph osd crush class ls | grep -q 'ccc' || return 1
+    ceph osd crush class ls | grep -q 'ccc' && return 1 # class 'ccc' should gone
     ceph osd crush set-device-class asdf all || return 1
     ceph osd tree | grep -q 'asdf' || return 1
     ceph osd crush dump | grep -q '~asdf' || return 1
     ceph osd crush tree --show-shadow | grep -q '~asdf' || return 1
+    ceph osd crush rule create-replicated asdf-rule default host asdf || return 1
     ceph osd crush rm-device-class all || return 1
     ceph osd tree | grep -q 'asdf' && return 1
+    ceph osd crush class ls | grep -q 'asdf' || return 1 # still referenced by asdf-rule
 
     ceph osd crush set-device-class abc osd.2 || return 1
     ceph osd crush move osd.2 root=foo rack=foo-rack host=foo-host || return 1
