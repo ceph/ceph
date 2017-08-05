@@ -9693,9 +9693,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
          << "really do.";
       err = -EPERM;
       goto reply;
-    } else if (is_destroy && !osdmap.exists(id)) {
+    } else if (!osdmap.exists(id)) {
       ss << "osd." << id << " does not exist";
-      err = -ENOENT;
+      err = 0; // idempotent
       goto reply;
     } else if (osdmap.is_up(id)) {
       ss << "osd." << id << " is not `down`.";
