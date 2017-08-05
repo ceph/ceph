@@ -505,9 +505,6 @@ COMMAND("osd map " \
 COMMAND("osd lspools " \
 	"name=auid,type=CephInt,req=false", \
 	"list pools", "osd", "r", "cli,rest")
-COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
-COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw",
-        "cli,rest")
 COMMAND_WITH_FLAG("osd crush rule list", "list crush rules", "osd", "r", "cli,rest",
 		  FLAG(DEPRECATED))
 COMMAND("osd crush rule ls", "list crush rules", "osd", "r", "cli,rest")
@@ -884,6 +881,9 @@ COMMAND("osd blacklist " \
 	"name=expire,type=CephFloat,range=0.0,req=false", \
 	"add (optionally until <expire> seconds from now) or remove <addr> from blacklist", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
+COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw",
+        "cli,rest")
 COMMAND("osd pool mksnap " \
 	"name=pool,type=CephPoolname " \
 	"name=snap,type=CephString", \
