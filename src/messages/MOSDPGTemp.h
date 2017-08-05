@@ -21,7 +21,7 @@
 
 class MOSDPGTemp : public PaxosServiceMessage {
  public:
-  epoch_t map_epoch;
+  epoch_t map_epoch = 0;
   map<pg_t, vector<int32_t> > pg_temp;
 
   MOSDPGTemp(epoch_t e) : PaxosServiceMessage(MSG_OSD_PGTEMP, e), map_epoch(e) { }

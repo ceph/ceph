@@ -23,7 +23,7 @@ class MOSDPGInfo : public Message {
   static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 1;
 
-  epoch_t epoch;
+  epoch_t epoch = 0;
 
 public:
   vector<pair<pg_notify_t,PastIntervals> > pg_list;

@@ -27,7 +27,7 @@ class MOSDPGQuery : public Message {
   static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 3;
 
-  version_t epoch;
+  version_t epoch = 0;
 
  public:
   version_t get_epoch() const { return epoch; }

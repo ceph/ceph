@@ -59,8 +59,8 @@ class MOSDPing : public Message {
   }
 
   uuid_d fsid;
-  epoch_t map_epoch;
-  __u8 op;
+  epoch_t map_epoch = 0;
+  __u8 op = 0;
   utime_t stamp;
   uint32_t min_message_size;
 
