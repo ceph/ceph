@@ -1016,6 +1016,7 @@ rm -rf %{buildroot}
 %{_unitdir}/ceph.target
 %{python_sitelib}/ceph_detect_init*
 %{python_sitelib}/ceph_disk*
+%dir %{python_sitelib}/ceph_volume
 %{python_sitelib}/ceph_volume/*
 %{python_sitelib}/ceph_volume-*
 %{_mandir}/man8/ceph-deploy.8*
