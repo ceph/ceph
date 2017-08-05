@@ -117,7 +117,7 @@ void Elector::defer(int who)
   ack_stamp = ceph_clock_now();
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap);
   m->mon_features = ceph::features::mon::get_supported();
-  m->sharing_bl = mon->get_supported_commands_bl();
+  m->sharing_bl = mon->get_local_commands_bl();
   mon->collect_metadata(&m->metadata);
   mon->messenger->send_message(m, mon->monmap->get_inst(who));
   
@@ -201,30 +201,23 @@ void Elector::victory()
   assert(epoch % 2 == 1);  // election
   bump_epoch(epoch+1);     // is over!
 
-  // decide my supported commands for peons to advertise
-  const bufferlist *cmds_bl = NULL;
-  const MonCommand *cmds;
-  int cmdsize;
-  mon->get_locally_supported_monitor_commands(&cmds, &cmdsize);
-  cmds_bl = &mon->get_supported_commands_bl();
-  
   // tell everyone!
   for (set<int>::iterator p = quorum.begin();
        p != quorum.end();
        ++p) {
     if (*p == mon->rank) continue;
-    MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
+    MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch,
+				       mon->monmap);
     m->quorum = quorum;
     m->quorum_features = cluster_features;
     m->mon_features = mon_features;
-    m->sharing_bl = *cmds_bl;
+    m->sharing_bl = mon->get_local_commands_bl();
     mon->messenger->send_message(m, mon->monmap->get_inst(*p));
   }
 
   // tell monitor
   mon->win_election(epoch, quorum,
-                    cluster_features, mon_features, metadata,
-                    cmds, cmdsize);
+                    cluster_features, mon_features, metadata);
 }
 
 
@@ -394,11 +387,10 @@ void Elector::handle_victory(MonOpRequestRef op)
 
   // stash leader's commands
   assert(m->sharing_bl.length());
-  MonCommand *new_cmds;
-  int cmdsize;
+  vector<MonCommand> new_cmds;
   bufferlist::iterator bi = m->sharing_bl.begin();
-  MonCommand::decode_array(&new_cmds, &cmdsize, bi);
-  mon->set_leader_supported_commands(new_cmds, cmdsize);
+  MonCommand::decode_vector(new_cmds, bi);
+  mon->set_leader_commands(new_cmds);
 }
 
 void Elector::nak_old_peer(MonOpRequestRef op)

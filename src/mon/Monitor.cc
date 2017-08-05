@@ -143,8 +143,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   auth_service_required(cct,
 			cct->_conf->auth_supported.empty() ?
 			cct->_conf->auth_service_required : cct->_conf->auth_supported ),
-  leader_supported_mon_commands(NULL),
-  leader_supported_mon_commands_size(0),
   mgr_messenger(mgr_m),
   mgr_client(cct_, mgr_m),
   pgservice(nullptr),
@@ -205,14 +203,18 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   exited_quorum = ceph_clock_now();
 
+  // prepare local commands
+  local_mon_commands.resize(ARRAY_SIZE(mon_commands));
+  for (unsigned i = 0; i < ARRAY_SIZE(mon_commands); ++i) {
+    local_mon_commands[i] = mon_commands[i];
+  }
+  MonCommand::encode_vector(local_mon_commands, local_mon_commands_bl);
+
   // assume our commands until we have an election.  this only means
   // we won't reply with EINVAL before the election; any command that
   // actually matters will wait until we have quorum etc and then
   // retry (and revalidate).
-  const MonCommand *cmds;
-  int cmdsize;
-  get_locally_supported_monitor_commands(&cmds, &cmdsize);
-  set_leader_supported_commands(cmds, cmdsize);
+  leader_mon_commands = local_mon_commands;
 
   // note: OSDMonitor may update this based on the luminous flag.
   pgservice = mgrstatmon()->get_pg_stat_service();
@@ -227,8 +229,6 @@ Monitor::~Monitor()
   delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;
-  if (leader_supported_mon_commands != mon_commands)
-    delete[] leader_supported_mon_commands;
 }
 
 
@@ -786,13 +786,6 @@ int Monitor::init()
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
 
   bootstrap();
-
-  // encode command sets
-  const MonCommand *cmds;
-  int cmdsize;
-  get_locally_supported_monitor_commands(&cmds, &cmdsize);
-  MonCommand::encode_array(cmds, cmdsize, supported_commands_bl);
-
   return 0;
 }
 
@@ -1861,14 +1854,10 @@ void Monitor::win_standalone_election()
   map<int,Metadata> metadata;
   collect_metadata(&metadata[0]);
 
-  const MonCommand *my_cmds = nullptr;
-  int cmdsize = 0;
-  get_locally_supported_monitor_commands(&my_cmds, &cmdsize);
   win_election(elector.get_epoch(), q,
                CEPH_FEATURES_ALL,
                ceph::features::mon::get_supported(),
-	       metadata,
-               my_cmds, cmdsize);
+	       metadata);
 }
 
 const utime_t& Monitor::get_leader_since() const
@@ -1896,8 +1885,7 @@ void Monitor::_finish_svc_election()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
-			   const map<int,Metadata>& metadata,
-                           const MonCommand *cmdset, int cmdsize)
+			   const map<int,Metadata>& metadata)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
 	   << " features " << features
@@ -1916,7 +1904,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   clog->info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum;
 
-  set_leader_supported_commands(cmdset, cmdsize);
+  set_leader_commands(get_local_commands());
 
   paxos->leader_init();
   // NOTE: tell monmap monitor first.  This is important for the
@@ -2812,18 +2800,14 @@ void Monitor::_generate_command_map(map<string,cmd_vartype>& cmdmap,
 
 const MonCommand *Monitor::_get_moncommand(
   const string &cmd_prefix,
-  const MonCommand *cmds,
-  int cmds_size)
+  const vector<MonCommand>& cmds)
 {
-  const MonCommand *this_cmd = NULL;
-  for (const MonCommand *cp = cmds;
-       cp < &cmds[cmds_size]; cp++) {
-    if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
-      this_cmd = cp;
-      break;
+  for (auto& c : cmds) {
+    if (c.cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
+      return &c;
     }
   }
-  return this_cmd;
+  return nullptr;
 }
 
 bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
@@ -2868,20 +2852,6 @@ void Monitor::format_command_descriptions(const std::vector<MonCommand> &command
   f->close_section();	// command_descriptions
 
   f->flush(*rdata);
-}
-
-void Monitor::get_locally_supported_monitor_commands(const MonCommand **cmds,
-						     int *count)
-{
-  *cmds = mon_commands;
-  *count = ARRAY_SIZE(mon_commands);
-}
-void Monitor::set_leader_supported_commands(const MonCommand *cmds, int size)
-{
-  if (leader_supported_mon_commands != mon_commands)
-    delete[] leader_supported_mon_commands;
-  leader_supported_mon_commands = cmds;
-  leader_supported_mon_commands_size = size;
 }
 
 bool Monitor::is_keyring_required()
@@ -2978,8 +2948,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     commands = static_cast<MgrMonitor*>(
         paxos_service[PAXOS_MGR])->get_command_descs();
 
-    for (int i = 0 ; i < leader_supported_mon_commands_size; ++i) {
-      commands.push_back(leader_supported_mon_commands[i]);
+    for (auto& c : leader_mon_commands) {
+      commands.push_back(c);
     }
 
     format_command_descriptions(commands, f, &rdata, hide_mgr_flag);
@@ -3015,12 +2985,9 @@ void Monitor::handle_command(MonOpRequestRef op)
   const auto& mgr_cmds = mgrmon()->get_command_descs();
   const MonCommand *mgr_cmd = nullptr;
   if (!mgr_cmds.empty()) {
-    mgr_cmd = _get_moncommand(prefix, &mgr_cmds.at(0), mgr_cmds.size());
+    mgr_cmd = _get_moncommand(prefix, mgr_cmds);
   }
-  leader_cmd = _get_moncommand(prefix,
-                               // the boost underlying this isn't const for some reason
-                               const_cast<MonCommand*>(leader_supported_mon_commands),
-                               leader_supported_mon_commands_size);
+  leader_cmd = _get_moncommand(prefix, leader_mon_commands);
   if (!leader_cmd) {
     leader_cmd = mgr_cmd;
     if (!leader_cmd) {
@@ -3029,8 +2996,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
   }
   // validate command is in our map & matches, or forward if it is allowed
-  const MonCommand *mon_cmd = _get_moncommand(prefix, mon_commands,
-                                              ARRAY_SIZE(mon_commands));
+  const MonCommand *mon_cmd = _get_moncommand(prefix, get_local_commands());
   if (!mon_cmd) {
     mon_cmd = mgr_cmd;
   }
