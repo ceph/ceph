@@ -523,23 +523,3 @@ happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
 You can manually initiate a scrub of a clean PG with::
 
   ceph pg deep-scrub <pgid>
-
-CephFS
-------
-
-FS_WITH_FAILED_MDS
-__________________
-
-
-FS_DEGRADED
-___________
-
-
-MDS_INSUFFICIENT_STANDBY
-________________________
-
-
-MDS_DAMAGED
-___________
-
-
