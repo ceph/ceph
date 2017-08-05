@@ -117,8 +117,14 @@ void Elector::defer(int who)
   ack_stamp = ceph_clock_now();
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap);
   m->mon_features = ceph::features::mon::get_supported();
-  m->sharing_bl = mon->get_local_commands_bl();
   mon->collect_metadata(&m->metadata);
+
+  // This field is unused completely in luminous, but jewel uses it to
+  // determine whether we are a dumpling mon due to some crufty old
+  // code.  It only needs to see this buffer non-empty, so put
+  // something useless there.
+  m->sharing_bl = mon->get_local_commands_bl(mon->get_required_mon_features());
+
   mon->messenger->send_message(m, mon->monmap->get_inst(who));
   
   // set a timer
@@ -211,7 +217,7 @@ void Elector::victory()
     m->quorum = quorum;
     m->quorum_features = cluster_features;
     m->mon_features = mon_features;
-    m->sharing_bl = mon->get_local_commands_bl();
+    m->sharing_bl = mon->get_local_commands_bl(mon_features);
     mon->messenger->send_message(m, mon->monmap->get_inst(*p));
   }
 
