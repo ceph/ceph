@@ -165,8 +165,9 @@ public:
 
   CompatSet features;
 
-  const MonCommand *leader_supported_mon_commands;
-  int leader_supported_mon_commands_size;
+  vector<MonCommand> leader_mon_commands; // quorum leader's commands
+  vector<MonCommand> local_mon_commands;  // commands i support
+  bufferlist local_mon_commands_bl;       // encoded version of above
 
   Messenger *mgr_messenger;
   MgrClient mgr_client;
@@ -248,7 +249,6 @@ private:
    * Intersection of quorum members mon-specific feature bits
    */
   mon_feature_t quorum_mon_features;
-  bufferlist supported_commands_bl; // encoded MonCommands we support
 
   set<string> outside_quorum;
 
@@ -600,17 +600,12 @@ public:
   void win_election(epoch_t epoch, set<int>& q,
 		    uint64_t features,
                     const mon_feature_t& mon_features,
-		    const map<int,Metadata>& metadata,
-		    const MonCommand *cmdset, int cmdsize);
+		    const map<int,Metadata>& metadata);
   void lose_election(epoch_t epoch, set<int>& q, int l,
 		     uint64_t features,
                      const mon_feature_t& mon_features);
   // end election (called by Elector)
   void finish_election();
-
-  const bufferlist& get_supported_commands_bl() {
-    return supported_commands_bl;
-  }
 
   void update_logger();
 
@@ -687,8 +682,7 @@ public:
                                     map<string,string> &param_str_map);
   static const MonCommand *_get_moncommand(
     const string &cmd_prefix,
-    const MonCommand *cmds,
-    int cmds_size);
+    const vector<MonCommand>& cmds);
   bool _allowed_command(MonSession *s, string &module, string &prefix,
                         const map<string,cmd_vartype>& cmdmap,
                         const map<string,string>& param_str_map,
@@ -967,9 +961,17 @@ public:
 					  Formatter *f,
 					  bufferlist *rdata,
 					  bool hide_mgr_flag=false);
-  void get_locally_supported_monitor_commands(const MonCommand **cmds, int *count);
-  /// the Monitor owns this pointer once you pass it in
-  void set_leader_supported_commands(const MonCommand *cmds, int size);
+
+  const std::vector<MonCommand> &get_local_commands() {
+    return local_mon_commands;
+  }
+  const bufferlist& get_local_commands_bl() {
+    return local_mon_commands_bl;
+  }
+  void set_leader_commands(const std::vector<MonCommand>& cmds) {
+    leader_mon_commands = cmds;
+  }
+
   static bool is_keyring_required();
 };
 
