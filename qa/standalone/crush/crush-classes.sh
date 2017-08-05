@@ -176,18 +176,6 @@ function TEST_mon_classes() {
     ceph osd crush rm-device-class all || return 1
     ceph osd tree | grep -q 'asdf' && return 1
 
-    # test 'class rm' automatically recycles shadow trees
-    ceph osd crush set-device-class asdf 0 1 2 || return 1
-    ceph osd tree | grep -q 'asdf' || return 1
-    ceph osd crush dump | grep -q '~asdf' || return 1
-    ceph osd crush tree --show-shadow | grep -q '~asdf' || return 1
-    ceph osd crush class ls | grep -q 'asdf' || return 1
-    ceph osd crush class rm asdf || return 1
-    ceph osd tree | grep -q 'asdf' && return 1
-    ceph osd crush dump | grep -q '~asdf' && return 1
-    ceph osd crush tree --show-shadow | grep -q '~asdf' && return 1
-    ceph osd crush class ls | grep -q 'asdf' && return 1
-
     ceph osd crush set-device-class abc osd.2 || return 1
     ceph osd crush move osd.2 root=foo rack=foo-rack host=foo-host || return 1
     out=`ceph osd tree |awk '$1 == 2 && $2 == "abc" {print $0}'`
@@ -207,24 +195,6 @@ function TEST_mon_classes() {
     ceph osd crush set-device-class abc osd.2 || return 1
 
     ceph osd crush rule create-replicated foo-rule foo host abc || return 1
-
-    # test class_is_in_use
-    ceph osd crush set-device-class hdd osd.0 || return 1
-    ceph osd crush set-device-class ssd osd.1 || return 1
-    ceph osd crush rule create-replicated foo-hdd1 default host hdd || return 1
-    ceph osd crush rule create-replicated foo-hdd2 default host hdd || return 1
-    ceph osd crush rule create-replicated foo-ssd default host ssd || return 1
-    expect_failure $dir EBUSY ceph osd crush class rm hdd || return 1
-    expect_failure $dir EBUSY ceph osd crush class rm ssd || return 1
-    ceph osd crush rule rm foo-hdd1 || return 1
-    expect_failure $dir EBUSY ceph osd crush class rm hdd || return 1 # still referenced by foo-hdd2
-    ceph osd crush rule rm foo-hdd2 || return 1
-    ceph osd crush rule rm foo-ssd || return 1
-    ceph osd crush class rm hdd || return 1
-    ceph osd crush class rm ssd || return 1
-    expect_failure $dir EBUSY ceph osd crush class rm abc || return 1 # still referenced by foo-rule
-    ceph osd crush rule rm foo-rule || return 1
-    ceph osd crush class rm abc || return 1
 
     # test set-device-class implicitly change class
     ceph osd crush set-device-class hdd osd.0 || return 1

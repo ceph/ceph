@@ -1364,41 +1364,6 @@ int CrushWrapper::get_parent_of_type(int item, int type) const
   return item;
 }
 
-
-bool CrushWrapper::class_is_in_use(int class_id, ostream *ss)
-{
-  list<unsigned> rules;
-  for (unsigned i = 0; i < crush->max_rules; ++i) {
-    crush_rule *r = crush->rules[i];
-    if (!r)
-      continue;
-    for (unsigned j = 0; j < r->len; ++j) {
-      if (r->steps[j].op == CRUSH_RULE_TAKE) {
-        int root = r->steps[j].arg1;
-        for (auto &p : class_bucket) {
-          auto& q = p.second;
-          if (q.count(class_id) && q[class_id] == root) {
-            rules.push_back(i);
-          }
-        }
-      }
-    }
-  }
-  if (rules.empty()) {
-    return false;
-  }
-  if (ss) {
-    ostringstream os;
-    for (auto &p: rules) {
-      os << "'" << get_rule_name(p) <<"',";
-    }
-    string out(os.str());
-    out.resize(out.size() - 1); // drop last ','
-    *ss << "still referenced by crush_rule(s): " << out;
-  }
-  return true;
-}
-
 int CrushWrapper::populate_classes(
   const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket)
 {

@@ -7479,63 +7479,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     else
       goto update;
-  } else if (prefix == "osd crush class rm") {
-    string device_class;
-    if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
-      err = -EINVAL; // no value!
-      goto reply;
-    }
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
-	 << "luminous' before using crush device classes";
-      err = -EPERM;
-      goto reply;
-    }
-
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
-
-    if (!newcrush.class_exists(device_class)) {
-      err = -ENOENT;
-      ss << "class '" << device_class << "' does not exist";
-      goto reply;
-    }
-
-    int class_id = newcrush.get_class_id(device_class);
-
-    stringstream ts;
-    if (newcrush.class_is_in_use(class_id, &ts)) {
-      err = -EBUSY;
-      ss << "class '" << device_class << "' " << ts.str();
-      goto reply;
-    }
-
-    set<int> osds;
-    newcrush.get_devices_by_class(device_class, &osds);
-    for (auto& p: osds) {
-      err = newcrush.remove_device_class(g_ceph_context, p, &ss);
-      if (err < 0) {
-        // ss has reason for failure
-        goto reply;
-      }
-    }
-
-    if (osds.empty()) {
-      // empty class, remove directly
-      err = newcrush.remove_class_name(device_class);
-      if (err < 0) {
-        ss << "class '" << device_class << "' cannot be removed '"
-           << cpp_strerror(err) << "'";
-        goto reply;
-      }
-    }
-
-    pending_inc.crush.clear();
-    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-    ss << "removed class " << device_class << " with id " << class_id
-       << " from crush map";
-    goto update;
-
   } else if (prefix == "osd crush weight-set create" ||
 	     prefix == "osd crush weight-set create-compat") {
     CrushWrapper newcrush;
