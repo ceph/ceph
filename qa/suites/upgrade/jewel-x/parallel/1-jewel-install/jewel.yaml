@@ -16,6 +16,9 @@ tasks:
       - \(FS_
       - \(MDS_
       - \(OSD_
+    conf:
+      mon:
+        mon warn on pool no app: false
 - print: "**** done ceph"
 - install.upgrade:
     mon.a:
