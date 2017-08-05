@@ -1243,6 +1243,17 @@ int ceph_get_pool_name(struct ceph_mount_info *cmount, int pool, char *buf, size
 int ceph_get_path_pool_name(struct ceph_mount_info *cmount, const char *path, char *buf, size_t buflen);
 
 /**
+ * Get the default pool name of cephfs
+ * Write the name of the default pool to the buffer. If buflen is 0, return
+ * a suggested length for the buffer.
+ * @param cmount the ceph mount handle to use.
+ * @param buf buffer to store the name in
+ * @param buflen size of the buffer
+ * @returns length in bytes of the pool name, or -ERANGE if the buffer is not large enough.
+ */
+int ceph_get_default_data_pool_name(struct ceph_mount_info *cmount, char *buf, size_t buflen);
+
+/**
  * Get the file layout from an open file descriptor.
  *
  * @param cmount the ceph mount handle to use.
