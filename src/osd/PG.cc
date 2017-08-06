@@ -2230,6 +2230,10 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
     // in the future).
     info.set_last_backfill(hobject_t());
     child->info.set_last_backfill(hobject_t());
+    // restarting backfill implies that the missing set is empty,
+    // since it is only used for objects prior to last_backfill
+    pg_log.reset_backfill();
+    child->pg_log.reset_backfill();
   }
 
   child->info.stats = info.stats;
