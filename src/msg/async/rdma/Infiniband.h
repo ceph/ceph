@@ -217,14 +217,14 @@ class Infiniband {
   };
 
  private:
-  uint32_t max_send_wr;
-  uint32_t max_recv_wr;
-  uint32_t max_sge;
-  uint8_t  ib_physical_port;
-  MemoryManager* memory_manager;
-  ibv_srq* srq;             // shared receive work queue
-  Device *device;
-  ProtectionDomain *pd;
+  uint32_t max_send_wr = 0;
+  uint32_t max_recv_wr = 0;
+  uint32_t max_sge = 0;
+  uint8_t  ib_physical_port = 0;
+  MemoryManager* memory_manager = nullptr;
+  ibv_srq* srq = nullptr;             // shared receive work queue
+  Device *device = NULL;
+  ProtectionDomain *pd = NULL;
   DeviceList *device_list = nullptr;
   RDMADispatcher *dispatcher = nullptr;
   void wire_gid_to_gid(const char *wgid, union ibv_gid *gid);
