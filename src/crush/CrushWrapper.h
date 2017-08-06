@@ -1214,9 +1214,10 @@ public:
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket,
     const std::set<int32_t>& used_ids,
     int *clone);
-  bool class_is_in_use(int class_id, ostream *ss = nullptr);
   int populate_classes(
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
+  bool _class_is_dead(int class_id);
+  void cleanup_dead_classes();
   int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
   int trim_roots_with_class(bool unused);

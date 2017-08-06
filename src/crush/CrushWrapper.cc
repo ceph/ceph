@@ -1364,41 +1364,6 @@ int CrushWrapper::get_parent_of_type(int item, int type) const
   return item;
 }
 
-
-bool CrushWrapper::class_is_in_use(int class_id, ostream *ss)
-{
-  list<unsigned> rules;
-  for (unsigned i = 0; i < crush->max_rules; ++i) {
-    crush_rule *r = crush->rules[i];
-    if (!r)
-      continue;
-    for (unsigned j = 0; j < r->len; ++j) {
-      if (r->steps[j].op == CRUSH_RULE_TAKE) {
-        int root = r->steps[j].arg1;
-        for (auto &p : class_bucket) {
-          auto& q = p.second;
-          if (q.count(class_id) && q[class_id] == root) {
-            rules.push_back(i);
-          }
-        }
-      }
-    }
-  }
-  if (rules.empty()) {
-    return false;
-  }
-  if (ss) {
-    ostringstream os;
-    for (auto &p: rules) {
-      os << "'" << get_rule_name(p) <<"',";
-    }
-    string out(os.str());
-    out.resize(out.size() - 1); // drop last ','
-    *ss << "still referenced by crush_rule(s): " << out;
-  }
-  return true;
-}
-
 int CrushWrapper::populate_classes(
   const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket)
 {
@@ -1840,18 +1805,6 @@ int CrushWrapper::remove_device_class(CephContext *cct, int id, ostream *ss)
   }
   class_remove_item(id);
 
-  // note that there is no need to remove ourselves from shadow parent
-  // and reweight because we are going to destroy all shadow trees
-  // rebuild them all (if necessary) later.
-
-  // see if there is any osds that still reference this class
-  set<int> devices;
-  get_devices_by_class(class_name, &devices);
-  if (devices.empty()) {
-    // class has no more devices
-    remove_class_name(class_name);
-  }
-
   int r = rebuild_roots_with_classes();
   if (r < 0) {
     *ss << "unable to rebuild roots with class '" << class_name << "' "
@@ -1936,9 +1889,45 @@ int CrushWrapper::device_class_clone(
   return 0;
 }
 
+bool CrushWrapper::_class_is_dead(int class_id)
+{
+  for (auto &p: class_map) {
+    if (p.first >= 0 && p.second == class_id) {
+      return false;
+    }
+  }
+  for (unsigned i = 0; i < crush->max_rules; ++i) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j = 0; j < r->len; ++j) {
+      if (r->steps[j].op == CRUSH_RULE_TAKE) {
+        int root = r->steps[j].arg1;
+        for (auto &p : class_bucket) {
+          auto& q = p.second;
+          if (q.count(class_id) && q[class_id] == root) {
+            return false;
+          }
+        }
+      }
+    }
+  }
+  // no more referenced by any devices or crush rules
+  return true;
+}
+
+void CrushWrapper::cleanup_dead_classes()
+{
+  for (auto &c: class_name) {
+    if (_class_is_dead(c.first))
+      remove_class_name(c.second);
+  }
+}
+
 int CrushWrapper::rebuild_roots_with_classes()
 {
   std::map<int32_t, map<int32_t, int32_t> > old_class_bucket = class_bucket;
+  cleanup_dead_classes();
   int r = trim_roots_with_class(false);
   if (r < 0)
     return r;
