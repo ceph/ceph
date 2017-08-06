@@ -968,7 +968,9 @@ rm -rf %{buildroot}
 %{_unitdir}/ceph.target
 %{python_sitelib}/ceph_detect_init*
 %{python_sitelib}/ceph_disk*
-%{python_sitelib}/ceph_volume*
+%dir %{python_sitelib}/ceph_volume
+%{python_sitelib}/ceph_volume/*
+%{python_sitelib}/ceph_volume-*
 %{_mandir}/man8/ceph-deploy.8*
 %{_mandir}/man8/ceph-detect-init.8*
 %{_mandir}/man8/ceph-create-keys.8*
