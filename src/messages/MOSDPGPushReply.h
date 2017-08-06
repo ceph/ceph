@@ -24,7 +24,7 @@ class MOSDPGPushReply : public MOSDFastDispatchOp {
 public:
   pg_shard_t from;
   spg_t pgid;
-  epoch_t map_epoch, min_epoch;
+  epoch_t map_epoch = 0, min_epoch = 0;
   vector<PushReplyOp> replies;
   uint64_t cost;
 
