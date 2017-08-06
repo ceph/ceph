@@ -22,6 +22,7 @@ tasks:
       - \(MGR_DOWN\)
       - \(PG_
       - Monitor daemon marked osd
+      - Behind on trimming
     conf:
       mon:
         mon warn on pool no app: false
