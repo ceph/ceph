@@ -1327,9 +1327,10 @@ function test_mon_osd_create_destroy()
   expect_false ceph auth get-key client.osd-lockbox.$uuid3
   expect_false ceph config-key exists dm-crypt/osd/$uuid3/luks
   ceph osd purge osd.$id3 --yes-i-really-mean-it
-  ceph osd purge osd.$id3 --yes-i-really-mean-it
+  ceph osd purge osd.$id3 --yes-i-really-mean-it # idempotent
 
   ceph osd purge osd.$id --yes-i-really-mean-it
+  ceph osd purge 123456 --yes-i-really-mean-it
   expect_false ceph osd find $id
   expect_false ceph auth get-key osd.$id
   expect_false ceph auth get-key client.osd-lockbox.$uuid
