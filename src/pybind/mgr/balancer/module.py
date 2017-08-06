@@ -122,14 +122,45 @@ class Eval:
         for t in ('pgs', 'objects', 'bytes'):
             avg = float(total[t]) / float(num)
             dev = 0.0
+
+            # score is a measure of how uneven the data distribution is.
+            # score lies between [0, 1), 0 means perfect distribution.
+            score = 0.0
+            sum_weight = 0.0
+
             for k, v in count[t].iteritems():
                 # adjust/normalize by weight
                 adjusted = float(v) / target[k] / float(num)
+
+                # Overweighted devices and their weights are factors to calculate reweight_urgency.
+                # One 10% underfilled device with 5 2% overfilled devices, is arguably a better
+                # situation than one 10% overfilled with 5 2% underfilled devices
+                if adjusted > avg:
+                    '''
+                    F(x) = 2*phi(x) - 1, where phi(x) = cdf of standard normal distribution
+                    x = (adjusted - avg)/avg.
+                    Since, we're considering only over-weighted devices, x >= 0, and so phi(x) lies in [0.5, 1).
+                    To bring range of F(x) in range [0, 1), we need to make the above modification.
+
+                    In general, we need to use a function F(x), where x = (adjusted - avg)/avg
+                    1. which is bounded between 0 and 1, so that ultimately reweight_urgency will also be bounded.
+                    2. A larger value of x, should imply more urgency to reweight.
+                    3. Also, the difference between F(x) when x is large, should be minimal.
+                    4. The value of F(x) should get close to 1 (highest urgency to reweight) with steeply.
+
+                    Could have used F(x) = (1 - e^(-x)). But that had slower convergence to 1, compared to the one currently in use.
+
+                    cdf of standard normal distribution: https://stackoverflow.com/a/29273201
+                    '''
+                    score += target[k] * (math.erf(((adjusted - avg)/avg) / math.sqrt(2.0)))
+                    sum_weight += target[k]
                 dev += (avg - adjusted) * (avg - adjusted)
             stddev = math.sqrt(dev / float(max(num - 1, 1)))
+            score = score / max(sum_weight, 1)
             r[t] = {
                 'avg': avg,
                 'stddev': stddev,
+                'score': sum_weight,
             }
         return r
 
@@ -449,7 +480,7 @@ class Module(MgrModule):
         self.log.debug('actual_by_pool %s' % pe.actual_by_pool)
         self.log.debug('actual_by_root %s' % pe.actual_by_root)
 
-        # average and stddev
+        # average and stddev and score
         pe.stats_by_root = {
             a: pe.calc_stats(
                 b,
@@ -458,12 +489,12 @@ class Module(MgrModule):
             ) for a, b in pe.count_by_root.iteritems()
         }
 
-        # aggregate score (normalize the stddev by count)
+	# the scores are already normalized
         pe.score_by_root = {
             r: {
-                'pgs': pe.stats_by_root[r]['pgs']['stddev'] / max(1, pe.total_by_root[r]['pgs']),
-                'objects': pe.stats_by_root[r]['objects']['stddev'] / max(1, pe.total_by_root[r]['objects']),
-                'bytes': pe.stats_by_root[r]['bytes']['stddev'] / max(1, pe.total_by_root[r]['bytes']),
+                'pgs': pe.stats_by_root[r]['pgs']['score'],
+                'objects': pe.stats_by_root[r]['objects']['score'],
+                'bytes': pe.stats_by_root[r]['bytes']['score'],
             } for r in pe.total_by_root.keys()
         }
 
