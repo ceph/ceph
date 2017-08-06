@@ -3204,7 +3204,7 @@ void PGMap::get_health_checks(
   }
 
   // POOL_APP
-  {
+  if (g_conf->get_val<bool>("mon_warn_on_pool_no_app")) {
     list<string> detail;
     for (auto &it : pools) {
       const pg_pool_t &pool = it.second;
