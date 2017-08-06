@@ -8,6 +8,14 @@ tasks:
     branch: kraken
 - print: "**** done installing kraken"
 - ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(FS_
+      - \(MDS_
+      - \(OSD_
+      - \(MON_DOWN\)
+      - \(CACHE_POOL_NO_HIT_SET\)
+      - Monitor daemon marked osd
 - print: "**** done ceph"
 - install.upgrade:
     mon.a:
