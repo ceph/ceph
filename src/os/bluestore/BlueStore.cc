@@ -4398,7 +4398,11 @@ bool BlueStore::is_rotational()
 
 bool BlueStore::is_journal_rotational()
 {
-  assert(bluefs);
+  if (!bluefs) {
+    dout(5) << __func__ << " bluefs disabled, default to store media type"
+            << dendl;
+    return is_rotational();
+  }
   dout(10) << __func__ << " " << (int)bluefs->wal_is_rotational() << dendl;
   return bluefs->wal_is_rotational();
 }
