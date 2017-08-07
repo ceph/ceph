@@ -1111,10 +1111,11 @@ TEST(CrushWrapper, trim_roots_with_class) {
   int root_id = c.get_item_id("default");
   int clone_id;
   map<int32_t, map<int32_t, int32_t>> old_class_bucket;
+  map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> weights
   set<int32_t> used_ids;
 
   ASSERT_EQ(c.device_class_clone(root_id, cl, old_class_bucket, used_ids,
-				 &clone_id), 0);
+				 &clone_id, &cmap_item_weight), 0);
 
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("default~ssd"));
@@ -1145,11 +1146,12 @@ TEST(CrushWrapper, device_class_clone) {
   c.reweight(g_ceph_context);
 
   map<int32_t, map<int32_t, int32_t>> old_class_bucket;
+  map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> weights
   set<int32_t> used_ids;
   int root_id = c.get_item_id("default");
   int clone_id;
   ASSERT_EQ(c.device_class_clone(root_id, cl, old_class_bucket, used_ids,
-				 &clone_id), 0);
+				 &clone_id, &cmap_item_weight), 0);
   ASSERT_TRUE(c.name_exists("default~ssd"));
   ASSERT_EQ(clone_id, c.get_item_id("default~ssd"));
   ASSERT_TRUE(c.subtree_contains(clone_id, item));
@@ -1160,13 +1162,13 @@ TEST(CrushWrapper, device_class_clone) {
   // cloning again does nothing and returns the existing one
   int other_clone_id;
   ASSERT_EQ(c.device_class_clone(root_id, cl, old_class_bucket, used_ids,
-				 &other_clone_id), 0);
+				 &other_clone_id, &cmap_item_weight), 0);
   ASSERT_EQ(clone_id, other_clone_id);
   // invalid arguments
   ASSERT_EQ(c.device_class_clone(12345, cl, old_class_bucket, used_ids,
-				 &other_clone_id), -ECHILD);
+				 &other_clone_id, &cmap_item_weight), -ECHILD);
   ASSERT_EQ(c.device_class_clone(root_id, 12345, old_class_bucket, used_ids,
-				 &other_clone_id), -EBADF);
+				 &other_clone_id, &cmap_item_weight), -EBADF);
 }
 
 TEST(CrushWrapper, split_id_class) {
@@ -1184,11 +1186,12 @@ TEST(CrushWrapper, split_id_class) {
   c.class_map[item] = class_id;
 
   map<int32_t, map<int32_t, int32_t>> old_class_bucket;
+  map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> weights
   set<int32_t> used_ids;
   int item_id = c.get_item_id("default");
   int clone_id;
   ASSERT_EQ(c.device_class_clone(item_id, class_id, old_class_bucket, used_ids,
-				 &clone_id), 0);
+				 &clone_id, &cmap_item_weight), 0);
   int retrieved_item_id;
   int retrieved_class_id;
   ASSERT_EQ(c.split_id_class(clone_id, &retrieved_item_id, &retrieved_class_id), 0);
