@@ -700,8 +700,9 @@ bool ParseState::key(const char* s, size_t l) {
     if (w->kind == TokenKind::cond_op) {
       auto id = w->id;
       auto& t = pp->policy.statements.back();
+      auto c_ife =  cond_ifexists;
       pp->s.emplace_back(pp, cond_key);
-      t.conditions.emplace_back(id, s, l, cond_ifexists);
+      t.conditions.emplace_back(id, s, l, c_ife);
       return true;
     } else {
       return false;
