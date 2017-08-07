@@ -928,7 +928,7 @@ Other Notable Changes
 * tools: script: add docker core dump debugger (`pr#16375 <https://github.com/ceph/ceph/pull/16375>`_, Patrick Donnelly)
 
 
-v12.1.2 Luminous (RC)
+v12.1.1 Luminous (RC)
 =====================
 
 This is the second release candidate for Luminous, the next long term
