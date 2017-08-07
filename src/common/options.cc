@@ -5089,7 +5089,7 @@ static std::vector<Option> get_rbd_options() {
     .set_description(""),
 
     Option("rbd_localize_parent_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
+    .set_default(false)
     .set_description(""),
 
     Option("rbd_readahead_trigger_requests", Option::TYPE_INT, Option::LEVEL_ADVANCED)
