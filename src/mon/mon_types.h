@@ -56,10 +56,20 @@ struct FeatureMap {
   std::map<uint32_t,std::map<uint64_t,uint64_t>> m;
 
   void add(uint32_t type, uint64_t features) {
+    if (type == CEPH_ENTITY_TYPE_MON) {
+      return;
+    }
     m[type][features]++;
   }
 
+  void add_mon(uint64_t features) {
+    m[CEPH_ENTITY_TYPE_MON][features]++;
+  }
+
   void rm(uint32_t type, uint64_t features) {
+    if (type == CEPH_ENTITY_TYPE_MON) {
+      return;
+    }
     auto p = m.find(type);
     assert(p != m.end());
     auto q = p->second.find(features);
