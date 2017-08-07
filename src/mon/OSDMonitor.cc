@@ -11366,6 +11366,16 @@ int OSDMonitor::_prepare_remove_pool(
       pending_inc.old_pg_upmap_items.insert(p.first);
     }
   }
+
+  // remove any choose_args for this pool
+  CrushWrapper newcrush;
+  _get_pending_crush(newcrush);
+  if (newcrush.have_choose_args(pool)) {
+    dout(10) << __func__ << " removing choose_args for pool " << pool << dendl;
+    newcrush.rm_choose_args(pool);
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+  }
   return 0;
 }
 
