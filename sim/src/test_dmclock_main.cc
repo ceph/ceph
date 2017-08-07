@@ -74,6 +74,7 @@ int main(int argc, char* argv[]) {
     const uint client_groups = g_conf.client_groups;
     const bool server_random_selection = g_conf.server_random_selection;
     const bool server_soft_limit = g_conf.server_soft_limit;
+    const double anticipation_timeout = g_conf.anticipation_timeout;
     uint server_total_count = 0;
     uint client_total_count = 0;
 
@@ -176,7 +177,11 @@ int main(int argc, char* argv[]) {
     test::CreateQueueF create_queue_f =
         [&](test::DmcQueue::CanHandleRequestFunc can_f,
             test::DmcQueue::HandleRequestFunc handle_f) -> test::DmcQueue* {
-        return new test::DmcQueue(client_info_f, can_f, handle_f, server_soft_limit);
+        return new test::DmcQueue(client_info_f,
+                                  can_f,
+                                  handle_f,
+                                  server_soft_limit,
+                                  anticipation_timeout);
     };
 
  
