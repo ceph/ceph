@@ -736,7 +736,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("ms_async_rdma_receive_buffers", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1024)
+    .set_default(32768)
+    .set_description(""),
+
+    Option("ms_async_rdma_receive_queue_len", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(4096)
     .set_description(""),
 
     Option("ms_async_rdma_port_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
