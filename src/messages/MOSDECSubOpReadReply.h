@@ -24,7 +24,7 @@ class MOSDECSubOpReadReply : public MOSDFastDispatchOp {
 
 public:
   spg_t pgid;
-  epoch_t map_epoch, min_epoch;
+  epoch_t map_epoch = 0, min_epoch = 0;
   ECSubReadReply op;
 
   int get_cost() const override {

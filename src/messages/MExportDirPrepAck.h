@@ -20,7 +20,7 @@
 
 class MExportDirPrepAck : public Message {
   dirfrag_t dirfrag;
-  bool success;
+  bool success = false;
 
  public:
   dirfrag_t get_dirfrag() { return dirfrag; }
