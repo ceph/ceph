@@ -155,6 +155,9 @@ Major Changes from Kraken
     multiple MDS daemons automatically.
   * Directory subtrees can be explicitly pinned to specific MDS daemons in
     cases where the automatic load balancing is not desired or effective.
+  * Client keys can now be created using the new ``ceph fs authorize`` command
+    to create keys with access to the given CephFS file system and all of its
+    data pools.
 
 - *Miscellaneous*:
 
@@ -258,6 +261,8 @@ Major Changes from Kraken
       MonMap.  ``ceph mon feature set`` will set an optional feature (none of
       these exist yet).
     - ``ceph tell <daemon> help`` will now return a usage summary.
+    - ``ceph fs authorize`` creates a new client key with caps automatically
+      set to access the given CephFS file system.
 
 Major Changes from Jewel
 ------------------------
