@@ -156,7 +156,7 @@ struct InstanceWatcher<I>::C_NotifyInstanceRequest : public Context {
     }
 
     dout(20) << "C_NotifyInstanceRequest: " << this << " " << __func__
-             << ": sendding to " << instance_id << dendl;
+             << ": sending to " << instance_id << dendl;
     notifier->notify(bl, &response, this);
   }
 
@@ -397,8 +397,7 @@ void InstanceWatcher<I>::remove(Context *on_finish) {
 template <typename I>
 void InstanceWatcher<I>::notify_image_acquire(
     const std::string &instance_id, const std::string &global_image_id,
-    const std::string &peer_mirror_uuid, const std::string &peer_image_id,
-  Context *on_notify_ack) {
+    Context *on_notify_ack) {
   dout(20) << "instance_id=" << instance_id << ", global_image_id="
            << global_image_id << dendl;
 
@@ -407,13 +406,12 @@ void InstanceWatcher<I>::notify_image_acquire(
   assert(m_on_finish == nullptr);
 
   if (instance_id == m_instance_id) {
-    handle_image_acquire(global_image_id, peer_mirror_uuid, peer_image_id,
-                         on_notify_ack);
+    handle_image_acquire(global_image_id, on_notify_ack);
   } else {
     uint64_t request_id = ++m_request_seq;
     bufferlist bl;
-    ::encode(NotifyMessage{ImageAcquirePayload{
-        request_id, global_image_id, peer_mirror_uuid, peer_image_id}}, bl);
+    ::encode(NotifyMessage{ImageAcquirePayload{request_id, global_image_id}},
+             bl);
     auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
                                            std::move(bl), on_notify_ack);
     req->send();
@@ -422,9 +420,8 @@ void InstanceWatcher<I>::notify_image_acquire(
 
 template <typename I>
 void InstanceWatcher<I>::notify_image_release(
-  const std::string &instance_id, const std::string &global_image_id,
-  const std::string &peer_mirror_uuid, const std::string &peer_image_id,
-  bool schedule_delete, Context *on_notify_ack) {
+    const std::string &instance_id, const std::string &global_image_id,
+    Context *on_notify_ack) {
   dout(20) << "instance_id=" << instance_id << ", global_image_id="
            << global_image_id << dendl;
 
@@ -433,14 +430,36 @@ void InstanceWatcher<I>::notify_image_release(
   assert(m_on_finish == nullptr);
 
   if (instance_id == m_instance_id) {
-    handle_image_release(global_image_id, peer_mirror_uuid, peer_image_id,
-                         schedule_delete, on_notify_ack);
+    handle_image_release(global_image_id, on_notify_ack);
   } else {
     uint64_t request_id = ++m_request_seq;
     bufferlist bl;
-    ::encode(NotifyMessage{ImageReleasePayload{
-        request_id, global_image_id, peer_mirror_uuid, peer_image_id,
-        schedule_delete}}, bl);
+    ::encode(NotifyMessage{ImageReleasePayload{request_id, global_image_id}},
+             bl);
+    auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
+                                           std::move(bl), on_notify_ack);
+    req->send();
+  }
+}
+
+template <typename I>
+void InstanceWatcher<I>::notify_peer_image_removed(
+    const std::string &instance_id, const std::string &global_image_id,
+    const std::string &peer_mirror_uuid, Context *on_notify_ack) {
+  dout(20) << "instance_id=" << instance_id << ", "
+           << "global_image_id=" << global_image_id << ", "
+           << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(m_on_finish == nullptr);
+
+  if (instance_id == m_instance_id) {
+    handle_peer_image_removed(global_image_id, peer_mirror_uuid, on_notify_ack);
+  } else {
+    uint64_t request_id = ++m_request_seq;
+    bufferlist bl;
+    ::encode(NotifyMessage{PeerImageRemovedPayload{request_id, global_image_id,
+                                                   peer_mirror_uuid}}, bl);
     auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
                                            std::move(bl), on_notify_ack);
     req->send();
@@ -1101,16 +1120,12 @@ void InstanceWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
 
 template <typename I>
 void InstanceWatcher<I>::handle_image_acquire(
-  const std::string &global_image_id, const std::string &peer_mirror_uuid,
-  const std::string &peer_image_id, Context *on_finish) {
+    const std::string &global_image_id, Context *on_finish) {
   dout(20) << "global_image_id=" << global_image_id << dendl;
 
   auto ctx = new FunctionContext(
-      [this, global_image_id, peer_mirror_uuid, peer_image_id,
-       on_finish] (int r) {
-        m_instance_replayer->acquire_image(this, global_image_id,
-                                           peer_mirror_uuid, peer_image_id,
-                                           on_finish);
+      [this, global_image_id, on_finish] (int r) {
+        m_instance_replayer->acquire_image(this, global_image_id, on_finish);
         m_notify_op_tracker.finish_op();
       });
 
@@ -1120,16 +1135,30 @@ void InstanceWatcher<I>::handle_image_acquire(
 
 template <typename I>
 void InstanceWatcher<I>::handle_image_release(
-  const std::string &global_image_id,  const std::string &peer_mirror_uuid,
-  const std::string &peer_image_id, bool schedule_delete, Context *on_finish) {
+    const std::string &global_image_id, Context *on_finish) {
   dout(20) << "global_image_id=" << global_image_id << dendl;
 
   auto ctx = new FunctionContext(
-      [this, global_image_id, peer_mirror_uuid, peer_image_id, schedule_delete,
-       on_finish] (int r) {
-        m_instance_replayer->release_image(global_image_id, peer_mirror_uuid,
-                                           peer_image_id, schedule_delete,
-                                           on_finish);
+      [this, global_image_id, on_finish] (int r) {
+        m_instance_replayer->release_image(global_image_id, on_finish);
+        m_notify_op_tracker.finish_op();
+      });
+
+  m_notify_op_tracker.start_op();
+  m_work_queue->queue(ctx, 0);
+}
+
+template <typename I>
+void InstanceWatcher<I>::handle_peer_image_removed(
+    const std::string &global_image_id, const std::string &peer_mirror_uuid,
+    Context *on_finish) {
+  dout(20) << "global_image_id=" << global_image_id << ", "
+           << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
+
+  auto ctx = new FunctionContext(
+      [this, peer_mirror_uuid, global_image_id, on_finish] (int r) {
+        m_instance_replayer->remove_peer_image(global_image_id,
+                                               peer_mirror_uuid, on_finish);
         m_notify_op_tracker.finish_op();
       });
 
@@ -1199,8 +1228,7 @@ void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
   auto on_finish = prepare_request(instance_id, payload.request_id,
                                    on_notify_ack);
   if (on_finish != nullptr) {
-    handle_image_acquire(payload.global_image_id, payload.peer_mirror_uuid,
-                         payload.peer_image_id, on_finish);
+    handle_image_acquire(payload.global_image_id, on_finish);
   }
 }
 
@@ -1214,9 +1242,22 @@ void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
   auto on_finish = prepare_request(instance_id, payload.request_id,
                                    on_notify_ack);
   if (on_finish != nullptr) {
-    handle_image_release(payload.global_image_id, payload.peer_mirror_uuid,
-                         payload.peer_image_id, payload.schedule_delete,
-                         on_finish);
+    handle_image_release(payload.global_image_id, on_finish);
+  }
+}
+
+template <typename I>
+void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
+                                        const PeerImageRemovedPayload &payload,
+                                        C_NotifyAck *on_notify_ack) {
+  dout(20) << "remove_peer_image: instance_id=" << instance_id << ", "
+           << "request_id=" << payload.request_id << dendl;
+
+  auto on_finish = prepare_request(instance_id, payload.request_id,
+                                   on_notify_ack);
+  if (on_finish != nullptr) {
+    handle_peer_image_removed(payload.global_image_id, payload.peer_mirror_uuid,
+                              on_finish);
   }
 }
 

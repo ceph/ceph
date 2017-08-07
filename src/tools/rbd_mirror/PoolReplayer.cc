@@ -620,37 +620,6 @@ void PoolReplayer::handle_update(const std::string &mirror_uuid,
       m_remote_pool_watcher->get_image_count());
   }
 
-  std::string removed_remote_peer_id;
-  ImageIds removed_remote_image_ids;
-  if (m_initial_mirror_image_ids.find(mirror_uuid) ==
-        m_initial_mirror_image_ids.end() &&
-      m_initial_mirror_image_ids.size() < 2) {
-    m_initial_mirror_image_ids[mirror_uuid] = added_image_ids;
-
-    if (m_initial_mirror_image_ids.size() == 2) {
-      dout(10) << "local and remote pools refreshed" << dendl;
-
-      // both local and remote initial pool listing received. derive
-      // removal notifications for the remote pool
-      auto &local_image_ids = m_initial_mirror_image_ids.begin()->second;
-      auto &remote_image_ids = m_initial_mirror_image_ids.rbegin()->second;
-      removed_remote_peer_id = m_initial_mirror_image_ids.rbegin()->first;
-      for (auto &local_image_id : local_image_ids) {
-        if (remote_image_ids.find(local_image_id) == remote_image_ids.end()) {
-          removed_remote_image_ids.emplace(local_image_id.global_id, "");
-        }
-      }
-      local_image_ids.clear();
-      remote_image_ids.clear();
-    }
-  }
-
-  if (!mirror_uuid.empty() && m_peer.uuid != mirror_uuid) {
-    m_instance_replayer->remove_peer(m_peer.uuid);
-    m_instance_replayer->add_peer(mirror_uuid, m_remote_io_ctx);
-    m_peer.uuid = mirror_uuid;
-  }
-
   m_update_op_tracker.start_op();
   Context *ctx = new FunctionContext([this](int r) {
       dout(20) << "complete handle_update: r=" << r << dendl;
@@ -663,26 +632,18 @@ void PoolReplayer::handle_update(const std::string &mirror_uuid,
     // for now always send to myself (the leader)
     std::string &instance_id = m_instance_watcher->get_instance_id();
     m_instance_watcher->notify_image_acquire(instance_id, image_id.global_id,
-                                             mirror_uuid, image_id.id,
                                              gather_ctx->new_sub());
   }
 
-  for (auto &image_id : removed_image_ids) {
-    // for now always send to myself (the leader)
-    std::string &instance_id = m_instance_watcher->get_instance_id();
-    m_instance_watcher->notify_image_release(instance_id, image_id.global_id,
-                                             mirror_uuid, image_id.id, true,
-                                             gather_ctx->new_sub());
-  }
-
-  // derived removal events for remote after initial image listing
-  for (auto& image_id : removed_remote_image_ids) {
-    // for now always send to myself (the leader)
-    std::string &instance_id = m_instance_watcher->get_instance_id();
-    m_instance_watcher->notify_image_release(instance_id, image_id.global_id,
-                                             removed_remote_peer_id,
-                                             image_id.id, true,
-                                             gather_ctx->new_sub());
+  if (!mirror_uuid.empty()) {
+    for (auto &image_id : removed_image_ids) {
+      // for now always send to myself (the leader)
+      std::string &instance_id = m_instance_watcher->get_instance_id();
+      m_instance_watcher->notify_peer_image_removed(instance_id,
+                                                    image_id.global_id,
+                                                    mirror_uuid,
+                                                    gather_ctx->new_sub());
+    }
   }
 
   gather_ctx->activate();
@@ -712,7 +673,6 @@ void PoolReplayer::init_local_pool_watcher(Context *on_finish) {
   assert(!m_local_pool_watcher);
   m_local_pool_watcher.reset(new PoolWatcher<>(
     m_threads, m_local_io_ctx, m_local_pool_watcher_listener));
-  m_initial_mirror_image_ids.clear();
 
   // ensure the initial set of local images is up-to-date
   // after acquiring the leader role

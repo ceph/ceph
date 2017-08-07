@@ -137,8 +137,6 @@ private:
   std::string m_asok_hook_name;
   AdminSocketHook *m_asok_hook = nullptr;
 
-  std::map<std::string, ImageIds> m_initial_mirror_image_ids;
-
   service_daemon::CalloutId m_callout_id = service_daemon::CALLOUT_ID_NONE;
 
   class PoolReplayerThread : public Thread {
