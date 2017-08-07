@@ -216,7 +216,7 @@ struct Option {
     return *this;
   }
   Option& set_long_description(const char* new_desc) {
-    desc = new_desc;
+    long_desc = new_desc;
     return *this;
   }
 

@@ -1279,11 +1279,14 @@ def get_dmcrypt_key(
         osd_uuid = get_oneliner(path, 'osd-uuid')
         ceph_fsid = read_one_line(path, 'ceph_fsid')
         if ceph_fsid is None:
-            raise Error('No cluster uuid assigned.')
-        cluster = find_cluster_by_uuid(ceph_fsid)
-        if cluster is None:
-            raise Error('No cluster conf found in ' + SYSCONFDIR +
-                        ' with fsid %s' % ceph_fsid)
+            LOG.warning("no `ceph_fsid` found falling back to 'ceph' "
+                        "for cluster name")
+            cluster = 'ceph'
+        else:
+            cluster = find_cluster_by_uuid(ceph_fsid)
+            if cluster is None:
+                raise Error('No cluster conf found in ' + SYSCONFDIR +
+                            ' with fsid %s' % ceph_fsid)
 
         if mode == KEY_MANAGEMENT_MODE_V1:
             key, stderr, ret = command(
@@ -1450,6 +1453,7 @@ def mount(
 
 def unmount(
     path,
+    do_rm=True,
 ):
     """
     Unmount and removes the given mount point.
@@ -1473,7 +1477,8 @@ def unmount(
             else:
                 time.sleep(0.5 + retries * 1.0)
                 retries += 1
-
+    if not do_rm:
+        return
     os.rmdir(path)
 
 
@@ -3942,7 +3947,7 @@ def main_deactivate_locked(args):
         with open(os.path.join(mounted_path, 'deactive'), 'w'):
             path_set_context(os.path.join(mounted_path, 'deactive'))
 
-    unmount(mounted_path)
+    unmount(mounted_path, do_rm=not args.once)
     LOG.info("Umount `%s` successfully.", mounted_path)
 
     if dmcrypt:

@@ -35,6 +35,12 @@ public:
                     const std::string &filter_prefix,
                     uint64_t max_return,
                     std::map<std::string, bufferlist> *out_vals) override;
+  int omap_get_vals2(const std::string& oid,
+                    const std::string& start_after,
+                    const std::string &filter_prefix,
+                    uint64_t max_return,
+                    std::map<std::string, bufferlist> *out_vals,
+                    bool *pmore) override;
   int omap_rm_keys(const std::string& oid,
                    const std::set<std::string>& keys) override;
   int omap_set(const std::string& oid, const std::map<std::string,
@@ -72,8 +78,8 @@ protected:
 private:
   TestMemIoCtxImpl(const TestMemIoCtxImpl&);
 
-  TestMemRadosClient *m_client;
-  TestMemCluster::Pool *m_pool;
+  TestMemRadosClient *m_client = nullptr;
+  TestMemCluster::Pool *m_pool = nullptr;
 
   void append_clone(bufferlist& src, bufferlist* dest);
   size_t clip_io(size_t off, size_t len, size_t bl_len);

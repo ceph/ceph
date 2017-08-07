@@ -12708,6 +12708,12 @@ int Client::fdescribe_layout(int fd, file_layout_t *lp)
   return 0;
 }
 
+int64_t Client::get_default_pool_id()
+{
+  Mutex::Locker lock(client_lock);
+  /* first data pool is the default */ 
+  return mdsmap->get_first_data_pool(); 
+}
 
 // expose osdmap
 
@@ -12900,6 +12906,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 	}
       }
       if (mds >= 0) {
+	assert (s != NULL);
 	switch (s->state) {
 	case MetaSession::STATE_CLOSING:
 	  ldout(cct, 1) << "reset from mds we were closing; we'll call that closed" << dendl;

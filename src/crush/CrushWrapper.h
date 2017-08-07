@@ -65,6 +65,7 @@ public:
   std::map<int32_t, string> type_map; /* bucket/device type names */
   std::map<int32_t, string> name_map; /* bucket/device names */
   std::map<int32_t, string> rule_name_map;
+
   std::map<int32_t, int32_t> class_map; /* item id -> class id */
   std::map<int32_t, string> class_name; /* class id -> class name */
   std::map<string, int32_t> class_rname; /* class name -> class id */
@@ -662,15 +663,7 @@ public:
    */
   pair<string,string> get_immediate_parent(int id, int *ret = NULL);
 
-  typedef enum {
-    PARENT_NONSHADOW,
-    PARENT_SHADOW,
-    PARENT_ALL,
-  } parent_type_t;
-
-  int get_immediate_parent_id(int id,
-                              int *parent,
-                              parent_type_t choice = PARENT_NONSHADOW) const;
+  int get_immediate_parent_id(int id, int *parent) const;
 
   /**
    * return ancestor of the given type, or 0 if none
@@ -1216,13 +1209,18 @@ public:
 
   int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
   int remove_device_class(CephContext *cct, int id, ostream *ss);
-  int device_class_clone(int original, int device_class, int *clone);
-  bool class_is_in_use(int class_id, ostream *ss = nullptr);
-  int populate_classes();
+  int device_class_clone(
+    int original, int device_class,
+    const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket,
+    const std::set<int32_t>& used_ids,
+    int *clone);
+  int populate_classes(
+    const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
+  bool _class_is_dead(int class_id);
+  void cleanup_dead_classes();
   int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
   int trim_roots_with_class(bool unused);
-  int cleanup_classes();
 
   void start_choose_profile() {
     free(crush->choose_tries);
@@ -1265,7 +1263,7 @@ public:
     }
   }
 
-  bool ruleset_exists(int const ruleset) const {
+  bool ruleset_exists(const int ruleset) const {
     for (size_t i = 0; i < crush->max_rules; ++i) {
       if (rule_exists(i) && crush->rules[i]->mask.ruleset == ruleset) {
 	return true;
@@ -1294,12 +1292,12 @@ public:
     return result;
   }
 
-  bool have_choose_args(uint64_t choose_args_index) const {
+  bool have_choose_args(int64_t choose_args_index) const {
     return choose_args.count(choose_args_index);
   }
 
   crush_choose_arg_map choose_args_get_with_fallback(
-    uint64_t choose_args_index) const {
+    int64_t choose_args_index) const {
     auto i = choose_args.find(choose_args_index);
     if (i == choose_args.end()) {
       i = choose_args.find(DEFAULT_CHOOSE_ARGS);
@@ -1313,7 +1311,7 @@ public:
       return i->second;
     }
   }
-  crush_choose_arg_map choose_args_get(uint64_t choose_args_index) const {
+  crush_choose_arg_map choose_args_get(int64_t choose_args_index) const {
     auto i = choose_args.find(choose_args_index);
     if (i == choose_args.end()) {
       crush_choose_arg_map arg_map;
@@ -1340,7 +1338,7 @@ public:
     free(arg_map.args);
   }
 
-  void create_choose_args(int id, int positions) {
+  void create_choose_args(int64_t id, int positions) {
     if (choose_args.count(id))
       return;
     assert(positions);
@@ -1373,7 +1371,7 @@ public:
     }
   }
 
-  void rm_choose_args(int id) {
+  void rm_choose_args(int64_t id) {
     auto p = choose_args.find(id);
     if (p != choose_args.end()) {
       destroy_choose_args(p->second);

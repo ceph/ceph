@@ -14,10 +14,11 @@ overrides:
   ceph:
     log-whitelist:
       - overall HEALTH_
-      - (OSDMAP_FLAGS)
-      - (OSD_
-      - (PG_
-      - (OBJECT_DEGRADED)
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(OBJECT_DEGRADED\)
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
         debug osd: 5

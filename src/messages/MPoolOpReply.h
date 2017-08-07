@@ -20,8 +20,8 @@
 class MPoolOpReply : public PaxosServiceMessage {
 public:
   uuid_d fsid;
-  __u32 replyCode;
-  epoch_t epoch;
+  __u32 replyCode = 0;
+  epoch_t epoch = 0;
   bufferlist response_data;
 
   MPoolOpReply() : PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, 0)

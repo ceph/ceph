@@ -38,14 +38,3 @@ AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, Cry
   }
   return NULL;
 }
-
-
-void AuthSessionHandler::print_auth_session_handler_stats() {
-  ldout(cct,10) << "Auth Session Handler Stats " << this << dendl;
-  ldout(cct,10) << "    Messages Signed    = " << messages_signed << dendl;
-  ldout(cct,10) << "    Signatures Checked = " << signatures_checked << dendl;
-  ldout(cct,10) << "        Signatures Matched = " << signatures_matched << dendl;
-  ldout(cct,10) << "        Signatures Did Not Match = " << signatures_failed << dendl;
-  ldout(cct,10) << "    Messages Encrypted = " << messages_encrypted << dendl;
-  ldout(cct,10) << "    Messages Decrypted = " << messages_decrypted << dendl;
-}

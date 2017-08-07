@@ -340,7 +340,6 @@
             <i class="fa fa-heartbeat" rv-style="health_status | health_color"></i>
             <span>Cluster health</span></a>
         </li>
-        PATH: {{ path_info }}
         <li class="treeview{%if path_info.startswith(('/server', '/osd'))%} active{%endif%}">
           <a href="#"><i class="fa fa-server"></i> <span>Cluster</span>
             <span class="pull-right-container">
@@ -371,6 +370,12 @@
                     <small rv-hide="rbd_mirroring.warnings | hide_count_box" class="label pull-right bg-yellow">{rbd_mirroring.warnings}</small>
                     <small rv-hide="rbd_mirroring.errors | hide_count_box" class="label pull-right bg-red">{rbd_mirroring.errors}</small>
                 </span>
+              </a>
+            </li>
+            <li>
+              <a href="/rbd_iscsi">
+                <i class="fa fa-upload"></i> iSCSI
+                <span class="pull-right-container" />
               </a>
             </li>
             <li class="treeview{%if path_info.startswith('/rbd_pool')%} active menu-open{%endif%}">

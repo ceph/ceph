@@ -113,10 +113,8 @@ Capability syntax follows the form::
 	osd 'allow {access} [pool={pool-name} [namespace={namespace-name}]]'
 	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]]'
 
-- **Metadata Server Caps:** Metadata server capability simply requires ``allow``, 
-  or blank and does not parse anything further. :: 
-
-	mds 'allow'
+- **Metadata Server Caps:** For administrators, use ``allow *``.  For all
+  other users, such as CephFS clients, consult :doc:`/cephfs/client-auth`
 
 
 .. note:: The Ceph Object Gateway daemon (``radosgw``) is a client of the 
@@ -228,10 +226,10 @@ namespace such that reads and writes by the user take place only within the
 namespace. Objects written to a namespace within the pool can only be accessed
 by users who have access to the namespace.
 
-.. note:: Currently (i.e., ``firefly``), namespaces are only useful for 
-   applications written on top of ``librados``. Ceph clients such as block 
-   device, object storage and file system do not currently support this 
-   feature.
+.. note:: Namespaces are primarily useful for applications written on top of
+   ``librados`` where the logical grouping can alleviate the need to create
+   different pools. Ceph Object Gateway (from ``luminous``) uses namespaces for various
+   metadata objects.
 
 The rationale for namespaces is that pools can be a computationally expensive
 method of segregating data sets for the purposes of authorizing separate sets

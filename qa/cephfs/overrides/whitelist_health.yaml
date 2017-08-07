@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(FS_DEGRADED\)
+      - \(MDS_FAILED\)
+      - \(MDS_DEGRADED\)
+      - \(FS_WITH_FAILED_MDS\)
+      - \(MDS_DAMAGE\)

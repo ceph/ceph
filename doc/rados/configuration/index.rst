@@ -32,7 +32,7 @@ For general object store configuration, refer to the following:
 .. toctree::
    :maxdepth: 1
 
-   Disks and Filesystems <filesystem-recommendations>
+   Storage devices <storage-devices>
    ceph-conf
 
 
@@ -51,7 +51,8 @@ To optimize the performance of your cluster, refer to the following:
    mon-lookup-dns
    Heartbeat Settings <mon-osd-interaction>
    OSD Settings <osd-config-ref>
-   Filestore Settings <filestore-config-ref>
+   BlueStore Settings <bluestore-config-ref>
+   FileStore Settings <filestore-config-ref>
    Journal Settings <journal-ref>
    Pool, PG & CRUSH Settings <pool-pg-config-ref.rst>
    Messaging Settings <ms-ref>

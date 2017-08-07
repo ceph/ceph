@@ -120,6 +120,39 @@ struct MonCommand {
     DECODE_FINISH(bl);
   }
 
+  // this uses a u16 for the count, so we need a special encoder/decoder.
+  static void encode_vector(const std::vector<MonCommand>& cmds,
+			    bufferlist &bl) {
+    ENCODE_START(2, 1, bl);
+    uint16_t s = cmds.size();
+    ::encode(s, bl);
+    for (unsigned i = 0; i < s; ++i) {
+      cmds[i].encode_bare(bl);
+    }
+    for (unsigned i = 0; i < s; i++) {
+      ::encode(cmds[i].flags, bl);
+    }
+    ENCODE_FINISH(bl);
+  }
+  static void decode_vector(std::vector<MonCommand> &cmds,
+			    bufferlist::iterator &bl) {
+    DECODE_START(2, bl);
+    uint16_t s = 0;
+    ::decode(s, bl);
+    cmds.resize(s);
+    for (unsigned i = 0; i < s; ++i) {
+      cmds[i].decode_bare(bl);
+    }
+    if (struct_v >= 2) {
+      for (unsigned i = 0; i < s; i++)
+        ::decode(cmds[i].flags, bl);
+    } else {
+      for (unsigned i = 0; i < s; i++)
+        cmds[i].flags = 0;
+    }
+    DECODE_FINISH(bl);
+  }
+
   bool requires_perm(char p) const {
     return (req_perms.find(p) != std::string::npos);
   }

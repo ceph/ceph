@@ -25,7 +25,7 @@ class MOSDPGRemove : public Message {
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 2;
 
-  epoch_t epoch;
+  epoch_t epoch = 0;
 
  public:
   vector<spg_t> pg_list;

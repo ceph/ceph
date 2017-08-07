@@ -750,7 +750,9 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
   }
   dout(10) << __func__ << " queue remaining: " << pending_creatings.queue.size()
 	   << " pools" << dendl;
-  dout(10) << __func__ << " " << pending_creatings.pgs.size() - total
+  dout(10) << __func__
+	   << " " << (pending_creatings.pgs.size() - total)
+	   << "/" << pending_creatings.pgs.size()
 	   << " pgs added from queued pools" << dendl;
   return pending_creatings;
 }
@@ -3215,11 +3217,11 @@ void OSDMonitor::update_creating_pgs()
 	   << creating_pgs.queue.size() << " pools in queue" << dendl;
   decltype(creating_pgs_by_osd_epoch) new_pgs_by_osd_epoch;
   std::lock_guard<std::mutex> l(creating_pgs_lock);
-  for (auto& pg : creating_pgs.pgs) {
+  for (const auto& pg : creating_pgs.pgs) {
     int acting_primary = -1;
     auto pgid = pg.first;
     auto mapped = pg.second.first;
-    dout(20) << __func__ << " looking up " << pgid << dendl;
+    dout(20) << __func__ << " looking up " << pgid << "@" << mapped << dendl;
     mapping.get(pgid, nullptr, nullptr, nullptr, &acting_primary);
     // check the previous creating_pgs, look for the target to whom the pg was
     // previously mapped
@@ -3244,14 +3246,14 @@ void OSDMonitor::update_creating_pgs()
       }
     }
     dout(10) << __func__ << " will instruct osd." << acting_primary
-	     << " to create " << pgid << dendl;
+	     << " to create " << pgid << "@" << mapped << dendl;
     new_pgs_by_osd_epoch[acting_primary][mapped].insert(pgid);
   }
   creating_pgs_by_osd_epoch = std::move(new_pgs_by_osd_epoch);
   creating_pgs_epoch = mapping.get_epoch();
 }
 
-epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
+epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) const
 {
   dout(30) << __func__ << " osd." << osd << " next=" << next
 	   << " " << creating_pgs_by_osd_epoch << dendl;
@@ -3275,11 +3277,12 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
 	m = new MOSDPGCreate(creating_pgs_epoch);
       // Need the create time from the monitor using its clock to set
       // last_scrub_stamp upon pg creation.
-      const auto& creation = creating_pgs.pgs[pg];
-      m->mkpg.emplace(pg, pg_create_t{creation.first, pg, 0});
-      m->ctimes.emplace(pg, creation.second);
+      auto create = creating_pgs.pgs.find(pg);
+      assert(create != creating_pgs.pgs.end());
+      m->mkpg.emplace(pg, pg_create_t{create->second.first, pg, 0});
+      m->ctimes.emplace(pg, create->second.second);
       dout(20) << __func__ << " will create " << pg
-	       << " at " << creation.first << dendl;
+	       << " at " << create->second.first << dendl;
     }
   }
   if (!m) {
@@ -7388,7 +7391,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         }
 
         auto class_name = newcrush.get_item_class(osd);
-        stringstream ts;
         if (!class_name) {
           ss << "osd." << osd << " belongs to no class, ";
           continue;
@@ -7477,63 +7479,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     else
       goto update;
-  } else if (prefix == "osd crush class rm") {
-    string device_class;
-    if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
-      err = -EINVAL; // no value!
-      goto reply;
-    }
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
-	 << "luminous' before using crush device classes";
-      err = -EPERM;
-      goto reply;
-    }
-
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
-
-    if (!newcrush.class_exists(device_class)) {
-      err = -ENOENT;
-      ss << "class '" << device_class << "' does not exist";
-      goto reply;
-    }
-
-    int class_id = newcrush.get_class_id(device_class);
-
-    stringstream ts;
-    if (newcrush.class_is_in_use(class_id, &ts)) {
-      err = -EBUSY;
-      ss << "class '" << device_class << "' " << ts.str();
-      goto reply;
-    }
-
-    set<int> osds;
-    newcrush.get_devices_by_class(device_class, &osds);
-    for (auto& p: osds) {
-      err = newcrush.remove_device_class(g_ceph_context, p, &ss);
-      if (err < 0) {
-        // ss has reason for failure
-        goto reply;
-      }
-    }
-
-    if (osds.empty()) {
-      // empty class, remove directly
-      err = newcrush.remove_class_name(device_class);
-      if (err < 0) {
-        ss << "class '" << device_class << "' cannot be removed '"
-           << cpp_strerror(err) << "'";
-        goto reply;
-      }
-    }
-
-    pending_inc.crush.clear();
-    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-    ss << "removed class " << device_class << " with id " << class_id
-       << " from crush map";
-    goto update;
-
   } else if (prefix == "osd crush weight-set create" ||
 	     prefix == "osd crush weight-set create-compat") {
     CrushWrapper newcrush;
@@ -7623,6 +7568,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	ss << "no weight-set for pool '" << poolname << "'";
 	err = -ENOENT;
 	goto reply;
+      }
+      auto arg_map = newcrush.choose_args_get(pool);
+      int positions = newcrush.get_choose_args_positions(arg_map);
+      if (weight.size() != (size_t)positions) {
+         ss << "must specify exact " << positions << " weight values";
+         err = -EINVAL;
+         goto reply;
       }
     } else {
       pool = CrushWrapper::DEFAULT_CHOOSE_ARGS;
@@ -8720,6 +8672,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
+    if (rel == osdmap.require_osd_release) {
+      // idempotent
+      err = 0;
+      goto reply;
+    }
     if (rel == CEPH_RELEASE_LUMINOUS) {
       if (!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS)) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_LUMINOUS feature";
@@ -9679,9 +9636,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
          << "really do.";
       err = -EPERM;
       goto reply;
-    } else if (is_destroy && !osdmap.exists(id)) {
+    } else if (!osdmap.exists(id)) {
       ss << "osd." << id << " does not exist";
-      err = -ENOENT;
+      err = 0; // idempotent
       goto reply;
     } else if (osdmap.is_up(id)) {
       ss << "osd." << id << " is not `down`.";

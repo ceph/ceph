@@ -17,6 +17,7 @@ tasks:
       git_version:
       help:
       config show:
+      config help:
       config set filestore_dump_file /tmp/foo:
       perf dump:
       perf schema:

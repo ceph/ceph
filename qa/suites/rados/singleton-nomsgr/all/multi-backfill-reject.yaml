@@ -13,9 +13,9 @@ tasks:
 - ceph:
     log-whitelist:
       - overall HEALTH_
-      - (PG_
-      - (OSD_
-      - (OBJECT_
+      - \(PG_
+      - \(OSD_
+      - \(OBJECT_
     conf:
       osd:
         osd debug reject backfill probability: .3
@@ -40,3 +40,5 @@ tasks:
 - exec:
     client.0:
       - sudo ceph osd pool set foo size 2
+- sleep:
+    duration: 300

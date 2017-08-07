@@ -1080,7 +1080,9 @@ void OSDService::send_pg_temp()
 void OSDService::send_pg_created(pg_t pgid)
 {
   dout(20) << __func__ << dendl;
-  monc->send_mon_message(new MOSDPGCreated(pgid));
+  if (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    monc->send_mon_message(new MOSDPGCreated(pgid));
+  }
 }
 
 // --------------------------------------
@@ -2355,10 +2357,12 @@ float OSD::get_osd_recovery_sleep()
 {
   if (cct->_conf->osd_recovery_sleep)
     return cct->_conf->osd_recovery_sleep;
-  if (store_is_rotational)
-    return cct->_conf->osd_recovery_sleep_hdd;
-  else
+  if (!store_is_rotational && !journal_is_rotational)
     return cct->_conf->osd_recovery_sleep_ssd;
+  else if (store_is_rotational && !journal_is_rotational)
+    return cct->_conf->get_val<double>("osd_recovery_sleep_hybrid");
+  else
+    return cct->_conf->osd_recovery_sleep_hdd;
 }
 
 int OSD::init()
@@ -2377,6 +2381,7 @@ int OSD::init()
   dout(2) << "init " << dev_path
 	  << " (looks like " << (store_is_rotational ? "hdd" : "ssd") << ")"
 	  << dendl;
+  dout(2) << "journal " << journal_path << dendl;
   assert(store);  // call pre_init() first!
 
   store->set_cache_shards(get_num_op_shards());
@@ -2386,6 +2391,9 @@ int OSD::init()
     derr << "OSD:init: unable to mount object store" << dendl;
     return r;
   }
+  journal_is_rotational = store->is_journal_rotational();
+  dout(2) << "journal looks like " << (journal_is_rotational ? "hdd" : "ssd")
+          << dendl;
 
   enable_disable_fuse(false);
 
@@ -2513,6 +2521,9 @@ int OSD::init()
 
   clear_temp_objects();
 
+  // initialize osdmap references in sharded wq
+  op_shardedwq.prune_pg_waiters(osdmap, whoami);
+
   // load up pgs (as they previously existed)
   load_pgs();
 
@@ -2635,15 +2646,15 @@ int OSD::init()
 
   r = update_crush_device_class();
   if (r < 0) {
-    derr << __func__ <<" unable to update_crush_device_class: "
-         << cpp_strerror(r) << dendl;
+    derr << __func__ << " unable to update_crush_device_class: "
+	 << cpp_strerror(r) << dendl;
     osd_lock.Lock();
     goto monout;
   }
 
   r = update_crush_location();
   if (r < 0) {
-    derr << __func__ <<" unable to update_crush_location: "
+    derr << __func__ << " unable to update_crush_location: "
          << cpp_strerror(r) << dendl;
     osd_lock.Lock();
     goto monout;
@@ -3524,6 +3535,7 @@ int OSD::update_crush_device_class()
   }
 
   if (device_class.empty()) {
+    dout(20) << __func__ << " no device class stored locally" << dendl;
     return 0;
   }
 
@@ -3533,11 +3545,12 @@ int OSD::update_crush_device_class()
     string("\"ids\": [\"") + stringify(whoami) + string("\"]}");
 
   r = mon_cmd_maybe_osd_create(cmd);
-  if (r == -EPERM) {
-    r = 0;
-  }
-
-  return r;
+  // the above cmd can fail for various reasons, e.g.:
+  //   (1) we are connecting to a pre-luminous monitor
+  //   (2) user manually specify a class other than
+  //       'ceph-disk prepare --crush-device-class'
+  // simply skip result-checking for now
+  return 0;
 }
 
 void OSD::write_superblock(ObjectStore::Transaction& t)
@@ -5880,6 +5893,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
   // backend
   (*pm)["osd_objectstore"] = store->get_type();
   (*pm)["rotational"] = store_is_rotational ? "1" : "0";
+  (*pm)["journal_rotational"] = journal_is_rotational ? "1" : "0";
   (*pm)["default_device_class"] = store->get_default_device_class();
   store->collect_metadata(pm);
 
@@ -6402,6 +6416,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     cmd_getval(cct, cmdmap, "value", val);
     osd_lock.Unlock();
     r = cct->_conf->set_val(key, val, true, &ss);
+    if (r == 0) {
+      cct->_conf->apply_changes(nullptr);
+    }
     osd_lock.Lock();
   }
   else if (prefix == "cluster_log") {
@@ -8953,17 +8970,19 @@ void OSD::handle_force_recovery(Message *m)
 {
   MOSDForceRecovery *msg = static_cast<MOSDForceRecovery*>(m);
   assert(msg->get_type() == MSG_OSD_FORCE_RECOVERY);
-  RWLock::RLocker l(pg_map_lock);
 
-  vector<PG*> local_pgs;
+  vector<PGRef> local_pgs;
   local_pgs.reserve(msg->forced_pgs.size());
 
-  for (auto& i : msg->forced_pgs) {
-    spg_t locpg;
-    if (osdmap->get_primary_shard(i, &locpg)) {
-      auto pg_map_entry = pg_map.find(locpg);
-      if (pg_map_entry != pg_map.end()) {
-	local_pgs.push_back(pg_map_entry->second);
+  {
+    RWLock::RLocker l(pg_map_lock);
+    for (auto& i : msg->forced_pgs) {
+      spg_t locpg;
+      if (osdmap->get_primary_shard(i, &locpg)) {
+	auto pg_map_entry = pg_map.find(locpg);
+	if (pg_map_entry != pg_map.end()) {
+	  local_pgs.push_back(pg_map_entry->second);
+	}
       }
     }
   }
@@ -9229,13 +9248,11 @@ bool OSDService::_recover_now(uint64_t *available_pushes)
 }
 
 
-void OSDService::adjust_pg_priorities(vector<PG*> pgs, int newflags)
+void OSDService::adjust_pg_priorities(const vector<PGRef>& pgs, int newflags)
 {
   if (!pgs.size() || !(newflags & (OFR_BACKFILL | OFR_RECOVERY)))
     return;
   int newstate = 0;
-
-  Mutex::Locker l(recovery_lock);
 
   if (newflags & OFR_BACKFILL) {
     newstate = PG_STATE_FORCED_BACKFILL;
@@ -9257,17 +9274,21 @@ void OSDService::adjust_pg_priorities(vector<PG*> pgs, int newflags)
 
   if (newflags & OFR_CANCEL) {
     for (auto& i : pgs) {
-      i->change_recovery_force_mode(newstate, true);
+      i->lock();
+      i->_change_recovery_force_mode(newstate, true);
+      i->unlock();
     }
   } else {
     for (auto& i : pgs) {
       // make sure the PG is in correct state before forcing backfill or recovery, or
       // else we'll make PG keeping FORCE_* flag forever, requiring osds restart
       // or forcing somehow recovery/backfill.
+      i->lock();
       int pgstate = i->get_state();
       if ( ((newstate == PG_STATE_FORCED_RECOVERY) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_RECOVERY_WAIT | PG_STATE_RECOVERING))) ||
 	    ((newstate == PG_STATE_FORCED_BACKFILL) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILL))) )
-        i->change_recovery_force_mode(newstate, false);
+        i->_change_recovery_force_mode(newstate, false);
+      i->unlock();
     }
   }
 }

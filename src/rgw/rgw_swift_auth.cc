@@ -3,8 +3,10 @@
 
 #include <array>
 
-#include <boost/utility/string_ref.hpp>
+#include <boost/utility/string_view.hpp>
 #include <boost/container/static_vector.hpp>
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include "rgw_swift_auth.h"
 #include "rgw_rest.h"
@@ -160,8 +162,8 @@ public:
   SignatureHelper() = default;
 
   const char* calc(const std::string& key,
-                   const boost::string_ref& method,
-                   const boost::string_ref& path,
+                   const boost::string_view& method,
+                   const boost::string_view& path,
                    const std::string& expires) {
 
     using ceph::crypto::HMACSHA1;
@@ -190,6 +192,53 @@ public:
 
 }; /* TempURLEngine::SignatureHelper */
 
+class TempURLEngine::PrefixableSignatureHelper
+    : private TempURLEngine::SignatureHelper {
+  using base_t = SignatureHelper;
+
+  const boost::string_view decoded_uri;
+  const boost::string_view object_name;
+  boost::string_view no_obj_uri;
+
+  const boost::optional<const std::string&> prefix;
+
+public:
+  PrefixableSignatureHelper(const std::string& decoded_uri,
+	                    const std::string& object_name,
+                            const boost::optional<const std::string&> prefix)
+    : decoded_uri(decoded_uri),
+      object_name(object_name),
+      prefix(prefix) {
+    /* Transform: v1/acct/cont/obj - > v1/acct/cont/ */
+    no_obj_uri = \
+      decoded_uri.substr(0, decoded_uri.length() - object_name.length());
+  }
+
+  const char* calc(const std::string& key,
+                   const boost::string_view& method,
+                   const boost::string_view& path,
+                   const std::string& expires) {
+    if (!prefix) {
+      return base_t::calc(key, method, path, expires);
+    } else {
+      const auto prefixed_path = \
+        string_cat_reserve("prefix:", no_obj_uri, *prefix);
+      return base_t::calc(key, method, prefixed_path, expires);
+    }
+  }
+
+  bool is_equal_to(const std::string& rhs) const {
+    bool is_auth_ok = base_t::is_equal_to(rhs);
+
+    if (prefix && is_auth_ok) {
+      const auto prefix_uri = string_cat_reserve(no_obj_uri, *prefix);
+      is_auth_ok = boost::algorithm::starts_with(decoded_uri, prefix_uri);
+    }
+
+    return is_auth_ok;
+  }
+}; /* TempURLEngine::PrefixableSignatureHelper */
+
 TempURLEngine::result_t
 TempURLEngine::authenticate(const req_state* const s) const
 {
@@ -197,12 +246,21 @@ TempURLEngine::authenticate(const req_state* const s) const
     return result_t::deny();
   }
 
-  const string& temp_url_sig = s->info.args.get("temp_url_sig");
-  const string& temp_url_expires = s->info.args.get("temp_url_expires");
+  /* NOTE(rzarzynski): RGWHTTPArgs::get(), in contrast to RGWEnv::get(),
+   * never returns nullptr. If the requested parameter is absent, we will
+   * get the empty string. */
+  const std::string& temp_url_sig = s->info.args.get("temp_url_sig");
+  const std::string& temp_url_expires = s->info.args.get("temp_url_expires");
 
   if (temp_url_sig.empty() || temp_url_expires.empty()) {
     return result_t::deny();
   }
+
+  /* Though, for prefixed tempurls we need to differentiate between empty
+   * prefix and lack of prefix. Empty prefix means allowance for whole
+   * container. */
+  const boost::optional<const std::string&> temp_url_prefix = \
+    s->info.args.get_optional("temp_url_prefix");
 
   RGWUserInfo owner_info;
   try {
@@ -228,14 +286,14 @@ TempURLEngine::authenticate(const req_state* const s) const
 
   /* XXX can we search this ONCE? */
   const size_t pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
-  boost::string_ref ref_uri = s->decoded_uri;
-  const std::array<boost::string_ref, 2> allowed_paths = {
+  const boost::string_view ref_uri = s->decoded_uri;
+  const std::array<boost::string_view, 2> allowed_paths = {
     ref_uri,
     ref_uri.substr(pos + 1)
   };
 
   /* Account owner calculates the signature also against a HTTP method. */
-  boost::container::static_vector<boost::string_ref, 3> allowed_methods;
+  boost::container::static_vector<boost::string_view, 3> allowed_methods;
   if (strcmp("HEAD", s->info.method) == 0) {
     /* HEAD requests are specially handled. */
     /* TODO: after getting a newer boost (with static_vector supporting
@@ -250,7 +308,12 @@ TempURLEngine::authenticate(const req_state* const s) const
   }
 
   /* Need to try each combination of keys, allowed path and methods. */
-  SignatureHelper sig_helper;
+  PrefixableSignatureHelper sig_helper {
+    s->decoded_uri,
+    s->object.name,
+    temp_url_prefix
+  };
+
   for (const auto& kv : owner_info.temp_url_keys) {
     const int temp_url_key_num = kv.first;
     const string& temp_url_key = kv.second;

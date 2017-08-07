@@ -2,6 +2,7 @@ ls on empty pool never containing images
 ========================================
   $ ceph osd pool create rbd_other 8
   pool 'rbd_other' created
+  $ rbd pool init rbd_other
   $ rados -p rbd rm rbd_directory >/dev/null 2>&1 || true
   $ rbd ls
   $ rbd ls --format json

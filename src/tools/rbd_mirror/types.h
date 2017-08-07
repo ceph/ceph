@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 
 namespace rbd {
@@ -40,6 +41,25 @@ struct ImageId {
 std::ostream &operator<<(std::ostream &, const ImageId &image_id);
 
 typedef std::set<ImageId> ImageIds;
+
+struct Peer {
+  std::string peer_uuid;
+  librados::IoCtx io_ctx;
+
+  Peer() {
+  }
+  Peer(const std::string &peer_uuid) : peer_uuid(peer_uuid) {
+  }
+  Peer(const std::string &peer_uuid, librados::IoCtx& io_ctx)
+    : peer_uuid(peer_uuid), io_ctx(io_ctx) {
+  }
+
+  inline bool operator<(const Peer &rhs) const {
+    return peer_uuid < rhs.peer_uuid;
+  }
+};
+
+typedef std::set<Peer> Peers;
 
 struct peer_t {
   peer_t() = default;

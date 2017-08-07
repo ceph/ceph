@@ -1157,6 +1157,30 @@ bool FileStore::is_rotational()
   return rotational;
 }
 
+bool FileStore::is_journal_rotational()
+{
+  bool journal_rotational;
+  if (backend) {
+    journal_rotational = backend->is_journal_rotational();
+  } else {
+    int fd = ::open(journalpath.c_str(), O_RDONLY);
+    if (fd < 0)
+      return true;
+    struct statfs st;
+    int r = ::fstatfs(fd, &st);
+    ::close(fd);
+    if (r < 0) {
+      return true;
+    }
+    create_backend(st.f_type);
+    journal_rotational = backend->is_journal_rotational();
+    delete backend;
+    backend = NULL;
+  }
+  dout(10) << __func__ << " " << (int)journal_rotational << dendl;
+  return journal_rotational;
+}
+
 int FileStore::_detect_fs()
 {
   struct statfs st;

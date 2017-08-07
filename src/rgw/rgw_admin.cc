@@ -53,7 +53,7 @@ using namespace std;
 
 static RGWRados *store = NULL;
 
-void _usage()
+void usage()
 {
   cout << "usage: radosgw-admin <cmd> [options...]" << std::endl;
   cout << "commands:\n";
@@ -81,6 +81,8 @@ void _usage()
   cout << "  bucket rm                  remove bucket\n";
   cout << "  bucket check               check bucket index\n";
   cout << "  bucket reshard             reshard bucket\n";
+  cout << "  bucket sync disable        disable bucket sync\n";
+  cout << "  bucket sync enable         enable bucket sync\n";
   cout << "  bi get                     retrieve bucket index object entries\n";
   cout << "  bi put                     store bucket index object entries\n";
   cout << "  bi list                    list raw bucket index entries\n";
@@ -325,12 +327,6 @@ void _usage()
   generic_client_usage();
 }
 
-int usage()
-{
-  _usage();
-  return 1;
-}
-
 enum {
   OPT_NO_CMD = 0,
   OPT_USER_CREATE,
@@ -356,6 +352,8 @@ enum {
   OPT_BUCKET_SYNC_STATUS,
   OPT_BUCKET_SYNC_INIT,
   OPT_BUCKET_SYNC_RUN,
+  OPT_BUCKET_SYNC_DISABLE,
+  OPT_BUCKET_SYNC_ENABLE,
   OPT_BUCKET_RM,
   OPT_BUCKET_REWRITE,
   OPT_BUCKET_RESHARD,
@@ -612,11 +610,15 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (prev_prev_cmd && strcmp(prev_prev_cmd, "bucket") == 0) {
     if (strcmp(prev_cmd, "sync") == 0) {
       if (strcmp(cmd, "status") == 0)
-	return OPT_BUCKET_SYNC_STATUS;
+        return OPT_BUCKET_SYNC_STATUS;
       if (strcmp(cmd, "init") == 0)
-	return OPT_BUCKET_SYNC_INIT;
+        return OPT_BUCKET_SYNC_INIT;
       if (strcmp(cmd, "run") == 0)
-	return OPT_BUCKET_SYNC_RUN;
+        return OPT_BUCKET_SYNC_RUN;
+      if (strcmp(cmd, "disable") == 0)
+        return OPT_BUCKET_SYNC_DISABLE;
+      if (strcmp(cmd, "enable") == 0)
+        return OPT_BUCKET_SYNC_ENABLE;
     } else if ((strcmp(prev_cmd, "limit") == 0) &&
 	       (strcmp(cmd, "check") == 0)) {
       return OPT_BUCKET_LIMIT_CHECK;
@@ -1494,6 +1496,59 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
   return 0;
 }
 
+int set_bucket_sync_enabled(RGWRados *store, int opt_cmd, const string& tenant_name, const string& bucket_name)
+{
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
+  RGWObjectCtx obj_ctx(store);
+
+  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, &attrs);
+  if (r < 0) {
+    cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+
+  if (opt_cmd == OPT_BUCKET_SYNC_ENABLE) {
+    bucket_info.flags &= ~BUCKET_DATASYNC_DISABLED;
+  } else if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
+    bucket_info.flags |= BUCKET_DATASYNC_DISABLED;
+  }
+
+  r = store->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
+  if (r < 0) {
+    cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+
+  int shards_num = bucket_info.num_shards? bucket_info.num_shards : 1;
+  int shard_id = bucket_info.num_shards? 0 : -1;
+
+  if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
+    r = store->stop_bi_log_entries(bucket_info, -1);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing stop bilog" << dendl;
+      return r;
+    }
+  } else {
+    r = store->resync_bi_log_entries(bucket_info, -1);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing resync bilog" << dendl;
+      return r;
+    }
+  }
+
+  for (int i = 0; i < shards_num; ++i, ++shard_id) {
+    r = store->data_log->add_entry(bucket_info.bucket, shard_id);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+      return r;
+    }
+  }
+
+  return 0;
+}
+
+
 /// search for a matching zone/zonegroup id and return a connection if found
 static boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store,
                                                     const RGWZoneGroup& zonegroup,
@@ -2154,7 +2209,6 @@ static void sync_status(Formatter *formatter)
 
   for (auto iter : store->zone_conn_map) {
     const string& source_id = iter.first;
-    string zone_name;
     string source_str = "source: ";
     string s = source_str + source_id;
     auto siter = store->zone_by_id.find(source_id);
@@ -2417,7 +2471,7 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      return 0;
+      assert(false);
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
       user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
@@ -2458,7 +2512,8 @@ int main(int argc, const char **argv)
         key_type = KEY_TYPE_S3;
       } else {
         cerr << "bad key type: " << key_type_str << std::endl;
-        return usage();
+        usage();
+	assert(false);
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
       job_id = val;
@@ -2571,7 +2626,8 @@ int main(int argc, const char **argv)
       bucket_id = val;
       if (bucket_id.empty()) {
         cerr << "bad bucket-id" << std::endl;
-        return usage();
+        usage();
+	assert(false);
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
@@ -2745,7 +2801,8 @@ int main(int argc, const char **argv)
   }
 
   if (args.empty()) {
-    return usage();
+    usage();
+    assert(false);
   }
   else {
     const char *prev_cmd = NULL;
@@ -2755,7 +2812,8 @@ int main(int argc, const char **argv)
       opt_cmd = get_cmd(*i, prev_cmd, prev_prev_cmd, &need_more);
       if (opt_cmd < 0) {
 	cerr << "unrecognized arg " << *i << std::endl;
-	return usage();
+	usage();
+	assert(false);
       }
       if (!need_more) {
 	++i;
@@ -2765,8 +2823,10 @@ int main(int argc, const char **argv)
       prev_cmd = *i;
     }
 
-    if (opt_cmd == OPT_NO_CMD)
-      return usage();
+    if (opt_cmd == OPT_NO_CMD) {
+      usage();
+      assert(false);
+    }
 
     /* some commands may have an optional extra param */
     if (i != args.end()) {
@@ -2822,7 +2882,8 @@ int main(int argc, const char **argv)
     formatter = new JSONFormatter(pretty_format);
   else {
     cerr << "unrecognized format: " << format << std::endl;
-    return usage();
+    usage();
+    assert(false);
   }
 
   realm_name = g_conf->rgw_realm;
@@ -4375,6 +4436,9 @@ int main(int argc, const char **argv)
     ret = user.add(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not create user: " << err_msg << std::endl;
+      if (ret == -ERR_INVALID_TENANT_NAME)
+	ret = -EINVAL;
+
       return -ret;
     }
     if (!subuser.empty()) {
@@ -4952,7 +5016,8 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_LOG_SHOW || opt_cmd == OPT_LOG_RM) {
     if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
       cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
-      return usage();
+      usage();
+      assert(false);
     }
 
     string oid;
@@ -5050,7 +5115,8 @@ next:
   if (opt_cmd == OPT_POOL_ADD) {
     if (pool_name.empty()) {
       cerr << "need to specify pool to add!" << std::endl;
-      return usage();
+      usage();
+      assert(false);
     }
 
     int ret = store->add_bucket_placement(pool);
@@ -5061,7 +5127,8 @@ next:
   if (opt_cmd == OPT_POOL_RM) {
     if (pool_name.empty()) {
       cerr << "need to specify pool to remove!" << std::endl;
-      return usage();
+      usage();
+      assert(false);
     }
 
     int ret = store->remove_bucket_placement(pool);
@@ -6379,6 +6446,35 @@ next:
       return -ret;
     }
   }
+
+  if ((opt_cmd == OPT_BUCKET_SYNC_DISABLE) || (opt_cmd == OPT_BUCKET_SYNC_ENABLE)) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+
+    if (ret < 0) {
+      cerr << "could not init realm " << ": " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+    RGWPeriod period;
+    ret = period.init(g_ceph_context, store, realm_id, realm_name, true);
+    if (ret < 0) {
+      cerr << "failed to init period " << ": " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    if (!store->is_meta_master()) {
+      cerr << "failed to update bucket sync: only allowed on meta master zone "  << std::endl;
+      cerr << period.get_master_zone() << " | " << period.get_realm() << std::endl;
+      return EINVAL;
+    }
+
+    rgw_obj obj(bucket, object);
+    ret = set_bucket_sync_enabled(store, opt_cmd, tenant, bucket_name);
+    if (ret < 0)
+      return -ret;
+}
 
   if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {
     if (source_zone.empty()) {

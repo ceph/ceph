@@ -127,15 +127,32 @@ namespace CrushTreeDumper {
       touched.insert(qi.id);
 
       if (qi.is_bucket()) {
-	// queue bucket contents...
+	// queue bucket contents, sorted by (class, name)
 	int s = crush->get_bucket_size(qi.id);
+	map<string,pair<int,float>> sorted;
 	for (int k = s - 1; k >= 0; k--) {
 	  int id = crush->get_bucket_item(qi.id, k);
 	  if (should_dump(id)) {
-	    qi.children.push_back(id);
-	    push_front(Item(id, qi.id, qi.depth + 1,
-			    crush->get_bucket_item_weightf(qi.id, k)));
+	    string sort_by;
+	    if (id >= 0) {
+	      const char *c = crush->get_item_class(id);
+	      sort_by = c ? c : "";
+	      sort_by += "_";
+	      char nn[80];
+	      snprintf(nn, sizeof(nn), "osd.%08d", id);
+	      sort_by += nn;
+	    } else {
+	      sort_by = "_";
+	      sort_by += crush->get_item_name(id);
+	    }
+	    sorted[sort_by] = make_pair(
+	      id, crush->get_bucket_item_weightf(qi.id, k));
 	  }
+	}
+	for (auto p = sorted.rbegin(); p != sorted.rend(); ++p) {
+	  qi.children.push_back(p->second.first);
+	  push_front(Item(p->second.first, qi.id, qi.depth + 1,
+			  p->second.second));
 	}
       }
       return true;

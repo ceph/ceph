@@ -493,7 +493,7 @@ void RGWOp_BILog_Info::execute() {
     }
   }
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
+  int ret =  store->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
     http_ret = ret;
     return;
@@ -512,6 +512,7 @@ void RGWOp_BILog_Info::send_response() {
   encode_json("bucket_ver", bucket_ver, s->formatter);
   encode_json("master_ver", master_ver, s->formatter);
   encode_json("max_marker", max_marker, s->formatter);
+  encode_json("syncstopped", syncstopped, s->formatter);
   s->formatter->close_section();
 
   flusher.flush();

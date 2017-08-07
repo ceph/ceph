@@ -123,8 +123,9 @@
  */
 
 // note: this should be replaced shortly!
-COMMAND("pg force_create_pg name=pgid,type=CephPgid", \
-	"force creation of pg <pgid>", "pg", "rw", "cli,rest")
+COMMAND_WITH_FLAG("pg force_create_pg name=pgid,type=CephPgid", \
+		  "force creation of pg <pgid>", "pg", "rw", "cli,rest",
+		  FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("pg set_full_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
 		  "set ratio at which pgs are considered full", \
 		  "pg", "rw", "cli,rest", FLAG(DEPRECATED))
@@ -174,6 +175,12 @@ COMMAND("auth get-or-create " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N,req=false", \
 	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command", \
+	"auth", "rwx", "cli,rest")
+COMMAND("fs authorize " \
+   "name=filesystem,type=CephString " \
+   "name=entity,type=CephString " \
+	"name=caps,type=CephString,n=N", \
+	"add auth for <entity> to access file system <filesystem> based on following directory and permissions pairs", \
 	"auth", "rwx", "cli,rest")
 COMMAND("auth caps " \
 	"name=entity,type=CephString " \
@@ -499,9 +506,6 @@ COMMAND("osd map " \
 COMMAND("osd lspools " \
 	"name=auid,type=CephInt,req=false", \
 	"list pools", "osd", "r", "cli,rest")
-COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
-COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw",
-        "cli,rest")
 COMMAND_WITH_FLAG("osd crush rule list", "list crush rules", "osd", "r", "cli,rest",
 		  FLAG(DEPRECATED))
 COMMAND("osd crush rule ls", "list crush rules", "osd", "r", "cli,rest")
@@ -641,10 +645,6 @@ COMMAND("osd crush tree "
         "name=shadow,type=CephChoices,strings=--show-shadow,req=false", \
 	"dump crush buckets and items in a tree view",
 	"osd", "r", "cli,rest")
-COMMAND("osd crush class rm " \
-	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
-	"remove crush device class <class>", \
-	"osd", "rw", "cli,rest")
 COMMAND("osd crush class ls", \
 	"list all crush device classes", \
 	"osd", "r", "cli,rest")
@@ -878,6 +878,9 @@ COMMAND("osd blacklist " \
 	"name=expire,type=CephFloat,range=0.0,req=false", \
 	"add (optionally until <expire> seconds from now) or remove <addr> from blacklist", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
+COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw",
+        "cli,rest")
 COMMAND("osd pool mksnap " \
 	"name=pool,type=CephPoolname " \
 	"name=snap,type=CephString", \

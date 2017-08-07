@@ -14,6 +14,7 @@ and, monitoring an operating cluster.
 	:maxdepth: 1 
 	
 	operating
+	health-checks
 	monitoring
 	monitoring-osd-pg
 	user-management
@@ -35,6 +36,7 @@ CRUSH algorithm.
 	erasure-code
 	cache-tiering
 	placement-groups
+	upmap
 	crush-map
 	crush-map-edits
 

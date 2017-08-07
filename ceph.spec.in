@@ -13,7 +13,7 @@
 # This file is under the GNU Lesser General Public License, version 2.1
 #
 # Please submit bugfixes or comments via http://tracker.ceph.com/
-# 
+#
 %bcond_without ocf
 %bcond_without cephfs_java
 %if 0%{?suse_version}
@@ -172,7 +172,7 @@ BuildRequires:	python-PrettyTable
 BuildRequires:	python-Sphinx
 BuildRequires:  rdma-core-devel
 %endif
-%if 0%{?fedora} || 0%{?rhel} 
+%if 0%{?fedora} || 0%{?rhel}
 Requires:	systemd
 BuildRequires:  boost-random
 BuildRequires:	btrfs-progs
@@ -910,6 +910,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mgr
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -933,6 +934,8 @@ rm -rf %{buildroot}
 %{_libexecdir}/systemd/system-preset/50-ceph.preset
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk
+%{_sbindir}/ceph-volume
+%{_sbindir}/ceph-volume-systemd
 %{_sbindir}/rcceph
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
@@ -961,9 +964,13 @@ rm -rf %{buildroot}
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
 %endif
 %{_unitdir}/ceph-disk@.service
+%{_unitdir}/ceph-volume@.service
 %{_unitdir}/ceph.target
 %{python_sitelib}/ceph_detect_init*
 %{python_sitelib}/ceph_disk*
+%dir %{python_sitelib}/ceph_volume
+%{python_sitelib}/ceph_volume/*
+%{python_sitelib}/ceph_volume-*
 %{_mandir}/man8/ceph-deploy.8*
 %{_mandir}/man8/ceph-detect-init.8*
 %{_mandir}/man8/ceph-create-keys.8*
@@ -978,6 +985,7 @@ rm -rf %{buildroot}
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mgr
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rbd
 
 %post base
 /sbin/ldconfig
@@ -989,6 +997,7 @@ fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-disk@\*.service ceph.target
+%systemd_post ceph-volume@\*.service ceph.target
 %endif
 if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph.target >/dev/null 2>&1 || :
@@ -1000,6 +1009,7 @@ fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_preun ceph-disk@\*.service ceph.target
+%systemd_preun ceph-volume@\*.service ceph.target
 %endif
 
 %postun base
@@ -1020,7 +1030,7 @@ if [ $FIRST_ARG -ge 1 ] ; then
     source $SYSCONF_CEPH
   fi
   if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
-    /usr/bin/systemctl try-restart ceph-disk@\*.service > /dev/null 2>&1 || :
+    /usr/bin/systemctl try-restart ceph-disk@\*.service ceph-volume@\*.service > /dev/null 2>&1 || :
   fi
 fi
 

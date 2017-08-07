@@ -278,8 +278,8 @@ cdef extern from "rados/librados.h" nogil:
     void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset)
     void rados_write_op_zero(rados_write_op_t write_op, uint64_t offset, uint64_t len)
 
-    void rados_read_op_omap_get_vals(rados_read_op_t read_op, const char * start_after, const char * filter_prefix, uint64_t max_return, rados_omap_iter_t * iter, int * prval)
-    void rados_read_op_omap_get_keys(rados_read_op_t read_op, const char * start_after, uint64_t max_return, rados_omap_iter_t * iter, int * prval)
+    void rados_read_op_omap_get_vals2(rados_read_op_t read_op, const char * start_after, const char * filter_prefix, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval)
+    void rados_read_op_omap_get_keys2(rados_read_op_t read_op, const char * start_after, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval)
     void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op, const char * const* keys, size_t keys_len, rados_omap_iter_t * iter, int * prval)
     int rados_read_op_operate(rados_read_op_t read_op, rados_ioctx_t io, const char * oid, int flags)
     int rados_aio_read_op_operate(rados_read_op_t read_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, int flags)
@@ -3341,8 +3341,8 @@ returned %d, but should return zero on success." % (self.name, ret))
             int prval = 0
 
         with nogil:
-            rados_read_op_omap_get_vals(_read_op.read_op, _start_after, _filter_prefix,
-                                        _max_return, &iter_addr,  &prval)
+            rados_read_op_omap_get_vals2(_read_op.read_op, _start_after, _filter_prefix,
+                                         _max_return, &iter_addr, NULL, &prval)
         it = OmapIterator(self)
         it.ctx = iter_addr
         return it, int(prval)
@@ -3368,8 +3368,8 @@ returned %d, but should return zero on success." % (self.name, ret))
             int prval = 0
 
         with nogil:
-            rados_read_op_omap_get_keys(_read_op.read_op, _start_after,
-                                        _max_return, &iter_addr,  &prval)
+            rados_read_op_omap_get_keys2(_read_op.read_op, _start_after,
+                                         _max_return, &iter_addr, NULL, &prval)
         it = OmapIterator(self)
         it.ctx = iter_addr
         return it, int(prval)

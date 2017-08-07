@@ -56,7 +56,7 @@ endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}")
 
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE) 
+  set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE)
 endif()
 
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
@@ -540,6 +540,11 @@ set(libcommon_files
   ${auth_files}
   ${mds_files})
 
+if(HAS_VTA)
+  set_source_files_properties(common/config.cc
+    PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
+endif()
+
 if(FREEBSD)
   list(APPEND libcommon_files common/freebsd_errno.cc)
 elseif(DARWIN)
@@ -717,6 +722,7 @@ endif()
 
 add_subdirectory(pybind)
 add_subdirectory(ceph-disk)
+add_subdirectory(ceph-volume)
 add_subdirectory(ceph-detect-init)
 
 ## dencoder
