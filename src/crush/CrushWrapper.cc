@@ -1869,7 +1869,7 @@ int CrushWrapper::device_class_clone(
     // pick a new shadow bucket id that is not used by the current map
     // *or* any previous shadow buckets.
     bno = -1;
-    while (crush->buckets[-1-bno] ||
+    while (((-1-bno) < crush->max_buckets && crush->buckets[-1-bno]) ||
 	   used_ids.count(bno)) {
       --bno;
     }
