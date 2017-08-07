@@ -507,7 +507,7 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
   CephContext* cct;
   const string& tenant;
   Policy& policy;
-  std::set<TokenID> v;
+  uint32_t v = 0;
 
   uint32_t seen = 0;
 
@@ -554,49 +554,59 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
   }
   void set(TokenID in) {
     seen |= dex(in);
-    if (in == TokenID::Sid || in == TokenID::Effect || in == TokenID::Principal || in == TokenID::NotPrincipal ||
-         in == TokenID::Action || in == TokenID::NotAction || in == TokenID::Resource || in == TokenID::NotResource ||
-            in == TokenID::Condition || in == TokenID::AWS || in == TokenID::Federated || in == TokenID::Service ||
-              in == TokenID::CanonicalUser) {
-      v.insert(in);
+    if (dex(in) & (dex(TokenID::Sid) | dex(TokenID::Effect) |
+		   dex(TokenID::Principal) | dex(TokenID::NotPrincipal) |
+		   dex(TokenID::Action) | dex(TokenID::NotAction) |
+		   dex(TokenID::Resource) | dex(TokenID::NotResource) |
+		   dex(TokenID::Condition) | dex(TokenID::AWS) |
+		   dex(TokenID::Federated) | dex(TokenID::Service) |
+		   dex(TokenID::CanonicalUser))) {
+      v |= dex(in);
     }
   }
   void set(std::initializer_list<TokenID> l) {
     for (auto in : l) {
       seen |= dex(in);
-      if (in == TokenID::Sid || in == TokenID::Effect || in == TokenID::Principal || in == TokenID::NotPrincipal ||
-         in == TokenID::Action || in == TokenID::NotAction || in == TokenID::Resource || in == TokenID::NotResource ||
-            in == TokenID::Condition || in == TokenID::AWS || in == TokenID::Federated || in == TokenID::Service ||
-              in == TokenID::CanonicalUser) {
-        v.insert(in);
+      if (dex(in) & (dex(TokenID::Sid) | dex(TokenID::Effect) |
+		     dex(TokenID::Principal) | dex(TokenID::NotPrincipal) |
+		     dex(TokenID::Action) | dex(TokenID::NotAction) |
+		     dex(TokenID::Resource) | dex(TokenID::NotResource) |
+		     dex(TokenID::Condition) | dex(TokenID::AWS) |
+		     dex(TokenID::Federated) | dex(TokenID::Service) |
+		     dex(TokenID::CanonicalUser))) {
+	v |= dex(in);
       }
     }
   }
   void reset(TokenID in) {
     seen &= ~dex(in);
-    if (in == TokenID::Sid || in == TokenID::Effect || in == TokenID::Principal || in == TokenID::NotPrincipal ||
-         in == TokenID::Action || in == TokenID::NotAction || in == TokenID::Resource || in == TokenID::NotResource ||
-            in == TokenID::Condition || in == TokenID::AWS || in == TokenID::Federated || in == TokenID::Service ||
-              in == TokenID::CanonicalUser) {
-      v.erase(in);
+    if (dex(in) & (dex(TokenID::Sid) | dex(TokenID::Effect) |
+		   dex(TokenID::Principal) | dex(TokenID::NotPrincipal) |
+		   dex(TokenID::Action) | dex(TokenID::NotAction) |
+		   dex(TokenID::Resource) | dex(TokenID::NotResource) |
+		   dex(TokenID::Condition) | dex(TokenID::AWS) |
+		   dex(TokenID::Federated) | dex(TokenID::Service) |
+		   dex(TokenID::CanonicalUser))) {
+      v &= ~dex(in);
     }
   }
   void reset(std::initializer_list<TokenID> l) {
     for (auto in : l) {
       seen &= ~dex(in);
-      if (in == TokenID::Sid || in == TokenID::Effect || in == TokenID::Principal || in == TokenID::NotPrincipal ||
-         in == TokenID::Action || in == TokenID::NotAction || in == TokenID::Resource || in == TokenID::NotResource ||
-            in == TokenID::Condition || in == TokenID::AWS || in == TokenID::Federated || in == TokenID::Service ||
-              in == TokenID::CanonicalUser) {
-        v.erase(in);
+      if (dex(in) & (dex(TokenID::Sid) | dex(TokenID::Effect) |
+		     dex(TokenID::Principal) | dex(TokenID::NotPrincipal) |
+		     dex(TokenID::Action) | dex(TokenID::NotAction) |
+		     dex(TokenID::Resource) | dex(TokenID::NotResource) |
+		     dex(TokenID::Condition) | dex(TokenID::AWS) |
+		     dex(TokenID::Federated) | dex(TokenID::Service) |
+		     dex(TokenID::CanonicalUser))) {
+	v &= ~dex(in);
       }
     }
   }
-  void reset(std::set<TokenID> v) {
-    for (auto in : v) {
-      seen &= ~dex(in);
-      v.erase(in);
-    }
+  void reset(uint32_t& v) {
+    seen &= ~v;
+    v = 0;
   }
 
   PolicyParser(CephContext* cct, const string& tenant, Policy& policy)
