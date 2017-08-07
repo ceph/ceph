@@ -243,14 +243,12 @@ Major Changes from Kraken
     - ``ceph osd reweightn`` will specify the `reweight` values for
       multiple OSDs in a single command.  This is equivalent to a series of
       ``ceph osd reweight`` commands.
-    - ``ceph osd crush class {rm,ls,ls-osd}`` manage the new
-      CRUSH *device class* feature.  ``ceph crush set-device-class
-      <class> <osd> [<osd>...]`` will set the class for particular devices.
-      Note that if you specify a non-existent class, it will be created
-      automatically. ``ceph crush rm-device-class <osd> [<osd>...]``
-      will instead remove the class for particular devices.
-      And if a class contains no more devices, it will be automatically
-      destoryed.
+    - ``ceph osd crush {set,rm}-device-class`` manage the new
+      CRUSH *device class* feature. Note that manually creating or deleting
+      a device class name is generally not necessary as it will be smart
+      enough to be self-managed. ``ceph osd crush class ls`` and 
+      ``ceph osd crush class ls-osd`` will output all existing device classes 
+      and a list of OSD ids under the given device class respectively.
     - ``ceph osd crush rule create-replicated`` replaces the old
       ``ceph osd crush rule create-simple`` command to create a CRUSH
       rule for a replicated pool.  Notably it takes a `class` argument
