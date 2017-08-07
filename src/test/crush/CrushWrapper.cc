@@ -1061,7 +1061,7 @@ TEST(CrushWrapper, choose_args_compat) {
   }
 }
 
-TEST(CrushWrapper, remove_unused_root) {
+TEST(CrushWrapper, remove_root) {
   CrushWrapper c;
   c.create();
   c.set_type_name(1, "host");
@@ -1087,9 +1087,9 @@ TEST(CrushWrapper, remove_unused_root) {
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));
   ASSERT_TRUE(c.name_exists("r12"));
-  ASSERT_EQ(c.remove_root(c.get_item_id("default"), true), 0);
+  ASSERT_EQ(c.remove_root(c.get_item_id("default")), 0);
   ASSERT_FALSE(c.name_exists("default"));
-  ASSERT_TRUE(c.name_exists("r11"));
+  ASSERT_FALSE(c.name_exists("r11"));
   ASSERT_FALSE(c.name_exists("r12"));
 }
 
@@ -1118,11 +1118,7 @@ TEST(CrushWrapper, trim_roots_with_class) {
 
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("default~ssd"));
-  c.trim_roots_with_class(true); // do nothing because still in use
-  ASSERT_TRUE(c.name_exists("default"));
-  ASSERT_TRUE(c.name_exists("default~ssd"));
-  c.class_bucket.clear();
-  c.trim_roots_with_class(true); // do nothing because still in use
+  c.trim_roots_with_class();
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_FALSE(c.name_exists("default~ssd"));
 }
