@@ -15,7 +15,6 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
-#include "ImageDeleter.h"
 #include "ProgressContext.h"
 #include "types.h"
 #include "tools/rbd_mirror/image_replayer/Types.h"
@@ -48,6 +47,7 @@ namespace journal { template <typename> class Replay; }
 namespace rbd {
 namespace mirror {
 
+template <typename> struct ImageDeleter;
 template <typename> struct InstanceWatcher;
 template <typename> struct Threads;
 
@@ -62,7 +62,7 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class ImageReplayer {
 public:
   static ImageReplayer *create(
-    Threads<librbd::ImageCtx> *threads, ImageDeleter<ImageCtxT>* image_deleter,
+    Threads<ImageCtxT> *threads, ImageDeleter<ImageCtxT>* image_deleter,
     InstanceWatcher<ImageCtxT> *instance_watcher,
     RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
     const std::string &global_image_id) {
@@ -74,7 +74,7 @@ public:
     delete this;
   }
 
-  ImageReplayer(Threads<librbd::ImageCtx> *threads,
+  ImageReplayer(Threads<ImageCtxT> *threads,
                 ImageDeleter<ImageCtxT>* image_deleter,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
                 RadosRef local, const std::string &local_mirror_uuid,
@@ -90,6 +90,16 @@ public:
   std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
   void set_state_description(int r, const std::string &desc);
 
+  // TODO temporary until policy handles release of image replayers
+  inline bool is_finished() const {
+    Mutex::Locker locker(m_lock);
+    return m_finished;
+  }
+  inline void set_finished(bool finished) {
+    Mutex::Locker locker(m_lock);
+    m_finished = finished;
+  }
+
   inline bool is_blacklisted() const {
     Mutex::Locker locker(m_lock);
     return (m_last_r == -EBLACKLISTED);
@@ -97,13 +107,7 @@ public:
 
   image_replayer::HealthState get_health_state() const;
 
-  void add_remote_image(const std::string &remote_mirror_uuid,
-                        const std::string &remote_image_id,
-                        librados::IoCtx &remote_io_ctx);
-  void remove_remote_image(const std::string &remote_mirror_uuid,
-                           const std::string &remote_image_id,
-			   bool schedule_delete);
-  bool remote_images_empty() const;
+  void add_peer(const std::string &peer_uuid, librados::IoCtx &remote_io_ctx);
 
   inline int64_t get_local_pool_id() const {
     return m_local_pool_id;
@@ -134,8 +138,14 @@ protected:
    *    v                                                   *
    * <starting>                                             *
    *    |                                                   *
+   *    v                                                   *
+   * WAIT_FOR_DELETION                                      *
+   *    |                                                   *
    *    v                                           (error) *
    * PREPARE_LOCAL_IMAGE  * * * * * * * * * * * * * * * * * *
+   *    |                                                   *
+   *    v                                           (error) *
+   * PREPARE_REMOTE_IMAGE * * * * * * * * * * * * * * * * * *
    *    |                                                   *
    *    v                                           (error) *
    * BOOTSTRAP_IMAGE  * * * * * * * * * * * * * * * * * * * *
@@ -224,29 +234,9 @@ private:
 
     RemoteImage() {
     }
-    RemoteImage(const std::string &mirror_uuid,
-                const std::string &image_id)
-      : mirror_uuid(mirror_uuid), image_id(image_id) {
-    }
-    RemoteImage(const std::string &mirror_uuid,
-                const std::string &image_id,
-                librados::IoCtx &io_ctx)
-      : mirror_uuid(mirror_uuid), image_id(image_id), io_ctx(io_ctx) {
-    }
-
-    inline bool operator<(const RemoteImage &rhs) const {
-      if (mirror_uuid != rhs.mirror_uuid) {
-        return mirror_uuid < rhs.mirror_uuid;
-      } else {
-        return image_id < rhs.image_id;
-      }
-    }
-    inline bool operator==(const RemoteImage &rhs) const {
-      return (mirror_uuid == rhs.mirror_uuid && image_id == rhs.image_id);
+    RemoteImage(const Peer& peer) : io_ctx(peer.io_ctx) {
     }
   };
-
-  typedef std::set<RemoteImage> RemoteImages;
 
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
   typedef boost::optional<State> OptionalState;
@@ -285,11 +275,11 @@ private:
     ImageReplayer<ImageCtxT> *replayer;
   };
 
-  Threads<librbd::ImageCtx> *m_threads;
+  Threads<ImageCtxT> *m_threads;
   ImageDeleter<ImageCtxT>* m_image_deleter;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
 
-  RemoteImages m_remote_images;
+  Peers m_peers;
   RemoteImage m_remote_image;
 
   RadosRef m_local;
@@ -298,6 +288,7 @@ private:
   std::string m_local_image_id;
   std::string m_global_image_id;
   std::string m_name;
+
   mutable Mutex m_lock;
   State m_state = STATE_STOPPED;
   std::string m_state_desc;
@@ -306,7 +297,11 @@ private:
   int m_last_r = 0;
 
   BootstrapProgressContext m_progress_cxt;
-  bool m_do_resync{false};
+
+  bool m_finished = false;
+  bool m_delete_requested = false;
+  bool m_resync_requested = false;
+
   image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
   image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
     nullptr;
@@ -319,7 +314,6 @@ private:
   Journaler* m_remote_journaler = nullptr;
   ::journal::ReplayHandler *m_replay_handler = nullptr;
   librbd::journal::Listener *m_journal_listener;
-  bool m_stopping_for_resync = false;
 
   Context *m_on_start_finish = nullptr;
   Context *m_on_stop_finish = nullptr;
@@ -394,8 +388,14 @@ private:
   void handle_shut_down(int r);
   void handle_remote_journal_metadata_updated();
 
+  void wait_for_deletion();
+  void handle_wait_for_deletion(int r);
+
   void prepare_local_image();
   void handle_prepare_local_image(int r);
+
+  void prepare_remote_image();
+  void handle_prepare_remote_image(int r);
 
   void bootstrap();
   void handle_bootstrap(int r);
@@ -423,6 +423,8 @@ private:
   void handle_process_entry_ready(int r);
   void handle_process_entry_safe(const ReplayEntry& replay_entry, int r);
 
+  void register_admin_socket_hook();
+  void unregister_admin_socket_hook();
 };
 
 } // namespace mirror
