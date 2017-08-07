@@ -3,7 +3,8 @@ meta:
     Setup 4 node ceph cluster using ceph-deploy, use latest
     stable jewel as initial release, upgrade to luminous and
     also setup mgr nodes along after upgrade, check for
-    cluster to reach healthy state, This test will detect any
+    cluster to reach healthy state, After upgrade run kernel tar/untar
+    task and systemd task. This test will detect any
     ceph upgrade issue and systemd issues.
 overrides:
   ceph-deploy:
@@ -15,6 +16,8 @@ overrides:
         osd pool default size: 2
         osd objectstore: filestore
         osd sloppy crc: true
+      client:
+        rbd default features: 5
 roles:
 - - mon.a
   - mds.a
@@ -47,4 +50,12 @@ tasks:
       - mon.a
       - mon.b
       - mon.c
-      - osd.6
+- workunit:
+    clients:
+      all:
+        - kernel_untar_build.sh
+- systemd:
+- workunit:
+    clients:
+      all:
+      - rados/load-gen-mix.sh
