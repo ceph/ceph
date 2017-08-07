@@ -1739,6 +1739,10 @@ int CrushWrapper::add_bucket(
 int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight)
 {
   __u32 new_size = bucket->size + 1;
+  int r = crush_bucket_add_item(crush, bucket, item, weight);
+  if (r < 0) {
+    return r;
+  }
   for (auto w : choose_args) {
     crush_choose_arg_map arg_map = w.second;
     crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
@@ -1757,7 +1761,7 @@ int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight)
       arg->ids_size = new_size;
     }
   }
-  return crush_bucket_add_item(crush, bucket, item, weight);
+  return 0;
 }
 
 int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
@@ -1768,6 +1772,10 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
     if (bucket->items[position] == item)
       break;
   assert(position != bucket->size);
+  int r = crush_bucket_remove_item(crush, bucket, item);
+  if (r < 0) {
+    return r;
+  }
   for (auto w : choose_args) {
     crush_choose_arg_map arg_map = w.second;
     crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
@@ -1788,7 +1796,7 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
       arg->ids_size = new_size;
     }
   }
-  return crush_bucket_remove_item(crush, bucket, item);
+  return 0;
 }
 
 int CrushWrapper::update_device_class(int id,
