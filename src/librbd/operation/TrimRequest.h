@@ -79,7 +79,7 @@ protected:
 
   bool should_complete(int r) override;
 
-  State m_state;
+  State m_state = STATE_PRE_COPYUP;
 
 private:
   uint64_t m_delete_start;
@@ -88,8 +88,8 @@ private:
   uint64_t m_new_size;
   ProgressContext &m_prog_ctx;
 
-  uint64_t m_copyup_start;
-  uint64_t m_copyup_end;
+  uint64_t m_copyup_start = 0;
+  uint64_t m_copyup_end = 0;
 
   TrimRequest(ImageCtxT &image_ctx, Context *on_finish,
 	      uint64_t original_size, uint64_t new_size,

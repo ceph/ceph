@@ -66,7 +66,7 @@ protected:
   }
 
 private:
-  State m_state;
+  State m_state = STATE_LOAD_MAP;
   ceph::BitVector<2> &m_object_map;
   uint64_t m_snap_id;
   uint64_t m_next_snap_id;
