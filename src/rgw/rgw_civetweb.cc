@@ -110,6 +110,7 @@ void RGWCivetWeb::init_env(CephContext *cct)
     env.set(buf, value);
   }
 
+  env.set("REMOTE_ADDR", info->remote_addr);
   env.set("REQUEST_METHOD", info->request_method);
   env.set("REQUEST_URI", info->request_uri); // get the full uri, we anyway handle abs uris later
   env.set("SCRIPT_URI", info->uri); /* FIXME */
