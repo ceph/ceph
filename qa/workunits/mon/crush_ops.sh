@@ -155,4 +155,35 @@ ceph osd crush weight-set create-compat
 ceph osd crush weight-set ls | grep '(compat)'
 ceph osd crush weight-set rm-compat
 
+# weight set vs device classes
+ceph osd pool create cool 2
+ceph osd pool create cold 2
+ceph osd pool set cold size 2
+ceph osd crush weight-set create-compat
+ceph osd crush weight-set create cool flat
+ceph osd crush weight-set create cold positional
+ceph osd crush rm-device-class osd.0
+ceph osd crush weight-set reweight-compat osd.0 10.5
+ceph osd crush weight-set reweight cool osd.0 11.5
+ceph osd crush weight-set reweight cold osd.0 12.5 12.4
+ceph osd crush set-device-class fish osd.0
+ceph osd crush tree --show-shadow | grep osd\\.0 | grep fish | grep 10\\.
+ceph osd crush tree --show-shadow | grep osd\\.0 | grep fish | grep 11\\.
+ceph osd crush tree --show-shadow | grep osd\\.0 | grep fish | grep 12\\.
+ceph osd crush rm-device-class osd.0
+ceph osd crush set-device-class globster osd.0
+ceph osd crush tree --show-shadow | grep osd\\.0 | grep globster | grep 10\\.
+ceph osd crush tree --show-shadow | grep osd\\.0 | grep globster | grep 11\\.
+ceph osd crush tree --show-shadow | grep osd\\.0 | grep globster | grep 12\\.
+ceph osd crush weight-set reweight-compat osd.0 7.5
+ceph osd crush weight-set reweight cool osd.0 8.5
+ceph osd crush weight-set reweight cold osd.0 6.5 6.6
+ceph osd crush tree --show-shadow | grep osd\\.0 | grep globster | grep 7\\.
+ceph osd crush tree --show-shadow | grep osd\\.0 | grep globster | grep 8\\.
+ceph osd crush tree --show-shadow | grep osd\\.0 | grep globster | grep 6\\.
+ceph osd crush rm-device-class osd.0
+ceph osd pool rm cool cool --yes-i-really-really-mean-it
+ceph osd pool rm cold cold --yes-i-really-really-mean-it
+ceph osd crush weight-set rm-compat
+
 echo OK
