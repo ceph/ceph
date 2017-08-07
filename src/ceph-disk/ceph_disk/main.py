@@ -1221,11 +1221,14 @@ def get_dmcrypt_key(
         osd_uuid = get_oneliner(path, 'osd-uuid')
         ceph_fsid = read_one_line(path, 'ceph_fsid')
         if ceph_fsid is None:
-            raise Error('No cluster uuid assigned.')
-        cluster = find_cluster_by_uuid(ceph_fsid)
-        if cluster is None:
-            raise Error('No cluster conf found in ' + SYSCONFDIR +
-                        ' with fsid %s' % ceph_fsid)
+            LOG.warning("no `ceph_fsid` found falling back to 'ceph' "
+                        "for cluster name")
+            cluster = 'ceph'
+        else:
+            cluster = find_cluster_by_uuid(ceph_fsid)
+            if cluster is None:
+                raise Error('No cluster conf found in ' + SYSCONFDIR +
+                            ' with fsid %s' % ceph_fsid)
 
         if mode == KEY_MANAGEMENT_MODE_V1:
             key, stderr, ret = command(
