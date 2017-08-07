@@ -55,12 +55,10 @@ dump_cmd_to_json(Formatter *f, const string& cmd)
   // elements are: "name", meaning "the typeless name that means a literal"
   // an object {} with key:value pairs representing an argument
 
-  int argnum = 0;
   stringstream ss(cmd);
   std::string word;
 
   while (std::getline(ss, word, ' ')) {
-    argnum++;
     // if no , or =, must be a plain word to put out
     if (word.find_first_of(",=") == string::npos) {
       f->dump_string("arg", word);
