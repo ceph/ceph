@@ -10508,8 +10508,6 @@ int BlueStore::_do_remove(
     return 0;
   }
 
-  uint32_t b_start = OBJECT_MAX_SIZE;
-  uint32_t b_end = 0;
   for (auto& e : h->extent_map.extent_map) {
     const bluestore_blob_t& b = e.blob->get_blob();
     SharedBlob *sb = e.blob->shared_blob.get();
@@ -10519,17 +10517,9 @@ int BlueStore::_do_remove(
       dout(20) << __func__ << "  unsharing " << e << dendl;
       bluestore_blob_t& blob = e.blob->dirty_blob();
       blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
-      if (e.logical_offset < b_start) {
-        b_start = e.logical_offset;
-      }
-      if (e.logical_end() > b_end) {
-        b_end = e.logical_end();
-      }
+      h->extent_map.dirty_range(e.logical_offset, 1);
     }
   }
-
-  assert(b_end > b_start);
-  h->extent_map.dirty_range(b_start, b_end - b_start);
   txc->write_onode(h);
 
   return 0;
