@@ -169,7 +169,7 @@ class Downburst(object):
                 {'source': 'front', 'mac': mac_address}],
             'distro': os_type,
             'distroversion': self.os_version,
-            'additional-disks': 3,
+            'additional-disks': 4,
             'additional-disks-size': '200G',
             'arch': 'x86_64',
         }
