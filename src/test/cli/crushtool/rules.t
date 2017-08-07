@@ -41,7 +41,7 @@
   root default {
   \tid -1\t\t# do not change unnecessarily (esc)
   \tid -6 class ssd\t\t# do not change unnecessarily (esc)
-  \tid -9 class hdd\t\t# do not change unnecessarily (esc)
+  \tid -15 class hdd\t\t# do not change unnecessarily (esc)
   \t# weight 6.000 (esc)
   \talg straw2 (esc)
   \thash 0\t# rjenkins1 (esc)
@@ -123,7 +123,7 @@
   root default {
   \tid -1\t\t# do not change unnecessarily (esc)
   \tid -6 class ssd\t\t# do not change unnecessarily (esc)
-  \tid -9 class hdd\t\t# do not change unnecessarily (esc)
+  \tid -15 class hdd\t\t# do not change unnecessarily (esc)
   \t# weight 6.000 (esc)
   \talg straw2 (esc)
   \thash 0\t# rjenkins1 (esc)
