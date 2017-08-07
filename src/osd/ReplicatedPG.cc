@@ -2219,6 +2219,11 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
     osd->logger->inc(l_osd_op_cache_hit);
     return cache_result_t::NOOP;
   }
+  if (!is_primary()) {
+    dout(20) << __func__ << " cache miss; ask the primary" << dendl;
+    osd->reply_op_error(op, -EAGAIN);
+    return cache_result_t::REPLIED_WITH_EAGAIN;
+  }
 
   if (missing_oid == hobject_t() && obc.get()) {
     missing_oid = obc->obs.oi.soid;
@@ -6147,6 +6152,8 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     case cache_result_t::BLOCKED_FULL:
       block_write_on_full_cache(soid, ctx->op);
       return -EAGAIN;
+    case cache_result_t::REPLIED_WITH_EAGAIN:
+      assert(0 == "this can't happen, no rollback on replica");
     default:
       assert(0 == "must promote was set, other values are not valid");
       return -EAGAIN;
