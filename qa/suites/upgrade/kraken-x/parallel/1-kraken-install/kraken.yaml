@@ -14,8 +14,17 @@ tasks:
       - \(MDS_
       - \(OSD_
       - \(MON_DOWN\)
-      - \(CACHE_POOL_NO_HIT_SET\)
+      - \(CACHE_POOL_
+      - \(POOL_
+      - \(MGR_DOWN\)
+      - \(PG_
+      - \(SMALLER_PGP_NUM\)
       - Monitor daemon marked osd
+      - Behind on trimming
+      - Manager daemon
+    conf:
+      global:
+        mon warn on pool no app: false
 - print: "**** done ceph"
 - install.upgrade:
     mon.a:
