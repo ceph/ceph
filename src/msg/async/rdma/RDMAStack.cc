@@ -59,7 +59,8 @@ RDMADispatcher::RDMADispatcher(CephContext* c, RDMAStack* s)
 
   plb.add_u64_counter(l_msgr_rdma_polling, "polling", "Whether dispatcher thread is polling");
   plb.add_u64_counter(l_msgr_rdma_inflight_tx_chunks, "inflight_tx_chunks", "The number of inflight tx chunks");
-  plb.add_u64_counter(l_msgr_rdma_inqueue_rx_chunks, "inqueue_rx_chunks", "The number of inqueue rx chunks");
+  plb.add_u64_counter(l_msgr_rdma_rx_bufs_in_use, "rx_bufs_in_use", "The number of rx buffers that are holding data and being processed");
+  plb.add_u64_counter(l_msgr_rdma_rx_bufs_total, "rx_bufs_total", "The total number of rx buffers");
 
   plb.add_u64_counter(l_msgr_rdma_tx_total_wc, "tx_total_wc", "The number of tx work comletions");
   plb.add_u64_counter(l_msgr_rdma_tx_total_wc_errors, "tx_total_wc_errors", "The number of tx errors");
@@ -140,6 +141,12 @@ void RDMADispatcher::handle_async_event()
   }
 }
 
+void RDMADispatcher::post_chunk_to_pool(Chunk* chunk) {
+  Mutex::Locker l(lock);
+  global_infiniband->post_chunk_to_pool(chunk);
+  perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
+}
+
 void RDMADispatcher::polling()
 {
   static int MAX_COMPLETIONS = 32;
@@ -166,8 +173,10 @@ void RDMADispatcher::polling()
       ldout(cct, 20) << __func__ << " rt completion queue got " << rx_ret
                      << " responses."<< dendl;
       perf_logger->inc(l_msgr_rdma_rx_total_wc, rx_ret);
+      perf_logger->inc(l_msgr_rdma_rx_bufs_in_use, rx_ret);
 
       Mutex::Locker l(lock);//make sure connected socket alive when pass wc
+      global_infiniband->post_chunks_to_srq(rx_ret);
       for (int i = 0; i < rx_ret; ++i) {
         ibv_wc* response = &wc[i];
         Chunk* chunk = reinterpret_cast<Chunk *>(response->wr_id);
@@ -178,35 +187,28 @@ void RDMADispatcher::polling()
         if (response->status == IBV_WC_SUCCESS) {
           conn = get_conn_lockless(response->qp_num);
           if (!conn) {
-            assert(global_infiniband->is_rx_buffer(chunk->buffer));
-            r = global_infiniband->post_chunk(chunk);
             ldout(cct, 1) << __func__ << " csi with qpn " << response->qp_num << " may be dead. chunk " << chunk << " will be back ? " << r << dendl;
-            assert(r == 0);
+            global_infiniband->post_chunk_to_pool(chunk);
+            perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
           } else {
-            polled[conn].push_back(*response);
+	    polled[conn].push_back(*response);
           }
         } else {
           perf_logger->inc(l_msgr_rdma_rx_total_wc_errors);
+          perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
+
           ldout(cct, 1) << __func__ << " work request returned error for buffer(" << chunk
               << ") status(" << response->status << ":"
               << global_infiniband->wc_status_to_string(response->status) << ")" << dendl;
-          assert(global_infiniband->is_rx_buffer(chunk->buffer));
-          r = global_infiniband->post_chunk(chunk);
-          if (r) {
-            ldout(cct, 0) << __func__ << " post chunk failed, error: " << cpp_strerror(r) << dendl;
-            assert(r == 0);
-          }
-
           conn = get_conn_lockless(response->qp_num);
           if (conn && conn->is_connected())
             conn->fault();
+
+          global_infiniband->post_chunk_to_pool(chunk);
         }
       }
-
-      for (auto &&i : polled) {
-        perf_logger->inc(l_msgr_rdma_inqueue_rx_chunks, i.second.size());
+      for (auto &&i : polled)
         i.first->pass_wc(std::move(i.second));
-      }
       polled.clear();
     }
 
@@ -411,7 +413,6 @@ RDMAWorker::RDMAWorker(CephContext *c, unsigned i)
   plb.add_u64_counter(l_msgr_rdma_tx_no_mem, "tx_no_mem", "The count of no tx buffer");
   plb.add_u64_counter(l_msgr_rdma_tx_parital_mem, "tx_parital_mem", "The count of parital tx buffer");
   plb.add_u64_counter(l_msgr_rdma_tx_failed, "tx_failed_post", "The number of tx failed posted");
-  plb.add_u64_counter(l_msgr_rdma_rx_no_registered_mem, "rx_no_registered_mem", "The count of no registered buffer when receiving");
 
   plb.add_u64_counter(l_msgr_rdma_tx_chunks, "tx_chunks", "The number of tx chunks transmitted");
   plb.add_u64_counter(l_msgr_rdma_tx_bytes, "tx_bytes", "The bytes of tx chunks transmitted");
