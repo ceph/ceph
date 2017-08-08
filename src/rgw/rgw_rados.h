@@ -1254,7 +1254,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (struct_v >= 7) {
       ::decode(lc_pool, bl);
     } else {
-      lc_pool.init(name + ".rgw.lc");
+      lc_pool = log_pool.name + ":lc";
     }
     if (struct_v >= 8) {
       ::decode(tier_config, bl);
