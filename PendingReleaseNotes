@@ -1,6 +1,8 @@
 >= 12.1.2
 ---------
-
+* When running 'df' on a CephFS filesystem comprising exactly one data pool,
+  the result now reflects the file storage space used and available in that
+  data pool (fuse client only).
 * Added new commands "pg force-recovery" and "pg-force-backfill". Use them
   to boost recovery or backfill priority of specified pgs, so they're
   recovered/backfilled before any other. Note that these commands don't
