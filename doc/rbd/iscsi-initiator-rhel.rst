@@ -42,7 +42,8 @@ Install the iSCSI initiator and multipath tools:
                        path_checker           tur
                        prio                   alua
                        prio_args              exclusive_pref_bit
-                       no_path_retry          120
+                       fast_oi_fail_tmo       25
+                       no_path_retry          queue
                }
        }
 
