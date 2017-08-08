@@ -2591,7 +2591,7 @@ private:
 		   OnodeRef o,
 		   uint64_t offset,
 		   set<SharedBlob*> *maybe_unshared_blobs=0);
-  void _truncate(TransContext *txc,
+  int _truncate(TransContext *txc,
 		CollectionRef& c,
 		OnodeRef& o,
 		uint64_t offset);
