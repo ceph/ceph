@@ -40,6 +40,7 @@ class RDMADispatcher {
 
   std::thread t;
   CephContext *cct;
+  Infiniband *ib;
   Infiniband::CompletionQueue* tx_cq;
   Infiniband::CompletionQueue* rx_cq;
   Infiniband::CompletionChannel *tx_cc, *rx_cc;
@@ -89,7 +90,7 @@ class RDMADispatcher {
  public:
   PerfCounters *perf_logger;
 
-  explicit RDMADispatcher(CephContext* c, RDMAStack* s);
+  explicit RDMADispatcher(CephContext* c, RDMAStack* s, Infiniband *ib);
   virtual ~RDMADispatcher();
   void handle_async_event();
 
@@ -106,6 +107,7 @@ class RDMADispatcher {
     ++num_pending_workers;
   }
   RDMAStack* get_stack() { return stack; }
+  Infiniband *get_ib() { return ib; }
   RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp);
   void erase_qpn_lockless(uint32_t qpn);
   void erase_qpn(uint32_t qpn);
