@@ -16,7 +16,7 @@ default_mode = 'none'
 default_sleep_interval = 60   # seconds
 default_max_misplaced = .03   # max ratio of pgs replaced at a time
 
-TIME_FORMAT = '%Y-%m-%d %H:%M:%S %Z'
+TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
 
 
 class MappingState:
@@ -312,9 +312,11 @@ class Module(MgrModule):
                                                    default_sleep_interval))
             if self.active:
                 self.log.debug('Running')
-                plan = self.plan_create('auto-foo')
-                self.optimize(plan)
-                #self.plan_apply(plan)
+                name = 'auto_%s' % time.strftime(TIME_FORMAT, time.gmtime())
+                plan = self.plan_create(name)
+                if self.optimize(plan):
+                    self.execute(plan)
+                self.plan_rm(name)
             self.log.debug('Sleeping for %d', sleep_interval)
             self.event.wait(sleep_interval)
             self.event.clear()
@@ -536,13 +538,14 @@ class Module(MgrModule):
                           misplaced, max_misplaced)
         else:
             if plan.mode == 'upmap':
-                self.do_upmap(plan)
+                return self.do_upmap(plan)
             elif plan.mode == 'crush-compat':
-                self.do_crush_compat(plan)
+                return self.do_crush_compat(plan)
             elif plan.mode == 'none':
                 self.log.info('Idle')
             else:
                 self.log.info('Unrecognized mode %s' % plan.mode)
+        return False
 
         ##
 
@@ -555,7 +558,7 @@ class Module(MgrModule):
         pools = [str(i['pool_name']) for i in ms.osdmap_dump.get('pools',[])]
         if len(pools) == 0:
             self.log.info('no pools, nothing to do')
-            return
+            return False
         # shuffle pool list so they all get equal (in)attention
         random.shuffle(pools)
         self.log.info('pools %s' % pools)
@@ -570,6 +573,7 @@ class Module(MgrModule):
             if left <= 0:
                 break
         self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
+        return True
 
     def do_crush_compat(self, plan):
         self.log.info('do_crush_compat')
@@ -597,7 +601,7 @@ class Module(MgrModule):
         if len(overlap) > 0:
             self.log.err('error: some osds belong to multiple subtrees: %s' %
                          overlap)
-            return
+            return False
 
         key = 'pgs'  # pgs objects or bytes
 
@@ -623,6 +627,7 @@ class Module(MgrModule):
                 self.log.debug('Reweight osd.%d %f -> %f', osd, weight,
                                new_weight)
                 plan.compat_ws[osd] = new_weight
+        return True
 
     def compat_weight_set_reweight(self, osd, new_weight):
         self.log.debug('ceph osd crush weight-set reweight-compat')
