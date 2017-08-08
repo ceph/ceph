@@ -4169,6 +4169,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 	 p != dir->items.end();
 	 ++p) {
       CDentry *dn = p->second;
+      assert(dn->last == CEPH_NOSNAP);
       CDentry::linkage_t *dnl = dn->get_linkage();
       dout(15) << " add_weak_primary_dentry " << *dn << dendl;
       assert(dnl->is_primary());
@@ -4188,10 +4189,39 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
     dir->state_set(CDir::STATE_REJOINING);
 
     for (CDir::map_t::iterator p = dir->items.begin();
-	 p != dir->items.end();
-	 ++p) {
+	 p != dir->items.end(); ) {
       CDentry *dn = p->second;
+      ++p;
+      dn->state_set(CDentry::STATE_REJOINING);
       CDentry::linkage_t *dnl = dn->get_linkage();
+      CInode *in = dnl->is_primary() ? dnl->get_inode() : NULL;
+
+      // trim snap dentries. because they may have been pruned by
+      // their auth mds (snap deleted)
+      if (dn->last != CEPH_NOSNAP) {
+	if (in && !in->remote_parents.empty()) {
+	  // unlink any stale remote snap dentry.
+	  for (compact_set<CDentry*>::iterator q = in->remote_parents.begin();
+	       q != in->remote_parents.end(); ) {
+	    CDentry *remote_dn = *q;
+	    ++q;
+	    assert(remote_dn->last != CEPH_NOSNAP);
+	    remote_dn->unlink_remote(remote_dn->get_linkage());
+	  }
+	}
+	if (dn->lru_is_expireable()) {
+	  if (!dnl->is_null())
+	    dir->unlink_inode(dn, false);
+	  if (in)
+	    remove_inode(in);
+	  dir->remove_dentry(dn);
+	  continue;
+	} else {
+	  // Inventing null/remote dentry shouldn't cause problem
+	  assert(!dnl->is_primary());
+	}
+      }
+
       dout(15) << " add_strong_dentry " << *dn << dendl;
       rejoin->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
 				dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
