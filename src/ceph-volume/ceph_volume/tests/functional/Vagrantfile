@@ -333,9 +333,13 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       # Virtualbox
       osd.vm.provider :virtualbox do |vb|
         # Create our own controller for consistency and to remove VM dependency
-        vb.customize ['storagectl', :id,
-                      '--name', 'OSD Controller',
-                      '--add', 'scsi']
+        # but only do it once, otherwise it would fail when rebooting machines.
+        # We assume this has run if one disk was created before
+        unless File.exist?("disk-#{i}-0.vdi")
+            vb.customize ['storagectl', :id,
+                          '--name', 'OSD Controller',
+                          '--add', 'scsi']
+        end
         (0..2).each do |d|
           vb.customize ['createhd',
                         '--filename', "disk-#{i}-#{d}",
