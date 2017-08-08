@@ -4619,6 +4619,11 @@ void RGWGetACLs::execute()
 int RGWPutACLs::verify_permission()
 {
   bool perm;
+
+  if (!s->canned_acl.empty()){
+    rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
+  }
+
   if (!s->object.empty()) {
     perm = verify_object_permission(s,
 				    s->object.instance.empty() ?
