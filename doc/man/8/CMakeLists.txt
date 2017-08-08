@@ -54,12 +54,17 @@ if(WITH_RBD)
   list(APPEND man_srcs
 	ceph-rbdnamer.rst
 	rbd-mirror.rst
-	rbd-nbd.rst
 	rbd-replay-many.rst
 	rbd-replay-prep.rst
 	rbd-replay.rst
 	rbdmap.rst
 	rbd.rst)
+  if(LINUX)
+    list(APPEND man_srcs rbd-nbd.rst)
+  endif()
+  if(FREEBSD)
+    list(APPEND man_srcs rbd-ggate.rst)
+  endif()
 endif()
 
 foreach(man ${man_srcs})
