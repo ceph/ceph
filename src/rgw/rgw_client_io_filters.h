@@ -17,119 +17,33 @@ namespace io {
 template <typename T>
 class AccountingFilter : public DecoratedRestfulClient<T>,
                          public Accounter {
-  bool enabled;
   uint64_t total_sent;
   uint64_t total_received;
-  CephContext *cct;
+  CephContext* const cct;
 
 public:
   template <typename U>
-  AccountingFilter(CephContext *cct, U&& decoratee)
+  AccountingFilter(CephContext* const cct, U&& decoratee)
     : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
-      enabled(false),
       total_sent(0),
-      total_received(0), cct(cct) {
-  }
-
-  size_t send_status(const int status,
-                     const char* const status_name) override {
-    const auto sent = DecoratedRestfulClient<T>::send_status(status,
-                                                             status_name);
-    lsubdout(cct, rgw, 30) << "AccountingFilter::send_status: e="
-        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
-        << total_sent << dendl;
-    if (enabled) {
-      total_sent += sent;
-    }
-    return sent;
-  }
-
-  size_t send_100_continue() override {
-    const auto sent = DecoratedRestfulClient<T>::send_100_continue();
-    lsubdout(cct, rgw, 30) << "AccountingFilter::send_100_continue: e="
-        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
-        << total_sent << dendl;
-    if (enabled) {
-      total_sent += sent;
-    }
-    return sent;
-  }
-
-  size_t send_header(const boost::string_ref& name,
-                     const boost::string_ref& value) override {
-    const auto sent = DecoratedRestfulClient<T>::send_header(name, value);
-    lsubdout(cct, rgw, 30) << "AccountingFilter::send_header: e="
-        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
-        << total_sent << dendl;
-    if (enabled) {
-      total_sent += sent;
-    }
-    return sent;
-  }
-
-  size_t send_content_length(const uint64_t len) override {
-    const auto sent = DecoratedRestfulClient<T>::send_content_length(len);
-    lsubdout(cct, rgw, 30) << "AccountingFilter::send_content_length: e="
-        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
-        << total_sent << dendl;
-    if (enabled) {
-      total_sent += sent;
-    }
-    return sent;
-  }
-
-  size_t send_chunked_transfer_encoding() override {
-    const auto sent = DecoratedRestfulClient<T>::send_chunked_transfer_encoding();
-    lsubdout(cct, rgw, 30) << "AccountingFilter::send_chunked_transfer_encoding: e="
-        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
-        << total_sent << dendl;
-    if (enabled) {
-      total_sent += sent;
-    }
-    return sent;
-  }
-
-  size_t complete_header() override {
-    const auto sent = DecoratedRestfulClient<T>::complete_header();
-    lsubdout(cct, rgw, 30) << "AccountingFilter::complete_header: e="
-        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
-        << total_sent << dendl;
-    if (enabled) {
-      total_sent += sent;
-    }
-    return sent;
+      total_received(0),
+      cct(cct) {
   }
 
   size_t recv_body(char* buf, size_t max) override {
     const auto received = DecoratedRestfulClient<T>::recv_body(buf, max);
-    lsubdout(cct, rgw, 30) << "AccountingFilter::recv_body: e="
-        << (enabled ? "1" : "0") << ", received=" << received << dendl;
-    if (enabled) {
-      total_received += received;
-    }
+    lsubdout(cct, rgw, 30) << "AccountingFilter::recv_body: received="
+                           << received << dendl;
+    total_received += received;
     return received;
   }
 
   size_t send_body(const char* const buf,
                    const size_t len) override {
     const auto sent = DecoratedRestfulClient<T>::send_body(buf, len);
-    lsubdout(cct, rgw, 30) << "AccountingFilter::send_body: e="
-        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
-        << total_sent << dendl;
-    if (enabled) {
-      total_sent += sent;
-    }
-    return sent;
-  }
-
-  size_t complete_request() override {
-    const auto sent = DecoratedRestfulClient<T>::complete_request();
-    lsubdout(cct, rgw, 30) << "AccountingFilter::complete_request: e="
-        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
-        << total_sent << dendl;
-    if (enabled) {
-      total_sent += sent;
-    }
+    lsubdout(cct, rgw, 30) << "AccountingFilter::send_body: sent="
+                           << sent << ", total=" << total_sent << dendl;
+    total_sent += sent;
     return sent;
   }
 
@@ -140,13 +54,12 @@ public:
   uint64_t get_bytes_received() const override {
     return total_received;
   }
-
-  void set_account(bool enabled) override {
-    this->enabled = enabled;
-    lsubdout(cct, rgw, 30) << "AccountingFilter::set_account: e="
-        << (enabled ? "1" : "0") << dendl;
-  }
 };
+
+template <typename T> static inline
+AccountingFilter<T> add_accounting(CephContext* const cct, T&& t) {
+  return AccountingFilter<T>(cct, std::forward<T>(t));
+}
 
 
 /* Filter for in-memory buffering incoming data and calculating the content
@@ -225,16 +138,10 @@ size_t BufferingFilter<T>::complete_request()
   size_t sent = 0;
 
   if (! has_content_length) {
-    /* It is not correct to count these bytes here,
-     * because they can only be part of the header.
-     * Therefore force count to 0.
-     */
     sent += DecoratedRestfulClient<T>::send_content_length(data.length());
     sent += DecoratedRestfulClient<T>::complete_header();
-    lsubdout(cct, rgw, 30) <<
-        "BufferingFilter::complete_request: !has_content_length: IGNORE: sent="
-        << sent << dendl;
-    sent = 0;
+    lsubdout(cct, rgw, 30) << "BufferingFilter::complete_request: "
+                           << "!has_content_length: sent=" << sent << dendl;
   }
 
   if (buffer_data) {
@@ -246,8 +153,8 @@ size_t BufferingFilter<T>::complete_request()
     }
     data.clear();
     buffer_data = false;
-    lsubdout(cct, rgw, 30) << "BufferingFilter::complete_request: buffer_data: sent="
-        << sent << dendl;
+    lsubdout(cct, rgw, 30) << "BufferingFilter::complete_request: buffer_data:"
+                           << " sent=" << sent << dendl;
   }
 
   return sent + DecoratedRestfulClient<T>::complete_request();

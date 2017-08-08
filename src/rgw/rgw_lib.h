@@ -86,10 +86,6 @@ namespace rgw {
       return 0;
     };
 
-    void set_account(bool) override {
-      return;
-    }
-
     uint64_t get_bytes_sent() const override {
       return 0;
     }

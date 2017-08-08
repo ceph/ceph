@@ -724,7 +724,6 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
 		     << e.what() << dendl;
   }
 
-  ACCOUNTING_IO(s)->set_account(true);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -1139,9 +1138,10 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 
   int len = 0;
   {
-    ACCOUNTING_IO(s)->set_account(true);
+    /* There is no need to manage the accounting enablement here. It is now
+     * enabled by default and records all trafic exchanged between RGW and
+     * a client in body of HTTP messages. */
     bufferptr bp(cl);
-
     const auto read_len  = recv_body(s, bp.c_str(), cl);
     if (read_len < 0) {
       return read_len;
@@ -1149,8 +1149,6 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 
     len = read_len;
     bl.append(bp, 0, len);
-
-    ACCOUNTING_IO(s)->set_account(false);
   }
 
   if ((uint64_t)ofs + len > s->cct->_conf->rgw_max_put_size) {

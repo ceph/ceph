@@ -130,8 +130,9 @@ void RGWLoadGenProcess::handle_request(RGWRequest* r)
   env.set_date(tm);
   env.sign(access_key);
 
-  RGWLoadGenIO real_client_io(&env);
-  RGWRestfulIO client_io(cct, &real_client_io);
+  RGWLoadGenIO cw_client(&env);
+  auto acct_client_io = rgw::io::add_accounting(cct, &cw_client);
+  RGWRestfulIO client_io(cct, &acct_client_io, acct_client_io);
 
   int ret = process_request(store, rest, req, uri_prefix,
                             *auth_registry, &client_io, olog);

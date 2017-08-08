@@ -38,7 +38,6 @@ class RGWLoadGenIO : public rgw::io::RestfulClient
   RGWLoadGenRequestEnv* req;
   RGWEnv env;
 
-  void init_env(CephContext *cct) override;
   size_t read_data(char *buf, size_t len);
   size_t write_data(const char *buf, size_t len);
 
@@ -48,6 +47,7 @@ public:
       req(req) {
   }
 
+  void init_env(CephContext *cct) override;
   size_t send_status(int status, const char *status_name) override;
   size_t send_100_continue() override;
   size_t send_header(const boost::string_ref& name,

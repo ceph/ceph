@@ -49,11 +49,11 @@ public:
 
 class Accounter {
 public:
-  virtual ~Accounter() = default;
+  enum class AccountingPolicy {
+    BODY_ONLY,
+  };
 
-  /* Enable or disable the accounting of both sent and received data. Changing
-   * the state does not affect the counters. */
-  virtual void set_account(bool enabled) = 0;
+  virtual ~Accounter() = default;
 
   /* Return number of bytes sent to a direct client of RadosGW (direct means
    * eg. a web server instance in the case of using FastCGI front-end) when
@@ -332,21 +332,43 @@ public:
  * like rgw::io::Accounter or the AWS Auth v4 stuff implemented by filters
  * while hiding the pipelined architecture from clients.
  *
- * rgw::io::Accounter came in as a part of rgw::io::AccountingFilter. */
-class RGWRestfulIO : public rgw::io::AccountingFilter<rgw::io::RestfulClient*> {
+ * rgw::io::Accounter is injected as a reference to a stage of the pipeline
+ * implementing this interface. */
+class RGWRestfulIO
+  : public rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>,
+    public rgw::io::Accounter {
+  /* Reference to a stage of the pipeline that provides the rgw::io::Accounter
+   * interface. */
+  rgw::io::Accounter& accounter;
+
+  /* Just a lifetime holder for dynamically injected stages. */
   std::vector<std::shared_ptr<DecoratedRestfulClient>> filters;
 
 public:
   ~RGWRestfulIO() override = default;
 
-  RGWRestfulIO(CephContext *_cx, rgw::io::RestfulClient* engine)
-    : AccountingFilter<rgw::io::RestfulClient*>(_cx, std::move(engine)) {
+  RGWRestfulIO(CephContext* const ctx,
+               rgw::io::RestfulClient* engine,
+               rgw::io::Accounter& accounter)
+    : DecoratedRestfulClient<rgw::io::RestfulClient*>(std::move(engine)),
+      accounter(accounter) {
+    /* The engine has been std::moved here as the parent class takes
+     * rgw::io::RestfulClient*&& to emphasize that next stage should
+     * be accessed solely via its methods. */
   }
 
   void add_filter(std::shared_ptr<DecoratedRestfulClient> new_filter) {
     new_filter->set_decoratee(this->get_decoratee());
     this->set_decoratee(*new_filter);
     filters.emplace_back(std::move(new_filter));
+  }
+
+  uint64_t get_bytes_sent() const override {
+    return accounter.get_bytes_sent();
+  }
+
+  uint64_t get_bytes_received() const override {
+    return accounter.get_bytes_received();
   }
 }; /* RGWRestfulIO */
 
