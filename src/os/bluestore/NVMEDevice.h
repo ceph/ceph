@@ -50,9 +50,6 @@ class NVMEDevice : public BlockDevice {
   SharedDriverData *driver;
   string name;
 
-  uint64_t size;
-  uint64_t block_size;
-
   bool aio_stop;
 
   struct BufferedExtents {
@@ -210,13 +207,6 @@ class NVMEDevice : public BlockDevice {
   bool supported_bdev_label() override { return false; }
 
   void aio_submit(IOContext *ioc) override;
-
-  uint64_t get_size() const override {
-    return size;
-  }
-  uint64_t get_block_size() const override {
-    return block_size;
-  }
 
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
            IOContext *ioc,
