@@ -70,23 +70,6 @@ int execute(const po::variables_map &vm) {
                 << "it crashed. Try again after closing/unmapping it or "
                 << "waiting 30s for the crashed client to timeout."
                 << std::endl;
-    } else if (r == -EMLINK) {
-      librbd::Image image;
-      int image_r = utils::open_image(io_ctx, image_name, true, &image);
-      librbd::group_spec_t group_spec;
-      if (image_r == 0) {
-	image_r = image.get_group(&group_spec);
-      }
-      if (image_r == 0)
-	std::cerr << "rbd: error: image belongs to a consistency group "
-		  << group_spec.pool << "." << group_spec.name;
-      else
-	std::cerr << "rbd: error: image belongs to a consistency group";
-
-      std::cerr << std::endl
-		<< "Remove the image from the consistency group and try again."
-		<< std::endl;
-      image.close();
     } else {
       std::cerr << "rbd: delete error: " << cpp_strerror(r) << std::endl;
     }

@@ -10,7 +10,6 @@
 
 extern void register_test_librbd();
 #ifdef TEST_LIBRBD_INTERNALS
-extern void register_test_groups();
 extern void register_test_image_watcher();
 extern void register_test_internal();
 extern void register_test_journal_entries();
@@ -25,7 +24,6 @@ int main(int argc, char **argv)
 {
   register_test_librbd();
 #ifdef TEST_LIBRBD_INTERNALS
-  register_test_groups();
   register_test_image_watcher();
   register_test_internal();
   register_test_journal_entries();
