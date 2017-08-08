@@ -288,13 +288,24 @@ distribution package.
 
 .. important:: Each ``rbd-mirror`` daemon requires the ability to connect
    to both clusters simultaneously.
-.. warning:: Only run a single ``rbd-mirror`` daemon per Ceph cluster. A
-   future Ceph release will add support for horizontal scale-out of the
-   ``rbd-mirror`` daemon.
+.. warning:: Pre-Luminous releases: only run a single ``rbd-mirror`` daemon per
+   Ceph cluster.
+
+Each ``rbd-mirror`` daemon should use a unique Ceph user ID. To
+`create a Ceph user`_, with ``ceph`` specify the ``auth get-or-create``
+command, user name, monitor caps, and OSD caps::
+
+  ceph auth get-or-create client.rbd-mirror.{unique id} mon 'profile rbd' osd 'profile rbd'
+
+The ``rbd-mirror`` daemon can be managed by ``systemd`` by specifying the user
+ID as the daemon instance::
+
+  systemctl enable ceph-rbd-mirror@rbd-mirror.{unique id}
 
 .. _rbd: ../../man/8/rbd
 .. _ceph-conf: ../../rados/configuration/ceph-conf/#running-multiple-clusters
 .. _explicitly enabled: #enable-image-mirroring
 .. _force resync command: #force-image-resync
 .. _demote the image: #image-promotion-and-demotion
+.. _create a Ceph user: ../../rados/operations/user-management#add-a-user
 

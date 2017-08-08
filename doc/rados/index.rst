@@ -70,7 +70,7 @@ the Ceph Storage Cluster.
 
 	</td></tr></tbody></table>
 
-.. _Ceph Block Devices: ../rbd/rbd
+.. _Ceph Block Devices: ../rbd/
 .. _Ceph Filesystem: ../cephfs/
 .. _Ceph Object Storage: ../radosgw/
 .. _Deployment: ../rados/deployment/
