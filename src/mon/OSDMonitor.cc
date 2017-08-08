@@ -4984,6 +4984,43 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
                               show_shadow);
       rdata.append(ss.str());
     }
+  } else if (prefix == "osd crush ls") {
+    string name;
+    if (!cmd_getval(g_ceph_context, cmdmap, "node", name)) {
+      ss << "no node specified";
+      r = -EINVAL;
+      goto reply;
+    }
+    if (!osdmap.crush->name_exists(name)) {
+      ss << "node '" << name << "' does not exist";
+      r = -ENOENT;
+      goto reply;
+    }
+    int id = osdmap.crush->get_item_id(name);
+    list<int> result;
+    if (id >= 0) {
+      result.push_back(id);
+    } else {
+      int num = osdmap.crush->get_bucket_size(id);
+      for (int i = 0; i < num; ++i) {
+	result.push_back(osdmap.crush->get_bucket_item(id, i));
+      }
+    }
+    if (f) {
+      f->open_array_section("items");
+      for (auto i : result) {
+	f->dump_string("item", osdmap.crush->get_item_name(i));
+      }
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      ostringstream ss;
+      for (auto i : result) {
+	ss << osdmap.crush->get_item_name(i) << "\n";
+      }
+      rdata.append(ss.str());
+    }
+    r = 0;
   } else if (prefix == "osd crush class ls") {
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_array_section("crush_classes");

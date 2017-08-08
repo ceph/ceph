@@ -222,6 +222,8 @@ Major Changes from Kraken
       disable the named mgr module.  The module must be present in the
       configured `mgr_module_path` on the host(s) where `ceph-mgr` is
       running.
+    - ``ceph osd crush ls <node>`` will list items (OSDs or other CRUSH nodes)
+      directly beneath a given CRUSH node.
     - ``ceph osd crush swap-bucket <src> <dest>`` will swap the
       contents of two CRUSH buckets in the hierarchy while preserving
       the buckets' ids.  This allows an entire subtree of devices to
