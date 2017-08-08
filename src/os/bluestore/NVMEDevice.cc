@@ -102,7 +102,6 @@ class SharedDriverQueueData {
   uint32_t queueid;
   struct spdk_nvme_qpair *qpair;
   std::function<void ()> run_func;
-  friend class AioCompletionThread;
 
   bool aio_stop = false;
   void _aio_thread();
