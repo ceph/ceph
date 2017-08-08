@@ -147,6 +147,12 @@ public:
   void pool_cache_io_rate_summary(Formatter *f, ostream *out,
                                   uint64_t poolid) const;
 
+  /**
+   * Return the number of additional bytes that can be stored in this
+   * pool before the first OSD fills up, accounting for PG overhead.
+   */
+  int64_t get_pool_free_space(const OSDMap &osd_map, int64_t poolid) const;
+
   virtual void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss,
 				    Formatter *f, bool verbose) const;
   void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
@@ -171,15 +177,8 @@ public:
       return p->second.primary;
   }
 
-  ceph_statfs get_statfs() const {
-    ceph_statfs statfs;
-    // these are in KB.
-    statfs.kb = osd_sum.kb;
-    statfs.kb_used = osd_sum.kb_used;
-    statfs.kb_avail = osd_sum.kb_avail;
-    statfs.num_objects = pg_sum.stats.sum.num_objects;
-    return statfs;
-  }
+  ceph_statfs get_statfs(OSDMap &osdmap,
+                         boost::optional<int64_t> data_pool) const;
 
   int64_t get_rule_avail(int ruleno) const {
     auto i = avail_space_by_rule.find(ruleno);
@@ -597,7 +596,7 @@ public:
 
   bool is_readable() const override { return true; }
 
-  const pool_stat_t* get_pool_stat(int poolid) const override {
+  const pool_stat_t* get_pool_stat(int64_t poolid) const override {
     auto i = pgmap.pg_pool_sum.find(poolid);
     if (i != pgmap.pg_pool_sum.end()) {
       return &i->second;
@@ -639,7 +638,8 @@ public:
   size_t get_num_pg_by_osd(int osd) const override {
     return pgmap.get_num_pg_by_osd(osd);
   }
-  ceph_statfs get_statfs() const override {
+  ceph_statfs get_statfs(OSDMap& osd_map,
+			 boost::optional<int64_t> data_pool) const override {
     ceph_statfs statfs;
     statfs.kb = pgmap.osd_sum.kb;
     statfs.kb_used = pgmap.osd_sum.kb_used;

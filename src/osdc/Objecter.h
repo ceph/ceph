@@ -1555,6 +1555,7 @@ public:
   struct StatfsOp {
     ceph_tid_t tid;
     struct ceph_statfs *stats;
+    boost::optional<int64_t> data_pool;
     Context *onfinish;
     uint64_t ontimeout;
 
@@ -2929,7 +2930,8 @@ private:
   void _fs_stats_submit(StatfsOp *op);
 public:
   void handle_fs_stats_reply(MStatfsReply *m);
-  void get_fs_stats(struct ceph_statfs& result, Context *onfinish);
+  void get_fs_stats(struct ceph_statfs& result, boost::optional<int64_t> poolid,
+		    Context *onfinish);
   int statfs_op_cancel(ceph_tid_t tid, int r);
   void _finish_statfs_op(StatfsOp *op, int r);
 
