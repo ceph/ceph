@@ -98,7 +98,7 @@ section of your configuration file. The settings include:
 :Required: No
 :Default: ``true``
 
-.. _Block Device: ../../rbd/rbd/
+.. _Block Device: ../../rbd
 
 
 Read-ahead Settings
