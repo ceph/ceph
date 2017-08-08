@@ -125,6 +125,8 @@ Major Changes from Kraken
   * RBD mirroring's rbd-mirror daemon is now highly available. We
     recommend deploying several instances of rbd-mirror for
     reliability.
+  * RBD mirroring's rbd-mirror daemon should utilize unique Ceph user
+    IDs per instance to support the new mirroring dashboard.
   * The default 'rbd' pool is no longer created automatically during
     cluster creation. Additionally, the name of the default pool used
     by the rbd CLI when no pool is specified can be overridden via a
