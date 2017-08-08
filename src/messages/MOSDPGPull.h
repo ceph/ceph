@@ -26,7 +26,7 @@ class MOSDPGPull : public MOSDFastDispatchOp {
 public:
   pg_shard_t from;
   spg_t pgid;
-  epoch_t map_epoch, min_epoch;
+  epoch_t map_epoch = 0, min_epoch = 0;
   uint64_t cost;
 
   epoch_t get_map_epoch() const override {
