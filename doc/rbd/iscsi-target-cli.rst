@@ -11,7 +11,7 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
 -  A running Ceph Luminous or later storage cluster
 
--  CentOS 7.4, Linux kernel v4.12 or newer
+-  RHEL/CentOS 7.4; or Linux kernel v4.14 or newer
 
 -  The following packages must be installed from your Linux distribution's software repository:
 
@@ -19,9 +19,13 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
    -  ``python-rtslib-2.1.fb64`` or newer package
 
-   -  ``tcmu-runner-1.2.1`` or newer package
+   -  ``tcmu-runner-1.3.0`` or newer package
 
-     .. IMPORTANT::
+   -  ``ceph-iscsi-config-2.3`` or newer package
+
+   -  ``ceph-iscsi-cli-2.5`` or newer package
+
+     .. important::
         If previous versions of these packages exist, then they must
         be removed first before installing the newer versions.
 
@@ -69,13 +73,6 @@ to the *Installing* section:
       ::
 
           [config]
-          cluster_name = <ceph_cluster_name>
-          gateway_keyring = <ceph_client_keyring>
-          api_secure = false
-
-      ::
-
-          [config]
           # Name of the Ceph storage cluster. A suitable Ceph configuration file allowing
           # access to the Ceph storage cluster from the gateway node is required, if not
           # colocated on an OSD node.
@@ -104,7 +101,7 @@ to the *Installing* section:
           # api_port = 5001
           # trusted_ip_list = 192.168.0.10,192.168.0.11
 
-      .. IMPORTANT::
+      .. important::
         The ``iscsi-gateway.cfg`` file must be identical on all iSCSI gateway nodes.
 
    #. As ``root``, copy the ``iscsi-gateway.cfg`` file to all iSCSI
@@ -152,7 +149,7 @@ to the *Installing* section:
        > auth chap=<user_name>/<password> | nochap
 
 
-  .. WARNING::
+  .. warning::
       CHAP must always be configured. Without CHAP, the target will
       reject any login requests.
 

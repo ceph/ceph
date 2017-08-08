@@ -34,7 +34,7 @@ Configuring the MPIO load balancing policy, setting the timeout and
 retry options are using PowerShell with the ``mpclaim`` command. The
 reset is done in the MPIO tool.
 
-.. NOTE::
+.. note::
   It is recommended to increase the ``PDORemovePeriod`` option to 120
   seconds from PowerShell. This value might need to be adjusted based
   on the application. When all paths are down, and 120 seconds
@@ -54,13 +54,13 @@ reset is done in the MPIO tool.
     MSDSM-wide Load Balance Policy: Fail Over Only
 
 #. Using the MPIO tool, from the “Targets” tab, click on the
-   “Devices…​” button:
+   “Devices...” button.
 
 #. From the Devices window, select a disk and click the
-   “MPIO…​” button:
+   “MPIO...” button.
 
 #. On the "Device Details" window the paths to each target portal is
-   displayed. If using the ``ceph-iscsi-ansible`` setup method, the
+   displayed. If using the ``ceph-ansible`` setup method, the
    iSCSI gateway will use ALUA to tell the iSCSI initiator which path
    and iSCSI gateway should be used as the primary path. The Load
    Balancing Policy “Fail Over Only” must be selected
@@ -69,8 +69,8 @@ reset is done in the MPIO tool.
 
     mpclaim -s -d $MPIO_DISK_ID
 
-.. NOTE::
-  For the ``ceph-iscsi-ansible`` setup method, there will be one
+.. note::
+  For the ``ceph-ansible`` setup method, there will be one
   Active/Optimized path which is the path to the iSCSI gateway node
   that owns the LUN, and there will be an Active/Unoptimized path for
   each other iSCSI gateway node.
@@ -87,7 +87,7 @@ Consider using the following registry settings:
 
    ::
 
-       DiskTimeout = 25
+       TimeOutValue = 65
 
 -  Microsoft iSCSI Initiator Driver
 
@@ -96,5 +96,5 @@ Consider using the following registry settings:
        HKEY_LOCAL_MACHINE\\SYSTEM\CurrentControlSet\Control\Class\{4D36E97B-E325-11CE-BFC1-08002BE10318}\<Instance_Number>\Parameters
 
    ::
-
-       SRBTimeoutDelta = 5
+       LinkDownTime = 25
+       SRBTimeoutDelta = 15
