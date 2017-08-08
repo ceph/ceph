@@ -109,7 +109,9 @@ struct FeatureMap {
       f->open_object_section(ceph_entity_type_name(p.first));
       for (auto& q : p.second) {
 	f->open_object_section("group");
-	f->dump_unsigned("features", q.first);
+        std::stringstream ss;
+        ss << "0x" << std::hex << q.first << std::dec;
+        f->dump_string("features", ss.str());
 	f->dump_string("release", ceph_release_name(
 			 ceph_release_from_features(q.first)));
 	f->dump_unsigned("num", q.second);
