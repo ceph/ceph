@@ -1262,7 +1262,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (struct_v >= 9) {
       ::decode(roles_pool, bl);
     } else {
-      roles_pool = name + ".rgw.roles";
+      roles_pool = name + ".rgw.meta:roles";
     }
     if (struct_v >= 10) {
       ::decode(reshard_pool, bl);
