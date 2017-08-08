@@ -7057,12 +7057,15 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 	::decode(str, p);
       }
       catch (buffer::error& e) {
+        isvalid = false;
       }
       bool success = s->caps.parse(str);
       if (success)
 	dout(10) << " session " << s << " " << s->entity_name << " has caps " << s->caps << " '" << str << "'" << dendl;
-      else
+      else {
 	dout(10) << " session " << s << " " << s->entity_name << " failed to parse caps '" << str << "'" << dendl;
+        isvalid = false;
+      }
     }
 
     s->put();
