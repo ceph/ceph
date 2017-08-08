@@ -111,10 +111,9 @@ static void handle_connection(RGWProcessEnv& env, tcp::socket socket,
     rgw::asio::ClientIO real_client{socket, parser, buffer};
 
     auto real_client_io = rgw::io::add_reordering(
-                            rgw::io::add_buffering(
-                              rgw::io::add_chunking(
-                                rgw::io::add_conlen_controlling(
-                                  &real_client))));
+                            rgw::io::add_chunking(
+                              rgw::io::add_conlen_controlling(
+                                &real_client)));
     RGWRestfulIO client(&real_client_io);
     process_request(env.store, env.rest, &req, env.uri_prefix,
                     *env.auth_registry, &client, env.olog);
