@@ -36,18 +36,11 @@ On Fedora:
 
 Enabling
 --------
-
-Add this to your ceph.conf on nodes where you run ceph-mgr:
+You can enable the *zabbix* module with:
 
 ::
 
-    [mgr]
-        mgr modules = zabbix
-
-If you use any other ceph-mgr modules, make sure they're in the list too.
-
-Restart the ceph-mgr daemon after modifying the setting to load the module.
-
+    ceph mgr module enable zabbix
 
 Configuration
 -------------
