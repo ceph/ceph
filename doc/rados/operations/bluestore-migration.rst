@@ -9,7 +9,7 @@ take advantage of the improved performance and robustness.  There are
 several strategies for making such a transition.
 
 An individual OSD cannot be converted in place in isolation, however:
-BlueStore and FileStore are simply to different for that to be
+BlueStore and FileStore are simply too different for that to be
 practical.  "Conversion" will rely either on the cluster's normal
 replication and healing support or tools and strategies that copy OSD
 content from and old (FileStore) device to a new (BlueStore) one.
@@ -77,7 +77,7 @@ more data migration than should be necessary, so it is not optimal.
 
 #. Tell the cluster the OSD has been destroyed (and a new OSD can be
    reprovisioned with the same ID)::
-     
+
      ceph osd destroy $ID --yes-i-really-mean-it
 
 #. Reprovision a BlueStore OSD in its place with the same OSD ID.
@@ -140,16 +140,16 @@ the data migrating only once.
    the empty host, you might see something like::
 
      $ bin/ceph osd tree
-     ID CLASS WEIGHT  TYPE NAME     STATUS REWEIGHT PRI-AFF 
-     -5             0 host newhost                          
-     10   ssd 1.00000     osd.0         up  1.00000 1.00000 
-     11   ssd 1.00000     osd.1         up  1.00000 1.00000 
-     12   ssd 1.00000     osd.2         up  1.00000 1.00000 
-     -1       3.00000 root default                          
+     ID CLASS WEIGHT  TYPE NAME     STATUS REWEIGHT PRI-AFF
+     -5             0 host newhost
+     10   ssd 1.00000     osd.0         up  1.00000 1.00000
+     11   ssd 1.00000     osd.1         up  1.00000 1.00000
+     12   ssd 1.00000     osd.2         up  1.00000 1.00000
+     -1       3.00000 root default
      -2       3.00000     host oldhost1
-      0   ssd 1.00000         osd.0     up  1.00000 1.00000 
-      1   ssd 1.00000         osd.1     up  1.00000 1.00000 
-      2   ssd 1.00000         osd.2     up  1.00000 1.00000 
+      0   ssd 1.00000         osd.0     up  1.00000 1.00000
+      1   ssd 1.00000         osd.1     up  1.00000 1.00000
+      2   ssd 1.00000         osd.2     up  1.00000 1.00000
      ...
 
 #. Identify the first target host to convert ::
