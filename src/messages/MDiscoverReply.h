@@ -70,20 +70,20 @@ class MDiscoverReply : public Message {
   // info about original request
   inodeno_t base_ino;
   frag_t base_dir_frag;  
-  bool wanted_base_dir;
-  bool wanted_xlocked;
+  bool wanted_base_dir = false;
+  bool wanted_xlocked = false;
   snapid_t wanted_snapid;
 
   // and the response
-  bool flag_error_dn;
-  bool flag_error_dir;
+  bool flag_error_dn = false;
+  bool flag_error_dir = false;
   std::string error_dentry;   // dentry that was not found (to trigger waiters on asker)
-  bool unsolicited;
+  bool unsolicited = false;
 
-  mds_rank_t dir_auth_hint;
+  mds_rank_t dir_auth_hint = 0;
 
  public:
-  __u8 starts_with;
+  __u8 starts_with = 0;
   bufferlist trace;
 
   enum { DIR, DENTRY, INODE };

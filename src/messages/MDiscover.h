@@ -29,8 +29,8 @@ class MDiscover : public Message {
   snapid_t        snapid;
   filepath        want;   // ... [/]need/this/stuff
 
-  bool want_base_dir;
-  bool want_xlocked;
+  bool want_base_dir = true;
+  bool want_xlocked = false;
 
  public:
   inodeno_t get_base_ino() { return base_ino; }
