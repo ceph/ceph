@@ -13,8 +13,8 @@ device an ideal candidate to interact with a mass data storage system like Ceph.
 Ceph block devices are thin-provisioned, resizable and store data striped over
 multiple OSDs in a Ceph cluster.  Ceph block devices leverage
 :abbr:`RADOS (Reliable Autonomic Distributed Object Store)` capabilities
-such as snapshotting, replication and consistency. Ceph's 
-:abbr:`RADOS (Reliable Autonomic Distributed Object Store)` Block Devices (RBD) 
+such as snapshotting, replication and consistency. Ceph's
+:abbr:`RADOS (Reliable Autonomic Distributed Object Store)` Block Devices (RBD)
 interact with OSDs using kernel modules or the ``librbd`` library.
 
 .. ditaa::  +------------------------+ +------------------------+
@@ -25,7 +25,7 @@ interact with OSDs using kernel modules or the ``librbd`` library.
             |          OSDs          | |        Monitors        |
             +------------------------+ +------------------------+
 
-.. note:: Kernel modules can use Linux page caching. For ``librbd``-based 
+.. note:: Kernel modules can use Linux page caching. For ``librbd``-based
    applications, Ceph supports `RBD Caching`_.
 
 Ceph's block devices deliver high performance with infinite scalability to
@@ -35,7 +35,7 @@ libvirt and QEMU to integrate with Ceph block devices. You can use the same clus
 to operate the `Ceph RADOS Gateway`_, the `Ceph FS filesystem`_, and Ceph block
 devices simultaneously.
 
-.. important:: To use Ceph Block Devices, you must have access to a running 
+.. important:: To use Ceph Block Devices, you must have access to a running
    Ceph cluster.
 
 .. toctree::
@@ -44,7 +44,8 @@ devices simultaneously.
 	Commands <rados-rbd-cmds>
 	Kernel Modules <rbd-ko>
 	Snapshots<rbd-snapshot>
-        Mirroring <rbd-mirroring>
+  Mirroring <rbd-mirroring>
+  iSCSI Gateway <iscsi-overview>
 	QEMU <qemu-rbd>
 	libvirt <libvirt>
 	Cache Settings <rbd-config-ref/>
@@ -60,8 +61,8 @@ devices simultaneously.
 	Manpage rbd-replay-many <../../man/8/rbd-replay-many>
 	Manpage rbdmap <../../man/8/rbdmap>
 	librbd <librbdpy>
-	
-	
+
+
 
 .. _RBD Caching: ../rbd-config-ref/
 .. _kernel modules: ../rbd-ko/
