@@ -37,7 +37,7 @@ public:
    *  post-luminous, but not when we are redirecting to the PGMonitor
    */
   virtual bool is_readable() const { return true; }
-  virtual const pool_stat_t* get_pool_stat(int poolid) const = 0;
+  virtual const pool_stat_t* get_pool_stat(int64_t poolid) const = 0;
   virtual const osd_stat_t& get_osd_sum() const {
     ceph_abort();
   }
@@ -73,7 +73,8 @@ public:
   virtual size_t get_num_pg_by_osd(int osd) const {
     ceph_abort();
   }
-  virtual ceph_statfs get_statfs() const = 0;
+  virtual ceph_statfs get_statfs(OSDMap &osd_map,
+				 boost::optional<int64_t> data_pool) const = 0;
   virtual void print_summary(Formatter *f, ostream *out) const = 0;
   virtual void dump_info(Formatter *f) const = 0;
   virtual void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const = 0;

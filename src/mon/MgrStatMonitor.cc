@@ -17,7 +17,7 @@ class MgrPGStatService : public MonPGStatService {
 public:
   MgrPGStatService(PGMapDigest& d) : digest(d) {}
 
-  const pool_stat_t* get_pool_stat(int poolid) const override {
+  const pool_stat_t* get_pool_stat(int64_t poolid) const override {
     auto i = digest.pg_pool_sum.find(poolid);
     if (i != digest.pg_pool_sum.end()) {
       return &i->second;
@@ -25,8 +25,9 @@ public:
     return nullptr;
   }
 
-  ceph_statfs get_statfs() const override {
-    return digest.get_statfs();
+  ceph_statfs get_statfs(OSDMap& osdmap,
+			 boost::optional<int64_t> data_pool) const override {
+    return digest.get_statfs(osdmap, data_pool);
   }
 
   void print_summary(Formatter *f, ostream *out) const override {
@@ -295,6 +296,7 @@ bool MgrStatMonitor::preprocess_statfs(MonOpRequestRef op)
   op->mark_pgmon_event(__func__);
   auto statfs = static_cast<MStatfs*>(op->get_req());
   auto session = statfs->get_session();
+
   if (!session)
     return true;
   if (!session->is_capable("pg", MON_CAP_R)) {
@@ -316,7 +318,8 @@ bool MgrStatMonitor::preprocess_statfs(MonOpRequestRef op)
     ver = mon->pgmon()->get_last_committed();
   }
   auto reply = new MStatfsReply(statfs->fsid, statfs->get_tid(), ver);
-  reply->h.st = mon->pgservice->get_statfs();
+  reply->h.st = mon->pgservice->get_statfs(mon->osdmon()->osdmap,
+					   statfs->data_pool);
   mon->send_reply(op, reply);
   return true;
 }
