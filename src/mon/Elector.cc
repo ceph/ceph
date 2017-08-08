@@ -35,9 +35,19 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, epoch_t epoch) {
 void Elector::init()
 {
   epoch = mon->store->get(Monitor::MONITOR_NAME, "election_epoch");
-  if (!epoch)
+  if (!epoch) {
+    dout(1) << "init, first boot, initializing epoch at 1 " << dendl;
     epoch = 1;
-  dout(1) << "init, last seen epoch " << epoch << dendl;
+  } else if (epoch % 2) {
+    dout(1) << "init, last seen epoch " << epoch
+	    << ", mid-election, bumping" << dendl;
+    ++epoch;
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
+    t->put(Monitor::MONITOR_NAME, "election_epoch", epoch);
+    mon->store->apply_transaction(t);
+  } else {
+    dout(1) << "init, last seen epoch " << epoch << dendl;
+  }
 }
 
 void Elector::shutdown()
