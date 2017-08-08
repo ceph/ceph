@@ -25,8 +25,6 @@
 
 class KernelDevice : public BlockDevice {
   int fd_direct, fd_buffered;
-  uint64_t size;
-  uint64_t block_size;
   std::string path;
   FS *fs;
   bool aio, dio;
@@ -78,13 +76,6 @@ public:
   KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);
 
   void aio_submit(IOContext *ioc) override;
-
-  uint64_t get_size() const override {
-    return size;
-  }
-  uint64_t get_block_size() const override {
-    return block_size;
-  }
 
   int collect_metadata(std::string prefix, map<std::string,std::string> *pm) const override;
 
