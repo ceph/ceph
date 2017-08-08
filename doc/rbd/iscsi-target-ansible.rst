@@ -11,23 +11,20 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
 -  A running Ceph Luminous (12.2.x) cluster or newer
 
--  The ``ceph-iscsi-config`` package installed on all the iSCSI gateway nodes
+-  RHEL/CentOS 7.4; or Linux kernel v4.14 or newer
 
-.. NOTE::
-  The ``device-mapper-multipath-0.4.9-99`` or newer package is only required for
-  older kernel RBD based implementations. This package is not required for newer
-  ``librbd`` based implementations.
+-  The ``ceph-iscsi-config`` package installed on all the iSCSI gateway nodes
 
 **Installing:**
 
 #. On the Ansible installer node, which could be either the administration node
    or a dedicated deployment node, perform the following steps:
 
-   #. As ``root``, install the ``ceph-iscsi-ansible`` package:
+   #. As ``root``, install the ``ceph-ansible`` package:
 
       ::
 
-          # yum install ceph-iscsi-ansible
+          # yum install ceph-ansible
 
    #. Add an entry in ``/etc/ansible/hosts`` file for the gateway group:
 
@@ -37,13 +34,13 @@ install, and configure the Ceph iSCSI gateway for basic operation.
           ceph-igw-1
           ceph-igw-2
 
-.. NOTE::
+.. note::
   If co-locating the iSCSI gateway with an OSD node, then add the OSD node to the
   ``[ceph-iscsi-gw]`` section.
 
 **Configuring:**
 
-The ``ceph-iscsi-ansible`` package places a file in the ``/usr/share/ceph-ansible/group_vars/``
+The ``ceph-ansible`` package places a file in the ``/usr/share/ceph-ansible/group_vars/``
 directory called ``ceph-iscsi-gw.sample``. Create a copy of this sample file named
 ``ceph-iscsi-gw.yml``. Review the following Ansible variables and descriptions,
 and update accordingly.
@@ -134,7 +131,7 @@ and update accordingly.
 |                                      | across client connections.           |
 +--------------------------------------+--------------------------------------+
 
-.. NOTE::
+.. note::
   When using the ``gateway_iqn`` variable, and for Red Hat Enterprise Linux
   clients, installing the ``iscsi-initiator-utils`` package is required for
   retrieving the gateway’s IQN name. The iSCSI initiator name is located in the
@@ -151,7 +148,7 @@ On the Ansible installer node, perform the following steps.
        # cd /usr/share/ceph-ansible
        # ansible-playbook ceph-iscsi-gw.yml
 
-   .. NOTE::
+   .. note::
     The Ansible playbook will handle RPM dependencies, RBD creation
     and Linux IO configuration.
 
@@ -161,12 +158,12 @@ On the Ansible installer node, perform the following steps.
 
        # gwcli ls
 
-   .. NOTE::
+   .. note::
     For more information on using the ``gwcli`` command to install and configure
     a Ceph iSCSI gateaway, see the `Configuring the iSCSI Target using the Command Line Interface`_
     section.
 
-   .. IMPORTANT::
+   .. important::
     Attempting to use the ``targetcli`` tool to change the configuration will
     result in the following issues, such as ALUA misconfiguration and path failover
     problems. There is the potential to corrupt data, to have mismatched
@@ -207,7 +204,7 @@ Within the ``/usr/share/ceph-ansible/group_vars/ceph-iscsi-gw`` file
 there are a number of operational workflows that the Ansible playbook
 supports.
 
-.. WARNING::
+.. warning::
   Before removing RBD images from the iSCSI gateway configuration,
   follow the standard procedures for removing a storage device from
   the operating system.
@@ -271,7 +268,7 @@ change across the iSCSI gateway nodes.
 
 **Removing the Configuration:**
 
-The ``ceph-iscsi-ansible`` package provides an Ansible playbook to
+The ``ceph-ansible`` package provides an Ansible playbook to
 remove the iSCSI gateway configuration and related RBD images. The
 Ansible playbook is ``/usr/share/ceph-ansible/purge_gateways.yml``. When
 this Ansible playbook is ran a prompted for the type of purge to
@@ -290,11 +287,11 @@ When ``all`` is chosen, the LIO configuration is removed together with
 environment, other unrelated RBD images will not be removed. Ensure the
 correct mode is chosen, this operation will delete data.
 
-.. WARNING::
+.. warning::
   A purge operation is destructive action against your iSCSI gateway
   environment.
 
-.. WARNING::
+.. warning::
   A purge operation will fail, if RBD images have snapshots or clones
   and are exported through the Ceph iSCSI gateway.
 

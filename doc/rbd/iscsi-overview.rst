@@ -9,10 +9,11 @@ to SCSI storage devices (targets) over a TCP/IP network. This allows for heterog
 clients, such as Microsoft Windows, to access the Ceph Storage cluster.
 
 Each iSCSI gateway runs the Linux IO target kernel subsystem (LIO) to provide the
-iSCSI protocol support and utilizes the Ceph’s RBD kernel module to expose RBD
-images to iSCSI clients. With Ceph’s iSCSI gateway you can effectively run a fully
-integrated block-storage infrastructure with all the features and benefits of a
-conventional Storage Area Network (SAN).
+iSCSI protocol support. LIO utilizes a userspace passthrough (TCMU) to interact
+with Ceph's librbd library and expose RBD images to iSCSI clients. With Ceph’s
+iSCSI gateway you can effectively run a fully integrated block-storage
+infrastructure with all the features and benefits of a conventional Storage Area
+Network (SAN).
 
 .. ditaa::
                   Cluster Network
