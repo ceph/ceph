@@ -17,6 +17,7 @@
 #include "librbd/io/ImageRequestWQ.h"
 #include "osdc/Striper.h"
 #include <boost/scope_exit.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/assign/list_of.hpp>
 #include <utility>
 #include <vector>
@@ -1063,6 +1064,8 @@ TEST_F(TestInternal, TestCoR)
     ASSERT_EQ(TEST_IO_SIZE, image.write(itr->second, TEST_IO_SIZE, bl));
   }
 
+  ASSERT_EQ(0, image.flush());
+
   bufferlist readbl;
   printf("verify written data by reading\n");
   {
@@ -1074,15 +1077,18 @@ TEST_F(TestInternal, TestCoR)
 
   int64_t data_pool_id = image.get_data_pool_id();
   rados_ioctx_t d_ioctx;
-  rados_ioctx_create2(_cluster, data_pool_id, &d_ioctx);
+  ASSERT_EQ(0, rados_wait_for_latest_osdmap(_cluster));
+  ASSERT_EQ(0, rados_ioctx_create2(_cluster, data_pool_id, &d_ioctx));
+
+  std::string block_name_prefix = image.get_block_name_prefix() + ".";
 
   const char *entry;
   rados_list_ctx_t list_ctx;
   set<string> obj_checker;
   ASSERT_EQ(0, rados_nobjects_list_open(d_ioctx, &list_ctx));
   while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
-    if (strstr(entry, info.block_name_prefix)) {
-      const char *block_name_suffix = entry + strlen(info.block_name_prefix) + 1;
+    if (boost::starts_with(entry, block_name_prefix)) {
+      const char *block_name_suffix = entry + block_name_prefix.length();
       obj_checker.insert(block_name_suffix);
     }
   }
@@ -1130,12 +1136,12 @@ TEST_F(TestInternal, TestCoR)
 
   printf("check whether child image has the same set of objects as parent\n");
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, clonename.c_str(), NULL));
-  ASSERT_EQ(0, image.stat(info, sizeof(info)));
+  block_name_prefix = image.get_block_name_prefix() + ".";
 
   ASSERT_EQ(0, rados_nobjects_list_open(d_ioctx, &list_ctx));
   while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
-    if (strstr(entry, info.block_name_prefix)) {
-      const char *block_name_suffix = entry + strlen(info.block_name_prefix) + 1;
+    if (boost::starts_with(entry, block_name_prefix)) {
+      const char *block_name_suffix = entry + block_name_prefix.length();
       set<string>::iterator it = obj_checker.find(block_name_suffix);
       ASSERT_TRUE(it != obj_checker.end());
       obj_checker.erase(it);
@@ -1200,6 +1206,8 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
     ASSERT_EQ(TEST_IO_SIZE, image.write(itr->second, TEST_IO_SIZE, bl));
   }
 
+  ASSERT_EQ(0, image.flush());
+
   bufferlist readbl;
   printf("verify written data by reading\n");
   {
@@ -1211,15 +1219,18 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
 
   int64_t data_pool_id = image.get_data_pool_id();
   rados_ioctx_t d_ioctx;
-  rados_ioctx_create2(_cluster, data_pool_id, &d_ioctx);
+  ASSERT_EQ(0, rados_wait_for_latest_osdmap(_cluster));
+  ASSERT_EQ(0, rados_ioctx_create2(_cluster, data_pool_id, &d_ioctx));
+
+  std::string block_name_prefix = image.get_block_name_prefix() + ".";
 
   const char *entry;
   rados_list_ctx_t list_ctx;
   set<string> obj_checker;
   ASSERT_EQ(0, rados_nobjects_list_open(d_ioctx, &list_ctx));
   while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
-    if (strstr(entry, info.block_name_prefix)) {
-      const char *block_name_suffix = entry + strlen(info.block_name_prefix) + 1;
+    if (boost::starts_with(entry, block_name_prefix)) {
+      const char *block_name_suffix = entry + block_name_prefix.length();
       obj_checker.insert(block_name_suffix);
     }
   }
@@ -1244,12 +1255,12 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   ASSERT_EQ(0, image.flatten());
 
   printf("check whether child image has the same set of objects as parent\n");
-  ASSERT_EQ(0, image.stat(info, sizeof(info)));
+  block_name_prefix = image.get_block_name_prefix() + ".";
 
   ASSERT_EQ(0, rados_nobjects_list_open(d_ioctx, &list_ctx));
   while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
-    if (strstr(entry, info.block_name_prefix)) {
-      const char *block_name_suffix = entry + strlen(info.block_name_prefix) + 1;
+    if (boost::starts_with(entry, block_name_prefix)) {
+      const char *block_name_suffix = entry + block_name_prefix.length();
       set<string>::iterator it = obj_checker.find(block_name_suffix);
       ASSERT_TRUE(it != obj_checker.end());
       obj_checker.erase(it);
