@@ -20,7 +20,7 @@ class MDentryLink : public Message {
   dirfrag_t subtree;
   dirfrag_t dirfrag;
   string dn;
-  bool is_primary;
+  bool is_primary = false;
 
  public:
   dirfrag_t get_subtree() { return subtree; }
