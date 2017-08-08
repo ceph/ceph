@@ -45,7 +45,7 @@
 	url = https://github.com/boostorg/boost.git
 [submodule "src/dpdk"]
 	path = src/dpdk
-	url = https://github.com/ceph/dpdk
+	url = https://github.com/spdk/dpdk.git
 [submodule "src/zstd"]
 	path = src/zstd
 	url = https://github.com/facebook/zstd
