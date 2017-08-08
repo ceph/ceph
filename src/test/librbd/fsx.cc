@@ -23,7 +23,9 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#if defined(__linux__)
 #include <linux/fs.h>
+#endif
 #include <sys/ioctl.h>
 #ifdef HAVE_ERR_H
 #include <err.h>
@@ -41,8 +43,11 @@
 #include <fcntl.h>
 #include <random>
 
+#include "include/compat.h"
 #include "include/intarith.h"
+#if defined(WITH_KRBD)
 #include "include/krbd.h"
+#endif
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.h"
@@ -521,7 +526,9 @@ char *pool;			/* name of the pool our test image is in */
 char *iname;			/* name of our test image */
 rados_t cluster;		/* handle for our test cluster */
 rados_ioctx_t ioctx;		/* handle for our test pool */
+#if defined(WITH_KRBD)
 struct krbd_ctx *krbd;		/* handle for libkrbd */
+#endif
 bool skip_partial_discard;	/* rbd_skip_partial_discard config value*/
 
 /*
@@ -828,6 +835,7 @@ const struct rbd_operations librbd_operations = {
 	librbd_compare_and_write,
 };
 
+#if defined(WITH_KRBD)
 int
 krbd_open(const char *name, struct rbd_ctx *ctx)
 {
@@ -884,7 +892,9 @@ krbd_close(struct rbd_ctx *ctx)
 
 	return __librbd_close(ctx);
 }
+#endif // WITH_KRBD
 
+#if defined(__linux__)
 ssize_t
 krbd_read(struct rbd_ctx *ctx, uint64_t off, size_t len, char *buf)
 {
@@ -1066,7 +1076,9 @@ krbd_flatten(struct rbd_ctx *ctx)
 
 	return __librbd_flatten(ctx);
 }
+#endif // __linux__
 
+#if defined(WITH_KRBD)
 const struct rbd_operations krbd_operations = {
 	krbd_open,
 	krbd_close,
@@ -1080,7 +1092,9 @@ const struct rbd_operations krbd_operations = {
 	krbd_flatten,
 	NULL,
 };
+#endif // WITH_KRBD
 
+#if defined(__linux__)
 int
 nbd_open(const char *name, struct rbd_ctx *ctx)
 {
@@ -1203,6 +1217,7 @@ const struct rbd_operations nbd_operations = {
 	krbd_flatten,
 	NULL,
 };
+#endif // __linux__
 
 struct rbd_ctx ctx = RBD_CTX_INIT;
 const struct rbd_operations *ops = &librbd_operations;
@@ -1548,11 +1563,13 @@ create_image()
 		simple_err("Error connecting to cluster", r);
 		goto failed_shutdown;
 	}
+#if defined(WITH_KRBD)
 	r = krbd_create_from_context(rados_cct(cluster), &krbd);
 	if (r < 0) {
 		simple_err("Could not create libkrbd handle", r);
 		goto failed_shutdown;
 	}
+#endif
 
 	r = rados_pool_create(cluster, pool);
 	if (r < 0 && r != -EEXIST) {
@@ -1604,7 +1621,9 @@ create_image()
  failed_open:
 	rados_ioctx_destroy(ioctx);
  failed_krbd:
+#if defined(WITH_KRBD)
 	krbd_destroy(krbd);
+#endif
  failed_shutdown:
 	rados_shutdown(cluster);
 	return r;
@@ -2506,10 +2525,14 @@ usage(void)
 #ifdef FALLOCATE
 "	-F: Do not use fallocate (preallocation) calls\n"
 #endif
-"	-H: do not use punch hole calls\n\
-	-K: enable krbd mode (use -t and -h too)\n\
-	-M: enable rbd-nbd mode (use -t and -h too)\n\
-	-L: fsxLite - no file creations & no file size changes\n\
+"	-H: do not use punch hole calls\n"
+#if defined(WITH_KRBD)
+"	-K: enable krbd mode (use -t and -h too)\n"
+#endif
+#if defined(__linux__)
+"	-M: enable rbd-nbd mode (use -t and -h too)\n"
+#endif
+"	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
 	-O: use oplen (see -o flag) for every op (default random)\n\
 	-P dirpath: save .fsxlog and .fsxgood files in dirpath (default ./)\n\
@@ -2751,14 +2774,18 @@ main(int argc, char **argv)
 		case 'H':
 			punch_hole_calls = 0;
 			break;
+#if defined(WITH_KRBD)
 		case 'K':
 			prt("krbd mode enabled\n");
 			ops = &krbd_operations;
 			break;
+#endif
+#if defined(__linux__)
 		case 'M':
 			prt("rbd-nbd mode enabled\n");
 			ops = &nbd_operations;
 			break;
+#endif
 		case 'L':
 			prt("lite mode not supported for rbd\n");
 			exit(1);
@@ -2966,7 +2993,9 @@ main(int argc, char **argv)
 	fclose(fsxlogf);
 
 	rados_ioctx_destroy(ioctx);
+#if defined(WITH_KRBD)
 	krbd_destroy(krbd);
+#endif
 	rados_shutdown(cluster);
 
 	free(original_buf);
