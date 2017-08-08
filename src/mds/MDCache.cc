@@ -7981,8 +7981,21 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
       SnapRealm *realm = cur->find_snaprealm();
       snapid = realm->resolve_snapname(path[depth], cur->ino());
       dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
-      if (!snapid)
+      if (!snapid) {
+	CInode *t = cur;
+	while (t) {
+	  // if snaplock isn't readable, it's possible that other mds is creating
+	  // snapshot, but snap update message hasn't been received.
+	  if (!t->snaplock.can_read(client)) {
+	    dout(10) << " non-readable snaplock on " << *t << dendl;
+	    t->snaplock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
+	    return 1;
+	  }
+	  CDentry *pdn = t->get_projected_parent_dn();
+	  t = pdn ? pdn->get_dir()->get_inode() : NULL;
+	}
 	return -ENOENT;
+      }
       mdr->snapid = snapid;
       depth++;
       continue;
