@@ -124,13 +124,13 @@ private:
   Context *m_on_finish;
 
   CephContext *m_cct;
-  int m_r_saved;  // used to return actual error after cleanup
+  int m_r_saved = 0;  // used to return actual error after cleanup
   bool m_force_non_primary;
   file_layout_t m_layout;
   std::string m_id_obj, m_header_obj, m_objmap_name;
 
   bufferlist m_outbl;
-  rbd_mirror_mode_t m_mirror_mode;
+  rbd_mirror_mode_t m_mirror_mode = RBD_MIRROR_MODE_DISABLED;
   cls::rbd::MirrorImage m_mirror_image_internal;
 
   void validate_pool();
