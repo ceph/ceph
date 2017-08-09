@@ -231,24 +231,32 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
   strftime(time_buffer, 29, "[%d/%b/%Y:%H:%M:%S %z]", &entry_time);
   std::string time(time_buffer);
 
+  std::string owner_id = entry.bucket_owner.id.empty() ? "-" : entry.bucket_owner.id;
+  std::string bucket = entry.bucket.empty() ? "-" : entry.bucket;
+  std::string user = entry.user.empty() ? "-" : entry.user;
+  std::string uri = entry.uri.empty() ? "-" : entry.uri;
+  std::string error_code = entry.error_code.empty() ? "-" : entry.error_code;
+  std::string referrer = entry.referrer.empty() ? "-" : entry.referrer;
+  std::string user_agent = entry.user_agent.empty() ? "-" : entry.user_agent;
+
                                                                                // S3 BL field
-  pending_column << entry.bucket_owner.id << row_separator                     // Bucket Owner
-                 << entry.bucket << row_separator                              // Bucket
+  pending_column << owner_id << row_separator                                  // Bucket Owner
+                 << bucket << row_separator                                    // Bucket
                  << time << row_separator                                      // Time
                  << entry.remote_addr << row_separator                         // Remote IP
-                 << entry.user << row_separator                                // Requester
+                 << user << row_separator                                      // Requester
                  << entry.request_id << row_separator                          // Request ID
                  << entry.op << row_separator                                  // Operation
                  << oname << row_separator                                     // Key
-                 << entry.uri << row_separator                                 // Request-URI
+                 << uri << row_separator                                       // Request-URI
                  << entry.http_status << row_separator                         // HTTP status
-                 << entry.error_code << row_separator                          // Error Code
+                 << error_code << row_separator                                // Error Code
                  << entry.bytes_sent << row_separator                          // Bytes Sent
                  << entry.obj_size << row_separator                            // Object Size
                  << entry.total_time << row_separator                          // Total Time
                  << "-" << row_separator                                       // Turn-Around Time
-                 << entry.referrer << row_separator                            // Referrer
-                 << entry.user_agent << row_separator                          // User-Agent
+                 << referrer << row_separator                                  // Referrer
+                 << user_agent << row_separator                                // User-Agent
                  << oversion_id << row_separator                               // Version Id
                  << newliner;
 
