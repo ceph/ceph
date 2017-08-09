@@ -64,7 +64,7 @@ struct C_IsTagOwner : public Context {
   Journaler *journaler;
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
-  uint64_t tag_tid;
+  uint64_t tag_tid = 0;
   journal::TagData tag_data;
 
   C_IsTagOwner(librados::IoCtx &io_ctx, const std::string &image_id,
