@@ -1904,7 +1904,10 @@ function run_tests() {
     local dir=td/ceph-helpers
 
     for func in $funcs ; do
-        $func $dir || return 1
+        if ! $func $dir; then
+            teardown $dir 1
+            return 1
+        fi
     done
 }
 
