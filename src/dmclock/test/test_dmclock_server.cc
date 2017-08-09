@@ -16,6 +16,9 @@
 #include "dmclock_util.h"
 #include "gtest/gtest.h"
 
+// process control to prevent core dumps during gtest death tests
+#include "dmcPrCtl.h"
+
 
 namespace dmc = crimson::dmclock;
 
@@ -61,17 +64,19 @@ namespace crimson {
       };
 
       QueueRef pq(new Queue(client_info_f, false));
-      Request req;
       ReqParams req_params(1,1);
 
-      EXPECT_DEATH_IF_SUPPORTED(pq->add_request(req, client1, req_params),
+      // Disable coredumps
+      PrCtl unset_dumpable;
+
+      EXPECT_DEATH_IF_SUPPORTED(pq->add_request(Request{}, client1, req_params),
 				"Assertion.*reservation.*max_tag.*"
 				"proportion.*max_tag") <<
 	"we should fail if a client tries to generate a reservation tag "
 	"where reservation and proportion are both 0";
 
 
-      EXPECT_DEATH_IF_SUPPORTED(pq->add_request(req, client2, req_params),
+      EXPECT_DEATH_IF_SUPPORTED(pq->add_request(Request{}, client2, req_params),
 				"Assertion.*reservation.*max_tag.*"
 				"proportion.*max_tag") <<
 	"we should fail if a client tries to generate a reservation tag "
@@ -548,14 +553,13 @@ namespace crimson {
 
       pq = QueueRef(new Queue(client_info_f, false));
 
-      Request req;
       ReqParams req_params(1,1);
 
       auto now = dmc::get_time();
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(req, client1, req_params);
-	pq->add_request(req, client2, req_params);
+	pq->add_request(Request{}, client1, req_params);
+	pq->add_request(Request{}, client2, req_params);
 	now += 0.0001;
       }
 
@@ -602,15 +606,14 @@ namespace crimson {
 
       QueueRef pq(new Queue(client_info_f, false));
 
-      Request req;
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
       auto old_time = dmc::get_time() - 100.0;
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request_time(req, client1, req_params, old_time);
-	pq->add_request_time(req, client2, req_params, old_time);
+	pq->add_request_time(Request{}, client1, req_params, old_time);
+	pq->add_request_time(Request{}, client2, req_params, old_time);
 	old_time += 0.001;
       }
 
@@ -661,7 +664,6 @@ namespace crimson {
 
       QueueRef pq(new Queue(client_info_f, false));
 
-      Request req;
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
@@ -669,8 +671,8 @@ namespace crimson {
 
       // add six requests; for same client reservations spaced one apart
       for (int i = 0; i < 3; ++i) {
-	pq->add_request_time(req, client1, req_params, start_time);
-	pq->add_request_time(req, client2, req_params, start_time);
+	pq->add_request_time(Request{}, client1, req_params, start_time);
+	pq->add_request_time(Request{}, client2, req_params, start_time);
       }
 
       Queue::PullReq pr = pq->pull_request(start_time + 0.5);
@@ -744,13 +746,12 @@ namespace crimson {
 
       QueueRef pq(new Queue(client_info_f, false));
 
-      Request req;
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(req, client1, req_params, now + 100);
+      pq->add_request_time(Request{}, client1, req_params, now + 100);
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::future, pr.type);
@@ -776,13 +777,12 @@ namespace crimson {
 
       QueueRef pq(new Queue(client_info_f, true));
 
-      Request req;
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(req, client1, req_params, now + 100);
+      pq->add_request_time(Request{}, client1, req_params, now + 100);
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
@@ -808,13 +808,12 @@ namespace crimson {
 
       QueueRef pq(new Queue(client_info_f, true));
 
-      Request req;
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(req, client1, req_params, now + 100);
+      pq->add_request_time(Request{}, client1, req_params, now + 100);
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
