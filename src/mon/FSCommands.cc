@@ -194,10 +194,13 @@ class FsNewHandler : public FileSystemCommandHandler
       return r;
     }
 
-    mon->osdmon()->do_application_enable(data,
-                                         pg_pool_t::APPLICATION_NAME_CEPHFS);
-    mon->osdmon()->do_application_enable(metadata,
-                                         pg_pool_t::APPLICATION_NAME_CEPHFS);
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS ||
+	mon->osdmon()->pending_inc.new_require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      mon->osdmon()->do_application_enable(data,
+					   pg_pool_t::APPLICATION_NAME_CEPHFS);
+      mon->osdmon()->do_application_enable(metadata,
+					   pg_pool_t::APPLICATION_NAME_CEPHFS);
+    }
 
     // All checks passed, go ahead and create.
     fsmap.create_filesystem(fs_name, metadata, data,
