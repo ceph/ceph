@@ -3320,12 +3320,6 @@ discover_aws_flavour(const req_info& info)
   return std::make_pair(version, route);
 }
 
-static void init_anon_user(struct req_state *s)
-{
-  rgw_get_anon_user(*(s->user));
-  s->perm_mask = RGW_PERM_FULL_CONTROL;
-}
-
 /*
  * verify that a signed request comes from the keyholder
  * by checking the signature against our locally-computed version
