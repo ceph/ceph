@@ -164,29 +164,29 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
 
   if (image_options.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &m_stripe_unit) != 0 ||
       m_stripe_unit == 0) {
-    m_stripe_unit = m_cct->_conf->rbd_default_stripe_unit;
+    m_stripe_unit = m_cct->_conf->get_val<uint64_t>("rbd_default_stripe_unit");
   }
   if (image_options.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &m_stripe_count) != 0 ||
       m_stripe_count == 0) {
-    m_stripe_count = m_cct->_conf->rbd_default_stripe_count;
+    m_stripe_count = m_cct->_conf->get_val<uint64_t>("rbd_default_stripe_count");
   }
   if (get_image_option(image_options, RBD_IMAGE_OPTION_ORDER, &m_order) != 0 ||
       m_order == 0) {
-    m_order = m_cct->_conf->rbd_default_order;
+    m_order = m_cct->_conf->get_val<int64_t>("rbd_default_order");
   }
   if (get_image_option(image_options, RBD_IMAGE_OPTION_JOURNAL_ORDER,
       &m_journal_order) != 0) {
-    m_journal_order = m_cct->_conf->rbd_journal_order;
+    m_journal_order = m_cct->_conf->get_val<uint64_t>("rbd_journal_order");
   }
   if (get_image_option(image_options, RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH,
                        &m_journal_splay_width) != 0) {
-    m_journal_splay_width = m_cct->_conf->rbd_journal_splay_width;
+    m_journal_splay_width = m_cct->_conf->get_val<uint64_t>("rbd_journal_splay_width");
   }
   if (image_options.get(RBD_IMAGE_OPTION_JOURNAL_POOL, &m_journal_pool) != 0) {
-    m_journal_pool = m_cct->_conf->rbd_journal_pool;
+    m_journal_pool = m_cct->_conf->get_val<std::string>("rbd_journal_pool");
   }
   if (image_options.get(RBD_IMAGE_OPTION_DATA_POOL, &m_data_pool) != 0) {
-    m_data_pool = m_cct->_conf->rbd_default_data_pool;
+    m_data_pool = m_cct->_conf->get_val<std::string>("rbd_default_data_pool");
   }
 
   m_layout.object_size = 1ull << m_order;
@@ -268,7 +268,7 @@ void CreateRequest<I>::send() {
 
 template<typename I>
 void CreateRequest<I>::validate_pool() {
-  if (!m_cct->_conf->rbd_validate_pool) {
+  if (!m_cct->_conf->get_val<bool>("rbd_validate_pool")) {
     create_id_object();
     return;
   }

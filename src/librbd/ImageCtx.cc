@@ -60,7 +60,7 @@ public:
     : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", 1,
                  "rbd_op_threads"),
       op_work_queue(new ContextWQ("librbd::op_work_queue",
-                                  cct->_conf->rbd_op_thread_timeout,
+                                  cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
                                   this)) {
     start();
   }
@@ -211,10 +211,11 @@ struct C_InvalidateCache : public Context {
     ThreadPool *thread_pool;
     get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
     io_work_queue = new io::ImageRequestWQ<>(
-      this, "librbd::io_work_queue", cct->_conf->rbd_op_thread_timeout,
+      this, "librbd::io_work_queue",
+      cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
       thread_pool);
 
-    if (cct->_conf->rbd_auto_exclusive_lock_until_manual_request) {
+    if (cct->_conf->get_val<bool>("rbd_auto_exclusive_lock_until_manual_request")) {
       exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
     } else {
       exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
@@ -1013,50 +1014,51 @@ struct C_InvalidateCache : public Context {
       }
     }
 
-#define ASSIGN_OPTION(config)                                                  \
+#define ASSIGN_OPTION(config, type)                                            \
     do {                                                                       \
       string key = "rbd_";						       \
       key = key + #config;					      	       \
       if (configs[key])                                                        \
-        config = local_config_t.rbd_##config;                                  \
+        config = local_config_t.get_val<type>("rbd_"#config);                  \
       else                                                                     \
-        config = cct->_conf->rbd_##config;                                     \
+        config = cct->_conf->get_val<type>("rbd_"#config);                     \
     } while (0);
 
-    ASSIGN_OPTION(non_blocking_aio);
-    ASSIGN_OPTION(cache);
-    ASSIGN_OPTION(cache_writethrough_until_flush);
-    ASSIGN_OPTION(cache_size);
-    ASSIGN_OPTION(cache_max_dirty);
-    ASSIGN_OPTION(cache_target_dirty);
-    ASSIGN_OPTION(cache_max_dirty_age);
-    ASSIGN_OPTION(cache_max_dirty_object);
-    ASSIGN_OPTION(cache_block_writes_upfront);
-    ASSIGN_OPTION(concurrent_management_ops);
-    ASSIGN_OPTION(balance_snap_reads);
-    ASSIGN_OPTION(localize_snap_reads);
-    ASSIGN_OPTION(balance_parent_reads);
-    ASSIGN_OPTION(localize_parent_reads);
-    ASSIGN_OPTION(readahead_trigger_requests);
-    ASSIGN_OPTION(readahead_max_bytes);
-    ASSIGN_OPTION(readahead_disable_after_bytes);
-    ASSIGN_OPTION(clone_copy_on_read);
-    ASSIGN_OPTION(blacklist_on_break_lock);
-    ASSIGN_OPTION(blacklist_expire_seconds);
-    ASSIGN_OPTION(request_timed_out_seconds);
-    ASSIGN_OPTION(enable_alloc_hint);
-    ASSIGN_OPTION(journal_order);
-    ASSIGN_OPTION(journal_splay_width);
-    ASSIGN_OPTION(journal_commit_age);
-    ASSIGN_OPTION(journal_object_flush_interval);
-    ASSIGN_OPTION(journal_object_flush_bytes);
-    ASSIGN_OPTION(journal_object_flush_age);
-    ASSIGN_OPTION(journal_pool);
-    ASSIGN_OPTION(journal_max_payload_bytes);
-    ASSIGN_OPTION(journal_max_concurrent_object_sets);
-    ASSIGN_OPTION(mirroring_resync_after_disconnect);
-    ASSIGN_OPTION(mirroring_replay_delay);
-    ASSIGN_OPTION(skip_partial_discard);
+    ASSIGN_OPTION(non_blocking_aio, bool);
+    ASSIGN_OPTION(cache, bool);
+    ASSIGN_OPTION(cache_writethrough_until_flush, bool);
+    ASSIGN_OPTION(cache_size, int64_t);
+    ASSIGN_OPTION(cache_max_dirty, int64_t);
+    ASSIGN_OPTION(cache_target_dirty, int64_t);
+    ASSIGN_OPTION(cache_max_dirty_age, double);
+    ASSIGN_OPTION(cache_max_dirty_object, int64_t);
+    ASSIGN_OPTION(cache_block_writes_upfront, bool);
+    ASSIGN_OPTION(concurrent_management_ops, int64_t);
+    ASSIGN_OPTION(balance_snap_reads, bool);
+    ASSIGN_OPTION(localize_snap_reads, bool);
+    ASSIGN_OPTION(balance_parent_reads, bool);
+    ASSIGN_OPTION(localize_parent_reads, bool);
+    ASSIGN_OPTION(readahead_trigger_requests, int64_t);
+    ASSIGN_OPTION(readahead_max_bytes, int64_t);
+    ASSIGN_OPTION(readahead_disable_after_bytes, int64_t);
+    ASSIGN_OPTION(clone_copy_on_read, bool);
+    ASSIGN_OPTION(blacklist_on_break_lock, bool);
+    ASSIGN_OPTION(blacklist_expire_seconds, int64_t);
+    ASSIGN_OPTION(request_timed_out_seconds, int64_t);
+    ASSIGN_OPTION(enable_alloc_hint, bool);
+    ASSIGN_OPTION(journal_order, uint64_t);
+    ASSIGN_OPTION(journal_splay_width, uint64_t);
+    ASSIGN_OPTION(journal_commit_age, double);
+    ASSIGN_OPTION(journal_object_flush_interval, int64_t);
+    ASSIGN_OPTION(journal_object_flush_bytes, int64_t);
+    ASSIGN_OPTION(journal_object_flush_age, double);
+    ASSIGN_OPTION(journal_pool, std::string);
+    ASSIGN_OPTION(journal_max_payload_bytes, uint64_t);
+    ASSIGN_OPTION(journal_max_concurrent_object_sets, int64_t);
+    ASSIGN_OPTION(mirroring_resync_after_disconnect, bool);
+    ASSIGN_OPTION(mirroring_replay_delay, int64_t);
+    ASSIGN_OPTION(skip_partial_discard, bool);
+    ASSIGN_OPTION(blkin_trace_all, bool);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {
