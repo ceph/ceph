@@ -274,7 +274,7 @@ WriteCompletionData::WriteCompletionData
  librados::AioCompletionImpl *userCompletion,
  int n) :
   CompletionData(striper, soid, lockCookie, userCompletion, n), m_safe(0),
-  m_unlockCompletion(0) {
+  m_unlockCompletion(0), m_writeRc(0) {
   if (userCompletion) {
     m_safe = new librados::IoCtxImpl::C_aio_Complete(userCompletion);
   }

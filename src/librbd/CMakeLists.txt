@@ -22,7 +22,6 @@ set(librbd_internal_srcs
   Utils.cc
   Watcher.cc
   api/DiffIterate.cc
-  api/Group.cc
   api/Image.cc
   api/Mirror.cc
   cache/ImageWriteback.cc

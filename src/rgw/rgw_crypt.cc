@@ -1022,21 +1022,27 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM);
     if (! req_sse_ca.empty()) {
       if (req_sse_ca != "AES256") {
+        ldout(s->cct, 5) << "ERROR: Invalid value for header "
+                         << "x-amz-server-side-encryption-customer-algorithm"
+                         << dendl;
         return -ERR_INVALID_REQUEST;
       }
       if (s->cct->_conf->rgw_crypt_require_ssl &&
           !s->info.env->exists("SERVER_PORT_SECURE")) {
+        ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
       }
       std::string key_bin = from_base64(
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY) );
       if (key_bin.size() != AES_256_CBC::AES_256_KEYSIZE) {
+        ldout(s->cct, 5) << "ERROR: invalid encryption key size" << dendl;
         return -ERR_INVALID_REQUEST;
       }
       boost::string_view keymd5 =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5);
       std::string keymd5_bin = from_base64(keymd5);
       if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
+        ldout(s->cct, 5) << "ERROR: Invalid key md5 size" << dendl;
         return -ERR_INVALID_DIGEST;
       }
       MD5 key_hash;
@@ -1045,6 +1051,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       key_hash.Final(key_hash_res);
 
       if (memcmp(key_hash_res, keymd5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
+        ldout(s->cct, 5) << "ERROR: Invalid key md5 hash" << dendl;
         return -ERR_INVALID_DIGEST;
       }
 
@@ -1066,10 +1073,13 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION);
     if (! req_sse.empty()) {
       if (req_sse != "aws:kms") {
+        ldout(s->cct, 5) << "ERROR: Invalid value for header x-amz-server-side-encryption"
+                         << dendl;
         return -ERR_INVALID_REQUEST;
       }
       if (s->cct->_conf->rgw_crypt_require_ssl &&
           !s->info.env->exists("SERVER_PORT_SECURE")) {
+        ldout(s->cct, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
       }
       boost::string_view key_id =
@@ -1148,18 +1158,23 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
   if (stored_mode == "SSE-C-AES256") {
     if (s->cct->_conf->rgw_crypt_require_ssl &&
         !s->info.env->exists("SERVER_PORT_SECURE")) {
+      ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
     const char *req_cust_alg =
         s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
 
     if ((nullptr == req_cust_alg) || (strcmp(req_cust_alg, "AES256") != 0)) {
+      ldout(s->cct, 5) << "ERROR: Invalid value for header "
+                       << "x-amz-server-side-encryption-customer-algorithm"
+                       << dendl;
       return -ERR_INVALID_REQUEST;
     }
 
     std::string key_bin =
         from_base64(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", ""));
     if (key_bin.size() != AES_256_CBC::AES_256_KEYSIZE) {
+      ldout(s->cct, 5) << "ERROR: Invalid encryption key size" << dendl;
       return -ERR_INVALID_REQUEST;
     }
 
@@ -1167,6 +1182,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
         s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
     std::string keymd5_bin = from_base64(keymd5);
     if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
+      ldout(s->cct, 5) << "ERROR: Invalid key md5 size " << dendl;
       return -ERR_INVALID_DIGEST;
     }
 
@@ -1191,6 +1207,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
   if (stored_mode == "SSE-KMS") {
     if (s->cct->_conf->rgw_crypt_require_ssl &&
         !s->info.env->exists("SERVER_PORT_SECURE")) {
+      ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
     /* try to retrieve actual key */

@@ -370,6 +370,7 @@ public:
   int unlink(const string& dirname, const string& filename);
   int mkdir(const string& dirname);
   int rmdir(const string& dirname);
+  bool wal_is_rotational();
 
   bool dir_exists(const string& dirname);
   int stat(const string& dirname, const string& filename,

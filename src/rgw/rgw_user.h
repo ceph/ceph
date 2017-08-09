@@ -199,7 +199,7 @@ struct RGWUserAdminOpState {
   bool op_mask_specified;
   bool caps_specified;
   bool suspension_op;
-  bool admin_specified;
+  bool admin_specified = false;
   bool system_specified;
   bool key_op;
   bool temp_url_key_specified;

@@ -68,7 +68,7 @@ public:
     return "";
   }
 
-  sem_t *m_sem;
+  sem_t *m_sem = nullptr;
   rados_t m_cluster;
   rados_ioctx_t m_ioctx;
   std::string m_pool_name;
@@ -131,7 +131,7 @@ public:
     return "";
   }
 
-  sem_t *m_sem;
+  sem_t *m_sem = nullptr;
   Rados m_cluster;
   IoCtx m_ioctx;
   std::string m_pool_name;
@@ -2570,7 +2570,7 @@ public:
     return "";
   }
 
-  sem_t *m_sem;
+  sem_t *m_sem = nullptr;
   Rados m_cluster;
   IoCtx m_ioctx;
   std::string m_pool_name;

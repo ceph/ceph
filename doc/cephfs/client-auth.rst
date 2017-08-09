@@ -25,19 +25,18 @@ Syntax
 ------
 
 To grant rw access to the specified directory only, we mention the specified
-directory while creating key for a client following the undermentioned syntax. ::
+directory while creating key for a client using the following syntax. ::
 
-./ceph auth get-or-create client.*client_name* mon 'allow r' mds 'allow r, allow rw path=/*specified_directory*' osd 'allow rw pool=data'
+ ceph fs authorize *filesystem_name* client.*client_name* /*specified_directory* rw
 
-for example, to restrict client ``foo`` to writing only in the ``bar`` directory,
-we will use: ::
+for example, to restrict client ``foo`` to writing only in the ``bar`` directory of filesystem ``cephfs``, use ::
 
-./ceph auth get-or-create client.foo mon 'allow r' mds 'allow r, allow rw path=/bar' osd 'allow rw pool=data'
+ ceph fs authorize cephfs client.foo / r /bar rw
 
 To completely restrict the client to the ``bar`` directory, omit the
-unqualified "allow r" clause: ::
+root directory ::
 
-./ceph auth get-or-create client.foo mon 'allow r' mds 'allow rw path=/bar' osd 'allow rw pool=data'
+ ceph fs authorize cephfs client.foo /bar rw
 
 Note that if a client's read access is restricted to a path, they will only
 be able to mount the filesystem when specifying a readable path in the
@@ -47,13 +46,13 @@ mount command (see below).
 See `User Management - Add a User to a Keyring`_. for additional details on user management
 
 To restrict a client to the specfied sub-directory only, we mention the specified
-directory while mounting following the undermentioned syntax. ::
+directory while mounting using the following syntax. ::
 
-./ceph-fuse -n client.*client_name* *mount_path* -r *directory_to_be_mounted*
+ ./ceph-fuse -n client.*client_name* *mount_path* -r *directory_to_be_mounted*
 
 for example, to restrict client ``foo`` to ``mnt/bar`` directory, we will use. ::
 
-./ceph-fuse -n client.foo mnt -r /bar
+ ./ceph-fuse -n client.foo mnt -r /bar
 
 Free space reporting
 --------------------
@@ -73,32 +72,6 @@ following config option on the client:
 If quotas are not enabled, or no quota is set on the sub-directory mounted,
 then the overall usage of the filesystem will be reported irrespective of
 the value of this setting.
-
-OSD restriction
-===============
-
-To prevent clients from writing or reading data to pools other than
-those in use for CephFS, set an OSD authentication capability that
-restricts access to the CephFS data pool(s):
-
-::
-
-    client.0
-        key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
-        caps: [mds] allow rw
-        caps: [mon] allow r
-        caps: [osd] allow rw pool=data1, allow rw pool=data2
-
-.. note::
-
-    Without a corresponding MDS path restriction, the OSD capabilities above do
-    **not** restrict file deletions outside of the ``data1`` and ``data2``
-    pools.
-
-You may also restrict clients from writing data by using 'r' instead of
-'rw' in OSD capabilities.  This does not affect the ability of the client
-to update filesystem metadata for these files, but it will prevent them
-from persistently writing data in a way that would be visible to other clients.
 
 Layout and Quota restriction (the 'p' flag)
 ===========================================

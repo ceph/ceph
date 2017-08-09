@@ -693,6 +693,7 @@ def cluster(ctx, config):
                     '-p',
                     mnt_point,
                 ])
+            log.info(str(roles_to_devs))
             log.info(str(roles_to_journals))
             log.info(role)
             if roles_to_devs.get(role):
@@ -1029,8 +1030,8 @@ def osd_scrub_pgs(ctx, config):
     indicate the last scrub completed.  Time out if no progess is made
     here after two minutes.
     """
-    retries = 20
-    delays = 10
+    retries = 40
+    delays = 20
     cluster_name = config['cluster']
     manager = ctx.managers[cluster_name]
     all_clean = False

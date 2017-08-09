@@ -1575,6 +1575,19 @@ public:
     return true;
   }
 
+  /**
+   * is_journal_rotational
+   *
+   * Check whether journal is backed by a rotational (HDD) or non-rotational
+   * (SSD) device.
+   *
+   *
+   * @return true for HDD, false for SSD
+   */
+  virtual bool is_journal_rotational() {
+    return true;
+  }
+
   virtual string get_default_device_class() {
     return is_rotational() ? "hdd" : "ssd";
   }

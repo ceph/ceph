@@ -641,7 +641,8 @@ int librados::RadosClient::get_fs_stats(ceph_statfs& stats)
   int ret = 0;
 
   lock.Lock();
-  objecter->get_fs_stats(stats, new C_SafeCond(&mylock, &cond, &done, &ret));
+  objecter->get_fs_stats(stats, boost::optional<int64_t> (),
+                         new C_SafeCond(&mylock, &cond, &done, &ret));
   lock.Unlock();
 
   mylock.Lock();

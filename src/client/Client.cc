@@ -9430,7 +9430,13 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
 
   ceph_statfs stats;
   C_SaferCond cond;
-  objecter->get_fs_stats(stats, &cond);
+
+  const vector<int64_t> &data_pools = mdsmap->get_data_pools();
+  if (data_pools.size() == 1) {
+    objecter->get_fs_stats(stats, data_pools[0], &cond);
+  } else {
+    objecter->get_fs_stats(stats, boost::optional<int64_t>(), &cond);
+  }
 
   client_lock.Unlock();
   int rval = cond.wait();
@@ -9501,7 +9507,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     stbuf->f_bfree = free;
     stbuf->f_bavail = free;
   } else {
-    // General case: report the overall RADOS cluster's statistics.  Because
+    // General case: report the cluster statistics returned from RADOS. Because
     // multiple pools may be used without one filesystem namespace via
     // layouts, this is the most correct thing we can do.
     stbuf->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
@@ -12708,6 +12714,12 @@ int Client::fdescribe_layout(int fd, file_layout_t *lp)
   return 0;
 }
 
+int64_t Client::get_default_pool_id()
+{
+  Mutex::Locker lock(client_lock);
+  /* first data pool is the default */ 
+  return mdsmap->get_first_data_pool(); 
+}
 
 // expose osdmap
 
@@ -12900,6 +12912,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 	}
       }
       if (mds >= 0) {
+	assert (s != NULL);
 	switch (s->state) {
 	case MetaSession::STATE_CLOSING:
 	  ldout(cct, 1) << "reset from mds we were closing; we'll call that closed" << dendl;
