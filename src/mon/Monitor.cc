@@ -5305,7 +5305,7 @@ void Monitor::scrub_check_results()
     }
   }
   if (!errors)
-    clog->info() << "scrub ok on " << quorum << ": " << mine;
+    clog->debug() << "scrub ok on " << quorum << ": " << mine;
 }
 
 inline void Monitor::scrub_timeout()
