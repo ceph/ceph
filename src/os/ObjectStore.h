@@ -330,7 +330,7 @@ public:
    *
    * TRANSACTION ISOLATION
    *
-   * Except as noted below, isolation is the responsibility of the
+   * Except as noted above, isolation is the responsibility of the
    * caller. In other words, if any storage element (storage element
    * == any of the four portions of an object as described above) is
    * altered by a transaction (including deletion), the caller
