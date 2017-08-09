@@ -131,7 +131,7 @@ void RGWLoadGenProcess::handle_request(RGWRequest* r)
   env.sign(access_key);
 
   RGWLoadGenIO real_client_io(&env);
-  RGWRestfulIO client_io(&real_client_io);
+  RGWRestfulIO client_io(cct, &real_client_io);
 
   int ret = process_request(store, rest, req, uri_prefix,
                             *auth_registry, &client_io, olog);
