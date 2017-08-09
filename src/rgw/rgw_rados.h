@@ -1450,7 +1450,7 @@ WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTarget)
 struct RGWZoneGroup : public RGWSystemMetaObj {
   string api_name;
   list<string> endpoints;
-  bool is_master;
+  bool is_master = false;
 
   string master_zone;
   map<string, RGWZone> zones;
