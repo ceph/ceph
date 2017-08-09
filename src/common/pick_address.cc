@@ -38,9 +38,10 @@ static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
 	exit(1);
       }
 
-      const struct sockaddr *found = find_ip_in_subnet(ifa, (struct sockaddr *) &net, prefix_len);
+      const struct ifaddrs *found = find_ip_in_subnet(ifa,
+                                      (struct sockaddr *) &net, prefix_len);
       if (found)
-	return found;
+	return found->ifa_addr;
     }
 
   return NULL;
@@ -132,6 +133,32 @@ void pick_addresses(CephContext *cct, int needs)
 
   freeifaddrs(ifa);
 }
+
+
+std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
+{
+  struct ifaddrs *ifa;
+  int r = getifaddrs(&ifa);
+  if (r < 0) {
+    string err = cpp_strerror(errno);
+    lderr(cct) << "unable to fetch interfaces and addresses: " << err << dendl;
+    return {};
+  }
+
+  unsigned int prefix_len = 0;
+  const struct ifaddrs *found = find_ip_in_subnet(ifa,
+                                  (const struct sockaddr *) &network, prefix_len);
+
+  std::string result;
+  if (found) {
+    result = found->ifa_name;
+  }
+
+  freeifaddrs(ifa);
+
+  return result;
+}
+
 
 bool have_local_addr(CephContext *cct, const list<entity_addr_t>& ls, entity_addr_t *match)
 {
