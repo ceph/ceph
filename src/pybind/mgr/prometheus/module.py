@@ -1,4 +1,5 @@
 import cherrypy
+import json
 import math
 import os
 import time
@@ -57,6 +58,30 @@ def stattype_to_str(stattype):
         return 'histogram'
 
     return ''
+
+
+def health_status_to_number(status):
+
+    if status == 'HEALTH_OK':
+        return 0
+    elif status == 'HEALTH_WARN':
+        return 1
+    elif status == 'HEALTH_ERR':
+        return 2
+
+PG_STATES = ['creating', 'active', 'clean', 'down', 'scrubbing', 'degraded',
+        'inconsistent', 'peering', 'repair', 'recovering', 'forced-recovery',
+        'backfill', 'forced-backfill', 'wait-backfill', 'backfill-toofull',
+        'incomplete', 'stale', 'remapped', 'undersized', 'peered']
+
+DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
+
+DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
+           'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
+
+OSD_STATS = ['kb', 'kb_used', 'num_snap_trimming', 'snap_trim_queue_len']
+
+OSD_PERF_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
 
 class Metric(object):
@@ -130,9 +155,59 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self.notified = False
         self.serving = False
-        self.metrics = dict()
+        self.metrics = self._setup_static_metrics()
         self.schema = OrderedDict()
         _global_instance['plugin'] = self
+
+    def _setup_static_metrics(self):
+        metrics = {}
+        metrics['health_status'] = Metric(
+            'undef',
+            'health_status',
+            'Cluster health status'
+        )
+        metrics['mon_quorum_count'] = Metric(
+            'gauge',
+            'mon_quorum_count',
+            'Monitors in quorum'
+        )
+        for state in PG_STATES:
+            path = 'pg_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'PG {}'.format(state),
+                ('osd',),
+            )
+        for state in DF_CLUSTER:
+            path = 'cluster_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'DF {}'.format(state),
+            )
+        for state in DF_POOL:
+            path = 'pool_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'DF pool {}'.format(state),
+                ('name', 'id')
+            )
+        for state in OSD_STATS + OSD_PERF_STATS:
+            path = 'osd_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'OSD {}'.format(state),
+                ('osd','device_class')
+            )
+
+        return metrics
 
     def _get_ordered_schema(self, **kwargs):
 
@@ -200,10 +275,61 @@ class Module(MgrModule):
             (daemon,)
         )
 
+    def get_health(self):
+        health = json.loads(self.get('health')['json'])
+        self.metrics['health_status'].set(
+            health_status_to_number(health['status'])
+        )
+
+    def get_df(self):
+        df = self.get('df')
+        # maybe get the to-be-exported metrics from a config?
+        for stat in DF_CLUSTER:
+            path = 'cluster_{}'.format(stat)
+            self.metrics[path].set(df['stats'][stat])
+
+        for pool in df['pools']:
+            for stat in DF_POOL:
+                path = 'pool_{}'.format(stat)
+                self.metrics[path].set(pool['stats'][stat], (pool['name'], pool['id']))
+
+    def get_mon_status(self):
+        mon_status = json.loads(self.get('mon_status')['json'])
+        self.metrics['mon_quorum_count'].set(len(mon_status['quorum']))
+
+    def get_osd_status(self):
+        '''TODO add device_class label!!!'''
+        osd_status = self.get('osd_stats')['osd_stats']
+        osd_devs = self.get('osd_metadata')
+        for osd in osd_status:
+            id_ = osd['osd']
+            dev_class = :q
+            for stat in OSD_STATS:
+                path = 'osd_{}'.format(stat)
+                self.metrics[path].set(osd[stat], (id_,))
+            for p_stat in OSD_PERF_STAT:
+                path = 'osd_{}'.format(stat)
+                self.metrics[path].set(osd['perf_stat'][stat], (id_,))
+
+    def get_pg_status(self):
+        pg_s = self.get('pg_summary')['by_osd']
+        for osd in pg_s:
+            reported_pg_s = [(s,v) for key, v in pg_s[osd].items() for s in
+                             key.split('+')]
+            for state in PG_STATES:
+                path = 'pg_{}'.format(state)
+                if state not in reported_pg_s:
+                    self.metrics[path].set(0, ('osd.{}'.format(osd),))
+
     def collect(self):
-        for daemon in self.schema.keys():
-            for path in self.schema[daemon].keys():
-                self.get_stat(daemon, path)
+        self.get_health()
+        self.get_df()
+        self.get_mon_status()
+        self.get_osd_status()
+        self.get_pg_status()
+        # for daemon in self.schema.keys():
+        #     for path in self.schema[daemon].keys():
+        #         self.get_stat(daemon, path)
         return self.metrics
 
     def notify(self, ntype, nid):
@@ -247,8 +373,8 @@ class Module(MgrModule):
             (server_addr, server_port)
         )
         # wait for first notification (of any kind) to start up
-        while not self.serving:
-            time.sleep(1)
+        # while not self.serving:
+        #     time.sleep(1)
 
         cherrypy.config.update({
             'server.socket_host': server_addr,
