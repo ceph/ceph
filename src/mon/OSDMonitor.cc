@@ -9187,11 +9187,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     vector<int64_t> id_vec;
     vector<int32_t> new_pg_temp;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
-      ss << "unable to parse 'id' value(s) '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
-      err = -EINVAL;
-      goto reply;
+    cmd_getval(g_ceph_context, cmdmap, "id", id_vec);
+    if (id_vec.empty())  {
+      pending_inc.new_pg_temp[pgid] = mempool::osdmap::vector<int>();
+      ss << "done cleaning up pg_temp of " << pgid;
+      goto update;
     }
     for (auto osd : id_vec) {
       if (!osdmap.exists(osd)) {
