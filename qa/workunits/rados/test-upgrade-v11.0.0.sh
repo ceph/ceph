@@ -15,7 +15,7 @@ pids=""
 for f in \
     'api_aio --gtest_filter=-LibRadosAio.RacingRemovePP:*WriteSame*:*CmpExt*:*RoundTrip3*' \
     'api_list --gtest_filter=-LibRadosList*.EnumerateObjects*' \
-    'api_io --gtest_filter=-*Checksum*' \
+    'api_io --gtest_filter=-*Checksum*:*CmpExt*' \
     api_lock \
     'api_misc --gtest_filter=-*WriteSame*:*CmpExt*:*Checksum*:*CloneRange*' \
     'api_watch_notify --gtest_filter=-*WatchNotify3*' \
