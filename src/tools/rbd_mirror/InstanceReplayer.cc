@@ -333,9 +333,9 @@ void InstanceReplayer<I>::start_image_replayers(int r) {
     return;
   }
 
-  size_t image_count = 0;
-  size_t warning_count = 0;
-  size_t error_count = 0;
+  uint64_t image_count = 0;
+  uint64_t warning_count = 0;
+  uint64_t error_count = 0;
   for (auto it = m_image_replayers.begin();
        it != m_image_replayers.end();) {
     auto current_it(it);
