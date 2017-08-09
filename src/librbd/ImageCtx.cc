@@ -60,7 +60,7 @@ public:
     : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", 1,
                  "rbd_op_threads"),
       op_work_queue(new ContextWQ("librbd::op_work_queue",
-                                  cct->_conf->rbd_op_thread_timeout,
+                                  cct->_conf->get_val_generic("rbd_op_thread_timeout"),
                                   this)) {
     start();
   }
@@ -211,10 +211,11 @@ struct C_InvalidateCache : public Context {
     ThreadPool *thread_pool;
     get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
     io_work_queue = new io::ImageRequestWQ<>(
-      this, "librbd::io_work_queue", cct->_conf->rbd_op_thread_timeout,
+      this, "librbd::io_work_queue",
+      cct->_conf->get_val_generic("rbd_op_thread_timeout"),
       thread_pool);
 
-    if (cct->_conf->rbd_auto_exclusive_lock_until_manual_request) {
+    if (cct->_conf->get_val_generic("rbd_auto_exclusive_lock_until_manual_request")) {
       exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
     } else {
       exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
@@ -1018,9 +1019,9 @@ struct C_InvalidateCache : public Context {
       string key = "rbd_";						       \
       key = key + #config;					      	       \
       if (configs[key])                                                        \
-        config = local_config_t.rbd_##config;                                  \
+        config = local_config_t.get_val_generic(key);                                  \
       else                                                                     \
-        config = cct->_conf->rbd_##config;                                     \
+        config = cct->_conf->get_val_generic(key);                                     \
     } while (0);
 
     ASSIGN_OPTION(non_blocking_aio);
