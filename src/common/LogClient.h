@@ -245,7 +245,7 @@ private:
   bool is_mon;
   Mutex log_lock;
   version_t last_log_sent;
-  std::atomic<uint64_t> last_log;
+  version_t last_log;
   std::deque<LogEntry> log_queue;
 
   std::map<std::string, LogChannelRef> channels;
