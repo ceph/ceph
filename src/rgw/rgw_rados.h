@@ -2855,7 +2855,7 @@ public:
         RGWObjManifest manifest;
         bool has_manifest;
         uint64_t size;
-	struct timespec mtime;
+	struct timespec mtime {};
         map<string, bufferlist> attrs;
 
         Result() : has_manifest(false), size(0) {}
