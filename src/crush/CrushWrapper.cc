@@ -1785,15 +1785,23 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
       assert(weight_set->size - 1 == new_size);
       for (__u32 k = position; k < new_size; k++)
 	weight_set->weights[k] = weight_set->weights[k+1];
-      weight_set->weights = (__u32*)realloc(weight_set->weights,
-					    new_size * sizeof(__u32));
+      if (new_size) {
+	weight_set->weights = (__u32*)realloc(weight_set->weights,
+					      new_size * sizeof(__u32));
+      } else {
+	weight_set->weights = NULL;
+      }
       weight_set->size = new_size;
     }
     if (arg->ids_size) {
       assert(arg->ids_size - 1 == new_size);
       for (__u32 k = position; k < new_size; k++)
 	arg->ids[k] = arg->ids[k+1];
-      arg->ids = (__s32 *)realloc(arg->ids, new_size * sizeof(__s32));
+      if (new_size) {
+	arg->ids = (__s32 *)realloc(arg->ids, new_size * sizeof(__s32));
+      } else {
+	arg->ids = NULL;
+      }
       arg->ids_size = new_size;
     }
   }
