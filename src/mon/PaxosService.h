@@ -83,16 +83,16 @@ protected:
    * Child must populate this during encode_pending() by calling encode_health().
    */
   health_check_map_t health_checks;
-public:
-  const health_check_map_t& get_health_checks() {
-    return health_checks;
-  }
-
 protected:
   /**
    * format of our state in leveldb, 0 for default
    */
   version_t format_version;
+
+public:
+  const health_check_map_t& get_health_checks() {
+    return health_checks;
+  }
 
   /**
    * @defgroup PaxosService_h_callbacks Callback classes
@@ -128,7 +128,6 @@ protected:
    * @}
    */
 
-public:
   /**
    * @param mn A Monitor instance
    * @param p A Paxos instance

@@ -3156,7 +3156,7 @@ void OSDMonitor::check_pg_creates_sub(Subscription *sub)
 void OSDMonitor::do_application_enable(int64_t pool_id,
                                        const std::string &app_name)
 {
-  assert(paxos->is_plugged());
+  assert(paxos->is_plugged() && is_writeable());
 
   dout(20) << __func__ << ": pool_id=" << pool_id << ", app_name=" << app_name
            << dendl;
