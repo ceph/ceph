@@ -25,10 +25,10 @@ class MOSDPGUpdateLogMissingReply : public MOSDFastDispatchOp {
 
 
 public:
-  epoch_t map_epoch, min_epoch;
+  epoch_t map_epoch = 0, min_epoch = 0;
   spg_t pgid;
   shard_id_t from;
-  ceph_tid_t rep_tid;
+  ceph_tid_t rep_tid = 0;
 
   epoch_t get_epoch() const { return map_epoch; }
   spg_t get_pgid() const { return pgid; }
