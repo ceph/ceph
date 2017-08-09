@@ -4497,7 +4497,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
 	  stringstream oss;
 	  oss << info.pgid.pgid << " " << mode << " starts" << std::endl;
-	  osd->clog->info(oss);
+	  osd->clog->debug(oss);
 	}
 
 	scrubber.seed = -1;
@@ -4936,7 +4936,7 @@ void PG::scrub_finish()
     if (total_errors)
       osd->clog->error(oss);
     else
-      osd->clog->info(oss);
+      osd->clog->debug(oss);
   }
 
   // finish up
