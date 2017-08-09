@@ -1450,7 +1450,7 @@ WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTarget)
 struct RGWZoneGroup : public RGWSystemMetaObj {
   string api_name;
   list<string> endpoints;
-  bool is_master;
+  bool is_master = false;
 
   string master_zone;
   map<string, RGWZone> zones;
@@ -2188,8 +2188,8 @@ struct bucket_info_entry {
 
 struct tombstone_entry {
   ceph::real_time mtime;
-  uint32_t zone_short_id;
-  uint64_t pg_ver;
+  uint32_t zone_short_id = 0;
+  uint64_t pg_ver = 0;
 
   tombstone_entry() = default;
   tombstone_entry(const RGWObjState& state)

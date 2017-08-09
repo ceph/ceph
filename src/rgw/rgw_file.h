@@ -200,7 +200,7 @@ namespace rgw {
       uint64_t nlink;
       uint32_t owner_uid; /* XXX need Unix attr */
       uint32_t owner_gid; /* XXX need Unix attr */
-      mode_t unix_mode;
+      mode_t unix_mode = MAGIC;
       struct timespec ctime;
       struct timespec mtime;
       struct timespec atime;
@@ -2200,7 +2200,7 @@ public:
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
   buffer::list data;
-  uint64_t timer_id;
+  uint64_t timer_id = 0;
   MD5 hash;
   off_t real_ofs;
   size_t bytes_written;
