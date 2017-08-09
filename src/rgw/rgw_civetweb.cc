@@ -112,7 +112,7 @@ void RGWCivetWeb::init_env(CephContext *cct)
 
   env.set("REQUEST_METHOD", info->request_method);
   env.set("REQUEST_URI", info->request_uri); // get the full uri, we anyway handle abs uris later
-  env.set("SCRIPT_URI", info->uri); /* FIXME */
+  env.set("SCRIPT_URI", info->local_uri);
   if (info->query_string) {
     env.set("QUERY_STRING", info->query_string);
   }
