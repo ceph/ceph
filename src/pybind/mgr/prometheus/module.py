@@ -300,16 +300,17 @@ class Module(MgrModule):
     def get_osd_status(self):
         '''TODO add device_class label!!!'''
         osd_status = self.get('osd_stats')['osd_stats']
-        osd_devs = self.get('osd_metadata')
+        osd_dev = self.get('osd_map_crush')['devices']
         for osd in osd_status:
             id_ = osd['osd']
-            dev_class = :q
+            dev_class = next((osd for osd in osd_dev if osd['id'] == id_))
             for stat in OSD_STATS:
                 path = 'osd_{}'.format(stat)
-                self.metrics[path].set(osd[stat], (id_,))
-            for p_stat in OSD_PERF_STAT:
-                path = 'osd_{}'.format(stat)
-                self.metrics[path].set(osd['perf_stat'][stat], (id_,))
+                self.metrics[path].set(osd[stat], (id_,dev_class['class']))
+            for p_stat in OSD_PERF_STATS:
+                path = 'osd_{}'.format(p_stat)
+                self.metrics[path].set(osd['perf_stat'][p_stat],
+                                       (id_,dev_class['class']))
 
     def get_pg_status(self):
         pg_s = self.get('pg_summary')['by_osd']
