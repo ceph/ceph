@@ -1100,7 +1100,7 @@ WRITE_CLASS_ENCODER(cls_rgw_lc_get_head_ret)
 
 struct cls_rgw_lc_list_entries_op {
   string marker;
-  uint32_t max_entries;
+  uint32_t max_entries = 0;
 
   cls_rgw_lc_list_entries_op() {}
 
