@@ -66,14 +66,14 @@ void ClientIO::init_env(CephContext *cct)
   env.set("REQUEST_METHOD", request.method);
 
   // split uri from query
-  auto url = boost::string_ref{request.url};
-  auto pos = url.find('?');
-  auto query = url.substr(pos + 1);
-  url = url.substr(0, pos);
+  auto uri = boost::string_ref{request.url};
+  auto pos = uri.find('?');
+  auto query = uri.substr(pos + 1);
+  uri = uri.substr(0, pos);
 
-  env.set("REQUEST_URI", url);
+  env.set("REQUEST_URI", request.url);
   env.set("QUERY_STRING", query);
-  env.set("SCRIPT_URI", url); /* FIXME */
+  env.set("SCRIPT_URI", uri);
 
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", socket.local_endpoint().port());
