@@ -3734,6 +3734,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
   if (!s->aws4_auth->canonical_qs.empty()) {
 
+    boost::replace_all(s->aws4_auth->canonical_qs, "+", "%20");
+
     /* handle case when query string exists. Step 3 in
      * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
 
