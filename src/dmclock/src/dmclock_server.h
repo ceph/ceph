@@ -109,36 +109,38 @@ namespace crimson {
       double proportion;
       double limit;
       bool   ready; // true when within limit
-#ifndef DO_NOT_DELAY_TAG_CALC
       Time   arrival;
-#endif
 
       RequestTag(const RequestTag& prev_tag,
 		 const ClientInfo& client,
 		 const uint32_t delta,
 		 const uint32_t rho,
 		 const Time time,
-		 const double cost = 0.0) :
-	reservation(cost + tag_calc(time,
-				    prev_tag.reservation,
-				    client.reservation_inv,
-				    rho,
-				    true)),
-	proportion(tag_calc(time,
-			    prev_tag.proportion,
-			    client.weight_inv,
-			    delta,
-			    true)),
-	limit(tag_calc(time,
-		       prev_tag.limit,
-		       client.limit_inv,
-		       delta,
-		       false)),
-	ready(false)
-#ifndef DO_NOT_DELAY_TAG_CALC
-	, arrival(time)
-#endif
+		 const double cost = 0.0,
+		 const double atcpation_timeout = 0.0) :
+	ready(false),
+	arrival(time)
       {
+	Time max_time = time;
+	if (time - atcpation_timeout < prev_tag.arrival)
+	  max_time -= atcpation_timeout;
+	
+	reservation = cost + tag_calc(max_time,
+				      prev_tag.reservation,
+				      client.reservation_inv,
+				      rho,
+				      true);
+	proportion = tag_calc(max_time,
+			      prev_tag.proportion,
+			      client.weight_inv,
+			      delta,
+			      true);
+	limit = tag_calc(max_time,
+			 prev_tag.limit,
+			 client.limit_inv,
+			 delta,
+			 false);
+
 	assert(reservation < max_tag || proportion < max_tag);
       }
 
@@ -146,18 +148,18 @@ namespace crimson {
 		 const ClientInfo& client,
 		 const ReqParams req_params,
 		 const Time time,
-		 const double cost = 0.0) :
-	RequestTag(prev_tag, client, req_params.delta, req_params.rho, time, cost)
+		 const double cost = 0.0,
+		 const double atcpation_timeout = 0.0) :
+	RequestTag(prev_tag, client, req_params.delta, req_params.rho, time,
+		   cost, atcpation_timeout)
       { /* empty */ }
 
       RequestTag(double _res, double _prop, double _lim, const Time _arrival) :
 	reservation(_res),
 	proportion(_prop),
 	limit(_lim),
-	ready(false)
-#ifndef DO_NOT_DELAY_TAG_CALC
-	, arrival(_arrival)
-#endif
+	ready(false),
+	arrival(_arrival)
       {
 	assert(reservation < max_tag || proportion < max_tag);
       }
@@ -166,10 +168,8 @@ namespace crimson {
 	reservation(other.reservation),
 	proportion(other.proportion),
 	limit(other.limit),
-	ready(other.ready)
-#ifndef DO_NOT_DELAY_TAG_CALC
-	, arrival(other.arrival)
-#endif
+	ready(other.ready),
+	arrival(other.arrival)
       {
 	// empty
       }
@@ -340,6 +340,7 @@ namespace crimson {
 	  assign_unpinned_tag(prev_tag.reservation, _prev.reservation);
 	  assign_unpinned_tag(prev_tag.limit, _prev.limit);
 	  assign_unpinned_tag(prev_tag.proportion, _prev.proportion);
+	  prev_tag.arrival = _prev.arrival;
 	  last_tick = _tick;
 	}
 
@@ -714,6 +715,7 @@ namespace crimson {
       // limit, this will allow the request next in terms of
       // proportion to still get issued
       bool             allow_limit_break;
+      double           atcpation_timeout;
 
       std::atomic_bool finishing;
 
@@ -742,9 +744,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			bool _allow_limit_break) :
+			bool _allow_limit_break,
+			double _atcpation_timeout) :
 	client_info_f(_client_info_f),
 	allow_limit_break(_allow_limit_break),
+	atcpation_timeout(_atcpation_timeout),
 	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
 	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
@@ -862,13 +866,19 @@ namespace crimson {
 			   get_cli_info(client),
 			   req_params,
 			   time,
-			   cost);
+			   cost,
+                           atcpation_timeout);
 
 	  // copy tag to previous tag for client
 	  client.update_req_tag(tag, tick);
 	}
 #else
-	RequestTag tag(client.get_req_tag(), get_cli_info(client), req_params, time, cost);
+	RequestTag tag(client.get_req_tag(),
+		       get_cli_info(client),
+		       req_params,
+		       time,
+		       cost,
+		       atcpation_timeout);
 	// copy tag to previous tag for client
 	client.update_req_tag(tag, tick);
 #endif
@@ -920,7 +930,8 @@ namespace crimson {
 	  ClientReq& next_first = top.next_request();
 	  next_first.tag = RequestTag(tag, get_cli_info(top),
 				      top.cur_delta, top.cur_rho,
-				      next_first.tag.arrival);
+				      next_first.tag.arrival,
+                                      0.0, atcpation_timeout);
 
   	  // copy tag to previous tag for client
 	  top.update_req_tag(next_first.tag, tick);
@@ -1169,10 +1180,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			bool _allow_limit_break = false) :
+			bool _allow_limit_break = false,
+			double _anticipation_timeout = 0.0) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
-	      _allow_limit_break)
+	      _allow_limit_break, _anticipation_timeout)
       {
 	// empty
       }
@@ -1393,10 +1405,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			bool _allow_limit_break = false) :
+			bool _allow_limit_break = false,
+			double anticipation_timeout = 0.0) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
-	      _allow_limit_break)
+	      _allow_limit_break, anticipation_timeout)
       {
 	can_handle_f = _can_handle_f;
 	handle_f = _handle_f;
@@ -1408,14 +1421,16 @@ namespace crimson {
       PushPriorityQueue(typename super::ClientInfoFunc _client_info_f,
 			CanHandleRequestFunc _can_handle_f,
 			HandleRequestFunc _handle_f,
-			bool _allow_limit_break = false) :
+			bool _allow_limit_break = false,
+			double _anticipation_timeout = 0.0) :
 	PushPriorityQueue(_client_info_f,
 			  _can_handle_f,
 			  _handle_f,
 			  std::chrono::minutes(10),
 			  std::chrono::minutes(15),
 			  std::chrono::minutes(6),
-			  _allow_limit_break)
+			  _allow_limit_break,
+			  _anticipation_timeout)
       {
 	// empty
       }
