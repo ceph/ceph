@@ -19,6 +19,7 @@
 #include <sys/resource.h>
 
 #include "include/str_list.h"
+#include "include/compat.h"
 #include "common/deleter.h"
 #include "common/Tub.h"
 #include "RDMAStack.h"
@@ -95,6 +96,7 @@ void RDMADispatcher::polling_start()
   assert(rx_cq);
 
   t = std::thread(&RDMADispatcher::polling, this);
+  ceph_pthread_setname(t.native_handle(), "rdma-polling");
 }
 
 void RDMADispatcher::polling_stop()
