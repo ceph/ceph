@@ -1,0 +1,61 @@
+language: node_js
+node_js:
+  - "5.10"
+
+before_install:
+  - "export CHROME_BIN=/usr/bin/google-chrome"
+  - "export DISPLAY=:99.0"
+  - "sh -e /etc/init.d/xvfb start"
+
+before_script:
+  - npm install
+
+script:
+  - gulp build
+  - gulp test
+  - gulp coverage
+  - gulp package
+  - gulp bower
+  - cat ./coverage/lcov.info | ./node_modules/.bin/coveralls
+
+notifications:
+  slack: chartjs:pcfCZR6ugg5TEcaLtmIfQYuA
+
+sudo: required
+dist: trusty
+
+addons:
+  firefox: latest
+  apt:
+    sources:
+      - google-chrome
+    packages:
+      - google-chrome-stable
+
+deploy:
+# Creates a tag containing dist files and bower.json
+# Requires GITHUB_AUTH_TOKEN and GITHUB_AUTH_EMAIL environment variables
+# IMPORTANT: the script has to be set executable in the Git repository (error 127)
+# https://github.com/travis-ci/travis-ci/issues/5538#issuecomment-225025939
+- provider: script
+  script: ./scripts/release.sh
+  skip_cleanup: true
+  on:
+    branch: release
+- provider: releases
+  api_key: $GITHUB_AUTH_TOKEN
+  file:
+  - "./dist/Chart.bundle.js"
+  - "./dist/Chart.bundle.min.js"
+  - "./dist/Chart.js"
+  - "./dist/Chart.min.js"
+  - "./dist/Chart.js.zip"
+  skip_cleanup: true
+  on:
+    tags: true
+- provider: npm
+  email: $NPM_AUTH_EMAIL
+  api_key: $NPM_AUTH_TOKEN
+  skip_cleanup: true
+  on:
+    tags: true
