@@ -1,0 +1,8 @@
+tasks:
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done parallel"
+- install.upgrade:
+    client.0:
+- print: "**** done install.upgrade on client.0"
