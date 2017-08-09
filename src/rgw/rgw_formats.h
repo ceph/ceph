@@ -29,6 +29,7 @@ public:
   void set_status(int status, const char* status_name) override {};
   void output_header() override {};
   void output_footer() override {};
+  void enable_line_break() override {};
   void flush(ostream& os) override;
   void reset() override;
 

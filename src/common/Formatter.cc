@@ -127,6 +127,8 @@ void JSONFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
   os << m_ss.str();
+  if (m_line_break_enabled)
+    os << "\n";
   m_ss.clear();
   m_ss.str("");
 }
@@ -325,6 +327,8 @@ void XMLFormatter::flush(std::ostream& os)
   /* There is a small catch here. If the rest of the formatter had NO output,
    * we should NOT output a newline. This primarily triggers on HTTP redirects */
   if (m_pretty && !m_ss_str.empty())
+    os << "\n";
+  else if (m_line_break_enabled)
     os << "\n";
   m_ss.clear();
   m_ss.str("");
