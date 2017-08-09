@@ -1619,7 +1619,7 @@ function wait_for_scrub() {
     local sname=${3:-last_scrub_stamp}
 
     for ((i=0; i < $TIMEOUT; i++)); do
-        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid $sname)" ; then
+        if test "$(get_last_scrub_stamp $pgid $sname)" '>' "$last_scrub" ; then
             return 0
         fi
         sleep 1
