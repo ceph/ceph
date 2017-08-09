@@ -147,7 +147,8 @@ ImageDeleter<I>::ImageDeleter(ContextWQ *work_queue, SafeTimer *timer,
     m_failed_timer_lock(timer_lock),
     m_asok_hook(new ImageDeleterAdminSocketHook<I>(g_ceph_context, this))
 {
-  set_failed_timer_interval(g_ceph_context->_conf->rbd_mirror_delete_retry_interval);
+  set_failed_timer_interval(g_ceph_context->_conf->get_val<double>(
+    "rbd_mirror_delete_retry_interval"));
   m_image_deleter_thread.create("image_deleter");
 }
 

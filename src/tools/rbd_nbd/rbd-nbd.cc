@@ -931,7 +931,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg, Config *
   config.parse_config_files(nullptr, nullptr, 0);
   config.parse_env();
   config.parse_argv(args);
-  cfg->poolname = config.rbd_default_pool;
+  cfg->poolname = config.get_val<std::string>("rbd_default_pool");
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {

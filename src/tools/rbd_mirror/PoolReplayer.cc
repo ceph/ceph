@@ -513,10 +513,10 @@ void PoolReplayer::print_status(Formatter *f, stringstream *ss)
 
   f->dump_string("local_cluster_admin_socket",
                  reinterpret_cast<CephContext *>(m_local_io_ctx.cct())->_conf->
-                     admin_socket);
+                     get_val<std::string>("admin_socket"));
   f->dump_string("remote_cluster_admin_socket",
                  reinterpret_cast<CephContext *>(m_remote_io_ctx.cct())->_conf->
-                     admin_socket);
+                     get_val<std::string>("admin_socket"));
 
   f->open_object_section("sync_throttler");
   m_instance_watcher->print_sync_status(f, ss);
