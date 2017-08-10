@@ -19,8 +19,10 @@ class RbdPoolLs(RemoteViewCache):
                 ioctx = self._module.rados.open_ioctx(pool)
                 ioctx.stat("rbd_directory")
                 rbd_pools.append(pool)
-            except (rados.PermissionError, rados.ObjectNotFound):
-                self.log.debug("No RBD directory in " + pool)
+            except rados.ObjectNotFound:
+                pass
+            except rados.PermissionError:
+                self.log.debug("Permission Error on " + pool)
             except:
                 self.log.exception("Failed to open pool " + pool)
 
