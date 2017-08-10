@@ -857,8 +857,6 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
 NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
   :   BlockDevice(cct),
       driver(nullptr),
-      size(0),
-      block_size(0),
       aio_stop(false),
       buffer_lock("NVMEDevice::buffer_lock"),
       aio_callback(cb),
