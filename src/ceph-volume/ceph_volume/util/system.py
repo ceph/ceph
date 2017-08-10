@@ -4,6 +4,7 @@ import pwd
 import platform
 import uuid
 from ceph_volume import process
+from . import as_string
 
 
 # TODO: get these out of here and into a common area for others to consume
@@ -94,10 +95,10 @@ def is_mounted(source, destination=None):
             mounted_path = fields[1]
             if os.path.isabs(mounted_device) and os.path.exists(mounted_device):
                 mounted_device = os.path.realpath(mounted_device)
-                if mounted_device == dev:
+                if as_string(mounted_device) == dev:
                     if destination:
                         destination = os.path.realpath(destination)
-                        return destination == os.path.realpath(mounted_path)
+                        return destination == as_string(os.path.realpath(mounted_path))
                     else:
                         return True
     return False
