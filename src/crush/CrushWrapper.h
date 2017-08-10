@@ -1214,6 +1214,7 @@ public:
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket,
     const std::set<int32_t>& used_ids,
     int *clone);
+  int rename_class(const string& srcname, const string& dstname);
   int populate_classes(
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
   bool _class_is_dead(int class_id);
