@@ -48,9 +48,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << sn << ") "
 
-static constexpr uint16_t data_buffer_default_num = 2048;
+static constexpr uint32_t data_buffer_default_num = 65536;
 
-static constexpr uint32_t data_buffer_size = 8192;
+static constexpr uint32_t data_buffer_size = 16384;
 
 static constexpr uint16_t inline_segment_num = 32;
 
@@ -442,7 +442,7 @@ void SharedDriverQueueData::_aio_thread()
   dout(1) << __func__ << " start" << dendl;
 
   if (data_buf_mempool.empty()) {
-    for (uint16_t i = 0; i < data_buffer_default_num; i++) {
+    for (uint32_t i = 0; i < data_buffer_default_num; i++) {
       void *b = spdk_dma_zmalloc(data_buffer_size, CEPH_PAGE_SIZE, NULL);
       if (!b) {
         derr << __func__ << " failed to create memory pool for nvme data buffer" << dendl;
@@ -455,13 +455,14 @@ void SharedDriverQueueData::_aio_thread()
   Task *t = nullptr;
   int r = 0;
   uint64_t lba_off, lba_count;
+  bool inflight;
 
   ceph::coarse_real_clock::time_point cur, start
     = ceph::coarse_real_clock::now();
   while (true) {
-    bool inflight = queue_op_seq.load() - completed_op_seq.load();
- again:
+    inflight = queue_op_seq.load() - completed_op_seq.load();
     dout(40) << __func__ << " polling" << dendl;
+ again:
     if (inflight) {
       if (!spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion)) {
         dout(30) << __func__ << " idle, have a pause" << dendl;
@@ -810,6 +811,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
              << queue->queue_op_seq - queue->completed_op_seq << dendl;
     // check waiting count before doing callback (which may
     // destroy this ioc).
+    task->release_segs(queue);
     if (ctx->priv) {
       if (!--ctx->num_running) {
         task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
@@ -817,7 +819,6 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     } else {
       ctx->try_aio_wake();
     }
-    task->release_segs(queue);
     delete task;
   } else if (task->command == IOCommand::READ_COMMAND) {
     queue->logger->tinc(l_bluestore_nvmedevice_read_lat, dur);
@@ -827,19 +828,14 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     task->release_segs(queue);
     // read submitted by AIO
     if(!task->return_code) {
-      if (ctx->priv) {
-	if (!--ctx->num_running) {
+      assert(ctx->priv != NULL);
+      if (!--ctx->num_running) {
           task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
-	}
-      } else {
-	ctx->try_aio_wake();
       }
       delete task;
     } else {
       task->return_code = 0;
-      if (!--ctx->num_running) {
-        task->io_wake();
-      }
+      ctx->try_aio_wake();
     }
   } else {
     assert(task->command == IOCommand::FLUSH_COMMAND);
@@ -868,6 +864,7 @@ NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
 int NVMEDevice::open(const string& p)
 {
   int r = 0;
+  char *str;
   dout(1) << __func__ << " path " << p << dendl;
 
   string serial_number;
@@ -879,7 +876,9 @@ int NVMEDevice::open(const string& p)
     return r;
   }
   char buf[100];
+  memset(buf, 0, sizeof(buf));
   r = ::read(fd, buf, sizeof(buf));
+  dout(1) << __func__ << "buf:" << buf << dendl;
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1; // defensive
   if (r <= 0) {
@@ -905,7 +904,18 @@ int NVMEDevice::open(const string& p)
 
   driver->register_device(this);
   block_size = driver->get_block_size();
-  size = driver->get_size();
+
+  str = index(buf, ':');
+  offset = strtoll(str + 1, NULL, 16);
+  str = rindex(buf, ':');
+  size = strtoll(str + 1, NULL, 16);
+
+  if (size > (driver->get_size() - offset)) {
+      derr << __func__ << " Failed to allocate file from offset" << offset << ""
+      << " with size " << size << "B" << dendl;
+	  return -1;
+  }
+
   name = serial_number;
 
   //nvme is non-rotational device.
@@ -915,8 +925,8 @@ int NVMEDevice::open(const string& p)
   size &= ~(block_size - 1);
 
   dout(1) << __func__ << " size " << size << " (" << pretty_si_t(size) << "B)"
-          << " block_size " << block_size << " (" << pretty_si_t(block_size)
-          << "B)" << dendl;
+          << " offset " << offset << " block_size " << block_size << " ("
+          << pretty_si_t(block_size) << "B)" << dendl;
 
   return 0;
 }
@@ -946,6 +956,7 @@ int NVMEDevice::collect_metadata(string prefix, map<string,string> *pm) const
 
 int NVMEDevice::flush()
 {
+  return 0;
   dout(10) << __func__ << " start" << dendl;
   auto start = ceph::coarse_real_clock::now();
 
@@ -994,28 +1005,21 @@ int NVMEDevice::aio_write(
   assert(off < size);
   assert(off + len <= size);
 
-  Task *t = new Task(this, IOCommand::WRITE_COMMAND, off, len);
+  Task *t = new Task(this, IOCommand::WRITE_COMMAND, off + offset, len);
 
   // TODO: if upper layer alloc memory with known physical address,
   // we can reduce this copy
   t->write_bl = std::move(bl);
 
-  if (buffered) {
-    // Only need to push the first entry
-    if(queue_id == -1)
-      queue_id = ceph_gettid();
-    driver->get_queue(queue_id)->queue_task(t);
-  } else {
-    t->ctx = ioc;
-    Task *first = static_cast<Task*>(ioc->nvme_task_first);
-    Task *last = static_cast<Task*>(ioc->nvme_task_last);
-    if (last)
-      last->next = t;
-    if (!first)
-      ioc->nvme_task_first = t;
-    ioc->nvme_task_last = t;
-    ++ioc->num_pending;
-  }
+  t->ctx = ioc;
+  Task *first = static_cast<Task*>(ioc->nvme_task_first);
+  Task *last = static_cast<Task*>(ioc->nvme_task_last);
+  if (last)
+    last->next = t;
+  if (!first)
+    ioc->nvme_task_first = t;
+  ioc->nvme_task_last = t;
+  ++ioc->num_pending;
 
   dout(5) << __func__ << " " << off << "~" << len << dendl;
 
@@ -1024,9 +1028,29 @@ int NVMEDevice::aio_write(
 
 int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered)
 {
-  // FIXME: there is presumably a more efficient way to do this...
+  uint64_t len = bl.length();
+  dout(20) << __func__ << " " << off << "~" << len << " buffered "
+           << buffered << dendl;
+  assert(off % block_size == 0);
+  assert(len % block_size == 0);
+  assert(len > 0);
+  assert(off < size);
+  assert(off + len <= size);
+
   IOContext ioc(cct, NULL);
-  aio_write(off, bl, &ioc, buffered);
+  Task *t = new Task(this, IOCommand::WRITE_COMMAND, off + offset, len, 1);
+
+  // TODO: if upper layer alloc memory with known physical address,
+  // we can reduce this copy
+  t->write_bl = std::move(bl);
+  t->ctx = &ioc;
+  if(queue_id == -1)
+    queue_id = ceph_gettid();
+  ++ioc.num_running;
+  driver->get_queue(queue_id)->queue_task(t);
+
+  dout(5) << __func__ << " " << off << "~" << len << dendl;
+
   ioc.aio_wait();
   return 0;
 }
@@ -1042,7 +1066,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   assert(off < size);
   assert(off + len <= size);
 
-  Task *t = new Task(this, IOCommand::READ_COMMAND, off, len, 1);
+  Task *t = new Task(this, IOCommand::READ_COMMAND, off + offset, len, 1);
   bufferptr p = buffer::create_page_aligned(len);
   int r = 0;
   t->ctx = ioc;
@@ -1051,13 +1075,12 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     t->copy_to_buf(buf, 0, t->len);
   };
   ++ioc->num_running;
+  assert(ioc->num_running == 1);
   if(queue_id == -1)
     queue_id = ceph_gettid();
   driver->get_queue(queue_id)->queue_task(t);
 
-  while(t->return_code > 0) {
-    t->io_wait();
-  }
+  ioc->aio_wait();
   pbl->push_back(std::move(p));
   r = t->return_code;
   delete t;
@@ -1077,7 +1100,7 @@ int NVMEDevice::aio_read(
   assert(off < size);
   assert(off + len <= size);
 
-  Task *t = new Task(this, IOCommand::READ_COMMAND, off, len);
+  Task *t = new Task(this, IOCommand::READ_COMMAND, off + offset, len);
 
   bufferptr p = buffer::create_page_aligned(len);
   pbl->append(p);
@@ -1109,10 +1132,12 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   uint64_t aligned_len = align_up(off+len, block_size) - aligned_off;
   dout(5) << __func__ << " " << off << "~" << len
           << " aligned " << aligned_off << "~" << aligned_len << dendl;
+
   IOContext ioc(g_ceph_context, nullptr);
-  Task *t = new Task(this, IOCommand::READ_COMMAND, aligned_off, aligned_len, 1);
+  Task *t = new Task(this, IOCommand::READ_COMMAND, aligned_off + offset, aligned_len, 1);
   int r = 0;
   t->ctx = &ioc;
+  off += offset;
   t->fill_cb = [buf, t, off, len]() {
     t->copy_to_buf(buf, off-t->offset, len);
   };
@@ -1121,9 +1146,7 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
     queue_id = ceph_gettid();
   driver->get_queue(queue_id)->queue_task(t);
 
-  while(t->return_code > 0) {
-    t->io_wait();
-  }
+  ioc.aio_wait();
   r = t->return_code;
   delete t;
   return r;
