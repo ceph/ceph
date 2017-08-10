@@ -2963,12 +2963,6 @@ void FileStore::_do_transaction(
       assert(0 == "collection attr methods no longer implemented");
       break;
 
-    case Transaction::OP_STARTSYNC:
-      tracepoint(objectstore, startsync_enter, osr_name);
-      _start_sync();
-      tracepoint(objectstore, startsync_exit);
-      break;
-
     case Transaction::OP_COLL_RENAME:
       {
         r = -EOPNOTSUPP;
@@ -4140,16 +4134,6 @@ void FileStore::sync_entry()
   }
   stop = false;
   lock.Unlock();
-}
-
-void FileStore::_start_sync()
-{
-  if (!journal) {  // don't do a big sync if the journal is on
-    dout(10) << __FUNC__ << dendl;
-    sync_cond.Signal();
-  } else {
-    dout(10) << __FUNC__ << ": - NOOP (journal is on)" << dendl;
-  }
 }
 
 void FileStore::do_force_sync()

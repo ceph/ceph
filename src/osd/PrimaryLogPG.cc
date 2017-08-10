@@ -6260,10 +6260,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_STARTSYNC:
-      tracepoint(osd, do_osd_op_pre_startsync, soid.oid.name.c_str(), soid.snap.val);
       t->nop(soid);
       break;
-
 
       // -- trivial map --
     case CEPH_OSD_OP_TMAPGET:
