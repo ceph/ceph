@@ -4976,6 +4976,8 @@ int BlueStore::_setup_block_symlink_or_file(
 
     if (!epath.compare(0, strlen(SPDK_PREFIX), SPDK_PREFIX)) {
       int fd = ::openat(path_fd, epath.c_str(), flags, 0644);
+      char buf[40];
+      string::size_type pos;
       if (fd < 0) {
 	r = -errno;
 	derr << __func__ << " failed to open " << epath << " file: "
@@ -4985,6 +4987,14 @@ int BlueStore::_setup_block_symlink_or_file(
       string serial_number = epath.substr(strlen(SPDK_PREFIX));
       r = ::write(fd, serial_number.c_str(), serial_number.size());
       assert(r == (int)serial_number.size());
+      pos = serial_number.find(":");
+      if (pos == serial_number.npos) {
+        snprintf(buf, sizeof(buf), ":0:%" PRIx64, size);
+      } else {
+        snprintf(buf, sizeof(buf), ":%" PRIx64, size);
+      }
+
+      r = ::write(fd, buf, strlen(buf));
       dout(1) << __func__ << " created " << name << " symlink to "
               << epath << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(fd));
