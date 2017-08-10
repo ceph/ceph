@@ -446,6 +446,44 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
   }
 }
 
+TEST_F(OSDMapTest, parse_osd_id_list) {
+  set_up_map();
+  set<int> out;
+  set<int> all;
+  osdmap.get_all_osds(all);
+
+  ASSERT_EQ(0, osdmap.parse_osd_id_list({"osd.0"}, &out, &cout));
+  ASSERT_EQ(1, out.size());
+  ASSERT_EQ(0, *out.begin());
+
+  ASSERT_EQ(0, osdmap.parse_osd_id_list({"1"}, &out, &cout));
+  ASSERT_EQ(1, out.size());
+  ASSERT_EQ(1, *out.begin());
+
+  ASSERT_EQ(0, osdmap.parse_osd_id_list({"osd.0","osd.1"}, &out, &cout));
+  ASSERT_EQ(2, out.size());
+  ASSERT_EQ(0, *out.begin());
+  ASSERT_EQ(1, *out.rbegin());
+
+  ASSERT_EQ(0, osdmap.parse_osd_id_list({"osd.0","1"}, &out, &cout));
+  ASSERT_EQ(2, out.size());
+  ASSERT_EQ(0, *out.begin());
+  ASSERT_EQ(1, *out.rbegin());
+
+  ASSERT_EQ(0, osdmap.parse_osd_id_list({"*"}, &out, &cout));
+  ASSERT_EQ(all.size(), out.size());
+  ASSERT_EQ(all, out);
+
+  ASSERT_EQ(0, osdmap.parse_osd_id_list({"all"}, &out, &cout));
+  ASSERT_EQ(all, out);
+
+  ASSERT_EQ(0, osdmap.parse_osd_id_list({"any"}, &out, &cout));
+  ASSERT_EQ(all, out);
+
+  ASSERT_EQ(-EINVAL, osdmap.parse_osd_id_list({"foo"}, &out, &cout));
+  ASSERT_EQ(-EINVAL, osdmap.parse_osd_id_list({"-12"}, &out, &cout));
+}
+
 TEST(PGTempMap, basic)
 {
   PGTempMap m;
@@ -461,3 +499,4 @@ TEST(PGTempMap, basic)
   ASSERT_EQ(m.find(b), m.end());
   ASSERT_EQ(998u, m.size());
 }
+
