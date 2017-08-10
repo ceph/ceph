@@ -1014,8 +1014,17 @@ OPTION(bluestore_bluefs_balance_interval, OPT_FLOAT) // how often (sec) to balan
 // with "spdk:" prefix.
 // Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
 // get the serial number of Intel(R) Fultondale NVMe controllers.
+// The format is:  bluestore_XXX_path = spdk:sn[:offset]
+// XXX can be: block or block_db  or block_wal.
+// offset is optional. If not provided, the default value is 0. The offset indicates
+// the beginning offset in bytes to be used in the NVMe SSD, the offset value provided
+// should be in hexformat.
 // Example:
-// bluestore_block_path = spdk:55cd2e404bd73932
+// bluestore_block_path = spdk:55cd2e404bd73932:40000000
+// It means that the block area will use the space in NVMe SDD from offset=1GB,
+// defintely the size is determined by the bluestore_block_size.
+// You can put db, wal, block in the NVMe SSD, but you need to make sure the allocated
+// space is not overlapped.
 // If you want to run multiple SPDK instances per node, you must specify the
 // amount of dpdk memory size in MB each instance will use, to make sure each
 // instance uses its own dpdk memory

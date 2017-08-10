@@ -52,6 +52,8 @@ class NVMEDevice : public BlockDevice {
   SharedDriverData *get_driver() { return driver; }
 
  public:
+  uint64_t offset;
+
   NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);
 
   bool supported_bdev_label() override { return false; }
