@@ -109,7 +109,10 @@ public:
   }
 
   bool is_identity(const flat_set<Principal>& ids) const override {
-    return ids.find(id) != ids.end();
+    if (id.is_wildcard() && (!ids.empty())) {
+      return true;
+    }
+    return ids.find(id) != ids.end() || ids.find(Principal::wildcard()) != ids.end();
   }
 };
 
