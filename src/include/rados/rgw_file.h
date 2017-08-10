@@ -27,7 +27,7 @@ extern "C" {
 
 #define LIBRGW_FILE_VER_MAJOR 1
 #define LIBRGW_FILE_VER_MINOR 1
-#define LIBRGW_FILE_VER_EXTRA 4
+#define LIBRGW_FILE_VER_EXTRA 5
 
 #define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
@@ -125,6 +125,10 @@ int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 int rgw_mount(librgw_t rgw, const char *uid, const char *key,
 	      const char *secret, struct rgw_fs **rgw_fs,
 	      uint32_t flags);
+
+int rgw_mount2(librgw_t rgw, const char *uid, const char *key,
+               const char *secret, const char *root, struct rgw_fs **rgw_fs,
+               uint32_t flags);
 
 /*
  register invalidate callbacks
