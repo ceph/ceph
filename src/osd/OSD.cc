@@ -924,7 +924,8 @@ void OSDService::set_injectfull(s_names type, int64_t count)
 }
 
 osd_stat_t OSDService::set_osd_stat(const struct store_statfs_t &stbuf,
-                                    vector<int>& hb_peers)
+                                    vector<int>& hb_peers,
+				    int num_pgs)
 {
   uint64_t bytes = stbuf.total;
   uint64_t used = bytes - stbuf.available;
@@ -941,6 +942,7 @@ osd_stat_t OSDService::set_osd_stat(const struct store_statfs_t &stbuf,
     osd_stat.kb = bytes >> 10;
     osd_stat.kb_used = used >> 10;
     osd_stat.kb_avail = avail >> 10;
+    osd_stat.num_pgs = num_pgs;
     return osd_stat;
   }
 }
@@ -955,7 +957,7 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
     return;
   }
 
-  auto new_stat = set_osd_stat(stbuf, hb_peers);
+  auto new_stat = set_osd_stat(stbuf, hb_peers, osd->get_num_pgs());
   dout(20) << "update_osd_stat " << new_stat << dendl;
   assert(new_stat.kb);
   float ratio = ((float)new_stat.kb_used) / ((float)new_stat.kb);

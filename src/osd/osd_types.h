@@ -904,6 +904,8 @@ struct osd_stat_t {
   epoch_t up_from = 0;
   uint64_t seq = 0;
 
+  uint32_t num_pgs = 0;
+
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 
@@ -915,6 +917,7 @@ struct osd_stat_t {
     num_snap_trimming += o.num_snap_trimming;
     op_queue_age_hist.add(o.op_queue_age_hist);
     os_perf_stat.add(o.os_perf_stat);
+    num_pgs += o.num_pgs;
   }
   void sub(const osd_stat_t& o) {
     kb -= o.kb;
@@ -924,6 +927,7 @@ struct osd_stat_t {
     num_snap_trimming -= o.num_snap_trimming;
     op_queue_age_hist.sub(o.op_queue_age_hist);
     os_perf_stat.sub(o.os_perf_stat);
+    num_pgs -= o.num_pgs;
   }
 
   void dump(Formatter *f) const;
@@ -941,7 +945,8 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
     l.num_snap_trimming == r.num_snap_trimming &&
     l.hb_peers == r.hb_peers &&
     l.op_queue_age_hist == r.op_queue_age_hist &&
-    l.os_perf_stat == r.os_perf_stat;
+    l.os_perf_stat == r.os_perf_stat &&
+    l.num_pgs == r.num_pgs;
 }
 inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);

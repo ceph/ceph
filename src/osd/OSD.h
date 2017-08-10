@@ -1047,7 +1047,8 @@ public:
 
   void update_osd_stat(vector<int>& hb_peers);
   osd_stat_t set_osd_stat(const struct store_statfs_t &stbuf,
-                          vector<int>& hb_peers);
+                          vector<int>& hb_peers,
+			  int num_pgs);
   osd_stat_t get_osd_stat() {
     Mutex::Locker l(stat_lock);
     ++seq;
@@ -1950,6 +1951,11 @@ protected:
 
 public:
   PG   *lookup_lock_pg(spg_t pgid);
+
+  int get_num_pgs() {
+    RWLock::RLocker l(pg_map_lock);
+    return pg_map.size();
+  }
 
 protected:
   PG   *_open_lock_pg(OSDMapRef createmap,
