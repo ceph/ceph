@@ -109,24 +109,8 @@ def platform_information():
         raise exc.UnsupportedPlatform(platform.system(), '', '')
 
     # this could be an empty string in Debian
-    if not codename and 'debian' in distro.lower():
-        debian_codenames = {
-            '8': 'jessie',
-            '7': 'wheezy',
-            '6': 'squeeze',
-        }
-        major_version = release.split('.')[0]
-        codename = debian_codenames.get(major_version, '')
-
-        # In order to support newer jessie/sid or wheezy/sid strings
-        # we test this if sid is buried in the minor, we should use
-        # sid anyway.
-        if not codename and '/' in release:
-            major, minor = release.split('/')
-            if minor == 'sid':
-                codename = minor
-            else:
-                codename = major
+    if not codename and 'debian' in distro_lower:
+        pass
 
     return (
         str(distro).rstrip(),
