@@ -131,7 +131,6 @@ check_SCRIPTS += \
 	test/mon/mon-handle-forward.sh \
 	test/libradosstriper/rados-striper.sh \
 	test/test_objectstore_memstore.sh \
-        test/test_pidfile.sh \
 	test/test_subman.sh
 
 EXTRA_DIST += \
