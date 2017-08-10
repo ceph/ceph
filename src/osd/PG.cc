@@ -3315,6 +3315,17 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
 
   last_written_info = info;
 
+  // if we are upgrading from jewel, we need to force rebuild of
+  // missing set.  v9 was fastinfo, added v11.0.2-331-g1d5dc29a13
+  // (before kraken).  persisted missing set was circa
+  // v11.0.0-866-gb0e239da95 (a bit earlier, also before kraken).
+  // v8 was pre-jewel (per-pg meta object).
+  bool force_rebuild_missing = info_struct_v < 9;
+  if (force_rebuild_missing) {
+    dout(10) << __func__ << " detected upgrade from jewel, force_rebuild_missing"
+	     << dendl;
+  }
+
   ostringstream oss;
   pg_log.read_log_and_missing(
     store,
@@ -3322,11 +3333,18 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     info_struct_v < 8 ? coll_t::meta() : coll,
     ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
     info,
+    force_rebuild_missing,
     oss,
     cct->_conf->osd_ignore_stale_divergent_priors,
     cct->_conf->osd_debug_verify_missing_on_start);
   if (oss.tellp())
     osd->clog->error() << oss.rdbuf();
+
+  if (force_rebuild_missing) {
+    dout(10) << __func__ << " forced rebuild of missing got "
+	     << pg_log.get_missing()
+	     << dendl;
+  }
 
   // log any weirdness
   log_weirdness();
