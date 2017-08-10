@@ -124,7 +124,7 @@ struct ObjectOperation {
     osd_op.op.xattr.name_len = (name ? strlen(name) : 0);
     osd_op.op.xattr.value_len = data.length();
     if (name)
-      osd_op.indata.append(name);
+      osd_op.indata.append(name, osd_op.op.xattr.name_len);
     osd_op.indata.append(data);
   }
   void add_xattr_cmp(int op, const char *name, uint8_t cmp_op,
@@ -135,7 +135,7 @@ struct ObjectOperation {
     osd_op.op.xattr.cmp_op = cmp_op;
     osd_op.op.xattr.cmp_mode = cmp_mode;
     if (name)
-      osd_op.indata.append(name);
+      osd_op.indata.append(name, osd_op.op.xattr.name_len);
     osd_op.indata.append(data);
   }
   void add_call(int op, const char *cname, const char *method,
@@ -2510,7 +2510,7 @@ public:
     ops[i].op.xattr.name_len = (name ? strlen(name) : 0);
     ops[i].op.xattr.value_len = 0;
     if (name)
-      ops[i].indata.append(name);
+      ops[i].indata.append(name, ops[i].op.xattr.name_len);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags |
 		   CEPH_OSD_FLAG_READ, onfinish, objver);
     o->snapid = snap;
@@ -2828,7 +2828,7 @@ public:
     ops[i].op.xattr.name_len = (name ? strlen(name) : 0);
     ops[i].op.xattr.value_len = bl.length();
     if (name)
-      ops[i].indata.append(name);
+      ops[i].indata.append(name, ops[i].op.xattr.name_len);
     ops[i].indata.append(bl);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags |
 		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
@@ -2849,7 +2849,7 @@ public:
     ops[i].op.xattr.name_len = (name ? strlen(name) : 0);
     ops[i].op.xattr.value_len = 0;
     if (name)
-      ops[i].indata.append(name);
+      ops[i].indata.append(name, ops[i].op.xattr.name_len);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags |
 		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
