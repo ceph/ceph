@@ -79,9 +79,9 @@ DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
 DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
 
-OSD_STATS = ['kb', 'kb_used', 'num_snap_trimming', 'snap_trim_queue_len']
+OSD_METADATA = ('id', 'device_class')
 
-OSD_PERF_STATS = ['apply_latency_ms', 'commit_latency_ms']
+POOL_METADATA= ('pool_id', 'name')
 
 
 class Metric(object):
@@ -171,6 +171,18 @@ class Module(MgrModule):
             'mon_quorum_count',
             'Monitors in quorum'
         )
+        metrics['osd_metadata'] = Metric(
+            'undef',
+            'osd_metadata',
+            'OSD Metadata',
+            OSD_METADATA
+        )
+        metrics['pool_metadata'] = Metric(
+            'undef',
+            'pool_metadata',
+            'POOL Metadata',
+            POOL_METADATA
+        )
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
             self.log.debug("init: creating {}".format(path))
@@ -195,16 +207,7 @@ class Module(MgrModule):
                 'gauge',
                 path,
                 'DF pool {}'.format(state),
-                ('name', 'id')
-            )
-        for state in OSD_STATS + OSD_PERF_STATS:
-            path = 'osd_{}'.format(state)
-            self.log.debug("init: creating {}".format(path))
-            metrics[path] = Metric(
-                'gauge',
-                path,
-                'OSD {}'.format(state),
-                ('osd','device_class')
+                ('pool_id',)
             )
 
         return metrics
@@ -275,8 +278,8 @@ class Module(MgrModule):
         )
 
     def get_df(self):
-        df = self.get('df')
         # maybe get the to-be-exported metrics from a config?
+        df = self.get('df')
         for stat in DF_CLUSTER:
             path = 'cluster_{}'.format(stat)
             self.metrics[path].set(df['stats'][stat])
@@ -284,9 +287,9 @@ class Module(MgrModule):
         for pool in df['pools']:
             for stat in DF_POOL:
                 path = 'pool_{}'.format(stat)
-                self.metrics[path].set(pool['stats'][stat], (pool['name'], pool['id']))
+                self.metrics[path].set(pool['stats'][stat], (pool['id'],))
 
-    def get_mon_status(self):
+    def get_quorum_status(self):
         mon_status = json.loads(self.get('mon_status')['json'])
         self.metrics['mon_quorum_count'].set(len(mon_status['quorum']))
 
@@ -306,6 +309,7 @@ class Module(MgrModule):
                                        (id_,dev_class['class']))
 
     def get_pg_status(self):
+        # TODO add per pool status?
         pg_s = self.get('pg_summary')['by_osd']
         for osd in pg_s:
             reported_pg_s = [(s,v) for key, v in pg_s[osd].items() for s in
@@ -320,11 +324,24 @@ class Module(MgrModule):
                 if state not in reported_states:
                     self.metrics[path].set(0, (osd,))
 
+    def get_metadata(self):
+        osd_map = self.get('osd_map')
+        osd_dev = self.get('osd_map_crush')['devices']
+        for osd in osd_map['osds']:
+            id_ = osd['osd']
+            dev_class = next((osd for osd in osd_dev if osd['id'] == id_))
+            self.metrics['osd_metadata'].set(0, (id_, dev_class['class']))
+
+        for pool in osd_map['pools']:
+            id_ = pool['pool']
+            name = pool['pool_name']
+            self.metrics['pool_metadata'].set(0, (id_, name))
+
     def collect(self):
         self.get_health()
         self.get_df()
-        self.get_mon_status()
-        self.get_osd_status()
+        self.get_quorum_status()
+        self.get_metadata()
         self.get_pg_status()
         # for daemon in self.schema.keys():
         #     for path in self.schema[daemon].keys():
