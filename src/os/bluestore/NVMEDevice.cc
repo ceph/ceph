@@ -868,6 +868,7 @@ NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
 int NVMEDevice::open(const string& p)
 {
   int r = 0;
+  char *str;
   dout(1) << __func__ << " path " << p << dendl;
 
   string serial_number;
@@ -905,7 +906,22 @@ int NVMEDevice::open(const string& p)
 
   driver->register_device(this);
   block_size = driver->get_block_size();
+
+  str = index(buf, ':');
+  offset = strtoll(str + 1, NULL, 16);
+#if 0
+  str = rindex(buf, ':');
+  size = strtoll(str + 1, NULL, 16);
+
+  if (size > (driver->get_size() - offset)) {
+      derr << __func__ << " Failed to allocate file from offset" << offset << ""
+      << " with size " << size << "B" << dendl;
+	  return -1;
+  }
+#else
   size = driver->get_size();
+#endif
+
   name = serial_number;
 
   //nvme is non-rotational device.
@@ -913,10 +929,9 @@ int NVMEDevice::open(const string& p)
 
   // round size down to an even block
   size &= ~(block_size - 1);
-
   dout(1) << __func__ << " size " << size << " (" << pretty_si_t(size) << "B)"
-          << " block_size " << block_size << " (" << pretty_si_t(block_size)
-          << "B)" << dendl;
+          << " offset " << offset << " block_size " << block_size << " ("
+          << pretty_si_t(block_size) << "B)" << dendl;
 
   return 0;
 }
@@ -994,7 +1009,7 @@ int NVMEDevice::aio_write(
   assert(off < size);
   assert(off + len <= size);
 
-  Task *t = new Task(this, IOCommand::WRITE_COMMAND, off, len);
+  Task *t = new Task(this, IOCommand::WRITE_COMMAND, off + offset, len);
 
   // TODO: if upper layer alloc memory with known physical address,
   // we can reduce this copy
@@ -1042,7 +1057,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   assert(off < size);
   assert(off + len <= size);
 
-  Task *t = new Task(this, IOCommand::READ_COMMAND, off, len, 1);
+  Task *t = new Task(this, IOCommand::READ_COMMAND, off + offset, len, 1);
   bufferptr p = buffer::create_page_aligned(len);
   int r = 0;
   t->ctx = ioc;
@@ -1077,7 +1092,7 @@ int NVMEDevice::aio_read(
   assert(off < size);
   assert(off + len <= size);
 
-  Task *t = new Task(this, IOCommand::READ_COMMAND, off, len);
+  Task *t = new Task(this, IOCommand::READ_COMMAND, off + offset, len);
 
   bufferptr p = buffer::create_page_aligned(len);
   pbl->append(p);
@@ -1109,10 +1124,12 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   uint64_t aligned_len = align_up(off+len, block_size) - aligned_off;
   dout(5) << __func__ << " " << off << "~" << len
           << " aligned " << aligned_off << "~" << aligned_len << dendl;
+
   IOContext ioc(g_ceph_context, nullptr);
-  Task *t = new Task(this, IOCommand::READ_COMMAND, aligned_off, aligned_len, 1);
+  Task *t = new Task(this, IOCommand::READ_COMMAND, aligned_off + offset, aligned_len, 1);
   int r = 0;
   t->ctx = &ioc;
+  off += offset;
   t->fill_cb = [buf, t, off, len]() {
     t->copy_to_buf(buf, off-t->offset, len);
   };

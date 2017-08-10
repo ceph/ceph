@@ -4981,6 +4981,11 @@ int BlueStore::_setup_block_symlink_or_file(
       string serial_number = epath.substr(strlen(SPDK_PREFIX));
       r = ::write(fd, serial_number.c_str(), serial_number.size());
       assert(r == (int)serial_number.size());
+#if 0
+      char buf[20];
+      snprintf(buf, sizeof(buf), ":%" PRIx64, size);
+      r = ::write(fd, buf, strlen(buf));
+#endif
       dout(1) << __func__ << " created " << name << " symlink to "
               << epath << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(fd));
