@@ -367,6 +367,17 @@ class Module(MgrModule):
 
             @cherrypy.expose
             def index(self):
+                return '''<!DOCTYPE html>
+<html>
+	<head><title>Ceph Exporter</title></head>
+	<body>
+		<h1>Ceph Exporter</h1>
+		<p><a href='/metrics'>Metrics</a></p>
+	</body>
+</html>'''
+
+            @cherrypy.expose
+            def metrics(self):
                 metrics = global_instance().collect()
                 cherrypy.response.headers['Content-Type'] = 'text/plain'
                 if metrics:
