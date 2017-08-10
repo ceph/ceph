@@ -141,7 +141,7 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
     }
   }
 
-  return r < 0 ? r : 0;
+  return 0;
 }
 
 int do_list(std::string &pool_name, bool lflag, int threads, Formatter *f) {
