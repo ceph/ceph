@@ -2452,6 +2452,10 @@ private:
       bool mark_unused;
       bool new_blob; ///< whether new blob was created
 
+      bool compressed = false;
+      bufferlist compressed_bl;
+      size_t compressed_len = 0;
+
       write_item(
 	uint64_t logical_offs,
         BlobRef b,
