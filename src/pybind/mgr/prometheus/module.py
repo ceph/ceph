@@ -327,10 +327,6 @@ class Module(MgrModule):
         return self.metrics
 
     def notify(self, ntype, nid):
-        ''' Just try to sync and not run until we're notified once '''
-        if not self.notified:
-            self.serving = True
-            self.notified = True
         if ntype == 'perf_schema_update':
             daemon_type, daemon_id = nid.split('.')
             self._get_ordered_schema(
@@ -366,9 +362,6 @@ class Module(MgrModule):
             "server_addr: %s server_port: %s" %
             (server_addr, server_port)
         )
-        # wait for first notification (of any kind) to start up
-        # while not self.serving:
-        #     time.sleep(1)
 
         cherrypy.config.update({
             'server.socket_host': server_addr,
