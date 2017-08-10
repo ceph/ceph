@@ -63,6 +63,11 @@ void ClientIO::init_env(CephContext *cct)
     env.set(buf, value);
   }
 
+  int major = request.version / 10;
+  int minor = request.version % 10;
+  std::string http_version = std::to_string(major) + '.' + std::to_string(minor);
+  env.set("HTTP_VERSION", http_version);
+
   env.set("REQUEST_METHOD", request.method);
 
   // split uri from query
