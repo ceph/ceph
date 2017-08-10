@@ -4641,3 +4641,23 @@ void OSDMap::check_health(health_check_map_t *checks) const
     }
   }
 }
+
+int OSDMap::parse_osd_id_list(const vector<string>& ls, set<int> *out,
+			      ostream *ss) const
+{
+  out->clear();
+  for (auto i = ls.begin(); i != ls.end(); ++i) {
+    if (i == ls.begin() &&
+	(*i == "any" || *i == "all" || *i == "*")) {
+      get_all_osds(*out);
+      break;
+    }
+    long osd = parse_osd_id(i->c_str(), ss);
+    if (osd < 0) {
+      *ss << "invalid osd id '" << *i << "'";
+      return -EINVAL;
+    }
+    out->insert(osd);
+  }
+  return 0;
+}
