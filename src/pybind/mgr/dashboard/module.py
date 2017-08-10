@@ -294,7 +294,7 @@ class Module(MgrModule):
                     ) + "/s"
 
                 metadata = self.get_metadata('mds', info['name'])
-                mds_versions[metadata['ceph_version']].append(info['name'])
+                mds_versions[metadata.get('ceph_version', 'unknown')].append(info['name'])
                 rank_table.append(
                     {
                         "rank": rank,
@@ -363,7 +363,7 @@ class Module(MgrModule):
         standby_table = []
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'])
-            mds_versions[metadata['ceph_version']].append(standby['name'])
+            mds_versions[metadata.get('ceph_version', 'unknown')].append(standby['name'])
 
             standby_table.append({
                 'name': standby['name']
