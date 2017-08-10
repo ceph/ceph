@@ -39,7 +39,7 @@ Synopsis
 
 | **ceph** **mon_status**
 
-| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lspools* \| *map* \| *metadata* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
+| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
 
 | **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
@@ -874,6 +874,18 @@ Usage::
 
 	ceph osd out <ids> [<ids>...]
 
+Subcommand ``ok-to-stop`` checks whether the list of OSD(s) can be
+stopped without immediately making data unavailable.  That is, all
+data should remain readable and writeable, although data redundancy
+may be reduced as some PGs may end up in a degraded (but active)
+state.  It will return a success code if it is okay to stop the
+OSD(s), or an error code and informative message if it is not or if no
+conclusion can be drawn at the current time.
+
+Usage::
+
+  ceph osd ok-to-stop <id> [<ids>...]
+
 Subcommand ``pause`` pauses osd.
 
 Usage::
@@ -1065,6 +1077,16 @@ Subcommand ``purge`` performs a combination of ``osd destroy``,
 Usage::
 
     ceph osd purge <id> {--yes-i-really-mean-it}
+
+Subcommand ``safe-to-destroy`` checks whether it is safe to remove or
+destroy an OSD without reducing overall data redundancy or durability.
+It will return a success code if it is definitely safe, or an error
+code and informative message if it is not or if no conclusion can be
+drawn at the current time.
+
+Usage::
+
+  ceph osd safe-to-destroy <id> [<ids>...]
 
 Subcommand ``scrub`` initiates scrub on specified osd.
 
