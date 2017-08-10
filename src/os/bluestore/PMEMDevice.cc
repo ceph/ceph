@@ -36,7 +36,6 @@
 PMEMDevice::PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv)
   : BlockDevice(cct),
     fd(-1), addr(0),
-    size(0), block_size(0),
     debug_lock("PMEMDevice::debug_lock"),
     injecting_crash(0)
 {
