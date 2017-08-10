@@ -227,16 +227,9 @@ class Module(MgrModule):
             self.log.warning('_get_ordered_schema: no data')
             return
 
-        new_schema = dict()
-        for k1 in schema.keys():    # 'perf_schema', but assume only one
-            for k2 in sorted(schema[k1].keys()):
-                sorted_dict = OrderedDict(
-                    sorted(schema[k1][k2].items(), key=lambda i: i[0])
-                )
-                new_schema[k2] = sorted_dict
-        for k in sorted(new_schema.keys()):
-            self.log.debug("updating schema for %s" % k)
-            self.schema[k] = new_schema[k]
+        k = '{}.{}'.format(daemon_type, daemon_id)
+        self.log.debug("updating schema for %s" % k)
+        self.schema[k] = schema['perf_schema'][k]
 
     def shutdown(self):
         self.serving = False
