@@ -34,7 +34,7 @@ TEST(CommonIPAddr, TestNotFound)
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
   memset(&net, '0', sizeof(net));
 
@@ -60,7 +60,7 @@ TEST(CommonIPAddr, TestV4_Simple)
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
   memset(&net, '0', sizeof(net));
 
@@ -77,7 +77,7 @@ TEST(CommonIPAddr, TestV4_Simple)
   ipv4(&net, "10.11.12.42");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 24);
-  ASSERT_EQ((struct sockaddr*)&a_one, result);
+  ASSERT_EQ((struct sockaddr*)&a_one, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV4_Prefix25)
@@ -86,7 +86,7 @@ TEST(CommonIPAddr, TestV4_Prefix25)
   struct sockaddr_in a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
   memset(&net, '0', sizeof(net));
 
@@ -103,7 +103,7 @@ TEST(CommonIPAddr, TestV4_Prefix25)
   ipv4(&net, "10.11.12.128");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 25);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV4_Prefix16)
@@ -112,7 +112,7 @@ TEST(CommonIPAddr, TestV4_Prefix16)
   struct sockaddr_in a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
   memset(&net, '0', sizeof(net));
 
@@ -129,7 +129,7 @@ TEST(CommonIPAddr, TestV4_Prefix16)
   ipv4(&net, "10.2.0.0");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 16);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV4_PrefixTooLong)
@@ -137,7 +137,7 @@ TEST(CommonIPAddr, TestV4_PrefixTooLong)
   struct ifaddrs one;
   struct sockaddr_in a_one;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
   memset(&net, '0', sizeof(net));
 
@@ -158,7 +158,7 @@ TEST(CommonIPAddr, TestV4_PrefixZero)
   struct sockaddr_in6 a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
   memset(&net, '0', sizeof(net));
 
@@ -175,7 +175,7 @@ TEST(CommonIPAddr, TestV4_PrefixZero)
   ipv4(&net, "255.0.1.2");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 0);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV6_Simple)
@@ -184,7 +184,7 @@ TEST(CommonIPAddr, TestV6_Simple)
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in6 net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
   memset(&net, '0', sizeof(net));
   
@@ -201,7 +201,7 @@ TEST(CommonIPAddr, TestV6_Simple)
   ipv6(&net, "2001:1234:5678:90ab::dead:beef");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 64);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV6_Prefix57)
@@ -210,7 +210,7 @@ TEST(CommonIPAddr, TestV6_Prefix57)
   struct sockaddr_in6 a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in6 net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
   memset(&net, '0', sizeof(net));
 
@@ -227,7 +227,7 @@ TEST(CommonIPAddr, TestV6_Prefix57)
   ipv6(&net, "2001:1234:5678:90ab::dead:beef");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 57);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV6_PrefixTooLong)
@@ -235,7 +235,7 @@ TEST(CommonIPAddr, TestV6_PrefixTooLong)
   struct ifaddrs one;
   struct sockaddr_in6 a_one;
   struct sockaddr_in6 net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
   memset(&net, '0', sizeof(net));
 
@@ -256,7 +256,7 @@ TEST(CommonIPAddr, TestV6_PrefixZero)
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in6 net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -271,7 +271,7 @@ TEST(CommonIPAddr, TestV6_PrefixZero)
   ipv6(&net, "ff00::1");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 0);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, ParseNetwork_Empty)
