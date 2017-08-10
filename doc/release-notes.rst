@@ -65,9 +65,7 @@ Major Changes from Kraken
     it (e.g., `hdd` or `ssd`), allowing CRUSH rules to trivially map
     data to a subset of devices in the system.  Manually writing CRUSH
     rules or manual editing of the CRUSH is normally not required.
-  * You can now *optimize CRUSH weights* to maintain a *near-perfect
-    distribution of data* across OSDs.  FIXME DOCS
-  * There is also a new `upmap <../rados/operations/upmap>`_ exception
+  * There is a new `upmap <../rados/operations/upmap>`_ exception
     mechanism that allows individual PGs to be moved around to achieve
     a *perfect distribution* (this requires luminous clients).
   * Each OSD now adjusts its default configuration based on whether the
