@@ -175,6 +175,7 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
 	::decode(str, p);
       }
       catch (buffer::error& e) {
+        is_valid = false;
       }
       bool success = s->caps.parse(str);
       if (success) {
