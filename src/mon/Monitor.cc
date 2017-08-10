@@ -2359,6 +2359,7 @@ void Monitor::health_to_clog_update_conf(const std::set<std::string> &changed)
   if (changed.count("mon_health_to_clog")) {
     if (!cct->_conf->mon_health_to_clog) {
       health_events_cleanup();
+      return;
     } else {
       if (!health_tick_event) {
         health_tick_start();
