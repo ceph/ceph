@@ -310,10 +310,15 @@ class Module(MgrModule):
         for osd in pg_s:
             reported_pg_s = [(s,v) for key, v in pg_s[osd].items() for s in
                              key.split('+')]
+            for state, value in reported_pg_s:
+                path = 'pg_{}'.format(state)
+                self.metrics[path].set(value, (osd,))
+            reported_states = [s[0] for s in reported_pg_s]
             for state in PG_STATES:
                 path = 'pg_{}'.format(state)
-                if state not in reported_pg_s:
-                    self.metrics[path].set(0, ('osd.{}'.format(osd),))
+                self.log.debug('rep_pgs: {}'.format(reported_pg_s))
+                if state not in reported_states:
+                    self.metrics[path].set(0, (osd,))
 
     def collect(self):
         self.get_health()
