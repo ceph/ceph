@@ -67,6 +67,8 @@ const string PREFIX_DEFERRED = "L";  // id -> deferred_transaction_t
 const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
 const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 
+//const int KV_QUEUE_HANDLE_LEN = 30;
+
 // write a label in the first block.  always use this size.  note that
 // bluefs makes a matching assumption about the location of its
 // superblock (always the second block of the device).
@@ -3785,6 +3787,12 @@ void BlueStore::_init_logger()
     "Average io_done state latency");
   b.add_time_avg(l_bluestore_state_kv_queued_lat, "state_kv_queued_lat",
     "Average kv_queued state latency");
+  b.add_time_avg(l_bluestore_state_kv_submitted_all_lat, "state_kv_submitted_all_lat",
+    "Average kv_submitted all state latency");
+  b.add_time_avg(l_bluestore_state_kv_deferred_lat, "state_kv_deferred_lat",
+    "Average kv deferred time");
+  b.add_time_avg(l_bluestore_state_kv_begin_finalize_lat, "state_kv_begin_finalize_lat",
+    "Average begin_finalize_lat");
   b.add_time_avg(l_bluestore_state_kv_committing_lat, "state_kv_commiting_lat",
     "Average kv_commiting state latency");
   b.add_time_avg(l_bluestore_state_kv_done_lat, "state_kv_done_lat",
@@ -5256,6 +5264,7 @@ void BlueStore::set_cache_shards(unsigned num)
 
 int BlueStore::_mount(bool kv_only)
 {
+  printf("LISA in decrease branch.\n");
   dout(1) << __func__ << " path " << path << dendl;
 
   {
@@ -8274,13 +8283,27 @@ void BlueStore::_kv_sync_thread()
       deque<DeferredBatch*> deferred_done, deferred_stable;
       uint64_t aios = 0, costs = 0;
 
-      dout(20) << __func__ << " committing " << kv_queue.size()
+      dout(1) << __func__ << " committing " << kv_queue.size()
 	       << " submitting " << kv_queue_unsubmitted.size()
 	       << " deferred done " << deferred_done_queue.size()
 	       << " stable " << deferred_stable_queue.size()
 	       << dendl;
       kv_committing.swap(kv_queue);
       kv_submitting.swap(kv_queue_unsubmitted);
+/*
+      int iter = 0;
+      while (!kv_queue_unsubmitted.empty() && iter < KV_QUEUE_HANDLE_LEN) {
+        kv_submitting.push_back(kv_queue_unsubmitted.front());
+        kv_queue_unsubmitted.pop_front();
+        iter++;
+      }
+      iter = 0;
+      while (!kv_queue.empty() && iter < KV_QUEUE_HANDLE_LEN) {
+        kv_committing.push_back(kv_queue.front());
+        kv_queue.pop_front();
+        iter++;
+      }
+*/
       deferred_done.swap(deferred_done_queue);
       deferred_stable.swap(deferred_stable_queue);
       aios = kv_ios;
@@ -8376,6 +8399,9 @@ void BlueStore::_kv_sync_thread()
 	  --txc->osr->txc_with_unstable_io;
 	}
       }
+      for (auto txc : kv_committing) {
+        txc->log_state_latency(logger, l_bluestore_state_kv_submitted_all_lat);
+      }
 
       // release throttle *before* we commit.  this allows new ops
       // to be prepared and enter pipeline while we are waiting on
@@ -8468,6 +8494,10 @@ void BlueStore::_kv_sync_thread()
 
       {
 	std::unique_lock<std::mutex> m(kv_finalize_lock);
+        for (auto txc : kv_committing) {
+          txc->log_state_latency(logger, l_bluestore_state_kv_deferred_lat);
+        }
+
 	if (kv_committing_to_finalize.empty()) {
 	  kv_committing_to_finalize.swap(kv_committing);
 	} else {
@@ -8475,7 +8505,7 @@ void BlueStore::_kv_sync_thread()
 	    kv_committing_to_finalize.end(),
 	    kv_committing.begin(),
 	    kv_committing.end());
-	  kv_committing.clear();
+	    kv_committing.clear();
 	}
 	if (deferred_stable_to_finalize.empty()) {
 	  deferred_stable_to_finalize.swap(deferred_stable);
@@ -8484,8 +8514,9 @@ void BlueStore::_kv_sync_thread()
 	    deferred_stable_to_finalize.end(),
 	    deferred_stable.begin(),
 	    deferred_stable.end());
-          deferred_stable.clear();
+            deferred_stable.clear();
 	}
+
 	kv_finalize_cond.notify_one();
       }
 
@@ -8522,11 +8553,12 @@ void BlueStore::_kv_finalize_thread()
       kv_committed.swap(kv_committing_to_finalize);
       deferred_stable.swap(deferred_stable_to_finalize);
       l.unlock();
-      dout(20) << __func__ << " kv_committed " << kv_committed << dendl;
-      dout(20) << __func__ << " deferred_stable " << deferred_stable << dendl;
+      dout(1) << __func__ << " kv_committed " << kv_committed.size() 
+             << " defferred_stable " << deferred_stable.size()  << dendl;
 
       while (!kv_committed.empty()) {
 	TransContext *txc = kv_committed.front();
+        txc->log_state_latency(logger, l_bluestore_state_kv_begin_finalize_lat);
 	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
 	_txc_state_proc(txc);
 	kv_committed.pop_front();
