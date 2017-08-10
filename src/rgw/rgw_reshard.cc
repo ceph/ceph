@@ -68,7 +68,7 @@ public:
                      int _num_shard,
                      deque<librados::AioCompletion *>& _completions) : store(_store), bucket_info(_bucket_info), bs(store),
                                                                        aio_completions(_completions) {
-    num_shard = (bucket_info.num_shards > 0 ? _num_shard : -1);
+    num_shard = (bucket_info.num_shards > 0 ? _num_shard : 1);
     bs.init(bucket_info.bucket, num_shard);
   }
 
