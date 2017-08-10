@@ -13013,6 +13013,12 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
     if (cur == root_ancestor)
       break;
 
+    // deleted inode
+    if (cur->nlink == 0) {
+      cur = root_ancestor;
+      break;
+    }
+
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPNAME);
     filepath path(cur->ino);
     req->set_filepath(path);
