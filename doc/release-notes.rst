@@ -33,7 +33,7 @@ Major Changes from Kraken
       :doc:`/rados/configuration/storage-devices` and
       :doc:`/rados/configuration/bluestore-config-ref`.
     - BlueStore supports `full data and metadata checksums
-      <../rados/configuration/bluestore-config-ref/#checksums`_ of all
+      <../rados/configuration/bluestore-config-ref/#checksums>`_ of all
       data stored by Ceph.
     - BlueStore supports `inline compression
       <../rados/configuration/bluestore-config-ref/#inline-compression>`_ using
