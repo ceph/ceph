@@ -555,6 +555,11 @@ COMMAND("osd crush rm-device-class " \
         "remove class of the osd(s) <id> [<id>...]," \
         "or use <all|any|*> to remove all.", \
         "osd", "rw", "cli,rest")
+COMMAND("osd crush class rename " \
+        "name=srcname,type=CephString,goodchars=[A-Za-z0-9-_] " \
+        "name=dstname,type=CephString,goodchars=[A-Za-z0-9-_]", \
+        "rename crush device class <srcname> to <dstname>", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd crush create-or-move " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \

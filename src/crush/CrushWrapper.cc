@@ -1364,6 +1364,42 @@ int CrushWrapper::get_parent_of_type(int item, int type) const
   return item;
 }
 
+int CrushWrapper::rename_class(const string& srcname, const string& dstname)
+{
+  auto i = class_rname.find(srcname);
+  if (i == class_rname.end())
+    return -ENOENT;
+  auto j = class_rname.find(dstname);
+  if (j != class_rname.end())
+    return -EEXIST;
+
+  int class_id = i->second;
+  assert(class_name.count(class_id));
+  // rename any shadow buckets of old class name
+  for (auto &it: class_map) {
+    if (it.first < 0 && it.second == class_id) {
+        string old_name = get_item_name(it.first);
+        size_t pos = old_name.find("~");
+        assert(pos != string::npos);
+        string name_no_class = old_name.substr(0, pos);
+        string old_class_name = old_name.substr(pos + 1);
+        assert(old_class_name == srcname);
+        string new_name = name_no_class + "~" + dstname;
+        // we do not use set_item_name
+        // because the name is intentionally invalid
+        name_map[it.first] = new_name;
+        have_rmaps = false;
+    }
+  }
+
+  // rename class
+  class_rname.erase(srcname);
+  class_name.erase(class_id);
+  class_rname[dstname] = class_id;
+  class_name[class_id] = dstname;
+  return 0;
+}
+
 int CrushWrapper::populate_classes(
   const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket)
 {
