@@ -83,6 +83,13 @@ OSD_METADATA = ('id', 'device_class')
 
 POOL_METADATA= ('pool_id', 'name')
 
+PERF_COUNTERS = {
+    'osd': [
+        'osd.stat_bytes',
+        'osd.stat_bytes_used',
+    ]
+}
+
 
 class Metric(object):
     def __init__(self, mtype, name, desc, labels=None):
@@ -256,19 +263,19 @@ class Module(MgrModule):
             self.log.debug('ignoring %s, type %s' % (path, stattype))
             return
 
+        daemon_type, daemon_id = daemon.split('.')
+
         if path not in self.metrics:
             self.metrics[path] = Metric(
                 stattype,
                 path,
                 perfcounter['description'],
-                ('daemon',),
+                (daemon_type,),
             )
-
-        daemon_type, daemon_id = daemon.split('.')
 
         self.metrics[path].set(
             self.get_latest(daemon_type, daemon_id, path),
-            (daemon,)
+            (daemon_id,)
         )
 
     def get_health(self):
@@ -292,21 +299,6 @@ class Module(MgrModule):
     def get_quorum_status(self):
         mon_status = json.loads(self.get('mon_status')['json'])
         self.metrics['mon_quorum_count'].set(len(mon_status['quorum']))
-
-    def get_osd_status(self):
-        '''TODO add device_class label!!!'''
-        osd_status = self.get('osd_stats')['osd_stats']
-        osd_dev = self.get('osd_map_crush')['devices']
-        for osd in osd_status:
-            id_ = osd['osd']
-            dev_class = next((osd for osd in osd_dev if osd['id'] == id_))
-            for stat in OSD_STATS:
-                path = 'osd_{}'.format(stat)
-                self.metrics[path].set(osd[stat], (id_,dev_class['class']))
-            for p_stat in OSD_PERF_STATS:
-                path = 'osd_{}'.format(p_stat)
-                self.metrics[path].set(osd['perf_stat'][p_stat],
-                                       (id_,dev_class['class']))
 
     def get_pg_status(self):
         # TODO add per pool status?
@@ -343,9 +335,11 @@ class Module(MgrModule):
         self.get_quorum_status()
         self.get_metadata()
         self.get_pg_status()
-        # for daemon in self.schema.keys():
-        #     for path in self.schema[daemon].keys():
-        #         self.get_stat(daemon, path)
+        for daemon in self.schema.keys():
+            d_type = daemon.split('.')[0]
+            if d_type in PERF_COUNTERS:
+                for path in PERF_COUNTERS[d_type]:
+                    self.get_stat(daemon, path)
         return self.metrics
 
     def notify(self, ntype, nid):
