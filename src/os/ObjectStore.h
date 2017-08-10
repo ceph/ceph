@@ -384,8 +384,6 @@ public:
       OP_COLL_SETATTRS = 26,  // cid, attrset
       OP_COLL_MOVE =    8,   // newcid, oldcid, oid
 
-      OP_STARTSYNC =    27,  // start a sync
-
       OP_RMATTRS =      28,  // cid, oid
       OP_COLL_RENAME =       29,  // cid, newcid
 
@@ -639,7 +637,6 @@ public:
 
       switch (op->op) {
       case OP_NOP:
-      case OP_STARTSYNC:
         break;
 
       case OP_TOUCH:
@@ -1026,12 +1023,6 @@ private:
     }
 
 public:
-    /// Commence a global file system sync operation.
-    void start_sync() {
-      Op* _op = _get_next_op();
-      _op->op = OP_STARTSYNC;
-      data.ops++;
-    }
     /// noop. 'nuf said
     void nop() {
       Op* _op = _get_next_op();
