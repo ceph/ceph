@@ -65,8 +65,6 @@ endif()
 if(WITH_SPDK)
   list(APPEND libos_srcs
     bluestore/NVMEDevice.cc)
-  ADD_DEFINITIONS(-D__SSE4_2__ -D__SSE4_1__ -D__SSSE3__ -D__SSE3__)
-  add_compile_options(-mcrc32 -msse3 -mssse3 -msse4.1 -msse4.2)
 endif()
 
 add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
