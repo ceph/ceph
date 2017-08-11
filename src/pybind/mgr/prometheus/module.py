@@ -275,7 +275,6 @@ class Module(MgrModule):
                 'gauge',
                 path,
                 'PG {}'.format(state),
-                ('osd',),
             )
         for state in DF_CLUSTER:
             path = 'cluster_{}'.format(state)
@@ -384,18 +383,17 @@ class Module(MgrModule):
 
     def get_pg_status(self):
         # TODO add per pool status?
-        pg_s = self.get('pg_summary')['by_osd']
-        for osd in pg_s:
-            reported_pg_s = [(s,v) for key, v in pg_s[osd].items() for s in
-                             key.split('+')]
-            for state, value in reported_pg_s:
-                path = 'pg_{}'.format(state)
-                self.metrics[path].set(value, (osd,))
-            reported_states = [s[0] for s in reported_pg_s]
-            for state in PG_STATES:
-                path = 'pg_{}'.format(state)
-                if state not in reported_states:
-                    self.metrics[path].set(0, (osd,))
+        pg_s = self.get('pg_summary')['all']
+        reported_pg_s = [(s,v) for key, v in pg_s.items() for s in
+                         key.split('+')]
+        for state, value in reported_pg_s:
+            path = 'pg_{}'.format(state)
+            self.metrics[path].set(value)
+        reported_states = [s[0] for s in reported_pg_s]
+        for state in PG_STATES:
+            path = 'pg_{}'.format(state)
+            if state not in reported_states:
+                self.metrics[path].set(0)
 
     def get_metadata(self):
         osd_map = self.get('osd_map')
