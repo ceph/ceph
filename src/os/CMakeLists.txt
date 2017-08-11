@@ -117,8 +117,11 @@ if(WITH_SPDK)
   include_directories("${CMAKE_SOURCE_DIR}/src/spdk/include")
   add_custom_target(build_spdk
     COMMAND
-    $(MAKE) DPDK_INC_DIR=${DPDK_INCLUDE_DIR}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/lib
+    ./configure
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/ 
+    COMMAND
+    $(MAKE)
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/
     COMMENT "spdk building")
   # TODO: should use add_library(spdk INTERFACE IMPORTED) instead in new cmake,
   # if INTERFACE is supported.

@@ -225,10 +225,10 @@ if(WITH_ZFS)
   set(HAVE_LIBZFS ${ZFS_FOUND})
 endif()
 
-option(WITH_SPDK "Enable SPDK" OFF)
+option(WITH_SPDK "Enable SPDK" ON)
 if(WITH_SPDK)
-  find_package(dpdk REQUIRED)
   set(HAVE_SPDK TRUE)
+  set(DPDK_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/include)
 endif(WITH_SPDK)
 
 option(WITH_PMEM "Enable PMEM" OFF)
