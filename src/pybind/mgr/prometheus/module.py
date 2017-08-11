@@ -333,6 +333,10 @@ class Module(MgrModule):
 
     def get_stat(self, daemon, path):
 
+        if daemon not in self.schema or path not in self.schema[daemon]:
+            self.log.debug('{} for {} not (yet) in schema'.format(path,
+                                                                  daemon))
+            return
         perfcounter = self.schema[daemon][path]
         stattype = stattype_to_str(perfcounter['type'])
         # XXX simplify first effort: no histograms
