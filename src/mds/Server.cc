@@ -1172,7 +1172,7 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
       mdlog->flush();
     }
   } else if (mdr->did_early_reply)
-    mds->locker->drop_rdlocks(mdr.get());
+    mds->locker->drop_rdlocks_for_early_reply(mdr.get());
   else
     mdlog->flush();
 }
