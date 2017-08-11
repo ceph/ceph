@@ -1272,6 +1272,8 @@ void ImageReplayer<I>::handle_process_entry_ready(int r) {
   dout(20) << dendl;
   assert(r == 0);
 
+  on_name_changed();
+
   // attempt to process the next event
   handle_replay_ready();
 }
