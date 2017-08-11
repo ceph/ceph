@@ -328,7 +328,6 @@ class Infiniband {
   bool initialized = false;
   const std::string &device_name;
   uint8_t port_num;
-  static bool init_prereq;
 
  public:
   explicit Infiniband(CephContext *c);

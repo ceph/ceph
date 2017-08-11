@@ -95,6 +95,7 @@ void RDMADispatcher::polling_start()
 
 void RDMADispatcher::polling_stop()
 {
+  Mutex::Locker l(lock);
   done = true;
   if (!t.joinable())
     return;
