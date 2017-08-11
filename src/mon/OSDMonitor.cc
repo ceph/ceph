@@ -3156,10 +3156,13 @@ void OSDMonitor::check_pg_creates_sub(Subscription *sub)
 void OSDMonitor::do_application_enable(int64_t pool_id,
                                        const std::string &app_name)
 {
-  assert(paxos->is_plugged());
+  assert(paxos->is_plugged() && is_writeable());
 
   dout(20) << __func__ << ": pool_id=" << pool_id << ", app_name=" << app_name
            << dendl;
+
+  assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS ||
+	 pending_inc.new_require_osd_release >= CEPH_RELEASE_LUMINOUS);
 
   auto pp = osdmap.get_pg_pool(pool_id);
   assert(pp != nullptr);
@@ -4984,6 +4987,43 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
                               show_shadow);
       rdata.append(ss.str());
     }
+  } else if (prefix == "osd crush ls") {
+    string name;
+    if (!cmd_getval(g_ceph_context, cmdmap, "node", name)) {
+      ss << "no node specified";
+      r = -EINVAL;
+      goto reply;
+    }
+    if (!osdmap.crush->name_exists(name)) {
+      ss << "node '" << name << "' does not exist";
+      r = -ENOENT;
+      goto reply;
+    }
+    int id = osdmap.crush->get_item_id(name);
+    list<int> result;
+    if (id >= 0) {
+      result.push_back(id);
+    } else {
+      int num = osdmap.crush->get_bucket_size(id);
+      for (int i = 0; i < num; ++i) {
+	result.push_back(osdmap.crush->get_bucket_item(id, i));
+      }
+    }
+    if (f) {
+      f->open_array_section("items");
+      for (auto i : result) {
+	f->dump_string("item", osdmap.crush->get_item_name(i));
+      }
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      ostringstream ss;
+      for (auto i : result) {
+	ss << osdmap.crush->get_item_name(i) << "\n";
+      }
+      rdata.append(ss.str());
+    }
+    r = 0;
   } else if (prefix == "osd crush class ls") {
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_array_section("crush_classes");
@@ -9150,11 +9190,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     vector<int64_t> id_vec;
     vector<int32_t> new_pg_temp;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
-      ss << "unable to parse 'id' value(s) '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
-      err = -EINVAL;
-      goto reply;
+    cmd_getval(g_ceph_context, cmdmap, "id", id_vec);
+    if (id_vec.empty())  {
+      pending_inc.new_pg_temp[pgid] = mempool::osdmap::vector<int>();
+      ss << "done cleaning up pg_temp of " << pgid;
+      goto update;
     }
     for (auto osd : id_vec) {
       if (!osdmap.exists(osd)) {

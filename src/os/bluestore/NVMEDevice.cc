@@ -102,7 +102,6 @@ class SharedDriverQueueData {
   uint32_t queueid;
   struct spdk_nvme_qpair *qpair;
   std::function<void ()> run_func;
-  friend class AioCompletionThread;
 
   bool aio_stop = false;
   void _aio_thread();
@@ -140,7 +139,7 @@ class SharedDriverQueueData {
         flush_waiters(0),
         completed_op_seq(0), queue_op_seq(0) {
 
-    qpair = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, SPDK_NVME_QPRIO_URGENT);
+    qpair = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, NULL, SPDK_NVME_QPRIO_URGENT);
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
     b.add_time_avg(l_bluestore_nvmedevice_aio_write_lat, "aio_write_lat", "Average write completing latency");
@@ -444,7 +443,7 @@ void SharedDriverQueueData::_aio_thread()
 
   if (data_buf_mempool.empty()) {
     for (uint16_t i = 0; i < data_buffer_default_num; i++) {
-      void *b = spdk_zmalloc(data_buffer_size, CEPH_PAGE_SIZE, NULL);
+      void *b = spdk_dma_zmalloc(data_buffer_size, CEPH_PAGE_SIZE, NULL);
       if (!b) {
         derr << __func__ << " failed to create memory pool for nvme data buffer" << dendl;
         assert(b);
@@ -750,8 +749,8 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
         spdk_env_opts_init(&opts);
         opts.name = "ceph-osd";
         opts.core_mask = coremask_arg;
-        opts.dpdk_master_core = m_core_arg;
-        opts.dpdk_mem_size = mem_size_arg;
+        opts.master_core = m_core_arg;
+        opts.mem_size = mem_size_arg;
         spdk_env_init(&opts);
 
         spdk_nvme_retry_count = g_ceph_context->_conf->bdev_nvme_retry_count;
@@ -858,8 +857,6 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
 NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
   :   BlockDevice(cct),
       driver(nullptr),
-      size(0),
-      block_size(0),
       aio_stop(false),
       buffer_lock("NVMEDevice::buffer_lock"),
       aio_callback(cb),

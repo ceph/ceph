@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include "gtest/gtest.h"
+#include "common/backport14.h"
 #include "common/Mutex.h"
 #include "common/Thread.h"
 #include "common/Throttle.h"
@@ -42,20 +43,16 @@ protected:
   public:
     Throttle &throttle;
     int64_t count;
-    bool waited;
+    bool waited = false;
 
     Thread_get(Throttle& _throttle, int64_t _count) :
-      throttle(_throttle),
-      count(_count),
-      waited(false)
-    {
-    }
+      throttle(_throttle), count(_count) {}
 
     void *entry() override {
       usleep(5);
       waited = throttle.get(count);
       throttle.put(count);
-      return NULL;
+      return nullptr;
     }
   };
 };
@@ -215,7 +212,6 @@ TEST_F(ThrottleTest, wait) {
     }
   } while(!waited);
 }
-
 
 TEST_F(ThrottleTest, destructor) {
   EXPECT_DEATH({

@@ -2523,7 +2523,7 @@ void RGWCreateBucket::execute()
       return;
   }
 
-  if (!store->get_zonegroup().is_master_zonegroup() &&
+  if (!store->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
       store->get_zonegroup().api_name != location_constraint) {
     ldout(s->cct, 0) << "location constraint (" << location_constraint << ")"
                      << " doesn't match zonegroup" << " (" << store->get_zonegroup().api_name << ")"
@@ -4751,12 +4751,6 @@ void RGWPutLC::execute()
   if (!config) {
     op_ret = -ERR_MALFORMED_XML;
     return;
-  }
-
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
-    ldout(s->cct, 15) << "Old LifecycleConfiguration:";
-    config->to_xml(*_dout);
-    *_dout << dendl;
   }
 
   op_ret = config->rebuild(store, new_config);

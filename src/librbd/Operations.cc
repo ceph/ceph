@@ -1428,6 +1428,11 @@ int Operations<I>::metadata_remove(const std::string &key) {
     return -EROFS;
   }
 
+  std::string value;
+  r = cls_client::metadata_get(&m_image_ctx.md_ctx, m_image_ctx.header_oid, key, &value);
+  if(r < 0)
+    return r;
+
   {
     RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
     C_SaferCond metadata_ctx;

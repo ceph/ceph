@@ -1,0 +1,56 @@
+---
+
+# DEFINE THE NUMBER OF VMS TO RUN
+mon_vms: 1
+osd_vms: 1
+mds_vms: 0
+rgw_vms: 0
+nfs_vms: 0
+rbd_mirror_vms: 0
+client_vms: 0
+iscsi_gw_vms: 0
+mgr_vms: 0
+
+# SUBNETS TO USE FOR THE VMS
+public_subnet: 192.168.3
+cluster_subnet: 192.168.4
+
+# MEMORY
+# set 1024 for CentOS
+memory: 512
+
+# Ethernet interface name
+# use eth1 for libvirt and ubuntu precise, enp0s8 for CentOS and ubuntu xenial
+eth: 'eth1'
+
+
+# VAGRANT BOX
+# Ceph boxes are *strongly* suggested. They are under better control and will
+# not get updated frequently unless required for build systems. These are (for
+# now):
+#
+# * ceph/ubuntu-xenial
+#
+# Ubuntu: ceph/ubuntu-xenial bento/ubuntu-16.04 or ubuntu/trusty64 or ubuntu/wily64
+# CentOS: bento/centos-7.1 or puppetlabs/centos-7.0-64-puppet
+# libvirt CentOS: centos/7
+# parallels Ubuntu: parallels/ubuntu-14.04
+# Debian: deb/jessie-amd64 - be careful the storage controller is named 'SATA Controller'
+# For more boxes have a look at:
+#   - https://atlas.hashicorp.com/boxes/search?utf8=✓&sort=&provider=virtualbox&q=
+#   - https://download.gluster.org/pub/gluster/purpleidea/vagrant/
+vagrant_box: centos/7
+#ssh_private_key_path: "~/.ssh/id_rsa"
+# The sync directory changes based on vagrant box
+# Set to /home/vagrant/sync for Centos/7, /home/{ user }/vagrant for openstack and defaults to /vagrant
+#vagrant_sync_dir: /home/vagrant/sync
+#vagrant_sync_dir: /
+# Disables synced folder creation. Not needed for testing, will skip mounting
+# the vagrant directory on the remote box regardless of the provider.
+vagrant_disable_synced_folder: true
+# VAGRANT URL
+# This is a URL to download an image from an alternate location.  vagrant_box
+# above should be set to the filename of the image.
+# Fedora virtualbox: https://download.fedoraproject.org/pub/fedora/linux/releases/22/Cloud/x86_64/Images/Fedora-Cloud-Base-Vagrant-22-20150521.x86_64.vagrant-virtualbox.box
+# Fedora libvirt: https://download.fedoraproject.org/pub/fedora/linux/releases/22/Cloud/x86_64/Images/Fedora-Cloud-Base-Vagrant-22-20150521.x86_64.vagrant-libvirt.box
+# vagrant_box_url: https://download.fedoraproject.org/pub/fedora/linux/releases/22/Cloud/x86_64/Images/Fedora-Cloud-Base-Vagrant-22-20150521.x86_64.vagrant-virtualbox.box

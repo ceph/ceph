@@ -4235,7 +4235,9 @@ void Objecter::_finish_pool_stat_op(PoolStatOp *op, int r)
   delete op;
 }
 
-void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish)
+void Objecter::get_fs_stats(ceph_statfs& result,
+			    boost::optional<int64_t> data_pool,
+			    Context *onfinish)
 {
   ldout(cct, 10) << "get_fs_stats" << dendl;
   unique_lock l(rwlock);
@@ -4243,6 +4245,7 @@ void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish)
   StatfsOp *op = new StatfsOp;
   op->tid = ++last_tid;
   op->stats = &result;
+  op->data_pool = data_pool;
   op->onfinish = onfinish;
   if (mon_timeout > timespan(0)) {
     op->ontimeout = timer.add_event(mon_timeout,
@@ -4265,6 +4268,7 @@ void Objecter::_fs_stats_submit(StatfsOp *op)
 
   ldout(cct, 10) << "fs_stats_submit" << op->tid << dendl;
   monc->send_mon_message(new MStatfs(monc->get_fsid(), op->tid,
+				     op->data_pool,
 				     last_seen_pgmap_version));
   op->last_submit = ceph::mono_clock::now();
 

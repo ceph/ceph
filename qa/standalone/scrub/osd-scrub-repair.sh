@@ -30,7 +30,11 @@ fi
 getjson="no"
 
 # Ignore the epoch and filter out the attr '_' value because it has date information and won't match
-jqfilter='.inconsistents | (.[].shards[].attrs[]? | select(.name == "_") | .value) |= "----Stripped-by-test----"'
+if [ "$(jq --version 2>&1 | awk '{ print $3}')" = "1.3" ]; then # Not sure all versions that apply here
+    jqfilter='.inconsistents | (.[].shards[].attrs[] | select(.name == "_") | .value) |= "----Stripped-by-test----"'
+else
+    jqfilter='.inconsistents | (.[].shards[].attrs[]? | select(.name == "_") | .value) |= "----Stripped-by-test----"'
+fi
 sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
 
 # Remove items are not consistent across runs, the pg interval and client
@@ -183,7 +187,7 @@ function create_ec_pool() {
 
     ceph osd erasure-code-profile set myprofile crush-failure-domain=osd $3 $4 $5 $6 $7 || return 1
 
-    ceph osd pool create "$poolname" 1 1 erasure myprofile || return 1
+    create_pool "$poolname" 1 1 erasure myprofile || return 1
 
     if [ "$allow_overwrites" = "true" ]; then
         ceph osd pool set "$poolname" allow_ec_overwrites true || return 1
@@ -487,8 +491,8 @@ function TEST_corrupt_scrub_replicated() {
     create_rbd_pool || return 1
     wait_for_clean || return 1
 
-    ceph osd pool create foo 1 || return 1
-    ceph osd pool create $poolname 1 1 || return 1
+    create_pool foo 1 || return 1
+    create_pool $poolname 1 1 || return 1
     wait_for_clean || return 1
 
     for i in $(seq 1 $total_objs) ; do
@@ -599,16 +603,10 @@ function TEST_corrupt_scrub_replicated() {
 
     local pg=$(get_pg $poolname ROBJ0)
 
-    set_config osd 0 filestore_debug_inject_read_err true || return 1
-    set_config osd 1 filestore_debug_inject_read_err true || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.1) \
-             injectdataerr $poolname ROBJ11 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) \
-             injectmdataerr $poolname ROBJ12 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) \
-             injectmdataerr $poolname ROBJ13 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.1) \
-             injectdataerr $poolname ROBJ13 || return 1
+    inject_eio rep data $poolname ROBJ11 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
+    inject_eio rep mdata $poolname ROBJ12 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
+    inject_eio rep mdata $poolname ROBJ13 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
+    inject_eio rep data $poolname ROBJ13 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
 
     pg_scrub $pg
 
@@ -971,16 +969,10 @@ EOF
     objectstore_tool $dir 1 $objname set-attr _ $dir/oi
     rm $dir/oi
 
-    set_config osd 0 filestore_debug_inject_read_err true || return 1
-    set_config osd 1 filestore_debug_inject_read_err true || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.1) \
-             injectdataerr $poolname ROBJ11 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) \
-             injectmdataerr $poolname ROBJ12 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) \
-             injectmdataerr $poolname ROBJ13 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.1) \
-             injectdataerr $poolname ROBJ13 || return 1
+    inject_eio rep data $poolname ROBJ11 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
+    inject_eio rep mdata $poolname ROBJ12 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
+    inject_eio rep mdata $poolname ROBJ13 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
+    inject_eio rep data $poolname ROBJ13 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
     pg_deep_scrub $pg
 
     rados list-inconsistent-pg $poolname > $dir/json || return 1
@@ -1615,7 +1607,7 @@ function corrupt_scrub_erasure() {
 	fi
     done
     create_rbd_pool || return 1
-    ceph osd pool create foo 1
+    create_pool foo 1
 
     create_ec_pool $poolname $allow_overwrites k=2 m=1 stripe_unit=2K --force || return 1
     wait_for_clean || return 1
@@ -2543,13 +2535,14 @@ function TEST_periodic_scrub_replicated() {
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=2 || return 1
     run_mgr $dir x || return 1
-    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0"
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0"
     run_osd $dir 0 $ceph_osd_args || return 1
     run_osd $dir 1 $ceph_osd_args || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
 
-    ceph osd pool create $poolname 1 1 || return 1
+    create_pool $poolname 1 1 || return 1
     wait_for_clean || return 1
 
     local osd=0
@@ -2573,6 +2566,7 @@ function TEST_periodic_scrub_replicated() {
     # Make sure bad object found
     rados list-inconsistent-obj $pg | jq '.' | grep -q $objname || return 1
 
+    flush_pg_stats
     local last_scrub=$(get_last_scrub_stamp $pg)
     # Fake a schedule scrub
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
@@ -2589,10 +2583,10 @@ function TEST_periodic_scrub_replicated() {
     # Can't upgrade with this set
     ceph osd set nodeep-scrub
     # Let map change propagate to OSDs
-    sleep 2
+    flush pg_stats
+    sleep 5
 
     # Fake a schedule scrub
-    local last_scrub=$(get_last_scrub_stamp $pg)
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
              trigger_scrub $pg || return 1
     # Wait for schedule regular scrub
@@ -2609,12 +2603,9 @@ function TEST_periodic_scrub_replicated() {
     # Bad object still known
     rados list-inconsistent-obj $pg | jq '.' | grep -q $objname || return 1
 
+    flush_pg_stats
     # Request a regular scrub and it will be done
-    local scrub_backoff_ratio=$(get_config osd ${primary} osd_scrub_backoff_ratio)
-    set_config osd ${primary} osd_scrub_backoff_ratio 0
     pg_scrub $pg
-    sleep 1
-    set_config osd ${primary} osd_scrub_backoff_ratio $scrub_backoff_ratio
     grep -q "Regular scrub request, deep-scrub details will be lost" $dir/osd.${primary}.log || return 1
 
     # deep-scrub error is no longer present

@@ -1,3 +1,7 @@
+Skip test on FreeBSD as it generates different output there.
+
+  $ test "$(uname)" = "FreeBSD" && exit 80 || true
+
   $ rbd --help
   usage: rbd <command> ...
   

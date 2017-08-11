@@ -45,23 +45,20 @@ RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
   cleanup();
   worker->remove_pending_conn(this);
   dispatcher->erase_qpn(my_msg.qpn);
+
+  for (unsigned i=0; i < wc.size(); ++i) {
+    dispatcher->post_chunk_to_pool(reinterpret_cast<Chunk*>(wc[i].wr_id));
+  }
+  for (unsigned i=0; i < buffers.size(); ++i) {
+    dispatcher->post_chunk_to_pool(buffers[i]);
+  }
+
   Mutex::Locker l(lock);
   if (notify_fd >= 0)
     ::close(notify_fd);
   if (tcp_fd >= 0)
     ::close(tcp_fd);
   error = ECONNRESET;
-  int ret = 0;
-  for (unsigned i=0; i < wc.size(); ++i) {
-    ret = infiniband->post_chunk(reinterpret_cast<Chunk*>(wc[i].wr_id));
-    assert(ret == 0);
-    dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
-  }
-  for (unsigned i=0; i < buffers.size(); ++i) {
-    ret = infiniband->post_chunk(buffers[i]);
-    assert(ret == 0);
-    dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
-  }
 }
 
 void RDMAConnectedSocketImpl::pass_wc(std::vector<ibv_wc> &&v)
@@ -212,6 +209,12 @@ void RDMAConnectedSocketImpl::handle_connection() {
     return;
   }
 
+  if (1 == connected) {
+    ldout(cct, 1) << __func__ << " warnning: logic failed: read len: " << r << dendl;
+    fault();
+    return;
+  }
+
   if (!is_server) {// syn + ack from server
     my_msg.peer_qpn = peer_msg.qpn;
     ldout(cct, 20) << __func__ << " peer msg :  < " << peer_msg.qpn << ", " << peer_msg.psn
@@ -233,6 +236,8 @@ void RDMAConnectedSocketImpl::handle_connection() {
         ldout(cct, 10) << __func__ << " server is already active." << dendl;
         return ;
       }
+      r = activate();
+      assert(!r);
       r = infiniband->send_msg(cct, tcp_fd, my_msg);
       if (r < 0) {
         ldout(cct, 1) << __func__ << " server ack failed." << dendl;
@@ -240,11 +245,10 @@ void RDMAConnectedSocketImpl::handle_connection() {
         fault();
         return ;
       }
-      r = activate();
-      assert(!r);
     } else { // ack from client
       connected = 1;
-      cleanup();
+      ldout(cct, 10) << __func__ << " handshake of rdma is done. server connected: " << connected << dendl;
+      //cleanup();
       submit(false);
       notify();
     }
@@ -256,6 +260,16 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
   uint64_t i = 0;
   int r = ::read(notify_fd, &i, sizeof(i));
   ldout(cct, 20) << __func__ << " notify_fd : " << i << " in " << my_msg.qpn << " r = " << r << dendl;
+  
+  if (!active) {
+    ldout(cct, 1) << __func__ << " when ib not active. len: " << len << dendl;
+    return -EAGAIN;
+  }
+  
+  if (0 == connected) {
+    ldout(cct, 1) << __func__ << " when ib not connected. len: " << len <<dendl;
+    return -EAGAIN;
+  }
   ssize_t read = 0;
   if (!buffers.empty())
     read = read_buffers(buf,len);
@@ -290,8 +304,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
         error = ECONNRESET;
         ldout(cct, 20) << __func__ << " got remote close msg..." << dendl;
       }
-      assert(infiniband->post_chunk(chunk) == 0);
-      dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
+      dispatcher->post_chunk_to_pool(chunk);
     } else {
       if (read == (ssize_t)len) {
         buffers.push_back(chunk);
@@ -302,8 +315,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
         ldout(cct, 25) << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound() << dendl;
       } else {
         read += chunk->read(buf+read, response->byte_len);
-        assert(infiniband->post_chunk(chunk) == 0);
-        dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
+        dispatcher->post_chunk_to_pool(chunk);
       }
     }
   }
@@ -334,8 +346,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
     read += tmp;
     ldout(cct, 25) << __func__ << " this iter read: " << tmp << " bytes." << " offset: " << (*c)->get_offset() << " ,bound: " << (*c)->get_bound()  << ". Chunk:" << *c  << dendl;
     if ((*c)->over()) {
-      assert(infiniband->post_chunk(*c) == 0);
-      dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
+      dispatcher->post_chunk_to_pool(*c);
       ldout(cct, 25) << __func__ << " one chunk over." << dendl;
     }
     if (read == len) {
@@ -599,11 +610,8 @@ void RDMAConnectedSocketImpl::cleanup() {
 
 void RDMAConnectedSocketImpl::notify()
 {
-  uint64_t i = 1;
-  int ret;
-
-  ret = write(notify_fd, &i, sizeof(i));
-  assert(ret = sizeof(i));
+  int i = 1;
+  assert(sizeof(i) == write(notify_fd, &i, sizeof(i)));
 }
 
 void RDMAConnectedSocketImpl::shutdown()

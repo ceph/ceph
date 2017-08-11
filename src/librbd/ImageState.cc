@@ -216,7 +216,7 @@ private:
     m_cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       thread_pool_singleton, "librbd::ImageUpdateWatchers::thread_pool");
     m_work_queue = new ContextWQ("librbd::ImageUpdateWatchers::op_work_queue",
-				 m_cct->_conf->rbd_op_thread_timeout,
+				 m_cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
 				 thread_pool_singleton);
   }
 

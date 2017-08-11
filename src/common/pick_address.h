@@ -31,6 +31,12 @@ class CephContext;
 void pick_addresses(CephContext *cct, int needs);
 
 /**
+ * Find a network interface whose address matches the address/netmask
+ * in `network`.
+ */
+std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network);
+
+/**
  * check for a locally configured address
  *
  * check if any of the listed addresses is configured on the local host.

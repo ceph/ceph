@@ -1,0 +1,4 @@
+*.vdi
+.vagrant/
+vagrant_ssh_config
+fetch/

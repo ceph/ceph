@@ -89,7 +89,7 @@ See `block devices`_ for additional details.
 
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _create a pool: ../../rados/operations/pools/#create-a-pool
-.. _block devices: ../../rbd/rbd
+.. _block devices: ../../rbd
 .. _FAQ: http://wiki.ceph.com/How_Can_I_Give_Ceph_a_Try
 .. _OS Recommendations: ../os-recommendations
 .. _rbdmap manpage: ../../man/8/rbdmap

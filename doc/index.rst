@@ -82,7 +82,7 @@ about Ceph, see our `Architecture`_ section.
 
 
 .. _Ceph Object Store: radosgw
-.. _Ceph Block Device: rbd/rbd
+.. _Ceph Block Device: rbd
 .. _Ceph Filesystem: cephfs
 .. _Getting Started: start
 .. _Architecture: architecture
@@ -96,7 +96,7 @@ about Ceph, see our `Architecture`_ section.
    install/index
    rados/index
    cephfs/index
-   rbd/rbd
+   rbd/index
    radosgw/index
    mgr/index
    api/index

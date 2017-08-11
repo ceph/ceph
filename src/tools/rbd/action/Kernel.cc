@@ -414,7 +414,8 @@ int execute_map(const po::variables_map &vm) {
   }
 
   // parse default options first so they can be overwritten by cli options
-  char *default_map_options = strdup(g_conf->rbd_default_map_options.c_str());
+  char *default_map_options = strdup(g_conf->get_val<std::string>(
+    "rbd_default_map_options").c_str());
   BOOST_SCOPE_EXIT( (default_map_options) ) {
     free(default_map_options);
   } BOOST_SCOPE_EXIT_END;

@@ -24,7 +24,7 @@ tasks:
       - Monitor daemon marked osd
       - Behind on trimming
     conf:
-      mon:
+      global:
         mon warn on pool no app: false
 - print: "**** done ceph"
 - install.upgrade:

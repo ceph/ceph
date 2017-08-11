@@ -224,10 +224,16 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
   // seq and who should be set for syslog/graylog/log_to_mon
   e.who = parent->get_myinst();
   e.name = parent->get_myname();
-  e.seq = parent->get_next_seq();
   e.prio = prio;
   e.msg = s;
   e.channel = get_log_channel();
+
+  // log to monitor?
+  if (log_to_monitors) {
+    e.seq = parent->queue(e);
+  } else {
+    e.seq = parent->get_next_seq();
+  }
 
   // log to syslog?
   if (do_log_to_syslog()) {
@@ -239,11 +245,6 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
   if (do_log_to_graylog()) {
     ldout(cct,0) << __func__ << " log to graylog"  << dendl;
     graylog->log_log_entry(&e);
-  }
-
-  // log to monitor?
-  if (log_to_monitors) {
-    parent->queue(e);
   }
 }
 
@@ -268,8 +269,8 @@ bool LogClient::are_pending()
 Message *LogClient::_get_mon_log_message()
 {
   assert(log_lock.is_locked());
-   if (log_queue.empty())
-     return NULL;
+  if (log_queue.empty())
+    return NULL;
 
   // only send entries that haven't been sent yet during this mon
   // session!  monclient needs to call reset_session() on mon session
@@ -324,6 +325,7 @@ void LogClient::_send_to_mon()
 version_t LogClient::queue(LogEntry &entry)
 {
   Mutex::Locker l(log_lock);
+  entry.seq = ++last_log;
   log_queue.push_back(entry);
 
   if (is_mon) {
@@ -335,6 +337,7 @@ version_t LogClient::queue(LogEntry &entry)
 
 uint64_t LogClient::get_next_seq()
 {
+  Mutex::Locker l(log_lock);
   return ++last_log;
 }
 

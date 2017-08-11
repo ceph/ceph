@@ -486,6 +486,9 @@ enum RGWOpType {
   RGW_OP_PUT_OBJ_TAGGING,
   RGW_OP_GET_OBJ_TAGGING,
   RGW_OP_DELETE_OBJ_TAGGING,
+  RGW_OP_PUT_LC,
+  RGW_OP_GET_LC,
+  RGW_OP_DELETE_LC,
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA,
   RGW_OP_GET_OBJ_LAYOUT,
@@ -1066,10 +1069,16 @@ struct rgw_bucket {
   static void generate_test_instances(list<rgw_bucket*>& o);
 
   bool operator<(const rgw_bucket& b) const {
-    return name.compare(b.name) < 0;
+    if (tenant == b.tenant) {
+      return name < b.name;
+    } else {
+      return tenant < b.tenant;
+    }
   }
+
   bool operator==(const rgw_bucket& b) const {
-    return (name == b.name) && (bucket_id == b.bucket_id);
+    return (tenant == b.tenant) && (name == b.name) && \
+           (bucket_id == b.bucket_id);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)

@@ -3320,12 +3320,6 @@ discover_aws_flavour(const req_info& info)
   return std::make_pair(version, route);
 }
 
-static void init_anon_user(struct req_state *s)
-{
-  rgw_get_anon_user(*(s->user));
-  s->perm_mask = RGW_PERM_FULL_CONTROL;
-}
-
 /*
  * verify that a signed request comes from the keyholder
  * by checking the signature against our locally-computed version
@@ -3821,6 +3815,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_SET_BUCKET_WEBSITE:
         case RGW_OP_PUT_BUCKET_POLICY:
         case RGW_OP_PUT_OBJ_TAGGING:
+        case RGW_OP_PUT_LC:
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;

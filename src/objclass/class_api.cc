@@ -142,8 +142,8 @@ int cls_getxattr(cls_method_context_t hctx, const char *name,
   int r;
 
   op.op.op = CEPH_OSD_OP_GETXATTR;
-  op.indata.append(name);
   op.op.xattr.name_len = strlen(name);
+  op.indata.append(name, op.op.xattr.name_len);
   r = (*pctx)->pg->do_osd_ops(*pctx, nops);
   if (r < 0)
     return r;
@@ -167,10 +167,10 @@ int cls_setxattr(cls_method_context_t hctx, const char *name,
   int r;
 
   op.op.op = CEPH_OSD_OP_SETXATTR;
-  op.indata.append(name);
-  op.indata.append(value);
   op.op.xattr.name_len = strlen(name);
   op.op.xattr.value_len = val_len;
+  op.indata.append(name, op.op.xattr.name_len);
+  op.indata.append(value, val_len);
   r = (*pctx)->pg->do_osd_ops(*pctx, nops);
 
   return r;
@@ -346,8 +346,8 @@ int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
   int r;
 
   op.op.op = CEPH_OSD_OP_GETXATTR;
-  op.indata.append(name);
   op.op.xattr.name_len = strlen(name);
+  op.indata.append(name, op.op.xattr.name_len);
   r = (*pctx)->pg->do_osd_ops(*pctx, nops);
   if (r < 0)
     return r;
@@ -387,10 +387,10 @@ int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
   int r;
 
   op.op.op = CEPH_OSD_OP_SETXATTR;
-  op.indata.append(name);
-  op.indata.append(*inbl);
   op.op.xattr.name_len = strlen(name);
   op.op.xattr.value_len = inbl->length();
+  op.indata.append(name, op.op.xattr.name_len);
+  op.indata.append(*inbl);
   r = (*pctx)->pg->do_osd_ops(*pctx, nops);
 
   return r;
