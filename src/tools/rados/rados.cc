@@ -93,7 +93,7 @@ void usage(ostream& out)
 "   getxattr <obj-name> attr\n"
 "   setxattr <obj-name> attr val\n"
 "   rmxattr <obj-name> attr\n"
-"   stat objname                     stat the named object\n"
+"   stat <obj-name>                  stat the named object\n"
 "   mapext <obj-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
