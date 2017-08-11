@@ -1406,7 +1406,9 @@ void Operations<I>::execute_metadata_set(const std::string &key,
                 << value << dendl;
 
   operation::MetadataSetRequest<I> *request =
-    new operation::MetadataSetRequest<I>(m_image_ctx, on_finish, key, value);
+    new operation::MetadataSetRequest<I>(m_image_ctx,
+					 new C_NotifyUpdate<I>(m_image_ctx, on_finish),
+					 key, value);
   request->send();
 }
 
@@ -1464,7 +1466,9 @@ void Operations<I>::execute_metadata_remove(const std::string &key,
   ldout(cct, 5) << this << " " << __func__ << ": key=" << key << dendl;
 
   operation::MetadataRemoveRequest<I> *request =
-    new operation::MetadataRemoveRequest<I>(m_image_ctx, on_finish, key);
+    new operation::MetadataRemoveRequest<I>(
+	m_image_ctx,
+	new C_NotifyUpdate<I>(m_image_ctx, on_finish), key);
   request->send();
 }
 
