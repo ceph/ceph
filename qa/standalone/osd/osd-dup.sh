@@ -2,6 +2,8 @@
 
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
+[ `uname` = FreeBSD ] && exit 0
+
 function run() {
     local dir=$1
     shift
@@ -38,7 +40,7 @@ function TEST_filestore_to_bluestore() {
 
     sleep 5
 
-    ceph osd pool create foo 16
+    create_pool foo 16
 
     # write some objects
     rados bench -p foo 10 write -b 4096 --no-cleanup || return 1

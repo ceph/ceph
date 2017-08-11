@@ -34,7 +34,7 @@ function TEST_pool_quota() {
     run_osd $dir 2 || return 1
 
     local poolname=testquoa
-    ceph osd  pool create $poolname 20
+    create_pool $poolname 20
     local objects=`ceph df detail | grep -w $poolname|awk '{print $3}'`
     local bytes=`ceph df detail | grep -w $poolname|awk '{print $4}'`
 

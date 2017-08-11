@@ -18,4 +18,4 @@
 # GNU Library Public License for more details.
 #
 
-$CEPH_ROOT/qa/standalone/ceph-helpers.sh TESTS
+$CEPH_ROOT/qa/standalone/ceph-helpers.sh TESTS "$@"

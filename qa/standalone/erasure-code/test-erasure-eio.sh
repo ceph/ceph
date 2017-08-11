@@ -60,7 +60,7 @@ function create_erasure_coded_pool() {
         plugin=jerasure \
         k=2 m=1 \
         crush-failure-domain=osd || return 1
-    ceph osd pool create $poolname 1 1 erasure myprofile \
+    create_pool $poolname 1 1 erasure myprofile \
         || return 1
     wait_for_clean || return 1
 }
@@ -142,22 +142,6 @@ function rados_put_get() {
     rm $dir/ORIGINAL
 }
 
-function inject_eio() {
-    local objname=$1
-    shift
-    local dir=$1
-    shift
-    local shard_id=$1
-    shift
-
-    local poolname=pool-jerasure
-    local -a initial_osds=($(get_osds $poolname $objname))
-    local osd_id=${initial_osds[$shard_id]}
-    set_config osd $osd_id filestore_debug_inject_read_err true || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.$osd_id) \
-             injectdataerr $poolname $objname $shard_id || return 1
-}
-
 function rados_get_data_eio() {
     local dir=$1
     shift
@@ -170,11 +154,11 @@ function rados_get_data_eio() {
     #
     local poolname=pool-jerasure
     local objname=obj-eio-$$-$shard_id
-    inject_eio $objname $dir $shard_id || return 1
+    inject_eio ec data $poolname $objname $dir $shard_id || return 1
     rados_put_get $dir $poolname $objname $recovery || return 1
 
     shard_id=$(expr $shard_id + 1)
-    inject_eio $objname $dir $shard_id || return 1
+    inject_eio ec data $poolname $objname $dir $shard_id || return 1
     # Now 2 out of 3 shards get EIO, so should fail
     rados_get $dir $poolname $objname fail || return 1
 }
