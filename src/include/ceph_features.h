@@ -4,12 +4,13 @@
 #include "sys/types.h"
 
 /*
- * Each time we reclaim bits for reuse we need to specify another bit
- * that, if present, indicates we have the new incarnation of that
- * feature.  Base case is 1 (first use)
+ * Each time we reclaim bits for reuse we need to specify another
+ * bitmask that, if all bits are set, indicates we have the new
+ * incarnation of that feature.  Base case is 1 (first use)
  */
 #define CEPH_FEATURE_INCARNATION_1 (0ull)
-#define CEPH_FEATURE_INCARNATION_2 (1ull<<57) // CEPH_FEATURE_SERVER_JEWEL
+#define CEPH_FEATURE_INCARNATION_2 (1ull<<57)              // SERVER_JEWEL
+#define CEPH_FEATURE_INCARNATION_3 ((1ull<<57)|(1ull<<28)) // SERVER_MIMIC
 
 #define DEFINE_CEPH_FEATURE(bit, incarnation, name)			\
 	const static uint64_t CEPH_FEATURE_##name = (1ULL<<bit);		\
