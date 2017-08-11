@@ -70,15 +70,8 @@ const string PREFIX_BITMAP = "b";
 
 const std::vector<KeyValueDB::ColumnFamily> cfs =
 {
-  //KeyValueDB::ColumnFamily(PREFIX_SUPER, ""),
-  //KeyValueDB::ColumnFamily(PREFIX_STAT, ""),
-  //KeyValueDB::ColumnFamily(PREFIX_COLL, ""),
-  KeyValueDB::ColumnFamily(PREFIX_OBJ, ""),
-  //KeyValueDB::ColumnFamily(PREFIX_OMAP, ""),
-  //KeyValueDB::ColumnFamily(PREFIX_DEFERRED, ""),
-  //KeyValueDB::ColumnFamily(PREFIX_ALLOC, ""),
-  KeyValueDB::ColumnFamily(PREFIX_BITMAP, ""),
-  //KeyValueDB::ColumnFamily(PREFIX_SHARED_BLOB, "")
+  KeyValueDB::ColumnFamily(PREFIX_OMAP, ""),
+  KeyValueDB::ColumnFamily(PREFIX_DEFERRED, ""),
 };
 
 // write a label in the first block.  always use this size.  note that
