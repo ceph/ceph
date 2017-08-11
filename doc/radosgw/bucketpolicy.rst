@@ -120,6 +120,11 @@ Currently, the only condition keys we support are:
 - aws:UserAgent
 - aws:username
 
+We support the following condition keys for ListBucket Op
+- s3:prefix
+- s3:delimiter
+- s3:max-keys
+
 More may be supported soon as we integrate with the recently rewritten
 Authentication/Authorization subsystem.
 
