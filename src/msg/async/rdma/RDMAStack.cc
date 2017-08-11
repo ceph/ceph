@@ -19,6 +19,7 @@
 #include <sys/resource.h>
 
 #include "include/str_list.h"
+#include "common/Cycles.h"
 #include "common/deleter.h"
 #include "common/Tub.h"
 #include "RDMAStack.h"
@@ -82,6 +83,7 @@ RDMADispatcher::RDMADispatcher(CephContext* c, RDMAStack* s)
 
   perf_logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perf_logger);
+  Cycles::init();
 }
 
 void RDMADispatcher::polling_start()
@@ -156,7 +158,7 @@ void RDMADispatcher::polling()
   std::vector<ibv_wc> tx_cqe;
   ldout(cct, 20) << __func__ << " going to poll tx cq: " << tx_cq << " rx cq: " << rx_cq << dendl;
   RDMAConnectedSocketImpl *conn = nullptr;
-  utime_t last_inactive = ceph_clock_now();
+  uint64_t last_inactive = Cycles::rdtsc();
   bool rearmed = false;
   int r = 0;
 
@@ -232,7 +234,8 @@ void RDMADispatcher::polling()
       if (!num_qp_conn && done)
         break;
 
-      if ((ceph_clock_now() - last_inactive).to_nsec() / 1000 > cct->_conf->ms_async_rdma_polling_us) {
+      uint64_t now = Cycles::rdtsc();
+      if (Cycles::to_microseconds(now - last_inactive) > cct->_conf->ms_async_rdma_polling_us) {
         handle_async_event();
         if (!rearmed) {
           // Clean up cq events after rearm notify ensure no new incoming event
@@ -264,7 +267,7 @@ void RDMADispatcher::polling()
           ldout(cct, 20) << __func__ << " got tx cq event." << dendl;
         if (r > 0 && rx_cc->get_cq_event())
           ldout(cct, 20) << __func__ << " got rx cq event." << dendl;
-        last_inactive = ceph_clock_now();
+        last_inactive = Cycles::rdtsc();
         perf_logger->set(l_msgr_rdma_polling, 1);
         rearmed = false;
       }
