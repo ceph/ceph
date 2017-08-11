@@ -2849,7 +2849,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     t.remove_collection(cid);
     cerr << "Invalid rm coll" << std::endl;
     PrCtl unset_dumpable;
-    EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), ".*Directory not empty.*");
+    EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), "");
   }
   {
     ObjectStore::Transaction t;
@@ -2871,7 +2871,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     t.remove(cid, hoid2);
     t.remove_collection(cid);
     PrCtl unset_dumpable;
-    EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), ".*Directory not empty.*");
+    EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), "");
   }
   {
     ObjectStore::Transaction t;
