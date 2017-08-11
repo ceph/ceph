@@ -201,6 +201,18 @@ function TEST_mon_classes() {
     # test set-device-class implicitly change class
     ceph osd crush set-device-class hdd osd.0 || return 1
     expect_failure $dir EBUSY ceph osd crush set-device-class nvme osd.0 || return 1
+
+    # test class rename
+    ceph osd crush rm-device-class all || return 1
+    ceph osd crush set-device-class class_1 all || return 1
+    ceph osd crush class ls | grep 'class_1' || return 1
+    ceph osd crush tree --show-shadow | grep 'class_1' || return 1
+    ceph osd crush rule create-replicated class_1_rule default host class_1 || return 1
+    ceph osd crush class rename class_1 class_2
+    ceph osd crush class ls | grep 'class_1' && return 1
+    ceph osd crush tree --show-shadow | grep 'class_1' && return 1
+    ceph osd crush class ls | grep 'class_2' || return 1
+    ceph osd crush tree --show-shadow | grep 'class_2' || return 1
 }
 
 main crush-classes "$@"
