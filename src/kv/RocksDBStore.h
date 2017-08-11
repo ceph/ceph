@@ -78,6 +78,7 @@ class RocksDBStore : public KeyValueDB {
   uint64_t cache_size = 0;
   bool set_cache_flag = false;
 
+  int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
   int do_open(ostream &out, bool create_if_missing);
 
   // manage async compactions
