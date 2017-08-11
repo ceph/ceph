@@ -1493,8 +1493,8 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 
   CInode *oldin = new CInode(this, true, in->first, last);
   oldin->inode = *in->get_previous_projected_inode();
-  oldin->symlink = in->symlink;
   oldin->xattrs = *in->get_previous_projected_xattrs();
+  oldin->symlink = in->symlink;
   oldin->inode.trim_client_ranges(last);
 
   if (in->first < in->oldest_snap)
@@ -1581,9 +1581,14 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     dnl = dn->get_projected_linkage();
   assert(!dnl->is_null());
 
-  if (dnl->is_primary() && dnl->get_inode()->is_multiversion()) {
+  CInode *in = dnl->is_primary() ? dnl->get_inode() : NULL;
+  bool cow_head = false;
+  if (in && in->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
+    assert(in->is_frozen_inode());
+    cow_head = true;
+  }
+  if (in && (in->is_multiversion() || cow_head)) {
     // multiversion inode.
-    CInode *in = dnl->get_inode();
     SnapRealm *realm = NULL;
 
     if (in->get_projected_parent_dn() != dn) {
@@ -1604,7 +1609,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	  // FIXME: adjust link count here?  hmm.
 
 	  if (dir_follows+1 > in->first)
-	    in->cow_old_inode(dir_follows, false);
+	    in->cow_old_inode(dir_follows, cow_head);
 	}
       }
 
@@ -1631,7 +1636,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       return;
     }
 
-    in->cow_old_inode(follows, false);
+    in->cow_old_inode(follows, cow_head);
 
   } else {
     SnapRealm *realm = dn->dir->inode->find_snaprealm();
@@ -1647,8 +1652,6 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     // update dn.first before adding old dentry to cdir's map
     snapid_t oldfirst = dn->first;
     dn->first = follows+1;
-
-    CInode *in = dnl->is_primary() ? dnl->get_inode() : NULL;
 
     if (!realm->has_snaps_in_range(oldfirst, follows)) {
       dout(10) << "journal_cow_dentry no snapshot follows " << follows << " on " << *dn << dendl;
