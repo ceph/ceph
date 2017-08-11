@@ -79,7 +79,7 @@ DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
 DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
 
-OSD_METADATA = ('id', 'device_class')
+OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr', 'weight')
 
 POOL_METADATA= ('pool_id', 'name')
 
@@ -394,7 +394,6 @@ class Module(MgrModule):
             reported_states = [s[0] for s in reported_pg_s]
             for state in PG_STATES:
                 path = 'pg_{}'.format(state)
-                self.log.debug('rep_pgs: {}'.format(reported_pg_s))
                 if state not in reported_states:
                     self.metrics[path].set(0, (osd,))
 
@@ -403,8 +402,17 @@ class Module(MgrModule):
         osd_dev = self.get('osd_map_crush')['devices']
         for osd in osd_map['osds']:
             id_ = osd['osd']
+            p_addr = osd['public_addr']
+            c_addr = osd['cluster_addr']
+            w = osd['weight']
             dev_class = next((osd for osd in osd_dev if osd['id'] == id_))
-            self.metrics['osd_metadata'].set(0, (id_, dev_class['class']))
+            self.metrics['osd_metadata'].set(0, (
+                c_addr,
+                dev_class['class'],
+                id_,
+                p_addr,
+                w
+            ))
 
         for pool in osd_map['pools']:
             id_ = pool['pool']
