@@ -3126,12 +3126,14 @@ void PG::trim_log()
 
 void PG::add_log_entry(const pg_log_entry_t& e, bool applied)
 {
+
+  assert(e.version > info.last_update);
+
   // raise last_complete only if we were previously up to date
   if (info.last_complete == info.last_update)
     info.last_complete = e.version;
   
   // raise last_update.
-  assert(e.version > info.last_update);
   info.last_update = e.version;
 
   // raise user_version, if it increased (it may have not get bumped
