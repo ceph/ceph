@@ -179,11 +179,6 @@ class FsNewHandler : public FileSystemCommandHandler
     pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(metadata);
     assert(metadata_pool != NULL);  // Checked it existed above
 
-    // we must make these checks before we even allow ourselves to *think*
-    // about requesting a proposal to the osdmonitor and bail out now if
-    // we believe we must.  bailing out *after* we request the proposal is
-    // bad business as we could have changed the osdmon's state and ending up
-    // returning an error to the user.
     int r = _check_pool(mon->osdmon()->osdmap, data, false, force, &ss);
     if (r < 0) {
       return r;
@@ -193,11 +188,21 @@ class FsNewHandler : public FileSystemCommandHandler
     if (r < 0) {
       return r;
     }
-
-    mon->osdmon()->do_application_enable(data,
-                                         pg_pool_t::APPLICATION_NAME_CEPHFS);
-    mon->osdmon()->do_application_enable(metadata,
-                                         pg_pool_t::APPLICATION_NAME_CEPHFS);
+    
+    // if we're running as luminous, we have to set the pool application metadata
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS ||
+	mon->osdmon()->pending_inc.new_require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      if (!mon->osdmon()->is_writeable()) {
+	// not allowed to write yet, so retry when we can
+	mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
+	return -EAGAIN;
+      }
+      mon->osdmon()->do_application_enable(data,
+					   pg_pool_t::APPLICATION_NAME_CEPHFS);
+      mon->osdmon()->do_application_enable(metadata,
+					   pg_pool_t::APPLICATION_NAME_CEPHFS);
+      mon->osdmon()->propose_pending();
+    }
 
     // All checks passed, go ahead and create.
     fsmap.create_filesystem(fs_name, metadata, data,
