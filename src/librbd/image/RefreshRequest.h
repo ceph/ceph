@@ -52,6 +52,9 @@ private:
    *    \-----> V2_GET_MUTABLE_METADATA                    <apply>
    *                |                                         |
    *                v                                         |
+   *            V2_GET_METADATA                               |
+   *                |                                         |
+   *                v                                         |
    *            V2_GET_FLAGS                                  |
    *                |                                         |
    *                v                                         |
@@ -127,6 +130,10 @@ private:
   uint64_t m_features;
   uint64_t m_incompatible_features;
   uint64_t m_flags;
+
+  std::string m_last_metadata_key;
+  std::map<std::string, bufferlist> m_metadata;
+
   std::string m_object_prefix;
   ParentInfo m_parent_md;
   cls::rbd::GroupSpec m_group_spec;
@@ -162,6 +169,9 @@ private:
 
   void send_v2_get_mutable_metadata();
   Context *handle_v2_get_mutable_metadata(int *result);
+
+  void send_v2_get_metadata();
+  Context *handle_v2_get_metadata(int *result);
 
   void send_v2_get_flags();
   Context *handle_v2_get_flags(int *result);
