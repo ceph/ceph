@@ -1248,8 +1248,8 @@ def healthy(ctx, config):
 
     try:
         manager.flush_all_pg_stats()
-    except run.CommandFailedError:
-        log.info('ignoring flush pg stats error, probably testing upgrade')
+    except (run.CommandFailedError, Exception) as e:
+        log.info('ignoring flush pg stats error, probably testing upgrade: %s', e)
     manager.wait_for_clean()
 
     log.info('Waiting until ceph cluster %s is healthy...', cluster_name)

@@ -728,7 +728,7 @@ int64_t BlueStore::GarbageCollector::estimate(
 
       // update gc_start_offset/gc_end_offset if needed
       gc_start_offset = min(gc_start_offset, (uint64_t)it->e.blob_start());
-      gc_end_offset = max(gc_end_offset, (uint64_t)it->e.blob_end());
+      gc_end_offset = ceph::max(gc_end_offset, (uint64_t)it->e.blob_end());
 
       auto o = it->e.logical_offset;
       auto l = it->e.length;
@@ -2676,7 +2676,10 @@ void BlueStore::ExtentMap::dirty_range(
     return;
   }
   auto start = seek_shard(offset);
-  auto last = seek_shard(offset + length);
+  if (length == 0) {
+    length = 1;
+  }
+  auto last = seek_shard(offset + length - 1);
   if (start < 0)
     return;
 
@@ -8073,7 +8076,7 @@ void BlueStore::_txc_finish(TransContext *txc)
   if (submit_deferred) {
     // we're pinning memory; flush!  we could be more fine-grained here but
     // i'm not sure it's worth the bother.
-    deferred_submit_all();
+    deferred_try_submit();
   }
 
   if (empty && osr->zombie) {
@@ -8136,7 +8139,7 @@ void BlueStore::_osr_drain_all()
   ++deferred_aggressive;
   {
     // submit anything pending
-    deferred_submit_all();
+    deferred_try_submit();
   }
   {
     // wake up any previously finished deferred events
@@ -8546,7 +8549,7 @@ void BlueStore::_kv_finalize_thread()
       if (!deferred_aggressive) {
 	if (deferred_queue_size >= deferred_batch_ops.load() ||
 	    throttle_deferred_bytes.past_midpoint()) {
-	  deferred_submit_all();
+	  deferred_try_submit();
 	}
       }
 
@@ -8575,7 +8578,7 @@ void BlueStore::_deferred_queue(TransContext *txc)
   dout(20) << __func__ << " txc " << txc << " osr " << txc->osr << dendl;
   deferred_lock.lock();
   if (!txc->osr->deferred_pending &&
-      txc->osr->deferred_running.empty()) {
+      !txc->osr->deferred_running) {
     deferred_queue.push_back(*txc->osr);
   }
   if (!txc->osr->deferred_pending) {
@@ -8593,14 +8596,15 @@ void BlueStore::_deferred_queue(TransContext *txc)
 	cct, wt.seq, e.offset, e.length, p);
     }
   }
-  if (deferred_aggressive) {
+  if (deferred_aggressive &&
+      !txc->osr->deferred_running) {
     _deferred_submit_unlock(txc->osr.get());
   } else {
     deferred_lock.unlock();
   }
 }
 
-void BlueStore::deferred_submit_all()
+void BlueStore::deferred_try_submit()
 {
   dout(20) << __func__ << " " << deferred_queue.size() << " osrs, "
 	   << deferred_queue_size << " txcs" << dendl;
@@ -8611,7 +8615,7 @@ void BlueStore::deferred_submit_all()
     osrs.push_back(&osr);
   }
   for (auto& osr : osrs) {
-    if (osr->deferred_pending) {
+    if (osr->deferred_pending && !osr->deferred_running) {
       _deferred_submit_unlock(osr.get());
       deferred_lock.lock();
     }
@@ -8620,15 +8624,17 @@ void BlueStore::deferred_submit_all()
 
 void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
 {
-  auto b = osr->deferred_pending;
-  dout(10) << __func__ << " osr " << osr << " b " << b
+  dout(10) << __func__ << " osr " << osr
 	   << " " << osr->deferred_pending->iomap.size() << " ios pending "
 	   << dendl;
-  assert(b);
+  assert(osr->deferred_pending);
+  assert(!osr->deferred_running);
+
+  auto b = osr->deferred_pending;
   deferred_queue_size -= b->seq_bytes.size();
   assert(deferred_queue_size >= 0);
 
-  osr->deferred_running.push_back(osr->deferred_pending);
+  osr->deferred_running = osr->deferred_pending;
   osr->deferred_pending = nullptr;
 
   uint64_t start = 0, pos = 0;
@@ -8671,21 +8677,24 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
   bdev->aio_submit(&b->ioc);
 }
 
-void BlueStore::_deferred_aio_finish(DeferredBatch *b)
+void BlueStore::_deferred_aio_finish(OpSequencer *osr)
 {
-  OpSequencer *osr = b->osr;
-  dout(10) << __func__ << " osr " << osr << " b " << b << dendl;
+  dout(10) << __func__ << " osr " << osr << dendl;
+  assert(osr->deferred_running);
+  DeferredBatch *b = osr->deferred_running;
 
   {
     std::lock_guard<std::mutex> l(deferred_lock);
-    auto p = std::find(osr->deferred_running.begin(),
-		       osr->deferred_running.end(),
-		       b);
-    assert(p != osr->deferred_running.end());
-    osr->deferred_running.erase(p);
-    if (osr->deferred_running.empty() && !osr->deferred_pending) {
+    assert(osr->deferred_running == b);
+    osr->deferred_running = nullptr;
+    if (!osr->deferred_pending) {
       auto q = deferred_queue.iterator_to(*osr);
       deferred_queue.erase(q);
+    } else if (deferred_aggressive) {
+      dout(20) << __func__ << " queuing async deferred_try_submit" << dendl;
+      finishers[0]->queue(new FunctionContext([&](int) {
+	    deferred_try_submit();
+	  }));
     }
   }
 
@@ -8822,7 +8831,7 @@ int BlueStore::queue_transactions(
       dout(10) << __func__ << " failed get throttle_deferred_bytes, aggressive"
 	       << dendl;
       ++deferred_aggressive;
-      deferred_submit_all();
+      deferred_try_submit();
       throttle_deferred_bytes.get(txc->cost);
       --deferred_aggressive;
    }

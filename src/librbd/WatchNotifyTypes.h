@@ -228,7 +228,7 @@ struct SnapRenamePayload : public SnapPayloadBase {
 		    const std::string &dst_name)
     : SnapPayloadBase(cls::rbd::UserSnapshotNamespace(), dst_name), snap_id(src_snap_id) {}
 
-  uint64_t snap_id;
+  uint64_t snap_id = 0;
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);

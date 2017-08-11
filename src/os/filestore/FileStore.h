@@ -616,8 +616,6 @@ public:
   int _fgetattrs(int fd, map<string,bufferptr>& aset);
   int _fsetattrs(int fd, map<string, bufferptr> &aset);
 
-  void _start_sync();
-
   void do_force_sync();
   void start_sync(Context *onsafe);
   void sync();

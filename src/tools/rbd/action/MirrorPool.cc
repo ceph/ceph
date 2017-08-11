@@ -459,7 +459,8 @@ public:
       m_factory(std::bind(ImageRequestAllocator<RequestT>(),
                           std::ref(m_io_ctx), std::ref(m_throttle),
                           std::placeholders::_1, std::forward<Args>(args)...)),
-      m_throttle(g_conf->rbd_concurrent_management_ops, true) {
+      m_throttle(g_conf->get_val<int64_t>("rbd_concurrent_management_ops"),
+                 true) {
   }
 
   int execute() {

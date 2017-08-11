@@ -33,6 +33,7 @@ fi
 if [ `uname` = FreeBSD ]; then
     SED=gsed
     DIFFCOLOPTS=""
+    KERNCORE="kern.corefile"
 else
     SED=sed
     termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
@@ -40,6 +41,7 @@ else
         termwidth="-W ${termwidth}"
     fi
     DIFFCOLOPTS="-y $termwidth"
+    KERNCORE="kernel.core_pattern"
 fi
 
 EXTRA_OPTS=""
@@ -152,13 +154,43 @@ function test_setup() {
 #
 function teardown() {
     local dir=$1
+    local dumplogs=$2
     kill_daemons $dir KILL
     if [ `uname` != FreeBSD ] \
         && [ $(stat -f -c '%T' .) == "btrfs" ]; then
         __teardown_btrfs $dir
     fi
+    local cores="no"
+    local pattern="$(sysctl -n $KERNCORE)"
+    # See if we have apport core handling
+    if [ "${pattern:0:1}" = "|" ]; then
+      # TODO: Where can we get the dumps?
+      # Not sure where the dumps really are so this will look in the CWD
+      pattern=""
+    fi
+    # Local we start with core and teuthology ends with core
+    if ls $(dirname $pattern) | grep -q '^core\|core$' ; then
+        cores="yes"
+        if [ -n "$LOCALRUN" ]; then
+	    mkdir /tmp/cores.$$ 2> /dev/null || true
+	    for i in $(ls $(dirname $(sysctl -n $KERNCORE)) | grep '^core\|core$'); do
+		mv $i /tmp/cores.$$
+	    done
+        fi
+    fi
+    if [ "$cores" = "yes" -o "$dumplogs" = "1" ]; then
+        display_logs $dir
+    fi
     rm -fr $dir
     rm -rf $(get_asok_dir)
+    if [ "$cores" = "yes" ]; then
+        echo "ERROR: Failure due to cores found"
+        if [ -n "$LOCALRUN" ]; then
+	    echo "Find saved core files in /tmp/cores.$$"
+        fi
+        return 1
+    fi
+    return 0
 }
 
 function __teardown_btrfs() {
@@ -406,6 +438,7 @@ function run_mon() {
         --id $id \
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
+        --mon-data-avail-warn=5 \
         --paxos-propose-interval=0.1 \
         --osd-crush-chooseleaf-type=0 \
         $EXTRA_OPTS \
@@ -472,8 +505,13 @@ function test_run_mon() {
 
 function create_rbd_pool() {
     ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
-    ceph osd pool create rbd $PG_NUM || return 1
+    create_pool rbd $PG_NUM || return 1
     rbd pool init rbd
+}
+
+function create_pool() {
+    ceph osd pool create "$@"
+    sleep 1
 }
 
 #######################################################################
@@ -1266,7 +1304,7 @@ function test_get_last_scrub_stamp() {
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
-    stamp=$(get_last_scrub_stamp 2.0)
+    stamp=$(get_last_scrub_stamp 1.0)
     test -n "$stamp" || return 1
     teardown $dir || return 1
 }
@@ -1466,9 +1504,9 @@ function test_repair() {
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
-    repair 2.0 || return 1
+    repair 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=1 repair 2.0 || return 1
+    ! TIMEOUT=1 repair 1.0 || return 1
     teardown $dir || return 1
 }
 #######################################################################
@@ -1506,9 +1544,9 @@ function test_pg_scrub() {
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
-    pg_scrub 2.0 || return 1
+    pg_scrub 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=1 pg_scrub 2.0 || return 1
+    ! TIMEOUT=1 pg_scrub 1.0 || return 1
     teardown $dir || return 1
 }
 
@@ -1581,7 +1619,7 @@ function wait_for_scrub() {
     local sname=${3:-last_scrub_stamp}
 
     for ((i=0; i < $TIMEOUT; i++)); do
-        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid $sname)" ; then
+        if test "$(get_last_scrub_stamp $pgid $sname)" '>' "$last_scrub" ; then
             return 0
         fi
         sleep 1
@@ -1598,7 +1636,7 @@ function test_wait_for_scrub() {
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
-    local pgid=2.0
+    local pgid=1.0
     ceph pg repair $pgid
     local last_scrub=$(get_last_scrub_stamp $pgid)
     wait_for_scrub $pgid "$last_scrub" || return 1
@@ -1796,6 +1834,7 @@ function test_flush_pg_stats()
     bytes_used=`ceph df detail --format=json | jq "$jq_filter.bytes_used"`
     test $raw_bytes_used > 0 || return 1
     test $raw_bytes_used == $bytes_used || return 1
+    teardown $dir
 }
 
 #######################################################################
@@ -1840,10 +1879,9 @@ function main() {
     if run $dir "$@" ; then
         code=0
     else
-        display_logs $dir
         code=1
     fi
-    teardown $dir || return 1
+    teardown $dir $code || return 1
     return $code
 }
 
@@ -1858,7 +1896,7 @@ function run_tests() {
 
     export CEPH_MON="127.0.0.1:7109" # git grep '\<7109\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+=" --fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     export CEPH_CONF=/dev/null
 
@@ -1866,13 +1904,17 @@ function run_tests() {
     local dir=td/ceph-helpers
 
     for func in $funcs ; do
-        $func $dir || return 1
+        if ! $func $dir; then
+            teardown $dir 1
+            return 1
+        fi
     done
 }
 
 if test "$1" = TESTS ; then
     shift
     run_tests "$@"
+    exit $?
 fi
 
 # NOTE:
@@ -1913,6 +1955,37 @@ function jq_success() {
     return 0
   fi
   return 1
+}
+
+function inject_eio() {
+    local pooltype=$1
+    shift
+    local which=$1
+    shift
+    local poolname=$1
+    shift
+    local objname=$1
+    shift
+    local dir=$1
+    shift
+    local shard_id=$1
+    shift
+
+    local -a initial_osds=($(get_osds $poolname $objname))
+    local osd_id=${initial_osds[$shard_id]}
+    if [ "$pooltype" != "ec" ]; then
+        shard_id=""
+    fi
+    set_config osd $osd_id filestore_debug_inject_read_err true || return 1
+    local loop=0
+    while ( CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.$osd_id) \
+             inject${which}err $poolname $objname $shard_id | grep -q Invalid ); do
+        loop=$(expr $loop + 1)
+        if [ $loop = "10" ]; then
+            return 1
+        fi
+        sleep 1
+    done
 }
 
 # Local Variables:

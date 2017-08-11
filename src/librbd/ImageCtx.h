@@ -196,6 +196,7 @@ namespace librbd {
     bool mirroring_resync_after_disconnect;
     int mirroring_replay_delay;
     bool skip_partial_discard;
+    bool blkin_trace_all;
 
     LibrbdAdminSocketHook *asok_hook;
 

@@ -27,8 +27,6 @@
 class PMEMDevice : public BlockDevice {
   int fd;
   char *addr; //the address of mmap
-  uint64_t size;
-  uint64_t block_size;
   std::string path;
 
   Mutex debug_lock;
@@ -42,13 +40,6 @@ public:
 
 
   void aio_submit(IOContext *ioc) override;
-
-  uint64_t get_size() const override {
-    return size;
-  }
-  uint64_t get_block_size() const override {
-    return block_size;
-  }
 
   int collect_metadata(std::string prefix, map<std::string,std::string> *pm) const override;
 

@@ -3115,7 +3115,7 @@ class RGWDataNotifier : public RGWRadosThread {
   RGWDataNotifierManager notify_mgr;
 
   uint64_t interval_msec() override {
-    return cct->_conf->rgw_md_notify_interval_msec;
+    return cct->_conf->get_val<int64_t>("rgw_data_notify_interval_msec");
   }
 public:
   RGWDataNotifier(RGWRados *_store) : RGWRadosThread(_store, "data-notifier"), notify_mgr(_store) {}

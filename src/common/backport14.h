@@ -118,11 +118,27 @@ not_fn_result<F> not_fn(F&& fn) {
   return not_fn_result<F>(std::forward<F>(fn));
 }
 
+struct in_place_t {};
+constexpr in_place_t in_place{};
+
+template<typename T>
+struct in_place_type_t {};
+
+#ifdef __cpp_variable_templates
+template<typename T>
+constexpr in_place_type_t<T> in_place_type{};
+#endif // __cpp_variable_templates
 } // namespace _backport17
 using _backport14::make_unique;
 using _backport17::size;
 using _backport14::max;
 using _backport17::not_fn;
+using _backport17::in_place_t;
+using _backport17::in_place;
+using _backport17::in_place_type_t;
+#ifdef __cpp_variable_templates
+using _backport17::in_place_type;
+#endif // __cpp_variable_templates
 } // namespace ceph
 
 #endif // CEPH_COMMON_BACKPORT14_H

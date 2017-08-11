@@ -200,7 +200,7 @@ void ImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
 				 bool native_async) {
   CephContext *cct = m_image_ctx.cct;
   ZTracer::Trace trace;
-  if (cct->_conf->rbd_blkin_trace_all) {
+  if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: read", &m_image_ctx.trace_endpoint);
     trace.event("start");
   }
@@ -241,7 +241,7 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
 				  bool native_async) {
   CephContext *cct = m_image_ctx.cct;
   ZTracer::Trace trace;
-  if (cct->_conf->rbd_blkin_trace_all) {
+  if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: write", &m_image_ctx.trace_endpoint);
     trace.event("init");
   }
@@ -278,7 +278,7 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
 				    bool native_async) {
   CephContext *cct = m_image_ctx.cct;
   ZTracer::Trace trace;
-  if (cct->_conf->rbd_blkin_trace_all) {
+  if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: discard", &m_image_ctx.trace_endpoint);
     trace.event("init");
   }
@@ -313,7 +313,7 @@ template <typename I>
 void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
   CephContext *cct = m_image_ctx.cct;
   ZTracer::Trace trace;
-  if (cct->_conf->rbd_blkin_trace_all) {
+  if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: flush", &m_image_ctx.trace_endpoint);
     trace.event("init");
   }
@@ -346,7 +346,7 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
 				      int op_flags, bool native_async) {
   CephContext *cct = m_image_ctx.cct;
   ZTracer::Trace trace;
-  if (cct->_conf->rbd_blkin_trace_all) {
+  if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: writesame", &m_image_ctx.trace_endpoint);
     trace.event("init");
   }
@@ -387,7 +387,7 @@ void ImageRequestWQ<I>::aio_compare_and_write(AioCompletion *c,
                                               int op_flags, bool native_async) {
   CephContext *cct = m_image_ctx.cct;
   ZTracer::Trace trace;
-  if (cct->_conf->rbd_blkin_trace_all) {
+  if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: compare_and_write", &m_image_ctx.trace_endpoint);
     trace.event("init");
   }

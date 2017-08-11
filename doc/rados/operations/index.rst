@@ -58,6 +58,7 @@ with new hardware.
 
 	add-or-rm-osds
 	add-or-rm-mons
+	bluestore-migration
 	Command Reference <control>
 
 	
