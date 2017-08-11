@@ -286,8 +286,8 @@ int main(int argc, const char **argv)
 	   << g_conf->osd_data << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
-    derr << "created object store " << g_conf->osd_data
-	 << " for osd." << whoami << " fsid " << mc.monmap.fsid << dendl;
+    dout(0) << "created object store " << g_conf->osd_data
+	    << " for osd." << whoami << " fsid " << mc.monmap.fsid << dendl;
   }
   if (mkkey) {
     common_init_finish(g_ceph_context);
