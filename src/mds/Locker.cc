@@ -229,13 +229,51 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 
   // xlocks
   for (set<SimpleLock*>::iterator p = xlocks.begin(); p != xlocks.end(); ++p) {
-    dout(20) << " must xlock " << **p << " " << *(*p)->get_parent() << dendl;
-    sorted.insert(*p);
-    mustpin.insert((*p)->get_parent());
+    SimpleLock *lock = *p;
+
+    if ((lock->get_type() == CEPH_LOCK_ISNAP ||
+         lock->get_type() == CEPH_LOCK_IPOLICY) &&
+	mds->is_cluster_degraded() &&
+	mdr->is_master() &&
+	!mdr->is_replay()) {
+      // waiting for recovering mds, to guarantee replayed requests and mksnap/setlayout
+      // get processed in proper order.
+      bool wait = false;
+      if (lock->get_parent()->is_auth()) {
+	if (!mdr->locks.count(lock)) {
+	  set<mds_rank_t> ls;
+	  lock->get_parent()->list_replicas(ls);
+	  for (auto m : ls) {
+	    if (mds->mdsmap->get_state(m) < MDSMap::STATE_ACTIVE) {
+	      wait = true;
+	      break;
+	    }
+	  }
+	}
+      } else {
+	// if the lock is the latest locked one, it's possible that slave mds got the lock
+	// while there are recovering mds.
+	if (!mdr->locks.count(lock) || lock == *mdr->locks.rbegin())
+	  wait = true;
+      }
+      if (wait) {
+	dout(10) << " must xlock " << *lock << " " << *lock->get_parent()
+		 << ", waiting for cluster recovered" << dendl;
+	mds->locker->drop_locks(mdr.get(), NULL);
+	mdr->drop_local_auth_pins();
+	mds->wait_for_cluster_recovered(new C_MDS_RetryRequest(mdcache, mdr));
+	return false;
+      }
+    }
+
+    dout(20) << " must xlock " << *lock << " " << *lock->get_parent() << dendl;
+
+    sorted.insert(lock);
+    mustpin.insert(lock->get_parent());
 
     // augment xlock with a versionlock?
     if ((*p)->get_type() == CEPH_LOCK_DN) {
-      CDentry *dn = (CDentry*)(*p)->get_parent();
+      CDentry *dn = (CDentry*)lock->get_parent();
       if (!dn->is_auth())
 	continue;
 
@@ -252,9 +290,9 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	sorted.insert(&dn->versionlock);
       }
     }
-    if ((*p)->get_type() > CEPH_LOCK_IVERSION) {
+    if (lock->get_type() > CEPH_LOCK_IVERSION) {
       // inode version lock?
-      CInode *in = (CInode*)(*p)->get_parent();
+      CInode *in = (CInode*)lock->get_parent();
       if (!in->is_auth())
 	continue;
       if (mdr->is_master()) {
@@ -762,18 +800,25 @@ void Locker::drop_non_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue)
     issue_caps_set(*pneed_issue);
 }
 
-void Locker::drop_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue)
+void Locker::drop_rdlocks_for_early_reply(MutationImpl *mut)
 {
-  set<CInode*> my_need_issue;
-  if (!pneed_issue)
-    pneed_issue = &my_need_issue;
+  set<CInode*> need_issue;
 
-  _drop_rdlocks(mut, pneed_issue);
+  for (auto p = mut->rdlocks.begin(); p != mut->rdlocks.end(); ) {
+    SimpleLock *lock = *p;
+    ++p;
+    // make later mksnap/setlayout (at other mds) wait for this unsafe request
+    if (lock->get_type() == CEPH_LOCK_ISNAP ||
+	lock->get_type() == CEPH_LOCK_IPOLICY)
+      continue;
+    bool ni = false;
+    rdlock_finish(lock, mut, &ni);
+    if (ni)
+      need_issue.insert(static_cast<CInode*>(lock->get_parent()));
+  }
 
-  if (pneed_issue == &my_need_issue)
-    issue_caps_set(*pneed_issue);
+  issue_caps_set(need_issue);
 }
-
 
 // generics
 
