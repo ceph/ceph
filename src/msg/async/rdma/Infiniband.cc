@@ -778,7 +778,7 @@ int Infiniband::MemoryManager::get_send_buffers(std::vector<Chunk*> &c, size_t b
   return send->get_buffers(c, bytes);
 }
 
-bool Infiniband::init_prereq = false;
+static std::atomic<bool> init_prereq = {false};
 
 void Infiniband::verify_prereq(CephContext *cct) {
 
@@ -792,7 +792,7 @@ void Infiniband::verify_prereq(CephContext *cct) {
    ldout(cct, 20) << __func__ << " ms_async_rdma_enable_hugepage value is: " << cct->_conf->ms_async_rdma_enable_hugepage <<  dendl;
    if (cct->_conf->ms_async_rdma_enable_hugepage){
      rc =  setenv("RDMAV_HUGEPAGES_SAFE","1",1);
-     ldout(cct, 20) << __func__ << " RDMAV_HUGEPAGES_SAFE is set as: " << getenv("RDMAV_HUGEPAGES_SAFE") <<  dendl;
+     ldout(cct, 0) << __func__ << " RDMAV_HUGEPAGES_SAFE is set as: " << getenv("RDMAV_HUGEPAGES_SAFE") <<  dendl;
      if (rc) {
        lderr(cct) << __func__ << " failed to export RDMA_HUGEPAGES_SAFE. On RDMA must be exported before using huge pages. Application aborts." << dendl;
        ceph_abort();
