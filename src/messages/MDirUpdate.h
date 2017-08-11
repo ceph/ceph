@@ -19,10 +19,10 @@
 #include "msg/Message.h"
 
 class MDirUpdate : public Message {
-  mds_rank_t from_mds;
+  mds_rank_t from_mds = -1;
   dirfrag_t dirfrag;
-  int32_t dir_rep;
-  int32_t discover;
+  int32_t dir_rep = 5;
+  int32_t discover = 5;
   compact_set<int32_t> dir_rep_by;
   filepath path;
   int tried_discover;

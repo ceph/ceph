@@ -19,7 +19,7 @@
 #include "include/types.h"
 
 class MExportDirDiscover : public Message {
-  mds_rank_t from;
+  mds_rank_t from = -1;
   dirfrag_t dirfrag;
   filepath path;
 
