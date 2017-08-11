@@ -610,11 +610,8 @@ void RDMAConnectedSocketImpl::cleanup() {
 
 void RDMAConnectedSocketImpl::notify()
 {
-  uint64_t i = 1;
-  int ret;
-
-  ret = write(notify_fd, &i, sizeof(i));
-  assert(ret = sizeof(i));
+  int i = 1;
+  assert(sizeof(i) == write(notify_fd, &i, sizeof(i)));
 }
 
 void RDMAConnectedSocketImpl::shutdown()
