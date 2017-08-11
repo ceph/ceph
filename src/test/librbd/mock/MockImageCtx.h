@@ -203,6 +203,7 @@ struct MockImageCtx {
                                          size_t, uint64_t, Context *, int, ZTracer::Trace *));
   MOCK_METHOD8(write_to_cache, void(object_t, const bufferlist&, size_t,
                                     uint64_t, Context *, int, uint64_t, ZTracer::Trace *));
+  MOCK_METHOD1(apply_metadata, int(const std::map<std::string, bufferlist> &));
 
   ImageCtx *image_ctx;
   CephContext *cct;

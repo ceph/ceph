@@ -122,6 +122,9 @@ private:
 
   bufferlist m_out_bl;
 
+  std::string m_last_metadata_key;
+  std::map<std::string, bufferlist> m_metadata;
+
   uint8_t m_order;
   uint64_t m_size;
   uint64_t m_features;
@@ -162,6 +165,9 @@ private:
 
   void send_v2_get_mutable_metadata();
   Context *handle_v2_get_mutable_metadata(int *result);
+
+  void send_v2_apply_metadata();
+  Context *handle_v2_apply_metadata(int *result);
 
   void send_v2_get_flags();
   Context *handle_v2_get_flags(int *result);
