@@ -817,9 +817,21 @@ struct C_Committed : public Context {
   void finish(int r) override {
     assert(r >= 0);
     Mutex::Locker l(paxos->mon->lock);
+    if (paxos->is_shutdown()) {
+      paxos->abort_commit();
+      return;
+    }
     paxos->commit_finish();
   }
 };
+
+void Paxos::abort_commit()
+{
+  assert(commits_started > 0);
+  --commits_started;
+  if (commits_started == 0)
+    shutdown_cond.Signal();
+}
 
 void Paxos::commit_start()
 {
@@ -855,6 +867,7 @@ void Paxos::commit_start()
     state = STATE_WRITING;
   else
     ceph_abort();
+  ++commits_started;
 
   if (mon->get_quorum().size() > 1) {
     // cancel timeout event
@@ -910,6 +923,8 @@ void Paxos::commit_finish()
   // it doesn't need to flush the store queue
   assert(is_writing() || is_writing_previous());
   state = STATE_REFRESH;
+  assert(commits_started > 0);
+  --commits_started;
 
   if (do_refresh()) {
     commit_proposal();
@@ -1301,8 +1316,16 @@ void Paxos::shutdown()
 {
   dout(10) << __func__ << " cancel all contexts" << dendl;
 
+  state = STATE_SHUTDOWN;
+
   // discard pending transaction
   pending_proposal.reset();
+
+  // Let store finish commits in progress
+  // XXX: I assume I can't use finish_contexts() because the store
+  // is going to trigger
+  while(commits_started > 0)
+    shutdown_cond.Wait(mon->lock);
 
   finish_contexts(g_ceph_context, waiting_for_writeable, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_commit, -ECANCELED);
