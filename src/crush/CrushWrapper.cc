@@ -2019,9 +2019,15 @@ bool CrushWrapper::_class_is_dead(int class_id)
 
 void CrushWrapper::cleanup_dead_classes()
 {
-  for (auto &c: class_name) {
-    if (_class_is_dead(c.first))
-      remove_class_name(c.second);
+  auto p = class_name.begin();
+  while (p != class_name.end()) {
+    if (_class_is_dead(p->first)) {
+      string n = p->second;
+      ++p;
+      remove_class_name(n);
+    } else {
+      ++p;
+    }
   }
 }
 
