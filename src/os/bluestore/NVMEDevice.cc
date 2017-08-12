@@ -929,7 +929,7 @@ void NVMEDevice::close()
   dout(1) << __func__ << " end" << dendl;
 }
 
-int NVMEDevice::collect_metadata(string prefix, map<string,string> *pm) const
+int NVMEDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
 {
   (*pm)[prefix + "rotational"] = "0";
   (*pm)[prefix + "size"] = stringify(get_size());

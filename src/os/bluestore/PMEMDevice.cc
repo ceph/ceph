@@ -146,7 +146,7 @@ static string get_dev_property(const char *dev, const char *property)
   return val;
 }
 
-int PMEMDevice::collect_metadata(string prefix, map<string,string> *pm) const
+int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
 {
   (*pm)[prefix + "rotational"] = stringify((int)(bool)rotational);
   (*pm)[prefix + "size"] = stringify(get_size());

@@ -41,7 +41,7 @@ public:
 
   void aio_submit(IOContext *ioc) override;
 
-  int collect_metadata(std::string prefix, map<std::string,std::string> *pm) const override;
+  int collect_metadata(const std::string& prefix, map<std::string,std::string> *pm) const override;
 
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc,

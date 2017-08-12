@@ -115,7 +115,7 @@ public:
   uint64_t get_size() const { return size; }
   uint64_t get_block_size() const { return block_size; }
 
-  virtual int collect_metadata(std::string prefix, std::map<std::string,std::string> *pm) const = 0;
+  virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const = 0;
 
   virtual int read(
     uint64_t off,
