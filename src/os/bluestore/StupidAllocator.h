@@ -9,6 +9,7 @@
 #include "Allocator.h"
 #include "include/btree_interval_set.h"
 #include "os/bluestore/bluestore_types.h"
+#include "include/mempool.h"
 
 class StupidAllocator : public Allocator {
   CephContext* cct;
@@ -17,12 +18,18 @@ class StupidAllocator : public Allocator {
   int64_t num_free;     ///< total bytes in freelist
   int64_t num_reserved; ///< reserved bytes
 
-  std::vector<btree_interval_set<uint64_t> > free;        ///< leading-edge copy
+  typedef mempool::bluestore_alloc::pool_allocator<
+    pair<const uint64_t,uint64_t>> allocator;
+  std::vector<btree_interval_set<uint64_t,allocator>> free;  ///< leading-edge copy
 
   uint64_t last_alloc;
 
   unsigned _choose_bin(uint64_t len);
   void _insert_free(uint64_t offset, uint64_t len);
+
+  uint64_t _aligned_len(
+    btree_interval_set<uint64_t,allocator>::iterator p,
+    uint64_t alloc_unit);
 
 public:
   StupidAllocator(CephContext* cct);

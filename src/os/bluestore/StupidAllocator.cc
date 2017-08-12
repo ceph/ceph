@@ -71,8 +71,9 @@ void StupidAllocator::unreserve(uint64_t unused)
 }
 
 /// return the effective length of the extent if we align to alloc_unit
-static uint64_t aligned_len(btree_interval_set<uint64_t>::iterator p,
-			    uint64_t alloc_unit)
+uint64_t StupidAllocator::_aligned_len(
+  btree_interval_set<uint64_t,allocator>::iterator p,
+  uint64_t alloc_unit)
 {
   uint64_t skew = p.get_start() % alloc_unit;
   if (skew)
@@ -106,7 +107,7 @@ int64_t StupidAllocator::allocate_int(
     for (bin = orig_bin; bin < (int)free.size(); ++bin) {
       p = free[bin].lower_bound(hint);
       while (p != free[bin].end()) {
-	if (aligned_len(p, alloc_unit) >= want_size) {
+	if (_aligned_len(p, alloc_unit) >= want_size) {
 	  goto found;
 	}
 	++p;
@@ -119,7 +120,7 @@ int64_t StupidAllocator::allocate_int(
     p = free[bin].begin();
     auto end = hint ? free[bin].lower_bound(hint) : free[bin].end();
     while (p != end) {
-      if (aligned_len(p, alloc_unit) >= want_size) {
+      if (_aligned_len(p, alloc_unit) >= want_size) {
 	goto found;
       }
       ++p;
@@ -131,7 +132,7 @@ int64_t StupidAllocator::allocate_int(
     for (bin = orig_bin; bin >= 0; --bin) {
       p = free[bin].lower_bound(hint);
       while (p != free[bin].end()) {
-	if (aligned_len(p, alloc_unit) >= alloc_unit) {
+	if (_aligned_len(p, alloc_unit) >= alloc_unit) {
 	  goto found;
 	}
 	++p;
@@ -144,7 +145,7 @@ int64_t StupidAllocator::allocate_int(
     p = free[bin].begin();
     auto end = hint ? free[bin].lower_bound(hint) : free[bin].end();
     while (p != end) {
-      if (aligned_len(p, alloc_unit) >= alloc_unit) {
+      if (_aligned_len(p, alloc_unit) >= alloc_unit) {
 	goto found;
       }
       ++p;
@@ -284,10 +285,10 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
   std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  btree_interval_set<uint64_t> rm;
+  btree_interval_set<uint64_t,allocator> rm;
   rm.insert(offset, length);
   for (unsigned i = 0; i < free.size() && !rm.empty(); ++i) {
-    btree_interval_set<uint64_t> overlap;
+    btree_interval_set<uint64_t,allocator> overlap;
     overlap.intersection_of(rm, free[i]);
     if (!overlap.empty()) {
       dout(20) << __func__ << " bin " << i << " rm 0x" << std::hex << overlap
