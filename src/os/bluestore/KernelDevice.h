@@ -36,8 +36,6 @@ class KernelDevice : public BlockDevice {
   std::mutex flush_mutex;
 
   aio_queue_t aio_queue;
-  aio_callback_t aio_callback;
-  void *aio_callback_priv;
   bool aio_stop;
 
   struct AioCompletionThread : public Thread {
