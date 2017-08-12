@@ -241,12 +241,22 @@ class Thrasher:
                         break
                     log.debug("ceph-objectstore-tool binary not present, trying again")
 
-            proc = exp_remote.run(args=cmd, wait=True,
-                                  check_status=False, stdout=StringIO())
-            if proc.exitstatus:
-                raise Exception("ceph-objectstore-tool: "
-                                "exp list-pgs failure with status {ret}".
-                                format(ret=proc.exitstatus))
+            # ceph-objectstore-tool might bogusly fail with "OSD has the store locked"
+            # see http://tracker.ceph.com/issues/19556
+            with safe_while(sleep=15, tries=40, action="ceph-objectstore-tool --op list-pgs") as proceed:
+                while proceed():
+                    proc = exp_remote.run(args=cmd, wait=True,
+                                          check_status=False,
+                                          stdout=StringIO(), stderr=StringIO())
+                    if proc.exitstatus == 0:
+                        break
+                    elif proc.exitstatus == 1 and proc.stderr == "OSD has the store locked":
+                        continue
+                    else:
+                        raise Exception("ceph-objectstore-tool: "
+                                        "exp list-pgs failure with status {ret}".
+                                        format(ret=proc.exitstatus))
+
             pgs = proc.stdout.getvalue().split('\n')[:-1]
             if len(pgs) == 0:
                 self.log("No PGs found for osd.{osd}".format(osd=exp_osd))
