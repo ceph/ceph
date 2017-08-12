@@ -43,7 +43,8 @@ tasks:
 - print: "****  v10.2.0 about to install"
 - install:
     tag: v10.2.0
-    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librgw2']
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    extra_packages: ['libradosstriper1', 'librgw2', 'python-rados', 'python-cephfs', 'python-rbd', 'libcephfs1']
 - print: "**** done v10.2.0 install"
 - ceph:
    fs: xfs
