@@ -10916,6 +10916,7 @@ int BlueStore::_do_clone_range(
   uint64_t end = srcoff + length;
   uint32_t dirty_range_begin = 0;
   uint32_t dirty_range_end = 0;
+  bool src_dirty = false;
   for (auto ep = oldo->extent_map.seek_lextent(srcoff);
        ep != oldo->extent_map.extent_map.end();
        ++ep) {
@@ -10936,7 +10937,8 @@ int BlueStore::_do_clone_range(
       // make sure it is shared
       if (!blob.is_shared()) {
 	c->make_blob_shared(_assign_blobid(txc), e.blob);
-	if (dirty_range_begin == 0 && dirty_range_end == 0) {
+	if (!src_dirty) {
+	  src_dirty = true;
           dirty_range_begin = e.logical_offset;
         }
         assert(e.logical_end() > 0);
@@ -10988,7 +10990,7 @@ int BlueStore::_do_clone_range(
     dout(20) << __func__ << "  dst " << *ne << dendl;
     ++n;
   }
-  if (dirty_range_end > dirty_range_begin) {
+  if (src_dirty) {
     oldo->extent_map.dirty_range(dirty_range_begin,
       dirty_range_end - dirty_range_begin);
     txc->write_onode(oldo);
