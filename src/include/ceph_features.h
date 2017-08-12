@@ -4,12 +4,13 @@
 #include "sys/types.h"
 
 /*
- * Each time we reclaim bits for reuse we need to specify another bit
- * that, if present, indicates we have the new incarnation of that
- * feature.  Base case is 1 (first use)
+ * Each time we reclaim bits for reuse we need to specify another
+ * bitmask that, if all bits are set, indicates we have the new
+ * incarnation of that feature.  Base case is 1 (first use)
  */
 #define CEPH_FEATURE_INCARNATION_1 (0ull)
-#define CEPH_FEATURE_INCARNATION_2 (1ull<<57) // CEPH_FEATURE_SERVER_JEWEL
+#define CEPH_FEATURE_INCARNATION_2 (1ull<<57)              // SERVER_JEWEL
+#define CEPH_FEATURE_INCARNATION_3 ((1ull<<57)|(1ull<<28)) // SERVER_MIMIC
 
 #define DEFINE_CEPH_FEATURE(bit, incarnation, name)			\
 	const static uint64_t CEPH_FEATURE_##name = (1ULL<<bit);		\
@@ -72,7 +73,7 @@
 DEFINE_CEPH_FEATURE( 0, 1, UID)
 DEFINE_CEPH_FEATURE( 1, 1, NOSRCADDR)
 DEFINE_CEPH_FEATURE_RETIRED( 2, 1, MONCLOCKCHECK, JEWEL, LUMINOUS)
-
+DEFINE_CEPH_FEATURE( 2, 3, SERVER_NAUTILUS)
 DEFINE_CEPH_FEATURE( 3, 1, FLOCK)
 DEFINE_CEPH_FEATURE( 4, 1, SUBSCRIBE2)
 DEFINE_CEPH_FEATURE( 5, 1, MONNAMES)
@@ -111,7 +112,7 @@ DEFINE_CEPH_FEATURE(25, 1, CRUSH_TUNABLES2)
 DEFINE_CEPH_FEATURE(26, 1, CREATEPOOLID)
 DEFINE_CEPH_FEATURE(27, 1, REPLY_CREATE_INODE)
 DEFINE_CEPH_FEATURE_RETIRED(28, 1, OSD_HBMSGS, HAMMER, JEWEL)
-DEFINE_CEPH_FEATURE(28, 2, SERVER_M)
+DEFINE_CEPH_FEATURE(28, 2, SERVER_MIMIC)
 DEFINE_CEPH_FEATURE(29, 1, MDSENC)
 DEFINE_CEPH_FEATURE(30, 1, OSDHASHPSPOOL)
 DEFINE_CEPH_FEATURE(31, 1, MON_SINGLE_PAXOS)  // deprecate me

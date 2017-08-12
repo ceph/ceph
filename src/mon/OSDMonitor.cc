@@ -2195,7 +2195,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   }
 
   // make sure upgrades stop at luminous
-  if (HAVE_FEATURE(m->osd_features, SERVER_M) &&
+  if (HAVE_FEATURE(m->osd_features, SERVER_MIMIC) &&
       osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
     mon->clog->info() << "disallowing boot of post-luminous OSD "
 		      << m->get_orig_source_inst()
