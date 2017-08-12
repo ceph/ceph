@@ -89,6 +89,8 @@ const char *ceph_release_name(int r)
 		return "luminous";
 	case CEPH_RELEASE_MIMIC:
 		return "mimic";
+	case CEPH_RELEASE_NAUTILUS:
+		return "nautilus";
 	default:
 		return "unknown";
 	}
@@ -98,6 +100,9 @@ int ceph_release_from_name(const char *s)
 {
 	if (!s) {
 		return -1;
+	}
+	if (strcmp(s, "nautilus") == 0) {
+		return CEPH_RELEASE_NAUTILUS;
 	}
 	if (strcmp(s, "mimic") == 0) {
 		return CEPH_RELEASE_MIMIC;
