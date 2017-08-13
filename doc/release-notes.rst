@@ -211,6 +211,11 @@ Major Changes from Kraken
     - ``ceph osd {add,rm}-{noout,noin,nodown,noup}`` allow the
       `noout`, `noin`, `nodown`, and `noup` flags to be applied to
       specific OSDs.
+    - ``ceph osd safe-to-destroy <osd(s)>`` will report whether it is safe to
+      remove or destroy OSD(s) without reducing data durability or redundancy.
+    - ``ceph osd ok-to-stop <osd(s)>`` will report whether it is okay to stop
+      OSD(s) without immediately compromising availability (i.e., all PGs
+      should remain active but may be degraded).
     - ``ceph log last [n]`` will output the last *n* lines of the cluster
       log.
     - ``ceph mgr dump`` will dump the MgrMap, including the currently active
