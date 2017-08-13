@@ -54,8 +54,9 @@ def start_rgw(ctx, config, clients):
         frontends = \
             '{frontend} port={port}'.format(frontend=ctx.rgw.frontend,
                                             port=port)
-        if ctx.rgw.frontend_prefix:
-            frontends += ' prefix={pfx}'.format(pfx=ctx.rgw.frontend_prefix)
+        frontend_prefix = client_config.get('frontend_prefix', None)
+        if frontend_prefix:
+            frontends += ' prefix={pfx}'.format(pfx=frontend_prefix)
         rgw_cmd.extend([
             '--rgw-frontends', frontends,
             '-n', client_with_id,
@@ -243,7 +244,6 @@ def task(ctx, config):
     ctx.rgw.erasure_code_profile = config.pop('erasure_code_profile', {})
     ctx.rgw.cache_pools = bool(config.pop('cache-pools', False))
     ctx.rgw.frontend = config.pop('frontend', 'civetweb')
-    ctx.rgw.frontend_prefix = config.pop('frontend_prefix', None)
     ctx.rgw.compression_type = config.pop('compression type', None)
     ctx.rgw.config = config
 
