@@ -17,6 +17,9 @@ install(TARGETS
   ceph_test_rados
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+# scripts
+add_ceph_test(osd-bench.sh ${CMAKE_CURRENT_SOURCE_DIR}/safe-to-destroy.sh)
+
 # unittest_osdmap
 add_executable(unittest_osdmap
   TestOSDMap.cc
