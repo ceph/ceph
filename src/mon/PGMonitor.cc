@@ -958,7 +958,7 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 }
 
 void PGMonitor::register_pg(OSDMap *osdmap,
-                            pg_pool_t& pool, pg_t pgid, epoch_t epoch,
+                            pg_t pgid, epoch_t epoch,
                             bool new_pool)
 {
   pg_t parent;
@@ -968,7 +968,7 @@ void PGMonitor::register_pg(OSDMap *osdmap,
     parent = pgid;
     while (1) {
       // remove most significant bit
-      int msb = pool.calc_bits_of(parent.ps());
+      int msb = pg_pool_t::calc_bits_of(parent.ps());
       if (!msb)
 	break;
       parent.set_ps(parent.ps() & ~(1<<(msb-1)));
@@ -1078,7 +1078,7 @@ bool PGMonitor::register_new_pgs()
 	continue;
       }
       created++;
-      register_pg(osdmap, pool, pgid, pool.get_last_change(), new_pool);
+      register_pg(osdmap, pgid, pool.get_last_change(), new_pool);
     }
   }
 
@@ -1979,10 +1979,7 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
     {
-      pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
-      s.state = PG_STATE_CREATING;
-      s.created = epoch;
-      s.last_change = ceph_clock_now(g_ceph_context);
+      register_pg(&mon->osdmon()->osdmap, pgid, epoch, true);
     }
     ss << "pg " << pgidstr << " now creating, ok";
     goto update;
