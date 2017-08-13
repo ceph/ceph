@@ -27,9 +27,9 @@ tasks:
           type: object-store
           description: Swift Service
 - rgw:
-    frontend_prefix: /swift
     client.0:
       valgrind: [--tool=memcheck]
+      frontend_prefix: /swift
       use-keystone-role: client.0
 - tempest:
     client.0:
