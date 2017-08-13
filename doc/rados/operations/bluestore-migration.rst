@@ -55,7 +55,7 @@ more data migration than should be necessary, so it is not optimal.
 
 #. Wait for the data to migrate off the OSD in question::
 
-     while ! ceph health | grep HEALTH_OK ; do sleep 60 ; done
+     while ! ceph osd safe-to-destroy $ID ; sleep 60 ; done
 
 #. Stop the OSD::
 
@@ -168,7 +168,7 @@ the data migrating only once.
 
 #. Wait for data migration to complete::
 
-     while ! ceph health | grep HEALTH_OK ; do sleep 60 ; done
+     while ! ceph osd safe-to-destroy $(ceph osd ls-tree $OLDHOST); do sleep 60 ; done
 
 #. Stop all old OSDs on the now-empty ``$OLDHOST``::
 
@@ -178,7 +178,7 @@ the data migrating only once.
 
 #. Destroy and purge the old OSDs::
 
-     for osd in `ceph osd crush ls $OLDHOST`; do
+     for osd in `ceph osd ls-tree $OLDHOST`; do
          ceph osd purge $osd --yes-i-really-mean-it
      done
 
