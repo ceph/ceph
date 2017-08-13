@@ -142,9 +142,9 @@ the data migrating only once.
      $ bin/ceph osd tree
      ID CLASS WEIGHT  TYPE NAME     STATUS REWEIGHT PRI-AFF
      -5             0 host newhost
-     10   ssd 1.00000     osd.0         up  1.00000 1.00000
-     11   ssd 1.00000     osd.1         up  1.00000 1.00000
-     12   ssd 1.00000     osd.2         up  1.00000 1.00000
+     10   ssd 1.00000     osd.10        up  1.00000 1.00000
+     11   ssd 1.00000     osd.11        up  1.00000 1.00000
+     12   ssd 1.00000     osd.12        up  1.00000 1.00000
      -1       3.00000 root default
      -2       3.00000     host oldhost1
       0   ssd 1.00000         osd.0     up  1.00000 1.00000
