@@ -834,10 +834,9 @@ public:
    * when a bucket is in use.
    *
    * @param item id to remove
-   * @param unused true if only unused items should be removed
    * @return 0 on success, negative on error
    */
-  int remove_root(int item, bool unused);
+  int remove_root(int item);
 
   /**
    * remove all instances of an item nested beneath a certain point from the map
@@ -1213,7 +1212,8 @@ public:
     int original, int device_class,
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket,
     const std::set<int32_t>& used_ids,
-    int *clone);
+    int *clone,
+    map<int,map<int,vector<int>>> *cmap_item_weight);
   int rename_class(const string& srcname, const string& dstname);
   int populate_classes(
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
@@ -1221,7 +1221,7 @@ public:
   void cleanup_dead_classes();
   int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
-  int trim_roots_with_class(bool unused);
+  int trim_roots_with_class();
 
   void start_choose_profile() {
     free(crush->choose_tries);
