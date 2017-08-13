@@ -610,7 +610,10 @@ void RDMAConnectedSocketImpl::cleanup() {
 
 void RDMAConnectedSocketImpl::notify()
 {
-  int i = 1;
+  // note: notify_fd is an event fd (man eventfd)
+  // write argument must be a 64bit integer
+  uint64_t i = 1;
+
   assert(sizeof(i) == write(notify_fd, &i, sizeof(i)));
 }
 
