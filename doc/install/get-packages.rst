@@ -171,34 +171,6 @@ over standard packages, so you must ensure that you set
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
-For development release packages, you may specify the repository
-for development releases instead. ::
-
-	[ceph]
-	name=Ceph packages for $basearch/$releasever
-	baseurl=https://download.ceph.com/rpm-testing/{distro}/$basearch
-	enabled=1
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/release.asc
-
-	[ceph-noarch]
-	name=Ceph noarch packages
-	baseurl=https://download.ceph.com/rpm-testing/{distro}/noarch
-	enabled=1
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/release.asc
-
-	[ceph-source]
-	name=Ceph source packages
-	baseurl=https://download.ceph.com/rpm-testing/{distro}/SRPMS
-	enabled=0
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/release.asc
-
-
 For specific packages, you may retrieve them by specifically downloading the
 release package by name. Our development process generates a new release of Ceph
 every 3-4 weeks. These packages are faster-moving than the major releases.
