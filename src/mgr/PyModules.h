@@ -18,7 +18,6 @@
 
 #include "common/Finisher.h"
 #include "common/Mutex.h"
-#include "common/Thread.h"
 
 #include "osdc/Objecter.h"
 #include "client/Client.h"
@@ -32,10 +31,13 @@
 class ServeThread;
 class health_check_map_t;
 
-class PyModules
+typedef std::map<std::string, std::string> PyModuleConfig;
+
+class ActivePyModules
 {
-  std::map<std::string, std::unique_ptr<MgrPyModule>> modules;
-  std::map<std::string, std::unique_ptr<ServeThread>> serve_threads;
+
+  std::map<std::string, std::unique_ptr<ActivePyModule>> modules;
+  PyModuleConfig config_cache;
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
@@ -44,20 +46,16 @@ class PyModules
   Client   &client;
   Finisher &finisher;
 
-  mutable Mutex lock{"PyModules::lock"};
 
-  std::string get_site_packages();
-
-  PyThreadState *pMainThreadState = nullptr;
+  mutable Mutex lock{"ActivePyModules::lock"};
 
 public:
-  static std::string config_prefix;
-
-  PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
+  ActivePyModules(PyModuleConfig const &config_,
+            DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
             LogChannelRef clog_, Objecter &objecter_, Client &client_,
             Finisher &f);
 
-  ~PyModules();
+  ~ActivePyModules();
 
   // FIXME: wrap for send_command?
   MonClient &get_monc() {return monc;}
@@ -97,15 +95,11 @@ public:
   void log(const std::string &module_name,
            int level, const std::string &record);
 
-  std::map<std::string, std::string> config_cache;
-
   // Python command definitions, including callback
   std::vector<ModuleCommand> get_py_commands() const;
 
   // Monitor command definitions, suitable for CLI
   std::vector<MonCommand> get_commands() const;
-
-  void insert_config(const std::map<std::string, std::string> &new_config);
 
   std::map<std::string, std::string> get_services() const;
 
@@ -117,14 +111,15 @@ public:
   void notify_all(const LogEntry &log_entry);
 
   int init();
-  void start();
   void shutdown();
+
+  void start_one(std::string const &module_name,
+      PyObject *pClass,
+      PyThreadState *pMyThreadState);
 
   void dump_server(const std::string &hostname,
                    const DaemonStateCollection &dmc,
                    Formatter *f);
-
-  static void list_modules(std::set<std::string> *modules);
 };
 
 #endif

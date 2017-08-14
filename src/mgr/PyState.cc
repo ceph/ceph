@@ -35,13 +35,13 @@
 
 typedef struct {
   PyObject_HEAD
-  PyModules *py_modules;
-  MgrPyModule *this_module;
+  ActivePyModules *py_modules;
+  ActivePyModule *this_module;
 } BaseMgrModule;
 
 class MonCommandCompletion : public Context
 {
-  PyModules *py_modules;
+  ActivePyModules *py_modules;
   PyObject *python_completion;
   const std::string tag;
   SafeThreadState pThreadState;
@@ -51,7 +51,7 @@ public:
   bufferlist outbl;
 
   MonCommandCompletion(
-      PyModules *py_modules_, PyObject* ev,
+      ActivePyModules *py_modules_, PyObject* ev,
       const std::string &tag_, PyThreadState *ts_)
     : py_modules(py_modules_), python_completion(ev),
       tag(tag_), pThreadState(ts_)
@@ -377,7 +377,7 @@ ceph_config_set(BaseMgrModule *self, PyObject *args)
   if (value) {
     val = value;
   }
-  global_handle->set_config(self->this_module->get_name(), key, val);
+  self->py_modules->set_config(self->this_module->get_name(), key, val);
 
   Py_RETURN_NONE;
 }
@@ -564,9 +564,11 @@ BaseMgrModule_init(BaseMgrModule *self, PyObject *args, PyObject *kwds)
         return -1;
     }
 
-    self->py_modules = (PyModules*)PyCapsule_GetPointer(py_modules_capsule, nullptr);
+    self->py_modules = (ActivePyModules*)PyCapsule_GetPointer(
+        py_modules_capsule, nullptr);
     assert(self->py_modules);
-    self->this_module = (MgrPyModule*)PyCapsule_GetPointer(this_module_capsule, nullptr);
+    self->this_module = (ActivePyModule*)PyCapsule_GetPointer(
+        this_module_capsule, nullptr);
     assert(self->this_module);
 
     return 0;

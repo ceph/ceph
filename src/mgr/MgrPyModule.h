@@ -22,6 +22,7 @@
 #include "common/cmdparse.h"
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
+#include "common/Thread.h"
 #include "mon/health_check.h"
 #include "mgr/Gil.h"
 
@@ -29,8 +30,8 @@
 #include <string>
 
 
-class MgrPyModule;
-class PyModules;
+class ActivePyModule;
+class ActivePyModules;
 
 /**
  * A Ceph CLI command description provided from a Python module
@@ -40,16 +41,34 @@ public:
   std::string cmdstring;
   std::string helpstring;
   std::string perm;
-  MgrPyModule *handler;
+  ActivePyModule *handler;
 };
 
-class MgrPyModule
+class ServeThread : public Thread
+{
+  ActivePyModule *mod;
+
+public:
+  ServeThread(ActivePyModule *mod_)
+    : mod(mod_) {}
+
+  void *entry() override;
+};
+
+class ActivePyModule
 {
 private:
   const std::string module_name;
-  PyObject *pClassInstance;
-  SafeThreadState pMainThreadState;
-  SafeThreadState pMyThreadState;
+
+  // Passed in by whoever loaded our python module and looked up
+  // the symbols in it.
+  PyObject *pClass = nullptr;
+
+  // Passed in by whoever created our subinterpreter for us
+  SafeThreadState pMyThreadState = nullptr;
+
+  // Populated when we construct our instance of pClass in load()
+  PyObject *pClassInstance = nullptr;
 
   health_check_map_t health_checks;
 
@@ -61,10 +80,14 @@ private:
   std::string uri;
 
 public:
-  MgrPyModule(const std::string &module_name, const std::string &sys_path, PyThreadState *main_ts);
-  ~MgrPyModule();
+  ActivePyModule(const std::string &module_name,
+      PyObject *pClass_,
+      PyThreadState *my_ts);
+  ~ActivePyModule();
 
-  int load(PyModules *py_modules);
+  ServeThread thread;
+
+  int load(ActivePyModules *py_modules);
   int serve();
   void shutdown();
   void notify(const std::string &notify_type, const std::string &notify_id);
