@@ -173,11 +173,11 @@ over standard packages, so you must ensure that you set
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
-For specific packages, you may retrieve them by specifically downloading the
-release package by name. Our development process generates a new release of Ceph
-every 3-4 weeks. These packages are faster-moving than the major releases.
-Development packages have new features integrated quickly, while still
-undergoing several weeks of QA prior to release.
+For specific packages, you may retrieve them by downloading the release package
+by name. Our development process generates a new release of Ceph every 3-4
+weeks. These packages are faster-moving than the major releases.  Development
+packages have new features integrated quickly, while still undergoing several
+weeks of QA prior to release.
 
 The repository package installs the repository details on your local system for
 use with ``yum``. Replace ``{distro}`` with your Linux distribution, and
@@ -200,40 +200,50 @@ If you are developing Ceph and need to deploy and test specific Ceph branches,
 ensure that you remove repository entries for major releases first.
 
 
-Debian Packages
----------------
+DEB Packages
+------------
 
-We automatically build Debian and Ubuntu packages for current
-development branches in the Ceph source code repository.  These
-packages are intended for developers and QA only.
+We automatically build Ubuntu packages for current development branches in the
+Ceph source code repository.  These packages are intended for developers and QA
+only.
 
-Add our package repository to your system's list of APT sources, but
-replace ``{BRANCH}`` with the branch you'd like to use (e.g., chef-3,
-wip-hack, master).  See `the gitbuilder page`_ for a complete
+Add the package repository to your system's list of APT sources, but
+replace ``{BRANCH}`` with the branch you'd like to use (e.g.,
+wip-hack, master).  See `the shaman page`_ for a complete
 list of distributions we build. ::
 
-	echo deb http://gitbuilder.ceph.com/ceph-deb-$(lsb_release -sc)-x86_64-basic/ref/{BRANCH} $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+    curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/ubuntu/$(lsb_release -sc)/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
+.. note:: If the repository is not ready an HTTP 504 will be returned
+
+The use of ``latest`` in the url, means it will figure out which is the last
+commit that has been built. Alternatively, a specific sha1 can be specified.
+For Ubuntu Xenial and the master branch of Ceph, it would look like::
+
+    curl -L https://shaman.ceph.com/api/repos/ceph/master/53e772a45fdf2d211c0c383106a66e1feedec8fd/ubuntu/xenial/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
+
+
+.. warning:: Development repositories are no longer available after two weeks.
 
 RPM Packages
 ------------
 
 For current development branches, you may add a Ceph entry to the
-``/etc/yum.repos.d`` directory. Create a ``ceph.repo`` file. In the example
-below, replace ``{distro}`` with your Linux distribution (e.g., ``el7``), and
-``{branch}`` with the name of the branch you want to install. ::
+``/etc/yum.repos.d`` directory. The `the shaman page`_ can be used to retrieve the full details
+of a repo file. It can be retrieved via an HTTP request, for example::
+
+    curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/centos/7/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
+
+The use of ``latest`` in the url, means it will figure out which is the last
+commit that has been built. Alternatively, a specific sha1 can be specified.
+For CentOS 7 and the master branch of Ceph, it would look like::
+
+    curl -L https://shaman.ceph.com/api/repos/ceph/master/53e772a45fdf2d211c0c383106a66e1feedec8fd/centos/7/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
 
-	[ceph-source]
-	name=Ceph source packages
-	baseurl=http://gitbuilder.ceph.com/ceph-rpm-{distro}-x86_64-basic/ref/{branch}/SRPMS
-	enabled=0
-	gpgcheck=0
+.. warning:: Development repositories are no longer available after two weeks.
 
-
-You may view http://gitbuilder.ceph.com directory to see which distributions
-Ceph supports.
-
+.. note:: If the repository is not ready an HTTP 504 will be returned
 
 Download Packages
 =================
@@ -306,8 +316,7 @@ line to get the short codename. ::
 
 
 
-
 .. _Install Ceph Object Storage: ../install-storage-cluster
 .. _the testing Debian repository: https://download.ceph.com/debian-testing/dists
-.. _the gitbuilder page: http://gitbuilder.ceph.com
+.. _the shaman page: https://shaman.ceph.com
 .. _Ceph Mirrors: ../mirrors
