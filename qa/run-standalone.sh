@@ -16,12 +16,12 @@ if [ `uname` = FreeBSD ]; then
     export PYTHONPATH=/usr/local/lib/python2.7/site-packages
     exec_mode=+111
     KERNCORE="kern.corefile"
-    COREPATTERN="core.%N.%P"
+    COREPATTERN="%N.%P"
 else
     export PYTHONPATH=/usr/lib/python2.7/dist-packages
     exec_mode=/111
     KERNCORE="kernel.core_pattern"
-    COREPATTERN="core.%e.%p.%t"
+    COREPATTERN="%e.%p.%t"
 fi
 
 PATH=$(pwd)/bin:$PATH
@@ -46,7 +46,7 @@ count=0
 errors=0
 userargs=""
 precore="$(sysctl -n $KERNCORE)"
-sudo sysctl -w ${KERNCORE}=${COREPATTERN}
+sudo sysctl -w ${KERNCORE}="core."${COREPATTERN}
 ulimit -c unlimited
 for f in $(cd $location ; find . -perm $exec_mode -type f)
 do

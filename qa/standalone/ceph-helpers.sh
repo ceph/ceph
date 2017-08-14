@@ -34,6 +34,7 @@ if [ `uname` = FreeBSD ]; then
     SED=gsed
     DIFFCOLOPTS=""
     KERNCORE="kern.corefile"
+    COREPATTERN="%N.%P"
 else
     SED=sed
     termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
@@ -42,6 +43,7 @@ else
     fi
     DIFFCOLOPTS="-y $termwidth"
     KERNCORE="kernel.core_pattern"
+    COREPATTERN="%e.%p.%t"
 fi
 
 EXTRA_OPTS=""
@@ -131,6 +133,7 @@ function setup() {
     teardown $dir || return 1
     mkdir -p $dir
     mkdir -p $(get_asok_dir)
+    sudo sysctl -w ${KERNCORE}="core."${COREPATTERN}
 }
 
 function test_setup() {
@@ -169,11 +172,11 @@ function teardown() {
       pattern=""
     fi
     # Local we start with core and teuthology ends with core
-    if ls $(dirname $pattern) | grep -q '^core\|core$' ; then
+    if ls $(dirname $pattern) | grep -q '^core\|core$' | grep -q "$dir"; then
         cores="yes"
         if [ -n "$LOCALRUN" ]; then
 	    mkdir /tmp/cores.$$ 2> /dev/null || true
-	    for i in $(ls $(dirname $(sysctl -n $KERNCORE)) | grep '^core\|core$'); do
+	    for i in $(ls $(dirname $(sysctl -n $KERNCORE)) | grep '^core\|core$'| grep "$dir"); do
 		mv $i /tmp/cores.$$
 	    done
         fi
