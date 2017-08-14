@@ -1963,8 +1963,10 @@ int CrushWrapper::device_class_clone(
       unsigned new_size = -1-bno + 1;
       cmap.args = (crush_choose_arg*)realloc(cmap.args,
 					     new_size * sizeof(cmap.args[0]));
+      assert(cmap.args);
       memset(cmap.args + cmap.size, 0,
 	     (new_size - cmap.size) * sizeof(cmap.args[0]));
+      cmap.size = new_size;
     }
     auto& o = cmap.args[-1-original_id];
     auto& n = cmap.args[-1-bno];
