@@ -43,14 +43,6 @@ also add keys and recommended packages.
   development, you may get Ceph development packages. See
   `Add Ceph Development`_ for details.
 
-- **Apache/FastCGI: (Optional)** If you are deploying a
-  :term:`Ceph Object Storage` service, you must install Apache and FastCGI.
-  Ceph provides Apache and FastCGI builds that are identical to those available
-  from Apache, but with 100-continue support. If you want to enable
-  :term:`Ceph Object Gateway` daemons with 100-continue support, you must
-  retrieve Apache/FastCGI packages from the Ceph repository.
-  See `Add Apache/FastCGI`_ for details.
-
 
 If you intend to download packages manually, see Section `Download Packages`_.
 
@@ -284,78 +276,6 @@ below, replace ``{distro}`` with your Linux distribution (e.g., ``el7``), and
 
 You may view http://gitbuilder.ceph.com directory to see which distributions
 Ceph supports.
-
-
-Add Apache/FastCGI
-==================
-
-Ceph Object Gateway works with ordinary Apache and FastCGI libraries. However,
-Ceph builds Apache and FastCGI packages that support 100-continue. To use the
-Ceph Apache and FastCGI packages, add them to your repository.
-
-
-Debian Packages
----------------
-
-Add our Apache and FastCGI packages to your system's list of APT sources if you intend to
-use 100-continue. ::
-
-	echo deb http://gitbuilder.ceph.com/apache2-deb-$(lsb_release -sc)-x86_64-basic/ref/master $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph-apache.list
-	echo deb http://gitbuilder.ceph.com/libapache-mod-fastcgi-deb-$(lsb_release -sc)-x86_64-basic/ref/master $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph-fastcgi.list
-
-
-RPM Packages
-------------
-
-You may add a Ceph entry to the ``/etc/yum.repos.d`` directory. Create a
-``ceph-apache.repo`` file. In the example below, replace ``{distro}`` with your
-Linux distribution (e.g., ``el7``).  You may view http://gitbuilder.ceph.com
-directory to see which distributions Ceph supports.
-::
-
-
-	[apache2-ceph-noarch]
-	name=Apache noarch packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/apache2-rpm-{distro}-x86_64-basic/ref/master
-	enabled=1
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
-
-	[apache2-ceph-source]
-	name=Apache source packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/apache2-rpm-{distro}-x86_64-basic/ref/master
-	enabled=0
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
-
-
-Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
-
-	[fastcgi-ceph-basearch]
-	name=FastCGI basearch packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
-	enabled=1
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
-
-	[fastcgi-ceph-noarch]
-	name=FastCGI noarch packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
-	enabled=1
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
-
-	[fastcgi-ceph-source]
-	name=FastCGI source packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
-	enabled=0
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
 Download Packages
