@@ -215,6 +215,15 @@ struct C_InvalidateCache : public Context {
       cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
       thread_pool);
 
+    SafeTimer *timer;
+    Mutex *timer_lock;
+    get_timer_instance(cct, &timer, &timer_lock);
+
+    read_iops_throttle = new TokenBucketThrottle(cct, 0, 0,
+						 timer, timer_lock);
+    write_iops_throttle = new TokenBucketThrottle(cct, 0, 0,
+						  timer, timer_lock);
+
     if (cct->_conf->get_val<bool>("rbd_auto_exclusive_lock_until_manual_request")) {
       exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
     } else {
@@ -256,6 +265,8 @@ struct C_InvalidateCache : public Context {
     delete io_work_queue;
     delete operations;
     delete state;
+    delete read_iops_throttle;
+    delete write_iops_throttle;
   }
 
   void ImageCtx::init() {
@@ -998,7 +1009,9 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_max_concurrent_object_sets", false)(
         "rbd_mirroring_resync_after_disconnect", false)(
         "rbd_mirroring_replay_delay", false)(
-        "rbd_skip_partial_discard", false);
+        "rbd_skip_partial_discard", false)(
+	"rbd_image_qos_iops_read_limit", false)(
+	"rbd_image_qos_iops_write_limit", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -1059,6 +1072,21 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(mirroring_replay_delay, int64_t);
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(blkin_trace_all, bool);
+    ASSIGN_OPTION(image_qos_iops_read_limit, uint64_t);
+    ASSIGN_OPTION(image_qos_iops_write_limit, uint64_t);
+
+    apply_qos();
+  }
+
+
+  void ImageCtx::apply_qos() {
+    ldout(cct, 20) << __func__ << dendl;
+
+    read_iops_throttle->set_avg(image_qos_iops_read_limit);
+    read_iops_throttle->set_max(image_qos_iops_read_limit);
+
+    write_iops_throttle->set_avg(image_qos_iops_write_limit);
+    write_iops_throttle->set_max(image_qos_iops_write_limit);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

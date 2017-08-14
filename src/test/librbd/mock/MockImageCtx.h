@@ -15,6 +15,7 @@
 #include "test/librbd/mock/MockReadahead.h"
 #include "test/librbd/mock/io/MockImageRequestWQ.h"
 #include "common/RWLock.h"
+#include "common/Throttle.h"
 #include "common/WorkQueue.h"
 #include "common/zipkin_trace.h"
 #include "librbd/ImageCtx.h"
@@ -88,6 +89,8 @@ struct MockImageCtx {
       state(new MockImageState()),
       image_watcher(NULL), object_map(NULL),
       exclusive_lock(NULL), journal(NULL),
+      read_iops_throttle(image_ctx.read_iops_throttle),
+      write_iops_throttle(image_ctx.write_iops_throttle),
       trace_endpoint(image_ctx.trace_endpoint),
       concurrent_management_ops(image_ctx.concurrent_management_ops),
       blacklist_on_break_lock(image_ctx.blacklist_on_break_lock),
@@ -203,6 +206,7 @@ struct MockImageCtx {
                                          size_t, uint64_t, Context *, int, ZTracer::Trace *));
   MOCK_METHOD8(write_to_cache, void(object_t, const bufferlist&, size_t,
                                     uint64_t, Context *, int, uint64_t, ZTracer::Trace *));
+  MOCK_METHOD1(apply_metadata, int(const std::map<std::string, bufferlist> &));
 
   ImageCtx *image_ctx;
   CephContext *cct;
@@ -280,6 +284,9 @@ struct MockImageCtx {
   MockObjectMap *object_map;
   MockExclusiveLock *exclusive_lock;
   MockJournal *journal;
+
+  TokenBucketThrottle *read_iops_throttle;
+  TokenBucketThrottle *write_iops_throttle;
 
   ZTracer::Endpoint trace_endpoint;
 

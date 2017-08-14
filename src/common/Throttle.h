@@ -12,7 +12,9 @@
 #include <map>
 #include <mutex>
 
+#include "Cond.h"
 #include "include/Context.h"
+#include "common/Timer.h"
 #include "common/convenience.h"
 #include "common/perf_counters.h"
 
@@ -328,6 +330,73 @@ private:
 
   void complete_pending_ops(UNIQUE_LOCK_T(m_lock)& l);
   uint32_t waiters = 0;
+};
+
+
+class Bucket {
+  CephContext *cct;
+  const std::string name;
+  std::atomic<int64_t> remain = { 0 }, max = { 0 };
+  Mutex lock;
+  list<Cond*> cond;
+
+public:
+  Bucket(CephContext *cct, const std::string& n, int64_t m = 0);
+  ~Bucket();
+
+private:
+  bool _should_wait(int64_t c) const {
+    return (remain <= 0);
+  }
+
+  bool _wait(int64_t c);
+
+public:
+  int64_t get_max() const { 
+    return max; 
+  }
+  int64_t get_current() const {
+    return remain;
+  }
+  void set_max(int64_t m);
+  bool get(int64_t c = 1);
+  int64_t put(int64_t c = 1);
+};
+
+
+class TokenBucketThrottle {
+  CephContext *m_cct;
+  Bucket throttle;
+  int64_t m_avg;
+  SafeTimer *m_timer;
+  Mutex *m_timer_lock;
+  FunctionContext *m_token_ctx;
+
+public:
+  TokenBucketThrottle(CephContext *cct,
+		      int64_t capacity,
+		      int64_t avg,
+		      SafeTimer *timer,
+		      Mutex *timer_lock)
+  : m_cct(cct), throttle(m_cct, "token_bucket_throttle", capacity),
+    m_avg(avg), m_timer(timer), m_timer_lock(timer_lock)
+  {
+      Mutex::Locker timer_locker(*m_timer_lock);
+      add_tokens();
+  }
+  ~TokenBucketThrottle(){
+    Mutex::Locker timer_locker(*m_timer_lock);
+    cancel_tokens();
+  }
+
+private:
+  void add_tokens();
+  void cancel_tokens();
+
+public:
+  int get(int64_t c);
+  void set_max(int64_t m);
+  void set_avg(int64_t avg);
 };
 
 #endif
