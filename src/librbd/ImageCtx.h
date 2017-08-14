@@ -14,6 +14,7 @@
 #include "common/Mutex.h"
 #include "common/Readahead.h"
 #include "common/RWLock.h"
+#include "common/Throttle.h"
 #include "common/snap_types.h"
 #include "common/zipkin_trace.h"
 
@@ -87,6 +88,9 @@ namespace librbd {
     IoCtx data_ctx, md_ctx;
     ImageWatcher<ImageCtx> *image_watcher;
     Journal<ImageCtx> *journal;
+
+    TokenBucketThrottle *read_iops_throttle;
+    TokenBucketThrottle *write_iops_throttle;
 
     /**
      * Lock ordering:
@@ -179,6 +183,8 @@ namespace librbd {
     uint32_t readahead_trigger_requests;
     uint64_t readahead_max_bytes;
     uint64_t readahead_disable_after_bytes;
+    uint64_t write_iops_limit;
+    uint64_t read_iops_limit;
     bool clone_copy_on_read;
     bool blacklist_on_break_lock;
     uint32_t blacklist_expire_seconds;
@@ -197,6 +203,8 @@ namespace librbd {
     int mirroring_replay_delay;
     bool skip_partial_discard;
     bool blkin_trace_all;
+    uint64_t image_qos_iops_read_limit;
+    uint64_t image_qos_iops_write_limit;
 
     LibrbdAdminSocketHook *asok_hook;
 
@@ -310,6 +318,7 @@ namespace librbd {
     void cancel_async_requests(Context *on_finish);
 
     void apply_metadata(const std::map<std::string, bufferlist> &meta);
+    void apply_qos();
 
     ExclusiveLock<ImageCtx> *create_exclusive_lock();
     ObjectMap<ImageCtx> *create_object_map(uint64_t snap_id);
