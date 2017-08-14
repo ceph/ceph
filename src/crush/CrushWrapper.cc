@@ -1702,6 +1702,7 @@ int CrushWrapper::add_bucket(
   crush_bucket *b = crush_make_bucket(crush, alg, hash, type, size, items,
 				      weights);
   assert(b);
+  assert(idout);
   int r = crush_add_bucket(crush, bucketno, b, idout);
   int pos = -1 - *idout;
   for (auto& p : choose_args) {
