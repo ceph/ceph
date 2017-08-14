@@ -1703,9 +1703,13 @@ ostream& operator<<(ostream& out, const BlueStore::Blob& b)
   if (b.is_spanning()) {
     out << " spanning " << b.id;
   }
-  out << " " << b.get_blob() << " " << b.get_blob_use_tracker()
-      << " " << *b.shared_blob
-      << ")";
+  out << " " << b.get_blob() << " " << b.get_blob_use_tracker();
+  if (b.shared_blob) {
+    out << " " << *b.shared_blob;
+  } else {
+    out << " (shared_blob=NULL)";
+  }
+  out << ")";
   return out;
 }
 
@@ -9009,7 +9013,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_TRUNCATE:
       {
         uint64_t off = op->off;
-	_truncate(txc, c, o, off);
+	r = _truncate(txc, c, o, off);
       }
       break;
 
@@ -10329,10 +10333,14 @@ int BlueStore::_write(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
-  _assign_nid(txc, o);
-  int r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
-  txc->write_onode(o);
-
+  int r = 0;
+  if (offset + length >= OBJECT_MAX_SIZE) {
+    r = -E2BIG;
+  } else {
+    _assign_nid(txc, o);
+    r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+    txc->write_onode(o);
+  }
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
@@ -10347,8 +10355,13 @@ int BlueStore::_zero(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
-  _assign_nid(txc, o);
-  int r = _do_zero(txc, c, o, offset, length);
+  int r = 0;
+  if (offset + length >= OBJECT_MAX_SIZE) {
+    r = -E2BIG;
+  } else {
+    _assign_nid(txc, o);
+    r = _do_zero(txc, c, o, offset, length);
+  }
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
@@ -10423,7 +10436,7 @@ void BlueStore::_do_truncate(
   txc->write_onode(o);
 }
 
-void BlueStore::_truncate(TransContext *txc,
+int BlueStore::_truncate(TransContext *txc,
 			 CollectionRef& c,
 			 OnodeRef& o,
 			 uint64_t offset)
@@ -10431,7 +10444,16 @@ void BlueStore::_truncate(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec
 	   << dendl;
-  _do_truncate(txc, c, o, offset);
+  int r = 0;
+  if (offset >= OBJECT_MAX_SIZE) {
+    r = -E2BIG;
+  } else {
+    _do_truncate(txc, c, o, offset);
+  }
+  dout(10) << __func__ << " " << c->cid << " " << o->oid
+	   << " 0x" << std::hex << offset << std::dec
+	   << " = " << r << dendl;
+  return r;
 }
 
 int BlueStore::_do_remove(
@@ -10913,6 +10935,7 @@ int BlueStore::_do_clone_range(
   uint64_t end = srcoff + length;
   uint32_t dirty_range_begin = 0;
   uint32_t dirty_range_end = 0;
+  bool src_dirty = false;
   for (auto ep = oldo->extent_map.seek_lextent(srcoff);
        ep != oldo->extent_map.extent_map.end();
        ++ep) {
@@ -10933,7 +10956,8 @@ int BlueStore::_do_clone_range(
       // make sure it is shared
       if (!blob.is_shared()) {
 	c->make_blob_shared(_assign_blobid(txc), e.blob);
-	if (dirty_range_begin == 0 && dirty_range_end == 0) {
+	if (!src_dirty) {
+	  src_dirty = true;
           dirty_range_begin = e.logical_offset;
         }
         assert(e.logical_end() > 0);
@@ -10985,7 +11009,7 @@ int BlueStore::_do_clone_range(
     dout(20) << __func__ << "  dst " << *ne << dendl;
     ++n;
   }
-  if (dirty_range_end > dirty_range_begin) {
+  if (src_dirty) {
     oldo->extent_map.dirty_range(dirty_range_begin,
       dirty_range_end - dirty_range_begin);
     txc->write_onode(oldo);
@@ -11012,6 +11036,11 @@ int BlueStore::_clone_range(TransContext *txc,
 	   << " to offset 0x" << dstoff << std::dec << dendl;
   int r = 0;
 
+  if (srcoff + length >= OBJECT_MAX_SIZE ||
+      dstoff + length >= OBJECT_MAX_SIZE) {
+    r = -E2BIG;
+    goto out;
+  }
   if (srcoff + length > oldo->onode.size) {
     r = -EINVAL;
     goto out;
