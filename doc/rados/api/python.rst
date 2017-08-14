@@ -15,14 +15,14 @@ Getting Started
 
 You can create your own Ceph client using Python. The following tutorial will
 show you how to import the Ceph Python module, connect to a Ceph cluster,  and
-perform object operations as a ``client.admin`` user. 
+perform object operations as a ``client.admin`` user.
 
-.. note:: To use the Ceph Python bindings, you must have access to a 
+.. note:: To use the Ceph Python bindings, you must have access to a
    running Ceph cluster. To set one up quickly, see `Getting Started`_.
 
 First, create a Python source file for your Ceph client. ::
    :linenos:
-   
+
 	sudo vim client.py
 
 
@@ -54,7 +54,7 @@ of the initial Ceph monitors.
    :linenos:
 
 	import rados, sys
-	
+
 	#Create Handle Examples.
 	cluster = rados.Rados(conffile='ceph.conf')
 	cluster = rados.Rados(conffile=sys.argv[1])
@@ -62,13 +62,13 @@ of the initial Ceph monitors.
 
 Ensure that the ``conffile`` argument provides the path and file name of your
 Ceph configuration file. You may use the ``sys`` module to avoid hard-coding the
-Ceph configuration path and file name. 
+Ceph configuration path and file name.
 
 Your Python client also requires a client keyring. For this example, we use the
 ``client.admin`` key by default. If you would like to specify the keyring when
 creating the cluster handle, you may use the ``conf`` argument. Alternatively,
-you may specify the keyring path in your Ceph configuration file. For example, 
-you may add something like the following line to you Ceph configuration file:: 
+you may specify the keyring path in your Ceph configuration file. For example,
+you may add something like the following line to you Ceph configuration file::
 
 	keyring = /path/to/ceph.client.admin.keyring
 
@@ -78,7 +78,7 @@ For additional details on modifying your configuration via Python, see `Configur
 Connect to the Cluster
 ----------------------
 
-Once you have a cluster handle configured, you may connect to the cluster. 
+Once you have a cluster handle configured, you may connect to the cluster.
 With a connection to the cluster, you may execute methods that return
 information about the cluster.
 
@@ -87,11 +87,11 @@ information about the cluster.
    :emphasize-lines: 7
 
 	import rados, sys
-	
+
 	cluster = rados.Rados(conffile='ceph.conf')
 	print "\nlibrados version: " + str(cluster.version())
-	print "Will attempt to connect to: " + str(cluster.conf_get('mon initial members'))	
-	
+	print "Will attempt to connect to: " + str(cluster.conf_get('mon initial members'))
+
 	cluster.connect()
 	print "\nCluster ID: " + cluster.get_fsid()
 
@@ -112,7 +112,7 @@ configuration file example uses the ``client.admin`` keyring you generated with
 
 .. code-block:: ini
    :linenos:
-   
+
 	[global]
 	...
 	keyring=/path/to/keyring/ceph.client.admin.keyring
@@ -123,7 +123,7 @@ Manage Pools
 
 When connected to the cluster, the ``Rados`` API allows you to manage pools. You
 can list pools, check for the existence of a pool, create a pool and delete a
-pool. 
+pool.
 
 .. code-block:: python
    :linenos:
@@ -174,7 +174,7 @@ to use.
 
 Once you have an I/O context, you can read/write objects, extended attributes,
 and perform a number of other operations. After you complete operations, ensure
-that you close the connection. For example: 
+that you close the connection. For example:
 
 .. code-block:: python
    :linenos:
@@ -190,18 +190,18 @@ Once you create an I/O context, you can write objects to the cluster. If you
 write to an object that doesn't exist, Ceph creates it. If you write to an
 object that exists, Ceph overwrites it (except when you specify a range, and
 then it only overwrites the range). You may read objects (and object ranges)
-from the cluster. You may also remove objects from the cluster. For example: 
+from the cluster. You may also remove objects from the cluster. For example:
 
 .. code-block:: python
 	:linenos:
 	:emphasize-lines: 2, 5, 8
-	
+
 	print "\nWriting object 'hw' with contents 'Hello World!' to pool 'data'."
 	ioctx.write_full("hw", "Hello World!")
 
 	print "\n\nContents of object 'hw'\n------------------------\n"
 	print ioctx.read("hw")
-	
+
 	print "\nRemoving object 'hw'"
 	ioctx.remove_object("hw")
 
@@ -210,7 +210,7 @@ Writing and Reading XATTRS
 --------------------------
 
 Once you create an object, you can write extended attributes (XATTRs) to
-the object and read XATTRs from the object. For example: 
+the object and read XATTRs from the object. For example:
 
 .. code-block:: python
 	:linenos:
@@ -226,7 +226,7 @@ the object and read XATTRs from the object. For example:
 Listing Objects
 ---------------
 
-If you want to examine the list of objects in a pool, you may 
+If you want to examine the list of objects in a pool, you may
 retrieve the list of objects and iterate over them with the object iterator.
 For example:
 
@@ -236,12 +236,12 @@ For example:
 
 	object_iterator = ioctx.list_objects()
 
-	while True : 
-	
-		try : 
+	while True :
+
+		try :
 			rados_object = object_iterator.next()
 			print "Object contents = " + rados_object.read()
-	
+
 		except StopIteration :
 			break
 
@@ -260,7 +260,7 @@ Configuration
 -------------
 
 The ``Rados`` class provides methods for getting and setting configuration
-values, reading the Ceph configuration file, and parsing arguments. You 
+values, reading the Ceph configuration file, and parsing arguments. You
 do not need to be connected to the Ceph Storage Cluster to invoke the following
 methods. See `Storage Cluster Configuration`_ for details on settings.
 
@@ -269,7 +269,7 @@ methods. See `Storage Cluster Configuration`_ for details on settings.
 .. automethod:: Rados.conf_set(option, val)
 .. automethod:: Rados.conf_read_file(path=None)
 .. automethod:: Rados.conf_parse_argv(args)
-.. automethod:: Rados.version()   
+.. automethod:: Rados.version()
 
 
 Connection Management
@@ -285,7 +285,7 @@ state (e.g., "configuring", "connecting", etc.).
 .. automethod:: Rados.shutdown()
 .. automethod:: Rados.get_fsid()
 .. automethod:: Rados.get_cluster_stats()
-.. automethod:: Rados.require_state(*args)
+.. automethod:: Rados.require_state()
 
 
 Pool Operations
@@ -307,8 +307,8 @@ Input/Output Context API
 
 To write data to and read data from the Ceph Object Store, you must create
 an Input/Output context (ioctx). The `Rados` class provides a `open_ioctx()`
-method. The remaining ``ioctx`` operations involve invoking methods of the 
-`Ioctx` and other classes. 
+method. The remaining ``ioctx`` operations involve invoking methods of the
+`Ioctx` and other classes.
 
 .. automethod:: Rados.open_ioctx(ioctx_name)
 .. automethod:: Ioctx.require_ioctx_open()
@@ -322,7 +322,7 @@ method. The remaining ``ioctx`` operations involve invoking methods of the
 .. --------------
 
 .. The Ceph Storage Cluster allows you to make a snapshot of a pool's state.
-.. Whereas, basic pool operations only require a connection to the cluster, 
+.. Whereas, basic pool operations only require a connection to the cluster,
 .. snapshots require an I/O context.
 
 .. Ioctx.create_snap(self, snap_name)
