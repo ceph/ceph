@@ -30,9 +30,7 @@ also add keys and recommended packages.
 
 - **Keys: (Recommended)** Whether you add repositories or download packages
   manually, you should download keys to verify the packages. If you do not get
-  the keys, you may encounter security warnings. There are two keys: one for
-  releases (common) and one for development (programmers and QA only). Choose
-  the key that suits your needs. See `Add Keys`_ for details.
+  the keys, you may encounter security warnings. See `Add Keys`_ for details.
 
 - **Ceph: (Required)** All Ceph deployments require Ceph release packages,
   except for deployments that use development packages (development, QA, and
@@ -52,9 +50,7 @@ Add Keys
 
 Add a key to your system's list of trusted keys to avoid a security warning. For
 major releases (e.g., ``hammer``, ``jewel``) and development releases
-(``release-name-rc1``, ``release-name-rc2``), use the ``release.asc`` key. For
-development testing packages, use the ``autobuild.asc`` key (developers and
-QA).
+(``release-name-rc1``, ``release-name-rc2``), use the ``release.asc`` key.
 
 
 APT
@@ -65,24 +61,12 @@ To install the ``release.asc`` key, execute the following::
 	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
 
 
-To install the ``autobuild.asc`` key, execute the following
-(QA and developers only)::
-
-	wget -q -O- 'https://download.ceph.com/keys/autobuild.asc' | sudo apt-key add -
-
-
 RPM
 ---
 
 To install the ``release.asc`` key, execute the following::
 
 	sudo rpm --import 'https://download.ceph.com/keys/release.asc'
-
-To install the ``autobuild.asc`` key, execute the following
-(QA and developers only)::
-
-	sudo rpm --import 'https://download.ceph.com/keys/autobuild.asc'
-
 
 Add Ceph
 ========
@@ -106,9 +90,8 @@ bugfixes are backported to LTS releases until their retirement. Since retired
 releases are no longer maintained, we recommend that users upgrade their
 clusters regularly - preferably to the latest LTS release.
 
-The most recent LTS release is Jewel (10.2.x).
-
-.. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
+.. tip:: For international users: There might be a mirror close to you where
+         download Ceph from. For more information see: `Ceph Mirrors`_.
 
 Debian Packages
 ---------------
@@ -126,6 +109,7 @@ For early Linux distributions, you may execute the following command::
 For earlier Ceph releases, replace ``{release-name}`` with the name  with the
 name of the Ceph release. You may call ``lsb_release -sc`` on the command  line
 to get the short codename, and replace ``{codename}`` in the following command.
+
 ::
 
 	sudo apt-add-repository 'deb https://download.ceph.com/debian-{release-name}/ {codename} main'
@@ -237,7 +221,6 @@ You can download the RPMs directly from::
 Add Ceph Development
 ====================
 
-Development repositories use the ``autobuild.asc`` key to verify packages.
 If you are developing Ceph and need to deploy and test specific Ceph branches,
 ensure that you remove repository entries for major releases first.
 
@@ -270,8 +253,7 @@ below, replace ``{distro}`` with your Linux distribution (e.g., ``el7``), and
 	name=Ceph source packages
 	baseurl=http://gitbuilder.ceph.com/ceph-rpm-{distro}-x86_64-basic/ref/{branch}/SRPMS
 	enabled=0
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
+	gpgcheck=0
 
 
 You may view http://gitbuilder.ceph.com directory to see which distributions
