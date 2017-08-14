@@ -1112,8 +1112,6 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
 
   bool fix_index = op_state.will_fix_index();
 
-  rgw_bucket bucket = op_state.get_bucket();
-
   if (!fix_index) {
     set_err_msg(err_msg, "check-objects flag requires fix index enabled");
     return -EINVAL;
@@ -1158,7 +1156,6 @@ int RGWBucket::check_index(RGWBucketAdminOpState& op_state,
         map<RGWObjCategory, RGWStorageStats>& calculated_stats,
         std::string *err_msg)
 {
-  rgw_bucket bucket = op_state.get_bucket();
   bool fix_index = op_state.will_fix_index();
 
   int r = store->bucket_check_index(bucket_info, &existing_stats, &calculated_stats);
