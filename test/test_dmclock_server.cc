@@ -639,6 +639,191 @@ namespace crimson {
     } // dmclock_server_pull.pull_reservation
 
 
+    TEST(dmclock_server_pull, update_client_info) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request,false>;
+      using QueueRef = std::unique_ptr<Queue>;
+
+      ClientId client1 = 17;
+      ClientId client2 = 98;
+
+      dmc::ClientInfo info1(0.0, 100.0, 0.0);
+      dmc::ClientInfo info2(0.0, 200.0, 0.0);
+
+      QueueRef pq;
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	if (client1 == c) return info1;
+	else if (client2 == c) return info2;
+	else {
+	  ADD_FAILURE() << "client info looked up for non-existant client";
+	  return info1;
+	}
+      };
+
+      pq = QueueRef(new Queue(client_info_f, false));
+
+      ReqParams req_params(1,1);
+
+      auto now = dmc::get_time();
+
+      for (int i = 0; i < 5; ++i) {
+	pq->add_request(Request{}, client1, req_params);
+	pq->add_request(Request{}, client2, req_params);
+	now += 0.0001;
+      }
+
+      int c1_count = 0;
+      int c2_count = 0;
+      for (int i = 0; i < 10; ++i) {
+	Queue::PullReq pr = pq->pull_request();
+	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+
+	if (i > 5) continue;
+	if (client1 == retn.client) ++c1_count;
+	else if (client2 == retn.client) ++c2_count;
+	else ADD_FAILURE() << "got request from neither of two clients";
+
+	EXPECT_EQ(PhaseType::priority, retn.phase);
+      }
+
+      EXPECT_EQ(2, c1_count) <<
+	"before: one-third of request should have come from first client";
+      EXPECT_EQ(4, c2_count) <<
+	"before: two-thirds of request should have come from second client";
+
+      std::chrono::seconds dura(1);
+      std::this_thread::sleep_for(dura);
+
+      info1 = dmc::ClientInfo(0.0, 200.0, 0.0);
+      pq->update_client_info(17);
+
+      now = dmc::get_time();
+
+      for (int i = 0; i < 5; ++i) {
+	pq->add_request(Request{}, client1, req_params);
+	pq->add_request(Request{}, client2, req_params);
+	now += 0.0001;
+      }
+
+      c1_count = 0;
+      c2_count = 0;
+      for (int i = 0; i < 6; ++i) {
+	Queue::PullReq pr = pq->pull_request();
+	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+
+	if (client1 == retn.client) ++c1_count;
+	else if (client2 == retn.client) ++c2_count;
+	else ADD_FAILURE() << "got request from neither of two clients";
+
+	EXPECT_EQ(PhaseType::priority, retn.phase);
+      }
+
+      EXPECT_EQ(3, c1_count) <<
+	"after: one-third of request should have come from first client";
+      EXPECT_EQ(3, c2_count) <<
+	"after: two-thirds of request should have come from second client";
+    }
+
+
+    TEST(dmclock_server_pull, dynamic_cli_info_f) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request,true>;
+      using QueueRef = std::unique_ptr<Queue>;
+
+      ClientId client1 = 17;
+      ClientId client2 = 98;
+
+      std::vector<dmc::ClientInfo> info1;
+      std::vector<dmc::ClientInfo> info2;
+
+      info1.push_back(dmc::ClientInfo(0.0, 100.0, 0.0));
+      info1.push_back(dmc::ClientInfo(0.0, 150.0, 0.0));
+
+      info2.push_back(dmc::ClientInfo(0.0, 200.0, 0.0));
+      info2.push_back(dmc::ClientInfo(0.0, 50.0, 0.0));
+
+      uint cli_info_group = 0;
+
+      QueueRef pq;
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	if (client1 == c) return info1[cli_info_group];
+	else if (client2 == c) return info2[cli_info_group];
+	else {
+	  ADD_FAILURE() << "client info looked up for non-existant client";
+	  return info1[0];
+	}
+      };
+
+      pq = QueueRef(new Queue(client_info_f, false));
+
+      ReqParams req_params(1,1);
+
+      auto now = dmc::get_time();
+
+      for (int i = 0; i < 5; ++i) {
+	pq->add_request(Request{}, client1, req_params);
+	pq->add_request(Request{}, client2, req_params);
+	now += 0.0001;
+      }
+
+      int c1_count = 0;
+      int c2_count = 0;
+      for (int i = 0; i < 10; ++i) {
+	Queue::PullReq pr = pq->pull_request();
+	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+
+	if (i > 5) continue;
+	if (client1 == retn.client) ++c1_count;
+	else if (client2 == retn.client) ++c2_count;
+	else ADD_FAILURE() << "got request from neither of two clients";
+
+	EXPECT_EQ(PhaseType::priority, retn.phase);
+      }
+
+      EXPECT_EQ(2, c1_count) <<
+	"before: one-third of request should have come from first client";
+      EXPECT_EQ(4, c2_count) <<
+	"before: two-thirds of request should have come from second client";
+
+      std::chrono::seconds dura(1);
+      std::this_thread::sleep_for(dura);
+
+      cli_info_group = 1;
+ 
+      now = dmc::get_time();
+
+      for (int i = 0; i < 6; ++i) {
+	pq->add_request(Request{}, client1, req_params);
+	pq->add_request(Request{}, client2, req_params);
+	now += 0.0001;
+      }
+
+      c1_count = 0;
+      c2_count = 0;
+      for (int i = 0; i < 8; ++i) {
+	Queue::PullReq pr = pq->pull_request();
+	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+
+	if (client1 == retn.client) ++c1_count;
+	else if (client2 == retn.client) ++c2_count;
+	else ADD_FAILURE() << "got request from neither of two clients";
+
+	EXPECT_EQ(PhaseType::priority, retn.phase);
+      }
+
+      EXPECT_EQ(6, c1_count) <<
+	"after: one-third of request should have come from first client";
+      EXPECT_EQ(2, c2_count) <<
+	"after: two-thirds of request should have come from second client";
+    }
+
+
     // This test shows what happens when a request can be ready (under
     // limit) but not schedulable since proportion tag is 0. We expect
     // to get some future and none responses.
