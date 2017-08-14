@@ -1703,25 +1703,28 @@ int CrushWrapper::add_bucket(
 				      weights);
   assert(b);
   int r = crush_add_bucket(crush, bucketno, b, idout);
+  int pos = -1 - *idout;
   for (auto& p : choose_args) {
     crush_choose_arg_map& cmap = p.second;
     if (cmap.args) {
-      if ((int)cmap.size <= *idout) {
+      if ((int)cmap.size <= pos) {
 	cmap.args = (crush_choose_arg*)realloc(
 	  cmap.args,
-	  sizeof(crush_choose_arg) * (*idout + 1));
+	  sizeof(crush_choose_arg) * (pos + 1));
+        assert(cmap.args);
 	memset(&cmap.args[cmap.size], 0,
-	       sizeof(crush_choose_arg) * (*idout + 1 - cmap.size));
-	cmap.size = *idout + 1;
+	       sizeof(crush_choose_arg) * (pos + 1 - cmap.size));
+	cmap.size = pos + 1;
       }
     } else {
       cmap.args = (crush_choose_arg*)calloc(sizeof(crush_choose_arg),
-					    *idout + 1);
-      cmap.size = *idout + 1;
+					    pos + 1);
+      assert(cmap.args);
+      cmap.size = pos + 1;
     }
     if (size > 0) {
       int positions = get_choose_args_positions(cmap);
-      crush_choose_arg& carg = cmap.args[*idout];
+      crush_choose_arg& carg = cmap.args[pos];
       carg.weight_set = (crush_weight_set*)calloc(sizeof(crush_weight_set),
 						  size);
       carg.weight_set_size = positions;
