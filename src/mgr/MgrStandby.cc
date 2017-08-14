@@ -46,6 +46,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),
   lock("MgrStandby::lock"),
   timer(g_ceph_context, lock),
+  py_module_registry(clog),
   active_mgr(nullptr),
   orig_argc(argc),
   orig_argv(argv),
@@ -151,7 +152,7 @@ void MgrStandby::send_beacon()
   dout(1) << state_str() << dendl;
 
   set<string> modules;
-  PyModules::list_modules(&modules);
+  PyModuleRegistry::list_modules(&modules);
 
   // Whether I think I am available (request MgrMonitor to set me
   // as available in the map)
@@ -215,6 +216,8 @@ void MgrStandby::shutdown()
 {
   // Expect already to be locked as we're called from signal handler
   assert(lock.is_locked_by_me());
+
+  py_module_registry.shutdown();
 
   // stop sending beacon first, i use monc to talk with monitors
   timer.shutdown();
@@ -305,10 +308,24 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   const bool active_in_map = map.active_gid == monc.get_global_id();
   dout(4) << "active in map: " << active_in_map
           << " active is " << map.active_gid << dendl;
+
+  if (!py_module_registry.is_initialized()) {
+    int r = py_module_registry.init(map);
+
+    // FIXME: error handling
+    assert(r == 0);
+  } else {
+    bool need_respawn = py_module_registry.handle_mgr_map(map);
+    if (need_respawn) {
+      respawn();
+    }
+  }
+
   if (active_in_map) {
     if (!active_mgr) {
       dout(1) << "Activating!" << dendl;
-      active_mgr.reset(new Mgr(&monc, map, client_messenger.get(), &objecter,
+      active_mgr.reset(new Mgr(&monc, map, &py_module_registry,
+                               client_messenger.get(), &objecter,
 			       &client, clog, audit_clog));
       active_mgr->background_init(new FunctionContext(
             [this](int r){
