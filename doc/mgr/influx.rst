@@ -2,15 +2,14 @@
 Influx Plugin 
 =============
 
-The influx plugin continuously collects and sends time series data to an influxdb database. 
-Users have the option to specify what type of stats they want to collect. Some default counters are already set. 
-However, users will have the option to choose some additional counters to collect 
+The influx plugin continuously collects and sends time series data to an influxdb database. Users have the option to specify what type of stats they want to collect. 
+Some default counters are already set. However, users will have the option to choose some additional counters to collect. 
 
 -------------
 Configuration 
 -------------
 
-In order for this module to work, a configure file must be created ``/etc/ceph/influx.conf``
+In order for this module to work, the following configuration should be created ``/etc/ceph/influx.conf``
 
 ^^^^^^^^
 Required 
@@ -23,21 +22,22 @@ The configurations must include the following under the header ``[influx]``
 :hostname: Influx host
 :username: Influx username
 :password: Influx password
-:database: Influx data base, if a database doesn't alread exist in influx the module will create one 
+:database: Influx database (if a database does not already exist in influx the module will create one)
 :port: Influx port 
-:stats: Stats about the osd, pool, and cluster can be collected. Specify as many as you would like, but seperate each type by a comma
+:stats: Stats about the osd, pool, and cluster can be collected. Specify as many as you would like, but seperate each type by a comma.
 
 
 ^^^^^^^^
 Optional 
 ^^^^^^^^
 
-Users have the ability to collect additional counters about both per osd or per cluster under the the header ``[extended]``.
-More information on the exteneded option can be found below under the *extended* section. Seperate each additional congifurations with a comma.  
+Users have the ability to collect additional counters for each osd or each cluster under the the header ``[extended]``.
+More information on the extended option can be found below under the *extended* section. Seperate each additional configurations with a comma.  
 
 Example config file:
 
 ::
+
     [influx]
         interval = 10
         hostname = samplehost
@@ -55,15 +55,13 @@ Example config file:
 Enabling 
 --------
 
-To enable the module the following steps must be taken in order:
-- Load the module by including this in the ceph.conf file 
+To enable the module, the following should be performed:
+- Load module by including this in the ceph.conf file 
 
 ::
 
     [mgr]
-        mgr_modules = influx 
-
-- Restart the mgr-daemon ``systemctl restart ceph-mgr@<mymonitor>`` 
+        mgr_modules = influx  
 - Initialize the module to run every set interval  ``ceph mgr module enable influx``
 
 ---------
@@ -87,8 +85,7 @@ To make use of the debugging option in the module:
         debug_mgr = 20  
 
 
-- Restart the ceph-mgr daemon ``systemctl restart ceph-mgr@<mymonitor>``
-- Use this command ``ceph tell mgr.<mymonitor> influx debug`` 
+- Use this command ``ceph tell mgr.<mymonitor> influx self-test`` 
 - Check the log files. Users may find it easier to filter the log files using *mgr[influx]*
 
 -----
@@ -106,15 +103,15 @@ Default Counters
 +===============+=====================================================+
 |bytes_used     | Bytes used in the pool not including copies         |
 +---------------+-----------------------------------------------------+
-|max_avail      | The max available number of bytes in the pool       |
+|max_avail      | Max available number of bytes in the pool           |
 +---------------+-----------------------------------------------------+
-|objects        | Number of objects in pool                           |
+|objects        | Number of objects in the pool                       |
 +---------------+-----------------------------------------------------+
-|wr_bytes       | Number of bytes written in pool                     |
+|wr_bytes       | Number of bytes written in the pool                 |
 +---------------+-----------------------------------------------------+
-|dirty          | Number of bytes dirty in pool                       |
+|dirty          | Number of bytes dirty in the pool                   |
 +---------------+-----------------------------------------------------+
-|rd_bytes       | Number of bytes read in pool                        |
+|rd_bytes       | Number of bytes read in the pool                    |
 +---------------+-----------------------------------------------------+
 |raw_bytes_used | Bytes used in pool including copies made            |
 +---------------+-----------------------------------------------------+
@@ -141,8 +138,7 @@ for all osd.
 ^^^^^^^^
 extended
 ^^^^^^^^
-There are many other counters that can be collected by configuring the module such as operational counters and suboperational counters. 
-A couple of counters are listed and described below, but additional counters 
+There are many other counters that can be collected by configuring the module such as operational counters and suboperational counters. A couple of counters are listed and described below, but additional counters 
 can be found here https://github.com/ceph/ceph/blob/5a197c5817f591fc514f55b9929982e90d90084e/src/osd/OSD.cc 
 
 **Operations**
@@ -172,7 +168,7 @@ can be found here https://github.com/ceph/ceph/blob/5a197c5817f591fc514f55b99299
 +------------------------+--------------------------------------------------------------------------+
 |op_w_prepare_latency    | Latency of write operations (excluding queue time and wait for finished) |
 +------------------------+--------------------------------------------------------------------------+
-|op_rw                   | Client read-modify-write operations")                                    |
+|op_rw                   | Client read-modify-write operations                                      |
 +------------------------+--------------------------------------------------------------------------+
 |op_rw_in_bytes          | Client read-modify-write operations write in                             |
 +------------------------+--------------------------------------------------------------------------+
@@ -185,7 +181,7 @@ can be found here https://github.com/ceph/ceph/blob/5a197c5817f591fc514f55b99299
 |op_rw_prepare_latency   | Latency of read-modify-write operations (excluding queue time            |
 |                        | and wait for finished)                                                   |
 +------------------------+--------------------------------------------------------------------------+
-|op_before_queue_op_lat  | Latency of IO before calling queue(before really queue into ShardedOpWq) |
+|op_before_queue_op_lat  | Latency of IO before calling queue (before really queue into ShardedOpWq)|
 |                        | op_before_dequeue_op_lat                                                 |
 +------------------------+--------------------------------------------------------------------------+
 |op_before_dequeue_op_lat| Latency of IO before calling dequeue_op(already dequeued and get PG lock)|

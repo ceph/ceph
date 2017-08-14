@@ -10,10 +10,10 @@ from threading import Event
 
 class Module(MgrModule):
  
-    run = True 
+     
     COMMANDS = [
         {
-            "cmd": "influx debug",
+            "cmd": "influx self-test",
             "desc": "debug the module",
             "perm": "rw"  
         },
@@ -23,20 +23,13 @@ class Module(MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.event = Event()
+        self.run = True 
 
 
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
         if data:
             return data[-1][1]
-        else:
-            return 0
-
-
-    def get_rate(self, daemon_type, daemon_name, stat):
-        data = self.get_counter(daemon_type, daemon_name, stat)[stat]
-        if data and len(data) > 1:
-            return (data[-1][1] - data[-2][1]) / float(data[-1][0] - data[-2][0])
         else:
             return 0
 
@@ -66,7 +59,7 @@ class Module(MgrModule):
                     "type_instance": type_inst,
                     "host": metadata['hostname']
                 },
-                    "time" : datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%fZ'), 
+                    "time" : datetime.utcnow().isoformat() + 'Z', 
                     "fields" : {
                         "value": self.get_latest("osd", osd_id.__str__(), path.__str__())
                     }
@@ -82,7 +75,7 @@ class Module(MgrModule):
                 "mgr_id": self.get_mgr_id(),
                 "type_instance": type_inst,
             },
-                "time" : datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
+                "time" : datetime.utcnow().isoformat() + 'Z',
                 "fields" : {
                     "value": self.sum_stat(type_inst)
                 }
@@ -113,7 +106,7 @@ class Module(MgrModule):
                         "type_instance" : df_type,
                         "mgr_id" : self.get_mgr_id(),
                     },
-                        "time" : datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
+                        "time" : datetime.utcnow().isoformat() + 'Z',
                         "fields": {
                             "value" : pool['stats'][df_type],
                         }
@@ -193,7 +186,7 @@ class Module(MgrModule):
             
         
     def handle_command(self, cmd):
-        if cmd['prefix'] == 'influx debug':
+        if cmd['prefix'] == 'influx self-test':
             self.send_to_influx()
             return 0,' ', 'debugging module'
         else:
