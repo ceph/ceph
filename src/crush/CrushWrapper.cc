@@ -1678,8 +1678,8 @@ int CrushWrapper::bucket_adjust_item_weight(CephContext *cct, crush_bucket *buck
       if (bucket->items[position] == item)
 	break;
     assert(position != bucket->size);
-    for (auto w : choose_args) {
-      crush_choose_arg_map arg_map = w.second;
+    for (auto &w : choose_args) {
+      crush_choose_arg_map &arg_map = w.second;
       crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
       for (__u32 j = 0; j < arg->weight_set_size; j++) {
 	crush_weight_set *weight_set = &arg->weight_set[j];
