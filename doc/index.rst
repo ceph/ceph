@@ -3,7 +3,7 @@
 =================
 
 Ceph uniquely delivers **object, block, and file storage in one unified
-system**. 
+system**.
 
 .. raw:: html
 
@@ -21,7 +21,7 @@ system**.
 - Multi-site deployment
 - Multi-site replication
 
-.. raw:: html 
+.. raw:: html
 
 	</td><td><h3>Ceph Block Device</h3>
 
@@ -38,10 +38,10 @@ system**.
 - Incremental backup
 - Disaster recovery (multisite asynchronous replication)
 
-.. raw:: html 
+.. raw:: html
 
 	</td><td><h3>Ceph Filesystem</h3>
-	
+
 - POSIX-compliant semantics
 - Separates metadata from data
 - Dynamic rebalancing
@@ -55,22 +55,22 @@ system**.
 .. raw:: html
 
 	</td></tr><tr><td>
-	
+
 See `Ceph Object Store`_ for additional details.
 
 .. raw:: html
 
 	</td><td>
-	
+
 See `Ceph Block Device`_ for additional details.
-	
+
 .. raw:: html
 
 	</td><td>
-	
-See `Ceph Filesystem`_ for additional details.	
-	
-.. raw::	html 
+
+See `Ceph Filesystem`_ for additional details.
+
+.. raw::	html
 
 	</td></tr></tbody></table>
 
@@ -88,7 +88,7 @@ about Ceph, see our `Architecture`_ section.
 .. _Architecture: architecture
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 3
    :hidden:
 
    start/intro
