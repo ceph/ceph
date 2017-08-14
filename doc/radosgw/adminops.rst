@@ -347,7 +347,9 @@ Request Parameters
 :Type: String
 :Example: ``foo_user``
 :Required: Yes
-A tenant name may also specified as a part of ``uid``, by following the syntax ``tenant$user``, refer to `Multitenancy`_ for more details.
+
+A tenant name may also specified as a part of ``uid``, by following the syntax
+``tenant$user``, refer to `Multitenancy`_ for more details.
 
 ``display-name``
 
