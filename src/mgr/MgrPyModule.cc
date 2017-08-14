@@ -24,6 +24,9 @@
 #include <boost/python.hpp>
 #include "include/assert.h"  // boost clobbers this
 
+
+#define dout_prefix *_dout << "mgr " << __func__ << " "
+
 // decode a Python exception into a string
 std::string handle_pyerror()
 {
@@ -46,96 +49,28 @@ std::string handle_pyerror()
     return extract<std::string>(formatted);
 }
 
-#define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_mgr
 
-#undef dout_prefix
-#define dout_prefix *_dout << "mgr[py] "
 
-namespace {
-  PyObject* log_write(PyObject*, PyObject* args) {
-    char* m = nullptr;
-    if (PyArg_ParseTuple(args, "s", &m)) {
-      auto len = strlen(m);
-      if (len && m[len-1] == '\n') {
-	m[len-1] = '\0';
-      }
-      dout(4) << m << dendl;
-    }
-    Py_RETURN_NONE;
-  }
 
-  PyObject* log_flush(PyObject*, PyObject*){
-    Py_RETURN_NONE;
-  }
-
-  static PyMethodDef log_methods[] = {
-    {"write", log_write, METH_VARARGS, "write stdout and stderr"},
-    {"flush", log_flush, METH_VARARGS, "flush"},
-    {nullptr, nullptr, 0, nullptr}
-  };
-}
-
-#undef dout_prefix
-#define dout_prefix *_dout << "mgr " << __func__ << " "
-
-MgrPyModule::MgrPyModule(const std::string &module_name_, const std::string &sys_path, PyThreadState *main_ts_)
-  : module_name(module_name_),
-    pClassInstance(nullptr),
-    pMainThreadState(main_ts_)
+void *ServeThread::entry()
 {
-  Gil gil(pMainThreadState);
-
-  auto thread_state = Py_NewInterpreter();
-  if (thread_state == nullptr) {
-    derr << "Failed to create python sub-interpreter for '" << module_name << '"' << dendl;
-  } else {
-    pMyThreadState.set(thread_state);
-
-    // Some python modules do not cope with an unpopulated argv, so lets
-    // fake one.  This step also picks up site-packages into sys.path.
-    const char *argv[] = {"ceph-mgr"};
-    PySys_SetArgv(1, (char**)argv);
-
-    if (g_conf->daemonize) {
-      auto py_logger = Py_InitModule("ceph_logger", log_methods);
-#if PY_MAJOR_VERSION >= 3
-      PySys_SetObject("stderr", py_logger);
-      PySys_SetObject("stdout", py_logger);
-#else
-      PySys_SetObject(const_cast<char*>("stderr"), py_logger);
-      PySys_SetObject(const_cast<char*>("stdout"), py_logger);
-#endif
-    }
-
-    PySys_SetPath(const_cast<char*>(sys_path.c_str()));
-
-    // Populate python namespace with callable hooks
-    Py_InitModule("ceph_osdmap", OSDMapMethods);
-    Py_InitModule("ceph_osdmap_incremental", OSDMapIncrementalMethods);
-    Py_InitModule("ceph_crushmap", CRUSHMapMethods);
-
-    PyMethodDef ModuleMethods[] = {
-      {nullptr}
-    };
-
-    // Initialize module
-    PyObject *ceph_module = Py_InitModule("ceph_module", ModuleMethods);
-    assert(ceph_module != nullptr);
-
-    // Initialize base class
-    BaseMgrModuleType.tp_new = PyType_GenericNew;
-    if (PyType_Ready(&BaseMgrModuleType) < 0) {
-        assert(0);
-    }
-
-    Py_INCREF(&BaseMgrModuleType);
-    PyModule_AddObject(ceph_module, "BaseMgrModule",
-                       (PyObject *)&BaseMgrModuleType);
-  }
+  // No need to acquire the GIL here; the module does it.
+  dout(4) << "Entering thread for " << mod->get_name() << dendl;
+  mod->serve();
+  return nullptr;
 }
 
-MgrPyModule::~MgrPyModule()
+ActivePyModule::ActivePyModule(const std::string &module_name_,
+                               PyObject *pClass_,
+                               PyThreadState *my_ts_)
+  : module_name(module_name_),
+    pClass(pClass_),
+    pMyThreadState(my_ts_),
+    thread(this)
+{
+}
+
+ActivePyModule::~ActivePyModule()
 {
   if (pMyThreadState.ts != nullptr) {
     Gil gil(pMyThreadState);
@@ -168,45 +103,17 @@ MgrPyModule::~MgrPyModule()
   }
 }
 
-int MgrPyModule::load(PyModules *py_modules)
+int ActivePyModule::load(ActivePyModules *py_modules)
 {
-  if (pMyThreadState.ts == nullptr) {
-    derr << "No python sub-interpreter exists for module '" << module_name << "'" << dendl;
-    return -EINVAL;
-  }
-
   Gil gil(pMyThreadState);
 
-  // Load the module
-  PyObject *pName = PyString_FromString(module_name.c_str());
-  auto pModule = PyImport_Import(pName);
-  Py_DECREF(pName);
-  if (pModule == nullptr) {
-    derr << "Module not found: '" << module_name << "'" << dendl;
-    derr << handle_pyerror() << dendl;
-
-    assert(0);
-    return -ENOENT;
-  }
-
-  // Find the class
-  // TODO: let them call it what they want instead of just 'Module'
-  auto pClass = PyObject_GetAttrString(pModule, (const char*)"Module");
-  Py_DECREF(pModule);
-  if (pClass == nullptr) {
-    derr << "Class not found in module '" << module_name << "'" << dendl;
-    derr << handle_pyerror() << dendl;
-    return -EINVAL;
-  }
-  
   // We tell the module how we name it, so that it can be consistent
   // with us in logging etc.
-  
   auto pThisPtr = PyCapsule_New(this, nullptr, nullptr);
   auto pPyModules = PyCapsule_New(py_modules, nullptr, nullptr);
-  
   auto pModuleName = PyString_FromString(module_name.c_str());
   auto pArgs = PyTuple_Pack(3, pModuleName, pPyModules, pThisPtr);
+
   pClassInstance = PyObject_CallObject(pClass, pArgs);
   Py_DECREF(pClass);
   Py_DECREF(pModuleName);
@@ -222,7 +129,7 @@ int MgrPyModule::load(PyModules *py_modules)
   return load_commands();
 }
 
-int MgrPyModule::serve()
+int ActivePyModule::serve()
 {
   assert(pClassInstance != nullptr);
 
@@ -245,8 +152,7 @@ int MgrPyModule::serve()
   return r;
 }
 
-// FIXME: DRY wrt serve
-void MgrPyModule::shutdown()
+void ActivePyModule::shutdown()
 {
   assert(pClassInstance != nullptr);
 
@@ -263,7 +169,7 @@ void MgrPyModule::shutdown()
   }
 }
 
-void MgrPyModule::notify(const std::string &notify_type, const std::string &notify_id)
+void ActivePyModule::notify(const std::string &notify_type, const std::string &notify_id)
 {
   assert(pClassInstance != nullptr);
 
@@ -286,7 +192,7 @@ void MgrPyModule::notify(const std::string &notify_type, const std::string &noti
   }
 }
 
-void MgrPyModule::notify_clog(const LogEntry &log_entry)
+void ActivePyModule::notify_clog(const LogEntry &log_entry)
 {
   assert(pClassInstance != nullptr);
 
@@ -314,9 +220,9 @@ void MgrPyModule::notify_clog(const LogEntry &log_entry)
   }
 }
 
-int MgrPyModule::load_commands()
+int ActivePyModule::load_commands()
 {
-  // Don't need a Gil here -- this is called from MgrPyModule::load(),
+  // Don't need a Gil here -- this is called from ActivePyModule::load(),
   // which already has one.
   PyObject *command_list = PyObject_GetAttrString(pClassInstance, "COMMANDS");
   assert(command_list != nullptr);
@@ -352,7 +258,7 @@ int MgrPyModule::load_commands()
   return 0;
 }
 
-int MgrPyModule::handle_command(
+int ActivePyModule::handle_command(
   const cmdmap_t &cmdmap,
   std::stringstream *ds,
   std::stringstream *ss)
@@ -391,7 +297,7 @@ int MgrPyModule::handle_command(
   return r;
 }
 
-void MgrPyModule::get_health_checks(health_check_map_t *checks)
+void ActivePyModule::get_health_checks(health_check_map_t *checks)
 {
   checks->merge(health_checks);
 }

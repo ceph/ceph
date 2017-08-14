@@ -3,9 +3,6 @@
 
 #include "Python.h"
 
-class PyModules;
-
-extern PyModules *global_handle;
 extern PyTypeObject BaseMgrModuleType;
 
 #endif

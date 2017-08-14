@@ -41,7 +41,7 @@ DaemonServer::DaemonServer(MonClient *monc_,
                            Finisher &finisher_,
 			   DaemonStateIndex &daemon_state_,
 			   ClusterState &cluster_state_,
-			   PyModules &py_modules_,
+			   PyModuleRegistry &py_modules_,
 			   LogChannelRef clog_,
 			   LogChannelRef audit_clog_)
     : Dispatcher(g_ceph_context),
@@ -1287,7 +1287,7 @@ bool DaemonServer::handle_command(MCommand *m)
   }
 
   // None of the special native commands, 
-  MgrPyModule *handler = nullptr;
+  ActivePyModule *handler = nullptr;
   auto py_commands = py_modules.get_py_commands();
   for (const auto &pyc : py_commands) {
     auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
