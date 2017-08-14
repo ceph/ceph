@@ -256,8 +256,8 @@ Major Changes from Kraken
     - ``ceph osd crush {set,rm}-device-class`` manage the new
       CRUSH *device class* feature. Note that manually creating or deleting
       a device class name is generally not necessary as it will be smart
-      enough to be self-managed. ``ceph osd crush class ls`` and 
-      ``ceph osd crush class ls-osd`` will output all existing device classes 
+      enough to be self-managed. ``ceph osd crush class ls`` and
+      ``ceph osd crush class ls-osd`` will output all existing device classes
       and a list of OSD ids under the given device class respectively.
     - ``ceph osd crush rule create-replicated`` replaces the old
       ``ceph osd crush rule create-simple`` command to create a CRUSH
@@ -1030,7 +1030,7 @@ stable release.
 * rgw: raise debug level of RGWPostObj_ObjStore_S3::get_policy (`pr#16203 <https://github.com/ceph/ceph/pull/16203>`_, Shasha Lu)
 * rgw: req xml params size limitation error msg (`pr#16310 <https://github.com/ceph/ceph/pull/16310>`_, Enming Zhang)
 * rgw: restore admin socket path in mrgw.sh (`pr#16540 <https://github.com/ceph/ceph/pull/16540>`_, Casey Bodley)
-* rgw: rgw_file: properly & |'d flags (`issue#20663 <http://tracker.ceph.com/issues/20663>`_, `pr#16448 <https://github.com/ceph/ceph/pull/16448>`_, Matt Benjamin)
+* rgw: rgw_file: properly & \|'d flags (`issue#20663 <http://tracker.ceph.com/issues/20663>`_, `pr#16448 <https://github.com/ceph/ceph/pull/16448>`_, Matt Benjamin)
 * rgw: rgw multisite: feature of bucket sync enable/disable (`pr#15801 <https://github.com/ceph/ceph/pull/15801>`_, Zhang Shaowen, Casey Bodley, Zengran Zhang)
 * rgw: should unlock when reshard_log->update() reture non-zero in RGWB… (`pr#16502 <https://github.com/ceph/ceph/pull/16502>`_, Wei Qiaomiao)
 * rgw: test,rgw: fix rgw placement rule pool config option (`pr#16380 <https://github.com/ceph/ceph/pull/16380>`_, Jiaying Ren)
@@ -1119,7 +1119,7 @@ Other Notable Changes
 * cephfs: Remove "experimental" warnings from multimds (`pr#15154 <https://github.com/ceph/ceph/pull/15154>`_, John Spray, "Yan, Zheng")
 * cleanup: test,mon,msg: kill clang analyzer warnings (`pr#16320 <https://github.com/ceph/ceph/pull/16320>`_, Kefu Chai)
 * cmake: fix the build with -DWITH_ZFS=ON (`pr#15907 <https://github.com/ceph/ceph/pull/15907>`_, Kefu Chai)
-* cmake: Rewrite HAVE_BABELTRACE  option to WITH_ (`pr#15305 <https://github.com/ceph/ceph/pull/15305>`_, Willem Jan Withagen)
+* cmake: Rewrite HAVE_BABELTRACE  option to WITH (`pr#15305 <https://github.com/ceph/ceph/pull/15305>`_, Willem Jan Withagen)
 * common: auth/RotatingKeyRing: use std::move() to set secrets (`pr#15866 <https://github.com/ceph/ceph/pull/15866>`_, Kefu Chai)
 * common: ceph.in, mgr: misc cleanups (`pr#16229 <https://github.com/ceph/ceph/pull/16229>`_, liuchang0812)
 * common: common,config: OPT_FLOAT and OPT_DOUBLE output format in config show (`issue#20104 <http://tracker.ceph.com/issues/20104>`_, `pr#15647 <https://github.com/ceph/ceph/pull/15647>`_, Yanhu Cao)
@@ -1237,7 +1237,7 @@ Other Notable Changes
 * mon: Division by zero in PGMapDigest::dump_pool_stats_full() (`pr#15901 <https://github.com/ceph/ceph/pull/15901>`_, Jos Collin)
 * mon: do crushtool test with fork and timeout, but w/o exec of crushtool (`issue#19964 <http://tracker.ceph.com/issues/19964>`_, `pr#16025 <https://github.com/ceph/ceph/pull/16025>`_, Sage Weil)
 * mon: Filter `log last` output by severity and channel (`pr#15924 <https://github.com/ceph/ceph/pull/15924>`_, John Spray)
-* mon: fix hang on deprecated/removed 'pg set_\*full_ratio' commands (`issue#20600 <http://tracker.ceph.com/issues/20600>`_, `pr#16300 <https://github.com/ceph/ceph/pull/16300>`_, Sage Weil)
+* mon: fix hang on deprecated/removed 'pg set_*full_ratio' commands (`issue#20600 <http://tracker.ceph.com/issues/20600>`_, `pr#16300 <https://github.com/ceph/ceph/pull/16300>`_, Sage Weil)
 * mon: fix kvstore type in mon compact command (`pr#15954 <https://github.com/ceph/ceph/pull/15954>`_, liuchang0812)
 * mon: Fix status output warning for mon_warn_osd_usage_min_max_delta (`issue#20544 <http://tracker.ceph.com/issues/20544>`_, `pr#16220 <https://github.com/ceph/ceph/pull/16220>`_, David Zafman)
 * mon: handle cases where store->get() may return error (`issue#19601 <http://tracker.ceph.com/issues/19601>`_, `pr#14678 <https://github.com/ceph/ceph/pull/14678>`_, Jos Collin)
@@ -3938,7 +3938,7 @@ of BlueStore include:
 
 The BlueStore on-disk format is expected to continue to evolve.  However, we
 will provide support in the OSD to migrate to the new format on upgrade.
-   
+
 .. note: BlueStore is still marked "experimental" in Kraken.  We
    recommend its use for proof-of-concept and test environments, or
    other cases where data loss can be tolerated.  Although it is
@@ -6768,7 +6768,7 @@ Major Changes from Infernalis
     and similar projects.
   * There is now experimental support for multiple CephFS file systems
     within a single cluster.
-  
+
 - *RGW*:
 
   * The multisite feature has been almost completely rearchitected and
@@ -6792,7 +6792,7 @@ Major Changes from Infernalis
     and a new rbd-mirror daemon that performs the cross-cluster
     replication.
   * The exclusive-lock, object-map, fast-diff, and journaling features
-    can be enabled or disabled dynamically. The deep-flatten features 
+    can be enabled or disabled dynamically. The deep-flatten features
     can be disabled dynamically but not re-enabled.
   * The RBD CLI has been rewritten to provide command-specific help
     and full bash completion support.
@@ -8947,7 +8947,7 @@ Notable Changes since Hammer
 * tests: many many ec test improvements (Loic Dachary)
 * upstart: throttle restarts (#11798 Sage Weil, Greg Farnum)
 
-  
+
 v10.1.2 Jewel (release candidate)
 =================================
 
@@ -9165,7 +9165,7 @@ Notable Changes since v10.1.0
 
 v10.1.0 Jewel (release candidate)
 =================================
-   
+
 There are a few known issues with this release candidate; see below.
 
 Known Issues with v10.1.0
@@ -11165,16 +11165,16 @@ Getting the release candidate
 -----------------------------
 
 The v9.1.0 packages are pushed to the development release repositories::
-  
+
   http://download.ceph.com/rpm-testing
   http://download.ceph.com/debian-testing
 
 For for info, see::
-  
+
   http://docs.ceph.com/docs/master/install/get-packages/
 
 Or install with ceph-deploy via::
-  
+
   ceph-deploy install --testing HOST
 
 
@@ -11268,7 +11268,7 @@ Upgrading directly from Firefly v0.80.z is not possible.  All clusters
 must first upgrade to Hammer v0.94.4 or a later v0.94.z release; only
 then is it possible to do online upgrade to Infernalis 9.2.z.
 
-User can upgrade to latest hammer v0.94.z 
+User can upgrade to latest hammer v0.94.z
 from gitbuilder with(also refer the hammer release notes for more details)::
 
   ceph-deploy install --release hammer HOST
@@ -11289,7 +11289,7 @@ Upgrading from Hammer
 
   The main notable distro that is *not* yet using systemd is Ubuntu trusty
   14.04.  (The next Ubuntu LTS, 16.04, will use systemd instead of upstart.)
-    
+
 * Ceph daemons now run as user and group ``ceph`` by default.  The
   ceph user has a static UID assigned by Fedora and Debian (also used
   by derivative distributions like RHEL/CentOS and Ubuntu).  On SUSE
@@ -11325,7 +11325,7 @@ Upgrading from Hammer
 
 	   service ceph stop           # fedora, centos, rhel, debian
 	   stop ceph-all               # ubuntu
-	   
+
       #. Fix the ownership::
 
 	   chown -R ceph:ceph /var/lib/ceph
@@ -12173,7 +12173,7 @@ Notable Changes
 * tools, test: Add ceph-objectstore-tool to operate on the meta collection (`issue#14977 <http://tracker.ceph.com/issues/14977>`_, `pr#7911 <http://github.com/ceph/ceph/pull/7911>`_, David Zafman)
 * unittest_crypto: benchmark 100,000 CryptoKey::encrypt() calls (`issue#14863 <http://tracker.ceph.com/issues/14863>`_, `pr#7801 <http://github.com/ceph/ceph/pull/7801>`_, Sage Weil)
 
-  
+
 v0.94.6 Hammer
 ======================
 
@@ -12506,7 +12506,7 @@ Notable Changes
 For more detailed information, see :download:`the complete changelog <changelog/v0.94.3.txt>`.
 
 
-  
+
 v0.94.2 Hammer
 ==============
 
@@ -15230,11 +15230,11 @@ Upgrading
   replaced by ``cluster_osd_bytes``).
 
 * The ``rd_kb`` and ``wr_kb`` fields in the JSON dumps for pool stats (accessed
-  via the ``ceph df detail -f json-pretty`` and related commands) have been 
-  replaced with corresponding ``*_bytes`` fields.  Similarly, the 
-  ``total_space``, ``total_used``, and ``total_avail`` fields are replaced with 
+  via the ``ceph df detail -f json-pretty`` and related commands) have been
+  replaced with corresponding ``*_bytes`` fields.  Similarly, the
+  ``total_space``, ``total_used``, and ``total_avail`` fields are replaced with
   ``total_bytes``, ``total_used_bytes``,  and ``total_avail_bytes`` fields.
-  
+
 * The ``rados df --format=json`` output ``read_bytes`` and ``write_bytes``
   fields were incorrectly reporting ops; this is now fixed.
 
@@ -18259,9 +18259,9 @@ For more detailed information, see :download:`the complete changelog <changelog/
 v0.67.5 "Dumpling"
 ==================
 
-This release includes a few critical bug fixes for the radosgw, 
+This release includes a few critical bug fixes for the radosgw,
 including a fix for hanging operations on large objects.  There are also
-several bug fixes for radosgw multi-site replications, and a few 
+several bug fixes for radosgw multi-site replications, and a few
 backported features.  Also, notably, the 'osd perf' command (which dumps
 recent performance information about active OSDs) has been backported.
 
@@ -19316,7 +19316,7 @@ Notable Changes from v0.60
 * osd: improve client request throttling
 * osd, librados: fixes to the LIST_SNAPS operation
 * osd: improvements to scrub error repair
-* osd: better prevention of wedging OSDs with ENOSPC 
+* osd: better prevention of wedging OSDs with ENOSPC
 * osd: many small fixes
 * mds: fix xattr handling on root inode
 * mds: fixed bugs in journal replay
@@ -19518,7 +19518,7 @@ Notable Changes
  * mon: rearchitected to utilize single instance of paxos and a key/value store (Joao Luis)
  * mon: new 'ceph df [detail]' command
  * osd: support for improved hashing of PGs across OSDs via HASHPSPOOL pool flag and feature
- * osd: refactored watch/notify infrastructure (fixes protocol, removes many bugs) (Sam Just) 
+ * osd: refactored watch/notify infrastructure (fixes protocol, removes many bugs) (Sam Just)
  * osd, librados: ability to list watchers (David Zafman)
  * osd, librados: new listsnaps command (David Zafman)
  * osd: trim log more aggressively, avoid appearance of leak memory
@@ -20293,7 +20293,7 @@ v0.48 "argonaut"
 Upgrading
 ---------
 
-* This release includes a disk format upgrade.  Each ceph-osd daemon, upon startup, will migrate its locally stored data to the new format.  This process can take a while (for large object counts, even hours), especially on non-btrfs file systems.  
+* This release includes a disk format upgrade.  Each ceph-osd daemon, upon startup, will migrate its locally stored data to the new format.  This process can take a while (for large object counts, even hours), especially on non-btrfs file systems.
 
 * To keep the cluster available while the upgrade is in progress, we recommend you upgrade a storage node or rack at a time, and wait for the cluster to recover each time.  To prevent the cluster from moving data around in response to the OSD daemons being down for minutes or hours, you may want to::
 
