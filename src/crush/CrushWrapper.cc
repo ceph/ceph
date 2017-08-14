@@ -1245,6 +1245,10 @@ int CrushWrapper::adjust_item_weight_in_loc(CephContext *cct, int id, int weight
     crush_bucket *b = get_bucket(bid);
     for (unsigned int i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
+        for (auto& p : choose_args) {
+          vector<int> weightv(get_choose_args_positions(p.second), weight);
+          choose_args_adjust_item_weight(cct, p.second, id, weightv, nullptr);
+        }
 	int diff = bucket_adjust_item_weight(cct, b, id, weight);
 	ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " diff " << diff
 		      << " in bucket " << bid << dendl;
@@ -1672,21 +1676,6 @@ int CrushWrapper::remove_rule(int ruleno)
 
 int CrushWrapper::bucket_adjust_item_weight(CephContext *cct, crush_bucket *bucket, int item, int weight)
 {
-  if (cct->_conf->osd_crush_update_weight_set) {
-    unsigned position;
-    for (position = 0; position < bucket->size; position++)
-      if (bucket->items[position] == item)
-	break;
-    assert(position != bucket->size);
-    for (auto w : choose_args) {
-      crush_choose_arg_map arg_map = w.second;
-      crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
-      for (__u32 j = 0; j < arg->weight_set_size; j++) {
-	crush_weight_set *weight_set = &arg->weight_set[j];
-	weight_set->weights[position] = weight;
-      }
-    }
-  }
   return crush_bucket_adjust_item_weight(crush, bucket, item, weight);
 }
 
