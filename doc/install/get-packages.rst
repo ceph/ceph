@@ -90,8 +90,8 @@ bugfixes are backported to LTS releases until their retirement. Since retired
 releases are no longer maintained, we recommend that users upgrade their
 clusters regularly - preferably to the latest LTS release.
 
-.. tip:: For international users: There might be a mirror close to you where
-         download Ceph from. For more information see: `Ceph Mirrors`_.
+.. tip:: For non-US users: There might be a mirror close to you where
+         to download Ceph from. For more information see: `Ceph Mirrors`_.
 
 Debian Packages
 ---------------
@@ -132,7 +132,9 @@ of Debian and Ubuntu releases supported. ::
 
 	echo deb https://download.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
-.. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
+.. tip:: For non-US users: There might be a mirror close to you where
+         to download Ceph from. For more information see: `Ceph Mirrors`_.
+
 
 RPM Packages
 ------------
@@ -187,7 +189,8 @@ You can download the RPMs directly from::
 
      https://download.ceph.com/rpm-testing
 
-.. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
+.. tip:: For non-US users: There might be a mirror close to you where
+         to download Ceph from. For more information see: `Ceph Mirrors`_.
 
 
 Add Ceph Development
