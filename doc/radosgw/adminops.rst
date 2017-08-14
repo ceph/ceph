@@ -415,6 +415,7 @@ A tenant name may also specified as a part of ``uid``, by following the syntax `
 :Required: No
 
 .. versionadded:: Jewel
+
 ``tenant``
 
 :Description: the Tenant under which a user is a part of.
@@ -764,7 +765,7 @@ Create Subuser
 ==============
 
 Create a new subuser (primarily useful for clients using the Swift API).
-Note that in general for a subuser to be useful, it must be granted 
+Note that in general for a subuser to be useful, it must be granted
 permissions by specifying ``access``. As with user creation if
 ``subuser`` is specified without ``secret``, then a secret key will
 be automatically generated.
@@ -1856,10 +1857,10 @@ Valid parameters for quotas include:
 
 - **Maximum Objects:** The ``max-objects`` setting allows you to specify
   the maximum number of objects. A negative value disables this setting.
-  
+
 - **Maximum Size:** The ``max-size`` option allows you to specify a quota
   for the maximum number of bytes. A negative value disables this setting.
-  
+
 - **Quota Type:** The ``quota-type`` option sets the scope for the quota.
   The options are ``bucket`` and ``user``.
 
@@ -1869,7 +1870,7 @@ Valid parameters for quotas include:
 Get User Quota
 ~~~~~~~~~~~~~~
 
-To get a quota, the user must have ``users`` capability set with ``read`` 
+To get a quota, the user must have ``users`` capability set with ``read``
 permission. ::
 
 	GET /admin/user?quota&uid=<uid>&quota-type=user
@@ -1878,7 +1879,7 @@ permission. ::
 Set User Quota
 ~~~~~~~~~~~~~~
 
-To set a quota, the user must have ``users`` capability set with ``write`` 
+To set a quota, the user must have ``users`` capability set with ``write``
 permission. ::
 
 	PUT /admin/user?quota&uid=<uid>&quota-type=user
@@ -1891,7 +1892,7 @@ as encoded in the corresponding read operation.
 Get Bucket Quota
 ~~~~~~~~~~~~~~~~
 
-To get a quota, the user must have ``users`` capability set with ``read`` 
+To get a quota, the user must have ``users`` capability set with ``read``
 permission. ::
 
 	GET /admin/user?quota&uid=<uid>&quota-type=bucket
@@ -1900,7 +1901,7 @@ permission. ::
 Set Bucket Quota
 ~~~~~~~~~~~~~~~~
 
-To set a quota, the user must have ``users`` capability set with ``write`` 
+To set a quota, the user must have ``users`` capability set with ``write``
 permission. ::
 
 	PUT /admin/user?quota&uid=<uid>&quota-type=bucket
