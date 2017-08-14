@@ -1747,8 +1747,8 @@ int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight)
   if (r < 0) {
     return r;
   }
-  for (auto w : choose_args) {
-    crush_choose_arg_map arg_map = w.second;
+  for (auto &w : choose_args) {
+    crush_choose_arg_map &arg_map = w.second;
     crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
     for (__u32 j = 0; j < arg->weight_set_size; j++) {
       crush_weight_set *weight_set = &arg->weight_set[j];
