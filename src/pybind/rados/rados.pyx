@@ -664,7 +664,7 @@ cdef class Rados(object):
         """
         Checks if the Rados object is in a special state
 
-        :raises: RadosStateError
+        :raises: :class:`RadosStateError`
         """
         if self.state in args:
             return
