@@ -74,7 +74,7 @@ internal structures if they are the direct subject of the message,
 for example in a corruption, but use plain english.
 Example: instead of "Objecter requests" say "OSD client requests"
 Example: it is okay to mention internal structure in the context
-        of "Corrupt session table" (but don't say "Corrupt SessionTable")
+of "Corrupt session table" (but don't say "Corrupt SessionTable")
 
 Where possible, describe the consequence for system availability, rather
 than only describing the underlying state.  For example, rather than
