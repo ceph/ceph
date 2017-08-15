@@ -9,9 +9,9 @@ through a centralized server or broker. With an algorithmically determined
 method of storing and retrieving data, Ceph avoids a single point of failure, a
 performance bottleneck, and a physical limit to its scalability.
 
-CRUSH requires a map of your cluster, and uses the CRUSH map to pseudo-randomly 
-store and retrieve data in OSDs with a uniform distribution of data across the 
-cluster. For a detailed discussion of CRUSH, see 
+CRUSH requires a map of your cluster, and uses the CRUSH map to pseudo-randomly
+store and retrieve data in OSDs with a uniform distribution of data across the
+cluster. For a detailed discussion of CRUSH, see
 `CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_
 
 CRUSH maps contain a list of :abbr:`OSDs (Object Storage Devices)`, a list of
@@ -51,8 +51,8 @@ Note:
 
 #. Note that the order of the keys does not matter.
 #. The key name (left of ``=``) must be a valid CRUSH ``type``.  By default
-   these include root, datacenter, room, row, pod, pdu, rack, chassis and host, 
-   but those types can be customized to be anything appropriate by modifying 
+   these include root, datacenter, room, row, pod, pdu, rack, chassis and host,
+   but those types can be customized to be anything appropriate by modifying
    the CRUSH map.
 #. Not all keys need to be specified.  For example, by default, Ceph
    automatically sets a ``ceph-osd`` daemon's location to be
@@ -151,12 +151,12 @@ leaves, interior nodes with non-device types, and a root node of type
                         | {o}root default |
                         +--------+--------+
                                  |
-                 +---------------+---------------+             
+                 +---------------+---------------+
                  |                               |
          +-------+-------+                 +-----+-------+
          | {o}host foo   |                 | {o}host bar |
          +-------+-------+                 +-----+-------+
-                 |                               | 
+                 |                               |
          +-------+-------+               +-------+-------+
          |               |               |               |
    +-----+-----+   +-----+-----+   +-----+-----+   +-----+-----+
@@ -197,7 +197,7 @@ specifying the *pool type* they will be used for (replicated or
 erasure coded), the *failure domain*, and optionally a *device class*.
 In rare cases rules must be written by hand by manually editing the
 CRUSH map.
-   
+
 You can see what rules are defined for your cluster with::
 
   ceph osd crush rule ls
@@ -313,7 +313,7 @@ Where:
 
 ``name``
 
-:Description: The full name of the OSD. 
+:Description: The full name of the OSD.
 :Type: String
 :Required: Yes
 :Example: ``osd.0``
@@ -337,7 +337,7 @@ Where:
 
 ``bucket-type``
 
-:Description: You may specify the OSD's location in the CRUSH hierarchy. 
+:Description: You may specify the OSD's location in the CRUSH hierarchy.
 :Type: Key/value pairs.
 :Required: No
 :Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
@@ -365,7 +365,7 @@ Where:
 
 ``name``
 
-:Description: The full name of the OSD. 
+:Description: The full name of the OSD.
 :Type: String
 :Required: Yes
 :Example: ``osd.0``
@@ -373,7 +373,7 @@ Where:
 
 ``weight``
 
-:Description: The CRUSH weight for the OSD. 
+:Description: The CRUSH weight for the OSD.
 :Type: Double
 :Required: Yes
 :Example: ``2.0``
@@ -396,7 +396,7 @@ Where:
 
 ``name``
 
-:Description: The full name of the OSD. 
+:Description: The full name of the OSD.
 :Type: String
 :Required: Yes
 :Example: ``osd.0``
@@ -458,7 +458,7 @@ Where:
 
 ``bucket-type``
 
-:Description: You may specify the bucket's location in the CRUSH hierarchy. 
+:Description: You may specify the bucket's location in the CRUSH hierarchy.
 :Type: Key/value pairs.
 :Required: No
 :Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
@@ -658,6 +658,8 @@ Rules that are not in use by pools can be deleted with::
   ceph osd crush rule rm {rule-name}
 
 
+.. _crush-map-tunables:
+
 Tunables
 ========
 
@@ -739,7 +741,7 @@ The new tunable is:
    CRUSH is sometimes unable to find a mapping.  The optimal value (in
    terms of computational cost and correctness) is 1.
 
-Migration impact: 
+Migration impact:
 
  * For existing clusters that have lots of existing data, changing
    from 0 to 1 will cause a lot of data to move; a value of 4 or 5
