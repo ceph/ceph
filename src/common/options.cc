@@ -1459,11 +1459,11 @@ std::vector<Option> get_global_options() {
     .set_default(65536)
     .set_description(""),
 
-    Option("mon_pool_quota_warn_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_pool_quota_warn_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description(""),
 
-    Option("mon_pool_quota_crit_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_pool_quota_crit_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description(""),
 
