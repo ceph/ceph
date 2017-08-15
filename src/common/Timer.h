@@ -37,6 +37,7 @@ class SafeTimer
 
   std::multimap<utime_t, Context*> schedule;
   std::map<Context*, std::multimap<utime_t, Context*>::iterator> events;
+  std::map<Context*, double> cycle_events;
   bool stopping;
 
   void dump(const char *caller = 0) const;
@@ -72,6 +73,7 @@ public:
    * Call with the event_lock LOCKED */
   bool add_event_after(double seconds, Context *callback);
   bool add_event_at(utime_t when, Context *callback);
+  bool add_cycle_event_after(double seconds, Context *callback);
 
   /* Cancel an event.
    * Call with the event_lock LOCKED

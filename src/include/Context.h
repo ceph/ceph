@@ -60,12 +60,10 @@ class Context {
   Context(const Context& other);
   const Context& operator=(const Context& other);
 
- protected:
-  virtual void finish(int r) = 0;
-
  public:
   Context() {}
   virtual ~Context() {}       // we want a virtual destructor!!!
+  virtual void finish(int r) = 0;
   virtual void complete(int r) {
     finish(r);
     delete this;
