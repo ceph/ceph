@@ -58,3 +58,6 @@
 [submodule "src/rapidjson"]
 	path = src/rapidjson
 	url = https://github.com/ceph/rapidjson
+[submodule "src/nvml"]
+	path = src/nvml
+	url = https://github.com/ceph/nvml.git
