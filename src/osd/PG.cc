@@ -3611,13 +3611,14 @@ bool PG::sched_scrub()
   bool ret = true;
   if (!scrubber.reserved) {
     assert(scrubber.reserved_peers.empty());
-    if (osd->inc_scrubs_pending()) {
-      dout(20) << "sched_scrub: reserved locally, reserving replicas" << dendl;
+    if ((cct->_conf->osd_scrub_during_recovery || !osd->is_recovery_active()) &&
+         osd->inc_scrubs_pending()) {
+      dout(20) << __func__ << ": reserved locally, reserving replicas" << dendl;
       scrubber.reserved = true;
       scrubber.reserved_peers.insert(pg_whoami);
       scrub_reserve_replicas();
     } else {
-      dout(20) << "sched_scrub: failed to reserve locally" << dendl;
+      dout(20) << __func__ << ": failed to reserve locally" << dendl;
       ret = false;
     }
   }
@@ -3797,7 +3798,13 @@ void PG::handle_scrub_reserve_request(OpRequestRef op)
 	     << dendl;
     return;
   }
-  scrubber.reserved = osd->inc_scrubs_pending();
+  if ((cct->_conf->osd_scrub_during_recovery || !osd->is_recovery_active()) &&
+      osd->inc_scrubs_pending()) {
+    scrubber.reserved = true;
+  } else {
+    dout(20) << __func__ << ": failed to reserve remotely" << dendl;
+    scrubber.reserved = false;
+  }
   if (op->get_req()->get_type() == MSG_OSD_SCRUB_RESERVE) {
     const MOSDScrubReserve *m =
       static_cast<const MOSDScrubReserve*>(op->get_req());
