@@ -2,10 +2,10 @@
  Release Notes
 ===============
 
-v12.1.3 Luminous (RC)
+v12.1.4 Luminous (RC)
 =====================
 
-This is the final release candidate for Luminous, the next long term stable
+This is the fifth release candidate for Luminous, the next long term stable
 release.
 
 Ceph Luminous (v12.2.0) will be the foundation for the next long-term
@@ -694,6 +694,21 @@ Notable Changes since v12.1.1 (RC2)
   new pool for reshard was created
 
 * RGW multisite now supports for enabling or disabling sync at a bucket level.
+
+
+Notable Changes
+---------------
+* core: Wip 20985 divergent handling luminous (`issue#20985 <http://tracker.ceph.com/issues/20985>`_, `pr#17001 <https://github.com/ceph/ceph/pull/17001>`_, Greg Farnum)
+* qa/tasks/thrashosds-health.yaml: ignore MON_DOWN (`issue#20910 <http://tracker.ceph.com/issues/20910>`_, `pr#17003 <https://github.com/ceph/ceph/pull/17003>`_, Sage Weil)
+* crush, mon: fix weight set vs crush device classes (`issue#20939 <http://tracker.ceph.com/issues/20939>`_, Sage Weil)
+
+
+v12.1.3 Luminous (RC)
+====================
+
+This is the fourth release candidate for Luminous, the next long term stable
+release.
+
 
 Other Notable Changes
 ---------------------
