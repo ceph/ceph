@@ -2325,4 +2325,6 @@ static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
 extern bool match_policy(boost::string_view pattern, boost::string_view input,
                          uint32_t flag);
 
+extern void rgw_dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool> *categories);
+
 #endif

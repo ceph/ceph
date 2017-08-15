@@ -1888,3 +1888,22 @@ bool match_policy(boost::string_view pattern, boost::string_view input,
     last_pos_input = cur_pos_input + 1;
   }
 }
+
+
+void rgw_dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool> *categories)
+{
+  formatter->open_array_section("categories");
+  for (const auto& uiter: entry.usage_map) {
+    if (categories && !categories->empty() && !categories->count(uiter.first))
+      continue;
+    const rgw_usage_data& usage = uiter.second;
+    formatter->open_object_section("entry");
+    formatter->dump_string("category", uiter.first);
+    formatter->dump_int("bytes_sent", usage.bytes_sent);
+    formatter->dump_int("bytes_received", usage.bytes_received);
+    formatter->dump_int("ops", usage.ops);
+    formatter->dump_int("successful_ops", usage.successful_ops);
+    formatter->close_section(); // entry
+  }
+  formatter->close_section(); // categories
+}
