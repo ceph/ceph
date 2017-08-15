@@ -24,7 +24,7 @@
 #include "mgr/MgrContext.h"
 #include "mgr/mgr_commands.h"
 
-#include "MgrPyModule.h"
+//#include "MgrPyModule.h"
 #include "DaemonServer.h"
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrDigest.h"

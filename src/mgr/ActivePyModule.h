@@ -13,8 +13,7 @@
  */
 
 
-#ifndef MGR_PY_MODULE_H_
-#define MGR_PY_MODULE_H_
+#pragma once
 
 // Python.h comes first because otherwise it clobbers ceph's assert
 #include "Python.h"
@@ -125,6 +124,4 @@ public:
 };
 
 std::string handle_pyerror();
-
-#endif
 
