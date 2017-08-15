@@ -646,6 +646,11 @@ COMMAND("osd crush rule create-erasure " \
 COMMAND("osd crush rule rm " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",	\
 	"remove crush rule <name>", "osd", "rw", "cli,rest")
+COMMAND("osd crush rule rename " \
+        "name=srcname,type=CephString,goodchars=[A-Za-z0-9-_.] "  \
+        "name=dstname,type=CephString,goodchars=[A-Za-z0-9-_.]",  \
+        "rename crush rule <srcname> to <dstname>",
+        "osd", "rw", "cli,rest")
 COMMAND("osd crush tree "
         "name=shadow,type=CephChoices,strings=--show-shadow,req=false", \
 	"dump crush buckets and items in a tree view",

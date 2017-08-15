@@ -539,6 +539,9 @@ public:
 		    ostream *ss);
 
   // rule names
+  int rename_rule(const string& srcname,
+                  const string& dstname,
+                  ostream *ss);
   bool rule_exists(string name) const {
     build_rmaps();
     return rule_name_rmap.count(name);

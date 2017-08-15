@@ -291,6 +291,33 @@ int CrushWrapper::rename_bucket(const string& srcname,
   return set_item_name(oldid, dstname);
 }
 
+int CrushWrapper::rename_rule(const string& srcname,
+                              const string& dstname,
+                              ostream *ss)
+{
+  if (!rule_exists(srcname)) {
+    if (ss) {
+      *ss << "source rule name '" << srcname << "' does not exist";
+    }
+    return -ENOENT;
+  }
+  if (rule_exists(dstname)) {
+    if (ss) {
+      *ss << "destination rule name '" << dstname << "' already exists";
+    }
+    return -EEXIST;
+  }
+  int rule_id = get_rule_id(srcname);
+  auto it = rule_name_map.find(rule_id);
+  assert(it != rule_name_map.end());
+  it->second = dstname;
+  if (have_rmaps) {
+    rule_name_rmap.erase(srcname);
+    rule_name_rmap[dstname] = rule_id;
+  }
+  return 0;
+}
+
 void CrushWrapper::find_takes(set<int>& roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
