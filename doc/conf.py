@@ -23,6 +23,8 @@ if tags.has('man'):
                          'radosgw/*',
                          'rbd/*',
                          'start/*']
+else:
+    exclude_patterns += ['man_index.rst']
 
 pygments_style = 'sphinx'
 
