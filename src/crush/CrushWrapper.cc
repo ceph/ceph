@@ -2305,7 +2305,7 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
       __u32 choose_args_size;
       ::decode(choose_args_size, blp);
       for (__u32 i = 0; i < choose_args_size; i++) {
-	uint64_t choose_args_index;
+        typename decltype(choose_args)::key_type choose_args_index;
 	::decode(choose_args_index, blp);
 	crush_choose_arg_map arg_map;
 	arg_map.size = crush->max_buckets;
