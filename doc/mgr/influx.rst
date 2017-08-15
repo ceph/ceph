@@ -9,20 +9,20 @@ Some default counters are already set. However, users will have the option to ch
 Configuration 
 -------------
 
-In order for this module to work, the following configuration should be created ``/etc/ceph/influx.conf``
+In order for this module to work, the following configuration should be created ``/etc/ceph/influx.conf``.
 
 ^^^^^^^^
 Required 
 ^^^^^^^^
 
-The configurations must include the following under the header ``[influx]``
+The configurations must include the following under the header ``[influx]``.
 
 :Configuration: **Description**
 :interval: Sets how often the module will collect the stats and send it to influx
 :hostname: Influx host
 :username: Influx username
 :password: Influx password
-:database: Influx database (if a database does not already exist in influx the module will create one)
+:database: Influx database (if a database does not already exist in influx, the module will create one)
 :port: Influx port 
 :stats: Stats about the osd, pool, and cluster can be collected. Specify as many as you would like, but seperate each type by a comma.
 
@@ -56,13 +56,13 @@ Enabling
 --------
 
 To enable the module, the following should be performed:
-- Load module by including this in the ceph.conf file 
 
-::
+- Load module by including this in the ceph.conf file.::
 
     [mgr]
         mgr_modules = influx  
-- Initialize the module to run every set interval  ``ceph mgr module enable influx``
+
+- Initialize the module to run every set interval  ``ceph mgr module enable influx``.
 
 ---------
 Disabling
@@ -77,16 +77,13 @@ Debugging
 By default, a few debugging statments as well as error statements have been set to print in the log files. Users can add more if necessary.
 To make use of the debugging option in the module:
 
-- Add this to the ceph.conf file
-
-::
+- Add this to the ceph.conf file.::
 
     [mgr]
         debug_mgr = 20  
 
-
-- Use this command ``ceph tell mgr.<mymonitor> influx self-test`` 
-- Check the log files. Users may find it easier to filter the log files using *mgr[influx]*
+- Use this command ``ceph tell mgr.<mymonitor> influx self-test``.
+- Check the log files. Users may find it easier to filter the log files using *mgr[influx]*.
 
 -----
 Usage
@@ -139,11 +136,11 @@ for all osd.
 extended
 ^^^^^^^^
 There are many other counters that can be collected by configuring the module such as operational counters and suboperational counters. A couple of counters are listed and described below, but additional counters 
-can be found here https://github.com/ceph/ceph/blob/5a197c5817f591fc514f55b9929982e90d90084e/src/osd/OSD.cc 
+can be found here https://github.com/ceph/ceph/blob/5a197c5817f591fc514f55b9929982e90d90084e/src/osd/OSD.cc
 
 **Operations**
 
-- Latency counters are measured in microseconds unless otherwise specified in the description
+- Latency counters are measured in microseconds unless otherwise specified in the description.
 
 +------------------------+--------------------------------------------------------------------------+
 |Counter                 | Description                                                              |
