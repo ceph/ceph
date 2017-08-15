@@ -847,6 +847,7 @@ public:
   void remove_want_pg_temp(pg_t pgid);
   void requeue_pg_temp();
   void send_pg_temp();
+  bool is_recovery_active();
 
   void queue_for_peering(PG *pg);
   bool queue_for_recovery(PG *pg);
@@ -2296,7 +2297,6 @@ protected:
 
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
-  bool is_recovery_active();
   void do_recovery(PG *pg, ThreadPool::TPHandle &handle);
   bool _recover_now();
 
