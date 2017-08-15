@@ -272,7 +272,7 @@ endif(WITH_LEVELDB)
 
 find_package(snappy REQUIRED)
 
-option(WITH_LZ4 "LZ4 compression support" OFF)
+option(WITH_LZ4 "LZ4 compression support" ON)
 if(WITH_LZ4)
   find_package(LZ4 REQUIRED)
   set(HAVE_LZ4 ${LZ4_FOUND})
