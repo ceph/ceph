@@ -24,7 +24,7 @@
 #include "common/errno.h"
 #include "common/version.h"
 
-#include "PyState.h"
+#include "BaseMgrModule.h"
 #include "Gil.h"
 
 #define dout_context g_ceph_context

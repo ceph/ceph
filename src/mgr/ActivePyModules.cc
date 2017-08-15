@@ -12,7 +12,7 @@
  */
 
 // Include this first to get python headers earlier
-#include "PyState.h"
+#include "BaseMgrModule.h"
 #include "Gil.h"
 
 #include "common/errno.h"
@@ -28,7 +28,7 @@
 // For ::config_prefix
 #include "PyModuleRegistry.h"
 
-#include "PyModules.h"
+#include "ActivePyModules.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr

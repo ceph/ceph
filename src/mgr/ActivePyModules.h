@@ -11,10 +11,9 @@
  * Foundation.  See file COPYING.
  */
 
-#ifndef PY_MODULES_H_
-#define PY_MODULES_H_
+#pragma once
 
-#include "MgrPyModule.h"
+#include "ActivePyModule.h"
 
 #include "common/Finisher.h"
 #include "common/Mutex.h"
@@ -121,6 +120,4 @@ public:
                    const DaemonStateCollection &dmc,
                    Formatter *f);
 };
-
-#endif
 
