@@ -810,7 +810,7 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
 
   map<uint32_t, rgw_meta_sync_marker>& markers;
 
-  RGWSTNCRef tn;
+  RGWSyncTraceNodeRef tn;
 
 public:
   RGWFetchAllMetaCR(RGWMetaSyncEnv *_sync_env, int _num_shards,
@@ -998,7 +998,7 @@ class RGWReadRemoteMetadataCR : public RGWCoroutine {
 
   bufferlist *pbl;
 
-  RGWSTNCRef tn;
+  RGWSyncTraceNodeRef tn;
 
 public:
   RGWReadRemoteMetadataCR(RGWMetaSyncEnv *_sync_env,
@@ -1165,13 +1165,13 @@ class RGWMetaSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, strin
   string marker_oid;
   rgw_meta_sync_marker sync_marker;
 
-  RGWSTNCRef tn;
+  RGWSyncTraceNodeRef tn;
 
 public:
   RGWMetaSyncShardMarkerTrack(RGWMetaSyncEnv *_sync_env,
                          const string& _marker_oid,
                          const rgw_meta_sync_marker& _marker,
-                         RGWSTNCRef& _tn) : RGWSyncShardMarkerTrack(META_SYNC_UPDATE_MARKER_WINDOW),
+                         RGWSyncTraceNodeRef& _tn) : RGWSyncShardMarkerTrack(META_SYNC_UPDATE_MARKER_WINDOW),
                                                                 sync_env(_sync_env),
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker),
@@ -1239,7 +1239,7 @@ int RGWMetaSyncSingleEntryCR::operate() {
         section = raw_key.substr(0, pos);
         key = raw_key.substr(pos + 1);
         tn->log(10, SSTR("fetching remote metadata entry" << (tries == 0 ? "" : " (retry)")));
-        call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl, tn->ref()));
+        call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl, tn));
       }
 
       sync_status = retcode;
@@ -1398,14 +1398,14 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   int total_entries = 0;
 
-  RGWSTNCRef tn;
+  RGWSyncTraceNodeRef tn;
 public:
   RGWMetaSyncShardCR(RGWMetaSyncEnv *_sync_env, const rgw_pool& _pool,
                      const std::string& period, epoch_t realm_epoch,
                      RGWMetadataLog* mdlog, uint32_t _shard_id,
                      rgw_meta_sync_marker& _marker,
                      const std::string& period_marker, bool *_reset_backoff,
-                     RGWSTNCRef& _tn)
+                     RGWSyncTraceNodeRef& _tn)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), pool(_pool),
       period(period), realm_epoch(realm_epoch), mdlog(mdlog),
       shard_id(_shard_id), sync_marker(_marker),
@@ -1569,7 +1569,7 @@ public:
           } else {
             // fetch remote and write locally
             yield {
-              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, MDLOG_STATUS_COMPLETE, marker_tracker, tn->ref()), false);
+              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, MDLOG_STATUS_COMPLETE, marker_tracker, tn), false);
               // stack_to_pos holds a reference to the stack
               stack_to_pos[stack] = iter->first;
               pos_to_prev[iter->first] = marker;
@@ -1757,7 +1757,7 @@ public:
             } else {
               raw_key = log_iter->section + ":" + log_iter->name;
               yield {
-                RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker, tn->ref()), false);
+                RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker, tn), false);
                 assert(stack);
                 // stack_to_pos holds a reference to the stack
                 stack_to_pos[stack] = log_iter->id;
@@ -1820,7 +1820,7 @@ class RGWMetaSyncShardControlCR : public RGWBackoffControlCR
   const std::string period_marker;
 
   RGWSyncTraceNodeRef tn_parent;
-  RGWSTNCRef tn;
+  RGWSyncTraceNodeRef tn;
 
   static constexpr bool exit_on_error = false; // retry on all errors
 public:
@@ -1861,7 +1861,7 @@ class RGWMetaSyncCR : public RGWCoroutine {
   RGWPeriodHistory::Cursor cursor; //< sync position in period history
   RGWPeriodHistory::Cursor next; //< next period in history
   rgw_meta_sync_status sync_status;
-  RGWSTNCRef tn;
+  RGWSyncTraceNodeRef tn;
 
   std::mutex mutex; //< protect access to shard_crs
 
@@ -1876,7 +1876,7 @@ class RGWMetaSyncCR : public RGWCoroutine {
 
 public:
   RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, RGWPeriodHistory::Cursor cursor,
-                const rgw_meta_sync_status& _sync_status, RGWSTNCRef& _tn)
+                const rgw_meta_sync_status& _sync_status, RGWSyncTraceNodeRef& _tn)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       pool(sync_env->store->get_zone_params().log_pool),
       cursor(cursor), sync_status(_sync_status), tn(_tn) {}
@@ -1936,7 +1936,7 @@ public:
             using ShardCR = RGWMetaSyncShardControlCR;
             auto cr = new ShardCR(sync_env, pool, period_id, realm_epoch,
                                   mdlog, shard_id, marker,
-                                  std::move(period_marker), tn->ref());
+                                  std::move(period_marker), tn);
             auto stack = spawn(cr, false);
             shard_crs[shard_id] = RefPair{cr, stack};
           }
@@ -2186,7 +2186,7 @@ int RGWRemoteMetaLog::run_sync()
     switch ((rgw_meta_sync_info::SyncState)sync_status.sync_info.state) {
       case rgw_meta_sync_info::StateBuildingFullSyncMaps:
         tn->log(20, "building full sync maps");
-        r = run(new RGWFetchAllMetaCR(&sync_env, num_shards, sync_status.sync_markers, tn->ref()));
+        r = run(new RGWFetchAllMetaCR(&sync_env, num_shards, sync_status.sync_markers, tn));
         if (r == -EBUSY || r == -EAGAIN) {
           backoff.backoff_sleep();
           continue;

@@ -203,7 +203,7 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
 
   std::atomic<bool> going_down = { false };
 
-  RGWSTNCRef tn;
+  RGWSyncTraceNodeRef tn;
 
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
@@ -426,7 +426,7 @@ class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
 
   bool error_injection;
 
-  RGWSTNCRef tn;
+  RGWSyncTraceNodeRef tn;
 
 public:
   RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,

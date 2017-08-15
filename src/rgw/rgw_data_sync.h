@@ -250,7 +250,7 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   RWLock lock;
   RGWDataSyncControlCR *data_sync_cr;
 
-  RGWSTNCRef tn;
+  RGWSyncTraceNodeRef tn;
 
   bool initialized;
 
