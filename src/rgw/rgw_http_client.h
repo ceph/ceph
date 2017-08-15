@@ -15,6 +15,7 @@ using param_pair_t = pair<string, string>;
 using param_vec_t = vector<param_pair_t>;
 
 struct rgw_http_req_data;
+class RGWHTTPManager;
 
 class RGWHTTPClient
 {
@@ -40,6 +41,8 @@ protected:
   CephContext *cct;
   param_vec_t headers;
 
+  RGWHTTPManager *get_manager();
+
   int init_request(const char *method,
                    const char *url,
                    rgw_http_req_data *req_data,
@@ -50,6 +53,9 @@ protected:
   }
   virtual int receive_data(void *ptr, size_t len) {
     return 0;
+  }
+  virtual int send_data(void *ptr, size_t len, bool *pause) {
+    return send_data(ptr, len);
   }
   virtual int send_data(void *ptr, size_t len) {
     return 0;
@@ -82,6 +88,11 @@ protected:
                                size_t size,
                                size_t nmemb,
                                void *_info);
+
+  Mutex& get_req_lock();
+
+  /* needs to be called under req_lock() */
+  void _set_write_paused(bool pause);
 public:
   static const long HTTP_STATUS_NOSTATUS     = 0;
   static const long HTTP_STATUS_UNAUTHORIZED = 401;
@@ -216,7 +227,19 @@ typedef RGWHTTPTransceiver RGWPostHTTPData;
 
 class RGWCompletionManager;
 
+enum RGWHTTPRequestSetState {
+  SET_NOP = 0,
+  SET_WRITE_PAUSED = 1,
+  SET_WRITE_RESUME = 2,
+};
+
 class RGWHTTPManager {
+  struct set_state {
+    rgw_http_req_data *req;
+    RGWHTTPRequestSetState state;
+
+    set_state(rgw_http_req_data *_req, RGWHTTPRequestSetState _state) : req(_req), state(_state) {}
+  };
   CephContext *cct;
   RGWCompletionManager *completion_mgr;
   void *multi_handle;
@@ -227,6 +250,7 @@ class RGWHTTPManager {
   RWLock reqs_lock;
   map<uint64_t, rgw_http_req_data *> reqs;
   list<rgw_http_req_data *> unregistered_reqs;
+  list<set_state> reqs_change_state;
   map<uint64_t, rgw_http_req_data *> complete_reqs;
   int64_t num_reqs;
   int64_t max_threaded_req;
@@ -240,6 +264,7 @@ class RGWHTTPManager {
   void unlink_request(rgw_http_req_data *req_data);
   void finish_request(rgw_http_req_data *req_data, int r);
   void _finish_request(rgw_http_req_data *req_data, int r);
+  void _set_req_state(set_state& ss);
   int link_request(rgw_http_req_data *req_data);
 
   void manage_pending_requests();
@@ -268,6 +293,7 @@ public:
   int add_request(RGWHTTPClient *client, const char *method, const char *url,
                   bool send_data_hint = false);
   int remove_request(RGWHTTPClient *client);
+  int set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetState state);
 
   /* only for non threaded case */
   int process_requests(bool wait_for_data, bool *done);

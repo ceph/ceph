@@ -786,15 +786,30 @@ int RGWRESTStreamRWRequest::receive_data(void *ptr, size_t len)
   return len;
 }
 
-int RGWRESTStreamRWRequest::send_data(void *ptr, size_t len)
+void RGWRESTStreamRWRequest::add_send_data(bufferlist& bl)
 {
+  Mutex::Locker req_locker(get_req_lock());
+  Mutex::Locker wl(write_lock);
+  outbl.claim_append(bl);
+  _set_write_paused(false);
+}
+
+int RGWRESTStreamRWRequest::send_data(void *ptr, size_t len, bool *pause)
+{
+  Mutex::Locker wl(write_lock);
+
   if (outbl.length() == 0) {
+    *pause = true;
     return 0;
   }
 
-  uint64_t send_size = min(len, (size_t)(outbl.length() - write_ofs));
+  len = std::min(len, (size_t)outbl.length());
+
+  bufferlist bl;
+  outbl.splice(0, len, &bl);
+  uint64_t send_size = bl.length();
   if (send_size > 0) {
-    memcpy(ptr, outbl.c_str() + write_ofs, send_size);
+    memcpy(ptr, bl.c_str(), send_size);
     write_ofs += send_size;
   }
   return send_size;
