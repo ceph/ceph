@@ -399,7 +399,7 @@ via the low-level command::
 
   ceph osd pool application enable foo
 
-For more information, see :doc:`pools.rst#associate-pool-to-application`.
+For more information, see :ref:`associate-pool-to-application`.
 
 POOL_FULL
 _________
@@ -458,8 +458,8 @@ peering state for the PG(s) responsible for the unfound object::
   ceph tell <pgid> query
 
 If the latest copy of the object is not available, the cluster can be
-told to roll back to a previous version of the object.  See
-:doc:`troubleshooting-pg#Unfound-objects` for more information.
+told to roll back to a previous version of the object. See
+:ref:`failures-osd-unfound` for more information.
 
 REQUEST_SLOW
 ____________
