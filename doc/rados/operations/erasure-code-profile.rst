@@ -1,4 +1,4 @@
-.. _erasure-code-profiles
+.. _erasure-code-profiles:
 
 =====================
 Erasure code profiles

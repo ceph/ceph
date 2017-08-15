@@ -440,8 +440,7 @@ Upgrade compatibility notes, Kraken to Luminous
 * The configuration option ``osd pool erasure code stripe width`` has
   been replaced by ``osd pool erasure code stripe unit``, and given
   the ability to be overridden by the erasure code profile setting
-  ``stripe_unit``. For more details see
-  :doc:`/rados/operations/erasure-code/#erasure-code-profiles`.
+  ``stripe_unit``. For more details see :ref:`erasure-code-profiles`.
 
 * rbd and cephfs can use erasure coding with bluestore. This may be
   enabled by setting ``allow_ec_overwrites`` to ``true`` for a pool. Since
