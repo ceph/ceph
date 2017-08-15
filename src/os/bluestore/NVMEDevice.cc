@@ -988,11 +988,7 @@ int NVMEDevice::aio_write(
   uint64_t len = bl.length();
   dout(20) << __func__ << " " << off << "~" << len << " ioc " << ioc
            << " buffered " << buffered << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  assert(is_valid_io(off, len));
 
   Task *t = new Task(this, IOCommand::WRITE_COMMAND, off, len);
 
@@ -1036,11 +1032,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
                      bool buffered)
 {
   dout(5) << __func__ << " " << off << "~" << len << " ioc " << ioc << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  assert(is_valid_io(off, len));
 
   Task *t = new Task(this, IOCommand::READ_COMMAND, off, len, 1);
   bufferptr p = buffer::create_page_aligned(len);
@@ -1071,11 +1063,7 @@ int NVMEDevice::aio_read(
     IOContext *ioc)
 {
   dout(20) << __func__ << " " << off << "~" << len << " ioc " << ioc << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  assert(is_valid_io(off, len));
 
   Task *t = new Task(this, IOCommand::READ_COMMAND, off, len);
 

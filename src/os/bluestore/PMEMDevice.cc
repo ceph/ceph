@@ -217,9 +217,7 @@ int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered)
 {
   uint64_t len = bl.length();
   dout(20) << __func__ << " " << off << "~" << len  << dendl;
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  assert(is_valid_io(off, len));
 
   dout(40) << "data: ";
   bl.hexdump(*_dout);
@@ -261,9 +259,7 @@ int PMEMDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      bool buffered)
 {
   dout(5) << __func__ << " " << off << "~" << len  << dendl;
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  assert(is_valid_io(off, len));
 
   bufferptr p = buffer::create_page_aligned(len);
   memcpy(p.c_str(), addr + off, len);
@@ -286,9 +282,8 @@ int PMEMDevice::aio_read(uint64_t off, uint64_t len, bufferlist *pbl,
 
 int PMEMDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered)
 {
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  dout(5) << __func__ << " " << off << "~" << len << dendl;
+  assert(is_valid_io(off, len));
 
   memcpy(buf, addr + off, len);
   return 0;

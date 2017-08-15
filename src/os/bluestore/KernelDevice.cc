@@ -567,11 +567,7 @@ int KernelDevice::write(
   dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	   << (buffered ? " (buffered)" : " (direct)")
 	   << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  assert(is_valid_io(off, len));
 
   if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
       bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
@@ -653,11 +649,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	  << (buffered ? " (buffered)" : " (direct)")
 	  << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  assert(is_valid_io(off, len));
 
   _aio_log_start(ioc, off, len);
 
