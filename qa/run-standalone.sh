@@ -24,6 +24,15 @@ else
     COREPATTERN="core.%e.%p.%t"
 fi
 
+function finish() {
+    if [ -n "$precore" ]; then
+        sudo sysctl -w ${KERNCORE}=${precore}
+    fi
+    exit 0
+}
+
+trap finish TERM HUP INT
+
 PATH=$(pwd)/bin:$PATH
 
 # TODO: Use getops
