@@ -24,11 +24,9 @@
 class RGWRados;
 class RGWSyncTraceManager;
 class RGWSyncTraceNode;
-class RGWSyncTraceNodeContainer;
 class RGWSyncTraceServiceMapThread;
 
 using RGWSyncTraceNodeRef = std::shared_ptr<RGWSyncTraceNode>;
-using RGWSTNCRef = std::shared_ptr<RGWSyncTraceNodeContainer>;
 
 class RGWSyncTraceNode {
   friend class RGWSyncTraceManager;
@@ -98,52 +96,6 @@ public:
   bool match(const string& search_term, bool search_history);
 };
 
-/*
- * a container to RGWSyncTraceNodeRef, responsible to keep track
- * of live nodes, and when last ref is dropped, calls ->finish()
- * so that node moves to the retired list in the manager
- */
-class RGWSyncTraceNodeContainer {
-  RGWSyncTraceNodeRef tn;
-public:
-  RGWSyncTraceNodeContainer(RGWSyncTraceNodeRef& _tn) : tn(_tn) {}
-
-  ~RGWSyncTraceNodeContainer();
-
-  RGWSyncTraceNodeRef& operator*() {
-    return tn;
-  }
-
-  RGWSyncTraceNodeRef& operator->() {
-    return tn;
-  }
-
-  void set_resource_name(const string& s) {
-    tn->set_resource_name(s);
-  }
-
-  const string& get_resource_name() {
-    return tn->get_resource_name();
-  }
-
-  void set_flag(uint16_t flag) {
-    tn->set_flag(flag);
-  }
-  void unset_flag(uint16_t flag) {
-    tn->unset_flag(flag);
-  }
-  bool test_flags(uint16_t f) {
-    return tn->test_flags(f);
-  }
-  void log(int level, const std::string& s) {
-    return tn->log(level, s);
-  }
-  RGWSyncTraceNodeRef& ref() {
-    return tn;
-  }
-};
-
-
 class RGWSyncTraceManager : public AdminSocketHook {
   friend class RGWSyncTraceNode;
 
@@ -171,7 +123,7 @@ public:
 
   const RGWSyncTraceNodeRef root_node;
 
-  RGWSTNCRef add_node(RGWSyncTraceNode *node);
+  RGWSyncTraceNodeRef add_node(RGWSyncTraceNode *node);
   void finish_node(RGWSyncTraceNode *node);
 
   int hook_to_admin_command();

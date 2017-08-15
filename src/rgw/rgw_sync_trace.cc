@@ -79,17 +79,15 @@ int RGWSyncTraceServiceMapThread::process()
   return 0;
 }
 
-RGWSTNCRef RGWSyncTraceManager::add_node(RGWSyncTraceNode *node)
+RGWSyncTraceNodeRef RGWSyncTraceManager::add_node(RGWSyncTraceNode *node)
 {
   RWLock::WLocker wl(lock);
   RGWSyncTraceNodeRef& ref = nodes[node->handle];
   ref.reset(node);
-  return RGWSTNCRef(new RGWSyncTraceNodeContainer(ref));
-}
-
-RGWSyncTraceNodeContainer::~RGWSyncTraceNodeContainer()
-{
-  tn->finish();
+  // return a separate shared_ptr that calls finish() on the node instead of
+  // deleting it. the lambda capture holds a reference to the original 'ref'
+  auto deleter = [ref] (RGWSyncTraceNode *node) { node->finish(); };
+  return {node, deleter};
 }
 
 bool RGWSyncTraceNode::match(const string& search_term, bool search_history)
