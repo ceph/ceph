@@ -453,11 +453,11 @@ EOF
     err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 22 errors"
     err_strings[23]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj15:head can't decode 'snapset' attr buffer"
 
-    for i in `seq 0 ${#err_strings[@]}`
+    for err_string in "${err_strings[@]}"
     do
-        if ! grep "${err_strings[$i]}" $dir/osd.0.log > /dev/null;
+        if ! grep "$err_string" $dir/osd.0.log > /dev/null;
         then
-            echo "Missing log message '${err_strings[$i]}'"
+            echo "Missing log message '$err_string'"
             ERRORS=$(expr $ERRORS + 1)
         fi
     done
