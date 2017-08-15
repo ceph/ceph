@@ -170,7 +170,7 @@ class Downburst(object):
             'distro': os_type,
             'distroversion': self.os_version,
             'additional-disks': 4,
-            'additional-disks-size': '200G',
+            'additional-disks-size': '100G',
             'arch': 'x86_64',
         }
         fqdn = self.name.split('@')[1]
