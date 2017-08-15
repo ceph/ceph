@@ -157,6 +157,8 @@ placement groups for your pool.
 :Required: No.
 :Default: 0, no splitting at the pool creation time.
 
+.. _associate-pool-to-application:
+
 Associate Pool to Application
 =============================
 
