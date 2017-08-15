@@ -72,6 +72,7 @@ public:
   map<hobject_t, interval_set<uint64_t>> clone_subsets;
 
   bool first = false, complete = false;
+  bool bdata_encode;
 
   interval_set<uint64_t> data_included;
   ObjectRecoveryInfo recovery_info;
@@ -198,7 +199,10 @@ public:
     for (unsigned i = 0; i < ops.size(); i++) {
       ops[i].op.payload_len = ops[i].indata.length();
       ::encode(ops[i].op, payload);
-      data.append(ops[i].indata);
+      if(false == bdata_encode) {
+        data.append(ops[i].indata);
+        bdata_encode = true;
+      }
     }
     ::encode(mtime, payload);
     //encode a false here for backward compatiable
@@ -245,7 +249,8 @@ public:
   }
 
   MOSDSubOp()
-    : MOSDFastDispatchOp(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }
+    : MOSDFastDispatchOp(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION),
+      bdata_encode(false) { }
   MOSDSubOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po,  int aw,
 	    epoch_t mape, ceph_tid_t rtid, eversion_t v)
@@ -258,7 +263,8 @@ public:
       acks_wanted(aw),
       old_exists(false), old_size(0),
       version(v),
-      first(false), complete(false) {
+      first(false), complete(false),
+      bdata_encode(false) {
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(rtid);
   }
