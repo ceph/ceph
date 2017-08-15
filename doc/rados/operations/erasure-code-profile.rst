@@ -1,3 +1,5 @@
+.. _erasure-code-profiles
+
 =====================
 Erasure code profiles
 =====================
