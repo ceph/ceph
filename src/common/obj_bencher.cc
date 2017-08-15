@@ -799,6 +799,11 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   }
 
   runtime = ceph_clock_now() - data.start_time;
+  if(runtime < 1) {
+      if(data.idata.max_iops == 0 && data.idata.min_iops == INT_MAX)
+          data.idata.max_iops = data.idata.min_iops = (int)(data.finished/runtime);
+  }
+
   lock.Lock();
   data.done = true;
   lock.Unlock();
@@ -1032,6 +1037,11 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   }
 
   runtime = ceph_clock_now() - data.start_time;
+  if(runtime < 1) {
+      if(data.idata.max_iops == 0 && data.idata.min_iops == INT_MAX)
+          data.idata.max_iops = data.idata.min_iops = (int)(data.finished/runtime);
+  }
+
   lock.Lock();
   data.done = true;
   lock.Unlock();
