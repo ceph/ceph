@@ -8470,6 +8470,36 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
 
+  } else if (prefix == "osd crush rule rename") {
+    string srcname;
+    string dstname;
+    cmd_getval(g_ceph_context, cmdmap, "srcname", srcname);
+    cmd_getval(g_ceph_context, cmdmap, "dstname", dstname);
+    if (srcname.empty() || dstname.empty()) {
+      ss << "must specify both source rule name and destination rule name";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (srcname == dstname) {
+      ss << "destination rule name is equal to source rule name";
+      err = 0;
+      goto reply;
+    }
+
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    err = newcrush.rename_rule(srcname, dstname, &ss);
+    if (err < 0) {
+      // ss has reason for failure
+      goto reply;
+    }
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+                               get_last_committed() + 1));
+    return true;
+
   } else if (prefix == "osd setmaxosd") {
     int64_t newmax;
     if (!cmd_getval(g_ceph_context, cmdmap, "newmax", newmax)) {
