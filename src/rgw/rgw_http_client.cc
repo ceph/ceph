@@ -22,23 +22,22 @@
 #define dout_subsys ceph_subsys_rgw
 
 struct rgw_http_req_data : public RefCountedObject {
-  CURL *easy_handle;
-  curl_slist *h;
+  CURL *easy_handle{nullptr};
+  curl_slist *h{nullptr};
   uint64_t id;
-  int ret;
+  int ret{0};
   std::atomic<bool> done = { false };
-  RGWHTTPClient *client;
-  void *user_info;
-  bool registered;
-  RGWHTTPManager *mgr;
+  RGWHTTPClient *client{nullptr};
+  void *user_info{nullptr};
+  bool registered{false};
+  RGWHTTPManager *mgr{nullptr};
   char error_buf[CURL_ERROR_SIZE];
+  bool write_paused{false};
 
   Mutex lock;
   Cond cond;
 
-  rgw_http_req_data() : easy_handle(NULL), h(NULL), id(-1), ret(0),
-                        client(nullptr), user_info(nullptr), registered(false),
-                        mgr(NULL), lock("rgw_http_req_data::lock") {
+  rgw_http_req_data() : id(-1), lock("rgw_http_req_data::lock") {
     memset(error_buf, 0, sizeof(error_buf));
   }
 
@@ -46,6 +45,27 @@ struct rgw_http_req_data : public RefCountedObject {
     Mutex::Locker l(lock);
     cond.Wait(lock);
     return ret;
+  }
+
+  void set_state(RGWHTTPRequestSetState state) {
+    Mutex::Locker l(lock);
+    CURLcode rc;
+    int bitmask;
+    switch (state) {
+      case SET_WRITE_PAUSED:
+        bitmask = CURLPAUSE_SEND;
+        break;
+      case SET_WRITE_RESUME:
+        bitmask = CURLPAUSE_CONT;
+        break;
+      default:
+        /* shouldn't really be here */
+        return;
+    }
+    rc = curl_easy_pause(easy_handle, bitmask);
+    if (rc != CURLE_OK) {
+      dout(0) << "ERROR: curl_easy_pause() returned rc=" << rc << dendl;
+    }
   }
 
 
@@ -78,6 +98,7 @@ struct rgw_http_req_data : public RefCountedObject {
     return mgr;
   }
 };
+
 
 /*
  * the simple set of callbacks will be called on RGWHTTPClient::process()
@@ -121,10 +142,16 @@ size_t RGWHTTPClient::simple_send_http_data(void * const ptr,
                                             void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  int ret = client->send_data(ptr, size * nmemb);
+  bool pause = false;
+  int ret = client->send_data(ptr, size * nmemb, &pause);
   if (ret < 0) {
     dout(0) << "WARNING: client->send_data() returned ret="
             << ret << dendl;
+  }
+
+  if (ret == 0 &&
+      pause) {
+    return CURL_READFUNC_PAUSE;
   }
 
   return ret;
@@ -191,12 +218,40 @@ size_t RGWHTTPClient::send_http_data(void * const ptr,
     return 0;
   }
 
-  int ret = req_data->client->send_data(ptr, size * nmemb);
+  bool pause;
+
+  int ret = req_data->client->send_data(ptr, size * nmemb, &pause);
   if (ret < 0) {
     dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
   }
 
+  if (ret == 0 &&
+      pause) {
+    req_data->write_paused = true;
+    return CURL_READFUNC_PAUSE;
+  }
+
   return ret;
+}
+
+Mutex& RGWHTTPClient::get_req_lock()
+{
+  return req_data->lock;
+}
+
+void RGWHTTPClient::_set_write_paused(bool pause)
+{
+  assert(req_data->lock.is_locked());
+  
+  RGWHTTPManager *mgr = req_data->mgr;
+  if (pause == req_data->write_paused) {
+    return;
+  }
+  if (pause) {
+    mgr->set_request_state(this, SET_WRITE_PAUSED);
+  } else {
+    mgr->set_request_state(this, SET_WRITE_RESUME);
+  }
 }
 
 static curl_slist *headers_to_slist(param_vec_t& headers)
@@ -380,7 +435,7 @@ int RGWHTTPClient::wait()
 RGWHTTPClient::~RGWHTTPClient()
 {
   if (req_data) {
-    RGWHTTPManager *http_manager = req_data->get_manager();
+    RGWHTTPManager *http_manager = req_data->mgr;
     if (http_manager) {
       http_manager->remove_request(this);
     }
@@ -674,6 +729,10 @@ void RGWHTTPManager::_finish_request(rgw_http_req_data *req_data, int ret)
   _complete_request(req_data);
 }
 
+void RGWHTTPManager::_set_req_state(set_state& ss)
+{
+  ss.req->set_state(ss.state);
+}
 /*
  * hook request to the curl multi handle
  */
@@ -711,7 +770,9 @@ void RGWHTTPManager::unlink_request(rgw_http_req_data *req_data)
 void RGWHTTPManager::manage_pending_requests()
 {
   reqs_lock.get_read();
-  if (max_threaded_req == num_reqs && unregistered_reqs.empty()) {
+  if (max_threaded_req == num_reqs &&
+      unregistered_reqs.empty() &&
+      reqs_change_state.empty()) {
     reqs_lock.unlock();
     return;
   }
@@ -741,6 +802,13 @@ void RGWHTTPManager::manage_pending_requests()
     } else {
       max_threaded_req = iter->first + 1;
     }
+  }
+
+  if (!reqs_change_state.empty()) {
+    for (auto siter : reqs_change_state) {
+      _set_req_state(siter);
+    }
+    reqs_change_state.clear();
   }
 
   for (auto piter : remove_reqs) {
@@ -793,6 +861,44 @@ int RGWHTTPManager::remove_request(RGWHTTPClient *client)
     return 0;
   }
   unregister_request(req_data);
+  int ret = signal_thread();
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetState state)
+{
+  rgw_http_req_data *req_data = client->get_req_data();
+
+  assert(req_data->lock.is_locked());
+
+  /* can only do that if threaded */
+  if (!is_threaded) {
+    return -EINVAL;
+  }
+
+  bool suggested_paused;
+  switch (state) {
+    case SET_WRITE_PAUSED:
+      suggested_paused = true;
+      break;
+    case SET_WRITE_RESUME:
+      suggested_paused = false;
+      break;
+    default:
+      /* shouldn't really be here */
+      return -EIO;
+  }
+  if (suggested_paused == req_data->write_paused) {
+    return 0;
+  }
+
+  req_data->write_paused = suggested_paused;
+
+  reqs_change_state.push_back(set_state(req_data, state));
   int ret = signal_thread();
   if (ret < 0) {
     return ret;

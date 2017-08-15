@@ -84,24 +84,26 @@ public:
 
 class RGWRESTStreamRWRequest : public RGWRESTSimpleRequest {
   Mutex lock;
+  Mutex write_lock;
   RGWGetDataCB *cb;
   bufferlist outbl;
   bufferlist in_data;
-  size_t chunk_ofs;
-  size_t ofs;
+  size_t chunk_ofs{0};
+  size_t ofs{0};
   RGWHTTPManager http_manager;
   const char *method;
-  uint64_t write_ofs;
+  uint64_t write_ofs{0};
+  bool send_paused{false};
 protected:
   int handle_header(const string& name, const string& val) override;
 public:
-  int send_data(void *ptr, size_t len) override;
+  int send_data(void *ptr, size_t len, bool *pause) override;
   int receive_data(void *ptr, size_t len) override;
 
   RGWRESTStreamRWRequest(CephContext *_cct, const char *_method, const string& _url, RGWGetDataCB *_cb,
 		param_vec_t *_headers, param_vec_t *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
-                lock("RGWRESTStreamReadRequest"), cb(_cb),
-                chunk_ofs(0), ofs(0), http_manager(_cct), method(_method), write_ofs(0) {
+                lock("RGWRESTStreamRWRequest"), write_lock("RGWRESTStreamRWRequest::write_lock"), cb(_cb),
+                http_manager(_cct), method(_method) {
   }
   virtual ~RGWRESTStreamRWRequest() override {}
   int send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr = NULL);
@@ -113,6 +115,8 @@ public:
   }
 
   void set_in_cb(RGWGetDataCB *_cb) { cb = _cb; }
+
+  void add_send_data(bufferlist& bl);
 };
 
 class RGWRESTStreamReadRequest : public RGWRESTStreamRWRequest {
