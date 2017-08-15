@@ -327,10 +327,9 @@ the cluster, and similar reduce overall performance.
 This may be an expected condition if data pools have not yet been
 created.
 
-The PG count for existing pools can be increased or new pools can be
-created.  Please refer to
-:doc:`placement-groups#Choosing-the-number-of-Placement-Groups` for
-more information.
+The PG count for existing pools can be increased or new pools can be created.
+Please refer to :ref:`choosing-number-of-placement-groups` for more
+information.
 
 TOO_MANY_PGS
 ____________
@@ -348,9 +347,8 @@ described above.  The ``pgp_num`` value can be adjusted with::
 
   ceph osd pool set <pool> pgp_num <value>
 
-Please refer to
-:doc:`placement-groups#Choosing-the-number-of-Placement-Groups` for
-more information.
+Please refer to :ref:`choosing-number-of-placement-groups` for more
+information.
 
 SMALLER_PGP_NUM
 _______________
