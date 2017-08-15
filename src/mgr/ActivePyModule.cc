@@ -11,14 +11,13 @@
  * Foundation.  See file COPYING.
  */
 
-#include "PyState.h"
-#include "PyOSDMap.h"
+#include "BaseMgrModule.h"
 
 #include "PyFormatter.h"
 
 #include "common/debug.h"
 
-#include "MgrPyModule.h"
+#include "ActivePyModule.h"
 
 //XXX courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
 #include <boost/python.hpp>

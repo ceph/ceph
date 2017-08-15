@@ -15,8 +15,11 @@
 #include "include/stringify.h"
 #include "common/errno.h"
 
-#include "PyState.h"
+#include "BaseMgrModule.h"
+#include "PyOSDMap.h"
 #include "Gil.h"
+
+#include "ActivePyModules.h"
 
 #include "PyModuleRegistry.h"
 

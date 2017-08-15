@@ -17,8 +17,13 @@
 // Python.h comes first because otherwise it clobbers ceph's assert
 #include "Python.h"
 
-// ActivePyModules
-#include "PyModules.h"
+#include <string>
+#include <map>
+#include <memory>
+
+#include "common/LogClient.h"
+
+#include "ActivePyModules.h"
 
 class PyModule
 {
