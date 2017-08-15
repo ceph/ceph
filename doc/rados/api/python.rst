@@ -280,12 +280,22 @@ the cluster ``fsid``, retrieve cluster statistics, and disconnect (shutdown)
 from the cluster. You may also assert that the cluster handle is in a particular
 state (e.g., "configuring", "connecting", etc.).
 
-
 .. automethod:: Rados.connect(timeout=0)
 .. automethod:: Rados.shutdown()
 .. automethod:: Rados.get_fsid()
 .. automethod:: Rados.get_cluster_stats()
-.. automethod:: Rados.require_state()
+
+.. documented manually because it raises warnings because of *args usage in the
+.. signature
+
+.. py:class:: Rados
+
+   .. py:method:: require_state(*args)
+
+      Checks if the Rados object is in a special state
+
+      :param args: Any number of states to check as separate arguments
+      :raises: :class:`RadosStateError`
 
 
 Pool Operations
