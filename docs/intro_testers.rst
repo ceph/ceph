@@ -44,10 +44,16 @@ Most testing happens by scheduling `runs`. The way we do that is using the
 
 To get a preview of what `teuthology-suite` might do, try::
 
-    teuthology-suite -v -s smoke -c master -m mira --dry-run
+    teuthology-suite -v -m mira --ceph-repo http://github.com/ceph/ceph.git -c master --suite-repo http://github.com/ceph/ceph.git -s smoke --dry-run
 
 The `-m mira` specifies `mira` as the machine type. Machine types are dependent
-on the specific lab in use.
+on the specific lab in use. The `--ceph-repo http://github.com/ceph/ceph.git`
+specifies from which git repository to pull `-c master`. Similarly,
+`--suite-repo` is specifying where to find the QA branch. The default for
+`--ceph-repo` and `--suite-repo` is `http://github.com/ceph/ceph-ci.git` which
+is usually what you will want. For `master`, you must always use
+`http://github.com/ceph/ceph.git` as it does not exist on the ceph-ci
+repository.
 
 Assuming a build is available, that should pretend to schedule several jobs. If
 it complains about missing packages, try swapping `master` with `jewel` or one
@@ -71,4 +77,4 @@ some other reason. For that use-case, `teuthology-suite` has a `--rerun`/`-r`
 flag, and an optional `--rerun-statuses`/`-R` flag. An example of its usage
 is::
 
-    teuthology-suite -v -m vps -r teuthology-2016-10-06_05:00:03-smoke-master-testing-basic-vps -R pass,running,queued
+    teuthology-suite -m smithi -c wip-pdonnell-testing-20170718 --rerun pdonnell-2017-07-19_19:04:52-multimds-wip-pdonnell-testing-20170718-testing-basic-smithi -R dead --dry-run
