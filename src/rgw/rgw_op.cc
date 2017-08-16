@@ -785,10 +785,9 @@ void RGWGetObjTags::execute()
 
 int RGWPutObjTags::verify_permission()
 {
-  if (!verify_object_permission(s,
-				s->object.instance.empty() ?
-				rgw::IAM::s3PutObjectTagging:
-				rgw::IAM::s3PutObjectVersionTagging))
+  iam_action = s->object.instance.empty() ?
+    rgw::IAM::s3PutObjectTagging: rgw::IAM::s3PutObjectVersionTagging;
+  if (!verify_object_permission(s,iam_action))
     return -EACCES;
   return 0;
 }
@@ -806,6 +805,7 @@ void RGWPutObjTags::execute()
 
   rgw_obj obj;
   obj = rgw_obj(s->bucket, s->object);
+  op_ret = rgw_iam_eval_existing_objtags(store, s, obj, iam_action);
   store->set_atomic(s->obj_ctx, obj);
   op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_TAGS, tags_bl);
   if (op_ret == -ECANCELED){
