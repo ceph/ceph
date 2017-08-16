@@ -198,7 +198,7 @@ section of your Ceph configuration file.
 .. code-block:: ini
 
 	[global]
-		...
+		# ... elided configuration
 		public network = {public-network/netmask}
 
 
@@ -213,7 +213,7 @@ following option to the ``[global]`` section of your Ceph configuration file.
 .. code-block:: ini
 
 	[global]
-		...
+		# ... elided configuration
 		cluster network = {cluster-network/netmask}
 
 We prefer that the cluster network is **NOT** reachable from the public network
