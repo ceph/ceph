@@ -5918,8 +5918,8 @@ std::vector<Option> get_mds_client_options() {
     .set_description(""),
 
     Option("fuse_set_user_groups", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
+    .set_default(true)
+    .set_description("check for ceph-fuse to consider supplementary groups for permissions"),
 
     Option("client_try_dentry_invalidate", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
