@@ -324,6 +324,7 @@ set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
   xxHash/xxhash.c
+  common/error_code.cc
   log/Log.cc
   mon/MonCap.cc
   mon/MonClient.cc
