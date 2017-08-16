@@ -1,4 +1,6 @@
 
+.. _cephfs-health-messages:
+
 ======================
 CephFS health messages
 ======================
