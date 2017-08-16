@@ -23,7 +23,7 @@ calculated automatically. Here are a few values commonly used:
 - If you have more than 50 OSDs, you need to understand the tradeoffs
   and how to calculate the ``pg_num`` value by yourself
 
-- For calculating ``pg_num`` value by yourself please take help of `pgcalc`_ tool 
+- For calculating ``pg_num`` value by yourself please take help of `pgcalc`_ tool
 
 As the number of OSDs increases, chosing the right value for pg_num
 becomes more important because it has a significant influence on the
@@ -191,7 +191,7 @@ will degrade ~4 (i.e. ~75 / 19 placement groups being recovered)
 instead of ~17 and the third OSD lost will only lose data if it is one
 of the four OSDs containing the surviving copy. In other words, if the
 probability of losing one OSD is 0.0001% during the recovery time
-frame, it goes from 17 * 10 * 0.0001% in the cluster with 10 OSDs to 4 * 20 * 
+frame, it goes from 17 * 10 * 0.0001% in the cluster with 10 OSDs to 4 * 20 *
 0.0001% in the cluster with 20 OSDs.
 
 In a nutshell, more OSDs mean faster recovery and a lower risk of
@@ -249,6 +249,8 @@ they exist.
 
 Minimizing the number of placement groups saves significant amounts of
 resources.
+
+.. _choosing-number-of-placement-groups:
 
 Choosing the number of Placement Groups
 =======================================
@@ -412,7 +414,7 @@ than others (for example, those PGs may hold data for images used by running
 machines and other PGs may be used by inactive machines/less relevant data).
 In that case, you may want to prioritize recovery of those groups so
 performance and/or availability of data stored on those groups is restored
-earlier. To do this (mark particular placement group(s) as prioritized during 
+earlier. To do this (mark particular placement group(s) as prioritized during
 backfill or recovery), execute the following::
 
         ceph pg force-recovery {pg-id} [{pg-id #2}] [{pg-id #3} ...]

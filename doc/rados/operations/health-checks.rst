@@ -15,7 +15,7 @@ health checks, and present them in a way that reflects their meaning.
 
 This page lists the health checks that are raised by the monitor and manager
 daemons.  In addition to these, you may also see health checks that originate
-from MDS daemons (see :doc:`/cephfs/health-messages`), and health checks
+from MDS daemons (see :ref:`cephfs-health-messages`), and health checks
 that are defined by ceph-mgr python modules.
 
 Definitions
@@ -90,7 +90,7 @@ threshold by a small amount::
 
 New storage should be added to the cluster by deploying more OSDs or
 existing data should be deleted in order to free up space.
-  
+
 OSD_BACKFILLFULL
 ________________
 
@@ -136,7 +136,7 @@ With the exception of *full*, these flags can be set or cleared with::
 
   ceph osd set <flag>
   ceph osd unset <flag>
-    
+
 OSD_FLAGS
 _________
 
@@ -165,7 +165,7 @@ The CRUSH map is using very old settings and should be updated.  The
 oldest tunables that can be used (i.e., the oldest client version that
 can connect to the cluster) without triggering this health warning is
 determined by the ``mon_crush_min_required_version`` config option.
-See :doc:`/rados/operations/crush-map/#tunables` for more information.
+See :ref:`crush-map-tunables` for more information.
 
 OLD_CRUSH_STRAW_CALC_VERSION
 ____________________________
@@ -175,7 +175,7 @@ intermediate weight values for ``straw`` buckets.
 
 The CRUSH map should be updated to use the newer method
 (``straw_calc_version=1``).  See
-:doc:`/rados/operations/crush-map/#tunables` for more information.
+:ref:`crush-map-tunables` for more information.
 
 CACHE_POOL_NO_HIT_SET
 _____________________
@@ -189,7 +189,7 @@ Hit sets can be configured on the cache pool with::
   ceph osd pool set <poolname> hit_set_type <type>
   ceph osd pool set <poolname> hit_set_period <period-in-seconds>
   ceph osd pool set <poolname> hit_set_count <number-of-hitsets>
-  ceph osd pool set <poolname> hit_set_fpp <target-false-positive-rate>  
+  ceph osd pool set <poolname> hit_set_fpp <target-false-positive-rate>
 
 OSD_NO_SORTBITWISE
 __________________
@@ -327,10 +327,9 @@ the cluster, and similar reduce overall performance.
 This may be an expected condition if data pools have not yet been
 created.
 
-The PG count for existing pools can be increased or new pools can be
-created.  Please refer to
-:doc:`placement-groups#Choosing-the-number-of-Placement-Groups` for
-more information.
+The PG count for existing pools can be increased or new pools can be created.
+Please refer to :ref:`choosing-number-of-placement-groups` for more
+information.
 
 TOO_MANY_PGS
 ____________
@@ -348,9 +347,8 @@ described above.  The ``pgp_num`` value can be adjusted with::
 
   ceph osd pool set <pool> pgp_num <value>
 
-Please refer to
-:doc:`placement-groups#Choosing-the-number-of-Placement-Groups` for
-more information.
+Please refer to :ref:`choosing-number-of-placement-groups` for more
+information.
 
 SMALLER_PGP_NUM
 _______________
@@ -401,7 +399,7 @@ via the low-level command::
 
   ceph osd pool application enable foo
 
-For more information, see :doc:`pools.rst#associate-pool-to-application`.
+For more information, see :ref:`associate-pool-to-application`.
 
 POOL_FULL
 _________
@@ -415,7 +413,7 @@ Pool quotas can be adjusted up or down (or removed) with::
   ceph osd pool set-quota <pool> max_bytes <bytes>
   ceph osd pool set-quota <pool> max_objects <objects>
 
-Setting the quota value to 0 will disable the quota.  
+Setting the quota value to 0 will disable the quota.
 
 POOL_NEAR_FULL
 ______________
@@ -460,8 +458,8 @@ peering state for the PG(s) responsible for the unfound object::
   ceph tell <pgid> query
 
 If the latest copy of the object is not available, the cluster can be
-told to roll back to a previous version of the object.  See
-:doc:`troubleshooting-pg#Unfound-objects` for more information.
+told to roll back to a previous version of the object. See
+:ref:`failures-osd-unfound` for more information.
 
 REQUEST_SLOW
 ____________
