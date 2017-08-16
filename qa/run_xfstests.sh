@@ -49,9 +49,6 @@ SCRATCH_DEV=""	# MUST BE SPECIFIED
 TEST_DEV=""	# MUST BE SPECIFIED
 TESTS="-g auto"	# The "auto" group is supposed to be "known good"
 
-# We no longer need to set the stripe unit in XFS_MKFS_OPTIONS because recent
-# versions of mkfs.xfs autodetect it.
-
 # print an error message and quit with non-zero status
 function err() {
 	if [ $# -gt 0 ]; then
@@ -251,11 +248,6 @@ export PATH="${TESTDIR}/binary/usr/local/sbin:${PATH}"
 
 ################################################################
 
-# Filesystem-specific mkfs options--set if not supplied
-#export XFS_MKFS_OPTIONS="${XFS_MKFS_OPTIONS:--f -l su=65536}"
-export EXT4_MKFS_OPTIONS="${EXT4_MKFS_OPTIONS:--F}"
-export BTRFS_MKFS_OPTION	# No defaults
-
 XFSTESTS_DIR="/var/lib/xfstests"	# Where the tests live
 XFSPROGS_DIR="/tmp/cephtest/xfsprogs-install"
 XFSDUMP_DIR="/tmp/cephtest/xfsdump-install"
@@ -317,8 +309,6 @@ function setup_host_options() {
 		SCRATCH_MNT="${scratch_dir}"
 		FSTYP="${FSTYP}"
 		export TEST_DEV SCRATCH_DEV TEST_DIR SCRATCH_MNT FSTYP
-		#
-		export XFS_MKFS_OPTIONS="${XFS_MKFS_OPTIONS}"
 	!
 
 	# Now ensure we are using the same values
@@ -341,9 +331,9 @@ function do_mkfs() {
 	local options
 
 	case "${FSTYP}" in
-		xfs)	options="${XFS_MKFS_OPTIONS}" ;;
-		ext4)	options="${EXT4_MKFS_OPTIONS}" ;;
-		btrfs)	options="${BTRFS_MKFS_OPTIONS}" ;;
+		xfs)	options="-f" ;;
+		ext4)	options="-F" ;;
+		btrfs)	options="-f" ;;
 	esac
 
 	"mkfs.${FSTYP}" ${options} "${dev}" ||
