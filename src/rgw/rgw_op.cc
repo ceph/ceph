@@ -568,7 +568,7 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const std::string& key
 	    std::forward_as_tuple(val));
 }
 
-static int rgw_iam_eval_existing_objtags(RGWRados* store, struct req_state* s, rgw_obj& obj, std::uint64_t action){
+static int rgw_iam_add_existing_objtags(RGWRados* store, struct req_state* s, rgw_obj& obj, std::uint64_t action){
   map <string, bufferlist> attrs;
   store->set_atomic(s->obj_ctx, obj);
   int op_ret = get_obj_attrs(store, s, obj, attrs);
@@ -591,11 +591,19 @@ static int rgw_iam_eval_existing_objtags(RGWRados* store, struct req_state* s, r
     }
   }
 
+  return 0;
+}
+
+static int rgw_iam_eval_existing_objtags(RGWRados* store, struct req_state* s, rgw_obj& obj, std::uint64_t action){
+  int op_ret = rgw_iam_add_existing_objtags(store, s, obj, action);
+  if (op_ret < 0)
+    return op_ret;
   auto e = s->iam_policy->eval(s->env, *s->auth.identity, action, obj);
   if (e == Effect::Deny)
     return -EACCES;
 
   return 0;
+
 }
 
 rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
