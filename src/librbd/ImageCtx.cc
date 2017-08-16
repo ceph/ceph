@@ -114,7 +114,7 @@ struct C_AsyncCallback : public Context {
     : image_ctx(image_ctx), on_finish(on_finish) {
   }
   virtual void finish(int r) {
-    image_ctx->op_work_queue->queue(on_finish, r);
+    image_ctx->writeback_handler->queue(on_finish, r);
   }
 };
 
