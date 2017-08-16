@@ -114,7 +114,7 @@ configuration file example uses the ``client.admin`` keyring you generated with
    :linenos:
 
 	[global]
-	...
+	# ... elided configuration
 	keyring=/path/to/keyring/ceph.client.admin.keyring
 
 
