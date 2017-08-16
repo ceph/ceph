@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import errno
-import util.rgw as rgw_utils
+import util.multisite_rgw as rgw_utils
 
 from requests.packages.urllib3 import PoolManager
 from requests.packages.urllib3.util import Retry
@@ -16,8 +16,8 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra.run import CommandFailedError
 # from util.rgw import rgwadmin
-from util.multisite-rgw import rgwadmin, get_config_master_client, extract_zone_info, extract_region_info
-from util.multisite-rados import (rados, create_ec_pool,
+from util.multisite_rgw import rgwadmin, get_config_master_client, extract_zone_info, extract_region_info
+from util.multisite_rados import (rados, create_ec_pool,
                                         create_replicated_pool,
                                         create_cache_pool)
 
