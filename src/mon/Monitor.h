@@ -50,6 +50,7 @@
 #include "mgr/MgrClient.h"
 
 #include "mon/MonOpRequest.h"
+#include "common/security.h"
 #include "common/WorkQueue.h"
 
 
@@ -841,7 +842,7 @@ public:
             ss << "session dropped for command ";
           }
         }
-        ss << "cmd='" << m->cmd << "': finished";
+        ss << "cmd='" << ceph::security::mask(m->cmd) << "': finished";
 
         mon->audit_clog->info() << ss.str();
 	mon->reply_command(op, rc, rs, rdata, version);

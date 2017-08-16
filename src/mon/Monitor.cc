@@ -61,6 +61,7 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
+#include "common/security.h"
 #include "global/signal_handler.h"
 #include "common/Formatter.h"
 #include "include/stringify.h"
@@ -281,7 +282,8 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
 
   (read_only ? audit_clog->debug() : audit_clog->info())
     << "from='admin socket' entity='admin socket' "
-    << "cmd='" << command << "' args=" << args << ": dispatch";
+    << "cmd='" << ceph::security::mask(command) << "' args=" << args
+    << ": dispatch";
 
   if (command == "mon_status") {
     get_mon_status(f.get(), ss);
@@ -332,7 +334,7 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
   (read_only ? audit_clog->debug() : audit_clog->info())
     << "from='admin socket' "
     << "entity='admin socket' "
-    << "cmd=" << command << " "
+    << "cmd=" << ceph::security::mask(command) << " "
     << "args=" << args << ": finished";
   return;
 
@@ -340,7 +342,7 @@ abort:
   (read_only ? audit_clog->debug() : audit_clog->info())
     << "from='admin socket' "
     << "entity='admin socket' "
-    << "cmd=" << command << " "
+    << "cmd=" << ceph::security::mask(command) << " "
     << "args=" << args << ": aborted";
 }
 
@@ -3098,7 +3100,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
       << "from='" << session->inst << "' "
       << "entity='" << session->entity_name << "' "
-      << "cmd=" << m->cmd << ":  access denied";
+      << "cmd=" << ceph::security::mask(m->cmd) << ":  access denied";
     reply_command(op, -EACCES, "access denied", 0);
     return;
   }
@@ -3106,7 +3108,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
     << "from='" << session->inst << "' "
     << "entity='" << session->entity_name << "' "
-    << "cmd=" << m->cmd << ": dispatch";
+    << "cmd=" << ceph::security::mask(m->cmd) << ": dispatch";
 
   if (mon_cmd->is_mgr() &&
       osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {

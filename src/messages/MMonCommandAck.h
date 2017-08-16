@@ -15,6 +15,7 @@
 #ifndef CEPH_MMONCOMMANDACK_H
 #define CEPH_MMONCOMMANDACK_H
 
+#include "common/security.h"
 #include "messages/PaxosServiceMessage.h"
 
 class MMonCommandAck : public PaxosServiceMessage {
@@ -33,7 +34,8 @@ private:
 public:
   const char *get_type_name() const override { return "mon_command"; }
   void print(ostream& o) const override {
-    o << "mon_command_ack(" << cmd << "=" << r << " " << rs << " v" << version << ")";
+    o << "mon_command_ack(" << ceph::security::mask(cmd) << "=" << r << " "
+      << rs << " v" << version << ")";
   }
   
   void encode_payload(uint64_t features) override {
