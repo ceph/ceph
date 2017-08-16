@@ -930,3 +930,45 @@ def test_bucket_sync_disable_enable():
 
     for bucket_name in buckets:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
+
+def test_encrypted_object_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    (zone1, zone2,) = zonegroup_conns.rw_zones
+
+    # create a bucket on the first zone
+    bucket_name = gen_bucket_name()
+    log.info('create bucket zone=%s name=%s', zone1.name, bucket_name)
+    bucket = zone1.conn.create_bucket(bucket_name)
+
+    # upload an object with sse-c encryption
+    sse_c_headers = {
+        'x-amz-server-side-encryption-customer-algorithm': 'AES256',
+        'x-amz-server-side-encryption-customer-key': 'pO3upElrwuEXSoFwCfnZPdSsmt/xWeFa0N9KgDijwVs=',
+        'x-amz-server-side-encryption-customer-key-md5': 'DWygnHRtgiJ77HCm+1rvHw=='
+    }
+    key = bucket.new_key('testobj-sse-c')
+    data = 'A'*512
+    key.set_contents_from_string(data, headers=sse_c_headers)
+
+    # upload an object with sse-kms encryption
+    sse_kms_headers = {
+        'x-amz-server-side-encryption': 'aws:kms',
+        # testkey-1 must be present in 'rgw crypt s3 kms encryption keys' (vstart.sh adds this)
+        'x-amz-server-side-encryption-aws-kms-key-id': 'testkey-1',
+    }
+    key = bucket.new_key('testobj-sse-kms')
+    key.set_contents_from_string(data, headers=sse_kms_headers)
+
+    # wait for the bucket metadata and data to sync
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_bucket_checkpoint(zone2.zone, zone1.zone, bucket_name)
+
+    # read the encrypted objects from the second zone
+    bucket2 = get_bucket(zone2, bucket_name)
+    key = bucket2.get_key('testobj-sse-c', headers=sse_c_headers)
+    eq(data, key.get_contents_as_string(headers=sse_c_headers))
+
+    key = bucket2.get_key('testobj-sse-kms')
+    eq(data, key.get_contents_as_string())
