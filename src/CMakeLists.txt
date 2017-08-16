@@ -695,10 +695,12 @@ if (WITH_MGR)
       mgr/DaemonServer.cc
       mgr/ClusterState.cc
       mgr/ActivePyModules.cc
+      mgr/StandbyPyModules.cc
       mgr/PyModuleRegistry.cc
       mgr/PyFormatter.cc
       mgr/PyOSDMap.cc
       mgr/BaseMgrModule.cc
+      mgr/BaseMgrStandbyModule.cc
       mgr/ActivePyModule.cc
       mgr/MgrStandby.cc
       mgr/Mgr.cc
