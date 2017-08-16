@@ -4068,10 +4068,9 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   if (mask & CEPH_SETATTR_MODE)
     pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
   else if ((mask & (CEPH_SETATTR_UID|CEPH_SETATTR_GID|CEPH_SETATTR_KILL_SGUID)) &&
-	    S_ISREG(pi->mode)) {
-    pi->mode &= ~S_ISUID;
-    if ((pi->mode & (S_ISGID|S_IXGRP)) == (S_ISGID|S_IXGRP))
-      pi->mode &= ~S_ISGID;
+	    S_ISREG(pi->mode) &&
+            (pi->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
+    pi->mode &= ~(S_ISUID|S_ISGID);
   }
 
   if (mask & CEPH_SETATTR_MTIME)
