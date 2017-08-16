@@ -568,6 +568,36 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const std::string& key
 	    std::forward_as_tuple(val));
 }
 
+static int rgw_iam_eval_existing_objtags(RGWRados* store, struct req_state* s, rgw_obj& obj, std::uint64_t action){
+  map <string, bufferlist> attrs;
+  store->set_atomic(s->obj_ctx, obj);
+  int op_ret = get_obj_attrs(store, s, obj, attrs);
+  if (op_ret < 0)
+    return op_ret;
+  auto tags = attrs.find(RGW_ATTR_TAGS);
+  if (tags != attrs.end()){
+    RGWObjTags tagset;
+    auto bliter = tags->second.begin();
+    try {
+      tagset.decode(bliter);
+    } catch (buffer::error& err) {
+      ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+      op_ret= -EIO;
+      return op_ret;
+    }
+
+    for (const auto& tag: tagset.get_tags()){
+      rgw_add_to_iam_environment(s->env, "s3:ExistingObjectTag/" + tag.first, tag.second);
+    }
+  }
+
+  auto e = s->iam_policy->eval(s->env, *s->auth.identity, action, obj);
+  if (e == Effect::Deny)
+    return -EACCES;
+
+  return 0;
+}
+
 rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						struct req_state* s)
 {
