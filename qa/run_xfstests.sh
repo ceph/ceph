@@ -44,7 +44,7 @@ XFSDUMP_VERSION="v3.1.4"
 COUNT="1"
 EXPUNGE_FILE=""
 DO_RANDOMIZE=""	# false
-FS_TYPE="xfs"
+FSTYP="xfs"
 SCRATCH_DEV=""	# MUST BE SPECIFIED
 TEST_DEV=""	# MUST BE SPECIFIED
 TESTS="-g auto"	# The "auto" group is supposed to be "known good"
@@ -197,7 +197,7 @@ function parseargs() {
 			-f|--fs-type)
 				fs_type_valid "$2" ||
 					usage "invalid fs_type '$2'"
-				FS_TYPE="$2"
+				FSTYP="$2"
 				shift
 				;;
 			-r|--randomize)
@@ -315,7 +315,7 @@ function setup_host_options() {
 		SCRATCH_DEV="${SCRATCH_DEV}"
 		TEST_DIR="${test_dir}"
 		SCRATCH_MNT="${scratch_dir}"
-		FSTYP="${FS_TYPE}"
+		FSTYP="${FSTYP}"
 		export TEST_DEV SCRATCH_DEV TEST_DIR SCRATCH_MNT FSTYP
 		#
 		export XFS_MKFS_OPTIONS="${XFS_MKFS_OPTIONS}"
