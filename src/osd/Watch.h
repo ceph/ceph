@@ -62,7 +62,7 @@ class Notify {
   uint32_t timeout;
   uint64_t cookie;
   uint64_t notify_id;
-  uint64_t version;
+  uint64_t version = 0;
 
   OSDService *osd;
   CancelableContext *cb;

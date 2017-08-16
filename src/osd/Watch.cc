@@ -45,7 +45,6 @@ Notify::Notify(
     timeout(timeout),
     cookie(cookie),
     notify_id(notify_id),
-    version(version),
     osd(osd),
     cb(NULL),
     lock("Notify::lock") {}
