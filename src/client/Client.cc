@@ -6845,6 +6845,14 @@ int Client::_setattr(InodeRef &in, struct stat *attr, int mask,
 
   stat_to_statx(attr, &stx);
   mask &= ~CEPH_SETATTR_BTIME;
+
+  if ((mask & CEPH_SETATTR_UID) && attr->st_uid == static_cast<uid_t>(-1)) {
+    mask &= ~CEPH_SETATTR_UID;
+  }
+  if ((mask & CEPH_SETATTR_GID) && attr->st_gid == static_cast<uid_t>(-1)) {
+    mask &= ~CEPH_SETATTR_GID;
+  }
+
   return _setattrx(in, &stx, mask, perms);
 }
 
@@ -7196,10 +7204,7 @@ int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
   struct stat attr;
   attr.st_uid = new_uid;
   attr.st_gid = new_gid;
-  int mask = 0;
-  if (new_uid != static_cast<uid_t>(-1)) mask |= CEPH_SETATTR_UID;
-  if (new_gid != static_cast<gid_t>(-1)) mask |= CEPH_SETATTR_GID;
-  return _setattr(in, &attr, mask, perms);
+  return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID, perms);
 }
 
 int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
