@@ -237,9 +237,9 @@ int main(int argc, char* argv[]) {
 
 
 void test::client_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ClientFilter client_disp_filter,
-		 int head_w, int data_w, int data_prec) {
+		       test::MySim* sim,
+		       test::MySim::ClientFilter client_disp_filter,
+		       int head_w, int data_w, int data_prec) {
     // report how many ops were done by reservation and proportion for
     // each client
 
@@ -270,9 +270,9 @@ void test::client_data(std::ostream& out,
 
 
 void test::server_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ServerFilter server_disp_filter,
-		 int head_w, int data_w, int data_prec) {
+		       test::MySim* sim,
+		       test::MySim::ServerFilter server_disp_filter,
+		       int head_w, int data_w, int data_prec) {
     out << std::setw(head_w) << "res_ops:";
     int total_r = 0;
     for (uint i = 0; i < sim->get_server_count(); ++i) {
