@@ -5699,7 +5699,7 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
    * if such a replica goes down it does not cause
    * a new interval. */
   int from = m->get_source().num();
-  if (get_osdmap()->get_down_at(from) >= m->map_epoch)
+  if (!get_osdmap()->exists(from) || get_osdmap()->get_down_at(from) >= m->map_epoch)
     return true;
 
   // same pg?
