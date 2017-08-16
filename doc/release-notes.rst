@@ -703,7 +703,7 @@ Notable Changes
 
 
 v12.1.3 Luminous (RC)
-====================
+=====================
 
 This is the fourth release candidate for Luminous, the next long term stable
 release.
