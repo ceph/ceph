@@ -9018,8 +9018,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     return r;
 
   /* clear the setuid/setgid bits, if any */
-  if (unlikely((in->mode & S_ISUID) ||
-	       (in->mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
+  if (unlikely(in->mode & (S_ISUID|S_ISGID)) && size > 0) {
     struct ceph_statx stx = { 0 };
 
     put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
