@@ -396,7 +396,7 @@ void PGMapDigest::recovery_summary(Formatter *f, list<string> *psl,
     } else {
       ostringstream ss;
       ss << delta_sum.stats.sum.num_objects_unfound
-         << "/" << delta_sum.stats.sum.num_objects << " unfound (" << b << "%)";
+         << "/" << delta_sum.stats.sum.num_objects << " objects unfound (" << b << "%)";
       psl->push_back(ss.str());
     }
   }
@@ -3097,7 +3097,7 @@ void PGMap::get_health_checks(
     snprintf(b, sizeof(b), "%.3lf", pc);
     ostringstream ss;
     ss << pg_sum.stats.sum.num_objects_unfound
-       << "/" << pg_sum.stats.sum.num_objects << " unfound (" << b << "%)";
+       << "/" << pg_sum.stats.sum.num_objects << " objects unfound (" << b << "%)";
     auto& d = checks->add("OBJECT_UNFOUND", HEALTH_WARN, ss.str());
 
     for (auto& p : pg_stat) {
