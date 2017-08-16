@@ -2283,9 +2283,8 @@ void Monitor::health_tick_start()
       if (r < 0)
         return;
       do_health_to_clog();
-      health_tick_start();
-    });
-  timer.add_event_after(cct->_conf->mon_health_to_clog_tick_interval,
+  });
+  timer.add_cycle_event_after(cct->_conf->mon_health_to_clog_tick_interval,
                         health_tick_event);
 }
 

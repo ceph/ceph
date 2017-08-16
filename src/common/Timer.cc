@@ -36,6 +36,7 @@ public:
 
 typedef std::multimap < utime_t, Context *> scheduled_map_t;
 typedef std::map < Context*, scheduled_map_t::iterator > event_lookup_map_t;
+typedef std::map<Context*, double> cycle_events_t;
 
 SafeTimer::SafeTimer(CephContext *cct_, Mutex &l, bool safe_callbacks)
   : cct(cct_), lock(l),
@@ -94,7 +95,16 @@ void SafeTimer::timer_thread()
       
       if (!safe_callbacks)
 	lock.Unlock();
-      callback->complete(0);
+
+      cycle_events_t::iterator c_iter = cycle_events.find(callback);
+      if (c_iter != cycle_events.end()) {
+        callback->finish(0);
+        cycle_events_t::iterator c_iter = cycle_events.find(callback);
+        add_event_after(c_iter->second, callback);
+      } else {
+        callback->complete(0);
+      }
+
       if (!safe_callbacks)
 	lock.Lock();
     }
@@ -121,6 +131,16 @@ bool SafeTimer::add_event_after(double seconds, Context *callback)
   utime_t when = ceph_clock_now();
   when += seconds;
   return add_event_at(when, callback);
+}
+
+bool SafeTimer::add_cycle_event_after(double seconds, Context *callback)
+{
+  assert(lock.is_locked());
+
+  cycle_events_t::value_type c_value(callback, seconds);
+  cycle_events.insert(c_value);
+
+  return add_event_after(seconds, callback);
 }
 
 bool SafeTimer::add_event_at(utime_t when, Context *callback)
@@ -158,6 +178,8 @@ bool SafeTimer::cancel_event(Context *callback)
     return false;
   }
 
+  cycle_events.erase(callback);
+
   ldout(cct,10) << "cancel_event " << p->second->first << " -> " << callback << dendl;
   delete p->first;
 
@@ -174,6 +196,7 @@ void SafeTimer::cancel_all_events()
   while (!events.empty()) {
     auto p = events.begin();
     ldout(cct,10) << " cancelled " << p->second->first << " -> " << p->first << dendl;
+    cycle_events.erase(p->first);
     delete p->first;
     schedule.erase(p->second);
     events.erase(p);
