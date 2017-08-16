@@ -6698,11 +6698,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
       ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
-    } else if (kill_sguid && S_ISREG(in->mode)) {
+    } else if (kill_sguid && S_ISREG(in->mode) && (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
       /* Must squash the any setuid/setgid bits with an ownership change */
-      in->mode &= ~S_ISUID;
-      if ((in->mode & (S_ISGID|S_IXGRP)) == (S_ISGID|S_IXGRP))
-	in->mode &= ~S_ISGID;
+      in->mode &= ~(S_ISUID|S_ISGID);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
     }
 
