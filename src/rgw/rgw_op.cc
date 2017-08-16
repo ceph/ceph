@@ -4655,12 +4655,11 @@ int RGWPutACLs::verify_permission()
   }
 
   if (!s->object.empty()) {
-    perm = verify_object_permission(s,
-				    s->object.instance.empty() ?
-				    rgw::IAM::s3PutObjectAcl :
-				    rgw::IAM::s3PutObjectVersionAcl);
+    iam_action = s->object.instance.empty() ? rgw::IAM::s3PutObjectAcl : rgw::IAM::s3PutObjectVersionAcl;
+    perm = verify_object_permission(s, iam_action);
   } else {
-    perm = verify_bucket_permission(s, rgw::IAM::s3PutBucketAcl);
+    iam_action = rgw::IAM::s3PutBucketAcl;
+    perm = verify_bucket_permission(s, iam_action);
   }
   if (!perm)
     return -EACCES;
@@ -4839,6 +4838,7 @@ void RGWPutACLs::execute()
 
   if (!s->object.empty()) {
     obj = rgw_obj(s->bucket, s->object);
+    op_ret = rgw_iam_eval_existing_objtags(store, s, obj, iam_action);
     store->set_atomic(s->obj_ctx, obj);
     //if instance is empty, we should modify the latest object
     op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_ACL, bl);
