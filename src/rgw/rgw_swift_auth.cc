@@ -583,7 +583,6 @@ void RGW_SWIFT_Auth_Get::execute()
 
   s->prot_flags |= RGW_REST_SWIFT;
 
-  string user_str;
   RGWUserInfo info;
   bufferlist bl;
   RGWAccessKey *swift_key;
@@ -592,6 +591,10 @@ void RGW_SWIFT_Auth_Get::execute()
   string swift_url = g_conf->rgw_swift_url;
   string swift_prefix = g_conf->rgw_swift_url_prefix;
   string tenant_path;
+
+  const rgw_user uid(user ? user : "");
+  const rgw_user tenanted_uid(uid.id, uid.id);
+  string user_str;
 
   /*
    * We did not allow an empty Swift prefix before, but we want it now.
@@ -639,12 +642,18 @@ void RGW_SWIFT_Auth_Get::execute()
   if (!key || !user)
     goto done;
 
-  user_str = user;
+  if (uid.tenant.empty()) {
+    user_str = tenanted_uid.to_str();
+    ret = rgw_get_user_info_by_swift(store, user_str, info);
+  }
 
-  if ((ret = rgw_get_user_info_by_swift(store, user_str, info)) < 0)
-  {
-    ret = -EACCES;
-    goto done;
+  if (ret < 0) {
+    user_str = uid.to_str();
+    ret = rgw_get_user_info_by_swift(store, user_str, info);
+    if (ret < 0) {
+      ret = -EACCES;
+      goto done;
+    }
   }
 
   siter = info.swift_keys.find(user_str);
