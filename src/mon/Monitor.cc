@@ -3599,7 +3599,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 
     mdsmon()->count_metadata("ceph_version", &mds);
     f->open_object_section("mds");
-    for (auto& p : mon) {
+    for (auto& p : mds) {
       f->dump_int(p.first.c_str(), p.second);
       overall[p.first] += p.second;
     }

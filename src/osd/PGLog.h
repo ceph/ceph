@@ -1284,6 +1284,7 @@ public:
     eversion_t on_disk_rollback_info_trimmed_to = eversion_t();
     ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
     map<eversion_t, hobject_t> divergent_priors;
+    bool must_rebuild = force_rebuild_missing;
     missing.may_include_deletes = false;
     list<pg_log_entry_t> entries;
     list<pg_log_dup_t> dups;
@@ -1298,7 +1299,7 @@ public:
 	  ::decode(divergent_priors, bp);
 	  ldpp_dout(dpp, 20) << "read_log_and_missing " << divergent_priors.size()
 			     << " divergent_priors" << dendl;
-	  assert(force_rebuild_missing);
+	  must_rebuild = true;
 	  debug_verify_stored_missing = false;
 	} else if (p->key() == "can_rollback_to") {
 	  ::decode(on_disk_can_rollback_to, bp);
@@ -1345,7 +1346,7 @@ public:
       std::move(entries),
       std::move(dups));
 
-    if (force_rebuild_missing || debug_verify_stored_missing) {
+    if (must_rebuild || debug_verify_stored_missing) {
       // build missing
       if (debug_verify_stored_missing || info.last_complete < info.last_update) {
 	ldpp_dout(dpp, 10)
@@ -1438,7 +1439,7 @@ public:
 	    }
 	  }
 	} else {
-	  assert(force_rebuild_missing);
+	  assert(must_rebuild);
 	  for (map<eversion_t, hobject_t>::reverse_iterator i =
 		 divergent_priors.rbegin();
 	       i != divergent_priors.rend();
@@ -1492,7 +1493,7 @@ public:
       }
     }
 
-    if (!force_rebuild_missing) {
+    if (!must_rebuild) {
       if (clear_divergent_priors)
 	(*clear_divergent_priors) = false;
       missing.flush();
