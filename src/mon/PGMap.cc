@@ -3068,7 +3068,7 @@ void PGMap::get_health_checks(
     }
     if (nearfull_pools) {
       ostringstream ss;
-      ss << nearfull_pools << " pools full";
+      ss << nearfull_pools << " pools nearfull";
       auto& d = checks->add("POOL_NEAR_FULL", HEALTH_WARN, ss.str());
       d.detail.swap(nearfull_detail);
     }
