@@ -568,6 +568,24 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const std::string& key
 	    std::forward_as_tuple(val));
 }
 
+static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
+  int op_ret;
+  RGWObjTags tagset;
+  try {
+    auto bliter = bl.begin();
+    tagset.decode(bliter);
+  } catch (buffer::error& err) {
+    ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+    op_ret= -EIO;
+    return op_ret;
+  }
+
+  for (const auto& tag: tagset.get_tags()){
+    rgw_add_to_iam_environment(s->env, "s3:ExistingObjectTag/" + tag.first, tag.second);
+  }
+  return 0;
+}
+
 static int rgw_iam_add_existing_objtags(RGWRados* store, struct req_state* s, rgw_obj& obj, std::uint64_t action){
   map <string, bufferlist> attrs;
   store->set_atomic(s->obj_ctx, obj);
@@ -576,21 +594,8 @@ static int rgw_iam_add_existing_objtags(RGWRados* store, struct req_state* s, rg
     return op_ret;
   auto tags = attrs.find(RGW_ATTR_TAGS);
   if (tags != attrs.end()){
-    RGWObjTags tagset;
-    auto bliter = tags->second.begin();
-    try {
-      tagset.decode(bliter);
-    } catch (buffer::error& err) {
-      ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
-      op_ret= -EIO;
-      return op_ret;
-    }
-
-    for (const auto& tag: tagset.get_tags()){
-      rgw_add_to_iam_environment(s->env, "s3:ExistingObjectTag/" + tag.first, tag.second);
-    }
+    return rgw_iam_add_tags_from_bl(s, tags->second);
   }
-
   return 0;
 }
 
@@ -753,10 +758,11 @@ int RGWOp::verify_op_mask()
 
 int RGWGetObjTags::verify_permission()
 {
+  iam_action = s->object.instance.empty() ?
+    rgw::IAM::s3GetObjectTagging:
+    rgw::IAM::s3GetObjectVersionTagging;
   if (!verify_object_permission(s,
-				s->object.instance.empty() ?
-				rgw::IAM::s3GetObjectTagging:
-				rgw::IAM::s3GetObjectVersionTagging))
+				iam_action))
     return -EACCES;
 
   return 0;
@@ -787,6 +793,14 @@ void RGWGetObjTags::execute()
   if(tags != attrs.end()){
     has_tags = true;
     tags_bl.append(tags->second);
+    // TODO since we are parsing the bl now anyway, we probably change
+    // the send_response function to accept RGWObjTag instead of a bl
+    rgw_iam_add_tags_from_bl(s, tags_bl);
+    auto e = s->iam_policy->eval(s->env, *s->auth.identity, iam_action, obj);
+    if (e == Effect::Deny){
+      op_ret= -EACCES;
+      return;
+    }
   }
   send_response_data(tags_bl);
 }
@@ -1798,6 +1812,19 @@ void RGWGetObj::execute()
   if (op_ret < 0) {
     goto done_err;
   }
+
+
+  attr_iter = attrs.find(RGW_ATTR_TAGS);
+  if (attr_iter != attrs.end()){
+    ldout(s->cct,0) << "abhi: evaling obj tags" << attr_iter->second.c_str() << dendl;
+    rgw_iam_add_tags_from_bl(s, attr_iter->second);
+    auto e = s->iam_policy->eval(s->env, *s->auth.identity, action, obj);
+    if (e == Effect::Deny){
+      op_ret = -EACCES;
+      goto done_err;
+    }
+  }
+
 
   if (!get_data || ofs > end) {
     send_response_data(bl, 0, 0);
