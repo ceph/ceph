@@ -202,17 +202,54 @@ void check_encryption(int mode, const bufferlist& expected)
   bufferptr key(buffer::create_static(sizeof(key_s), key_s));
   bufferptr iv(buffer::create_static(sizeof(iv_s), iv_s));
 
+  char data_in[expected.length()];
+  for (size_t i = 0; i < expected.length(); i++) {
+    data_in[i] = i;
+  }
+  bufferlist in;
+  in.append(data_in, sizeof(data_in));
+
+  bufferlist out;
+  bufferlist out_decrypt;
+  CryptoKeyHandler* ckh;
+  if (mode == CEPH_CRYPTO_AES_256_ECB)
+    ckh = ch->get_key_handler(key, EMPTY_IV, error);
+  else
+    ckh = ch->get_key_handler(key, iv, error);
+  ASSERT_NE(ckh, nullptr);
+  ASSERT_EQ(ckh->encrypt(in, out, &error), 0);
+  ASSERT_EQ(ckh->decrypt(out, out_decrypt, &error), 0);
+  ASSERT_EQ(in, out_decrypt);
+  ASSERT_EQ(out, expected);
+  delete ckh;
+  delete ch;
+}
+
+void check_chunked_encryption(int mode)
+{
+  CryptoHandler* ch = CryptoHandler::create(mode);
+  ASSERT_NE(ch, nullptr);
+  string error;
+  static char key_s[] =
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+  static char iv_s[] =
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+  bufferptr key(buffer::create_static(sizeof(key_s), key_s));
+  bufferptr iv(buffer::create_static(sizeof(iv_s), iv_s));
+
+
   char data_in[4096];
   memset(data_in, 111, sizeof(data_in));
   bufferlist in;
 
   size_t pos = 0;
   for (int i = 9; i >= 0 ; i--) {
-	  size_t len = rand() % (sizeof(data_in) / 10);
-	  if (i==0)
-		  len = sizeof(data_in) - pos;
-	  in.append(bufferptr(buffer::copy(data_in + pos, len)));
-	  pos += len;
+    size_t len = rand() % (sizeof(data_in) / 10);
+    if (i==0)
+      len = sizeof(data_in) - pos;
+    in.append(bufferptr(buffer::copy(data_in + pos, len)));
+    pos += len;
   }
 
   bufferlist out;
@@ -229,6 +266,7 @@ void check_encryption(int mode, const bufferlist& expected)
   delete ckh;
   delete ch;
 }
+
 
 void check_encryption_errors(int mode, bool check_iv)
 {
@@ -286,7 +324,6 @@ void check_encryption_errors(int mode, bool check_iv)
   }
   ASSERT_NE(ckh, nullptr);
 
-
   static char data_in[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
   static char data_in_uneven[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
   bufferlist in;
@@ -303,24 +340,45 @@ void check_encryption_errors(int mode, bool check_iv)
 }
 
 TEST(AES256, AES_256_CBC) {
-  char expected_s[] = {-14,-112,0,-74,42,73,-97,-48,-87,-13,-102,106,-35,46,119,-128};
-  bufferlist expected;
-  expected.append(expected_s, sizeof(expected_s));
-  check_encryption(CEPH_CRYPTO_AES_256_CBC, expected);
+  char expected_s[] = {
+      -14,-112,0,-74,42,73,-97,-48,-87,-13,-102,106,-35,46,119,-128,
+      -107,67,-72,111,-64,70,-6,-120,58,-108,70,-72,46,71,-47,45,
+      -95,68,-4,37,90,-83,69,-65,104,29,58,55,115,-93,37,-62,
+      -109,104,-113,71,-38,-37,-55,-90,-31,-83,-54,-82,106,30,59,-41
+  };
+  for (size_t size = 16 ; size <= sizeof(expected_s) ; size += 16) {
+    bufferlist expected;
+    expected.append(expected_s, size);
+    check_encryption(CEPH_CRYPTO_AES_256_CBC, expected);
+  }
 }
 
 TEST(AES256, AES_256_ECB) {
-  char expected_s[] = {90,110,4,87,8,-5,113,-106,-16,46,85,61,2,-61,-90,-110};
-  bufferlist expected;
-  expected.append(expected_s, sizeof(expected_s));
-  check_encryption(CEPH_CRYPTO_AES_256_ECB, expected);
+  char expected_s[] = {
+      90,110,4,87,8,-5,113,-106,-16,46,85,61,2,-61,-90,-110,
+      -23,-61,-17,-118,-78,52,83,-26,-16,116,-100,-42,54,-25,-88,-114,
+      97,-90,-109,110,78,-113,16,28,28,-63,-7,-109,-75,66,-96,-44,
+      -30,116,14,-118,-6,-44,-28,-47,93,13,102,27,56,46,-54,-119
+  };
+  for (size_t size = 16 ; size <= sizeof(expected_s) ; size += 16) {
+    bufferlist expected;
+    expected.append(expected_s, size);
+    check_encryption(CEPH_CRYPTO_AES_256_ECB, expected);
+  }
 }
 
 TEST(AES256, AES_256_CTR) {
-  char expected_s[] = {90,111,6,84,12,-2,119,-111,-8,39,95,54,14,-50,-88,-99};
-  bufferlist expected;
-  expected.append(expected_s, sizeof(expected_s));
-  check_encryption(CEPH_CRYPTO_AES_256_CTR, expected);
+  char expected_s[] = {
+      90,111,6,84,12,-2,119,-111,-8,39,95,54,14,-50,-88,-99,
+      112,-30,2,-58,-41,-112,78,74,77,15,-31,74,110,-8,62,-48,
+      60,68,85,120,30,-32,-22,-125,-109,-56,33,-114,-55,60,-23,-67,
+      -90,-6,53,65,28,-91,-111,-40,81,121,103,43,-59,89,-45,98
+  };
+  for (size_t size = 16 ; size <= sizeof(expected_s) ; size += 16) {
+    bufferlist expected;
+    expected.append(expected_s, size);
+    check_encryption(CEPH_CRYPTO_AES_256_CTR, expected);
+  }
 }
 
 TEST(AES256, AES_256_CBC_errors) {
@@ -333,4 +391,16 @@ TEST(AES256, AES_256_ECB_errors) {
 
 TEST(AES256, AES_256_CTR_errors) {
   check_encryption_errors(CEPH_CRYPTO_AES_256_CTR, true);
+}
+
+TEST(AES256, AES_256_CBC_chunked) {
+  check_chunked_encryption(CEPH_CRYPTO_AES_256_CBC);
+}
+
+TEST(AES256, AES_256_ECB_chunked) {
+  check_chunked_encryption(CEPH_CRYPTO_AES_256_ECB);
+}
+
+TEST(AES256, AES_256_CTR_chunked) {
+  check_chunked_encryption(CEPH_CRYPTO_AES_256_CTR);
 }
