@@ -234,10 +234,10 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
   std::string owner_id = entry.bucket_owner.id.empty() ? "-" : entry.bucket_owner.id;
   std::string bucket = entry.bucket.empty() ? "-" : entry.bucket;
   std::string user = entry.user.empty() ? "-" : entry.user;
-  std::string uri = entry.uri.empty() ? "-" : entry.uri;
+  std::string uri = entry.uri.empty() ? "\"-\"" : ("\""+entry.uri+"\"");
   std::string error_code = entry.error_code.empty() ? "-" : entry.error_code;
-  std::string referrer = entry.referrer.empty() ? "-" : entry.referrer;
-  std::string user_agent = entry.user_agent.empty() ? "-" : entry.user_agent;
+  std::string referrer = entry.referrer.empty() ? "\"-\"" : ("\""+entry.referrer+"\"");
+  std::string user_agent = entry.user_agent.empty() ? "\"-\"" : ("\""+entry.user_agent+"\"");
 
                                                                                // S3 BL field
   pending_column << owner_id << row_separator                                  // Bucket Owner
