@@ -612,6 +612,7 @@ private:
             pos = 0;
           }
         }
+        PK11_DestroyContext(ectx, PR_TRUE);
       }
       if (ectx && (ret == SECSuccess) && ((size_t)written == in.length())) {
         result = 0;
@@ -809,32 +810,70 @@ private:
         *error = "Input size is not multiple of 16";
       }
     } else {
-      bufferptr p(in.length());
-      bufferlist _in(in);
-      const unsigned char* data_in = reinterpret_cast<const unsigned char*>(_in.c_str());
-      size_t data_size = in.length();
-      unsigned char* data_out = reinterpret_cast<unsigned char*>(p.c_str());
+      bufferptr buf(in.length());
+      size_t size = in.length();
 
       SECStatus ret;
       PK11Context *ectx;
-      int written;
-      unsigned int written2;
+      int written = 0;
 
       ectx = PK11_CreateContextBySymKey(
           CKM_AES_ECB, do_encrypt?CKA_ENCRYPT:CKA_DECRYPT, symkey, param);
       if (ectx) {
-        ret = PK11_CipherOp(ectx, data_out, &written,
-                            data_size, data_in, data_size);
-        if (ret == SECSuccess) {
-          ret = PK11_DigestFinal(ectx,
-                                 data_out + written, &written2,
-                                 data_size - written);
+        std::vector<char> hold;
+        hold.reserve(CryptoAES_256_ECB::BLOCK_SIZE);
+        std::list<bufferptr>::const_iterator it = in.buffers().begin();
+        size_t pos = 0;
+        while (it != in.buffers().end()) {
+          if (hold.size() == 0) {
+            size_t block = (it->length() - pos) /
+                CryptoAES_256_ECB::BLOCK_SIZE * CryptoAES_256_ECB::BLOCK_SIZE;
+            if (block > 0) {
+              int w;
+              ret = PK11_CipherOp(ectx,
+                                  reinterpret_cast<unsigned char*>(buf.c_str() + written),
+                                  &w,
+                                  block,
+                                  reinterpret_cast<const unsigned char*>(it->c_str() + pos),
+                                  block);
+              if (ret != SECSuccess) {
+                break;
+              }
+              written += w;
+              pos += w;
+              if (pos == it->length()) {
+                it++;
+                pos = 0;
+              }
+              continue;
+            }
+          }
+          hold.push_back(it->c_str()[pos]);
+          pos++;
+          if (hold.size() == CryptoAES_256_ECB::BLOCK_SIZE) {
+            int w;
+            ret = PK11_CipherOp(ectx,
+                                reinterpret_cast<unsigned char*>(buf.c_str() + written),
+                                &w,
+                                CryptoAES_256_ECB::BLOCK_SIZE,
+                                reinterpret_cast<const unsigned char*>(hold.data()),
+                                CryptoAES_256_ECB::BLOCK_SIZE);
+            hold.clear();
+            if (ret != SECSuccess) {
+              break;
+            }
+            written += w;
+          }
+          if (pos == it->length()) {
+            it++;
+            pos = 0;
+          }
         }
         PK11_DestroyContext(ectx, PR_TRUE);
       }
-      if (ectx && (ret == SECSuccess) && ((size_t)(written + written2) == data_size)) {
+      if (ectx && (ret == SECSuccess) && ((size_t)(written) == size)) {
           result = 0;
-          out.append(p);
+          out.append(buf);
       } else {
         if (error != nullptr) {
           std::ostringstream ss;
@@ -1052,10 +1091,9 @@ private:
     bool result = false;
     SECStatus ret;
     PK11Context *ectx;
-    int written;
+    int written = 0;
     unsigned int written2;
     size_t size = input.length();
-    bufferlist _input(input);
 
     if ((input.length() % CryptoAES_256_CTR::BLOCK_SIZE) != 0) {
       if (error) {
@@ -1063,15 +1101,24 @@ private:
       }
       return false;
     }
-
     ectx = PK11_CreateContextBySymKey(CKM_AES_CTR, CKA_ENCRYPT, symkey, param);
     if (ectx) {
       buffer::ptr buf(
           (size + CryptoAES_256_CTR::KEY_SIZE - 1)
           / CryptoAES_256_CTR::KEY_SIZE * CryptoAES_256_CTR::KEY_SIZE);
-      ret = PK11_CipherOp(ectx,
-                          (unsigned char*)buf.c_str(), &written, buf.length(),
-                          (unsigned char*)_input.c_str(), size);
+
+      for (std::list<bufferptr>::const_iterator it = input.buffers().begin();
+          it != input.buffers().end(); it++) {
+        int w;
+        ret = PK11_CipherOp(ectx,
+                            (unsigned char*)buf.c_str() + written, &w,
+                            buf.length() - written,
+                            (unsigned char*)it->c_str(), it->length());
+        if (ret != SECSuccess) {
+          break;
+        }
+        written += w;
+      }
       if (ret == SECSuccess) {
         ret = PK11_DigestFinal(ectx,
                                (unsigned char*)buf.c_str() + written, &written2,
