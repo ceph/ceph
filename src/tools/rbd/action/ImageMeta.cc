@@ -297,7 +297,7 @@ int execute_remove(const po::variables_map &vm) {
 }
 
 Shell::Action action_list(
-  {"image-meta", "list"}, {}, "Image metadata list keys with values.", "",
+  {"image-meta", "list"}, {"image-meta", "ls"}, "Image metadata list keys with values.", "",
   &get_list_arguments, &execute_list);
 Shell::Action action_get(
   {"image-meta", "get"}, {},
@@ -307,7 +307,7 @@ Shell::Action action_set(
   {"image-meta", "set"}, {}, "Image metadata set key with value.", "",
   &get_set_arguments, &execute_set);
 Shell::Action action_remove(
-  {"image-meta", "remove"}, {},
+  {"image-meta", "remove"}, {"image-meta", "rm"},
   "Image metadata remove the key and value associated.", "",
   &get_remove_arguments, &execute_remove);
 
