@@ -501,15 +501,18 @@ static inline std::string aws4_uri_recode(const boost::string_view& src)
 
 std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
 {
-  if (info.request_params.empty()) {
+  std::string request_params = info.request_params;
+  if (request_params.empty()) {
     /* Optimize the typical flow. */
     return std::string();
+  } else {
+    boost::replace_all(request_params, "+", "%20");
   }
 
   /* Handle case when query string exists. Step 3 described in: http://docs.
    * aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
   std::map<std::string, std::string> canonical_qs_map;
-  for (const auto& s : get_str_vec<5>(info.request_params, "&")) {
+  for (const auto& s : get_str_vec<5>(request_params, "&")) {
     boost::string_view key, val;
     const auto parsed_pair = parse_key_value(s);
     if (parsed_pair) {
