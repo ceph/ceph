@@ -23,7 +23,7 @@ class MonClient;
 
 class SnapServer : public MDSTableServer {
 protected:
-  MonClient *mon_client;
+  MonClient *mon_client = nullptr;
   snapid_t last_snap;
   map<snapid_t, SnapInfo> snaps;
   map<int, set<snapid_t> > need_to_purge;
