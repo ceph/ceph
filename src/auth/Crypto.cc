@@ -1086,7 +1086,9 @@ private:
     }
     if (result == false) {
       if (error) {
-        *error = "Failed to perform AES-CTR encryption: " + PR_GetError();
+        std::ostringstream ss;
+        ss << "Failed to perform AES-CTR encryption: " << PR_GetError();
+        *error = ss.str();
       }
     }
     return result;
