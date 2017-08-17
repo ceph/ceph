@@ -57,7 +57,6 @@ def main(args=None):
 
     Expected input is similar to::
 
-        ['/path/to/ceph-volume-systemd', '<osd id>-<osd uuid>-<device type>']
         ['/path/to/ceph-volume-systemd', '<type>-<extra metadata>']
 
     For example::
