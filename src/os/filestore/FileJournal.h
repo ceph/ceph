@@ -251,7 +251,7 @@ private:
   /// state associated with an in-flight aio request
   /// Protected by aio_lock
   struct aio_info {
-    struct iocb iocb;
+    struct iocb iocb {};
     bufferlist bl;
     struct iovec *iov;
     bool done;
