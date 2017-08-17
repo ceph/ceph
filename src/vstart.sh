@@ -360,12 +360,12 @@ fi
 ARGS="-c $conf_fn"
 
 prunb() {
-    echo "$* &"
+    printf "'%s' " "$@"; echo '&'
     "$@" &
 }
 
 prun() {
-    echo "$*"
+    printf "'%s' " "$@"; echo
     "$@"
 }
 
