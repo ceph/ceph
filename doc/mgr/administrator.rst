@@ -1,3 +1,4 @@
+.. _mgr-administrator-guide:
 
 ceph-mgr administrator's guide
 ==============================
@@ -39,7 +40,7 @@ High availability
 -----------------
 
 In general, you should set up a ceph-mgr on each of the hosts
-running a ceph-mon daemon to achieve the same level of availability. 
+running a ceph-mon daemon to achieve the same level of availability.
 
 By default, whichever ceph-mgr instance comes up first will be made
 active by the monitors, and the others will be standbys.  There is
