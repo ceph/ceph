@@ -34,7 +34,9 @@ public:
     COMP_ALG_SNAPPY = 1,
     COMP_ALG_ZLIB = 2,
     COMP_ALG_ZSTD = 3,
+#ifdef HAVE_LZ4
     COMP_ALG_LZ4 = 4,
+#endif
     COMP_ALG_LAST	//the last value for range checks
   };
   // compression options
