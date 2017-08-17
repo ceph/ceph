@@ -81,8 +81,10 @@ void RDMADispatcher::polling_start()
   // take lock because listen/connect can happen from different worker threads
   Mutex::Locker l(lock);
 
-  if (t.joinable()) 
-    return; // dispatcher thread already running 
+  if (!done)
+    return ;
+
+  assert(!t.joinable());
 
   tx_cc = get_stack()->get_infiniband().create_comp_channel(cct);
   assert(tx_cc);
@@ -95,17 +97,19 @@ void RDMADispatcher::polling_start()
 
   t = std::thread(&RDMADispatcher::polling, this);
   ceph_pthread_setname(t.native_handle(), "rdma-polling");
+  done = false;
 }
 
 void RDMADispatcher::polling_stop()
 {
   {
     Mutex::Locker l(lock);
+    if (done)
+      return ;
     done = true;
   }
 
-  if (!t.joinable())
-    return;
+  assert(t.joinable());
 
   t.join();
 
@@ -547,8 +551,6 @@ RDMAStack::~RDMAStack()
   if (cct->_conf->ms_async_rdma_enable_hugepage) {
     unsetenv("RDMAV_HUGEPAGES_SAFE");	//remove env variable on destruction
   }
-
-  dispatcher.polling_stop();
 }
 
 void RDMAStack::spawn_worker(unsigned i, std::function<void ()> &&func)

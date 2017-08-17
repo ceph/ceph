@@ -44,7 +44,7 @@ class RDMADispatcher {
   Infiniband::CompletionQueue* rx_cq;
   Infiniband::CompletionChannel *tx_cc, *rx_cc;
   EventCallbackRef async_handler;
-  bool done = false;
+  bool done = true;
   std::atomic<uint64_t> num_dead_queue_pair = {0};
   std::atomic<uint64_t> num_qp_conn = {0};
   Mutex lock; // protect `qp_conns`, `dead_queue_pairs`
