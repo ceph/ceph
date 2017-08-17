@@ -178,5 +178,10 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		A systemd ``type`` where a command is defined in ``ExecStart`` which will
 		exit upon completion (it is not intended to daemonize)
 
+	LVM tags
+		Extensible metadata for LVM volumes and groups. It is used to store
+		Ceph-specific information about devices and its relationship with
+		OSDs.
+
 .. _http://github.com/ceph: http://github.com/ceph
 .. _Cluster Map: ../architecture#cluster-map
