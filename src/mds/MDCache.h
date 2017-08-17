@@ -616,8 +616,9 @@ public:
     inodeno_t realm_ino;
     snapid_t snap_follows;
     int dirty_caps;
+    bool snapflush;
     reconnected_cap_info_t() :
-      realm_ino(0), snap_follows(0), dirty_caps(0) {}
+      realm_ino(0), snap_follows(0), dirty_caps(0), snapflush(false) {}
   };
   map<inodeno_t,map<client_t, reconnected_cap_info_t> >  reconnected_caps;   // inode -> client -> snap_follows,realmino
   map<inodeno_t,map<client_t, snapid_t> > reconnected_snaprealms;  // realmino -> client -> realmseq
@@ -627,9 +628,11 @@ public:
     info.realm_ino = inodeno_t(icr.capinfo.snaprealm);
     info.snap_follows = icr.snap_follows;
   }
-  void set_reconnected_dirty_caps(client_t client, inodeno_t ino, int dirty) {
+  void set_reconnected_dirty_caps(client_t client, inodeno_t ino, int dirty, bool snapflush) {
     reconnected_cap_info_t &info = reconnected_caps[ino][client];
     info.dirty_caps |= dirty;
+    if (snapflush)
+      info.snapflush = snapflush;
   }
   void add_reconnected_snaprealm(client_t client, inodeno_t ino, snapid_t seq) {
     reconnected_snaprealms[ino][client] = seq;
