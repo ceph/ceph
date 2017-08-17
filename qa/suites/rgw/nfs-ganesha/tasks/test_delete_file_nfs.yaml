@@ -3,3 +3,4 @@ tasks:
 - ceph-ansible: null
 - nfs_ganesha_rgw:
     test-name: test_delete_file_nfs
+    nfs_version: 4
