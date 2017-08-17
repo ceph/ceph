@@ -20,6 +20,7 @@ if tags.has('man'):
                          'mon/*',
                          'rados/*',
                          'mgr/*',
+                         'ceph-volume/*',
                          'radosgw/*',
                          'rbd/*',
                          'start/*']
