@@ -202,9 +202,19 @@ void check_encryption(int mode, const bufferlist& expected)
   bufferptr key(buffer::create_static(sizeof(key_s), key_s));
   bufferptr iv(buffer::create_static(sizeof(iv_s), iv_s));
 
-  static char data_in[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+  char data_in[4096];
+  memset(data_in, 111, sizeof(data_in));
   bufferlist in;
-  in.append(data_in, sizeof(data_in));
+
+  size_t pos = 0;
+  for (int i = 9; i >= 0 ; i--) {
+	  size_t len = rand() % (sizeof(data_in) / 10);
+	  if (i==0)
+		  len = sizeof(data_in) - pos;
+	  in.append(bufferptr(buffer::copy(data_in + pos, len)));
+	  pos += len;
+  }
+
   bufferlist out;
   bufferlist out_decrypt;
   CryptoKeyHandler* ckh;

@@ -563,13 +563,55 @@ private:
 
       ectx = PK11_CreateContextBySymKey(CKM_AES_CBC, encrypt?CKA_ENCRYPT:CKA_DECRYPT, symkey, param);
       if (ectx) {
-        ret = PK11_CipherOp(ectx,
-                            reinterpret_cast<unsigned char*>(p.c_str()),
-                            &written,
-                            in.length(),
-                            reinterpret_cast<const unsigned char*>(_in.c_str()),
-                            in.length());
-        PK11_DestroyContext(ectx, PR_TRUE);
+        std::vector<char> hold;
+        hold.reserve(CryptoAES_256_CBC::BLOCK_SIZE);
+        std::list<bufferptr>::const_iterator it = in.buffers().begin();
+        size_t pos = 0;
+        while (it != in.buffers().end()) {
+          if (hold.size() == 0) {
+            size_t block = (it->length() - pos) /
+                CryptoAES_256_CBC::BLOCK_SIZE * CryptoAES_256_CBC::BLOCK_SIZE;
+            if (block > 0) {
+              int w;
+              ret = PK11_CipherOp(ectx,
+                                  reinterpret_cast<unsigned char*>(p.c_str() + written),
+                                  &w,
+                                  block,
+                                  reinterpret_cast<const unsigned char*>(it->c_str() + pos),
+                                  block);
+              if (ret != SECSuccess) {
+                break;
+              }
+              written += w;
+              pos += w;
+              if (pos == it->length()) {
+                it++;
+                pos = 0;
+              }
+              continue;
+            }
+          }
+          hold.push_back(it->c_str()[pos]);
+          pos++;
+          if (hold.size() == CryptoAES_256_CBC::BLOCK_SIZE) {
+            int w;
+            ret = PK11_CipherOp(ectx,
+                                reinterpret_cast<unsigned char*>(p.c_str() + written),
+                                &w,
+                                CryptoAES_256_CBC::BLOCK_SIZE,
+                                reinterpret_cast<const unsigned char*>(hold.data()),
+                                CryptoAES_256_CBC::BLOCK_SIZE);
+            hold.clear();
+            if (ret != SECSuccess) {
+              break;
+            }
+            written += w;
+          }
+          if (pos == it->length()) {
+            it++;
+            pos = 0;
+          }
+        }
       }
       if (ectx && (ret == SECSuccess) && ((size_t)written == in.length())) {
         result = 0;
