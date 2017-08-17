@@ -4567,6 +4567,9 @@ int reweight::by_utilization(
       if (pools && pools->count(pg.first.pool()) == 0)
 	continue;
       for (const auto acting : pg.second.acting) {
+        if (!osdmap.exists(acting)) {
+          continue;
+        }
 	if (acting >= (int)pgs_by_osd.size())
 	  pgs_by_osd.resize(acting);
 	if (pgs_by_osd[acting] == 0) {
