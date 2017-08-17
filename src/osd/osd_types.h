@@ -811,6 +811,15 @@ public:
 
   string get_key_name() const;
 
+  // key must point to the beginning of a block of 32 chars
+  inline void get_key_name(char* key) const {
+    // Below is equivalent of sprintf("%010u.%020llu");
+    key[31] = 0;
+    ritoa<uint64_t, 10, 20>(version, key + 31);
+    key[10] = '.';
+    ritoa<uint32_t, 10, 10>(epoch, key + 10);
+  }
+
   void encode(bufferlist &bl) const {
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.append((char *)this, sizeof(version_t) + sizeof(epoch_t));
