@@ -3261,6 +3261,13 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) cons
   dout(30) << __func__ << " osd." << osd << " next=" << next
 	   << " " << creating_pgs_by_osd_epoch << dendl;
   std::lock_guard<std::mutex> l(creating_pgs_lock);
+  if (creating_pgs_epoch == 0 ||
+      creating_pgs_epoch < mapping.get_epoch()) {
+    dout(20) << __func__
+	     << " not using stale creating_pgs@" << creating_pgs_epoch << dendl;
+    // the subscribers will be updated when the mapping is completed anyway
+    return next;
+  }
   auto creating_pgs_by_epoch = creating_pgs_by_osd_epoch.find(osd);
   if (creating_pgs_by_epoch == creating_pgs_by_osd_epoch.end())
     return next;
