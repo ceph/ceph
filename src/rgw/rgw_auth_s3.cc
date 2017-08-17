@@ -501,15 +501,22 @@ static inline std::string aws4_uri_recode(const boost::string_view& src)
 
 std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
 {
-  if (info.request_params.empty()) {
+  const std::string *params = &info.request_params;
+  std::string copy_params;
+  if (params->empty()) {
     /* Optimize the typical flow. */
     return std::string();
+  }
+  if (params->find_first_of('+') != std::string::npos) {
+    copy_params = *params;
+    boost::replace_all(copy_params, "+", " ");
+    params = &copy_params;
   }
 
   /* Handle case when query string exists. Step 3 described in: http://docs.
    * aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
   std::map<std::string, std::string> canonical_qs_map;
-  for (const auto& s : get_str_vec<5>(info.request_params, "&")) {
+  for (const auto& s : get_str_vec<5>(*params, "&")) {
     boost::string_view key, val;
     const auto parsed_pair = parse_key_value(s);
     if (parsed_pair) {
@@ -986,8 +993,11 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
                       std::begin(parsing_buf) + consumed);
   }
 
+  size_t stream_pos_was = stream_pos - parsing_buf.size();
+
   size_t to_extract = \
-    std::min(chunk_meta.get_data_size(stream_pos), buf_max);
+    std::min(chunk_meta.get_data_size(stream_pos_was), buf_max);
+  dout(30) << "AWSv4ComplMulti: stream_pos_was=" << stream_pos_was << ", to_extract=" << to_extract << dendl;
   
   /* It's quite probable we have a couple of real data bytes stored together
    * with meta-data in the parsing_buf. We need to extract them and move to
@@ -996,6 +1006,7 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
   if (to_extract > 0 && parsing_buf.size() > 0) {
     const auto data_len = std::min(to_extract, parsing_buf.size());
     const auto data_end_iter = std::begin(parsing_buf) + data_len;
+    dout(30) << "AWSv4ComplMulti: to_extract=" << to_extract << ", data_len=" << data_len << dendl;
 
     std::copy(std::begin(parsing_buf), data_end_iter, buf);
     parsing_buf.erase(std::begin(parsing_buf), data_end_iter);
@@ -1010,6 +1021,7 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
    * buffering. */
   while (to_extract > 0) {
     const size_t received = io_base_t::recv_body(buf + buf_pos, to_extract);
+    dout(30) << "AWSv4ComplMulti: to_extract=" << to_extract << ", received=" << received << dendl;
 
     if (received == 0) {
       break;
