@@ -258,6 +258,7 @@ void MDSTableServer::handle_mds_recovery(mds_rank_t who)
     if (p->second.reqid >= next_reqid)
       next_reqid = p->second.reqid + 1;
     MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, p->second.reqid, p->second.tid);
+    _get_reply_buffer(p->second.tid, &reply->bl);
     mds->send_message_mds(reply, who);
   }
 

@@ -123,7 +123,6 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       dout(10) << "prepare v" << version << " update " << info << dendl;
 
       bl.clear();
-      ::encode(last_snap, bl);
     }
     break;
 
@@ -133,11 +132,27 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
   //dump();
 }
 
-bool SnapServer::_is_prepared(version_t tid) const
+void SnapServer::_get_reply_buffer(version_t tid, bufferlist *pbl) const
 {
-  return 
-    pending_update.count(tid) ||
-    pending_destroy.count(tid);
+  auto p = pending_update.find(tid);
+  if (p != pending_update.end()) {
+    if (pbl && p->second.long_name == "create")
+      ::encode(p->second.snapid, *pbl);
+    return;
+  }
+  auto q = pending_destroy.find(tid);
+  if (q != pending_destroy.end()) {
+    if (pbl)
+      ::encode(q->second.second, *pbl);
+    return;
+  }
+  auto r = pending_noop.find(tid);
+  if (r != pending_noop.end()) {
+    if (pbl)
+      ::encode(last_snap, *pbl);
+    return;
+  }
+  assert (0 == "tid not found");
 }
 
 void SnapServer::_commit(version_t tid, MMDSTableRequest *req)
