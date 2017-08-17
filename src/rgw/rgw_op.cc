@@ -830,10 +830,10 @@ void RGWDeleteObjTags::pre_exec()
 int RGWDeleteObjTags::verify_permission()
 {
   if (!s->object.empty()) {
-    if (!verify_object_permission(s,
-				  s->object.instance.empty() ?
-				  rgw::IAM::s3DeleteObjectTagging:
-				  rgw::IAM::s3DeleteObjectVersionTagging))
+    iam_action = s->object.instance.empty() ?
+      rgw::IAM::s3DeleteObjectTagging:
+      rgw::IAM::s3DeleteObjectVersionTagging;
+    if (!verify_object_permission(s, iam_action))
       return -EACCES;
   }
   return 0;
@@ -846,6 +846,7 @@ void RGWDeleteObjTags::execute()
 
   rgw_obj obj;
   obj = rgw_obj(s->bucket, s->object);
+  rgw_iam_eval_existing_objtags(store, s, obj, iam_action);
   store->set_atomic(s->obj_ctx, obj);
   map <string, bufferlist> attrs;
   map <string, bufferlist> rmattr;
