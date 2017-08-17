@@ -453,20 +453,20 @@ TEST_F(OSDMapTest, parse_osd_id_list) {
   osdmap.get_all_osds(all);
 
   ASSERT_EQ(0, osdmap.parse_osd_id_list({"osd.0"}, &out, &cout));
-  ASSERT_EQ(1, out.size());
+  ASSERT_EQ(1u, out.size());
   ASSERT_EQ(0, *out.begin());
 
   ASSERT_EQ(0, osdmap.parse_osd_id_list({"1"}, &out, &cout));
-  ASSERT_EQ(1, out.size());
+  ASSERT_EQ(1u, out.size());
   ASSERT_EQ(1, *out.begin());
 
   ASSERT_EQ(0, osdmap.parse_osd_id_list({"osd.0","osd.1"}, &out, &cout));
-  ASSERT_EQ(2, out.size());
+  ASSERT_EQ(2u, out.size());
   ASSERT_EQ(0, *out.begin());
   ASSERT_EQ(1, *out.rbegin());
 
   ASSERT_EQ(0, osdmap.parse_osd_id_list({"osd.0","1"}, &out, &cout));
-  ASSERT_EQ(2, out.size());
+  ASSERT_EQ(2u, out.size());
   ASSERT_EQ(0, *out.begin());
   ASSERT_EQ(1, *out.rbegin());
 
