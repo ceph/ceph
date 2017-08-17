@@ -102,6 +102,7 @@ about Ceph, see our `Architecture`_ section.
    api/index
    architecture
    Development <dev/index>
+   ceph-volume/index
    release-notes
    releases
    Glossary <glossary>
