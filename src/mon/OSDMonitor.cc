@@ -4923,6 +4923,34 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       osdmap.crush->list_rules(&ss);
       rdata.append(ss.str());
     }
+  } else if (prefix == "osd crush rule ls-by-class") {
+    string class_name;
+    cmd_getval(g_ceph_context, cmdmap, "class", class_name);
+    if (class_name.empty()) {
+      ss << "no class specified";
+      r = -EINVAL;
+      goto reply;
+    }
+    set<int> rules;
+    r = osdmap.crush->get_rules_by_class(class_name, &rules);
+    if (r < 0) {
+      ss << "failed to get rules by class '" << class_name << "'";
+      goto reply;
+    }
+    if (f) {
+      f->open_array_section("rules");
+      for (auto &rule: rules) {
+        f->dump_string("name", osdmap.crush->get_rule_name(rule));
+      }
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      ostringstream rs;
+      for (auto &rule: rules) {
+        rs << osdmap.crush->get_rule_name(rule) << "\n";
+      }
+      rdata.append(rs.str());
+    }
   } else if (prefix == "osd crush rule dump") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);

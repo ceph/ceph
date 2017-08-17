@@ -2017,6 +2017,37 @@ int CrushWrapper::device_class_clone(
   return 0;
 }
 
+int CrushWrapper::get_rules_by_class(const string &class_name, set<int> *rules)
+{
+  assert(rules);
+  rules->clear();
+  if (!class_exists(class_name)) {
+    return -ENOENT;
+  }
+  int class_id = get_class_id(class_name);
+  for (unsigned i = 0; i < crush->max_rules; ++i) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j = 0; j < r->len; ++j) {
+      if (r->steps[j].op == CRUSH_RULE_TAKE) {
+        int step_item = r->steps[j].arg1;
+        int original_item;
+        int c;
+        int res = split_id_class(step_item, &original_item, &c);
+        if (res < 0) {
+          return res;
+        }
+        if (c != -1 && c == class_id) {
+          rules->insert(i);
+          break;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
 bool CrushWrapper::_class_is_dead(int class_id)
 {
   for (auto &p: class_map) {
