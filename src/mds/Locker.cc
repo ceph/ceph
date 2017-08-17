@@ -2633,10 +2633,11 @@ void Locker::handle_client_caps(MClientCaps *m)
       m->put();
       return;
     }
-    if (mds->is_reconnect() &&
+    if ((mds->is_reconnect() || mds->get_want_state() == MDSMap::STATE_RECONNECT) &&
 	m->get_dirty() && m->get_client_tid() > 0 &&
 	!session->have_completed_flush(m->get_client_tid())) {
-      mdcache->set_reconnected_dirty_caps(client, m->get_ino(), m->get_dirty());
+      mdcache->set_reconnected_dirty_caps(client, m->get_ino(), m->get_dirty(),
+					  m->get_op() == CEPH_CAP_OP_FLUSHSNAP);
     }
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
     return;
@@ -2850,6 +2851,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
       }
     }
+    if (cap->need_snapflush() && (m->flags & MClientCaps::FLAG_NO_CAPSNAP))
+      cap->clear_needsnapflush();
     
     if (m->get_dirty() && in->is_auth()) {
       dout(7) << " flush client." << client << " dirty " << ccap_string(m->get_dirty()) 

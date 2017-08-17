@@ -1531,7 +1531,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
     for (auto p : in->client_caps) {
       client_t client = p.first;
       Capability *cap = p.second;
-      int issued = cap->issued();
+      int issued = cap->need_snapflush() ? CEPH_CAP_ANY_WR : cap->issued();
       if ((issued & CEPH_CAP_ANY_WR) &&
 	  cap->client_follows < last) {
 	// note in oldin
@@ -5782,8 +5782,17 @@ void MDCache::open_snap_parents()
 	auto q = reconnected_caps.find(child->ino());
 	assert(q != reconnected_caps.end());
 	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
-	  if (r->second.snap_follows > 0 && r->second.snap_follows < in->first - 1) {
-	    rebuild_need_snapflush(child, in->snaprealm, r->first, r->second.snap_follows);
+	  if (r->second.snap_follows > 0) {
+	    if (r->second.snap_follows < child->first - 1) {
+	      rebuild_need_snapflush(child, in->snaprealm, r->first, r->second.snap_follows);
+	    } else if (r->second.snapflush) {
+	      // When processing a cap flush message that is re-sent, it's possble
+	      // that the sender has already released all WR caps. So we should
+	      // force MDCache::cow_inode() to setup CInode::client_need_snapflush.
+	      Capability *cap = child->get_client_cap(r->first);
+	      if (cap)
+		cap->mark_needsnapflush();
+	    }
 	  }
 	  // make sure client's cap is in the correct snaprealm.
 	  if (r->second.realm_ino != in->ino()) {
