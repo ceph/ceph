@@ -44,6 +44,7 @@ private:
 public:
   virtual void handle_query(MMDSTableRequest *m) = 0;
   virtual void _prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds) = 0;
+  virtual void _get_reply_buffer(version_t tid, bufferlist *pbl) const = 0;
   virtual void _commit(version_t tid, MMDSTableRequest *req=NULL) = 0;
   virtual void _rollback(version_t tid) = 0;
   virtual void _server_update(bufferlist& bl) { ceph_abort(); }
