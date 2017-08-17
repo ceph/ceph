@@ -216,6 +216,24 @@ compare_images ${POOL} ${clone_image}
 expect_failure "is non-primary" clone_image ${CLUSTER1} ${PARENT_POOL} \
     ${parent_image} ${parent_snap} ${POOL} ${clone_image}1
 
+testlog "TEST: data pool"
+dp_image=test_data_pool
+create_image ${CLUSTER2} ${POOL} ${dp_image} 128 --data-pool ${PARENT_POOL}
+data_pool=$(get_image_data_pool ${CLUSTER2} ${POOL} ${dp_image})
+test "${data_pool}" = "${PARENT_POOL}"
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${dp_image}
+data_pool=$(get_image_data_pool ${CLUSTER1} ${POOL} ${dp_image})
+test "${data_pool}" = "${PARENT_POOL}"
+create_snapshot ${CLUSTER2} ${POOL} ${dp_image} 'snap1'
+write_image ${CLUSTER2} ${POOL} ${dp_image} 100
+create_snapshot ${CLUSTER2} ${POOL} ${dp_image} 'snap2'
+write_image ${CLUSTER2} ${POOL} ${dp_image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${dp_image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${dp_image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${dp_image}@snap1
+compare_images ${POOL} ${dp_image}@snap2
+compare_images ${POOL} ${dp_image}
+
 testlog "TEST: disable mirroring / delete non-primary image"
 image2=test2
 image3=test3

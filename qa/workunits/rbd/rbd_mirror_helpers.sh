@@ -867,6 +867,16 @@ request_resync_image()
     rbd --cluster=${cluster} -p ${pool} mirror image resync ${image}
 }
 
+get_image_data_pool()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster ${cluster} -p ${pool} info ${image} |
+        awk '$1 == "data_pool:" {print $2}'
+}
+
 #
 # Main
 #
