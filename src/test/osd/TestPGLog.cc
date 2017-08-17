@@ -2990,6 +2990,20 @@ TEST_F(PGLogTest, _merge_object_divergent_entries) {
   }
 }
 
+TEST(eversion_t, get_key_name) {
+  eversion_t a(1234, 5678);
+  std::string a_key_name = a.get_key_name();
+  EXPECT_EQ("0000001234.00000000000000005678", a_key_name);
+}
+
+TEST(pg_log_dup_t, get_key_name) {
+  pg_log_dup_t a(eversion_t(1234, 5678),
+		 13,
+		 osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+		 15);
+  std::string a_key_name = a.get_key_name();
+  EXPECT_EQ("dup_0000001234.00000000000000005678", a_key_name);
+}
 
 // Local Variables:
 // compile-command: "cd ../.. ; make unittest_pglog ; ./unittest_pglog --log-to-stderr=true  --debug-osd=20 # --gtest_filter=*.* "
