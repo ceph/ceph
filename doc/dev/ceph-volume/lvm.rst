@@ -1,5 +1,5 @@
 
-.. _lvm_tag_api:
+.. _ceph-volume-lvm-api:
 
 LVM
 ===
@@ -12,6 +12,8 @@ later.
              it is clear what the tool is doing behind the scenes. Do not alter
              any of these values.
 
+
+.. _ceph-volume-lvm-tag-api:
 
 Tag API
 -------
