@@ -21,4 +21,4 @@ exposed to the user, these sections explain how these pieces work together,
 clarifying the workflows of the tool.
 
 :ref:`Systemd Units <ceph-volume-systemd>` |
-:ref:`lvm <cwph-volume-lvm-api>`
+:ref:`lvm <ceph-volume-lvm-api>`
