@@ -39,6 +39,7 @@ public:
 #ifdef HAVE_SPDK
   void *nvme_task_first = nullptr;
   void *nvme_task_last = nullptr;
+  std::atomic_int total_nseg = {0};
 #endif
 
 
