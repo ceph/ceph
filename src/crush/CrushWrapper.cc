@@ -1667,7 +1667,7 @@ int CrushWrapper::remove_rule(int ruleno)
   crush->rules[ruleno] = NULL;
   rule_name_map.erase(ruleno);
   have_rmaps = false;
-  return 0;
+  return rebuild_roots_with_classes();
 }
 
 int CrushWrapper::bucket_adjust_item_weight(CephContext *cct, crush_bucket *bucket, int item, int weight)
