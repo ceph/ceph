@@ -3535,6 +3535,9 @@ int OSD::update_crush_device_class()
   int r = store->read_meta("crush_device_class", &device_class);
   if (r < 0 || device_class.empty()) {
     device_class = store->get_default_device_class();
+    r = store->write_meta("crush_device_class", device_class);
+    if (r < 0)
+      return r;
   }
 
   if (device_class.empty()) {
