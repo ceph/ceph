@@ -1554,6 +1554,15 @@ Effect Policy::eval(const Environment& e,
   return allowed ? Effect::Allow : Effect::Pass;
 }
 
+bool Policy::has_conditional(const string& conditional, bool partial) const {
+  for (const auto&s: statements){
+    if (std::any_of(s.conditions.begin(), s.conditions.end(),
+		    [&](const Condition& c) { return c.has_key(conditional, partial);}))
+	return true;
+  }
+  return false;
+}
+
 ostream& operator <<(ostream& m, const Policy& p) {
   m << "{ Version: "
     << (p.version == Version::v2008_10_17 ? "2008-10-17" : "2012-10-17");

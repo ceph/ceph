@@ -394,6 +394,13 @@ struct Condition {
     }
     return false;
   }
+
+  bool has_key(const std::string& _key, bool partial=false) const {
+    if (partial)
+      return boost::algorithm::istarts_with(key, _key);
+    else
+      return boost::algorithm::iequals(key, _key);
+  }
 };
 
 std::ostream& operator <<(std::ostream& m, const Condition& c);
@@ -446,6 +453,8 @@ struct Policy {
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,
 	      std::uint64_t action, const ARN& resource) const;
+
+  bool has_conditional(const string& conditional, bool partial=false) const;
 };
 
 std::ostream& operator <<(ostream& m, const Policy& p);
