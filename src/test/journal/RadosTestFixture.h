@@ -64,7 +64,7 @@ public:
 
   librados::IoCtx m_ioctx;
 
-  ContextWQ *m_work_queue;
+  ContextWQ *m_work_queue = nullptr;
 
   Mutex m_timer_lock;
   SafeTimer *m_timer;
