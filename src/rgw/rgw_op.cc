@@ -603,18 +603,6 @@ static int rgw_iam_add_existing_objtags(RGWRados* store, struct req_state* s, rg
   return 0;
 }
 
-static int rgw_iam_eval_existing_objtags(RGWRados* store, struct req_state* s, rgw_obj& obj, std::uint64_t action){
-  int op_ret = rgw_iam_add_existing_objtags(store, s, obj, action);
-  if (op_ret < 0)
-    return op_ret;
-  auto e = s->iam_policy->eval(s->env, *s->auth.identity, action, obj);
-  if (e == Effect::Deny)
-    return -EACCES;
-
-  return 0;
-
-}
-
 rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						struct req_state* s)
 {
