@@ -1502,10 +1502,13 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       unlinked.erase(*p);
     dout(10) << " unlinked set contains " << unlinked << dendl;
     for (map<CInode*, CDir*>::iterator p = unlinked.begin(); p != unlinked.end(); ++p) {
-      if (slaveup) // preserve unlinked inodes until slave commit
-	slaveup->unlinked.insert(p->first);
-      else
-	mds->mdcache->remove_inode_recursive(p->first);
+      CInode *in = p->first;
+      if (slaveup) { // preserve unlinked inodes until slave commit
+	slaveup->unlinked.insert(in);
+	if (in->snaprealm)
+	  in->snaprealm->adjust_parent();
+      } else
+	mds->mdcache->remove_inode_recursive(in);
     }
   }
 
