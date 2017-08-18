@@ -110,11 +110,16 @@ struct C_InvalidateCache : public Context {
 struct C_AsyncCallback : public Context {
   ImageCtx *image_ctx;
   Context *on_finish;
-  C_AsyncCallback(ImageCtx *image_ctx, Context *on_finish)
-    : image_ctx(image_ctx), on_finish(on_finish) {
+  bool     reentrant_safe;
+  C_AsyncCallback(ImageCtx *image_ctx, Context *on_finish, bool _reentrant_safe)
+    : image_ctx(image_ctx), on_finish(on_finish), reentrant_safe(_reentrant_safe) {
   }
   virtual void finish(int r) {
-    image_ctx->writeback_handler->queue(on_finish, r);
+    if (!reentrant_safe) {
+      image_ctx->writeback_handler->queue(on_finish, r);
+    } else {
+      on_finish->complete(r);
+    }
   }
 };
 
@@ -860,13 +865,17 @@ void _flush_async_operations(ImageCtx *ictx, Context *on_finish) {
 
   void ImageCtx::flush_async_operations() {
     C_SaferCond ctx;
-    _flush_async_operations(this, &ctx);
+    _flush_async_operations(this, new C_AsyncCallback(this, &ctx, true));
     ctx.wait();
   }
 
   void ImageCtx::flush_async_operations(Context *on_finish) {
     // complete context in clean thread context
-    _flush_async_operations(this, new C_AsyncCallback(this, on_finish));
+    bool reentrant = false;
+    if (object_cacher == NULL) {
+      reentrant = true;
+    }
+    _flush_async_operations(this, new C_AsyncCallback(this, on_finish, reentrant));
   }
 
   int ImageCtx::flush() {
