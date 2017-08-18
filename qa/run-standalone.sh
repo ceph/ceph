@@ -7,7 +7,7 @@ if [ ! -e Makefile -o ! -d bin ]; then
 fi
 
 if [ ! -d /tmp/ceph-disk-virtualenv -o ! -d /tmp/ceph-detect-init-virtualenv ]; then
-    echo '/tmp/*-virtualenv directories not built'
+    echo '/tmp/*-virtualenv directories not built. Please run "make check" first.'
     exit 1
 fi
 
