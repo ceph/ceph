@@ -711,6 +711,9 @@ bool PGBackend::be_compare_scrub_objects(
   for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
        i != auth.attrs.end();
        ++i) {
+    // We check system keys seperately
+    if (i->first == OI_ATTR || i->first == SS_ATTR)
+      continue;
     if (!candidate.attrs.count(i->first)) {
       if (error != CLEAN)
         errorstream << ", ";
@@ -728,6 +731,9 @@ bool PGBackend::be_compare_scrub_objects(
   for (map<string,bufferptr>::const_iterator i = candidate.attrs.begin();
        i != candidate.attrs.end();
        ++i) {
+    // We check system keys seperately
+    if (i->first == OI_ATTR || i->first == SS_ATTR)
+      continue;
     if (!auth.attrs.count(i->first)) {
       if (error != CLEAN)
         errorstream << ", ";
@@ -758,7 +764,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   inconsistent_obj_wrapper &object_error)
 {
   eversion_t auth_version;
-  bufferlist auth_bl;
+  bufferlist first_bl;
 
   // Create list of shards with primary last so it will be auth copy all
   // other things being equal.
@@ -782,6 +788,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     }
     string error_string;
     auto& shard_info = shard_map[j->first];
+    if (j->first == get_parent()->whoami_shard())
+      shard_info.primary = true;
     if (i->second.read_error) {
       shard_info.set_read_error();
       error_string += " read_error";
@@ -809,6 +817,25 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       goto out;
     }
 
+    // We won't pick an auth copy if the snapset is missing or won't decode.
+    if (obj.is_head() || obj.is_snapdir()) {
+      k = i->second.attrs.find(SS_ATTR);
+      if (k == i->second.attrs.end()) {
+	shard_info.set_ss_attr_missing();
+	error_string += " ss_attr_missing";
+      } else {
+        ss_bl.push_back(k->second);
+        try {
+	  bufferlist::iterator bliter = ss_bl.begin();
+	  ::decode(ss, bliter);
+        } catch (...) {
+	  // invalid snapset, probably corrupt
+	  shard_info.set_ss_attr_corrupted();
+	  error_string += " ss_attr_corrupted";
+        }
+      }
+    }
+
     k = i->second.attrs.find(OI_ATTR);
     if (k == i->second.attrs.end()) {
       // no object info on object, probably corrupt
@@ -827,48 +854,32 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       goto out;
     }
 
-    if (oi.soid != obj) {
-      shard_info.set_oi_attr_corrupted();
-      error_string += " oi_attr_corrupted";
+    // This is automatically corrected in PG::_repair_oinfo_oid()
+    assert(oi.soid == obj);
+
+    if (first_bl.length() == 0) {
+      first_bl.append(bl);
+    } else if (!object_error.has_object_info_inconsistency() && !bl.contents_equal(first_bl)) {
+      object_error.set_object_info_inconsistency();
+      error_string += " object_info_inconsistency";
+    }
+
+    if (i->second.size != be_get_ondisk_size(oi.size)) {
+      dout(5) << __func__ << " size " << i->second.size << " oi size " << oi.size << dendl;
+      shard_info.set_obj_size_oi_mismatch();
+      error_string += " obj_size_oi_mismatch";
+    }
+
+    // Don't use this particular shard due to previous errors
+    // XXX: For now we can't pick one shard for repair and another's object info or snapset
+    if (shard_info.errors)
       goto out;
-    }
-
-    if (auth_version != eversion_t()) {
-      if (!object_error.has_object_info_inconsistency() && !(bl == auth_bl)) {
-	object_error.set_object_info_inconsistency();
-	error_string += " object_info_inconsistency";
-      }
-    }
-
-    // Don't use this particular shard because it won't be able to repair data
-    // XXX: For now we can't pick one shard for repair and another's object info
-    if (i->second.read_error || i->second.ec_hash_mismatch || i->second.ec_size_mismatch)
-      goto out;
-
-    // We don't set errors here for snapset, but we won't pick an auth copy if the
-    // snapset is missing or won't decode.
-    if (obj.is_head() || obj.is_snapdir()) {
-      k = i->second.attrs.find(SS_ATTR);
-      if (k == i->second.attrs.end()) {
-	goto out;
-      }
-      ss_bl.push_back(k->second);
-      try {
-	bufferlist::iterator bliter = ss_bl.begin();
-	::decode(ss, bliter);
-      } catch (...) {
-	// invalid snapset, probably corrupt
-	goto out;
-      }
-    }
 
     if (auth_version == eversion_t() || oi.version > auth_version ||
         (oi.version == auth_version && dcount(oi) > dcount(*auth_oi))) {
       auth = j;
       *auth_oi = oi;
       auth_version = oi.version;
-      auth_bl.clear();
-      auth_bl.append(bl);
     }
 
 out:
@@ -929,7 +940,8 @@ void PGBackend::be_compare_scrubmaps(
     set<pg_shard_t> object_errors;
     if (auth == maps.end()) {
       object_error.set_version(0);
-      object_error.set_auth_missing(*k, maps, shard_map, shallow_errors, deep_errors);
+      object_error.set_auth_missing(*k, maps, shard_map, shallow_errors,
+	deep_errors, get_parent()->whoami_shard());
       if (object_error.has_deep_errors())
 	++deep_errors;
       else if (object_error.has_shallow_errors())
@@ -982,6 +994,7 @@ void PGBackend::be_compare_scrubmaps(
       } else {
 	cur_missing.insert(j->first);
 	shard_map[j->first].set_missing();
+        shard_map[j->first].primary = (j->first == get_parent()->whoami_shard());
 	// Can't have any other errors if there is no information available
 	++shallow_errors;
 	errorstream << pgid << " shard " << j->first << " missing " << *k

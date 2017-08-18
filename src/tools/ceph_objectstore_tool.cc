@@ -1983,7 +1983,7 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
 }
 
 int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsize, Formatter* formatter,
-	     ObjectStore::Sequencer &osr)
+	     ObjectStore::Sequencer &osr, bool corrupt)
 {
   if (ghobj.hobj.is_snapdir()) {
     cerr << "Can't set the size of a snapdir" << std::endl;
@@ -2060,7 +2060,9 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
     ::encode(oi, attr, -1);  /* fixme: using full features */
     ObjectStore::Transaction t;
     t.setattr(coll, ghobj, OI_ATTR, attr);
-    t.truncate(coll, ghobj, setsize);
+    // Only modify object info if we want to corrupt it
+    if (!corrupt)
+      t.truncate(coll, ghobj, setsize);
     if (is_snap) {
       bufferlist snapattr;
       snapattr.clear();
@@ -3396,7 +3398,9 @@ int main(int argc, char **argv)
 	}
 	ret = print_obj_info(fs, coll, ghobj, formatter);
 	goto out;
-      } else if (objcmd == "set-size") {
+      } else if (objcmd == "set-size" || objcmd == "corrupt-size") {
+	// Undocumented testing feature
+	bool corrupt = (objcmd == "corrupt-size");
         // Extra arg
 	if (vm.count("arg1") == 0 || vm.count("arg2")) {
 	  usage(desc);
@@ -3409,7 +3413,7 @@ int main(int argc, char **argv)
 	  goto out;
 	}
 	uint64_t size = atoll(arg1.c_str());
-	ret = set_size(fs, coll, ghobj, size, formatter, *osr);
+	ret = set_size(fs, coll, ghobj, size, formatter, *osr, corrupt);
 	goto out;
       } else if (objcmd == "clear-snapset") {
         // UNDOCUMENTED: For testing zap SnapSet
