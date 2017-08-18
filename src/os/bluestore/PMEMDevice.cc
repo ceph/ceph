@@ -34,7 +34,7 @@
 #define dout_prefix *_dout << "bdev-PMEM("  << path << ") "
 
 PMEMDevice::PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv)
-  : BlockDevice(cct),
+  : BlockDevice(cct, cb, cbpriv),
     fd(-1), addr(0),
     debug_lock("PMEMDevice::debug_lock"),
     injecting_crash(0)
@@ -146,7 +146,7 @@ static string get_dev_property(const char *dev, const char *property)
   return val;
 }
 
-int PMEMDevice::collect_metadata(string prefix, map<string,string> *pm) const
+int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
 {
   (*pm)[prefix + "rotational"] = stringify((int)(bool)rotational);
   (*pm)[prefix + "size"] = stringify(get_size());
