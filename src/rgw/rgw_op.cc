@@ -72,6 +72,10 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
 
 static MultipartMetaFilter mp_filter;
 
+// this probably should belong in the rgw_iam_policy_keywords, I'll get it to it
+// at some point
+static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
+
 static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_content)
 {
   int r = -ERANGE;
@@ -727,6 +731,8 @@ int RGWGetObj::verify_permission()
     } else {
       action = rgw::IAM::s3GetObjectVersion;
     }
+    if (s->iam_policy->has_conditional(S3_EXISTING_OBJTAG))
+      rgw_iam_add_existing_objtags(store, s, obj, iam_action);
   }
 
   if (!verify_object_permission(s, action)) {
@@ -809,6 +815,12 @@ int RGWPutObjTags::verify_permission()
 {
   iam_action = s->object.instance.empty() ?
     rgw::IAM::s3PutObjectTagging: rgw::IAM::s3PutObjectVersionTagging;
+
+  if(s->iam_policy->has_conditional(S3_EXISTING_OBJTAG)){
+    auto obj = rgw_obj(s->bucket, s->object);
+    rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+  }
+
   if (!verify_object_permission(s,iam_action))
     return -EACCES;
   return 0;
@@ -827,7 +839,6 @@ void RGWPutObjTags::execute()
 
   rgw_obj obj;
   obj = rgw_obj(s->bucket, s->object);
-  op_ret = rgw_iam_eval_existing_objtags(store, s, obj, iam_action);
   store->set_atomic(s->obj_ctx, obj);
   op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_TAGS, tags_bl);
   if (op_ret == -ECANCELED){
@@ -847,6 +858,12 @@ int RGWDeleteObjTags::verify_permission()
     iam_action = s->object.instance.empty() ?
       rgw::IAM::s3DeleteObjectTagging:
       rgw::IAM::s3DeleteObjectVersionTagging;
+
+    if (s->iam_policy->has_conditional(S3_EXISTING_OBJTAG)){
+      auto obj = rgw_obj(s->bucket, s->object);
+      rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+    }
+
     if (!verify_object_permission(s, iam_action))
       return -EACCES;
   }
@@ -860,7 +877,6 @@ void RGWDeleteObjTags::execute()
 
   rgw_obj obj;
   obj = rgw_obj(s->bucket, s->object);
-  rgw_iam_eval_existing_objtags(store, s, obj, iam_action);
   store->set_atomic(s->obj_ctx, obj);
   map <string, bufferlist> attrs;
   map <string, bufferlist> rmattr;
@@ -1812,19 +1828,6 @@ void RGWGetObj::execute()
   if (op_ret < 0) {
     goto done_err;
   }
-
-
-  attr_iter = attrs.find(RGW_ATTR_TAGS);
-  if (attr_iter != attrs.end()){
-    ldout(s->cct,0) << "abhi: evaling obj tags" << attr_iter->second.c_str() << dendl;
-    rgw_iam_add_tags_from_bl(s, attr_iter->second);
-    auto e = s->iam_policy->eval(s->env, *s->auth.identity, action, obj);
-    if (e == Effect::Deny){
-      op_ret = -EACCES;
-      goto done_err;
-    }
-  }
-
 
   if (!get_data || ofs > end) {
     send_response_data(bl, 0, 0);
@@ -4652,8 +4655,12 @@ int RGWGetACLs::verify_permission()
   bool perm;
   if (!s->object.empty()) {
     iam_action = s->object.instance.empty() ? rgw::IAM::s3GetObjectAcl : rgw::IAM::s3GetObjectVersionAcl;
-    rgw_obj obj = rgw_obj(s->bucket, s->object);
-    rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+
+    if (s->iam_policy->has_conditional(S3_EXISTING_OBJTAG)){
+      rgw_obj obj = rgw_obj(s->bucket, s->object);
+      rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+    }
+
     perm = verify_object_permission(s, iam_action);
   } else {
     perm = verify_bucket_permission(s, rgw::IAM::s3GetBucketAcl);
@@ -4692,6 +4699,8 @@ int RGWPutACLs::verify_permission()
 
   if (!s->object.empty()) {
     iam_action = s->object.instance.empty() ? rgw::IAM::s3PutObjectAcl : rgw::IAM::s3PutObjectVersionAcl;
+    auto obj = rgw_obj(s->bucket, s->object);
+    op_ret = rgw_iam_add_existing_objtags(store, s, obj, iam_action);
     perm = verify_object_permission(s, iam_action);
   } else {
     iam_action = rgw::IAM::s3PutBucketAcl;
@@ -4874,7 +4883,6 @@ void RGWPutACLs::execute()
 
   if (!s->object.empty()) {
     obj = rgw_obj(s->bucket, s->object);
-    op_ret = rgw_iam_eval_existing_objtags(store, s, obj, iam_action);
     store->set_atomic(s->obj_ctx, obj);
     //if instance is empty, we should modify the latest object
     op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_ACL, bl);
