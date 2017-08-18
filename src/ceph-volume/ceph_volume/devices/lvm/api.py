@@ -8,6 +8,41 @@ from ceph_volume import process
 from ceph_volume.exceptions import MultipleLVsError, MultipleVGsError
 
 
+def _output_parser(output, fields):
+    """
+    Newer versions of LVM allow ``--reportformat=json``, but older versions,
+    like the one included in Xenial do not. LVM has the ability to filter and
+    format its output so we assume the output will be in a format this parser
+    can handle (using ',' as a delimiter)
+
+    :param fields: A string, possibly using ',' to group many items, as it
+                   would be used on the CLI
+    :param output: The CLI output from the LVM call
+    """
+    field_items = fields.split(',')
+    report = []
+    for line in output:
+        # clear the leading/trailing whitespace
+        line = line.strip()
+
+        # remove the extra '"' in each field
+        line = line.replace('"', '')
+
+        # prevent moving forward with empty contents
+        if not line:
+            continue
+
+        # spliting on ';' because that is what the lvm call uses as
+        # '--separator'
+        output_items = [i.strip() for i in line.split(';')]
+        # map the output to the fiels
+        report.append(
+            dict(zip(field_items, output_items))
+        )
+
+    return report
+
+
 def parse_tags(lv_tags):
     """
     Return a dictionary mapping of all the tags associated with
