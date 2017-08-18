@@ -63,11 +63,12 @@ struct err_t {
     OI_ATTR_MISSING         = 1 << 14,
     OI_ATTR_CORRUPTED       = 1 << 15,
     SS_ATTR_MISSING         = 1 << 16,
-    SS_ATTR_CORRUPTED       = 1 << 17
+    SS_ATTR_CORRUPTED       = 1 << 17,
+    OBJ_SIZE_OI_MISMATCH      = 1 << 18
     // When adding more here add to either SHALLOW_ERRORS or DEEP_ERRORS
   };
   uint64_t errors = 0;
-  static constexpr uint64_t SHALLOW_ERRORS = SHARD_MISSING|SHARD_STAT_ERR|SIZE_MISMATCH_OI|OI_ATTR_MISSING|OI_ATTR_CORRUPTED|SS_ATTR_MISSING|SS_ATTR_CORRUPTED;
+  static constexpr uint64_t SHALLOW_ERRORS = SHARD_MISSING|SHARD_STAT_ERR|SIZE_MISMATCH_OI|OI_ATTR_MISSING|OI_ATTR_CORRUPTED|SS_ATTR_MISSING|SS_ATTR_CORRUPTED|OBJ_SIZE_OI_MISMATCH;
   static constexpr uint64_t DEEP_ERRORS = SHARD_READ_ERR|DATA_DIGEST_MISMATCH_OI|OMAP_DIGEST_MISMATCH_OI|SHARD_EC_HASH_MISMATCH|SHARD_EC_SIZE_MISMATCH;
   bool has_shard_missing() const {
     return errors & SHARD_MISSING;
@@ -111,6 +112,9 @@ struct err_t {
   bool has_deep_errors() const {
     return errors & DEEP_ERRORS;
   }
+  bool has_obj_size_oi_mismatch() const {
+    return errors & OBJ_SIZE_OI_MISMATCH;
+  }
 };
 
 struct shard_info_t : err_t {
@@ -121,6 +125,7 @@ struct shard_info_t : err_t {
   bool data_digest_present = false;
   uint32_t data_digest = 0;
   bool selected_oi = false;
+  bool primary = false;
 };
 
 struct osd_shard_t {
