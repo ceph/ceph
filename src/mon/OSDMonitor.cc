@@ -83,14 +83,6 @@
 #define dout_subsys ceph_subsys_mon
 #define OSD_PG_CREATING_PREFIX "osd_pg_creating"
 
-namespace {
-
-const uint32_t MAX_POOL_APPLICATIONS = 4;
-const uint32_t MAX_POOL_APPLICATION_KEYS = 64;
-const uint32_t MAX_POOL_APPLICATION_LENGTH = 128;
-
-} // anonymous namespace
-
 void LastEpochClean::Lec::report(ps_t ps, epoch_t last_epoch_clean)
 {
   if (epoch_by_pg.size() <= ps) {
@@ -6373,15 +6365,17 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
       return -EPERM;
     }
 
-    if (!app_exists && p.application_metadata.size() >= MAX_POOL_APPLICATIONS) {
+    int max_apps = g_conf->get_val<int64_t>("mon_pool_max_apps");
+    if (!app_exists && (int)p.application_metadata.size() >= max_apps) {
       ss << "too many enabled applications on pool '" << pool_name << "'; "
-         << "max " << MAX_POOL_APPLICATIONS;
+         << "max " << max_apps;
       return -EINVAL;
     }
 
-    if (app.length() > MAX_POOL_APPLICATION_LENGTH) {
+    int max_len = g_conf->get_val<int64_t>("mon_pool_app_max_len");
+    if ((int)app.length() > max_len) {
       ss << "application name '" << app << "' too long; max length "
-         << MAX_POOL_APPLICATION_LENGTH;
+         << max_len;
       return -EINVAL;
     }
 
@@ -6431,24 +6425,26 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
     }
 
     auto &app_keys = p.application_metadata[app];
+    int max_keys = g_conf->get_val<int64_t>("mon_pool_app_max_keys");
     if (app_keys.count(key) == 0 &&
-        app_keys.size() >= MAX_POOL_APPLICATION_KEYS) {
+        (int)app_keys.size() >= max_keys) {
       ss << "too many keys set for application '" << app << "' on pool '"
-         << pool_name << "'; max " << MAX_POOL_APPLICATION_KEYS;
+         << pool_name << "'; max " << max_keys;
       return -EINVAL;
     }
 
-    if (key.length() > MAX_POOL_APPLICATION_LENGTH) {
+    int max_len = g_conf->get_val<int64_t>("mon_pool_app_max_len");
+    if ((int)key.length() > max_len) {
       ss << "key '" << app << "' too long; max length "
-         << MAX_POOL_APPLICATION_LENGTH;
+         << max_len;
       return -EINVAL;
     }
 
     string value;
     cmd_getval(g_ceph_context, cmdmap, "value", value);
-    if (value.length() > MAX_POOL_APPLICATION_LENGTH) {
+    if ((int)value.length() > max_len) {
       ss << "value '" << value << "' too long; max length "
-         << MAX_POOL_APPLICATION_LENGTH;
+         << max_len;
       return -EINVAL;
     }
 
