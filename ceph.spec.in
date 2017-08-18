@@ -67,7 +67,8 @@ Release:	@RPM_RELEASE@%{?dist}
 Epoch:		2
 %endif
 
-# define %_epoch_prefix macro which will expand to the empty string if %epoch is undefined
+# define _epoch_prefix macro which will expand to the empty string if epoch is
+# undefined
 %global _epoch_prefix %{?epoch:%{epoch}:}
 
 Summary:	User space components of the Ceph file system
