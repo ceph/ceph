@@ -1075,7 +1075,7 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
 
   // swap names
   swap_names(src, dst);
-  return 0;
+  return rebuild_roots_with_classes();
 }
 
 int CrushWrapper::link_bucket(
