@@ -18,50 +18,6 @@ log = logging.getLogger(__name__)
 
 class CephAnsible(Task):
     name = 'ceph_ansible'
-     # TODO: Eventually, we should drop _default_playbook in favor of site.yml.sample from ceph-ansible.git
-    _default_playbook = [
-        # Run gather facts at the top as required by mgr-role
-        dict(
-            hosts='all',
-            become=True,
-            tasks=[],
-        ),
-        dict(
-            hosts='mons',
-            become=True,
-            roles=['ceph-mon'],
-        ),
-        dict(
-            hosts='mgrs',
-            become=True,
-            roles=['ceph-mgr'],
-        ),
-        dict(
-            hosts='osds',
-            become=True,
-            roles=['ceph-osd'],
-        ),
-        dict(
-            hosts='mdss',
-            become=True,
-            roles=['ceph-mds'],
-        ),
-        dict(
-            hosts='rgws',
-            become=True,
-            roles=['ceph-rgw'],
-        ),
-        dict(
-            hosts='clients',
-            become=True,
-            roles=['ceph-client'],
-        ),
-        dict(
-            hosts='restapis',
-            become=True,
-            roles=['ceph-restapi'],
-        ),
-    ]
 
     __doc__ = """
     A task to setup ceph cluster using ceph-ansible
@@ -84,17 +40,13 @@ class CephAnsible(Task):
         * Set ``monitor_interface`` for each host if ``monitor_interface`` is
           unset
         * Set ``public_network`` for each host if ``public_network`` is unset
-    """.format(
-        git_base=teuth_config.ceph_git_base_url,
-        playbook=_default_playbook,
-    )
+    """.format(git_base=teuth_config.ceph_git_base_url)
 
     def __init__(self, ctx, config):
         super(CephAnsible, self).__init__(ctx, config)
         config = self.config or dict()
-        if 'playbook' not in config:
-            self.playbook = self._default_playbook
-        else:
+        self.playbook = None
+        if 'playbook' in config:
             self.playbook = self.config['playbook']
         if 'repo' not in config:
             self.config['repo'] = os.path.join(teuth_config.ceph_git_base_url,
@@ -115,19 +67,20 @@ class CephAnsible(Task):
         super(CephAnsible, self).setup()
         # generate hosts file based on test config
         self.generate_hosts_file()
-        # use default or user provided playbook file
-        pb_buffer = StringIO()
-        pb_buffer.write('---\n')
-        yaml.safe_dump(self.playbook, pb_buffer)
-        pb_buffer.seek(0)
-        playbook_file = NamedTemporaryFile(
-            prefix="ceph_ansible_playbook_",
-            dir='/tmp/',
-            delete=False,
-        )
-        playbook_file.write(pb_buffer.read())
-        playbook_file.flush()
-        self.playbook_file = playbook_file.name
+        # generate playbook file if it exists in config
+        self.playbook_file = None
+        if self.playbook is not None:
+            pb_buffer = StringIO()
+            pb_buffer.write('---\n')
+            yaml.safe_dump(self.playbook, pb_buffer)
+            pb_buffer.seek(0)
+            playbook_file = NamedTemporaryFile(
+               prefix="ceph_ansible_playbook_", dir='/tmp/',
+               delete=False,
+            )
+            playbook_file.write(pb_buffer.read())
+            playbook_file.flush()
+            self.playbook_file = playbook_file.name
         # everything from vars in config go into group_vars/all file
         extra_vars = dict()
         extra_vars.update(self.config.get('vars', dict()))
@@ -222,7 +175,8 @@ class CephAnsible(Task):
     def teardown(self):
         log.info("Cleaning up temporary files")
         os.remove(self.inventory)
-        os.remove(self.playbook_file)
+        if self.playbook is not None:
+            os.remove(self.playbook_file)
         os.remove(self.extra_vars_file)
         # collect logs
         self.collect_logs()
@@ -307,14 +261,7 @@ class CephAnsible(Task):
             '/usr/share/ceph-ansible',
             '.'
         ])
-        ceph_installer.put_file(self.inventory, 'ceph-ansible/inven.yml')
-        ceph_installer.put_file(self.playbook_file, 'ceph-ansible/site.yml')
-        # copy extra vars to groups/all
-        ceph_installer.put_file(self.extra_vars_file, 'ceph-ansible/group_vars/all')
-        # print for debug info
-        ceph_installer.run(args=('cat', 'ceph-ansible/inven.yml'))
-        ceph_installer.run(args=('cat', 'ceph-ansible/site.yml'))
-        ceph_installer.run(args=('cat', 'ceph-ansible/group_vars/all'))
+        self._copy_and_print_config()
         out = StringIO()
         str_args = ' '.join(args)
         ceph_installer.run(
@@ -382,16 +329,7 @@ class CephAnsible(Task):
             run.Raw('-b %s' % branch),
             run.Raw(ansible_repo),
         ])
-        # copy the inventory file to installer node
-        ceph_installer.put_file(self.inventory, 'ceph-ansible/inven.yml')
-        # copy the site file
-        ceph_installer.put_file(self.playbook_file, 'ceph-ansible/site.yml')
-        # copy extra vars to groups/all
-        ceph_installer.put_file(self.extra_vars_file, 'ceph-ansible/group_vars/all')
-        # print for debug info
-        ceph_installer.run(args=('cat', 'ceph-ansible/inven.yml'))
-        ceph_installer.run(args=('cat', 'ceph-ansible/site.yml'))
-        ceph_installer.run(args=('cat', 'ceph-ansible/group_vars/all'))
+        self._copy_and_print_config()
         str_args = ' '.join(args)
         ceph_installer.run(args=[
             run.Raw('cd ~/ceph-ansible'),
@@ -419,6 +357,29 @@ class CephAnsible(Task):
         # for the teuthology workunits to work we
         # need to fix the permission on keyring to be readable by them
         self.fix_keyring_permission()
+
+    def _copy_and_print_config(self):
+            ceph_installer = self.ceph_installer
+            # copy the inventory file to installer node
+            ceph_installer.put_file(self.inventory, 'ceph-ansible/inven.yml')
+            # copy the config provided site file or use sample
+            if self.playbook_file is not None:
+                ceph_installer.put_file(self.playbook_file, 'ceph-ansible/site.yml')
+            else:
+                # use the site.yml.sample provided by the repo as the main site.yml file
+                ceph_installer.run(
+                   args=[
+                        'cp',
+                        'ceph-ansible/site.yml.sample',
+                        'ceph-ansible/site.yml'
+                        ]
+                )
+            # copy extra vars to groups/all
+            ceph_installer.put_file(self.extra_vars_file, 'ceph-ansible/group_vars/all')
+            # print for debug info
+            ceph_installer.run(args=('cat', 'ceph-ansible/inven.yml'))
+            ceph_installer.run(args=('cat', 'ceph-ansible/site.yml'))
+            ceph_installer.run(args=('cat', 'ceph-ansible/group_vars/all'))
 
     def fix_keyring_permission(self):
         clients_only = lambda role: role.startswith('client')
