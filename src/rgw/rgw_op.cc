@@ -752,11 +752,17 @@ int RGWOp::verify_op_mask()
 
 int RGWGetObjTags::verify_permission()
 {
-  iam_action = s->object.instance.empty() ?
-    rgw::IAM::s3GetObjectTagging:
-    rgw::IAM::s3GetObjectVersionTagging;
+  // TODO since we are parsing the bl now anyway, we probably change
+  // the send_response function to accept RGWObjTag instead of a bl
+  if (s->iam_policy->has_conditional(S3_EXISTING_OBJTAG)){
+    rgw_obj obj = rgw_obj(s->bucket, s->object);
+    rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+  }
+
   if (!verify_object_permission(s,
-				iam_action))
+				s->object.instance.empty() ?
+				rgw::IAM::s3GetObjectTagging:
+				rgw::IAM::s3GetObjectVersionTagging))
     return -EACCES;
 
   return 0;
@@ -787,14 +793,6 @@ void RGWGetObjTags::execute()
   if(tags != attrs.end()){
     has_tags = true;
     tags_bl.append(tags->second);
-    // TODO since we are parsing the bl now anyway, we probably change
-    // the send_response function to accept RGWObjTag instead of a bl
-    rgw_iam_add_tags_from_bl(s, tags_bl);
-    auto e = s->iam_policy->eval(s->env, *s->auth.identity, iam_action, obj);
-    if (e == Effect::Deny){
-      op_ret= -EACCES;
-      return;
-    }
   }
   send_response_data(tags_bl);
 }
