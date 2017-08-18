@@ -855,12 +855,10 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
 #define dout_prefix *_dout << "bdev(" << name << ") "
 
 NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
-  :   BlockDevice(cct),
+  :   BlockDevice(cct, cb, cbpriv),
       driver(nullptr),
       aio_stop(false),
-      buffer_lock("NVMEDevice::buffer_lock"),
-      aio_callback(cb),
-      aio_callback_priv(cbpriv)
+      buffer_lock("NVMEDevice::buffer_lock")
 {
 }
 
@@ -931,7 +929,7 @@ void NVMEDevice::close()
   dout(1) << __func__ << " end" << dendl;
 }
 
-int NVMEDevice::collect_metadata(string prefix, map<string,string> *pm) const
+int NVMEDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
 {
   (*pm)[prefix + "rotational"] = "0";
   (*pm)[prefix + "size"] = stringify(get_size());
