@@ -19,6 +19,8 @@ set(rbd_mirror_internal
   ServiceDaemon.cc
   Threads.cc
   types.cc
+  image_map/LoadRequest.cc
+  image_map/UpdateRequest.cc
   image_replayer/BootstrapRequest.cc
   image_replayer/CloseImageRequest.cc
   image_replayer/CreateImageRequest.cc
@@ -38,6 +40,7 @@ set(rbd_mirror_internal
   image_sync/SyncPointPruneRequest.cc
   pool_watcher/RefreshImagesRequest.cc
   service_daemon/Types.cc)
+
 add_library(rbd_mirror_internal STATIC
   ${rbd_mirror_internal})
 
