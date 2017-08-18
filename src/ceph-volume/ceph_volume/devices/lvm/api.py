@@ -3,7 +3,6 @@ API for CRUD lvm tag operations. Follows the Ceph LVM tag naming convention
 that prefixes tags with ``ceph.`` and uses ``=`` for assignment, and provides
 set of utilities for interacting with LVM.
 """
-import json
 from ceph_volume import process
 from ceph_volume.exceptions import MultipleLVsError, MultipleVGsError
 
@@ -72,49 +71,22 @@ def parse_tags(lv_tags):
 
 def get_api_vgs():
     """
-    Return the list of group volumes available in the system using flags to include common
-    metadata associated with them
+    Return the list of group volumes available in the system using flags to
+    include common metadata associated with them
 
-    Command and sample JSON output, should look like::
+    Command and sample delimeted output, should look like::
 
-        $ sudo vgs --reportformat=json
-        {
-            "report": [
-                {
-                    "vg": [
-                        {
-                            "vg_name":"VolGroup00",
-                            "pv_count":"1",
-                            "lv_count":"2",
-                            "snap_count":"0",
-                            "vg_attr":"wz--n-",
-                            "vg_size":"38.97g",
-                            "vg_free":"0 "},
-                        {
-                            "vg_name":"osd_vg",
-                            "pv_count":"3",
-                            "lv_count":"1",
-                            "snap_count":"0",
-                            "vg_attr":"wz--n-",
-                            "vg_size":"32.21g",
-                            "vg_free":"9.21g"
-                        }
-                    ]
-                }
-            ]
-        }
+        $ sudo vgs --noheadings --separator=';' \
+          -o vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free
+          ubuntubox-vg;1;2;0;wz--n-;299.52g;12.00m
+          osd_vg;3;1;0;wz--n-;29.21g;9.21g
 
     """
+    fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free'
     stdout, stderr, returncode = process.call(
-        [
-            'sudo', 'vgs', '--reportformat=json'
-        ]
+        ['sudo', 'vgs', '--noheadings', '--separator=";"', '-o', fields]
     )
-    report = json.loads(''.join(stdout))
-    for report_item in report.get('report', []):
-        # is it possible to get more than one item in "report" ?
-        return report_item['vg']
-    return []
+    return _output_parser(stdout, fields)
 
 
 def get_api_lvs():
