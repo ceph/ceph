@@ -201,6 +201,7 @@ class NVMEDevice : public BlockDevice {
  public:
   aio_callback_t aio_callback;
   void *aio_callback_priv;
+  uint64_t offset;
 
   NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);
 
