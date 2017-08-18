@@ -1271,6 +1271,18 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("mon_pool_max_apps", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(4)
+    .set_description("maximum number of applications a single pool can associate with"),
+
+    Option("mon_pool_app_max_keys", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(64)
+    .set_description("maximum number of key-value pairs a single pool application can hold"),
+
+    Option("mon_pool_app_max_len", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(128)
+    .set_description("maximum pool application name, key or value length"),
+
     Option("mon_debug_deprecated_as_obsolete", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),

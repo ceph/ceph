@@ -304,6 +304,9 @@ OPTION(mon_osd_reporter_subtree_level , OPT_STR)   // in which level of parent b
 OPTION(mon_osd_force_trim_to, OPT_INT)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous)
 OPTION(mon_mds_force_trim_to, OPT_INT)   // force mon to trim mdsmaps to this point (dangerous)
 OPTION(mon_mds_skip_sanity, OPT_BOOL)  // skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
+OPTION(mon_pool_max_apps, OPT_INT)
+OPTION(mon_pool_app_max_keys, OPT_INT)
+OPTION(mon_pool_app_max_len, OPT_INT)
 
 // monitor debug options
 OPTION(mon_debug_deprecated_as_obsolete, OPT_BOOL) // consider deprecated commands as obsolete
