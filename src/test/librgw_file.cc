@@ -61,8 +61,6 @@ TEST(LibRGW, MOUNT) {
 
 TEST(LibRGW, GETATTR_ROOT) {
   if (do_getattr) {
-    using std::get;
-
     if (! fs)
       return;
 
