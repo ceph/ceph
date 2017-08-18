@@ -320,6 +320,7 @@ struct Task {
       for (uint16_t i = 0; i < io_request.nseg; i++)
         queue_data->data_buf_mempool.push_back(io_request.inline_segs[i]);
     }
+    ctx->total_nseg -= io_request.nseg;
     io_request.nseg = 0;
   }
 
@@ -423,6 +424,7 @@ int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
     data_buf_mempool.pop_back();
   }
   t->io_request.nseg = count;
+  t->ctx->total_nseg += count;
   if (write) {
     auto blp = t->write_bl.begin();
     uint32_t len = 0;
