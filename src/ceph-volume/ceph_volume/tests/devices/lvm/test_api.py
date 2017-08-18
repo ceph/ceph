@@ -24,50 +24,53 @@ class TestParseTags(object):
 class TestGetAPIVgs(object):
 
     def test_report_is_emtpy(self, monkeypatch):
-        monkeypatch.setattr(api.process, 'call', lambda x: ('{}', '', 0))
+        monkeypatch.setattr(api.process, 'call', lambda x: ('\n\n', '', 0))
         assert api.get_api_vgs() == []
 
     def test_report_has_stuff(self, monkeypatch):
-        report = '{"report":[{"vg":[{"vg_name":"VolGroup00"}]}]}'
+        report = ['  VolGroup00']
         monkeypatch.setattr(api.process, 'call', lambda x: (report, '', 0))
         assert api.get_api_vgs() == [{'vg_name': 'VolGroup00'}]
+
+    def test_report_has_stuff_with_empty_attrs(self, monkeypatch):
+        report = ['  VolGroup00 ;;;;;;9g']
+        monkeypatch.setattr(api.process, 'call', lambda x: (report, '', 0))
+        result = api.get_api_vgs()[0]
+        assert len(result.keys()) == 7
+        assert result['vg_name'] == 'VolGroup00'
+        assert result['vg_free'] == '9g'
 
     def test_report_has_multiple_items(self, monkeypatch):
-        report = '{"report":[{"vg":[{"vg_name":"VolGroup00"},{"vg_name":"ceph_vg"}]}]}'
+        report = ['   VolGroup00;;;;;;;', '    ceph_vg;;;;;;;']
         monkeypatch.setattr(api.process, 'call', lambda x: (report, '', 0))
-        assert api.get_api_vgs() == [{'vg_name': 'VolGroup00'}, {'vg_name': 'ceph_vg'}]
-
-    def test_does_not_get_poluted_with_non_vg_items(self, monkeypatch):
-        report = '{"report":[{"vg":[{"vg_name":"VolGroup00"}],"lv":[{"lv":"1"}]}]}'
-        monkeypatch.setattr(api.process, 'call', lambda x: (report, '', 0))
-        assert api.get_api_vgs() == [{'vg_name': 'VolGroup00'}]
+        result = api.get_api_vgs()
+        assert result[0]['vg_name'] == 'VolGroup00'
+        assert result[1]['vg_name'] == 'ceph_vg'
 
 
 class TestGetAPILvs(object):
 
     def test_report_is_emtpy(self, monkeypatch):
-        monkeypatch.setattr(api.process, 'call', lambda x: ('{}', '', 0))
+        monkeypatch.setattr(api.process, 'call', lambda x: ('', '', 0))
         assert api.get_api_lvs() == []
 
     def test_report_has_stuff(self, monkeypatch):
-        report = '{"report":[{"lv":[{"lv_name":"VolGroup00"}]}]}'
+        report = ['  ;/path;VolGroup00;root']
         monkeypatch.setattr(api.process, 'call', lambda x: (report, '', 0))
-        assert api.get_api_lvs() == [{'lv_name': 'VolGroup00'}]
+        result = api.get_api_lvs()
+        assert result[0]['lv_name'] == 'VolGroup00'
 
     def test_report_has_multiple_items(self, monkeypatch):
-        report = '{"report":[{"lv":[{"lv_name":"VolName"},{"lv_name":"ceph_lv"}]}]}'
+        report = ['  ;/path;VolName;root', ';/dev/path;ceph_lv;ceph_vg']
         monkeypatch.setattr(api.process, 'call', lambda x: (report, '', 0))
-        assert api.get_api_lvs() == [{'lv_name': 'VolName'}, {'lv_name': 'ceph_lv'}]
-
-    def test_does_not_get_poluted_with_non_lv_items(self, monkeypatch):
-        report = '{"report":[{"lv":[{"lv_name":"VolName"}],"vg":[{"vg":"1"}]}]}'
-        monkeypatch.setattr(api.process, 'call', lambda x: (report, '', 0))
-        assert api.get_api_lvs() == [{'lv_name': 'VolName'}]
+        result = api.get_api_lvs()
+        assert result[0]['lv_name'] == 'VolName'
+        assert result[1]['lv_name'] == 'ceph_lv'
 
 
 @pytest.fixture
 def volumes(monkeypatch):
-    monkeypatch.setattr(process, 'call', lambda x: ('{}', '', 0))
+    monkeypatch.setattr(process, 'call', lambda x: ('', '', 0))
     volumes = api.Volumes()
     volumes._purge()
     return volumes
@@ -75,7 +78,7 @@ def volumes(monkeypatch):
 
 @pytest.fixture
 def volume_groups(monkeypatch):
-    monkeypatch.setattr(process, 'call', lambda x: ('{}', '', 0))
+    monkeypatch.setattr(process, 'call', lambda x: ('', '', 0))
     vgs = api.VolumeGroups()
     vgs._purge()
     return vgs
