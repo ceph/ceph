@@ -415,7 +415,8 @@ snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t 
 
 void SnapRealm::adjust_parent()
 {
-  SnapRealm *newparent = inode->get_parent_dn()->get_dir()->get_inode()->find_snaprealm();
+  CDentry *pdn = inode->get_parent_dn();
+  SnapRealm *newparent = pdn ? pdn->get_dir()->get_inode()->find_snaprealm() : NULL;
   if (newparent != parent) {
     dout(10) << "adjust_parent " << parent << " -> " << newparent << dendl;
     if (parent)
