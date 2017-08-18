@@ -55,7 +55,12 @@ count=0
 errors=0
 userargs=""
 precore="$(sysctl -n $KERNCORE)"
-sudo sysctl -w ${KERNCORE}=${COREPATTERN}
+# If corepattern already set, avoid having to use sudo
+if [ "$precore" = "$COREPATTERN" ]; then
+    precore=""
+else
+    sudo sysctl -w ${KERNCORE}=${COREPATTERN}
+fi
 ulimit -c unlimited
 for f in $(cd $location ; find . -perm $exec_mode -type f)
 do
@@ -105,7 +110,9 @@ do
         fi
     fi
 done
-sudo sysctl -w ${KERNCORE}=${precore}
+if [ -n "$precore" ]; then
+    sudo sysctl -w ${KERNCORE}=${precore}
+fi
 
 if [ "$errors" != "0" ]; then
     echo "$errors TESTS FAILED, $count TOTAL TESTS"
