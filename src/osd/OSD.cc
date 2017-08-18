@@ -2975,7 +2975,7 @@ void OSD::create_logger()
     "Latency of client operations (excluding queue time and wait for finished)");
 
   osd_plb.add_u64_counter(
-    l_osd_op_r, "op_r", "Client read operations", "rop", PerfCountersBuilder::PRIO_INTERESTING);
+    l_osd_op_r, "op_r", "Client read operations");
   osd_plb.add_u64_counter(
     l_osd_op_r_outb, "op_r_out_bytes", "Client data read");
   osd_plb.add_time_avg(
@@ -2992,7 +2992,7 @@ void OSD::create_logger()
     l_osd_op_r_prepare_lat, "op_r_prepare_latency",
     "Latency of read operations (excluding queue time and wait for finished)");
   osd_plb.add_u64_counter(
-    l_osd_op_w, "op_w", "Client write operations", "wop", PerfCountersBuilder::PRIO_INTERESTING);
+    l_osd_op_w, "op_w", "Client write operations");
   osd_plb.add_u64_counter(
     l_osd_op_w_inb, "op_w_in_bytes", "Client data written");
   osd_plb.add_time_avg(
