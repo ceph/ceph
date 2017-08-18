@@ -115,7 +115,6 @@ protected:
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
   int op_ret;
-  std::uint64_t iam_action;
   int do_aws4_auth_completion();
 
   virtual int init_quota();

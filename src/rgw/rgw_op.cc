@@ -720,7 +720,7 @@ int RGWGetObj::verify_permission()
       action = rgw::IAM::s3GetObjectVersion;
     }
     if (s->iam_policy->has_conditional(S3_EXISTING_OBJTAG))
-      rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+      rgw_iam_add_existing_objtags(store, s, obj, action);
   }
 
   if (!verify_object_permission(s, action)) {
@@ -752,6 +752,9 @@ int RGWOp::verify_op_mask()
 
 int RGWGetObjTags::verify_permission()
 {
+  auto iam_action = s->object.instance.empty()?
+    rgw::IAM::s3GetObjectTagging:
+    rgw::IAM::s3GetObjectVersionTagging;
   // TODO since we are parsing the bl now anyway, we probably change
   // the send_response function to accept RGWObjTag instead of a bl
   if (s->iam_policy->has_conditional(S3_EXISTING_OBJTAG)){
@@ -759,10 +762,7 @@ int RGWGetObjTags::verify_permission()
     rgw_iam_add_existing_objtags(store, s, obj, iam_action);
   }
 
-  if (!verify_object_permission(s,
-				s->object.instance.empty() ?
-				rgw::IAM::s3GetObjectTagging:
-				rgw::IAM::s3GetObjectVersionTagging))
+  if (!verify_object_permission(s,iam_action))
     return -EACCES;
 
   return 0;
@@ -799,8 +799,9 @@ void RGWGetObjTags::execute()
 
 int RGWPutObjTags::verify_permission()
 {
-  iam_action = s->object.instance.empty() ?
-    rgw::IAM::s3PutObjectTagging: rgw::IAM::s3PutObjectVersionTagging;
+  auto iam_action = s->object.instance.empty() ?
+    rgw::IAM::s3PutObjectTagging:
+    rgw::IAM::s3PutObjectVersionTagging;
 
   if(s->iam_policy->has_conditional(S3_EXISTING_OBJTAG)){
     auto obj = rgw_obj(s->bucket, s->object);
@@ -841,7 +842,7 @@ void RGWDeleteObjTags::pre_exec()
 int RGWDeleteObjTags::verify_permission()
 {
   if (!s->object.empty()) {
-    iam_action = s->object.instance.empty() ?
+    auto iam_action = s->object.instance.empty() ?
       rgw::IAM::s3DeleteObjectTagging:
       rgw::IAM::s3DeleteObjectVersionTagging;
 
@@ -4640,7 +4641,9 @@ int RGWGetACLs::verify_permission()
 {
   bool perm;
   if (!s->object.empty()) {
-    iam_action = s->object.instance.empty() ? rgw::IAM::s3GetObjectAcl : rgw::IAM::s3GetObjectVersionAcl;
+    auto iam_action = s->object.instance.empty() ?
+      rgw::IAM::s3GetObjectAcl :
+      rgw::IAM::s3GetObjectVersionAcl;
 
     if (s->iam_policy->has_conditional(S3_EXISTING_OBJTAG)){
       rgw_obj obj = rgw_obj(s->bucket, s->object);
@@ -4684,13 +4687,12 @@ int RGWPutACLs::verify_permission()
   }
 
   if (!s->object.empty()) {
-    iam_action = s->object.instance.empty() ? rgw::IAM::s3PutObjectAcl : rgw::IAM::s3PutObjectVersionAcl;
+    auto iam_action = s->object.instance.empty() ? rgw::IAM::s3PutObjectAcl : rgw::IAM::s3PutObjectVersionAcl;
     auto obj = rgw_obj(s->bucket, s->object);
     op_ret = rgw_iam_add_existing_objtags(store, s, obj, iam_action);
     perm = verify_object_permission(s, iam_action);
   } else {
-    iam_action = rgw::IAM::s3PutBucketAcl;
-    perm = verify_bucket_permission(s, iam_action);
+    perm = verify_bucket_permission(s, rgw::IAM::s3PutBucketAcl);
   }
   if (!perm)
     return -EACCES;
