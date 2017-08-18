@@ -94,37 +94,18 @@ def get_api_lvs():
     Return the list of logical volumes available in the system using flags to include common
     metadata associated with them
 
-    Command and sample JSON output, should look like::
+    Command and delimeted output, should look like::
 
-        $ sudo lvs -o  lv_tags,lv_path,lv_name,vg_name --reportformat=json
-        {
-            "report": [
-                {
-                    "lv": [
-                        {
-                            "lv_tags":"",
-                            "lv_path":"/dev/VolGroup00/LogVol00",
-                            "lv_name":"LogVol00",
-                            "vg_name":"VolGroup00"},
-                        {
-                            "lv_tags":"ceph.osd_fsid=aaa-fff-0000,ceph.osd_fsid=aaa-fff-bbbb,ceph.osd_id=0",
-                            "lv_path":"/dev/osd_vg/OriginLV",
-                            "lv_name":"OriginLV",
-                            "vg_name":"osd_vg"
-                        }
-                    ]
-                }
-            ]
-        }
+        $ sudo lvs --noheadings --separator=';' -o lv_tags,lv_path,lv_name,vg_name
+          ;/dev/ubuntubox-vg/root;root;ubuntubox-vg
+          ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
+    fields = 'lv_tags,lv_path,lv_name,vg_name'
     stdout, stderr, returncode = process.call(
-        ['sudo', 'lvs', '-o', 'lv_tags,lv_path,lv_name,vg_name', '--reportformat=json'])
-    report = json.loads(''.join(stdout))
-    for report_item in report.get('report', []):
-        # is it possible to get more than one item in "report" ?
-        return report_item['lv']
-    return []
+        ['sudo', 'lvs', '--noheadings', '--separator=";"', '-o', fields]
+    )
+    return _output_parser(stdout, fields)
 
 
 def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_tags=None):
