@@ -202,7 +202,7 @@ struct InodeStat {
 class MClientReply : public Message {
   // reply data
 public:
-  struct ceph_mds_reply_head head;
+  struct ceph_mds_reply_head head {};
   bufferlist trace_bl;
   bufferlist extra_bl;
   bufferlist snapbl;
