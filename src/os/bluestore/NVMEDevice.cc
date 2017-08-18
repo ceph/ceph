@@ -1000,22 +1000,15 @@ int NVMEDevice::aio_write(
   // we can reduce this copy
   t->write_bl = std::move(bl);
 
-  if (buffered) {
-    // Only need to push the first entry
-    if(queue_id == -1)
-      queue_id = ceph_gettid();
-    driver->get_queue(queue_id)->queue_task(t);
-  } else {
-    t->ctx = ioc;
-    Task *first = static_cast<Task*>(ioc->nvme_task_first);
-    Task *last = static_cast<Task*>(ioc->nvme_task_last);
-    if (last)
-      last->next = t;
-    if (!first)
-      ioc->nvme_task_first = t;
-    ioc->nvme_task_last = t;
-    ++ioc->num_pending;
-  }
+  t->ctx = ioc;
+  Task *first = static_cast<Task*>(ioc->nvme_task_first);
+  Task *last = static_cast<Task*>(ioc->nvme_task_last);
+  if (last)
+    last->next = t;
+  if (!first)
+    ioc->nvme_task_first = t;
+  ioc->nvme_task_last = t;
+  ++ioc->num_pending;
 
   dout(5) << __func__ << " " << off << "~" << len << dendl;
 
@@ -1024,9 +1017,28 @@ int NVMEDevice::aio_write(
 
 int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered)
 {
-  // FIXME: there is presumably a more efficient way to do this...
+  uint64_t len = bl.length();
+  dout(20) << __func__ << " " << off << "~" << len << " buffered "
+           << buffered << dendl;
+  assert(off % block_size == 0);
+  assert(len % block_size == 0);
+  assert(len > 0);
+  assert(off < size);
+  assert(off + len <= size);
+
   IOContext ioc(cct, NULL);
-  aio_write(off, bl, &ioc, buffered);
+  Task *t = new Task(this, IOCommand::WRITE_COMMAND, off, len);
+
+  // TODO: if upper layer alloc memory with known physical address,
+  // we can reduce this copy
+  t->write_bl = std::move(bl);
+  t->ctx = &ioc;
+  if(queue_id == -1)
+    queue_id = ceph_gettid();
+  ++ioc.num_running;
+  driver->get_queue(queue_id)->queue_task(t);
+
+  dout(5) << __func__ << " " << off << "~" << len << dendl;
   ioc.aio_wait();
   return 0;
 }
