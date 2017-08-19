@@ -199,7 +199,7 @@ COMMAND("auth rm " \
 /*
  * Monitor commands (Monitor.cc)
  */
-COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage", \
+COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb/rocksdb storage", \
 	     "mon", "rw", "cli,rest", \
              FLAG(NOFORWARD)|FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("scrub", "scrub the monitor stores", \
@@ -264,7 +264,7 @@ COMMAND("node ls " \
  * Monitor-specific commands under module 'mon'
  */
 COMMAND_WITH_FLAG("mon compact", \
-    "cause compaction of monitor's leveldb storage", \
+    "cause compaction of monitor's leveldb/rocksdb storage", \
     "mon", "rw", "cli,rest", \
     FLAG(NOFORWARD))
 COMMAND_WITH_FLAG("mon scrub",
