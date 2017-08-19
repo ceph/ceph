@@ -8635,6 +8635,9 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
   assert(!osr->deferred_running);
 
   auto b = osr->deferred_pending;
+  for (auto& txc : b->txcs) {
+    txc.log_state_latency(logger, l_bluestore_state_deferred_queued_lat);
+  }
   deferred_queue_size -= b->seq_bytes.size();
   assert(deferred_queue_size >= 0);
 
@@ -8707,6 +8710,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
     std::lock_guard<std::mutex> l2(osr->qlock);
     for (auto& i : b->txcs) {
       TransContext *txc = &i;
+      txc->log_state_latency(logger, l_bluestore_state_deferred_aio_wait_lat);
       txc->state = TransContext::STATE_DEFERRED_CLEANUP;
       costs += txc->cost;
     }
