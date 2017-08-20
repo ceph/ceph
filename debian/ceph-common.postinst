@@ -62,6 +62,12 @@ case "$1" in
                -d $SERVER_HOME   \
                -g $SERVER_GROUP  \
                $SERVER_USER
+       # Unlock $SERVER_USER in case it is locked from an uninstall
+       if [ -f /etc/shadow ]; then
+           usermod -U -e '' $SERVER_USER
+       else
+           usermod -U $SERVER_USER
+       fi
        echo "..done"
 
        # 5. adjust file and directory permissions
