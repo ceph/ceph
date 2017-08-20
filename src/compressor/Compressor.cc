@@ -27,7 +27,9 @@ const char * Compressor::get_comp_alg_name(int a) {
   case COMP_ALG_SNAPPY: return "snappy";
   case COMP_ALG_ZLIB: return "zlib";
   case COMP_ALG_ZSTD: return "zstd";
+#ifdef HAVE_LZ4
   case COMP_ALG_LZ4: return "lz4";
+#endif
   default: return "???";
   }
 }
@@ -39,8 +41,10 @@ boost::optional<Compressor::CompressionAlgorithm> Compressor::get_comp_alg_type(
     return COMP_ALG_ZLIB;
   if (s == "zstd")
     return COMP_ALG_ZSTD;
+#ifdef HAVE_LZ4
   if (s == "lz4")
     return COMP_ALG_LZ4;
+#endif
   if (s == "" || s == "none")
     return COMP_ALG_NONE;
 
