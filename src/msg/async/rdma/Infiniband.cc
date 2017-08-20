@@ -633,9 +633,9 @@ int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk*> &chunks,
   return r;
 }
 
-bool Infiniband::MemoryManager::pool_context::can_alloc(unsigned nbufs)
+bool Infiniband::MemoryManager::MemPoolContext::can_alloc(unsigned nbufs)
 {
-  /* unimited */
+  /* unlimited */
   if (manager->cct->_conf->ms_async_rdma_receive_buffers <= 0)
     return true;
 
@@ -649,13 +649,13 @@ bool Infiniband::MemoryManager::pool_context::can_alloc(unsigned nbufs)
   return true;
 }
 
-void Infiniband::MemoryManager::pool_context::set_stat_logger(PerfCounters *logger) {
+void Infiniband::MemoryManager::MemPoolContext::set_stat_logger(PerfCounters *logger) {
   perf_logger = logger;
   if (perf_logger != nullptr)
     perf_logger->set(l_msgr_rdma_rx_bufs_total, n_bufs_allocated);
 }
 
-void Infiniband::MemoryManager::pool_context::update_stats(int nbufs)
+void Infiniband::MemoryManager::MemPoolContext::update_stats(int nbufs)
 {
   n_bufs_allocated += nbufs;
 
@@ -671,17 +671,17 @@ void Infiniband::MemoryManager::pool_context::update_stats(int nbufs)
 
 void *Infiniband::MemoryManager::mem_pool::slow_malloc()
 {
-    void *p;
+  void *p;
 
-    Mutex::Locker l(PoolAllocator::lock);
-    PoolAllocator::g_ctx = ctx;
-    // this will trigger pool expansion via PoolAllocator::malloc()
-    p = boost::pool<PoolAllocator>::malloc();
-    PoolAllocator::g_ctx = nullptr;
-    return p;
+  Mutex::Locker l(PoolAllocator::lock);
+  PoolAllocator::g_ctx = ctx;
+  // this will trigger pool expansion via PoolAllocator::malloc()
+  p = boost::pool<PoolAllocator>::malloc();
+  PoolAllocator::g_ctx = nullptr;
+  return p;
 }
 
-Infiniband::MemoryManager::pool_context *Infiniband::MemoryManager::PoolAllocator::g_ctx = nullptr;
+Infiniband::MemoryManager::MemPoolContext *Infiniband::MemoryManager::PoolAllocator::g_ctx = nullptr;
 Mutex Infiniband::MemoryManager::PoolAllocator::lock("pool-alloc-lock");
 
 // lock is taken by mem_pool::slow_malloc()
