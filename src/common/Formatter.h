@@ -37,6 +37,7 @@ namespace ceph {
     Formatter();
     virtual ~Formatter();
 
+    virtual void enable_line_break() = 0;
     virtual void flush(std::ostream& os) = 0;
     void flush(bufferlist &bl);
     virtual void reset() = 0;
@@ -93,6 +94,7 @@ namespace ceph {
     void set_status(int status, const char* status_name) override {};
     void output_header() override {};
     void output_footer() override {};
+    void enable_line_break() override { m_line_break_enabled = true; }
     void flush(std::ostream& os) override;
     using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset() override;
@@ -128,6 +130,7 @@ namespace ceph {
     std::stringstream m_ss, m_pending_string;
     std::list<json_formatter_stack_entry_d> m_stack;
     bool m_is_pending_string;
+    bool m_line_break_enabled = false;
   };
 
   class XMLFormatter : public Formatter {
@@ -139,6 +142,7 @@ namespace ceph {
     void output_header() override;
     void output_footer() override;
 
+    void enable_line_break() override { m_line_break_enabled = true; }
     void flush(std::ostream& os) override;
     using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset() override;
@@ -176,6 +180,7 @@ namespace ceph {
     const bool m_underscored;
     std::string m_pending_string_name;
     bool m_header_done;
+    bool m_line_break_enabled = false;
   };
 
   class TableFormatter : public Formatter {
@@ -185,6 +190,7 @@ namespace ceph {
     void set_status(int status, const char* status_name) override {};
     void output_header() override {};
     void output_footer() override {};
+    void enable_line_break() override {};
     void flush(std::ostream& os) override;
     using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset() override;

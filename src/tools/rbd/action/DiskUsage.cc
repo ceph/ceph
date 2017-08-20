@@ -283,7 +283,7 @@ int execute(const po::variables_map &vm) {
                     from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
                     formatter.get());
   if (r < 0) {
-    std::cerr << "du failed: " << cpp_strerror(r) << std::endl;
+    std::cerr << "rbd: du failed: " << cpp_strerror(r) << std::endl;
     return r;
   }
   return 0;
