@@ -92,10 +92,10 @@ protected:
   uint64_t size;
   uint64_t block_size;
   bool rotational = true;
-  aio_callback_t aio_callback;
-  void *aio_callback_priv;
 
 public:
+  aio_callback_t aio_callback;
+  void *aio_callback_priv;
   BlockDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
   : cct(cct),
     size(0),
