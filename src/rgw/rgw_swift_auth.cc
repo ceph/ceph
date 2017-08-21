@@ -422,21 +422,20 @@ ExternalTokenEngine::authenticate(const std::string& token,
   return result_t::grant(std::move(apl));
 }
 
-static int build_token(const string& swift_user,
-                       const string& key,
-                       const uint64_t nonce,
-                       const utime_t& expiration,
-                       bufferlist& bl)
+static ceph::bufferlist build_token(CephContext* const cct,
+                                    const std::string& swift_user,
+                                    const std::string& key,
+                                    const uint64_t nonce,
+                                    const utime_t& expiration)
 {
+  ceph::bufferlist bl;
   ::encode(swift_user, bl);
   ::encode(nonce, bl);
   ::encode(expiration, bl);
 
   bufferptr p(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
 
-  char buf[bl.length() * 2 + 1];
-  buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
-  dout(20) << "build_token token=" << buf << dendl;
+  ldout(cct, 20) << "build_token token=" << buf_to_hex(bl) << dendl;
 
   char k[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   memset(k, 0, sizeof(k));
@@ -447,24 +446,22 @@ static int build_token(const string& swift_user,
   calc_hmac_sha1(k, sizeof(k), bl.c_str(), bl.length(), p.c_str());
 
   bl.append(p);
-
-  return 0;
-
+  return bl;
 }
 
-static int encode_token(CephContext *cct, string& swift_user, string& key,
-			bufferlist& bl)
+static ceph::bufferlist encode_token(CephContext* const cct,
+                                     const std::string& swift_user,
+                                     const std::string& key)
 {
   uint64_t nonce;
+  const int ret = get_random_bytes((char *)&nonce, sizeof(nonce));
+  if (ret < 0) {
+    throw ret;
+  }
 
-  int ret = get_random_bytes((char *)&nonce, sizeof(nonce));
-  if (ret < 0)
-    return ret;
-
-  utime_t expiration = ceph_clock_now();
-  expiration += cct->_conf->rgw_swift_token_expiration;
-
-  return build_token(swift_user, key, nonce, expiration, bl);
+  const utime_t expiration = \
+    ceph_clock_now() + cct->_conf->rgw_swift_token_expiration;
+  return build_token(cct, swift_user, key, nonce, expiration);
 }
 
 
@@ -543,11 +540,8 @@ SignedTokenEngine::authenticate(const std::string& token,
 
   const auto swift_key = siter->second;
 
-  bufferlist local_tok_bl;
-  ret = build_token(swift_user, swift_key.key, nonce, expiration, local_tok_bl);
-  if (ret < 0) {
-    throw ret;
-  }
+  ceph::bufferlist local_tok_bl = \
+    build_token(cct, swift_user, swift_key.key, nonce, expiration);
 
   if (local_tok_bl.length() != tok_bl.length()) {
     ldout(cct, 0) << "NOTICE: tokens length mismatch:"
@@ -589,7 +583,6 @@ void RGW_SWIFT_Auth_Get::execute()
 
   string user_str;
   RGWUserInfo info;
-  bufferlist bl;
   RGWAccessKey *swift_key;
   map<string, RGWAccessKey>::iterator siter;
 
@@ -675,9 +668,12 @@ void RGW_SWIFT_Auth_Get::execute()
   dump_header(s, "X-Storage-Url", swift_url + swift_prefix + "/v1" +
               tenant_path);
 
-  using rgw::auth::swift::encode_token;
-  op_ret = encode_token(s->cct, swift_key->id, swift_key->key, bl);
-  if (op_ret < 0) {
+  ceph::bufferlist bl;
+  try {
+    using rgw::auth::swift::encode_token;
+    bl = encode_token(s->cct, swift_key->id, swift_key->key);
+  } catch (int err) {
+    op_ret = err;
     return;
   }
 
