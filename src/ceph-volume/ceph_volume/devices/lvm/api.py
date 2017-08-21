@@ -3,9 +3,43 @@ API for CRUD lvm tag operations. Follows the Ceph LVM tag naming convention
 that prefixes tags with ``ceph.`` and uses ``=`` for assignment, and provides
 set of utilities for interacting with LVM.
 """
-import json
 from ceph_volume import process
 from ceph_volume.exceptions import MultipleLVsError, MultipleVGsError
+
+
+def _output_parser(output, fields):
+    """
+    Newer versions of LVM allow ``--reportformat=json``, but older versions,
+    like the one included in Xenial do not. LVM has the ability to filter and
+    format its output so we assume the output will be in a format this parser
+    can handle (using ',' as a delimiter)
+
+    :param fields: A string, possibly using ',' to group many items, as it
+                   would be used on the CLI
+    :param output: The CLI output from the LVM call
+    """
+    field_items = fields.split(',')
+    report = []
+    for line in output:
+        # clear the leading/trailing whitespace
+        line = line.strip()
+
+        # remove the extra '"' in each field
+        line = line.replace('"', '')
+
+        # prevent moving forward with empty contents
+        if not line:
+            continue
+
+        # spliting on ';' because that is what the lvm call uses as
+        # '--separator'
+        output_items = [i.strip() for i in line.split(';')]
+        # map the output to the fiels
+        report.append(
+            dict(zip(field_items, output_items))
+        )
+
+    return report
 
 
 def parse_tags(lv_tags):
@@ -37,49 +71,22 @@ def parse_tags(lv_tags):
 
 def get_api_vgs():
     """
-    Return the list of group volumes available in the system using flags to include common
-    metadata associated with them
+    Return the list of group volumes available in the system using flags to
+    include common metadata associated with them
 
-    Command and sample JSON output, should look like::
+    Command and sample delimeted output, should look like::
 
-        $ sudo vgs --reportformat=json
-        {
-            "report": [
-                {
-                    "vg": [
-                        {
-                            "vg_name":"VolGroup00",
-                            "pv_count":"1",
-                            "lv_count":"2",
-                            "snap_count":"0",
-                            "vg_attr":"wz--n-",
-                            "vg_size":"38.97g",
-                            "vg_free":"0 "},
-                        {
-                            "vg_name":"osd_vg",
-                            "pv_count":"3",
-                            "lv_count":"1",
-                            "snap_count":"0",
-                            "vg_attr":"wz--n-",
-                            "vg_size":"32.21g",
-                            "vg_free":"9.21g"
-                        }
-                    ]
-                }
-            ]
-        }
+        $ sudo vgs --noheadings --separator=';' \
+          -o vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free
+          ubuntubox-vg;1;2;0;wz--n-;299.52g;12.00m
+          osd_vg;3;1;0;wz--n-;29.21g;9.21g
 
     """
+    fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free'
     stdout, stderr, returncode = process.call(
-        [
-            'sudo', 'vgs', '--reportformat=json'
-        ]
+        ['sudo', 'vgs', '--noheadings', '--separator=";"', '-o', fields]
     )
-    report = json.loads(''.join(stdout))
-    for report_item in report.get('report', []):
-        # is it possible to get more than one item in "report" ?
-        return report_item['vg']
-    return []
+    return _output_parser(stdout, fields)
 
 
 def get_api_lvs():
@@ -87,37 +94,18 @@ def get_api_lvs():
     Return the list of logical volumes available in the system using flags to include common
     metadata associated with them
 
-    Command and sample JSON output, should look like::
+    Command and delimeted output, should look like::
 
-        $ sudo lvs -o  lv_tags,lv_path,lv_name,vg_name --reportformat=json
-        {
-            "report": [
-                {
-                    "lv": [
-                        {
-                            "lv_tags":"",
-                            "lv_path":"/dev/VolGroup00/LogVol00",
-                            "lv_name":"LogVol00",
-                            "vg_name":"VolGroup00"},
-                        {
-                            "lv_tags":"ceph.osd_fsid=aaa-fff-0000,ceph.osd_fsid=aaa-fff-bbbb,ceph.osd_id=0",
-                            "lv_path":"/dev/osd_vg/OriginLV",
-                            "lv_name":"OriginLV",
-                            "vg_name":"osd_vg"
-                        }
-                    ]
-                }
-            ]
-        }
+        $ sudo lvs --noheadings --separator=';' -o lv_tags,lv_path,lv_name,vg_name
+          ;/dev/ubuntubox-vg/root;root;ubuntubox-vg
+          ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
+    fields = 'lv_tags,lv_path,lv_name,vg_name'
     stdout, stderr, returncode = process.call(
-        ['sudo', 'lvs', '-o', 'lv_tags,lv_path,lv_name,vg_name', '--reportformat=json'])
-    report = json.loads(''.join(stdout))
-    for report_item in report.get('report', []):
-        # is it possible to get more than one item in "report" ?
-        return report_item['lv']
-    return []
+        ['sudo', 'lvs', '--noheadings', '--separator=";"', '-o', fields]
+    )
+    return _output_parser(stdout, fields)
 
 
 def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_tags=None):
