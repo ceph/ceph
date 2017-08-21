@@ -51,7 +51,7 @@ rados pgls operation on the containing pool.
 Bucket Index
 ^^^^^^^^^^^^
 
-It's a different kind of metadata, and kept separately. The bucket index holds
+It is a different kind of metadata, and kept separately. The bucket index holds
 a key-value map in rados objects. By default it is a single rados object per
 bucket, but it is possible since Hammer to shard that map over multiple rados
 objects. The map itself is kept in omap, associated with each rados object.
@@ -60,7 +60,7 @@ metadata of that object -- metadata that shows up when listing the bucket.
 Also, each omap holds a header, and we keep some bucket accounting metadata
 in that header (number of objects, total size, etc.).
 
-Note that we also hold other information in the bucket index, and it's kept in
+Note that we also hold other information in the bucket index, and it is kept in
 other key namespaces. We can hold the bucket index log there, and for versioned
 objects there is more information that we keep on other keys.
 

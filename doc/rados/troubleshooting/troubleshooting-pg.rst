@@ -5,8 +5,8 @@
 Placement Groups Never Get Clean
 ================================
 
-When you create a cluster and your cluster remains in ``active``, 
-``active+remapped`` or ``active+degraded`` status and never achieve an 
+When you create a cluster and your cluster remains in ``active``,
+``active+remapped`` or ``active+degraded`` status and never achieve an
 ``active+clean`` status, you likely have a problem with your configuration.
 
 You may need to review settings in the `Pool, PG and CRUSH Config Reference`_
@@ -26,20 +26,20 @@ Ceph  daemon may cause a deadlock due to issues with the Linux kernel itself
 configuration, in spite of the limitations as described herein.
 
 If you are trying to create a cluster on a single node, you must change the
-default of the ``osd crush chooseleaf type`` setting from ``1`` (meaning 
+default of the ``osd crush chooseleaf type`` setting from ``1`` (meaning
 ``host`` or ``node``) to ``0`` (meaning ``osd``) in your Ceph configuration
 file before you create your monitors and OSDs. This tells Ceph that an OSD
 can peer with another OSD on the same host. If you are trying to set up a
-1-node cluster and ``osd crush chooseleaf type`` is greater than ``0``, 
-Ceph will try to peer the PGs of one OSD with the PGs of another OSD on 
+1-node cluster and ``osd crush chooseleaf type`` is greater than ``0``,
+Ceph will try to peer the PGs of one OSD with the PGs of another OSD on
 another node, chassis, rack, row, or even datacenter depending on the setting.
 
-.. tip:: DO NOT mount kernel clients directly on the same node as your 
-   Ceph Storage Cluster, because kernel conflicts can arise. However, you 
+.. tip:: DO NOT mount kernel clients directly on the same node as your
+   Ceph Storage Cluster, because kernel conflicts can arise. However, you
    can mount kernel clients within virtual machines (VMs) on a single node.
 
 If you are creating OSDs using a single disk, you must create directories
-for the data manually first. For example:: 
+for the data manually first. For example::
 
 	mkdir /var/local/osd0 /var/local/osd1
 	ceph-deploy osd prepare {localhost-name}:/var/local/osd0 {localhost-name}:/var/local/osd1
@@ -49,40 +49,40 @@ for the data manually first. For example::
 Fewer OSDs than Replicas
 ------------------------
 
-If you have brought up two OSDs to an ``up`` and ``in`` state, but you still 
-don't see ``active + clean`` placement groups, you may have an 
+If you have brought up two OSDs to an ``up`` and ``in`` state, but you still
+do not see ``active + clean`` placement groups, you may have an
 ``osd pool default size`` set to greater than ``2``.
 
 There are a few ways to address this situation. If you want to operate your
-cluster in an ``active + degraded`` state with two replicas, you can set the 
-``osd pool default min size`` to ``2`` so that you can write objects in 
+cluster in an ``active + degraded`` state with two replicas, you can set the
+``osd pool default min size`` to ``2`` so that you can write objects in
 an ``active + degraded`` state. You may also set the ``osd pool default size``
-setting to ``2`` so that you only have two stored replicas (the original and 
-one replica), in which case the cluster should achieve an ``active + clean`` 
+setting to ``2`` so that you only have two stored replicas (the original and
+one replica), in which case the cluster should achieve an ``active + clean``
 state.
 
-.. note:: You can make the changes at runtime. If you make the changes in 
+.. note:: You can make the changes at runtime. If you make the changes in
    your Ceph configuration file, you may need to restart your cluster.
 
 
 Pool Size = 1
 -------------
 
-If you have the ``osd pool default size`` set to ``1``, you will only have 
-one copy of the object. OSDs rely on other OSDs to tell them which objects 
+If you have the ``osd pool default size`` set to ``1``, you will only have
+one copy of the object. OSDs rely on other OSDs to tell them which objects
 they should have. If a first OSD has a copy of an object and there is no
 second copy, then no second OSD can tell the first OSD that it should have
-that copy. For each placement group mapped to the first OSD (see 
+that copy. For each placement group mapped to the first OSD (see
 ``ceph pg dump``), you can force the first OSD to notice the placement groups
 it needs by running::
-   
+
    	ceph osd force-create-pg <pgid>
-   	
+
 
 CRUSH Map Errors
 ----------------
 
-Another candidate for placement groups remaining unclean involves errors 
+Another candidate for placement groups remaining unclean involves errors
 in your CRUSH map.
 
 
@@ -96,11 +96,11 @@ of these states for a long time this may be an indication of a larger problem.
 For this reason, the monitor will warn when placement groups get "stuck" in a
 non-optimal state.  Specifically, we check for:
 
-* ``inactive`` - The placement group has not been ``active`` for too long 
-  (i.e., it hasn't been able to service read/write requests).
-  
-* ``unclean`` - The placement group has not been ``clean`` for too long 
-  (i.e., it hasn't been able to completely recover from a previous failure).
+* ``inactive`` - The placement group has not been ``active`` for too long
+  (i.e., it has not been able to service read/write requests).
+
+* ``unclean`` - The placement group has not been ``clean`` for too long
+  (i.e., it has not been able to completely recover from a previous failure).
 
 * ``stale`` - The placement group status has not been updated by a ``ceph-osd``,
   indicating that all nodes storing this placement group may be ``down``.
@@ -172,11 +172,11 @@ and things will recover.
 
 Alternatively, if there is a catastrophic failure of ``osd.1`` (e.g., disk
 failure), we can tell the cluster that it is ``lost`` and to cope as
-best it can. 
+best it can.
 
 .. important:: This is dangerous in that the cluster cannot
-   guarantee that the other copies of the data are consistent 
-   and up to date.  
+   guarantee that the other copies of the data are consistent
+   and up to date.
 
 To instruct Ceph to continue anyway::
 
@@ -198,7 +198,7 @@ Under certain combinations of failures Ceph may complain about
 	pg 2.4 is active+degraded, 78 unfound
 
 This means that the storage cluster knows that some objects (or newer
-copies of existing objects) exist, but it hasn't found copies of them.
+copies of existing objects) exist, but it has not found copies of them.
 One example of how this might come about for a PG whose data is on ceph-osds
 1 and 2:
 
@@ -262,12 +262,12 @@ data, but it is ``down``.  The full range of possible states include:
 * not queried (yet)
 
 Sometimes it simply takes some time for the cluster to query possible
-locations.  
+locations.
 
 It is possible that there are other locations where the object can
 exist that are not listed.  For example, if a ceph-osd is stopped and
 taken out of the cluster, the cluster fully recovers, and due to some
-future set of failures ends up with an unfound object, it won't
+future set of failures ends up with an unfound object, it will not
 consider the long-departed ceph-osd as a potential location to
 consider.  (This scenario, however, is unlikely.)
 
@@ -280,7 +280,7 @@ are recovered.  To mark the "unfound" objects as "lost"::
 	ceph pg 2.5 mark_unfound_lost revert|delete
 
 This the final argument specifies how the cluster should deal with
-lost objects.  
+lost objects.
 
 The "delete" option will forget about them entirely.
 
@@ -331,12 +331,12 @@ multiple of the number of OSDs. See `Placement Groups`_ for details. The default
 placement group count for pools is not useful, but you can change it `here`_.
 
 
-Can't Write Data
-================
+Cannot Write Data
+=================
 
-If your cluster is up, but some OSDs are down and you cannot write data, 
+If your cluster is up, but some OSDs are down and you cannot write data,
 check to ensure that you have the minimum number of OSDs running for the
-placement group. If you don't have the minimum number of OSDs running, 
+placement group. If you do not have the minimum number of OSDs running,
 Ceph will not allow you to write data because there is no guarantee
 that Ceph can replicate your data. See ``osd pool default min size``
 in the `Pool, PG and CRUSH Config Reference`_ for details.
@@ -442,7 +442,7 @@ In this case, we can learn from the output:
     * ``size_mismatch_oi``: the size stored in the object-info is different
       from the one read from OSD.2. The latter is 0.
 
-You can repair the inconsistent placement group by executing:: 
+You can repair the inconsistent placement group by executing::
 
 	ceph pg repair {placement-group-ID}
 
@@ -456,9 +456,9 @@ If ``read_error`` is listed in the ``errors`` attribute of a shard, the
 inconsistency is likely due to disk errors. You might want to check your disk
 used by that OSD.
 
-If you receive ``active + clean + inconsistent`` states periodically due to 
-clock skew, you may consider configuring your `NTP`_ daemons on your 
-monitor hosts to act as peers. See `The Network Time Protocol`_ and Ceph 
+If you receive ``active + clean + inconsistent`` states periodically due to
+clock skew, you may consider configuring your `NTP`_ daemons on your
+monitor hosts to act as peers. See `The Network Time Protocol`_ and Ceph
 `Clock Settings`_ for additional details.
 
 
@@ -664,5 +664,3 @@ It took 11 tries to map 42 PGs, 12 tries to map 44 PGs etc. The highest number o
 .. _NTP: http://en.wikipedia.org/wiki/Network_Time_Protocol
 .. _The Network Time Protocol: http://www.ntp.org/
 .. _Clock Settings: ../../configuration/mon-config-ref/#clock
-
-

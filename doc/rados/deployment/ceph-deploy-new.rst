@@ -59,7 +59,7 @@ For example::
 
 .. note:: If you run multiple clusters, ensure you adjust the default
    port settings and open ports for your additional cluster(s) so that
-   the networks of the two different clusters don't conflict with each other.
+   the networks of the two different clusters do not conflict with each other.
 
 
 .. _Monitor Configuration Reference: ../../configuration/mon-config-ref

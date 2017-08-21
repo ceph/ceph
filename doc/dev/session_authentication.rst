@@ -51,7 +51,7 @@ Storing the Key
 ---------------
 
 The key is needed to create signatures on the sending end and check signatures on the receiving end.
-In the future, if asymmetric crypto is an option, it's possible that two keys (a private one for
+In the future, if asymmetric crypto is an option, it is possible that two keys (a private one for
 this end of the pipe and a public one for the other end) would need to be stored. At this time,
 messages going in both directions will be signed with the same key, so only that key needs to be
 saved.
@@ -79,7 +79,7 @@ Signing Messages
 Messages are signed in the ``write\_message`` call located in ``msg/Pipe.cc``.  The actual
 signature process is to encrypt the CRCs for the message using the shared key.  Thus, we must
 defer signing until all CRCs have been computed.  The header CRC is computed last, so we
-call ``sign\_message()`` as soon as we've calculated that CRC.  
+call ``sign\_message()`` as soon as we have calculated that CRC.  
 
 ``sign\_message()`` is a virtual function defined in ``auth/AuthSessionHandler.h``.  Thus,
 a specific version of it must be written for each authentication protocol supported.  Currently,

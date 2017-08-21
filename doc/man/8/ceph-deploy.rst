@@ -35,7 +35,7 @@ Ceph cluster without involving complex and detailed manual configuration. It
 uses ssh to gain access to other Ceph nodes from the admin node, sudo for
 administrator privileges on them and the underlying Python scripts automates
 the manual process of Ceph installation on each node from the admin node itself.
-It can be easily run on an workstation and doesn't require servers, databases or
+It can be easily run on a workstation and does not require servers, databases or
 any other automated tools. With :program:`ceph-deploy`, it is really easy to set
 up and take down a cluster. However, it is not a generic deployment tool. It is
 a specific tool which is designed for those who want to get Ceph up and running
@@ -90,7 +90,7 @@ the platform and distribution for the hosts and installs Ceph normally by
 downloading distro compatible packages if adequate repo for Ceph is already added.
 ``--release`` flag is used to get the latest release for installation. During
 detection of platform and distribution before installation, if it finds the
-``distro.init`` to be ``sysvinit`` (Fedora, CentOS/RHEL etc), it doesn't allow
+``distro.init`` to be ``sysvinit`` (Fedora, CentOS/RHEL etc), it does not allow
 installation with custom cluster name and uses the default name ``ceph`` for the
 cluster.
 
@@ -130,7 +130,7 @@ the ``mds`` command is used to create one on the desired host node. It uses the
 subcommand ``create`` to do so. ``create`` first gets the hostname and distro
 information of the desired mds host. It then tries to read the ``bootstrap-mds``
 key for the cluster and deploy it in the desired host. The key generally has a
-format of ``{cluster}.bootstrap-mds.keyring``. If it doesn't finds a keyring,
+format of ``{cluster}.bootstrap-mds.keyring``. If it does not find a keyring,
 it runs ``gatherkeys`` to get the keyring. It then creates a mds on the desired
 host under the path ``/var/lib/ceph/mds/`` in ``/var/lib/ceph/mds/{cluster}-{name}``
 format and a bootstrap keyring under ``/var/lib/ceph/bootstrap-mds/`` in
@@ -152,8 +152,8 @@ to deploy Ceph monitors on other nodes.
 
 Subcommand ``create-initial`` deploys for monitors defined in
 ``mon initial members`` under ``[global]`` section in Ceph configuration file,
-wait until they form quorum and then gatherkeys, reporting the monitor status
-along the process. If monitors don't form quorum the command will eventually
+wait until they form a quorum and then gatherkeys, reporting the monitor status
+along the process. If monitors do not form a quorum, the command will eventually
 time out.
 
 Usage::
@@ -192,10 +192,10 @@ exists and defines a mon addr that will be used, otherwise it will fallback by
 resolving the hostname to an IP. If :option:`--address` is used it will override
 all other options. After adding the monitor to the cluster, it gives it some time
 to start. It then looks for any monitor errors and checks monitor status. Monitor
-errors arise if the monitor is not added in ``mon initial members``, if it doesn't
+errors arise if the monitor is not added in ``mon initial members``, if it does not
 exist in ``monmap`` and if neither ``public_addr`` nor ``public_network`` keys
 were defined for monitors. Under such conditions, monitors may not be able to
-form quorum. Monitor status tells if the monitor is up and running normally. The
+form a quorum. Monitor status tells if the monitor is up and running normally. The
 status is checked by running ``ceph daemon mon.hostname mon_status`` on remote
 end which provides the output and returns a boolean status of what is going on.
 ``False`` means a monitor that is not fine even if it is up and running, while
@@ -245,7 +245,7 @@ disk
 ----
 
 Manage disks on a remote host. It actually triggers the ``ceph-disk`` utility
-and it's subcommands to manage disks.
+and its subcommands to manage disks.
 
 Subcommand ``list`` lists disk partitions and Ceph OSDs.
 
@@ -279,7 +279,7 @@ Usage::
 Here, [HOST] is hostname of the node and [DISK] is disk name or path.
 
 Subcommand ``zap`` zaps/erases/destroys a device's partition table and contents.
-It actually uses ``sgdisk`` and it's option ``--zap-all`` to destroy both GPT and
+It actually uses ``sgdisk`` and its option ``--zap-all`` to destroy both GPT and
 MBR data structures so that the disk becomes suitable for repartitioning.
 ``sgdisk`` then uses ``--mbrtogpt`` to convert the MBR or BSD disklabel disk to a
 GPT disk. The ``prepare`` subcommand can now be executed which will create a new
@@ -407,7 +407,7 @@ purgedata
 
 Purge (delete, destroy, discard, shred) any Ceph data from ``/var/lib/ceph``.
 Once it detects the platform and distro of desired host, it first checks if Ceph
-is still installed on the selected host and if installed, it won't purge data
+is still installed on the selected host and if installed, it will not purge data
 from it. If Ceph is already uninstalled from the host, it tries to remove the
 contents of ``/var/lib/ceph``. If it fails then probably OSDs are still mounted
 and needs to be unmounted to continue. It unmount the OSDs and tries to remove
@@ -459,7 +459,7 @@ Install and configure Calamari nodes. It first checks if distro is supported
 for Calamari installation by ceph-deploy. An argument ``connect`` is used for
 installation and configuration. It checks for ``ceph-deploy`` configuration
 file (cd_conf) and Calamari release repo or ``calamari-minion`` repo. It relies
-on default for repo installation as it doesn't install Ceph unless specified
+on default for repo installation as it does not install Ceph unless specified
 otherwise. ``options`` dictionary is also defined because ``ceph-deploy``
 pops items internally which causes issues when those items are needed to be
 available for every host. If the distro is Debian/Ubuntu, it is ensured that

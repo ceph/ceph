@@ -48,7 +48,7 @@ For example::
 	rbd --name client.admin --keyring=/etc/ceph/ceph.keyring [commands]
 
 .. tip:: Add the user and secret to the ``CEPH_ARGS`` environment 
-   variable so that you don't need to enter them each time.
+   variable so that you do not need to enter them each time.
 
 
 Snapshot Basics
@@ -117,7 +117,7 @@ For example::
 
 
 .. note:: Ceph OSDs delete data asynchronously, so deleting a snapshot 
-   doesn't free up the disk space immediately.
+   does not free up the disk space immediately.
 
 Purge Snapshots
 ---------------

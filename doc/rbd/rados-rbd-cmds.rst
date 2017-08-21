@@ -63,7 +63,7 @@ pool named ``swimmingpool``, execute the following::
 
 	rbd create --size 1024 swimmingpool/bar
 
-If you don't specify pool when creating an image, it will be stored in the
+If you do not specify pool when creating an image, it will be stored in the
 default pool ``rbd``. For example, to create a 1GB image named ``foo`` stored in
 the default pool ``rbd``, execute the following::
 
@@ -128,7 +128,7 @@ For example::
 Resizing a Block Device Image
 =============================
 
-:term:`Ceph Block Device` images are thin provisioned. They don't actually use
+:term:`Ceph Block Device` images are thin provisioned. They do not actually use
 any physical storage  until you begin saving data to them. However, they do have
 a maximum capacity  that you set with the ``--size`` option. If you want to
 increase (or decrease) the maximum size of a Ceph Block Device image, execute

@@ -8,7 +8,7 @@ Overview
 -----------
 
 Generally, snapshots do what they sound like: they create an immutable view
-of the filesystem at the point in time they're taken. There are some headline
+of the filesystem at the point in time they are taken. There are some headline
 features that make CephFS snapshots different from what you might expect:
 
 * Arbitrary subtrees. Snapshots are created within any directory you choose,
@@ -106,9 +106,9 @@ determnistic) to find which link is now the primary.
 
 Multi-FS
 ---------
-Snapshots and multiiple filesystems don't interact well. Specifically, each
+Snapshots and multiple filesystems do not interact well. Specifically, each
 MDS cluster allocates `snapids` independently; if you have multiple filesystems
 sharing a single pool (via namespaces), their snapshots *will* collide and
 deleting one will result in missing file data for others. (This may even be
 invisible, not throwing errors to the user.) If each FS gets its own
-pool things probably work, but this isn't tested and may not be true.
+pool things probably work, but this is not tested and may not be true.

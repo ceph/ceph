@@ -84,7 +84,7 @@ The output will look something like this if the bucket has some files::
 Deleting a Bucket
 -----------------
 .. note::
-   The Bucket must be empty! Otherwise it won't work!
+   The Bucket must be empty! Otherwise it will not work!
 
 .. code-block:: ruby
 
@@ -258,7 +258,7 @@ The output will look something like this if the bucket has some files::
 Deleting a Bucket
 -----------------
 .. note::
-   The Bucket must be empty! Otherwise it won't work!
+   The Bucket must be empty! Otherwise it will not work!
 
 .. code-block:: ruby
 

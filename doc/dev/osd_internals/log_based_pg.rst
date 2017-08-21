@@ -33,10 +33,10 @@ concept of interval changes) and an increasing per-pg version number
 pg_info_t::last_update.  Furthermore, we maintain a log of "recent"
 operations extending back at least far enough to include any
 *unstable* writes (writes which have been started but not committed)
-and objects which aren't uptodate locally (see recovery and
+and objects which are not uptodate locally (see recovery and
 backfill).  In practice, the log will extend much further
 (osd_pg_min_log_entries when clean, osd_pg_max_log_entries when not
-clean) because it's handy for quickly performing recovery.
+clean) because it is handy for quickly performing recovery.
 
 Using this log, as long as we talk to a non-empty subset of the OSDs
 which must have accepted any completed writes from the most recent
@@ -46,7 +46,7 @@ as committed.  There is some freedom here, we can choose any log entry
 between the oldest head remembered by an element of that set (any
 newer cannot have completed without that log containing it) and the
 newest head remembered (clearly, all writes in the log were started,
-so it's fine for us to remember them) as the new head.  This is the
+so it is fine for us to remember them) as the new head.  This is the
 main point of divergence between replicated pools and ec pools in
 PG/PrimaryLogPG: replicated pools try to choose the newest valid
 option to avoid the client needing to replay those operations and
@@ -58,7 +58,7 @@ in implementation: one copy will not generally be enough to
 reconstruct an ec object.  Indeed, there are encodings where some log
 combinations would leave unrecoverable objects (as with a 4+2 encoding
 where 3 of the replicas remember a write, but the other 3 do not -- we
-don't have 3 copies of either version).  For this reason, log entries
+do not have 3 copies of either version).  For this reason, log entries
 representing *unstable* writes (writes not yet committed to the
 client) must be rollbackable using only local information on ec pools.
 Log entries in general may therefore be rollbackable (and in that case,
@@ -110,7 +110,7 @@ Instead, we choose a few abstractions (and a few kludges) to paper over the diff
 PGBackend and PGTransaction enable abstraction of differences 1, 2,
 and the addition of 4 as needed to the log entries.
 
-The replicated implementation is in ReplicatedBackend.h/cc and doesn't
+The replicated implementation is in ReplicatedBackend.h/cc and does not
 require much explanation, I think.  More detail on the ECBackend can be
 found in doc/dev/osd_internals/erasure_coding/ecbackend.rst.
 
@@ -143,7 +143,7 @@ synchronously out of the primary OSD.  With an erasure coded strategy,
 the primary will need to request data from some number of replicas in
 order to satisfy a read.  PGBackend will therefore need to provide
 seperate objects_read_sync and objects_read_async interfaces where
-the former won't be implemented by the ECBackend.
+the former will not be implemented by the ECBackend.
 
 PGBackend interfaces:
 

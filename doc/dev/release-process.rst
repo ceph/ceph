@@ -9,7 +9,7 @@ There are multiple build environments, debian based packages are built via pbuil
 
 The RPM based packages are built natively, so one distribution per build host.  The list of hosts is found in ``rpm_hosts``.
 
-Prior to building, it's necessary to update the pbuilder seed tarballs::
+Prior to building, it is necessary to update the pbuilder seed tarballs::
 
     ./update_all_pbuilders.sh
 
@@ -20,7 +20,7 @@ Prior to building, it's necessary to update the pbuilder seed tarballs::
 
     export GNUPGHOME=<path to keyring dir>
 
-    # verify it's accessible
+    # verify it is accessible
     gpg --list-keys
 
 The release key should be present::

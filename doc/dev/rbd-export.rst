@@ -1,7 +1,7 @@
 RBD Export & Import
 ===================
 
-This is a file format of an RBD image or snapshot. It's a sparse format
+This is a file format of an RBD image or snapshot. It is a sparse format
 for the full image. There are three recording sections in the file.
 
 (1) Header.

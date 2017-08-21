@@ -71,7 +71,7 @@ the parent, so differing object sizes between parents and children
 do not matter.
 
 Before a write to an object is performed, the object is checked for
-existence. If it doesn't exist, a copy-up operation is performed,
+existence. If it does not exist, a copy-up operation is performed,
 which means reading the relevant range of data from the parent
 snapshot and writing it (plus the original write) to the child
 image. To prevent races with multiple writes trying to copy-up the
@@ -255,8 +255,8 @@ layering:
 ::
 
     snapshot_add - stores current overlap and has_parent with
-                   other snapshot metadata (images that don't have
-                   layering enabled aren't affected)
+                   other snapshot metadata (images that do not have
+                   layering enabled are not affected)
 
     set_size     - will adjust the parent overlap down as needed.
 
@@ -265,7 +265,7 @@ librbd
 
 Opening a child image opens its parent (and this will continue
 recursively as needed). This means that an ImageCtx will contain a
-pointer to the parent image context. Differing object sizes won't
+pointer to the parent image context. Differing object sizes will not
 matter, since reading from the parent will go through the parent
 image context.
 

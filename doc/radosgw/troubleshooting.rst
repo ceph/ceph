@@ -3,18 +3,18 @@
 =================
 
 
-The Gateway Won't Start
-=======================
+The Gateway Will Not Start
+==========================
 
-If you cannot start the gateway (i.e., there is no existing ``pid``), 
-check to see if there is an existing ``.asok`` file from another 
+If you cannot start the gateway (i.e., there is no existing ``pid``),
+check to see if there is an existing ``.asok`` file from another
 user. If an ``.asok`` file from another user exists and there is no
 running ``pid``, remove the ``.asok`` file and try to start the
 process again.
 
-This may occur when you start the process as a ``root`` user and 
-the startup script is trying to start the process as a 
-``www-data`` or ``apache`` user and an existing ``.asok`` is 
+This may occur when you start the process as a ``root`` user and
+the startup script is trying to start the process as a
+``www-data`` or ``apache`` user and an existing ``.asok`` is
 preventing the script from starting the daemon.
 
 The radosgw init script (/etc/init.d/radosgw) also has a verbose argument that
@@ -57,7 +57,7 @@ its admin socket.  By default, there will be a socket configured to
 reside in ``/var/run/ceph``, and the daemon can be queried with::
 
  ceph daemon /var/run/ceph/client.rgw help
- 
+
  help                list available commands
  objecter_requests   show in-progress osd requests
  perfcounters_dump   dump perfcounters value
@@ -109,7 +109,7 @@ that the OSD is not responding.  For example, for request 1858, you could
 check the OSD status with::
 
  ceph pg map 2.d2041a48
- 
+
  osdmap e9 pg 2.d2041a48 (2.0) -> up [1,0] acting [1,0]
 
 This tells us to look at ``osd.1``, the primary copy for this PG::
@@ -136,30 +136,30 @@ Java S3 API Troubleshooting
 Peer Not Authenticated
 ----------------------
 
-You may receive an error that looks like this:: 
+You may receive an error that looks like this::
 
      [java] INFO: Unable to execute HTTP request: peer not authenticated
 
 The Java SDK for S3 requires a valid certificate from a recognized certificate
 authority, because it uses HTTPS by default. If you are just testing the Ceph
-Object Storage services, you can resolve this problem in a few ways:  
+Object Storage services, you can resolve this problem in a few ways:
 
 #. Prepend the IP address or hostname with ``http://``. For example, change this::
 
 	conn.setEndpoint("myserver");
 
-   To:: 
+   To::
 
 	conn.setEndpoint("http://myserver")
 
-#. After setting your credentials, add a client configuration and set the 
-   protocol to ``Protocol.HTTP``. :: 
+#. After setting your credentials, add a client configuration and set the
+   protocol to ``Protocol.HTTP``. ::
 
 			AWSCredentials credentials = new BasicAWSCredentials(accessKey, secretKey);
-			
+
 			ClientConfiguration clientConfig = new ClientConfiguration();
 			clientConfig.setProtocol(Protocol.HTTP);
-			
+
 			AmazonS3 conn = new AmazonS3Client(credentials, clientConfig);
 
 
@@ -167,13 +167,10 @@ Object Storage services, you can resolve this problem in a few ways:
 405 MethodNotAllowed
 --------------------
 
-If you receive an 405 error, check to see if you have the S3 subdomain set up correctly. 
+If you receive an 405 error, check to see if you have the S3 subdomain set up correctly.
 You will need to have a wild card setting in your DNS record for subdomain functionality
 to work properly.
 
 Also, check to ensure that the default site is disabled. ::
 
      [java] Exception in thread "main" Status Code: 405, AWS Service: Amazon S3, AWS Request ID: null, AWS Error Code: MethodNotAllowed, AWS Error Message: null, S3 Extended Request ID: null
-  
-  
-  

@@ -60,7 +60,7 @@ Request Headers
 +--------------------------------------+-------------------------------------------------+------------------------+------------+
 | **x-amz-copy-if-match**              |  Copies only if object ETag matches ETag.       |   Entity Tag           | No         |
 +--------------------------------------+-------------------------------------------------+------------------------+------------+
-| **x-amz-copy-if-none-match**         |  Copies only if object ETag doesn't match.      |   Entity Tag           | No         |
+| **x-amz-copy-if-none-match**         |  Copies only if object ETag does not match.     |   Entity Tag           | No         |
 +--------------------------------------+-------------------------------------------------+------------------------+------------+
 
 Response Entities
@@ -92,7 +92,7 @@ Syntax
 
 Get Object
 ----------
-Retrieves an object from a bucket within RADOS. 
+Retrieves an object from a bucket within RADOS.
 
 Syntax
 ~~~~~~

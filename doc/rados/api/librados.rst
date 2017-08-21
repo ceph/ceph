@@ -78,7 +78,7 @@ In the end, you will want to close your IO context and connection to RADOS with 
 Asychronous IO
 ==============
 
-When doing lots of IO, you often don't need to wait for one operation
+When doing lots of IO, you often do not need to wait for one operation
 to complete before starting the next one. `Librados` provides
 asynchronous versions of several operations:
 
@@ -90,7 +90,7 @@ asynchronous versions of several operations:
 For each operation, you must first create a
 :c:type:`rados_completion_t` that represents what to do when the
 operation is safe or complete by calling
-:c:func:`rados_aio_create_completion`. If you don't need anything
+:c:func:`rados_aio_create_completion`. If you do not need anything
 special to happen, you can pass NULL::
 
 	rados_completion_t comp;
@@ -167,7 +167,7 @@ latencies::
 		// the latencies can now be analyzed
 		printf("Request # | Ack latency (s) | Commit latency (s)\n");
 		for (size_t i = 0; i < num_writes; ++i) {
-			// don't forget to free the completions
+			// do not forget to free the completions
 			rados_aio_release(comps[i]);
 			struct timeval ack_lat, commit_lat;
 			timersub(&times[i].ack_end, &times[i].start, &ack_lat);

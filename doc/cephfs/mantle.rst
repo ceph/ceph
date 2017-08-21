@@ -88,7 +88,7 @@ Mantle with `vstart.sh`
      tail -f out/mds.a.log
 
 
-   Note that if you look at the last MDS (which could be a, b, or c -- it's
+   Note that if you look at the last MDS (which could be a, b, or c -- it is
    random), you will see an an attempt to index a nil value. This is because the
    last MDS tries to check the load of its neighbor, which does not exist.
 
@@ -159,7 +159,7 @@ Implementation Details
 
 Most of the implementation is in MDBalancer. Metrics are passed to the balancer
 policies via the Lua stack and a list of loads is returned back to MDBalancer.
-It sits alongside the current balancer implementation and it's enabled with a
+It sits alongside the current balancer implementation and it is enabled with a
 Ceph CLI command ("ceph fs set cephfs balancer mybalancer.lua"). If the Lua policy
 fails (for whatever reason), we fall back to the original metadata load
 balancer. The balancer is stored in the RADOS metadata pool and a string in the
@@ -196,7 +196,7 @@ Compile/Execute the Balancer
 Here we use `lua_pcall` instead of `lua_call` because we want to handle errors
 in the MDBalancer. We do not want the error propagating up the call chain. The
 cls_lua class wants to handle the error itself because it must fail gracefully.
-For Mantle, we don't care if a Lua error crashes our balancer -- in that case,
+For Mantle, we do not care if a Lua error crashes our balancer -- in that case,
 we will fall back to the original balancer.
 
 The performance improvement of using `lua_call` over `lua_pcall` would not be

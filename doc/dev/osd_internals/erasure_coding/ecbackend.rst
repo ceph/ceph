@@ -86,9 +86,9 @@ Scrub
 -----
 
 The main catch, however, for ec pools is that sending a crc32 of the
-stored chunk on a replica isn't particularly helpful since the chunks
+stored chunk on a replica is not particularly helpful since the chunks
 on different replicas presumably store different data.  Because we
-don't support overwrites except via DELETE, however, we have the
+do not support overwrites except via DELETE, however, we have the
 option of maintaining a crc32 on each chunk through each append.
 Thus, each replica instead simply computes a crc32 of its own stored
 chunk and compares it with the locally stored checksum.  The replica
@@ -168,7 +168,7 @@ The rollforward part can be delayed since we report the operation as
 committed once all replicas have committed.  Currently, whenever we
 send a write, we also indicate that all previously committed
 operations should be rolled forward (see
-ECBackend::try_reads_to_commit).  If there aren't any in the pipeline
+ECBackend::try_reads_to_commit).  If there are not any in the pipeline
 when we arrive at the waiting_rollforward queue, we start a dummy
 write to move things along (see the Pipeline section later on and
 ECBackend::try_finish_rmw).
@@ -176,7 +176,7 @@ ECBackend::try_finish_rmw).
 ExtentCache
 -----------
 
-It's pretty important to be able to pipeline writes on the same
+It is pretty important to be able to pipeline writes on the same
 object.  For this reason, there is a cache of extents written by
 cacheable operations.  Each extent remains pinned until the operations
 referring to it are committed.  The pipeline prevents rmw operations
@@ -193,8 +193,8 @@ Pipeline
 Reading src/osd/ExtentCache.h should have given a good idea of how
 operations might overlap.  There are several states involved in
 processing a write operation and an important invariant which
-isn't enforced by PrimaryLogPG at a higher level which need to be
-managed by ECBackend.  The important invariant is that we can't
+is not enforced by PrimaryLogPG at a higher level which need to be
+managed by ECBackend.  The important invariant is that we cannot
 have uncacheable and rmw operations running at the same time
 on the same object.  For simplicity, we simply enforce that any
 operation which contains an rmw operation must wait until

@@ -145,7 +145,7 @@ Async messenger options
 
 :Description: Send messages directly from the thread that generated them instead of
               queuing and sending from Async Messenger thread. This option is known
-              to decrease performance on systems with a lot of CPU cores, so it's
+              to decrease performance on systems with a lot of CPU cores, so it is
               disabled by default.
 :Type: Boolean
 :Required: No

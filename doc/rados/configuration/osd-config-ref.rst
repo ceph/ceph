@@ -353,7 +353,7 @@ Operations
 Operations settings allow you to configure the number of threads for servicing
 requests. If you set ``osd op threads`` to ``0``, it disables multi-threading.
 By default, Ceph  uses two threads with a 30 second timeout and a 30 second
-complaint time if an operation doesn't complete within those time parameters.
+complaint time if an operation does not complete within those time parameters.
 You can set operations priority weights between client operations and
 recovery operations to ensure optimal performance during recovery.
 
@@ -657,7 +657,6 @@ Various organizations and individuals are currently experimenting with
 mClock as it exists in this code base along with their modifications
 to the code base. We hope you'll share you're experiences with your
 mClock and dmClock experiments in the ceph-devel mailing list.
-
 
 ``osd push per object cost``
 

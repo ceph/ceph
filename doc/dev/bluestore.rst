@@ -61,7 +61,7 @@ Mapping
 -------
 
 This very roughly maps the type of write onto what we do when we
-encounter a given blob.  In practice it's a bit more complicated since there
+encounter a given blob.  In practice it is a bit more complicated since there
 might be several blobs to consider (e.g., we might be able to *W* into one or
 *P* into another), but it should communicate a rough idea of strategy.
 

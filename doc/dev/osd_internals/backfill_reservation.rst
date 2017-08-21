@@ -26,7 +26,7 @@ is sent on the primary before calling recovery_complete and on the replica on
 receipt of the BackfillComplete progress message), or upon leaving Active or
 ReplicaActive.
 
-It's important that we always grab the local reservation before the remote
+It is important that we always grab the local reservation before the remote
 reservation in order to prevent a circular dependency.
 
 We want to minimize the risk of data loss by prioritizing the order in

@@ -55,7 +55,7 @@ Both the client and server, upon connecting, send a banner::
 The protocol features are a new, distinct namespace.  Initially no
 features are defined or required, so this will be "ceph 0 0\n".
 
-If the remote party advertises required features we don't support, we
+If the remote party advertises required features we do not support, we
 can disconnect.
 
 Frame format
@@ -180,7 +180,7 @@ an established session.
 
 * TAG_IDENT_MISSING_FEATURES (server only): complain about a TAG_IDENT with too few features::
 
-    __le64 features we require that peer didn't advertise
+    __le64 features we require that peer did not advertise
 
 * TAG_IDENT_BAD_PROTOCOL (server only): complain about an old protocol version::
 
@@ -243,7 +243,7 @@ Once a session is stablished, we can exchange messages.
 * TAG_CLOSE: terminate a stream
 
   Indicates that a stream should be terminated. This is equivalent to
-  a hangup or reset (i.e., should trigger ms_handle_reset).  It isn't
+  a hangup or reset (i.e., should trigger ms_handle_reset).  It is not
   strictly necessary or useful if there is only a single stream as we
   could just disconnect the TCP connection, although one could
   certainly use it creatively (e.g., reset the stream state and retry

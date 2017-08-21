@@ -196,7 +196,7 @@ will appear as follows::
 
     Error looking up replication of pool: <pool name>
 
-Hadoop will also produce a log entry when it wasn't able to select an exact
+Hadoop will also produce a log entry when it was not able to select an exact
 match for replication. This log entry will appear as follows::
 
     selectDataPool path=<path> pool:repl=<name>:<value> wanted=<value>

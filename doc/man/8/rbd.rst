@@ -467,7 +467,7 @@ Per client instance `rbd map` options:
 * cephx_require_signatures - Require cephx message signing (since 3.19,
   default).
 
-* nocephx_require_signatures - Don't require cephx message signing (since
+* nocephx_require_signatures - Do not require cephx message signing (since
   3.19).
 
 * tcp_nodelay - Disable Nagle's algorithm on client sockets (since 4.0,

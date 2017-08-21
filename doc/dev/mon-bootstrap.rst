@@ -112,7 +112,7 @@ a single global config file for the cluster can have a line like::
 
 and will also serve to inform any ceph clients or daemons who the monitors are.
 
-The ``ceph-mon`` daemons will need to be fed the initial keyring and cluster fsid to 
+The ``ceph-mon`` daemons will need to be fed the initial keyring and cluster fsid to
 initialize themselves:
 
      ceph-mon --mkfs -i <name> --fsid <uuid> --keyring <initial_keyring>
@@ -167,7 +167,7 @@ New nodes can be forced to join an existing cluster in two ways:
 Initially peerless expansion
 ----------------------------
 
-Create a new monitor and give it no peer addresses other than it's own.  For
+Create a new monitor and give it no peer addresses other than its own.  For
 example::
 
      ceph-mon --mkfs -i <myid> --fsid <fsid> --keyring <mon secret key> --public-addr <ip>
@@ -192,8 +192,3 @@ When the daemon is started, ``mon initial members`` must be set via the command 
      ceph-mon -i <myid> --mon-initial-members foo,bar,baz
 
 to prevent any risk of split-brain.
-  
-
-
-
-

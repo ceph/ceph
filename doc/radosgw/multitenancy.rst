@@ -78,7 +78,7 @@ Here's a simple Python sample:
 		calling_format = OrdinaryCallingFormat())
 	bucket = c.get_bucket("test5b:testbucket")
 
-Note that it's not possible to supply an explicit tenant using
+Note that it is not possible to supply an explicit tenant using
 a hostname. Hostnames cannot contain colons, or any other separators
 that are not already valid in bucket names. Using a period creates an
 ambiguous syntax. Therefore, the bucket-in-URL-path format has to be
@@ -92,7 +92,7 @@ TBD -- not in test_multen.py yet
 Swift with Keystone
 -------------------
 
-TBD -- don't forget to explain the function of
+TBD -- do not forget to explain the function of
        rgw keystone implicit tenants = true
        in commit e9259486decab52a362443d3fd3dec33b0ec654f
 

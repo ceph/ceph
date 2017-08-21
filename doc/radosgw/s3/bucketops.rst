@@ -265,7 +265,7 @@ List Bucket Multipart Uploads
 -----------------------------
 
 ``GET /?uploads`` returns a list of the current in-progress multipart uploads--i.e., the application initiates a multipart upload, but
-the service hasn't completed all the uploads yet.
+the service has not completed all the uploads yet.
 
 Syntax
 ~~~~~~

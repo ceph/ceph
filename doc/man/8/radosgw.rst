@@ -81,7 +81,7 @@ or process management may be available in the FastCGI application framework
 in use.
 
 ``Apache`` can be configured in a way that enables ``mod_proxy_fcgi`` to be used
-with localhost tcp or through unix domain socket. ``mod_proxy_fcgi`` that doesn't
+with localhost tcp or through unix domain socket. ``mod_proxy_fcgi`` that does not
 support unix domain socket such as the ones in Apache 2.2 and earlier versions of
 Apache 2.4, needs to be configured for use with localhost tcp. Later versions of
 Apache like Apache 2.4.9 or later support unix domain socket and as such they

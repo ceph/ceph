@@ -111,9 +111,9 @@ some time period ("age" vs "temperature").
 The ``min_read_recency_for_promote`` defines how many HitSets to check for the
 existence of an object when handling a read operation. The checking result is
 used to decide whether to promote the object asynchronously. Its value should be
-between 0 and ``hit_set_count``. If it's set to 0, the object is always promoted.
-If it's set to 1, the current HitSet is checked. And if this object is in the
-current HitSet, it's promoted. Otherwise not. For the other values, the exact
+between 0 and ``hit_set_count``. If it is set to 0, the object is always promoted.
+If it is set to 1, the current HitSet is checked. And if this object is in the
+current HitSet, it is promoted. Otherwise not. For the other values, the exact
 number of archive HitSets are checked. The object is promoted if the object is
 found in any of the most recent ``min_read_recency_for_promote`` HitSets.
 

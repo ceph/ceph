@@ -31,7 +31,7 @@ deploying a Ceph Storage Cluster.
 
 	</td><td><h3>Step 3: Ceph Client(s)</h3>
 	
-Most Ceph users don't store objects directly in the Ceph Storage Cluster. They typically use at least one of
+Most Ceph users do not store objects directly in the Ceph Storage Cluster. They typically use at least one of
 Ceph Block Devices, the Ceph Filesystem, and Ceph Object Storage.
 
 .. toctree::

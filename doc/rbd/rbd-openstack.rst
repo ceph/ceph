@@ -180,8 +180,8 @@ temporary copy of the key::
 
 Save the uuid of the secret for configuring ``nova-compute`` later.
 
-.. important:: You don't necessarily need the UUID on all the compute nodes.
-   However from a platform consistency perspective, it's better to keep the
+.. important:: You do not necessarily need the UUID on all the compute nodes.
+   However from a platform consistency perspective, it is better to keep the
    same UUID.
 
 .. _cephx authentication: ../../rados/configuration/auth-config-ref/#enabling-disabling-cephx
@@ -319,7 +319,7 @@ Note that if you are configuring multiple cinder back ends,
 Configuring Cinder Backup
 -------------------------
 
-OpenStack Cinder Backup requires a specific daemon so don't forget to install it.
+OpenStack Cinder Backup requires a specific daemon so do not forget to install it.
 On your Cinder Backup node, edit ``/etc/cinder/cinder.conf`` and add::
 
     backup_driver = cinder.backup.drivers.ceph

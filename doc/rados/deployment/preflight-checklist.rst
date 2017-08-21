@@ -35,7 +35,7 @@ Create a User
 
 Create a user on nodes running Ceph daemons. 
 
-.. tip:: We recommend a username that brute force attackers won't
+.. tip:: We recommend a username that brute force attackers will not
    guess easily (e.g., something other than ``root``, ``ceph``, etc).
 
 ::

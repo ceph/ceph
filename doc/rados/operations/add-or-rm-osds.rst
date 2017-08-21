@@ -13,7 +13,7 @@ OSD is generally one Ceph ``ceph-osd`` daemon for one storage drive within a
 host machine. If your host has multiple storage drives, you may map one
 ``ceph-osd`` daemon for each drive.
 
-Generally, it's a good idea to check the capacity of your cluster to see if you
+Generally, it is a good idea to check the capacity of your cluster to see if you
 are reaching the upper end of its capacity. As your cluster reaches its ``near
 full`` ratio, you should add one or more OSDs to expand your cluster's capacity.
 
@@ -129,7 +129,7 @@ weight).
 	ceph osd crush add {id-or-name} {weight}  [{bucket-type}={bucket-name} ...]
 
    You may also decompile the CRUSH map, add the OSD to the device list, add the 
-   host as a bucket (if it's not already in the CRUSH map), add the device as an 
+   host as a bucket (if it is not already in the CRUSH map), add the device as an 
    item in the host, assign it a weight, recompile it and set it. See 
    `Add/Move an OSD`_ for details.
 
@@ -178,7 +178,7 @@ need to be keep intact after the OSD is destroyed for replacement.
      ceph osd destroy {id} --yes-i-really-mean-it
 
 #. Zap a disk for the new OSD, if the disk was used before for other purposes.
-   It's not necessary for a new disk::
+   It is not necessary for a new disk::
 
      ceph-disk zap /dev/sdX
 
@@ -238,7 +238,7 @@ When you want to reduce the size of a cluster or replace hardware, you may
 remove an OSD at runtime. With Ceph, an OSD is generally one Ceph ``ceph-osd``
 daemon for one storage drive within a host machine. If your host has multiple
 storage drives, you may need to remove one ``ceph-osd`` daemon for each drive.
-Generally, it's a good idea to check the capacity of your cluster to see if you
+Generally, it is a good idea to check the capacity of your cluster to see if you
 are reaching the upper end of its capacity. Ensure that when you remove an OSD
 that your cluster is not at its ``near full`` ratio.
 
@@ -342,7 +342,7 @@ you need to perform this step manually:
 
 #. Remove the OSD from the CRUSH map so that it no longer receives data. You may
    also decompile the CRUSH map, remove the OSD from the device list, remove the
-   device as an item in the host bucket or remove the host  bucket (if it's in the
+   device as an item in the host bucket or remove the host  bucket (if it is in the
    CRUSH map and you intend to remove the host), recompile the map and set it. 
    See `Remove an OSD`_ for details. :: 
 

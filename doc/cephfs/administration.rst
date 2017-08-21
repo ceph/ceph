@@ -49,7 +49,7 @@ Settings
 
     fs set <fs name> max_file_size <size in bytes>
 
-CephFS has a configurable maximum file size, and it's 1TB by default.
+CephFS has a configurable maximum file size, and it is 1TB by default.
 You may wish to set this limit higher if you expect to store large files
 in CephFS. It is a 64-bit field.
 

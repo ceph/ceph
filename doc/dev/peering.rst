@@ -26,7 +26,7 @@ Concepts
    a temporary placement group acting set used while backfilling the
    primary osd. Let say acting is [0,1,2] and we are
    active+clean. Something happens and acting is now [3,1,2]. osd 3 is
-   empty and can't serve reads although it is the primary. osd.3 will
+   empty and cannot serve reads although it is the primary. osd.3 will
    see that and request a *PG temp* of [1,2,3] to the monitors using a
    MOSDPGTemp message so that osd.1 temporarily becomes the
    primary. It will select osd.3 as a backfill peer and continue to

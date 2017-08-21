@@ -10,7 +10,7 @@ Ceph.  When you execute a command such as ``ceph health`` or ``ceph -s``,  the
 Cluster`. The Ceph Monitor knows about the Ceph Storage Cluster by requiring
 reports from each :term:`Ceph OSD Daemon`, and by receiving reports from Ceph
 OSD Daemons about the status of their neighboring Ceph OSD Daemons. If the Ceph
-Monitor doesn't receive reports, or if it receives reports of changes in the
+Monitor does not receive reports, or if it receives reports of changes in the
 Ceph Storage Cluster, the Ceph Monitor updates the status of the :term:`Ceph
 Cluster Map`.
 
@@ -27,7 +27,7 @@ OSDs Check Heartbeats
 Each Ceph OSD Daemon checks the heartbeat of other Ceph OSD Daemons every 6
 seconds. You can change the heartbeat interval by adding an ``osd heartbeat
 interval`` setting under the ``[osd]`` section of your Ceph configuration file,
-or by setting the value at runtime. If a neighboring Ceph OSD Daemon doesn't
+or by setting the value at runtime. If a neighboring Ceph OSD Daemon does not
 show a heartbeat within a 20 second grace period, the Ceph OSD Daemon may
 consider the neighboring Ceph OSD Daemon ``down`` and report it back to a Ceph
 Monitor, which will update the Ceph Cluster Map. You may change this grace
@@ -149,7 +149,7 @@ setting the value at runtime.
 OSDs Report Their Status
 ========================
 
-If an Ceph OSD Daemon doesn't report to a Ceph Monitor, the Ceph Monitor will
+If an Ceph OSD Daemon does not report to a Ceph Monitor, the Ceph Monitor will
 consider the Ceph OSD Daemon ``down`` after the  ``mon osd report timeout``
 elapses. A Ceph OSD Daemon sends a report to a Ceph Monitor when a reportable
 event such as a failure, a change in placement group stats, a change in
@@ -298,7 +298,7 @@ Monitor Settings
 ``mon osd down out interval``
 
 :Description: The number of seconds Ceph waits before marking a Ceph OSD Daemon
-              ``down`` and ``out`` if it doesn't respond.
+              ``down`` and ``out`` if it does not respond.
 
 :Type: 32-bit Integer
 :Default: ``600``
@@ -362,7 +362,7 @@ OSD Settings
 
 ``osd heartbeat grace``
 
-:Description: The elapsed time when a Ceph OSD Daemon hasn't shown a heartbeat
+:Description: The elapsed time when a Ceph OSD Daemon has not shown a heartbeat
               that the Ceph Storage Cluster considers it ``down``.
               This setting has to be set in both the [mon] and [osd] or [global]
               section so that it is read by both the MON and OSD daemons.

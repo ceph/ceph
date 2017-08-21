@@ -5,7 +5,7 @@
 .. index:: pools; configuration
 
 When you create pools and set the number of placement groups for the pool, Ceph
-uses default values when you don't specifically override the defaults. **We
+uses default values when you do not specifically override the defaults. **We
 recommend** overridding some of the defaults. Specifically, we recommend setting
 a pool's replica size and overriding the default number of placement groups. You
 can specifically set these values when running `pool`_ commands. You can also

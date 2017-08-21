@@ -3,7 +3,7 @@
 =================
 
 The perf histograms build on perf counters infrastructure. Histograms are built for a number of counters and simplify gathering data on which groups of counter values occur most often over time. 
-Perf histograms are currently unsigned 64-bit integer counters, so they're mostly useful for time and sizes. Data dumped by perf histogram can then be feed into other analysis tools/scripts.
+Perf histograms are currently unsigned 64-bit integer counters, so they are mostly useful for time and sizes. Data dumped by perf histogram can then be feed into other analysis tools/scripts.
 
 Access
 ------

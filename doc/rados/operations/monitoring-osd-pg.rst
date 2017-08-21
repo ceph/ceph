@@ -5,13 +5,13 @@
 High availability and high reliability require a fault-tolerant approach to
 managing hardware and software issues. Ceph has no single point-of-failure, and
 can service requests for data in a "degraded" mode. Ceph's `data placement`_
-introduces a layer of indirection to ensure that data doesn't bind directly to
+introduces a layer of indirection to ensure that data does not bind directly to
 particular OSD addresses. This means that tracking down system faults requires
 finding the `placement group`_ and the underlying OSDs at root of the problem.
 
 .. tip:: A fault in one part of the cluster may prevent you from accessing a 
-   particular object, but that doesn't mean that you cannot access other objects.
-   When you run into a fault, don't panic. Just follow the steps for monitoring
+   particular object, but that does not mean that you cannot access other objects.
+   When you run into a fault, do not panic. Just follow the steps for monitoring
    your OSDs and placement groups. Then, begin troubleshooting.
 
 Ceph is generally self-repairing. However, when problems persist, monitoring
@@ -49,12 +49,12 @@ not assign placement groups to the OSD. If an OSD is ``down``, it should also be
            +----------------+        +----------------+
 
 If you execute a command such as ``ceph health``, ``ceph -s`` or ``ceph -w``,
-you may notice that the cluster does not always echo back ``HEALTH OK``. Don't
+you may notice that the cluster does not always echo back ``HEALTH OK``. Do not
 panic. With respect to OSDs, you should expect that the cluster will **NOT**
 echo   ``HEALTH OK`` in a few expected circumstances:
 
-#. You haven't started the cluster yet (it won't respond).
-#. You have just started or restarted the cluster and it's not ready yet,
+#. You have not started the cluster yet (it will not respond).
+#. You have just started or restarted the cluster and it is not ready yet,
    because the placement groups are getting created and the OSDs are in
    the process of peering.
 #. You just added or removed an OSD.
@@ -95,7 +95,7 @@ If an OSD is ``down``, start it::
 
 	sudo systemctl start ceph-osd@1
 
-See `OSD Not Running`_ for problems associated with OSDs that stopped, or won't
+See `OSD Not Running`_ for problems associated with OSDs that stopped, or will not
 restart.
 	
 
@@ -113,7 +113,7 @@ neighbor OSDs in a large cluster. We refer to the set of OSDs that should
 contain the replicas of a particular placement group as the **Acting Set**. In
 some cases, an OSD in the Acting Set is ``down`` or otherwise not able to
 service requests for objects in the placement group. When these situations
-arise, don't panic. Common examples include:
+arise, do not panic. Common examples include:
 
 - You added or removed an OSD. Then, CRUSH reassigned the placement group to 
   other OSDs--thereby changing the composition of the Acting Set and spawning
@@ -190,15 +190,15 @@ you check to see if the OSDs are running, you should also check placement group
 states. You should expect that the cluster will **NOT** echo ``HEALTH OK`` in a
 number of placement group peering-related circumstances:
 
-#. You have just created a pool and placement groups haven't peered yet.
+#. You have just created a pool and placement groups have not peered yet.
 #. The placement groups are recovering.
 #. You have just added an OSD to or removed an OSD from the cluster.
 #. You have just modified your CRUSH map and your placement groups are migrating.
 #. There is inconsistent data in different replicas of a placement group.
 #. Ceph is scrubbing a placement group's replicas.
-#. Ceph doesn't have enough storage capacity to complete backfilling operations.
+#. Ceph does not have enough storage capacity to complete backfilling operations.
 
-If one of the foregoing circumstances causes Ceph to echo ``HEALTH WARN``, don't
+If one of the foregoing circumstances causes Ceph to echo ``HEALTH WARN``, do not
 panic. In many cases, the cluster will recover on its own. In some cases, you
 may need to take action. An important aspect of monitoring placement groups is
 to ensure that when the cluster is up and running that all placement groups are
@@ -431,7 +431,7 @@ state until the primary OSD has received an acknowledgement from the replica
 OSDs that Ceph created the replica objects successfully. 
 
 The reason a placement group can be ``active+degraded`` is that an OSD may be
-``active`` even though it doesn't hold all of the objects yet. If an OSD goes
+``active`` even though it does not hold all of the objects yet. If an OSD goes
 ``down``, Ceph marks each placement group assigned to the OSD as ``degraded``.
 The OSDs must peer again when the OSD comes back online. However, a client can
 still write a new object to a ``degraded`` placement group if it is ``active``.
@@ -490,7 +490,7 @@ During the backfill operations, you may see one of several states:
 ``backfill_wait`` indicates that a backfill operation is pending, but is not
 underway yet; ``backfill`` indicates that a backfill operation is underway;
 and, ``backfill_too_full`` indicates that a backfill operation was requested,
-but couldn't be completed due to insufficient storage capacity. When a 
+but could not be completed due to insufficient storage capacity. When a 
 placement group cannot be backfilled, it may be considered ``incomplete``.
 
 Ceph provides a number of settings to manage the load spike associated with

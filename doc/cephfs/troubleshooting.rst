@@ -50,7 +50,7 @@ caps which prevent others from using it, either because the client is trying
 to flush out dirty data or because you have encountered a bug in CephFS'
 distributed file lock code (the file "capabilities" ["caps"] system).
 
-If it's a result of a bug in the capabilities code, restarting the MDS
+If it is a result of a bug in the capabilities code, restarting the MDS
 is likely to resolve the problem.
 
 If there are no slow requests reported on the MDS, and it is not reporting
@@ -129,8 +129,8 @@ You can identify you are in this situation if dmesg/kern.log report something li
 This is an area of ongoing work to improve the behavior. Kernels will soon
 be reliably issuing error codes to in-progress IO, although your application(s)
 may not deal with them well. In the longer-term, we hope to allow reconnect
-and reclaim of data in cases where it won't violate POSIX semantics (generally,
-data which hasn't been accessed or modified by other clients).
+and reclaim of data in cases where it will not violate POSIX semantics (generally,
+data which has not been accessed or modified by other clients).
 
 Mounting
 ========

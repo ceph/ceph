@@ -8,7 +8,7 @@ is the first step in deploying a Ceph Storage Cluster. Monitor deployment also
 sets important criteria for the entire cluster, such as the number of replicas
 for pools, the number of placement groups per OSD, the heartbeat intervals,
 whether authentication is required, etc. Most of these values are set by
-default, so it's useful to know about them when setting up your cluster for
+default, so it is useful to know about them when setting up your cluster for
 production.
 
 Following the same configuration as `Installation (Quick)`_, we will set up a
@@ -304,7 +304,7 @@ Once you have your initial monitor(s) running, you should add OSDs. Your cluster
 cannot reach an ``active + clean`` state until you have enough OSDs to handle the
 number of copies of an object (e.g., ``osd pool default size = 2`` requires at
 least two OSDs). After bootstrapping your monitor, your cluster has a default
-CRUSH map; however, the CRUSH map doesn't have any Ceph OSD Daemons mapped to 
+CRUSH map; however, the CRUSH map does not have any Ceph OSD Daemons mapped to 
 a Ceph Node.
 
 

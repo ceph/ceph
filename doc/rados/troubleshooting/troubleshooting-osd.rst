@@ -5,7 +5,7 @@
 Before troubleshooting your OSDs, check your monitors and network first. If
 you execute ``ceph health`` or ``ceph -s`` on the command line and Ceph returns
 a health status, it means that the monitors have a quorum.
-If you don't have a monitor quorum or if there are errors with the monitor
+If you do not have a monitor quorum or if there are errors with the monitor
 status, `address the monitor issues first <../troubleshooting-mon>`_.
 Check your networks to ensure they
 are running properly, because networks may have a significant impact on OSD
@@ -24,12 +24,12 @@ addition to the information you collected while `monitoring your OSDs`_
 Ceph Logs
 ---------
 
-If you haven't changed the default path, you can find Ceph log files at
+If you have not changed the default path, you can find Ceph log files at
 ``/var/log/ceph``::
 
 	ls /var/log/ceph
 
-If you don't get enough log detail, you can change your logging level.  See
+If you do not get enough log detail, you can change your logging level.  See
 `Logging and Debugging`_ for details to ensure that Ceph performs adequately
 under high logging volume.
 
@@ -125,10 +125,10 @@ OSD Not Running
 Under normal circumstances, simply restarting the ``ceph-osd`` daemon will
 allow it to rejoin the cluster and recover.
 
-An OSD Won't Start
-------------------
+An OSD Will Not Start
+---------------------
 
-If you start your cluster and an OSD won't start, check the following:
+If you start your cluster and an OSD will not start, check the following:
 
 - **Configuration File:** If you were not able to get OSDs running from
   a new installation, check your configuration file to ensure it conforms
@@ -202,7 +202,7 @@ unexpected error), it should be reported to the `ceph-devel`_ email list.
 No Free Drive Space
 -------------------
 
-Ceph prevents you from writing to a full OSD so that you don't lose data.
+Ceph prevents you from writing to a full OSD so that you do not lose data.
 In an operational cluster, you should receive a warning when your cluster
 is getting near its full ratio. The ``mon osd full ratio`` defaults to
 ``0.95``, or 95% of capacity before it stops clients from writing data.
@@ -481,7 +481,7 @@ network so that you can better meet the capacity requirements of object
 replication. Another advantage is that you can run a cluster network such that
 it is not connected to the internet, thereby preventing some denial of service
 attacks. When OSDs peer and check heartbeats, they use the cluster (back-end)
-network when it's available. See `Monitor/OSD Interaction`_ for details.
+network when it is available. See `Monitor/OSD Interaction`_ for details.
 
 However, if the cluster (back-end) network fails or develops significant latency
 while the public (front-end) network operates optimally, OSDs currently do not

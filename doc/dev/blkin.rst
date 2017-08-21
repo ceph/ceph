@@ -57,7 +57,7 @@ want to configure with something like::
 Testing Blkin
 =============
 
-It's easy to test Ceph's Blkin tracing. Let's assume you don't have
+It is easy to test Ceph's Blkin tracing. Let us assume you do not have
 Ceph already running, and you compiled Ceph with Blkin support but
 you did't install it. Then launch Ceph with the ``vstart.sh`` script
 in Ceph's src directgory so you can see the possible tracepoints.::
@@ -66,7 +66,7 @@ in Ceph's src directgory so you can see the possible tracepoints.::
   OSD=3 MON=3 RGW=1 ./vstart.sh -n
   lttng list --userspace
 
-You'll see something like the following:::
+You will see something like the following:::
 
   UST events:
   -------------
@@ -118,7 +118,7 @@ Then stop the LTTng session and see what was collected.::
   lttng stop
   lttng view
 
-You'll see something like:::
+You will see something like:::
 
   [13:09:07.755054973] (+?.?????????) scruffy zipkin:timestamp: { cpu_id = 5 }, { trace_name = "Main", service_name = "MOSDOp", port_no = 0, ip = "0.0.0.0", trace_id = 7492589359882233221, span_id = 2694140257089376129, parent_span_id = 0, event = "Message allocated" }
   [13:09:07.755071569] (+0.000016596) scruffy zipkin:keyval: { cpu_id = 5 }, { trace_name = "Main", service_name = "MOSDOp", port_no = 0, ip = "0.0.0.0", trace_id = 7492589359882233221, span_id = 2694140257089376129, parent_span_id = 0, key = "Type", val = "MOSDOp" }

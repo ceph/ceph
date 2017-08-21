@@ -2,7 +2,7 @@
  Network Encoding
 ==================
 
-This describes the encoding used to serialize data.  It doesn't cover specific
+This describes the encoding used to serialize data.  It does not cover specific
 objects/messages but focuses on the base types.
 
 The types are not self documenting in any way.  They can not be decoded unless
@@ -72,7 +72,7 @@ These types are just aliases for primitive types.
 Structures
 ==========
 
-These are the way structures are encoded.  Note that these structures don't
+These are the way structures are encoded.  Note that these structures do not
 actually exist in the source but are the way that different types are encoded.
 
 Optional
@@ -184,7 +184,7 @@ Maps are used to encode ``std::map``, ``std::multimap`` and
 Complex Types
 =============
 
-These aren't hard to find in the source but the common ones are listed here for
+These are not hard to find in the source but the common ones are listed here for
 convenience.
 
 utime_t
