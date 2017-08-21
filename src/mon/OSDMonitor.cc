@@ -7578,8 +7578,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd crush add-bucket") {
     // os crush add-bucket <name> <type>
     string name, typestr;
+    vector<string> argvec;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     cmd_getval(g_ceph_context, cmdmap, "type", typestr);
+    cmd_getval(g_ceph_context, cmdmap, "args", argvec);
+    map<string,string> loc;
+    if (!argvec.empty()) {
+      CrushWrapper::parse_loc_map(argvec, &loc);
+      dout(0) << "will create and move bucket '" << name
+              << "' to location " << loc << dendl;
+    }
 
     if (!_have_pending_crush() &&
 	_get_stable_crush().name_exists(name)) {
@@ -7619,10 +7627,29 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
+    if (!loc.empty()) {
+      if (!newcrush.check_item_loc(g_ceph_context, bucketno, loc,
+          (int *)NULL)) {
+        err = newcrush.move_bucket(g_ceph_context, bucketno, loc);
+        if (err < 0) {
+          ss << "error moving bucket '" << name << "' to location " << loc;
+          goto reply;
+        }
+      } else {
+        ss << "no need to move item id " << bucketno << " name '" << name
+           << "' to location " << loc << " in crush map";
+      }
+    }
+
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-    ss << "added bucket " << name << " type " << typestr
-       << " to crush map";
+    if (loc.empty()) {
+      ss << "added bucket " << name << " type " << typestr
+         << " to crush map";
+    } else {
+      ss << "added bucket " << name << " type " << typestr
+         << " to location " << loc;
+    }
     goto update;
   } else if (prefix == "osd crush rename-bucket") {
     string srcname, dstname;

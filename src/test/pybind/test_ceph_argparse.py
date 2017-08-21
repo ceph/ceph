@@ -613,13 +613,11 @@ class TestOSD(TestArgparse):
     def test_crush_add_bucket(self):
         self.assert_valid_command(['osd', 'crush', 'add-bucket',
                                    'name', 'type'])
+        self.assert_valid_command(['osd', 'crush', 'add-bucket',
+                                   'name', 'type', 'root=foo-root', 'host=foo-host'])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     'add-bucket']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
-                                                    'add-bucket', 'name',
-                                                    'type',
-                                                    'toomany']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     'add-bucket', '^^^',
                                                     'type']))
