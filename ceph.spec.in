@@ -341,6 +341,7 @@ Summary:	Ceph fuse-based client
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
+Requires:       fuse
 %description fuse
 FUSE based client for Ceph distributed network file system
 
