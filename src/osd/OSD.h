@@ -1615,7 +1615,7 @@ private:
    *
    * Multiple worker threads can operate on each shard.
    *
-   * Under normal circumstances, num_running == to_proces.size().  There are
+   * Under normal circumstances, num_running == to_process.size().  There are
    * two times when that is not true: (1) when waiting_for_pg == true and
    * to_process is accumulating requests that are waiting for the pg to be
    * instantiated; in that case they will all get requeued together by
@@ -1732,7 +1732,7 @@ private:
     /// wake any pg waiters after a PG is created/instantiated
     void wake_pg_waiters(spg_t pgid);
 
-    /// prune ops (and possiblye pg_slots) for pgs that shouldn't be here
+    /// prune ops (and possibly pg_slots) for pgs that shouldn't be here
     void prune_pg_waiters(OSDMapRef osdmap, int whoami);
 
     /// clear cached PGRef on pg deletion

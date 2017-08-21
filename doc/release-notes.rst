@@ -55,8 +55,8 @@ Major Changes from Kraken
     - The *ceph-mgr* daemon includes a `REST-based management API
       <../mgr/restful>`_. The API is still experimental and somewhat limited but
       will form the basis for API-based management of Ceph going forward.
-    - *ceph-mgr* also includes a `Prometheus exporter <../mgr/prometheus>`_
-       plugin, which can provide Ceph perfcounters to Prometheus.
+    - *ceph-mgr* also includes a `Prometheus exporter <../mgr/prometheus>`_ plugin,
+      which can provide Ceph perfcounters to Prometheus.
 
   * The overall *scalability* of the cluster has improved. We have
     successfully tested clusters with up to 10,000 OSDs.
