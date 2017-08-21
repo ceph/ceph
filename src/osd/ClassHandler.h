@@ -36,7 +36,7 @@ public:
   };
 
   struct ClassFilter {
-    struct ClassHandler::ClassData *cls;
+    struct ClassHandler::ClassData *cls = nullptr;
     std::string name;
     cls_cxx_filter_factory_t fn;
 
