@@ -898,13 +898,12 @@ class RBD(object):
     def trash_move(self, ioctx, name, delay=0):
         """
         Move an RBD image to the trash.
-
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param name: the name of the image to remove
         :type name: str
         :param delay: time delay in seconds before the image can be deleted
-                      from trash
+        from trash
         :type delay: int
         :raises: :class:`ImageNotFound`
         """
