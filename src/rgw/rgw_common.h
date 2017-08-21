@@ -2079,6 +2079,29 @@ static inline void buf_to_hex(const unsigned char* const buf,
   }
 }
 
+/* A variant of buf_to_hex dedicated to handling ceph::bufferlist which
+ * size can't be deduced at compile-time. This translates into necessity
+ * to use heap as VLA: 1) is a GCC's extension and 2) can be dangerous.
+ * The procedure is optimized to avoid extra linearisation of incoming
+ * buffers. */
+static inline std::string buf_to_hex(const ceph::bufferlist& bl)
+{
+  std::string hexed;
+  hexed.resize(bl.length() * 2);
+
+  size_t consumed = 0;
+  for (const auto& buf : bl.buffers()) {
+    /* NOTE(rzarzynski): yes, we're writing directly to underlying buffer
+     * of std::string. Since C++11 it should be perfectly legal as we got
+     * the guarantee it's continuous in memory. */
+    buf_to_hex(reinterpret_cast<const unsigned char*>(buf.c_str()),
+               buf.length(), &hexed.front() + consumed * 2);
+    consumed += buf.length();
+  }
+
+  return hexed;
+}
+
 template<size_t N> static inline std::array<char, N * 2 + 1>
 buf_to_hex(const std::array<unsigned char, N>& buf)
 {
