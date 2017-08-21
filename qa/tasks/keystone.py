@@ -272,11 +272,15 @@ def run_section_cmds(ctx, cclient, section_cmd, special,
             [ 'openstack' ] + section_cmd.split() +
             dict_to_args(special, auth_section + section_item.items()))
 
-def create_endpoint(ctx, cclient, service, url):
+def create_endpoint(ctx, cclient, service, url, adminurl=None):
     endpoint_section = {
         'service': service,
         'publicurl': url,
     }
+    if adminurl:
+        endpoint_section.update( {
+            'adminurl': adminurl,
+            } )
     return run_section_cmds(ctx, cclient, 'endpoint create', 'service',
                             [ endpoint_section ])
 
@@ -300,7 +304,10 @@ def fill_keystone(ctx, config):
         public_host, public_port = ctx.keystone.public_endpoints[cclient]
         url = 'http://{host}:{port}/v2.0'.format(host=public_host,
                                                  port=public_port)
-        create_endpoint(ctx, cclient, 'keystone', url)
+        admin_host, admin_port = ctx.keystone.admin_endpoints[cclient]
+        admin_url = 'http://{host}:{port}/v2.0'.format(host=admin_host,
+                                                       port=admin_port)
+        create_endpoint(ctx, cclient, 'keystone', url, admin_url)
         # for the deferred endpoint creation; currently it's used in rgw.py
         ctx.keystone.create_endpoint = create_endpoint
 
@@ -362,7 +369,7 @@ def task(ctx, config):
         or isinstance(config, dict), \
         "task keystone only supports a list or dictionary for configuration"
 
-    if not ctx.tox:
+    if not hasattr(ctx, 'tox'):
         raise ConfigError('keystone must run after the tox task')
 
     all_clients = ['client.{id}'.format(id=id_)

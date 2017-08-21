@@ -190,6 +190,16 @@ def configure(ctx, config):
         else:
             s3tests_conf['DEFAULT']['host'] = 'localhost'
 
+        if properties is not None and 'kms_key' in properties:
+            host = None
+            if not hasattr(ctx, 'barbican'):
+                raise ConfigError('s3tests must run after the barbican task')
+            if not ( properties['kms_key'] in ctx.barbican.keys ):
+                raise ConfigError('Key '+properties['kms_key']+' not defined')
+
+            key = ctx.barbican.keys[properties['kms_key']]
+            s3tests_conf['DEFAULT']['kms_keyid'] = key['id']
+
         if properties is not None and 'slow_backend' in properties:
 	    s3tests_conf['fixtures']['slow backend'] = properties['slow_backend']
 
