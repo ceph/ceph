@@ -35,7 +35,7 @@ Linux)
             fi
         fi
         ;;
-    RedHatEnterpriseWorkstation|RedHatEnterpriseServer)
+    RedHatEnterpriseWorkstation|RedHatEnterpriseServer|CentOS)
         for package in python-pip python-virtualenv mariadb-devel libev-devel libvirt-devel libffi-devel; do
 	    if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
 		missing="${missing:+$missing }$package"
