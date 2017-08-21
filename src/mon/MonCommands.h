@@ -524,8 +524,10 @@ COMMAND("osd crush set name=prior_version,type=CephInt,req=false", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush add-bucket " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
-	"name=type,type=CephString", \
-	"add no-parent (probably root) crush bucket <name> of type <type>", \
+        "name=type,type=CephString " \
+        "name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=],req=false", \
+	"add no-parent (probably root) crush bucket <name> of type <type> " \
+        "to location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rename-bucket " \
 	"name=srcname,type=CephString,goodchars=[A-Za-z0-9-_.] " \
