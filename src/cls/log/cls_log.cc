@@ -200,9 +200,7 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
     }
   }
 
-  if (ret.truncated) {
-    ret.marker = marker;
-  }
+  ret.marker = marker;
 
   ::encode(ret, *out);
 
