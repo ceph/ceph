@@ -279,6 +279,7 @@ class CephAnsible(Task):
         if re.search(r'all hosts have already failed', out.getvalue()):
             log.error("Failed during ceph-ansible execution")
             raise CephAnsibleError("Failed during ceph-ansible execution")
+        self._create_rbd_pool()
 
     def run_playbook(self):
         # setup ansible on first mon node
@@ -356,6 +357,7 @@ class CephAnsible(Task):
             self.wait_for_ceph_health()
         # for the teuthology workunits to work we
         # need to fix the permission on keyring to be readable by them
+        self._create_rbd_pool()
         self.fix_keyring_permission()
 
     def _copy_and_print_config(self):
@@ -380,6 +382,23 @@ class CephAnsible(Task):
             ceph_installer.run(args=('cat', 'ceph-ansible/inven.yml'))
             ceph_installer.run(args=('cat', 'ceph-ansible/site.yml'))
             ceph_installer.run(args=('cat', 'ceph-ansible/group_vars/all'))
+
+    def _create_rbd_pool(self):
+        mon_node = self.ceph_installer
+        cluster_name = 'ceph'
+        log.info('Creating RBD pool')
+        mon_node.run(
+            args=[
+                'sudo', 'ceph', '--cluster', cluster_name,
+                'osd', 'pool', 'create', 'rbd', '128', '128'],
+            check_status=False)
+        mon_node.run(
+            args=[
+                'sudo', 'ceph', '--cluster', cluster_name,
+                'osd', 'pool', 'application', 'enable',
+                'rbd', 'rbd', '--yes-i-really-mean-it'
+                ],
+            check_status=False)
 
     def fix_keyring_permission(self):
         clients_only = lambda role: role.startswith('client')
