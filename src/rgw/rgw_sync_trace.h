@@ -4,7 +4,7 @@
 #include <atomic>
 
 #include "common/Mutex.h"
-#include "common/RWLock.h"
+#include "common/shunique_lock.h"
 #include "common/admin_socket.h"
 
 #include <set>
@@ -105,7 +105,8 @@ class RGWSyncTraceManager : public AdminSocketHook {
   std::map<uint64_t, RGWSyncTraceNodeRef> nodes;
   boost::circular_buffer<RGWSyncTraceNodeRef> complete_nodes;
 
-  RWLock lock{"RGWSyncTraceManager::lock"};
+  mutable boost::shared_mutex lock;
+  using shunique_lock = ceph::shunique_lock<decltype(lock)>;
 
   std::atomic<uint64_t> count = { 0 };
 

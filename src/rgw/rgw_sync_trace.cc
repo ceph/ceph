@@ -81,7 +81,7 @@ int RGWSyncTraceServiceMapThread::process()
 
 RGWSyncTraceNodeRef RGWSyncTraceManager::add_node(RGWSyncTraceNode *node)
 {
-  RWLock::WLocker wl(lock);
+  shunique_lock wl(lock, ceph::acquire_unique);
   RGWSyncTraceNodeRef& ref = nodes[node->handle];
   ref.reset(node);
   // return a separate shared_ptr that calls finish() on the node instead of
@@ -208,7 +208,7 @@ bool RGWSyncTraceManager::call(std::string command, cmdmap_t& cmdmap, std::strin
     search = boost::get<string>(si->second);
   }
 
-  RWLock::RLocker rl(lock);
+  shunique_lock rl(lock, ceph::acquire_shared);
 
   stringstream ss;
   JSONFormatter f(true);
@@ -258,7 +258,7 @@ bool RGWSyncTraceManager::call(std::string command, cmdmap_t& cmdmap, std::strin
 
 void RGWSyncTraceManager::finish_node(RGWSyncTraceNode *node)
 {
-  RWLock::WLocker wl(lock);
+  shunique_lock wl(lock, ceph::acquire_unique);
   if (!node) {
     return;
   }
