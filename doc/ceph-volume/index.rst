@@ -26,5 +26,6 @@ technologies, including plain disks.
    lvm/index
    lvm/activate
    lvm/prepare
+   lvm/create
    lvm/scan
    lvm/systemd
