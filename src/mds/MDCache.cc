@@ -8044,7 +8044,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
       if (curdir->is_complete() ||
 	  (snapid == CEPH_NOSNAP &&
 	   curdir->has_bloom() &&
-	   !curdir->is_in_bloom(path[depth]))){
+	   !curdir->is_in_bloom(path[depth]))) {
         // file not found
 	if (pdnvec) {
 	  // instantiate a null dn?
@@ -8090,7 +8090,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
       mds_authority_t dauth = curdir->authority();
 
       if (forward &&
-	  snapid && mdr && mdr->client_request &&
+	  mdr && mdr->client_request &&
 	  (int)depth < mdr->client_request->get_num_fwd()) {
 	dout(7) << "traverse: snap " << snapid << " and depth " << depth
 		<< " < fwd " << mdr->client_request->get_num_fwd()
@@ -9912,7 +9912,9 @@ void MDCache::handle_discover(MDiscover *dis)
     // incomplete dir?
     if (!dn) {
       if (!curdir->is_complete() &&
-	  (!curdir->has_bloom() || curdir->is_in_bloom(dis->get_dentry(i)))) {
+	  !(snapid == CEPH_NOSNAP &&
+	    curdir->has_bloom() &&
+	    !curdir->is_in_bloom(dis->get_dentry(i)))) {
 	// readdir
 	dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << dendl;
 	if (reply->is_empty()) {
@@ -9928,10 +9930,19 @@ void MDCache::handle_discover(MDiscover *dis)
 	}
       }
 
+      if (snapid != CEPH_NOSNAP && !reply->is_empty()) {
+	dout(7) << "dentry " << dis->get_dentry(i) << " snap " << snapid
+		<< " dne, non-empty reply, stopping" << dendl;
+	break;
+      }
+
       // send null dentry
       dout(7) << "dentry " << dis->get_dentry(i) << " dne, returning null in "
 	      << *curdir << dendl;
-      dn = curdir->add_null_dentry(dis->get_dentry(i));
+      if (snapid == CEPH_NOSNAP)
+	dn = curdir->add_null_dentry(dis->get_dentry(i));
+      else
+	dn = curdir->add_null_dentry(dis->get_dentry(i), snapid, snapid);
     }
     assert(dn);
 
