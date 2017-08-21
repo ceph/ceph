@@ -9843,8 +9843,8 @@ int OSD::init_op_flags(OpRequestRef& op)
     if ((iter->op.op == CEPH_OSD_OP_WATCH &&
 	 iter->op.watch.op == CEPH_OSD_WATCH_OP_PING)) {
       /* This a bit odd.  PING isn't actually a write.  It can't
-       * result in an update to the object_info.  PINGs also aren'ty
-       * resent, so there's no reason to write out a log entry
+       * result in an update to the object_info.  PINGs also aren't
+       * resent, so there's no reason to write out a log entry.
        *
        * However, we pipeline them behind writes, so let's force
        * the write_ordered flag.
@@ -10265,7 +10265,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     OSDMapRef osdmap = sdata->waiting_for_pg_osdmap;
     if (osdmap->is_up_acting_osd_shard(item.first, osd->whoami)) {
       dout(20) << __func__ << " " << item.first
-	       << " no pg, should exist, will wait" << " on " << *qi << dendl;
+	       << " no pg, should exist, will wait on " << *qi << dendl;
       slot.to_process.push_front(*qi);
       slot.waiting_for_pg = true;
     } else if (qi->get_map_epoch() > osdmap->get_epoch()) {
