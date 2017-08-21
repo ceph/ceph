@@ -2899,22 +2899,19 @@ int RGWRunBucketSyncCoroutine::operate()
     tn->log(10, "took lease");
     yield call(new RGWReadBucketSyncStatusCoroutine(sync_env, bs, &sync_status));
     if (retcode < 0 && retcode != -ENOENT) {
-      tn->log(0, SSTR("ERROR: failed to read sync status for bucket="
-          << bucket_shard_str{bs}));
+      tn->log(0, "ERROR: failed to read sync status for bucket");
       lease_cr->go_down();
       drain_all();
       return set_cr_error(retcode);
     }
 
-    tn->log(20, SSTR("sync status for bucket "
-        << bucket_shard_str{bs} << ": " << sync_status.state));
+    tn->log(20, SSTR("sync status for bucket: " << sync_status.state));
 
     yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, bs.bucket, &bucket_info));
     if (retcode == -ENOENT) {
       /* bucket instance info has not been synced in yet, fetch it now */
       yield {
-        tn->log(10, SSTR("no local info for bucket "
-            << bucket_str{bs.bucket} << ": fetching metadata"));
+        tn->log(10, SSTR("no local info for bucket:" << ": fetching metadata"));
         string raw_key = string("bucket.instance:") + bs.bucket.get_key();
 
         meta_sync_env.init(cct, sync_env->store, sync_env->store->rest_master_conn, sync_env->async_rados,
@@ -2945,8 +2942,7 @@ int RGWRunBucketSyncCoroutine::operate()
     if (sync_status.state == rgw_bucket_shard_sync_info::StateInit) {
       yield call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs, sync_status));
       if (retcode < 0) {
-        tn->log(0, SSTR("ERROR: init sync on " << bucket_shard_str{bs}
-            << " failed, retcode=" << retcode));
+        tn->log(0, SSTR("ERROR: init sync on bucket failed, retcode=" << retcode));
         lease_cr->go_down();
         drain_all();
         return set_cr_error(retcode);
@@ -2958,8 +2954,7 @@ int RGWRunBucketSyncCoroutine::operate()
                                               status_oid, lease_cr.get(),
                                               sync_status.full_marker, tn));
       if (retcode < 0) {
-        tn->log(5, SSTR("full sync on " << bucket_shard_str{bs}
-            << " failed, retcode=" << retcode));
+        tn->log(5, SSTR("full sync on bucket failed, retcode=" << retcode));
         lease_cr->go_down();
         drain_all();
         return set_cr_error(retcode);
@@ -2972,8 +2967,7 @@ int RGWRunBucketSyncCoroutine::operate()
                                                      status_oid, lease_cr.get(),
                                                      sync_status.inc_marker, tn));
       if (retcode < 0) {
-        tn->log(5, SSTR("incremental sync on " << bucket_shard_str{bs}
-            << " failed, retcode=" << retcode));
+        tn->log(5, SSTR("incremental sync on bucket failed, retcode=" << retcode));
         lease_cr->go_down();
         drain_all();
         return set_cr_error(retcode);
