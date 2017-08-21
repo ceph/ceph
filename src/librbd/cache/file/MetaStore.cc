@@ -20,7 +20,17 @@ namespace file {
 template <typename I>
 MetaStore<I>::MetaStore(I &image_ctx, uint64_t block_count)
   : m_image_ctx(image_ctx), m_block_count(block_count),
-    m_meta_file(image_ctx.cct, *image_ctx.op_work_queue, image_ctx.id + ".meta"), init_m_loc_map(false) {
+    m_meta_file(image_ctx.cct, *image_ctx.op_work_queue, image_ctx.id + ".meta"){
+}
+
+template <typename I>
+bool MetaStore<I>::check_exists() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+  if (!m_meta_file.try_open()) {
+    return false;
+  }
+  return true;
 }
 
 template <typename I>
@@ -29,10 +39,6 @@ void MetaStore<I>::init(Context *on_finish) {
   ldout(cct, 20) << dendl;
   Context* ctx;
 
-  // TODO
-  if (!m_meta_file.try_open()) {
-    init_m_loc_map = true;
-  }
   ctx = new FunctionContext(
     [this, on_finish](int r) {
       if (r < 0) {
@@ -65,19 +71,17 @@ void MetaStore<I>::shut_down(Context *on_finish) {
 template <typename I>
 void MetaStore<I>::load(uint32_t loc) {
   uint32_t tmp;
-  if (init_m_loc_map) {
-    for(uint64_t block = 0; block < m_block_count; block++) {
-      switch(loc) {
-        case NOT_IN_CACHE:
-          m_loc_map[block] = (loc << 30);
-          break;
-        case LOCATE_IN_BASE_CACHE:
-          tmp = loc << 30;
-          m_loc_map[block] = tmp | block;
-          break;
-        default:
-          assert(0);
-      }
+  for(uint64_t block = 0; block < m_block_count; block++) {
+    switch(loc) {
+      case NOT_IN_CACHE:
+        m_loc_map[block] = (loc << 30);
+        break;
+      case LOCATE_IN_BASE_CACHE:
+        tmp = loc << 30;
+        m_loc_map[block] = tmp;
+        break;
+      default:
+        assert(0);
     }
   }
 }

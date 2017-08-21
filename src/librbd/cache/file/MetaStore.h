@@ -22,6 +22,7 @@ class MetaStore {
 public:
   MetaStore(ImageCtxT &image_ctx, uint64_t block_count);
 
+  bool check_exists();
   void init(Context *on_finish);
   void remove(Context *on_finish);
   void shut_down(Context *on_finish);
@@ -35,8 +36,6 @@ private:
   uint32_t *m_loc_map;
   //mutable Mutex m_lock;
   std::mutex m_lock;
-  bool init_m_loc_map;
-
   os::CacheStore::SyncFile m_meta_file;
 
 };

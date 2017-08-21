@@ -13,6 +13,11 @@
 #include <functional>
 #include <list>
 
+#define get_min(a,b) \
+  ({ __typeof__ (a) _a = (a); \
+     __typeof__ (b) _b = (b); \
+     _a < _b ? _a : _b; })
+
 namespace librbd {
 
 struct ImageCtx;
@@ -58,14 +63,16 @@ public:
 
   void invalidate(Context *on_finish) override;
   void flush(Context *on_finish) override;
-  void load_snap_as_base(Context *on_finish);
-  void load_meta_to_policy();
+  /*void load_snap_as_base(Context *on_finish);
+  void load_meta_to_policy();*/
   void set_parent();
 
   ImageWriteback<ImageCtxT> m_image_writeback;
   ImageWriteback<ImageCtxT> m_parent_snap_image_writeback;
   file::Policy *m_policy = nullptr;
+  file::Policy *m_parent_policy = nullptr;
   file::MetaStore<ImageCtx> *m_meta_store = nullptr;
+  file::MetaStore<ImageCtx> *m_parent_meta_store = nullptr;
   file::ImageStore<ImageCtx> *m_image_store = nullptr;
   file::ImageStore<ImageCtx> *m_parent_image_store = nullptr;
   ContextWQ* pcache_op_work_queue;
@@ -89,6 +96,7 @@ private:
   void map_block(BlockGuard::BlockIO &&block_io);
   void invalidate(Extents&& image_extents, Context *on_finish);
   bool if_cloned_volume;
+  uint64_t p_cache_size;
 
 };
 

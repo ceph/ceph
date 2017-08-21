@@ -36,7 +36,7 @@ private:
   LRUList m_clean_lru;
 
 public:
-  StupidPolicy(ImageCtxT &image_ctx);
+  StupidPolicy(ImageCtxT &image_ctx, uint64_t ssd_cache_size);
 
   virtual void set_block_count(uint64_t block_count);
 

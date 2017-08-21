@@ -15,13 +15,13 @@ namespace cache {
 namespace file {
 
 template <typename I>
-StupidPolicy<I>::StupidPolicy(I &image_ctx)
+StupidPolicy<I>::StupidPolicy(I &image_ctx, uint64_t ssd_cache_size)
   : m_image_ctx(image_ctx),
     m_lock("librbd::cache::file::StupidPolicy::m_lock") {
 
   set_block_count(offset_to_block(image_ctx.size));
   // TODO support resizing of entries based on number of provisioned blocks
-  m_entries.resize(offset_to_block(image_ctx.ssd_cache_size < m_image_ctx.size?image_ctx.ssd_cache_size:m_image_ctx.size)); // 1GB of storage
+  m_entries.resize(offset_to_block(ssd_cache_size)); // 1GB of storage
   uint64_t block_id = 0;
   for (auto &entry : m_entries) {
     entry.on_disk_id = block_id++;
@@ -172,7 +172,8 @@ uint32_t StupidPolicy<I>::get_loc(uint64_t block) {
   assert (block_info != nullptr);
   switch( block_info->status ) {
     case LOCATE_IN_BASE_CACHE:
-      ret_data = ( block | (block_info->status << 30) ) ; 
+      //ret_data = ( block | (block_info->status << 30) ) ; 
+      ret_data = (block_info->status << 30); 
       return ret_data;
     case LOCATE_IN_CACHE:
       assert(block_info->entry->on_disk_id <= MAX_BLOCK_ID);
@@ -205,8 +206,6 @@ void StupidPolicy<I>::set_loc(uint32_t *src) {
         block_it->second->status = LOCATE_IN_CACHE;
         break;
       case LOCATE_IN_BASE_CACHE:
-        on_disk_id = (src[block_id] & MAX_BLOCK_ID);
-        assert(on_disk_id == block_id);
         block_it->second->status = LOCATE_IN_BASE_CACHE;
         break;
       case NOT_IN_CACHE:
