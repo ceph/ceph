@@ -277,6 +277,7 @@ public:
 
   int verify_permission() override { return 0; }
   void execute() override;
+  void send_response() override;
   const string name() override { return "swift_auth_get"; }
 };
 

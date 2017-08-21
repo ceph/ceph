@@ -580,7 +580,7 @@ SignedTokenEngine::authenticate(const std::string& token,
 
 void RGW_SWIFT_Auth_Get::execute()
 {
-  int ret = -EPERM;
+  op_ret = -EPERM;
 
   const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
   const char *user = s->info.env->get("HTTP_X_AUTH_USER");
@@ -628,8 +628,8 @@ void RGW_SWIFT_Auth_Get::execute()
     const char *host = s->info.env->get("HTTP_HOST");
     if (!host) {
       dout(0) << "NOTICE: server is misconfigured, missing rgw_swift_url_prefix or rgw_swift_url, HTTP_HOST is not set" << dendl;
-      ret = -EINVAL;
-      goto done;
+      op_ret = -EINVAL;
+      return;
     }
     swift_url = protocol;
     swift_url.append("://");
@@ -640,28 +640,28 @@ void RGW_SWIFT_Auth_Get::execute()
     }
   }
 
-  if (!key || !user)
-    goto done;
+  if (!key || !user) {
+    return;
+  }
 
   user_str = user;
-
-  if ((ret = rgw_get_user_info_by_swift(store, user_str, info)) < 0)
+  if ((op_ret = rgw_get_user_info_by_swift(store, user_str, info)) < 0)
   {
-    ret = -EACCES;
-    goto done;
+    op_ret = -EACCES;
+    return;
   }
 
   siter = info.swift_keys.find(user_str);
   if (siter == info.swift_keys.end()) {
-    ret = -EPERM;
-    goto done;
+    op_ret = -EPERM;
+    return;
   }
   swift_key = &siter->second;
 
   if (swift_key->key.compare(key) != 0) {
     dout(0) << "NOTICE: RGW_SWIFT_Auth_Get::execute(): bad swift key" << dendl;
-    ret = -EPERM;
-    goto done;
+    op_ret = -EPERM;
+    return;
   }
 
   if (!g_conf->rgw_swift_tenant_name.empty()) {
@@ -676,8 +676,10 @@ void RGW_SWIFT_Auth_Get::execute()
               tenant_path);
 
   using rgw::auth::swift::encode_token;
-  if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
-    goto done;
+  op_ret = encode_token(s->cct, swift_key->id, swift_key->key, bl);
+  if (op_ret < 0) {
+    return;
+  }
 
   {
     static constexpr size_t PREFIX_LEN = sizeof("AUTH_rgwtk") - 1;
@@ -691,10 +693,12 @@ void RGW_SWIFT_Auth_Get::execute()
     dump_header(s, "X-Auth-Token", token_val);
   }
 
-  ret = STATUS_NO_CONTENT;
+  op_ret = STATUS_NO_CONTENT;
+}
 
-done:
-  set_req_state_err(s, ret);
+void RGW_SWIFT_Auth_Get::send_response()
+{
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 }
