@@ -189,18 +189,6 @@ static RGWRESTMgr *rest_filter(RGWRados *store, int dialect, RGWRESTMgr *orig)
   return sync_module->get_rest_filter(dialect, orig);
 }
 
-RGWRealmReloader *preloader = NULL;
-
-static void reloader_handler(int signum)
-{
-  if (preloader) {
-    bufferlist bl;
-    bufferlist::iterator p = bl.begin();
-    preloader->handle_notify(RGWRealmNotify::Reload, p);
-  }
-  sighup_handler(signum);
-}
-
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
@@ -465,7 +453,7 @@ int main(int argc, const char **argv)
   }
 
   init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, reloader_handler);
+  register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler(SIGTERM, handle_sigterm);
   register_async_signal_handler(SIGINT, handle_sigterm);
   register_async_signal_handler(SIGUSR1, handle_sigterm);
@@ -561,8 +549,6 @@ int main(int argc, const char **argv)
   RGWFrontendPauser pauser(fes, &pusher);
   RGWRealmReloader reloader(store, service_map_meta, &pauser);
 
-  preloader = &reloader;
-
   RGWRealmWatcher realm_watcher(g_ceph_context, store->realm);
   realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
@@ -596,7 +582,7 @@ int main(int argc, const char **argv)
     delete fec;
   }
 
-  unregister_async_signal_handler(SIGHUP, reloader_handler);
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGTERM, handle_sigterm);
   unregister_async_signal_handler(SIGINT, handle_sigterm);
   unregister_async_signal_handler(SIGUSR1, handle_sigterm);
