@@ -210,7 +210,7 @@
             rivets.bind($("#content"), content_data);
 
             var refresh = function() {
-                $.get("/health_data", function(data) {
+                $.get("{{ url_prefix }}/health_data", function(data) {
                     _.extend(content_data, data);
                     draw_usage_charts();
                     setTimeout(refresh, 5000);
