@@ -2362,17 +2362,18 @@ class Lockbox(object):
         cluster = self.args.cluster
         bootstrap = self.args.prepare_key_template.format(cluster=cluster,
                                                           statedir=STATEDIR)
-        command_check_call(
+        command_with_stdin(
             [
                 'ceph',
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
+                '-i', '-',
                 'config-key',
                 'put',
                 'dm-crypt/osd/' + self.args.osd_uuid + '/luks',
-                base64_key,
             ],
+            base64_key
         )
         keyring, stderr, ret = command(
             [
