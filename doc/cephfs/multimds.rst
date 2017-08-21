@@ -40,7 +40,7 @@ result of commands.
 
     # fsmap e5: 1/1/1 up {0=a=up:active}, 2 up:standby
 
-    ceph fs set max_mds 2
+    ceph fs set <fs_name> max_mds 2
 
     # fsmap e8: 2/2/2 up {0=a=up:active,1=c=up:creating}, 1 up:standby
     # fsmap e9: 2/2/2 up {0=a=up:active,1=c=up:active}, 1 up:standby
@@ -74,7 +74,7 @@ having just a single active MDS:
 ::
     
     # fsmap e9: 2/2/2 up {0=a=up:active,1=c=up:active}, 1 up:standby
-    ceph fs set max_mds 1
+    ceph fs set <fs_name> max_mds 1
     # fsmap e10: 2/2/1 up {0=a=up:active,1=c=up:active}, 1 up:standby
 
 Note that we still have two active MDSs: the ranks still exist even though
