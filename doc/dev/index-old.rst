@@ -39,3 +39,4 @@ in the body of the message.
    osd_internals/index*
    mds_internals/index*
    radosgw/index*
+   ceph-volume/index*
