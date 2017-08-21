@@ -1,0 +1,6 @@
+tasks:
+- ssh-keys: null
+- ceph-ansible: null
+- nfs_ganesha_rgw:
+    test-name: test_create_rgw_new_user_io
+    nfs_version: 3
