@@ -572,23 +572,12 @@ SignedTokenEngine::authenticate(const std::string& token,
 } /* namespace rgw */
 
 
-void RGW_SWIFT_Auth_Get::execute()
+static std::string get_xstorage_location(const req_state* const s,
+                                         const RGWUserInfo& info)
 {
-  op_ret = -EPERM;
-
-  const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
-  const char *user = s->info.env->get("HTTP_X_AUTH_USER");
-
-  s->prot_flags |= RGW_REST_SWIFT;
-
-  string user_str;
-  RGWUserInfo info;
-  RGWAccessKey *swift_key;
-  map<string, RGWAccessKey>::iterator siter;
-
-  string swift_url = g_conf->rgw_swift_url;
-  string swift_prefix = g_conf->rgw_swift_url_prefix;
-  string tenant_path;
+  std::string swift_url = g_conf->rgw_swift_url;
+  std::string swift_prefix = g_conf->rgw_swift_url_prefix;
+  std::string tenant_path;
 
   /*
    * We did not allow an empty Swift prefix before, but we want it now.
@@ -621,8 +610,7 @@ void RGW_SWIFT_Auth_Get::execute()
     const char *host = s->info.env->get("HTTP_HOST");
     if (!host) {
       dout(0) << "NOTICE: server is misconfigured, missing rgw_swift_url_prefix or rgw_swift_url, HTTP_HOST is not set" << dendl;
-      op_ret = -EINVAL;
-      return;
+      throw -EINVAL;
     }
     swift_url = protocol;
     swift_url.append("://");
@@ -632,6 +620,31 @@ void RGW_SWIFT_Auth_Get::execute()
       swift_url.append(server_port);
     }
   }
+
+  if (!g_conf->rgw_swift_tenant_name.empty()) {
+    tenant_path = "/AUTH_";
+    tenant_path.append(g_conf->rgw_swift_tenant_name);
+  } else if (g_conf->rgw_swift_account_in_url) {
+    tenant_path = "/AUTH_";
+    tenant_path.append(info.user_id.to_str());
+  }
+
+  return swift_url + swift_prefix + "/v1" + tenant_path;
+}
+
+void RGW_SWIFT_Auth_Get::execute()
+{
+  int op_ret = -EPERM;
+
+  const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
+  const char *user = s->info.env->get("HTTP_X_AUTH_USER");
+
+  s->prot_flags |= RGW_REST_SWIFT;
+
+  string user_str;
+  RGWUserInfo info;
+  RGWAccessKey *swift_key;
+  map<string, RGWAccessKey>::iterator siter;
 
   if (!key || !user) {
     return;
@@ -657,17 +670,6 @@ void RGW_SWIFT_Auth_Get::execute()
     return;
   }
 
-  if (!g_conf->rgw_swift_tenant_name.empty()) {
-    tenant_path = "/AUTH_";
-    tenant_path.append(g_conf->rgw_swift_tenant_name);
-  } else if (g_conf->rgw_swift_account_in_url) {
-    tenant_path = "/AUTH_";
-    tenant_path.append(info.user_id.to_str());
-  }
-
-  dump_header(s, "X-Storage-Url", swift_url + swift_prefix + "/v1" +
-              tenant_path);
-
   ceph::bufferlist bl;
   try {
     using rgw::auth::swift::encode_token;
@@ -677,23 +679,23 @@ void RGW_SWIFT_Auth_Get::execute()
     return;
   }
 
-  {
-    static constexpr size_t PREFIX_LEN = sizeof("AUTH_rgwtk") - 1;
-    char token_val[PREFIX_LEN + bl.length() * 2 + 1];
-
-    snprintf(token_val, PREFIX_LEN + 1, "AUTH_rgwtk");
-    buf_to_hex((const unsigned char *)bl.c_str(), bl.length(),
-	       token_val + PREFIX_LEN);
-
-    dump_header(s, "X-Storage-Token", token_val);
-    dump_header(s, "X-Auth-Token", token_val);
+  /* Let's construct the value of token we're going to sent to client. */
+  const auto token_val = string_cat_reserve("AUTH_rgwtk", buf_to_hex(bl));
+  dump_header(s, "X-Storage-Token", token_val);
+  dump_header(s, "X-Auth-Token", token_val);
+  try {
+    dump_header(s, "X-Storage-Url", get_xstorage_location(s, info));
+  } catch (const int err) {
+    op_ret = err;
   }
-
-  op_ret = STATUS_NO_CONTENT;
 }
 
 void RGW_SWIFT_Auth_Get::send_response()
 {
+  if (op_ret == 0) {
+    op_ret = STATUS_NO_CONTENT;
+  }
+
   set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
