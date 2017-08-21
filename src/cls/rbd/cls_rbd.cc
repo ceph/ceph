@@ -2799,6 +2799,7 @@ int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
   int rc;
   uint64_t new_limit;
   bufferlist bl;
+  size_t snap_count = 0;
 
   try {
     bufferlist::iterator iter = in->begin();
@@ -2810,8 +2811,49 @@ int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
   if (new_limit == UINT64_MAX) {
     CLS_LOG(20, "remove snapshot limit\n");
     rc = cls_cxx_map_remove_key(hctx, "snap_limit");
+    return rc;
+  }
+
+  //try to read header as v1 format
+  rc = snap_read_header(hctx, bl);
+
+  // error when reading header
+  if (rc < 0 && rc != -EINVAL) {
+    return rc;
+  } else if (rc >= 0) {
+    // success, the image is v1 format
+    struct rbd_obj_header_ondisk *header;
+    header = (struct rbd_obj_header_ondisk *)bl.c_str();
+    snap_count = header->snap_count;
+  } else {
+    // else, the image is v2 format
+    int max_read = RBD_MAX_KEYS_READ;
+    string last_read = RBD_SNAP_KEY_PREFIX;
+    bool more;
+
+    do {
+      set<string> keys;
+      rc = cls_cxx_map_get_keys(hctx, last_read, max_read, &keys, &more);
+      if (rc < 0) {
+        CLS_ERR("error retrieving snapshots: %s", cpp_strerror(rc).c_str());
+        return rc;
+      }
+      for (auto& key : keys) {
+        if (key.find(RBD_SNAP_KEY_PREFIX) != 0)
+          break;
+        snap_count++;
+      }
+      if (!keys.empty())
+        last_read = *(keys.rbegin());
+    } while (more);
+  }
+
+  if (new_limit < snap_count) {
+    rc = -ERANGE;
+    CLS_LOG(10, "snapshot limit is less than the number of snapshots.\n");
   } else {
     CLS_LOG(20, "set snapshot limit to %" PRIu64 "\n", new_limit);
+    bl.clear();
     ::encode(new_limit, bl);
     rc = cls_cxx_map_set_val(hctx, "snap_limit", &bl);
   }
@@ -5305,7 +5347,7 @@ CLS_INIT(rbd)
 			  CLS_METHOD_RD,
 			  snapshot_get_limit, &h_snapshot_get_limit);
   cls_register_cxx_method(h_class, "snapshot_set_limit",
-			  CLS_METHOD_WR,
+			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  snapshot_set_limit, &h_snapshot_set_limit);
 
   /* methods for the rbd_children object */

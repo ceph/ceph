@@ -772,6 +772,8 @@ void Replay<I>::handle_event(const journal::SnapLimitEvent &event,
 							   event,
 							   on_op_complete));
 
+  op_event->ignore_error_codes = {-ERANGE};
+
   on_ready->complete(0);
 }
 
