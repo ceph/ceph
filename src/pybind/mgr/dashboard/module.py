@@ -62,6 +62,10 @@ def recurse_refs(root, path):
 
     log.info("%s %d (%s)" % (path, sys.getrefcount(root), root.__class__))
 
+def get_prefixed_url(url):
+    return global_instance().url_prefix + url
+
+
 
 class StandbyModule(MgrStandbyModule):
     def serve(self):
@@ -142,6 +146,9 @@ class Module(MgrModule):
         # A short history of pool df stats
         self.pool_stats = defaultdict(lambda: defaultdict(
             lambda: collections.deque(maxlen=10)))
+
+        # A prefix for all URLs to use the dashboard with a reverse http proxy
+        self.url_prefix = ''
 
     @property
     def rados(self):
@@ -418,7 +425,7 @@ class Module(MgrModule):
                 "id": fs_id,
                 "name": mdsmap['fs_name'],
                 "client_count": client_count,
-                "clients_url": "/clients/{0}/".format(fs_id),
+                "clients_url": get_prefixed_url("/clients/{0}/".format(fs_id)),
                 "ranks": rank_table,
                 "pools": pools_table
             },
@@ -484,7 +491,7 @@ class Module(MgrModule):
                 rbd_pools = sorted([
                     {
                         "name": name,
-                        "url": "/rbd_pool/{0}/".format(name)
+                        "url": get_prefixed_url("/rbd_pool/{0}/".format(name))
                     }
                     for name in data
                 ], key=lambda k: k['name'])
@@ -499,7 +506,7 @@ class Module(MgrModule):
                     {
                         "id": f['id'],
                         "name": f['mdsmap']['fs_name'],
-                        "url": "/filesystem/{0}/".format(f['id'])
+                        "url": get_prefixed_url("/filesystem/{0}/".format(f['id']))
                     }
                     for f in fsmap.data['filesystems']
                 ]
@@ -523,6 +530,7 @@ class Module(MgrModule):
                 }
 
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
                     path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
@@ -586,11 +594,12 @@ class Module(MgrModule):
                     "clients": clients,
                     "fs_name": fs_name,
                     "fscid": fscid,
-                    "fs_url": "/filesystem/" + fscid_str + "/"
+                    "fs_url": get_prefixed_url("/filesystem/" + fscid_str + "/")
                 }
 
                 template = env.get_template("clients.html")
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
                     path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
@@ -635,6 +644,7 @@ class Module(MgrModule):
                 }
 
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
                     path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
@@ -661,6 +671,7 @@ class Module(MgrModule):
                 content_data = self._rbd_mirroring()
 
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
                     path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
@@ -687,6 +698,7 @@ class Module(MgrModule):
                 content_data = self._rbd_iscsi()
 
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
                     path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
@@ -702,6 +714,7 @@ class Module(MgrModule):
             def health(self):
                 template = env.get_template("health.html")
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
                     path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
@@ -712,6 +725,7 @@ class Module(MgrModule):
             def servers(self):
                 template = env.get_template("servers.html")
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
                     path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
@@ -865,6 +879,17 @@ class Module(MgrModule):
                         ret[k1][k2] = sorted_dict
                 return ret
 
+        url_prefix = self.get_config('url_prefix')
+        if url_prefix == None:
+            url_prefix = ''
+        else:
+            if len(url_prefix) != 0:
+                if url_prefix[0] != '/':
+                    url_prefix = '/'+url_prefix
+                if url_prefix[-1] == '/':
+                    url_prefix = url_prefix[:-1]
+        self.url_prefix = url_prefix
+
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '7000')
         if server_addr is None:
@@ -936,6 +961,7 @@ class Module(MgrModule):
                 toplevel_data = self._toplevel_data()
 
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
                     path_info='/osd' + cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
@@ -977,7 +1003,7 @@ class Module(MgrModule):
                 result['up'] = osd_info['up']
                 result['in'] = osd_info['in']
 
-                result['url'] = "/osd/perf/{0}".format(osd_id)
+                result['url'] = get_prefixed_url("/osd/perf/{0}".format(osd_id))
 
                 return result
 
@@ -1030,14 +1056,15 @@ class Module(MgrModule):
                 }
 
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
                     path_info='/osd' + cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
 
-        cherrypy.tree.mount(Root(), "/", conf)
-        cherrypy.tree.mount(OSDEndpoint(), "/osd", conf)
+        cherrypy.tree.mount(Root(), get_prefixed_url("/"), conf)
+        cherrypy.tree.mount(OSDEndpoint(), get_prefixed_url("/osd"), conf)
 
         log.info("Starting engine on {0}:{1}...".format(
             server_addr, server_port))

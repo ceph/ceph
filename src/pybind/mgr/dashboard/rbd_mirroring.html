@@ -8,7 +8,7 @@
             var content_data = {{ content_data }};
 
             var refresh = function() {
-                $.get("/rbd_mirroring_data", function(data) {
+                $.get("{{ url_prefix }}/rbd_mirroring_data", function(data) {
                     _.extend(content_data, data);
                     setTimeout(refresh, 30000);
                 });
