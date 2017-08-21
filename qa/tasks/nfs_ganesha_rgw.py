@@ -208,21 +208,14 @@ def task(ctx, config):
     try:
         yield
     finally:
-        log.info("Deleting repo's")
-        if ctx.archive is not None:
-            path = os.path.join(ctx.archive, 'remote')
-            os.makedirs(path)
-            sub = os.path.join(path, rgw[0].shortname)
-            os.makedirs(sub)
+        log.info("Deleting the test soot")
 
-            # teuthology.pull_directory(clients[0], '/tmp/apilog',os.path.join(sub, 'log'))
+        rgw[0].run(args=['sudo', 'umount', run.Raw('~/ganesha-mount')])
 
-            rgw[0].run(args=['sudo', 'umount', run.Raw('~/ganesha-mount')])
+        cleanup = lambda x: rgw[0].run(args=[run.Raw('sudo rm -rf %s' % x)])
 
-            cleanup = lambda x: rgw[0].run(args=[run.Raw('sudo rm -rf %s' % x)])
+        soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
+                '*.key.*']
 
-            soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
-                    '*.key.*']
-
-            map(cleanup, soot)
+        map(cleanup, soot)
 
