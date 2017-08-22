@@ -59,7 +59,7 @@ private:
   vector<snapid_t> snaps;
 
   uint64_t features;
-
+  bool bdata_encode;
   osd_reqid_t reqid; // reqid explicitly set by sender
 
 public:
@@ -169,7 +169,8 @@ public:
   MOSDOp()
     : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       partial_decode_needed(true),
-      final_decode_needed(true) { }
+      final_decode_needed(true),
+      bdata_encode(false) { }
   MOSDOp(int inc, long tid, const hobject_t& ho, spg_t& _pgid,
 	 epoch_t _osdmap_epoch,
 	 int _flags, uint64_t feat)
@@ -180,7 +181,8 @@ public:
       pgid(_pgid),
       partial_decode_needed(false),
       final_decode_needed(false),
-      features(feat) {
+      features(feat),
+      bdata_encode(false) {
     set_tid(tid);
 
     // also put the client_inc in reqid.inc, so that get_reqid() can
@@ -244,8 +246,10 @@ public:
 
   // marshalling
   void encode_payload(uint64_t features) override {
-
-    OSDOp::merge_osd_op_vector_in_data(ops, data);
+    if( false == bdata_encode ) {
+      OSDOp::merge_osd_op_vector_in_data(ops, data);
+      bdata_encode = true;
+    }
 
     if ((features & CEPH_FEATURE_OBJECTLOCATOR) == 0) {
       // here is the old structure we are encoding to: //
@@ -560,6 +564,7 @@ struct ceph_osd_request_head {
 
   void clear_buffers() override {
     OSDOp::clear_data(ops);
+    bdata_encode = false;
   }
 
   const char *get_type_name() const override { return "osd_op"; }
