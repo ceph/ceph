@@ -86,6 +86,15 @@ class TestRun(object):
         )
         assert proc.exitstatus == 0
 
+    def test_run_cwd(self):
+        self.m_stdout_buf.channel.recv_exit_status.return_value = 0
+        run.run(
+            client=self.m_ssh,
+            args=['foo_bar_baz'],
+            cwd='/cwd/test',
+        )
+        self.m_ssh.exec_command.assert_called_with('(cd /cwd/test && exec foo_bar_baz)')
+
     def test_capture_stdout(self):
         output = 'foo\nbar'
         set_buffer_contents(self.m_stdout_buf, output)
