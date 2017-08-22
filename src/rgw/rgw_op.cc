@@ -369,6 +369,12 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     if (!r) {
       if (!zonegroup.endpoints.empty()) {
 	s->zonegroup_endpoint = zonegroup.endpoints.front();
+      } else {
+        // use zonegroup's master zone endpoints
+        auto z = zonegroup.zones.find(zonegroup.master_zone);
+        if (z != zonegroup.zones.end() && !z->second.endpoints.empty()) {
+          s->zonegroup_endpoint = z->second.endpoints.front();
+        }
       }
       s->zonegroup_name = zonegroup.get_name();
     }

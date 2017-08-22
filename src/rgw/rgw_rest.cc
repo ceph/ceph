@@ -717,7 +717,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
       if (!s->redirect.empty()) {
         dest_uri = s->redirect;
       } else if (!s->zonegroup_endpoint.empty()) {
-        string dest_uri = s->zonegroup_endpoint;
+        dest_uri = s->zonegroup_endpoint;
         /*
          * reqest_uri is always start with slash, so we need to remove
          * the unnecessary slash at the end of dest_uri.
