@@ -23,8 +23,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-#define DEFAULT_SWIFT_PREFIX "/swift"
-
 using namespace ceph::crypto;
 
 
@@ -575,17 +573,13 @@ SignedTokenEngine::authenticate(const std::string& token,
 static std::string get_xstorage_location(const req_state* const s,
                                          const RGWUserInfo& info)
 {
-  std::string swift_url = g_conf->rgw_swift_url;
-  std::string swift_prefix = g_conf->rgw_swift_url_prefix;
-  std::string tenant_path;
-
-  /*
-   * We did not allow an empty Swift prefix before, but we want it now.
+  /* We did not allow an empty Swift prefix before, but we want it now.
    * So, we take rgw_swift_url_prefix = "/" to yield the empty prefix.
    * The rgw_swift_url_prefix = "" is the default and yields "/swift"
-   * in a backwards-compatible way.
-   */
+   * in a backwards-compatible way. */
+  std::string swift_prefix = g_conf->rgw_swift_url_prefix;
   if (swift_prefix.size() == 0) {
+    static const std::string DEFAULT_SWIFT_PREFIX("/swift");
     swift_prefix = DEFAULT_SWIFT_PREFIX;
   } else if (swift_prefix == "/") {
     swift_prefix.clear();
@@ -595,6 +589,7 @@ static std::string get_xstorage_location(const req_state* const s,
     }
   }
 
+  std::string swift_url = g_conf->rgw_swift_url;
   if (swift_url.size() == 0) {
     bool add_port = false;
     const char *server_port = s->info.env->get("SERVER_PORT_SECURE");
@@ -609,7 +604,9 @@ static std::string get_xstorage_location(const req_state* const s,
     }
     const char *host = s->info.env->get("HTTP_HOST");
     if (!host) {
-      dout(0) << "NOTICE: server is misconfigured, missing rgw_swift_url_prefix or rgw_swift_url, HTTP_HOST is not set" << dendl;
+      ldout(s->cct, 0) << "NOTICE: server is misconfigured, missing "
+                       << "rgw_swift_url_prefix or rgw_swift_url, "
+                       << "HTTP_HOST is not set" << dendl;
       throw -EINVAL;
     }
     swift_url = protocol;
@@ -621,15 +618,14 @@ static std::string get_xstorage_location(const req_state* const s,
     }
   }
 
+  std::string tenant_path("/AUTH_");
   if (!g_conf->rgw_swift_tenant_name.empty()) {
-    tenant_path = "/AUTH_";
     tenant_path.append(g_conf->rgw_swift_tenant_name);
   } else if (g_conf->rgw_swift_account_in_url) {
-    tenant_path = "/AUTH_";
     tenant_path.append(info.user_id.to_str());
   }
 
-  return swift_url + swift_prefix + "/v1" + tenant_path;
+  return string_cat_reserve(swift_url, swift_prefix, "/v1", tenant_path);
 }
 
 void RGW_SWIFT_Auth_Get::execute()
