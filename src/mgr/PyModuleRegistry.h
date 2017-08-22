@@ -24,6 +24,7 @@
 #include "common/LogClient.h"
 
 #include "ActivePyModules.h"
+#include "StandbyPyModules.h"
 
 class PyModule
 {
@@ -34,12 +35,18 @@ private:
 public:
   PyThreadState *pMyThreadState = nullptr;
   PyObject *pClass = nullptr;
+  PyObject *pStandbyClass = nullptr;
 
   PyModule(const std::string &module_name_)
     : module_name(module_name_)
   {
   }
+
   int load(PyThreadState *pMainThreadState);
+
+  std::string get_name() const {
+    return module_name;
+  }
 };
 
 /**
@@ -52,13 +59,14 @@ public:
 class PyModuleRegistry
 {
 private:
+  mutable Mutex lock{"PyModuleRegistry::lock"};
+
   LogChannelRef clog;
 
   std::map<std::string, std::unique_ptr<PyModule>> modules;
 
   std::unique_ptr<ActivePyModules> active_modules;
-
-  mutable Mutex lock{"PyModuleRegistry::lock"};
+  std::unique_ptr<StandbyPyModules> standby_modules;
 
   PyThreadState *pMainThreadState = nullptr;
 
@@ -81,6 +89,11 @@ public:
 
     bool modules_changed = mgr_map_.modules != mgr_map.modules;
     mgr_map = mgr_map_;
+
+    if (standby_modules != nullptr) {
+      standby_modules->handle_mgr_map(mgr_map_);
+    }
+
     return modules_changed;
   }
 
@@ -96,8 +109,15 @@ public:
                 DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
                 LogChannelRef clog_, Objecter &objecter_, Client &client_,
                 Finisher &f);
-  void standby_start();
+  void standby_start(
+      MonClient *monc);
 
+  bool is_standby_running() const
+  {
+    return standby_modules != nullptr;
+  }
+
+  void active_shutdown();
   void shutdown();
 
   template<typename Callback, typename...Args>

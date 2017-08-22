@@ -24,6 +24,9 @@
 #include "include/assert.h"  // boost clobbers this
 
 
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mgr
+#undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 // decode a Python exception into a string
@@ -47,8 +50,6 @@ std::string handle_pyerror()
     formatted = str("").join(formatted_list);
     return extract<std::string>(formatted);
 }
-
-
 
 
 void *ServeThread::entry()

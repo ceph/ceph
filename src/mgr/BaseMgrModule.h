@@ -1,9 +1,7 @@
-#ifndef PYSTATE_H_
-#define PYSTATE_H_
+
+#pragma once
 
 #include "Python.h"
 
 extern PyTypeObject BaseMgrModuleType;
-
-#endif
 

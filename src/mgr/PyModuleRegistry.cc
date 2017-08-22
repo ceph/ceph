@@ -17,6 +17,7 @@
 
 #include "BaseMgrModule.h"
 #include "PyOSDMap.h"
+#include "BaseMgrStandbyModule.h"
 #include "Gil.h"
 
 #include "ActivePyModules.h"
@@ -234,7 +235,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
     Py_InitModule("ceph_osdmap_incremental", OSDMapIncrementalMethods);
     Py_InitModule("ceph_crushmap", CRUSHMapMethods);
 
-    // Initialize base class
+    // Initialize base classes
     BaseMgrModuleType.tp_new = PyType_GenericNew;
     if (PyType_Ready(&BaseMgrModuleType) < 0) {
         assert(0);
@@ -243,6 +244,15 @@ int PyModule::load(PyThreadState *pMainThreadState)
     Py_INCREF(&BaseMgrModuleType);
     PyModule_AddObject(ceph_module, "BaseMgrModule",
                        (PyObject *)&BaseMgrModuleType);
+
+    BaseMgrModuleType.tp_new = PyType_GenericNew;
+    if (PyType_Ready(&BaseMgrStandbyModuleType) < 0) {
+        assert(0);
+    }
+
+    Py_INCREF(&BaseMgrStandbyModuleType);
+    PyModule_AddObject(ceph_module, "BaseMgrStandbyModule",
+                       (PyObject *)&BaseMgrStandbyModuleType);
   }
 
   // Environment is all good, import the external module
@@ -256,24 +266,71 @@ int PyModule::load(PyThreadState *pMainThreadState)
     if (pModule == nullptr) {
       derr << "Module not found: '" << module_name << "'" << dendl;
       derr << handle_pyerror() << dendl;
-
-      assert(0);
       return -ENOENT;
     }
 
     // Find the class
     // TODO: let them call it what they want instead of just 'Module'
     pClass = PyObject_GetAttrString(pModule, (const char*)"Module");
-    Py_DECREF(pModule);
     if (pClass == nullptr) {
       derr << "Class not found in module '" << module_name << "'" << dendl;
       derr << handle_pyerror() << dendl;
       return -EINVAL;
     }
+
+    pStandbyClass = PyObject_GetAttrString(pModule,
+                                           (const char*)"StandbyModule");
+    if (pStandbyClass) {
+      dout(4) << "Standby mode available in module '" << module_name
+              << "'" << dendl;
+    } else {
+      dout(4) << "Standby mode not provided by module '" << module_name
+              << "'" << dendl;
+      PyErr_Clear();
+    }
+
+    Py_DECREF(pModule);
   }
 
   return 0;
 } 
+
+void PyModuleRegistry::standby_start(MonClient *monc)
+{
+  Mutex::Locker l(lock);
+  assert(active_modules == nullptr);
+  assert(standby_modules == nullptr);
+  assert(is_initialized());
+
+  dout(4) << "Starting modules in standby mode" << dendl;
+
+  standby_modules.reset(new StandbyPyModules(monc, mgr_map));
+
+  std::set<std::string> failed_modules;
+  for (const auto &i : modules) {
+    if (i.second->pStandbyClass) {
+      dout(4) << "starting module " << i.second->get_name() << dendl;
+      int r = standby_modules->start_one(i.first,
+              i.second->pStandbyClass,
+              i.second->pMyThreadState);
+      if (r != 0) {
+        derr << "failed to start module '" << i.second->get_name()
+             << "'" << dendl;;
+        failed_modules.insert(i.second->get_name());
+        // Continue trying to load any other modules
+      }
+    } else {
+      dout(4) << "skipping module '" << i.second->get_name() << "' because "
+                 "it does not implement a standby mode" << dendl;
+    }
+  }
+
+  if (!failed_modules.empty()) {
+    clog->error() << "Failed to execute ceph-mgr module(s) in standby mode: "
+        << joinify(failed_modules.begin(), failed_modules.end(),
+                   std::string(", "));
+  }
+}
 
 void PyModuleRegistry::active_start(
             PyModuleConfig &config_,
@@ -283,24 +340,45 @@ void PyModuleRegistry::active_start(
 {
   Mutex::Locker locker(lock);
 
+  dout(4) << "Starting modules in active mode" << dendl;
+
   assert(active_modules == nullptr);
+  assert(is_initialized());
+
+  if (standby_modules != nullptr) {
+    standby_modules->shutdown();
+    standby_modules.reset();
+  }
 
   active_modules.reset(new ActivePyModules(
               config_, ds, cs, mc, clog_, objecter_, client_, f));
 
   for (const auto &i : modules) {
-    active_modules->start_one(i.first,
+    dout(4) << "Starting " << i.first << dendl;
+    int r = active_modules->start_one(i.first,
             i.second->pClass,
             i.second->pMyThreadState);
+    assert(r == 0); // TODO
+  }
+}
+
+void PyModuleRegistry::active_shutdown()
+{
+  Mutex::Locker locker(lock);
+
+  if (active_modules != nullptr) {
+    active_modules->shutdown();
+    active_modules.reset();
   }
 }
 
 void PyModuleRegistry::shutdown()
 {
   Mutex::Locker locker(lock);
-  if (active_modules != nullptr) {
-    active_modules->shutdown();
-    active_modules.reset();
+
+  if (standby_modules != nullptr) {
+    standby_modules->shutdown();
+    standby_modules.reset();
   }
 
   modules.clear();
