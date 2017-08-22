@@ -295,7 +295,7 @@ struct Task {
   IOCommand command;
   uint64_t offset;
   uint64_t len;
-  bufferlist write_bl;
+  bufferlist bl;
   std::function<void()> fill_cb;
   Task *next = nullptr;
   int64_t return_code;
@@ -321,6 +321,11 @@ struct Task {
         queue_data->data_buf_mempool.push_back(io_request.inline_segs[i]);
     }
     io_request.nseg = 0;
+  }
+
+  void copy_to_buf(bufferptr p, uint64_t off, uint64_t len) {
+    copy_to_buf(p.c_str(), off, len);
+    bl.append(std::move(p));
   }
 
   void copy_to_buf(char *buf, uint64_t off, uint64_t len) {
@@ -424,14 +429,14 @@ int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
   }
   t->io_request.nseg = count;
   if (write) {
-    auto blp = t->write_bl.begin();
+    auto blp = t->bl.begin();
     uint32_t len = 0;
     uint16_t i = 0;
     for (; i < count - 1; ++i) {
       blp.copy(data_buffer_size, static_cast<char*>(segs[i]));
       len += data_buffer_size;
     }
-    blp.copy(t->write_bl.length() - len, static_cast<char*>(segs[i]));
+    blp.copy(t->bl.length() - len, static_cast<char*>(segs[i]));
   }
 
   return 0;
@@ -996,7 +1001,7 @@ int NVMEDevice::aio_write(
 
   // TODO: if upper layer alloc memory with known physical address,
   // we can reduce this copy
-  t->write_bl = std::move(bl);
+  t->bl = std::move(bl);
 
   t->ctx = ioc;
   Task *first = static_cast<Task*>(ioc->nvme_task_first);
@@ -1029,7 +1034,7 @@ int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered)
 
   // TODO: if upper layer alloc memory with known physical address,
   // we can reduce this copy
-  t->write_bl = std::move(bl);
+  t->bl = std::move(bl);
   t->ctx = &ioc;
   if(queue_id == -1)
     queue_id = ceph_gettid();
@@ -1056,9 +1061,9 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   bufferptr p = buffer::create_page_aligned(len);
   int r = 0;
   t->ctx = ioc;
-  char *buf = p.c_str();
-  t->fill_cb = [buf, t]() {
-    t->copy_to_buf(buf, 0, t->len);
+  pbl->append(std::move(t->bl));
+  t->fill_cb = [p, t]() {
+    t->copy_to_buf(p, 0, t->len);
   };
   ++ioc->num_running;
   if(queue_id == -1)
@@ -1090,11 +1095,10 @@ int NVMEDevice::aio_read(
   Task *t = new Task(this, IOCommand::READ_COMMAND, off, len);
 
   bufferptr p = buffer::create_page_aligned(len);
-  pbl->append(p);
+  pbl->append(std::move(t->bl));
   t->ctx = ioc;
-  char *buf = p.c_str();
-  t->fill_cb = [buf, t]() {
-    t->copy_to_buf(buf, 0, t->len);
+  t->fill_cb = [p, t]() {
+    t->copy_to_buf(p, 0, t->len);
   };
 
   Task *first = static_cast<Task*>(ioc->nvme_task_first);
