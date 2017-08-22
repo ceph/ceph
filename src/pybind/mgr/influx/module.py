@@ -155,8 +155,8 @@ class Module(MgrModule):
             elif stats == "osd":
                 for default_osd in default: 
                     client.write_points(self.get_stat(default_osd), 'ms')
-                    if config.has_option('extended', 'cluster'):
-                        osd = config.get('extended', 'cluster').replace(' ', '').split(',')
+                    if config.has_option('extended', 'osd'):
+                        osd = config.get('extended', 'osd').replace(' ', '').split(',')
                         for osd in osd:
                             client.write_points(self.get_stat(osd), 'ms')
                 self.log.debug("wrote osd stats")
