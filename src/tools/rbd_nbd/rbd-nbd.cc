@@ -159,11 +159,11 @@ private:
   struct IOContext
   {
     xlist<IOContext*>::item item;
-    NBDServer *server;
+    NBDServer *server = nullptr;
     struct nbd_request request;
     struct nbd_reply reply;
     bufferlist data;
-    int command;
+    int command = 0;
 
     IOContext()
       : item(this)
