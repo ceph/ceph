@@ -91,7 +91,7 @@ template <>
 class SnapshotCopyRequest<librbd::MockTestImageCtx> {
 public:
   static SnapshotCopyRequest* s_instance;
-  Context *on_finish;
+  Context *on_finish = nullptr;
 
   static SnapshotCopyRequest* create(librbd::MockTestImageCtx *local_image_ctx,
                                      librbd::MockTestImageCtx *remote_image_ctx,
@@ -123,7 +123,7 @@ template <>
 class SyncPointCreateRequest<librbd::MockTestImageCtx> {
 public:
   static SyncPointCreateRequest *s_instance;
-  Context *on_finish;
+  Context *on_finish = nullptr;
 
   static SyncPointCreateRequest* create(librbd::MockTestImageCtx *remote_image_ctx,
                                         const std::string &mirror_uuid,
@@ -145,8 +145,8 @@ template <>
 class SyncPointPruneRequest<librbd::MockTestImageCtx> {
 public:
   static SyncPointPruneRequest *s_instance;
-  Context *on_finish;
-  bool sync_complete;
+  Context *on_finish = nullptr;
+  bool sync_complete = false;
 
   static SyncPointPruneRequest* create(librbd::MockTestImageCtx *remote_image_ctx,
                                        bool sync_complete,
