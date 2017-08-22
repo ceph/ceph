@@ -566,10 +566,14 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
   return ret;
 }
 
-void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const std::string& key, const std::string& val){
+void rgw_add_to_iam_environment(rgw::IAM::Environment& e, std::string&& key, std::string&& val){
   e.emplace(std::piecewise_construct,
 	    std::forward_as_tuple(key),
 	    std::forward_as_tuple(val));
+}
+
+void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const std::string& key, const std::string& val){
+  e[key] = val;
 }
 
 static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
