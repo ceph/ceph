@@ -10,6 +10,45 @@ import threading
 from collections import defaultdict
 
 
+class CPlusPlusHandler(logging.Handler):
+    def __init__(self, module_inst):
+        super(CPlusPlusHandler, self).__init__()
+        self._module = module_inst
+
+    def emit(self, record):
+        if record.levelno <= logging.DEBUG:
+            ceph_level = 20
+        elif record.levelno <= logging.INFO:
+            ceph_level = 4
+        elif record.levelno <= logging.WARNING:
+            ceph_level = 1
+        else:
+            ceph_level = 0
+
+        self._module._ceph_log(ceph_level, self.format(record))
+
+
+def configure_logger(module_inst, name):
+    logger = logging.getLogger(name)
+
+
+    # Don't filter any logs at the python level, leave it to C++
+    logger.setLevel(logging.DEBUG)
+
+    # FIXME: we should learn the log level from C++ land, and then
+    # avoid calling the C++ level log when we know a message is of
+    # an insufficient level to be ultimately output
+    logger.addHandler(CPlusPlusHandler(module_inst))
+
+    return logger
+
+
+def unconfigure_logger(module_inst, name):
+    logger = logging.getLogger(name)
+    rm_handlers = [h for h in logger.handlers if isinstance(h, CPlusPlusHandler)]
+    for h in rm_handlers:
+        logger.removeHandler(h)
+
 class CommandResult(object):
     """
     Use with MgrModule.send_command
@@ -115,6 +154,52 @@ class CRUSHMap(object):
         uglymap = ceph_crushmap.get_take_weight_osd_map(self._handle, root)
         return { int(k): v for k, v in uglymap.get('weights', {}).iteritems() }
 
+class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
+    """
+    Standby modules only implement a serve and shutdown method, they
+    are not permitted to implement commands and they do not receive
+    any notifications.
+
+    They only have access to the mgrmap (for acecssing service URI info
+    from their active peer), and to configuration settings (read only).
+    """
+
+    def __init__(self, module_name, capsule):
+        super(MgrStandbyModule, self).__init__(capsule)
+        self.module_name = module_name
+        self._logger = configure_logger(self, module_name)
+
+    def __del__(self):
+        unconfigure_logger(self, self.module_name)
+
+    @property
+    def log(self):
+        return self._logger
+
+    def serve(self):
+        """
+        The serve method is mandatory for standby modules.
+        :return:
+        """
+        raise NotImplementedError()
+
+    def get_mgr_id(self):
+        return self._ceph_get_mgr_id()
+
+    def get_config(self, key):
+        return self._ceph_get_config(key)
+
+    def get_active_uri(self):
+        return self._ceph_get_active_uri()
+
+    def get_localized_config(self, key, default=None):
+        r = self.get_config(self.get_mgr_id() + '/' + key)
+        if r is None:
+            r = self.get_config(key)
+
+        if r is None:
+            r = default
+        return r
 
 class MgrModule(ceph_module.BaseMgrModule):
     COMMANDS = []
@@ -137,35 +222,21 @@ class MgrModule(ceph_module.BaseMgrModule):
     PERFCOUNTER_TYPE_MASK = ~2
 
     def __init__(self, module_name, py_modules_ptr, this_ptr):
+        self.module_name = module_name
+
+        # If we're taking over from a standby module, let's make sure
+        # its logger was unconfigured before we hook ours up
+        unconfigure_logger(self, self.module_name)
+        self._logger = configure_logger(self, module_name)
+
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
-        self._logger = logging.getLogger(module_name)
-
-        # Don't filter any logs at the python level, leave it to C++
-        self._logger.setLevel(logging.DEBUG)
-
-        # FIXME: we should learn the log level from C++ land, and then
-        # avoid calling the C++ level log when we know a message is of
-        # an insufficient level to be ultimately output
-
-        module_inst = self
-        class CPlusPlusHandler(logging.Handler):
-            def emit(self, record):
-                if record.levelno <= logging.DEBUG:
-                    ceph_level = 20
-                elif record.levelno <= logging.INFO:
-                    ceph_level = 4
-                elif record.levelno <= logging.WARNING:
-                    ceph_level = 1
-                else:
-                    ceph_level = 0
-
-                module_inst._ceph_log(ceph_level, self.format(record))
-
-        self._logger.addHandler(CPlusPlusHandler())
 
         self._version = self._ceph_get_version()
 
         self._perf_schema_cache = None
+
+    def __del__(self):
+        unconfigure_logger(self, self.module_name)
 
     def update_perf_schema(self, daemon_type, daemon_name):
         """
