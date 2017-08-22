@@ -6,6 +6,8 @@
    :maxdepth: 1
 
    ../../man/8/ceph-disk.rst
+   ../../man/8/ceph-volume.rst
+   ../../man/8/ceph-volume-systemd.rst
    ../../man/8/ceph.rst
    ../../man/8/ceph-deploy.rst
    ../../man/8/ceph-rest-api.rst
