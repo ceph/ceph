@@ -18,6 +18,8 @@ if tags.has('man'):
                          'install/*',
                          'mon/*',
                          'rados/*',
+                         'mgr/*',
+                         'ceph-volume/*',
                          'radosgw/*',
                          'rbd/*',
                          'start/*']
