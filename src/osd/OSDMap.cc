@@ -4448,21 +4448,21 @@ void OSDMap::check_health(health_check_map_t *checks) const
     if (br < nr) {
       ostringstream ss;
       ss << "backfillfull_ratio (" << br
-	 << ") < nearfull_ratio (" << nr << "), increased";
+	 << ") < nearfull_ratio (" << nr << "), should increase backfillfull_ratio";
       detail.push_back(ss.str());
       br = nr;
     }
     if (fr < br) {
       ostringstream ss;
       ss << "full_ratio (" << fr << ") < backfillfull_ratio (" << br
-	 << "), increased";
+	 << "), should increase full_ratio";
       detail.push_back(ss.str());
       fr = br;
     }
     if (fsr < fr) {
       ostringstream ss;
       ss << "osd_failsafe_full_ratio (" << fsr << ") < full_ratio (" << fr
-	 << "), increased";
+	 << "), should increase osd_failsafe_full_ratio";
       detail.push_back(ss.str());
     }
     if (!detail.empty()) {
