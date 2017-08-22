@@ -23,3 +23,8 @@
   as net/ceph. Future development releases will be available via net/ceph-devel
 
   More details about this port are in: README.FreeBSD
+
+* The Ceph LZ4 compression plugin is now built by default if the required
+  version of the LZ4 library is available. LZ4 is not enabled in the official
+  Ceph releases due to some distros shipping with a very old releases of the
+  LZ4 library which does not have the required LZ4 streaming function.
