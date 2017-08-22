@@ -2421,6 +2421,9 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
       }
     }
 
+    // update osd beacon timestamp
+    last_osd_report[from] = ceph_clock_now();
+
     pending_inc.new_xinfo[from] = xi;
 
     // wait
