@@ -323,7 +323,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   }
 }
 
-void ActivePyModules::start_one(std::string const &module_name,
+int ActivePyModules::start_one(std::string const &module_name,
     PyObject *pClass, PyThreadState *pMyThreadState)
 {
   Mutex::Locker l(lock);
@@ -335,14 +335,16 @@ void ActivePyModules::start_one(std::string const &module_name,
       pMyThreadState));
 
   int r = modules[module_name]->load(this);
+  if (r != 0) {
+    return r;
+  } else {
+    std::ostringstream thread_name;
+    thread_name << "mgr." << module_name;
+    dout(4) << "Starting thread for " << module_name << dendl;
+    modules[module_name]->thread.create(thread_name.str().c_str());
 
-  // FIXME error handling
-  assert(r == 0);
-
-  std::ostringstream thread_name;
-  thread_name << "mgr." << module_name;
-  dout(4) << "Starting thread for " << module_name << dendl;
-  modules[module_name]->thread.create(thread_name.str().c_str());
+    return 0;
+  }
 }
 
 void ActivePyModules::shutdown()
