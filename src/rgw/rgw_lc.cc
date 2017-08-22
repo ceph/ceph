@@ -67,7 +67,14 @@ bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
     op.mp_expiration = rule->get_mp_expiration().get_days();
   }
   op.dm_expiration = rule->get_dm_expiration();
-  auto ret = prefix_map.insert(pair<string, lc_op>(rule->get_prefix(), op));
+
+  std::string prefix;
+  if (rule->get_filter().has_prefix()){
+    prefix = rule->get_filter().get_prefix();
+  } else {
+    prefix = rule->get_prefix();
+  }
+  auto ret = prefix_map.emplace(std::move(prefix), std::move(op));
   return ret.second;
 }
 
