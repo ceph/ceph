@@ -547,8 +547,6 @@ RDMAStack::~RDMAStack()
   if (cct->_conf->ms_async_rdma_enable_hugepage) {
     unsetenv("RDMAV_HUGEPAGES_SAFE");	//remove env variable on destruction
   }
-
-  dispatcher.polling_stop();
 }
 
 void RDMAStack::spawn_worker(unsigned i, std::function<void ()> &&func)
