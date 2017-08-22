@@ -2364,10 +2364,12 @@ class PrepareSpace(object):
                 self.space_symlink = getattr(self.args, self.name)
                 return
 
-        self.space_symlink = '/dev/disk/by-partuuid/{uuid}'.format(
-            uuid=getattr(self.args, self.name + '_uuid'))
 
-        if self.args.dmcrypt:
+       self.space_symlink = '/dev/disk/by-parttypeuuid/{osd_fsid}.{uuid}'.format(
+            osd_fsid=PTYPE['mpath']['block']['ready'], 
+            uuid=getattr(self.args,self.name + '_uuid'))
+       
+       if self.args.dmcrypt:
             self.space_dmcrypt = self.space_symlink
             self.space_symlink = '/dev/mapper/{uuid}'.format(
                 uuid=getattr(self.args, self.name + '_uuid'))
