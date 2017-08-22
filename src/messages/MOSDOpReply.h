@@ -38,6 +38,7 @@ class MOSDOpReply : public Message {
   object_t oid;
   pg_t pgid;
   vector<OSDOp> ops;
+  bool bdata_encode;
   int64_t flags = 0;
   errorcode32_t result;
   eversion_t bad_replay_version;
@@ -104,6 +105,7 @@ public:
   }
   void claim_ops(vector<OSDOp>& o) {
     o.swap(ops);
+    bdata_encode = false;
   }
 
   /**
@@ -125,13 +127,15 @@ public:
 
 public:
   MOSDOpReply()
-    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) {
+    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    bdata_encode(false) {
     do_redirect = false;
   }
   MOSDOpReply(const MOSDOp *req, int r, epoch_t e, int acktype,
 	      bool ignore_out_data)
     : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
-      oid(req->hobj.oid), pgid(req->pgid.pgid), ops(req->ops) {
+      oid(req->hobj.oid), pgid(req->pgid.pgid), ops(req->ops),
+      bdata_encode(false) {
 
     set_tid(req->get_tid());
     result = r;
@@ -154,8 +158,10 @@ private:
 
 public:
   void encode_payload(uint64_t features) override {
-
-    OSDOp::merge_osd_op_vector_out_data(ops, data);
+    if(false == bdata_encode) {
+      OSDOp::merge_osd_op_vector_out_data(ops, data);
+      bdata_encode = true;
+    }
 
     if ((features & CEPH_FEATURE_PGID64) == 0) {
       header.version = 1;
