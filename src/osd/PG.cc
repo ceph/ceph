@@ -1142,7 +1142,6 @@ void PG::calc_ec_acting(
 {
   vector<int> want(size, CRUSH_ITEM_NONE);
   map<shard_id_t, set<pg_shard_t> > all_info_by_shard;
-  unsigned usable = 0;
   for (map<pg_shard_t, pg_info_t>::const_iterator i = all_info.begin();
        i != all_info.end();
        ++i) {
@@ -1156,7 +1155,6 @@ void PG::calc_ec_acting(
 	auth_log_shard->second.log_tail) {
       ss << " selecting up[i]: " << pg_shard_t(up[i], shard_id_t(i)) << std::endl;
       want[i] = up[i];
-      ++usable;
       continue;
     }
     if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE) {
@@ -1171,7 +1169,6 @@ void PG::calc_ec_acting(
 	auth_log_shard->second.log_tail) {
       ss << " selecting acting[i]: " << pg_shard_t(acting[i], shard_id_t(i)) << std::endl;
       want[i] = acting[i];
-      ++usable;
     } else if (!restrict_to_up_acting) {
       for (set<pg_shard_t>::iterator j = all_info_by_shard[shard_id_t(i)].begin();
 	   j != all_info_by_shard[shard_id_t(i)].end();
@@ -1182,7 +1179,6 @@ void PG::calc_ec_acting(
 	    auth_log_shard->second.log_tail) {
 	  ss << " selecting stray: " << *j << std::endl;
 	  want[i] = j->osd;
-	  ++usable;
 	  break;
 	}
       }
