@@ -23,6 +23,8 @@ set(osd_srcs
   ceph-clsinfo.rst
   ceph-detect-init.rst
   ceph-disk.rst
+  ceph-volume.rst
+  ceph-volume-systemd.rst
   ceph-osd.rst
   osdmaptool.rst)
 
