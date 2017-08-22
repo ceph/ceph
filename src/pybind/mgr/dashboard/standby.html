@@ -1,0 +1,15 @@
+
+<html>
+    <!-- Note: this is only displayed when the standby
+         does not know an active URI to redirect to, otherwise
+         a simple redirect is returned instead -->
+    <head>
+        <title>Ceph</title>
+        <meta http-equiv="refresh" content="{{delay}}">
+    </head>
+    <body>
+        No active ceph-mgr instance is currently running
+        the dashboard.  A failover may be in progress.
+        Retrying in {{delay}} seconds...
+    </body>
+</html>
