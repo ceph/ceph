@@ -618,11 +618,10 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1conf_1read_1file
 		return -1;
 	}
 
-	ldout(cct, 10) << "jni: conf_read_file: path " << c_path << dendl;
-
 	ret = ceph_conf_read_file(cmount, c_path);
 
-	ldout(cct, 10) << "jni: conf_read_file: exit ret " << ret << dendl;
+        ldout(cct, 10) << "jni: conf_read_file: path " << c_path <<
+                " ret " << ret << dendl;
 
 	env->ReleaseStringUTFChars(j_path, c_path);
 
@@ -1321,11 +1320,11 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1stat
 		return -1;
 	}
 
-	ldout(cct, 10) << "jni: lstat: path " << c_path << dendl;
+	ldout(cct, 10) << "jni: stat: path " << c_path << dendl;
 
 	ret = ceph_statx(cmount, c_path, &stx, CEPH_J_CEPHSTAT_MASK, 0);
 
-	ldout(cct, 10) << "jni: lstat exit ret " << ret << dendl;
+	ldout(cct, 10) << "jni: stat exit ret " << ret << dendl;
 
 	env->ReleaseStringUTFChars(j_path, c_path);
 
