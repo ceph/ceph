@@ -77,9 +77,10 @@ public:
     ts->tv_sec = tv.tv_sec;
     ts->tv_nsec = tv.tv_nsec;
   }
-  void set_from_double(double d) { 
+  utime_t& set_from_double(double d) {
     tv.tv_sec = (__u32)trunc(d);
     tv.tv_nsec = (__u32)((d - (double)tv.tv_sec) * (double)1000000000.0);
+    return *this;
   }
 
   real_time to_real_time() const {

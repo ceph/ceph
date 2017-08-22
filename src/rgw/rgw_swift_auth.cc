@@ -459,8 +459,8 @@ static ceph::bufferlist encode_token(CephContext* const cct,
     throw ret;
   }
 
-  const utime_t expiration = \
-    ceph_clock_now() + cct->_conf->rgw_swift_token_expiration;
+  const utime_t expiration = ceph_clock_now() + \
+    utime_t().set_from_double(cct->_conf->rgw_swift_token_expiration);
   return build_token(cct, swift_user, key, nonce, expiration);
 }
 
