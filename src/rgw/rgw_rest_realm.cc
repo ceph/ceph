@@ -84,9 +84,9 @@ void RGWOp_Period_Post::execute()
   period.init(cct, store, false);
 
   // decode the period from input
-#define PERIOD_MAX_LEN 4096
+  const uint64_t max_size = 1 * 1024 * 1024;
   bool empty;
-  http_ret = rgw_rest_get_json_input(cct, s, period, PERIOD_MAX_LEN, &empty);
+  http_ret = rgw_rest_get_json_input(cct, s, period, max_size, &empty);
   if (http_ret < 0) {
     lderr(cct) << "failed to decode period" << dendl;
     return;
