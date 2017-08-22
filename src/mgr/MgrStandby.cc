@@ -217,6 +217,8 @@ void MgrStandby::shutdown()
   // Expect already to be locked as we're called from signal handler
   assert(lock.is_locked_by_me());
 
+  dout(4) << "Shutting down" << dendl;
+
   py_module_registry.shutdown();
 
   // stop sending beacon first, i use monc to talk with monitors
@@ -347,10 +349,16 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       dout(4) << "Map now says I am available" << dendl;
       available_in_map = true;
     }
+  } else if (active_mgr != nullptr) {
+    derr << "I was active but no longer am" << dendl;
+    respawn();
   } else {
-    if (active_mgr != nullptr) {
-      derr << "I was active but no longer am" << dendl;
-      respawn();
+    if (map.active_gid != 0 && map.active_name != g_conf->name.get_id()) {
+      // I am the standby and someone else is active, start modules
+      // in standby mode to do redirects if needed
+      if (!py_module_registry.is_standby_running()) {
+        py_module_registry.standby_start(&monc);
+      }
     }
   }
 
@@ -432,6 +440,12 @@ int MgrStandby::main(vector<const char *> args)
 
 std::string MgrStandby::state_str()
 {
-  return active_mgr == nullptr ? "standby" : "active";
+  if (active_mgr == nullptr) {
+    return "standby";
+  } else if (active_mgr->is_initialized()) {
+    return "active";
+  } else {
+    return "active (starting)";
+  }
 }
 

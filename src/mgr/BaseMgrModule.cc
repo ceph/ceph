@@ -18,6 +18,8 @@
  * available as methods on that object.
  */
 
+#include "Python.h"
+
 #include "Mgr.h"
 
 #include "mon/MonClient.h"

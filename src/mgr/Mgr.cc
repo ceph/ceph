@@ -379,7 +379,7 @@ void Mgr::shutdown()
       server.shutdown();
     }
     // after the messenger is stopped, signal modules to shutdown via finisher
-    py_module_registry->shutdown();
+    py_module_registry->active_shutdown();
   }));
 
   // Then stop the finisher to ensure its enqueued contexts aren't going
