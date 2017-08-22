@@ -409,9 +409,9 @@ def create_zone_pools(ctx, zone):
         pool_name = pool_config['val']['data_pool']
         if ctx.rgw.ec_data_pool:
             create_ec_pool(gateway.remote, pool_name, zone.name, 64,
-                           ctx.rgw.erasure_code_profile, cluster.name)
+                           ctx.rgw.erasure_code_profile, cluster.name, 'rgw')
         else:
-            create_replicated_pool(gateway.remote, pool_name, 64, cluster.name)
+            create_replicated_pool(gateway.remote, pool_name, 64, cluster.name, 'rgw')
 
 def configure_zone_compression(zone, compression):
     """ Set compression type in the zone's default-placement """

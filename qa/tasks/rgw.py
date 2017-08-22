@@ -142,12 +142,12 @@ def create_pools(ctx, clients):
 
         if ctx.rgw.ec_data_pool:
             create_ec_pool(remote, data_pool, client, 64,
-                           ctx.rgw.erasure_code_profile, cluster_name)
+                           ctx.rgw.erasure_code_profile, cluster_name, 'rgw')
         else:
-            create_replicated_pool(remote, data_pool, 64, cluster_name)
+            create_replicated_pool(remote, data_pool, 64, cluster_name, 'rgw')
         if ctx.rgw.cache_pools:
             create_cache_pool(remote, data_pool, data_pool + '.cache', 64,
-                              64*1024*1024, cluster_name)
+                              64*1024*1024, cluster_name, 'rgw')
     log.debug('Pools created')
     yield
 
