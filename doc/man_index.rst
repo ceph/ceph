@@ -14,6 +14,8 @@
    man/8/ceph-deploy
    man/8/ceph-detect-init
    man/8/ceph-disk
+   man/8/ceph-volume
+   man/8/ceph-volume-systemd
    man/8/ceph-fuse
    man/8/ceph-mds
    man/8/ceph-mon
