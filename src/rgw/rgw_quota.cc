@@ -241,19 +241,19 @@ public:
     const uint64_t rounded_added = rgw_rounded_objsize(added_bytes);
     const uint64_t rounded_removed = rgw_rounded_objsize(removed_bytes);
 
-    if ((entry->stats.size + added_bytes - removed_bytes) >= 0) {
+    if (((int64_t)(entry->stats.size + added_bytes - removed_bytes)) >= 0) {
       entry->stats.size += added_bytes - removed_bytes;
     } else {
       entry->stats.size = 0;
     }
 
-    if ((entry->stats.size_rounded + rounded_added - rounded_removed) >= 0) {
+    if (((int64_t)(entry->stats.size_rounded + rounded_added - rounded_removed)) >= 0) {
       entry->stats.size_rounded += rounded_added - rounded_removed;
     } else {
       entry->stats.size_rounded = 0;
     }
 
-    if ((entry->stats.num_objects + objs_delta) >= 0) {
+    if (((int64_t)(entry->stats.num_objects + objs_delta)) >= 0) {
       entry->stats.num_objects += objs_delta;
     } else {
       entry->stats.num_objects = 0;
