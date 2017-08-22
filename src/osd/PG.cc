@@ -1297,12 +1297,12 @@ void PG::calc_replicated_acting(
     const pg_info_t &cur_info = all_info.find(acting_cand)->second;
     if (cur_info.is_incomplete() ||
 	cur_info.last_update < primary->second.log_tail) {
-      ss << " shard " << acting_cand << " (stray) REJECTED "
+      ss << " shard " << acting_cand << " (acting) REJECTED "
 	       << cur_info << std::endl;
     } else {
       want->push_back(*i);
       acting_backfill->insert(acting_cand);
-      ss << " shard " << acting_cand << " (stray) accepted "
+      ss << " shard " << acting_cand << " (acting) accepted "
 	 << cur_info << std::endl;
       usable++;
     }
