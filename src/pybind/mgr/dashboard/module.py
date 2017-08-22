@@ -27,7 +27,7 @@ import socket
 import cherrypy
 import jinja2
 
-from mgr_module import MgrModule, CommandResult
+from mgr_module import MgrModule, MgrStandbyModule, CommandResult
 
 from types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
@@ -61,6 +61,50 @@ def recurse_refs(root, path):
             recurse_refs(i, path + "[%d]" % n)
 
     log.info("%s %d (%s)" % (path, sys.getrefcount(root), root.__class__))
+
+
+class StandbyModule(MgrStandbyModule):
+    def serve(self):
+        server_addr = self.get_localized_config('server_addr', '::')
+        server_port = self.get_localized_config('server_port', '7000')
+        if server_addr is None:
+            raise RuntimeError('no server_addr configured; try "ceph config-key set mgr/dashboard/server_addr <ip>"')
+        log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
+        cherrypy.config.update({
+            'server.socket_host': server_addr,
+            'server.socket_port': int(server_port),
+            'engine.autoreload.on': False
+        })
+
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        jinja_loader = jinja2.FileSystemLoader(current_dir)
+        env = jinja2.Environment(loader=jinja_loader)
+
+        module = self
+
+        class Root(object):
+            @cherrypy.expose
+            def index(self):
+                active_uri = module.get_active_uri()
+                if active_uri:
+                    log.info("Redirecting to active '{0}'".format(active_uri))
+                    raise cherrypy.HTTPRedirect(active_uri)
+                else:
+                    template = env.get_template("standby.html")
+                    return template.render(delay=5)
+
+        cherrypy.tree.mount(Root(), "/", {})
+        log.info("Starting engine...")
+        cherrypy.engine.start()
+        log.info("Waiting for engine...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STOPPED)
+        log.info("Engine done.")
+
+    def shutdown(self):
+        log.info("Stopping server...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
+        cherrypy.engine.stop()
+        log.info("Stopped server")
 
 
 class Module(MgrModule):
@@ -838,7 +882,7 @@ class Module(MgrModule):
         # Publish the URI that others may use to access the service we're
         # about to start serving
         self.set_uri("http://{0}:{1}/".format(
-            socket.gethostname() if server_addr == "::" else server_addr,
+            socket.getfqdn() if server_addr == "::" else server_addr,
             server_port
         ))
 
@@ -995,7 +1039,8 @@ class Module(MgrModule):
         cherrypy.tree.mount(Root(), "/", conf)
         cherrypy.tree.mount(OSDEndpoint(), "/osd", conf)
 
-        log.info("Starting engine...")
+        log.info("Starting engine on {0}:{1}...".format(
+            server_addr, server_port))
         cherrypy.engine.start()
         log.info("Waiting for engine...")
         cherrypy.engine.block()
