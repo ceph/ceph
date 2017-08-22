@@ -56,7 +56,7 @@ public:
 
   template <typename ImageCtxT>
   struct C_SparseReadRequest : public C_SparseReadRequestBase {
-    ObjectReadRequest<ImageCtxT> *request;
+    ObjectReadRequest<ImageCtxT> *request = nullptr;
 
     C_SparseReadRequest(AioCompletion *aio_completion)
       : C_SparseReadRequestBase(aio_completion) {
