@@ -2364,7 +2364,8 @@ class PrepareSpace(object):
                 self.space_symlink = getattr(self.args, self.name)
                 return
 
-        self.space_symlink = '/dev/disk/by-partuuid/{uuid}'.format(
+        self.space_symlink = '/dev/disk/by-parttypeuuid/{ptype}.{uuid}'.format(
+            ptype=PTYPE['mpath']['block']['ready'],
             uuid=getattr(self.args, self.name + '_uuid'))
 
         if self.args.dmcrypt:
