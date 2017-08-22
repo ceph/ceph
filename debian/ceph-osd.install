@@ -11,6 +11,7 @@ usr/lib/libosd_tp.so*
 usr/lib/python*/dist-packages/ceph_disk*
 usr/sbin/ceph-disk
 usr/sbin/ceph-volume
+usr/sbin/ceph-volume-systemd
 usr/lib/python*/dist-packages/ceph_volume/*
 usr/lib/python*/dist-packages/ceph_volume-*
 usr/share/man/man8/ceph-clsinfo.8
