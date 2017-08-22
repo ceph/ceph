@@ -160,8 +160,8 @@ MockCreate *MockCreate::s_instance = nullptr;
 template<>
 class OpenRequest<MockJournalImageCtx> {
 public:
-  TagData *tag_data;
-  Context *on_finish;
+  TagData *tag_data = nullptr;
+  Context *on_finish = nullptr;
   static OpenRequest *s_instance;
   static OpenRequest *create(MockJournalImageCtx *image_ctx,
                              ::journal::MockJournalerProxy *journaler,
