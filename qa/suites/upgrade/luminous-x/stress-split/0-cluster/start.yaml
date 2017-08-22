@@ -1,0 +1,29 @@
+meta:
+- desc: |
+   Run ceph on two nodes,
+   with a separate client-only node.
+   Use xfs beneath the osds.
+overrides:
+  ceph:
+    fs: xfs
+    log-whitelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+      - \(MGR_DOWN\)
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: "*"
+      mon:
+        mon warn on osd down out interval zero: false
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+- - client.0
