@@ -5891,12 +5891,6 @@ void OSD::_collect_metadata(map<string,string> *pm)
 
   collect_sys_info(pm, cct);
 
-  std::string front_iface, back_iface;
-  /*
-  pick_iface(cct,
-      CEPH_PICK_ADDRESS_PUBLIC | CEPH_PICK_ADDRESS_CLUSTER,
-      &front_iface, &back_iface);
-      */
   (*pm)["front_iface"] = pick_iface(cct,
       client_messenger->get_myaddr().get_sockaddr_storage());
   (*pm)["back_iface"] = pick_iface(cct,
