@@ -607,6 +607,28 @@ static int rgw_iam_add_existing_objtags(RGWRados* store, struct req_state* s, rg
   return 0;
 }
 
+static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct req_state *s){
+
+  using header_pair_t = std::pair <const char*, const char*>;
+  static const std::initializer_list <header_pair_t> acl_header_conditionals {
+    {"HTTP_X_AMZ_GRANT_READ", "s3:x-amz-grant-read"},
+    {"HTTP_X_AMZ_GRANT_WRITE", "s3:x-amz-grant-write"},
+    {"HTTP_X_AMZ_GRANT_READ_ACP", "s3:x-amz-grant-acp"},
+    {"HTTP_X_AMZ_GRANT_WRITE_ACP", "s3:x-amz-grant-write-acp"},
+    {"HTTP_X_AMZ_GRANT_FULL_CONTROL", "s3:x-amz-grant-full-control"}
+  };
+
+  if (s->has_acl_header){
+    for (const auto& c: acl_header_conditionals){
+      auto hdr = s->info.env->get(c.first);
+      if(hdr) {
+	e[c.second] = hdr;
+      }
+    }
+  }
+}
+
+
 rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						struct req_state* s)
 {
@@ -3017,6 +3039,7 @@ int RGWPutObj::verify_permission()
     }
 
     rgw_add_to_iam_environment(s->env, "s3:x-amz-copy-source", copy_source);
+    rgw_add_grant_to_iam_environment(s->env, s);
     /* admin request overrides permission checks */
     if (! s->auth.identity->is_admin_of(cs_acl.get_owner().get_id())) {
       if (policy) {
@@ -4692,6 +4715,7 @@ int RGWPutACLs::verify_permission()
 
   if (!s->object.empty()) {
     auto iam_action = s->object.instance.empty() ? rgw::IAM::s3PutObjectAcl : rgw::IAM::s3PutObjectVersionAcl;
+    rgw_add_grant_to_iam_environment(s->env, s);
     auto obj = rgw_obj(s->bucket, s->object);
     op_ret = rgw_iam_add_existing_objtags(store, s, obj, iam_action);
     perm = verify_object_permission(s, iam_action);
