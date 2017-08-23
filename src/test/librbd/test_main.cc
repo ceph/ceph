@@ -54,5 +54,10 @@ int main(int argc, char **argv)
     std::cerr << "failed to enable lockdep" << std::endl;
     return -r;
   }
+
+  int seed = getpid();
+  std::cout << "seed " << seed << std::endl;
+  srand(seed);
+
   return RUN_ALL_TESTS();
 }
