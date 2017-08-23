@@ -129,6 +129,15 @@ void Option::dump(Formatter *f) const
   f->close_section();
 }
 
+constexpr unsigned long long operator"" _min (unsigned long long min) {
+  return min * 60;
+}
+constexpr unsigned long long operator"" _hr (unsigned long long hr) {
+  return hr * 60 * 60;
+}
+constexpr unsigned long long operator"" _day (unsigned long long day) {
+  return day * 60 * 60 * 24;
+}
 constexpr unsigned long long operator"" _K (unsigned long long n) {
   return n << 10;
 }
@@ -881,7 +890,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_subscribe_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(24*3600)
+    .set_default(1_day)
     .set_description(""),
 
     Option("mon_delta_reset_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -889,7 +898,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_osd_laggy_halflife", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(60*60)
+    .set_default(1_hr)
     .set_description(""),
 
     Option("mon_osd_laggy_weight", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -1181,7 +1190,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_health_to_clog_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(3600)
+    .set_default(1_hr)
     .set_description(""),
 
     Option("mon_health_to_clog_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -1221,11 +1230,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_scrub_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(3600*24)
+    .set_default(1_day)
     .set_description(""),
 
     Option("mon_scrub_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(60*5)
+    .set_default(5_min)
     .set_description(""),
 
     Option("mon_scrub_max_keys", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -1337,7 +1346,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_osd_blacklist_default_expire", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60*60)
+    .set_default(1_hr)
     .set_description(""),
 
     Option("mon_osd_crush_smoke_test", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -1421,11 +1430,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("auth_mon_ticket_ttl", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60*60*12)
+    .set_default(12_hr)
     .set_description(""),
 
     Option("auth_service_ticket_ttl", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60*60)
+    .set_default(1_hr)
     .set_description(""),
 
     Option("auth_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -2275,11 +2284,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_remove_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(60*60)
+    .set_default(1_hr)
     .set_description(""),
 
     Option("osd_remove_thread_suicide_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(10*60*60)
+    .set_default(10_hr)
     .set_description(""),
 
     Option("osd_command_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -2431,11 +2440,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_scrub_min_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60*60*24)
+    .set_default(1_day)
     .set_description(""),
 
     Option("osd_scrub_max_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(7*60*60*24)
+    .set_default(7_day)
     .set_description(""),
 
     Option("osd_scrub_interval_randomize_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -2467,7 +2476,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_deep_scrub_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60*60*24*7)
+    .set_default(7_day)
     .set_description(""),
 
     Option("osd_deep_scrub_randomize_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -2479,7 +2488,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_deep_scrub_update_digest_min_age", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(2*60*60)
+    .set_default(2_hr)
     .set_description(""),
 
     Option("osd_class_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -4353,7 +4362,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_keystone_revocation_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(15 * 60)
+    .set_default(15_min)
     .set_description(""),
 
     Option("rgw_keystone_verify_ssl", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -4425,7 +4434,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_swift_token_expiration", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(24 * 3600)
+    .set_default(1_day)
     .set_description(""),
 
     Option("rgw_print_continue", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -4624,15 +4633,15 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_gc_obj_min_wait", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(2 * 3600)
+    .set_default(2_hr)
     .set_description(""),
 
     Option("rgw_gc_processor_max_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(3600)
+    .set_default(1_hr)
     .set_description(""),
 
     Option("rgw_gc_processor_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(3600)
+    .set_default(1_hr)
     .set_description(""),
 
     Option("rgw_s3_success_create_obj_status", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -4756,7 +4765,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_user_quota_sync_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(3600 * 24)
+    .set_default(1_day)
     .set_description(""),
 
     Option("rgw_user_quota_sync_idle_users", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -4764,7 +4773,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_user_quota_sync_wait_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(3600 * 24)
+    .set_default(1_day)
     .set_description(""),
 
     Option("rgw_user_default_quota_max_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -4788,7 +4797,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_olh_pending_timeout_sec", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(3600)
+    .set_default(1_hr)
     .set_description(""),
 
     Option("rgw_user_max_buckets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -4796,7 +4805,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_objexp_gc_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(60 * 10)
+    .set_default(10_min)
     .set_description(""),
 
     Option("rgw_objexp_time_step", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -4948,7 +4957,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_reshard_thread_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(60 * 10)
+    .set_default(10_min)
     .set_description(""),
   });
 }
