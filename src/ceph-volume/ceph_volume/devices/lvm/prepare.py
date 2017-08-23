@@ -75,7 +75,6 @@ class Prepare(object):
 
         cluster_fsid = conf.ceph.get('global', 'fsid')
         fsid = args.osd_fsid or system.generate_uuid()
-        #osd_id = args.osd_id or prepare_utils.create_id(fsid)
         # allow re-using an id, in case a prepare failed
         osd_id = args.osd_id or prepare_utils.create_id(fsid, json.dumps(secrets))
         journal_name = "journal_%s" % fsid
@@ -167,28 +166,18 @@ class Prepare(object):
         Once the OSD is ready, an ad-hoc systemd unit will be enabled so that
         it can later get activated and the OSD daemon can get started.
 
-        Most basic Usage looks like (journal will be collocated from the same volume group):
-
-            ceph-volume lvm prepare --data {volume group name}
-
-
         Example calls for supported scenarios:
 
-        Dedicated volume group for Journal(s)
-        -------------------------------------
+        Filestore
+        ---------
 
           Existing logical volume (lv) or device:
 
-              ceph-volume lvm prepare --data {logical volume} --journal /path/to/{lv}|{device}
+              ceph-volume lvm prepare --filestore --data {vg name/lv name} --journal /path/to/device
 
           Or:
 
-              ceph-volume lvm prepare --data {data volume group} --journal {journal volume group}
-
-        Collocated (same group) for data and journal
-        --------------------------------------------
-
-              ceph-volume lvm prepare --data {volume group}
+              ceph-volume lvm prepare --filestore --data {vg name/lv name} --journal {vg name/lv name}
 
         """)
         parser = prepare_parser(
