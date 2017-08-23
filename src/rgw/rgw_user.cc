@@ -358,6 +358,12 @@ int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info
   return rgw_get_user_info_from_index(store, email, store->get_zone_params().user_email_pool, info, objv_tracker, pmtime);
 }
 
+extern swift_name_t rgw_get_swift_name(const rgw_user& account,
+                                       const boost::string_view user)
+{
+  return string_cat_reserve(account.to_str(), ":", user);
+}
+
 /**
  * Given an swift username, finds the user_info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)

@@ -74,16 +74,22 @@ extern int rgw_store_user_info(RGWRados *store,
 extern int rgw_get_user_info_by_uid(RGWRados *store,
                                     const rgw_user& user_id,
                                     RGWUserInfo& info,
-                                    RGWObjVersionTracker *objv_tracker = NULL,
-                                    real_time *pmtime                     = NULL,
-                                    rgw_cache_entry_info *cache_info   = NULL,
-                                    map<string, bufferlist> *pattrs    = NULL);
+                                    RGWObjVersionTracker *objv_tracker = nullptr,
+                                    real_time *pmtime                  = nullptr,
+                                    rgw_cache_entry_info *cache_info   = nullptr,
+                                    map<string, bufferlist> *pattrs    = nullptr);
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
                                       RGWObjVersionTracker *objv_tracker = NULL, real_time *pmtime = NULL);
+
+
+using swift_name_t = std::string;
+extern swift_name_t rgw_get_swift_name(const rgw_user& account,
+                                       const boost::string_view user);
+
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
@@ -437,15 +443,11 @@ struct RGWUserAdminOpState {
   RGWUserCaps *get_caps_obj() { return &info.caps; }
 
   std::string build_default_swift_kid() {
-    if (user_id.empty() || subuser.empty())
+    if (user_id.empty() || subuser.empty()) {
       return "";
-
-    std::string kid;
-    user_id.to_str(kid);
-    kid.append(":");
-    kid.append(subuser);
-
-    return kid;
+    } else {
+      return rgw_get_swift_name(user_id, subuser);
+    }
   }
 
   std::string generate_subuser() {
