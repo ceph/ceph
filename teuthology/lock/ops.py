@@ -77,7 +77,8 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
         # Only query for os_type/os_version if non-vps and non-libcloud, since
         # in that case we just create them.
         vm_types = ['vps'] + teuthology.provision.cloud.get_types()
-        if machine_type not in vm_types:
+        reimage_types = teuthology.provision.fog.get_types()
+        if machine_type not in vm_types + reimage_types:
             if os_type:
                 data['os_type'] = os_type
             if os_version:
@@ -106,6 +107,13 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                         unlock_one(ctx, machine, user)
                     ok_machs = keys.do_update_keys(ok_machs.keys())[1]
                 return ok_machs
+            elif machine_type in reimage_types:
+                reimaged = dict()
+                for machine in machines:
+                    teuthology.provision.reimage(ctx, machine)
+                    reimaged[machine] = machines[machine]
+                reimaged = keys.do_update_keys(reimaged.keys())[1]
+                return reimaged
             return machines
         elif response.status_code == 503:
             log.error('Insufficient nodes available to lock %d %s nodes.',

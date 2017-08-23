@@ -5,6 +5,7 @@ from ..misc import decanonicalize_hostname, get_distro, get_distro_version
 
 import cloud
 import downburst
+import fog
 import openstack
 import os
 
@@ -16,6 +17,13 @@ def _logfile(ctx, shortname):
     if hasattr(ctx, 'config') and ctx.config.get('archive_path'):
         return os.path.join(ctx.config['archive_path'],
                             shortname + '.downburst.log')
+
+
+def reimage(ctx, machine_name):
+    os_type = get_distro(ctx)
+    os_version = get_distro_version(ctx)
+    fog_obj = fog.FOG(machine_name, os_type, os_version)
+    return fog_obj.create()
 
 
 def create_if_vm(ctx, machine_name, _downburst=None):

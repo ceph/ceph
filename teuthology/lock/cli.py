@@ -153,6 +153,9 @@ def main(ctx):
                 ret = 1
                 if not ctx.f:
                     return ret
+            elif not query.is_vm(machine):
+                teuthology.provision.reimage(ctx, machine)
+                keys.do_update_keys([machine])
             else:
                 machines_to_update.append(machine)
                 teuthology.provision.create_if_vm(
