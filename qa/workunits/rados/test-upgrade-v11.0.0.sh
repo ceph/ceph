@@ -13,14 +13,14 @@ trap cleanup EXIT ERR HUP INT QUIT
 
 pids=""
 for f in \
-    'api_aio --gtest_filter=-LibRadosAio.RacingRemovePP:*WriteSame*:*CmpExt*:*RoundTrip3*:*Quota*' \
+    'api_aio --gtest_filter=-LibRadosAio.RacingRemovePP:*WriteSame*:*CmpExt*:*RoundTrip3*:*RoundTripPP3*:*Quota*' \
     'api_list --gtest_filter=-LibRadosList*.EnumerateObjects*' \
     'api_io --gtest_filter=-*Checksum*:*CmpExt*' \
     api_lock \
     'api_misc --gtest_filter=-*WriteSame*:*CmpExt*:*Checksum*:*CloneRange*' \
     'api_watch_notify --gtest_filter=-*WatchNotify3*' \
     api_tier api_pool api_snapshots api_stat api_cmd \
-    'api_c_write_operations --gtest_filter=-*WriteSame*' \
+    'api_c_write_operations --gtest_filter=-*WriteSame*:*CmpExt*' \
     api_c_read_operations \
     list_parallel \
     open_pools_parallel \
