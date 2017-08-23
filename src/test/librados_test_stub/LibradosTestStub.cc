@@ -920,7 +920,7 @@ void ObjectWriteOperation::writesame(uint64_t off, uint64_t len, const bufferlis
 
 void ObjectWriteOperation::zero(uint64_t off, uint64_t len) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
-  o->ops.push_back(boost::bind(&TestIoCtxImpl::zero, _1, _2, off, len));
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::zero, _1, _2, off, len, _4));
 }
 
 Rados::Rados() : client(NULL) {

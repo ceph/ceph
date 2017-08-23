@@ -68,7 +68,8 @@ public:
                 std::map<std::string, bufferlist>* attrset) override;
   int xattr_set(const std::string& oid, const std::string &name,
                 bufferlist& bl) override;
-  int zero(const std::string& oid, uint64_t off, uint64_t len) override;
+  int zero(const std::string& oid, uint64_t off, uint64_t len,
+           const SnapContext &snapc) override;
 
 protected:
   TestMemCluster::Pool *get_pool() {
