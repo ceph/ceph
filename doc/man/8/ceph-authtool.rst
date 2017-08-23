@@ -139,7 +139,8 @@ In general, an osd capability follows the grammar::
 
         osdcap  := grant[,grant...]
         grant   := allow (match capspec | capspec match)
-        match   := [pool[=]<poolname> | object_prefix <prefix>]
+        match   := [pool[=]<poolname> | object_prefix <prefix>
+                    | tag <application-name> <key>=<value> ]
         capspec := * | [r][w][x] [class-read] [class-write]
 
 The capspec determines what kind of operations the entity can perform::
