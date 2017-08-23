@@ -211,6 +211,7 @@ TYPE_FEATUREFUL(file_layout_t)
 
 #include "mds/CInode.h"
 TYPE_FEATUREFUL(InodeStore)
+TYPE_FEATUREFUL(InodeStoreBare)
 
 #include "mds/MDSMap.h"
 TYPE_FEATUREFUL(MDSMap)
