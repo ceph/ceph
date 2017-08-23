@@ -3762,9 +3762,9 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
       // Whether we have a tag to apply depends on ScrubHeader (if one is
       // present)
-      if (in->scrub_infop && in->scrub_infop->header) {
+      if (in->scrub_infop) {
         // I'm a non-orphan, so look up my ScrubHeader via my linkage
-        const std::string &tag = in->scrub_infop->header->tag;
+        const std::string &tag = in->scrub_infop->header->get_tag();
         // Rather than using the usual CInode::fetch_backtrace,
         // use a special variant that optionally writes a tag in the same
         // operation.
@@ -3888,7 +3888,7 @@ next:
           ++p) {
         CDir *dir = in->get_or_open_dirfrag(in->mdcache, *p);
 	dir->scrub_info();
-	if (!dir->scrub_infop->header && in->scrub_infop)
+	if (!dir->scrub_infop->header)
 	  dir->scrub_infop->header = in->scrub_infop->header;
         if (dir->is_complete()) {
 	  dir->scrub_local();
@@ -3933,8 +3933,7 @@ next:
 	if (dir->scrub_infop &&
 	    dir->scrub_infop->pending_scrub_error) {
 	  dir->scrub_infop->pending_scrub_error = false;
-	  if (dir->scrub_infop->header &&
-	      dir->scrub_infop->header->repair) {
+	  if (dir->scrub_infop->header->get_repair()) {
 	    results->raw_stats.error_str
 	      << "dirfrag(" << p->first << ") has bad stats (will be fixed); ";
 	  } else {
@@ -3949,8 +3948,7 @@ next:
       if (!dir_info.same_sums(in->inode.dirstat) ||
 	  !nest_info.same_sums(in->inode.rstat)) {
 	if (in->scrub_infop &&
-	    in->scrub_infop->header &&
-	    in->scrub_infop->header->repair) {
+	    in->scrub_infop->header->get_repair()) {
 	  results->raw_stats.error_str
 	    << "freshly-calculated rstats don't match existing ones (will be fixed)";
 	  in->mdcache->repair_inode_stats(in);
@@ -4179,7 +4177,7 @@ void CInode::scrub_initialize(CDentry *scrub_parent,
     for (std::list<frag_t>::iterator i = frags.begin();
         i != frags.end();
         ++i) {
-      if (header->force)
+      if (header->get_force())
 	scrub_infop->dirfrag_stamps[*i].reset();
       else
 	scrub_infop->dirfrag_stamps[*i];
@@ -4290,10 +4288,10 @@ void CInode::scrub_finished(MDSInternalContextBase **c) {
   *c = scrub_infop->on_finish;
   scrub_infop->on_finish = NULL;
 
-  if (scrub_infop->header && scrub_infop->header->origin == this) {
+  if (scrub_infop->header->get_origin() == this) {
     // We are at the point that a tagging scrub was initiated
     LogChannelRef clog = mdcache->mds->clog;
-    clog->info() << "scrub complete with tag '" << scrub_infop->header->tag << "'";
+    clog->info() << "scrub complete with tag '" << scrub_infop->header->get_tag() << "'";
   }
 }
 
