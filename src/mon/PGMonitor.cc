@@ -2336,6 +2336,32 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
   }
 
+  if (g_conf->mon_warn_osd_usage_min_max_delta) {
+    float max_osd_usage = 0.0, min_osd_usage = 1.0;
+    for (auto p = pg_map.osd_stat.begin(); p != pg_map.osd_stat.end(); ++p) {
+      // kb should never be 0, but avoid divide by zero in case of corruption
+      if (p->second.kb <= 0)
+        continue;
+      float usage = ((float)p->second.kb_used) / ((float)p->second.kb);
+      if (usage > max_osd_usage)
+        max_osd_usage = usage;
+      if (usage < min_osd_usage)
+        min_osd_usage = usage;
+    }
+    float diff = max_osd_usage - min_osd_usage;
+    if (diff > g_conf->mon_warn_osd_usage_min_max_delta) {
+      ostringstream ss;
+      ss << "difference between min (" << roundf(min_osd_usage*1000.0)/10.0
+	 << "%) and max (" << roundf(max_osd_usage*1000.0)/10.0
+	 << "%) osd usage " << roundf(diff*1000.0)/10.0 << "% > "
+	 << roundf(g_conf->mon_warn_osd_usage_min_max_delta*1000.0)/10.0
+	 << "% (mon_warn_osd_usage_min_max_delta)";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail)
+        detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+  }
+
   // recovery
   list<string> sl;
   pg_map.overall_recovery_summary(NULL, &sl);

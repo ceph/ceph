@@ -706,9 +706,19 @@ int FileStore::statfs(struct statfs *buf)
     assert(r != -ENOENT);
     return r;
   }
+  // Adjust for writes pending in the journal
+  if (journal) {
+    fsblkcnt_t estimate = DIV_ROUND_UP(journal->get_journal_size_estimate(), buf->f_bsize);
+    if (buf->f_bavail > estimate) {
+      buf->f_bavail -= estimate;
+      buf->f_bfree -= estimate;
+    } else {
+      buf->f_bavail = 0;
+      buf->f_bfree = 0;
+    }
+  }
   return 0;
 }
-
 
 void FileStore::new_journal()
 {
@@ -2895,7 +2905,7 @@ void FileStore::_do_transaction(
 	} else if (r == -ENOSPC) {
 	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
 	  // by partially applying transactions.
-	  msg = "ENOSPC handling not implemented";
+	  msg = "ENOSPC from disk filesystem, misconfigured cluster";
 	} else if (r == -ENOTEMPTY) {
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
 	} else if (r == -EPERM) {

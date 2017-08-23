@@ -222,7 +222,7 @@ Monitor Settings
               mark Ceph OSD Daemons ``out``.
               
 :Type: Double
-:Default: ``.3``
+:Default: ``.75``
 
 
 ``mon osd laggy halflife``
