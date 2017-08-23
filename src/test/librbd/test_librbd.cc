@@ -179,14 +179,6 @@ public:
   }
 
   static void SetUpTestCase() {
-    static bool seeded = false;
-    if (!seeded) {
-      seeded = true;
-      int seed = getpid();
-      cout << "seed " << seed << std::endl;
-      srand(seed);
-    }
-
     _pool_names.clear();
     _unique_pool_names.clear();
     _image_number = 0;
