@@ -107,6 +107,7 @@ void SnapshotRemoveRequest<I>::send_remove_object_map() {
     if (image_ctx.snap_info.find(m_snap_id) == image_ctx.snap_info.end()) {
       lderr(cct) << this << " " << __func__ << ": snapshot doesn't exist"
                  << dendl;
+      m_state = STATE_ERROR;
       this->async_complete(-ENOENT);
       return;
     }
