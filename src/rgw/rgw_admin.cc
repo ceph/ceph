@@ -2396,6 +2396,7 @@ int main(int argc, const char **argv)
   string start_marker;
   string end_marker;
   int max_entries = -1;
+  bool max_entries_specified = false;
   int admin = false;
   bool admin_specified = false;
   int system = false;
@@ -2557,6 +2558,7 @@ int main(int argc, const char **argv)
       max_buckets_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
       max_entries = (int)strict_strtol(val.c_str(), 10, &err);
+      max_entries_specified = true;
       if (!err.empty()) {
         cerr << "ERROR: failed to parse max entries: " << err << std::endl;
         return EINVAL;
@@ -6093,31 +6095,47 @@ next:
     }
     void *handle;
     int max = 1000;
-    int ret = store->meta_mgr->list_keys_init(metadata_key, &handle);
+    int ret = store->meta_mgr->list_keys_init(metadata_key, marker, &handle);
     if (ret < 0) {
       cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
     bool truncated;
+    uint64_t count = 0;
 
+    if (max_entries_specified) {
+      formatter->open_object_section("result");
+    }
     formatter->open_array_section("keys");
 
+    uint64_t left;
     do {
       list<string> keys;
-      ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
+      left = (max_entries_specified ? max_entries - count : max);
+      ret = store->meta_mgr->list_keys_next(handle, left, keys, &truncated);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       } if (ret != -ENOENT) {
 	for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
 	  formatter->dump_string("key", *iter);
+          ++count;
 	}
 	formatter->flush(cout);
       }
-    } while (truncated);
+    } while (truncated && left > 0);
 
     formatter->close_section();
+
+    if (max_entries_specified) {
+      encode_json("truncated", truncated, formatter);
+      encode_json("count", count, formatter);
+      if (truncated) {
+        encode_json("marker", store->meta_mgr->get_marker(handle), formatter);
+      }
+      formatter->close_section();
+    }
     formatter->flush(cout);
 
     store->meta_mgr->list_keys_complete(handle);

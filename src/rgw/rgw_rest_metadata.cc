@@ -68,6 +68,24 @@ const string RGWOp_Metadata_List::name() {
 }
 
 void RGWOp_Metadata_List::execute() {
+  string marker = s->info.args.get("marker");
+  bool max_entries_specified;
+  string max_entries_str = s->info.args.get("max-entries", &max_entries_specified);
+
+  bool extended_response = (max_entries_specified); /* for backward compatibility, if max-entries is not specified
+                                                    we will send the old response format */
+  uint64_t max_entries = 0;
+
+  if (max_entries_specified) {
+    string err;
+    max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+  }
+
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
@@ -75,19 +93,26 @@ void RGWOp_Metadata_List::execute() {
   void *handle;
   int max = 1000;
 
-  http_ret = store->meta_mgr->list_keys_init(metadata_key, &handle);
+  http_ret = store->meta_mgr->list_keys_init(metadata_key, marker, &handle);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't get key: " << cpp_strerror(http_ret) << dendl;
     return;
   }
 
   bool truncated;
+  uint64_t count = 0;
+
+  if (extended_response) {
+    s->formatter->open_object_section("result");
+  }
 
   s->formatter->open_array_section("keys");
 
+  uint64_t left;
   do {
     list<string> keys;
-    http_ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
+    left = (max_entries_specified ? max_entries - count : max);
+    http_ret = store->meta_mgr->list_keys_next(handle, left, keys, &truncated);
     if (http_ret < 0) {
       dout(5) << "ERROR: lists_keys_next(): " << cpp_strerror(http_ret)
 	      << dendl;
@@ -97,12 +122,21 @@ void RGWOp_Metadata_List::execute() {
     for (list<string>::iterator iter = keys.begin(); iter != keys.end();
 	 ++iter) {
       s->formatter->dump_string("key", *iter);
+      ++count;
     }
 
-  } while (truncated);
+  } while (truncated && left > 0);
 
   s->formatter->close_section();
 
+  if (extended_response) {
+    encode_json("truncated", truncated, s->formatter);
+    encode_json("count", count, s->formatter);
+    if (truncated) {
+      encode_json("marker", store->meta_mgr->get_marker(handle), s->formatter);
+    }
+    s->formatter->close_section();
+  }
   store->meta_mgr->list_keys_complete(handle);
 
   http_ret = 0;
