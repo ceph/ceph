@@ -28,3 +28,7 @@
   the safe use of the "osd snap trim sleep" option, wihch defaults to 0 but
   otherwise adds the given number of seconds in delay between every dispatch
   of trim operations to the underlying system.
+
+* The 'mon_warn_osd_usage_min_max_delta' health warning has been disabled because
+  it does not address clusters undergoing recovery or CRUSH rules that do
+  not target all devices in the cluster.
