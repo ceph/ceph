@@ -287,7 +287,15 @@ static void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen)
 extern "C" UserPerm *ceph_userperm_new(uid_t uid, gid_t gid, int ngids,
 				       gid_t *gidlist)
 {
-  return new (std::nothrow) UserPerm(uid, gid, ngids, gidlist);
+  UserPerm *perms = nullptr;
+  try {
+    perms = new UserPerm(uid, gid, ngids, gidlist);
+  }
+  catch (std::bad_alloc) {
+    delete perms;
+    perms = nullptr;
+  }
+  return perms;
 }
 
 extern "C" void ceph_userperm_destroy(UserPerm *perm)

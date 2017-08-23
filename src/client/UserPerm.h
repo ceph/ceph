@@ -25,14 +25,18 @@ private:
   bool alloced_gids;
   void deep_copy_from(const UserPerm& b) {
     if (alloced_gids) {
-      delete[] gids;
+      free(gids);
       alloced_gids = false;
     }
     m_uid = b.m_uid;
     m_gid = b.m_gid;
     gid_count = b.gid_count;
     if (gid_count) {
-      gids = new gid_t[gid_count];
+      gids = (gid_t *) malloc(gid_count * sizeof(gid_t));
+      if (!gids) {
+	throw std::bad_alloc();
+	return;
+      }
       alloced_gids = true;
       for (int i = 0; i < gid_count; ++i) {
 	gids[i] = b.gids[i];
@@ -59,7 +63,7 @@ public:
   }
   ~UserPerm() {
     if (alloced_gids)
-      delete[] gids;
+      free(gids);
   }
   UserPerm& operator=(const UserPerm o) {
     deep_copy_from(o);
