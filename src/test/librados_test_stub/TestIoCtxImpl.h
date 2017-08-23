@@ -158,7 +158,8 @@ public:
                         std::map<std::string, bufferlist>* attrset) = 0;
   virtual int xattr_set(const std::string& oid, const std::string &name,
                         bufferlist& bl) = 0;
-  virtual int zero(const std::string& oid, uint64_t off, uint64_t len) = 0;
+  virtual int zero(const std::string& oid, uint64_t off, uint64_t len,
+                   const SnapContext &snapc) = 0;
 
   int execute_operation(const std::string& oid,
                         const Operation &operation);
