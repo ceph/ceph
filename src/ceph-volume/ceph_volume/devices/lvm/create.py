@@ -28,28 +28,18 @@ class Create(object):
         all the metadata to the logical volumes using LVM tags, and starting
         the OSD daemon.
 
-        Most basic Usage looks like (journal will be collocated from the same volume group):
-
-            ceph-volume lvm create --data {volume group name}
-
-
         Example calls for supported scenarios:
 
-        Dedicated volume group for Journal(s)
-        -------------------------------------
+        Filestore
+        ---------
 
           Existing logical volume (lv) or device:
 
-              ceph-volume lvm create --data {logical volume} --journal /path/to/{lv}|{device}
+              ceph-volume lvm create --filestore --data {vg name/lv name} --journal /path/to/device
 
           Or:
 
-              ceph-volume lvm create --data {data volume group} --journal {journal volume group}
-
-        Collocated (same group) for data and journal
-        --------------------------------------------
-
-              ceph-volume lvm create --data {volume group}
+              ceph-volume lvm create --filestore --data {vg name/lv name} --journal {vg name/lv name}
 
         """)
         parser = create_parser(
