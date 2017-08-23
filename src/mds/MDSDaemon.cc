@@ -1343,28 +1343,28 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
     if (caps_info.allow_all) {
       // Flag for auth providers that don't provide cap strings
       s->auth_caps.set_allow_all();
-    }
+    } else {
+      bufferlist::iterator p = caps_info.caps.begin();
+      string auth_cap_str;
+      try {
+        ::decode(auth_cap_str, p);
 
-    bufferlist::iterator p = caps_info.caps.begin();
-    string auth_cap_str;
-    try {
-      ::decode(auth_cap_str, p);
-
-      dout(10) << __func__ << ": parsing auth_cap_str='" << auth_cap_str << "'" << dendl;
-      std::ostringstream errstr;
-      if (!s->auth_caps.parse(g_ceph_context, auth_cap_str, &errstr)) {
-        dout(1) << __func__ << ": auth cap parse error: " << errstr.str()
-		<< " parsing '" << auth_cap_str << "'" << dendl;
-	clog->warn() << name << " mds cap '" << auth_cap_str
-		     << "' does not parse: " << errstr.str();
+        dout(10) << __func__ << ": parsing auth_cap_str='" << auth_cap_str << "'" << dendl;
+        std::ostringstream errstr;
+        if (!s->auth_caps.parse(g_ceph_context, auth_cap_str, &errstr)) {
+          dout(1) << __func__ << ": auth cap parse error: " << errstr.str()
+		  << " parsing '" << auth_cap_str << "'" << dendl;
+	  clog->warn() << name << " mds cap '" << auth_cap_str
+		       << "' does not parse: " << errstr.str();
+          is_valid = false;
+        }
+      } catch (buffer::error& e) {
+        // Assume legacy auth, defaults to:
+        //  * permit all filesystem ops
+        //  * permit no `tell` ops
+        dout(1) << __func__ << ": cannot decode auth caps bl of length " << caps_info.caps.length() << dendl;
         is_valid = false;
       }
-    } catch (buffer::error& e) {
-      // Assume legacy auth, defaults to:
-      //  * permit all filesystem ops
-      //  * permit no `tell` ops
-      dout(1) << __func__ << ": cannot decode auth caps bl of length " << caps_info.caps.length() << dendl;
-      is_valid = false;
     }
   }
 
