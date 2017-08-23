@@ -956,6 +956,7 @@ public:
 
   // crap
   int chdir(const char *s, std::string &new_cwd, const UserPerm& perms);
+  void _getcwd(std::string& cwd, const UserPerm& perms);
   void getcwd(std::string& cwd, const UserPerm& perms);
 
   // namespace ops

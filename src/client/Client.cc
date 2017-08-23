@@ -9380,11 +9380,11 @@ int Client::chdir(const char *relpath, std::string &new_cwd,
     cwd.swap(in);
   ldout(cct, 3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
 
-  getcwd(new_cwd, perms);
+  _getcwd(new_cwd, perms);
   return 0;
 }
 
-void Client::getcwd(string& dir, const UserPerm& perms)
+void Client::_getcwd(string& dir, const UserPerm& perms)
 {
   filepath path;
   ldout(cct, 10) << "getcwd " << *cwd << dendl;
@@ -9422,6 +9422,12 @@ void Client::getcwd(string& dir, const UserPerm& perms)
   }
   dir = "/";
   dir += path.get_path();
+}
+
+void Client::getcwd(string& dir, const UserPerm& perms)
+{
+  Mutex::Locker l(client_lock);
+  _getcwd(dir, perms);
 }
 
 int Client::statfs(const char *path, struct statvfs *stbuf,
