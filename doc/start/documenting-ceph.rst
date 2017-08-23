@@ -464,7 +464,7 @@ its native format. You may notice that it is generally as legible in a terminal
 as it is in its rendered HTML format. Additionally, you may also notice that
 diagrams in ``ditaa`` format also render reasonably well in text mode. ::
 
-	cat doc/architecture.rst | less
+	less doc/architecture.rst
 
 Review the following style guides to maintain this consistency.
 
