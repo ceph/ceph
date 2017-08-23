@@ -5212,7 +5212,7 @@ ostream& operator<<(ostream &out, const UserPerm& perm) {
 int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
 			const UserPerm& perms)
 {
-  ldout(cct, 20) << __func__ << *in << "; " << perms << dendl;
+  ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
@@ -6698,11 +6698,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
       ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
-    } else if (kill_sguid && S_ISREG(in->mode)) {
+    } else if (kill_sguid && S_ISREG(in->mode) && (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
       /* Must squash the any setuid/setgid bits with an ownership change */
-      in->mode &= ~S_ISUID;
-      if ((in->mode & (S_ISGID|S_IXGRP)) == (S_ISGID|S_IXGRP))
-	in->mode &= ~S_ISGID;
+      in->mode &= ~(S_ISUID|S_ISGID);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
     }
 
@@ -6845,6 +6843,14 @@ int Client::_setattr(InodeRef &in, struct stat *attr, int mask,
 
   stat_to_statx(attr, &stx);
   mask &= ~CEPH_SETATTR_BTIME;
+
+  if ((mask & CEPH_SETATTR_UID) && attr->st_uid == static_cast<uid_t>(-1)) {
+    mask &= ~CEPH_SETATTR_UID;
+  }
+  if ((mask & CEPH_SETATTR_GID) && attr->st_gid == static_cast<uid_t>(-1)) {
+    mask &= ~CEPH_SETATTR_GID;
+  }
+
   return _setattrx(in, &stx, mask, perms);
 }
 
@@ -7196,10 +7202,7 @@ int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
   struct stat attr;
   attr.st_uid = new_uid;
   attr.st_gid = new_gid;
-  int mask = 0;
-  if (new_uid != static_cast<uid_t>(-1)) mask |= CEPH_SETATTR_UID;
-  if (new_gid != static_cast<gid_t>(-1)) mask |= CEPH_SETATTR_GID;
-  return _setattr(in, &attr, mask, perms);
+  return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID, perms);
 }
 
 int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
@@ -9015,8 +9018,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     return r;
 
   /* clear the setuid/setgid bits, if any */
-  if (unlikely((in->mode & S_ISUID) ||
-	       (in->mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
+  if (unlikely(in->mode & (S_ISUID|S_ISGID)) && size > 0) {
     struct ceph_statx stx = { 0 };
 
     put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
