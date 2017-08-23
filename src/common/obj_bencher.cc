@@ -202,6 +202,10 @@ void *ObjBencher::status_printer(void *_bencher) {
   }
   if (formatter)
     formatter->close_section(); //datas
+  if (iops < 0) {
+    auto runtime = ceph_clock_now() - data.start_time;
+    data.idata.min_iops = data.idata.max_iops = data.finished / runtime;
+  }
   bencher->lock.Unlock();
   return NULL;
 }
