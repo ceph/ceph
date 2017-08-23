@@ -5449,6 +5449,9 @@ void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
 {
   dout(10) << "rebuild_need_snapflush " << snap_follows << " on " << *head_in << dendl;
 
+  if (!realm->has_snaps_in_range(snap_follows + 1, head_in->first - 1))
+    return;
+
   const set<snapid_t>& snaps = realm->get_snaps();
   snapid_t follows = snap_follows;
 
@@ -5456,9 +5459,21 @@ void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
     CInode *in = pick_inode_snap(head_in, follows);
     if (in == head_in)
       break;
+
+    bool need_snapflush = false;
+    for (auto p = snaps.lower_bound(MAX(in->first, (snapid_t)(follows + 1)));
+	 p != snaps.end() && *p <= in->last;
+	 ++p) {
+      head_in->add_need_snapflush(in, *p, client);
+      need_snapflush = true;
+    }
+    follows = in->last;
+    if (!need_snapflush)
+      continue;
+
     dout(10) << " need snapflush from client." << client << " on " << *in << dendl;
 
-    /* TODO: we can check the reconnected/flushing caps to find 
+    /* TODO: we can check the reconnected/flushing caps to find
      *       which locks need gathering */
     for (int i = 0; i < num_cinode_locks; i++) {
       int lockid = cinode_lock_info[i].lock;
@@ -5470,13 +5485,6 @@ void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
       lock->get_wrlock(true);
     }
 
-    for (auto p = snaps.lower_bound(in->first);
-	 p != snaps.end() && *p <= in->last;
-	 ++p) {
-      head_in->add_need_snapflush(in, *p, client);
-    }
-
-    follows = in->last;
   }
 }
 
