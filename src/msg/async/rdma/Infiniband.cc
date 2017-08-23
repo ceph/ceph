@@ -1029,7 +1029,12 @@ retry:
   sprintf(msg, "%04x:%08x:%08x:%08x:%s", im.lid, im.qpn, im.psn, im.peer_qpn, gid);
   ldout(cct, 10) << __func__ << " sending: " << im.lid << ", " << im.qpn << ", " << im.psn
                  << ", " << im.peer_qpn << ", "  << gid  << dendl;
+  if (sd <= 0){
+    ldout(cct, 0) << __func__ << " socket in bad state" << dendl;
+    return -EBADFD;
+  }
   r = ::write(sd, msg, sizeof(msg));
+
   // Drop incoming qpt
   if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
     if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
