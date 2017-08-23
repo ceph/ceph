@@ -4842,6 +4842,11 @@ void RGWDeleteLC::execute()
       }
     }
   op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  if (op_ret < 0) {
+    ldout(s->cct, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket=" << s->bucket.name
+            << " returned err=" << op_ret << dendl;
+    return;
+  }
   string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
   pair<string, int> entry(shard_id, lc_uninitial);
   string oid; 
