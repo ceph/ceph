@@ -1739,8 +1739,8 @@ TEST(LibCephFS, ClearSetuid) {
   Fh *fh;
   Inode *in;
   struct ceph_statx stx;
-  const mode_t after_mode = S_IRWXU | S_IRWXG;
-  const mode_t before_mode = S_IRWXU | S_IRWXG | S_ISUID | S_ISGID;
+  const mode_t after_mode = S_IRWXU;
+  const mode_t before_mode = S_IRWXU | S_ISUID | S_ISGID;
   const unsigned want = CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_MODE;
   UserPerm *usercred = ceph_mount_perms(cmount);
 
@@ -1787,6 +1787,35 @@ TEST(LibCephFS, ClearSetuid) {
   ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, usercred), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_MODE);
   ASSERT_EQ(stx.stx_mode & (mode_t)ALLPERMS, after_mode);
+
+  /* test chown with supplementary groups, and chown with/without exe bit */
+  uid_t u = 65534;
+  gid_t g = 65534;
+  gid_t gids[] = {65533,65532};
+  UserPerm *altcred = ceph_userperm_new(u, g, sizeof gids / sizeof gids[0], gids);
+  stx.stx_uid = u;
+  stx.stx_gid = g;
+  mode_t m = S_ISGID|S_ISUID|S_IRUSR|S_IWUSR;
+  stx.stx_mode = m;
+  ASSERT_EQ(ceph_ll_setattr(cmount, in, &stx, CEPH_STATX_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID, rootcred), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, altcred), 0);
+  ASSERT_EQ(stx.stx_mode&(mode_t)ALLPERMS, m);
+  /* not dropped without exe bit */
+  stx.stx_gid = gids[0];
+  ASSERT_EQ(ceph_ll_setattr(cmount, in, &stx, CEPH_SETATTR_GID, altcred), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, altcred), 0);
+  ASSERT_EQ(stx.stx_mode&(mode_t)ALLPERMS, m);
+  /* now check dropped with exe bit */
+  m = S_ISGID|S_ISUID|S_IRWXU;
+  stx.stx_mode = m;
+  ASSERT_EQ(ceph_ll_setattr(cmount, in, &stx, CEPH_STATX_MODE, altcred), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, altcred), 0);
+  ASSERT_EQ(stx.stx_mode&(mode_t)ALLPERMS, m);
+  stx.stx_gid = gids[1];
+  ASSERT_EQ(ceph_ll_setattr(cmount, in, &stx, CEPH_SETATTR_GID, altcred), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, altcred), 0);
+  ASSERT_EQ(stx.stx_mode&(mode_t)ALLPERMS, m&(S_IRWXU|S_IRWXG|S_IRWXO));
+  ceph_userperm_destroy(altcred);
 
   ASSERT_EQ(ceph_ll_close(cmount, fh), 0);
   ceph_shutdown(cmount);
