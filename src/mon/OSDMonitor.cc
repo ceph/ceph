@@ -5726,15 +5726,20 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     _get_pending_crush(newcrush);
     ostringstream err;
     CrushTester tester(newcrush, err);
+    tester.set_min_x(0);
     tester.set_max_x(50);
     tester.set_rule(crush_rule);
+    auto start = ceph::coarse_mono_clock::now();
     r = tester.test_with_fork(g_conf->mon_lease);
+    auto duration = ceph::coarse_mono_clock::now() - start;
     if (r < 0) {
       dout(10) << " tester.test_with_fork returns " << r
 	       << ": " << err.str() << dendl;
       *ss << "crush test failed with " << r << ": " << err.str();
       return r;
     }
+    dout(10) << __func__ << " crush somke test duration: "
+             << duration << dendl;
   }
   unsigned size, min_size;
   r = prepare_pool_size(pool_type, erasure_code_profile, &size, &min_size, ss);
@@ -7301,8 +7306,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       dout(10) << " testing map" << dendl;
       stringstream ess;
       CrushTester tester(crush, ess);
+      tester.set_min_x(0);
       tester.set_max_x(50);
+      auto start = ceph::coarse_mono_clock::now();
       int r = tester.test_with_fork(g_conf->mon_lease);
+      auto duration = ceph::coarse_mono_clock::now() - start;
       if (r < 0) {
 	dout(10) << " tester.test_with_fork returns " << r
 		 << ": " << ess.str() << dendl;
@@ -7310,7 +7318,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = r;
 	goto reply;
       }
-      dout(10) << " crush test result " << ess.str() << dendl;
+      dout(10) << __func__ << " crush somke test duration: "
+               << duration << ", result: " << ess.str() << dendl;
     }
 
     pending_inc.crush = data;
