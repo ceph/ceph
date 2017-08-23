@@ -83,4 +83,55 @@ int balance_values(int values_count, int items_count, __s64* straws, __u32* targ
       delta[winner_item] -= 1;
     }
 
+    int highest_variance = 0;
+    for (int j = 0; j < items_count; j++)
+      highest_variance = MAX(highest_variance, abs(delta[j]));
+
+    // there is little to gain with a perfect distribution, +-1 is
+    // good enough
+    if (highest_variance <= 1)
+      break;
+
+    // find the smallest difference so that we can either remove a value
+    // from an overfilled item and add the subtracted weight to an
+    // underfilled item or add a value to an overfilled item and sub the
+    // added weight from an overfilled item
+  
+    double smallest_winner_ratio = DBL_MAX;
+    int smallest_winner_item = -1;
+
+    double smallest_looser_ratio = DBL_MAX;
+    int smallest_looser_item = -1;
+
+    for (int j = 0; j < items_count; j++) {
+      if (delta[j] == 0) // balanced
+        continue;
+      if (delta[j] < 0) {
+        // overfilled
+        if (closest_winners[j] < smallest_winner_ratio) {
+          smallest_winner_item = j;
+          smallest_winner_ratio = closest_winners[j];
+        }
+      } else {
+        // underfilled
+        if (closest_loosers[j] < smallest_looser_ratio) {
+          smallest_looser_item = j;
+          smallest_looser_ratio = closest_loosers[j];
+        }
+      }
+    }
+
+    // that should not happen
+    if (smallest_looser_item == -1 || smallest_winner_item == -1)
+      break;
+
+    double modify = MIN(smallest_winner_ratio, smallest_winner_ratio); // + 1 so it wins/looses
+
+    for (int i = 0; i < values_count; i++) {
+      __s64* items_straws = straws + items_count * i;
+      items_straws[smallest_winner_item] *= 1.0 - modify;
+      items_straws[smallest_looser_item] *= 1.0 + modify;
+    }
+  }
+  return iterations;
 }
