@@ -1,0 +1,3 @@
+* The 'mon_warn_osd_usage_min_max_delta' health warning has been disabled because
+  it does not address clusters undergoing recovery or CRUSH rules that do
+  not target all devices in the cluster.
