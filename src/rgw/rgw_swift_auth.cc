@@ -203,13 +203,17 @@ class TempURLEngine::PrefixableSignatureHelper
   const boost::optional<const std::string&> prefix;
 
 public:
-  PrefixableSignatureHelper(const std::string& decoded_uri,
+  PrefixableSignatureHelper(const std::string& _decoded_uri,
 	                    const std::string& object_name,
                             const boost::optional<const std::string&> prefix)
-    : decoded_uri(decoded_uri),
+    : decoded_uri(_decoded_uri),
       object_name(object_name),
       prefix(prefix) {
-    /* Transform: v1/acct/cont/obj - > v1/acct/cont/ */
+    /* Transform: v1/acct/cont/obj - > v1/acct/cont/
+     *
+     * NOTE(rzarzynski): we really want to substr() on boost::string_view,
+     * not std::string. Otherwise we would end with no_obj_uri referencing
+     * a temporary. */
     no_obj_uri = \
       decoded_uri.substr(0, decoded_uri.length() - object_name.length());
   }
