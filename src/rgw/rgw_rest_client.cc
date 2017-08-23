@@ -391,7 +391,7 @@ struct grant_type_to_header grants_headers_def[] = {
 
 static bool grants_by_type_check_perm(map<int, string>& grants_by_type, int perm, ACLGrant& grant, int check_perm)
 {
-  if ((perm & check_perm) == perm) {
+  if ((perm & check_perm) == check_perm) {
     grants_by_type_add_one_grant(grants_by_type, check_perm, grant);
     return true;
   }
