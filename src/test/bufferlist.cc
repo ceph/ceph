@@ -219,6 +219,7 @@ TEST(Buffer, constructors) {
     snprintf(cmd, sizeof(cmd), "echo ABC > %s", FILENAME);
     EXPECT_EQ(0, ::system(cmd));
     int fd = ::open(FILENAME, O_RDONLY);
+    assert (fd >= 0);
     bufferptr ptr(buffer::create_zero_copy(zc_len, fd, NULL));
     history_alloc_bytes += zc_len;
     history_alloc_num++;
