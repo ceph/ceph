@@ -83,8 +83,8 @@ static int do_metadata_list(librbd::Image& image, Formatter *f)
   return 0;
 }
 
-static int do_metadata_set(librbd::Image& image, const char *key,
-                          const char *value)
+static int do_metadata_set(librbd::Image& image, std::string &key,
+                          std::string &value)
 {
   int r = image.metadata_set(key, value);
   if (r < 0) {
@@ -94,7 +94,7 @@ static int do_metadata_set(librbd::Image& image, const char *key,
   return r;
 }
 
-static int do_metadata_remove(librbd::Image& image, const char *key)
+static int do_metadata_remove(librbd::Image& image, std::string &key)
 {
   int r = image.metadata_remove(key);
   if (r == -ENOENT) {
@@ -107,7 +107,7 @@ static int do_metadata_remove(librbd::Image& image, const char *key)
   return r;
 }
 
-static int do_metadata_get(librbd::Image& image, const char *key)
+static int do_metadata_get(librbd::Image& image, std::string &key)
 {
   std::string s;
   int r = image.metadata_get(key, &s);
@@ -195,7 +195,7 @@ int execute_get(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_metadata_get(image, key.c_str());
+  r = do_metadata_get(image, key);
   if (r < 0) {
     std::cerr << "rbd: getting metadata failed: " << cpp_strerror(r)
               << std::endl;
@@ -245,7 +245,7 @@ int execute_set(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_metadata_set(image, key.c_str(), value.c_str());
+  r = do_metadata_set(image, key, value);
   if (r < 0) {
     std::cerr << "rbd: setting metadata failed: " << cpp_strerror(r)
               << std::endl;
@@ -287,7 +287,7 @@ int execute_remove(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_metadata_remove(image, key.c_str());
+  r = do_metadata_remove(image, key);
   if (r < 0) {
     std::cerr << "rbd: removing metadata failed: " << cpp_strerror(r)
               << std::endl;
