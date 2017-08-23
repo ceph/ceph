@@ -1,3 +1,4 @@
+from ceph_volume.util import arg_validators
 import argparse
 
 
@@ -14,12 +15,13 @@ def common_parser(prog, description):
     required_args = parser.add_argument_group('required arguments')
     parser.add_argument(
         '--journal',
-        help='A logical group name, path to a logical volume, or path to a device',
+        help='A logical volume (vg_name/lv_name), or path to a device',
     )
     required_args.add_argument(
         '--data',
         required=True,
-        help='A logical group name or a path to a logical volume',
+        type=arg_validators.LVPath(),
+        help='A logical volume (vg_name/lv_name) for OSD data',
     )
     parser.add_argument(
         '--journal-size',
