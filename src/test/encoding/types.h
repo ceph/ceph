@@ -612,10 +612,6 @@ MESSAGE(MOSDRepScrub)
 MESSAGE(MOSDScrub)
 #include "messages/MOSDForceRecovery.h"
 MESSAGE(MOSDForceRecovery)
-#include "messages/MOSDSubOp.h"
-MESSAGE(MOSDSubOp)
-#include "messages/MOSDSubOpReply.h"
-MESSAGE(MOSDSubOpReply)
 #include "messages/MPGStats.h"
 MESSAGE(MPGStats)
 #include "messages/MPGStatsAck.h"

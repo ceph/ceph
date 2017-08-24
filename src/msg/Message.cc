@@ -65,8 +65,6 @@ using namespace std;
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include "messages/MOSDSubOp.h"
-#include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDMap.h"
@@ -462,12 +460,6 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case CEPH_MSG_OSD_OPREPLY:
     m = new MOSDOpReply();
-    break;
-  case MSG_OSD_SUBOP:
-    m = new MOSDSubOp();
-    break;
-  case MSG_OSD_SUBOPREPLY:
-    m = new MOSDSubOpReply();
     break;
   case MSG_OSD_REPOP:
     m = new MOSDRepOp();

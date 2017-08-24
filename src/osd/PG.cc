@@ -50,9 +50,7 @@
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MOSDBackoff.h"
 #include "messages/MOSDScrubReserve.h"
-#include "messages/MOSDSubOp.h"
 #include "messages/MOSDRepOp.h"
-#include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDRepScrubMap.h"
 #include "messages/MOSDPGRecoveryDelete.h"
@@ -3725,46 +3723,6 @@ void PG::do_replica_scrub_map(OpRequestRef op)
   }
 }
 
-void PG::sub_op_scrub_map(OpRequestRef op)
-{
-  // for legacy jewel compatibility only
-  const MOSDSubOp *m = static_cast<const MOSDSubOp *>(op->get_req());
-  assert(m->get_type() == MSG_OSD_SUBOP);
-  dout(7) << "sub_op_scrub_map" << dendl;
-
-  if (m->map_epoch < info.history.same_interval_since) {
-    dout(10) << "sub_op_scrub discarding old sub_op from "
-	     << m->map_epoch << " < " << info.history.same_interval_since << dendl;
-    return;
-  }
-
-  if (!scrubber.is_chunky_scrub_active()) {
-    dout(10) << "sub_op_scrub_map scrub isn't active" << dendl;
-    return;
-  }
-
-  op->mark_started();
-
-  dout(10) << " got " << m->from << " scrub map" << dendl;
-  bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
-
-  scrubber.received_maps[m->from].decode(p, info.pgid.pool());
-  dout(10) << "map version is "
-	     << scrubber.received_maps[m->from].valid_through
-	     << dendl;
-
-  --scrubber.waiting_on;
-  scrubber.waiting_on_whom.erase(m->from);
-
-  if (scrubber.waiting_on == 0) {
-    if (ops_blocked_by_scrub()) {
-      requeue_scrub(true);
-    } else {
-      requeue_scrub(false);
-    }
-  }
-}
-
 // send scrub v3 messages (chunky scrub)
 void PG::_request_scrub_map(
   pg_shard_t replica, eversion_t version,
@@ -3801,24 +3759,14 @@ void PG::handle_scrub_reserve_request(OpRequestRef op)
     dout(20) << __func__ << ": failed to reserve remotely" << dendl;
     scrubber.reserved = false;
   }
-  if (op->get_req()->get_type() == MSG_OSD_SCRUB_RESERVE) {
-    const MOSDScrubReserve *m =
-      static_cast<const MOSDScrubReserve*>(op->get_req());
-    Message *reply = new MOSDScrubReserve(
-      spg_t(info.pgid.pgid, primary.shard),
-      m->map_epoch,
-      scrubber.reserved ? MOSDScrubReserve::GRANT : MOSDScrubReserve::REJECT,
-      pg_whoami);
-    osd->send_message_osd_cluster(reply, op->get_req()->get_connection());
-  } else {
-    // for jewel compat only
-    const MOSDSubOp *req = static_cast<const MOSDSubOp*>(op->get_req());
-    assert(req->get_type() == MSG_OSD_SUBOP);
-    MOSDSubOpReply *reply = new MOSDSubOpReply(
-      req, pg_whoami, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
-    ::encode(scrubber.reserved, reply->get_data());
-    osd->send_message_osd_cluster(reply, op->get_req()->get_connection());
-  }
+  const MOSDScrubReserve *m =
+    static_cast<const MOSDScrubReserve*>(op->get_req());
+  Message *reply = new MOSDScrubReserve(
+    spg_t(info.pgid.pgid, primary.shard),
+    m->map_epoch,
+    scrubber.reserved ? MOSDScrubReserve::GRANT : MOSDScrubReserve::REJECT,
+    pg_whoami);
+  osd->send_message_osd_cluster(reply, op->get_req()->get_connection());
 }
 
 void PG::handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from)
@@ -3913,27 +3861,12 @@ void PG::scrub_reserve_replicas()
        ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting reserve from osd." << *i << dendl;
-    if (HAVE_FEATURE(get_min_acting_features(), SERVER_LUMINOUS)) {
-      osd->send_message_osd_cluster(
-	i->osd,
-	new MOSDScrubReserve(spg_t(info.pgid.pgid, i->shard),
-			     get_osdmap()->get_epoch(),
-			     MOSDScrubReserve::REQUEST, pg_whoami),
-	get_osdmap()->get_epoch());
-    } else {
-      // for jewel compat only
-      vector<OSDOp> scrub(1);
-      scrub[0].op.op = CEPH_OSD_OP_SCRUB_RESERVE;
-      hobject_t poid;
-      eversion_t v;
-      osd_reqid_t reqid;
-      MOSDSubOp *subop = new MOSDSubOp(
-	reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
-	get_osdmap()->get_epoch(), osd->get_tid(), v);
-      subop->ops = scrub;
-      osd->send_message_osd_cluster(
-	i->osd, subop, get_osdmap()->get_epoch());
-    }
+    osd->send_message_osd_cluster(
+      i->osd,
+      new MOSDScrubReserve(spg_t(info.pgid.pgid, i->shard),
+			   get_osdmap()->get_epoch(),
+			   MOSDScrubReserve::REQUEST, pg_whoami),
+      get_osdmap()->get_epoch());
   }
 }
 
@@ -3945,26 +3878,12 @@ void PG::scrub_unreserve_replicas()
        ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting unreserve from osd." << *i << dendl;
-    if (HAVE_FEATURE(get_min_acting_features(), SERVER_LUMINOUS)) {
-      osd->send_message_osd_cluster(
-	i->osd,
-	new MOSDScrubReserve(spg_t(info.pgid.pgid, i->shard),
-			     get_osdmap()->get_epoch(),
-			     MOSDScrubReserve::RELEASE, pg_whoami),
-	get_osdmap()->get_epoch());
-    } else {
-      // for jewel compat only
-      vector<OSDOp> scrub(1);
-      scrub[0].op.op = CEPH_OSD_OP_SCRUB_UNRESERVE;
-      hobject_t poid;
-      eversion_t v;
-      osd_reqid_t reqid;
-      MOSDSubOp *subop = new MOSDSubOp(
-	reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
-	get_osdmap()->get_epoch(), osd->get_tid(), v);
-      subop->ops = scrub;
-      osd->send_message_osd_cluster(i->osd, subop, get_osdmap()->get_epoch());
-    }
+    osd->send_message_osd_cluster(
+      i->osd,
+      new MOSDScrubReserve(spg_t(info.pgid.pgid, i->shard),
+			   get_osdmap()->get_epoch(),
+			   MOSDScrubReserve::RELEASE, pg_whoami),
+      get_osdmap()->get_epoch());
   }
 }
 
@@ -4289,33 +4208,12 @@ void PG::replica_scrub(
     map, start, end, msg->deep, msg->seed,
     handle);
 
-  if (HAVE_FEATURE(acting_features, SERVER_LUMINOUS)) {
-    MOSDRepScrubMap *reply = new MOSDRepScrubMap(
-      spg_t(info.pgid.pgid, get_primary().shard),
-      msg->map_epoch,
-      pg_whoami);
-    ::encode(map, reply->get_data());
-    osd->send_message_osd_cluster(reply, msg->get_connection());
-  } else {
-    // for jewel compatibility
-    vector<OSDOp> scrub(1);
-    scrub[0].op.op = CEPH_OSD_OP_SCRUB_MAP;
-    hobject_t poid;
-    eversion_t v;
-    osd_reqid_t reqid;
-    MOSDSubOp *subop = new MOSDSubOp(
-      reqid,
-      pg_whoami,
-      spg_t(info.pgid.pgid, get_primary().shard),
-      poid,
-      0,
-      msg->map_epoch,
-      osd->get_tid(),
-      v);
-    ::encode(map, subop->get_data());
-    subop->ops = scrub;
-    osd->send_message_osd_cluster(subop, msg->get_connection());
-  }
+  MOSDRepScrubMap *reply = new MOSDRepScrubMap(
+    spg_t(info.pgid.pgid, get_primary().shard),
+    msg->map_epoch,
+    pg_whoami);
+  ::encode(map, reply->get_data());
+  osd->send_message_osd_cluster(reply, msg->get_connection());
 }
 
 /* Scrub:
@@ -5749,8 +5647,6 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_op(op);
   case CEPH_MSG_OSD_BACKOFF:
     return false; // never discard
-  case MSG_OSD_SUBOP:
-    return can_discard_replica_op<MOSDSubOp, MSG_OSD_SUBOP>(op);
   case MSG_OSD_REPOP:
     return can_discard_replica_op<MOSDRepOp, MSG_OSD_REPOP>(op);
   case MSG_OSD_PG_PUSH:
@@ -5759,8 +5655,6 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_replica_op<MOSDPGPull, MSG_OSD_PG_PULL>(op);
   case MSG_OSD_PG_PUSH_REPLY:
     return can_discard_replica_op<MOSDPGPushReply, MSG_OSD_PG_PUSH_REPLY>(op);
-  case MSG_OSD_SUBOPREPLY:
-    return can_discard_replica_op<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op);
   case MSG_OSD_REPOPREPLY:
     return can_discard_replica_op<MOSDRepOpReply, MSG_OSD_REPOPREPLY>(op);
   case MSG_OSD_PG_RECOVERY_DELETE:
