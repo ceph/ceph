@@ -2715,7 +2715,6 @@ void PG::publish_stats_to_osd()
   _update_calc_stats();
   _update_blocked_by();
 
-  bool publish = false;
   pg_stat_t pre_publish = info.stats;
   pre_publish.stats.add(unstable_stats);
   utime_t cutoff = now;
@@ -2743,10 +2742,6 @@ void PG::publish_stats_to_osd()
     if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
       info.stats.last_fullsized = now;
 
-    // do not send pgstat to mon anymore once we are luminous, since mgr takes
-    // care of this by sending MMonMgrReport to mon.
-    publish =
-      osd->osd->get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
     pg_stats_publish_valid = true;
     pg_stats_publish = pre_publish;
 
@@ -2754,9 +2749,6 @@ void PG::publish_stats_to_osd()
 	     << ":" << pg_stats_publish.reported_seq << dendl;
   }
   pg_stats_publish_lock.Unlock();
-
-  if (publish)
-    osd->pg_stat_queue_enqueue(this);
 }
 
 void PG::clear_publish_stats()
@@ -2765,8 +2757,6 @@ void PG::clear_publish_stats()
   pg_stats_publish_lock.Lock();
   pg_stats_publish_valid = false;
   pg_stats_publish_lock.Unlock();
-
-  osd->pg_stat_queue_dequeue(this);
 }
 
 /**
