@@ -1678,8 +1678,8 @@ int CrushWrapper::bucket_adjust_item_weight(CephContext *cct, crush_bucket *buck
       if (bucket->items[position] == item)
 	break;
     assert(position != bucket->size);
-    for (auto w : choose_args) {
-      crush_choose_arg_map arg_map = w.second;
+    for (auto &w : choose_args) {
+      crush_choose_arg_map &arg_map = w.second;
       crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
       for (__u32 j = 0; j < arg->weight_set_size; j++) {
 	crush_weight_set *weight_set = &arg->weight_set[j];
@@ -1702,26 +1702,30 @@ int CrushWrapper::add_bucket(
   crush_bucket *b = crush_make_bucket(crush, alg, hash, type, size, items,
 				      weights);
   assert(b);
+  assert(idout);
   int r = crush_add_bucket(crush, bucketno, b, idout);
+  int pos = -1 - *idout;
   for (auto& p : choose_args) {
     crush_choose_arg_map& cmap = p.second;
     if (cmap.args) {
-      if ((int)cmap.size <= *idout) {
+      if ((int)cmap.size <= pos) {
 	cmap.args = (crush_choose_arg*)realloc(
 	  cmap.args,
-	  sizeof(crush_choose_arg) * (*idout + 1));
+	  sizeof(crush_choose_arg) * (pos + 1));
+        assert(cmap.args);
 	memset(&cmap.args[cmap.size], 0,
-	       sizeof(crush_choose_arg) * (*idout + 1 - cmap.size));
-	cmap.size = *idout + 1;
+	       sizeof(crush_choose_arg) * (pos + 1 - cmap.size));
+	cmap.size = pos + 1;
       }
     } else {
       cmap.args = (crush_choose_arg*)calloc(sizeof(crush_choose_arg),
-					    *idout + 1);
-      cmap.size = *idout + 1;
+					    pos + 1);
+      assert(cmap.args);
+      cmap.size = pos + 1;
     }
     if (size > 0) {
       int positions = get_choose_args_positions(cmap);
-      crush_choose_arg& carg = cmap.args[*idout];
+      crush_choose_arg& carg = cmap.args[pos];
       carg.weight_set = (crush_weight_set*)calloc(sizeof(crush_weight_set),
 						  size);
       carg.weight_set_size = positions;
@@ -1744,8 +1748,8 @@ int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight)
   if (r < 0) {
     return r;
   }
-  for (auto w : choose_args) {
-    crush_choose_arg_map arg_map = w.second;
+  for (auto &w : choose_args) {
+    crush_choose_arg_map &arg_map = w.second;
     crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
     for (__u32 j = 0; j < arg->weight_set_size; j++) {
       crush_weight_set *weight_set = &arg->weight_set[j];
@@ -1777,8 +1781,8 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
   if (r < 0) {
     return r;
   }
-  for (auto w : choose_args) {
-    crush_choose_arg_map arg_map = w.second;
+  for (auto &w : choose_args) {
+    crush_choose_arg_map &arg_map = w.second;
     crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
     for (__u32 j = 0; j < arg->weight_set_size; j++) {
       crush_weight_set *weight_set = &arg->weight_set[j];
@@ -1960,8 +1964,10 @@ int CrushWrapper::device_class_clone(
       unsigned new_size = -1-bno + 1;
       cmap.args = (crush_choose_arg*)realloc(cmap.args,
 					     new_size * sizeof(cmap.args[0]));
+      assert(cmap.args);
       memset(cmap.args + cmap.size, 0,
 	     (new_size - cmap.size) * sizeof(cmap.args[0]));
+      cmap.size = new_size;
     }
     auto& o = cmap.args[-1-original_id];
     auto& n = cmap.args[-1-bno];
@@ -2299,7 +2305,7 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
       __u32 choose_args_size;
       ::decode(choose_args_size, blp);
       for (__u32 i = 0; i < choose_args_size; i++) {
-	uint64_t choose_args_index;
+        typename decltype(choose_args)::key_type choose_args_index;
 	::decode(choose_args_index, blp);
 	crush_choose_arg_map arg_map;
 	arg_map.size = crush->max_buckets;
