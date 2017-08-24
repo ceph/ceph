@@ -23,7 +23,10 @@
 #include <signal.h>
 #include "osd/PGLog.h"
 #include "osd/OSDMap.h"
-#include "test/unit.h"
+#include "common/ceph_argparse.h"
+#include "global/global_init.h"
+#include "../objectstore/store_test_fixture.h"
+#include <gtest/gtest.h>
 
 
 struct PGLogTestBase {
@@ -2087,17 +2090,25 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 
-
-class PGLogMergeDupsTest : public ::testing::Test, protected PGLog {
+class PGLogMergeDupsTest : protected PGLog, public StoreTestFixture {
 
 public:
 
-  PGLogMergeDupsTest() : PGLog(g_ceph_context) { }
+  PGLogMergeDupsTest() : PGLog(g_ceph_context), StoreTestFixture("memstore") { }
 
-  void SetUp() override { }
+  void SetUp() override {
+    StoreTestFixture::SetUp();
+    ObjectStore::Sequencer osr(__func__);
+    ObjectStore::Transaction t;
+    test_coll = coll_t(spg_t(pg_t(1, 1)));
+    t.create_collection(test_coll, 0);
+    store->apply_transaction(&osr, std::move(t));
+  }
 
   void TearDown() override {
+    test_disk_roundtrip();
     clear();
+    StoreTestFixture::TearDown();
   }
 
   static pg_log_dup_t create_dup_entry(uint a, uint b) {
@@ -2133,11 +2144,13 @@ public:
 
   void add_dups(uint a, uint b) {
     log.dups.push_back(create_dup_entry(a, b));
+    write_from_dups = MIN(write_from_dups, log.dups.back().version);
   }
 
   void add_dups(const std::vector<pg_log_dup_t>& l) {
     for (auto& i : l) {
       log.dups.push_back(i);
+      write_from_dups = MIN(write_from_dups, log.dups.back().version);
     }
   }
 
@@ -2162,6 +2175,36 @@ public:
       EXPECT_EQ(1u, log.dup_index.count(i.reqid));
     }
   }
+
+  void test_disk_roundtrip() {
+    ObjectStore::Sequencer osr(__func__);
+    ObjectStore::Transaction t;
+    hobject_t hoid;
+    hoid.pool = 1;
+    hoid.oid = "log";
+    ghobject_t log_oid(hoid);
+    map<string, bufferlist> km;
+    write_log(t, &km, test_coll, log_oid, false);
+    if (!km.empty()) {
+      t.omap_setkeys(test_coll, log_oid, km);
+    }
+    ASSERT_EQ(0u, store->apply_transaction(&osr, std::move(t)));
+
+    auto orig_dups = log.dups;
+    clear();
+    ostringstream err;
+    read_log(store.get(), test_coll, test_coll, log_oid,
+	     pg_info_t(), err, false);
+    ASSERT_EQ(orig_dups.size(), log.dups.size());
+    ASSERT_EQ(orig_dups, log.dups);
+    auto dups_it = log.dups.begin();
+    for (auto orig_dup : orig_dups) {
+      ASSERT_EQ(orig_dup, *dups_it);
+      ++dups_it;
+    }
+  }
+
+  coll_t test_coll;
 };
 
 TEST_F(PGLogMergeDupsTest, OtherEmpty) {
@@ -2353,14 +2396,7 @@ struct PGLogTrimTest :
   public PGLogTestBase,
   public PGLog::IndexedLog
 {
-  std::list<hobject_t*> test_hobjects;
-  CephContext *cct;
-
-  void SetUp() override {
-    cct = (new CephContext(CEPH_ENTITY_TYPE_OSD))->get();
-
-    hobject_t::generate_test_instances(test_hobjects);
-  }
+  CephContext *cct = g_ceph_context;
 
   void SetUp(unsigned min_entries, unsigned max_entries, unsigned dup_track) {
     constexpr size_t size = 10;
@@ -2376,33 +2412,8 @@ struct PGLogTrimTest :
     cct->_conf->set_val_or_die("osd_min_pg_log_entries", min_entries_s);
     cct->_conf->set_val_or_die("osd_max_pg_log_entries", max_entries_s);
     cct->_conf->set_val_or_die("osd_pg_log_dups_tracked", dup_track_s);
-}
-
-  void TearDown() override {
-    while (!test_hobjects.empty()) {
-      delete test_hobjects.front();
-      test_hobjects.pop_front();
-    }
-
-    cct->put();
   }
 }; // struct PGLogTrimTest
-
-
-# if 0
-TEST_F(PGLogTest, Trim1) {
-  TestCase t;
-
-  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(8, 70)));
-  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(15, 150), mk_evt(10, 100)));
-  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(15, 155), mk_evt(15, 150)));
-  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(20, 160), mk_evt(25, 152)));
-  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(21, 165), mk_evt(26, 160)));
-  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(21, 165), mk_evt(31, 171)));
-
-  t.setup();
-}
-#endif
 
 
 TEST_F(PGLogTrimTest, TestMakingCephContext)
@@ -2432,11 +2443,11 @@ TEST_F(PGLogTrimTest, TestPartialTrim)
 
   std::set<eversion_t> trimmed;
   std::set<std::string> trimmed_dups;
-  bool dirty_dups = false;
+  eversion_t write_from_dups = eversion_t::max();
 
-  log.trim(cct, nullptr, mk_evt(19, 157), &trimmed, &trimmed_dups, &dirty_dups);
+  log.trim(cct, nullptr, mk_evt(19, 157), &trimmed, &trimmed_dups, &write_from_dups);
 
-  EXPECT_TRUE(dirty_dups);
+  EXPECT_EQ(eversion_t(15, 150), write_from_dups);
   EXPECT_EQ(3u, log.log.size());
   EXPECT_EQ(3u, trimmed.size());
   EXPECT_EQ(2u, log.dups.size());
@@ -2446,11 +2457,11 @@ TEST_F(PGLogTrimTest, TestPartialTrim)
 
   std::set<eversion_t> trimmed2;
   std::set<std::string> trimmed_dups2;
-  bool dirty_dups2 = false;
-  
-  log.trim(cct, nullptr, mk_evt(20, 164), &trimmed2, &trimmed_dups2, &dirty_dups2);
+  eversion_t write_from_dups2 = eversion_t::max();
 
-  EXPECT_TRUE(dirty_dups2);
+  log.trim(cct, nullptr, mk_evt(20, 164), &trimmed2, &trimmed_dups2, &write_from_dups2);
+
+  EXPECT_EQ(eversion_t(19, 160), write_from_dups2);
   EXPECT_EQ(2u, log.log.size());
   EXPECT_EQ(1u, trimmed2.size());
   EXPECT_EQ(2u, log.dups.size());
@@ -2472,11 +2483,11 @@ TEST_F(PGLogTrimTest, TestTrimNoTrimmed) {
   log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 165), mk_evt(26, 160)));
   log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 167), mk_evt(31, 166)));
 
-  bool dirty_dups = false;
+  eversion_t write_from_dups = eversion_t::max();
 
-  log.trim(cct, nullptr, mk_evt(19, 157), nullptr, nullptr, &dirty_dups);
+  log.trim(cct, nullptr, mk_evt(19, 157), nullptr, nullptr, &write_from_dups);
 
-  EXPECT_TRUE(dirty_dups);
+  EXPECT_EQ(eversion_t(15, 150), write_from_dups);
   EXPECT_EQ(3u, log.log.size());
   EXPECT_EQ(2u, log.dups.size());
 }
@@ -2499,11 +2510,11 @@ TEST_F(PGLogTrimTest, TestTrimNoDups)
 
   std::set<eversion_t> trimmed;
   std::set<std::string> trimmed_dups;
-  bool dirty_dups = false;
+  eversion_t write_from_dups = eversion_t::max();
 
-  log.trim(cct, nullptr, mk_evt(19, 157), &trimmed, &trimmed_dups, &dirty_dups);
+  log.trim(cct, nullptr, mk_evt(19, 157), &trimmed, &trimmed_dups, &write_from_dups);
 
-  EXPECT_FALSE(dirty_dups);
+  EXPECT_EQ(eversion_t::max(), write_from_dups);
   EXPECT_EQ(3u, log.log.size());
   EXPECT_EQ(3u, trimmed.size());
   EXPECT_EQ(0u, log.dups.size());
@@ -2527,11 +2538,11 @@ TEST_F(PGLogTrimTest, TestNoTrim)
 
   std::set<eversion_t> trimmed;
   std::set<std::string> trimmed_dups;
-  bool dirty_dups = false;
+  eversion_t write_from_dups = eversion_t::max();
 
-  log.trim(cct, nullptr, mk_evt(9, 99), &trimmed, &trimmed_dups, &dirty_dups);
+  log.trim(cct, nullptr, mk_evt(9, 99), &trimmed, &trimmed_dups, &write_from_dups);
 
-  EXPECT_FALSE(dirty_dups);
+  EXPECT_EQ(eversion_t::max(), write_from_dups);
   EXPECT_EQ(6u, log.log.size());
   EXPECT_EQ(0u, trimmed.size());
   EXPECT_EQ(0u, log.dups.size());
@@ -2555,11 +2566,11 @@ TEST_F(PGLogTrimTest, TestTrimAll)
 
   std::set<eversion_t> trimmed;
   std::set<std::string> trimmed_dups;
-  bool dirty_dups = false;
+  eversion_t write_from_dups = eversion_t::max();
 
-  log.trim(cct, nullptr, mk_evt(22, 180), &trimmed, &trimmed_dups, &dirty_dups);
+  log.trim(cct, nullptr, mk_evt(22, 180), &trimmed, &trimmed_dups, &write_from_dups);
 
-  EXPECT_TRUE(dirty_dups);
+  EXPECT_EQ(eversion_t(15, 150), write_from_dups);
   EXPECT_EQ(0u, log.log.size());
   EXPECT_EQ(6u, trimmed.size());
   EXPECT_EQ(5u, log.dups.size());
@@ -2589,11 +2600,11 @@ TEST_F(PGLogTrimTest, TestGetRequest) {
   log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 167), mk_evt(31, 166),
 		       osd_reqid_t(client, 8, 6)));
 
-  bool dirty_dups = false;
+  eversion_t write_from_dups = eversion_t::max();
 
-  log.trim(cct, nullptr, mk_evt(19, 157), nullptr, nullptr, &dirty_dups);
+  log.trim(cct, nullptr, mk_evt(19, 157), nullptr, nullptr, &write_from_dups);
 
-  EXPECT_TRUE(dirty_dups);
+  EXPECT_EQ(eversion_t(15, 150), write_from_dups);
   EXPECT_EQ(3u, log.log.size());
   EXPECT_EQ(2u, log.dups.size());
 
@@ -2617,6 +2628,8 @@ TEST_F(PGLogTrimTest, TestGetRequest) {
   result = log.get_request(bad_reqid, &version, &user_version);
   EXPECT_FALSE(result);
 }
+
+
 
 
 // Local Variables:
