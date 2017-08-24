@@ -641,6 +641,7 @@ void MgrMonitor::drop_active()
   pending_map.active_gid = 0;
   pending_map.available = false;
   pending_map.active_addr = entity_addr_t();
+  pending_map.services.clear();
 
   // So that when new active mgr subscribes to mgrdigest, it will
   // get an immediate response instead of waiting for next timer
