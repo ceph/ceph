@@ -8,8 +8,6 @@
 #include "common/config.h"
 #include "msg/Message.h"
 #include "messages/MOSDOp.h"
-#include "messages/MOSDSubOp.h"
-#include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
 #include "include/assert.h"
@@ -36,10 +34,6 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   }
   if (req->get_type() == CEPH_MSG_OSD_OP) {
     reqid = static_cast<MOSDOp*>(req)->get_reqid();
-  } else if (req->get_type() == MSG_OSD_SUBOP) {
-    reqid = static_cast<MOSDSubOp*>(req)->reqid;
-  } else if (req->get_type() == MSG_OSD_SUBOPREPLY) {
-    reqid = static_cast<MOSDSubOpReply*>(req)->reqid;
   } else if (req->get_type() == MSG_OSD_REPOP) {
     reqid = static_cast<MOSDRepOp*>(req)->reqid;
   } else if (req->get_type() == MSG_OSD_REPOPREPLY) {

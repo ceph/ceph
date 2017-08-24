@@ -1401,7 +1401,6 @@ public:
     OpRequestRef op,
     ThreadPool::TPHandle &handle);
   void do_replica_scrub_map(OpRequestRef op);
-  void sub_op_scrub_map(OpRequestRef op);
 
   void handle_scrub_reserve_request(OpRequestRef op);
   void handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from);
@@ -2505,8 +2504,6 @@ public:
   ) = 0;
 
   virtual void do_op(OpRequestRef& op) = 0;
-  virtual void do_sub_op(OpRequestRef op) = 0;
-  virtual void do_sub_op_reply(OpRequestRef op) = 0;
   virtual void do_scan(
     OpRequestRef op,
     ThreadPool::TPHandle &handle
