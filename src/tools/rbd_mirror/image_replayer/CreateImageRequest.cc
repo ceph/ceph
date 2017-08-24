@@ -74,6 +74,8 @@ void CreateImageRequest<I>::create_image() {
                     m_remote_image_ctx->stripe_unit);
   image_options.set(RBD_IMAGE_OPTION_STRIPE_COUNT,
                     m_remote_image_ctx->stripe_count);
+  image_options.set(RBD_IMAGE_OPTION_DATA_POOL,
+		    m_remote_image_ctx->data_ctx.get_pool_name());
 
   librbd::image::CreateRequest<I> *req = librbd::image::CreateRequest<I>::create(
     m_local_io_ctx, m_local_image_name, m_local_image_id,

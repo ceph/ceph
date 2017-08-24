@@ -36,6 +36,13 @@ Ceph clusters.
    configuration file of the same name (e.g. /etc/ceph/remote.conf).  See the
    `ceph-conf`_ documentation for how to configure multiple clusters.
 
+.. note:: Images in a given pool will be mirrored to a pool with the same name
+   on the remote cluster. Images using a separate data-pool will use a data-pool
+   with the same name on the remote cluster. E.g., if an image being mirrored is
+   in the ``rbd`` pool on the local cluster and using a data-pool called
+   ``rbd-ec``, pools called ``rbd`` and ``rbd-ec`` must exist on the remote
+   cluster and will be used for mirroring the image.
+
 Enable Mirroring
 ----------------
 

@@ -7,7 +7,7 @@
   If there are multiple matches, the first one is returned; this order
   is system-dependent and should not be relied on.
  */
-const struct sockaddr *find_ip_in_subnet(const struct ifaddrs *addrs,
+const struct ifaddrs *find_ip_in_subnet(const struct ifaddrs *addrs,
 					 const struct sockaddr *net,
 					 unsigned int prefix_len);
 

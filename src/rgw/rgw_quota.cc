@@ -512,6 +512,9 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
           ldout(cct, 5) << "ERROR: sync_all_users() returned ret=" << ret << dendl;
         }
 
+        if (stats->going_down())
+          break;
+
         lock.Lock();
         cond.WaitInterval(lock, utime_t(cct->_conf->rgw_user_quota_sync_interval, 0));
         lock.Unlock();

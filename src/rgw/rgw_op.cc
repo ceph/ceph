@@ -720,6 +720,12 @@ void RGWGetObjTags::execute()
   store->set_atomic(s->obj_ctx, obj);
 
   op_ret = get_obj_attrs(store, s, obj, attrs);
+  if (op_ret < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to get obj attrs, obj=" << obj
+		     << " ret=" << op_ret << dendl;
+    return;
+  }
+
   auto tags = attrs.find(RGW_ATTR_TAGS);
   if(tags != attrs.end()){
     has_tags = true;
@@ -4485,7 +4491,7 @@ int RGWGetACLs::verify_permission()
 				    rgw::IAM::s3GetObjectAcl :
 				    rgw::IAM::s3GetObjectVersionAcl);
   } else {
-    perm = verify_bucket_permission(s, rgw::IAM::s3GetObjectAcl);
+    perm = verify_bucket_permission(s, rgw::IAM::s3GetBucketAcl);
   }
   if (!perm)
     return -EACCES;

@@ -20,6 +20,7 @@
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+#include "common/pick_address.h"
 #include "global/global_init.h"
 
 #include "mgr/MgrStandby.h"
@@ -51,6 +52,8 @@ int main(int argc, const char **argv)
   if ((args.size() == 1 && (std::string(args[0]) == "--help" || std::string(args[0]) == "-h"))) {
     usage();
   }
+
+  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
   global_init_daemonize(g_ceph_context);
   global_init_chdir(g_ceph_context);

@@ -12,7 +12,12 @@ You can run them in a git checkout + build directory as well:
   * The qa/run-standalone.sh will run all of them in sequence.  This is slow
      since there is no parallelism.
 
-  * You can run an individual script by passing these environment args.  For
-    example, if you are in the build/ directory,
+  * You can run individual script(s) by specifying the basename or path below
+    qa/standalone as arguments to qa/run-standalone.sh.
 
-PATH=$PATH:bin CEPH_ROOT=.. CEPH_LIB=lib ../qa/standalone/mon/misc.sh
+../qa/run-standalone.sh misc.sh osd/osd-dup.sh
+
+  * Add support for specifying arguments to selected tests by simply adding
+    list of tests to each argument.
+
+../qa/run-standalone.sh "test-ceph-helpers.sh test_get_last_scrub_stamp"
