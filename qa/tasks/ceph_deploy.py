@@ -749,6 +749,21 @@ def upgrade(ctx, config):
                 ]
             )
             ceph_admin.run(args=['sudo', 'ceph', '-s'])
+
+    # workaround for http://tracker.ceph.com/issues/20950
+    # write the correct mgr key to disk
+    if config.get('setup-mgr-node', None):
+        mons = ctx.cluster.only(teuthology.is_type('mon'))
+        for remote, roles in mons.remotes.iteritems():
+            remote.run(
+                args=[
+                    run.Raw('sudo ceph auth get client.bootstrap-mgr'),
+                    run.Raw('|'),
+                    run.Raw('sudo tee'),
+                    run.Raw('/var/lib/ceph/bootstrap-mgr/ceph.keyring')
+                ]
+            )
+
     if config.get('setup-mgr-node', None):
         mgr_nodes = get_nodes_using_role(ctx, 'mgr')
         mgr_nodes = " ".join(mgr_nodes)
