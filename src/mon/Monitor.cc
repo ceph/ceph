@@ -2707,7 +2707,12 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
-    get_health_status(false, f, nullptr);
+    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      get_health_status(false, f, nullptr);
+    } else {
+      list<string> health_str;
+      get_health(health_str, nullptr, f);
+    }
     f->dump_unsigned("election_epoch", get_epoch());
     {
       f->open_array_section("quorum");
