@@ -108,6 +108,27 @@ def get_api_lvs():
     return _output_parser(stdout, fields)
 
 
+def get_api_pvs():
+    """
+    Return the list of physical volumes configured for lvm and available in the
+    system using flags to include common metadata associated with them like the uuid
+
+    Command and delimeted output, should look like::
+
+        $ sudo lvs --noheadings --separator=';' -o lv_tags,lv_path,lv_name,vg_name
+          ;/dev/ubuntubox-vg/root;root;ubuntubox-vg
+          ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
+
+    """
+    fields = 'pv_name,pv_tags,pv_uuid'
+
+    stdout, stderr, returncode = process.call(
+        ['sudo', 'pvs', '--no-heading', '--separator=";"', '-o', fields]
+    )
+
+    return _output_parser(stdout, fields)
+
+
 def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_tags=None):
     """
     Return a matching lv for the current system, requiring ``lv_name``,
@@ -483,5 +504,63 @@ class Volume(object):
             [
                 'sudo', 'lvchange',
                 '--addtag', '%s=%s' % (key, value), self.lv_path
+            ]
+        )
+
+
+class PVolume(object):
+    """
+    Represents a Physical Volume from LVM, with some top-level attributes like
+    ``pv_name`` and parsed tags as a dictionary of key/value pairs.
+    """
+
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
+        self.pv_api = kw
+        self.name = kw['pv_name']
+        self.tags = parse_tags(kw['pv_tags'])
+
+    def __str__(self):
+        return '<%s>' % self.pv_api['pv_name']
+
+    def __repr__(self):
+        return self.__str__()
+
+    def set_tags(self, tags):
+        """
+        :param tags: A dictionary of tag names and values, like::
+
+            {
+                "ceph.osd_fsid": "aaa-fff-bbbb",
+                "ceph.osd_id": "0"
+            }
+
+        At the end of all modifications, the tags are refreshed to reflect
+        LVM's most current view.
+        """
+        for k, v in tags.items():
+            self.set_tag(k, v)
+        # after setting all the tags, refresh them for the current object, use the
+        # pv_* identifiers to filter because those shouldn't change
+        pv_object = get_pv(pv_name=self.pv_name, pv_path=self.pv_path)
+        self.tags = pv_object.tags
+
+    def set_tag(self, key, value):
+        """
+        Set the key/value pair as an pvM tag. Does not "refresh" the values of
+        the current object for its tags. Meant to be a "fire and forget" type
+        of modification.
+        """
+        # remove it first if it exists
+        if self.tags.get(key):
+            current_value = self.tags[key]
+            tag = "%s=%s" % (key, current_value)
+            process.call(['sudo', 'pvchange', '--deltag', tag, self.pv_api['pv_path']])
+
+        process.call(
+            [
+                'sudo', 'pvchange',
+                '--addtag', '%s=%s' % (key, value), self.pv_path
             ]
         )
