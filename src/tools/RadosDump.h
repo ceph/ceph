@@ -330,7 +330,7 @@ struct metadata_section {
     if (struct_v >= 6) {
       ::decode(past_intervals, bl);
     } else if (struct_v > 1) {
-      past_intervals.decode_classic(bl);
+      cout << "NOTICE: Older export with classic past_intervals" << std::endl;
     } else {
       cout << "NOTICE: Older export without past_intervals" << std::endl;
     }

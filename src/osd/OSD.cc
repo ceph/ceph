@@ -8482,9 +8482,7 @@ void OSD::handle_pg_create(OpRequestRef op)
     bool mapped = osdmap->get_primary_shard(on, &pgid);
     assert(mapped);
 
-    PastIntervals pi(
-      osdmap->get_pools().at(pgid.pool()).ec_pool(),
-      *osdmap);
+    PastIntervals pi;
     pg_history_t history;
     build_initial_pg_history(pgid, created, ci->second, &history, &pi);
 
@@ -9098,9 +9096,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 	    it->second.epoch_sent,
 	    osdmap->get_epoch(),
 	    empty),
-	  PastIntervals(
-	    osdmap->get_pools().at(pgid.pool()).ec_pool(),
-	    *osdmap)));
+	  PastIntervals()));
     }
   }
   do_notifies(notify_list, osdmap);

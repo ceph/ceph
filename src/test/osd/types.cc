@@ -125,8 +125,6 @@ TEST(pg_interval_t, check_new_interval)
 {
 // iterate through all 4 combinations
 for (unsigned i = 0; i < 4; ++i) {
-  bool compact = i & 1;
-  bool ec_pool = i & 2;
   //
   // Create a situation where osdmaps are the same so that
   // each test case can diverge from it using minimal code.
@@ -175,7 +173,7 @@ for (unsigned i = 0; i < 4; ++i) {
   // being split
   //
   {
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_FALSE(PastIntervals::check_new_interval(old_primary,
@@ -204,7 +202,7 @@ for (unsigned i = 0; i < 4; ++i) {
     int _new_primary = osd_id + 1;
     new_acting.push_back(_new_primary);
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -233,7 +231,7 @@ for (unsigned i = 0; i < 4; ++i) {
     int _new_primary = osd_id + 1;
     new_up.push_back(_new_primary);
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -260,7 +258,7 @@ for (unsigned i = 0; i < 4; ++i) {
     vector<int> new_up;
     int _new_up_primary = osd_id + 1;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -294,7 +292,7 @@ for (unsigned i = 0; i < 4; ++i) {
     inc.new_pools[pool_id].set_pg_num(new_pg_num);
     osdmap->apply_incremental(inc);
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -328,7 +326,7 @@ for (unsigned i = 0; i < 4; ++i) {
     inc.new_pools[pool_id].set_pg_num(pg_num);
     osdmap->apply_incremental(inc);
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -355,7 +353,7 @@ for (unsigned i = 0; i < 4; ++i) {
   {
     vector<int> old_acting;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ostringstream out;
 
@@ -407,7 +405,7 @@ for (unsigned i = 0; i < 4; ++i) {
 
     ostringstream out;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -440,7 +438,7 @@ for (unsigned i = 0; i < 4; ++i) {
 
     ostringstream out;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -483,7 +481,7 @@ for (unsigned i = 0; i < 4; ++i) {
 
     ostringstream out;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -530,7 +528,7 @@ for (unsigned i = 0; i < 4; ++i) {
 
     ostringstream out;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -1579,21 +1577,10 @@ struct PITest : ::testing::Test {
       pg_down,
       new RequiredPredicate(rec_pred));
 
-    PastIntervals simple, compact;
-    simple.update_type(ec_pool, false);
-    compact.update_type(ec_pool, true);
+    PastIntervals compact;
     for (auto &&i: intervals) {
-      simple.add_interval(ec_pool, i);
       compact.add_interval(ec_pool, i);
     }
-    PI::PriorSet simple_ps = simple.get_prior_set(
-      ec_pool,
-      last_epoch_started,
-      new RequiredPredicate(rec_pred),
-      map_pred,
-      up,
-      acting,
-      nullptr);
     PI::PriorSet compact_ps = compact.get_prior_set(
       ec_pool,
       last_epoch_started,
@@ -1602,7 +1589,6 @@ struct PITest : ::testing::Test {
       up,
       acting,
       nullptr);
-    ASSERT_EQ(correct, simple_ps);
     ASSERT_EQ(correct, compact_ps);
   }
 };
