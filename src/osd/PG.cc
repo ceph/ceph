@@ -247,7 +247,7 @@ void PGPool::update(OSDMapRef map)
         lgeneric_subdout(cct, osd, 0) << __func__
           << " cached_removed_snaps shrank from " << cached_removed_snaps
           << " to " << newly_removed_snaps << dendl;
-        cached_removed_snaps = newly_removed_snaps;
+        cached_removed_snaps.swap(newly_removed_snaps);
         newly_removed_snaps.clear();
     }
     snapc = pi->get_snap_context();
