@@ -49,7 +49,7 @@ class Elector {
    * Event callback responsible for dealing with an expired election once a
    * timer runs out and fires up.
    */
-  Context *expire_event;
+  Context *expire_event = nullptr;
 
   /**
    * Resets the expire_event timer, by cancelling any existing one and
@@ -148,35 +148,6 @@ class Elector {
    * @param e Epoch to which we will update our epoch
    */
   void bump_epoch(epoch_t e);
-
-  /**
-   * @defgroup Elector_h_callbacks Callbacks
-   * @{
-   */
-  /**
-   * This class is used as the callback when the expire_event timer fires up.
-   *
-   * If the expire_event is fired, then it means that we had an election going,
-   * either started by us or by some other participant, but it took too long,
-   * thus expiring.
-   *
-   * When the election expires, we will check if we were the ones who won, and
-   * if so we will declare victory. If that is not the case, then we assume
-   * that the one we defered to didn't declare victory quickly enough (in fact,
-   * as far as we know, we may even be dead); so, just propose ourselves as the
-   * Leader.
-   */
-  class C_ElectionExpire : public Context {
-    Elector *elector;
-  public:
-    explicit C_ElectionExpire(Elector *e) : elector(e) { }
-    void finish(int r) {
-      elector->expire();
-    }
-  };
-  /**
-   * @}
-   */
 
   /**
    * Start new elections by proposing ourselves as the new Leader.
@@ -349,7 +320,6 @@ class Elector {
    * @param m A Monitor instance
    */
   explicit Elector(Monitor *m) : mon(m),
-			expire_event(0),
 			epoch(0),
 			participating(true),
 			electing_me(false),

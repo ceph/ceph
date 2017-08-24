@@ -43,8 +43,7 @@ void Elector::init()
 
 void Elector::shutdown()
 {
-  if (expire_event)
-    mon->timer.cancel_event(expire_event);
+  cancel_timer();
 }
 
 void Elector::bump_epoch(epoch_t e) 
@@ -129,7 +128,22 @@ void Elector::reset_timer(double plus)
 {
   // set the timer
   cancel_timer();
-  expire_event = new C_ElectionExpire(this);
+  /**
+   * This class is used as the callback when the expire_event timer fires up.
+   *
+   * If the expire_event is fired, then it means that we had an election going,
+   * either started by us or by some other participant, but it took too long,
+   * thus expiring.
+   *
+   * When the election expires, we will check if we were the ones who won, and
+   * if so we will declare victory. If that is not the case, then we assume
+   * that the one we defered to didn't declare victory quickly enough (in fact,
+   * as far as we know, we may even be dead); so, just propose ourselves as the
+   * Leader.
+   */
+  expire_event = new C_MonContext(mon, [this](int) {
+      expire();
+    });
   mon->timer.add_event_after(g_conf->mon_election_timeout + plus,
 			     expire_event);
 }

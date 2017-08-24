@@ -38,6 +38,15 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
 		<< ") ";
 }
 
+class Paxos::C_Trimmed : public Context {
+  Paxos *paxos;
+public:
+  explicit C_Trimmed(Paxos *p) : paxos(p) { }
+  void finish(int r) override {
+    paxos->trimming = false;
+  }
+};
+
 MonitorDBStore *Paxos::get_store()
 {
   return mon->store;
@@ -186,7 +195,11 @@ void Paxos::collect(version_t oldpn)
   }
 
   // set timeout event
-  collect_timeout_event = new C_CollectTimeout(this);
+  collect_timeout_event = new C_MonContext(mon, [this](int r) {
+	if (r == -ECANCELED)
+	  return;
+	collect_timeout();
+    });
   mon->timer.add_event_after(g_conf->mon_accept_timeout_factor *
 			     g_conf->mon_lease,
 			     collect_timeout_event);
@@ -670,7 +683,11 @@ void Paxos::begin(bufferlist& v)
   }
 
   // set timeout event
-  accept_timeout_event = new C_AcceptTimeout(this);
+  accept_timeout_event = new C_MonContext(mon, [this](int r) {
+      if (r == -ECANCELED)
+	return;
+      accept_timeout();
+    });
   mon->timer.add_event_after(g_conf->mon_accept_timeout_factor *
 			     g_conf->mon_lease,
 			     accept_timeout_event);
@@ -956,14 +973,22 @@ void Paxos::extend_lease()
   // set timeout event.
   //  if old timeout is still in place, leave it.
   if (!lease_ack_timeout_event) {
-    lease_ack_timeout_event = new C_LeaseAckTimeout(this);
+    lease_ack_timeout_event = new C_MonContext(mon, [this](int r) {
+	if (r == -ECANCELED)
+	  return;
+	lease_ack_timeout();
+      });
     mon->timer.add_event_after(g_conf->mon_lease_ack_timeout_factor *
 			       g_conf->mon_lease,
 			       lease_ack_timeout_event);
   }
 
   // set renew event
-  lease_renew_event = new C_LeaseRenew(this);
+  lease_renew_event = new C_MonContext(mon, [this](int r) {
+      if (r == -ECANCELED)
+	return;
+      lease_renew_timeout();
+    });
   utime_t at = lease_expire;
   at -= g_conf->mon_lease;
   at += g_conf->mon_lease_renew_interval_factor * g_conf->mon_lease;
@@ -1148,7 +1173,11 @@ void Paxos::reset_lease_timeout()
   dout(20) << "reset_lease_timeout - setting timeout event" << dendl;
   if (lease_timeout_event)
     mon->timer.cancel_event(lease_timeout_event);
-  lease_timeout_event = new C_LeaseTimeout(this);
+  lease_timeout_event = new C_MonContext(mon, [this](int r) {
+      if (r == -ECANCELED)
+	return;
+      lease_timeout();
+    });
   mon->timer.add_event_after(g_conf->mon_lease_ack_timeout_factor *
 			     g_conf->mon_lease,
 			     lease_timeout_event);

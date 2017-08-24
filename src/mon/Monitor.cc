@@ -142,6 +142,12 @@ long parse_pos_long(const char *s, ostream *pss)
   return r;
 }
 
+void C_MonContext::finish(int r) {
+  if (mon->is_shutdown())
+    return;
+  FunctionContext::finish(r);
+}
+
 Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 		 Messenger *m, MonMap *map) :
   Dispatcher(cct_),
@@ -190,12 +196,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   timecheck_rounds_since_clean(0),
   timecheck_event(NULL),
 
-  probe_timeout_event(NULL),
-
   paxos_service(PAXOS_NUM),
   admin_hook(NULL),
-  health_tick_event(NULL),
-  health_interval_event(NULL),
   routed_request_tid(0),
   op_tracker(cct, true, 1)
 {
@@ -1232,7 +1234,9 @@ void Monitor::sync_reset_timeout()
   dout(10) << __func__ << dendl;
   if (sync_timeout_event)
     timer.cancel_event(sync_timeout_event);
-  sync_timeout_event = new C_SyncTimeout(this);
+  sync_timeout_event = new C_MonContext(this, [this](int) {
+      sync_timeout();
+    });
   timer.add_event_after(g_conf->mon_sync_timeout, sync_timeout_event);
 }
 
@@ -1570,7 +1574,9 @@ void Monitor::cancel_probe_timeout()
 void Monitor::reset_probe_timeout()
 {
   cancel_probe_timeout();
-  probe_timeout_event = new C_ProbeTimeout(this);
+  probe_timeout_event = new C_MonContext(this, [this](int r) {
+      probe_timeout(r);
+    });
   double t = g_conf->mon_probe_timeout;
   timer.add_event_after(t, probe_timeout_event);
   dout(10) << "reset_probe_timeout " << probe_timeout_event << " after " << t << " seconds" << dendl;
@@ -2160,8 +2166,12 @@ void Monitor::health_tick_start()
   dout(15) << __func__ << dendl;
 
   health_tick_stop();
-  health_tick_event = new C_HealthToClogTick(this);
-
+  health_tick_event = new C_MonContext(this, [this](int r) {
+      if (r < 0)
+        return;
+      do_health_to_clog();
+      health_tick_start();
+    });
   timer.add_event_after(cct->_conf->mon_health_to_clog_tick_interval,
                         health_tick_event);
 }
@@ -2205,7 +2215,11 @@ void Monitor::health_interval_start()
 
   health_interval_stop();
   utime_t next = health_interval_calc_next_update();
-  health_interval_event = new C_HealthToClogInterval(this);
+  health_interval_event = new C_MonContext(this, [this](int r) {
+      if (r < 0)
+        return;
+      do_health_to_clog_interval();
+    });
   timer.add_event_at(next, health_interval_event);
 }
 
@@ -3921,7 +3935,9 @@ void Monitor::timecheck_reset_event()
            << " rounds_since_clean " << timecheck_rounds_since_clean
            << dendl;
 
-  timecheck_event = new C_TimeCheck(this);
+  timecheck_event = new C_MonContext(this, [this](int) {
+      timecheck_start_round();
+    });
   timer.add_event_after(delay, timecheck_event);
 }
 
@@ -4741,7 +4757,9 @@ void Monitor::scrub_event_start()
     return;
   }
 
-  scrub_event = new C_Scrub(this);
+  scrub_event = new C_MonContext(this, [this](int) {
+      scrub_start();
+    });
   timer.add_event_after(cct->_conf->mon_scrub_interval, scrub_event);
 }
 
@@ -4766,25 +4784,19 @@ void Monitor::scrub_reset_timeout()
 {
   dout(15) << __func__ << " reset timeout event" << dendl;
   scrub_cancel_timeout();
-  scrub_timeout_event = new C_ScrubTimeout(this);
+
+  scrub_timeout_event = new C_MonContext(this, [this](int) {
+      scrub_timeout();
+    });
   timer.add_event_after(g_conf->mon_scrub_timeout, scrub_timeout_event);
 }
 
 /************ TICK ***************/
-
-class C_Mon_Tick : public Context {
-  Monitor *mon;
-public:
-  explicit C_Mon_Tick(Monitor *m) : mon(m) {}
-  void finish(int r) {
-    mon->tick();
-  }
-};
-
 void Monitor::new_tick()
 {
-  C_Mon_Tick *ctx = new C_Mon_Tick(this);
-  timer.add_event_after(g_conf->mon_tick_interval, ctx);
+  timer.add_event_after(g_conf->mon_tick_interval, new C_MonContext(this, [this](int) {
+	tick();
+      }));
 }
 
 void Monitor::tick()
