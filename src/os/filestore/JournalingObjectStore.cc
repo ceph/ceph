@@ -130,7 +130,6 @@ uint64_t JournalingObjectStore::ApplyManager::op_apply_start(uint64_t op)
   dout(10) << "op_apply_start " << op << " open_ops " << open_ops << " -> "
 	   << (open_ops+1) << dendl;
   assert(!blocked);
-  assert(op > committed_seq);
   open_ops++;
   return op;
 }
