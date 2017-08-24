@@ -21,7 +21,7 @@ for f in \
     'api_watch_notify --gtest_filter=-*WatchNotify3*' \
     api_tier api_pool api_snapshots api_stat api_cmd \
     'api_c_write_operations --gtest_filter=-*WriteSame*:*CmpExt*' \
-    api_c_read_operations \
+    'api_c_read_operations --gtest_filter=-*Checksum*:*CmpExt*' \
     list_parallel \
     open_pools_parallel \
     delete_pools_parallel \
