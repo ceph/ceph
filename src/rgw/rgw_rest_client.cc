@@ -786,6 +786,11 @@ int RGWRESTStreamRWRequest::receive_data(void *ptr, size_t len)
   return len;
 }
 
+void RGWRESTStreamRWRequest::set_stream_write(bool s) {
+  Mutex::Locker wl(write_lock);
+  stream_writes = s;
+}
+
 void RGWRESTStreamRWRequest::add_send_data(bufferlist& bl)
 {
   Mutex::Locker req_locker(get_req_lock());
@@ -794,12 +799,22 @@ void RGWRESTStreamRWRequest::add_send_data(bufferlist& bl)
   _set_write_paused(false);
 }
 
+void RGWRESTStreamRWRequest::finish_write()
+{
+  Mutex::Locker req_locker(get_req_lock());
+  Mutex::Locker wl(write_lock);
+  write_stream_complete = true;
+  _set_write_paused(false);
+}
+
 int RGWRESTStreamRWRequest::send_data(void *ptr, size_t len, bool *pause)
 {
   Mutex::Locker wl(write_lock);
 
   if (outbl.length() == 0) {
-    *pause = true;
+    if (stream_writes && !write_stream_complete) {
+      *pause = true;
+    }
     return 0;
   }
 
