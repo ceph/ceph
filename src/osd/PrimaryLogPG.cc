@@ -6765,7 +6765,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   fail:
     osd_op.rval = result;
     tracepoint(osd, do_osd_op_post, soid.oid.name.c_str(), soid.snap.val, op.op, ceph_osd_op_name(op.op), op.flags, result);
-    if (result < 0 && (op.flags & CEPH_OSD_OP_FLAG_FAILOK))
+    if (result < 0 && (op.flags & CEPH_OSD_OP_FLAG_FAILOK) &&
+        result != -EAGAIN && result != -EINPROGRESS)
       result = 0;
 
     if (result < 0)
