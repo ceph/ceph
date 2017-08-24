@@ -1,0 +1,61 @@
+meta:
+- desc: |
+    Setup 4 node ceph cluster using ceph-deploy, use latest
+    stable kraken as initial release, upgrade to luminous and
+    also setup mgr nodes along after upgrade, check for
+    cluster to reach healthy state, After upgrade run kernel tar/untar
+    task and systemd task. This test will detect any
+    ceph upgrade issue and systemd issues.
+overrides:
+  ceph-deploy:
+    fs: xfs
+    conf:
+      global:
+        mon pg warn min per osd: 2
+      osd:
+        osd pool default size: 2
+        osd objectstore: filestore
+        osd sloppy crc: true
+      client:
+        rbd default features: 5
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - mgr.x
+- - mon.b
+  - mgr.y
+- - mon.c
+  - osd.3
+  - osd.4
+  - osd.5
+- - osd.6
+  - osd.7
+  - osd.8
+  - client.0
+tasks:
+- ssh-keys:
+- ceph-deploy:
+    branch:
+      stable: kraken
+    skip-mgr: True
+- ceph-deploy.upgrade:
+    branch:
+      dev: luminous
+    setup-mgr-node: True
+    check-for-healthy: True
+    roles:
+      - mon.a
+      - mon.b
+      - mon.c
+- workunit:
+    clients:
+      all:
+        - kernel_untar_build.sh
+- systemd:
+- workunit:
+    clients:
+      all:
+      - rados/load-gen-mix.sh
