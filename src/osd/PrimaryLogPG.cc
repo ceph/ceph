@@ -4918,9 +4918,6 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
         bufferlist t;
         uint64_t len = miter->first - last;
         r = pgbackend->objects_read_sync(soid, last, len, op.flags, &t);
-	if (r == -EIO) {
-	  r = rep_repair_primary_object(soid, ctx->op);
-	}
         if (r < 0) {
           osd->clog->error() << coll << " " << soid
 			     << " sparse-read failed to read: "
@@ -4935,6 +4932,9 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       bufferlist tmpbl;
       r = pgbackend->objects_read_sync(soid, miter->first, miter->second,
 				       op.flags, &tmpbl);
+      if (r == -EIO) {
+        r = rep_repair_primary_object(soid, ctx->op);
+      }
       if (r < 0) {
 	return r;
       }
