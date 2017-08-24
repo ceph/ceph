@@ -14,7 +14,7 @@ trap cleanup EXIT ERR HUP INT QUIT
 pids=""
 for f in \
     'api_aio --gtest_filter=-LibRadosAio.RacingRemovePP:*WriteSame*:*CmpExt*:*RoundTrip3*:*RoundTripPP3*:*Quota*' \
-    'api_list --gtest_filter=-LibRadosList*.EnumerateObjects*' \
+    'api_list --gtest_filter=-LibRadosList*.EnumerateObjects*:*ListObjectsError*' \
     'api_io --gtest_filter=-*Checksum*:*CmpExt*' \
     api_lock \
     'api_misc --gtest_filter=-*WriteSame*:*CmpExt*:*Checksum*:*CloneRange*' \
