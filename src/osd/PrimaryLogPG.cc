@@ -13893,12 +13893,16 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 			  << " snapset.head_exists=false, but head exists";
 	  ++scrubber.shallow_errors;
 	  head_error.set_head_mismatch();
+	  // Fix head_exists locally so is_legacy() returns correctly
+          snapset->head_exists = true;
 	}
 	if (soid.is_snapdir() && snapset->head_exists) {
 	  osd->clog->error() << mode << " " << info.pgid << " " << soid
 			  << " snapset.head_exists=true, but snapdir exists";
 	  ++scrubber.shallow_errors;
 	  head_error.set_head_mismatch();
+	  // For symmetry fix this too, but probably doesn't matter
+          snapset->head_exists = false;
 	}
 
 	if (get_osdmap()->require_osd_release >= CEPH_RELEASE_LUMINOUS) {

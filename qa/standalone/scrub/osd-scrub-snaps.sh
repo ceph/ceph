@@ -46,7 +46,8 @@ function TEST_scrub_snaps() {
     wait_for_clean || return 1
 
     # Create a pool with a single pg
-    ceph osd pool create $poolname 1 1
+    create_pool $poolname 1 1
+    wait_for_clean || return 1
     poolid=$(ceph osd dump | grep "^pool.*[']test[']" | awk '{ print $2 }')
 
     dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
@@ -449,9 +450,8 @@ EOF
     err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj9:1 is missing in clone_size"
     err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj11:1 is an unexpected clone"
     err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj14:1 size 1032 != clone_size 1033"
-    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 23 errors"
+    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 22 errors"
     err_strings[23]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj15:head can't decode 'snapset' attr buffer"
-    err_strings[24]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj12:1 has no oi or legacy_snaps; cannot convert 1=[[]1[]]:[[]1[]].stray_clone_snaps=[{]1=[[]1[]][}]"
 
     for err_string in "${err_strings[@]}"
     do
