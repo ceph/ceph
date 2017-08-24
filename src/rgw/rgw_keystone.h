@@ -109,8 +109,10 @@ public:
   class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
   public:
     RGWKeystoneHTTPTransceiver(CephContext * const cct,
+                               const string& method,
+                               const string& url,
                                bufferlist * const token_body_bl)
-      : RGWHTTPTransceiver(cct, token_body_bl,
+      : RGWHTTPTransceiver(cct, method, url, token_body_bl,
                            cct->_conf->rgw_keystone_verify_ssl,
                            { "X-Subject-Token" }) {
     }

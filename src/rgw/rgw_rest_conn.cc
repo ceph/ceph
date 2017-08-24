@@ -109,7 +109,7 @@ int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv,
     snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
   }
-  RGWRESTSimpleRequest req(cct, url, NULL, &params);
+  RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params);
   return req.forward_request(key, info, max_response, inbl, outbl);
 }
 
@@ -123,7 +123,7 @@ int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_si
 
   param_vec_t params;
   populate_params(params, &uid, self_zone_group);
-  RGWRESTStreamWriteRequest *wr = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
+  RGWRESTStreamWriteRequest *wr = new RGWRESTStreamWriteRequest(cct, "PUT", url, NULL, &params);
   ret = wr->put_obj_init(key, obj, obj_size, attrs);
   if (ret < 0) {
     delete wr;
