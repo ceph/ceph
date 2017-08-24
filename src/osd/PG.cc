@@ -299,9 +299,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
-  past_intervals(
-    curmap->get_pools().at(p.pgid.pool()).ec_pool(),
-    *curmap),
   stat_queue_item(this),
   scrub_queued(false),
   recovery_queued(false),
@@ -5697,7 +5694,6 @@ void PG::handle_advance_map(
 	   << dendl;
   update_osdmap_ref(osdmap);
   pool.update(osdmap);
-  past_intervals.update_type_from_map(pool.info.ec_pool(), *osdmap);
   if (cct->_conf->osd_debug_verify_cached_snaps) {
     interval_set<snapid_t> actual_removed_snaps;
     const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());

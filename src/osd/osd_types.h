@@ -2591,13 +2591,7 @@ public:
     static void generate_test_instances(list<pg_interval_t*>& o);
   };
 
-  PastIntervals() = default;
-  PastIntervals(bool ec_pool, const OSDMap &osdmap) : PastIntervals() {
-    update_type_from_map(ec_pool, osdmap);
-  }
-  PastIntervals(bool ec_pool, bool compact) : PastIntervals() {
-    update_type(ec_pool, compact);
-  }
+  PastIntervals();
   PastIntervals(PastIntervals &&rhs) = default;
   PastIntervals &operator=(PastIntervals &&rhs) = default;
 
@@ -2618,7 +2612,6 @@ public:
     virtual void encode(bufferlist &bl) const = 0;
     virtual void decode(bufferlist::iterator &bl) = 0;
     virtual void dump(Formatter *f) const = 0;
-    virtual bool is_classic() const = 0;
     virtual void iterate_mayberw_back_to(
       bool ec_pool,
       epoch_t les,
@@ -2633,7 +2626,6 @@ public:
 
     virtual ~interval_rep() {}
   };
-  friend class pi_simple_rep;
   friend class pi_compact_rep;
 private:
 
@@ -2647,15 +2639,10 @@ public:
     return past_intervals->add_interval(ec_pool, interval);
   }
 
-  bool is_classic() const {
-    assert(past_intervals);
-    return past_intervals->is_classic();
-  }
-
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     if (past_intervals) {
-      __u8 type = is_classic() ? 1 : 2;
+      __u8 type = 2;
       ::encode(type, bl);
       past_intervals->encode(bl);
     } else {
@@ -2663,18 +2650,8 @@ public:
     }
     ENCODE_FINISH(bl);
   }
-  void encode_classic(bufferlist &bl) const {
-    if (past_intervals) {
-      assert(past_intervals->is_classic());
-      past_intervals->encode(bl);
-    } else {
-      // it's a map<>
-      ::encode((uint32_t)0, bl);
-    }
-  }
 
   void decode(bufferlist::iterator &bl);
-  void decode_classic(bufferlist::iterator &bl);
 
   void dump(Formatter *f) const {
     assert(past_intervals);
@@ -2870,9 +2847,6 @@ public:
 
     friend class PastIntervals;
   };
-
-  void update_type(bool ec_pool, bool compact);
-  void update_type_from_map(bool ec_pool, const OSDMap &osdmap);
 
   template <typename... Args>
   PriorSet get_prior_set(Args&&... args) const {
