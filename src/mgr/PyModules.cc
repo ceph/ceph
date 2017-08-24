@@ -105,14 +105,16 @@ PyObject *PyModules::list_servers_python()
   dout(10) << " >" << dendl;
 
   PyFormatter f(false, true);
-  const auto &all = daemon_state.get_all_servers();
-  for (const auto &i : all) {
-    const auto &hostname = i.first;
+  daemon_state.with_daemons_by_server([this, &f]
+      (const std::map<std::string, DaemonStateCollection> &all) {
+    for (const auto &i : all) {
+      const auto &hostname = i.first;
 
-    f.open_object_section("server");
-    dump_server(hostname, i.second, &f);
-    f.close_section();
-  }
+      f.open_object_section("server");
+      dump_server(hostname, i.second, &f);
+      f.close_section();
+    }
+  });
 
   return f.get();
 }
@@ -731,35 +733,34 @@ PyObject* PyModules::get_perf_schema_python(
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  DaemonStateCollection states;
+  DaemonStateCollection daemons;
 
   if (svc_type == "") {
-    states = daemon_state.get_all();
+    daemons = std::move(daemon_state.get_all());
   } else if (svc_id.empty()) {
-    states = daemon_state.get_by_service(svc_type);
+    daemons = std::move(daemon_state.get_by_service(svc_type));
   } else {
     auto key = DaemonKey(svc_type, svc_id);
     // so that the below can be a loop in all cases
     auto got = daemon_state.get(key);
     if (got != nullptr) {
-      states[key] = got;
+      daemons[key] = got;
     }
   }
 
   PyFormatter f;
   f.open_object_section("perf_schema");
 
-  // FIXME: this is unsafe, I need to either be inside DaemonStateIndex's
-  // lock or put a lock on individual DaemonStates
-  if (!states.empty()) {
-    for (auto statepair : states) {
-      std::ostringstream daemon_name;
+  if (!daemons.empty()) {
+    for (auto statepair : daemons) {
       auto key = statepair.first;
       auto state = statepair.second;
-      Mutex::Locker l(state->lock);
+
+      std::ostringstream daemon_name;
       daemon_name << key.first << "." << key.second;
       f.open_object_section(daemon_name.str().c_str());
 
+      Mutex::Locker l(state->lock);
       for (auto typestr : state->perf_counters.declared_types) {
 	f.open_object_section(typestr.c_str());
 	auto type = state->perf_counters.types[typestr];
