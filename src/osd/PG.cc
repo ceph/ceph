@@ -2841,31 +2841,10 @@ void PG::upgrade(ObjectStore *store)
   assert(info_struct_v <= 10);
   ObjectStore::Transaction t;
 
-  assert(info_struct_v >= 7);
+  // <do upgrade steps here>
 
-  // 7 -> 8
-  if (info_struct_v <= 7) {
-    pg_log.mark_log_for_rewrite();
-    ghobject_t log_oid(OSD::make_pg_log_oid(pg_id));
-    ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
-    t.remove(coll_t::meta(), log_oid);
-    t.remove(coll_t::meta(), biginfo_oid);
-    t.touch(coll, pgmeta_oid);
-  }
-
-  // 8 -> 9
-  if (info_struct_v <= 8) {
-    // no special action needed.
-  }
-
-  // 9 -> 10
-  if (info_struct_v <= 9) {
-    // previous versions weren't (as) aggressively clearing past_intervals
-    if (info.history.last_epoch_clean >= info.history.same_interval_since) {
-      dout(20) << __func__ << " clearing past_intervals" << dendl;
-      past_intervals.clear();
-    }
-  }
+  // finished upgrade!
+  assert(info_struct_v == 10);
 
   // update infover_key
   if (info_struct_v < cur_struct_v) {
@@ -3237,7 +3216,6 @@ int PG::read_info(
   pg_info_t &info, PastIntervals &past_intervals,
   __u8 &struct_v)
 {
-  // try for v8 or later
   set<string> keys;
   keys.insert(infover_key);
   keys.insert(info_key);
@@ -3246,58 +3224,27 @@ int PG::read_info(
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   map<string,bufferlist> values;
   int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
-  if (r == 0) {
-    assert(values.size() == 3 ||
-	   values.size() == 4);
+  assert(r == 0);
+  assert(values.size() == 3 ||
+	 values.size() == 4);
 
-    bufferlist::iterator p = values[infover_key].begin();
-    ::decode(struct_v, p);
-    assert(struct_v >= 8);
-
-    p = values[info_key].begin();
-    ::decode(info, p);
-
-    p = values[biginfo_key].begin();
-    if (struct_v >= 10) {
-      ::decode(past_intervals, p);
-    } else {
-      past_intervals.decode_classic(p);
-    }
-    ::decode(info.purged_snaps, p);
-
-    p = values[fastinfo_key].begin();
-    if (!p.end()) {
-      pg_fast_info_t fast;
-      ::decode(fast, p);
-      fast.try_apply_to(&info);
-    }
-    return 0;
-  }
-
-  // legacy (ver < 8)
-  ghobject_t infos_oid(OSD::make_infos_oid());
-  bufferlist::iterator p = bl.begin();
+  bufferlist::iterator p = values[infover_key].begin();
   ::decode(struct_v, p);
-  assert(struct_v == 7);
+  assert(struct_v >= 10);
 
-  // get info out of leveldb
-  string k = get_info_key(info.pgid);
-  string bk = get_biginfo_key(info.pgid);
-  keys.clear();
-  keys.insert(k);
-  keys.insert(bk);
-  values.clear();
-  store->omap_get_values(coll_t::meta(), ghobject_t(infos_oid), keys, &values);
-  assert(values.size() == 2);
-
-  p = values[k].begin();
+  p = values[info_key].begin();
   ::decode(info, p);
 
-  p = values[bk].begin();
+  p = values[biginfo_key].begin();
   ::decode(past_intervals, p);
-  interval_set<snapid_t> snap_collections;  // obsolete
-  ::decode(snap_collections, p);
   ::decode(info.purged_snaps, p);
+
+  p = values[fastinfo_key].begin();
+  if (!p.end()) {
+    pg_fast_info_t fast;
+    ::decode(fast, p);
+    fast.try_apply_to(&info);
+  }
   return 0;
 }
 
@@ -3309,17 +3256,6 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
 
   last_written_info = info;
 
-  // if we are upgrading from jewel, we need to force rebuild of
-  // missing set.  v9 was fastinfo, added v11.0.2-331-g1d5dc29a13
-  // (before kraken).  persisted missing set was circa
-  // v11.0.0-866-gb0e239da95 (a bit earlier, also before kraken).
-  // v8 was pre-jewel (per-pg meta object).
-  bool force_rebuild_missing = info_struct_v < 9;
-  if (force_rebuild_missing) {
-    dout(10) << __func__ << " detected upgrade from jewel, force_rebuild_missing"
-	     << dendl;
-  }
-
   ostringstream oss;
   pg_log.read_log_and_missing(
     store,
@@ -3327,18 +3263,11 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     info_struct_v < 8 ? coll_t::meta() : coll,
     ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
     info,
-    force_rebuild_missing,
     oss,
     cct->_conf->osd_ignore_stale_divergent_priors,
     cct->_conf->osd_debug_verify_missing_on_start);
   if (oss.tellp())
     osd->clog->error() << oss.rdbuf();
-
-  if (force_rebuild_missing) {
-    dout(10) << __func__ << " forced rebuild of missing got "
-	     << pg_log.get_missing()
-	     << dendl;
-  }
 
   // log any weirdness
   log_weirdness();

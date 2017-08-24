@@ -351,7 +351,7 @@ public:
   // v8 was the move to a per-pg pgmeta object
   // v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
   // (first appeared in cuttlefish).
-  static const __u8 compat_struct_v = 7;
+  static const __u8 compat_struct_v = 10;
   bool must_upgrade() {
     return info_struct_v < cur_struct_v;
   }
