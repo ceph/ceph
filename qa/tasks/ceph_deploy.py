@@ -297,7 +297,6 @@ def build_ceph_cluster(ctx, config):
         # are taking way more than a minute/monitor to form quorum, so lets
         # try the next block which will wait up to 15 minutes to gatherkeys.
         execute_ceph_deploy(mon_create_nodes)
-        execute_ceph_deploy(mgr_create)
 
         # create-keys is explicit now
         # http://tracker.ceph.com/issues/16036
@@ -307,6 +306,9 @@ def build_ceph_cluster(ctx, config):
                              '--id', remote.shortname])
 
         estatus_gather = execute_ceph_deploy(gather_keys)
+
+        execute_ceph_deploy(mgr_create)
+
         if mds_nodes:
             estatus_mds = execute_ceph_deploy(deploy_mds)
             if estatus_mds != 0:
