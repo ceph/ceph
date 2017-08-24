@@ -152,6 +152,15 @@ public:
   virtual int invalidate_cache(uint64_t off, uint64_t len) = 0;
   virtual int open(const std::string& path) = 0;
   virtual void close() = 0;
+
+protected:
+  bool is_valid_io(uint64_t off, uint64_t len) const {
+    return (off % block_size == 0 &&
+            len % block_size == 0 &&
+            len > 0 &&
+            off < size &&
+            off + len <= size);
+  }
 };
 
 #endif //CEPH_OS_BLUESTORE_BLOCKDEVICE_H
