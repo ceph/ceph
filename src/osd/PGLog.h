@@ -1260,14 +1260,13 @@ public:
     coll_t log_coll,
     ghobject_t log_oid,
     const pg_info_t &info,
-    bool force_rebuild_missing,
     ostringstream &oss,
     bool tolerate_divergent_missing_log,
     bool debug_verify_stored_missing = false
     ) {
     return read_log_and_missing(
       store, pg_coll, log_coll, log_oid, info,
-      log, missing, force_rebuild_missing, oss,
+      log, missing, oss,
       tolerate_divergent_missing_log,
       &clear_divergent_priors,
       this,
@@ -1284,7 +1283,6 @@ public:
     const pg_info_t &info,
     IndexedLog &log,
     missing_type &missing,
-    bool force_rebuild_missing,
     ostringstream &oss,
     bool tolerate_divergent_missing_log,
     bool *clear_divergent_priors = nullptr,
@@ -1306,7 +1304,7 @@ public:
     eversion_t on_disk_rollback_info_trimmed_to = eversion_t();
     ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
     map<eversion_t, hobject_t> divergent_priors;
-    bool must_rebuild = force_rebuild_missing;
+    bool must_rebuild = false;
     missing.may_include_deletes = false;
     list<pg_log_entry_t> entries;
     list<pg_log_dup_t> dups;
