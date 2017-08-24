@@ -538,7 +538,7 @@ public:
       eversion_t s,
       set<eversion_t> *trimmed,
       set<string>* trimmed_dups,
-      bool* dirty_dups);
+      eversion_t *write_from_dups);
 
     ostream& print(ostream& out) const;
   }; // IndexedLog
@@ -554,13 +554,15 @@ protected:
   eversion_t dirty_from;       ///< must clear/writeout all keys >= dirty_from
   eversion_t writeout_from;    ///< must writout keys >= writeout_from
   set<eversion_t> trimmed;     ///< must clear keys in trimmed
+  eversion_t dirty_to_dups;    ///< must clear/writeout all dups <= dirty_to_dups
+  eversion_t dirty_from_dups;  ///< must clear/writeout all dups >= dirty_from_dups
+  eversion_t write_from_dups;  ///< must write keys >= write_from_dups
   set<string> trimmed_dups;    ///< must clear keys in trimmed_dups
   CephContext *cct;
   bool pg_log_debug;
   /// Log is clean on [dirty_to, dirty_from)
   bool touched_log;
   bool clear_divergent_priors;
-  bool dirty_dups; /// log.dups is updated
   bool rebuilt_missing_with_deletes = false;
 
   void mark_dirty_to(eversion_t to) {
@@ -575,6 +577,14 @@ protected:
     if (from < writeout_from)
       writeout_from = from;
   }
+  void mark_dirty_to_dups(eversion_t to) {
+    if (to > dirty_to_dups)
+      dirty_to_dups = to;
+  }
+  void mark_dirty_from_dups(eversion_t from) {
+    if (from < dirty_from_dups)
+      dirty_from_dups = from;
+  }
 public:
   bool is_dirty() const {
     return !touched_log ||
@@ -584,12 +594,16 @@ public:
       !(trimmed.empty()) ||
       !missing.is_clean() ||
       !(trimmed_dups.empty()) ||
-      dirty_dups ||
+      (dirty_to_dups != eversion_t()) ||
+      (dirty_from_dups != eversion_t::max()) ||
+      (write_from_dups != eversion_t::max()) ||
       rebuilt_missing_with_deletes;
   }
   void mark_log_for_rewrite() {
     mark_dirty_to(eversion_t::max());
     mark_dirty_from(eversion_t());
+    mark_dirty_to_dups(eversion_t::max());
+    mark_dirty_from_dups(eversion_t());
     touched_log = false;
   }
   bool get_rebuilt_missing_with_deletes() const {
@@ -624,7 +638,9 @@ protected:
     writeout_from = eversion_t::max();
     check();
     missing.flush();
-    dirty_dups = false;
+    dirty_to_dups = eversion_t();
+    dirty_from_dups = eversion_t::max();
+    write_from_dups = eversion_t::max();
   }
 public:
 
@@ -633,11 +649,12 @@ public:
     prefix_provider(dpp),
     dirty_from(eversion_t::max()),
     writeout_from(eversion_t::max()),
+    dirty_from_dups(eversion_t::max()),
+    write_from_dups(eversion_t::max()),
     cct(cct),
     pg_log_debug(!(cct && !(cct->_conf->osd_debug_pg_log_writeout))),
     touched_log(false),
-    clear_divergent_priors(false),
-    dirty_dups(false)
+    clear_divergent_priors(false)
   { }
 
   void reset_backfill();
@@ -715,6 +732,7 @@ public:
     log.claim_log_and_clear_rollback_info(o);
     missing.clear();
     mark_dirty_to(eversion_t::max());
+    mark_dirty_to_dups(eversion_t::max());
   }
 
   void split_into(
@@ -724,7 +742,9 @@ public:
     log.split_out_child(child_pgid, split_bits, &opg_log->log);
     missing.split_into(child_pgid, split_bits, &(opg_log->missing));
     opg_log->mark_dirty_to(eversion_t::max());
+    opg_log->mark_dirty_to_dups(eversion_t::max());
     mark_dirty_to(eversion_t::max());
+    mark_dirty_to_dups(eversion_t::max());
     if (missing.may_include_deletes)
       opg_log->rebuilt_missing_with_deletes = true;
   }
@@ -1181,8 +1201,7 @@ public:
     pg_log_t &log,
     const coll_t& coll,
     const ghobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
-    bool require_rollback,
-    bool dirty_dups);
+    bool require_rollback);
 
   static void write_log_and_missing(
     ObjectStore::Transaction& t,
@@ -1192,7 +1211,6 @@ public:
     const ghobject_t &log_oid,
     const pg_missing_tracker_t &missing,
     bool require_rollback,
-    bool dirty_dups,
     bool *rebuilt_missing_set_with_deletes);
 
   static void _write_log_and_missing_wo_missing(
@@ -1209,7 +1227,9 @@ public:
     bool dirty_divergent_priors,
     bool touch_log,
     bool require_rollback,
-    bool dirty_dups,
+    eversion_t dirty_to_dups,
+    eversion_t dirty_from_dups,
+    eversion_t write_from_dups,
     set<string> *log_keys_debug
     );
 
@@ -1227,7 +1247,9 @@ public:
     bool touch_log,
     bool require_rollback,
     bool clear_divergent_priors,
-    bool dirty_dups,
+    eversion_t dirty_to_dups,
+    eversion_t dirty_from_dups,
+    eversion_t write_from_dups,
     bool *rebuilt_missing_with_deletes,
     set<string> *log_keys_debug
     );
