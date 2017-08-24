@@ -5041,14 +5041,24 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   } else if (prefix == "osd crush class ls-osd") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "class", name);
-    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     set<int> osds;
     osdmap.crush->get_devices_by_class(name, &osds);
-    f->open_array_section("osds");
-    for (auto& osd : osds)
-      f->dump_int("osd", osd);
-    f->close_section();
-    f->flush(rdata);
+    if (f) {
+      f->open_array_section("osds");
+      for (auto &osd: osds)
+        f->dump_int("osd", osd);
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      bool first = true;
+      for (auto &osd : osds) {
+        if (!first)
+          ds << "\n";
+        first = false;
+        ds << osd;
+      }
+      rdata.append(ds);
+    }
   } else if (prefix == "osd erasure-code-profile ls") {
     const auto &profiles = osdmap.get_erasure_code_profiles();
     if (f)
