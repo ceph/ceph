@@ -10833,7 +10833,6 @@ void PrimaryLogPG::on_shutdown()
   dout(10) << "on_shutdown" << dendl;
 
   // remove from queues
-  osd->pg_stat_queue_dequeue(this);
   osd->peering_wq.dequeue(this);
 
   // handles queue races
