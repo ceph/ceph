@@ -379,11 +379,11 @@ ExternalTokenEngine::authenticate(const std::string& token,
   char url_buf[auth_url.size() + 1 + token.length() + 1];
   sprintf(url_buf, "%s/%s", auth_url.c_str(), token.c_str());
 
-  RGWHTTPHeadersCollector validator(cct, { "X-Auth-Groups", "X-Auth-Ttl" });
+  RGWHTTPHeadersCollector validator(cct, "GET", url_buf, { "X-Auth-Groups", "X-Auth-Ttl" });
 
   ldout(cct, 10) << "rgw_swift_validate_token url=" << url_buf << dendl;
 
-  int ret = validator.process(url_buf);
+  int ret = validator.process();
   if (ret < 0) {
     throw ret;
   }

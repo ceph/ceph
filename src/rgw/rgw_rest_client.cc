@@ -102,8 +102,9 @@ static void get_new_date_str(string& date_str)
   date_str = rgw_to_asctime(ceph_clock_now());
 }
 
-int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const char *resource)
+int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const char *resource)
 {
+  method = _method;
   string new_url = url;
   string new_resource = resource;
 
@@ -114,6 +115,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const c
     new_resource.append(resource);
   }
   new_url.append(new_resource);
+  url = new_url;
 
   string date_str;
   get_new_date_str(date_str);
@@ -122,8 +124,8 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const c
   string canonical_header;
   map<string, string> meta_map;
   map<string, string> sub_resources;
-  rgw_create_s3_canonical_header(method, NULL, NULL, date_str.c_str(),
-                            meta_map, new_url.c_str(), sub_resources,
+  rgw_create_s3_canonical_header(method.c_str(), NULL, NULL, date_str.c_str(),
+                            meta_map, url.c_str(), sub_resources,
                             canonical_header);
 
   string digest;
@@ -138,7 +140,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const c
   ldout(cct, 15) << "generated auth header: " << auth_hdr << dendl;
 
   headers.push_back(pair<string, string>("AUTHORIZATION", auth_hdr));
-  int r = process(method, new_url.c_str());
+  int r = process();
   if (r < 0)
     return r;
 
@@ -292,7 +294,10 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
     set_send_length(inbl->length());
   }
 
-  int r = process(new_info.method, new_url.c_str());
+  method = new_info.method;
+  url = new_url;
+
+  int r = process();
   if (r < 0){
     if (r == -EINVAL){
       // curl_easy has errored, generally means the service is not available
@@ -492,7 +497,10 @@ int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uin
 
   set_send_length(obj_size);
 
-  int r = http_manager.add_request(this, new_info.method, new_url.c_str());
+  method = new_info.method;
+  url = new_url;
+
+  int r = http_manager.add_request(this);
   if (r < 0)
     return r;
 
@@ -654,7 +662,7 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
     new_env.set(iter->first.c_str(), iter->second.c_str());
   }
 
-  new_info.method = method;
+  new_info.method = method.c_str();
 
   new_info.script_uri = "/";
   new_info.script_uri.append(new_resource);
@@ -676,7 +684,7 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
 
   bool send_data_hint = false;
   if (send_data) {
-    outbl.claim(*send_data);
+    set_outbl(*send_data);
     send_data_hint = true;
   }
 
@@ -694,7 +702,10 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
     set_send_length(send_size);
   }
 
-  int r = pmanager->add_request(this, new_info.method, new_url.c_str(), send_data_hint);
+  method = new_info.method;
+  url = new_url;
+
+  int r = pmanager->add_request(this, send_data_hint);
   if (r < 0)
     return r;
 
@@ -759,7 +770,7 @@ int RGWRESTStreamRWRequest::complete_request(string& etag, real_time *mtime, uin
   return status;
 }
 
-int RGWRESTStreamRWRequest::handle_header(const string& name, const string& val)
+int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val)
 {
   if (name == "RGWX_EMBEDDED_METADATA_LEN") {
     string err;
@@ -774,7 +785,7 @@ int RGWRESTStreamRWRequest::handle_header(const string& name, const string& val)
   return 0;
 }
 
-int RGWRESTStreamRWRequest::receive_data(void *ptr, size_t len)
+int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len)
 {
   bufferptr bp((const char *)ptr, len);
   bufferlist bl;
@@ -786,12 +797,12 @@ int RGWRESTStreamRWRequest::receive_data(void *ptr, size_t len)
   return len;
 }
 
-void RGWRESTStreamRWRequest::set_stream_write(bool s) {
+void RGWHTTPStreamRWRequest::set_stream_write(bool s) {
   Mutex::Locker wl(write_lock);
   stream_writes = s;
 }
 
-void RGWRESTStreamRWRequest::add_send_data(bufferlist& bl)
+void RGWHTTPStreamRWRequest::add_send_data(bufferlist& bl)
 {
   Mutex::Locker req_locker(get_req_lock());
   Mutex::Locker wl(write_lock);
@@ -799,7 +810,7 @@ void RGWRESTStreamRWRequest::add_send_data(bufferlist& bl)
   _set_write_paused(false);
 }
 
-void RGWRESTStreamRWRequest::finish_write()
+void RGWHTTPStreamRWRequest::finish_write()
 {
   Mutex::Locker req_locker(get_req_lock());
   Mutex::Locker wl(write_lock);
@@ -807,7 +818,7 @@ void RGWRESTStreamRWRequest::finish_write()
   _set_write_paused(false);
 }
 
-int RGWRESTStreamRWRequest::send_data(void *ptr, size_t len, bool *pause)
+int RGWHTTPStreamRWRequest::send_data(void *ptr, size_t len, bool *pause)
 {
   Mutex::Locker wl(write_lock);
 
