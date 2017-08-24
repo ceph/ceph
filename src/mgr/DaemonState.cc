@@ -20,7 +20,7 @@
 
 void DaemonStateIndex::insert(DaemonStatePtr dm)
 {
-  Mutex::Locker l(lock);
+  RWLock::WLocker l(lock);
 
   if (all.count(dm->key)) {
     _erase(dm->key);
@@ -32,7 +32,7 @@ void DaemonStateIndex::insert(DaemonStatePtr dm)
 
 void DaemonStateIndex::_erase(const DaemonKey& dmk)
 {
-  assert(lock.is_locked_by_me());
+  assert(lock.is_wlocked());
 
   const auto to_erase = all.find(dmk);
   assert(to_erase != all.end());
@@ -49,7 +49,7 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
 DaemonStateCollection DaemonStateIndex::get_by_service(
   const std::string& svc) const
 {
-  Mutex::Locker l(lock);
+  RWLock::RLocker l(lock);
 
   DaemonStateCollection result;
 
@@ -65,7 +65,7 @@ DaemonStateCollection DaemonStateIndex::get_by_service(
 DaemonStateCollection DaemonStateIndex::get_by_server(
   const std::string &hostname) const
 {
-  Mutex::Locker l(lock);
+  RWLock::RLocker l(lock);
 
   if (by_server.count(hostname)) {
     return by_server.at(hostname);
@@ -76,14 +76,14 @@ DaemonStateCollection DaemonStateIndex::get_by_server(
 
 bool DaemonStateIndex::exists(const DaemonKey &key) const
 {
-  Mutex::Locker l(lock);
+  RWLock::RLocker l(lock);
 
   return all.count(key) > 0;
 }
 
 DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
 {
-  Mutex::Locker l(lock);
+  RWLock::RLocker l(lock);
 
   auto iter = all.find(key);
   if (iter != all.end()) {
@@ -98,7 +98,7 @@ void DaemonStateIndex::cull(const std::string& svc_name,
 {
   std::vector<string> victims;
 
-  Mutex::Locker l(lock);
+  RWLock::WLocker l(lock);
   auto begin = all.lower_bound({svc_name, ""});
   auto end = all.end();
   for (auto &i = begin; i != end; ++i) {

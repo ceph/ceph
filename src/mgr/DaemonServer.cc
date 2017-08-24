@@ -332,7 +332,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
   if (daemon) {
     dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
     Mutex::Locker l(daemon->lock);
-    daemon_state.get(key)->perf_counters.clear();
+    daemon->perf_counters.clear();
   }
 
   if (m->service_daemon) {
