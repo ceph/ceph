@@ -94,6 +94,8 @@ class RGWRESTStreamRWRequest : public RGWRESTSimpleRequest {
   const char *method;
   uint64_t write_ofs{0};
   bool send_paused{false};
+  bool stream_writes{false};
+  bool write_stream_complete{false};
 protected:
   int handle_header(const string& name, const string& val) override;
 public:
@@ -117,6 +119,11 @@ public:
   void set_in_cb(RGWGetDataCB *_cb) { cb = _cb; }
 
   void add_send_data(bufferlist& bl);
+
+  void set_stream_write(bool s);
+
+  /* finish streaming writes */
+  void finish_write();
 };
 
 class RGWRESTStreamReadRequest : public RGWRESTStreamRWRequest {
