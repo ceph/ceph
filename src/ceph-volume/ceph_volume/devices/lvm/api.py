@@ -124,6 +124,21 @@ def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_tags=None):
     return lvs.get(lv_name=lv_name, vg_name=vg_name, lv_path=lv_path, lv_tags=lv_tags)
 
 
+def create_pv(device):
+    """
+    Create a physical volume from a device, useful when devices need to be later mapped
+    to journals.
+    """
+    process.run([
+        'sudo',
+        'pvcreate',
+        '-v',  # verbose
+        '-f',  # force it
+        '--yes', # answer yes to any prompts
+        device
+    ])
+
+
 def create_lv(name, group, size=None, **tags):
     """
     Create a Logical Volume in a Volume Group. Command looks like::
