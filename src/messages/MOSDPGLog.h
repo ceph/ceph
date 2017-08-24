@@ -21,7 +21,7 @@
 class MOSDPGLog : public Message {
 
   static const int HEAD_VERSION = 5;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 5;
 
   epoch_t epoch = 0;
   /// query_epoch is the epoch of the query being responded to, or
@@ -81,13 +81,7 @@ public:
     ::encode(log, payload);
     ::encode(missing, payload);
     ::encode(query_epoch, payload);
-    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
-      header.version = HEAD_VERSION;
-      ::encode(past_intervals, payload);
-    } else {
-      header.version = 4;
-      past_intervals.encode_classic(payload);
-    }
+    ::encode(past_intervals, payload);
     ::encode(to, payload);
     ::encode(from, payload);
   }
@@ -97,23 +91,10 @@ public:
     ::decode(info, p);
     log.decode(p, info.pgid.pool());
     missing.decode(p, info.pgid.pool());
-    if (header.version >= 2) {
-      ::decode(query_epoch, p);
-    }
-    if (header.version >= 3) {
-      if (header.version >= 5) {
-	::decode(past_intervals, p);
-      } else {
-	past_intervals.decode_classic(p);
-      }
-    }
-    if (header.version >= 4) {
-      ::decode(to, p);
-      ::decode(from, p);
-    } else {
-      to = shard_id_t::NO_SHARD;
-      from = shard_id_t::NO_SHARD;
-    }
+    ::decode(query_epoch, p);
+    ::decode(past_intervals, p);
+    ::decode(to, p);
+    ::decode(from, p);
   }
 };
 
