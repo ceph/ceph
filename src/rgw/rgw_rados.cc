@@ -7912,6 +7912,8 @@ int RGWRados::Object::Delete::delete_obj()
       if (params.expiration_time != delete_at) {
         return -ERR_PRECONDITION_FAILED;
       }
+    } else {
+      return -ERR_PRECONDITION_FAILED;
     }
   }
 

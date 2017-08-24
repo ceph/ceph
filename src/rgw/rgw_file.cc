@@ -1278,8 +1278,8 @@ namespace rgw {
       emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
     }
 
-    op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at,
-				 if_match, if_nomatch);
+    op_ret = processor->complete(etag, &mtime, real_time(), attrs,
+	                         (delete_at ? *delete_at : real_time()), if_match, if_nomatch);
     if (! op_ret) {
       /* update stats */
       rgw_fh->set_mtime(real_clock::to_timespec(mtime));
