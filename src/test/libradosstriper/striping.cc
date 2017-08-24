@@ -46,12 +46,14 @@ protected:
     ASSERT_LT(0, ioctx.getxattr(firstOid, "striper.layout.stripe_unit", xattrbl));
     std::string s_xattr(xattrbl.c_str(), xattrbl.length()); // adds 0 byte at the end
     uint64_t stripe_unit = strtoll(s_xattr.c_str(), NULL, 10);
+    assert(stripe_unit!=0);
     ASSERT_LT((unsigned)0, stripe_unit);
     ASSERT_EQ(stripe_unit, exp_stripe_unit);
     xattrbl.clear();
     ASSERT_LT(0, ioctx.getxattr(firstOid, "striper.layout.stripe_count", xattrbl));
     s_xattr = std::string(xattrbl.c_str(), xattrbl.length()); // adds 0 byte at the end
     uint64_t stripe_count = strtoll(s_xattr.c_str(), NULL, 10);
+    assert(stripe_count!=0);
     ASSERT_LT(0U, stripe_count);
     ASSERT_EQ(stripe_count, exp_stripe_count);
     xattrbl.clear();
