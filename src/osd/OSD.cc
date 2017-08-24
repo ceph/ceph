@@ -45,6 +45,7 @@
 #include "common/ceph_time.h"
 #include "common/version.h"
 #include "common/io_priority.h"
+#include "common/pick_address.h"
 
 #include "os/ObjectStore.h"
 #ifdef HAVE_LIBFUSE
@@ -5900,6 +5901,17 @@ void OSD::_collect_metadata(map<string,string> *pm)
   store->collect_metadata(pm);
 
   collect_sys_info(pm, cct);
+
+  std::string front_iface, back_iface;
+  /*
+  pick_iface(cct,
+      CEPH_PICK_ADDRESS_PUBLIC | CEPH_PICK_ADDRESS_CLUSTER,
+      &front_iface, &back_iface);
+      */
+  (*pm)["front_iface"] = pick_iface(cct,
+      client_messenger->get_myaddr().get_sockaddr_storage());
+  (*pm)["back_iface"] = pick_iface(cct,
+      cluster_messenger->get_myaddr().get_sockaddr_storage());
 
   dout(10) << __func__ << " " << *pm << dendl;
 }
