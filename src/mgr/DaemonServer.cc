@@ -416,14 +416,18 @@ bool DaemonServer::handle_report(MMgrReport *m)
     dout(20) << "updating existing DaemonState for " << key << dendl;
     daemon = daemon_state.get(key);
   } else {
-    dout(4) << "constructing new DaemonState for " << key << dendl;
-    daemon = std::make_shared<DaemonState>(daemon_state.types);
-    // FIXME: crap, we don't know the hostname at this stage.
-    daemon->key = key;
-    daemon_state.insert(daemon);
-    // FIXME: we should avoid this case by rejecting MMgrReport from
-    // daemons without sessions, and ensuring that session open
-    // always contains metadata.
+    // we don't know the hostname at this stage, reject MMgrReport here.
+    dout(1) << "rejecting report from " << key << ", since we do not have its metadata now."
+	    << dendl;
+    // kill session
+    MgrSessionRef session(static_cast<MgrSession*>(m->get_connection()->get_priv()));
+    if (!session) {
+      return false;
+    }
+    m->get_connection()->mark_down();
+    session->put();
+
+    return false;
   }
 
   // Update the DaemonState
