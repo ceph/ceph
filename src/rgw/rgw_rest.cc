@@ -1138,7 +1138,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   }
 
   int len = 0;
-  if (cl) {
+  {
     ACCOUNTING_IO(s)->set_account(true);
     bufferptr bp(cl);
 
