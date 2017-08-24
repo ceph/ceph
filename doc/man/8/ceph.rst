@@ -560,17 +560,19 @@ Usage::
 
 	ceph osd create {<uuid>} {<id>}
 
-Subcommand ``new`` reuses a previously destroyed OSD *id*. The new OSD will
-have the specified *uuid*, and the command expects a JSON file containing
-the base64 cephx key for auth entity *client.osd.<id>*, as well as optional
-base64 cepx key for dm-crypt lockbox access and a dm-crypt key. Specifying
-a dm-crypt requires specifying the accompanying lockbox cephx key.
+Subcommand ``new`` can be used to create a new OSD or to recreate a previously
+destroyed OSD with a specific *id*. The new OSD will have the specified *uuid*,
+and the command expects a JSON file containing the base64 cephx key for auth
+entity *client.osd.<id>*, as well as optional base64 cepx key for dm-crypt
+lockbox access and a dm-crypt key. Specifying a dm-crypt requires specifying
+the accompanying lockbox cephx key.
 
 Usage::
 
     ceph osd new {<id>} {<uuid>} -i {<secrets.json>}
 
-The secrets JSON file is expected to maintain a form of the following format::
+The secrets JSON file is optional but if provided, is expected to maintain
+a form of the following format::
 
     {
         "cephx_secret": "AQBWtwhZdBO5ExAAIDyjK2Bh16ZXylmzgYYEjg=="

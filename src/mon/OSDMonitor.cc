@@ -6784,6 +6784,11 @@ int OSDMonitor::prepare_command_osd_create(
 {
   dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
   assert(existing_id);
+  if (osdmap.is_destroyed(id)) {
+    ss << "ceph osd create has been deprecated. Please use ceph osd new "
+          "instead.";
+    return -EINVAL;
+  }
 
   if (uuid.is_zero()) {
     dout(10) << __func__ << " no uuid; assuming legacy `osd create`" << dendl;
