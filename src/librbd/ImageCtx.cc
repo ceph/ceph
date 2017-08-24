@@ -110,16 +110,11 @@ struct C_InvalidateCache : public Context {
 struct C_AsyncCallback : public Context {
   ImageCtx *image_ctx;
   Context *on_finish;
-  bool     reentrant_safe;
-  C_AsyncCallback(ImageCtx *image_ctx, Context *on_finish, bool _reentrant_safe)
-    : image_ctx(image_ctx), on_finish(on_finish), reentrant_safe(_reentrant_safe) {
+  C_AsyncCallback(ImageCtx *image_ctx, Context *on_finish)
+    : image_ctx(image_ctx), on_finish(on_finish) {
   }
   virtual void finish(int r) {
-    if (!reentrant_safe) {
-      image_ctx->writeback_handler->queue(on_finish, r);
-    } else {
-      on_finish->complete(r);
-    }
+    image_ctx->async_finisher->queue(on_finish, r);
   }
 };
 
@@ -168,7 +163,7 @@ void _flush_async_operations(ImageCtx *ictx, Context *on_finish) {
       stripe_unit(0), stripe_count(0), flags(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
-      total_bytes_read(0), copyup_finisher(NULL),
+      total_bytes_read(0), copyup_finisher(NULL), async_finisher(new Finisher(cct)),
       object_map(*this), aio_work_queue(NULL), op_work_queue(NULL)
   {
     md_ctx.dup(p);
@@ -220,6 +215,8 @@ void _flush_async_operations(ImageCtx *ictx, Context *on_finish) {
       copyup_finisher->start();
     }
 
+    async_finisher->start();
+
     ThreadPoolSingleton *thread_pool_singleton;
     cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       thread_pool_singleton, "librbd::thread_pool");
@@ -258,6 +255,8 @@ void _flush_async_operations(ImageCtx *ictx, Context *on_finish) {
 
     delete op_work_queue;
     delete aio_work_queue;
+    delete async_finisher;
+    async_finisher = NULL;
   }
 
   int ImageCtx::init() {
@@ -865,17 +864,13 @@ void _flush_async_operations(ImageCtx *ictx, Context *on_finish) {
 
   void ImageCtx::flush_async_operations() {
     C_SaferCond ctx;
-    _flush_async_operations(this, new C_AsyncCallback(this, &ctx, true));
+    _flush_async_operations(this, new C_AsyncCallback(this, &ctx));
     ctx.wait();
   }
 
   void ImageCtx::flush_async_operations(Context *on_finish) {
     // complete context in clean thread context
-    bool reentrant = false;
-    if (object_cacher == NULL) {
-      reentrant = true;
-    }
-    _flush_async_operations(this, new C_AsyncCallback(this, on_finish, reentrant));
+    _flush_async_operations(this, new C_AsyncCallback(this, on_finish));
   }
 
   int ImageCtx::flush() {
