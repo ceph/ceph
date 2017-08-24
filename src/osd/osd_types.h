@@ -2653,6 +2653,16 @@ struct pg_log_dup_t {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_log_dup_t*>& o);
 
+  bool operator==(const pg_log_dup_t &rhs) const {
+    return reqid == rhs.reqid &&
+      version == rhs.version &&
+      user_version == rhs.user_version &&
+      return_code == rhs.return_code;
+  }
+  bool operator!=(const pg_log_dup_t &rhs) const {
+    return !(*this == rhs);
+  }
+
   friend std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e);
 };
 WRITE_CLASS_ENCODER(pg_log_dup_t)
