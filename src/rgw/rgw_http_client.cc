@@ -284,27 +284,21 @@ static curl_slist *headers_to_slist(param_vec_t& headers)
   return h;
 }
 
-static bool is_upload_request(const char *method)
+static bool is_upload_request(const string& method)
 {
-  if (method == nullptr) {
-    return false;
-  }
-  return strcmp(method, "POST") == 0 || strcmp(method, "PUT") == 0;
+  return method == "POST" || method == "PUT";
 }
 
 /*
  * process a single simple one off request, not going through RGWHTTPManager. Not using
  * req_data.
  */
-int RGWHTTPClient::process(const char *method, const char *url)
+int RGWHTTPClient::process()
 {
   int ret = 0;
   CURL *curl_handle;
 
   char error_buf[CURL_ERROR_SIZE];
-
-  last_method = (method ? method : "");
-  last_url = (url ? url : "");
 
   curl_handle = curl_easy_init();
 
@@ -312,8 +306,8 @@ int RGWHTTPClient::process(const char *method, const char *url)
 
   curl_slist *h = headers_to_slist(headers);
 
-  curl_easy_setopt(curl_handle, CURLOPT_CUSTOMREQUEST, method);
-  curl_easy_setopt(curl_handle, CURLOPT_URL, url);
+  curl_easy_setopt(curl_handle, CURLOPT_CUSTOMREQUEST, method.c_str());
+  curl_easy_setopt(curl_handle, CURLOPT_URL, url.c_str());
   curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, simple_receive_http_header);
@@ -352,8 +346,8 @@ int RGWHTTPClient::process(const char *method, const char *url)
 
 string RGWHTTPClient::to_str()
 {
-  string method_str = (last_method.empty() ? "<no-method>" : last_method);
-  string url_str = (last_url.empty() ? "<no-url>" : last_url);
+  string method_str = (method.empty() ? "<no-method>" : method);
+  string url_str = (url.empty() ? "<no-url>" : url);
   return method_str + " " + url_str;
 }
 
@@ -369,7 +363,7 @@ int RGWHTTPClient::get_req_retcode()
 /*
  * init request, will be used later with RGWHTTPManager
  */
-int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_req_data *_req_data, bool send_data_hint)
+int RGWHTTPClient::init_request(rgw_http_req_data *_req_data, bool send_data_hint)
 {
   assert(!req_data);
   _req_data->get();
@@ -387,11 +381,8 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
 
   req_data->h = h;
 
-  last_method = (method ? method : "");
-  last_url = (url ? url : "");
-
-  curl_easy_setopt(easy_handle, CURLOPT_CUSTOMREQUEST, method);
-  curl_easy_setopt(easy_handle, CURLOPT_URL, url);
+  curl_easy_setopt(easy_handle, CURLOPT_CUSTOMREQUEST, method.c_str());
+  curl_easy_setopt(easy_handle, CURLOPT_URL, url.c_str());
   curl_easy_setopt(easy_handle, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(easy_handle, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(easy_handle, CURLOPT_HEADERFUNCTION, receive_http_header);
@@ -819,11 +810,11 @@ void RGWHTTPManager::manage_pending_requests()
   }
 }
 
-int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const char *url, bool send_data_hint)
+int RGWHTTPManager::add_request(RGWHTTPClient *client, bool send_data_hint)
 {
   rgw_http_req_data *req_data = new rgw_http_req_data;
 
-  int ret = client->init_request(method, url, req_data, send_data_hint);
+  int ret = client->init_request(req_data, send_data_hint);
   if (ret < 0) {
     req_data->put();
     req_data = NULL;

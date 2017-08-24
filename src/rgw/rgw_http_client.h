@@ -31,21 +31,21 @@ class RGWHTTPClient
 
   void *user_info;
 
-  string last_method;
-  string last_url;
   bool verify_ssl; // Do not validate self signed certificates, default to false
 
   std::atomic<unsigned> stopped { 0 };
 
 protected:
   CephContext *cct;
+
+  string method;
+  string url;
+
   param_vec_t headers;
 
   RGWHTTPManager *get_manager();
 
-  int init_request(const char *method,
-                   const char *url,
-                   rgw_http_req_data *req_data,
+  int init_request(rgw_http_req_data *req_data,
                    bool send_data_hint = false);
 
   virtual int receive_header(void *ptr, size_t len) {
@@ -99,14 +99,18 @@ public:
   static const long HTTP_STATUS_NOTFOUND     = 404;
 
   virtual ~RGWHTTPClient();
-  explicit RGWHTTPClient(CephContext *cct)
+  explicit RGWHTTPClient(CephContext *cct,
+                         const string& _method,
+                         const string& _url)
     : send_len(0),
       has_send_len(false),
       http_status(HTTP_STATUS_NOSTATUS),
       req_data(nullptr),
       user_info(nullptr),
       verify_ssl(cct->_conf->rgw_verify_ssl),
-      cct(cct) {
+      cct(cct),
+      method(_method),
+      url(_url) {
   }
 
   void set_user_info(void *info) {
@@ -135,8 +139,7 @@ public:
     verify_ssl = flag;
   }
 
-  int process(const char *method, const char *url);
-  int process(const char *url) { return process("GET", url); }
+  int process();
 
   int wait();
   rgw_http_req_data *get_req_data() { return req_data; }
@@ -144,6 +147,14 @@ public:
   string to_str();
 
   int get_req_retcode();
+
+  void set_url(const string& _url) {
+    url = _url;
+  }
+
+  void set_method(const string& _method) {
+    method = _method;
+  }
 };
 
 
@@ -154,8 +165,10 @@ public:
   typedef std::set<header_name_t, ltstr_nocase> header_spec_t;
 
   RGWHTTPHeadersCollector(CephContext * const cct,
+                          const string& method,
+                          const string& url,
                           const header_spec_t relevant_headers)
-    : RGWHTTPClient(cct),
+    : RGWHTTPClient(cct, method, url),
       relevant_headers(relevant_headers) {
   }
 
@@ -192,18 +205,22 @@ class RGWHTTPTransceiver : public RGWHTTPHeadersCollector {
 
 public:
   RGWHTTPTransceiver(CephContext * const cct,
+                     const string& method,
+                     const string& url,
                      bufferlist * const read_bl,
                      const header_spec_t intercept_headers = {})
-    : RGWHTTPHeadersCollector(cct, intercept_headers),
+    : RGWHTTPHeadersCollector(cct, method, url, intercept_headers),
       read_bl(read_bl),
       post_data_index(0) {
   }
 
   RGWHTTPTransceiver(CephContext * const cct,
+                     const string& method,
+                     const string& url,
                      bufferlist * const read_bl,
                      const bool verify_ssl,
                      const header_spec_t intercept_headers = {})
-    : RGWHTTPHeadersCollector(cct, intercept_headers),
+    : RGWHTTPHeadersCollector(cct, method, url, intercept_headers),
       read_bl(read_bl),
       post_data_index(0) {
     set_verify_ssl(verify_ssl);
@@ -290,8 +307,7 @@ public:
   int set_threaded();
   void stop();
 
-  int add_request(RGWHTTPClient *client, const char *method, const char *url,
-                  bool send_data_hint = false);
+  int add_request(RGWHTTPClient *client, bool send_data_hint = false);
   int remove_request(RGWHTTPClient *client);
   int set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetState state);
 

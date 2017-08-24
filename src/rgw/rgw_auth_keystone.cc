@@ -70,7 +70,7 @@ TokenEngine::get_from_keystone(const std::string& token) const
   /* The container for plain response obtained from Keystone. It will be
    * parsed token_envelope_t::parse method. */
   ceph::bufferlist token_body_bl;
-  RGWValidateKeystoneToken validate(cct, &token_body_bl);
+  RGWValidateKeystoneToken validate(cct, "GET", "", &token_body_bl);
 
   std::string url = config.get_endpoint_url();
   if (url.empty()) {
@@ -94,7 +94,9 @@ TokenEngine::get_from_keystone(const std::string& token) const
   validate.append_header("X-Auth-Token", admin_token);
   validate.set_send_length(0);
 
-  int ret = validate.process(url.c_str());
+  validate.set_url(url);
+
+  int ret = validate.process();
   if (ret < 0) {
     throw ret;
   }
@@ -322,7 +324,7 @@ EC2Engine::get_from_keystone(const boost::string_view& access_key_id,
   /* The container for plain response obtained from Keystone. It will be
    * parsed token_envelope_t::parse method. */
   ceph::bufferlist token_body_bl;
-  RGWValidateKeystoneToken validate(cct, &token_body_bl);
+  RGWValidateKeystoneToken validate(cct, "POST", keystone_url, &token_body_bl);
 
   /* set required headers for keystone request */
   validate.append_header("X-Auth-Token", admin_token);
@@ -347,7 +349,7 @@ EC2Engine::get_from_keystone(const boost::string_view& access_key_id,
   validate.set_send_length(os.str().length());
 
   /* send request */
-  ret = validate.process("POST", keystone_url.c_str());
+  ret = validate.process();
   if (ret < 0) {
     ldout(cct, 2) << "s3 keystone: token validation ERROR: "
                   << token_body_bl.c_str() << dendl;

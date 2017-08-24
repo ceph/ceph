@@ -13,8 +13,6 @@ protected:
   int http_status;
   int status;
 
-  string url;
-
   map<string, string> out_headers;
   param_vec_t params;
 
@@ -29,9 +27,10 @@ protected:
 
   int sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info);
 public:
-  RGWRESTSimpleRequest(CephContext *_cct, const string& _url, param_vec_t *_headers,
-		param_vec_t *_params) : RGWHTTPClient(_cct), http_status(0), status(0),
-                url(_url), send_iter(NULL),
+  RGWRESTSimpleRequest(CephContext *_cct, const string& _method, const string& _url,
+                       param_vec_t *_headers, param_vec_t *_params) : RGWHTTPClient(_cct, _method, _url),
+                http_status(0), status(0),
+                send_iter(NULL),
                 max_response(0) {
     set_headers(_headers);
     set_params(_params);
@@ -72,8 +71,8 @@ public:
   int add_output_data(bufferlist& bl);
   int send_data(void *ptr, size_t len) override;
 
-  RGWRESTStreamWriteRequest(CephContext *_cct, const string& _url, param_vec_t *_headers,
-		param_vec_t *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
+  RGWRESTStreamWriteRequest(CephContext *_cct, const string& _method, const string& _url, param_vec_t *_headers,
+		param_vec_t *_params) : RGWRESTSimpleRequest(_cct, _method, _url, _headers, _params),
                 lock("RGWRESTStreamWriteRequest"), cb(NULL), http_manager(_cct) {}
   ~RGWRESTStreamWriteRequest() override;
   int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs);
@@ -82,7 +81,7 @@ public:
   RGWGetDataCB *get_out_cb() { return cb; }
 };
 
-class RGWRESTStreamRWRequest : public RGWRESTSimpleRequest {
+class RGWHTTPStreamRWRequest : public RGWRESTSimpleRequest {
   Mutex lock;
   Mutex write_lock;
   RGWGetDataCB *cb;
@@ -90,8 +89,6 @@ class RGWRESTStreamRWRequest : public RGWRESTSimpleRequest {
   bufferlist in_data;
   size_t chunk_ofs{0};
   size_t ofs{0};
-  RGWHTTPManager http_manager;
-  const char *method;
   uint64_t write_ofs{0};
   bool send_paused{false};
   bool stream_writes{false};
@@ -102,15 +99,11 @@ public:
   int send_data(void *ptr, size_t len, bool *pause) override;
   int receive_data(void *ptr, size_t len) override;
 
-  RGWRESTStreamRWRequest(CephContext *_cct, const char *_method, const string& _url, RGWGetDataCB *_cb,
-		param_vec_t *_headers, param_vec_t *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
-                lock("RGWRESTStreamRWRequest"), write_lock("RGWRESTStreamRWRequest::write_lock"), cb(_cb),
-                http_manager(_cct), method(_method) {
+  RGWHTTPStreamRWRequest(CephContext *_cct, const string& _method, const string& _url, RGWGetDataCB *_cb,
+                         param_vec_t *_headers, param_vec_t *_params) : RGWRESTSimpleRequest(_cct, _method, _url, _headers, _params),
+                                                                        lock("RGWRESTStreamRWRequest"), write_lock("RGWRESTStreamRWRequest::write_lock"), cb(_cb) {
   }
-  virtual ~RGWRESTStreamRWRequest() override {}
-  int send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr = NULL);
-  int send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = NULL /* optional input data */, RGWHTTPManager *mgr = NULL);
-  int complete_request(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs);
+  virtual ~RGWHTTPStreamRWRequest() override {}
 
   void set_outbl(bufferlist& _outbl) {
     outbl.swap(_outbl);
@@ -124,6 +117,19 @@ public:
 
   /* finish streaming writes */
   void finish_write();
+};
+
+class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
+  RGWHTTPManager http_manager;
+public:
+  RGWRESTStreamRWRequest(CephContext *_cct, const string& _method, const string& _url, RGWGetDataCB *_cb,
+		param_vec_t *_headers, param_vec_t *_params) : RGWHTTPStreamRWRequest(_cct, _method, _url, _cb, _headers, _params),
+                http_manager(_cct) {
+  }
+  virtual ~RGWRESTStreamRWRequest() override {}
+  int send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr = NULL);
+  int send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = NULL /* optional input data */, RGWHTTPManager *mgr = NULL);
+  int complete_request(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs);
 };
 
 class RGWRESTStreamReadRequest : public RGWRESTStreamRWRequest {

@@ -860,11 +860,11 @@ static int request_key_from_barbican(CephContext *cct,
   secret_url += "v1/secrets/" + std::string(key_id);
 
   bufferlist secret_bl;
-  RGWHTTPTransceiver secret_req(cct, &secret_bl);
+  RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);
   secret_req.append_header("Accept", "application/octet-stream");
   secret_req.append_header("X-Auth-Token", barbican_token);
 
-  res = secret_req.process("GET", secret_url.c_str());
+  res = secret_req.process();
   if (res < 0) {
     return res;
   }
