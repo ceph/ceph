@@ -1346,7 +1346,6 @@ public:
 
 private:
   std::atomic_int state{STATE_INITIALIZING};
-  bool waiting_for_luminous_mons = false;
 
 public:
   int get_state() const {
