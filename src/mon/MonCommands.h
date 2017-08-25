@@ -509,6 +509,10 @@ COMMAND("osd lspools " \
 COMMAND_WITH_FLAG("osd crush rule list", "list crush rules", "osd", "r", "cli,rest",
 		  FLAG(DEPRECATED))
 COMMAND("osd crush rule ls", "list crush rules", "osd", "r", "cli,rest")
+COMMAND("osd crush rule ls-by-class " \
+        "name=class,type=CephString,goodchars=[A-Za-z0-9-_.],req=false", \
+        "list all crush rules that reference the same <class>", \
+        "osd", "r", "cli,rest")
 COMMAND("osd crush rule dump " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.],req=false", \
 	"dump crush rule <name> (default all)", \
@@ -646,6 +650,11 @@ COMMAND("osd crush rule create-erasure " \
 COMMAND("osd crush rule rm " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",	\
 	"remove crush rule <name>", "osd", "rw", "cli,rest")
+COMMAND("osd crush rule rename " \
+        "name=srcname,type=CephString,goodchars=[A-Za-z0-9-_.] "  \
+        "name=dstname,type=CephString,goodchars=[A-Za-z0-9-_.]",  \
+        "rename crush rule <srcname> to <dstname>",
+        "osd", "rw", "cli,rest")
 COMMAND("osd crush tree "
         "name=shadow,type=CephChoices,strings=--show-shadow,req=false", \
 	"dump crush buckets and items in a tree view",
