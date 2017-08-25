@@ -740,7 +740,9 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   item_weight[id] = bucketweight;
   
   assert(id != 0);
-  int r = crush.add_bucket(id, alg, hash, type, size, &items[0], &weights[0], NULL);
+  int idout;
+  int r = crush.add_bucket(id, alg, hash, type, size,
+                           &items[0], &weights[0], &idout);
   if (r < 0) {
     if (r == -EEXIST)
       err << "Duplicate bucket id " << id << std::endl;
