@@ -632,25 +632,49 @@ void RGW_SWIFT_Auth_Get::execute()
 {
   int op_ret = -EPERM;
 
-  const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
-  const char *user = s->info.env->get("HTTP_X_AUTH_USER");
-
-  s->prot_flags |= RGW_REST_SWIFT;
-
-  string user_str;
-  RGWUserInfo info;
   RGWAccessKey *swift_key;
   map<string, RGWAccessKey>::iterator siter;
 
-  if (!key || !user) {
+  const char* const key = s->info.env->get("HTTP_X_AUTH_KEY", nullptr);
+  const boost::string_view auth_user = s->info.env->get("HTTP_X_AUTH_USER", "");
+  if (!key || auth_user.empty()) {
     return;
   }
 
-  user_str = user;
-  if ((op_ret = rgw_get_user_info_by_swift(store, user_str, info)) < 0)
-  {
-    op_ret = -EACCES;
+  /* In TempAUTH the X-Auth-User header carries information about both:
+   * 1) account (rgw_user in RadosGW's terminology) and 2) user (subuser)
+   * separated with colon. RadosGW follows this format. Although there is
+   * an abstraction layer, it isn't truly used as the format is frozen as
+   * everyone uses RGWUserAdminOpState::build_default_swift_kid(). */
+  const size_t sep_pos = auth_user.find(':');
+  if (sep_pos == boost::string_view::npos) {
+    op_ret = -EINVAL;
     return;
+  }
+
+  const auto account = auth_user.substr(0, sep_pos);
+  const auto subuser = auth_user.substr(sep_pos + 1);
+  const rgw_user uid(account.to_string());
+  swift_name_t user_str;
+
+  RGWUserInfo info;
+  if (uid.tenant.empty()) {
+    const rgw_user tenanted_uid(uid.id, uid.id);
+    user_str = rgw_get_swift_name(tenanted_uid, subuser);
+    op_ret = rgw_get_user_info_by_swift(store, user_str, info);
+    ldout(s->cct, 20) << "TempAUTH: rgw_get_user_info_by_swift on tenanted_uid="
+                      << tenanted_uid << ", ret=" << op_ret << dendl;
+  }
+
+  if (op_ret < 0) {
+    user_str = rgw_get_swift_name(uid, subuser);
+    op_ret = rgw_get_user_info_by_swift(store, user_str, info);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << "TempAUTH: can't get user info for uid="
+                        << user_str << ", orig ret=" << op_ret << dendl;
+      op_ret = -EACCES;
+      return;
+    }
   }
 
   siter = info.swift_keys.find(user_str);
