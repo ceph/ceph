@@ -41,7 +41,7 @@ class RGWObjTagSet_S3: public RGWObjTags, public XMLObj
 {
 public:
   bool xml_end(const char*) override;
-  void dump_xml(Formatter *f);
+  void dump_xml(Formatter *f) const;
   int rebuild(RGWObjTags& dest);
 };
 
