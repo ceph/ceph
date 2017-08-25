@@ -65,10 +65,6 @@ public:
     start_tick();
   }
 
-  void get_health(
-    list<pair<health_status_t,string> >& summary,
-    list<pair<health_status_t,string> > *detail) override;
-
   int get_type() override {
     return HealthService::SERVICE_HEALTH_DATA;
   }

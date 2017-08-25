@@ -500,11 +500,6 @@ public:
     return .95;
   }
 
-  void get_health(CephContext *cct,
-		  const OSDMap& osdmap,
-		  list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail) const;
-
   void get_health_checks(
     CephContext *cct,
     const OSDMap& osdmap,

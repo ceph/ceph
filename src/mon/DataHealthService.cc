@@ -64,49 +64,6 @@ void DataHealthService::start_epoch()
   last_warned_percent = 0;
 }
 
-void DataHealthService::get_health(
-    list<pair<health_status_t,string> >& summary,
-    list<pair<health_status_t,string> > *detail)
-{
-  dout(10) << __func__ << dendl;
-  for (map<entity_inst_t,DataStats>::iterator it = stats.begin();
-       it != stats.end(); ++it) {
-    string mon_name = mon->monmap->get_name(it->first.addr);
-    DataStats& stats = it->second;
-
-    health_status_t health_status = HEALTH_OK;
-    string health_detail;
-    if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_crit) {
-      health_status = HEALTH_ERR;
-      health_detail = "low disk space, shutdown imminent";
-    } else if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_warn) {
-      health_status = HEALTH_WARN;
-      health_detail = "low disk space";
-    }
-
-    if (stats.store_stats.bytes_total >= g_conf->mon_data_size_warn) {
-      if (health_status > HEALTH_WARN)
-        health_status = HEALTH_WARN;
-      if (!health_detail.empty())
-        health_detail.append("; ");
-      stringstream ss;
-      ss << "store is getting too big! "
-         << prettybyte_t(stats.store_stats.bytes_total)
-         << " >= " << prettybyte_t(g_conf->mon_data_size_warn);
-      health_detail.append(ss.str());
-    }
-
-    if (health_status != HEALTH_OK) {
-      stringstream ss;
-      ss << "mon." << mon_name << " " << health_detail;
-      summary.push_back(make_pair(health_status, ss.str()));
-      ss << " -- " <<  stats.fs_stats.avail_percent << "% avail";
-      if (detail)
-	detail->push_back(make_pair(health_status, ss.str()));
-    }
-  }
-}
-
 int DataHealthService::update_store_stats(DataStats &ours)
 {
   map<string,uint64_t> extra;

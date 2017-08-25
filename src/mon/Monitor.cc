@@ -2444,39 +2444,15 @@ void Monitor::do_health_to_clog(bool force)
 
   dout(10) << __func__ << (force ? " (force)" : "") << dendl;
 
-  if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-    string summary;
-    health_status_t level = get_health_status(false, nullptr, &summary);
-    if (!force &&
-	summary == health_status_cache.summary &&
-	level == health_status_cache.overall)
-      return;
-    clog->health(level) << "overall " << summary;
-    health_status_cache.summary = summary;
-    health_status_cache.overall = level;
-  } else {
-    // for jewel only
-    list<string> status;
-    health_status_t overall = get_health(status, NULL, NULL);
-    dout(25) << __func__
-	     << (force ? " (force)" : "")
-	     << dendl;
-
-    string summary = joinify(status.begin(), status.end(), string("; "));
-
-    if (!force &&
-	overall == health_status_cache.overall &&
-	!health_status_cache.summary.empty() &&
-	health_status_cache.summary == summary) {
-      // we got a dup!
-      return;
-    }
-
-    clog->info() << summary;
-
-    health_status_cache.overall = overall;
-    health_status_cache.summary = summary;
-  }
+  string summary;
+  health_status_t level = get_health_status(false, nullptr, &summary);
+  if (!force &&
+      summary == health_status_cache.summary &&
+      level == health_status_cache.overall)
+    return;
+  clog->health(level) << "overall " << summary;
+  health_status_cache.summary = summary;
+  health_status_cache.overall = level;
 }
 
 health_status_t Monitor::get_health_status(
@@ -2659,106 +2635,6 @@ void Monitor::log_health(
   }
 }
 
-health_status_t Monitor::get_health(list<string>& status,
-                                    bufferlist *detailbl,
-                                    Formatter *f)
-{
-  list<pair<health_status_t,string> > summary;
-  list<pair<health_status_t,string> > detail;
-
-  if (f)
-    f->open_object_section("health");
-
-  for (vector<PaxosService*>::iterator p = paxos_service.begin();
-       p != paxos_service.end();
-       ++p) {
-    PaxosService *s = *p;
-    s->get_health(summary, detailbl ? &detail : NULL, cct);
-  }
-
-  health_monitor->get_health(summary, (detailbl ? &detail : NULL));
-
-  health_status_t overall = HEALTH_OK;
-  if (!timecheck_skews.empty()) {
-    list<string> warns;
-    for (map<entity_inst_t,double>::iterator i = timecheck_skews.begin();
-         i != timecheck_skews.end(); ++i) {
-      entity_inst_t inst = i->first;
-      double skew = i->second;
-      double latency = timecheck_latencies[inst];
-      string name = monmap->get_name(inst.addr);
-      ostringstream tcss;
-      health_status_t tcstatus = timecheck_status(tcss, skew, latency);
-      if (tcstatus != HEALTH_OK) {
-        if (overall > tcstatus)
-          overall = tcstatus;
-        warns.push_back(name);
-        ostringstream tmp_ss;
-        tmp_ss << "mon." << name
-               << " addr " << inst.addr << " " << tcss.str()
-	       << " (latency " << latency << "s)";
-        detail.push_back(make_pair(tcstatus, tmp_ss.str()));
-      }
-    }
-    if (!warns.empty()) {
-      ostringstream ss;
-      ss << "clock skew detected on";
-      while (!warns.empty()) {
-        ss << " mon." << warns.front();
-        warns.pop_front();
-        if (!warns.empty())
-          ss << ",";
-      }
-      status.push_back(ss.str());
-      summary.push_back(make_pair(HEALTH_WARN, "Monitor clock skew detected "));
-    }
-  }
-
-  if (f)
-    f->open_array_section("summary");
-  if (!summary.empty()) {
-    while (!summary.empty()) {
-      if (overall > summary.front().first)
-	overall = summary.front().first;
-      status.push_back(summary.front().second);
-      if (f) {
-        f->open_object_section("item");
-        f->dump_stream("severity") <<  summary.front().first;
-        f->dump_string("summary", summary.front().second);
-        f->close_section();
-      }
-      summary.pop_front();
-    }
-  }
-  if (f)
-    f->close_section();
-
-  stringstream fss;
-  fss << overall;
-  status.push_front(fss.str());
-  if (f)
-    f->dump_stream("overall_status") << overall;
-
-  if (f)
-    f->open_array_section("detail");
-  while (!detail.empty()) {
-    if (f)
-      f->dump_string("item", detail.front().second);
-    else if (detailbl != NULL) {
-      detailbl->append(detail.front().second);
-      detailbl->append('\n');
-    }
-    detail.pop_front();
-  }
-  if (f)
-    f->close_section();
-
-  if (f)
-    f->close_section();
-
-  return overall;
-}
-
 void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 {
   if (f)
@@ -2766,12 +2642,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
-    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      get_health_status(false, f, nullptr);
-    } else {
-      list<string> health_str;
-      get_health(health_str, nullptr, f);
-    }
+    get_health_status(false, f, nullptr);
     f->dump_unsigned("election_epoch", get_epoch());
     {
       f->open_array_section("quorum");
@@ -2806,15 +2677,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     ss << "    id:     " << monmap->get_fsid() << "\n";
 
     string health;
-    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      get_health_status(false, nullptr, &health,
-			"\n            ", "\n            ");
-    } else {
-      list<string> ls;
-      get_health(ls, NULL, f);
-      health = joinify(ls.begin(), ls.end(),
-		       string("\n            "));
-    }
+    get_health_status(false, nullptr, &health,
+		      "\n            ", "\n            ");
     ss << "    health: " << health << "\n";
 
     ss << "\n \n  services:\n";
@@ -3351,34 +3215,12 @@ void Monitor::handle_command(MonOpRequestRef op)
       }
       rdata.append(ds);
     } else if (prefix == "health") {
-      if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-	string plain;
-	get_health_status(detail == "detail", f.get(), f ? nullptr : &plain);
-	if (f) {
-	  f->flush(rdata);
-	} else {
-	  rdata.append(plain);
-	}
+      string plain;
+      get_health_status(detail == "detail", f.get(), f ? nullptr : &plain);
+      if (f) {
+	f->flush(rdata);
       } else {
-	list<string> health_str;
-	get_health(health_str, detail == "detail" ? &rdata : NULL, f.get());
-	if (f) {
-	  f->flush(ds);
-	  ds << '\n';
-	} else {
-	  assert(!health_str.empty());
-	  ds << health_str.front();
-	  health_str.pop_front();
-	  if (!health_str.empty()) {
-	    ds << ' ';
-	    ds << joinify(health_str.begin(), health_str.end(), string("; "));
-	  }
-	}
-	bufferlist comb;
-	comb.append(ds);
-	if (detail == "detail")
-	  comb.append(rdata);
-	rdata = comb;
+	rdata.append(plain);
       }
     } else if (prefix == "df") {
       bool verbose = (detail == "detail");
@@ -3420,12 +3262,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
     f->dump_string("tag", tagstr);
 
-    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      get_health_status(true, f.get(), nullptr);
-    } else {
-      list<string> health_str;
-      get_health(health_str, nullptr, f.get());
-    }
+    get_health_status(true, f.get(), nullptr);
 
     monmon()->dump_info(f.get());
     osdmon()->dump_info(f.get());
@@ -4460,13 +4297,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(new JSONFormatter(true));
   f->open_object_section("pong");
 
-  if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-    get_health_status(false, f.get(), nullptr);
-  } else {
-    list<string> health_str;
-    get_health(health_str, nullptr, f.get());
-  }
-
+  get_health_status(false, f.get(), nullptr);
   {
     stringstream ss;
     get_mon_status(f.get(), ss);

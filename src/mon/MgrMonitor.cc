@@ -475,36 +475,6 @@ void MgrMonitor::on_active()
   }
 }
 
-void MgrMonitor::get_health(
-  list<pair<health_status_t,string> >& summary,
-  list<pair<health_status_t,string> > *detail,
-  CephContext *cct) const
-{
-  // start mgr warnings as soon as the mons and osds are all upgraded,
-  // but before the require_luminous osdmap flag is set.  this way the
-  // user gets some warning before the osd flag is set and mgr is
-  // actually *required*.
-  if (!mon->monmap->get_required_features().contains_all(
-	ceph::features::mon::FEATURE_LUMINOUS) ||
-      !HAVE_FEATURE(mon->osdmon()->osdmap.get_up_osd_features(),
-		    SERVER_LUMINOUS)) {
-    return;
-  }
-
-  if (map.active_gid == 0) {
-    auto level = HEALTH_WARN;
-    // do not escalate to ERR if they are still upgrading to jewel.
-    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      utime_t now = ceph_clock_now();
-      if (first_seen_inactive != utime_t() &&
-	  now - first_seen_inactive > g_conf->mon_mgr_inactive_grace) {
-	level = HEALTH_ERR;
-      }
-    }
-    summary.push_back(make_pair(level, "no active mgr"));
-  }
-}
-
 void MgrMonitor::tick()
 {
   if (!is_active() || !mon->is_leader())

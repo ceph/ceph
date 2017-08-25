@@ -1113,20 +1113,6 @@ update:
   return true;
 }
 
-void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
-			   list<pair<health_status_t,string> > *detail,
-			   CephContext *cct) const
-{
-  // legacy pre-luminous full/nearfull
-  if (mon->osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-    check_full_osd_health(summary, detail, pg_map.full_osds, "full",
-			  HEALTH_ERR);
-    check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full",
-			  HEALTH_WARN);
-    pg_map.get_health(cct, mon->osdmon()->osdmap, summary, detail);
-  }
-}
-
 void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summary,
                                       list<pair<health_status_t,string> > *detail,
                                       const mempool::pgmap::set<int>& s, const char *desc,
