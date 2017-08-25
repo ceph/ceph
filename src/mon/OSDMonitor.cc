@@ -125,7 +125,7 @@ void OSDMonitor::create_initial()
   // new clusters should sort bitwise by default.
   newmap.set_flag(CEPH_OSDMAP_SORTBITWISE);
 
-  if (!g_conf->mon_debug_init_recovery_deletes) {
+  if (g_conf->mon_debug_init_recovery_deletes) {
     // new clusters should set recovery deletes by default.
     newmap.set_flag(CEPH_OSDMAP_RECOVERY_DELETES);
   }
