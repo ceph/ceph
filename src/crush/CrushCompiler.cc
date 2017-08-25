@@ -587,11 +587,10 @@ int CrushCompiler::parse_bucket(iter_t const& i)
       if (verbose) err << "bucket " << name << " id " << maybe_id;
       if (sub->children.size() > 2) {
         string class_name = string_node(sub->children[3]);
-        if (!crush.class_exists(class_name)) {
-          err << " unknown device class '" << class_name << "'" << std::endl;
-          return -EINVAL;
-        }
-        int cid = crush.get_class_id(class_name);
+        // note that we do not verify class existence here,
+        // as this bucket might come from an empty shadow tree
+        // which currently has no OSDs but is still referenced by a rule!
+        int cid = crush.get_or_create_class_id(class_name);
         if (class_id.count(cid) != 0) {
           err << "duplicate device class " << class_name << " for bucket " << name << std::endl;
           return -ERANGE;
@@ -741,7 +740,9 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   item_weight[id] = bucketweight;
   
   assert(id != 0);
-  int r = crush.add_bucket(id, alg, hash, type, size, &items[0], &weights[0], NULL);
+  int idout;
+  int r = crush.add_bucket(id, alg, hash, type, size,
+                           &items[0], &weights[0], &idout);
   if (r < 0) {
     if (r == -EEXIST)
       err << "Duplicate bucket id " << id << std::endl;

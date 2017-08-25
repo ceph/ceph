@@ -70,8 +70,9 @@ void shard_info_wrapper::set_object(const ScrubMap::object& object)
 
 void shard_info_wrapper::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(errors, bl);
+  ::encode(primary, bl);
   if (has_shard_missing()) {
     return;
   }
@@ -87,8 +88,9 @@ void shard_info_wrapper::encode(bufferlist& bl) const
 
 void shard_info_wrapper::decode(bufferlist::iterator& bp)
 {
-  DECODE_START(2, bp);
+  DECODE_START(3, bp);
   ::decode(errors, bp);
+  ::decode(primary, bp);
   if (has_shard_missing()) {
     return;
   }
@@ -98,8 +100,7 @@ void shard_info_wrapper::decode(bufferlist::iterator& bp)
   ::decode(omap_digest, bp);
   ::decode(data_digest_present, bp);
   ::decode(data_digest, bp);
-  if (struct_v > 1)
-    ::decode(selected_oi, bp);
+  ::decode(selected_oi, bp);
   DECODE_FINISH(bp);
 }
 
@@ -120,10 +121,12 @@ void
 inconsistent_obj_wrapper::set_auth_missing(const hobject_t& hoid,
                                            const map<pg_shard_t, ScrubMap*>& maps,
 					   map<pg_shard_t, shard_info_wrapper> &shard_map,
-					   int &shallow_errors, int &deep_errors)
+					   int &shallow_errors, int &deep_errors,
+					   const pg_shard_t &primary)
 {
   for (auto pg_map : maps) {
     auto oid_object = pg_map.second->objects.find(hoid);
+    shard_map[pg_map.first].primary = (pg_map.first == primary);
     if (oid_object == pg_map.second->objects.end())
       shard_map[pg_map.first].set_missing();
     else
