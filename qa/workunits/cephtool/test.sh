@@ -1744,7 +1744,7 @@ function test_mon_osd_pool_quota()
   # get quotas
   #
   ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10B'
-  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10240k objects'
+  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10M objects'
   #
   # get quotas in json-pretty format
   #

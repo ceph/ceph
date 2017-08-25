@@ -345,20 +345,40 @@ struct si_t {
 
 inline ostream& operator<<(ostream& out, const si_t& b)
 {
-  uint64_t bump_after = 100;
-  if (b.v > bump_after << 60)
-    return out << (b.v >> 60) << "E";
-  if (b.v > bump_after << 50)
-    return out << (b.v >> 50) << "P";
-  if (b.v > bump_after << 40)
-    return out << (b.v >> 40) << "T";
-  if (b.v > bump_after << 30)
-    return out << (b.v >> 30) << "G";
-  if (b.v > bump_after << 20)
-    return out << (b.v >> 20) << "M";
-  if (b.v > bump_after << 10)
-    return out << (b.v >> 10) << "k";
-  return out << b.v;
+  char buffer[32];
+  uint64_t n = b.v;
+  int index = 0;
+
+  while (n >= 1024 && index < 6) {
+    n /= 1024;
+    index++;
+  }
+
+  char u = " KMGTPE"[index];
+
+  if (index == 0) {
+    (void) snprintf(buffer, sizeof(buffer), "%" PRId64, n);
+  } else if ((b.v & ((1ULL << 10 * index) - 1)) == 0) {
+    // If this is an even multiple of the base, always display
+    // without any decimal fraction.
+    (void) snprintf(buffer, sizeof(buffer), "%" PRId64 "%c", n, u);
+  } else {
+    // We want to choose a precision that reflects the best choice
+    // for fitting in 5 characters.  This can get rather tricky when
+    // we have numbers that are very close to an order of magnitude.
+    // For example, when displaying 10239 (which is really 9.999K),
+    // we want only a single place of precision for 10.0K.  We could
+    // develop some complex heuristics for this, but it's much
+    // easier just to try each combination in turn.
+    int i;
+    for (i = 2; i >= 0; i--) {
+      if (snprintf(buffer, sizeof(buffer), "%.*f%c", i,
+        (double)b.v / (1ULL << 10 * index), u) <= 5)
+        break;
+    }
+  }
+
+  return out << buffer;
 }
 
 struct pretty_si_t {
