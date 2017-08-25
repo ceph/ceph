@@ -38,7 +38,7 @@ public:
 
   EFragment() : LogEvent(EVENT_FRAGMENT) { }
   EFragment(MDLog *mdlog, int o, dirfrag_t df, int b) :
-    LogEvent(EVENT_FRAGMENT), metablob(mdlog), 
+    LogEvent(EVENT_FRAGMENT),
     op(o), ino(df.ino), basefrag(df.frag), bits(b) { }
 
   void print(ostream& out) const override {
