@@ -539,6 +539,9 @@ public:
 		    ostream *ss);
 
   // rule names
+  int rename_rule(const string& srcname,
+                  const string& dstname,
+                  ostream *ss);
   bool rule_exists(string name) const {
     build_rmaps();
     return rule_name_rmap.count(name);
@@ -1217,6 +1220,7 @@ public:
   int rename_class(const string& srcname, const string& dstname);
   int populate_classes(
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
+  int get_rules_by_class(const string &class_name, set<int> *rules);
   bool _class_is_dead(int class_id);
   void cleanup_dead_classes();
   int rebuild_roots_with_classes();
