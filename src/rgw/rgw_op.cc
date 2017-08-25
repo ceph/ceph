@@ -3671,6 +3671,20 @@ void RGWPutACLs::execute()
     return;
   }
 
+  // forward bucket acl requests to meta master zone
+  if (s->object.empty() && !store->is_meta_master()) {
+    bufferlist in_data;
+    // include acl data unless it was generated from a canned_acl
+    if (s->canned_acl.empty()) {
+      in_data.append(data, len);
+    }
+    op_ret = forward_request_to_master(s, NULL, store, in_data, NULL);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
     ldout(s->cct, 15) << "Old AccessControlPolicy";
     policy->to_xml(*_dout);
@@ -3743,6 +3757,14 @@ void RGWPutCORS::execute()
   op_ret = get_params();
   if (op_ret < 0)
     return;
+
+  if (!store->is_meta_master()) {
+    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
 
   bool is_object_op = (!s->object.empty());
   if (is_object_op) {
