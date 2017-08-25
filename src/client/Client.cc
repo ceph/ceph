@@ -251,7 +251,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     last_tid(0), oldest_tid(0), last_flush_tid(1),
     initialized(false),
     mounted(false), unmounting(false), blacklisted(false),
-    local_osd(-1), local_osd_epoch(0),
+    local_osd(-ENXIO), local_osd_epoch(0),
     unsafe_sync_write(0),
     client_lock("Client::client_lock")
 {
@@ -12868,9 +12868,7 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 }
 
 
-/*
- * find an osd with the same ip.  -1 if none.
- */
+/* find an osd with the same ip.  -ENXIO if none. */
 int Client::get_local_osd()
 {
   Mutex::Locker lock(client_lock);
