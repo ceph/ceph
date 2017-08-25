@@ -87,9 +87,6 @@ class MDSMonitor : public PaxosService {
   bool preprocess_offload_targets(MonOpRequestRef op);
   bool prepare_offload_targets(MonOpRequestRef op);
 
-  void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail,
-		  CephContext *cct) const override;
   int fail_mds(std::ostream &ss, const std::string &arg,
       MDSMap::mds_info_t *failed_info);
 

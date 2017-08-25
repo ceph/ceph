@@ -57,9 +57,6 @@ public:
   void send_digests();
 
   void on_active() override;
-  void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail,
-		  CephContext *cct) const override;
   void tick() override;
 
   uint64_t get_last_osd_stat_seq(int osd) {

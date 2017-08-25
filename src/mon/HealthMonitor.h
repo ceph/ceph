@@ -39,11 +39,6 @@ public:
    */
   void init() override;
 
-  void get_health(
-    list<pair<health_status_t,string> >& summary,
-    list<pair<health_status_t,string> > *detail,
-    CephContext *cct) const override {}
-
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
 

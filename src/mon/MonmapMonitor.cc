@@ -727,31 +727,6 @@ bool MonmapMonitor::should_propose(double& delay)
   return true;
 }
 
-void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,
-			       list<pair<health_status_t, string> > *detail,
-			       CephContext *cct) const
-{
-  int max = mon->monmap->size();
-  int actual = mon->get_quorum().size();
-  if (actual < max) {
-    ostringstream ss;
-    ss << (max-actual) << " mons down, quorum " << mon->get_quorum() << " " << mon->get_quorum_names();
-    summary.push_back(make_pair(HEALTH_WARN, ss.str()));
-    if (detail) {
-      set<int> q = mon->get_quorum();
-      for (int i=0; i<max; i++) {
-	if (q.count(i) == 0) {
-	  ostringstream ss;
-	  ss << "mon." << mon->monmap->get_name(i) << " (rank " << i
-	     << ") addr " << mon->monmap->get_addr(i)
-	     << " is down (out of quorum)";
-	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
-	}
-      }
-    }
-  }
-}
-
 int MonmapMonitor::get_monmap(bufferlist &bl)
 {
   version_t latest_ver = get_last_committed();

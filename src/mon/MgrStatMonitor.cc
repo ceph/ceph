@@ -189,12 +189,6 @@ void MgrStatMonitor::on_active()
   update_logger();
 }
 
-void MgrStatMonitor::get_health(list<pair<health_status_t,string> >& summary,
-				list<pair<health_status_t,string> > *detail,
-				CephContext *cct) const
-{
-}
-
 void MgrStatMonitor::tick()
 {
 }

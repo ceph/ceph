@@ -95,13 +95,3 @@ void OldHealthMonitor::service_shutdown()
   services.clear();
 }
 
-void OldHealthMonitor::get_health(
-  list<pair<health_status_t,string> >& summary,
-  list<pair<health_status_t,string> > *detail)
-{
-  for (map<int,HealthService*>::iterator it = services.begin();
-       it != services.end();
-       ++it) {
-    it->second->get_health(summary, detail);
-  }
-}
