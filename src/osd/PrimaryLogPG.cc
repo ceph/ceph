@@ -268,6 +268,10 @@ void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
     assert(pg->in_progress_async_reads.front().second == this);
     pg->in_progress_async_reads.pop_front();
 
+    if (op->may_read()) {
+      obc->ondisk_read_unlock();
+    }
+
     // Restart the op context now that all reads have been
     // completed. Read failures will be handled by the op finisher
     pg->execute_ctx(this);
@@ -3234,12 +3238,13 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
         reqid.name._num, reqid.tid, reqid.inc);
   }
 
-  if (op->may_read()) {
-    dout(10) << " dropping ondisk_read_lock" << dendl;
-    obc->ondisk_read_unlock();
-  }
-
   bool pending_async_reads = !ctx->pending_async_reads.empty();
+  if (!pending_async_reads) {
+    if (op->may_read()) {
+      dout(10) << " dropping ondisk_read_lock" << dendl;
+      obc->ondisk_read_unlock();
+    }
+  }
   if (result == -EINPROGRESS || pending_async_reads) {
     // come back later.
     if (pending_async_reads) {
