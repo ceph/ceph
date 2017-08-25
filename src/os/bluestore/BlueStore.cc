@@ -5995,6 +5995,71 @@ int BlueStore::fsck(bool deep)
     }
     fm->enumerate_reset();
     size_t count = used_blocks.count();
+    if (used_blocks.size() == count + 1) {
+      // this due to http://tracker.ceph.com/issues/21089
+      bufferlist fm_bpb_bl, fm_blocks_bl, fm_bpk_bl;
+      db->get(PREFIX_ALLOC, "bytes_per_block", &fm_bpb_bl);
+      db->get(PREFIX_ALLOC, "blocks", &fm_blocks_bl);
+      db->get(PREFIX_ALLOC, "blocks_per_key", &fm_bpk_bl);
+      uint64_t fm_blocks = 0;
+      uint64_t fm_bsize = 1;
+      uint64_t fm_blocks_per_key = 1;
+      try {
+	auto p = fm_blocks_bl.begin();
+	::decode(fm_blocks, p);
+	auto q = fm_bpb_bl.begin();
+	::decode(fm_bsize, q);
+	auto r = fm_bpk_bl.begin();
+	::decode(fm_blocks_per_key, r);
+      } catch (buffer::error& e) {
+      }
+      uint64_t dev_bsize = bdev->get_block_size();
+      uint64_t bad_size = bdev->get_size() & ~fm_bsize;
+      if (used_blocks.test(bad_size / dev_bsize) == 0) {
+	// this is the last block of the device that we previously
+	// (incorrectly) truncated off of the effective device size.  this
+	// prevented BitmapFreelistManager from marking it as used along with
+	// the other "past-eof" blocks in the last key slot.  mark it used
+	// now.
+	derr << __func__ << " warning: fixing leaked block 0x" << std::hex
+	     << bad_size << "~" << fm_bsize << std::dec << " due to old bug"
+	     << dendl;
+	KeyValueDB::Transaction t = db->get_transaction();
+	// fix freelistmanager metadata (the internal 'blocks' count is
+	// rounded up to include the trailing key, past eof)
+	uint64_t new_blocks = bdev->get_size() / fm_bsize;
+	if (new_blocks / fm_blocks_per_key * fm_blocks_per_key != new_blocks) {
+	  new_blocks = (new_blocks / fm_blocks_per_key + 1) *
+	    fm_blocks_per_key;
+	}
+	if (new_blocks != fm_blocks) {
+	  // the fm block count increased
+	  derr << __func__ << "  freelist block and key count changed, fixing 0x"
+	       << std::hex << bdev->get_size() << "~"
+	       << ((new_blocks * fm_bsize) - bdev->get_size()) << std::dec
+	       << dendl;
+	  bufferlist bl;
+	  ::encode(new_blocks, bl);
+	  t->set(PREFIX_ALLOC, "blocks", bl);
+	  fm->allocate(bdev->get_size(),
+		       (new_blocks * fm_bsize) - bdev->get_size(),
+		       t);
+	} else {
+	  // block count is the same, but size changed; fix just the size
+	  derr << __func__ << "  fixing just the stray block at 0x"
+	       << std::hex << bad_size << "~" << fm_bsize << std::dec << dendl;
+	  fm->allocate(bad_size, fm_bsize, t);
+	}
+	bufferlist sizebl;
+	::encode(bdev->get_size(), sizebl);
+	t->set(PREFIX_ALLOC, "size", sizebl);
+	int r = db->submit_transaction_sync(t);
+	assert(r == 0);
+
+	used_blocks.set(bad_size / dev_bsize);
+	++count;
+      }
+    }
     if (used_blocks.size() != count) {
       assert(used_blocks.size() > count);
       derr << __func__ << " error: leaked some space;"
