@@ -120,14 +120,25 @@ public:
     set_tunables_default();
   }
 
-  /// true if any rule has a ruleset != the rule id
-  bool has_legacy_rulesets() const;
+  /**
+   * true if any rule has a rule id != its position in the array
+   *
+   * These indicate "ruleset" IDs that were created by older versions
+   * of Ceph.  They are cleaned up in renumber_rules so that eventually
+   * we can remove the code for handling them.
+   */
+  bool has_legacy_rule_ids() const;
 
-  /// fix rules whose ruleid != ruleset
-  int renumber_rules_by_ruleset();
-
-  /// true if any ruleset has more than 1 rule
-  bool has_multirule_rulesets() const;
+  /**
+   * fix rules whose ruleid != ruleset
+   *
+   * These rules were created in older versions of Ceph.  The concept
+   * of a ruleset no longer exists.
+   *
+   * Return a map of old ID -> new ID.  Caller must update OSDMap
+   * to use new IDs.
+   */
+  std::map<int, int> renumber_rules();
 
   /// true if any buckets that aren't straw2
   bool has_non_straw2_buckets() const;
@@ -1238,7 +1249,7 @@ public:
   void finalize() {
     assert(crush);
     crush_finalize(crush);
-    have_uniform_rules = !has_legacy_rulesets();
+    have_uniform_rules = !has_legacy_rule_ids();
   }
 
   int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
@@ -1315,7 +1326,7 @@ public:
   /**
    * Return the lowest numbered ruleset of type `type`
    *
-   * @returns a ruleset ID, or -1 if no matching rulesets found.
+   * @returns a ruleset ID, or -1 if no matching rules found.
    */
   int find_first_ruleset(int type) const {
     int result = -1;
