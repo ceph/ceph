@@ -15,6 +15,10 @@ bool RGWObjTags::add_tag(const string&key, const string& val){
   return tag_map.emplace(std::make_pair(key,val)).second;
 }
 
+bool RGWObjTags::emplace_tag(std::string&& key, std::string&& val){
+  return tag_map.emplace(std::move(key), std::move(val)).second;
+}
+
 int RGWObjTags::check_and_add_tag(const string&key, const string& val){
   if (tag_map.size() == MAX_OBJ_TAGS ||
       key.size() > MAX_TAG_KEY_SIZE ||
