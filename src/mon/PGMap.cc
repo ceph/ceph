@@ -3188,7 +3188,7 @@ void PGMap::get_health_checks(
     }
     if (!error_detail.empty()) {
       ostringstream ss;
-      ss << warn << " stuck requests are blocked > "
+      ss << error << " stuck requests are blocked > "
 	 << err_age << " sec";
       auto& d = checks->add("REQUEST_STUCK", HEALTH_ERR, ss.str());
       d.detail.swap(error_detail);
