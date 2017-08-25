@@ -976,7 +976,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_lease", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(5)
+    .set_default(30)
     .set_description(""),
 
     Option("mon_lease_renew_interval_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
