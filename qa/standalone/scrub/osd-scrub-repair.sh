@@ -374,11 +374,11 @@ function unfound_erasure_coded() {
     #
     # it may take a bit to appear due to mon/mgr asynchrony
     for f in `seq 1 60`; do
-	ceph -s | grep "1/1 unfound" && break
+	ceph -s | grep "1/1 objects unfound" && break
 	sleep 1
     done
     ceph -s|grep "4 osds: 4 up, 4 in" || return 1
-    ceph -s|grep "1/1 unfound" || return 1
+    ceph -s|grep "1/1 objects unfound" || return 1
 
     teardown $dir || return 1
 }
