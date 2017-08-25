@@ -495,6 +495,8 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
        */
       if (store->get_zonegroup().is_master_zonegroup() && s->system_request) {
         /*If this is the master, don't redirect*/
+      } else if (s->op_type == RGW_OP_GET_BUCKET_LOCATION ) {
+        /* If op is get bucket location, don't redirect */
       } else if (!s->local_source ||
           (s->op != OP_PUT && s->op != OP_COPY) ||
           s->object.empty()) {
