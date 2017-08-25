@@ -1069,7 +1069,28 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       crypt_http_responses["x-amz-server-side-encryption-customer-algorithm"] = "AES256";
       crypt_http_responses["x-amz-server-side-encryption-customer-key-MD5"] = keymd5.to_string();
       return 0;
+    } else {
+      boost::string_view customer_key =
+          get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY);
+      if (!customer_key.empty()) {
+        ldout(s->cct, 5) << "ERROR: SSE-C encryption request is missing the header "
+                         << "x-amz-server-side-encryption-customer-algorithm"
+                         << dendl;
+        s->err.message = "Requests specifying Server Side Encryption with Customer provided keys must provide a valid encryption algorithm.";
+        return -EINVAL;
+      }
+
+      boost::string_view customer_key_md5 =
+          get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5);
+      if (!customer_key_md5.empty()) {
+        ldout(s->cct, 5) << "ERROR: SSE-C encryption request is missing the header "
+                         << "x-amz-server-side-encryption-customer-algorithm"
+                         << dendl;
+        s->err.message = "Requests specifying Server Side Encryption with Customer provided keys must provide a valid encryption algorithm.";
+        return -EINVAL;
+      }
     }
+
     /* AMAZON server side encryption with KMS (key management service) */
     boost::string_view req_sse =
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION);
@@ -1118,6 +1139,16 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       }
       actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
       return 0;
+    } else {
+      boost::string_view key_id =
+          get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
+      if (!key_id.empty()) {
+        ldout(s->cct, 5) << "ERROR: SSE-KMS encryption request is missing the header "
+                         << "x-amz-server-side-encryption"
+                         << dendl;
+        s->err.message = "Server Side Encryption with KMS managed key requires HTTP header x-amz-server-side-encryption : aws:kms";
+        return -EINVAL;
+      }
     }
 
     /* no other encryption mode, check if default encryption is selected */
