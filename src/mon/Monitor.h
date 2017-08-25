@@ -662,7 +662,6 @@ public:
   friend class LogMonitor;
   friend class ConfigKeyService;
 
-  QuorumService *health_monitor;
   QuorumService *config_key_service;
 
   // -- sessions --
