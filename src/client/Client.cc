@@ -5677,6 +5677,8 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
     return 0;
   }
 
+  unmounting = false;
+
   int r = authenticate();
   if (r < 0) {
     lderr(cct) << "authentication failed: " << cpp_strerror(r) << dendl;
