@@ -1080,7 +1080,8 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       if (req_sse != "aws:kms") {
         ldout(s->cct, 5) << "ERROR: Invalid value for header x-amz-server-side-encryption"
                          << dendl;
-        return -ERR_INVALID_REQUEST;
+        s->err.message = "Server Side Encryption with KMS managed key requires HTTP header x-amz-server-side-encryption : aws:kms";
+        return -EINVAL;
       }
       if (s->cct->_conf->rgw_crypt_require_ssl &&
           !s->info.env->exists("SERVER_PORT_SECURE")) {
@@ -1090,17 +1091,23 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       boost::string_view key_id =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
       if (key_id.empty()) {
+        ldout(s->cct, 5) << "ERROR: not provide a valid key id" << dendl;
+        s->err.message = "Server Side Encryption with KMS managed key requires HTTP header x-amz-server-side-encryption-aws-kms-key-id";
         return -ERR_INVALID_ACCESS_KEY;
       }
       /* try to retrieve actual key */
       std::string key_selector = create_random_key_selector(s->cct);
       std::string actual_key;
       res = get_actual_key_from_kms(s->cct, key_id, key_selector, actual_key);
-      if (res != 0)
+      if (res != 0) {
+        ldout(s->cct, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
+        s->err.message = "Failed to retrieve the actual key, kms-keyid: " + key_id.to_string();
         return res;
+      }
       if (actual_key.size() != AES_256_KEYSIZE) {
         ldout(s->cct, 5) << "ERROR: key obtained from key_id:" <<
             key_id << " is not 256 bit size" << dendl;
+        s->err.message = "KMS provided an invalid key for the given kms-keyid.";
         return -ERR_INVALID_ACCESS_KEY;
       }
       set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-KMS");
@@ -1235,12 +1242,14 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
     std::string actual_key;
     res = get_actual_key_from_kms(s->cct, key_id, key_selector, actual_key);
     if (res != 0) {
-      ldout(s->cct, 10) << "No encryption key for key-id=" << key_id << dendl;
+      ldout(s->cct, 10) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
+      s->err.message = "Failed to retrieve the actual key, kms-keyid: " + key_id;
       return res;
     }
     if (actual_key.size() != AES_256_KEYSIZE) {
       ldout(s->cct, 0) << "ERROR: key obtained from key_id:" <<
           key_id << " is not 256 bit size" << dendl;
+      s->err.message = "KMS provided an invalid key for the given kms-keyid.";
       return -ERR_INVALID_ACCESS_KEY;
     }
 
