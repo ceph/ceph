@@ -2921,8 +2921,9 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
     start_key = key_iter;
   }
 
+  bool more;
   CLS_LOG(20, "usage_iterate_range start_key=%s", start_key.c_str());
-  int ret = cls_cxx_map_get_vals(hctx, start_key, filter_prefix, max_entries, &keys, truncated);
+  int ret = cls_cxx_map_get_vals(hctx, start_key, filter_prefix, max_entries, &keys, &more);
   if (ret < 0)
     return ret;
 
@@ -2964,6 +2965,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
 
 
     if (i == num_keys - 1) {
+      *truncated = more;
       key_iter = key;
       return 0;
     }
