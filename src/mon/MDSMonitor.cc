@@ -864,53 +864,6 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       ds << fsmap;
     }
     r = 0;
-  } else if (prefix == "mds dump") {
-    int64_t epocharg;
-    epoch_t epoch;
-
-    FSMap *p = &fsmap;
-    if (cmd_getval(g_ceph_context, cmdmap, "epoch", epocharg)) {
-      epoch = epocharg;
-      bufferlist b;
-      int err = get_version(epoch, b);
-      if (err == -ENOENT) {
-	p = 0;
-	r = -ENOENT;
-      } else {
-	assert(err == 0);
-	assert(b.length());
-	p = new FSMap;
-	p->decode(b);
-      }
-    }
-    if (p) {
-      stringstream ds;
-      const MDSMap *mdsmap = nullptr;
-      MDSMap blank;
-      blank.epoch = fsmap.epoch;
-      if (fsmap.legacy_client_fscid != FS_CLUSTER_ID_NONE) {
-        mdsmap = &(fsmap.filesystems[fsmap.legacy_client_fscid]->mds_map);
-      } else {
-        mdsmap = &blank;
-      }
-      if (f != NULL) {
-	f->open_object_section("mdsmap");
-	mdsmap->dump(f.get());
-	f->close_section();
-	f->flush(ds);
-	r = 0;
-      } else {
-	mdsmap->print(ds);
-	r = 0;
-      }
-
-      rdata.append(ds);
-      ss << "dumped fsmap epoch " << p->get_epoch();
-
-      if (p != &fsmap) {
-	delete p;
-      }
-    }
   } else if (prefix == "fs dump") {
     int64_t epocharg;
     epoch_t epoch;
@@ -1004,29 +957,6 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
     count_metadata(field, f.get());
     f->flush(ds);
     r = 0;
-  } else if (prefix == "mds getmap") {
-    epoch_t e;
-    int64_t epocharg;
-    bufferlist b;
-    if (cmd_getval(g_ceph_context, cmdmap, "epoch", epocharg)) {
-      e = epocharg;
-      int err = get_version(e, b);
-      if (err == -ENOENT) {
-	r = -ENOENT;
-      } else {
-	assert(err == 0);
-	assert(b.length());
-	FSMap mm;
-	mm.decode(b);
-	mm.encode(rdata, m->get_connection()->get_features());
-	ss << "got fsmap epoch " << mm.get_epoch();
-	r = 0;
-      }
-    } else {
-      fsmap.encode(rdata, m->get_connection()->get_features());
-      ss << "got fsmap epoch " << fsmap.get_epoch();
-      r = 0;
-    }
   } else if (prefix == "mds compat show") {
       if (f) {
 	f->open_object_section("mds_compat");
@@ -1298,8 +1228,6 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
     goto out;
   }
 
-  r = legacy_filesystem_command(op, prefix, cmdmap, ss);
-
   if (r == -ENOSYS && ss.str().empty()) {
     ss << "unrecognized command";
   }
@@ -1359,9 +1287,7 @@ int MDSMonitor::filesystem_command(
   string whostr;
   cmd_getval(g_ceph_context, cmdmap, "who", whostr);
 
-  if (prefix == "mds stop" ||
-      prefix == "mds deactivate") {
-
+  if (prefix == "mds deactivate") {
     mds_role_t role;
     r = parse_role(whostr, &role, ss);
     if (r < 0 ) {
@@ -1537,99 +1463,6 @@ int MDSMonitor::filesystem_command(
 
   return r;
 }
-
-/**
- * Helper to legacy_filesystem_command
- */
-void MDSMonitor::modify_legacy_filesystem(
-    std::function<void(std::shared_ptr<Filesystem> )> fn)
-{
-  pending_fsmap.modify_filesystem(
-    pending_fsmap.legacy_client_fscid,
-    fn
-  );
-}
-
-
-
-/**
- * Handle a command that affects the filesystem (i.e. a filesystem
- * must exist for the command to act upon).
- *
- * @retval 0        Command was successfully handled and has side effects
- * @retval -EAGAIN  Messages has been requeued for retry
- * @retval -ENOSYS  Unknown command
- * @retval < 0      An error has occurred; **ss** may have been set.
- */
-int MDSMonitor::legacy_filesystem_command(
-    MonOpRequestRef op,
-    std::string const &prefix,
-    map<string, cmd_vartype> &cmdmap,
-    std::stringstream &ss)
-{
-  dout(4) << __func__ << " prefix='" << prefix << "'" << dendl;
-  op->mark_mdsmon_event(__func__);
-  int r = 0;
-  string whostr;
-  cmd_getval(g_ceph_context, cmdmap, "who", whostr);
-
-  assert (pending_fsmap.legacy_client_fscid != FS_CLUSTER_ID_NONE);
-
-  if (prefix == "mds set_max_mds") {
-    // NOTE: deprecated by "fs set max_mds"
-    int64_t maxmds;
-    if (!cmd_getval(g_ceph_context, cmdmap, "maxmds", maxmds) || maxmds <= 0) {
-      return -EINVAL;
-    }
-
-    const MDSMap& mdsmap =
-      pending_fsmap.filesystems.at(pending_fsmap.legacy_client_fscid)->mds_map;
-      
-    if (!mdsmap.allows_multimds() &&
-	maxmds > mdsmap.get_max_mds() &&
-	maxmds > 1) {
-      ss << "multi-MDS clusters are not enabled; set 'allow_multimds' to enable";
-      return -EINVAL;
-    }
-
-    if (maxmds > MAX_MDS) {
-      ss << "may not have more than " << MAX_MDS << " MDS ranks";
-      return -EINVAL;
-    }
-
-    modify_legacy_filesystem(
-        [maxmds](std::shared_ptr<Filesystem> fs)
-    {
-      fs->mds_map.set_max_mds(maxmds);
-    });
-
-    r = 0;
-    ss << "max_mds = " << maxmds;
-  } else if (prefix == "mds cluster_down") {
-    // NOTE: deprecated by "fs set cluster_down"
-    modify_legacy_filesystem(
-        [](std::shared_ptr<Filesystem> fs)
-    {
-      fs->mds_map.set_flag(CEPH_MDSMAP_DOWN);
-    });
-    ss << "marked fsmap DOWN";
-    r = 0;
-  } else if (prefix == "mds cluster_up") {
-    // NOTE: deprecated by "fs set cluster_up"
-    modify_legacy_filesystem(
-        [](std::shared_ptr<Filesystem> fs)
-    {
-      fs->mds_map.clear_flag(CEPH_MDSMAP_DOWN);
-    });
-    ss << "unmarked fsmap DOWN";
-    r = 0;
-  } else {
-    return -ENOSYS;
-  }
-
-  return r;
-}
-
 
 void MDSMonitor::check_subs()
 {
