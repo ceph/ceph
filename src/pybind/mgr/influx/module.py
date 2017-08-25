@@ -1,16 +1,15 @@
+from collections import defaultdict
+from datetime import datetime
 import json
 import sys
+from threading import Event
 import time
 from ConfigParser import SafeConfigParser
-from collections import defaultdict
 from influxdb import InfluxDBClient
 from mgr_module import MgrModule
-from datetime import datetime
-from threading import Event 
 
 class Module(MgrModule):
- 
-     
+    
     COMMANDS = [
         {
             "cmd": "influx self-test",
@@ -34,59 +33,10 @@ class Module(MgrModule):
             return 0
 
 
-    def sum_stat(self, type_inst):
-        path = "osd." + type_inst.__str__()
-        osdmap = self.get("osd_map")
-        value = 0
-        for osd in osdmap['osds']:
-            osd_id = osd['osd']
-            value += self.get_latest("osd", osd_id.__str__(), path.__str__())
-        return int(value) 
-     
-
-    def get_stat(self, type_inst):
-        path = "osd." + type_inst.__str__()
-        osdmap = self.get("osd_map")
-        data = []
-        for osd in osdmap['osds']:
-            osd_id = osd['osd']
-            metadata = self.get_metadata('osd', "%s" % osd_id)
-            point = {
-                "measurement": "ceph_osd_stats",
-                "tags": {
-                    "mgr_id": self.get_mgr_id(),
-                    "osd_id": osd_id,
-                    "type_instance": type_inst,
-                    "host": metadata['hostname']
-                },
-                    "time" : datetime.utcnow().isoformat() + 'Z', 
-                    "fields" : {
-                        "value": self.get_latest("osd", osd_id.__str__(), path.__str__())
-                    }
-            }
-            data.append(point)
-        return data 
-               
-
-    def get_sum_stats(self, type_inst):
-        point = [{
-            "measurement": "ceph_cluster_stats",
-            "tags": {
-                "mgr_id": self.get_mgr_id(),
-                "type_instance": type_inst,
-            },
-                "time" : datetime.utcnow().isoformat() + 'Z',
-                "fields" : {
-                    "value": self.sum_stat(type_inst)
-                }
-
-        }]
-        return point 
-            
-    
     def get_df_stats(self):
         df = self.get("df")
         data = []
+
         df_type = [
             'bytes_used',
             'dirty',
@@ -96,6 +46,7 @@ class Module(MgrModule):
             'objects',
             'max_avail'
         ]
+
         for df_type in df_type:
             for pool in df['pools']:
                 point = {
@@ -113,8 +64,94 @@ class Module(MgrModule):
                 }
                 data.append(point)
         return data
-            
+
+
+    def get_default_stat(self):
+        default= [
+            "op_w",
+            "op_in_bytes",
+            "op_r",
+            "op_out_bytes"
+        ]
+
+        osd_data = []
+        cluster_data = []
+        for default in default:
+            osdmap = self.get("osd_map")
+            value = 0
+            for osd in osdmap['osds']:
+                osd_id = osd['osd']
+                metadata = self.get_metadata('osd', "%s" % osd_id)
+                value += self.get_latest("osd", osd_id.__str__(), "osd."+ default.__str__())
+                point = {
+                    "measurement": "ceph_osd_stats",
+                    "tags": {
+                        "mgr_id": self.get_mgr_id(),
+                        "osd_id": osd_id,
+                        "type_instance": default,
+                        "host": metadata['hostname']
+                    },
+                        "time" : datetime.utcnow().isoformat() + 'Z', 
+                        "fields" : {
+                            "value": self.get_latest("osd", osd_id.__str__(), "osd."+ default.__str__())
+                        }
+                }
+                osd_data.append(point)
+            point2 = {
+                "measurement": "ceph_cluster_stats",
+                "tags": {
+                    "mgr_id": self.get_mgr_id(),
+                    "type_instance": default,
+                },
+                    "time" : datetime.utcnow().isoformat() + 'Z',
+                    "fields" : {
+                        "value": value 
+                    }
+            }
+            cluster_data.append(point2)
+        return osd_data, cluster_data
+
         
+
+    def get_extended(self, counter_type, type_inst):
+        path = "osd." + type_inst.__str__()
+        osdmap = self.get("osd_map")
+        data = []
+        value = 0
+        for osd in osdmap['osds']: 
+            osd_id = osd['osd']
+            metadata = self.get_metadata('osd', "%s" % osd_id)
+            value += self.get_latest("osd", osd_id.__str__(), path.__str__())
+            point = {
+                "measurement": "ceph_osd_stats",
+                "tags": {
+                    "mgr_id": self.get_mgr_id(),
+                    "osd_id": osd_id,
+                    "type_instance": type_inst,
+                    "host": metadata['hostname']
+                },
+                    "time" : datetime.utcnow().isoformat() + 'Z', 
+                    "fields" : {
+                        "value": self.get_latest("osd", osd_id.__str__(), path.__str__())
+                    }
+            }
+            data.append(point)
+        if counter_type == "cluster":
+            point = [{
+                "measurement": "ceph_cluster_stats",
+                "tags": {
+                    "mgr_id": self.get_mgr_id(),
+                    "type_instance": type_inst,
+                },
+                    "time" : datetime.utcnow().isoformat() + 'Z',
+                    "fields" : {
+                        "value": value 
+                    }
+            }]
+            return point 
+        else:
+            return data 
+
     def send_to_influx(self):
         config = SafeConfigParser()
         config.read('/etc/ceph/influx.conf')
@@ -126,65 +163,40 @@ class Module(MgrModule):
         stats = config.get('influx', 'stats').replace(' ', '').split(',')
         client = InfluxDBClient(host, port, username, password, database) 
         database_avail = client.get_list_database()
+        default_stats = self.get_default_stat()
         for database_avail in database_avail:
             if database_avail == database: 
                 break
             else: 
                 client.create_database(database)
 
-        default= [
-            "op_w",
-            "op_in_bytes",
-            "op_r",
-            "op_out_bytes"
-        ]
+        
 
         for stats in stats:
-            if stats == "pool":
-                client.write_points(self.get_df_stats())
-
-            elif stats == "cluster":
-                for default_cluster in default:
-                    client.write_points(self.get_sum_stats(default_cluster), 'ms')
-                    if config.has_option('extended', 'cluster'):
-                        cluster = config.get('extended', 'cluster').replace(' ', '').split(',')
-                        for cluster in cluster:
-                            client.write_points(self.get_sum_stats(cluster), 'ms')
-                self.log.debug("wrote cluster stats")
+            if stats == "pool": 
+                client.write_points(self.get_df_stats(), 'ms')
 
             elif stats == "osd":
-                for default_osd in default: 
-                    client.write_points(self.get_stat(default_osd), 'ms')
-                    if config.has_option('extended', 'osd'):
-                        osd = config.get('extended', 'osd').replace(' ', '').split(',')
-                        for osd in osd:
-                            client.write_points(self.get_stat(osd), 'ms')
+                client.write_points(default_stats[0], 'ms')
+                if config.has_option('extended', 'osd'):
+                    osd = config.get('extended', 'osd').replace(' ', '').split(',')
+                    for osd in osd:
+                        client.write_points(self.get_extended("osd", osd), 'ms')
                 self.log.debug("wrote osd stats")
 
-            else:
-                self.log.error("Invalid stat type config")
-            
-        self.log.debug("sent all stats to influx")
-         
+            elif stats == "cluster": 
+                client.write_points(default_stats[-1], 'ms')
+                if config.has_option('extended', 'cluster'):
+                    cluster = config.get('extended', 'cluster').replace(' ', '').split(',')
+                    for cluster in cluster:
+                        client.write_points(self.get_extended("cluster", cluster), 'ms')
+                self.log.debug("wrote cluster stats")
+    
     def shutdown(self):
         self.log.info('Stopping influx module')
         self.run = False
         self.event.set()
 
-    def serve(self):
-        self.log.info('Starting influx module')
-        self.run = True
-        config = SafeConfigParser()
-        config.read('/etc/ceph/influx.conf')
-        
-        while self.run:
-            self.send_to_influx()
-            self.log.debug("Running interval loop")
-            interval = int(config.get('influx','interval'))
-            self.log.debug("sleeping for %d seconds",interval)
-            self.event.wait(interval)
-            
-        
     def handle_command(self, cmd):
         if cmd['prefix'] == 'influx self-test':
             self.send_to_influx()
@@ -193,12 +205,15 @@ class Module(MgrModule):
             print 'not found'
             raise NotImplementedError(cmd['prefix'])
 
-    
-    
-
-       
-    
-
-        
-
-
+    def serve(self):
+        self.log.info('Starting influx module')
+        self.run = True
+        config = SafeConfigParser()
+        config.read('/etc/ceph/influx.conf')
+        while self.run:
+            self.send_to_influx()
+            self.log.debug("Running interval loop")
+            interval = int(config.get('influx','interval'))
+            self.log.debug("sleeping for %d seconds",interval)
+            self.event.wait(interval)
+            
