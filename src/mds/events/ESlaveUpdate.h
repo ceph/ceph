@@ -120,7 +120,7 @@ public:
 
   ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE), master(0), op(0), origop(0) { }
   ESlaveUpdate(MDLog *mdlog, const char *s, metareqid_t ri, int mastermds, int o, int oo) : 
-    LogEvent(EVENT_SLAVEUPDATE), commit(mdlog), 
+    LogEvent(EVENT_SLAVEUPDATE),
     type(s),
     reqid(ri),
     master(mastermds),

@@ -26,7 +26,7 @@ public:
 
   EOpen() : LogEvent(EVENT_OPEN) { }
   explicit EOpen(MDLog *mdlog) :
-    LogEvent(EVENT_OPEN), metablob(mdlog) { }
+    LogEvent(EVENT_OPEN) { }
 
   void print(ostream& out) const override {
     out << "EOpen " << metablob << ", " << inos.size() << " open files";

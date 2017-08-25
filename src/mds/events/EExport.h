@@ -35,7 +35,7 @@ public:
   EExport() :
     LogEvent(EVENT_EXPORT), target(MDS_RANK_NONE) { }
   EExport(MDLog *mdlog, CDir *dir, mds_rank_t t) :
-    LogEvent(EVENT_EXPORT), metablob(mdlog),
+    LogEvent(EVENT_EXPORT),
     base(dir->dirfrag()), target(t) { }
   
   set<dirfrag_t> &get_bounds() { return bounds; }
