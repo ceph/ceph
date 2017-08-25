@@ -3250,10 +3250,10 @@ void OSDMap::print_oneline_summary(ostream& out) const
     out << " nearfull";
 }
 
-bool OSDMap::crush_ruleset_in_use(int ruleset) const
+bool OSDMap::crush_rule_in_use(int rule_id) const
 {
   for (const auto &pool : pools) {
-    if (pool.second.crush_rule == ruleset)
+    if (pool.second.crush_rule == rule_id)
       return true;
   }
   return false;
