@@ -632,9 +632,6 @@ void RGW_SWIFT_Auth_Get::execute()
 {
   int op_ret = -EPERM;
 
-  RGWAccessKey *swift_key;
-  map<string, RGWAccessKey>::iterator siter;
-
   const char* const key = s->info.env->get("HTTP_X_AUTH_KEY", nullptr);
   const boost::string_view auth_user = s->info.env->get("HTTP_X_AUTH_USER", "");
   if (!key || auth_user.empty()) {
@@ -677,15 +674,17 @@ void RGW_SWIFT_Auth_Get::execute()
     }
   }
 
-  siter = info.swift_keys.find(user_str);
-  if (siter == info.swift_keys.end()) {
+  const auto siter = info.swift_keys.find(user_str);
+  if (siter == std::end(info.swift_keys)) {
+    ldout(s->cct, 20) << "TempAUTH: can't find swift key for uid="
+                      << user_str << dendl;
     op_ret = -EPERM;
     return;
   }
-  swift_key = &siter->second;
 
-  if (swift_key->key.compare(key) != 0) {
-    dout(0) << "NOTICE: RGW_SWIFT_Auth_Get::execute(): bad swift key" << dendl;
+  const RGWAccessKey& swift_key = siter->second;
+  if (swift_key.key.compare(key) != 0) {
+    ldout(s->cct, 20) << "NOTICE: TempAUTH: bad swift key" << dendl;
     op_ret = -EPERM;
     return;
   }
@@ -693,21 +692,21 @@ void RGW_SWIFT_Auth_Get::execute()
   ceph::bufferlist bl;
   try {
     using rgw::auth::swift::encode_token;
-    bl = encode_token(s->cct, swift_key->id, swift_key->key);
-  } catch (int err) {
+    bl = encode_token(s->cct, swift_key.id, swift_key.key);
+  } catch (const int err) {
     op_ret = err;
     return;
   }
 
-  /* Let's construct the value of token we're going to sent to client. */
-  const auto token_val = string_cat_reserve("AUTH_rgwtk", buf_to_hex(bl));
-  dump_header(s, "X-Storage-Token", token_val);
-  dump_header(s, "X-Auth-Token", token_val);
   try {
-    dump_header(s, "X-Storage-Url", get_xstorage_location(s, info));
+    storage_location = get_xstorage_location(s, info);
+    /* Let's construct the value of token we're going to send to client. */
+    token_value = string_cat_reserve("AUTH_rgwtk", buf_to_hex(bl));
   } catch (const int err) {
     op_ret = err;
   }
+
+  op_ret = 0;
 }
 
 void RGW_SWIFT_Auth_Get::send_response()
@@ -718,6 +717,11 @@ void RGW_SWIFT_Auth_Get::send_response()
 
   set_req_state_err(s, op_ret);
   dump_errno(s);
+
+  dump_header(s, "X-Storage-Token", token_value);
+  dump_header(s, "X-Auth-Token", token_value);
+  dump_header(s, "X-Storage-Url", storage_location);
+
   end_header(s);
 }
 
@@ -727,12 +731,14 @@ int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state,
   state->dialect = "swift-auth";
   state->formatter = new JSONFormatter;
   state->format = RGW_FORMAT_JSON;
+  state->prot_flags |= RGW_REST_SWIFT;
 
   return RGWHandler::init(store, state, cio);
 }
 
 int RGWHandler_SWIFT_Auth::authorize()
 {
+  /* Everyone is authorized. */
   return 0;
 }
 

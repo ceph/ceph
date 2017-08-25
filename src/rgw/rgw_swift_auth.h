@@ -271,9 +271,12 @@ public:
 
 
 class RGW_SWIFT_Auth_Get : public RGWOp {
+  std::string storage_location;
+  std::string token_value;
+
 public:
-  RGW_SWIFT_Auth_Get() {}
-  ~RGW_SWIFT_Auth_Get() override {}
+  RGW_SWIFT_Auth_Get() = default;
+  ~RGW_SWIFT_Auth_Get() override = default;
 
   int verify_permission() override { return 0; }
   void execute() override;
