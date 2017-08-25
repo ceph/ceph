@@ -36,7 +36,6 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
-#include "messages/MMonHealth.h"
 #include "messages/MMonMetadata.h"
 #include "messages/MMonSync.h"
 #include "messages/MMonScrub.h"
@@ -77,7 +76,6 @@
 #include "MgrMonitor.h"
 #include "MgrStatMonitor.h"
 #include "mon/QuorumService.h"
-#include "mon/OldHealthMonitor.h"
 #include "mon/HealthMonitor.h"
 #include "mon/ConfigKeyService.h"
 #include "common/config.h"
@@ -197,7 +195,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_MGRSTAT] = new MgrStatMonitor(this, paxos, "mgrstat");
   paxos_service[PAXOS_HEALTH] = new HealthMonitor(this, paxos, "health");
 
-  health_monitor = new OldHealthMonitor(this);
   config_key_service = new ConfigKeyService(this, paxos);
 
   mon_caps = new MonCap();
@@ -234,7 +231,6 @@ Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     delete *p;
-  delete health_monitor;
   delete config_key_service;
   delete paxos;
   assert(session_map.sessions.empty());
@@ -685,7 +681,6 @@ int Monitor::preinit()
   dout(10) << "sync_last_committed_floor " << sync_last_committed_floor << dendl;
 
   init_paxos();
-  health_monitor->init();
 
   if (is_keyring_required()) {
     // we need to bootstrap authentication keys so we can form an
@@ -910,7 +905,6 @@ void Monitor::shutdown()
   paxos->shutdown();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->shutdown();
-  health_monitor->shutdown();
 
   finish_contexts(g_ceph_context, waitfor_quorum, -ECANCELED);
   finish_contexts(g_ceph_context, maybe_wait_for_quorum, -ECANCELED);
@@ -1079,7 +1073,6 @@ void Monitor::_reset()
 
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->restart();
-  health_monitor->finish();
 }
 
 
@@ -1934,7 +1927,6 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   // round without agreeing on who the participants are.
   monmon()->election_finished();
   _finish_svc_election();
-  health_monitor->start(epoch);
 
   logger->inc(l_mon_election_win);
 
@@ -1987,7 +1979,6 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
 
   paxos->peon_init();
   _finish_svc_election();
-  health_monitor->start(epoch);
 
   logger->inc(l_mon_election_lose);
 
@@ -4262,10 +4253,6 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 
     case MSG_TIMECHECK:
       handle_timecheck(op);
-      break;
-
-    case MSG_MON_HEALTH:
-      health_monitor->dispatch(op);
       break;
 
     case MSG_MON_HEALTH_CHECKS:

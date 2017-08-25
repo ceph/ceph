@@ -17,8 +17,6 @@
 #include "mon/Monitor.h"
 #include "mon/QuorumService.h"
 
-#include "messages/MMonHealth.h"
-
 #include "common/config.h"
 
 struct HealthService : public QuorumService
