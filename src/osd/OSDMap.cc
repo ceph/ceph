@@ -3236,10 +3236,10 @@ void OSDMap::print_oneline_summary(ostream& out) const
     out << " nearfull";
 }
 
-bool OSDMap::crush_ruleset_in_use(int ruleset) const
+bool OSDMap::crush_rule_in_use(int rule_id) const
 {
   for (const auto &pool : pools) {
-    if (pool.second.crush_rule == ruleset)
+    if (pool.second.crush_rule == rule_id)
       return true;
   }
   return false;
@@ -3962,7 +3962,7 @@ void OSDMap::get_pool_ids_by_osd(CephContext *cct,
   set<int> rules;
   for (auto &i: raw_rules) {
     // exclude any dead rule
-    if (crush_ruleset_in_use(i)) {
+    if (crush_rule_in_use(i)) {
       rules.insert(i);
     }
   }
