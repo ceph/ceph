@@ -21,7 +21,6 @@
 #include "Monitor.h"
 #include "MonitorDBStore.h"
 #include "OSDMonitor.h"
-#include "PGMonitor.h"
 
 #include "common/strtol.h"
 #include "common/perf_counters.h"

@@ -24,7 +24,6 @@
 #include "mon/OSDMonitor.h"
 #include "mon/Monitor.h"
 #include "mon/MDSMonitor.h"
-#include "mon/PGMonitor.h"
 #include "mon/MgrStatMonitor.h"
 #include "mon/AuthMonitor.h"
 #include "mon/ConfigKeyService.h"
@@ -360,15 +359,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     }
   }
 
-  // make sure we're using the right pg service.. remove me post-luminous!
-  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-    dout(10) << __func__ << " pgservice is mgrstat" << dendl;
-    mon->pgservice = mon->mgrstatmon()->get_pg_stat_service();
-  } else {
-    dout(10) << __func__ << " pgservice is pg" << dendl;
-    mon->pgservice = mon->pgmon()->get_pg_stat_service();
-  }
-
   // walk through incrementals
   MonitorDBStore::TransactionRef t;
   size_t tx_size = 0;
@@ -430,15 +420,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       t->erase("mkfs", "osdmap");
     }
 
-    // make sure we're using the right pg service.. remove me post-luminous!
-    if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      dout(10) << __func__ << " pgservice is mgrstat" << dendl;
-      mon->pgservice = mon->mgrstatmon()->get_pg_stat_service();
-    } else {
-      dout(10) << __func__ << " pgservice is pg" << dendl;
-      mon->pgservice = mon->pgmon()->get_pg_stat_service();
-    }
-
     if (tx_size > g_conf->mon_sync_max_payload_size*2) {
       mon->store->apply_transaction(t);
       t = MonitorDBStore::TransactionRef();
@@ -481,11 +462,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     }
   }
   // XXX: need to trim MonSession connected with a osd whose id > max_osd?
-
-  if (mon->is_leader()) {
-    // kick pgmon, make sure it's seen the latest map
-    mon->pgmon()->check_osd_map(osdmap.epoch);
-  }
 
   check_osdmap_subs();
   check_pg_creates_subs();
@@ -3121,11 +3097,6 @@ void OSDMonitor::check_osdmap_sub(Subscription *sub)
 
 void OSDMonitor::check_pg_creates_subs()
 {
-  if (!mon->monmap->get_required_features().contains_all(
-	ceph::features::mon::FEATURE_LUMINOUS)) {
-    // PGMonitor takes care of this in pre-luminous era.
-    return;
-  }
   if (!osdmap.get_num_up_osds()) {
     return;
   }
