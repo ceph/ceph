@@ -1,6 +1,6 @@
 meta:
 - desc: |
-   randomized correctness test for rados operations on a replicated pool, 
+   randomized correctness test for rados operations on a replicated pool,
    using only reads, writes, and deletes
 split_tasks:
   sequential:

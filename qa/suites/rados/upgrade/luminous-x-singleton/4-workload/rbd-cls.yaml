@@ -4,7 +4,7 @@ meta:
 split_tasks:
   sequential:
   - workunit:
-      branch: jewel
+      branch: luminous
       clients:
         client.0:
           - cls/test_cls_rbd.sh
