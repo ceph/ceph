@@ -651,14 +651,6 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
   }
   // check for new or old pools
   if (pending_creatings.last_scan_epoch < inc.epoch) {
-    if (osdmap.get_epoch() &&
-	osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      auto added =
-	mon->pgservice->maybe_add_creating_pgs(creating_pgs.last_scan_epoch,
-					       osdmap.get_pools(),
-					       &pending_creatings);
-      dout(7) << __func__ << " " << added << " pgs added from pgmap" << dendl;
-    }
     unsigned queued = 0;
     queued += scan_for_creating_pgs(osdmap.get_pools(),
 				    inc.old_pools,
@@ -1172,12 +1164,6 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (mon->monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {
     auto pending_creatings = update_pending_pgs(pending_inc);
-    if (osdmap.get_epoch() &&
-	osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      dout(7) << __func__ << " in the middle of upgrading, "
-	      << " trimming pending creating_pgs using pgmap" << dendl;
-      mon->pgservice->maybe_trim_creating_pgs(&pending_creatings);
-    }
     bufferlist creatings_bl;
     ::encode(pending_creatings, creatings_bl);
     t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
