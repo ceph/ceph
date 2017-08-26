@@ -2,7 +2,7 @@ meta:
 - desc: |
    swift api tests for rgw
 tasks:
-- rgw: 
+- rgw:
     client.0:
 - print: "**** done rgw 9-workload"
 - swift:

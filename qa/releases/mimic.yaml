@@ -1,0 +1,6 @@
+tasks:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release mimic
+      - ceph osd set-require-min-compat-client mimic
+- ceph.healthy:

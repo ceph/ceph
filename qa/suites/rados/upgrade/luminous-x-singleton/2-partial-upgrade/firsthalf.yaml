@@ -5,7 +5,7 @@ meta:
    restart : osd.0,1,2,3,4,5
 tasks:
 - install.upgrade:
-    osd.0: 
+    osd.0:
 - print: "**** done install.upgrade osd.0"
 - ceph.restart:
     daemons: [mon.a, mon.b, mon.c]
