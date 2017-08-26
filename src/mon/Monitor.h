@@ -169,10 +169,6 @@ public:
   vector<MonCommand> local_mon_commands;  // commands i support
   bufferlist local_mon_commands_bl;       // encoded version of above
 
-  // for upgrading mon cluster that still uses PGMonitor
-  vector<MonCommand> local_upgrading_mon_commands;  // mixed mon cluster commands
-  bufferlist local_upgrading_mon_commands_bl;       // encoded version of above
-
   Messenger *mgr_messenger;
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
@@ -618,10 +614,6 @@ public:
    */
   vector<PaxosService*> paxos_service;
 
-  class PGMonitor *pgmon() {
-    return (class PGMonitor *)paxos_service[PAXOS_PGMAP];
-  }
-
   class MDSMonitor *mdsmon() {
     return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP];
   }
@@ -658,7 +650,6 @@ public:
   friend class OSDMonitor;
   friend class MDSMonitor;
   friend class MonmapMonitor;
-  friend class PGMonitor;
   friend class LogMonitor;
   friend class ConfigKeyService;
 
@@ -975,16 +966,10 @@ public:
 					  bool hide_mgr_flag=false);
 
   const std::vector<MonCommand> &get_local_commands(mon_feature_t f) {
-    if (f.contains_all(ceph::features::mon::FEATURE_LUMINOUS))
-      return local_mon_commands;
-    else
-      return local_upgrading_mon_commands;
+    return local_mon_commands;
   }
   const bufferlist& get_local_commands_bl(mon_feature_t f) {
-    if (f.contains_all(ceph::features::mon::FEATURE_LUMINOUS))
-      return local_mon_commands_bl;
-    else
-      return local_upgrading_mon_commands_bl;
+    return local_mon_commands_bl;
   }
   void set_leader_commands(const std::vector<MonCommand>& cmds) {
     leader_mon_commands = cmds;

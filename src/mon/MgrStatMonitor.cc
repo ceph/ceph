@@ -4,7 +4,6 @@
 #include "MgrStatMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "mon/PGMap.h"
-#include "mon/PGMonitor.h"
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"
 #include "messages/MMonMgrReport.h"
@@ -159,11 +158,6 @@ void MgrStatMonitor::create_pending()
 void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   ++version;
-  if (version < mon->pgmon()->get_last_committed()) {
-    // fast-forward to pgmon version to ensure clients don't see a
-    // jump back in time for MGetPoolStats and MStatFs.
-    version = mon->pgmon()->get_last_committed() + 1;
-  }
   dout(10) << " " << version << dendl;
   bufferlist bl;
   ::encode(pending_digest, bl, mon->get_quorum_con_features());
@@ -265,12 +259,7 @@ bool MgrStatMonitor::preprocess_getpoolstats(MonOpRequestRef op)
 	    << m->fsid << " != " << mon->monmap->fsid << dendl;
     return true;
   }
-  epoch_t ver = 0;
-  if (mon->pgservice == get_pg_stat_service()) {
-    ver = get_last_committed();
-  } else {
-    ver = mon->pgmon()->get_last_committed();
-  }
+  epoch_t ver = get_last_committed();
   auto reply = new MGetPoolStatsReply(m->fsid, m->get_tid(), ver);
   for (const auto& pool_name : m->pools) {
     const auto pool_id = mon->osdmon()->osdmap.lookup_pg_pool_name(pool_name);
@@ -305,12 +294,7 @@ bool MgrStatMonitor::preprocess_statfs(MonOpRequestRef op)
   }
   dout(10) << __func__ << " " << *statfs
            << " from " << statfs->get_orig_source() << dendl;
-  epoch_t ver = 0;
-  if (mon->pgservice == get_pg_stat_service()) {
-    ver = get_last_committed();
-  } else {
-    ver = mon->pgmon()->get_last_committed();
-  }
+  epoch_t ver = get_last_committed();
   auto reply = new MStatfsReply(statfs->fsid, statfs->get_tid(), ver);
   reply->h.st = mon->pgservice->get_statfs(mon->osdmon()->osdmap,
 					   statfs->data_pool);

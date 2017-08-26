@@ -70,7 +70,6 @@
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
 #include "MonmapMonitor.h"
-#include "PGMonitor.h"
 #include "LogMonitor.h"
 #include "AuthMonitor.h"
 #include "MgrMonitor.h"
@@ -108,9 +107,6 @@ const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
   {parsesig, helptext, modulename, req_perms, avail, flags},
 MonCommand mon_commands[] = {
 #include <mon/MonCommands.h>
-};
-MonCommand pgmonitor_commands[] = {
-#include <mon/PGMonitorCommands.h>
 };
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
@@ -188,7 +184,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, paxos, "mdsmap");
   paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, paxos, "monmap");
   paxos_service[PAXOS_OSDMAP] = new OSDMonitor(cct, this, paxos, "osdmap");
-  paxos_service[PAXOS_PGMAP] = new PGMonitor(this, paxos, "pgmap");
   paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
   paxos_service[PAXOS_MGR] = new MgrMonitor(this, paxos, "mgr");
@@ -209,13 +204,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
     local_mon_commands[i] = mon_commands[i];
   }
   MonCommand::encode_vector(local_mon_commands, local_mon_commands_bl);
-
-  local_upgrading_mon_commands = local_mon_commands;
-  for (unsigned i = 0; i < ARRAY_SIZE(pgmonitor_commands); ++i) {
-    local_upgrading_mon_commands.push_back(pgmonitor_commands[i]);
-  }
-  MonCommand::encode_vector(local_upgrading_mon_commands,
-			    local_upgrading_mon_commands_bl);
 
   // assume our commands until we have an election.  this only means
   // we won't reply with EINVAL before the election; any command that
@@ -2886,14 +2874,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     bool hide_mgr_flag =
       osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS;
 
-    std::vector<MonCommand> commands;
-
-    // only include mgr commands once all mons are upgrade (and we've dropped
-    // the hard-coded PGMonitor commands)
-    if (quorum_mon_features.contains_all(ceph::features::mon::FEATURE_LUMINOUS)) {
-      commands = static_cast<MgrMonitor*>(
+    std::vector<MonCommand> commands = static_cast<MgrMonitor*>(
         paxos_service[PAXOS_MGR])->get_command_descs();
-    }
 
     for (auto& c : leader_mon_commands) {
       commands.push_back(c);
@@ -3054,10 +3036,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  if (module == "pg") {
-    pgmon()->dispatch(op);
-    return;
-  }
   if (module == "mon" &&
       /* Let the Monitor class handle the following commands:
        *  'mon compact'
@@ -4107,11 +4085,6 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       paxos_service[PAXOS_MGRSTAT]->dispatch(op);
       break;
 
-    // pg
-    case MSG_PGSTATS:
-      paxos_service[PAXOS_PGMAP]->dispatch(op);
-      break;
-
     // log
     case MSG_LOG:
       paxos_service[PAXOS_LOG]->dispatch(op);
@@ -4787,12 +4760,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       }
     } else if (p->first == "osd_pg_creates") {
       if ((int)s->is_capable("osd", MON_CAP_W)) {
-	if (monmap->get_required_features().contains_all(
-	      ceph::features::mon::FEATURE_LUMINOUS)) {
-	  osdmon()->check_pg_creates_sub(s->sub_map["osd_pg_creates"]);
-	} else {
-	  pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
-	}
+	osdmon()->check_pg_creates_sub(s->sub_map["osd_pg_creates"]);
       }
     } else if (p->first == "monmap") {
       monmon()->check_sub(s->sub_map[p->first]);
