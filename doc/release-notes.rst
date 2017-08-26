@@ -416,7 +416,8 @@ Upgrade from Jewel or Kraken
 
      # systemctl restart radosgw.target
 
-#. Complete the upgrade by disallowing pre-luminous OSDs::
+#. Complete the upgrade by disallowing pre-luminous OSDs and enabling
+   all new Luminous-only functionality::
 
      # ceph osd require-osd-release luminous
 
