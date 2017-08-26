@@ -100,6 +100,7 @@ class SharedDriverQueueData {
   uint32_t sector_size;
   uint32_t core_id;
   uint32_t queueid;
+  uint32_t max_queue_depth;
   struct spdk_nvme_qpair *qpair;
   std::function<void ()> run_func;
 
@@ -118,6 +119,7 @@ class SharedDriverQueueData {
   std::set<uint64_t> flush_waiter_seqs;
 
   public:
+    uint32_t current_queue_depth = 0;
     std::atomic_ulong completed_op_seq, queue_op_seq;
     std::vector<void*> data_buf_mempool;
     PerfCounters *logger = nullptr;
@@ -138,8 +140,14 @@ class SharedDriverQueueData {
         flush_lock("NVMEDevice::flush_lock"),
         flush_waiters(0),
         completed_op_seq(0), queue_op_seq(0) {
+    struct spdk_nvme_io_qpair_opts opts = {};
+    spdk_nvme_ctrlr_get_default_io_qpair_opts(ctrlr, &opts, sizeof(opts));
+    opts.qprio = SPDK_NVME_QPRIO_URGENT;
+    // usable queue depth should minus 1 to aovid overflow.
+    max_queue_depth = opts.io_queue_size - 1;
+    qpair = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, &opts, sizeof(opts));
+    assert(qpair != NULL);
 
-    qpair = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, NULL, SPDK_NVME_QPRIO_URGENT);
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
     b.add_time_avg(l_bluestore_nvmedevice_aio_write_lat, "aio_write_lat", "Average write completing latency");
@@ -470,6 +478,11 @@ void SharedDriverQueueData::_aio_thread()
     }
 
     for (; t; t = t->next) {
+      if (current_queue_depth == max_queue_depth) {
+        // no slots
+        goto again;
+      }
+
       t->queue = this;
       lba_off = t->offset / sector_size;
       lba_count = t->len / sector_size;
@@ -539,6 +552,7 @@ void SharedDriverQueueData::_aio_thread()
           break;
         }
       }
+      current_queue_depth++;
     }
 
     if (!queue_empty.load()) {
@@ -801,6 +815,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
   assert(queue != NULL);
   assert(ctx != NULL);
   ++queue->completed_op_seq;
+  --queue->current_queue_depth;
   auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(
       ceph::coarse_real_clock::now() - task->start);
   if (task->command == IOCommand::WRITE_COMMAND) {
