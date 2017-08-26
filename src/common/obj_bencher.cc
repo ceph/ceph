@@ -82,7 +82,7 @@ void *ObjBencher::status_printer(void *_bencher) {
   int previous_writes = 0;
   int cycleSinceChange = 0;
   double bandwidth;
-  int iops;
+  int iops = 0;
   utime_t ONE_SECOND;
   ONE_SECOND.set_from_double(1.0);
   bencher->lock.Lock();
