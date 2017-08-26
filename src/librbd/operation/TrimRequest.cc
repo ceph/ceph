@@ -264,12 +264,9 @@ void TrimRequest<I>::send_pre_copyup() {
   m_copyup_start = m_delete_start;
   m_delete_start = m_copyup_end;
 
-  bool copyup_objects = false;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (image_ctx.object_map == nullptr) {
-      copyup_objects = true;
-    } else {
+    if (image_ctx.object_map != nullptr) {
       ldout(image_ctx.cct, 5) << this << " send_pre_copyup: "
                               << " copyup_start=" << m_copyup_start
                               << " copyup_end=" << m_copyup_end << dendl;
@@ -277,19 +274,16 @@ void TrimRequest<I>::send_pre_copyup() {
 
       assert(image_ctx.exclusive_lock->is_lock_owner());
 
-      Context *ctx = this->create_callback_context();
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
-      if (!image_ctx.object_map->aio_update(m_copyup_start, m_copyup_end,
-                                            OBJECT_PENDING, OBJECT_EXISTS, ctx)) {
-        delete ctx;
-        copyup_objects = true;
+      if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
+            CEPH_NOSNAP, m_copyup_start, m_copyup_end, OBJECT_PENDING,
+            OBJECT_EXISTS, this)) {
+        return;
       }
     }
   }
 
-  if (copyup_objects) {
-    send_copyup_objects();
-  }
+  send_copyup_objects();
 }
 
 template <typename I>
@@ -330,12 +324,9 @@ void TrimRequest<I>::send_post_copyup() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
 
-  bool pre_remove_objects = false;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (image_ctx.object_map == nullptr) {
-      pre_remove_objects = true;
-    } else {
+    if (image_ctx.object_map != nullptr) {
       ldout(image_ctx.cct, 5) << this << " send_post_copyup:"
                               << " copyup_start=" << m_copyup_start
                               << " copyup_end=" << m_copyup_end << dendl;
@@ -343,19 +334,16 @@ void TrimRequest<I>::send_post_copyup() {
 
       assert(image_ctx.exclusive_lock->is_lock_owner());
 
-      Context *ctx = this->create_callback_context();
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
-      if (!image_ctx.object_map->aio_update(m_copyup_start, m_copyup_end,
-                                            OBJECT_NONEXISTENT, OBJECT_PENDING, ctx)) {
-        delete ctx;
-        pre_remove_objects = true;
+      if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
+            CEPH_NOSNAP, m_copyup_start, m_copyup_end, OBJECT_NONEXISTENT,
+            OBJECT_PENDING, this)) {
+        return;
       }
     }
   }
 
-  if (pre_remove_objects) {
-    send_pre_remove();
-  }
+  send_pre_remove();
 }
 
 template <typename I>
