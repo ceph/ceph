@@ -2762,16 +2762,12 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
 
 void Monitor::format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
-					  bufferlist *rdata,
-					  bool hide_mgr_flag)
+					  bufferlist *rdata)
 {
   int cmdnum = 0;
   f->open_object_section("command_descriptions");
   for (const auto &cmd : commands) {
     unsigned flags = cmd.flags;
-    if (hide_mgr_flag) {
-      flags &= ~MonCommand::FLAG_MGR;
-    }
     ostringstream secname;
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
     dump_cmddesc_to_json(f, secname.str(),
@@ -2870,9 +2866,6 @@ void Monitor::handle_command(MonOpRequestRef op)
   if (prefix == "get_command_descriptions") {
     bufferlist rdata;
     Formatter *f = Formatter::create("json");
-    // hide mgr commands until luminous upgrade is complete
-    bool hide_mgr_flag =
-      osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS;
 
     std::vector<MonCommand> commands = static_cast<MgrMonitor*>(
         paxos_service[PAXOS_MGR])->get_command_descs();
@@ -2881,7 +2874,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       commands.push_back(c);
     }
 
-    format_command_descriptions(commands, f, &rdata, hide_mgr_flag);
+    format_command_descriptions(commands, f, &rdata);
     delete f;
     reply_command(op, 0, "", rdata, 0);
     return;
