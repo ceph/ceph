@@ -3565,11 +3565,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     else
       rdata.append(ds);
   }
-  else if (prefix == "osd perf" ||
-	   prefix == "osd blocked-by") {
-    r = mon->pgservice->process_pg_command(prefix, cmdmap,
-					   osdmap, f.get(), &ss, &rdata);
-  }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
 	   prefix == "osd ls" ||
@@ -4524,9 +4519,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       }
     }
     r = 0;
-  } else if (prefix == "osd pool stats") {
-    r = mon->pgservice->process_pg_command(prefix, cmdmap,
-					   osdmap, f.get(), &ss, &rdata);
   } else if (prefix == "osd pool get-quota") {
     string pool_name;
     cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
@@ -10633,75 +10625,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(
       op, new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
     return true;
-  } else if (prefix == "osd reweight-by-pg" ||
-	     prefix == "osd reweight-by-utilization" ||
-	     prefix == "osd test-reweight-by-pg" ||
-	     prefix == "osd test-reweight-by-utilization") {
-    bool by_pg =
-      prefix == "osd reweight-by-pg" || prefix == "osd test-reweight-by-pg";
-    bool dry_run =
-      prefix == "osd test-reweight-by-pg" ||
-      prefix == "osd test-reweight-by-utilization";
-    int64_t oload;
-    cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
-    set<int64_t> pools;
-    vector<string> poolnamevec;
-    cmd_getval(g_ceph_context, cmdmap, "pools", poolnamevec);
-    for (unsigned j = 0; j < poolnamevec.size(); j++) {
-      int64_t pool = osdmap.lookup_pg_pool_name(poolnamevec[j]);
-      if (pool < 0) {
-	ss << "pool '" << poolnamevec[j] << "' does not exist";
-	err = -ENOENT;
-	goto reply;
-      }
-      pools.insert(pool);
-    }
-    double max_change = g_conf->mon_reweight_max_change;
-    cmd_getval(g_ceph_context, cmdmap, "max_change", max_change);
-    if (max_change <= 0.0) {
-      ss << "max_change " << max_change << " must be positive";
-      err = -EINVAL;
-      goto reply;
-    }
-    int64_t max_osds = g_conf->mon_reweight_max_osds;
-    cmd_getval(g_ceph_context, cmdmap, "max_osds", max_osds);
-    if (max_osds <= 0) {
-      ss << "max_osds " << max_osds << " must be positive";
-      err = -EINVAL;
-      goto reply;
-    }
-    string no_increasing;
-    cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
-    string out_str;
-    mempool::osdmap::map<int32_t, uint32_t> new_weights;
-    err = mon->pgservice->reweight_by_utilization(osdmap,
-					     oload,
-					     max_change,
-					     max_osds,
-					     by_pg,
-					     pools.empty() ? NULL : &pools,
-					     no_increasing == "--no-increasing",
-					     &new_weights,
-					     &ss, &out_str, f.get());
-    if (err >= 0) {
-      dout(10) << "reweight::by_utilization: finished with " << out_str << dendl;
-    }
-    if (f)
-      f->flush(rdata);
-    else
-      rdata.append(out_str);
-    if (err < 0) {
-      ss << "FAILED reweight-by-pg";
-    } else if (err == 0 || dry_run) {
-      ss << "no change";
-    } else {
-      ss << "SUCCESSFUL reweight-by-pg";
-      pending_inc.new_weight = std::move(new_weights);
-      wait_for_finished_proposal(
-	op,
-	new Monitor::C_Command(mon, op, 0, rs, rdata, get_last_committed() + 1));
-      return true;
-    }
   } else if (prefix == "osd force-create-pg") {
     pg_t pgid;
     string pgidstr;
