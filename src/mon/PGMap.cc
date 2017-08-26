@@ -2727,7 +2727,7 @@ void PGMap::get_health_checks(
       // required release
       if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
           sum.num_objects > 0 && pool.application_metadata.empty() &&
-          !pool.is_tier() && !g_conf->mon_debug_no_require_luminous) {
+          !pool.is_tier()) {
         stringstream ss;
         ss << "application not enabled on pool '" << pool_name << "'";
         detail.push_back(ss.str());

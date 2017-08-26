@@ -1303,7 +1303,7 @@ std::vector<Option> get_global_options() {
     .set_default("/var/log/ceph/$cluster-$name.tdump")
     .set_description(""),
 
-    Option("mon_debug_no_require_luminous", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    Option("mon_debug_no_require_mimic", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
