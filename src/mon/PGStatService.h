@@ -34,7 +34,7 @@ public:
   virtual ~PGStatService() {}
   // FIXME: Kill this once we rip out PGMonitor post-luminous
   /** returns true if the underlying data is readable. Always true
-   *  post-luminous, but not when we are redirecting to the PGMonitor
+   *  post-luminous, but not when we are redirecting to the yPGMonitor
    */
   virtual bool is_readable() const { return true; }
   virtual const pool_stat_t* get_pool_stat(int64_t poolid) const = 0;
@@ -81,34 +81,6 @@ public:
   virtual void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
 			       bool verbose) const = 0;
 
-  virtual int process_pg_command(const string& prefix,
-				 const map<string,cmd_vartype>& cmdmap,
-				 const OSDMap& osdmap,
-				 Formatter *f,
-				 stringstream *ss,
-				 bufferlist *odata) const {
-    ceph_abort();
-  }
-
-};
-
-class MonPGStatService : virtual public PGStatService {
-public:
-  MonPGStatService() : PGStatService() {}
-  virtual ~MonPGStatService() {}
-
-  virtual int reweight_by_utilization(const OSDMap &osd_map,
-			      int oload,
-			      double max_changef,
-			      int max_osds,
-			      bool by_pg, const set<int64_t> *pools,
-			      bool no_increasing,
-			      mempool::osdmap::map<int32_t, uint32_t>* new_weights,
-			      std::stringstream *ss,
-			      std::string *out_str,
-				      Formatter *f) const {
-    ceph_abort();
-  }
 };
 
 #endif

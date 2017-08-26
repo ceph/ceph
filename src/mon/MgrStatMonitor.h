@@ -8,7 +8,7 @@
 #include "mon/PGMap.h"
 #include "mgr/ServiceMap.h"
 
-class MonPGStatService;
+class PGStatService;
 class MgrPGStatService;
 
 class MgrStatMonitor : public PaxosService {
@@ -67,7 +67,7 @@ public:
 
   void print_summary(Formatter *f, std::ostream *ss) const;
 
-  MonPGStatService *get_pg_stat_service();
+  PGStatService *get_pg_stat_service();
   const ServiceMap& get_service_map() {
     return service_map;
   }
