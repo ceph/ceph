@@ -771,7 +771,7 @@ namespace rgw {
       }
 
       void operator()() {
-	rgw_fh.write_finish();
+	rgw_fh.close(); /* will finish in-progress write */
 	rgw_fh.get_fs()->unref(&rgw_fh);
       }
     };
