@@ -172,7 +172,13 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
     set_header(mod_pg_ver, extra_headers, "HTTP_DEST_PG_VER");
   }
 
-  return (*req)->get_obj(key, extra_headers, obj);
+  int r = (*req)->get_obj(key, extra_headers, obj);
+  if (r < 0) {
+    delete *req;
+    *req = nullptr;
+  }
+  
+  return r;
 }
 
 int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, real_time *mtime, map<string, string>& attrs)
