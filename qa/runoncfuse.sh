@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 mkdir -p testspace
 ceph-fuse testspace -m $1

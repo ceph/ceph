@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #command line => CEPH_BRANCH=<branch>; MACHINE_NAME=<machine_type>; SUITE_NAME=<suite>; ../schedule_subset.sh <day_of_week> $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL
 

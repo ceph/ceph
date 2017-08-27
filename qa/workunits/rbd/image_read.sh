@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
 
 # Copyright (C) 2013 Inktank Storage, Inc.
 #
@@ -41,6 +41,7 @@
 # supercede these defaults.  Such variables have names that begin
 # with "IMAGE_READ_", for e.g. use IMAGE_READ_PAGE_SIZE=65536
 # to use 65536 as the page size.
+set -e
 
 DEFAULT_VERBOSE=true
 DEFAULT_TEST_CLONES=true

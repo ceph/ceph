@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 BIN_PATH=${TESTDIR}/fsstress/ltp-full-20091231/testcases/kernel/fs/fsstress/fsstress
 

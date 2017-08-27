@@ -1,4 +1,4 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
 #
 # Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
@@ -14,6 +14,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+set -ex
 
 : ${CORPUS:=https://github.com/ceph/ceph-erasure-code-corpus.git}
 : ${DIRECTORY:=$CEPH_ROOT/ceph-erasure-code-corpus}
