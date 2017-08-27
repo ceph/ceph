@@ -88,6 +88,21 @@ std::string TestClsRbd::_pool_name;
 librados::Rados TestClsRbd::_rados;
 uint64_t TestClsRbd::_image_number = 0;
 
+TEST_F(TestClsRbd, get_all_features)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, ioctx.create(oid, false));
+
+  uint64_t all_features = 0;
+  ASSERT_EQ(0, get_all_features(&ioctx, oid, &all_features));
+  ASSERT_EQ(RBD_FEATURES_ALL, all_features);
+
+  ioctx.close();
+}
+
 TEST_F(TestClsRbd, copyup)
 {
   librados::IoCtx ioctx;
