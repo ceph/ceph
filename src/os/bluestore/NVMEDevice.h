@@ -43,11 +43,10 @@ class NVMEDevice : public BlockDevice {
   /**
    * points to pinned, physically contiguous memory region;
    * contains 4KB IDENTIFY structure for controller which is
-   *  target for CONTROLLER IDENTIFY command during initialization
+   * target for CONTROLLER IDENTIFY command during initialization
    */
   SharedDriverData *driver;
   string name;
-  bool aio_stop;
 
   static void init();
  public:
