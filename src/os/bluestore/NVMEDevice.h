@@ -48,7 +48,6 @@ class NVMEDevice : public BlockDevice {
   SharedDriverData *driver;
   string name;
 
-  static void init();
  public:
   SharedDriverData *get_driver() { return driver; }
 
