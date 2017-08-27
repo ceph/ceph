@@ -2061,11 +2061,11 @@ void AsyncConnection::fault()
   requeue_sent();
   recv_start = recv_end = 0;
   state_offset = 0;
-  replacing = false;
   is_reset_from_peer = false;
   outcoming_bl.clear();
   if (!once_ready && !is_queued() &&
-      state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
+      state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH &&
+      !replacing) {
     ldout(async_msgr->cct, 10) << __func__ << " with nothing to send and in the half "
                               << " accept state just closed" << dendl;
     write_lock.unlock();
@@ -2073,6 +2073,7 @@ void AsyncConnection::fault()
     dispatch_queue->queue_reset(this);
     return ;
   }
+  replacing = false;
   reset_recv_state();
   if (policy.standby && !is_queued() && state != STATE_WAIT) {
     ldout(async_msgr->cct, 10) << __func__ << " with nothing to send, going to standby" << dendl;
