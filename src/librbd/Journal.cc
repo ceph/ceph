@@ -797,6 +797,40 @@ int Journal<I>::promote(I *image_ctx) {
     return r;
   }
 
+  journaler.start_append(0, 0, 0);
+  BOOST_SCOPE_EXIT_ALL(&journaler) {
+    C_SaferCond stop_append_ctx;
+    journaler.stop_append(&stop_append_ctx);
+    stop_append_ctx.wait();
+  };
+
+  journal::EventEntry event_entry{journal::DemotePromoteEvent{}};
+  bufferlist event_entry_bl;
+  ::encode(event_entry, event_entry_bl);
+  Future future = journaler.append(new_tag.tid, event_entry_bl);
+
+  C_SaferCond flush_ctx;
+  future.flush(&flush_ctx);
+  r = flush_ctx.wait();
+  if (r < 0) {
+    lderr(cct) << __func__ << ": "
+               << "failed to append promotion journal event: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  journaler.committed(future);
+
+  C_SaferCond flush_commit_ctx;
+  journaler.flush_commit_position(&flush_commit_ctx);
+  r = flush_commit_ctx.wait();
+  if (r < 0) {
+    lderr(cct) << __func__ << ": "
+               << "failed to flush promotion commit position: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
   return 0;
 }
 
@@ -962,7 +996,7 @@ int Journal<I>::demote() {
       return r;
     }
 
-    journal::EventEntry event_entry{journal::DemoteEvent{}};
+    journal::EventEntry event_entry{journal::DemotePromoteEvent{}};
     bufferlist event_entry_bl;
     ::encode(event_entry, event_entry_bl);
 

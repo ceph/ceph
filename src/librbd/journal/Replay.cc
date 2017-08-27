@@ -624,10 +624,10 @@ void Replay<I>::handle_event(const journal::FlattenEvent &event,
 }
 
 template <typename I>
-void Replay<I>::handle_event(const journal::DemoteEvent &event,
+void Replay<I>::handle_event(const journal::DemotePromoteEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << ": Demote event" << dendl;
+  ldout(cct, 20) << ": Demote/Promote event" << dendl;
   on_ready->complete(0);
   on_safe->complete(0);
 }
