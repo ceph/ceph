@@ -1,4 +1,4 @@
-#! /bin/bash
+#! /usr/bin/env bash
 SPECIFIC_VERSION=latest-Ceph-2-RHEL-7 
 #SPECIFIC_VERSION=Ceph-2-RHEL-7-20160630.t.0
 #SPECIFIC_VERSION=Ceph-2.0-RHEL-7-20160718.t.0

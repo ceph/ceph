@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/usr/bin/env bash
 #
 # Copyright (C) 2015 Red Hat <contact@redhat.com>
 # Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>

@@ -1,4 +1,6 @@
-#!/bin/bash -fv
+#!/usr/bin/env bash
+set -fv
+
 #
 # Create a glance image, a corresponding cinder volume, a nova instance, attach, the cinder volume to the
 # nova instance, and create a backup.

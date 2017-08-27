@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Simple script which performs a HTTP and rsync check on
 # all Ceph mirrors over IPv4 and IPv6 to see if they are online

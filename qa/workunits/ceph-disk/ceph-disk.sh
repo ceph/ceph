@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 if [ -f $(dirname $0)/../ceph-helpers-root.sh ]; then
     source $(dirname $0)/../ceph-helpers-root.sh
 else

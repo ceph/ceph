@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This can be run from e.g. the senta machines which have docker available. You
 # may need to run this script with sudo.

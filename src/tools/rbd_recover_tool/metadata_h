@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # file: metadata_h
 #
 # Copyright (C) 2015 Ubuntu Kylin

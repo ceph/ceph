@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 # this should be run from the src directory in the ceph.git (when built with
 # automake) or cmake build directory

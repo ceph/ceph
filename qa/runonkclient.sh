@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 mkdir -p testspace
 /bin/mount -t ceph $1 testspace

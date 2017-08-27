@@ -1,4 +1,6 @@
-#! /bin/bash -f
+#!/usr/bin/env bash
+set -f
+
 echo $OS_CEPH_ISO
 if [[ $# -ne 4 ]]; then
     echo "Usage: ceph_cluster mon.0 osd.0 osd.1 osd.2"

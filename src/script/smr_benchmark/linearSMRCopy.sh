@@ -1,4 +1,4 @@
-#! /bin/bash
+#! /usr/bin/env bash
 
 # copy a linear file from srcFile to destination SMRDisk in a loop until writeSize MBs is written
 # SMRDisk is the SMR Host Aware / Host Managed Disk eg. /dev/sdb

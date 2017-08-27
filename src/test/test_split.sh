@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 #
 # Add some objects to the data PGs, and then test splitting those PGs

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # file: rbd-recover-tool
 #
 # Copyright (C) 2015 Ubuntu Kylin

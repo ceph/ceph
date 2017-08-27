@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 RUN_TIME=300		# approximate duration of run (seconds)
 

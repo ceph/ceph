@@ -1,5 +1,6 @@
-#!/bin/bash  -x
+#!/usr/bin/env bash
 # can't use -e because of background process
+set -x
 
 IMAGE=rbdrw-image
 LOCKID=rbdrw
