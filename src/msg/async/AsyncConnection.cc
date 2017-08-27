@@ -1609,6 +1609,11 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
         ldout(async_msgr->cct, 10) << __func__ << " accept connection race, existing " << existing
                              << ".cseq " << existing->connect_seq << " == "
                              << connect.connect_seq << ", OPEN|STANDBY, RETRY_SESSION" << dendl;
+        // if connect_seq both zero, dont stuck into dead lock. it's ok to replace
+        if (policy.resetcheck && existing->connect_seq == 0) {
+          goto replace;
+        }
+
         reply.connect_seq = existing->connect_seq + 1;
         existing->lock.unlock();
         return _reply_accept(CEPH_MSGR_TAG_RETRY_SESSION, connect, reply, authorizer_reply);
