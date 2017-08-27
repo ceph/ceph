@@ -455,6 +455,17 @@ class interval_set {
         { pa++;  continue; }
       if (pb->first + pb->second <= pa->first) 
         { pb++;  continue; }
+
+      if (*pa == *pb) {
+        do {
+          mi = m.insert(mi, *pa);
+          _size += pa->second;
+          ++pa;
+          ++pb;
+        } while (pa != a.m.end() && pb != b.m.end() && *pa == *pb);
+        continue;
+      }
+
       T start = MAX(pa->first, pb->first);
       T en = MIN(pa->first+pa->second, pb->first+pb->second);
       assert(en > start);
