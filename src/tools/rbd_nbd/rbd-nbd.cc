@@ -246,7 +246,7 @@ private:
       ctx->data.append_zero(pad_byte_count);
       dout(20) << __func__ << ": " << *ctx << ": Pad byte count: "
                << pad_byte_count << dendl;
-      ctx->reply.error = 0;
+      ctx->reply.error = htonl(0);
     } else {
       ctx->reply.error = htonl(0);
     }
@@ -396,7 +396,7 @@ public:
     }
   }
 
-  void stop()
+  ~NBDServer()
   {
     if (started) {
       dout(10) << __func__ << ": terminating" << dendl;
@@ -410,11 +410,6 @@ public:
 
       started = false;
     }
-  }
-
-  ~NBDServer()
-  {
-    stop();
   }
 };
 
@@ -761,8 +756,6 @@ static int do_map(int argc, const char *argv[], Config *cfg)
       unregister_async_signal_handler(SIGINT, handle_signal);
       unregister_async_signal_handler(SIGTERM, handle_signal);
       shutdown_async_signal_handler();
-      
-      server.stop();
     }
 
     r = image.update_unwatch(handle);
