@@ -27,22 +27,23 @@ class DaemonsAndImages(RemoteViewCache):
                         }
                         daemons[server['hostname']] = daemon
 
-                    image = images.get(service['id'])
+                    image_id = service['id'].split(':')[-1]
+                    image = images.get(image_id)
                     if image is None:
                         image = {
-                            'id': service['id'],
+                            'id': image_id,
                             'pool_name': metadata['pool_name'],
                             'name': metadata['image_name'],
                             'optimized_paths': [],
                             'non_optimized_paths': []
                         }
-                        if status.get('lock_owner', 'false') == 'true':
-                            daemon['optimized_paths'] += 1
-                            image['optimized_paths'].append(server['hostname'])
-                        else:
-                            daemon['non_optimized_paths'] += 1
-                            image['non_optimized_paths'].append(server['hostname'])
-                        images[service['id']] = image
+                        images[image_id] = image
+                    if status.get('lock_owner', 'false') == 'true':
+                        daemon['optimized_paths'] += 1
+                        image['optimized_paths'].append(server['hostname'])
+                    else:
+                        daemon['non_optimized_paths'] += 1
+                        image['non_optimized_paths'].append(server['hostname'])
 
         return {
             'daemons': [daemons[k] for k in sorted(daemons, key=daemons.get)],
