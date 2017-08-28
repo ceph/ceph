@@ -15,8 +15,12 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif // MIN
 
-int balance_values(int values_count, int items_count, __s64* straws, __u32* target_weights)
+int balance_values(int values_count, int items_count, __s64* original_straws, __u32* target_weights, __u32* weights)
 {
+  __s64 straws[values_count * items_count];
+  for (int i = 0; i < values_count; i++)
+    for (int j = 0; j < items_count; j++)
+      straws[i * items_count + j] = div64_s64(original_straws[i * items_count + j], weights[j]);
   // a single item is always perfectly balanced
   if (items_count < 2)
     return 0;
@@ -33,8 +37,10 @@ int balance_values(int values_count, int items_count, __s64* straws, __u32* targ
     total_expected += expected[i];
   }
   assert(values_count - total_expected < items_count);
+  for (int i = 0; i < values_count - total_expected; i++)
+    expected[i]++;
 
-  int max_iterations = 1000 + values_count;
+  int max_iterations = CRUSH_BALANCE_MAX_ITERATIONS + values_count;
   int iterations;
   for (iterations = 0; iterations < max_iterations; iterations++) {
     int delta[items_count];
@@ -46,7 +52,11 @@ int balance_values(int values_count, int items_count, __s64* straws, __u32* targ
     // that would have won the value otherwise, i.e. the second best.
     // This is the closest looser.
     double closest_loosers[items_count];
+    int closest_loosers_value[items_count];
+    __s64 closest_loosers_diff[items_count];
     double closest_winners[items_count];
+    int closest_winners_value[items_count];
+    __s64 closest_winners_diff[items_count];
     for (int j = 0; j < items_count; j++) {
       closest_loosers[j] = DBL_MAX;
       closest_winners[j] = DBL_MAX;
@@ -63,30 +73,40 @@ int balance_values(int values_count, int items_count, __s64* straws, __u32* targ
         }
       }
       int looser_item = -1;
-      __s64 winner_diff = S64_MAX; // by how much did the winner won
+      __s64 looser_straw = S64_MIN;
+      __s64 winner_diff = S64_MAX; // by how much did it win
       for (int j = 0; j < items_count; j++) {
         if (j == winner_item)
           continue;
-        __s64 maybe_winner_diff = items_straws[winner_item] - items_straws[j];
+        __s64 maybe_winner_diff = labs(items_straws[winner_item] - items_straws[j]);
         if (maybe_winner_diff < winner_diff) {
           winner_diff = maybe_winner_diff;
+          looser_straw = items_straws[j];
           looser_item = j;
         }
       }
-      double winner_ratio = (double)winner_diff / winner_straw;
-      if (closest_loosers[looser_item] > winner_ratio)
+      double winner_ratio = (double)winner_diff / labs(looser_straw);
+      if (closest_loosers[looser_item] > winner_ratio) {
         closest_loosers[looser_item] = winner_ratio;
-      if (closest_winners[winner_item] > winner_ratio)
+        closest_loosers_value[looser_item] = i;
+        closest_loosers_diff[looser_item] = winner_diff;
+      }
+      if (closest_winners[winner_item] > winner_ratio) {
         closest_winners[winner_item] = winner_ratio;
+        closest_winners_value[winner_item] = i;
+        closest_winners_diff[winner_item] = winner_diff;
+      }
 
       // negative delta is overfilled, positive is underfilled
       delta[winner_item] -= 1;
     }
 
     int highest_variance = 0;
-    for (int j = 0; j < items_count; j++)
+    for (int j = 0; j < items_count; j++) {
       highest_variance = MAX(highest_variance, abs(delta[j]));
-
+      printf("%d ", delta[j]);
+    }
+    printf("\n");
     // there is little to gain with a perfect distribution, +-1 is
     // good enough
     if (highest_variance <= 1)
@@ -125,12 +145,50 @@ int balance_values(int values_count, int items_count, __s64* straws, __u32* targ
     if (smallest_looser_item == -1 || smallest_winner_item == -1)
       break;
 
-    double modify = MIN(smallest_winner_ratio, smallest_winner_ratio); // + 1 so it wins/looses
+    double modify;
+    int change;
+    int value;
+    int item;
+    __s64 diff;
+    if (smallest_winner_ratio < smallest_looser_ratio) {
+      item = smallest_winner_item;
+      value = closest_winners_value[smallest_winner_item];
+      diff = closest_winners_diff[smallest_winner_item];
+      modify = closest_winners[smallest_winner_item];
+      change = -1; // we need to loose
+    } else {
+      item = smallest_looser_item;
+      value = closest_loosers_value[smallest_looser_item];
+      diff = closest_loosers_diff[smallest_looser_item];
+      modify = closest_loosers[smallest_looser_item];
+      change = 1; // we need to win
+    }
+
+    if (closest_winners_value[smallest_winner_item] != closest_loosers_value[smallest_looser_item]) {
+      // if they are not the same we need to check for rounding errors to make sure a value will
+      // be lost/gained where intended
+      __s64 desired_straw = straws[value] + change * diff;
+      __s64 original_straw = original_straws[value];
+      double step = 1.0 - 1 / U32_MAX;
+      do {
+        __u32 weight = weights[item] * (1.0 + change * modify);
+        __s64 straw = div64_s64(original_straw, weight);
+        if (labs(straw - desired_straw) > diff)
+          break;
+        modify *= step;
+      } while (1);
+    } else {
+      // the items switch places for this value, the winner will become the second best and the second best becomes the winner
+    }
+
+    weights[smallest_winner_item] *= 1.0 - modify;
+    weights[smallest_looser_item] *= 1.0 + modify;
 
     for (int i = 0; i < values_count; i++) {
       __s64* items_straws = straws + items_count * i;
-      items_straws[smallest_winner_item] *= 1.0 - modify;
-      items_straws[smallest_looser_item] *= 1.0 + modify;
+      __s64* items_original_straws = original_straws + items_count * i;
+      items_straws[smallest_winner_item] = div64_s64(items_original_straws[smallest_winner_item], weights[smallest_winner_item]);
+      items_straws[smallest_looser_item] = div64_s64(items_original_straws[smallest_looser_item], weights[smallest_looser_item]);
     }
   }
   return iterations;
