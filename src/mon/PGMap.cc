@@ -1186,8 +1186,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     last_osdmap_epoch = inc.osdmap_epoch;
   if (inc.pg_scan)
     last_pg_scan = inc.pg_scan;
-
-  min_last_epoch_clean = 0;  // invalidate
 }
 
 void PGMap::calc_stats()
@@ -1213,41 +1211,25 @@ void PGMap::calc_stats()
        p != osd_stat.end();
        ++p)
     stat_osd_add(p->first, p->second);
-
-  min_last_epoch_clean = calc_min_last_epoch_clean();
 }
 
 void PGMap::update_pg(pg_t pgid, bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
   auto s = pg_stat.find(pgid);
-  epoch_t old_lec = 0, lec;
   if (s != pg_stat.end()) {
-    old_lec = s->second.get_effective_last_epoch_clean();
     stat_pg_update(pgid, s->second, p);
-    lec = s->second.get_effective_last_epoch_clean();
   } else {
     pg_stat_t& r = pg_stat[pgid];
     ::decode(r, p);
     stat_pg_add(pgid, r);
-    lec = r.get_effective_last_epoch_clean();
   }
-
-  if (min_last_epoch_clean &&
-      (lec < min_last_epoch_clean ||  // we did
-       (lec > min_last_epoch_clean && // we might
-        old_lec == min_last_epoch_clean)
-      ))
-    min_last_epoch_clean = 0;
 }
 
 void PGMap::remove_pg(pg_t pgid)
 {
   auto s = pg_stat.find(pgid);
   if (s != pg_stat.end()) {
-    if (min_last_epoch_clean &&
-        s->second.get_effective_last_epoch_clean() == min_last_epoch_clean)
-      min_last_epoch_clean = 0;
     stat_pg_sub(pgid, s->second);
     pg_stat.erase(s);
   }
@@ -1269,18 +1251,8 @@ void PGMap::update_osd(int osd, bufferlist& bl)
   stat_osd_add(osd, r);
 
   // epoch?
-  if (!p.end()) {
-    epoch_t e;
-    ::decode(e, p);
-
-    if (e < min_last_epoch_clean ||
-        (e > min_last_epoch_clean &&
-         old_lec == min_last_epoch_clean))
-      min_last_epoch_clean = 0;
-  } else {
-    // WARNING: we are not refreshing min_last_epoch_clean!  must be old store
-    // or old mon running.
-  }
+  epoch_t e;
+  ::decode(e, p);
 }
 
 void PGMap::remove_osd(int osd)
@@ -1458,29 +1430,6 @@ void PGMap::stat_osd_sub(int osd, const osd_stat_t &s)
   osd_last_seq[osd] = 0;
 }
 
-epoch_t PGMap::calc_min_last_epoch_clean() const
-{
-  if (pg_stat.empty())
-    return 0;
-
-  auto p = pg_stat.begin();
-  epoch_t min = p->second.get_effective_last_epoch_clean();
-  for (++p; p != pg_stat.end(); ++p) {
-    epoch_t lec = p->second.get_effective_last_epoch_clean();
-    if (lec < min)
-      min = lec;
-  }
-  // also scan osd epochs
-  // don't trim past the oldest reported osd epoch
-  for (auto i = osd_epochs.begin();
-       i != osd_epochs.end();
-       ++i) {
-    if (i->second < min)
-      min = i->second;
-  }
-  return min;
-}
-
 void PGMap::encode_digest(const OSDMap& osdmap,
 			  bufferlist& bl, uint64_t features) const
 {
@@ -1577,7 +1526,6 @@ void PGMap::dump_basic(Formatter *f) const
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("last_osdmap_epoch", last_osdmap_epoch);
   f->dump_unsigned("last_pg_scan", last_pg_scan);
-  f->dump_unsigned("min_last_epoch_clean", min_last_epoch_clean);
 
   f->open_object_section("pg_stats_sum");
   pg_sum.dump(f);
