@@ -370,6 +370,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS);
   return compat;
 }
 
@@ -2078,6 +2079,13 @@ void Monitor::apply_monmap_to_compatset_features()
     assert(HAVE_FEATURE(quorum_con_features, SERVER_KRAKEN));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_LUMINOUS)) {
+    assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_LUMINOUS));
+    // this feature should only ever be set if the quorum supports it.
+    assert(HAVE_FEATURE(quorum_con_features, SERVER_LUMINOUS));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2102,6 +2110,9 @@ void Monitor::calc_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_KRAKEN)) {
     required_features |= CEPH_FEATUREMASK_SERVER_KRAKEN;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_LUMINOUS;
   }
 
   // monmap
