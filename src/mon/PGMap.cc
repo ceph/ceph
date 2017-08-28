@@ -1116,49 +1116,6 @@ void PGMap::calc_stats()
     stat_osd_add(p->first, p->second);
 }
 
-void PGMap::update_pg(pg_t pgid, bufferlist& bl)
-{
-  bufferlist::iterator p = bl.begin();
-  auto s = pg_stat.find(pgid);
-  if (s != pg_stat.end()) {
-    stat_pg_update(pgid, s->second, p);
-  } else {
-    pg_stat_t& r = pg_stat[pgid];
-    ::decode(r, p);
-    stat_pg_add(pgid, r);
-  }
-}
-
-void PGMap::remove_pg(pg_t pgid)
-{
-  auto s = pg_stat.find(pgid);
-  if (s != pg_stat.end()) {
-    stat_pg_sub(pgid, s->second);
-    pg_stat.erase(s);
-  }
-}
-
-void PGMap::update_osd(int osd, bufferlist& bl)
-{
-  bufferlist::iterator p = bl.begin();
-  auto o = osd_stat.find(osd);
-  if (o != osd_stat.end()) {
-    stat_osd_sub(osd, o->second);
-  }
-  osd_stat_t& r = osd_stat[osd];
-  ::decode(r, p);
-  stat_osd_add(osd, r);
-}
-
-void PGMap::remove_osd(int osd)
-{
-  auto o = osd_stat.find(osd);
-  if (o != osd_stat.end()) {
-    stat_osd_sub(osd, o->second);
-    osd_stat.erase(o);
-  }
-}
-
 void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
                         bool sameosds)
 {
@@ -1282,29 +1239,6 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
     if (it != num_pg_by_osd.end() && it->second.primary > 0)
       it->second.primary--;
   }
-}
-
-void PGMap::stat_pg_update(const pg_t pgid, pg_stat_t& s,
-                           bufferlist::iterator& blp)
-{
-  pg_stat_t n;
-  ::decode(n, blp);
-
-  bool sameosds =
-    s.acting == n.acting &&
-    s.up == n.up &&
-    s.blocked_by == n.blocked_by;
-
-  stat_pg_sub(pgid, s, sameosds);
-
-  // if acting_primary has shift to an just restored osd, and pg yet to finish
-  // peering, many attributes in current stats remain stale. others seem don't
-  // mater much while faulty last_active will make "pg stuck in" check unhappy.
-  if (!(n.state & (PG_STATE_ACTIVE | PG_STATE_PEERED)) &&
-      n.last_active < s.last_active)
-    n.last_active = s.last_active;
-  s = n;
-  stat_pg_add(pgid, n, sameosds);
 }
 
 void PGMap::stat_osd_add(int osd, const osd_stat_t &s)
