@@ -1162,19 +1162,6 @@ void OSDMap::count_full_nearfull_osds(int *full, int *backfill, int *nearfull) c
   }
 }
 
-static bool get_osd_utilization(
-  const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &osd_stat,
-  int id, int64_t* kb, int64_t* kb_used, int64_t* kb_avail)
-{
-  auto p = osd_stat.find(id);
-  if (p == osd_stat.end())
-    return false;
-  *kb = p->second.kb;
-  *kb_used = p->second.kb_used;
-  *kb_avail = p->second.kb_avail;
-  return *kb > 0;
-}
-
 void OSDMap::get_full_osd_counts(set<int> *full, set<int> *backfill,
 				 set<int> *nearfull) const
 {
