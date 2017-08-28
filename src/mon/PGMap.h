@@ -412,6 +412,18 @@ public:
     return pool_stat_t();
   }
 
+  const osd_stat_t& get_osd_sum() const {
+    return osd_sum;
+  }
+
+  const osd_stat_t *get_osd_stat(int osd) const {
+    auto i = osd_stat.find(osd);
+    if (i == osd_stat.end()) {
+      return nullptr;
+    }
+    return &i->second;
+  }
+
 
   void update_pg(pg_t pgid, bufferlist& bl);
   void remove_pg(pg_t pgid);
@@ -589,93 +601,5 @@ namespace reweight {
 		     std::string *out_str,
 		     Formatter *f);
 }
-
-
-class PGMapStatService : virtual public PGStatService {
-protected:
-  const PGMap& pgmap;
-public:
-  PGMapStatService(const PGMap& o)
-    : pgmap(o) {}
-
-  bool is_readable() const override { return true; }
-
-  const pool_stat_t* get_pool_stat(int64_t poolid) const override {
-    auto i = pgmap.pg_pool_sum.find(poolid);
-    if (i != pgmap.pg_pool_sum.end()) {
-      return &i->second;
-    }
-    return nullptr;
-  }
-
-  const osd_stat_t& get_osd_sum() const override { return pgmap.osd_sum; }
-
-  const osd_stat_t *get_osd_stat(int osd) const override {
-    auto i = pgmap.osd_stat.find(osd);
-    if (i == pgmap.osd_stat.end()) {
-      return nullptr;
-    }
-    return &i->second;
-  }
-  const mempool::pgmap::unordered_map<int32_t,osd_stat_t>& get_osd_stat() const override {
-    return pgmap.osd_stat;
-  }
-  float get_full_ratio() const override { return pgmap.full_ratio; }
-  float get_nearfull_ratio() const override { return pgmap.nearfull_ratio; }
-
-  bool have_creating_pgs() const override {
-    return !pgmap.creating_pgs.empty();
-  }
-  bool is_creating_pg(pg_t pgid) const override {
-    return pgmap.creating_pgs.count(pgid);
-  }
-
-  epoch_t get_min_last_epoch_clean() const override {
-    return pgmap.get_min_last_epoch_clean();
-  }
-
-  bool have_full_osds() const override { return !pgmap.full_osds.empty(); }
-  bool have_nearfull_osds() const override {
-    return !pgmap.nearfull_osds.empty();
-  }
-
-  size_t get_num_pg_by_osd(int osd) const override {
-    return pgmap.get_num_pg_by_osd(osd);
-  }
-  ceph_statfs get_statfs(OSDMap& osd_map,
-			 boost::optional<int64_t> data_pool) const override {
-    ceph_statfs statfs;
-    statfs.kb = pgmap.osd_sum.kb;
-    statfs.kb_used = pgmap.osd_sum.kb_used;
-    statfs.kb_avail = pgmap.osd_sum.kb_avail;
-    statfs.num_objects = pgmap.pg_sum.stats.sum.num_objects;
-    return statfs;
-  }
-  void print_summary(Formatter *f, ostream *out) const override {
-    pgmap.print_summary(f, out);
-  }
-  virtual void dump_info(Formatter *f) const override {
-    f->dump_object("pgmap", pgmap);
-  }
-  void dump_fs_stats(stringstream *ss,
-		     Formatter *f,
-		     bool verbose) const override {
-    pgmap.dump_fs_stats(ss, f, verbose);
-  }
-  void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
-		       bool verbose) const override {
-    pgmap.dump_pool_stats_full(osdm, ss, f, verbose);
-  }
-
-  int process_pg_command(const string& prefix,
-			 const map<string,cmd_vartype>& cmdmap,
-			 const OSDMap& osdmap,
-			 Formatter *f,
-			 stringstream *ss,
-			 bufferlist *odata) const override {
-    return process_pg_map_command(prefix, cmdmap, pgmap, osdmap, f, ss, odata);
-  }
-};
-
 
 #endif

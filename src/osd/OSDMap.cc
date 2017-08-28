@@ -30,8 +30,8 @@
 
 #include "crush/CrushTreeDumper.h"
 #include "common/Clock.h"
-#include "mon/PGStatService.h"
- 
+#include "mon/PGMap.h"
+
 #define dout_subsys ceph_subsys_osd
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMap, osdmap, osdmap);
@@ -3968,10 +3968,10 @@ public:
   typedef CrushTreeDumper::Dumper<F> Parent;
 
   OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
-		       const PGStatService *pgs_, bool tree_) :
+		       const PGMap& pgmap_, bool tree_) :
     Parent(crush, osdmap_->get_pool_names()),
     osdmap(osdmap_),
-    pgs(pgs_),
+    pgmap(pgmap_),
     tree(tree_),
     average_util(average_utilization()),
     min_var(-1),
@@ -4003,7 +4003,7 @@ protected:
     if (average_util)
       var = util / average_util;
 
-    size_t num_pgs = qi.is_bucket() ? 0 : pgs->get_num_pg_by_osd(qi.id);
+    size_t num_pgs = qi.is_bucket() ? 0 : pgmap.get_num_pg_by_osd(qi.id);
 
     dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, num_pgs, f);
 
@@ -4050,7 +4050,7 @@ protected:
 
   bool get_osd_utilization(int id, int64_t* kb, int64_t* kb_used,
 			   int64_t* kb_avail) const {
-    const osd_stat_t *p = pgs->get_osd_stat(id);
+    const osd_stat_t *p = pgmap.get_osd_stat(id);
     if (!p) return false;
     *kb = p->kb;
     *kb_used = p->kb_used;
@@ -4088,7 +4088,7 @@ protected:
 
 protected:
   const OSDMap *osdmap;
-  const PGStatService *pgs;
+  const PGMap& pgmap;
   bool tree;
   double average_util;
   double min_var;
@@ -4103,8 +4103,8 @@ public:
   typedef OSDUtilizationDumper<TextTable> Parent;
 
   OSDUtilizationPlainDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-		     const PGStatService *pgs, bool tree) :
-    Parent(crush, osdmap, pgs, tree) {}
+			    const PGMap& pgmap, bool tree) :
+    Parent(crush, osdmap, pgmap, tree) {}
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
@@ -4127,9 +4127,9 @@ public:
     *tbl << ""
 	 << ""
 	 << "" << "TOTAL"
-	 << si_t(pgs->get_osd_sum().kb << 10)
-	 << si_t(pgs->get_osd_sum().kb_used << 10)
-	 << si_t(pgs->get_osd_sum().kb_avail << 10)
+	 << si_t(pgmap.get_osd_sum().kb << 10)
+	 << si_t(pgmap.get_osd_sum().kb_used << 10)
+	 << si_t(pgmap.get_osd_sum().kb_avail << 10)
 	 << lowprecision_t(average_util)
 	 << ""
 	 << TextTable::endrow;
@@ -4216,8 +4216,8 @@ public:
   typedef OSDUtilizationDumper<Formatter> Parent;
 
   OSDUtilizationFormatDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-			     const PGStatService *pgs, bool tree) :
-    Parent(crush, osdmap, pgs, tree) {}
+			     const PGMap& pgmap, bool tree) :
+    Parent(crush, osdmap, pgmap, tree) {}
 
   void dump(Formatter *f) {
     f->open_array_section("nodes");
@@ -4256,9 +4256,9 @@ protected:
 public:
   void summary(Formatter *f) {
     f->open_object_section("summary");
-    f->dump_int("total_kb", pgs->get_osd_sum().kb);
-    f->dump_int("total_kb_used", pgs->get_osd_sum().kb_used);
-    f->dump_int("total_kb_avail", pgs->get_osd_sum().kb_avail);
+    f->dump_int("total_kb", pgmap.get_osd_sum().kb);
+    f->dump_int("total_kb_used", pgmap.get_osd_sum().kb_used);
+    f->dump_int("total_kb_avail", pgmap.get_osd_sum().kb_avail);
     f->dump_float("average_utilization", average_util);
     f->dump_float("min_var", min_var);
     f->dump_float("max_var", max_var);
@@ -4268,7 +4268,7 @@ public:
 };
 
 void print_osd_utilization(const OSDMap& osdmap,
-			   const PGStatService *pgstat,
+			   const PGMap& pgmap,
 			   ostream& out,
 			   Formatter *f,
 			   bool tree)
@@ -4276,13 +4276,13 @@ void print_osd_utilization(const OSDMap& osdmap,
   const CrushWrapper *crush = osdmap.crush.get();
   if (f) {
     f->open_object_section("df");
-    OSDUtilizationFormatDumper d(crush, &osdmap, pgstat, tree);
+    OSDUtilizationFormatDumper d(crush, &osdmap, pgmap, tree);
     d.dump(f);
     d.summary(f);
     f->close_section();
     f->flush(out);
   } else {
-    OSDUtilizationPlainDumper d(crush, &osdmap, pgstat, tree);
+    OSDUtilizationPlainDumper d(crush, &osdmap, pgmap, tree);
     TextTable tbl;
     d.dump(&tbl);
     out << tbl << d.summary() << "\n";
