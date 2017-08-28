@@ -3393,10 +3393,12 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   // build dir contents
   bufferlist dnbl;
   __u32 numfiles = 0;
-  bool end = (dir->begin() == dir->end());
-  for (CDir::map_t::iterator it = dir->begin();
-       !end && numfiles < max;
-       end = (it == dir->end())) {
+  bool start = !offset_hash && offset_str.empty();
+  // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
+  dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
+  auto it = start ? dir->begin() : dir->lower_bound(skip_key);
+  bool end = (it == dir->end());
+  for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;
     ++it;
 
