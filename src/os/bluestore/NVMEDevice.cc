@@ -72,16 +72,11 @@ enum {
 
 static void io_complete(void *t, const struct spdk_nvme_cpl *completion);
 
-int dpdk_thread_adaptor(void *f)
+static int dpdk_thread_adaptor(void *f)
 {
   (*static_cast<std::function<void ()>*>(f))();
   return 0;
 }
-
-struct IOSegment {
-  uint32_t len;
-  void *addr;
-};
 
 struct IORequest {
   uint16_t cur_seg_idx = 0;
@@ -91,6 +86,7 @@ struct IORequest {
   void **extra_segs = nullptr;
 };
 
+struct Task;
 class SharedDriverQueueData {
   SharedDriverData *driver;
   spdk_nvme_ctrlr *ctrlr;
@@ -871,9 +867,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
 
 NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
   :   BlockDevice(cct, cb, cbpriv),
-      driver(nullptr),
-      aio_stop(false),
-      buffer_lock("NVMEDevice::buffer_lock")
+      driver(nullptr)
 {
 }
 
