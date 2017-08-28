@@ -37,7 +37,7 @@ class Module(MgrModule):
         df = self.get("df")
         data = []
 
-        df_type = [
+        df_types = [
             'bytes_used',
             'dirty',
             'rd_bytes',
@@ -47,7 +47,7 @@ class Module(MgrModule):
             'max_avail'
         ]
 
-        for df_type in df_type:
+        for df_type in df_types:
             for pool in df['pools']:
                 point = {
                     "measurement": "ceph_pool_stats",
@@ -67,7 +67,7 @@ class Module(MgrModule):
 
 
     def get_default_stat(self):
-        default= [
+        defaults= [ 
             "op_w",
             "op_in_bytes",
             "op_r",
@@ -76,13 +76,13 @@ class Module(MgrModule):
 
         osd_data = []
         cluster_data = []
-        for default in default:
-            osdmap = self.get("osd_map")
+        for default in defaults:
+            osdmap = self.get("osd_map")['osds']
             value = 0
-            for osd in osdmap['osds']:
+            for osd in osdmap:
                 osd_id = osd['osd']
                 metadata = self.get_metadata('osd', "%s" % osd_id)
-                value += self.get_latest("osd", osd_id.__str__(), "osd."+ default.__str__())
+                value += self.get_latest("osd", str(osd_id), "osd."+ str(default))
                 point = {
                     "measurement": "ceph_osd_stats",
                     "tags": {
@@ -162,9 +162,9 @@ class Module(MgrModule):
         port = int(config.get('influx','port'))
         stats = config.get('influx', 'stats').replace(' ', '').split(',')
         client = InfluxDBClient(host, port, username, password, database) 
-        database_avail = client.get_list_database()
+        databases_avail = client.get_list_database()
         default_stats = self.get_default_stat()
-        for database_avail in database_avail:
+        for database_avail in databases_avail:
             if database_avail == database: 
                 break
             else: 
@@ -172,26 +172,28 @@ class Module(MgrModule):
 
         
 
-        for stats in stats:
-            if stats == "pool": 
+        for stat in stats:
+            if stat == "pool": 
                 client.write_points(self.get_df_stats(), 'ms')
 
-            elif stats == "osd":
+            elif stat == "osd":
                 client.write_points(default_stats[0], 'ms')
                 if config.has_option('extended', 'osd'):
-                    osd = config.get('extended', 'osd').replace(' ', '').split(',')
-                    for osd in osd:
+                    osds = config.get('extended', 'osd').replace(' ', '').split(',')
+                    for osd in osds:
                         client.write_points(self.get_extended("osd", osd), 'ms')
                 self.log.debug("wrote osd stats")
 
-            elif stats == "cluster": 
+            elif stat == "cluster": 
                 client.write_points(default_stats[-1], 'ms')
                 if config.has_option('extended', 'cluster'):
-                    cluster = config.get('extended', 'cluster').replace(' ', '').split(',')
-                    for cluster in cluster:
+                    clusters = config.get('extended', 'cluster').replace(' ', '').split(',')
+                    for cluster in clusters:
                         client.write_points(self.get_extended("cluster", cluster), 'ms')
                 self.log.debug("wrote cluster stats")
-    
+            else:
+                self.log.error("invalid stat")
+
     def shutdown(self):
         self.log.info('Stopping influx module')
         self.run = False
@@ -202,7 +204,7 @@ class Module(MgrModule):
             self.send_to_influx()
             return 0,' ', 'debugging module'
         else:
-            print 'not found'
+            print('not found')
             raise NotImplementedError(cmd['prefix'])
 
     def serve(self):
