@@ -51,6 +51,24 @@ class Prepare(object):
     def __init__(self, argv):
         self.argv = argv
 
+    def get_journal_pv(self, argument):
+        # it is safe to get the pv by its name
+        device = api.get_pv(pv_name=argument)
+        if device:
+            # means this has an existing uuid, so we can use it without
+            # recreating it
+            if device.pv_uuid:
+                return device
+            # otherwise, we need to create it as a 'pv', ask back again for it
+            # as a pv, and return that
+            api.create_pv(argument)
+            return api.get_pv(pv_name=argument)
+        # if we get to this point, this should be a red flag, `prepare` probably is
+        # out of options to use anything so raise an error
+        raise RuntimeError(
+            '--journal specified an invalid or non-existent device: %s' % argument
+        )
+
     def get_journal_lv(self, argument):
         """
         Perform some parsing of the value of ``--journal`` so that the process
@@ -88,28 +106,30 @@ class Prepare(object):
 
             if not args.journal:
                 raise RuntimeError('--journal is required when using --filestore')
-            journal_device = None
-            journal_lv = self.get_journal_lv(args.journal)
 
-            # check if we have an actual path to a device, which is allowed
-            if not journal_lv:
-                if os.path.exists(args.journal):
-                    journal_device = args.journal
-                else:
-                    raise RuntimeError(
-                        '--journal specified an invalid or non-existent device: %s' % args.journal
-                    )
-            # Otherwise the journal_device is the path to the lv
-            else:
+            journal_lv = self.get_journal_lv(args.journal)
+            if journal_lv:
                 journal_device = journal_lv.lv_path
+                journal_uuid = journal_lv.lv_uuid
+                # we can only set tags on an lv, the pv (if any) can't as we
+                # aren't making it part of an lvm group (vg)
                 journal_lv.set_tags({
                     'ceph.type': 'journal',
                     'ceph.osd_fsid': fsid,
                     'ceph.osd_id': osd_id,
                     'ceph.cluster_fsid': cluster_fsid,
                     'ceph.journal_device': journal_device,
+                    'ceph.journal_uuid': journal_uuid,
                     'ceph.data_device': data_lv.lv_path,
+                    'ceph.data_uuid': data_lv.lv_uuid,
                 })
+
+            # otherwise assume this is a regular disk, that will need to be
+            # created as a 'pv'
+            else:
+                journal_pv = self.get_journal_pv(args.journal)
+                journal_device = journal_pv.pv_name
+                journal_uuid = journal_pv.pv_uuid
 
             data_lv.set_tags({
                 'ceph.type': 'data',
@@ -117,7 +137,9 @@ class Prepare(object):
                 'ceph.osd_id': osd_id,
                 'ceph.cluster_fsid': cluster_fsid,
                 'ceph.journal_device': journal_device,
+                'ceph.journal_uuid': journal_uuid,
                 'ceph.data_device': data_lv.lv_path,
+                'ceph.data_uuid': data_lv.lv_uuid,
             })
 
             prepare_filestore(
