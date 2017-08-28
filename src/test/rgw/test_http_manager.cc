@@ -38,8 +38,8 @@ TEST(HTTPManager, SignalThread)
   constexpr size_t num_requests = max_requests + 1;
 
   for (size_t i = 0; i < num_requests; i++) {
-    RGWHTTPClient client{cct};
-    http.add_request(&client, "PUT", "http://127.0.0.1:80");
+    RGWHTTPClient client{cct, "PUT", "http://127.0.0.1:80"};
+    http.add_request(&client);
   }
 }
 

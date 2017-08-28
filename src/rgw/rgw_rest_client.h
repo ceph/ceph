@@ -67,25 +67,6 @@ public:
 };
 
 
-class RGWRESTStreamWriteRequest : public RGWRESTSimpleRequest {
-  Mutex lock;
-  list<bufferlist> pending_send;
-  RGWGetDataCB *cb;
-  RGWHTTPManager http_manager;
-public:
-  int add_output_data(bufferlist& bl);
-  int send_data(void *ptr, size_t len) override;
-
-  RGWRESTStreamWriteRequest(CephContext *_cct, const string& _method, const string& _url, param_vec_t *_headers,
-		param_vec_t *_params) : RGWRESTSimpleRequest(_cct, _method, _url, _headers, _params),
-                lock("RGWRESTStreamWriteRequest"), cb(NULL), http_manager(_cct) {}
-  ~RGWRESTStreamWriteRequest() override;
-  int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs);
-  int complete(string& etag, real_time *mtime);
-
-  RGWGetDataCB *get_out_cb() { return cb; }
-};
-
 class RGWHTTPStreamRWRequest : public RGWHTTPSimpleRequest {
   Mutex lock;
   Mutex write_lock;
@@ -125,15 +106,13 @@ public:
 };
 
 class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
-  RGWHTTPManager http_manager;
 public:
   RGWRESTStreamRWRequest(CephContext *_cct, const string& _method, const string& _url, RGWGetDataCB *_cb,
-		param_vec_t *_headers, param_vec_t *_params) : RGWHTTPStreamRWRequest(_cct, _method, _url, _cb, _headers, _params),
-                http_manager(_cct) {
+		param_vec_t *_headers, param_vec_t *_params) : RGWHTTPStreamRWRequest(_cct, _method, _url, _cb, _headers, _params) {
   }
   virtual ~RGWRESTStreamRWRequest() override {}
-  int send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr = NULL);
-  int send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = NULL /* optional input data */, RGWHTTPManager *mgr = NULL);
+  int send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr);
+  int send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr, bufferlist *send_data = nullptr /* optional input data */);
   int complete_request(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs);
 };
 
@@ -147,6 +126,18 @@ class RGWRESTStreamHeadRequest : public RGWRESTStreamRWRequest {
 public:
   RGWRESTStreamHeadRequest(CephContext *_cct, const string& _url, RGWGetDataCB *_cb, param_vec_t *_headers,
 		param_vec_t *_params) : RGWRESTStreamRWRequest(_cct, "HEAD", _url, _cb, _headers, _params) {}
+};
+
+class RGWRESTStreamS3PutObj : public RGWRESTStreamRWRequest {
+  RGWGetDataCB *out_cb;
+public:
+  RGWRESTStreamS3PutObj(CephContext *_cct, const string& _method, const string& _url, param_vec_t *_headers,
+		param_vec_t *_params) : RGWRESTStreamRWRequest(_cct, _method, _url, nullptr, _headers, _params),
+                out_cb(NULL) {}
+  ~RGWRESTStreamS3PutObj() override;
+  int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs);
+
+  RGWGetDataCB *get_out_cb() { return out_cb; }
 };
 
 #endif

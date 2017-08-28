@@ -23,8 +23,12 @@
 
 RGWHTTPManager *rgw_http_manager;
 
+struct RGWCurlHandle;
+
+static void do_curl_easy_cleanup(RGWCurlHandle *curl_handle);
+
 struct rgw_http_req_data : public RefCountedObject {
-  CURL *easy_handle{nullptr};
+  RGWCurlHandle *curl_handle{nullptr};
   curl_slist *h{nullptr};
   uint64_t id;
   int ret{0};
@@ -64,7 +68,7 @@ struct rgw_http_req_data : public RefCountedObject {
         /* shouldn't really be here */
         return;
     }
-    rc = curl_easy_pause(easy_handle, bitmask);
+    rc = curl_easy_pause(**curl_handle, bitmask);
     if (rc != CURLE_OK) {
       dout(0) << "ERROR: curl_easy_pause() returned rc=" << rc << dendl;
     }
@@ -74,13 +78,13 @@ struct rgw_http_req_data : public RefCountedObject {
   void finish(int r) {
     Mutex::Locker l(lock);
     ret = r;
-    if (easy_handle)
-      curl_easy_cleanup(easy_handle);
+    if (curl_handle)
+      do_curl_easy_cleanup(curl_handle);
 
     if (h)
       curl_slist_free_all(h);
 
-    easy_handle = NULL;
+    curl_handle = NULL;
     h = NULL;
     done = true;
     cond.Signal();
@@ -99,6 +103,8 @@ struct rgw_http_req_data : public RefCountedObject {
     Mutex::Locker l(lock);
     return mgr;
   }
+
+  CURL *get_easy_handle() const;
 };
 
 struct RGWCurlHandle {
@@ -111,6 +117,16 @@ struct RGWCurlHandle {
     return this->h;
   }
 };
+
+void rgw_http_req_data::set_state(int bitmask) {
+  /* no need to lock here, moreover curl_easy_pause() might trigger
+   * the data receive callback :/
+   */
+  CURLcode rc = curl_easy_pause(**curl_handle, bitmask);
+  if (rc != CURLE_OK) {
+    dout(0) << "ERROR: curl_easy_pause() returned rc=" << rc << dendl;
+  }
+}
 
 #define MAXIDLE 5
 class RGWCurlHandles : public Thread {
@@ -214,7 +230,23 @@ void RGWCurlHandles::flush_curl_handles()
   saved_curl.shrink_to_fit();
 }
 
+CURL *rgw_http_req_data::get_easy_handle() const
+{
+  return **curl_handle;
+}
+
 static RGWCurlHandles *handles;
+
+static RGWCurlHandle *do_curl_easy_init()
+{
+  return handles->get_curl_handle();
+}
+
+static void do_curl_easy_cleanup(RGWCurlHandle *curl_handle)
+{
+  handles->release_curl_handle(curl_handle);
+}
+
 // XXX make this part of the token cache?  (but that's swift-only;
 //	and this especially needs to integrates with s3...)
 
@@ -422,59 +454,11 @@ static bool is_upload_request(const string& method)
 }
 
 /*
- * process a single simple one off request, not going through RGWHTTPManager. Not using
- * req_data.
+ * process a single simple one off request
  */
 int RGWHTTPClient::process()
 {
-  int ret = 0;
-  CURL *curl_handle;
-
-  char error_buf[CURL_ERROR_SIZE];
-
-  auto ca = handles->get_curl_handle();
-  curl_handle = **ca;
-
-  dout(20) << "sending request to " << url << dendl;
-
-  curl_slist *h = headers_to_slist(headers);
-
-  curl_easy_setopt(curl_handle, CURLOPT_CUSTOMREQUEST, method.c_str());
-  curl_easy_setopt(curl_handle, CURLOPT_URL, url.c_str());
-  curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
-  curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1L);
-  curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, simple_receive_http_header);
-  curl_easy_setopt(curl_handle, CURLOPT_WRITEHEADER, (void *)this);
-  curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, simple_receive_http_data);
-  curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)this);
-  curl_easy_setopt(curl_handle, CURLOPT_ERRORBUFFER, (void *)error_buf);
-  if (h) {
-    curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, (void *)h);
-  }
-  curl_easy_setopt(curl_handle, CURLOPT_READFUNCTION, simple_send_http_data);
-  curl_easy_setopt(curl_handle, CURLOPT_READDATA, (void *)this);
-  if (is_upload_request(method)) {
-    curl_easy_setopt(curl_handle, CURLOPT_UPLOAD, 1L);
-  }
-  if (has_send_len) {
-    curl_easy_setopt(curl_handle, CURLOPT_INFILESIZE, (void *)send_len); 
-  }
-  if (!verify_ssl) {
-    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0L);
-    dout(20) << "ssl verification is set to off" << dendl;
-  }
-
-  CURLcode status = curl_easy_perform(curl_handle);
-  if (status) {
-    dout(0) << "curl_easy_perform returned status " << status << " error: " << error_buf << dendl;
-    ret = -EINVAL;
-  }
-  curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &http_status);
-  handles->release_curl_handle(ca);
-  curl_slist_free_all(h);
-
-  return ret;
+  return RGWHTTP::process(this);
 }
 
 string RGWHTTPClient::to_str()
@@ -502,11 +486,9 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data, bool send_data_hin
   _req_data->get();
   req_data = _req_data;
 
-  CURL *easy_handle;
+  req_data->curl_handle = do_curl_easy_init();
 
-  easy_handle = curl_easy_init();
-
-  req_data->easy_handle = easy_handle;
+  CURL *easy_handle = req_data->get_easy_handle();
 
   dout(20) << "sending request to " << url << dendl;
 
@@ -806,7 +788,7 @@ void RGWHTTPManager::register_request(rgw_http_req_data *req_data)
   req_data->registered = true;
   reqs[num_reqs] = req_data;
   num_reqs++;
-  ldout(cct, 20) << __func__ << " mgr=" << this << " req_data->id=" << req_data->id << ", easy_handle=" << req_data->easy_handle << dendl;
+  ldout(cct, 20) << __func__ << " mgr=" << this << " req_data->id=" << req_data->id << ", curl_handle=" << req_data->curl_handle << dendl;
 }
 
 void RGWHTTPManager::unregister_request(rgw_http_req_data *req_data)
@@ -815,7 +797,7 @@ void RGWHTTPManager::unregister_request(rgw_http_req_data *req_data)
   req_data->get();
   req_data->registered = false;
   unregistered_reqs.push_back(req_data);
-  ldout(cct, 20) << __func__ << " mgr=" << this << " req_data->id=" << req_data->id << ", easy_handle=" << req_data->easy_handle << dendl;
+  ldout(cct, 20) << __func__ << " mgr=" << this << " req_data->id=" << req_data->id << ", curl_handle=" << req_data->curl_handle << dendl;
 }
 
 void RGWHTTPManager::complete_request(rgw_http_req_data *req_data)
@@ -862,8 +844,8 @@ void RGWHTTPManager::_set_req_state(set_state& ss)
  */
 int RGWHTTPManager::link_request(rgw_http_req_data *req_data)
 {
-  ldout(cct, 20) << __func__ << " req_data=" << req_data << " req_data->id=" << req_data->id << ", easy_handle=" << req_data->easy_handle << dendl;
-  CURLMcode mstatus = curl_multi_add_handle((CURLM *)multi_handle, req_data->easy_handle);
+  ldout(cct, 20) << __func__ << " req_data=" << req_data << " req_data->id=" << req_data->id << ", curl_handle=" << req_data->curl_handle << dendl;
+  CURLMcode mstatus = curl_multi_add_handle((CURLM *)multi_handle, req_data->get_easy_handle());
   if (mstatus) {
     dout(0) << "ERROR: failed on curl_multi_add_handle, status=" << mstatus << dendl;
     return -EIO;
@@ -877,8 +859,8 @@ int RGWHTTPManager::link_request(rgw_http_req_data *req_data)
  */
 void RGWHTTPManager::_unlink_request(rgw_http_req_data *req_data)
 {
-  if (req_data->easy_handle) {
-    curl_multi_remove_handle((CURLM *)multi_handle, req_data->easy_handle);
+  if (req_data->curl_handle) {
+    curl_multi_remove_handle((CURLM *)multi_handle, req_data->get_easy_handle());
   }
   if (!req_data->is_done()) {
     _finish_request(req_data, -ECANCELED);
@@ -1029,77 +1011,6 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
   }
 
   return 0;
-}
-
-/*
- * the synchronous, non-threaded request processing method.
- */
-int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
-{
-  assert(!is_threaded);
-
-  int still_running;
-  int mstatus;
-
-  do {
-    if (wait_for_data) {
-      int ret = do_curl_wait(cct, (CURLM *)multi_handle, -1);
-      if (ret < 0) {
-        return ret;
-      }
-    }
-
-    mstatus = curl_multi_perform((CURLM *)multi_handle, &still_running);
-    switch (mstatus) {
-      case CURLM_OK:
-      case CURLM_CALL_MULTI_PERFORM:
-        break;
-      default:
-        dout(20) << "curl_multi_perform returned: " << mstatus << dendl;
-        return -EINVAL;
-    }
-    int msgs_left;
-    CURLMsg *msg;
-    while ((msg = curl_multi_info_read((CURLM *)multi_handle, &msgs_left))) {
-      if (msg->msg == CURLMSG_DONE) {
-	CURL *e = msg->easy_handle;
-	rgw_http_req_data *req_data;
-	curl_easy_getinfo(e, CURLINFO_PRIVATE, (void **)&req_data);
-
-	long http_status;
-	curl_easy_getinfo(e, CURLINFO_RESPONSE_CODE, (void **)&http_status);
-
-	int status = rgw_http_error_to_errno(http_status);
-	int result = msg->data.result;
-	finish_request(req_data, status);
-        switch (result) {
-          case CURLE_OK:
-            break;
-          default:
-            dout(20) << "ERROR: msg->data.result=" << result << dendl;
-            return -EIO;
-        }
-      }
-    }
-  } while (mstatus == CURLM_CALL_MULTI_PERFORM);
-
-  *done = (still_running == 0);
-
-  return 0;
-}
-
-/*
- * the synchronous, non-threaded request processing completion method.
- */
-int RGWHTTPManager::complete_requests()
-{
-  bool done = false;
-  int ret;
-  do {
-    ret = process_requests(true, &done);
-  } while (!done && !ret);
-
-  return ret;
 }
 
 int RGWHTTPManager::set_threaded()
