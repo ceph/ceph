@@ -1528,10 +1528,7 @@ fi
 %{_libdir}/librbd_tp.so.*
 %endif
 
-%post -n librbd1
-/sbin/ldconfig
-mkdir -p /usr/lib64/qemu/
-ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
+%post -n librbd1 -p /sbin/ldconfig
 
 %postun -n librbd1 -p /sbin/ldconfig
 
