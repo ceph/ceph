@@ -616,6 +616,13 @@ public:
   void execute() override;
 
   virtual int get_params() = 0;
+  virtual void handle_listing_chunk(RGWUserBuckets& buckets) {
+    /* The default implementation, used by e.g. S3, just generates a new
+     * part of listing and sends it client immediately. Swift can behave
+     * differently: when the reverse option is requested, all incoming
+     * instances of RGWUserBuckets are buffered and finally reversed. */
+    return send_response_data(buckets);
+  }
   virtual void send_response_begin(bool has_buckets) = 0;
   virtual void send_response_data(RGWUserBuckets& buckets) = 0;
   virtual void send_response_end() = 0;
