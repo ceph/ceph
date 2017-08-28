@@ -375,18 +375,12 @@ public:
   }
 
 
-  void update_pg(pg_t pgid, bufferlist& bl);
-  void remove_pg(pg_t pgid);
-  void update_osd(int osd, bufferlist& bl);
-  void remove_osd(int osd);
-
   void apply_incremental(CephContext *cct, const Incremental& inc);
   void calc_stats();
   void stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
   void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
-  void stat_pg_update(const pg_t pgid, pg_stat_t &prev, bufferlist::iterator& blp);
   void stat_osd_add(int osd, const osd_stat_t &s);
   void stat_osd_sub(int osd, const osd_stat_t &s);
   
