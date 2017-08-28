@@ -11,42 +11,6 @@
 #include "messages/MStatfsReply.h"
 #include "messages/MServiceMap.h"
 
-class MgrPGStatService : public PGStatService {
-  PGMapDigest& digest;
-public:
-  MgrPGStatService(PGMapDigest& d) : digest(d) {}
-
-  const pool_stat_t* get_pool_stat(int64_t poolid) const override {
-    auto i = digest.pg_pool_sum.find(poolid);
-    if (i != digest.pg_pool_sum.end()) {
-      return &i->second;
-    }
-    return nullptr;
-  }
-
-  ceph_statfs get_statfs(OSDMap& osdmap,
-			 boost::optional<int64_t> data_pool) const override {
-    return digest.get_statfs(osdmap, data_pool);
-  }
-
-  void print_summary(Formatter *f, ostream *out) const override {
-    digest.print_summary(f, out);
-  }
-  void dump_info(Formatter *f) const override {
-    digest.dump(f);
-  }
-  void dump_fs_stats(stringstream *ss,
-		     Formatter *f,
-		     bool verbose) const override {
-    digest.dump_fs_stats(ss, f, verbose);
-  }
-  void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
-		       bool verbose) const override {
-    digest.dump_pool_stats_full(osdm, ss, f, verbose);
-  }
-};
-
-
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon)
@@ -57,17 +21,11 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
 }
 
 MgrStatMonitor::MgrStatMonitor(Monitor *mn, Paxos *p, const string& service_name)
-  : PaxosService(mn, p, service_name),
-    pgservice(new MgrPGStatService(digest))
+  : PaxosService(mn, p, service_name)
 {
 }
 
 MgrStatMonitor::~MgrStatMonitor() = default;
-
-PGStatService *MgrStatMonitor::get_pg_stat_service()
-{
-  return pgservice.get();
-}
 
 void MgrStatMonitor::create_initial()
 {
@@ -187,11 +145,6 @@ void MgrStatMonitor::tick()
 {
 }
 
-void MgrStatMonitor::print_summary(Formatter *f, std::ostream *ss) const
-{
-  pgservice->print_summary(f, ss);
-}
-
 bool MgrStatMonitor::preprocess_query(MonOpRequestRef op)
 {
   auto m = static_cast<PaxosServiceMessage*>(op->get_req());
@@ -265,7 +218,7 @@ bool MgrStatMonitor::preprocess_getpoolstats(MonOpRequestRef op)
     const auto pool_id = mon->osdmon()->osdmap.lookup_pg_pool_name(pool_name);
     if (pool_id == -ENOENT)
       continue;
-    auto pool_stat = mon->pgservice->get_pool_stat(pool_id);
+    auto pool_stat = get_pool_stat(pool_id);
     if (!pool_stat)
       continue;
     reply->pool_stats[pool_name] = *pool_stat;
@@ -296,8 +249,7 @@ bool MgrStatMonitor::preprocess_statfs(MonOpRequestRef op)
            << " from " << statfs->get_orig_source() << dendl;
   epoch_t ver = get_last_committed();
   auto reply = new MStatfsReply(statfs->fsid, statfs->get_tid(), ver);
-  reply->h.st = mon->pgservice->get_statfs(mon->osdmon()->osdmap,
-					   statfs->data_pool);
+  reply->h.st = get_statfs(mon->osdmon()->osdmap, statfs->data_pool);
   mon->send_reply(op, reply);
   return true;
 }
