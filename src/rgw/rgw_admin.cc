@@ -1089,6 +1089,7 @@ public:
   explicit StoreDestructor(RGWRados *_s) : store(_s) {}
   ~StoreDestructor() {
     RGWStoreManager::close_storage(store);
+    rgw_http_client_cleanup();
   }
 };
 
@@ -3108,6 +3109,7 @@ int main(int argc, const char **argv)
   rgw_bucket_init(store->meta_mgr);
   rgw_otp_init(store);
 
+  rgw_http_client_init(g_ceph_context);
 
   struct rgw_curl_setup {
     rgw_curl_setup() {

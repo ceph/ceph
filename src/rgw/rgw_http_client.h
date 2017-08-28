@@ -14,6 +14,9 @@
 using param_pair_t = pair<string, string>;
 using param_vec_t = vector<param_pair_t>;
 
+void rgw_http_client_init(CephContext *cct);
+void rgw_http_client_cleanup();
+
 struct rgw_http_req_data;
 class RGWHTTPManager;
 
@@ -317,4 +320,10 @@ public:
   int complete_requests();
 };
 
+class RGWHTTP
+{
+public:
+  static int send(RGWHTTPClient *req);
+  static int process(RGWHTTPClient *req);
+};
 #endif
