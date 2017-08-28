@@ -1175,30 +1175,6 @@ static bool get_osd_utilization(
   return *kb > 0;
 }
 
-void OSDMap::get_full_osd_util(
-  const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &osd_stat,
-  map<int, float> *full, map<int, float> *backfill, map<int, float> *nearfull) const
-{
-  full->clear();
-  backfill->clear();
-  nearfull->clear();
-  for (int i = 0; i < max_osd; ++i) {
-    if (exists(i) && is_up(i) && is_in(i)) {
-      int64_t kb, kb_used, kb_avail;
-      if (osd_state[i] & CEPH_OSD_FULL) {
-        if (get_osd_utilization(osd_stat, i, &kb, &kb_used, &kb_avail))
-	  full->emplace(i, (float)kb_used / (float)kb);
-      } else if (osd_state[i] & CEPH_OSD_BACKFILLFULL) {
-        if (get_osd_utilization(osd_stat, i, &kb, &kb_used, &kb_avail))
-	  backfill->emplace(i, (float)kb_used / (float)kb);
-      } else if (osd_state[i] & CEPH_OSD_NEARFULL) {
-        if (get_osd_utilization(osd_stat, i, &kb, &kb_used, &kb_avail))
-	  nearfull->emplace(i, (float)kb_used / (float)kb);
-      }
-    }
-  }
-}
-
 void OSDMap::get_full_osd_counts(set<int> *full, set<int> *backfill,
 				 set<int> *nearfull) const
 {
