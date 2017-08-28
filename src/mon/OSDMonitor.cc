@@ -9077,10 +9077,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	 << " < firefly, which is required for primary-temp";
       err = -EPERM;
       goto reply;
-    } else if (!g_conf->mon_osd_allow_primary_temp) {
-      ss << "you must enable 'mon osd allow primary temp = true' on the mons before you can set primary_temp mappings.  note that this is for developers only: older clients/OSDs will break and there is no feature bit infrastructure in place.";
-      err = -EPERM;
-      goto reply;
     }
 
     pending_inc.new_primary_temp[pgid] = osd;
@@ -9344,10 +9340,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "require_min_compat_client "
 	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < firefly, which is required for primary-affinity";
-      err = -EPERM;
-      goto reply;
-    } else if (!g_conf->mon_osd_allow_primary_affinity) {
-      ss << "you must enable 'mon osd allow primary affinity = true' on the mons before you can adjust primary-affinity.  note that older clients will no longer be able to communicate with the cluster.";
       err = -EPERM;
       goto reply;
     }

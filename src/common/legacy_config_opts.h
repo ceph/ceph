@@ -223,8 +223,6 @@ OPTION(mon_osd_min_in_ratio, OPT_DOUBLE)   // min osds required to be in to mark
 OPTION(mon_osd_warn_op_age, OPT_DOUBLE)     // max op age before we generate a warning (make it a power of 2)
 OPTION(mon_osd_err_op_age_ratio, OPT_DOUBLE)  // when to generate an error, as multiple of mon_osd_warn_op_age
 OPTION(mon_osd_max_split_count, OPT_INT) // largest number of PGs per "involved" OSD to let split create
-OPTION(mon_osd_allow_primary_temp, OPT_BOOL)  // allow primary_temp to be set in the osdmap
-OPTION(mon_osd_allow_primary_affinity, OPT_BOOL)  // allow primary_affinity to be set in the osdmap
 OPTION(mon_osd_prime_pg_temp, OPT_BOOL)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT)  // max time to spend priming
 OPTION(mon_osd_prime_pg_temp_max_estimate, OPT_FLOAT) // max estimate of pg total before we do all pgs in parallel
