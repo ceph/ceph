@@ -313,11 +313,6 @@ public:
   int add_request(RGWHTTPClient *client, bool send_data_hint = false);
   int remove_request(RGWHTTPClient *client);
   int set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetState state);
-
-  /* only for non threaded case */
-  int process_requests(bool wait_for_data, bool *done);
-
-  int complete_requests();
 };
 
 class RGWHTTP
