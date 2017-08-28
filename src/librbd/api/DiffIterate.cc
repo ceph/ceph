@@ -162,12 +162,10 @@ private:
                      << q->offset << "~" << q->length << " from "
                      << q->buffer_extents << dendl;
       uint64_t opos = q->offset;
-      ceph::bufferlist::iterator bi = m_buffers.begin();
       for (vector<pair<uint64_t,uint64_t> >::iterator r = q->buffer_extents.begin();
-           r != q->buffer_extents.end(); ++r, ++bi) {
-        for (ceph::bufferptr::iterator pi = bi->begin(); pi != bi->end(); ++pi) {
+           r != q->buffer_extents.end(); ++r) {
           for (uint64_t ei = 0; ei < q.get_len(); ++ei) {
-            m_hash.eat(static_cast<unsigned char>((*pi)[q.get_start() + ei]));
+            m_hash.eat(m_buffers[q.get_start() + ei]));
           }
         }
 
