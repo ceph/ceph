@@ -1101,7 +1101,6 @@ public:
     map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     unsigned size,
     const vector<int> &acting,
-    pg_shard_t acting_primary,
     const vector<int> &up,
     pg_shard_t up_primary,
     const map<pg_shard_t, pg_info_t> &all_info,
