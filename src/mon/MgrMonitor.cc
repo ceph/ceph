@@ -17,7 +17,6 @@
 #include "messages/MMgrMap.h"
 #include "messages/MMgrDigest.h"
 
-#include "PGStatService.h"
 #include "include/stringify.h"
 #include "mgr/MgrContext.h"
 #include "mgr/mgr_commands.h"
