@@ -266,8 +266,6 @@ public:
       osd_stat_rm.insert(osd);
       osd_stat_updates.erase(osd);
     }
-    void encode(bufferlist &bl, uint64_t features=-1) const;
-    void decode(bufferlist::iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Incremental*>& o);
 
@@ -454,7 +452,6 @@ public:
 
   static void generate_test_instances(list<PGMap*>& o);
 };
-WRITE_CLASS_ENCODER_FEATURES(PGMap::Incremental)
 WRITE_CLASS_ENCODER_FEATURES(PGMap)
 
 inline ostream& operator<<(ostream& out, const PGMapDigest& m) {
