@@ -196,11 +196,6 @@ public:
       pg_sum.stats.sum.num_legacy_snapsets == 0;
   }
 
-  // kill me post-luminous:
-  virtual float get_fallback_full_ratio() const {
-    return .95;
-  }
-
   uint64_t get_last_osd_stat_seq(int osd) {
     if (osd < (int)osd_last_seq.size())
       return osd_last_seq[osd];
@@ -225,10 +220,6 @@ public:
   epoch_t last_pg_scan;  // osdmap epoch
   mempool::pgmap::unordered_map<int32_t,osd_stat_t> osd_stat;
   mempool::pgmap::unordered_map<pg_t,pg_stat_t> pg_stat;
-  mempool::pgmap::set<int32_t> full_osds;     // for pre-luminous only
-  mempool::pgmap::set<int32_t> nearfull_osds; // for pre-luminous only
-  float full_ratio;
-  float nearfull_ratio;
 
   // mapping of osd to most recently reported osdmap epoch
   mempool::pgmap::unordered_map<int32_t,epoch_t> osd_epochs;
@@ -241,8 +232,6 @@ public:
     epoch_t osdmap_epoch;
     epoch_t pg_scan;  // osdmap epoch
     mempool::pgmap::set<pg_t> pg_remove;
-    float full_ratio;
-    float nearfull_ratio;
     utime_t stamp;
 
   private:
@@ -305,8 +294,7 @@ public:
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Incremental*>& o);
 
-    Incremental() : version(0), osdmap_epoch(0), pg_scan(0),
-        full_ratio(0), nearfull_ratio(0) {}
+    Incremental() : version(0), osdmap_epoch(0), pg_scan(0) {}
   };
 
 
@@ -367,17 +355,8 @@ public:
   
   PGMap()
     : version(0),
-      last_osdmap_epoch(0), last_pg_scan(0),
-      full_ratio(0), nearfull_ratio(0)
+      last_osdmap_epoch(0), last_pg_scan(0)
   {}
-
-  void set_full_ratios(float full, float nearfull) {
-    if (full_ratio == full && nearfull_ratio == nearfull)
-      return;
-    full_ratio = full;
-    nearfull_ratio = nearfull;
-    redo_full_sets();
-  }
 
   version_t get_version() const {
     return version;
@@ -430,8 +409,6 @@ public:
   void remove_osd(int osd);
 
   void apply_incremental(CephContext *cct, const Incremental& inc);
-  void redo_full_sets();
-  void register_nearfull_status(int osd, const osd_stat_t& s);
   void calc_stats();
   void stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
@@ -502,13 +479,6 @@ public:
     if (!min_last_epoch_clean)
       min_last_epoch_clean = calc_min_last_epoch_clean();
     return min_last_epoch_clean;
-  }
-
-  float get_fallback_full_ratio() const override {
-    if (full_ratio > 0) {
-      return full_ratio;
-    }
-    return .95;
   }
 
   void get_health_checks(

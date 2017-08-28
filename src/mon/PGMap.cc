@@ -887,13 +887,7 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
     return 0;
   }
 
-  float fratio;
-  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
-      osdmap.get_full_ratio() > 0) {
-    fratio = osdmap.get_full_ratio();
-  } else {
-    fratio = get_fallback_full_ratio();
-  }
+  float fratio = osdmap.get_full_ratio();
 
   int64_t min = -1;
   for (auto p = wm.begin(); p != wm.end(); ++p) {
@@ -953,8 +947,8 @@ void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
     ::encode(osd_stat_rm, bl);
     ::encode(osdmap_epoch, bl);
     ::encode(pg_scan, bl);
-    ::encode(full_ratio, bl);
-    ::encode(nearfull_ratio, bl);
+    ::encode((float).95, bl);
+    ::encode((float).85, bl);
     ::encode(pg_remove, bl);
     return;
   }
@@ -966,8 +960,8 @@ void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
   ::encode(osd_stat_rm, bl);
   ::encode(osdmap_epoch, bl);
   ::encode(pg_scan, bl);
-  ::encode(full_ratio, bl);
-  ::encode(nearfull_ratio, bl);
+  ::encode((float).95, bl); // full_ratio
+  ::encode((float).85, bl); // nearfull_ratio
   ::encode(pg_remove, bl);
   ::encode(stamp, bl);
   ::encode(osd_epochs, bl);
@@ -995,10 +989,9 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
   ::decode(osd_stat_rm, bl);
   ::decode(osdmap_epoch, bl);
   ::decode(pg_scan, bl);
-  if (struct_v >= 2) {
-    ::decode(full_ratio, bl);
-    ::decode(nearfull_ratio, bl);
-  }
+  float full_ratio;
+  ::decode(full_ratio, bl);
+  ::decode(full_ratio, bl);  // nearfull
   if (struct_v < 3) {
     pg_remove.clear();
     __u32 n;
@@ -1010,12 +1003,6 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
     }
   } else {
     ::decode(pg_remove, bl);
-  }
-  if (struct_v < 4 && full_ratio == 0) {
-    full_ratio = -1;
-  }
-  if (struct_v < 4 && nearfull_ratio == 0) {
-    nearfull_ratio = -1;
   }
   if (struct_v >= 6)
     ::decode(stamp, bl);
@@ -1039,8 +1026,6 @@ void PGMap::Incremental::dump(Formatter *f) const
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("osdmap_epoch", osdmap_epoch);
   f->dump_unsigned("pg_scan_epoch", pg_scan);
-  f->dump_float("full_ratio", full_ratio);
-  f->dump_float("nearfull_ratio", nearfull_ratio);
 
   f->open_array_section("pg_stat_updates");
   for (auto p = pg_stat_updates.begin(); p != pg_stat_updates.end(); ++p) {
@@ -1086,8 +1071,6 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
   o.back()->version = 3;
   o.back()->osdmap_epoch = 1;
   o.back()->pg_scan = 2;
-  o.back()->full_ratio = .2;
-  o.back()->nearfull_ratio = .3;
   o.back()->pg_stat_updates[pg_t(4,5,6)] = pg_stat_t();
   o.back()->osd_stat_updates[6] = osd_stat_t();
   o.back()->osd_epochs[6] = 12;
@@ -1110,18 +1093,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
 
   pool_stat_t pg_sum_old = pg_sum;
   mempool::pgmap::unordered_map<uint64_t, pool_stat_t> pg_pool_sum_old;
-
-  bool ratios_changed = false;
-  if (inc.full_ratio != full_ratio && inc.full_ratio != -1) {
-    full_ratio = inc.full_ratio;
-    ratios_changed = true;
-  }
-  if (inc.nearfull_ratio != nearfull_ratio && inc.nearfull_ratio != -1) {
-    nearfull_ratio = inc.nearfull_ratio;
-    ratios_changed = true;
-  }
-  if (ratios_changed)
-    redo_full_sets();
 
   for (auto p = inc.pg_stat_updates.begin();
        p != inc.pg_stat_updates.end();
@@ -1165,9 +1136,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       i->second = j->second;
 
     stat_osd_add(osd, new_stats);
-
-    // adjust [near]full status
-    register_nearfull_status(osd, new_stats);
   }
   set<int64_t> deleted_pools;
   for (auto p = inc.pg_remove.begin();
@@ -1191,10 +1159,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       osd_stat.erase(t);
       osd_epochs.erase(*p);
     }
-
-    // remove these old osds from full/nearfull set(s), too
-    nearfull_osds.erase(*p);
-    full_osds.erase(*p);
   }
 
   // calculate a delta, and average over the last 2 deltas.
@@ -1226,36 +1190,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   min_last_epoch_clean = 0;  // invalidate
 }
 
-void PGMap::redo_full_sets()
-{
-  full_osds.clear();
-  nearfull_osds.clear();
-  for (auto i = osd_stat.begin();
-       i != osd_stat.end();
-       ++i) {
-    register_nearfull_status(i->first, i->second);
-  }
-}
-
-void PGMap::register_nearfull_status(int osd, const osd_stat_t& s)
-{
-  float ratio = ((float)s.kb_used) / ((float)s.kb);
-
-  if (full_ratio > 0 && ratio > full_ratio) {
-    // full
-    full_osds.insert(osd);
-    nearfull_osds.erase(osd);
-  } else if (nearfull_ratio > 0 && ratio > nearfull_ratio) {
-    // nearfull
-    full_osds.erase(osd);
-    nearfull_osds.insert(osd);
-  } else {
-    // ok
-    full_osds.erase(osd);
-    nearfull_osds.erase(osd);
-  }
-}
-
 void PGMap::calc_stats()
 {
   num_pg = 0;
@@ -1279,8 +1213,6 @@ void PGMap::calc_stats()
        p != osd_stat.end();
        ++p)
     stat_osd_add(p->first, p->second);
-
-  redo_full_sets();
 
   min_last_epoch_clean = calc_min_last_epoch_clean();
 }
@@ -1336,9 +1268,6 @@ void PGMap::update_osd(int osd, bufferlist& bl)
   ::decode(r, p);
   stat_osd_add(osd, r);
 
-  // adjust [near]full status
-  register_nearfull_status(osd, r);
-
   // epoch?
   if (!p.end()) {
     epoch_t e;
@@ -1360,10 +1289,6 @@ void PGMap::remove_osd(int osd)
   if (o != osd_stat.end()) {
     stat_osd_sub(osd, o->second);
     osd_stat.erase(o);
-
-    // remove these old osds from full/nearfull set(s), too
-    nearfull_osds.erase(osd);
-    full_osds.erase(osd);
   }
 }
 
@@ -1565,27 +1490,15 @@ void PGMap::encode_digest(const OSDMap& osdmap,
 
 void PGMap::encode(bufferlist &bl, uint64_t features) const
 {
-  if ((features & CEPH_FEATURE_MONENC) == 0) {
-    __u8 v = 3;
-    ::encode(v, bl);
-    ::encode(version, bl);
-    ::encode(pg_stat, bl);
-    ::encode(osd_stat, bl);
-    ::encode(last_osdmap_epoch, bl);
-    ::encode(last_pg_scan, bl);
-    ::encode(full_ratio, bl);
-    ::encode(nearfull_ratio, bl);
-    return;
-  }
-
+  assert(features & CEPH_FEATURE_MONENC);
   ENCODE_START(6, 4, bl);
   ::encode(version, bl);
   ::encode(pg_stat, bl);
   ::encode(osd_stat, bl);
   ::encode(last_osdmap_epoch, bl);
   ::encode(last_pg_scan, bl);
-  ::encode(full_ratio, bl);
-  ::encode(nearfull_ratio, bl);
+  ::encode((float).95, bl);
+  ::encode((float).85, bl);
   ::encode(stamp, bl);
   ::encode(osd_epochs, bl);
   ENCODE_FINISH(bl);
@@ -1612,8 +1525,9 @@ void PGMap::decode(bufferlist::iterator &bl)
   ::decode(last_osdmap_epoch, bl);
   ::decode(last_pg_scan, bl);
   if (struct_v >= 2) {
+    float full_ratio;
     ::decode(full_ratio, bl);
-    ::decode(nearfull_ratio, bl);
+    ::decode(full_ratio, bl); // nearfull
   }
   if (struct_v >= 5)
     ::decode(stamp, bl);
@@ -1637,8 +1551,6 @@ void PGMap::dirty_all(Incremental& inc)
 {
   inc.osdmap_epoch = last_osdmap_epoch;
   inc.pg_scan = last_pg_scan;
-  inc.full_ratio = full_ratio;
-  inc.nearfull_ratio = nearfull_ratio;
 
   for (auto p = pg_stat.begin(); p != pg_stat.end(); ++p) {
     inc.pg_stat_updates[p->first] = p->second;
@@ -1666,8 +1578,6 @@ void PGMap::dump_basic(Formatter *f) const
   f->dump_unsigned("last_osdmap_epoch", last_osdmap_epoch);
   f->dump_unsigned("last_pg_scan", last_pg_scan);
   f->dump_unsigned("min_last_epoch_clean", min_last_epoch_clean);
-  f->dump_float("full_ratio", full_ratio);
-  f->dump_float("near_full_ratio", nearfull_ratio);
 
   f->open_object_section("pg_stats_sum");
   pg_sum.dump(f);
@@ -1841,8 +1751,6 @@ void PGMap::dump_basic(ostream& ss) const
   ss << "stamp " << stamp << std::endl;
   ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
   ss << "last_pg_scan " << last_pg_scan << std::endl;
-  ss << "full_ratio " << full_ratio << std::endl;
-  ss << "nearfull_ratio " << nearfull_ratio << std::endl;
 }
 
 void PGMap::dump_pg_stats(ostream& ss, bool brief) const
@@ -3709,10 +3617,6 @@ void PGMapUpdater::check_osd_map(const OSDMap::Incremental &osd_inc,
       dout(10) << __func__ << "  osd." << p.first
                << " created or destroyed" << dendl;
       pending_inc->rm_stat(p.first);
-
-      // and adjust full, nearfull set
-      pg_map->nearfull_osds.erase(p.first);
-      pg_map->full_osds.erase(p.first);
     }
   }
 }
