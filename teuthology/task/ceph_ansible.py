@@ -336,6 +336,7 @@ class CephAnsible(Task):
             run.Raw('cd ~/ceph-ansible'),
             run.Raw(';'),
             'virtualenv',
+            run.Raw('--system-site-packages'),
             'venv',
             run.Raw(';'),
             run.Raw('source venv/bin/activate'),
