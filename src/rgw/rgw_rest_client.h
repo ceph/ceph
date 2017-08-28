@@ -8,7 +8,7 @@
 
 class RGWGetDataCB;
 
-class RGWRESTSimpleRequest : public RGWHTTPClient {
+class RGWHTTPSimpleRequest : public RGWHTTPClient {
 protected:
   int http_status;
   int status;
@@ -25,9 +25,8 @@ protected:
   void append_param(string& dest, const string& name, const string& val);
   void get_params_str(map<string, string>& extra_args, string& dest);
 
-  int sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info);
 public:
-  RGWRESTSimpleRequest(CephContext *_cct, const string& _method, const string& _url,
+  RGWHTTPSimpleRequest(CephContext *_cct, const string& _method, const string& _url,
                        param_vec_t *_headers, param_vec_t *_params) : RGWHTTPClient(_cct, _method, _url),
                 http_status(0), status(0),
                 send_iter(NULL),
@@ -52,13 +51,19 @@ public:
 
   bufferlist& get_response() { return response; }
 
-  int execute(RGWAccessKey& key, const char *method, const char *resource);
-  int forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
-
   map<string, string>& get_out_headers() { return out_headers; }
 
   int get_http_status() { return http_status; }
   int get_status();
+};
+
+class RGWRESTSimpleRequest : public RGWHTTPSimpleRequest {
+public:
+  RGWRESTSimpleRequest(CephContext *_cct, const string& _method, const string& _url,
+                       param_vec_t *_headers, param_vec_t *_params) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params) {}
+
+  int execute(RGWAccessKey& key, const char *method, const char *resource);
+  int forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
 };
 
 
@@ -81,7 +86,7 @@ public:
   RGWGetDataCB *get_out_cb() { return cb; }
 };
 
-class RGWHTTPStreamRWRequest : public RGWRESTSimpleRequest {
+class RGWHTTPStreamRWRequest : public RGWHTTPSimpleRequest {
   Mutex lock;
   Mutex write_lock;
   RGWGetDataCB *cb;
@@ -100,8 +105,8 @@ public:
   int receive_data(void *ptr, size_t len) override;
 
   RGWHTTPStreamRWRequest(CephContext *_cct, const string& _method, const string& _url, RGWGetDataCB *_cb,
-                         param_vec_t *_headers, param_vec_t *_params) : RGWRESTSimpleRequest(_cct, _method, _url, _headers, _params),
-                                                                        lock("RGWRESTStreamRWRequest"), write_lock("RGWRESTStreamRWRequest::write_lock"), cb(_cb) {
+                         param_vec_t *_headers, param_vec_t *_params) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params),
+                                                                        lock("RGWHTTPStreamRWRequest"), write_lock("RGWHTTPStreamRWRequest::write_lock"), cb(_cb) {
   }
   virtual ~RGWHTTPStreamRWRequest() override {}
 

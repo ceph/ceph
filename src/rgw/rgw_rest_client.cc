@@ -16,7 +16,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-int RGWRESTSimpleRequest::get_status()
+int RGWHTTPSimpleRequest::get_status()
 {
   int retcode = get_req_retcode();
   if (retcode < 0) {
@@ -25,7 +25,7 @@ int RGWRESTSimpleRequest::get_status()
   return status;
 }
 
-int RGWRESTSimpleRequest::handle_header(const string& name, const string& val) 
+int RGWHTTPSimpleRequest::handle_header(const string& name, const string& val) 
 {
   if (name == "CONTENT_LENGTH") {
     string err;
@@ -41,7 +41,7 @@ int RGWRESTSimpleRequest::handle_header(const string& name, const string& val)
   return 0;
 }
 
-int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
+int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
 {
   char line[len + 1];
 
@@ -147,7 +147,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const 
   return status;
 }
 
-int RGWRESTSimpleRequest::send_data(void *ptr, size_t len)
+int RGWHTTPSimpleRequest::send_data(void *ptr, size_t len)
 {
   if (!send_iter)
     return 0;
@@ -160,7 +160,7 @@ int RGWRESTSimpleRequest::send_data(void *ptr, size_t len)
   return len;
 }
 
-int RGWRESTSimpleRequest::receive_data(void *ptr, size_t len)
+int RGWHTTPSimpleRequest::receive_data(void *ptr, size_t len)
 {
   size_t cp_len, left_len;
 
@@ -177,7 +177,7 @@ int RGWRESTSimpleRequest::receive_data(void *ptr, size_t len)
 
 }
 
-void RGWRESTSimpleRequest::append_param(string& dest, const string& name, const string& val)
+void RGWHTTPSimpleRequest::append_param(string& dest, const string& name, const string& val)
 {
   if (dest.empty()) {
     dest.append("?");
@@ -196,7 +196,7 @@ void RGWRESTSimpleRequest::append_param(string& dest, const string& name, const 
   }
 }
 
-void RGWRESTSimpleRequest::get_params_str(map<string, string>& extra_args, string& dest)
+void RGWHTTPSimpleRequest::get_params_str(map<string, string>& extra_args, string& dest)
 {
   map<string, string>::iterator miter;
   for (miter = extra_args.begin(); miter != extra_args.end(); ++miter) {
@@ -208,7 +208,7 @@ void RGWRESTSimpleRequest::get_params_str(map<string, string>& extra_args, strin
   }
 }
 
-int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info)
+static int sign_request(CephContext *cct, RGWAccessKey& key, RGWEnv& env, req_info& info)
 {
   /* don't sign if no key is provided */
   if (key.key.empty()) {
@@ -256,7 +256,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
 
   new_env.set("HTTP_DATE", date_str.c_str());
 
-  int ret = sign_request(key, new_env, new_info);
+  int ret = sign_request(cct, key, new_env, new_info);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
     return ret;
@@ -483,7 +483,7 @@ int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uin
     grants_by_type_add_perm(grants_by_type, perm.get_permissions(), grant);
   }
   add_grants_headers(grants_by_type, new_env, new_info.x_meta_map);
-  ret = sign_request(key, new_env, new_info);
+  ret = sign_request(cct, key, new_env, new_info);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
     return ret;
@@ -671,7 +671,7 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
   new_info.init_meta_info(NULL);
 
   if (key) {
-    int ret = sign_request(*key, new_env, new_info);
+    int ret = sign_request(cct, *key, new_env, new_info);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
       return ret;
