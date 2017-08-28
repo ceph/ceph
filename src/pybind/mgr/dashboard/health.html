@@ -165,7 +165,7 @@
                     },
                     options: {
                         center_text: raw_usage_text,
-                        responsive: false,
+                        responsive: true,
                         legend: {display: false},
                         animation: {duration: 0}
                     }
@@ -199,7 +199,7 @@
                         ]
                     },
                     options: {
-                        responsive: false,
+                        responsive: true,
                         legend: {display: false},
                         animation: {duration: 0}
                     }
@@ -297,13 +297,15 @@
                                 <td>
                                     <span style="font-size: 45px;">{df.stats.total_objects | dimless}</span>
                                 </td>
-                                <td>
-                                    <canvas id="raw_usage_chart"
-                                            style="height:120px; width:120px;"></canvas>
+                                <td >
+                                    <div style="height:120px; width: 120px;">
+                                        <canvas id="raw_usage_chart"></canvas>
+                                    </div>
                                 </td>
                                 <td>
-                                    <canvas id="pool_usage_chart"
-                                            style="height:120px; width: 120px;"></canvas>
+                                    <div style="height:120px; width: 120px;">
+                                        <canvas id="pool_usage_chart"></canvas>
+                                    </div>
                                 </td>
                             </tr>
                             <tr>
