@@ -38,6 +38,7 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
   prefix = s->info.args.get("prefix");
   marker = s->info.args.get("marker");
   end_marker = s->info.args.get("end_marker");
+  wants_reversed = s->info.args.exists("reverse");
 
   string limit_str = s->info.args.get("limit");
   if (!limit_str.empty()) {
@@ -170,6 +171,17 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
   }
 }
 
+void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(RGWUserBuckets& buckets)
+{
+  if (wants_reversed) {
+    /* Just store in the reversal buffer. Its content will be handled later,
+     * in send_response_end(). */
+    reverse_buffer.emplace(std::begin(reverse_buffer), std::move(buckets));
+  } else {
+    return send_response_data(buckets);
+  }
+}
+
 void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
 {
   if (! sent_data) {
@@ -184,23 +196,61 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
   for (auto iter = m.lower_bound(prefix);
        iter != m.end() && boost::algorithm::starts_with(iter->first, prefix);
        ++iter) {
-    const RGWBucketEnt& obj = iter->second;
+    dump_bucket_entry(iter->second);
+  }
+}
 
-    s->formatter->open_object_section("container");
-    s->formatter->dump_string("name", obj.bucket.name);
-    if (need_stats) {
-      s->formatter->dump_int("count", obj.count);
-      s->formatter->dump_int("bytes", obj.size);
-    }
-    s->formatter->close_section();
-    if (! s->cct->_conf->rgw_swift_enforce_content_length) {
-      rgw_flush_formatter(s, s->formatter);
-    }
+void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& obj)
+{
+  s->formatter->open_object_section("container");
+  s->formatter->dump_string("name", obj.bucket.name);
+
+  if (need_stats) {
+    s->formatter->dump_int("count", obj.count);
+    s->formatter->dump_int("bytes", obj.size);
+  }
+
+  s->formatter->close_section();
+
+  if (! s->cct->_conf->rgw_swift_enforce_content_length) {
+    rgw_flush_formatter(s, s->formatter);
+  }
+}
+
+void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(RGWUserBuckets& buckets)
+{
+  if (! sent_data) {
+    return;
+  }
+
+  /* Take care of the prefix parameter of Swift API. There is no business
+   * in applying the filter earlier as we really need to go through all
+   * entries regardless of it (the headers like X-Account-Container-Count
+   * aren't affected by specifying prefix). */
+  std::map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
+
+  auto iter = m.rbegin();
+  for (/* initialized above */;
+       iter != m.rend() && !boost::algorithm::starts_with(iter->first, prefix);
+       ++iter) {
+    /* NOP */;
+  }
+
+  for (/* iter carried */;
+       iter != m.rend() && boost::algorithm::starts_with(iter->first, prefix);
+       ++iter) {
+    dump_bucket_entry(iter->second);
   }
 }
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_end()
 {
+  if (wants_reversed) {
+    for (auto& buckets : reverse_buffer) {
+      send_response_data_reversed(buckets);
+    }
+  }
+
   if (sent_data) {
     s->formatter->close_section();
   }
@@ -216,7 +266,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
-    end_header(s, NULL, NULL, s->formatter->get_len(), true);
+    end_header(s, nullptr, nullptr, s->formatter->get_len(), true);
   }
 
   if (sent_data || s->cct->_conf->rgw_swift_enforce_content_length) {
