@@ -295,6 +295,9 @@ elseif(ALLOCATOR STREQUAL "jemalloc")
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "libc")
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
+else()
+  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
+  message(WARNING "Possibly incorrect allocator selected:" ${ALLOCATOR})
 endif()
 
 # tcmalloc heap profiler
