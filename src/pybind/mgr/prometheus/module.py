@@ -76,7 +76,7 @@ class Metric(object):
 
         def promethize(path):
             ''' replace illegal metric name characters '''
-            return path.replace('.', '_').replace('-', '_')
+            return path.replace('.', '_').replace('-', '_minus').replace('+', '_plus') 
 
         def floatstr(value):
             ''' represent as Go-compatible float '''
