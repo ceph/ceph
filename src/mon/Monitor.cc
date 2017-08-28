@@ -142,7 +142,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 			cct->_conf->auth_service_required : cct->_conf->auth_supported ),
   mgr_messenger(mgr_m),
   mgr_client(cct_, mgr_m),
-  pgservice(nullptr),
   store(s),
   
   state(STATE_PROBING),
@@ -210,9 +209,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   // actually matters will wait until we have quorum etc and then
   // retry (and revalidate).
   leader_mon_commands = local_mon_commands;
-
-  // note: OSDMonitor may update this based on the luminous flag.
-  pgservice = mgrstatmon();
 }
 
 Monitor::~Monitor()
@@ -2644,7 +2640,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     osdmon()->osdmap.print_summary(f, cout, string(12, ' '));
     f->close_section();
     f->open_object_section("pgmap");
-    pgservice->print_summary(f, NULL);
+    mgrstatmon()->print_summary(f, NULL);
     f->close_section();
     f->open_object_section("fsmap");
     mdsmon()->get_fsmap().print_summary(f, NULL);
@@ -2705,7 +2701,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     }
 
     ss << "\n \n  data:\n";
-    pgservice->print_summary(NULL, &ss);
+    mgrstatmon()->print_summary(NULL, &ss);
     ss << "\n ";
   }
 }
@@ -3193,10 +3189,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       if (f)
         f->open_object_section("stats");
 
-      pgservice->dump_fs_stats(&ds, f.get(), verbose);
+      mgrstatmon()->dump_fs_stats(&ds, f.get(), verbose);
       if (!f)
         ds << '\n';
-      pgservice->dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
+      mgrstatmon()->dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
 
       if (f) {
         f->close_section();
@@ -3234,7 +3230,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     osdmon()->dump_info(f.get());
     mdsmon()->dump_info(f.get());
     authmon()->dump_info(f.get());
-    pgservice->dump_info(f.get());
+    mgrstatmon()->dump_info(f.get());
 
     paxos->dump_info(f.get());
 
