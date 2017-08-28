@@ -221,9 +221,6 @@ public:
   mempool::pgmap::unordered_map<int32_t,osd_stat_t> osd_stat;
   mempool::pgmap::unordered_map<pg_t,pg_stat_t> pg_stat;
 
-  // mapping of osd to most recently reported osdmap epoch
-  mempool::pgmap::unordered_map<int32_t,epoch_t> osd_epochs;
-
   class Incremental {
   public:
     MEMPOOL_CLASS_HELPERS();
@@ -237,10 +234,6 @@ public:
   private:
     mempool::pgmap::map<int32_t,osd_stat_t> osd_stat_updates;
     mempool::pgmap::set<int32_t> osd_stat_rm;
-
-    // mapping of osd to most recently reported osdmap epoch.
-    // 1:1 with osd_stat_updates.
-    mempool::pgmap::map<int32_t,epoch_t> osd_epochs;
   public:
 
     const mempool::pgmap::map<int32_t, osd_stat_t> &get_osd_stat_updates() const {
@@ -249,28 +242,14 @@ public:
     const mempool::pgmap::set<int32_t> &get_osd_stat_rm() const {
       return osd_stat_rm;
     }
-    const mempool::pgmap::map<int32_t, epoch_t> &get_osd_epochs() const {
-      return osd_epochs;
-    }
-
     template<typename OsdStat>
-    void update_stat(int32_t osd, epoch_t epoch, OsdStat&& stat) {
+    void update_stat(int32_t osd, OsdStat&& stat) {
       osd_stat_updates[osd] = std::forward<OsdStat>(stat);
-      osd_epochs[osd] = epoch;
-      assert(osd_epochs.size() == osd_stat_updates.size());
     }
-    void stat_osd_out(int32_t osd, epoch_t epoch) {
-      // 0 the stats for the osd
+    void stat_osd_out(int32_t osd) {
       osd_stat_updates[osd] = osd_stat_t();
-      // only fill in the epoch if the osd didn't already report htis
-      // epoch.  that way we zero the stat but still preserve a reported
-      // new epoch...
-      if (!osd_epochs.count(osd))
-	osd_epochs[osd] = epoch;
-      // ...and maintain our invariant.
-      assert(osd_epochs.size() == osd_stat_updates.size());
     }
-    void stat_osd_down_up(int32_t osd, epoch_t epoch, const PGMap& pg_map) {
+    void stat_osd_down_up(int32_t osd, const PGMap& pg_map) {
       // 0 the op_queue_age_hist for this osd
       auto p = osd_stat_updates.find(osd);
       if (p != osd_stat_updates.end()) {
@@ -281,12 +260,10 @@ public:
       if (q != pg_map.osd_stat.end()) {
 	osd_stat_t& t = osd_stat_updates[osd] = q->second;
 	t.op_queue_age_hist.clear();
-	osd_epochs[osd] = epoch;
       }
     }
     void rm_stat(int32_t osd) {
       osd_stat_rm.insert(osd);
-      osd_epochs.erase(osd);
       osd_stat_updates.erase(osd);
     }
     void encode(bufferlist &bl, uint64_t features=-1) const;
@@ -421,8 +398,6 @@ public:
   /// encode subset of our data to a PGMapDigest
   void encode_digest(const OSDMap& osdmap,
 		     bufferlist& bl, uint64_t features) const;
-
-  void dirty_all(Incremental& inc);
 
   int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
   void get_rules_avail(const OSDMap& osdmap,

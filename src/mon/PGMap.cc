@@ -964,7 +964,10 @@ void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
   ::encode((float).85, bl); // nearfull_ratio
   ::encode(pg_remove, bl);
   ::encode(stamp, bl);
-  ::encode(osd_epochs, bl);
+  {
+    map<int32_t,epoch_t> osd_epochs;
+    ::encode(osd_epochs, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -1007,15 +1010,8 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
   if (struct_v >= 6)
     ::decode(stamp, bl);
   if (struct_v >= 7) {
+    map<int32_t,epoch_t> osd_epochs;
     ::decode(osd_epochs, bl);
-  } else {
-    for (auto i = osd_stat_updates.begin();
-         i != osd_stat_updates.end();
-         ++i) {
-      // This isn't accurate, but will cause trimming to behave like
-      // previously.
-      osd_epochs.insert(make_pair(i->first, osdmap_epoch));
-    }
   }
   DECODE_FINISH(bl);
 }
@@ -1066,14 +1062,12 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
   o.back()->version = 2;
   o.back()->pg_stat_updates[pg_t(1,2,3)] = pg_stat_t();
   o.back()->osd_stat_updates[5] = osd_stat_t();
-  o.back()->osd_epochs[5] = 12;
   o.push_back(new Incremental);
   o.back()->version = 3;
   o.back()->osdmap_epoch = 1;
   o.back()->pg_scan = 2;
   o.back()->pg_stat_updates[pg_t(4,5,6)] = pg_stat_t();
   o.back()->osd_stat_updates[6] = osd_stat_t();
-  o.back()->osd_epochs[6] = 12;
   o.back()->pg_remove.insert(pg_t(1,2,3));
   o.back()->osd_stat_rm.insert(5);
 }
@@ -1112,7 +1106,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     }
     stat_pg_add(update_pg, update_stat);
   }
-  assert(osd_stat.size() == osd_epochs.size());
   for (auto p = inc.get_osd_stat_updates().begin();
        p != inc.get_osd_stat_updates().end();
        ++p) {
@@ -1126,15 +1119,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       stat_osd_sub(t->first, t->second);
       t->second = new_stats;
     }
-    auto i = osd_epochs.find(osd);
-    auto j = inc.get_osd_epochs().find(osd);
-    assert(j != inc.get_osd_epochs().end());
-
-    if (i == osd_epochs.end())
-      osd_epochs.insert(*j);
-    else
-      i->second = j->second;
-
     stat_osd_add(osd, new_stats);
   }
   set<int64_t> deleted_pools;
@@ -1157,7 +1141,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     if (t != osd_stat.end()) {
       stat_osd_sub(t->first, t->second);
       osd_stat.erase(t);
-      osd_epochs.erase(*p);
     }
   }
 
@@ -1239,20 +1222,12 @@ void PGMap::update_osd(int osd, bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
   auto o = osd_stat.find(osd);
-  epoch_t old_lec = 0;
   if (o != osd_stat.end()) {
-    auto i = osd_epochs.find(osd);
-    if (i != osd_epochs.end())
-      old_lec = i->second;
     stat_osd_sub(osd, o->second);
   }
   osd_stat_t& r = osd_stat[osd];
   ::decode(r, p);
   stat_osd_add(osd, r);
-
-  // epoch?
-  epoch_t e;
-  ::decode(e, p);
 }
 
 void PGMap::remove_osd(int osd)
@@ -1449,7 +1424,10 @@ void PGMap::encode(bufferlist &bl, uint64_t features) const
   ::encode((float).95, bl);
   ::encode((float).85, bl);
   ::encode(stamp, bl);
-  ::encode(osd_epochs, bl);
+  {
+    map<int32_t,epoch_t> osd_epochs;
+    ::encode(osd_epochs, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -1481,35 +1459,12 @@ void PGMap::decode(bufferlist::iterator &bl)
   if (struct_v >= 5)
     ::decode(stamp, bl);
   if (struct_v >= 6) {
+    map<int32_t,epoch_t> osd_epochs;
     ::decode(osd_epochs, bl);
-  } else {
-    for (auto i = osd_stat.begin();
-         i != osd_stat.end();
-         ++i) {
-      // This isn't accurate, but will cause trimming to behave like
-      // previously.
-      osd_epochs.insert(make_pair(i->first, last_osdmap_epoch));
-    }
   }
   DECODE_FINISH(bl);
 
   calc_stats();
-}
-
-void PGMap::dirty_all(Incremental& inc)
-{
-  inc.osdmap_epoch = last_osdmap_epoch;
-  inc.pg_scan = last_pg_scan;
-
-  for (auto p = pg_stat.begin(); p != pg_stat.end(); ++p) {
-    inc.pg_stat_updates[p->first] = p->second;
-  }
-  for (auto p = osd_stat.begin(); p != osd_stat.end(); ++p) {
-    assert(osd_epochs.count(p->first));
-    inc.update_stat(p->first,
-                    inc.get_osd_epochs().find(p->first)->second,
-                    p->second);
-  }
 }
 
 void PGMap::dump(Formatter *f) const
@@ -1533,15 +1488,6 @@ void PGMap::dump_basic(Formatter *f) const
 
   f->open_object_section("osd_stats_sum");
   osd_sum.dump(f);
-  f->close_section();
-
-  f->open_array_section("osd_epochs");
-  for (auto p = osd_epochs.begin(); p != osd_epochs.end(); ++p) {
-    f->open_object_section("osd");
-    f->dump_unsigned("osd", p->first);
-    f->dump_unsigned("epoch", p->second);
-    f->close_section();
-  }
   f->close_section();
 
   dump_delta(f);
@@ -3534,9 +3480,7 @@ void PGMapUpdater::check_osd_map(const OSDMap::Incremental &osd_inc,
   for (const auto &p : osd_inc.new_weight) {
     if (p.second == CEPH_OSD_OUT) {
       dout(10) << __func__ << "  osd." << p.first << " went OUT" << dendl;
-      auto j = pg_map->osd_epochs.find(p.first);
-      if (j != pg_map->osd_epochs.end())
-	pending_inc->stat_osd_out(p.first, j->second);
+      pending_inc->stat_osd_out(p.first);
     }
   }
 
@@ -3556,7 +3500,7 @@ void PGMapUpdater::check_osd_map(const OSDMap::Incremental &osd_inc,
       // clear out osd_stat slow request histogram
       dout(20) << __func__ << " clearing osd." << p.first
                << " request histogram" << dendl;
-      pending_inc->stat_osd_down_up(p.first, osd_inc.epoch, *pg_map);
+      pending_inc->stat_osd_down_up(p.first, *pg_map);
     }
 
     if (p.second & CEPH_OSD_EXISTS) {
@@ -3582,15 +3526,12 @@ void PGMapUpdater::check_osd_map(
     } else if (osdmap.is_out(p.first)) {
       // zero osd_stat
       if (p.second.kb != 0) {
-	auto j = pgmap.osd_epochs.find(p.first);
-	if (j != pgmap.osd_epochs.end()) {
-	  pending_inc->stat_osd_out(p.first, j->second);
-	}
+	pending_inc->stat_osd_out(p.first);
       }
     } else if (!osdmap.is_up(p.first)) {
       // zero the op_queue_age_hist
       if (!p.second.op_queue_age_hist.empty()) {
-	pending_inc->stat_osd_down_up(p.first, osdmap.get_epoch(), pgmap);
+	pending_inc->stat_osd_down_up(p.first, pgmap);
       }
     }
   }
