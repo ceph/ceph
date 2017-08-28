@@ -310,7 +310,7 @@ public:
 
   static int check_index(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher);
-
+  static int fix_multipart_leak(RGWRados *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
   static int remove_bucket(RGWRados *store, RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true);
   static int remove_object(RGWRados *store, RGWBucketAdminOpState& op_state);
   static int info(RGWRados *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
