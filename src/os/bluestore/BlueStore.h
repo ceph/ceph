@@ -1757,13 +1757,6 @@ public:
     }
   };
 
-  typedef boost::intrusive::list<
-    OpSequencer,
-    boost::intrusive::member_hook<
-      OpSequencer,
-      boost::intrusive::list_member_hook<>,
-      &OpSequencer::deferred_osr_queue_item> > deferred_osr_queue_t;
-
   struct KVSyncThread : public Thread {
     BlueStore *store;
     explicit KVSyncThread(BlueStore *s) : store(s) {}
@@ -1843,7 +1836,6 @@ private:
 
   std::mutex deferred_lock, deferred_submit_lock;
   std::atomic<uint64_t> deferred_seq = {0};
-  deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
   atomic_int deferred_aggressive = {0}; ///< aggressive wakeup of kv thread
 
