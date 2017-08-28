@@ -488,6 +488,7 @@ namespace ceph {
     namespace mon {
       constexpr mon_feature_t FEATURE_KRAKEN(     (1ULL << 0));
       constexpr mon_feature_t FEATURE_LUMINOUS(   (1ULL << 1));
+      constexpr mon_feature_t FEATURE_MIMIC(      (1ULL << 2));
 
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
@@ -501,6 +502,7 @@ namespace ceph {
         return (
 	  FEATURE_KRAKEN |
 	  FEATURE_LUMINOUS |
+	  FEATURE_MIMIC |
 	  FEATURE_NONE
 	  );
       }
@@ -518,6 +520,7 @@ namespace ceph {
         return (
 	  FEATURE_KRAKEN |
 	  FEATURE_LUMINOUS |
+	  FEATURE_MIMIC |
 	  FEATURE_NONE
 	  );
       }
@@ -534,6 +537,8 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "kraken";
   } else if (f == FEATURE_LUMINOUS) {
     return "luminous";
+  } else if (f == FEATURE_MIMIC) {
+    return "mimic";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -547,6 +552,8 @@ mon_feature_t ceph::features::mon::get_feature_by_name(std::string n) {
     return FEATURE_KRAKEN;
   } else if (n == "luminous") {
     return FEATURE_LUMINOUS;
+  } else if (n == "mimic") {
+    return FEATURE_MIMIC;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }

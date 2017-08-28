@@ -2120,6 +2120,10 @@ void Monitor::calc_quorum_requirements()
 	ceph::features::mon::FEATURE_LUMINOUS)) {
     required_features |= CEPH_FEATUREMASK_SERVER_LUMINOUS;
   }
+  if (monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_MIMIC)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_MIMIC;
+  }
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }
 
