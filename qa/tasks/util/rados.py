@@ -45,7 +45,7 @@ def create_replicated_pool(remote, name, pgnum, cluster_name="ceph", application
             'sudo', 'ceph', 'osd', 'pool', 'application', 'enable', name, application, '--cluster', cluster_name
         ])
 
-def create_cache_pool(remote, base_name, cache_name, pgnum, size, cluster_name="ceph", application=None):
+def create_cache_pool(remote, base_name, cache_name, pgnum, size, cluster_name="ceph"):
     remote.run(args=[
         'sudo', 'ceph', 'osd', 'pool', 'create', cache_name, str(pgnum), '--cluster', cluster_name
     ])
@@ -53,10 +53,6 @@ def create_cache_pool(remote, base_name, cache_name, pgnum, size, cluster_name="
         'sudo', 'ceph', 'osd', 'tier', 'add-cache', base_name, cache_name,
         str(size), '--cluster', cluster_name
     ])
-    if application:
-        remote.run(args=[
-            'sudo', 'ceph', 'osd', 'pool', 'application', 'enable', name, application, '--cluster', cluster_name
-        ])
 
 def cmd_erasure_code_profile(profile_name, profile):
     """
