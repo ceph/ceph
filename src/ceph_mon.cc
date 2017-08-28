@@ -679,13 +679,10 @@ int main(int argc, const char **argv)
   msgr->set_default_policy(Messenger::Policy::stateless_server(0));
   msgr->set_policy(entity_name_t::TYPE_MON,
                    Messenger::Policy::lossless_peer_reuse(
-		     CEPH_FEATURE_UID |
-		     CEPH_FEATURE_PGID64 |
-		     CEPH_FEATURE_MON_SINGLE_PAXOS));
+		     CEPH_FEATURE_SERVER_LUMINOUS));
   msgr->set_policy(entity_name_t::TYPE_OSD,
                    Messenger::Policy::stateless_server(
-		     CEPH_FEATURE_PGID64 |
-		     CEPH_FEATURE_OSDENC));
+		     CEPH_FEATURE_SERVER_LUMINOUS));
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
                    Messenger::Policy::stateless_server(0));
   msgr->set_policy(entity_name_t::TYPE_MDS,
