@@ -8,11 +8,7 @@
 #include "mon/PGMap.h"
 #include "mgr/ServiceMap.h"
 
-class PGStatService;
-class MgrPGStatService;
-
-class MgrStatMonitor : public PaxosService,
-		       public PGStatService {
+class MgrStatMonitor : public PaxosService {
   // live version
   version_t version = 0;
   PGMapDigest digest;
@@ -68,8 +64,8 @@ public:
     return service_map;
   }
 
-  // PGStatService
-  const pool_stat_t* get_pool_stat(int64_t poolid) const override {
+  // pg stat access
+  const pool_stat_t* get_pool_stat(int64_t poolid) const {
     auto i = digest.pg_pool_sum.find(poolid);
     if (i != digest.pg_pool_sum.end()) {
       return &i->second;
@@ -78,23 +74,23 @@ public:
   }
 
   ceph_statfs get_statfs(OSDMap& osdmap,
-			 boost::optional<int64_t> data_pool) const override {
+			 boost::optional<int64_t> data_pool) const {
     return digest.get_statfs(osdmap, data_pool);
   }
 
-  void print_summary(Formatter *f, ostream *out) const override {
+  void print_summary(Formatter *f, ostream *out) const {
     digest.print_summary(f, out);
   }
-  void dump_info(Formatter *f) const override {
+  void dump_info(Formatter *f) const {
     digest.dump(f);
   }
   void dump_fs_stats(stringstream *ss,
 		     Formatter *f,
-		     bool verbose) const override {
+		     bool verbose) const {
     digest.dump_fs_stats(ss, f, verbose);
   }
   void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
-		       bool verbose) const override {
+		       bool verbose) const {
     digest.dump_pool_stats_full(osdm, ss, f, verbose);
   }
 

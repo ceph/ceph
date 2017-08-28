@@ -37,7 +37,6 @@
 #include "Elector.h"
 #include "Paxos.h"
 #include "Session.h"
-#include "PGStatService.h"
 #include "MonCommand.h"
 
 #include "common/LogClient.h"

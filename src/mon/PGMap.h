@@ -28,7 +28,6 @@
 #include "include/mempool.h"
 #include "mon/health_check.h"
 #include <sstream>
-#include "mon/PGStatService.h"
 
 // FIXME: don't like including this here to get OSDMap::Incremental, maybe
 // PGMapUpdater needs its own header.
