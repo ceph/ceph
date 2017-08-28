@@ -1037,7 +1037,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
             pg_pool.last_change = pending_inc.epoch;
             pending_inc.new_pools[pool_id] = pg_pool;
           } else if (match_count > 1) {
-            auto pstat = mon->pgservice->get_pool_stat(pool_id);
+            auto pstat = mon->mgrstatmon()->get_pool_stat(pool_id);
             if (pstat != nullptr && pstat->stats.sum.num_objects > 0) {
               mon->clog->info() << "unable to auto-enable application for pool "
                                 << "'" << pool_name << "'";
@@ -4838,7 +4838,7 @@ bool OSDMonitor::update_pools_status()
 
   auto& pools = osdmap.get_pools();
   for (auto it = pools.begin(); it != pools.end(); ++it) {
-    const pool_stat_t *pstat = mon->pgservice->get_pool_stat(it->first);
+    const pool_stat_t *pstat = mon->mgrstatmon()->get_pool_stat(it->first);
     if (!pstat)
       continue;
     const object_stat_sum_t& sum = pstat->stats.sum;
@@ -10061,7 +10061,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     // make sure new tier is empty
     string force_nonempty;
     cmd_getval(g_ceph_context, cmdmap, "force_nonempty", force_nonempty);
-    const pool_stat_t *pstats = mon->pgservice->get_pool_stat(tierpool_id);
+    const pool_stat_t *pstats = mon->mgrstatmon()->get_pool_stat(tierpool_id);
     if (pstats && pstats->stats.sum.num_objects != 0 &&
 	force_nonempty != "--force-nonempty") {
       ss << "tier pool '" << tierpoolstr << "' is not empty; --force-nonempty to force";
@@ -10375,7 +10375,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  mode != pg_pool_t::CACHEMODE_READPROXY))) {
 
       const pool_stat_t* pstats =
-        mon->pgservice->get_pool_stat(pool_id);
+        mon->mgrstatmon()->get_pool_stat(pool_id);
 
       if (pstats && pstats->stats.sum.num_objects_dirty > 0) {
         ss << "unable to set cache-mode '"
@@ -10443,7 +10443,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     // make sure new tier is empty
     const pool_stat_t *pstats =
-      mon->pgservice->get_pool_stat(tierpool_id);
+      mon->mgrstatmon()->get_pool_stat(tierpool_id);
     if (pstats && pstats->stats.sum.num_objects != 0) {
       ss << "tier pool '" << tierpoolstr << "' is not empty";
       err = -ENOTEMPTY;
