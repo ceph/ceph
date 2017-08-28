@@ -70,7 +70,7 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
 
   const int from = stats->get_orig_source().num();
 
-  pending_inc.update_stat(from, stats->epoch, std::move(stats->osd_stat));
+  pending_inc.update_stat(from, std::move(stats->osd_stat));
 
   for (auto p : stats->pg_stat) {
     pg_t pgid = p.first;
