@@ -3725,12 +3725,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
       rdata.append(ds);
     }
-  } else if (prefix == "osd df") {
-    string method;
-    cmd_getval(g_ceph_context, cmdmap, "output_method", method);
-    print_osd_utilization(osdmap, mon->pgservice, ds,
-			  f.get(), method == "tree");
-    rdata.append(ds);
   } else if (prefix == "osd getmaxosd") {
     if (f) {
       f->open_object_section("getmaxosd");
