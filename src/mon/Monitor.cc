@@ -212,7 +212,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   leader_mon_commands = local_mon_commands;
 
   // note: OSDMonitor may update this based on the luminous flag.
-  pgservice = mgrstatmon()->get_pg_stat_service();
+  pgservice = mgrstatmon();
 }
 
 Monitor::~Monitor()

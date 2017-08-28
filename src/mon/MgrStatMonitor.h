@@ -11,7 +11,8 @@
 class PGStatService;
 class MgrPGStatService;
 
-class MgrStatMonitor : public PaxosService {
+class MgrStatMonitor : public PaxosService,
+		       public PGStatService {
   // live version
   version_t version = 0;
   PGMapDigest digest;
@@ -21,8 +22,6 @@ class MgrStatMonitor : public PaxosService {
   PGMapDigest pending_digest;
   health_check_map_t pending_health_checks;
   bufferlist pending_service_map_bl;
-
-  std::unique_ptr<MgrPGStatService> pgservice;
 
 public:
   MgrStatMonitor(Monitor *mn, Paxos *p, const string& service_name);
@@ -65,11 +64,38 @@ public:
 
   void update_logger();
 
-  void print_summary(Formatter *f, std::ostream *ss) const;
-
-  PGStatService *get_pg_stat_service();
   const ServiceMap& get_service_map() {
     return service_map;
+  }
+
+  // PGStatService
+  const pool_stat_t* get_pool_stat(int64_t poolid) const override {
+    auto i = digest.pg_pool_sum.find(poolid);
+    if (i != digest.pg_pool_sum.end()) {
+      return &i->second;
+    }
+    return nullptr;
+  }
+
+  ceph_statfs get_statfs(OSDMap& osdmap,
+			 boost::optional<int64_t> data_pool) const override {
+    return digest.get_statfs(osdmap, data_pool);
+  }
+
+  void print_summary(Formatter *f, ostream *out) const override {
+    digest.print_summary(f, out);
+  }
+  void dump_info(Formatter *f) const override {
+    digest.dump(f);
+  }
+  void dump_fs_stats(stringstream *ss,
+		     Formatter *f,
+		     bool verbose) const override {
+    digest.dump_fs_stats(ss, f, verbose);
+  }
+  void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
+		       bool verbose) const override {
+    digest.dump_pool_stats_full(osdm, ss, f, verbose);
   }
 
   friend class C_Updated;
