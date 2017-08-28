@@ -21,6 +21,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+RGWHTTPManager *rgw_http_manager;
+
 struct rgw_http_req_data : public RefCountedObject {
   CURL *easy_handle{nullptr};
   curl_slist *h{nullptr};
@@ -1109,4 +1111,42 @@ void *RGWHTTPManager::reqs_thread_entry()
   return 0;
 }
 
+void rgw_http_client_init(CephContext *cct)
+{
+  curl_global_init(CURL_GLOBAL_ALL);
+  rgw_http_manager = new RGWHTTPManager(cct);
+  rgw_http_manager->set_threaded();
+}
+
+void rgw_http_client_cleanup()
+{
+  rgw_http_manager->stop();
+  delete rgw_http_manager;
+  curl_global_cleanup();
+}
+
+
+int RGWHTTP::send(RGWHTTPClient *req) {
+  if (!req) {
+    return 0;
+  }
+  int r = rgw_http_manager->add_request(req);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWHTTP::process(RGWHTTPClient *req) {
+  if (!req) {
+    return 0;
+  }
+  int r = send(req);
+  if (r < 0) {
+    return r;
+  }
+
+  return req->wait();
+}
 

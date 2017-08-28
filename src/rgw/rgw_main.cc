@@ -319,8 +319,8 @@ int main(int argc, const char **argv)
   }
 
   rgw_init_resolver();
-  
-  curl_global_init(CURL_GLOBAL_ALL);
+
+  rgw_http_client_init(g_ceph_context);
   
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_Init();
@@ -596,7 +596,7 @@ int main(int argc, const char **argv)
 
   rgw_tools_cleanup();
   rgw_shutdown_resolver();
-  curl_global_cleanup();
+  rgw_http_client_cleanup();
 
   rgw_perf_stop(g_ceph_context);
 
