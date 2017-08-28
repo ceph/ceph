@@ -58,7 +58,6 @@ public:
 
   void check_recovery_sources(const OSDMapRef& osdmap) override;
 
-  /// @see PGBackend::delay_message_until_active
   bool can_handle_while_inactive(OpRequestRef op) override;
 
   /// @see PGBackend::handle_message
