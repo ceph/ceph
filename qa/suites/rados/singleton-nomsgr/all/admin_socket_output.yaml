@@ -9,6 +9,7 @@ overrides:
       - (OSDMAP_FLAGS)
       - (OSD_FULL)
       - (MDS_READ_ONLY)
+      - (POOL_FULL)
 tasks:
 - install:
 - ceph:

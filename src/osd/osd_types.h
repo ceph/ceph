@@ -1147,6 +1147,9 @@ struct pg_pool_t {
     FLAG_WRITE_FADVISE_DONTNEED = 1<<7, // write mode with LIBRADOS_OP_FLAG_FADVISE_DONTNEED
     FLAG_NOSCRUB = 1<<8, // block periodic scrub
     FLAG_NODEEP_SCRUB = 1<<9, // block periodic deep-scrub
+    FLAG_FULL_NO_QUOTA = 1<<10, // pool is currently running out of quota, will set FLAG_FULL too
+    FLAG_NEARFULL = 1<<11, // pool is nearfull
+    FLAG_BACKFILLFULL = 1<<12, // pool is backfillfull
   };
 
   static const char *get_flag_name(int f) {
@@ -1161,6 +1164,9 @@ struct pg_pool_t {
     case FLAG_WRITE_FADVISE_DONTNEED: return "write_fadvise_dontneed";
     case FLAG_NOSCRUB: return "noscrub";
     case FLAG_NODEEP_SCRUB: return "nodeep-scrub";
+    case FLAG_FULL_NO_QUOTA: return "full_no_quota";
+    case FLAG_NEARFULL: return "nearfull";
+    case FLAG_BACKFILLFULL: return "backfillfull";
     default: return "???";
     }
   }
@@ -1199,6 +1205,12 @@ struct pg_pool_t {
       return FLAG_NOSCRUB;
     if (name == "nodeep-scrub")
       return FLAG_NODEEP_SCRUB;
+    if (name == "full_no_quota")
+      return FLAG_FULL_NO_QUOTA;
+    if (name == "nearfull")
+      return FLAG_NEARFULL;
+    if (name == "backfillfull")
+      return FLAG_BACKFILLFULL;
     return 0;
   }
 
