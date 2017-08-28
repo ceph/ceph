@@ -29,8 +29,7 @@ ClusterState::ClusterState(
   : monc(monc_),
     objecter(objecter_),
     lock("ClusterState"),
-    mgr_map(mgrmap),
-    pgservice(pg_map)
+    mgr_map(mgrmap)
 {}
 
 void ClusterState::set_objecter(Objecter *objecter_)

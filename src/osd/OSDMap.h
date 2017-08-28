@@ -1384,10 +1384,10 @@ inline ostream& operator<<(ostream& out, const OSDMap& m) {
   return out;
 }
 
-class PGStatService;
+class PGMap;
 
 void print_osd_utilization(const OSDMap& osdmap,
-			   const PGStatService *pgstat,
+			   const PGMap& pgmap,
 			   ostream& out,
 			   Formatter *f,
 			   bool tree);
