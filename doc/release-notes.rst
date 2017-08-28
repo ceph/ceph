@@ -592,13 +592,11 @@ Upgrade compatibility notes, Kraken to Luminous
     by "ceph tell mds.<id> ..."
 
 
-Notable Changes since v12.1.1 (RC1)
------------------------------------
-
-* choose_args encoding has been changed to make it architecture-independent.
-  If you deployed Luminous dev releases or 12.1.0 rc release and made use of
-  the CRUSH choose_args feature, you need to remove all choose_args mappings
-  from your CRUSH map before starting the upgrade.
+* CRUSH choose_args encoding has been changed to make it
+  architecture-independent.  If you deployed Luminous dev releases or
+  12.1.0 rc release and made use of the CRUSH choose_args feature, you
+  need to remove all choose_args mappings from your CRUSH map before
+  starting the upgrade.
 
 * The 'ceph health' structured output (JSON or XML) no longer contains
   a 'timechecks' section describing the time sync status.  This
@@ -650,41 +648,6 @@ Notable Changes since v12.1.1 (RC1)
   For more details see "User Management" in the documentation.
 
 * ``ceph config-key put`` has been deprecated in favor of ``ceph config-key set``.
-
-
-Notable Changes since v12.1.1 (RC2)
------------------------------------
-
-* New "ceph -w" behavior - the "ceph -w" output no longer contains I/O rates,
-  available space, pg info, etc. because these are no longer logged to the
-  central log (which is what "ceph -w" shows). The same information can be
-  obtained by running "ceph pg stat"; alternatively, I/O rates per pool can
-  be determined using "ceph osd pool stats". Although these commands do not
-  self-update like "ceph -w" did, they do have the ability to return formatted
-  output by providing a "--format=<format>" option.
-
-* Pools are now expected to be associated with the application using them.
-  Upon completing the upgrade to Luminous, the cluster will attempt to associate
-  existing pools to known applications (i.e. CephFS, RBD, and RGW). In-use pools
-  that are not associated to an application will generate a health warning. Any
-  unassociated pools can be manually associated using the new
-  "ceph osd pool application enable" command. For more details see
-  "Associate Pool to Application" in the documentation.
-
-* ceph-mgr now has a Zabbix plugin. Using zabbix_sender it sends trapper
-  events to a Zabbix server containing high-level information of the Ceph
-  cluster. This makes it easy to monitor a Ceph cluster's status and send
-  out notifications in case of a malfunction.
-
-* The 'mon_warn_osd_usage_min_max_delta' config option has been
-  removed and the associated health warning has been disabled because
-  it does not address clusters undergoing recovery or CRUSH rules that do
-  not target all devices in the cluster.
-
-* Specifying user authorization capabilities for RBD clients has been
-  simplified. The general syntax for using RBD capability profiles is
-  "mon 'profile rbd' osd 'profile rbd[-read-only][ pool={pool-name}[, ...]]'".
-  For more details see "User Management" in the documentation.
 
 * RGW: bucket index resharding now uses the reshard  namespace in log pool
   upgrade scenarios as well this is a changed behaviour from RC1 where a
