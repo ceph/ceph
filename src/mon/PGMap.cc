@@ -3274,6 +3274,9 @@ void PGMap::get_health_checks(
     if (cct->_conf->mon_warn_not_scrubbed ||
         cct->_conf->mon_warn_not_deep_scrubbed) {
       list<string> detail, deep_detail;
+      int detail_max = max, deep_detail_max = max;
+      int detail_more = 0, deep_detail_more = 0;
+      int detail_total = 0, deep_detail_total = 0;
       const double age = cct->_conf->mon_warn_not_scrubbed +
         cct->_conf->mon_scrub_interval;
       utime_t cutoff = now;
@@ -3285,30 +3288,60 @@ void PGMap::get_health_checks(
       for (auto& p : pg_stat) {
         if (cct->_conf->mon_warn_not_scrubbed &&
             p.second.last_scrub_stamp < cutoff) {
-	  ostringstream ss;
-	  ss << "pg " << p.first << " not scrubbed since "
-	     << p.second.last_scrub_stamp;
-          detail.push_back(ss.str());
+          if (detail_max > 0) {
+            ostringstream ss;
+            ss << "pg " << p.first << " not scrubbed since "
+               << p.second.last_scrub_stamp;
+            detail.push_back(ss.str());
+            --detail_max;
+          } else {
+            ++detail_more;
+          }
+          ++detail_total;
         }
         if (cct->_conf->mon_warn_not_deep_scrubbed &&
             p.second.last_deep_scrub_stamp < deep_cutoff) {
-	  ostringstream ss;
-	  ss << "pg " << p.first << " not deep-scrubbed since "
-	     << p.second.last_deep_scrub_stamp;
-          deep_detail.push_back(ss.str());
+          if (deep_detail_max > 0) {
+            ostringstream ss;
+            ss << "pg " << p.first << " not deep-scrubbed since "
+               << p.second.last_deep_scrub_stamp;
+            deep_detail.push_back(ss.str());
+            --deep_detail_max;
+          } else {
+            ++deep_detail_more;
+          }
+          ++deep_detail_total;
+        } 
+      }
+      if (detail_total) {
+        ostringstream ss;
+        ss << detail_total << " pgs not scrubbed for " << age;
+        auto& d = checks->add("PG_NOT_SCRUBBED", HEALTH_WARN, ss.str());
+
+        if (!detail.empty()) {
+          d.detail.swap(detail);
+
+          if (detail_more) {
+            ostringstream ss;
+            ss << detail_more << " more pgs... ";
+            d.detail.push_back(ss.str());
+          }
         }
       }
-      if (!detail.empty()) {
+      if (deep_detail_total) {
         ostringstream ss;
-        ss << detail.size() << " pgs not scrubbed for " << age;
-        auto& d = checks->add("PG_NOT_SCRUBBED", HEALTH_WARN, ss.str());
-        d.detail.swap(detail);
-      }
-      if (!deep_detail.empty()) {
-        ostringstream ss;
-        ss << deep_detail.size() << " pgs not deep-scrubbed for " << deep_age;
+        ss << deep_detail_total << " pgs not deep-scrubbed for " << deep_age;
         auto& d = checks->add("PG_NOT_DEEP_SCRUBBED", HEALTH_WARN, ss.str());
-        d.detail.swap(deep_detail);
+
+        if (!deep_detail.empty()) {
+          d.detail.swap(deep_detail);
+
+          if (deep_detail_more) {
+            ostringstream ss;
+            ss << deep_detail_more << " more pgs... ";
+            d.detail.push_back(ss.str());
+          }
+        }
       }
     }
   }
