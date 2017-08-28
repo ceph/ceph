@@ -2,11 +2,8 @@
  Release Notes
 ===============
 
-v12.1.4 Luminous (RC)
-=====================
-
-This is the fifth release candidate for Luminous, the next long term stable
-release.
+v12.2.0 Luminous
+================
 
 Ceph Luminous (v12.2.0) will be the foundation for the next long-term
 stable release series.  There have been major changes since Kraken
@@ -695,6 +692,13 @@ Notable Changes since v12.1.1 (RC2)
 
 * RGW multisite now supports for enabling or disabling sync at a bucket level.
 
+Changes since v12.1.4
+---------------------
+
+...
+  
+v12.1.4 Luminous (RC)
+=====================
 
 Notable Changes
 ---------------
