@@ -316,9 +316,9 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
 }
 
 class RGWRESTStreamOutCB : public RGWGetDataCB {
-  RGWRESTStreamWriteRequest *req;
+  RGWRESTStreamS3PutObj *req;
 public:
-  explicit RGWRESTStreamOutCB(RGWRESTStreamWriteRequest *_req) : req(_req) {}
+  explicit RGWRESTStreamOutCB(RGWRESTStreamS3PutObj *_req) : req(_req) {}
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override; /* callback for object iteration when sending data */
 };
 
@@ -326,34 +326,21 @@ int RGWRESTStreamOutCB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   dout(20) << "RGWRESTStreamOutCB::handle_data bl.length()=" << bl.length() << " bl_ofs=" << bl_ofs << " bl_len=" << bl_len << dendl;
   if (!bl_ofs && bl_len == bl.length()) {
-    return req->add_output_data(bl);
+    req->add_send_data(bl);
+    return 0;
   }
 
   bufferptr bp(bl.c_str() + bl_ofs, bl_len);
   bufferlist new_bl;
   new_bl.push_back(bp);
 
-  return req->add_output_data(new_bl);
+  req->add_send_data(new_bl);
+  return 0;
 }
 
-RGWRESTStreamWriteRequest::~RGWRESTStreamWriteRequest()
+RGWRESTStreamS3PutObj::~RGWRESTStreamS3PutObj()
 {
-  delete cb;
-}
-
-int RGWRESTStreamWriteRequest::add_output_data(bufferlist& bl)
-{
-  lock.Lock();
-  if (status < 0) {
-    int ret = status;
-    lock.Unlock();
-    return ret;
-  }
-  pending_send.push_back(bl);
-  lock.Unlock();
-
-  bool done;
-  return http_manager.process_requests(false, &done);
+  delete out_cb;
 }
 
 static void grants_by_type_add_one_grant(map<int, string>& grants_by_type, int perm, ACLGrant& grant)
@@ -426,7 +413,7 @@ static void add_grants_headers(map<int, string>& grants, RGWEnv& env, map<string
   }
 }
 
-int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs)
+int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs)
 {
   string resource = obj.bucket.name + "/" + obj.get_oid();
   string new_url = url;
@@ -493,65 +480,19 @@ int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uin
     headers.emplace_back(kv);
   }
 
-  cb = new RGWRESTStreamOutCB(this);
+  out_cb = new RGWRESTStreamOutCB(this);
 
   set_send_length(obj_size);
 
   method = new_info.method;
   url = new_url;
 
-  int r = http_manager.add_request(this);
+  int r = RGWHTTP::send(this);
   if (r < 0)
     return r;
 
   return 0;
 }
-
-int RGWRESTStreamWriteRequest::send_data(void *ptr, size_t len)
-{
-  uint64_t sent = 0;
-
-  dout(20) << "RGWRESTStreamWriteRequest::send_data()" << dendl;
-  lock.Lock();
-  if (pending_send.empty() || status < 0) {
-    lock.Unlock();
-    return status;
-  }
-
-  list<bufferlist>::iterator iter = pending_send.begin();
-  while (iter != pending_send.end() && len > 0) {
-    bufferlist& bl = *iter;
-    
-    list<bufferlist>::iterator next_iter = iter;
-    ++next_iter;
-    lock.Unlock();
-
-    uint64_t send_len = min(len, (size_t)bl.length());
-
-    memcpy(ptr, bl.c_str(), send_len);
-
-    ptr = (char *)ptr + send_len;
-    len -= send_len;
-    sent += send_len;
-
-    lock.Lock();
-
-    bufferlist new_bl;
-    if (bl.length() > send_len) {
-      bufferptr bp(bl.c_str() + send_len, bl.length() - send_len);
-      new_bl.append(bp);
-    }
-    pending_send.pop_front(); /* need to do this after we copy data from bl */
-    if (new_bl.length()) {
-      pending_send.push_front(new_bl);
-    }
-    iter = next_iter;
-  }
-  lock.Unlock();
-
-  return sent;
-}
-
 
 void set_str_from_headers(map<string, string>& out_headers, const string& header_name, string& str)
 {
@@ -594,26 +535,6 @@ static int parse_rgwx_mtime(CephContext *cct, const string& s, ceph::real_time *
   return 0;
 }
 
-int RGWRESTStreamWriteRequest::complete(string& etag, real_time *mtime)
-{
-  int ret = http_manager.complete_requests();
-  if (ret < 0)
-    return ret;
-
-  set_str_from_headers(out_headers, "ETAG", etag);
-
-  if (mtime) {
-    string mtime_str;
-    set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
-
-    ret = parse_rgwx_mtime(cct, mtime_str, mtime);
-    if (ret < 0) {
-      return ret;
-    }
-  }
-  return status;
-}
-
 int RGWRESTStreamRWRequest::send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr)
 {
   string urlsafe_bucket, urlsafe_object;
@@ -621,11 +542,11 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey& key, map<string, string>&
   url_encode(obj.key.name, urlsafe_object);
   string resource = urlsafe_bucket + "/" + urlsafe_object;
 
-  return send_request(&key, extra_headers, resource, nullptr, mgr);
+  return send_request(&key, extra_headers, resource, mgr);
 }
 
 int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
-                                         bufferlist *send_data, RGWHTTPManager *mgr)
+                                         RGWHTTPManager *mgr, bufferlist *send_data)
 {
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
@@ -688,11 +609,6 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
     send_data_hint = true;
   }
 
-  RGWHTTPManager *pmanager = &http_manager;
-  if (mgr) {
-    pmanager = mgr;
-  }
-
   // Not sure if this is the place to set a send_size, curl otherwise sets
   // chunked option and doesn't send content length anymore
   uint64_t send_size = (size_t)(outbl.length() - write_ofs);
@@ -705,21 +621,23 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
   method = new_info.method;
   url = new_url;
 
-  int r = pmanager->add_request(this, send_data_hint);
+  if (!mgr) {
+    return RGWHTTP::send(this);
+  }
+
+  int r = mgr->add_request(this, send_data_hint);
   if (r < 0)
     return r;
-
-  if (!mgr) {
-    r = pmanager->complete_requests();
-    if (r < 0)
-      return r;
-  }
 
   return 0;
 }
 
 int RGWRESTStreamRWRequest::complete_request(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs)
 {
+  int ret = wait();
+  if (ret < 0) {
+    return ret;
+  }
   set_str_from_headers(out_headers, "ETAG", etag);
   if (status >= 0) {
     if (mtime) {
