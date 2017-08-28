@@ -147,7 +147,7 @@ def create_pools(ctx, clients):
             create_replicated_pool(remote, data_pool, 64, cluster_name, 'rgw')
         if ctx.rgw.cache_pools:
             create_cache_pool(remote, data_pool, data_pool + '.cache', 64,
-                              64*1024*1024, cluster_name, 'rgw')
+                              64*1024*1024, cluster_name)
     log.debug('Pools created')
     yield
 
