@@ -1334,54 +1334,25 @@ void PGMap::encode_digest(const OSDMap& osdmap,
 
 void PGMap::encode(bufferlist &bl, uint64_t features) const
 {
-  assert(features & CEPH_FEATURE_MONENC);
-  ENCODE_START(6, 4, bl);
+  ENCODE_START(7, 7, bl);
   ::encode(version, bl);
   ::encode(pg_stat, bl);
   ::encode(osd_stat, bl);
   ::encode(last_osdmap_epoch, bl);
   ::encode(last_pg_scan, bl);
-  ::encode((float).95, bl);
-  ::encode((float).85, bl);
   ::encode(stamp, bl);
-  {
-    map<int32_t,epoch_t> osd_epochs;
-    ::encode(osd_epochs, bl);
-  }
   ENCODE_FINISH(bl);
 }
 
 void PGMap::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 4, 4, bl);
+  DECODE_START(7, bl);
   ::decode(version, bl);
-  if (struct_v < 3) {
-    pg_stat.clear();
-    __u32 n;
-    ::decode(n, bl);
-    while (n--) {
-      old_pg_t opgid;
-      ::decode(opgid, bl);
-      pg_t pgid = opgid;
-      ::decode(pg_stat[pgid], bl);
-    }
-  } else {
-    ::decode(pg_stat, bl);
-  }
+  ::decode(pg_stat, bl);
   ::decode(osd_stat, bl);
   ::decode(last_osdmap_epoch, bl);
   ::decode(last_pg_scan, bl);
-  if (struct_v >= 2) {
-    float full_ratio;
-    ::decode(full_ratio, bl);
-    ::decode(full_ratio, bl); // nearfull
-  }
-  if (struct_v >= 5)
-    ::decode(stamp, bl);
-  if (struct_v >= 6) {
-    map<int32_t,epoch_t> osd_epochs;
-    ::decode(osd_epochs, bl);
-  }
+  ::decode(stamp, bl);
   DECODE_FINISH(bl);
 
   calc_stats();
