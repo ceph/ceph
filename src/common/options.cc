@@ -961,14 +961,6 @@ std::vector<Option> get_global_options() {
     .set_default(32)
     .set_description(""),
 
-    Option("mon_osd_allow_primary_temp", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
-    Option("mon_osd_allow_primary_affinity", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
     Option("mon_osd_prime_pg_temp", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
