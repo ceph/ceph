@@ -38,6 +38,7 @@ public:
 
   void shut_down(Context *on_shutdown);
 
+  bool is_lock_required() const;
   bool is_lock_request_needed() const;
 
   inline bool writes_blocked() const {
@@ -109,7 +110,6 @@ private:
   int start_in_flight_op(AioCompletion *c);
   void finish_in_flight_op();
 
-  bool is_lock_required() const;
   void queue(AioImageRequest<ImageCtx> *req);
 
   void handle_refreshed(int r, AioImageRequest<ImageCtx> *req);
