@@ -1042,7 +1042,7 @@ int LFNIndex::lfn_parse_object_name_keyless(const string &long_name, ghobject_t 
   out->hobj.pool = pool;
   if (!r) return -EINVAL;
   string temp = lfn_generate_object_name(*out);
-  return r ? 0 : -EINVAL;
+  return 0;
 }
 
 static bool append_unescaped(string::const_iterator begin,
