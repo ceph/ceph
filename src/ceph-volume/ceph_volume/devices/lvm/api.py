@@ -4,7 +4,7 @@ that prefixes tags with ``ceph.`` and uses ``=`` for assignment, and provides
 set of utilities for interacting with LVM.
 """
 from ceph_volume import process
-from ceph_volume.exceptions import MultipleLVsError, MultipleVGsError
+from ceph_volume.exceptions import MultipleLVsError, MultipleVGsError, MultiplePVsError
 
 
 def _output_parser(output, fields):
@@ -115,15 +115,17 @@ def get_api_pvs():
 
     Command and delimeted output, should look like::
 
-        $ sudo lvs --noheadings --separator=';' -o lv_tags,lv_path,lv_name,vg_name
-          ;/dev/ubuntubox-vg/root;root;ubuntubox-vg
-          ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
+        $ sudo pvs --noheadings --separator=';' -o pv_name,pv_tags,pv_uuid
+          /dev/sda1;;
+          /dev/sdv;;07A4F654-4162-4600-8EB3-88D1E42F368D
 
     """
     fields = 'pv_name,pv_tags,pv_uuid'
 
+    # note the use of `pvs -a` which will return every physical volume including
+    # ones that have not been initialized as "pv" by LVM
     stdout, stderr, returncode = process.call(
-        ['sudo', 'pvs', '--no-heading', '--separator=";"', '-o', fields]
+        ['sudo', 'pvs', '-a', '--no-heading', '--separator=";"', '-o', fields]
     )
 
     return _output_parser(stdout, fields)
@@ -143,6 +145,18 @@ def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_tags=None):
         return None
     lvs = Volumes()
     return lvs.get(lv_name=lv_name, vg_name=vg_name, lv_path=lv_path, lv_tags=lv_tags)
+
+
+def get_pv(pv_name=None, pv_uuid=None, pv_tags=None):
+    """
+    Return a matching pv (physical volume) for the current system, requiring
+    ``pv_name``, ``pv_uuid``, or ``pv_tags``. Raises an error if more than one
+    pv is found.
+    """
+    if not any([pv_name, pv_uuid, pv_tags]):
+        return None
+    pvs = PVolumes()
+    return pvs.get(pv_name=pv_name, pv_uuid=pv_uuid, pv_tags=pv_tags)
 
 
 def create_pv(device):
@@ -432,6 +446,105 @@ class Volumes(list):
         return lvs[0]
 
 
+class PVolumes(list):
+    """
+    A list of all known (physical) volumes for the current system, with the ability
+    to filter them via keyword arguments.
+    """
+
+    def __init__(self):
+        self._populate()
+
+    def _populate(self):
+        # get all the pvs in the current system
+        for pv_item in get_api_pvs():
+            self.append(PVolume(**pv_item))
+
+    def _purge(self):
+        """
+        Deplete all the items in the list, used internally only so that we can
+        dynamically allocate the items when filtering without the concern of
+        messing up the contents
+        """
+        self[:] = []
+
+    def _filter(self, pv_name=None, pv_uuid=None, pv_tags=None):
+        """
+        The actual method that filters using a new list. Useful so that other
+        methods that do not want to alter the contents of the list (e.g.
+        ``self.find``) can operate safely.
+        """
+        filtered = [i for i in self]
+        if pv_name:
+            filtered = [i for i in filtered if i.pv_name == pv_name]
+
+        if pv_uuid:
+            filtered = [i for i in filtered if i.pv_uuid == pv_uuid]
+
+        # at this point, `filtered` has either all the physical volumes in self
+        # or is an actual filtered list if any filters were applied
+        if pv_tags:
+            tag_filtered = []
+            for k, v in pv_tags.items():
+                for pvolume in filtered:
+                    if pvolume.tags.get(k) == str(v):
+                        if pvolume not in tag_filtered:
+                            tag_filtered.append(pvolume)
+            # return the tag_filtered pvolumes here, the `filtered` list is no
+            # longer useable
+            return tag_filtered
+
+        return filtered
+
+    def filter(self, pv_name=None, pv_uuid=None, pv_tags=None):
+        """
+        Filter out volumes on top level attributes like ``pv_name`` or by
+        ``pv_tags`` where a dict is required. For example, to find a physical volume
+        that has an OSD ID of 0, the filter would look like::
+
+            pv_tags={'ceph.osd_id': '0'}
+
+        """
+        if not any([pv_name, pv_uuid, pv_tags]):
+            raise TypeError('.filter() requires pv_name, pv_uuid, or pv_tags (none given)')
+        # first find the filtered volumes with the values in self
+        filtered_volumes = self._filter(
+            pv_name=pv_name,
+            pv_uuid=pv_uuid,
+            pv_tags=pv_tags
+        )
+        # then purge everything
+        self._purge()
+        # and add the filtered items
+        self.extend(filtered_volumes)
+
+    def get(self, pv_name=None, pv_uuid=None, pv_tags=None):
+        """
+        This is a bit expensive, since it will try to filter out all the
+        matching items in the list, filter them out applying anything that was
+        added and return the matching item.
+
+        This method does *not* alter the list, and it will raise an error if
+        multiple pvs are matched
+
+        It is useful to use ``tags`` when trying to find a specific logical volume,
+        but it can also lead to multiple pvs being found, since a lot of metadata
+        is shared between pvs of a distinct OSD.
+        """
+        if not any([pv_name, pv_uuid, pv_tags]):
+            return None
+        pvs = self._filter(
+            pv_name=pv_name,
+            pv_uuid=pv_uuid,
+            pv_tags=pv_tags
+        )
+        if not pvs:
+            return None
+        if len(pvs) > 1:
+            raise MultiplePVsError(pv_name)
+        return pvs[0]
+
+
 class VolumeGroup(object):
     """
     Represents an LVM group, with some top-level attributes like ``vg_name``
@@ -543,24 +656,29 @@ class PVolume(object):
             self.set_tag(k, v)
         # after setting all the tags, refresh them for the current object, use the
         # pv_* identifiers to filter because those shouldn't change
-        pv_object = get_pv(pv_name=self.pv_name, pv_path=self.pv_path)
+        pv_object = get_pv(pv_name=self.pv_name, pv_uuid=self.pv_uuid)
         self.tags = pv_object.tags
 
     def set_tag(self, key, value):
         """
-        Set the key/value pair as an pvM tag. Does not "refresh" the values of
+        Set the key/value pair as an LVM tag. Does not "refresh" the values of
         the current object for its tags. Meant to be a "fire and forget" type
         of modification.
+
+        **warning**: Altering tags on a PV has to be done ensuring that the
+        device is actually the one intended. ``pv_name`` is *not* a persistent
+        value, only ``pv_uuid`` is. Using ``pv_uuid`` is the best way to make
+        sure the device getting changed is the one needed.
         """
         # remove it first if it exists
         if self.tags.get(key):
             current_value = self.tags[key]
             tag = "%s=%s" % (key, current_value)
-            process.call(['sudo', 'pvchange', '--deltag', tag, self.pv_api['pv_path']])
+            process.call(['sudo', 'pvchange', '--deltag', tag, self.pv_name])
 
         process.call(
             [
                 'sudo', 'pvchange',
-                '--addtag', '%s=%s' % (key, value), self.pv_path
+                '--addtag', '%s=%s' % (key, value), self.pv_name
             ]
         )
