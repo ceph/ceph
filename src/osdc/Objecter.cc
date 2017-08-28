@@ -4235,7 +4235,7 @@ void Objecter::_finish_pool_stat_op(PoolStatOp *op, int r)
   delete op;
 }
 
-void Objecter::get_fs_stats(ceph_statfs& result,
+void Objecter::get_fs_stats(struct ceph_statfs& result,
 			    boost::optional<int64_t> data_pool,
 			    Context *onfinish)
 {
