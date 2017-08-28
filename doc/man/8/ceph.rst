@@ -569,7 +569,7 @@ the accompanying lockbox cephx key.
 
 Usage::
 
-    ceph osd new {<id>} {<uuid>} -i {<secrets.json>}
+    ceph osd new {<uuid>} {<id>} -i {<secrets.json>}
 
 The secrets JSON file is optional but if provided, is expected to maintain
 a form of the following format::
