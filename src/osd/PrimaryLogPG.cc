@@ -1978,7 +1978,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   // We can't allow OSD to become non-startable even if mds
   // could be writing as part of file removals.
   ostringstream ss;
-  if (write_ordered && osd->check_failsafe_full(ss)) {
+  if (write_ordered && osd->check_failsafe_full(ss) && !m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
              << ss.str()
 	     << dendl;
