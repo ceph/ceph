@@ -216,7 +216,7 @@ private:
 
   map<hobject_t, PullInfo> pulling;
 
-  // Reverse mapping from osd peer to objects beging pulled from that peer
+  // Reverse mapping from osd peer to objects being pulled from that peer
   map<pg_shard_t, set<hobject_t> > pull_from_peer;
   void clear_pull(
     map<hobject_t, PullInfo>::iterator piter,

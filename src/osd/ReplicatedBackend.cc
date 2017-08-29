@@ -2121,7 +2121,7 @@ bool ReplicatedBackend::handle_push_reply(
 	pi->recovery_progress, &new_progress, reply,
 	&(pi->stat));
       // Handle the case of a read error right after we wrote, which is
-      // hopefuilly extremely rare.
+      // hopefully extremely rare.
       if (r < 0) {
         dout(5) << __func__ << ": oid " << soid << " error " << r << dendl;
 

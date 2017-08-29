@@ -638,7 +638,7 @@ struct C_DoWatchError : public Context {
 int Objecter::_normalize_watch_error(int r)
 {
   // translate ENOENT -> ENOTCONN so that a delete->disconnection
-  // notification and a failure to reconnect becuase we raced with
+  // notification and a failure to reconnect because we raced with
   // the delete appear the same to the user.
   if (r == -ENOENT)
     r = -ENOTCONN;
@@ -2190,7 +2190,7 @@ void Objecter::tick()
     }
   }
 
-  // Make sure we don't resechedule if we wake up after shutdown
+  // Make sure we don't reschedule if we wake up after shutdown
   if (initialized) {
     tick_event = timer.reschedule_me(ceph::make_timespan(
 				       cct->_conf->objecter_tick_interval));

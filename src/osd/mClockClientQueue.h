@@ -34,7 +34,7 @@ namespace ceph {
 
   // This class exists to bridge the ceph code, which treats the class
   // as the client, and the queue, where the class is
-  // osd_op_type_t. So this adpater class will transform calls
+  // osd_op_type_t. So this adapter class will transform calls
   // appropriately.
   class mClockClientQueue : public OpQueue<Request, Client> {
 

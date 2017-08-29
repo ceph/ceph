@@ -2067,7 +2067,7 @@ WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
 /**
  * pg_hit_set_info_t - information about a single recorded HitSet
  *
- * Track basic metadata about a HitSet, like the nubmer of insertions
+ * Track basic metadata about a HitSet, like the number of insertions
  * and the time range it covers.
  */
 struct pg_hit_set_info_t {

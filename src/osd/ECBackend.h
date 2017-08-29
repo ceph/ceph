@@ -140,7 +140,7 @@ public:
    * maintain a queue of in progress reads (@see in_progress_client_reads)
    * to ensure that we always call the completion callback in order.
    *
-   * Another subtely is that while we may read a degraded object, we will
+   * Another subtly is that while we may read a degraded object, we will
    * still only perform a client read from shards in the acting set.  This
    * ensures that we won't ever have to restart a client initiated read in
    * check_recovery_sources.
