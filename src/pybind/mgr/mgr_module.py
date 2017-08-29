@@ -6,7 +6,15 @@ import ceph_crushmap  #noqa
 import json
 import logging
 import threading
+from collections import defaultdict
 
+
+# Priority definitions for perf counters
+PRIO_CRITICAL = 10
+PRIO_INTERESTING = 8
+PRIO_USEFUL = 5
+PRIO_UNINTERESTING = 2
+PRIO_DEBUGONLY = 0
 
 class CommandResult(object):
     """
@@ -144,6 +152,19 @@ class MgrModule(object):
         self._logger.addHandler(CPlusPlusHandler())
 
         self._version = ceph_state.get_version()
+
+        self._perf_schema_cache = None
+
+    def update_perf_schema(self, daemon_type, daemon_name):
+        """
+        For plugins that use get_all_perf_counters, call this when
+        receiving a notification of type 'perf_schema_update', to
+        prompt MgrModule to update its cache of counter schemas.
+
+        :param daemon_type:
+        :param daemon_name:
+        :return:
+        """
 
     @property
     def log(self):
@@ -395,3 +416,60 @@ class MgrModule(object):
         :return: OSDMap
         """
         return OSDMap(ceph_state.get_osdmap())
+
+    def get_all_perf_counters(self, prio_limit=PRIO_USEFUL):
+        """
+        Return the perf counters currently known to this ceph-mgr
+        instance, filtered by priority equal to or greater than `prio_limit`.
+
+        The result us a map of string to dict, associating services
+        (like "osd.123") with their counters.  The counter
+        dict for each service maps counter paths to a counter
+        info structure, which is the information from
+        the schema, plus an additional "value" member with the latest
+        value.
+        """
+
+        result = defaultdict(dict)
+
+        # TODO: improve C++->Python interface to return just
+        # the latest if that's all we want.
+        def get_latest(daemon_type, daemon_name, counter):
+            data = self.get_counter(daemon_type, daemon_name, counter)[counter]
+            if data:
+                return data[-1][1]
+            else:
+                return 0
+
+        for server in self.list_servers():
+            for service in server['services']:
+                if service['type'] not in ("mds", "osd", "mon"):
+                    continue
+
+                schema = self.get_perf_schema(service['type'], service['id'])
+                if not schema:
+                    self.log.warn("No perf counter schema for {0}.{1}".format(
+                        service['type'], service['id']
+                    ))
+                    continue
+
+                # Value is returned in a potentially-multi-service format,
+                # get just the service we're asking about
+                svc_full_name = "{0}.{1}".format(service['type'], service['id'])
+                schema = schema[svc_full_name]
+
+                # Populate latest values
+                for counter_path, counter_schema in schema.items():
+                    # self.log.debug("{0}: {1}".format(
+                    #     counter_path, json.dumps(counter_schema)
+                    # ))
+                    if counter_schema['priority'] < prio_limit:
+                        continue
+
+                    counter_info = counter_schema
+                    counter_info['value'] = get_latest(service['type'], service['id'], counter_path)
+                    result[svc_full_name][counter_path] = counter_info
+
+        self.log.debug("returning {0} counter".format(len(result)))
+
+        return result
