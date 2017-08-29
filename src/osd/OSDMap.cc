@@ -2947,6 +2947,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",require_luminous_osds";
   if (f & CEPH_OSDMAP_RECOVERY_DELETES)
     s += ",recovery_deletes";
+  if (f & CEPH_OSDMAP_PURGED_SNAPDIRS)
+    s += ",purged_snapdirs";
   if (s.length())
     s.erase(0, 1);
   return s;

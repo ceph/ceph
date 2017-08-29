@@ -156,13 +156,15 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_REQUIRE_KRAKEN   (1<<17) /* require kraken for booting osds */
 #define CEPH_OSDMAP_REQUIRE_LUMINOUS (1<<18) /* require l for booting osds */
 #define CEPH_OSDMAP_RECOVERY_DELETES (1<<19) /* deletes performed during recovery instead of peering */
+#define CEPH_OSDMAP_PURGED_SNAPDIRS  (1<<20) /* osds have converted snapsets */
 
 /* these are hidden in 'ceph status' view */
 #define CEPH_OSDMAP_SEMIHIDDEN_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL|	\
 				      CEPH_OSDMAP_REQUIRE_KRAKEN |	\
 				      CEPH_OSDMAP_REQUIRE_LUMINOUS |	\
 				      CEPH_OSDMAP_RECOVERY_DELETES |	\
-				      CEPH_OSDMAP_SORTBITWISE)
+				      CEPH_OSDMAP_SORTBITWISE |		\
+				      CEPH_OSDMAP_PURGED_SNAPDIRS)
 #define CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL |	\
 					  CEPH_OSDMAP_REQUIRE_KRAKEN |	\
 					  CEPH_OSDMAP_REQUIRE_LUMINOUS)
