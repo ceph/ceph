@@ -2700,6 +2700,7 @@ struct PGLogTrimTest :
 {
   CephContext *cct = g_ceph_context;
 
+  using ::testing::Test::SetUp;
   void SetUp(unsigned min_entries, unsigned max_entries, unsigned dup_track) {
     constexpr size_t size = 10;
 
