@@ -323,7 +323,6 @@ public:
     }
     throw std::system_error((int)std::errc::operation_not_permitted,
 			    std::generic_category());
-    return unique_lock_type();
   }
 
   shared_lock_type release_to_shared() {
