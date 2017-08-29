@@ -233,7 +233,7 @@ private:
     if (ret == -EINVAL) {
       // if shrinking an image, a pagecache writeback might reference
       // extents outside of the range of the new image extents
-      dout(5) << __func__ << ": masking IO out-of-bounds error" << dendl;
+      dout(0) << __func__ << ": masking IO out-of-bounds error" << dendl;
       ctx->data.clear();
       ret = 0;
     }
