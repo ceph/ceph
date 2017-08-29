@@ -7609,16 +7609,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
-
-    if (!newcrush.class_exists(srcname)) {
-      err = -ENOENT;
-      ss << "class '" << srcname << "' does not exist";
-      goto reply;
-    }
-
-    if (newcrush.class_exists(dstname)) {
-      err = -EEXIST;
-      ss << "class '" << dstname << "' already exists";
+    if (!newcrush.class_exists(srcname) && newcrush.class_exists(dstname)) {
+      // suppose this is a replay and return success
+      // so command is idempotent
+      ss << "already renamed to '" << dstname << "'";
+      err = 0;
       goto reply;
     }
 

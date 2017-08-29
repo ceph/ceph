@@ -209,6 +209,7 @@ function TEST_mon_classes() {
     ceph osd crush tree --show-shadow | grep 'class_1' || return 1
     ceph osd crush rule create-replicated class_1_rule default host class_1 || return 1
     ceph osd crush class rename class_1 class_2
+    ceph osd crush class rename class_1 class_2 # idempotent
     ceph osd crush class ls | grep 'class_1' && return 1
     ceph osd crush tree --show-shadow | grep 'class_1' && return 1
     ceph osd crush class ls | grep 'class_2' || return 1
