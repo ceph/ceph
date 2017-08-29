@@ -5854,6 +5854,11 @@ next:
     if (inconsistent_index == false) {
       RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, true);
     } else {
+      if (!yes_i_really_mean_it) {
+	cerr << "using --inconsistent_index can corrupt the bucket index " << std::endl
+	<< "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+	return 1;
+      }
       RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, false);
     }
   }
