@@ -11,13 +11,28 @@ tasks:
 - install:
 - ceph:
 - rbd.xfstests:
-    client.0:
+    client.0: &ref
         test_image: 'test_image-0'
+        test_size: 5120  # MB
         scratch_image: 'scratch_image-0'
-        tests: '-g auto'
+        scratch_size: 5120  # MB
+        fs_type: ext4
+        tests: '-g auto -x clone'
+        exclude:
+        - generic/042
+        - generic/392
+        - generic/044
+        - generic/045
+        - generic/046
+        - generic/223
+        - ext4/304
+        - generic/050  # krbd BLKROSET bug
+        - generic/388
+        - generic/405
+        - generic/422
+        - generic/448
         randomize: true
     client.1:
+        <<: *ref
         test_image: 'test_image-1'
         scratch_image: 'scratch_image-1'
-        tests: '-g auto'
-        randomize: true
