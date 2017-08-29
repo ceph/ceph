@@ -71,13 +71,13 @@ bool HeartbeatMap::_check(const heartbeat_handle_d *h, const char *who, time_t n
 
   was = h->timeout;
   if (was && was < now) {
-    ldout(m_cct, 1) << who << " '" << h->name << "'"
+    ldout(m_cct, 0) << who << " '" << h->name << "'"
 		    << " had timed out after " << h->grace << dendl;
     healthy = false;
   }
   was = h->suicide_timeout;
   if (was && was < now) {
-    ldout(m_cct, 1) << who << " '" << h->name << "'"
+    ldout(m_cct, 0) << who << " '" << h->name << "'"
 		    << " had suicide timed out after " << h->suicide_grace << dendl;
     pthread_kill(h->thread_id, SIGABRT);
     sleep(1);
