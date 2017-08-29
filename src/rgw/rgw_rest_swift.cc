@@ -175,7 +175,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(RGWUserBuckets& buckets)
+void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(RGWUserBuckets&& buckets)
 {
   if (wants_reversed) {
     /* Just store in the reversal buffer. Its content will be handled later,

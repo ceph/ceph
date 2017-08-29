@@ -773,11 +773,12 @@ struct RGWUserInfo
 WRITE_CLASS_ENCODER(RGWUserInfo)
 
 struct rgw_pool {
-  string name;
-  string ns;
+  std::string name;
+  std::string ns;
 
-  rgw_pool() {}
+  rgw_pool() = default;
   rgw_pool(const rgw_pool& _p) : name(_p.name), ns(_p.ns) {}
+  rgw_pool(rgw_pool&&) = default;
   rgw_pool(const string& _s) {
     from_str(_s);
   }
@@ -833,6 +834,8 @@ struct rgw_pool {
     DECODE_FINISH(bl);
   }
 
+  rgw_pool& operator=(const rgw_pool&) = default;
+
   bool operator==(const rgw_pool& p) const {
     return (compare(p) == 0);
   }
@@ -854,10 +857,20 @@ struct rgw_data_placement_target {
   rgw_pool data_extra_pool;
   rgw_pool index_pool;
 
-  rgw_data_placement_target() {}
+  rgw_data_placement_target() = default;
+  rgw_data_placement_target(const rgw_data_placement_target&) = default;
+  rgw_data_placement_target(rgw_data_placement_target&&) = default;
 
-  rgw_data_placement_target(const rgw_pool& _data_pool, const rgw_pool& _data_extra_pool, const rgw_pool& _index_pool) 
-         : data_pool(_data_pool), data_extra_pool(_data_extra_pool), index_pool(_index_pool) {}
+  rgw_data_placement_target(const rgw_pool& data_pool,
+                            const rgw_pool& data_extra_pool,
+                            const rgw_pool& index_pool)
+    : data_pool(data_pool),
+      data_extra_pool(data_extra_pool),
+      index_pool(index_pool) {
+  }
+
+  rgw_data_placement_target&
+  operator=(const rgw_data_placement_target&) = default;
 
   const rgw_pool& get_data_extra_pool() const {
     if (data_extra_pool.empty()) {
@@ -983,6 +996,8 @@ struct rgw_bucket {
     explicit_placement(b.explicit_placement.data_pool,
                        b.explicit_placement.data_extra_pool,
                        b.explicit_placement.index_pool) {}
+  rgw_bucket(const rgw_bucket&) = default;
+  rgw_bucket(rgw_bucket&&) = default;
 
   void convert(cls_user_bucket *b) const {
     b->name = name;
@@ -1067,6 +1082,8 @@ struct rgw_bucket {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket*>& o);
+
+  rgw_bucket& operator=(const rgw_bucket&) = default;
 
   bool operator<(const rgw_bucket& b) const {
     if (tenant == b.tenant) {
@@ -1868,7 +1885,15 @@ struct RGWBucketEnt {
   real_time creation_time;
   uint64_t count;
 
-  RGWBucketEnt() : size(0), size_rounded(0), count(0) {}
+  RGWBucketEnt()
+    : size(0),
+      size_rounded(0),
+      count(0) {
+  }
+  RGWBucketEnt(const RGWBucketEnt&) = default;
+  RGWBucketEnt(RGWBucketEnt&&) = default;
+
+  RGWBucketEnt& operator=(const RGWBucketEnt&) = default;
 
   explicit RGWBucketEnt(const rgw_user& u, const cls_user_bucket_entry& e)
     : bucket(u, e.bucket),

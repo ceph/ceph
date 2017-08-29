@@ -53,7 +53,7 @@ public:
   ~RGWListBuckets_ObjStore_SWIFT() override {}
 
   int get_params() override;
-  void handle_listing_chunk(RGWUserBuckets& buckets) override;
+  void handle_listing_chunk(RGWUserBuckets&& buckets) override;
   void send_response_begin(bool has_buckets) override;
   void send_response_data(RGWUserBuckets& buckets) override;
   void send_response_data_reversed(RGWUserBuckets& buckets);
