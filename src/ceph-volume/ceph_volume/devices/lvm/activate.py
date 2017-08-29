@@ -18,7 +18,10 @@ def activate_filestore(lvs):
     # blow up with a KeyError if this doesn't exist
     osd_fsid = osd_lv.tags['ceph.osd_fsid']
     if not osd_journal_lv:
-        osd_journal = osd_lv.tags.get('ceph.journal_device')
+        # must be a pv, by quering lvm by the uuid we are ensuring that the
+        # device path is always correct
+        osd_journal_pv = api.get_pv(pv_uuid=osd_lv.tags['journal_uuid'])
+        osd_journal = osd_journal_pv.pv_name
     else:
         osd_journal = osd_journal.lv_path
 
