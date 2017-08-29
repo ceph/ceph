@@ -92,6 +92,14 @@ ceph osd tree | grep -c host1 | grep -q 0
 expect_false ceph osd crush rm bar   # not empty
 ceph osd crush unlink host2
 
+ceph osd crush add-bucket host-for-test host root=root-for-test rack=rack-for-test
+ceph osd tree | grep host-for-test
+ceph osd tree | grep rack-for-test
+ceph osd tree | grep root-for-test
+ceph osd crush rm host-for-test
+ceph osd crush rm rack-for-test
+ceph osd crush rm root-for-test
+
 # reference foo and bar with a rule
 ceph osd crush rule create-simple foo-rule foo host firstn
 expect_false ceph osd crush rm foo
