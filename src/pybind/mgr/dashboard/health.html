@@ -334,15 +334,15 @@
                             </thead>
                             <tbody>
                             <tr rv-each-pool="pools">
-                                <td style="text-align: right;">
+                                <td>
                                     {pool.pool_name}
                                 </td>
                                 <td rv-style="pool.pg_status | pg_status_style">
                                     {pool.pg_status | pg_status}
                                 </td>
                                 <td>
-                                    {pool.stats.bytes_used.latest | dimless} /
-                                    {pool.stats.max_avail.latest | dimless }
+                                    {pool.stats.bytes_used.latest | dimless_binary } /
+                                    {pool.stats.max_avail.latest | dimless_binary }
                                 </td>
                                 <td>
                                     {pool.stats.rd_bytes.rate | dimless } rd, {
