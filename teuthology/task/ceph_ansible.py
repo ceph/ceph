@@ -286,7 +286,14 @@ class CephAnsible(Task):
         ceph_installer = self.ceph_installer
         args = self.args
         if ceph_installer.os.package_type == 'rpm':
-            # install crypto packages for ansible
+            # handle selinux init issues during purge-cluster
+            # https://bugzilla.redhat.com/show_bug.cgi?id=1364703
+            ceph_installer.run(
+                args=[
+                    'sudo', 'yum', 'remove', '-y', 'libselinux-python'
+                ]
+            )
+            # install crypto/selinux packages for ansible
             ceph_installer.run(args=[
                 'sudo',
                 'yum',
@@ -294,7 +301,8 @@ class CephAnsible(Task):
                 '-y',
                 'libffi-devel',
                 'python-devel',
-                'openssl-devel'
+                'openssl-devel',
+                'libselinux-python'
             ])
         else:
             ceph_installer.run(args=[
@@ -303,6 +311,7 @@ class CephAnsible(Task):
                 'install',
                 '-y',
                 'libssl-dev',
+                'python-openssl',
                 'libffi-dev',
                 'python-dev'
             ])
