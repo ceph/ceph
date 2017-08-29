@@ -2,7 +2,12 @@ tasks:
 - install:
 - exec:
     mon.b:
+    - sudo systemctl stop ntpd || sudo /etc/init.d/ntp stop
     - date -u -s @$(expr $(date -u +%s) + 10)
+- full_sequential_finally:
+  - exec:
+      mon.b:
+        - sudo systemctl start ntpd || sudo /etc/init.d/ntp start
 - ceph:
     wait-for-healthy: false
     log-whitelist:
