@@ -392,16 +392,19 @@ Title of pull requests and title of commits
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The text up to the first empty line in a commit message is the commit
-title. Ideally it is a single short line less than 50 characters,
+title. Ideally it is a single short line of at most 72 characters,
 summarizing the change. It is required to prefix it with the
 subsystem or module you are changing. For instance, the prefix
 could be "doc:", "osd:", or "common:". One can use::
 
      git log
 
-for more examples. Please use this convention for naming pull requests
-(subsystem: short description) also, as it feeds directly into the script
-that generates release notes and it's tedious to clean up at release time.
+for more examples. Please use this "subsystem: short description"
+convention for naming pull requests (PRs) also, as it feeds directly
+into the script that generates release notes and it's tedious to clean
+up at release time. This document places no limit on the length of PR
+titles, but be aware that they are subject to editing as part of the
+release process.
 
 Commit message
 ^^^^^^^^^^^^^^
