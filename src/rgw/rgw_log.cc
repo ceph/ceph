@@ -351,7 +351,11 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   else
     set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
-  set_param_str(s, "HTTP_REFERRER", entry.referrer);
+  // legacy apps are still using misspelling referer, such as curl -e option
+  if (s->info.env->exists("HTTP_REFERRER"))
+    set_param_str(s, "HTTP_REFERRER", entry.referrer);
+  else
+    set_param_str(s, "HTTP_REFERER", entry.referrer);
   set_param_str(s, "REQUEST_URI", entry.uri);
   set_param_str(s, "REQUEST_METHOD", entry.op);
 
