@@ -31,4 +31,9 @@ overrides:
         enable experimental unrecoverable data corrupting features: "*"
       mon:
         mon warn on osd down out interval zero: false
+      osd:
+        osd_class_load_list: "cephfs hello journal lock log numops rbd refcount 
+                              replica_log rgw sdk statelog timeindex user version"
+        osd_class_default_list: "cephfs hello journal lock log numops rbd refcount 
+                                 replica_log rgw sdk statelog timeindex user version"
     fs: xfs
