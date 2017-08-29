@@ -1864,7 +1864,7 @@ void RGWListBuckets::execute()
       map<string, RGWBucketEnt>::reverse_iterator riter = m.rbegin();
       marker = riter->first;
 
-      handle_listing_chunk((buckets));
+      handle_listing_chunk(std::move(buckets));
     }
   } while (is_truncated && !done);
 
