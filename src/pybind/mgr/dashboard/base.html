@@ -394,9 +394,9 @@
                 <li rv-each-pool="rbd_pools">
                   <a rv-href="pool.url"><i class="fa fa-circle-o"></i> {pool.name}</a>
                 </li>
+                <li class="ceph-none-found" rv-hide="rbd_pools | length">None found</li>
               </ul>
             </li>
-            <li class="ceph-none-found" rv-hide="rbd_pools | length">None found</li>
           </ul>
         </li>
         <li class="treeview{%if path_info.startswith(('/filesystem/', '/clients/'))%} active{%endif%}">
