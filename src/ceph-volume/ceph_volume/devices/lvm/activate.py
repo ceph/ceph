@@ -1,6 +1,5 @@
 from __future__ import print_function
 import argparse
-import os
 from textwrap import dedent
 from ceph_volume import process, conf, decorators
 from ceph_volume.util import system
@@ -20,7 +19,7 @@ def activate_filestore(lvs):
     if not osd_journal_lv:
         # must be a pv, by quering lvm by the uuid we are ensuring that the
         # device path is always correct
-        osd_journal_pv = api.get_pv(pv_uuid=osd_lv.tags['journal_uuid'])
+        osd_journal_pv = api.get_pv(pv_uuid=osd_lv.tags['ceph.journal_uuid'])
         osd_journal = osd_journal_pv.pv_name
     else:
         osd_journal = osd_journal.lv_path
@@ -34,11 +33,10 @@ def activate_filestore(lvs):
     if not system.is_mounted(source, destination=destination):
         process.run(['sudo', 'mount', '-v', source, destination])
 
-    # ensure that the symlink for the journal is there
-    if not os.path.exists(osd_journal):
-        source = osd_journal
-        destination = '/var/lib/ceph/osd/%s-%s/journal' % (conf.cluster, osd_id)
-        process.run(['sudo', 'ln', '-s', source, destination])
+    # always re-do the symlink regardless if it exists, so that the journal
+    # device path that may have changed can be mapped correctly every time
+    destination = '/var/lib/ceph/osd/%s-%s/journal' % (conf.cluster, osd_id)
+    process.run(['sudo', 'ln', '-snf', osd_journal, destination])
 
     # make sure that the journal has proper permissions
     system.chown(osd_journal)
