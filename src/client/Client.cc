@@ -7567,8 +7567,6 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 
   string dn_name;
   while (true) {
-    if (!dirp->inode->is_complete_and_ordered())
-      return -EAGAIN;
     if (pd == dir->readdir_cache.end())
       break;
     Dentry *dn = *pd;
