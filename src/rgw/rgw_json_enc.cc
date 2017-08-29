@@ -904,6 +904,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("log_pool", log_pool, f);
   encode_json("intent_log_pool", intent_log_pool, f);
   encode_json("usage_log_pool", usage_log_pool, f);
+  encode_json("roles_pool", roles_pool, f);
   encode_json("reshard_pool", reshard_pool, f);
   encode_json("user_keys_pool", user_keys_pool, f);
   encode_json("user_email_pool", user_email_pool, f);
@@ -945,6 +946,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("lc_pool", lc_pool, obj);
   JSONDecoder::decode_json("log_pool", log_pool, obj);
   JSONDecoder::decode_json("intent_log_pool", intent_log_pool, obj);
+  JSONDecoder::decode_json("roles_pool", roles_pool, obj);
   JSONDecoder::decode_json("reshard_pool", reshard_pool, obj);
   JSONDecoder::decode_json("usage_log_pool", usage_log_pool, obj);
   JSONDecoder::decode_json("user_keys_pool", user_keys_pool, obj);
