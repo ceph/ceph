@@ -501,6 +501,7 @@ public:
       }
       ostringstream ss;
       jf.close_section();
+      jf.enable_line_break();
       jf.flush(ss);
       out.append(ss.str());
     }
