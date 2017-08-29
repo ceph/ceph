@@ -8756,8 +8756,6 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
     ++i;
   }
 
-  // demote to deferred_submit_lock, then drop that too
-  std::lock_guard<std::mutex> l(deferred_submit_lock);
   deferred_lock.unlock();
   bdev->aio_submit(&b->ioc);
 }
