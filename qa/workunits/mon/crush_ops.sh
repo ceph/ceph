@@ -38,12 +38,14 @@ ceph osd pool rm ec-foo ec-foo --yes-i-really-really-mean-it
 ceph osd crush rule ls | grep foo
 
 ceph osd crush rule rename foo foo-asdf
+ceph osd crush rule rename foo foo-asdf # idempotent
 ceph osd crush rule rename bar bar-asdf
 ceph osd crush rule ls | grep 'foo-asdf'
 ceph osd crush rule ls | grep 'bar-asdf'
 ceph osd crush rule rm foo 2>&1 | grep 'does not exist'
 ceph osd crush rule rm bar 2>&1 | grep 'does not exist'
 ceph osd crush rule rename foo-asdf foo
+ceph osd crush rule rename foo-asdf foo # idempotent
 ceph osd crush rule rename bar-asdf bar
 ceph osd crush rule ls | expect_false grep 'foo-asdf'
 ceph osd crush rule ls | expect_false grep 'bar-asdf'
