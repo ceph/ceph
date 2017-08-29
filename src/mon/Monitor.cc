@@ -1768,6 +1768,22 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
     }
   }
 
+  // did the existing cluster complete upgrade to luminous?
+  if (osdmon()->osdmap.get_epoch()) {
+    if (osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      derr << __func__ << " existing cluster has not completed upgrade to"
+	   << " luminous; 'ceph osd require_osd_release luminous' before"
+	   << " upgrading" << dendl;
+      exit(0);
+    }
+    if (!osdmon()->osdmap.test_flag(CEPH_OSDMAP_PURGED_SNAPDIRS)) {
+      derr << __func__ << " existing cluster has not completed a full luminous"
+	   << " scrub to purge legacy snapdir objects; please scrub before"
+	   << " upgrading beyond luminous." << dendl;
+      exit(0);
+    }
+  }
+
   // is there an existing quorum?
   if (m->quorum.size()) {
     dout(10) << " existing quorum " << m->quorum << dendl;
