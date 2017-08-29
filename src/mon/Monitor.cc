@@ -3364,8 +3364,12 @@ void Monitor::handle_command(MonOpRequestRef op)
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
     f->dump_string("tag", tagstr);
 
-    list<string> hs;
-    get_health(hs, NULL, f.get());
+    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      get_health_status(true, f.get(), nullptr);
+    } else {
+      list<string> health_str;
+      get_health(health_str, nullptr, f.get());
+    }
 
     monmon()->dump_info(f.get());
     osdmon()->dump_info(f.get());
@@ -4400,8 +4404,13 @@ void Monitor::handle_ping(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(new JSONFormatter(true));
   f->open_object_section("pong");
 
-  list<string> health_str;
-  get_health(health_str, NULL, f.get());
+  if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    get_health_status(false, f.get(), nullptr);
+  } else {
+    list<string> health_str;
+    get_health(health_str, nullptr, f.get());
+  }
+
   {
     stringstream ss;
     get_mon_status(f.get(), ss);
