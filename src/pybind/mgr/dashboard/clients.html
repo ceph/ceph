@@ -8,7 +8,7 @@
             var content_data = {{ content_data }};
 
             var refresh = function() {
-                $.get("/clients_data/" + content_data.fscid  + "/", function(data) {
+                $.get("{{ url_prefix }}/clients_data/" + content_data.fscid  + "/", function(data) {
                     content_data.clients = data;
                     setTimeout(refresh, 5000);
                 });

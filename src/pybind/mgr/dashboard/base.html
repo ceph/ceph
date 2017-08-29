@@ -9,27 +9,27 @@
     <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
           name="viewport">
     <link rel="stylesheet"
-          href="/static/AdminLTE-2.3.7/bootstrap/css/bootstrap.min.css">
+          href="{{ url_prefix }}/static/AdminLTE-2.3.7/bootstrap/css/bootstrap.min.css">
     <link rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.5.0/css/font-awesome.min.css">
     <link rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/ionicons/2.0.1/css/ionicons.min.css">
     <link rel="stylesheet"
-          href="/static/AdminLTE-2.3.7/dist/css/AdminLTE.min.css">
+          href="{{ url_prefix }}/static/AdminLTE-2.3.7/dist/css/AdminLTE.min.css">
     <link rel="stylesheet"
-          href="/static/AdminLTE-2.3.7/dist/css/skins/skin-blue.min.css">
+          href="{{ url_prefix }}/static/AdminLTE-2.3.7/dist/css/skins/skin-blue.min.css">
     <link rel="stylesheet"
-          href="/static/AdminLTE-2.3.7/plugins/datatables/jquery.dataTables.css">
+          href="{{ url_prefix }}/static/AdminLTE-2.3.7/plugins/datatables/jquery.dataTables.css">
 
-    <script src="/static/AdminLTE-2.3.7/plugins/jQuery/jquery-2.2.3.min.js"></script>
-    <script src="/static/AdminLTE-2.3.7/plugins/sparkline/jquery.sparkline.min.js"></script>
+    <script src="{{ url_prefix }}/static/AdminLTE-2.3.7/plugins/jQuery/jquery-2.2.3.min.js"></script>
+    <script src="{{ url_prefix }}/static/AdminLTE-2.3.7/plugins/sparkline/jquery.sparkline.min.js"></script>
 
-    <script src="/static/rivets.bundled.min.js"></script>
-    <script src="/static/underscore-min.js"></script>
+    <script src="{{ url_prefix }}/static/rivets.bundled.min.js"></script>
+    <script src="{{ url_prefix }}/static/underscore-min.js"></script>
 
-    <script src="/static/AdminLTE-2.3.7/bootstrap/js/bootstrap.min.js"></script>
-    <script src="/static/AdminLTE-2.3.7/dist/js/app.min.js"></script>
-    <script src="/static/AdminLTE-2.3.7/plugins/datatables/jquery.dataTables.min.js"></script>
+    <script src="{{ url_prefix }}/static/AdminLTE-2.3.7/bootstrap/js/bootstrap.min.js"></script>
+    <script src="{{ url_prefix }}/static/AdminLTE-2.3.7/dist/js/app.min.js"></script>
+    <script src="{{ url_prefix }}/static/AdminLTE-2.3.7/plugins/datatables/jquery.dataTables.min.js"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.17.1/moment.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.4.0/Chart.min.js"></script>
@@ -42,7 +42,7 @@
             var refresh_interval = 5000;
 
             var refresh = function() {
-                $.get("/toplevel_data", function(data) {
+                $.get("{{ url_prefix }}/toplevel_data", function(data) {
                     _.extend(toplevel_data, data);
                     setTimeout(refresh, refresh_interval);
                 });
@@ -154,8 +154,8 @@
         });
       </script>
 
-      <link rel="shortcut icon" href="http://ceph.com/wp-content/themes/ceph/favicon.ico">
-      <link rel="shortcut icon" href="/static/favicon.ico">
+      <link rel="shortcut icon" href="https://ceph.com/wp-content/themes/cephTheme/Resources/Favicons/favicon-96x96.png">
+      <link rel="shortcut icon" href="{{ url_prefix }}/static/favicon.ico">
 
     <style>
         div.box {
@@ -297,13 +297,13 @@
     <!-- Main Header -->
     <header class="main-header">
         <!-- Logo -->
-        <a href="/" class="logo">
+        <a href="{{ url_prefix }}/" class="logo">
       <span class="logo-lg">
-        <img src="/static/Ceph_Logo_Standard_RGB_White_120411_fa.png"
+        <img src="{{ url_prefix }}/static/Ceph_Logo_Standard_RGB_White_120411_fa.png"
              width="123px" height="34px"/>
           </span>
       <span class="logo-mini">
-        <img src="/static/logo-mini.png"
+        <img src="{{ url_prefix }}/static/logo-mini.png"
              width="34px" height="34px"/>
           </span>
         </a>
@@ -341,7 +341,7 @@
       <ul class="sidebar-menu">
         <!-- Optionally, you can add icons to the links -->
         <li class="{%if path_info=='/' or path_info.startswith('/health')%}active{%endif%}">
-            <a href="/health">
+            <a href="{{ url_prefix }}/health">
             <i class="fa fa-heartbeat" rv-style="health_status | health_color"></i>
             <span>Cluster health</span></a>
         </li>
@@ -353,10 +353,10 @@
           </a>
           <ul class="treeview-menu menu-open">
             <li>
-                <a href="/servers">Servers</a>
+                <a href="{{ url_prefix }}/servers">Servers</a>
             </li>
             <li>
-                <a href="/osd">OSDs</a>
+                <a href="{{ url_prefix }}/osd">OSDs</a>
             </li>
           </ul>
         </li>
@@ -369,7 +369,7 @@
           </a>
           <ul class="treeview-menu menu-open">
             <li>
-              <a href="/rbd_mirroring">
+              <a href="{{ url_prefix }}/rbd_mirroring">
                 <i class="fa fa-exchange"></i> Mirroring
                 <span class="pull-right-container">
                     <small rv-hide="rbd_mirroring.warnings | hide_count_box" class="label pull-right bg-yellow">{rbd_mirroring.warnings}</small>
@@ -378,7 +378,7 @@
               </a>
             </li>
             <li>
-              <a href="/rbd_iscsi">
+              <a href="{{ url_prefix }}/rbd_iscsi">
                 <i class="fa fa-upload"></i> iSCSI
                 <span class="pull-right-container" />
               </a>
@@ -434,83 +434,6 @@
     <!-- Default to the left -->
     <strong>Copyright &copy; 2016 by Ceph Contributors.</strong> Free software (LGPL 2.1)
   </footer>
-
-  <!-- Control Sidebar -->
-  <aside class="control-sidebar control-sidebar-dark">
-    <!-- Create the tabs -->
-    <ul class="nav nav-tabs nav-justified control-sidebar-tabs">
-      <li class="active"><a href="#control-sidebar-home-tab" data-toggle="tab"><i class="fa fa-home"></i></a></li>
-      <li><a href="#control-sidebar-settings-tab" data-toggle="tab"><i class="fa fa-gears"></i></a></li>
-    </ul>
-    <!-- Tab panes -->
-    <div class="tab-content">
-      <!-- Home tab content -->
-      <div class="tab-pane active" id="control-sidebar-home-tab">
-        <h3 class="control-sidebar-heading">Recent Activity</h3>
-        <ul class="control-sidebar-menu">
-          <li>
-            <a href="javascript::;">
-              <i class="menu-icon fa fa-birthday-cake bg-red"></i>
-
-              <div class="menu-info">
-                <h4 class="control-sidebar-subheading">Langdon's Birthday</h4>
-
-                <p>Will be 23 on April 24th</p>
-              </div>
-            </a>
-          </li>
-        </ul>
-        <!-- /.control-sidebar-menu -->
-
-        <h3 class="control-sidebar-heading">Tasks Progress</h3>
-        <ul class="control-sidebar-menu">
-          <li>
-            <a href="javascript::;">
-              <h4 class="control-sidebar-subheading">
-                Custom Template Design
-                <span class="pull-right-container">
-                  <span class="label label-danger pull-right">70%</span>
-                </span>
-              </h4>
-
-              <div class="progress progress-xxs">
-                <div class="progress-bar progress-bar-danger" style="width: 70%"></div>
-              </div>
-            </a>
-          </li>
-        </ul>
-        <!-- /.control-sidebar-menu -->
-
-      </div>
-      <!-- /.tab-pane -->
-      <!-- Stats tab content -->
-      <div class="tab-pane" id="control-sidebar-stats-tab">Stats Tab Content</div>
-      <!-- /.tab-pane -->
-      <!-- Settings tab content -->
-      <div class="tab-pane" id="control-sidebar-settings-tab">
-        <form method="post">
-          <h3 class="control-sidebar-heading">General Settings</h3>
-
-          <div class="form-group">
-            <label class="control-sidebar-subheading">
-              Report panel usage
-              <input type="checkbox" class="pull-right" checked>
-            </label>
-
-            <p>
-              Some information about this general settings option
-            </p>
-          </div>
-          <!-- /.form-group -->
-        </form>
-      </div>
-      <!-- /.tab-pane -->
-    </div>
-  </aside>
-  <!-- /.control-sidebar -->
-  <!-- Add the sidebar's background. This div must be placed
-       immediately after the control sidebar -->
-  <div class="control-sidebar-bg"></div>
 
 </div>
 

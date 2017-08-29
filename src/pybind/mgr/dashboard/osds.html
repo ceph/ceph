@@ -8,7 +8,7 @@
             var content_data = {{ content_data }};
 
             var refresh = function() {
-                $.get("/osd/list_data/", function(data) {
+                $.get("{{ url_prefix }}/osd/list_data/", function(data) {
                     content_data.osds_by_server = data;
                     $('.inlinesparkline').sparkline();
                     setTimeout(refresh, 5000);
