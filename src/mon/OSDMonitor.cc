@@ -8557,6 +8557,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
+    if (!newcrush.rule_exists(srcname) && newcrush.rule_exists(dstname)) {
+      // srcname does not exist and dstname already exists
+      // suppose this is a replay and return success
+      // (so this command is idempotent)
+      ss << "already renamed to '" << dstname << "'";
+      err = 0;
+      goto reply;
+    }
+
     err = newcrush.rename_rule(srcname, dstname, &ss);
     if (err < 0) {
       // ss has reason for failure
