@@ -1101,6 +1101,10 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
       features &= ~CEPH_FEATURE_SERVER_JEWEL;
     }
+    if (tmp.require_osd_release < CEPH_RELEASE_MIMIC) {
+      dout(10) << __func__ << " encoding without feature SERVER_MIMIC" << dendl;
+      features &= ~(CEPH_FEATURE_SERVER_MIMIC);
+    }
     dout(10) << __func__ << " encoding full map with " << features << dendl;
 
     bufferlist fullbl;
