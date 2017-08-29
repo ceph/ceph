@@ -291,6 +291,33 @@ int CrushWrapper::rename_bucket(const string& srcname,
   return set_item_name(oldid, dstname);
 }
 
+int CrushWrapper::rename_rule(const string& srcname,
+                              const string& dstname,
+                              ostream *ss)
+{
+  if (!rule_exists(srcname)) {
+    if (ss) {
+      *ss << "source rule name '" << srcname << "' does not exist";
+    }
+    return -ENOENT;
+  }
+  if (rule_exists(dstname)) {
+    if (ss) {
+      *ss << "destination rule name '" << dstname << "' already exists";
+    }
+    return -EEXIST;
+  }
+  int rule_id = get_rule_id(srcname);
+  auto it = rule_name_map.find(rule_id);
+  assert(it != rule_name_map.end());
+  it->second = dstname;
+  if (have_rmaps) {
+    rule_name_rmap.erase(srcname);
+    rule_name_rmap[dstname] = rule_id;
+  }
+  return 0;
+}
+
 void CrushWrapper::find_takes(set<int>& roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
@@ -1991,6 +2018,37 @@ int CrushWrapper::device_class_clone(
 	bucket_weights[s] += n.weight_set[s].weights[i];
       }
       (*cmap_item_weight)[w.first][bno] = bucket_weights;
+    }
+  }
+  return 0;
+}
+
+int CrushWrapper::get_rules_by_class(const string &class_name, set<int> *rules)
+{
+  assert(rules);
+  rules->clear();
+  if (!class_exists(class_name)) {
+    return -ENOENT;
+  }
+  int class_id = get_class_id(class_name);
+  for (unsigned i = 0; i < crush->max_rules; ++i) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j = 0; j < r->len; ++j) {
+      if (r->steps[j].op == CRUSH_RULE_TAKE) {
+        int step_item = r->steps[j].arg1;
+        int original_item;
+        int c;
+        int res = split_id_class(step_item, &original_item, &c);
+        if (res < 0) {
+          return res;
+        }
+        if (c != -1 && c == class_id) {
+          rules->insert(i);
+          break;
+        }
+      }
     }
   }
   return 0;
