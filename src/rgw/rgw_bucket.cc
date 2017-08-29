@@ -2161,8 +2161,7 @@ public:
     pool = store->get_zone_params().domain_root;
   }
 
-  int list_keys_init(RGWRados *store, const string& marker, void **phandle)
-  {
+  int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
     list_keys_info *info = new list_keys_info;
 
     info->store = store;
