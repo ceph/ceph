@@ -172,11 +172,11 @@ void PGMapDigest::print_summary(Formatter *f, ostream *out) const
     *out << "    pools:   " << pg_pool_sum.size() << " pools, "
          << num_pg << " pgs\n";
     *out << "    objects: " << si_t(pg_sum.stats.sum.num_objects) << " objects, "
-         << prettybyte_t(pg_sum.stats.sum.num_bytes) << "\n";
+         << si_t(pg_sum.stats.sum.num_bytes) << "\n";
     *out << "    usage:   "
-         << kb_t(osd_sum.kb_used) << " used, "
-         << kb_t(osd_sum.kb_avail) << " / "
-         << kb_t(osd_sum.kb) << " avail\n";
+         << si_t(osd_sum.kb_used << 10) << " used, "
+         << si_t(osd_sum.kb_avail << 10) << " / "
+         << si_t(osd_sum.kb << 10) << " avail\n";
     *out << "    pgs:     ";
   }
 
