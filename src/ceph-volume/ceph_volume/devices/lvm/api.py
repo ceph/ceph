@@ -101,7 +101,7 @@ def get_api_lvs():
           ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
-    fields = 'lv_tags,lv_path,lv_name,vg_name'
+    fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid'
     stdout, stderr, returncode = process.call(
         ['sudo', 'lvs', '--noheadings', '--separator=";"', '-o', fields]
     )
@@ -131,7 +131,7 @@ def get_api_pvs():
     return _output_parser(stdout, fields)
 
 
-def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_tags=None):
+def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
     """
     Return a matching lv for the current system, requiring ``lv_name``,
     ``vg_name``, ``lv_path`` or ``tags``. Raises an error if more than one lv
@@ -141,10 +141,13 @@ def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_tags=None):
     but it can also lead to multiple lvs being found, since a lot of metadata
     is shared between lvs of a distinct OSD.
     """
-    if not any([lv_name, vg_name, lv_path, lv_tags]):
+    if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
         return None
     lvs = Volumes()
-    return lvs.get(lv_name=lv_name, vg_name=vg_name, lv_path=lv_path, lv_tags=lv_tags)
+    return lvs.get(
+        lv_name=lv_name, vg_name=vg_name, lv_path=lv_path, lv_uuid=lv_uuid,
+        lv_tags=lv_tags
+    )
 
 
 def get_pv(pv_name=None, pv_uuid=None, pv_tags=None):
@@ -364,7 +367,7 @@ class Volumes(list):
         """
         self[:] = []
 
-    def _filter(self, lv_name=None, vg_name=None, lv_path=None, lv_tags=None):
+    def _filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
         """
         The actual method that filters using a new list. Useful so that other
         methods that do not want to alter the contents of the list (e.g.
@@ -376,6 +379,9 @@ class Volumes(list):
 
         if vg_name:
             filtered = [i for i in filtered if i.vg_name == vg_name]
+
+        if lv_uuid:
+            filtered = [i for i in filtered if i.lv_uuid == lv_uuid]
 
         if lv_path:
             filtered = [i for i in filtered if i.lv_path == lv_path]
@@ -395,7 +401,7 @@ class Volumes(list):
 
         return filtered
 
-    def filter(self, lv_name=None, vg_name=None, lv_path=None, lv_tags=None):
+    def filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
         """
         Filter out volumes on top level attributes like ``lv_name`` or by
         ``lv_tags`` where a dict is required. For example, to find a volume
@@ -404,13 +410,14 @@ class Volumes(list):
             lv_tags={'ceph.osd_id': '0'}
 
         """
-        if not any([lv_name, vg_name, lv_path, lv_tags]):
-            raise TypeError('.filter() requires lv_name, vg_name, lv_path, or tags (none given)')
+        if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
+            raise TypeError('.filter() requires lv_name, vg_name, lv_path, lv_uuid, or tags (none given)')
         # first find the filtered volumes with the values in self
         filtered_volumes = self._filter(
             lv_name=lv_name,
             vg_name=vg_name,
             lv_path=lv_path,
+            lv_uuid=lv_uuid,
             lv_tags=lv_tags
         )
         # then purge everything
@@ -418,7 +425,7 @@ class Volumes(list):
         # and add the filtered items
         self.extend(filtered_volumes)
 
-    def get(self, lv_name=None, vg_name=None, lv_path=None, lv_tags=None):
+    def get(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
         """
         This is a bit expensive, since it will try to filter out all the
         matching items in the list, filter them out applying anything that was
@@ -431,12 +438,13 @@ class Volumes(list):
         but it can also lead to multiple lvs being found, since a lot of metadata
         is shared between lvs of a distinct OSD.
         """
-        if not any([lv_name, vg_name, lv_path, lv_tags]):
+        if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
             return None
         lvs = self._filter(
             lv_name=lv_name,
             vg_name=vg_name,
             lv_path=lv_path,
+            lv_uuid=lv_uuid,
             lv_tags=lv_tags
         )
         if not lvs:
