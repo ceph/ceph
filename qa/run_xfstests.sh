@@ -31,26 +31,14 @@ set -e
 
 PROGNAME=$(basename $0)
 
-# xfstests is downloaded from this git repository and then built.
-# XFSTESTS_REPO="git://oss.sgi.com/xfs/cmds/xfstests.git"
-XFSTESTS_REPO="git://git.ceph.com/xfstests.git"
-XFSTESTS_VERSION="facff609afd6a2ca557c2b679e088982026aa188"
-XFSPROGS_REPO="git://oss.sgi.com/xfs/cmds/xfsprogs"
-XFSPROGS_VERSION="v3.2.2"
-XFSDUMP_REPO="git://oss.sgi.com/xfs/cmds/xfsdump"
-XFSDUMP_VERSION="v3.1.4"
-
 # Default command line option values
 COUNT="1"
 EXPUNGE_FILE=""
 DO_RANDOMIZE=""	# false
-FS_TYPE="xfs"
+FSTYP="xfs"
 SCRATCH_DEV=""	# MUST BE SPECIFIED
 TEST_DEV=""	# MUST BE SPECIFIED
 TESTS="-g auto"	# The "auto" group is supposed to be "known good"
-
-# We no longer need to set the stripe unit in XFS_MKFS_OPTIONS because recent
-# versions of mkfs.xfs autodetect it.
 
 # print an error message and quit with non-zero status
 function err() {
@@ -197,7 +185,7 @@ function parseargs() {
 			-f|--fs-type)
 				fs_type_valid "$2" ||
 					usage "invalid fs_type '$2'"
-				FS_TYPE="$2"
+				FSTYP="$2"
 				shift
 				;;
 			-r|--randomize)
@@ -237,102 +225,6 @@ function parseargs() {
 
 ################################################################
 
-[ -n "${TESTDIR}" ] || usage "TESTDIR env variable must be set"
-
-# Set up some environment for normal teuthology test setup.
-# This really should not be necessary but I found it was.
-export CEPH_ARGS="--conf ${TESTDIR}/ceph.conf"
-export CEPH_ARGS="${CEPH_ARGS} --keyring ${TESTDIR}/data/client.0.keyring"
-export CEPH_ARGS="${CEPH_ARGS} --name client.0"
-
-export LD_LIBRARY_PATH="${TESTDIR}/binary/usr/local/lib:${LD_LIBRARY_PATH}"
-export PATH="${TESTDIR}/binary/usr/local/bin:${PATH}"
-export PATH="${TESTDIR}/binary/usr/local/sbin:${PATH}"
-
-################################################################
-
-# Filesystem-specific mkfs options--set if not supplied
-#export XFS_MKFS_OPTIONS="${XFS_MKFS_OPTIONS:--f -l su=65536}"
-export EXT4_MKFS_OPTIONS="${EXT4_MKFS_OPTIONS:--F}"
-export BTRFS_MKFS_OPTION	# No defaults
-
-XFSTESTS_DIR="/var/lib/xfstests"	# Where the tests live
-XFSPROGS_DIR="/tmp/cephtest/xfsprogs-install"
-XFSDUMP_DIR="/tmp/cephtest/xfsdump-install"
-export PATH="${XFSPROGS_DIR}/sbin:${XFSDUMP_DIR}/sbin:${PATH}"
-
-# download, build, and install xfstests
-function install_xfstests() {
-	arg_count 0 $#
-
-	local multiple=""
-	local ncpu
-
-	pushd "${TESTDIR}"
-
-	git clone "${XFSTESTS_REPO}"
-
-	cd xfstests
-	git checkout "${XFSTESTS_VERSION}"
-
-	ncpu=$(getconf _NPROCESSORS_ONLN 2>&1)
-	[ -n "${ncpu}" -a "${ncpu}" -gt 1 ] && multiple="-j ${ncpu}"
-
-	make realclean
-	make ${multiple}
-	make -k install
-
-	popd
-}
-
-# remove previously-installed xfstests files
-function remove_xfstests() {
-	arg_count 0 $#
-
-	rm -rf "${TESTDIR}/xfstests"
-	rm -rf "${XFSTESTS_DIR}"
-}
-
-# create a host options file that uses the specified devices
-function setup_host_options() {
-	arg_count 0 $#
-	export MNTDIR="/tmp/cephtest"
-
-	# Create mount points for the test and scratch filesystems
-	mkdir -p ${MNTDIR}
-	local test_dir="$(mktemp -d ${MNTDIR}/test_dir.XXXXXXXXXX)"
-	local scratch_dir="$(mktemp -d ${MNTDIR}/scratch_mnt.XXXXXXXXXX)"
-
-	# Write a host options file that uses these devices.
-	# xfstests uses the file defined by HOST_OPTIONS as the
-	# place to get configuration variables for its run, and
-	# all (or most) of the variables set here are required.
-	export HOST_OPTIONS="$(mktemp ${TESTDIR}/host_options.XXXXXXXXXX)"
-	cat > "${HOST_OPTIONS}" <<-!
-		# Created by ${PROGNAME} on $(date)
-		# HOST_OPTIONS="${HOST_OPTIONS}"
-		TEST_DEV="${TEST_DEV}"
-		SCRATCH_DEV="${SCRATCH_DEV}"
-		TEST_DIR="${test_dir}"
-		SCRATCH_MNT="${scratch_dir}"
-		FSTYP="${FS_TYPE}"
-		export TEST_DEV SCRATCH_DEV TEST_DIR SCRATCH_MNT FSTYP
-		#
-		export XFS_MKFS_OPTIONS="${XFS_MKFS_OPTIONS}"
-	!
-
-	# Now ensure we are using the same values
-	. "${HOST_OPTIONS}"
-}
-
-# remove the host options file, plus the directories it refers to
-function cleanup_host_options() {
-	arg_count 0 $#
-
-	rm -rf "${TEST_DIR}" "${SCRATCH_MNT}"
-	rm -f "${HOST_OPTIONS}"
-}
-
 # run mkfs on the given device using the specified filesystem type
 function do_mkfs() {
 	arg_count 1 $#
@@ -341,160 +233,73 @@ function do_mkfs() {
 	local options
 
 	case "${FSTYP}" in
-		xfs)	options="${XFS_MKFS_OPTIONS}" ;;
-		ext4)	options="${EXT4_MKFS_OPTIONS}" ;;
-		btrfs)	options="${BTRFS_MKFS_OPTIONS}" ;;
+		xfs)	options="-f" ;;
+		ext4)	options="-F" ;;
+		btrfs)	options="-f" ;;
 	esac
 
 	"mkfs.${FSTYP}" ${options} "${dev}" ||
 		err "unable to make ${FSTYP} file system on device \"${dev}\""
 }
 
-# mount the given device on the given mount point
-function do_mount() {
-	arg_count 2 $#
-
-	local dev="${1}"
-	local dir="${2}"
-
-	mount "${dev}" "${dir}" ||
-		err "unable to mount file system \"${dev}\" on \"${dir}\""
-}
-
-# unmount a previously-mounted device
-function do_umount() {
-	arg_count 1 $#
-
-	local dev="${1}"
-
-	if mount | grep "${dev}" > /dev/null; then
-		if ! umount "${dev}"; then
-			err "unable to unmount device \"${dev}\""
-		fi
-	else
-		# Report it but don't error out
-		echo "device \"${dev}\" was not mounted" >&2
-	fi
-}
-
-# do basic xfstests setup--make and mount the test and scratch filesystems
-function setup_xfstests() {
-	arg_count 0 $#
-
-	# TEST_DEV can persist across test runs, but for now we
-	# don't bother.   I believe xfstests prefers its devices to
-	# have been already been formatted for the desired
-	# filesystem type--it uses blkid to identify things or
-	# something.  So we mkfs both here for a fresh start.
-	do_mkfs "${TEST_DEV}"
-	do_mkfs "${SCRATCH_DEV}"
-
-	# I believe the test device is expected to be mounted; the
-	# scratch doesn't need to be (but it doesn't hurt).
-	do_mount "${TEST_DEV}" "${TEST_DIR}"
-	do_mount "${SCRATCH_DEV}" "${SCRATCH_MNT}"
-}
-
-# clean up changes made by setup_xfstests
-function cleanup_xfstests() {
-	arg_count 0 $#
-
-	# Unmount these in case a test left them mounted (plus
-	# the corresponding setup function mounted them...)
-	do_umount "${TEST_DEV}"
-	do_umount "${SCRATCH_DEV}"
-	rmdir "${TEST_DIR}"
-	rmdir "${SCRATCH_MNT}"
-	rmdir "${MNTDIR}"
-}
-
-function install_xfsprogs() {
-	arg_count 0 $#
-
-	pushd "${TESTDIR}"
-	git clone ${XFSPROGS_REPO}
-	cd xfsprogs
-	git checkout ${XFSPROGS_VERSION}
-	libtoolize -c `libtoolize -n -i >/dev/null 2>/dev/null && echo -i` -f
-	cp include/install-sh .
-	aclocal -I m4
-	autoconf
-	./configure --prefix=${XFSPROGS_DIR}
-	make install
-	popd
-}
-
-function install_xfsdump() {
-	arg_count 0 $#
-
-	pushd "${TESTDIR}"
-	git clone ${XFSDUMP_REPO}
-	cd xfsdump
-	git checkout ${XFSDUMP_VERSION}
-
-	# somebody took #define min and #define max out, which breaks the build on
-	# ubuntu. we back out this commit here, though that may cause problems with
-	# this script down the line.
-	git revert -n 5a2985233c390d59d2a9757b119cb0e001c87a96
-	libtoolize -c `libtoolize -n -i >/dev/null 2>/dev/null && echo -i` -f
-	cp include/install-sh .
-	aclocal -I m4
-	autoconf
-	./configure --prefix=${XFSDUMP_DIR}
-	(make -k install || true) # that's right, the install process is broken too
-	popd
-}
-
-function remove_xfsprogs() {
-	arg_count 0 $#
-
-	rm -rf ${TESTDIR}/xfsprogs
-	rm -rf ${XFSPROGS_DIR}
-}	
-
-function remove_xfsdump() {
-	arg_count 0 $#
-
-	rm -rf ${TESTDIR}/xfsdump
-	rm -rf ${XFSDUMP_DIR}
-}
-
-
 # top-level setup routine
 function setup() {
 	arg_count 0 $#
 
-	setup_host_options
-	install_xfsprogs
-	install_xfsdump
-	install_xfstests
-	setup_xfstests
+	wget -P "${TESTDIR}" http://download.ceph.com/qa/xfstests.tar.gz
+	tar zxf "${TESTDIR}/xfstests.tar.gz" -C "$(dirname "${XFSTESTS_DIR}")"
+	mkdir "${TEST_DIR}"
+	mkdir "${SCRATCH_MNT}"
+	do_mkfs "${TEST_DEV}"
 }
 
 # top-level (final) cleanup routine
 function cleanup() {
 	arg_count 0 $#
 
-	cd /
-	remove_xfsprogs
-	remove_xfsdump
-	cleanup_xfstests
-	remove_xfstests
-	cleanup_host_options
+	# ensure teuthology can clean up the logs
+	chmod -R a+rw "${TESTDIR}/archive"
+
+	findmnt "${TEST_DEV}" && umount "${TEST_DEV}"
+	[ -d "${SCRATCH_MNT}" ] && rmdir "${SCRATCH_MNT}"
+	[ -d "${TEST_DIR}" ] && rmdir "${TEST_DIR}"
+	rm -rf "${XFSTESTS_DIR}"
+	rm -f "${TESTDIR}/xfstests.tar.gz"
 }
-trap cleanup EXIT ERR HUP INT QUIT
 
 # ################################################################
 
 start_date="$(date)"
-
 parseargs "$@"
+[ -n "${TESTDIR}" ] || usage "TESTDIR env variable must be set"
+[ -d "${TESTDIR}/archive" ] || usage "\$TESTDIR/archive directory must exist"
+TESTDIR="$(readlink -e "${TESTDIR}")"
+[ -n "${EXPUNGE_FILE}" ] && EXPUNGE_FILE="$(readlink -e "${EXPUNGE_FILE}")"
 
+XFSTESTS_DIR="/var/lib/xfstests"  # hardcoded into dbench binary
+TEST_DIR="/mnt/test_dir"
+SCRATCH_MNT="/mnt/scratch_mnt"
+MKFS_OPTIONS=""
+EXT_MOUNT_OPTIONS="-o block_validity"
+
+trap cleanup EXIT ERR HUP INT QUIT
 setup
+
+export TEST_DEV
+export TEST_DIR
+export SCRATCH_DEV
+export SCRATCH_MNT
+export FSTYP
+export MKFS_OPTIONS
+export EXT_MOUNT_OPTIONS
 
 pushd "${XFSTESTS_DIR}"
 for (( i = 1 ; i <= "${COUNT}" ; i++ )); do
 	[ "${COUNT}" -gt 1 ] && echo "=== Iteration "$i" starting at:  $(date)"
+
+	RESULT_BASE="${TESTDIR}/archive/results-${i}"
+	mkdir "${RESULT_BASE}"
+	export RESULT_BASE
 
 	EXPUNGE=""
 	[ -n "${EXPUNGE_FILE}" ] && EXPUNGE="-E ${EXPUNGE_FILE}"
@@ -503,8 +308,8 @@ for (( i = 1 ; i <= "${COUNT}" ; i++ )); do
 	[ -n "${DO_RANDOMIZE}" ] && RANDOMIZE="-r"
 
 	# -T output timestamps
-	./check -T ${RANDOMIZE} ${EXPUNGE} ${TESTS}
-	status=$?
+	PATH="${PWD}/bin:${PATH}" ./check -T ${RANDOMIZE} ${EXPUNGE} ${TESTS}
+	findmnt "${TEST_DEV}" && umount "${TEST_DEV}"
 
 	[ "${COUNT}" -gt 1 ] && echo "=== Iteration "$i" complete at:  $(date)"
 done
@@ -515,5 +320,4 @@ popd
 echo "This xfstests run started at:  ${start_date}"
 echo "xfstests run completed at:     $(date)"
 [ "${COUNT}" -gt 1 ] && echo "xfstests run consisted of ${COUNT} iterations"
-
-exit "${status}"
+echo OK
