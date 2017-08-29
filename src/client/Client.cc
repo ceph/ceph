@@ -12373,11 +12373,7 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
     flock.Unlock();
   }
 
-  if (r < 0) {
-    return r;
-  } else {
-    return length;
-  }
+  return length;
 }
 
 int Client::ll_commit_blocks(Inode *in,
