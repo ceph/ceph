@@ -4950,10 +4950,6 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       last = miter->first + r;
     }
 
-    if (r < 0) {
-      return r;
-    }
-
     // verify trailing hole?
     if (cct->_conf->osd_verify_sparse_read_holes) {
       uint64_t end = MIN(op.extent.offset + op.extent.length, oi.size);
