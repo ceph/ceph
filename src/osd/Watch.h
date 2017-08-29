@@ -167,7 +167,7 @@ class Watch {
   entity_addr_t addr;
 
   bool will_ping;    ///< is client new enough to ping the watch
-  utime_t last_ping; ///< last cilent ping
+  utime_t last_ping; ///< last client ping
 
   entity_name_t entity;
   bool discarded;
