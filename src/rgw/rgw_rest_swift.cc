@@ -40,9 +40,13 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
   end_marker = s->info.args.get("end_marker");
   wants_reversed = s->info.args.exists("reverse");
 
-  string limit_str = s->info.args.get("limit");
+  if (wants_reversed) {
+    std::swap(marker, end_marker);
+  }
+
+  std::string limit_str = s->info.args.get("limit");
   if (!limit_str.empty()) {
-    string err;
+    std::string err;
     long l = strict_strtol(limit_str.c_str(), 10, &err);
     if (!err.empty()) {
       return -EINVAL;
