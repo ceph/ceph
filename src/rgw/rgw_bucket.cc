@@ -1350,6 +1350,132 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
   return 0;
 }
 
+static string get_multipart_main_file_name(const string& full_name) {
+  size_t meta_suffix_period = full_name.find_last_of('.', full_name.length()-1);
+  size_t meta_and_oid_suffix_period = full_name.find_last_of('.', meta_suffix_period-1);
+  return full_name.substr(0, meta_and_oid_suffix_period);
+}
+
+static int delete_leaked_multipart_objects(RGWRados *store, RGWBucketAdminOpState& op_state, RGWBucketInfo bucket_info) {
+  RGWRados::Bucket target(store, bucket_info);
+  RGWRados::Bucket::List list_op(&target);
+  list_op.params.prefix = "";
+  list_op.params.delim = "";
+  list_op.params.marker = rgw_obj_key("");
+  list_op.params.ns = "multipart";
+  list_op.params.enforce_ns = false;
+  list_op.params.list_versions = true;
+
+  list<RGWObjEnt> meta_objs;
+  list<RGWObjEnt> nonmeta_objs;
+
+  map<string, bool> common_prefixes;
+  bool is_truncated;
+  int max = 100000000;
+
+
+  // Discern between meta and nonmeta entries
+  do {
+    vector<RGWObjEnt> result;
+    int r = list_op.list_objects(max, &result, &common_prefixes, &is_truncated);
+    if (r < 0) {
+      return r;
+    }
+
+    vector<RGWObjEnt>::iterator iter;
+    for (iter = result.begin(); iter != result.end(); ++iter) {
+      RGWObjEnt& ent = *iter;
+      rgw_obj_key key = ent.key;
+
+      if (key.name.substr(key.name.length() - 5, 5) == ".meta") {
+        meta_objs.push_back(ent);
+      }
+      else {
+        nonmeta_objs.push_back(ent);
+      }
+    }
+
+  } while (is_truncated);
+
+  bool leak_found = false;
+
+  // Look through nonmeta files to see who does not belong to an existing meta
+  list<RGWObjEnt>::iterator meta_obj_iter;
+  list<RGWObjEnt>::iterator nonmeta_obj_iter;
+  for (nonmeta_obj_iter = nonmeta_objs.begin(); nonmeta_obj_iter != nonmeta_objs.end(); ++nonmeta_obj_iter) {
+    string nonmeta_multipart_main_file_name = get_multipart_main_file_name(nonmeta_obj_iter->key.name);
+    bool found_my_meta = false;
+
+    for (meta_obj_iter = meta_objs.begin(); meta_obj_iter != meta_objs.end(); ++meta_obj_iter) {
+      string meta_multipart_main_file_name(get_multipart_main_file_name(meta_obj_iter->key.name));
+
+      if (nonmeta_multipart_main_file_name == meta_multipart_main_file_name) {
+        found_my_meta = true;
+      }
+    }
+
+    // We leaked if we cannot find the meta for this nonmeta
+    if (!found_my_meta) {
+      if (!leak_found) {
+        leak_found = true;
+        cout << "Fixing leaked multipart objects:" << std::endl;
+      }
+
+      cout << "  " << nonmeta_obj_iter->key.name << std::endl;
+
+      rgw_bucket bucket = bucket_info.bucket;
+      rgw_obj obj(bucket, nonmeta_obj_iter->key.name);
+      obj.set_ns("multipart");
+      obj.set_instance(nonmeta_obj_iter->key.instance);
+
+      RGWObjectCtx obj_ctx(store);
+      obj_ctx.set_atomic(obj);
+
+      RGWRados::Object del_target(store, bucket_info, obj_ctx, obj);
+      RGWRados::Object::Delete del_op(&del_target);
+
+      del_op.params.bucket_owner = bucket_info.owner;
+      del_op.params.versioning_status = bucket_info.versioning_status();
+
+      ACLOwner owner;
+      owner.set_id(bucket_info.owner);
+      owner.set_name(op_state.get_user_display_name());
+      del_op.params.obj_owner = owner;
+
+      int op_ret = del_op.delete_obj();
+      if (op_ret == -ENOENT) {
+        cout << "Got -ENOENT with " << nonmeta_obj_iter->key.name << std::endl;
+      } else if (op_ret != 0) {
+        cout << "Failed to delete " << nonmeta_obj_iter->key.name << std::endl;
+      }
+    }
+  }
+
+  if (!leak_found) {
+    cout << "Found no leaked multipart objects" << std::endl;
+  }
+
+  return 0;
+}
+
+int RGWBucketAdminOp::fix_multipart_leak(RGWRados *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher) {
+  if (op_state.bucket_name.empty()) {
+    cerr << "ERROR: need to specify bucket name" << std::endl;
+    return -EINVAL;
+  }
+
+  RGWBucketInfo bucket_info;
+  RGWObjectCtx obj_ctx(store);
+
+  int ret = store->get_bucket_info(obj_ctx, op_state.get_user_id().tenant, op_state.bucket_name, bucket_info, NULL);
+  if (ret < 0){
+    cerr << "could not get bucket info for bucket=" << op_state.bucket_name << std::endl;
+    return ret;
+  }
+
+  return delete_leaked_multipart_objects(store, op_state, bucket_info);
+}
+
 int RGWBucketAdminOp::remove_bucket(RGWRados *store, RGWBucketAdminOpState& op_state,
                                     bool bypass_gc, bool keep_index_consistent)
 {

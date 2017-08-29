@@ -74,6 +74,7 @@ void _usage()
   cout << "  bucket rm                  remove bucket\n";
   cout << "  bucket check               check bucket index\n";
   cout << "  bucket reshard             reshard bucket\n";
+  cout << "  bucket fixmpleak           remove leaked multipart objects that have accumulated from retries\n";
   cout << "  bi get                     retrieve bucket index object entries\n";
   cout << "  bi put                     store bucket index object entries\n";
   cout << "  bi list                    list raw bucket index entries\n";
@@ -301,6 +302,7 @@ enum {
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
   OPT_BUCKET_CHECK,
+  OPT_BUCKET_FIXMPLEAK,
   OPT_BUCKET_SYNC_STATUS,
   OPT_BUCKET_SYNC_INIT,
   OPT_BUCKET_SYNC_RUN,
@@ -513,6 +515,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_BUCKET_RESHARD;
     if (strcmp(cmd, "check") == 0)
       return OPT_BUCKET_CHECK;
+    if (strcmp(cmd, "fixmpleak") == 0)
+      return OPT_BUCKET_FIXMPLEAK;
     if (strcmp(cmd, "sync") == 0) {
       *need_more = true;
       return 0;
@@ -5289,6 +5293,13 @@ next:
       do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter);
     } else {
       RGWBucketAdminOp::check_index(store, bucket_op, f);
+    }
+  }
+
+  if (opt_cmd == OPT_BUCKET_FIXMPLEAK) {
+    int ret = RGWBucketAdminOp::fix_multipart_leak(store, bucket_op, f);
+    if (ret < 0) {
+      return -ret;
     }
   }
 
