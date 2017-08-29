@@ -25,6 +25,8 @@ tasks:
     client.0:
       - sudo ceph osd down 0
 - ceph.restart: [osd.0]
+- sleep:
+    duration: 20 # http://tracker.ceph.com/issues/16239
 - exec:
     client.0:
       - sudo ceph tell osd.0 flush_pg_stats
