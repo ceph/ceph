@@ -1179,6 +1179,17 @@ def run_in_thread(target, *args, **kwargs):
     return t.retval
 
 
+def send_command_retry(*args, **kwargs):
+    while True:
+        try:
+            return send_command(*args, **kwargs)
+        except Exception as e:
+            if ('get_command_descriptions' in str(e) and
+                'object in state configuring' in str(e)):
+                continue
+            else:
+                raise
+
 def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
                  verbose=False):
     """
@@ -1292,8 +1303,9 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
                 # use the target we were originally given
                 pass
 
-        ret, outbuf, outs = send_command(cluster, target, [json.dumps(cmddict)],
-                                         inbuf, timeout, verbose)
+        ret, outbuf, outs = send_command_retry(cluster,
+                                               target, [json.dumps(cmddict)],
+                                               inbuf, timeout, verbose)
 
     except Exception as e:
         if not isinstance(e, ArgumentError):
