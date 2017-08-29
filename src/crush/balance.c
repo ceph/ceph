@@ -48,17 +48,17 @@ int balance_values(int values_count, int items_count, __s64* original_straws, __
 
     // One of the values that landed on each item because it
     // got a straw that is not much higher than the second best straw.
-    // This is the closest winner. And the closest looser is the item
+    // This is the closest winner. And the closest loser is the item
     // that would have won the value otherwise, i.e. the second best.
-    // This is the closest looser.
-    double closest_loosers[items_count];
-    int closest_loosers_value[items_count];
-    __s64 closest_loosers_diff[items_count];
+    // This is the closest loser.
+    double closest_losers[items_count];
+    int closest_losers_value[items_count];
+    __s64 closest_losers_diff[items_count];
     double closest_winners[items_count];
     int closest_winners_value[items_count];
     __s64 closest_winners_diff[items_count];
     for (int j = 0; j < items_count; j++) {
-      closest_loosers[j] = DBL_MAX;
+      closest_losers[j] = DBL_MAX;
       closest_winners[j] = DBL_MAX;
     }
   
@@ -72,8 +72,8 @@ int balance_values(int values_count, int items_count, __s64* original_straws, __
           winner_item = j;
         }
       }
-      int looser_item = -1;
-      __s64 looser_straw = S64_MIN;
+      int loser_item = -1;
+      __s64 loser_straw = S64_MIN;
       __s64 winner_diff = S64_MAX; // by how much did it win
       for (int j = 0; j < items_count; j++) {
         if (j == winner_item)
@@ -81,15 +81,15 @@ int balance_values(int values_count, int items_count, __s64* original_straws, __
         __s64 maybe_winner_diff = labs(items_straws[winner_item] - items_straws[j]);
         if (maybe_winner_diff < winner_diff) {
           winner_diff = maybe_winner_diff;
-          looser_straw = items_straws[j];
-          looser_item = j;
+          loser_straw = items_straws[j];
+          loser_item = j;
         }
       }
-      double winner_ratio = (double)winner_diff / labs(looser_straw);
-      if (closest_loosers[looser_item] > winner_ratio) {
-        closest_loosers[looser_item] = winner_ratio;
-        closest_loosers_value[looser_item] = i;
-        closest_loosers_diff[looser_item] = winner_diff;
+      double winner_ratio = (double)winner_diff / labs(loser_straw);
+      if (closest_losers[loser_item] > winner_ratio) {
+        closest_losers[loser_item] = winner_ratio;
+        closest_losers_value[loser_item] = i;
+        closest_losers_diff[loser_item] = winner_diff;
       }
       if (closest_winners[winner_item] > winner_ratio) {
         closest_winners[winner_item] = winner_ratio;
@@ -120,8 +120,8 @@ int balance_values(int values_count, int items_count, __s64* original_straws, __
     double smallest_winner_ratio = DBL_MAX;
     int smallest_winner_item = -1;
 
-    double smallest_looser_ratio = DBL_MAX;
-    int smallest_looser_item = -1;
+    double smallest_loser_ratio = DBL_MAX;
+    int smallest_loser_item = -1;
 
     for (int j = 0; j < items_count; j++) {
       if (delta[j] == 0) // balanced
@@ -134,15 +134,15 @@ int balance_values(int values_count, int items_count, __s64* original_straws, __
         }
       } else {
         // underfilled
-        if (closest_loosers[j] < smallest_looser_ratio) {
-          smallest_looser_item = j;
-          smallest_looser_ratio = closest_loosers[j];
+        if (closest_losers[j] < smallest_loser_ratio) {
+          smallest_loser_item = j;
+          smallest_loser_ratio = closest_losers[j];
         }
       }
     }
 
     // that should not happen
-    if (smallest_looser_item == -1 || smallest_winner_item == -1)
+    if (smallest_loser_item == -1 || smallest_winner_item == -1)
       break;
 
     double modify;
@@ -150,21 +150,21 @@ int balance_values(int values_count, int items_count, __s64* original_straws, __
     int value;
     int item;
     __s64 diff;
-    if (smallest_winner_ratio < smallest_looser_ratio) {
+    if (smallest_winner_ratio < smallest_loser_ratio) {
       item = smallest_winner_item;
       value = closest_winners_value[smallest_winner_item];
       diff = closest_winners_diff[smallest_winner_item];
       modify = closest_winners[smallest_winner_item];
       change = -1; // we need to loose
     } else {
-      item = smallest_looser_item;
-      value = closest_loosers_value[smallest_looser_item];
-      diff = closest_loosers_diff[smallest_looser_item];
-      modify = closest_loosers[smallest_looser_item];
+      item = smallest_loser_item;
+      value = closest_losers_value[smallest_loser_item];
+      diff = closest_losers_diff[smallest_loser_item];
+      modify = closest_losers[smallest_loser_item];
       change = 1; // we need to win
     }
 
-    if (closest_winners_value[smallest_winner_item] != closest_loosers_value[smallest_looser_item]) {
+    if (closest_winners_value[smallest_winner_item] != closest_losers_value[smallest_loser_item]) {
       // if they are not the same we need to check for rounding errors to make sure a value will
       // be lost/gained where intended
       __s64 desired_straw = straws[value] + change * diff;
@@ -182,13 +182,13 @@ int balance_values(int values_count, int items_count, __s64* original_straws, __
     }
 
     weights[smallest_winner_item] *= 1.0 - modify;
-    weights[smallest_looser_item] *= 1.0 + modify;
+    weights[smallest_loser_item] *= 1.0 + modify;
 
     for (int i = 0; i < values_count; i++) {
       __s64* items_straws = straws + items_count * i;
       __s64* items_original_straws = original_straws + items_count * i;
       items_straws[smallest_winner_item] = div64_s64(items_original_straws[smallest_winner_item], weights[smallest_winner_item]);
-      items_straws[smallest_looser_item] = div64_s64(items_original_straws[smallest_looser_item], weights[smallest_looser_item]);
+      items_straws[smallest_loser_item] = div64_s64(items_original_straws[smallest_loser_item], weights[smallest_loser_item]);
     }
   }
   return iterations;
