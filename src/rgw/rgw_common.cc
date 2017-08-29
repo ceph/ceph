@@ -124,6 +124,8 @@ rgw_http_errors rgw_http_swift_errors({
     { ERR_BAD_URL, {412, "Bad URL" }},
     { ERR_NOT_SLO_MANIFEST, {400, "Not an SLO manifest" }},
     { ERR_QUOTA_EXCEEDED, {413, "QuotaExceeded" }},
+    { ENOTEMPTY, {409, "There was a conflict when trying "
+                       "to complete your request." }},
     /* FIXME(rzarzynski): we need to find a way to apply Swift's error handling
      * procedures also for ERR_ZERO_IN_URL. This make a problem as the validation
      * is performed very early, even before setting the req_state::proto_flags. */
