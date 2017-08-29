@@ -109,7 +109,7 @@ protected:
   rgw_obj_key key;
 
   ceph::real_time mtime;
-  uint64_t size;
+  uint64_t size = 0;
   map<string, bufferlist> attrs;
 public:
   RGWStatRemoteObjCBCR(RGWDataSyncEnv *_sync_env,

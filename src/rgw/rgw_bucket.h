@@ -199,7 +199,7 @@ struct RGWBucketAdminOpState {
   bool fix_index;
   bool delete_child_objects;
   bool bucket_stored;
-  int max_aio;
+  int max_aio = 0;
 
   rgw_bucket bucket;
 
