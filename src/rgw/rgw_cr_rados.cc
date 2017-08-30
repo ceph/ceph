@@ -794,3 +794,36 @@ int RGWStatObjCR::request_complete()
 {
   return req->get_ret_status();
 }
+
+RGWRadosNotifyCR::RGWRadosNotifyCR(RGWRados *store, const rgw_raw_obj& obj,
+                                   bufferlist& request, uint64_t timeout_ms,
+                                   bufferlist *response)
+  : RGWSimpleCoroutine(store->ctx()), store(store), obj(obj),
+    request(request), timeout_ms(timeout_ms), response(response)
+{
+  set_description() << "notify dest=" << obj;
+}
+
+int RGWRadosNotifyCR::send_request()
+{
+  int r = store->get_raw_obj_ref(obj, &ref);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
+    return r;
+  }
+
+  set_status() << "sending request";
+
+  cn = stack->create_completion_notifier();
+  return ref.ioctx.aio_notify(ref.oid, cn->completion(), request,
+                              timeout_ms, response);
+}
+
+int RGWRadosNotifyCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
+}
