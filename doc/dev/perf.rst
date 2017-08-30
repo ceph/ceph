@@ -20,6 +20,22 @@ To view by callee (where you can see who calls each top function)::
 :note: If the caller/callee views look the same you may be
        suffering from a kernel bug; upgrade to 4.8 or later.
 
+Common Issues
+-------------
+
+Ceph use `RelWithDebInfo` as its default `CMAKE_BUILD_TYPE`. Hence `-O2 -g` is
+used to compile the tree in this case. And the `-O2` optimization level
+enables `-fomit-frame-pointer` by default. But this prevents stack profilers
+from accessing the complete stack information. So one can disable this option
+when launching `cmake` ::
+
+  cmake -DCMAKE_CXX_FLAGS="-fno-omit-frame-pointer"
+
+or when building the tree::
+
+  make CMAKE_CXX_FLAGS="-fno-omit-frame-pointer"
+
+
 Flamegraphs
 -----------
 
