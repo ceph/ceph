@@ -1518,7 +1518,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   struct rgw_bucket_dir_header header;
   ret = read_bucket_header(hctx, &header);
   if (ret < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_unlink_instance(): failed to read header\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_link_olh(): failed to read header\n");
     return ret;
   }
 
@@ -1543,9 +1543,11 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
                               powner, powner_display_name, &op.zones_trace);
     if (ret < 0)
       return ret;
+
+    return write_bucket_header(hctx, &header); /* updates header version */
   }
 
-  return write_bucket_header(hctx, &header); /* updates header version */
+  return 0;
 }
 
 static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -1689,9 +1691,11 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
                               op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL, &op.zones_trace);
     if (ret < 0)
       return ret;
+
+    return write_bucket_header(hctx, &header); /* updates header version */
   }
 
-  return write_bucket_header(hctx, &header); /* updates header version */
+  return 0;
 }
 
 static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
