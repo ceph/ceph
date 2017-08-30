@@ -1154,4 +1154,23 @@ class RGWStatObjCR : public RGWSimpleCoroutine {
   int request_complete() override;
 };
 
+/// coroutine wrapper for IoCtx::aio_notify()
+class RGWRadosNotifyCR : public RGWSimpleCoroutine {
+  RGWRados *const store;
+  const rgw_raw_obj obj;
+  bufferlist request;
+  const uint64_t timeout_ms;
+  bufferlist *response;
+  rgw_rados_ref ref;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
+
+public:
+  RGWRadosNotifyCR(RGWRados *store, const rgw_raw_obj& obj,
+                   bufferlist& request, uint64_t timeout_ms,
+                   bufferlist *response);
+
+  int send_request() override;
+  int request_complete() override;
+};
+
 #endif
