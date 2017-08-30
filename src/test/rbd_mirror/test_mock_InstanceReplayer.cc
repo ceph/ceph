@@ -121,9 +121,11 @@ namespace rbd {
 namespace mirror {
 
 using ::testing::_;
+using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
+using ::testing::ReturnArg;
 using ::testing::ReturnRef;
 using ::testing::WithArg;
 
@@ -146,8 +148,8 @@ public:
   void expect_add_event_after(MockThreads &mock_threads,
                               Context** timer_ctx = nullptr) {
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
-      .WillOnce(WithArg<1>(
-        Invoke([this, &mock_threads, timer_ctx](Context *ctx) {
+      .WillOnce(DoAll(
+        WithArg<1>(Invoke([this, &mock_threads, timer_ctx](Context *ctx) {
           assert(mock_threads.timer_lock.is_locked());
           if (timer_ctx != nullptr) {
             *timer_ctx = ctx;
@@ -159,7 +161,8 @@ public:
                 ctx->complete(0);
               }), 0);
           }
-        })));
+        })),
+        ReturnArg<1>()));
   }
 
   void expect_cancel_event(MockThreads &mock_threads, bool canceled) {

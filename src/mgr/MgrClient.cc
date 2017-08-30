@@ -114,11 +114,12 @@ void MgrClient::reconnect()
     when += cct->_conf->mgr_connect_retry_interval;
     if (now < when) {
       if (!connect_retry_callback) {
-	connect_retry_callback = new FunctionContext([this](int r){
-	    connect_retry_callback = nullptr;
-	    reconnect();
-	  });
-	timer.add_event_at(when, connect_retry_callback);
+	connect_retry_callback = timer.add_event_at(
+	  when,
+	  new FunctionContext([this](int r){
+	      connect_retry_callback = nullptr;
+	      reconnect();
+	    }));
       }
       ldout(cct, 4) << "waiting to retry connect until " << when << dendl;
       return;

@@ -105,6 +105,7 @@ using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::MatcherCast;
 using ::testing::Return;
+using ::testing::ReturnArg;
 using ::testing::SetArgPointee;
 using ::testing::WithArg;
 
@@ -356,9 +357,10 @@ public:
   void expect_add_event_after_repeatedly(MockThreads &mock_threads) {
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
       .WillRepeatedly(
-        Invoke([this](double seconds, Context *ctx) {
-          m_threads->timer->add_event_after(seconds, ctx);
-        }));
+        DoAll(Invoke([this](double seconds, Context *ctx) {
+		       m_threads->timer->add_event_after(seconds, ctx);
+		     }),
+	  ReturnArg<1>()));
     EXPECT_CALL(*mock_threads.timer, cancel_event(_))
       .WillRepeatedly(
         Invoke([this](Context *ctx) {

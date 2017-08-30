@@ -5944,19 +5944,6 @@ void Client::unmount()
   ldout(cct, 2) << "unmounted." << dendl;
 }
 
-
-
-class C_C_Tick : public Context {
-  Client *client;
-public:
-  explicit C_C_Tick(Client *c) : client(c) {}
-  void finish(int r) override {
-    // Called back via Timer, which takes client_lock for us
-    assert(client->client_lock.is_locked_by_me());
-    client->tick();
-  }
-};
-
 void Client::flush_cap_releases()
 {
   // send any cap releases
@@ -5985,9 +5972,13 @@ void Client::tick()
   }
 
   ldout(cct, 21) << "tick" << dendl;
-  tick_event = new C_C_Tick(this);
-  timer.add_event_after(cct->_conf->client_tick_interval, tick_event);
-
+  tick_event = timer.add_event_after(
+    cct->_conf->client_tick_interval,
+    new FunctionContext([this](int) {
+	// Called back via Timer, which takes client_lock for us
+	assert(client_lock.is_locked_by_me());
+	tick();
+      }));
   utime_t now = ceph_clock_now();
 
   if (!mounted && !mds_requests.empty()) {
