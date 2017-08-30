@@ -32,6 +32,12 @@ how many ranks will be created.  The actual number of ranks
 in the filesystem will only be increased if a spare daemon is
 available to take on the new rank. For example, if there is only one MDS daemon running, and max_mds is set to two, no second rank will be created.
 
+Before ``max_mds`` can be increased, the ``allow_multimds`` flag must be set.
+The following command sets this flag for a filesystem instance.
+
+::
+    # ceph fs set <fs_name> cephfs allow_multimds true --yes-i-really-mean-it
+
 Set ``max_mds`` to the desired number of ranks.  In the following examples
 the "fsmap" line of "ceph status" is shown to illustrate the expected
 result of commands.
