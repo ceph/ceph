@@ -483,6 +483,15 @@ if(LINUX)
   add_definitions(-D__linux__)
 endif(LINUX)
 
+# Profiling build
+option(WITH_PROFILING "build with profiling build" OFF)
+
+if(WITH_PROFILING)
+  set(PROFILING_CFLAGS "-fno-omit-frame-pointer -O2")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PROFILING_CFLAGS}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${PROFILING_CFLAGS}")
+endif()
+
 # ASAN and friends
 option(WITH_ASAN "build with ASAN" OFF)
 option(WITH_ASAN_LEAK "explicitly enable ASAN leak detection" OFF)
