@@ -277,9 +277,9 @@ int RGWRemoteMetaLog::init()
 {
   conn = store->rest_master_conn;
 
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
 
@@ -1999,9 +1999,9 @@ int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
   // cannot run concurrently with run_sync(), so run in a separate manager
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
   RGWMetaSyncEnv sync_env_local = sync_env;

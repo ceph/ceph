@@ -23,7 +23,7 @@ TEST(HTTPManager, SignalThread)
   auto cct = g_ceph_context;
   RGWHTTPManager http(cct);
 
-  ASSERT_EQ(0, http.set_threaded());
+  ASSERT_EQ(0, http.start());
 
   // default pipe buffer size according to man pipe
   constexpr size_t max_pipe_buffer_size = 65536;
