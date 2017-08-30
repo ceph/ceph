@@ -2162,8 +2162,7 @@ public:
     pool = store->get_zone_params().domain_root;
   }
 
-  int list_keys_init(RGWRados *store, const string& marker, void **phandle)
-  {
+  int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
     auto info = ceph::make_unique<list_keys_info>();
 
     info->store = store;

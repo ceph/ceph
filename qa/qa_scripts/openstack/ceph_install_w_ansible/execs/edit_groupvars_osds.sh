@@ -1,4 +1,4 @@
-#! /bin/bash
+#! /usr/bin/env bash
 ed /usr/share/ceph-ansible/group_vars/osds << EOF
 $
 /^devices:

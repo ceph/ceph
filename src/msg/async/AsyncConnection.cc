@@ -1609,6 +1609,11 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
         ldout(async_msgr->cct, 10) << __func__ << " accept connection race, existing " << existing
                              << ".cseq " << existing->connect_seq << " == "
                              << connect.connect_seq << ", OPEN|STANDBY, RETRY_SESSION" << dendl;
+        // if connect_seq both zero, dont stuck into dead lock. it's ok to replace
+        if (policy.resetcheck && existing->connect_seq == 0) {
+          goto replace;
+        }
+
         reply.connect_seq = existing->connect_seq + 1;
         existing->lock.unlock();
         return _reply_accept(CEPH_MSGR_TAG_RETRY_SESSION, connect, reply, authorizer_reply);
@@ -2061,11 +2066,11 @@ void AsyncConnection::fault()
   requeue_sent();
   recv_start = recv_end = 0;
   state_offset = 0;
-  replacing = false;
   is_reset_from_peer = false;
   outcoming_bl.clear();
   if (!once_ready && !is_queued() &&
-      state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
+      state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH &&
+      !replacing) {
     ldout(async_msgr->cct, 10) << __func__ << " with nothing to send and in the half "
                               << " accept state just closed" << dendl;
     write_lock.unlock();
@@ -2073,6 +2078,7 @@ void AsyncConnection::fault()
     dispatch_queue->queue_reset(this);
     return ;
   }
+  replacing = false;
   reset_recv_state();
   if (policy.standby && !is_queued() && state != STATE_WAIT) {
     ldout(async_msgr->cct, 10) << __func__ << " with nothing to send, going to standby" << dendl;

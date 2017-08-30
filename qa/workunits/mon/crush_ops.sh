@@ -1,6 +1,6 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
 
-set -e
+set -ex
 
 function expect_false()
 {
@@ -26,6 +26,10 @@ ceph osd crush set-device-class ssd osd.0
 ceph osd crush set-device-class hdd osd.1
 ceph osd crush rule create-replicated foo-ssd default host ssd
 ceph osd crush rule create-replicated foo-hdd default host hdd
+ceph osd crush rule ls-by-class ssd | grep 'foo-ssd'
+ceph osd crush rule ls-by-class ssd | expect_false grep 'foo-hdd'
+ceph osd crush rule ls-by-class hdd | grep 'foo-hdd'
+ceph osd crush rule ls-by-class hdd | expect_false grep 'foo-ssd'
 
 ceph osd erasure-code-profile set ec-foo-ssd crush-device-class=ssd m=2 k=2
 ceph osd pool create ec-foo 2 erasure ec-foo-ssd
@@ -33,6 +37,18 @@ ceph osd pool rm ec-foo ec-foo --yes-i-really-really-mean-it
 
 ceph osd crush rule ls | grep foo
 
+ceph osd crush rule rename foo foo-asdf
+ceph osd crush rule rename foo foo-asdf # idempotent
+ceph osd crush rule rename bar bar-asdf
+ceph osd crush rule ls | grep 'foo-asdf'
+ceph osd crush rule ls | grep 'bar-asdf'
+ceph osd crush rule rm foo 2>&1 | grep 'does not exist'
+ceph osd crush rule rm bar 2>&1 | grep 'does not exist'
+ceph osd crush rule rename foo-asdf foo
+ceph osd crush rule rename foo-asdf foo # idempotent
+ceph osd crush rule rename bar-asdf bar
+ceph osd crush rule ls | expect_false grep 'foo-asdf'
+ceph osd crush rule ls | expect_false grep 'bar-asdf'
 ceph osd crush rule rm foo
 ceph osd crush rule rm foo  # idempotent
 ceph osd crush rule rm bar
@@ -77,6 +93,14 @@ ceph osd tree | grep -c host1 | grep -q 0
 
 expect_false ceph osd crush rm bar   # not empty
 ceph osd crush unlink host2
+
+ceph osd crush add-bucket host-for-test host root=root-for-test rack=rack-for-test
+ceph osd tree | grep host-for-test
+ceph osd tree | grep rack-for-test
+ceph osd tree | grep root-for-test
+ceph osd crush rm host-for-test
+ceph osd crush rm rack-for-test
+ceph osd crush rm root-for-test
 
 # reference foo and bar with a rule
 ceph osd crush rule create-simple foo-rule foo host firstn

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # file: common_h
 #
 # Copyright (C) 2015 Ubuntu Kylin

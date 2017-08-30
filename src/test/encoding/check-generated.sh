@@ -1,11 +1,10 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
+set -e
 
 source $(dirname $0)/../detect-build-env-vars.sh
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 dir=$1
-
-set -e
 
 tmp1=`mktemp /tmp/typ-XXXXXXXXX`
 tmp2=`mktemp /tmp/typ-XXXXXXXXX`

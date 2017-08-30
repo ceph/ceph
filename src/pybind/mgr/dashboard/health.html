@@ -165,7 +165,7 @@
                     },
                     options: {
                         center_text: raw_usage_text,
-                        responsive: false,
+                        responsive: true,
                         legend: {display: false},
                         animation: {duration: 0}
                     }
@@ -199,7 +199,7 @@
                         ]
                     },
                     options: {
-                        responsive: false,
+                        responsive: true,
                         legend: {display: false},
                         animation: {duration: 0}
                     }
@@ -210,7 +210,7 @@
             rivets.bind($("#content"), content_data);
 
             var refresh = function() {
-                $.get("/health_data", function(data) {
+                $.get("{{ url_prefix }}/health_data", function(data) {
                     _.extend(content_data, data);
                     draw_usage_charts();
                     setTimeout(refresh, 5000);
@@ -297,13 +297,15 @@
                                 <td>
                                     <span style="font-size: 45px;">{df.stats.total_objects | dimless}</span>
                                 </td>
-                                <td>
-                                    <canvas id="raw_usage_chart"
-                                            style="height:120px; width:120px;"></canvas>
+                                <td >
+                                    <div style="height:120px; width: 120px;">
+                                        <canvas id="raw_usage_chart"></canvas>
+                                    </div>
                                 </td>
                                 <td>
-                                    <canvas id="pool_usage_chart"
-                                            style="height:120px; width: 120px;"></canvas>
+                                    <div style="height:120px; width: 120px;">
+                                        <canvas id="pool_usage_chart"></canvas>
+                                    </div>
                                 </td>
                             </tr>
                             <tr>
@@ -332,15 +334,15 @@
                             </thead>
                             <tbody>
                             <tr rv-each-pool="pools">
-                                <td style="text-align: right;">
+                                <td>
                                     {pool.pool_name}
                                 </td>
                                 <td rv-style="pool.pg_status | pg_status_style">
                                     {pool.pg_status | pg_status}
                                 </td>
                                 <td>
-                                    {pool.stats.bytes_used.latest | dimless} /
-                                    {pool.stats.max_avail.latest | dimless }
+                                    {pool.stats.bytes_used.latest | dimless_binary } /
+                                    {pool.stats.max_avail.latest | dimless_binary }
                                 </td>
                                 <td>
                                     {pool.stats.rd_bytes.rate | dimless } rd, {

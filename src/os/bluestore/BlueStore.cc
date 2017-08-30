@@ -2133,7 +2133,7 @@ void BlueStore::ExtentMap::reshard(
 	     << needs_reshard_end << ")" << std::dec << dendl;
   }
 
-  fault_range(db, needs_reshard_begin, needs_reshard_end);
+  fault_range(db, needs_reshard_begin, (needs_reshard_end - needs_reshard_begin));
 
   // we may need to fault in a larger interval later must have all
   // referring extents for spanning blobs loaded in order to have
@@ -5413,7 +5413,6 @@ static void apply(uint64_t off,
                   uint64_t len,
                   uint64_t granularity,
                   BlueStore::mempool_dynamic_bitset &bitset,
-	          const char *what,
                   std::function<void(uint64_t,
 				     BlueStore::mempool_dynamic_bitset &)> f) {
   auto end = ROUND_UP_TO(off + len, granularity);
@@ -5442,7 +5441,7 @@ int BlueStore::_fsck_check_extents(
     }
     bool already = false;
     apply(
-      e.offset, e.length, block_size, used_blocks, __func__,
+      e.offset, e.length, block_size, used_blocks,
       [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	if (bs.test(pos))
 	  already = true;
@@ -5546,7 +5545,7 @@ int BlueStore::fsck(bool deep)
 
   used_blocks.resize(bdev->get_size() / block_size);
   apply(
-    0, SUPER_RESERVED, block_size, used_blocks, "0~SUPER_RESERVED",
+    0, SUPER_RESERVED, block_size, used_blocks,
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
       bs.set(pos);
     }
@@ -5555,7 +5554,7 @@ int BlueStore::fsck(bool deep)
   if (bluefs) {
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), block_size, used_blocks, "bluefs",
+        e.get_start(), e.get_len(), block_size, used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
           bs.set(pos);
         }
@@ -5954,7 +5953,7 @@ int BlueStore::fsck(bool deep)
 	       << " released 0x" << std::hex << wt.released << std::dec << dendl;
       for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
         apply(
-          e.get_start(), e.get_len(), block_size, used_blocks, "deferred",
+          e.get_start(), e.get_len(), block_size, used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
             bs.set(pos);
           }
@@ -5969,7 +5968,7 @@ int BlueStore::fsck(bool deep)
     // know they are allocated.
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), block_size, used_blocks, "bluefs_extents",
+        e.get_start(), e.get_len(), block_size, used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	  bs.reset(pos);
         }
@@ -5980,7 +5979,7 @@ int BlueStore::fsck(bool deep)
     while (fm->enumerate_next(&offset, &length)) {
       bool intersects = false;
       apply(
-        offset, length, block_size, used_blocks, "free",
+        offset, length, block_size, used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
           if (bs.test(pos)) {
             intersects = true;
@@ -6000,10 +5999,25 @@ int BlueStore::fsck(bool deep)
     size_t count = used_blocks.count();
     if (used_blocks.size() != count) {
       assert(used_blocks.size() > count);
-      derr << __func__ << " error: leaked some space;"
-	   << (used_blocks.size() - count) * min_alloc_size
-	   << " bytes leaked" << dendl;
       ++errors;
+      used_blocks.flip();
+      size_t start = used_blocks.find_first();
+      while (start != decltype(used_blocks)::npos) {
+	size_t cur = start;
+	while (true) {
+	  size_t next = used_blocks.find_next(cur);
+	  if (next != cur + 1) {
+	    derr << __func__ << " error: leaked extent 0x" << std::hex
+		 << ((uint64_t)start * block_size) << "~"
+		 << ((cur + 1 - start) * block_size) << std::dec
+		 << dendl;
+	    start = next;
+	    break;
+	  }
+	  cur = next;
+	}
+      }
+      used_blocks.flip();
     }
   }
 
@@ -7657,6 +7671,11 @@ void BlueStore::_txc_calc_cost(TransContext *txc)
   for (auto& p : txc->ioc.pending_aios) {
     ios += p.iov.size();
   }
+
+#ifdef HAVE_SPDK
+  ios += txc->ioc.total_nseg;
+#endif
+
   auto cost = throttle_cost_per_io.load();
   txc->cost = ios * cost + txc->bytes;
   dout(10) << __func__ << " " << txc << " cost " << txc->cost << " ("

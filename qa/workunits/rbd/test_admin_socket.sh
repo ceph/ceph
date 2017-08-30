@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 TMPDIR=/tmp/rbd_test_admin_socket$$
 mkdir $TMPDIR

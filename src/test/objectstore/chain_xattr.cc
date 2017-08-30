@@ -348,6 +348,7 @@ TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
   const char *file = FILENAME;
   ::unlink(file);
   int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
+  assert(fd >= 0);
 
   std::size_t existing_xattrs = get_xattrs(fd).size();
   char buf[800];
@@ -392,6 +393,7 @@ TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
   const char *file = FILENAME;
   ::unlink(file);
   int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
+  assert(fd >= 0);
   std::size_t existing_xattrs = get_xattrs(fd).size();
   ::close(fd);
 

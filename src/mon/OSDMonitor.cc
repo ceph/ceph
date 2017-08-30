@@ -3261,8 +3261,7 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) cons
   dout(30) << __func__ << " osd." << osd << " next=" << next
 	   << " " << creating_pgs_by_osd_epoch << dendl;
   std::lock_guard<std::mutex> l(creating_pgs_lock);
-  if (creating_pgs_epoch == 0 ||
-      creating_pgs_epoch < mapping.get_epoch()) {
+  if (creating_pgs_epoch <= creating_pgs.last_scan_epoch) {
     dout(20) << __func__
 	     << " not using stale creating_pgs@" << creating_pgs_epoch << dendl;
     // the subscribers will be updated when the mapping is completed anyway
@@ -4929,6 +4928,34 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ostringstream ss;
       osdmap.crush->list_rules(&ss);
       rdata.append(ss.str());
+    }
+  } else if (prefix == "osd crush rule ls-by-class") {
+    string class_name;
+    cmd_getval(g_ceph_context, cmdmap, "class", class_name);
+    if (class_name.empty()) {
+      ss << "no class specified";
+      r = -EINVAL;
+      goto reply;
+    }
+    set<int> rules;
+    r = osdmap.crush->get_rules_by_class(class_name, &rules);
+    if (r < 0) {
+      ss << "failed to get rules by class '" << class_name << "'";
+      goto reply;
+    }
+    if (f) {
+      f->open_array_section("rules");
+      for (auto &rule: rules) {
+        f->dump_string("name", osdmap.crush->get_rule_name(rule));
+      }
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      ostringstream rs;
+      for (auto &rule: rules) {
+        rs << osdmap.crush->get_rule_name(rule) << "\n";
+      }
+      rdata.append(rs.str());
     }
   } else if (prefix == "osd crush rule dump") {
     string name;
@@ -6806,6 +6833,11 @@ int OSDMonitor::prepare_command_osd_create(
 {
   dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
   assert(existing_id);
+  if (osdmap.is_destroyed(id)) {
+    ss << "ceph osd create has been deprecated. Please use ceph osd new "
+          "instead.";
+    return -EINVAL;
+  }
 
   if (uuid.is_zero()) {
     dout(10) << __func__ << " no uuid; assuming legacy `osd create`" << dendl;
@@ -7577,16 +7609,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
-
-    if (!newcrush.class_exists(srcname)) {
-      err = -ENOENT;
-      ss << "class '" << srcname << "' does not exist";
-      goto reply;
-    }
-
-    if (newcrush.class_exists(dstname)) {
-      err = -EEXIST;
-      ss << "class '" << dstname << "' already exists";
+    if (!newcrush.class_exists(srcname) && newcrush.class_exists(dstname)) {
+      // suppose this is a replay and return success
+      // so command is idempotent
+      ss << "already renamed to '" << dstname << "'";
+      err = 0;
       goto reply;
     }
 
@@ -7604,8 +7631,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd crush add-bucket") {
     // os crush add-bucket <name> <type>
     string name, typestr;
+    vector<string> argvec;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     cmd_getval(g_ceph_context, cmdmap, "type", typestr);
+    cmd_getval(g_ceph_context, cmdmap, "args", argvec);
+    map<string,string> loc;
+    if (!argvec.empty()) {
+      CrushWrapper::parse_loc_map(argvec, &loc);
+      dout(0) << "will create and move bucket '" << name
+              << "' to location " << loc << dendl;
+    }
 
     if (!_have_pending_crush() &&
 	_get_stable_crush().name_exists(name)) {
@@ -7645,10 +7680,29 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
+    if (!loc.empty()) {
+      if (!newcrush.check_item_loc(g_ceph_context, bucketno, loc,
+          (int *)NULL)) {
+        err = newcrush.move_bucket(g_ceph_context, bucketno, loc);
+        if (err < 0) {
+          ss << "error moving bucket '" << name << "' to location " << loc;
+          goto reply;
+        }
+      } else {
+        ss << "no need to move item id " << bucketno << " name '" << name
+           << "' to location " << loc << " in crush map";
+      }
+    }
+
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-    ss << "added bucket " << name << " type " << typestr
-       << " to crush map";
+    if (loc.empty()) {
+      ss << "added bucket " << name << " type " << typestr
+         << " to crush map";
+    } else {
+      ss << "added bucket " << name << " type " << typestr
+         << " to location " << loc;
+    }
     goto update;
   } else if (prefix == "osd crush rename-bucket") {
     string srcname, dstname;
@@ -8575,6 +8629,45 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd crush rule rename") {
+    string srcname;
+    string dstname;
+    cmd_getval(g_ceph_context, cmdmap, "srcname", srcname);
+    cmd_getval(g_ceph_context, cmdmap, "dstname", dstname);
+    if (srcname.empty() || dstname.empty()) {
+      ss << "must specify both source rule name and destination rule name";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (srcname == dstname) {
+      ss << "destination rule name is equal to source rule name";
+      err = 0;
+      goto reply;
+    }
+
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    if (!newcrush.rule_exists(srcname) && newcrush.rule_exists(dstname)) {
+      // srcname does not exist and dstname already exists
+      // suppose this is a replay and return success
+      // (so this command is idempotent)
+      ss << "already renamed to '" << dstname << "'";
+      err = 0;
+      goto reply;
+    }
+
+    err = newcrush.rename_rule(srcname, dstname, &ss);
+    if (err < 0) {
+      // ss has reason for failure
+      goto reply;
+    }
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+                               get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd setmaxosd") {

@@ -1978,7 +1978,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   // We can't allow OSD to become non-startable even if mds
   // could be writing as part of file removals.
   ostringstream ss;
-  if (write_ordered && osd->check_failsafe_full(ss)) {
+  if (write_ordered && osd->check_failsafe_full(ss) && !m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
              << ss.str()
 	     << dendl;
@@ -4918,9 +4918,6 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
         bufferlist t;
         uint64_t len = miter->first - last;
         r = pgbackend->objects_read_sync(soid, last, len, op.flags, &t);
-	if (r == -EIO) {
-	  r = rep_repair_primary_object(soid, ctx->op);
-	}
         if (r < 0) {
           osd->clog->error() << coll << " " << soid
 			     << " sparse-read failed to read: "
@@ -4935,6 +4932,9 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       bufferlist tmpbl;
       r = pgbackend->objects_read_sync(soid, miter->first, miter->second,
 				       op.flags, &tmpbl);
+      if (r == -EIO) {
+        r = rep_repair_primary_object(soid, ctx->op);
+      }
       if (r < 0) {
 	return r;
       }
@@ -6765,7 +6765,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   fail:
     osd_op.rval = result;
     tracepoint(osd, do_osd_op_post, soid.oid.name.c_str(), soid.snap.val, op.op, ceph_osd_op_name(op.op), op.flags, result);
-    if (result < 0 && (op.flags & CEPH_OSD_OP_FLAG_FAILOK))
+    if (result < 0 && (op.flags & CEPH_OSD_OP_FLAG_FAILOK) &&
+        result != -EAGAIN && result != -EINPROGRESS)
       result = 0;
 
     if (result < 0)

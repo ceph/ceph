@@ -550,15 +550,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>quuy</name>
   </images>
   $ rbd list -l
-  NAME       SIZE PARENT FMT PROT LOCK 
-  foo       1024M          1           
-  foo@snap  1024M          1           
-  quux      1024k          1      excl 
-  bar       1024M          2           
-  bar@snap   512M          2 yes       
-  bar@snap2 1024M          2           
-  baz       2048M          2      shr  
-  quuy      2048M          2           
+  NAME      SIZE PARENT FMT PROT LOCK 
+  foo         1G          1           
+  foo@snap    1G          1           
+  quux        1M          1      excl 
+  bar         1G          2           
+  bar@snap  512M          2 yes       
+  bar@snap2   1G          2           
+  baz         2G          2      shr  
+  quuy        2G          2           
   $ rbd list -l --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -886,12 +886,12 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </snapshots>
   $ rbd disk-usage --pool rbd_other 2>/dev/null
-  NAME                    PROVISIONED  USED 
-  child@snap                     512M     0 
-  child                          512M 4096k 
-  deep-flatten-child@snap        512M     0 
-  deep-flatten-child             512M     0 
-  <TOTAL>                       1024M 4096k 
+  NAME                    PROVISIONED USED 
+  child@snap                     512M    0 
+  child                          512M   4M 
+  deep-flatten-child@snap        512M    0 
+  deep-flatten-child             512M    0 
+  <TOTAL>                          1G   4M 
   $ rbd disk-usage --pool rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "images": [

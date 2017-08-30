@@ -1,4 +1,5 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
+set -e
 
 source $(dirname $0)/detect-build-env-vars.sh
 

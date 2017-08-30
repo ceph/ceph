@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 STACK_BRANCH=stable/ocata
 
@@ -87,7 +88,8 @@ enable_plugin devstack-plugin-ceph git://git.openstack.org/openstack/devstack-pl
 EOF
 
 cat<<EOF > ${STACK_HOME_PATH}/start.sh
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 cd ${STACK_OPT_PATH}
 git clone https://git.openstack.org/openstack-dev/devstack -b ${STACK_BRANCH}
 

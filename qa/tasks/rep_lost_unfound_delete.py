@@ -169,8 +169,8 @@ def task(ctx, config):
         assert err
 
     # see if osd.1 can cope
-    manager.revive_osd(1)
     manager.mark_in_osd(1)
+    manager.revive_osd(1)
     manager.wait_till_osd_is_up(1)
     manager.wait_for_clean()
     run.wait(procs)

@@ -292,6 +292,7 @@ specify the pool name for the block device. On your OpenStack node, edit
     [DEFAULT]
     ...
     enabled_backends = ceph
+    glance_api_version = 2
     ...
     [ceph]
     volume_driver = cinder.volume.drivers.rbd.RBDDriver
@@ -302,7 +303,6 @@ specify the pool name for the block device. On your OpenStack node, edit
     rbd_max_clone_depth = 5
     rbd_store_chunk_size = 4
     rados_connect_timeout = -1
-    glance_api_version = 2
 
 If you are using `cephx authentication`_, also configure the user and uuid of
 the secret you added to ``libvirt`` as documented earlier::

@@ -82,7 +82,7 @@ void *ObjBencher::status_printer(void *_bencher) {
   int previous_writes = 0;
   int cycleSinceChange = 0;
   double bandwidth;
-  int iops;
+  int iops = 0;
   utime_t ONE_SECOND;
   ONE_SECOND.set_from_double(1.0);
   bencher->lock.Lock();
@@ -202,6 +202,10 @@ void *ObjBencher::status_printer(void *_bencher) {
   }
   if (formatter)
     formatter->close_section(); //datas
+  if (iops < 0) {
+    auto runtime = ceph_clock_now() - data.start_time;
+    data.idata.min_iops = data.idata.max_iops = data.finished / runtime;
+  }
   bencher->lock.Unlock();
   return NULL;
 }
