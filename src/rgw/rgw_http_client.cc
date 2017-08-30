@@ -766,7 +766,7 @@ void *RGWHTTPManager::ReqsThread::entry()
  * RGWHTTPManager has two modes of operation: threaded and non-threaded.
  */
 RGWHTTPManager::RGWHTTPManager(CephContext *_cct, RGWCompletionManager *_cm) : cct(_cct),
-                                                    completion_mgr(_cm), is_threaded(false),
+                                                    completion_mgr(_cm), is_started(false),
                                                     reqs_lock("RGWHTTPManager::reqs_lock"), num_reqs(0), max_threaded_req(0),
                                                     reqs_thread(NULL)
 {
@@ -942,7 +942,7 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client, bool send_data_hint)
 
   register_request(req_data);
 
-  if (!is_threaded) {
+  if (!is_started) {
     ret = link_request(req_data);
     if (ret < 0) {
       req_data->put();
@@ -962,7 +962,7 @@ int RGWHTTPManager::remove_request(RGWHTTPClient *client)
 {
   rgw_http_req_data *req_data = client->get_req_data();
 
-  if (!is_threaded) {
+  if (!is_started) {
     unlink_request(req_data);
     return 0;
   }
@@ -982,7 +982,7 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
   assert(req_data->lock.is_locked());
 
   /* can only do that if threaded */
-  if (!is_threaded) {
+  if (!is_started) {
     return -EINVAL;
   }
 
@@ -1013,7 +1013,7 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
   return 0;
 }
 
-int RGWHTTPManager::set_threaded()
+int RGWHTTPManager::start()
 {
   int r = pipe(thread_pipe);
   if (r < 0) {
@@ -1040,7 +1040,7 @@ int RGWHTTPManager::set_threaded()
                  thread_pipe[1], thread_pipe[0]);
 #endif
 
-  is_threaded = true;
+  is_started = true;
   reqs_thread = new ReqsThread(this);
   reqs_thread->create("http_manager");
   return 0;
@@ -1054,7 +1054,7 @@ void RGWHTTPManager::stop()
 
   is_stopped = true;
 
-  if (is_threaded) {
+  if (is_started) {
     going_down = true;
     signal_thread();
     reqs_thread->join();
@@ -1157,7 +1157,7 @@ void rgw_http_client_init(CephContext *cct)
 {
   curl_global_init(CURL_GLOBAL_ALL);
   rgw_http_manager = new RGWHTTPManager(cct);
-  rgw_http_manager->set_threaded();
+  rgw_http_manager->start();
 }
 
 void rgw_http_client_cleanup()

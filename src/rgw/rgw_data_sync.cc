@@ -667,9 +667,9 @@ int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSy
     return 0;
   }
 
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
 
@@ -694,9 +694,9 @@ int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
   // cannot run concurrently with run_sync(), so run in a separate manager
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
   RGWDataSyncEnv sync_env_local = sync_env;
@@ -741,9 +741,9 @@ int RGWRemoteDataLog::init_sync_status(int num_shards)
 
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
   RGWDataSyncEnv sync_env_local = sync_env;
@@ -3074,9 +3074,9 @@ int RGWBucketSyncStatusManager::init()
     return -EINVAL;
   }
 
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
 

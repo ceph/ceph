@@ -136,8 +136,8 @@ class RGWPeriodPusher::CRThread {
       http(cct, coroutines.get_completion_mgr()),
       push_all(new PushAllCR(cct, &http, std::move(period), std::move(conns)))
   {
-    http.set_threaded();
-    // must spawn the CR thread after set_threaded
+    http.start();
+    // must spawn the CR thread after start
     thread = std::thread([this] { coroutines.run(push_all.get()); });
   }
   ~CRThread()
