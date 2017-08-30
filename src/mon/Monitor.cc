@@ -3169,8 +3169,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
     const auto& hdr = m->get_header();
     uint64_t size = hdr.front_len + hdr.middle_len + hdr.data_len;
-    uint64_t max =
-      g_conf->mon_client_bytes * g_conf->mon_mgr_proxy_client_bytes_ratio;
+    uint64_t max = g_conf->get_val<uint64_t>("mon_client_bytes")
+                 * g_conf->get_val<double>("mon_mgr_proxy_client_bytes_ratio");
     if (mgr_proxy_bytes + size > max) {
       dout(10) << __func__ << " current mgr proxy bytes " << mgr_proxy_bytes
 	       << " + " << size << " > max " << max << dendl;

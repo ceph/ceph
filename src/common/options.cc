@@ -1152,7 +1152,9 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_mgr_proxy_client_bytes_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
-    .set_default(.3),
+    .set_default(.3)
+    .set_description("ratio of mon_client_bytes that can be consumed by "
+                     "proxied mgr commands before we error out to client"),
 
     Option("mon_log_max_summary", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)

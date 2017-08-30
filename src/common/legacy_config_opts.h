@@ -262,7 +262,6 @@ OPTION(mon_max_mdsmap_epochs, OPT_INT)
 OPTION(mon_max_osd, OPT_INT)
 OPTION(mon_probe_timeout, OPT_DOUBLE)
 OPTION(mon_client_bytes, OPT_U64)  // client msg data allowed in memory (in bytes)
-OPTION(mon_mgr_proxy_client_bytes_ratio, OPT_FLOAT) // ratio of mon_client_bytes that can be consumed by proxied mgr commands before we error out to client
 OPTION(mon_log_max_summary, OPT_U64)
 OPTION(mon_daemon_bytes, OPT_U64)  // mds, osd message memory cap (in bytes)
 OPTION(mon_max_log_entries_per_event, OPT_INT)
@@ -1553,10 +1552,6 @@ OPTION(mgr_mon_messages, OPT_U64)        // messages from mons
 OPTION(mgr_connect_retry_interval, OPT_DOUBLE)
 OPTION(mgr_service_beacon_grace, OPT_DOUBLE)
 
-OPTION(mon_mgr_digest_period, OPT_INT)  // How frequently to send digests
-OPTION(mon_mgr_beacon_grace, OPT_INT)  // How long to wait to failover
-OPTION(mon_mgr_inactive_grace, OPT_INT) // How long before health WARN -> ERR
-OPTION(mon_mgr_mkfs_grace, OPT_INT) // How long before we complain about MGR_DOWN
 OPTION(rgw_crypt_require_ssl, OPT_BOOL) // requests including encryption key headers must be sent over ssl
 OPTION(rgw_crypt_default_encryption_key, OPT_STR) // base64 encoded key for encryption of rgw objects
 OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR) // extra keys that may be used for aws:kms
