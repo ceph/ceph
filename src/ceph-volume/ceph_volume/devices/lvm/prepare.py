@@ -3,8 +3,8 @@ import json
 import os
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
-from ceph_volume.util import system
-from ceph_volume import conf, decorators
+from ceph_volume.util import system, disk
+from ceph_volume import conf, decorators, terminal
 from . import api
 from .common import prepare_parser
 
@@ -51,23 +51,12 @@ class Prepare(object):
     def __init__(self, argv):
         self.argv = argv
 
-    def get_journal_pv(self, argument):
-        # it is safe to get the pv by its name
-        device = api.get_pv(pv_name=argument)
-        if device:
-            # means this has an existing uuid, so we can use it without
-            # recreating it
-            if device.pv_uuid:
-                return device
-            # otherwise, we need to create it as a 'pv', ask back again for it
-            # as a pv, and return that
-            api.create_pv(argument)
-            return api.get_pv(pv_name=argument)
-        # if we get to this point, this should be a red flag, `prepare` probably is
-        # out of options to use anything so raise an error
-        raise RuntimeError(
-            '--journal specified an invalid or non-existent device: %s' % argument
-        )
+    def get_journal_ptuuid(self, argument):
+        uuid = disk.get_partuuid(argument)
+        if not uuid:
+            terminal.error('blkid could not detect a PARTUUID for device: %s' % argument)
+            raise RuntimeError('unable to use device for a journal')
+        return uuid
 
     def get_journal_lv(self, argument):
         """
@@ -124,12 +113,15 @@ class Prepare(object):
                     'ceph.data_uuid': data_lv.lv_uuid,
                 })
 
-            # otherwise assume this is a regular disk, that will need to be
-            # created as a 'pv'
+            # allow a file
+            elif os.path.isfile(args.journal):
+                journal_uuid = ''
+                journal_device = args.journal
+
+            # otherwise assume this is a regular disk partition
             else:
-                journal_pv = self.get_journal_pv(args.journal)
-                journal_device = journal_pv.pv_name
-                journal_uuid = journal_pv.pv_uuid
+                journal_uuid = self.get_journal_ptuuid(args.journal)
+                journal_device = args.journal
 
             data_lv.set_tags({
                 'ceph.type': 'data',
