@@ -245,7 +245,6 @@ TEST(BitAllocator, test_bmap_entry)
     bmap = new BmapEntry(g_ceph_context, false);
     start = -1;
     scanned = 0;
-    allocated = 0;
     allocated = bmap->find_first_set_bits(1, 1, &start, &scanned);
     bmap_test_assert(allocated == 1);
     bmap_test_assert(start == 1);

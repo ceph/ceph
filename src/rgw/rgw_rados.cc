@@ -8098,12 +8098,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
-  bool versioned_dest = dest_bucket_info.versioning_enabled();
-
   if (version_id && !version_id->empty()) {
-    versioned_dest = true;
     dest_obj.key.set_instance(*version_id);
-  } else if (versioned_dest) {
+  } else if (dest_bucket_info.versioning_enabled()) {
     gen_rand_obj_instance_name(&dest_obj);
   }
 
