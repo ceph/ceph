@@ -843,6 +843,7 @@ class Module(MgrModule):
                 content_data = self.get_counter_stats(path)
 
                 return template.render(
+                    url_prefix=global_instance().url_prefix,
                     ceph_version=global_instance().version,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2),
@@ -869,6 +870,7 @@ class Module(MgrModule):
                 content_data = self.get_perf_graph_data()
 
                 return template.render(
+                    url_prefix=global_instance().url_prefix,
                     ceph_version=global_instance().version,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2)

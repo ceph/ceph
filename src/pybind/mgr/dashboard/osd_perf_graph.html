@@ -23,7 +23,7 @@
     var content_data = {{ content_data }};
 
     var refresh = function() {
-        $.get("/get_perf_graph_data/", function(data) {
+        $.get("{{ url_prefix }}/get_perf_graph_data/", function(data) {
             content_data = data;
             plot_graphs();
             setTimeout(refresh, 5000);

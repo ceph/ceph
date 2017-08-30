@@ -24,7 +24,7 @@
     var content_data = {{ content_data }};
 
     var refresh = function() {
-        $.get("/get_counter_stats/" + content_data["perf_counter"] + "/", function(data) {
+        $.get("{{ url_prefix }}/get_counter_stats/" + content_data["perf_counter"] + "/", function(data) {
             content_data = data;
             plot_graphs();
             setTimeout(refresh, 5000);
