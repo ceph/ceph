@@ -1539,23 +1539,6 @@ OPTION(rgw_shard_warning_threshold, OPT_DOUBLE) // pct of safe max
 
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL) // whether swift object versioning feature is enabled
 
-OPTION(mgr_module_path, OPT_STR) // where to load python modules from
-OPTION(mgr_initial_modules, OPT_STR)  // Which modules to load
-OPTION(mgr_data, OPT_STR) // where to find keyring etc
-OPTION(mgr_tick_period, OPT_INT)  // How frequently to tick
-OPTION(mgr_stats_period, OPT_INT) // How frequently clients send stats
-OPTION(mgr_client_bytes, OPT_U64) // bytes from clients
-OPTION(mgr_client_messages, OPT_U64)      // messages from clients
-OPTION(mgr_osd_bytes, OPT_U64)   // bytes from osds
-OPTION(mgr_osd_messages, OPT_U64)       // messages from osds
-OPTION(mgr_mds_bytes, OPT_U64)   // bytes from mdss
-OPTION(mgr_mds_messages, OPT_U64)        // messages from mdss
-OPTION(mgr_mon_bytes, OPT_U64)   // bytes from mons
-OPTION(mgr_mon_messages, OPT_U64)        // messages from mons
-
-OPTION(mgr_connect_retry_interval, OPT_DOUBLE)
-OPTION(mgr_service_beacon_grace, OPT_DOUBLE)
-
 OPTION(rgw_crypt_require_ssl, OPT_BOOL) // requests including encryption key headers must be sent over ssl
 OPTION(rgw_crypt_default_encryption_key, OPT_STR) // base64 encoded key for encryption of rgw objects
 OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR) // extra keys that may be used for aws:kms
