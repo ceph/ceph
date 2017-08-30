@@ -39,7 +39,6 @@ public:
   public:
     enum class op_type_t {
       client_op,
-      osd_subop,
       bg_snaptrim,
       bg_recovery,
       bg_scrub
@@ -134,7 +133,7 @@ public:
 	       << " cost " << item.get_cost()
 	       << " e" << item.get_map_epoch() << ")";
   }
-};
+}; // class OpQueueItem
 
 /// Implements boilerplate for operations queued for the pg lock
 class PGOpQueueable : public OpQueueItem::OpQueueable {

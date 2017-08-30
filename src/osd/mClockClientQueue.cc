@@ -18,9 +18,8 @@
 #include "osd/mClockClientQueue.h"
 #include "common/dout.h"
 
-
 namespace dmc = crimson::dmclock;
-
+using namespace std::placeholders;
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -30,99 +29,27 @@ namespace dmc = crimson::dmclock;
 
 namespace ceph {
 
-  mClockClientQueue::mclock_op_tags_t::mclock_op_tags_t(CephContext *cct) :
-    client_op(cct->_conf->osd_op_queue_mclock_client_op_res,
-	      cct->_conf->osd_op_queue_mclock_client_op_wgt,
-	      cct->_conf->osd_op_queue_mclock_client_op_lim),
-    osd_subop(cct->_conf->osd_op_queue_mclock_osd_subop_res,
-	      cct->_conf->osd_op_queue_mclock_osd_subop_wgt,
-	      cct->_conf->osd_op_queue_mclock_osd_subop_lim),
-    snaptrim(cct->_conf->osd_op_queue_mclock_snap_res,
-	     cct->_conf->osd_op_queue_mclock_snap_wgt,
-	     cct->_conf->osd_op_queue_mclock_snap_lim),
-    recov(cct->_conf->osd_op_queue_mclock_recov_res,
-	  cct->_conf->osd_op_queue_mclock_recov_wgt,
-	  cct->_conf->osd_op_queue_mclock_recov_lim),
-    scrub(cct->_conf->osd_op_queue_mclock_scrub_res,
-	  cct->_conf->osd_op_queue_mclock_scrub_wgt,
-	  cct->_conf->osd_op_queue_mclock_scrub_lim)
-  {
-    dout(20) <<
-      "mClockClientQueue settings:: " <<
-      "client_op:" << client_op <<
-      "; osd_subop:" << osd_subop <<
-      "; snaptrim:" << snaptrim <<
-      "; recov:" << recov <<
-      "; scrub:" << scrub <<
-      dendl;
-  }
-
-
-  const dmc::ClientInfo*
-  mClockClientQueue::op_class_client_info_f(
-    const mClockClientQueue::InnerClient& client)
-  {
-    switch(client.second) {
-    case osd_op_type_t::client_op:
-      return &mclock_op_tags->client_op;
-    case osd_op_type_t::osd_subop:
-      return &mclock_op_tags->osd_subop;
-    case osd_op_type_t::bg_snaptrim:
-      return &mclock_op_tags->snaptrim;
-    case osd_op_type_t::bg_recovery:
-      return &mclock_op_tags->recov;
-    case osd_op_type_t::bg_scrub:
-      return &mclock_op_tags->scrub;
-    default:
-      assert(0);
-      return nullptr;
-    }
-  }
-
-
   /*
    * class mClockClientQueue
    */
 
-  std::unique_ptr<mClockClientQueue::mclock_op_tags_t>
-  mClockClientQueue::mclock_op_tags(nullptr);
-
-  mClockClientQueue::pg_queueable_visitor_t
-  mClockClientQueue::pg_queueable_visitor;
-
   mClockClientQueue::mClockClientQueue(CephContext *cct) :
-    queue(&mClockClientQueue::op_class_client_info_f)
+    queue(std::bind(&mClockClientQueue::op_class_client_info_f, this, _1)),
+    client_info_mgr(cct)
   {
-    // manage the singleton
-    if (!mclock_op_tags) {
-      mclock_op_tags.reset(new mclock_op_tags_t(cct));
-    }
+    // empty
   }
 
-  mClockClientQueue::osd_op_type_t
-  mClockClientQueue::get_osd_op_type(const Request& request) {
-    switch (request.get_op_type()) {
-    // if we got client_op back then we need to distinguish between
-    // a client op and an osd subop.
-    case OpQueueItem::op_type_t::client_op:
-      return osd_op_type_t::client_op;
-    case OpQueueItem::op_type_t::osd_subop:
-      return osd_op_type_t::osd_subop;
-    case OpQueueItem::op_type_t::bg_snaptrim:
-      return osd_op_type_t::bg_snaptrim;
-    case OpQueueItem::op_type_t::bg_recovery:
-      return osd_op_type_t::bg_recovery;
-    case OpQueueItem::op_type_t::bg_scrub:
-      return osd_op_type_t::bg_scrub;
-    default:
-      assert(0);
-    }
+  const dmc::ClientInfo* mClockClientQueue::op_class_client_info_f(
+    const mClockClientQueue::InnerClient& client)
+  {
+    return client_info_mgr.get_client_info(client.second);
   }
 
   mClockClientQueue::InnerClient
   inline mClockClientQueue::get_inner_client(const Client& cl,
-				      const Request& request) {
-    return InnerClient(cl, get_osd_op_type(request));
+					     const Request& request) {
+    return InnerClient(cl, client_info_mgr.osd_op_type(request));
   }
 
   // Formatted output of the queue
