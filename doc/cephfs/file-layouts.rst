@@ -201,15 +201,27 @@ directories do not have layouts set:
 
     
 Adding a data pool to the MDS
----------------------------------
+-----------------------------
 
 Before you can use a pool with CephFS you have to add it to the Metadata Servers.
 
 .. code-block:: bash
 
     $ ceph fs add_data_pool cephfs cephfs_data_ssd
-    # Pool should now show up
-    $ ceph fs ls
+    $ ceph fs ls  # Pool should now show up
     .... data pools: [cephfs_data cephfs_data_ssd ]
 
 Make sure that your cephx keys allows the client to access this new pool.
+
+You can then update the layout on a directory in CephFS to use the pool you added:
+
+.. code-block:: bash
+
+    $ mkdir /mnt/cephfs/myssddir
+    $ setfattr -n ceph.dir.layout.pool -v cephfs_data_ssd /mnt/cephfs/myssddir
+
+All new files created within that directory will now inherit its layout and place their data in your newly added pool. 
+
+You may notice that object counts in your primary data pool (the one passed to ``fs new``) continue to increase, even if files are being created in the pool you added.  This is normal: the file data is stored in the pool specified by the layout, but a small amount of metadata is kept in the primary data pool for all files.
+
+
