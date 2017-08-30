@@ -2038,13 +2038,15 @@ void BlueFS::sync_metadata()
   std::unique_lock<std::mutex> l(lock);
   if (log_t.empty()) {
     dout(10) << __func__ << " - no pending log events" << dendl;
-    return;
+  } else {
+    dout(10) << __func__ << dendl;
+    utime_t start = ceph_clock_now();
+    flush_bdev(); // FIXME?
+    _flush_and_sync_log(l);
+    utime_t end = ceph_clock_now();
+    utime_t dur = end - start;
+    dout(10) << __func__ << " done in " << dur << dendl;
   }
-  dout(10) << __func__ << dendl;
-  utime_t start = ceph_clock_now();
-  flush_bdev(); // FIXME?
-  _flush_and_sync_log(l);
-  dout(10) << __func__ << " done in " << (ceph_clock_now() - start) << dendl;
 
   if (_should_compact_log()) {
     if (cct->_conf->bluefs_compact_log_sync) {
@@ -2053,10 +2055,6 @@ void BlueFS::sync_metadata()
       _compact_log_async(l);
     }
   }
-
-  utime_t end = ceph_clock_now();
-  utime_t dur = end - start;
-  dout(10) << __func__ << " done in " << dur << dendl;
 }
 
 int BlueFS::open_for_write(
