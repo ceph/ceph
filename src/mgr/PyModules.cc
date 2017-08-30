@@ -411,7 +411,7 @@ int PyModules::init()
 
   // Configure sys.path to include mgr_module_path
   std::string sys_path = std::string(Py_GetPath()) + ":" + get_site_packages()
-                         + ":" + g_conf->mgr_module_path;
+                         + ":" + g_conf->get_val<std::string>("mgr_module_path");
   dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
 
   // Drop the GIL and remember the main thread state (current
@@ -854,7 +854,7 @@ static void _list_modules(
 
 void PyModules::list_modules(std::set<std::string> *modules)
 {
-  _list_modules(g_conf->mgr_module_path, modules);
+  _list_modules(g_conf->get_val<std::string>("mgr_module_path"), modules);
 }
 
 void PyModules::set_health_checks(const std::string& handle,
