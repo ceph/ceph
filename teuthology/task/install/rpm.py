@@ -132,12 +132,14 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
 
     if dist_release in ['opensuse', 'sle']:
         pkg_mng_cmd = 'zypper'
-        pkg_mng_opts = '-n --no-gpg-checks'
+        pkg_mng_opts = '-n'
+        pkg_mng_gpg_opt = '--no-gpg-checks'
         pkg_mng_subcommand_opts = '--capability'
         pkg_mng_install_opts = '--no-recommends'
     else:
         pkg_mng_cmd = 'yum'
         pkg_mng_opts = '-y'
+        pkg_mng_gpg_opt = ''
         pkg_mng_subcommand_opts = ''
         pkg_mng_install_opts = ''
 
@@ -153,14 +155,14 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
                       run.Raw(pkg), run.Raw(';'), 'then',
                       'sudo', pkg_mng_cmd, pkg_mng_opts, 'remove',
                       pkg_mng_subcommand_opts, pkg, run.Raw(';'),
-                      'sudo', pkg_mng_cmd, pkg_mng_opts, 'install',
+                      'sudo', pkg_mng_cmd, pkg_mng_opts, pkg_mng_gpg_opt, 'install',
                       pkg_mng_subcommand_opts, pkg_mng_install_opts,
                       pkg, run.Raw(';'),
                       'fi']
             )
         if pkg is None:
             remote.run(args=[
-                'sudo', pkg_mng_cmd, pkg_mng_opts, 'install',
+                'sudo', pkg_mng_cmd, pkg_mng_opts, pkg_mng_gpg_opt, 'install',
                 pkg_mng_subcommand_opts, pkg_mng_install_opts, cpack
             ])
         else:
