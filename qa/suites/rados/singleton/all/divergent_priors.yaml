@@ -17,7 +17,7 @@ overrides:
       - \(OSDMAP_FLAGS\)
       - \(OSD_
       - \(PG_
-      - \(OBJECT_DEGRADED\)
+      - \(OBJECT_
       - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
