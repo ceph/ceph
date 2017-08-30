@@ -299,7 +299,7 @@ def task(ctx, config):
         log.error('test does not support small size objects less than 10 MB ')
         exit(1)
 
-    if 'verison' in config['test-name']:
+    if 'version' in config['test-name']:
 
         osize = (osize / int(test_config['version_count']))
 
