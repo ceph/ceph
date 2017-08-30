@@ -785,8 +785,9 @@ double perf_timer()
   uint64_t start = Cycles::rdtsc();
   Mutex::Locker l(lock);
   for (int i = 0; i < count; i++) {
-    timer.add_event_after(12345, c[i]);
-    timer.cancel_event(c[i]);
+    if (timer.add_event_after(12345, c[i])) {
+      timer.cancel_event(c[i]);
+    }
   }
   uint64_t stop = Cycles::rdtsc();
   delete[] c;

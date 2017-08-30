@@ -145,6 +145,7 @@ using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
+using ::testing::ReturnArg;
 using ::testing::StrEq;
 using ::testing::WithArg;
 using ::testing::WithoutArgs;
@@ -238,13 +239,15 @@ public:
 
   void expect_timer_add_event(MockThreads &mock_threads) {
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
-      .WillOnce(WithArg<1>(Invoke([this](Context *ctx) {
-          auto wrapped_ctx = new FunctionContext([this, ctx](int r) {
-              Mutex::Locker timer_locker(m_threads->timer_lock);
-              ctx->complete(r);
-            });
-          m_threads->work_queue->queue(wrapped_ctx, 0);
-        })));
+      .WillOnce(DoAll(WithArg<1>(Invoke([this](Context *ctx) {
+                        auto wrapped_ctx =
+			  new FunctionContext([this, ctx](int r) {
+			      Mutex::Locker timer_locker(m_threads->timer_lock);
+			      ctx->complete(r);
+			    });
+			m_threads->work_queue->queue(wrapped_ctx, 0);
+                      })),
+                      ReturnArg<1>()));
   }
 
   int when_shut_down(MockPoolWatcher &mock_pool_watcher) {

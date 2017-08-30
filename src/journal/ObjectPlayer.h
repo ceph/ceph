@@ -90,12 +90,6 @@ private:
     }
     void finish(int r) override;
   };
-  struct C_WatchTask : public Context {
-    ObjectPlayerPtr object_player;
-    C_WatchTask(ObjectPlayer *o) : object_player(o) {
-    }
-    void finish(int r) override;
-  };
   struct C_WatchFetch : public Context {
     ObjectPlayerPtr object_player;
     C_WatchFetch(ObjectPlayer *o) : object_player(o) {

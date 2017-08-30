@@ -802,9 +802,9 @@ void JournalMetadata::schedule_commit_task() {
   assert(m_lock.is_locked());
   assert(m_commit_position_ctx != nullptr);
   if (m_commit_position_task_ctx == NULL) {
-    m_commit_position_task_ctx = new C_CommitPositionTask(this);
-    m_timer->add_event_after(m_settings.commit_interval,
-                             m_commit_position_task_ctx);
+    m_commit_position_task_ctx =
+      m_timer->add_event_after(m_settings.commit_interval,
+			       new C_CommitPositionTask(this));
   }
 }
 
