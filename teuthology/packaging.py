@@ -796,7 +796,9 @@ class GitbuilderProject(object):
             url = "{base_url}/{arch}".format(
                 base_url=self.base_url, arch=self.arch)
             self.remote.run(args=[
-                'sudo', 'zypper', '-n', 'addrepo', '-p', '1', url, 'ceph-rpm-under-test'
+                'sudo', 'zypper', '-n', 'addrepo', '-p', '1', url, 'ceph-rpm-under-test',
+                Raw(';'),
+                'sudo', 'zypper', '-n', '--no-gpg-checks', 'refresh'
             ])
         else:
             self.remote.run(args=['sudo', 'yum', '-y', 'install', url])
