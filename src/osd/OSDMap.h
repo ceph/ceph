@@ -1357,7 +1357,9 @@ public:
     OSDMap *newmap,
     const set<int64_t> *pools,
     std::string *out,
-    Formatter *f) const;
+    Formatter *f,
+    int *pg_moved,
+    int *pg_total) const;
 
   string get_flag_string() const;
   static string get_flag_string(unsigned flags);
