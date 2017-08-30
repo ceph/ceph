@@ -31,8 +31,6 @@
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDBackoff.h"
-#include "messages/MOSDSubOp.h"
-#include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDRepScrub.h"
@@ -1752,14 +1750,6 @@ void PrimaryLogPG::do_request(
     }
     break;
 
-  case MSG_OSD_SUBOP:
-    do_sub_op(op);
-    break;
-
-  case MSG_OSD_SUBOPREPLY:
-    do_sub_op_reply(op);
-    break;
-
   case MSG_OSD_PG_SCAN:
     do_scan(op, handle);
     break;
@@ -3453,66 +3443,6 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
 	   << " inb " << inb
 	   << " outb " << outb
 	   << " lat " << latency << dendl;
-}
-
-void PrimaryLogPG::do_sub_op(OpRequestRef op)
-{
-  const MOSDSubOp *m = static_cast<const MOSDSubOp*>(op->get_req());
-  assert(have_same_or_newer_map(m->map_epoch));
-  assert(m->get_type() == MSG_OSD_SUBOP);
-  dout(15) << "do_sub_op " << *op->get_req() << dendl;
-
-  if (!is_peered()) {
-    waiting_for_peered.push_back(op);
-    op->mark_delayed("waiting for active");
-    return;
-  }
-
-  const OSDOp *first = NULL;
-  if (m->ops.size() >= 1) {
-    first = &m->ops[0];
-  }
-
-  if (first) {
-    switch (first->op.op) {
-    case CEPH_OSD_OP_DELETE:
-      sub_op_remove(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_RESERVE:
-      handle_scrub_reserve_request(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_UNRESERVE:
-      handle_scrub_reserve_release(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_MAP:
-      sub_op_scrub_map(op);
-      return;
-    }
-  }
-}
-
-void PrimaryLogPG::do_sub_op_reply(OpRequestRef op)
-{
-  const MOSDSubOpReply *r = static_cast<const MOSDSubOpReply *>(op->get_req());
-  assert(r->get_type() == MSG_OSD_SUBOPREPLY);
-  if (r->ops.size() >= 1) {
-    const OSDOp& first = r->ops[0];
-    switch (first.op.op) {
-    case CEPH_OSD_OP_SCRUB_RESERVE:
-      {
-	pg_shard_t from = r->from;
-	bufferlist::iterator p = const_cast<bufferlist&>(r->get_data()).begin();
-	bool reserved;
-	::decode(reserved, p);
-	if (reserved) {
-	  handle_scrub_reserve_grant(op, from);
-	} else {
-	  handle_scrub_reserve_reject(op, from);
-	}
-      }
-      return;
-    }
-  }
 }
 
 void PrimaryLogPG::do_scan(
@@ -10380,25 +10310,6 @@ int PrimaryLogPG::recover_missing(
   return PULL_YES;
 }
 
-void PrimaryLogPG::send_remove_op(
-  const hobject_t& oid, eversion_t v, pg_shard_t peer)
-{
-  ceph_tid_t tid = osd->get_tid();
-  osd_reqid_t rid(osd->get_cluster_msgr_name(), 0, tid);
-
-  dout(10) << "send_remove_op " << oid << " from osd." << peer
-	   << " tid " << tid << dendl;
-
-  MOSDSubOp *subop = new MOSDSubOp(
-    rid, pg_whoami, spg_t(info.pgid.pgid, peer.shard),
-    oid, CEPH_OSD_FLAG_ACK,
-    get_osdmap()->get_epoch(), tid, v);
-  subop->ops = vector<OSDOp>(1);
-  subop->ops[0].op.op = CEPH_OSD_OP_DELETE;
-
-  osd->send_message_osd_cluster(peer.osd, subop, get_osdmap()->get_epoch());
-}
-
 void PrimaryLogPG::remove_missing_object(const hobject_t &soid,
 					 eversion_t v, Context *on_complete)
 {
@@ -10564,20 +10475,6 @@ void PrimaryLogPG::failed_push(const list<pg_shard_t> &from, const hobject_t &so
 	  << ", reps on " << missing_loc.get_locations(soid)
 	  << " unfound? " << missing_loc.is_unfound(soid) << dendl;
   finish_recovery_op(soid);  // close out this attempt,
-}
-
-void PrimaryLogPG::sub_op_remove(OpRequestRef op)
-{
-  const MOSDSubOp *m = static_cast<const MOSDSubOp*>(op->get_req());
-  assert(m->get_type() == MSG_OSD_SUBOP);
-  dout(7) << "sub_op_remove " << m->poid << dendl;
-
-  op->mark_started();
-
-  ObjectStore::Transaction t;
-  remove_snap_mapped_object(t, m->poid);
-  int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
-  assert(r == 0);
 }
 
 eversion_t PrimaryLogPG::pick_newest_available(const hobject_t& oid)
@@ -10936,7 +10833,6 @@ void PrimaryLogPG::on_shutdown()
   dout(10) << "on_shutdown" << dendl;
 
   // remove from queues
-  osd->pg_stat_queue_dequeue(this);
   osd->peering_wq.dequeue(this);
 
   // handles queue races
@@ -12136,43 +12032,29 @@ uint64_t PrimaryLogPG::recover_backfill(
     add_object_context_to_pg_stat(obc, &stat);
     pending_backfill_updates[*i] = stat;
   }
-  if (HAVE_FEATURE(get_min_upacting_features(), SERVER_LUMINOUS)) {
-    map<pg_shard_t,MOSDPGBackfillRemove*> reqs;
-    for (unsigned i = 0; i < to_remove.size(); ++i) {
-      handle.reset_tp_timeout();
-      const hobject_t& oid = to_remove[i].get<0>();
-      eversion_t v = to_remove[i].get<1>();
-      pg_shard_t peer = to_remove[i].get<2>();
-      MOSDPGBackfillRemove *m;
-      auto it = reqs.find(peer);
-      if (it != reqs.end()) {
-	m = it->second;
-      } else {
-	m = reqs[peer] = new MOSDPGBackfillRemove(
-	  spg_t(info.pgid.pgid, peer.shard),
-	  get_osdmap()->get_epoch());
-      }
-      m->ls.push_back(make_pair(oid, v));
-
-      if (oid <= last_backfill_started)
-	pending_backfill_updates[oid]; // add empty stat!
+  map<pg_shard_t,MOSDPGBackfillRemove*> reqs;
+  for (unsigned i = 0; i < to_remove.size(); ++i) {
+    handle.reset_tp_timeout();
+    const hobject_t& oid = to_remove[i].get<0>();
+    eversion_t v = to_remove[i].get<1>();
+    pg_shard_t peer = to_remove[i].get<2>();
+    MOSDPGBackfillRemove *m;
+    auto it = reqs.find(peer);
+    if (it != reqs.end()) {
+      m = it->second;
+    } else {
+      m = reqs[peer] = new MOSDPGBackfillRemove(
+	spg_t(info.pgid.pgid, peer.shard),
+	get_osdmap()->get_epoch());
     }
-    for (auto p : reqs) {
-      osd->send_message_osd_cluster(p.first.osd, p.second,
-				    get_osdmap()->get_epoch());
-    }
-  } else {
-    // for jewel targets
-    for (unsigned i = 0; i < to_remove.size(); ++i) {
-      handle.reset_tp_timeout();
+    m->ls.push_back(make_pair(oid, v));
 
-      // ordered before any subsequent updates
-      send_remove_op(to_remove[i].get<0>(), to_remove[i].get<1>(),
-		     to_remove[i].get<2>());
-
-      if (to_remove[i].get<0>() <= last_backfill_started)
-	pending_backfill_updates[to_remove[i].get<0>()]; // add empty stat!
-    }
+    if (oid <= last_backfill_started)
+      pending_backfill_updates[oid]; // add empty stat!
+  }
+  for (auto p : reqs) {
+    osd->send_message_osd_cluster(p.first.osd, p.second,
+				  get_osdmap()->get_epoch());
   }
 
   pgbackend->run_recovery_op(h, get_recovery_op_priority());

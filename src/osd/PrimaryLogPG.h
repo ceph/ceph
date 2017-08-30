@@ -1238,7 +1238,6 @@ protected:
   class C_OSD_AppliedRecoveredObject;
   class C_OSD_CommittedPushedObject;
   class C_OSD_AppliedRecoveredObjectReplica;
-  void sub_op_remove(OpRequestRef op);
 
   void _applied_recovered_object(ObjectContextRef obc);
   void _applied_recovered_object_replica();
@@ -1386,8 +1385,6 @@ public:
   void record_write_error(OpRequestRef op, const hobject_t &soid,
 			  MOSDOpReply *orig_reply, int r);
   void do_pg_op(OpRequestRef op);
-  void do_sub_op(OpRequestRef op) override;
-  void do_sub_op_reply(OpRequestRef op) override;
   void do_scan(
     OpRequestRef op,
     ThreadPool::TPHandle &handle) override;

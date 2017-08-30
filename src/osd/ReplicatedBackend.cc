@@ -14,9 +14,7 @@
 #include "common/errno.h"
 #include "ReplicatedBackend.h"
 #include "messages/MOSDOp.h"
-#include "messages/MOSDSubOp.h"
 #include "messages/MOSDRepOp.h"
-#include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPull.h"
@@ -209,14 +207,6 @@ bool ReplicatedBackend::_handle_message(
   case MSG_OSD_PG_PUSH_REPLY:
     do_push_reply(op);
     return true;
-
-  case MSG_OSD_SUBOP: {
-    const MOSDSubOp *m = static_cast<const MOSDSubOp*>(op->get_req());
-    if (m->ops.size() == 0) {
-      assert(0);
-    }
-    break;
-  }
 
   case MSG_OSD_REPOP: {
     do_repop(op);

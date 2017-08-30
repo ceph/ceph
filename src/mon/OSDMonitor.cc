@@ -8959,6 +8959,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -EPERM;
 	goto reply;
       }
+    } else if (rel == CEPH_RELEASE_MIMIC) {
+      if (!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_MIMIC)) {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_MIMIC feature";
+	err = -EPERM;
+	goto reply;
+      }
     } else {
       ss << "not supported for this release yet";
       err = -EPERM;
