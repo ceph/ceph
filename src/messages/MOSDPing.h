@@ -79,45 +79,25 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(map_epoch, p);
-    if (header.version < 4) {
-      osd_peer_stat_t peer_stat;
-      epoch_t peer_as_of_epoch;
-      ::decode(peer_as_of_epoch, p);
-      ::decode(op, p);
-      ::decode(peer_stat, p);
-    } else {
-      ::decode(op, p);
-    }
+    ::decode(op, p);
     ::decode(stamp, p);
-    if (header.version >= 3) {
-      int payload_mid_length = p.get_off();
-      uint32_t size;
-      ::decode(size, p);
-      p.advance(size);
-      min_message_size = size + payload_mid_length;
-    }
+
+    int payload_mid_length = p.get_off();
+    uint32_t size;
+    ::decode(size, p);
+    p.advance(size);
+    min_message_size = size + payload_mid_length;
   }
   void encode_payload(uint64_t features) override {
     ::encode(fsid, payload);
     ::encode(map_epoch, payload);
-    
-    // with luminous, we drop peer_as_of_epoch and peer_stat
-    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
-      header.version = HEAD_VERSION;
-      ::encode(op, payload);
-    } else {
-      epoch_t dummy_epoch = {};
-      osd_peer_stat_t dummy_stat = {};
-      header.version = 3;
-      header.compat_version = 2;
-      ::encode(dummy_epoch, payload);
-      ::encode(op, payload);   
-      ::encode(dummy_stat, payload);
-    }
+    ::encode(op, payload);
     ::encode(stamp, payload);
+
     size_t s = 0;
-    if (min_message_size > payload.length())
+    if (min_message_size > payload.length()) {
       s = min_message_size - payload.length();
+    }
     ::encode((uint32_t)s, payload);
     if (s) {
       // this should be big enough for normal min_message padding sizes. since

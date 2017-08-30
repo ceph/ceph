@@ -49,8 +49,8 @@ function run() {
 
     tries=0
     while [[ $tries < 30 ]] ; do
-        if [ curl -s http://127.0.0.1:7001/toplevel_data | \
-             jq '.health.overall_status' | grep HEALTH_ ]
+        if curl -s http://127.0.0.1:7001/toplevel_data | \
+             jq '.health.overall_status' | grep HEALTH_
         then
             break
         fi

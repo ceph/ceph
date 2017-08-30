@@ -329,8 +329,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
 		    struct_ver >= 8 ? coll : coll_t::meta(),
 		    struct_ver >= 8 ? pgid.make_pgmeta_oid() : log_oid,
 		    info, log, missing,
-				struct_ver < 9,
-				oss,
+		    oss,
 		    g_ceph_context->_conf->osd_ignore_stale_divergent_priors);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
