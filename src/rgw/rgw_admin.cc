@@ -6235,7 +6235,7 @@ next:
 
     RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
     RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
-    int ret = http.set_threaded();
+    int ret = http.start();
     if (ret < 0) {
       cerr << "failed to initialize http client with " << cpp_strerror(ret) << std::endl;
       return -ret;

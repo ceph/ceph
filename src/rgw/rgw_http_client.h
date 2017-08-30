@@ -263,7 +263,7 @@ class RGWHTTPManager {
   CephContext *cct;
   RGWCompletionManager *completion_mgr;
   void *multi_handle;
-  bool is_threaded;
+  bool is_started;
   std::atomic<unsigned> going_down { 0 };
   std::atomic<unsigned> is_stopped { 0 };
 
@@ -307,7 +307,7 @@ public:
   RGWHTTPManager(CephContext *_cct, RGWCompletionManager *completion_mgr = NULL);
   ~RGWHTTPManager();
 
-  int set_threaded();
+  int start();
   void stop();
 
   int add_request(RGWHTTPClient *client, bool send_data_hint = false);

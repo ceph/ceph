@@ -2913,7 +2913,7 @@ class RGWMetaNotifierManager : public RGWCoroutinesManager {
 public:
   RGWMetaNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                              http_manager(store->ctx(), completion_mgr) {
-    http_manager.set_threaded();
+    http_manager.start();
   }
 
   int notify_all(map<string, RGWRESTConn *>& conn_map, set<int>& shards) {
@@ -2940,7 +2940,7 @@ class RGWDataNotifierManager : public RGWCoroutinesManager {
 public:
   RGWDataNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                              http_manager(store->ctx(), completion_mgr) {
-    http_manager.set_threaded();
+    http_manager.start();
   }
 
   int notify_all(map<string, RGWRESTConn *>& conn_map, map<int, set<string> >& shards) {
@@ -3260,7 +3260,7 @@ public:
   {}
 
   int init() override {
-    return http.set_threaded();
+    return http.start();
   }
   int process() override {
     list<RGWCoroutinesStack*> stacks;
