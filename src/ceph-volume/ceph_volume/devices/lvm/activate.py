@@ -2,7 +2,7 @@ from __future__ import print_function
 import argparse
 from textwrap import dedent
 from ceph_volume import process, conf, decorators
-from ceph_volume.util import system
+from ceph_volume.util import system, disk
 from ceph_volume.systemd import systemctl
 from . import api
 
@@ -17,12 +17,11 @@ def activate_filestore(lvs):
     # blow up with a KeyError if this doesn't exist
     osd_fsid = osd_lv.tags['ceph.osd_fsid']
     if not osd_journal_lv:
-        # must be a pv, by quering lvm by the uuid we are ensuring that the
+        # must be a disk partition, by quering blkid by the uuid we are ensuring that the
         # device path is always correct
-        osd_journal_pv = api.get_pv(pv_uuid=osd_lv.tags['ceph.journal_uuid'])
-        osd_journal = osd_journal_pv.pv_name
+        osd_journal = disk.get_device_from_partuuid(osd_lv.tags['ceph.journal_uuid'])
     else:
-        osd_journal = osd_journal.lv_path
+        osd_journal = osd_lv.tags['ceph.journal_device']
 
     if not osd_journal:
         raise RuntimeError('unable to detect an lv or device journal for OSD %s' % osd_id)
