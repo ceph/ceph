@@ -775,6 +775,7 @@ public:
    * @param dst bucket b
    * @return 0 for success, negative on error
    */
+  bool check_bucket_relation(crush_bucket *f, crush_bucket *tar);
   int swap_bucket(CephContext *cct, int src, int dst);
 
   /**

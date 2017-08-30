@@ -1035,6 +1035,15 @@ int CrushWrapper::detach_bucket(CephContext *cct, int item)
   return bucket_weight;
 }
 
+bool CrushWrapper::check_bucket_relation(crush_bucket *f, crush_bucket *tar){
+  if(!f->size)return false;
+  for(unsigned i=0; i<f->size; ++i){
+	if(f->items[i] == tar->id  ||  check_bucket_relation(get_bucket(f->items[i]), tar))
+	  return true;
+  }
+  return false;
+}
+
 int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
 {
   if (src >= 0 || dst >= 0)
@@ -1043,6 +1052,11 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
     return -EINVAL;
   crush_bucket *a = get_bucket(src);
   crush_bucket *b = get_bucket(dst);
+  
+  if(check_bucket_relation(a, b) || check_bucket_relation(b, a)){
+	return -EINVAL;
+  }
+
   unsigned aw = a->weight;
   unsigned bw = b->weight;
 
