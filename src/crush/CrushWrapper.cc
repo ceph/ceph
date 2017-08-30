@@ -765,10 +765,8 @@ map<int, string> CrushWrapper::get_parent_hierarchy(int id)
 
   // read the type map and get the name of the type with the largest ID
   int high_type = 0;
-  for (map<int, string>::iterator it = type_map.begin(); it != type_map.end(); ++it){
-    if ( (*it).first > high_type )
-      high_type = (*it).first;
-  }
+  if (!type_map.empty())
+    high_type = type_map.rbegin()->first;
 
   parent_id = get_item_id(parent_coord.second);
 
