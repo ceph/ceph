@@ -3760,6 +3760,25 @@ def main_activate(args):
             )
             osd_data = get_mount_point(cluster, osd_id)
 
+            args.cluster = cluster
+
+            # Check if encrypted block device in journal
+
+            block_dmcrypt_path = os.path.join(osd_data, 'block_dmcrypt')
+
+            if args.dmcrypt and os.path.exists(block_dmcrypt_path):
+                partition = DevicePartition.factory(
+                    path=None,
+                    dev=os.path.join(osd_data, 'block_dmcrypt'),
+                    args=args)
+
+                partition.osd_dm_key = get_dmcrypt_key(
+                    get_partition_uuid(args.path),
+                    args.dmcrypt_key_dir,
+                    CryptHelpers.get_dmcrypt_type(args) == "luks")
+
+                partition.map()
+
         elif stat.S_ISDIR(mode):
             (cluster, osd_id) = activate_dir(
                 path=args.path,
