@@ -301,8 +301,10 @@ public:
           if (cct->_experimental_features.count("*")) {
             lderr(cct) << "WARNING: all dangerous and experimental features are enabled." << dendl;
           } else {
+#if 0
             lderr(cct) << "WARNING: the following dangerous and experimental features are enabled: "
               << cct->_experimental_features << dendl;
+#endif
           }
         }
       }

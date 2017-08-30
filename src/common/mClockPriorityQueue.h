@@ -301,13 +301,13 @@ namespace ceph {
 
     void enqueue(K cl, unsigned priority, unsigned cost, T item) override final {
       // priority is ignored
-      queue.add_request(std::move(item), cl, cost);
+      queue.add_request(std::move(item), cl);
     }
 
     void enqueue(K cl, unsigned priority, unsigned cost, T item,
 		 const ReqPm& req_params) {
       // priority is ignored
-      queue.add_request(std::move(item), cl, req_params, cost);
+      queue.add_request(std::move(item), cl, req_params);
     }
 
     void enqueue_front(K cl,
