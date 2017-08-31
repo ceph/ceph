@@ -13416,23 +13416,23 @@ unsigned PrimaryLogPG::process_clones_to(const boost::optional<hobject_t> &head,
  *
  * We are sort of comparing 2 lists. The main loop is on objmap.objects. But
  * the comparison of the objects is against multiple snapset.clones. There are
- * multiple clone lists and in between lists we expect head or snapdir.
+ * multiple clone lists and in between lists we expect head.
  *
  * Example
  *
  * objects              expected
  * =======              =======
- * obj1 snap 1          head/snapdir, unexpected obj1 snap 1
- * obj2 head            head/snapdir, head ok
+ * obj1 snap 1          head, unexpected obj1 snap 1
+ * obj2 head            head, match
  *              [SnapSet clones 6 4 2 1]
  * obj2 snap 7          obj2 snap 6, unexpected obj2 snap 7
  * obj2 snap 6          obj2 snap 6, match
  * obj2 snap 4          obj2 snap 4, match
- * obj3 head            obj2 snap 2 (expected), obj2 snap 1 (expected), head ok
+ * obj3 head            obj2 snap 2 (expected), obj2 snap 1 (expected), match
  *              [Snapset clones 3 1]
  * obj3 snap 3          obj3 snap 3 match
  * obj3 snap 1          obj3 snap 1 match
- * obj4 snapdir         head/snapdir, snapdir ok
+ * obj4 head            head, match
  *              [Snapset clones 4]
  * EOL                  obj4 snap 4, (expected)
  */
@@ -13460,12 +13460,12 @@ void PrimaryLogPG::scrub_snapshot_metadata(
   for (map<hobject_t,ScrubMap::object>::reverse_iterator
        p = scrubmap.objects.rbegin(); p != scrubmap.objects.rend(); ++p) {
     const hobject_t& soid = p->first;
+    assert(!soid.is_snapdir());
     soid_error = inconsistent_snapset_wrapper{soid};
     object_stat_sum_t stat;
     boost::optional<object_info_t> oi;
 
-    if (!soid.is_snapdir())
-      stat.num_objects++;
+    stat.num_objects++;
 
     if (soid.nspace == cct->_conf->osd_hit_set_namespace)
       stat.num_objects_hit_set_archive++;
@@ -13519,16 +13519,14 @@ void PrimaryLogPG::scrub_snapshot_metadata(
       if (soid.nspace == cct->_conf->osd_hit_set_namespace)
 	stat.num_bytes_hit_set_archive += oi->size;
 
-      if (!soid.is_snapdir()) {
-	if (oi->is_dirty())
-	  ++stat.num_objects_dirty;
-	if (oi->is_whiteout())
-	  ++stat.num_whiteouts;
-	if (oi->is_omap())
-	  ++stat.num_objects_omap;
-	if (oi->is_cache_pinned())
-	  ++stat.num_objects_pinned;
-      }
+      if (oi->is_dirty())
+	++stat.num_objects_dirty;
+      if (oi->is_whiteout())
+	++stat.num_whiteouts;
+      if (oi->is_omap())
+	++stat.num_objects_omap;
+      if (oi->is_cache_pinned())
+	++stat.num_objects_pinned;
     }
 
     // Check for any problems while processing clones
@@ -13555,14 +13553,14 @@ void PrimaryLogPG::scrub_snapshot_metadata(
     bool expected;
     // Check doing_clones() again in case we ran process_clones_to()
     if (doing_clones(snapset, curclone)) {
-      // A head/snapdir would have processed all clones above
+      // A head would have processed all clones above
       // or all greater than *curclone.
       assert(soid.is_snap() && *curclone <= soid.snap);
 
       // After processing above clone snap should match the expected curclone
       expected = (*curclone == soid.snap);
     } else {
-      // If we aren't doing clones any longer, then expecting head/snapdir
+      // If we aren't doing clones any longer, then expecting head
       expected = soid.has_snapset();
     }
     if (!expected) {
