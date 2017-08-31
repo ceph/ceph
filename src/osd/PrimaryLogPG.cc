@@ -7046,8 +7046,10 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     coid.snap = snapc.seq;
     
     unsigned l;
-    for (l=1; l<snapc.snaps.size() && snapc.snaps[l] > ctx->new_snapset.seq; l++) ;
-    
+    for (l = 1;
+	 l < snapc.snaps.size() && snapc.snaps[l] > ctx->new_snapset.seq;
+	 l++) ;
+
     vector<snapid_t> snaps(l);
     for (unsigned i=0; i<l; i++)
       snaps[i] = snapc.snaps[i];
@@ -7057,7 +7059,8 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     object_info_t *snap_oi;
     if (is_primary()) {
       ctx->clone_obc = object_contexts.lookup_or_create(static_snap_oi.soid);
-      ctx->clone_obc->destructor_callback = new C_PG_ObjectContext(this, ctx->clone_obc.get());
+      ctx->clone_obc->destructor_callback =
+	new C_PG_ObjectContext(this, ctx->clone_obc.get());
       ctx->clone_obc->obs.oi = static_snap_oi;
       ctx->clone_obc->obs.exists = true;
       ctx->clone_obc->ssc = ctx->obc->ssc;
@@ -7113,10 +7116,11 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
 	     << " to " << coid << " v " << ctx->at_version
 	     << " snaps=" << snaps
 	     << " snapset=" << ctx->new_snapset << dendl;
-    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::CLONE, coid, ctx->at_version,
-				      ctx->obs->oi.version,
-				      ctx->obs->oi.user_version,
-				      osd_reqid_t(), ctx->new_obs.oi.mtime, 0));
+    ctx->log.push_back(pg_log_entry_t(
+			 pg_log_entry_t::CLONE, coid, ctx->at_version,
+			 ctx->obs->oi.version,
+			 ctx->obs->oi.user_version,
+			 osd_reqid_t(), ctx->new_obs.oi.mtime, 0));
     ::encode(snaps, ctx->log.back().snaps);
 
     ctx->at_version.version++;
@@ -7124,12 +7128,13 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
 
   // update most recent clone_overlap and usage stats
   if (ctx->new_snapset.clones.size() > 0) {
-    /* we need to check whether the most recent clone exists, if it's been evicted,
-     * it's not included in the stats */
+    // we need to check whether the most recent clone exists, if it's
+    // been evicted, it's not included in the stats
     hobject_t last_clone_oid = soid;
     last_clone_oid.snap = ctx->new_snapset.clone_overlap.rbegin()->first;
     if (is_present_clone(last_clone_oid)) {
-      interval_set<uint64_t> &newest_overlap = ctx->new_snapset.clone_overlap.rbegin()->second;
+      interval_set<uint64_t> &newest_overlap =
+	ctx->new_snapset.clone_overlap.rbegin()->second;
       ctx->modified_ranges.intersection_of(newest_overlap);
       // modified_ranges is still in use by the clone
       add_interval_usage(ctx->modified_ranges, ctx->delta_stats);
