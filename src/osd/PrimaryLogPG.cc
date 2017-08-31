@@ -2059,20 +2059,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     return;
   }
 
-  // missing snapdir?
-  hobject_t snapdir = head.get_snapdir();
-
-  if (is_unreadable_object(snapdir)) {
-    wait_for_unreadable_object(snapdir, op);
-    return;
-  }
-
-  // degraded object?
-  if (write_ordered && is_degraded_or_backfilling_object(snapdir)) {
-    wait_for_degraded_object(snapdir, op);
-    return;
-  }
-
   // dup/resent?
   if (op->may_write() || op->may_cache()) {
     // warning: we will get back *a* request for this reqid, but not
