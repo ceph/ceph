@@ -664,7 +664,7 @@ public:
    *
    * FIXME: ambiguous for items that occur multiple times in the map
    */
-  pair<string,string> get_immediate_parent(int id, int *ret = NULL);
+  pair<string,string> get_immediate_parent(int id, int *ret = NULL) const;
 
   int get_immediate_parent_id(int id, int *parent) const;
 
@@ -683,7 +683,7 @@ public:
    * returns the location in the form of (type=foo) where type is a type of bucket
    * specified in the CRUSH map and foo is a name specified in the CRUSH map
    */
-  map<string, string> get_full_location(int id);
+  map<string, string> get_full_location(int id) const;
 
   /*
    * identical to get_full_location(int id) although it returns the type/name
@@ -691,7 +691,7 @@ public:
    *
    * returns -ENOENT if id is not found.
    */
-  int get_full_location_ordered(int id, vector<pair<string, string> >& path);
+  int get_full_location_ordered(int id, vector<pair<string, string> >& path) const;
 
   /*
    * identical to get_full_location_ordered(int id, vector<pair<string, string> >& path),
@@ -700,13 +700,13 @@ public:
    *
    * returns the location in descending hierarchy as a string.
    */
-  string get_full_location_ordered_string(int id);
+  string get_full_location_ordered_string(int id) const;
 
   /**
    * returns (type_id, type) of all parent buckets between id and
    * default, can be used to check for anomolous CRUSH maps
    */
-  map<int, string> get_parent_hierarchy(int id);
+  map<int, string> get_parent_hierarchy(int id) const;
 
   /**
    * enumerate immediate children of given node
@@ -714,7 +714,7 @@ public:
    * @param id parent bucket or device id
    * @return number of items, or error
    */
-  int get_children(int id, list<int> *children);
+  int get_children(int id, list<int> *children) const;
 
   /**
     * enumerate leaves(devices) of given node
@@ -722,9 +722,12 @@ public:
     * @param name parent bucket name
     * @return 0 on success or a negative errno on error.
     */
-  int get_leaves(const string &name, set<int> *leaves);
-  int _get_leaves(int id, list<int> *leaves); // worker
+  int get_leaves(const string &name, set<int> *leaves) const;
 
+private:
+  int _get_leaves(int id, list<int> *leaves) const; // worker
+
+public:
   /**
    * insert an item into the map at a specific position
    *
@@ -868,7 +871,7 @@ public:
    * @param loc a set of key=value pairs describing a location in the hierarchy
    */
   int get_common_ancestor_distance(CephContext *cct, int id,
-				   const std::multimap<string,string>& loc);
+				   const std::multimap<string,string>& loc) const;
 
   /**
    * parse a set of key/value pairs out of a string vector
