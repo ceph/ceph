@@ -603,6 +603,10 @@ void ExclusiveLock<I>::handle_reacquire_lock(int r) {
     }
   } else {
     m_cookie = m_new_cookie;
+
+    m_lock.Unlock();
+    m_image_ctx.image_watcher->notify_acquired_lock();
+    m_lock.Lock();
   }
 
   complete_active_action(STATE_LOCKED, 0);

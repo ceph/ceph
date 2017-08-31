@@ -709,6 +709,7 @@ TEST_F(TestMockExclusiveLock, ReacquireLock) {
   MockReacquireRequest mock_reacquire_request;
   C_SaferCond reacquire_ctx;
   expect_reacquire_lock(mock_image_ctx, mock_reacquire_request, 0);
+  expect_notify_acquired_lock(mock_image_ctx);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     exclusive_lock.reacquire_lock(&reacquire_ctx);
