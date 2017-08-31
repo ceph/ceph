@@ -116,6 +116,8 @@ void ReleaseRequest<I>::send_block_writes() {
 
   {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    // setting the lock as required will automatically cause the IO
+    // queue to re-request the lock if any IO is queued
     if (m_image_ctx.clone_copy_on_read ||
         m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
       m_image_ctx.aio_work_queue->set_require_lock(AIO_DIRECTION_BOTH, true);

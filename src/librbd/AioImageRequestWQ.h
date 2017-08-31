@@ -46,9 +46,6 @@ public:
 
   void shut_down(Context *on_shutdown);
 
-  bool is_lock_required() const;
-  bool is_lock_request_needed() const;
-
   inline bool writes_blocked() const {
     RWLock::RLocker locker(m_lock);
     return (m_write_blockers > 0);
@@ -67,29 +64,9 @@ protected:
 private:
   typedef std::list<Context *> Contexts;
 
-  struct C_RefreshFinish : public Context {
-    AioImageRequestWQ *aio_work_queue;
-    AioImageRequest<ImageCtxT> *aio_image_request;
-
-    C_RefreshFinish(AioImageRequestWQ *aio_work_queue,
-                    AioImageRequest<ImageCtxT> *aio_image_request)
-      : aio_work_queue(aio_work_queue), aio_image_request(aio_image_request) {
-    }
-    virtual void finish(int r) override {
-      aio_work_queue->handle_refreshed(r, aio_image_request);
-    }
-  };
-
-  struct C_BlockedWrites : public Context {
-    AioImageRequestWQ *aio_work_queue;
-    C_BlockedWrites(AioImageRequestWQ *_aio_work_queue)
-      : aio_work_queue(_aio_work_queue) {
-    }
-
-    virtual void finish(int r) {
-      aio_work_queue->handle_blocked_writes(r);
-    }
-  };
+  struct C_AcquireLock;
+  struct C_BlockedWrites;
+  struct C_RefreshFinish;
 
   ImageCtxT &m_image_ctx;
   mutable RWLock m_lock;
@@ -101,12 +78,18 @@ private:
   atomic_t m_queued_reads {0};
   atomic_t m_queued_writes {0};
   atomic_t m_in_flight_ios {0};
-
-  bool m_refresh_in_progress = false;
+  atomic_t m_io_blockers {0};
 
   bool m_shutdown = false;
   Context *m_on_shutdown = nullptr;
 
+  bool is_lock_required(bool write_op) const;
+
+  inline bool require_lock_on_read() const {
+    RWLock::RLocker locker(m_lock);
+    return m_require_lock_on_read;
+
+  }
   inline bool writes_empty() const {
     RWLock::RLocker locker(m_lock);
     return (m_queued_writes.read() == 0);
@@ -117,9 +100,11 @@ private:
 
   int start_in_flight_io(AioCompletion *c);
   void finish_in_flight_io();
+  void fail_in_flight_io(int r, AioImageRequest<ImageCtxT> *req);
 
   void queue(AioImageRequest<ImageCtxT> *req);
 
+  void handle_acquire_lock(int r, AioImageRequest<ImageCtxT> *req);
   void handle_refreshed(int r, AioImageRequest<ImageCtxT> *req);
   void handle_blocked_writes(int r);
 };

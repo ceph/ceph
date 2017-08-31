@@ -152,7 +152,6 @@ public:
         expect_unblock_writes(mock_image_ctx);
       }
       expect_notify_released_lock(mock_image_ctx);
-      expect_is_lock_request_needed(mock_image_ctx, false);
     }
   }
 
@@ -180,11 +179,6 @@ public:
   void expect_notify_released_lock(MockExclusiveLockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.image_watcher, notify_released_lock())
                   .Times(1);
-  }
-
-  void expect_is_lock_request_needed(MockExclusiveLockImageCtx &mock_image_ctx, bool ret) {
-    EXPECT_CALL(*mock_image_ctx.aio_work_queue, is_lock_request_needed())
-                  .WillRepeatedly(Return(ret));
   }
 
   void expect_flush_notifies(MockExclusiveLockImageCtx &mock_image_ctx) {
@@ -566,7 +560,6 @@ TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
   EXPECT_CALL(release, send())
                 .WillOnce(Notify(&wait_for_send_ctx2));
   expect_notify_released_lock(mock_image_ctx);
-  expect_is_lock_request_needed(mock_image_ctx, false);
 
   C_SaferCond try_request_ctx1;
   {
