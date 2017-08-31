@@ -21,6 +21,13 @@
 
 #include <stdio.h>
 #include <signal.h>
+
+#include <chrono>
+#include <list>
+#include <mutex>
+#include <random>
+#include <thread>
+
 #include "gtest/gtest.h"
 #include "common/backport14.h"
 #include "common/Mutex.h"
@@ -28,13 +35,7 @@
 #include "common/Throttle.h"
 #include "common/ceph_argparse.h"
 #include "common/backport14.h"
-
-#include <thread>
-#include <atomic>
-#include <chrono>
-#include <mutex>
-#include <list>
-#include <random>
+#include "include/coredumpctl.h"
 
 class ThrottleTest : public ::testing::Test {
 protected:
@@ -214,6 +215,7 @@ TEST_F(ThrottleTest, wait) {
 }
 
 TEST_F(ThrottleTest, destructor) {
+  PrCtl unset_dumpable;
   EXPECT_DEATH({
       int64_t throttle_max = 10;
       auto throttle = ceph::make_unique<Throttle>(g_ceph_context, "throttle",
@@ -348,6 +350,7 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
 }
 
 TEST(BackoffThrottle, destruct) {
+  PrCtl unset_dumpable;
   EXPECT_DEATH({
       auto throttle = ceph::make_unique<BackoffThrottle>(
 	g_ceph_context, "destructor test", 10);
@@ -421,6 +424,7 @@ TEST(BackoffThrottle, oversaturated)
 }
 
 TEST(OrderedThrottle, destruct) {
+  PrCtl unset_dumpable;
   EXPECT_DEATH({
       auto throttle = ceph::make_unique<OrderedThrottle>(1, false);
       throttle->start_op(nullptr);
