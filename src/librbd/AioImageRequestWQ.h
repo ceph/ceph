@@ -16,6 +16,12 @@ class AioCompletion;
 template <typename> class AioImageRequest;
 class ImageCtx;
 
+enum AioDirection {
+  AIO_DIRECTION_READ,
+  AIO_DIRECTION_WRITE,
+  AIO_DIRECTION_BOTH
+};
+
 template <typename ImageCtxT = librbd::ImageCtx>
 class AioImageRequestWQ
   : protected ThreadPool::PointerWQ<AioImageRequest<ImageCtxT> > {
@@ -52,8 +58,7 @@ public:
   void block_writes(Context *on_blocked);
   void unblock_writes();
 
-  void set_require_lock_on_read();
-  void clear_require_lock_on_read();
+  void set_require_lock(AioDirection aio_direction, bool enabled);
 
 protected:
   virtual void *_void_dequeue();
@@ -91,6 +96,7 @@ private:
   Contexts m_write_blocker_contexts;
   uint32_t m_write_blockers = 0;
   bool m_require_lock_on_read = false;
+  bool m_require_lock_on_write = false;
   atomic_t m_in_flight_writes {0};
   atomic_t m_queued_reads {0};
   atomic_t m_queued_writes {0};

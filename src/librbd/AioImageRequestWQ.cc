@@ -292,28 +292,36 @@ void AioImageRequestWQ<I>::unblock_writes() {
 }
 
 template <typename I>
-void AioImageRequestWQ<I>::set_require_lock_on_read() {
+void AioImageRequestWQ<I>::set_require_lock(AioDirection aio_direction,
+					    bool enabled) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << __func__ << dendl;
+  ldout(cct, 20) << dendl;
 
-  RWLock::WLocker locker(m_lock);
-  m_require_lock_on_read = true;
-}
-
-template <typename I>
-void AioImageRequestWQ<I>::clear_require_lock_on_read() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << __func__ << dendl;
-
+  bool wake_up = false;
   {
-    RWLock::WLocker locker(m_lock);
-    if (!m_require_lock_on_read) {
-      return;
+    switch (aio_direction) {
+    case AIO_DIRECTION_READ:
+      wake_up = (enabled != m_require_lock_on_read);
+      m_require_lock_on_read = enabled;
+      break;
+    case AIO_DIRECTION_WRITE:
+      wake_up = (enabled != m_require_lock_on_write);
+      m_require_lock_on_write = enabled;
+      break;
+    case AIO_DIRECTION_BOTH:
+      wake_up = (enabled != m_require_lock_on_read ||
+                 enabled != m_require_lock_on_write);
+      m_require_lock_on_read = enabled;
+      m_require_lock_on_write = enabled;
+      break;
     }
-
-    m_require_lock_on_read = false;
   }
-  this->signal();
+
+  // wake up the thread pool whenever the state changes so that
+  // we can re-request the lock if required
+  if (wake_up) {
+    this->signal();
+  }
 }
 
 template <typename I>
