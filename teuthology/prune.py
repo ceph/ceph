@@ -24,17 +24,19 @@ def main(args):
     archive_dir = args['--archive']
     dry_run = args['--dry-run']
     pass_days = int(args['--pass'])
+    fail_days = int(args['--fail'])
     remotes_days = int(args['--remotes'])
     compress_days = int(args['--compress'])
 
     prune_archive(
-        archive_dir, pass_days, remotes_days, compress_days, dry_run
+        archive_dir, pass_days, fail_days, remotes_days, compress_days, dry_run
     )
 
 
 def prune_archive(
         archive_dir,
         pass_days,
+        fail_days,
         remotes_days,
         compress_days,
         dry_run=False,
@@ -43,7 +45,8 @@ def prune_archive(
     Walk through the archive_dir, calling the cleanup functions to process
     directories that might be old enough
     """
-    max_days = min(pass_days, remotes_days)
+    min_days = min(filter(
+        lambda n: n >= 0, [pass_days, fail_days, remotes_days]))
     log.debug("Archive {archive} has {count} children".format(
         archive=archive_dir, count=len(os.listdir(archive_dir))))
     # Use full paths
@@ -56,12 +59,12 @@ def prune_archive(
         # Ensure that the path is not a symlink, is a directory, and is old
         # enough to process
         if (not os.path.islink(child) and os.path.isdir(child) and
-                is_old_enough(child, max_days)):
+                is_old_enough(child, min_days)):
             run_dirs.append(child)
     run_dirs.sort(key=lambda p: os.path.getctime(p), reverse=True)
     for run_dir in run_dirs:
         log.debug("Processing %s ..." % run_dir)
-        maybe_remove_passes(run_dir, pass_days, dry_run)
+        maybe_remove_jobs(run_dir, pass_days, fail_days, dry_run)
         maybe_remove_remotes(run_dir, remotes_days, dry_run)
         maybe_compress_logs(run_dir, compress_days, dry_run)
 
@@ -93,6 +96,8 @@ def is_old_enough(file_name, days):
     :returns: True if the file's modification date is earlier than the amount
               of days specified
     """
+    if days < 0:
+        return False
     now = time.time()
     secs_to_days = lambda s: s / (60 * 60 * 24)
     age = now - os.path.getmtime(file_name)
@@ -112,34 +117,44 @@ def remove(path):
         log.exception("Failed to remove %s !" % path)
 
 
-def maybe_remove_passes(run_dir, days, dry_run=False):
+def maybe_remove_jobs(run_dir, pass_days, fail_days, dry_run=False):
     """
     Remove entire job log directories if they are old enough and the job passed
     """
-    if days < 0:
+    if pass_days < 0 and fail_days < 0:
         return
     contents = listdir(run_dir)
     if PRESERVE_FILE in contents:
         return
     for child in contents:
         item = os.path.join(run_dir, child)
-        # Ensure the path isn't marked for preservation, that it is a
-        # directory, and that it is old enough
-        if (should_preserve(item) or not os.path.isdir(item) or not
-                is_old_enough(item, days)):
+        # Ensure the path isn't marked for preservation and that it is a
+        # directory
+        if should_preserve(item) or not os.path.isdir(item):
             continue
         # Is it a job dir?
         summary_path = os.path.join(item, 'summary.yaml')
         if not os.path.exists(summary_path):
             continue
-        # Is it a passed job?
+        # Depending on whether it passed or failed, we have a different age
+        # threshold
         summary_lines = [line.strip() for line in
                          file(summary_path).readlines()]
         if 'success: true' in summary_lines:
-            log.info("{job} is a {days}-day old passed job; removing".format(
-                job=item, days=days))
-            if not dry_run:
-                remove(item)
+            status = 'passed'
+            days = pass_days
+        elif 'success: false' in summary_lines:
+            status = 'failed'
+            days = fail_days
+        else:
+            continue
+        # Ensure the directory is old enough to remove
+        if not is_old_enough(item, days):
+            continue
+        log.info("{job} is a {days}-day old {status} job; removing".format(
+            job=item, days=days, status=status))
+        if not dry_run:
+            remove(item)
 
 
 def maybe_remove_remotes(run_dir, days, dry_run=False):

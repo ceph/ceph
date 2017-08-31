@@ -21,6 +21,7 @@ optional arguments:
   -p DAYS, --pass DAYS  Remove all logs for jobs which passed and are older
                         than DAYS. Negative values will skip this operation.
                         [default: 14]
+  -f DAYS, --fail DAYS  Like --pass, but for failed jobs. [default: -1]
   -r DAYS, --remotes DAYS
                         Remove the 'remote' subdir of jobs older than DAYS.
                         Negative values will skip this operation.
