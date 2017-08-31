@@ -12,6 +12,17 @@
  * 
  */
 
+
+/**
+ * This is used to send pings between daemons (so far, the OSDs) for
+ * heartbeat purposes. We include a timestamp and distinguish between
+ * outgoing pings and responses to those. If you set the
+ * min_message in the constructor, the message will inflate itself
+ * to the specified size -- this is good for dealing with network
+ * issues with jumbo frames. See http://tracker.ceph.com/issues/20087
+ *
+ */
+
 #ifndef CEPH_MOSDPING_H
 #define CEPH_MOSDPING_H
 
@@ -23,7 +34,7 @@
 
 class MOSDPing : public Message {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
  public:
@@ -52,13 +63,15 @@ class MOSDPing : public Message {
   __u8 op;
   osd_peer_stat_t peer_stat;
   utime_t stamp;
+  uint32_t min_message_size;
 
-  MOSDPing(const uuid_d& f, epoch_t e, __u8 o, utime_t s)
+  MOSDPing(const uuid_d& f, epoch_t e, __u8 o, utime_t s, uint32_t min_message)
     : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
-      fsid(f), map_epoch(e), peer_as_of_epoch(0), op(o), stamp(s)
+      fsid(f), map_epoch(e), peer_as_of_epoch(0), op(o), stamp(s),
+      min_message_size(min_message)
   { }
   MOSDPing()
-    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION)
+    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION), min_message_size(0)
   {}
 private:
   ~MOSDPing() {}
@@ -71,8 +84,14 @@ public:
     ::decode(peer_as_of_epoch, p);
     ::decode(op, p);
     ::decode(peer_stat, p);
-    if (header.version >= 2)
-      ::decode(stamp, p);
+    ::decode(stamp, p);
+    if (header.version >= 3) {
+      int payload_mid_length = p.get_off();
+      uint32_t size;
+      ::decode(size, p);
+      p.advance(size);
+      min_message_size = size + payload_mid_length;
+    }
   }
   void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
@@ -81,6 +100,25 @@ public:
     ::encode(op, payload);
     ::encode(peer_stat, payload);
     ::encode(stamp, payload);
+
+    size_t s = 0;
+    if (min_message_size > payload.length())
+      s = min_message_size - payload.length();
+    ::encode((uint32_t)s, payload);
+    if (s) {
+      // this should be big enough for normal min_message padding sizes. since
+      // we are targetting jumbo ethernet frames around 9000 bytes, 16k should
+      // be more than sufficient!  the compiler will statically zero this so
+      // that at runtime we are only adding a bufferptr reference to it.
+      static char zeros[16384] = {};
+      while (s > sizeof(zeros)) {
+	payload.append(buffer::create_static(sizeof(zeros), zeros));
+	s -= sizeof(zeros);
+      }
+      if (s) {
+	payload.append(buffer::create_static(s, zeros));
+      }
+    }
   }
 
   const char *get_type_name() const { return "osd_ping"; }
