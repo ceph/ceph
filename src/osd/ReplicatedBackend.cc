@@ -1491,13 +1491,6 @@ int ReplicatedBackend::prep_push_to_replica(
       dout(15) << "push_to_replica missing head " << head << ", pushing raw clone" << dendl;
       return prep_push(obc, soid, peer, pop, cache_dont_need);
     }
-    hobject_t snapdir = head;
-    snapdir.snap = CEPH_SNAPDIR;
-    if (get_parent()->get_local_missing().is_missing(snapdir)) {
-      dout(15) << "push_to_replica missing snapdir " << snapdir
-	       << ", pushing raw clone" << dendl;
-      return prep_push(obc, soid, peer, pop, cache_dont_need);
-    }
 
     SnapSetContext *ssc = obc->ssc;
     assert(ssc);
