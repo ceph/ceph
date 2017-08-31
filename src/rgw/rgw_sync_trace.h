@@ -99,14 +99,14 @@ public:
 class RGWSyncTraceManager : public AdminSocketHook {
   friend class RGWSyncTraceNode;
 
+  mutable boost::shared_mutex lock;
+  using shunique_lock = ceph::shunique_lock<decltype(lock)>;
+
   CephContext *cct;
   RGWSyncTraceServiceMapThread *service_map_thread{nullptr};
 
   std::map<uint64_t, RGWSyncTraceNodeRef> nodes;
   boost::circular_buffer<RGWSyncTraceNodeRef> complete_nodes;
-
-  mutable boost::shared_mutex lock;
-  using shunique_lock = ceph::shunique_lock<decltype(lock)>;
 
   std::atomic<uint64_t> count = { 0 };
 
