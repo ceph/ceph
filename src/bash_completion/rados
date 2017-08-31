@@ -32,7 +32,7 @@ _rados()
                 return 0
                 ;;
             rados)
-                COMPREPLY=( $(compgen -W "lspools mkpool rmpool df ls chown get put create rm listxattr getxattr setxattr rmxattr stat mapext lssnap mksnap rmsnap rollback bench" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "lspools mkpool rmpool df ls chown get put create rm listxattr getxattr setxattr rmxattr stat stat2 mapext lssnap mksnap rmsnap rollback bench" -- ${cur}) )
                 return 0
             ;;
         esac
