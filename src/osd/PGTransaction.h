@@ -283,8 +283,8 @@ public:
 
   /// Sets up state for target renamed from source
   void rename(
-    const hobject_t &target,       ///< [in] source (must be a temp object)
-    const hobject_t &source        ///< [in] to, must not exist, be non-temp
+    const hobject_t &target,       ///< [in] to, must not exist, be non-temp
+    const hobject_t &source        ///< [in] source (must be a temp object)
     ) {
     assert(source.is_temp());
     assert(!target.is_temp());
