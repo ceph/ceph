@@ -414,8 +414,7 @@ private:
 
     // lazy delete, see "deleted_conns"
     Mutex::Locker l(deleted_lock);
-    if (deleted_conns.count(p->second)) {
-      deleted_conns.erase(p->second);
+    if (deleted_conns.erase(p->second)) {
       p->second->get_perf_counter()->dec(l_msgr_active_connections);
       conns.erase(p);
       return NULL;
@@ -452,14 +451,16 @@ public:
 
   int accept_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(lock);
-    if (conns.count(conn->peer_addr)) {
-      AsyncConnectionRef existing = conns[conn->peer_addr];
+    auto it = conns.find(conn->peer_addr);
+    if (it != conns.end()) {
+      AsyncConnectionRef existing = it->second;
 
       // lazy delete, see "deleted_conns"
       // If conn already in, we will return 0
       Mutex::Locker l(deleted_lock);
-      if (deleted_conns.count(existing)) {
-        deleted_conns.erase(existing);
+      if (deleted_conns.erase(existing)) {
+        existing->get_perf_counter()->dec(l_msgr_active_connections);
+        conns.erase(it);
       } else if (conn != existing) {
         return -1;
       }
