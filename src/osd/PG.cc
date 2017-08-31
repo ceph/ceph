@@ -3834,7 +3834,8 @@ void PG::_scan_snaps(ScrubMap &smap)
     const hobject_t &hoid = i->first;
     ScrubMap::object &o = i->second;
 
-    if (hoid.is_head() || hoid.is_snapdir()) {
+    assert(!hoid.is_snapdir());
+    if (hoid.is_head()) {
       // parse the SnapSet
       bufferlist bl;
       if (o.attrs.find(SS_ATTR) == o.attrs.end()) {
