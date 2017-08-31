@@ -20,6 +20,27 @@ if ! git submodule sync || ! git submodule update $force --init --recursive; the
     exit 1
 fi
 
+download_boost() {
+    boost_version=$1
+    boost_md5=$2
+    boost_version_underscore=$(echo $boost_version | sed 's/\./_/g')
+    boost_fname=boost_${boost_version_underscore}.tar.bz2
+    echo "downloading boost_$boost_version..."
+    wget --no-verbose -O $boost_fname \
+         https://downloads.sourceforge.net/project/boost/boost/$boost_version/$boost_fname
+    if [ $? != 0 -o ! -e $boost_fname ]; then
+        echo "Error: failed to download boost."
+        exit 1
+    elif [ $(md5sum $boost_fname | awk '{print $1}') != $boost_md5 ]; then
+        echo "Error: failed to download boost: MD5 mismatch."
+        exit 1
+    fi
+    tar xjf $boost_fname -C src
+    mv src/boost_${boost_version_underscore} src/boost
+    tar cf ${outfile}.boost.tar src/boost
+    rm -rf src/boost
+}
+
 # clean out old cruft...
 echo "cleanup..."
 rm -f $outfile*
@@ -49,6 +70,7 @@ else
 	rpm_release=0
 fi
 
+download_boost 1.63.0 1c837ecd990bb022d07e7aab32b09847
 
 for spec in ceph.spec.in alpine/APKBUILD.in; do
     cat $spec |
@@ -58,11 +80,13 @@ for spec in ceph.spec.in alpine/APKBUILD.in; do
 done
 ln -s . $outfile
 tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec $outfile/alpine/APKBUILD
-tar --concatenate -f $outfile.both.tar $outfile.version.tar
-tar --concatenate -f $outfile.both.tar $outfile.tar
-mv $outfile.both.tar $outfile.tar
+tar --concatenate -f $outfile.all.tar $outfile.version.tar
+tar --concatenate -f $outfile.all.tar $outfile.boost.tar
+tar --concatenate -f $outfile.all.tar $outfile.tar
+mv $outfile.all.tar $outfile.tar
 rm $outfile
 rm -f $outfile.version.tar
+rm -f $outfile.boost.tar
 
 echo "compressing..."
 bzip2 -9 $outfile.tar
