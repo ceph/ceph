@@ -1031,6 +1031,7 @@ class Thrasher:
                         Scrubber(self.ceph_manager, self.config)
             self.choose_action()()
             time.sleep(delay)
+        self.all_up()
         if self.random_eio > 0:
             self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
                           'injectargs', '--', '--filestore_debug_random_read_err=0.0')
