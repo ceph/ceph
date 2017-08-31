@@ -591,7 +591,7 @@ int CrushWrapper::remove_item_under(
 }
 
 int CrushWrapper::get_common_ancestor_distance(CephContext *cct, int id,
-			       const std::multimap<string,string>& loc)
+			       const std::multimap<string,string>& loc) const
 {
   ldout(cct, 5) << __func__ << " " << id << " " << loc << dendl;
   if (!item_exists(id))
@@ -704,7 +704,7 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,s
   return false;
 }
 
-map<string, string> CrushWrapper::get_full_location(int id)
+map<string, string> CrushWrapper::get_full_location(int id) const
 {
   vector<pair<string, string> > full_location_ordered;
   map<string,string> full_location;
@@ -718,7 +718,7 @@ map<string, string> CrushWrapper::get_full_location(int id)
   return full_location;
 }
 
-int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> >& path)
+int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> >& path) const
 {
   if (!item_exists(id))
     return -ENOENT;
@@ -734,7 +734,7 @@ int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> 
   return 0;
 }
 
-string CrushWrapper::get_full_location_ordered_string(int id)
+string CrushWrapper::get_full_location_ordered_string(int id) const
 {
   vector<pair<string, string> > full_location_ordered;
   string full_location;
@@ -749,7 +749,7 @@ string CrushWrapper::get_full_location_ordered_string(int id)
   return full_location;
 }
 
-map<int, string> CrushWrapper::get_parent_hierarchy(int id)
+map<int, string> CrushWrapper::get_parent_hierarchy(int id) const
 {
   map<int,string> parent_hierarchy;
   pair<string, string> parent_coord = get_immediate_parent(id);
@@ -765,10 +765,8 @@ map<int, string> CrushWrapper::get_parent_hierarchy(int id)
 
   // read the type map and get the name of the type with the largest ID
   int high_type = 0;
-  for (map<int, string>::iterator it = type_map.begin(); it != type_map.end(); ++it){
-    if ( (*it).first > high_type )
-      high_type = (*it).first;
-  }
+  if (!type_map.empty())
+    high_type = type_map.rbegin()->first;
 
   parent_id = get_item_id(parent_coord.second);
 
@@ -786,14 +784,14 @@ map<int, string> CrushWrapper::get_parent_hierarchy(int id)
   return parent_hierarchy;
 }
 
-int CrushWrapper::get_children(int id, list<int> *children)
+int CrushWrapper::get_children(int id, list<int> *children) const
 {
   // leaf?
   if (id >= 0) {
     return 0;
   }
 
-  crush_bucket *b = get_bucket(id);
+  auto *b = get_bucket(id);
   if (IS_ERR(b)) {
     return -ENOENT;
   }
@@ -804,7 +802,7 @@ int CrushWrapper::get_children(int id, list<int> *children)
   return b->size;
 }
 
-int CrushWrapper::_get_leaves(int id, list<int> *leaves)
+int CrushWrapper::_get_leaves(int id, list<int> *leaves) const
 {
   assert(leaves);
 
@@ -814,7 +812,7 @@ int CrushWrapper::_get_leaves(int id, list<int> *leaves)
     return 0;
   }
 
-  crush_bucket *b = get_bucket(id);
+  auto b = get_bucket(id);
   if (IS_ERR(b)) {
     return -ENOENT;
   }
@@ -834,7 +832,7 @@ int CrushWrapper::_get_leaves(int id, list<int> *leaves)
   return 0; // all is well
 }
 
-int CrushWrapper::get_leaves(const string &name, set<int> *leaves)
+int CrushWrapper::get_leaves(const string &name, set<int> *leaves) const
 {
   assert(leaves);
   leaves->clear();
@@ -1334,7 +1332,7 @@ bool CrushWrapper::check_item_present(int id) const
 }
 
 
-pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
+pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret) const
 {
 
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
@@ -1345,8 +1343,8 @@ pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
       continue;
     for (unsigned i = 0; i < b->size; i++)
       if (b->items[i] == id) {
-        string parent_id = name_map[b->id];
-        string parent_bucket_type = type_map[b->type];
+        string parent_id = name_map.at(b->id);
+        string parent_bucket_type = type_map.at(b->type);
         if (_ret)
           *_ret = 0;
         return make_pair(parent_bucket_type, parent_id);
