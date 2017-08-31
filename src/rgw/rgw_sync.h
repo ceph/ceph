@@ -430,7 +430,7 @@ class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
 
 public:
   RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
-		           const string& _raw_key, const string& _entry_marker,
+                           const string& _raw_key, const string& _entry_marker,
                            const RGWMDLogStatus& _op_status,
                            RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent);
 
