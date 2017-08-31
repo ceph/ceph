@@ -20,6 +20,18 @@ using std::string;
  */
 class KeyValueDB {
 public:
+  /*
+   *  See RocksDB's definition of a column family(CF) and how to use it.
+   *  The interfaces of KeyValueDB is extended, when a column family is created.
+   *  Prefix will be the name of column family to use.
+   */
+  struct ColumnFamily {
+    string name;      //< name of this individual column family
+    string option;    //< configure option string for this CF
+    ColumnFamily(const string &name, const string &option)
+      : name(name), option(option) {}
+  };
+
   class TransactionImpl {
   public:
     /// Set Keys
@@ -106,7 +118,16 @@ public:
   static int test_init(const std::string& type, const std::string& dir);
   virtual int init(string option_str="") = 0;
   virtual int open(std::ostream &out) = 0;
+  virtual int open(std::ostream &out, const std::vector<ColumnFamily>& cfs) {
+    assert(0 == "Not implemented"); }
   virtual int create_and_open(std::ostream &out) = 0;
+  // vector cfs contains column families to be created when db is created.
+  virtual int create_and_open(std::ostream &out,
+			      const std::vector<ColumnFamily>& cfs) {
+    assert(0 == "Not implemented"); }
+  virtual int drop_column_family(
+    const string &cf_name         ///< [in] name of CF to delete
+    ) { assert(0 == "Not implemented"); }
 
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
@@ -149,6 +170,8 @@ public:
     virtual ~GenericIteratorImpl() {}
   };
 
+  /// When Column Family is used, WholeSpaceIterator is limited to the default column family,
+  /// and user can still use multiple prefixes within the default CF.
   class WholeSpaceIteratorImpl {
   public:
     virtual int seek_to_first() = 0;
@@ -177,66 +200,105 @@ public:
   };
   typedef ceph::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
 
+  /// Iterator for column family which is created explicitly and not the default one.
+  class ColumnFamilyIteratorImpl {
+  public:
+    virtual int seek_to_first() = 0;
+    virtual int seek_to_last() = 0;
+    virtual int upper_bound(const std::string &after) = 0;
+    virtual int lower_bound(const std::string &to) = 0;
+    virtual bool valid() = 0;
+    virtual int next() = 0;
+    virtual int prev() = 0;
+    virtual std::string key() = 0;
+    virtual bufferlist value() = 0;
+    virtual bufferptr value_as_ptr() {
+      bufferlist bl = value();
+      if (bl.length()) {
+        return *bl.buffers().begin();
+      } else {
+        return bufferptr();
+      }
+    }
+    virtual int status() = 0;
+    virtual ~ColumnFamilyIteratorImpl() { }
+  };
+  typedef ceph::shared_ptr< ColumnFamilyIteratorImpl > ColumnFamilyIterator;
+
   class IteratorImpl : public GenericIteratorImpl {
     const std::string prefix;
     WholeSpaceIterator generic_iter;
+    ColumnFamilyIterator cf_iter;
   public:
+    const bool is_cf;                       //is it for a explicit column family
     IteratorImpl(const std::string &prefix, WholeSpaceIterator iter) :
-      prefix(prefix), generic_iter(iter) { }
+      prefix(prefix), generic_iter(iter), is_cf(false) { }
+    IteratorImpl(const std::string &cf_name, ColumnFamilyIterator iter) :
+      prefix(cf_name), cf_iter(iter), is_cf(true) { }
     virtual ~IteratorImpl() { }
 
-    int seek_to_first() {
-      return generic_iter->seek_to_first(prefix);
-    }
-    int seek_to_last() {
-      return generic_iter->seek_to_last(prefix);
-    }
-    int upper_bound(const std::string &after) {
-      return generic_iter->upper_bound(prefix, after);
-    }
-    int lower_bound(const std::string &to) {
-      return generic_iter->lower_bound(prefix, to);
-    }
+     int seek_to_first() {
+      return is_cf ? cf_iter->seek_to_first() :
+                     generic_iter->seek_to_first(prefix);
+     }
+     int seek_to_last() {
+      return is_cf ? cf_iter->seek_to_last() :
+                     generic_iter->seek_to_last(prefix);
+     }
+     int upper_bound(const std::string &after) {
+      return is_cf ? cf_iter->upper_bound(after) :
+                     generic_iter->upper_bound(prefix, after);
+     }
+     int lower_bound(const std::string &to) {
+      return is_cf ? cf_iter->lower_bound(to) :
+                     generic_iter->lower_bound(prefix, to);
+     }
     bool valid() {
-      if (!generic_iter->valid())
-	return false;
-      return generic_iter->raw_key_is_prefixed(prefix);
+      if (is_cf) {
+	return cf_iter->valid();
+      } else {
+        if (!generic_iter->valid())
+	  return false;
+        return generic_iter->raw_key_is_prefixed(prefix);
+      }
     }
     // Note that next() and prev() shouldn't validate iters,
     // it's responsibility of caller to ensure they're valid.
     int next(bool validate=true) {
       if (validate) {
         if (valid())
-          return generic_iter->next();
-        return status();
+	  return is_cf ? cf_iter->next() : generic_iter->next();
+	return status();
       } else {
-        return generic_iter->next();  
+	return is_cf ? cf_iter->next() : generic_iter->next();  
       }      
     }
     
     int prev(bool validate=true) {
       if (validate) {
         if (valid())
-          return generic_iter->prev();
+          return is_cf ? cf_iter->prev() : generic_iter->prev();
         return status();
       } else {
-        return generic_iter->prev();  
+	return is_cf ? cf_iter->prev() : generic_iter->prev();
       }      
     }
     std::string key() {
-      return generic_iter->key();
+      return is_cf ? cf_iter->key() : generic_iter->key();
     }
+    // For column family, keys actually don't contain prefix;
+    // to make interface compatible, prefix is added.
     std::pair<std::string, std::string> raw_key() {
-      return generic_iter->raw_key();
+      return is_cf ? make_pair(prefix, cf_iter->key()) : generic_iter->raw_key();
     }
     bufferlist value() {
-      return generic_iter->value();
+      return is_cf ? cf_iter->value() : generic_iter->value();
     }
     bufferptr value_as_ptr() {
-      return generic_iter->value_as_ptr();
+      return is_cf ? cf_iter->value_as_ptr() : generic_iter->value_as_ptr();
     }
     int status() {
-      return generic_iter->status();
+      return is_cf ? cf_iter->status() : generic_iter->status();
     }
   };
 
@@ -246,16 +308,45 @@ public:
     return _get_iterator();
   }
 
+  ColumnFamilyIterator get_cf_iterator(const std::string& cf_name) {
+    return _get_cf_iterator(cf_name);
+  }
+
   Iterator get_iterator(const std::string &prefix) {
-    return std::make_shared<IteratorImpl>(prefix, get_iterator());
+    return is_column_family(prefix) ?
+             std::make_shared<IteratorImpl>(prefix, get_cf_iterator(prefix)) :
+             std::make_shared<IteratorImpl>(prefix, get_iterator());
   }
 
   WholeSpaceIterator get_snapshot_iterator() {
     return _get_snapshot_iterator();
   }
 
+  ColumnFamilyIterator get_cf_snapshot_iterator(const std::string& cf_name) {
+    return _get_cf_snapshot_iterator(cf_name);
+  }
+
   Iterator get_snapshot_iterator(const std::string &prefix) {
-    return std::make_shared<IteratorImpl>(prefix, get_snapshot_iterator());
+    return is_column_family(prefix) ?
+             std::make_shared<IteratorImpl>(prefix, get_cf_snapshot_iterator(prefix)) :
+             std::make_shared<IteratorImpl>(prefix, get_snapshot_iterator());
+  }
+
+  void add_column_family(const std::string& cf_name, void *handle) {
+    cf_handles.insert(std::make_pair(cf_name, handle));
+  }
+
+  void *get_cf_handle(const std::string& cf_name) {
+    std::unordered_map<std::string, void*>::const_iterator iter;
+    iter = cf_handles.find(cf_name);
+    if (iter == cf_handles.end())
+      return nullptr;
+    else
+      return iter->second;
+  }
+
+  bool is_column_family(const std::string& prefix) {
+    return cf_handles.count(prefix); 
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
@@ -278,8 +369,15 @@ public:
 				   const std::string& start, const std::string& end) {}
 
 protected:
+  /// column families in use, name->handle
+  std::unordered_map<std::string, void *> cf_handles;
+
   virtual WholeSpaceIterator _get_iterator() = 0;
   virtual WholeSpaceIterator _get_snapshot_iterator() = 0;
+  virtual ColumnFamilyIterator _get_cf_iterator(const std::string& cf_name) {
+    assert(0 == "Not implemented"); }
+  virtual ColumnFamilyIterator _get_cf_snapshot_iterator(const std::string& cf_name) {
+    assert(0 == "Not implemented"); }
 };
 
 #endif
