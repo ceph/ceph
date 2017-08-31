@@ -69,6 +69,14 @@ endif()
 
 add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 
+if(WITH_BLUEFS)
+  add_library(bluefs SHARED 
+    bluestore/BlueRocksEnv.cc)
+  target_include_directories(bluefs PUBLIC ${ROCKSDB_INCLUDE_DIR})
+  target_link_libraries(bluefs global)
+  install(TARGETS bluefs DESTINATION lib)
+endif(WITH_BLUEFS)
+
 if(HAVE_LIBAIO)
   target_link_libraries(os ${AIO_LIBRARIES})
 endif(HAVE_LIBAIO)

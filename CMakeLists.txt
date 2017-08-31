@@ -237,6 +237,8 @@ if(WITH_PMEM)
   set(HAVE_PMEM ${PMEM_FOUND})
 endif(WITH_PMEM)
 
+option(WITH_BLUEFS "libbluefs library" OFF)
+
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
