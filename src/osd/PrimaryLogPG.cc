@@ -7376,81 +7376,6 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 	   << dendl;
   utime_t now = ceph_clock_now();
 
-  // snapset
-  bufferlist bss;
-
-  if (soid.snap == CEPH_NOSNAP && maintain_ssc) {
-    ::encode(ctx->new_snapset, bss);
-    assert(ctx->new_obs.exists == ctx->new_snapset.head_exists ||
-	   !ctx->new_snapset.is_legacy());
-
-    if (ctx->new_obs.exists) {
-      if (!ctx->obs->exists) {
-	if (ctx->snapset_obc && ctx->snapset_obc->obs.exists) {
-	  hobject_t snapoid = soid.get_snapdir();
-	  dout(10) << " removing unneeded snapdir " << snapoid << dendl;
-	  ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid,
-	      ctx->at_version,
-	      ctx->snapset_obc->obs.oi.version,
-	      0, osd_reqid_t(), ctx->mtime, 0));
-	  ctx->op_t->remove(snapoid);
-
-	  ctx->at_version.version++;
-
-	  ctx->snapset_obc->obs.exists = false;
-	}
-      }
-    } else if (!ctx->new_snapset.clones.empty() &&
-	       !ctx->cache_evict &&
-	       !ctx->new_snapset.head_exists &&
-	       (!ctx->snapset_obc || !ctx->snapset_obc->obs.exists)) {
-      // save snapset on _snap
-      hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.get_hash(),
-			info.pgid.pool(), soid.get_namespace());
-      dout(10) << " final snapset " << ctx->new_snapset
-	       << " in " << snapoid << dendl;
-      assert(get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS);
-      ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid,
-					ctx->at_version,
-	                                eversion_t(),
-					0, osd_reqid_t(), ctx->mtime, 0));
-
-      if (!ctx->snapset_obc)
-	ctx->snapset_obc = get_object_context(snapoid, true);
-      bool got = false;
-      if (ctx->lock_type == ObjectContext::RWState::RWWRITE) {
-	got = ctx->lock_manager.get_write_greedy(
-	  snapoid,
-	  ctx->snapset_obc,
-	  ctx->op);
-      } else {
-	assert(ctx->lock_type == ObjectContext::RWState::RWEXCL);
-	got = ctx->lock_manager.get_lock_type(
-	  ObjectContext::RWState::RWEXCL,
-	  snapoid,
-	  ctx->snapset_obc,
-	  ctx->op);
-      }
-      assert(got);
-      dout(20) << " got greedy write on snapset_obc " << *ctx->snapset_obc << dendl;
-      ctx->snapset_obc->obs.exists = true;
-      ctx->snapset_obc->obs.oi.version = ctx->at_version;
-      ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
-      ctx->snapset_obc->obs.oi.mtime = ctx->mtime;
-      ctx->snapset_obc->obs.oi.local_mtime = now;
-
-      map<string, bufferlist> attrs;
-      bufferlist bv(sizeof(ctx->new_obs.oi));
-      ::encode(ctx->snapset_obc->obs.oi, bv,
-	       get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-      ctx->op_t->create(snapoid);
-      attrs[OI_ATTR].claim(bv);
-      attrs[SS_ATTR].claim(bss);
-      setattrs_maybe_cache(ctx->snapset_obc, ctx, ctx->op_t.get(), attrs);
-      ctx->at_version.version++;
-    }
-  }
-
   // finish and log the op.
   if (ctx->user_modify) {
     // update the user_version for any modify ops, except for the watch op
@@ -7466,7 +7391,6 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
   ctx->bytes_written = ctx->op_t->get_bytes_written();
  
   if (ctx->new_obs.exists) {
-    // on the head object
     ctx->new_obs.oi.version = ctx->at_version;
     ctx->new_obs.oi.prior_version = ctx->obs->oi.version;
     ctx->new_obs.oi.last_reqid = ctx->reqid;
@@ -7478,26 +7402,28 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       dout(10) << " mtime unchanged at " << ctx->new_obs.oi.mtime << dendl;
     }
 
+    // object_info_t
     map <string, bufferlist> attrs;
     bufferlist bv(sizeof(ctx->new_obs.oi));
     ::encode(ctx->new_obs.oi, bv,
 	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
     attrs[OI_ATTR].claim(bv);
 
+    // snapset
     if (soid.snap == CEPH_NOSNAP) {
       dout(10) << " final snapset " << ctx->new_snapset
 	       << " in " << soid << dendl;
+      bufferlist bss;
+      ::encode(ctx->new_snapset, bss);
       attrs[SS_ATTR].claim(bss);
     } else {
       dout(10) << " no snapset (this is a clone)" << dendl;
     }
     ctx->op_t->setattrs(soid, attrs);
   } else {
+    // reset cached oi
     ctx->new_obs.oi = object_info_t(ctx->obc->obs.oi.soid);
   }
-
-  bool legacy_snapset = ctx->new_snapset.is_legacy() ||
-    get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
 
   // append to log
   ctx->log.push_back(pg_log_entry_t(log_op_type, soid, ctx->at_version,
@@ -7509,16 +7435,9 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     case pg_log_entry_t::MODIFY:
     case pg_log_entry_t::PROMOTE:
     case pg_log_entry_t::CLEAN:
-      if (legacy_snapset) {
-	dout(20) << __func__ << " encoding legacy_snaps "
-		 << ctx->new_obs.oi.legacy_snaps
-		 << dendl;
-	::encode(ctx->new_obs.oi.legacy_snaps, ctx->log.back().snaps);
-      } else {
-	dout(20) << __func__ << " encoding snaps from " << ctx->new_snapset
-		 << dendl;
-	::encode(ctx->new_snapset.clone_snaps[soid.snap], ctx->log.back().snaps);
-      }
+      dout(20) << __func__ << " encoding snaps from " << ctx->new_snapset
+	       << dendl;
+      ::encode(ctx->new_snapset.clone_snaps[soid.snap], ctx->log.back().snaps);
       break;
     default:
       break;
@@ -7533,7 +7452,8 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
 
-  if (soid.is_head() && !ctx->obc->obs.exists &&
+  if (soid.is_head() &&
+      !ctx->obc->obs.exists &&
       (!maintain_ssc || ctx->cache_evict)) {
     ctx->obc->ssc->exists = false;
     ctx->obc->ssc->snapset = SnapSet();
