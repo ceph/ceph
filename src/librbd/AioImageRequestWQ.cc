@@ -369,9 +369,16 @@ void *AioImageRequestWQ<I>::_void_dequeue() {
     RWLock::RLocker locker(m_lock);
     bool write_op = peek_item->is_write_op();
     lock_required = is_lock_required(write_op);
-    if (write_op && !lock_required && !refresh_required) {
-      // completed ops will requeue the IO -- don't count it as in-progress
-      m_in_flight_writes.inc();
+    if (write_op) {
+      if (!lock_required && m_write_blockers > 0) {
+        // missing lock is not the write blocker
+        return nullptr;
+      }
+
+      if (!lock_required && !refresh_required) {
+        // completed ops will requeue the IO -- don't count it as in-progress
+        m_in_flight_writes.inc();
+      }
     }
   }
 
