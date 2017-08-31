@@ -84,7 +84,9 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
   dout(10) << " " << version << dendl;
   load_health();
   bufferlist bl;
-  get_version(version, bl);
+  int err = get_version(version, bl);
+  assert(err == 0);
+  
   if (version) {
     assert(bl.length());
     try {
