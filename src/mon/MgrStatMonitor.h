@@ -37,6 +37,10 @@ public:
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   version_t get_trim_to() override;
 
+  bool definitely_converted_snapsets() const {
+    return digest.definitely_converted_snapsets();
+  }
+
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
 

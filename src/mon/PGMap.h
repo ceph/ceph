@@ -188,6 +188,15 @@ public:
       return 0;
   }
 
+  // kill me post-mimic or -nautilus
+  bool definitely_converted_snapsets() const {
+    // false negative is okay; false positive is not!
+    return
+      num_pg &&
+      num_pg_unknown == 0 &&
+      pg_sum.stats.sum.num_legacy_snapsets == 0;
+  }
+
   // kill me post-luminous:
   virtual float get_fallback_full_ratio() const {
     return .95;
