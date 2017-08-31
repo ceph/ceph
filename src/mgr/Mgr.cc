@@ -96,7 +96,7 @@ public:
   {
     daemon_state.clear_updating(key);
     if (r == 0) {
-      if (key.first == "mds") {
+      if (key.first == "mds" || key.first == "osd") {
         json_spirit::mValue json_result;
         bool read_ok = json_spirit::read(
             outbl.to_str(), json_result);
@@ -105,6 +105,8 @@ public:
                   << key.first << "." << key.second << dendl;
           return;
         }
+        dout(4) << "mon returned valid metadata JSON for "
+                << key.first << "." << key.second << dendl;
 
         json_spirit::mObject daemon_meta = json_result.get_obj();
 
@@ -119,7 +121,11 @@ public:
         if (daemon_state.exists(key)) {
           state = daemon_state.get(key);
 	  Mutex::Locker l(state->lock);
-          daemon_meta.erase("name");
+          if (key.first == "mds") {
+            daemon_meta.erase("name");
+          } else if (key.first == "osd") {
+            daemon_meta.erase("id");
+          }
           daemon_meta.erase("hostname");
           state->metadata.clear();
           for (const auto &i : daemon_meta) {
@@ -130,13 +136,19 @@ public:
           state->key = key;
           state->hostname = daemon_meta.at("hostname").get_str();
 
+          if (key.first == "mds") {
+            daemon_meta.erase("name");
+          } else if (key.first == "osd") {
+            daemon_meta.erase("id");
+          }
+          daemon_meta.erase("hostname");
+
           for (const auto &i : daemon_meta) {
             state->metadata[i.first] = i.second.get_str();
           }
 
           daemon_state.insert(state);
         }
-      } else if (key.first == "osd") {
       } else {
         ceph_abort();
       }
