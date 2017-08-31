@@ -1846,6 +1846,7 @@ private:
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
   atomic_int deferred_aggressive = {0}; ///< aggressive wakeup of kv thread
+  Finisher deferred_finisher;
 
   int m_finisher_num = 1;
   vector<Finisher*> finishers;
