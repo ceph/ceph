@@ -11756,50 +11756,7 @@ uint64_t PrimaryLogPG::recover_backfill(
         pbi.pop_front();
       }
 
-      /* This requires a bit of explanation.  We compare head against
-       * last_backfill to determine whether to send an operation
-       * to the replica.  A single write operation can touch up to three
-       * objects: head, the snapdir, and a new clone which sorts closer to
-       * head than any existing clone.  If last_backfill points at a clone,
-       * the transaction won't be sent and all 3 must lie on the right side
-       * of the line (i.e., we'll backfill them later).  If last_backfill
-       * points at snapdir, it sorts greater than head, so we send the
-       * transaction which is correct because all three must lie to the left
-       * of the line.
-       *
-       * If it points at head, we have a bit of an issue.  If head actually
-       * exists, no problem, because any transaction which touches snapdir
-       * must end up creating it (and deleting head), so sending the
-       * operation won't pose a problem -- we'll end up having to scan it,
-       * but it'll end up being the right version so we won't bother to
-       * rebackfill it.  However, if head doesn't exist, any write on head
-       * will remove snapdir.  For a replicated pool, this isn't a problem,
-       * ENOENT on remove isn't an issue and it's in backfill future anyway.
-       * It only poses a problem for EC pools, because we never just delete
-       * an object, we rename it into a rollback object.  That operation
-       * will end up crashing the osd with ENOENT.  Tolerating the failure
-       * wouldn't work either, even if snapdir exists, we'd be creating a
-       * rollback object past the last_backfill line which wouldn't get
-       * cleaned up (no rollback objects past the last_backfill line is an
-       * existing important invariant).  Thus, let's avoid the whole issue
-       * by just not updating last_backfill_started here if head doesn't
-       * exist and snapdir does.  We aren't using up a recovery count here,
-       * so we're going to recover snapdir immediately anyway.  We'll only
-       * fail "backward" if we fail to get the rw lock and that just means
-       * we'll re-process this section of the hash space again.
-       *
-       * I'm choosing this hack here because the really "correct" answer is
-       * going to be to unify snapdir and head into a single object (a
-       * snapdir is really just a confusing way to talk about head existing
-       * as a whiteout), but doing that is going to be a somewhat larger
-       * undertaking.
-       *
-       * @see http://tracker.ceph.com/issues/17668
-       */
-      if (!(check.is_head() &&
-	    backfill_info.begin.is_snapdir() &&
-	    check == backfill_info.begin.get_head()))
-	last_backfill_started = check;
+      last_backfill_started = check;
 
       // Don't increment ops here because deletions
       // are cheap and not replied to unlike real recovery_ops,
