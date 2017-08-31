@@ -99,7 +99,6 @@ void ECTransaction::generate_transactions(
   WritePlan &plan,
   ErasureCodeInterfaceRef &ecimpl,
   pg_t pgid,
-  bool legacy_log_entries,
   const ECUtil::stripe_info_t &sinfo,
   const map<hobject_t,extent_map> &partial_extents,
   vector<pg_log_entry_t> &entries,

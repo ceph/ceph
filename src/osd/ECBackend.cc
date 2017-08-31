@@ -1900,7 +1900,6 @@ bool ECBackend::try_reads_to_commit()
       op->plan,
       ec_impl,
       get_parent()->get_info().pgid.pgid,
-      (get_osdmap()->require_osd_release < CEPH_RELEASE_KRAKEN),
       sinfo,
       op->remote_read_result,
       op->log_entries,
