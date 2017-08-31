@@ -9937,12 +9937,11 @@ void PrimaryLogPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
   object_info_t& oi = obc->obs.oi;
 
   dout(10) << "add_object_context_to_pg_stat " << oi.soid << dendl;
+  assert(!oi.soid.is_snapdir());
+
   object_stat_sum_t stat;
-
   stat.num_bytes += oi.size;
-
-  if (oi.soid.snap != CEPH_SNAPDIR)
-    stat.num_objects++;
+  stat.num_objects++;
   if (oi.is_dirty())
     stat.num_objects_dirty++;
   if (oi.is_whiteout())
@@ -9952,7 +9951,7 @@ void PrimaryLogPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
   if (oi.is_cache_pinned())
     stat.num_objects_pinned++;
 
-  if (oi.soid.snap && oi.soid.snap != CEPH_NOSNAP && oi.soid.snap != CEPH_SNAPDIR) {
+  if (oi.soid.is_snap()) {
     stat.num_object_clones++;
 
     if (!obc->ssc)
