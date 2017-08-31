@@ -10074,9 +10074,9 @@ void PrimaryLogPG::put_snapset_context(SnapSetContext *ssc)
  * Return values:
  *  NONE  - didn't pull anything
  *  YES   - pulled what the caller wanted
- *  OTHER - needed to pull something else first (_head or _snapdir)
+ *  OTHER - needed to pull head first
  */
-enum { PULL_NONE, PULL_OTHER, PULL_YES };
+enum { PULL_NONE, PULL_HEAD, PULL_YES };
 
 int PrimaryLogPG::recover_missing(
   const hobject_t &soid, eversion_t v,
@@ -10128,7 +10128,7 @@ int PrimaryLogPG::recover_missing(
   ObjectContextRef obc;
   ObjectContextRef head_obc;
   if (soid.snap && soid.snap < CEPH_NOSNAP) {
-    // do we have the head and/or snapdir?
+    // do we have the head?
     hobject_t head = soid.get_head();
     if (pg_log.get_missing().is_missing(head)) {
       if (recovering.count(head)) {
@@ -10139,35 +10139,14 @@ int PrimaryLogPG::recover_missing(
 	  head, pg_log.get_missing().get_items().find(head)->second.need, priority,
 	  h);
 	if (r != PULL_NONE)
-	  return PULL_OTHER;
+	  return PULL_HEAD;
 	return PULL_NONE;
       }
     }
-    head = soid.get_snapdir();
-    if (pg_log.get_missing().is_missing(head)) {
-      if (recovering.count(head)) {
-	dout(10) << " missing but already recovering snapdir " << head << dendl;
-	return PULL_NONE;
-      } else {
-	int r = recover_missing(
-	  head, pg_log.get_missing().get_items().find(head)->second.need, priority,
-	  h);
-	if (r != PULL_NONE)
-	  return PULL_OTHER;
-	return PULL_NONE;
-      }
-    }
-
-    // we must have one or the other
     head_obc = get_object_context(
       soid.get_head(),
       false,
       0);
-    if (!head_obc)
-      head_obc = get_object_context(
-	soid.get_snapdir(),
-	false,
-	0);
     assert(head_obc);
   }
   start_recovery_op(soid);
@@ -11358,7 +11337,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 	case PULL_YES:
 	  ++started;
 	  break;
-	case PULL_OTHER:
+	case PULL_HEAD:
 	  ++started;
 	case PULL_NONE:
 	  ++skipped;
