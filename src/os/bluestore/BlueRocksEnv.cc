@@ -16,6 +16,7 @@ rocksdb::Status err_to_status(int r)
   case -EINVAL:
     return rocksdb::Status::InvalidArgument(rocksdb::Status::kNone);
   case -EIO:
+  case -EEXIST:
     return rocksdb::Status::IOError(rocksdb::Status::kNone);
   default:
     // FIXME :(
