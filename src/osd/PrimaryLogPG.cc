@@ -676,21 +676,12 @@ void PrimaryLogPG::block_write_on_degraded_snap(
   wait_for_degraded_object(snap, op);
 }
 
-bool PrimaryLogPG::maybe_await_blocked_snapset(
+bool PrimaryLogPG::maybe_await_blocked_head(
   const hobject_t &hoid,
   OpRequestRef op)
 {
   ObjectContextRef obc;
   obc = object_contexts.lookup(hoid.get_head());
-  if (obc) {
-    if (obc->is_blocked()) {
-      wait_for_blocked_object(obc->obs.oi.soid, op);
-      return true;
-    } else {
-      return false;
-    }
-  }
-  obc = object_contexts.lookup(hoid.get_snapdir());
   if (obc) {
     if (obc->is_blocked()) {
       wait_for_blocked_object(obc->obs.oi.soid, op);
@@ -2093,7 +2084,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // io blocked on obc?
   if (!m->has_flag(CEPH_OSD_FLAG_FLUSH) &&
-      maybe_await_blocked_snapset(oid, op)) {
+      maybe_await_blocked_head(oid, op)) {
     return;
   }
 
