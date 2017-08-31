@@ -13851,19 +13851,8 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 			 << " obc->obs.oi.soid: " << obc->obs.oi.soid;
       continue;
     }
-    ObjectContextRef snapset_obc;
-    if (!obc->obs.exists) {
-      snapset_obc = get_object_context(p.first.get_snapdir(), false);
-      if (!snapset_obc) {
-	osd->clog->error() << info.pgid << " " << mode
-			   << " cannot get object context for "
-			   << p.first.get_snapdir();
-	continue;
-      }
-    }
     OpContextUPtr ctx = simple_opc_create(obc);
     PGTransaction *t = ctx->op_t.get();
-    ctx->snapset_obc = snapset_obc;
     ctx->at_version = get_next_version();
     ctx->mtime = utime_t();      // do not update mtime
     ctx->new_snapset = p.second;
