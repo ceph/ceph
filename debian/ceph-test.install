@@ -28,3 +28,4 @@ usr/bin/ceph_tpbench
 usr/bin/ceph_xattr_bench
 usr/lib/ceph/ceph-monstore-update-crush.sh
 usr/share/java/libcephfs-test.jar
+usr/share/man/man8/ceph-kvstore-tool.8
