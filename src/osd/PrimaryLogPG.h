@@ -1745,7 +1745,7 @@ public:
     const hobject_t& oid, ObjectContextRef obc, OpRequestRef op);
   void block_write_on_degraded_snap(const hobject_t& oid, OpRequestRef op);
 
-  bool maybe_await_blocked_snapset(const hobject_t &soid, OpRequestRef op);
+  bool maybe_await_blocked_head(const hobject_t &soid, OpRequestRef op);
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
 
