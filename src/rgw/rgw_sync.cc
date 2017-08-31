@@ -80,7 +80,7 @@ void RGWSyncBackoff::backoff_sleep()
 void RGWSyncBackoff::backoff(RGWCoroutine *op)
 {
   update_wait_time();
-  op->wait(utime_t(cur_wait, 0));
+  op->wait(std::chrono::seconds(cur_wait));
 }
 
 int RGWBackoffControlCR::operate() {
@@ -1708,7 +1708,7 @@ public:
         }
 	if (mdlog_marker == max_marker && can_adjust_marker) {
 #define INCREMENTAL_INTERVAL 20
-	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
+	  yield wait(std::chrono::seconds(INCREMENTAL_INTERVAL));
 	}
       } while (can_adjust_marker);
 
@@ -2904,7 +2904,7 @@ int MetaPeerTrimCR::operate()
 
 class MetaTrimPollCR : public RGWCoroutine {
   RGWRados *const store;
-  const utime_t interval; //< polling interval
+  const uint32_t interval_sec; //< polling interval
   const rgw_raw_obj obj;
   const std::string name{"meta_trim"}; //< lock name
   const std::string cookie;
@@ -2914,8 +2914,8 @@ class MetaTrimPollCR : public RGWCoroutine {
   virtual RGWCoroutine* alloc_cr() = 0;
 
  public:
-  MetaTrimPollCR(RGWRados *store, utime_t interval)
-    : RGWCoroutine(store->ctx()), store(store), interval(interval),
+  MetaTrimPollCR(RGWRados *store, uint32_t interval_sec)
+    : RGWCoroutine(store->ctx()), store(store), interval_sec(interval_sec),
       obj(store->get_zone_params().log_pool, RGWMetadataLogHistory::oid),
       cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
   {}
@@ -2928,12 +2928,12 @@ int MetaTrimPollCR::operate()
   reenter(this) {
     for (;;) {
       set_status("sleeping");
-      wait(interval);
+      wait(std::chrono::seconds(interval_sec));
 
       // prevent others from trimming for our entire wait interval
       set_status("acquiring trim lock");
       yield call(new RGWSimpleRadosLockCR(store->get_async_rados(), store,
-                                          obj, name, cookie, interval.sec()));
+                                          obj, name, cookie, interval_sec));
       if (retcode < 0) {
         ldout(cct, 4) << "failed to lock: " << cpp_strerror(retcode) << dendl;
         continue;
@@ -2960,8 +2960,8 @@ class MetaMasterTrimPollCR : public MetaTrimPollCR  {
   }
  public:
   MetaMasterTrimPollCR(RGWRados *store, RGWHTTPManager *http,
-                       int num_shards, utime_t interval)
-    : MetaTrimPollCR(store, interval),
+                       int num_shards, uint32_t interval_sec)
+    : MetaTrimPollCR(store, interval_sec),
       env(store, http, num_shards)
   {}
 };
@@ -2973,19 +2973,19 @@ class MetaPeerTrimPollCR : public MetaTrimPollCR {
   }
  public:
   MetaPeerTrimPollCR(RGWRados *store, RGWHTTPManager *http,
-                     int num_shards, utime_t interval)
-    : MetaTrimPollCR(store, interval),
+                     int num_shards, uint32_t interval_sec)
+    : MetaTrimPollCR(store, interval_sec),
       env(store, http, num_shards)
   {}
 };
 
 RGWCoroutine* create_meta_log_trim_cr(RGWRados *store, RGWHTTPManager *http,
-                                      int num_shards, utime_t interval)
+                                      int num_shards, uint32_t interval_sec)
 {
   if (store->is_meta_master()) {
-    return new MetaMasterTrimPollCR(store, http, num_shards, interval);
+    return new MetaMasterTrimPollCR(store, http, num_shards, interval_sec);
   }
-  return new MetaPeerTrimPollCR(store, http, num_shards, interval);
+  return new MetaPeerTrimPollCR(store, http, num_shards, interval_sec);
 }
 
 

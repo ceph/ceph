@@ -24,8 +24,8 @@ class PushAndRetryCR : public RGWCoroutine {
   RGWHTTPManager *const http;
   RGWPeriod& period;
   const std::string epoch; //< epoch string for params
-  double timeout; //< current interval between retries
-  const double timeout_max; //< maximum interval between retries
+  ceph::timespan timeout; //< current interval between retries
+  const ceph::timespan timeout_max; //< maximum interval between retries
   uint32_t counter; //< number of failures since backoff increased
 
  public:
@@ -33,8 +33,8 @@ class PushAndRetryCR : public RGWCoroutine {
                  RGWHTTPManager* http, RGWPeriod& period)
     : RGWCoroutine(cct), zone(zone), conn(conn), http(http), period(period),
       epoch(std::to_string(period.get_epoch())),
-      timeout(cct->_conf->rgw_period_push_interval),
-      timeout_max(cct->_conf->rgw_period_push_interval_max),
+      timeout(ceph::make_timespan(cct->_conf->rgw_period_push_interval)),
+      timeout_max(ceph::make_timespan(cct->_conf->rgw_period_push_interval_max)),
       counter(0)
   {}
 
@@ -71,11 +71,8 @@ int PushAndRetryCR::operate()
 
       // wait with exponential backoff up to timeout_max
       yield {
-        utime_t dur;
-        dur.set_from_double(timeout);
-
-        ldout(cct, 10) << "waiting " << dur << "s for retry.." << dendl;
-        wait(dur);
+        ldout(cct, 10) << "waiting " << timeout << "s for retry.." << dendl;
+        wait(timeout);
 
         timeout *= 2;
         if (timeout > timeout_max)

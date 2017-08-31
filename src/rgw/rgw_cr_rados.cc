@@ -664,7 +664,7 @@ int RGWContinuousLeaseCR::operate()
         return set_state(RGWCoroutine_Error, retcode);
       }
       set_locked(true);
-      yield wait(utime_t(interval / 2, 0));
+      yield wait(std::chrono::seconds(interval / 2));
     }
     set_locked(false); /* moot at this point anyway */
     yield call(new RGWSimpleRadosUnlockCR(async_rados, store, obj, lock_name, cookie));
