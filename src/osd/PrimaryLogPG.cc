@@ -2082,6 +2082,25 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   hobject_t missing_oid;
   const hobject_t& oid = m->get_hobj();
 
+  // make sure LIST_SNAPS is on CEPH_SNAPDIR and nothing else
+  for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
+    OSDOp& osd_op = *p;
+
+    if (osd_op.op.op == CEPH_OSD_OP_LIST_SNAPS) {
+      if (m->get_snapid() != CEPH_SNAPDIR) {
+	dout(10) << "LIST_SNAPS with incorrect context" << dendl;
+	osd->reply_op_error(op, -EINVAL);
+	return;
+      }
+    } else {
+      if (m->get_snapid() == CEPH_SNAPDIR) {
+	dout(10) << "non-LIST_SNAPS on snapdir" << dendl;
+	osd->reply_op_error(op, -EINVAL);
+	return;
+      }
+    }
+  }
+
   // io blocked on obc?
   if (!m->has_flag(CEPH_OSD_FLAG_FLUSH) &&
       maybe_await_blocked_head(oid, op)) {
@@ -2196,18 +2215,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   dout(25) << __func__ << " oi " << obc->obs.oi << dendl;
-
-  for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
-    OSDOp& osd_op = *p;
-
-    // make sure LIST_SNAPS is on CEPH_SNAPDIR and nothing else
-    if (osd_op.op.op == CEPH_OSD_OP_LIST_SNAPS &&
-	m->get_snapid() != CEPH_SNAPDIR) {
-      dout(10) << "LIST_SNAPS with incorrect context" << dendl;
-      osd->reply_op_error(op, -EINVAL);
-      return;
-    }
-  }
 
   OpContext *ctx = new OpContext(op, m->get_reqid(), &m->ops, obc, this);
 
