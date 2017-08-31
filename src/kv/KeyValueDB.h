@@ -125,9 +125,6 @@ public:
   virtual int create_and_open(std::ostream &out,
 			      const std::vector<ColumnFamily>& cfs) {
     assert(0 == "Not implemented"); }
-  virtual int drop_column_family(
-    const string &cf_name         ///< [in] name of CF to delete
-    ) { assert(0 == "Not implemented"); }
 
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
@@ -305,6 +302,10 @@ public:
   typedef ceph::shared_ptr< IteratorImpl > Iterator;
 
   WholeSpaceIterator get_iterator() {
+    // a whole-space iterator cannot be used in combination with
+    // column families because it is not smart enough to traverse
+    // across all of them.
+    assert(cf_handles.empty());
     return _get_iterator();
   }
 
@@ -315,7 +316,7 @@ public:
   Iterator get_iterator(const std::string &prefix) {
     return is_column_family(prefix) ?
              std::make_shared<IteratorImpl>(prefix, get_cf_iterator(prefix)) :
-             std::make_shared<IteratorImpl>(prefix, get_iterator());
+             std::make_shared<IteratorImpl>(prefix, _get_iterator());
   }
 
   WholeSpaceIterator get_snapshot_iterator() {
