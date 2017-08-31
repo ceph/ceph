@@ -7081,12 +7081,6 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     snap_oi->prior_version = ctx->obs->oi.version;
     snap_oi->copy_user_bits(ctx->obs->oi);
 
-    bool legacy = ctx->new_snapset.is_legacy() ||
-      get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
-    if (legacy) {
-      snap_oi->legacy_snaps = snaps;
-    }
-
     _make_clone(ctx, ctx->op_t.get(), ctx->clone_obc, soid, coid, snap_oi);
     
     ctx->delta_stats.num_objects++;
@@ -7101,9 +7095,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     ctx->delta_stats.num_object_clones++;
     ctx->new_snapset.clones.push_back(coid.snap);
     ctx->new_snapset.clone_size[coid.snap] = ctx->obs->oi.size;
-    if (!legacy) {
-      ctx->new_snapset.clone_snaps[coid.snap] = snaps;
-    }
+    ctx->new_snapset.clone_snaps[coid.snap] = snaps;
 
     // clone_overlap should contain an entry for each clone 
     // (an empty interval_set if there is no overlap)
@@ -7145,13 +7137,6 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
   // update snapset with latest snap context
   ctx->new_snapset.seq = snapc.seq;
   ctx->new_snapset.snaps = snapc.snaps;
-  if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
-    // pessimistic assumption that this is a net-new legacy SnapSet
-    ctx->delta_stats.num_legacy_snapsets++;
-    ctx->new_snapset.head_exists = ctx->new_obs.exists;
-  } else if (ctx->new_snapset.is_legacy()) {
-    ctx->new_snapset.head_exists = ctx->new_obs.exists;
-  }
   dout(20) << "make_writeable " << soid
 	   << " done, snapset=" << ctx->new_snapset << dendl;
 }
