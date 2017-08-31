@@ -1,0 +1,54 @@
+#!/usr/bin/env python
+
+import json
+import os
+import requests
+from subprocess import call
+import sys
+import time
+
+label = sys.argv[1]
+repo = "ceph/ceph"
+
+with open(os.environ['HOME'] + '/.github_token', 'r') as myfile:
+    token = myfile.readline().strip()
+
+# get prs
+baseurl = 'https://api.github.com/repos/{repo}/issues?labels={label}&access_token={token}'
+url = baseurl.format(
+    label=label,
+    repo=repo,
+    token=token)
+r = requests.get(url)
+assert(r.ok)
+j = json.loads(r.text or r.content)
+print("--- found %d issues tagged with %s" % (len(j), label))
+
+prs = []
+for issue in j:
+    if 'pull_request' not in issue:
+        continue
+    r = requests.get(issue['pull_request']['url'] + '?access_token=' + token)
+    prs.append(json.loads(r.text or r.content))
+print("--- queried %s prs" % len(prs))
+
+# name branch
+TIME_FORMAT = '%Y-%m-%d-%H%M'
+branch = label + "-" + time.strftime(TIME_FORMAT, time.localtime())
+print "branch %s" % branch
+
+# assemble
+print('--- creating branch %s' % branch)
+call(['git', 'branch', '-D', branch])
+call(['git', 'checkout', '-b', branch])
+for pr in prs:
+    print('--- pr %d --- pulling %s branch %s' % (
+        pr['number'],
+        pr['head']['repo']['clone_url'],
+        pr['head']['ref']))
+    call(['git', 'pull', '--no-edit',
+          pr['head']['repo']['clone_url'],
+          pr['head']['ref']
+    ])
+print('--- done')
+print('--- perhaps you want to: make && ctest -j12 && git push ci %s' % branch)
