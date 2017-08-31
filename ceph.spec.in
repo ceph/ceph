@@ -1639,6 +1639,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph-kvstore-tool
 %{_bindir}/ceph-debugpack
 %{_mandir}/man8/ceph-debugpack.8*
+%{_mandir}/man8/ceph-kvstore-tool.8*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
 %endif
