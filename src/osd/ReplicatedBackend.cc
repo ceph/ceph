@@ -1410,10 +1410,7 @@ void ReplicatedBackend::prepare_pull(
   ObcLockManager lock_manager;
 
   if (soid.is_snap()) {
-    assert(!get_parent()->get_local_missing().is_missing(
-	     soid.get_head()) ||
-	   !get_parent()->get_local_missing().is_missing(
-	     soid.get_snapdir()));
+    assert(!get_parent()->get_local_missing().is_missing(soid.get_head()));
     assert(headctx);
     // check snapset
     SnapSetContext *ssc = headctx->ssc;
