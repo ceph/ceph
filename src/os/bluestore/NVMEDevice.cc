@@ -983,10 +983,41 @@ void NVMEDevice::aio_submit(IOContext *ioc)
     ioc->num_pending -= pending;
     assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
     // Only need to push the first entry
-  if(queue_id == -1)
-    queue_id = ceph_gettid();
-    driver->get_queue(queue_id)->queue_task(t, pending);
+    if(queue_id == -1)
+      queue_id = ceph_gettid();
     ioc->nvme_task_first = ioc->nvme_task_last = nullptr;
+    driver->get_queue(queue_id)->queue_task(t, pending);
+  }
+}
+
+static void write_split(
+    NVMEDevice *dev,
+    uint64_t off,
+    bufferlist &bl,
+    IOContext *ioc)
+{
+  uint64_t remain_len = bl.length(), begin = 0, write_size;
+  Task *t, *first, *last;
+  // This value may need to be got from configuration later.
+  uint64_t split_size = 131072; // 128KB.
+
+  while (remain_len > 0) {
+    write_size = std::min(remain_len, split_size);
+    t = new Task(dev, IOCommand::WRITE_COMMAND, off + begin, write_size);
+    // TODO: if upper layer alloc memory with known physical address,
+    // we can reduce this copy
+    bl.splice(0, write_size, &t->bl);
+    remain_len -= write_size;
+    t->ctx = ioc;
+    first = static_cast<Task*>(ioc->nvme_task_first);
+    last = static_cast<Task*>(ioc->nvme_task_last);
+    if (last)
+      last->next = t;
+    if (!first)
+      ioc->nvme_task_first = t;
+    ioc->nvme_task_last = t;
+    ++ioc->num_pending;
+    begin += write_size;
   }
 }
 
@@ -1001,22 +1032,7 @@ int NVMEDevice::aio_write(
            << " buffered " << buffered << dendl;
   assert(is_valid_io(off, len));
 
-  Task *t = new Task(this, IOCommand::WRITE_COMMAND, off, len);
-
-  // TODO: if upper layer alloc memory with known physical address,
-  // we can reduce this copy
-  t->bl = std::move(bl);
-
-  t->ctx = ioc;
-  Task *first = static_cast<Task*>(ioc->nvme_task_first);
-  Task *last = static_cast<Task*>(ioc->nvme_task_last);
-  if (last)
-    last->next = t;
-  if (!first)
-    ioc->nvme_task_first = t;
-  ioc->nvme_task_last = t;
-  ++ioc->num_pending;
-
+  write_split(this, off, bl, ioc);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
 
   return 0;
@@ -1034,18 +1050,9 @@ int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered)
   assert(off + len <= size);
 
   IOContext ioc(cct, NULL);
-  Task *t = new Task(this, IOCommand::WRITE_COMMAND, off, len);
-
-  // TODO: if upper layer alloc memory with known physical address,
-  // we can reduce this copy
-  t->bl = std::move(bl);
-  t->ctx = &ioc;
-  if(queue_id == -1)
-    queue_id = ceph_gettid();
-  ++ioc.num_running;
-  driver->get_queue(queue_id)->queue_task(t);
-
+  write_split(this, off, bl, &ioc);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
+  aio_submit(&ioc);
   ioc.aio_wait();
   return 0;
 }
