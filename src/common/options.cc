@@ -6099,6 +6099,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default(1073741824)
     .set_description(""),
 
+    Option("rbd_persistent_cache_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("readonly")
+    .set_description(""),
+
     Option("rbd_persistent_cache_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/tmp")
     .set_description(""),
