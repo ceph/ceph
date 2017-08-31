@@ -12,11 +12,6 @@
 namespace librbd {
 namespace cache {
  
-struct Entry : public LRUObject {
-  uint64_t on_disk_id;
-  Entry() : on_disk_id(0) {}
-};
-
 struct Block {
   std::mutex lock;
 

@@ -371,7 +371,7 @@ void RemoveRequest<I>::handle_trim_image(int r) {
   } else {
     remove_child();
   }
-  return nullptr;
+  return;
 }
 
 template<typename I>

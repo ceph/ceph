@@ -25,7 +25,7 @@ namespace CacheStore {
 SyncFile::SyncFile(CephContext *cct, ContextWQ &work_queue,
                     const std::string &name)
   : cct(cct), m_work_queue(work_queue){
-  m_name = cct->_conf->rbd_persistent_cache_path + "/rbd_cache." + name;
+  m_name = cct->_conf->get_val<std::string>("rbd_persistent_cache_path") + "/rbd_cache." + name;
 }
 
 SyncFile::~SyncFile() {

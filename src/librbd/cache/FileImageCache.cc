@@ -49,7 +49,7 @@ public:
     : ThreadPool(cct, "librbd::cache::thread_pool", "tp_librbd_cache", 32,
                  "pcache_threads"),
       pcache_op_work_queue(new ContextWQ("librbd::pcache_op_work_queue",
-                                  cct->_conf->rbd_op_thread_timeout,
+                                  cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
                                   this)) {
     start();
   }
@@ -732,8 +732,8 @@ void FileImageCache<I>::aio_compare_and_write(Extents &&image_extents,
                                                      int fadvise_flags,
                                                      Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "image_extents=" << image_extents << ", "
-                 << "on_finish=" << on_finish << dendl;
+  //ldout(cct, 20) << "image_extents=" << image_extents << ", "
+  //               << "on_finish=" << on_finish << dendl;
 
   m_image_writeback.aio_compare_and_write(
     std::move(image_extents), std::move(cmp_bl), std::move(bl), mismatch_offset,

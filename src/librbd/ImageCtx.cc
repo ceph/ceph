@@ -1094,7 +1094,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(blkin_trace_all, bool);
     ASSIGN_OPTION(qos_iops_limit, uint64_t);
-    ASSIGN_OPTION(persistent_cache_enabled, true);
+    ASSIGN_OPTION(persistent_cache_enabled, bool);
     if (thread_safe) {
       ASSIGN_OPTION(journal_pool, std::string);
     }

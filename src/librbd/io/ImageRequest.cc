@@ -76,17 +76,6 @@ struct C_FlushJournalCommit : public Context {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << "C_FlushJournalCommit: journal committed" << dendl;
 
-    if (r >= 0) {
-      size_t length = 0;
-      for (auto &image_extent : m_image_extents) {
-        length += image_extent.second;
-      }
-      assert(length == m_bl.length());
-
-      m_completion->destriper.add_partial_sparse_result(
-          cct, m_bl, {{0, length}}, 0, {{0, length}});
-      r = length;
-    }
     aio_comp->complete_request(r);
   }
 };

@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_CACHE_TYPES
 
 #include "include/int_types.h"
+#include "include/lru.h"
 #include <vector>
 
 namespace librbd {
@@ -14,6 +15,15 @@ namespace cache {
 #define LOCATE_IN_BASE_CACHE 0X01
 #define LOCATE_IN_CACHE      0X02
 #define NOT_IN_CACHE         0X03
+
+class Entry : public LRUObject {
+public:
+  uint64_t on_disk_id;
+  Entry() : on_disk_id(0) {}
+  Entry(const Entry& other) {
+    on_disk_id = other.on_disk_id;
+  }
+};
 
 enum PolicyMapResult {
   POLICY_MAP_RESULT_HIT,    // block is already in cache

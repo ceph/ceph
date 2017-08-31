@@ -12,13 +12,13 @@ namespace meta_store {
 
 void Header::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  ::encode(journal_sequence, bl);
+  ceph::encode(journal_sequence, bl);
   ENCODE_FINISH(bl);
 }
 
 void Header::decode(bufferlist::iterator& it) {
   DECODE_START(1, it);
-  ::decode(journal_sequence, it);
+  ceph::decode(journal_sequence, it);
   DECODE_FINISH(it);
 }
 
@@ -36,15 +36,15 @@ namespace journal_store {
 
 void Event::encode_fields(bufferlist& bl) const {
   uint8_t *fields = reinterpret_cast<uint8_t*>(&fields);
-  ::encode(*fields, bl);
+  ceph::encode(*fields, bl);
 }
 
 void Event::encode(bufferlist& bl) const {
   size_t start_offset = bl.end().get_off();
   ENCODE_START(1, 1, bl);
-  ::encode(tid, bl);
-  ::encode(block, bl);
-  ::encode(crc, bl);
+  ceph::encode(tid, bl);
+  ceph::encode(block, bl);
+  ceph::encode(crc, bl);
   assert(bl.length() - start_offset == ENCODED_FIELDS_OFFSET);
   encode_fields(bl);
   ENCODE_FINISH(bl);
@@ -53,11 +53,11 @@ void Event::encode(bufferlist& bl) const {
 
 void Event::decode(bufferlist::iterator& it) {
   DECODE_START(1, it);
-  ::decode(tid, it);
-  ::decode(block, it);
-  ::decode(crc, it);
+  ceph::decode(tid, it);
+  ceph::decode(block, it);
+  ceph::decode(crc, it);
   uint8_t byte_fields;
-  ::decode(byte_fields, it);
+  ceph::decode(byte_fields, it);
   reinterpret_cast<uint8_t&>(fields) = byte_fields;
   DECODE_FINISH(it);
 }
@@ -72,7 +72,7 @@ void Event::generate_test_instances(std::list<Event *> &o) {
 
 void EventBlock::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  ::encode(sequence, bl);
+  ceph::encode(sequence, bl);
 
   // TODO
   ENCODE_FINISH(bl);
@@ -80,7 +80,7 @@ void EventBlock::encode(bufferlist& bl) const {
 
 void EventBlock::decode(bufferlist::iterator& it) {
   DECODE_START(1, it);
-  ::decode(sequence, it);
+  ceph::decode(sequence, it);
 
   // TODO
   DECODE_FINISH(it);

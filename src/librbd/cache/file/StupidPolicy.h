@@ -32,11 +32,12 @@ private:
   BlockMap* m_block_map;
   uint64_t m_block_count;
 
-  LRUList m_free_lru;
-  LRUList m_clean_lru;
+  LRU m_free_lru;
+  LRU m_clean_lru;
 
 public:
   StupidPolicy(ImageCtxT &image_ctx, uint64_t ssd_cache_size);
+  ~StupidPolicy();
 
   virtual void set_block_count(uint64_t block_count);
 

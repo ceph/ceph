@@ -314,9 +314,9 @@ void CloneRequest<I>::handle_refresh(int r) {
     m_p_imctx->snap_lock.put_read();
   }
 
-  if (m_imctx->image_cache && m_imctx->parent) {
-    m_imctx->image_cache->set_parent();
-  }
+  //if (m_imctx->image_cache && m_imctx->parent) {
+  //  m_imctx->image_cache->set_parent();
+  //}
 
   if (r < 0 || !snap_protected) {
     m_r_saved = -EINVAL;

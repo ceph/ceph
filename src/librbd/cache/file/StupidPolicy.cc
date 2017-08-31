@@ -25,9 +25,24 @@ StupidPolicy<I>::StupidPolicy(I &image_ctx, uint64_t ssd_cache_size)
   uint64_t block_id = 0;
   for (auto &entry : m_entries) {
     entry.on_disk_id = block_id++;
-    m_free_lru.insert_tail(&entry);
+    m_free_lru.lru_insert_top(&entry);
   }
   m_block_map = new BlockMap(m_block_count);
+}
+
+template <typename I>
+StupidPolicy<I>::~StupidPolicy() {
+  for(;;) {
+    auto entry = m_free_lru.lru_expire();
+    if(!entry)
+      break;
+  }
+  for(;;) {
+    auto entry = m_clean_lru.lru_expire();
+    if(!entry)
+      break;
+  }
+
 }
 
 template <typename I>
@@ -55,8 +70,8 @@ int StupidPolicy<I>::invalidate(uint64_t block) {
   block_info->status = NOT_IN_CACHE;
 
   if (entry != nullptr) {
-    m_clean_lru.remove(entry);
-    m_free_lru.insert_tail(entry);
+    m_clean_lru.lru_remove(entry);
+    m_free_lru.lru_insert_bot(entry);
   }
 
   return 0;
@@ -88,8 +103,8 @@ int StupidPolicy<I>::map(IOType io_type, uint64_t block, bool partial_block,
       switch(block_info->status) {
         case LOCATE_IN_CACHE:
           *policy_map_result = POLICY_MAP_RESULT_HIT;
-          m_clean_lru.remove(entry);
-          m_free_lru.insert_tail(entry);
+          m_clean_lru.lru_remove(entry);
+          m_free_lru.lru_insert_bot(entry);
           block_info->status = NOT_IN_CACHE;
           break;
         case LOCATE_IN_BASE_CACHE:
@@ -109,8 +124,8 @@ int StupidPolicy<I>::map(IOType io_type, uint64_t block, bool partial_block,
         entry = block_info->entry;
         assert(entry != nullptr);
         *policy_map_result = POLICY_MAP_RESULT_HIT;
-        m_clean_lru.remove(entry);
-        m_clean_lru.insert_head(entry);
+        m_clean_lru.lru_remove(entry);
+        m_clean_lru.lru_insert_top(entry);
         ldout(cct, 1) << "cache hit, block: " << block << dendl;
         break;
       case LOCATE_IN_BASE_CACHE:
@@ -119,12 +134,12 @@ int StupidPolicy<I>::map(IOType io_type, uint64_t block, bool partial_block,
         break;
       case NOT_IN_CACHE:
       default:
-        entry = reinterpret_cast<Entry*>(m_free_lru.get_head());
+        entry = reinterpret_cast<Entry*>(m_free_lru.lru_expire());
         if (entry != nullptr) {
           ldout(cct, 1) << "cache miss -- new entry, block: " << block << dendl;
           *policy_map_result = POLICY_MAP_RESULT_NEW;
-          m_free_lru.remove(entry);
-          m_clean_lru.insert_head(entry);
+          m_free_lru.lru_remove(entry);
+          m_clean_lru.lru_insert_top(entry);
           block_info->entry = entry;
           block_info->status = LOCATE_IN_CACHE;
         } else {
@@ -200,8 +215,8 @@ void StupidPolicy<I>::set_loc(uint32_t *src) {
         on_disk_id = (src[block_id] & MAX_BLOCK_ID);
         entry = &m_entries[on_disk_id];
         assert(entry != nullptr);
-        m_free_lru.remove(entry);
-        m_clean_lru.insert_head(entry);
+        m_free_lru.lru_remove(entry);
+        m_clean_lru.lru_insert_top(entry);
         block_it->second->entry = entry;
         block_it->second->status = LOCATE_IN_CACHE;
         break;
