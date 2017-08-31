@@ -9987,6 +9987,14 @@ int BlueStore::_do_alloc_write(
         csum_length += suggested_boff - b_off;
         b_off = suggested_boff;
       }
+      if (csum != Checksummer::CSUM_NONE) {
+        dout(20) << __func__ << " initialize csum setting for new blob " << *b
+                 << " csum_type " << Checksummer::get_csum_type_string(csum)
+                 << " csum_order " << csum_order
+                 << " csum_length 0x" << std::hex << csum_length << std::dec
+                 << dendl;
+        dblob.init_csum(csum, csum_order, csum_length);
+      }
     }
 
     AllocExtentVector extents;
@@ -10004,18 +10012,11 @@ int BlueStore::_do_alloc_write(
     }
     dblob.allocated(P2ALIGN(b_off, min_alloc_size), final_length, extents);
 
-    dout(20) << __func__ << " blob " << *b
-	     << " csum_type " << Checksummer::get_csum_type_string(csum)
-	     << " csum_order " << csum_order
-	     << " csum_length 0x" << std::hex << csum_length << std::dec
-	     << dendl;
-
-    if (csum != Checksummer::CSUM_NONE) {
-      if (!dblob.has_csum()) {
-	dblob.init_csum(csum, csum_order, csum_length);
-      }
+    dout(20) << __func__ << " blob " << *b << dendl;
+    if (dblob.has_csum()) {
       dblob.calc_csum(b_off, *l);
     }
+
     if (wi.mark_unused) {
       auto b_end = b_off + wi.bl.length();
       if (b_off) {
