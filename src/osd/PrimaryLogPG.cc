@@ -1238,10 +1238,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	    break;
 	  }
 
-	  // skip snapdir objects
-	  if (candidate.snap == CEPH_SNAPDIR)
-	    continue;
-
 	  if (candidate.snap != CEPH_NOSNAP)
 	    continue;
 
@@ -1396,10 +1392,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	    next = candidate;
 	    break;
 	  }
-
-	  // skip snapdir objects
-	  if (candidate.snap == CEPH_SNAPDIR)
-	    continue;
 
 	  if (candidate.snap != CEPH_NOSNAP)
 	    continue;
