@@ -37,7 +37,7 @@ namespace librbd {
 
   struct ImageCtx;
   class AioCompletion;
-  class AioImageRequestWQ;
+  template <typename> class AioImageRequestWQ;
   class AsyncOperation;
   class CopyupRequest;
   template <typename> class ExclusiveLock;
@@ -145,7 +145,7 @@ namespace librbd {
 
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
-    AioImageRequestWQ *aio_work_queue;
+    AioImageRequestWQ<ImageCtx> *aio_work_queue;
     xlist<AioCompletion*> completed_reqs;
     EventSocket event_socket;
 

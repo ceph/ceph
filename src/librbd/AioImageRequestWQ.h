@@ -16,9 +16,11 @@ class AioCompletion;
 template <typename> class AioImageRequest;
 class ImageCtx;
 
-class AioImageRequestWQ : protected ThreadPool::PointerWQ<AioImageRequest<ImageCtx> > {
+template <typename ImageCtxT = librbd::ImageCtx>
+class AioImageRequestWQ
+  : protected ThreadPool::PointerWQ<AioImageRequest<ImageCtxT> > {
 public:
-  AioImageRequestWQ(ImageCtx *image_ctx, const string &name, time_t ti,
+  AioImageRequestWQ(ImageCtxT *image_ctx, const string &name, time_t ti,
                     ThreadPool *tp);
 
   ssize_t read(uint64_t off, uint64_t len, char *buf, int op_flags);
@@ -33,8 +35,8 @@ public:
                    bool native_async=true);
   void aio_flush(AioCompletion *c, bool native_async=true);
 
-  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::drain;
-  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::empty;
+  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtxT> >::drain;
+  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtxT> >::empty;
 
   void shut_down(Context *on_shutdown);
 
@@ -55,17 +57,17 @@ public:
 
 protected:
   virtual void *_void_dequeue();
-  virtual void process(AioImageRequest<ImageCtx> *req);
+  virtual void process(AioImageRequest<ImageCtxT> *req);
 
 private:
   typedef std::list<Context *> Contexts;
 
   struct C_RefreshFinish : public Context {
     AioImageRequestWQ *aio_work_queue;
-    AioImageRequest<ImageCtx> *aio_image_request;
+    AioImageRequest<ImageCtxT> *aio_image_request;
 
     C_RefreshFinish(AioImageRequestWQ *aio_work_queue,
-                    AioImageRequest<ImageCtx> *aio_image_request)
+                    AioImageRequest<ImageCtxT> *aio_image_request)
       : aio_work_queue(aio_work_queue), aio_image_request(aio_image_request) {
     }
     virtual void finish(int r) override {
@@ -84,7 +86,7 @@ private:
     }
   };
 
-  ImageCtx &m_image_ctx;
+  ImageCtxT &m_image_ctx;
   mutable RWLock m_lock;
   Contexts m_write_blocker_contexts;
   uint32_t m_write_blockers;
@@ -104,18 +106,20 @@ private:
     return (m_queued_writes.read() == 0);
   }
 
-  void finish_queued_op(AioImageRequest<ImageCtx> *req);
+  void finish_queued_op(AioImageRequest<ImageCtxT> *req);
   void finish_in_progress_write();
 
   int start_in_flight_op(AioCompletion *c);
   void finish_in_flight_op();
 
-  void queue(AioImageRequest<ImageCtx> *req);
+  void queue(AioImageRequest<ImageCtxT> *req);
 
-  void handle_refreshed(int r, AioImageRequest<ImageCtx> *req);
+  void handle_refreshed(int r, AioImageRequest<ImageCtxT> *req);
   void handle_blocked_writes(int r);
 };
 
 } // namespace librbd
+
+extern template class librbd::AioImageRequestWQ<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_AIO_IMAGE_REQUEST_WQ_H
