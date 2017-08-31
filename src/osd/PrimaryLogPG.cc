@@ -11536,12 +11536,6 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 	continue;
       }
 
-      if (soid.is_snap() && pg_log.get_missing().is_missing(soid.get_snapdir())) {
-	dout(10) << __func__ << ": " << soid.get_snapdir()
-		 << " still missing on primary" << dendl;
-	continue;
-      }
-
       if (pg_log.get_missing().is_missing(soid)) {
 	dout(10) << __func__ << ": " << soid << " still missing on primary" << dendl;
 	continue;
