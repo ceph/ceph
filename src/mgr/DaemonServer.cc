@@ -74,10 +74,13 @@ DaemonServer::DaemonServer(MonClient *monc_,
                       g_conf->auth_cluster_required :
                       g_conf->auth_supported),
       lock("DaemonServer")
-{}
+{
+  g_conf->add_observer(this);
+}
 
 DaemonServer::~DaemonServer() {
   delete msgr;
+  g_conf->remove_observer(this);
 }
 
 int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
@@ -232,6 +235,11 @@ bool DaemonServer::ms_handle_reset(Connection *con)
     dout(10) << "unregistering osd." << session->osd_id
 	     << "  session " << session << " con " << con << dendl;
     osd_cons[session->osd_id].erase(con);
+
+    auto iter = daemon_connections.find(con);
+    if (iter != daemon_connections.end()) {
+      daemon_connections.erase(iter);
+    }
   }
   return false;
 }
@@ -315,10 +323,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 
   dout(4) << "from " << m->get_connection() << "  " << key << dendl;
 
-  auto configure = new MMgrConfigure();
-  configure->stats_period = g_conf->mgr_stats_period;
-  configure->stats_threshold = g_conf->get_val<int64_t>("mgr_stats_threshold");
-  m->get_connection()->send_message(configure);
+  _send_configure(m->get_connection());
 
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
@@ -357,6 +362,15 @@ bool DaemonServer::handle_open(MMgrOpen *m)
       d->metadata = m->daemon_metadata;
       pending_service_map_dirty = pending_service_map.epoch;
     }
+  }
+
+  if (m->get_connection()->get_peer_type() != entity_name_t::TYPE_CLIENT &&
+      m->service_name.empty())
+  {
+    // Store in set of the daemon/service connections, i.e. those
+    // connections that require an update in the event of stats
+    // configuration changes.
+    daemon_connections.insert(m->get_connection());
   }
 
   m->put();
@@ -702,6 +716,19 @@ bool DaemonServer::handle_command(MCommand *m)
     }
     f->close_section();
     f->flush(cmdctx->odata);
+    cmdctx->reply(0, ss);
+    return true;
+  }
+
+  if (prefix == "config set") {
+    std::string key;
+    std::string val;
+    cmd_getval(cct, cmdctx->cmdmap, "key", key);
+    cmd_getval(cct, cmdctx->cmdmap, "value", val);
+    r = cct->_conf->set_val(key, val, true, &ss);
+    if (r == 0) {
+      cct->_conf->apply_changes(nullptr);
+    }
     cmdctx->reply(0, ss);
     return true;
   }
@@ -1405,3 +1432,48 @@ void DaemonServer::got_service_map()
     daemon_state.cull(p.first, names);
   }
 }
+
+
+const char** DaemonServer::get_tracked_conf_keys() const
+{
+  static const char *KEYS[] = {
+    "mgr_stats_threshold",
+    "mgr_stats_period",
+    nullptr
+  };
+
+  return KEYS;
+}
+
+void DaemonServer::handle_conf_change(const struct md_config_t *conf,
+                                              const std::set <std::string> &changed)
+{
+  dout(4) << "ohai" << dendl;
+  // We may be called within lock (via MCommand `config set`) or outwith the
+  // lock (via admin socket `config set`), so handle either case.
+  const bool initially_locked = lock.is_locked_by_me();
+  if (!initially_locked) {
+    lock.Lock();
+  }
+
+  if (changed.count("mgr_stats_threshold") || changed.count("mgr_stats_period")) {
+    dout(4) << "Updating stats threshold/period on "
+            << daemon_connections.size() << " clients" << dendl;
+    // Send a fresh MMgrConfigure to all clients, so that they can follow
+    // the new policy for transmitting stats
+    for (auto &c : daemon_connections) {
+      _send_configure(c);
+    }
+  }
+}
+
+void DaemonServer::_send_configure(ConnectionRef c)
+{
+  assert(lock.is_locked_by_me());
+
+  auto configure = new MMgrConfigure();
+  configure->stats_period = g_conf->get_val<int64_t>("mgr_stats_period");
+  configure->stats_threshold = g_conf->get_val<int64_t>("mgr_stats_threshold");
+  c->send_message(configure);
+}
+
