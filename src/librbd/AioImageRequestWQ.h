@@ -24,7 +24,7 @@ enum AioDirection {
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class AioImageRequestWQ
-  : protected ThreadPool::PointerWQ<AioImageRequest<ImageCtxT> > {
+  : public ThreadPool::PointerWQ<AioImageRequest<ImageCtxT> > {
 public:
   AioImageRequestWQ(ImageCtxT *image_ctx, const string &name, time_t ti,
                     ThreadPool *tp);

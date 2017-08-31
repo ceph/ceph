@@ -140,7 +140,7 @@ template <typename I>
 void AioImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
 				    char *buf, bufferlist *pbl, int op_flags,
 				    bool native_async) {
-  c->init_time(&m_image_ctx, librbd::AIO_TYPE_READ);
+  c->init_time(util::get_image_ctx(&m_image_ctx), librbd::AIO_TYPE_READ);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "aio_read: ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", "
@@ -172,7 +172,7 @@ template <typename I>
 void AioImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
 				     const char *buf, int op_flags,
 				     bool native_async) {
-  c->init_time(&m_image_ctx, librbd::AIO_TYPE_WRITE);
+  c->init_time(util::get_image_ctx(&m_image_ctx), librbd::AIO_TYPE_WRITE);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "aio_write: ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", "
@@ -200,7 +200,7 @@ void AioImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t le
 template <typename I>
 void AioImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
 				       uint64_t len, bool native_async) {
-  c->init_time(&m_image_ctx, librbd::AIO_TYPE_DISCARD);
+  c->init_time(util::get_image_ctx(&m_image_ctx), librbd::AIO_TYPE_DISCARD);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "aio_discard: ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", len=" << len
@@ -227,7 +227,7 @@ void AioImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
 
 template <typename I>
 void AioImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
-  c->init_time(&m_image_ctx, librbd::AIO_TYPE_FLUSH);
+  c->init_time(util::get_image_ctx(&m_image_ctx), librbd::AIO_TYPE_FLUSH);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "aio_flush: ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << dendl;
@@ -481,6 +481,7 @@ int AioImageRequestWQ<I>::start_in_flight_io(AioCompletion *c) {
     CephContext *cct = m_image_ctx.cct;
     lderr(cct) << "IO received on closed image" << dendl;
 
+    c->get();
     c->fail(-ESHUTDOWN);
     return false;
   }
