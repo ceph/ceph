@@ -238,7 +238,7 @@ OSDService::OSDService(OSD *osd) :
   promote_max_objects(0),
   promote_max_bytes(0),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
-  objecter_finisher(osd->client_messenger->cct),
+  m_objecter_finishers(cct->_conf->osd_objecter_finishers),
   watch_lock("OSDService::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
@@ -281,11 +281,23 @@ OSDService::OSDService(OSD *osd) :
 #endif
 {
   objecter->init();
+
+  for (int i = 0; i < m_objecter_finishers; i++) {
+    ostringstream str;
+    str << "objecter-finisher-" << i;
+    Finisher *fin = new Finisher(osd->client_messenger->cct, str.str(), "finisher");
+    objecter_finishers.push_back(fin);
+  }
 }
 
 OSDService::~OSDService()
 {
   delete objecter;
+
+  for (auto f : objecter_finishers) {
+    delete f;
+    f = NULL;
+  }
 }
 
 
@@ -517,8 +529,10 @@ void OSDService::shutdown()
   }
 
   objecter->shutdown();
-  objecter_finisher.wait_for_empty();
-  objecter_finisher.stop();
+  for (auto f : objecter_finishers) {
+    f->wait_for_empty();
+    f->stop();
+  }
 
   {
     Mutex::Locker l(recovery_request_lock);
@@ -542,7 +556,9 @@ void OSDService::shutdown()
 void OSDService::init()
 {
   reserver_finisher.start();
-  objecter_finisher.start();
+  for (auto f : objecter_finishers) {
+    f->start();
+  }
   objecter->set_client_incarnation(0);
 
   // deprioritize objecter in daemonperf output

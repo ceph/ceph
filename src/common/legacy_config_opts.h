@@ -663,6 +663,7 @@ OPTION(osd_tier_default_cache_min_read_recency_for_promote, OPT_INT) // number o
 OPTION(osd_tier_default_cache_min_write_recency_for_promote, OPT_INT) // number of recent HitSets the object must appear in to be promoted (on write)
 OPTION(osd_tier_default_cache_hit_set_grade_decay_rate, OPT_INT)
 OPTION(osd_tier_default_cache_hit_set_search_last_n, OPT_INT)
+OPTION(osd_objecter_finishers, OPT_INT)
 
 OPTION(osd_map_dedup, OPT_BOOL)
 OPTION(osd_map_max_advance, OPT_INT) // make this < cache_size!
