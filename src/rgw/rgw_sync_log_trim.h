@@ -38,6 +38,12 @@ struct BucketTrimConfig {
   uint32_t trim_interval_sec{0};
   /// maximum number of buckets to track with BucketChangeObserver
   size_t counter_size{0};
+  /// maximum number of buckets to process each trim interval
+  uint32_t buckets_per_interval{0};
+  /// maximum number of buckets to process in parallel
+  uint32_t concurrent_buckets{0};
+  /// timeout in ms for bucket trim notify replies
+  uint64_t notify_timeout_ms{0};
 };
 
 /// fill out the BucketTrimConfig from the ceph context
