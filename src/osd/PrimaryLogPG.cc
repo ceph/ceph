@@ -3581,6 +3581,7 @@ int PrimaryLogPG::trim_object(
   bool first, const hobject_t &coid, PrimaryLogPG::OpContextUPtr *ctxp)
 {
   *ctxp = NULL;
+
   // load clone info
   bufferlist bl;
   ObjectContextRef obc = get_object_context(coid, false, NULL);
@@ -3590,14 +3591,11 @@ int PrimaryLogPG::trim_object(
     return -ENOENT;
   }
 
-  hobject_t snapoid(
-    coid.oid, coid.get_key(),
-    obc->ssc->snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.get_hash(),
-    info.pgid.pool(), coid.get_namespace());
-  ObjectContextRef snapset_obc = get_object_context(snapoid, false);
-  if (!snapset_obc) {
+  hobject_t head_oid = coid.get_head();
+  ObjectContextRef head_obc = get_object_context(head_oid, false);
+  if (!head_obc) {
     osd->clog->error() << __func__ << ": Can not trim " << coid
-      << " repair needed, no snapset obc for " << snapoid;
+      << " repair needed, no snapset obc for " << head_oid;
     return -ENOENT;
   }
 
@@ -3651,7 +3649,7 @@ int PrimaryLogPG::trim_object(
   }
 
   OpContextUPtr ctx = simple_opc_create(obc);
-  ctx->snapset_obc = snapset_obc;
+  ctx->snapset_obc = head_obc;
 
   if (!ctx->lock_manager.get_snaptrimmer_write(
 	coid,
@@ -3663,11 +3661,11 @@ int PrimaryLogPG::trim_object(
   }
 
   if (!ctx->lock_manager.get_snaptrimmer_write(
-	snapoid,
-	snapset_obc,
+	head_oid,
+	head_obc,
 	first)) {
     close_op_ctx(ctx.release());
-    dout(10) << __func__ << ": Unable to get a wlock on " << snapoid << dendl;
+    dout(10) << __func__ << ": Unable to get a wlock on " << head_oid << dendl;
     return -ENOLCK;
   }
 
@@ -3780,21 +3778,21 @@ int PrimaryLogPG::trim_object(
 
   // save head snapset
   dout(10) << coid << " new snapset " << snapset << " on "
-	   << snapset_obc->obs.oi << dendl;
+	   << head_obc->obs.oi << dendl;
   if (snapset.clones.empty() &&
       (!snapset.head_exists ||
-       (snapset_obc->obs.oi.is_whiteout() &&
-	!(snapset_obc->obs.oi.is_dirty() && pool.info.is_tier()) &&
-	!snapset_obc->obs.oi.is_cache_pinned()))) {
+       (head_obc->obs.oi.is_whiteout() &&
+	!(head_obc->obs.oi.is_dirty() && pool.info.is_tier()) &&
+	!head_obc->obs.oi.is_cache_pinned()))) {
     // NOTE: this arguably constitutes minor interference with the
     // tiering agent if this is a cache tier since a snap trim event
     // is effectively evicting a whiteout we might otherwise want to
     // keep around.
-    dout(10) << coid << " removing " << snapoid << dendl;
+    dout(10) << coid << " removing " << head_oid << dendl;
     ctx->log.push_back(
       pg_log_entry_t(
 	pg_log_entry_t::DELETE,
-	snapoid,
+	head_oid,
 	ctx->at_version,
 	ctx->snapset_obc->obs.oi.version,
 	0,
@@ -3802,7 +3800,7 @@ int PrimaryLogPG::trim_object(
 	ctx->mtime,
 	0)
       );
-    if (snapoid.is_head()) {
+    if (head_oid.is_head()) {
       derr << "removing snap head" << dendl;
       object_info_t& oi = ctx->snapset_obc->obs.oi;
       ctx->delta_stats.num_objects--;
@@ -3820,17 +3818,17 @@ int PrimaryLogPG::trim_object(
       }
     }
     ctx->snapset_obc->obs.exists = false;
-    ctx->snapset_obc->obs.oi = object_info_t(snapoid);
-    t->remove(snapoid);
+    ctx->snapset_obc->obs.oi = object_info_t(head_oid);
+    t->remove(head_oid);
   } else {
-    dout(10) << coid << " filtering snapset on " << snapoid << dendl;
+    dout(10) << coid << " filtering snapset on " << head_oid << dendl;
     snapset.filter(pool.info);
-    dout(10) << coid << " writing updated snapset on " << snapoid
+    dout(10) << coid << " writing updated snapset on " << head_oid
 	     << ", snapset is " << snapset << dendl;
     ctx->log.push_back(
       pg_log_entry_t(
 	pg_log_entry_t::MODIFY,
-	snapoid,
+	head_oid,
 	ctx->at_version,
 	ctx->snapset_obc->obs.oi.version,
 	0,
@@ -3852,7 +3850,7 @@ int PrimaryLogPG::trim_object(
     ::encode(ctx->snapset_obc->obs.oi, bl,
 	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
     attrs[OI_ATTR].claim(bl);
-    t->setattrs(snapoid, attrs);
+    t->setattrs(head_oid, attrs);
   }
 
   *ctxp = std::move(ctx);
