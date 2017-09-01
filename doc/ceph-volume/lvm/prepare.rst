@@ -89,6 +89,46 @@ mounted, re-using all the pieces of information from the initial steps::
       --osd-uuid <osd uuid> --keyring /var/lib/ceph/osd/<cluster name>-<osd id>/keyring \
       --setuser ceph --setgroup ceph
 
+
+.. _ceph-volume-lvm-partitions:
+
+Partitioning
+------------
+``ceph-volume lvm`` does not currently create partitions from a whole device.
+If using device partitions the only requirement is that they contain the
+``PARTUUID`` and that it is discoverable by ``blkid``. Both ``fdisk`` and
+``parted`` will create that automatically for a new partition.
+
+For example, using a new, unformatted drive (``/dev/sdd`` in this case) we can
+use ``parted`` to create a new partition. First we list the device
+information::
+
+    $ parted --script /dev/sdd print
+    Model: VBOX HARDDISK (scsi)
+    Disk /dev/sdd: 11.5GB
+    Sector size (logical/physical): 512B/512B
+    Disk Flags:
+
+This device is not even labeled yet, so we can use ``parted`` to create
+a ``gpt`` label before we create a partition, and verify again with ``parted
+print``::
+
+    $ parted --script /dev/sdd mklabel gpt
+    $ parted --script /dev/sdd print
+    Model: VBOX HARDDISK (scsi)
+    Disk /dev/sdd: 11.5GB
+    Sector size (logical/physical): 512B/512B
+    Partition Table: gpt
+    Disk Flags:
+
+Now lets create a single partition, and verify later if ``blkid`` can find
+a ``PARTUUID`` that is needed by ``ceph-volume``::
+
+    $ parted --script /dev/sdd mkpart primary 1 100%
+    $ blkid /dev/sdd1
+    /dev/sdd1: PARTLABEL="primary" PARTUUID="16399d72-1e1f-467d-96ee-6fe371a7d0d4"
+
+
 .. _ceph-volume-lvm-existing-osds:
 
 Existing OSDs
