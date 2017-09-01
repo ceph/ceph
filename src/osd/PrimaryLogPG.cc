@@ -5421,10 +5421,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ssc = ctx->obc->ssc = get_snapset_context(soid, false);
         }
         assert(ssc);
+	dout(20) << " snapset " << ssc->snapset << dendl;
 
         int clonecount = ssc->snapset.clones.size();
-        if (ssc->snapset.head_exists)
-          clonecount++;
+	clonecount++;  // for head
         resp.clones.reserve(clonecount);
         for (auto clone_iter = ssc->snapset.clones.begin();
 	     clone_iter != ssc->snapset.clones.end(); ++clone_iter) {
@@ -5482,8 +5482,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0) {
 	  break;
 	}	  
-        if (ssc->snapset.head_exists &&
-	    !ctx->obc->obs.oi.is_whiteout()) {
+        if (!ctx->obc->obs.oi.is_whiteout()) {
           assert(obs.exists);
           clone_info ci;
           ci.cloneid = CEPH_NOSNAP;
