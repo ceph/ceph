@@ -490,7 +490,11 @@ class BucketTrimCR : public RGWCoroutine {
   bufferlist notify_replies;
   BucketChangeCounter counter;
   std::vector<std::string> buckets; //< buckets selected for trim
+  BucketTrimStatus status;
+  RGWObjVersionTracker objv; //< version tracker for trim status object
+  std::string last_cold_marker; //< position for next trim marker
 
+  static const std::string section; //< metadata section for bucket instances
  public:
   BucketTrimCR(RGWRados *store, const BucketTrimConfig& config,
                const rgw_raw_obj& obj)
@@ -500,6 +504,8 @@ class BucketTrimCR : public RGWCoroutine {
 
   int operate();
 };
+
+const std::string BucketTrimCR::section{"bucket.instance"};
 
 int BucketTrimCR::operate()
 {
@@ -531,11 +537,55 @@ int BucketTrimCR::operate()
       }
       buckets.reserve(config.buckets_per_interval);
 
-      const int max_count = config.buckets_per_interval;
+      const int max_count = config.buckets_per_interval -
+                            config.min_cold_buckets_per_interval;
       counter.get_highest(max_count,
         [this] (const std::string& bucket, int count) {
           buckets.push_back(bucket);
         });
+    }
+
+    if (buckets.size() < config.buckets_per_interval) {
+      // read BucketTrimStatus for marker position
+      set_status("reading trim status");
+      using ReadStatus = RGWSimpleRadosReadCR<BucketTrimStatus>;
+      yield call(new ReadStatus(store->get_async_rados(), store, obj,
+                                &status, true, &objv));
+      if (retcode < 0) {
+        ldout(cct, 10) << "failed to read bilog trim status: "
+            << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
+      if (status.marker == "MAX") {
+        status.marker.clear(); // restart at the beginning
+      }
+      ldout(cct, 10) << "listing cold buckets from marker="
+          << status.marker << dendl;
+
+      set_status("listing cold buckets for trim");
+      yield {
+        // list cold buckets to consider for trim
+        auto cb = [this] (std::string&& bucket, std::string&& marker) {
+          // filter out active buckets that we've already selected
+          auto i = std::find(buckets.begin(), buckets.end(), bucket);
+          if (i != buckets.end()) {
+            return true;
+          }
+          buckets.emplace_back(std::move(bucket));
+          // remember the last cold bucket spawned to update the status marker
+          last_cold_marker = std::move(marker);
+          // return true if there's room for more
+          return buckets.size() < config.buckets_per_interval;
+        };
+
+        call(new MetadataListCR(cct, store->get_async_rados(), store->meta_mgr,
+                                section, status.marker, cb));
+      }
+      if (retcode < 0) {
+        ldout(cct, 4) << "failed to list bucket instance metadata: "
+            << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
     }
 
     // trim bucket instances with limited concurrency
@@ -544,6 +594,21 @@ int BucketTrimCR::operate()
     yield call(new BucketTrimInstanceCollectCR(store, buckets,
                                                config.concurrent_buckets));
     // ignore errors from individual buckets
+
+    // write updated trim status
+    if (!last_cold_marker.empty() && status.marker != last_cold_marker) {
+      set_status("writing updated trim status");
+      status.marker = std::move(last_cold_marker);
+      ldout(cct, 20) << "writing bucket trim marker=" << status.marker << dendl;
+      using WriteStatus = RGWSimpleRadosWriteCR<BucketTrimStatus>;
+      yield call(new WriteStatus(store->get_async_rados(), store, obj,
+                                 status, &objv));
+      if (retcode < 0) {
+        ldout(cct, 4) << "failed to write updated trim status: "
+            << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
+    }
 
     return set_cr_done();
   }

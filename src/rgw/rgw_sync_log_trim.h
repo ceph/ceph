@@ -41,6 +41,8 @@ struct BucketTrimConfig {
   size_t counter_size{0};
   /// maximum number of buckets to process each trim interval
   uint32_t buckets_per_interval{0};
+  /// minimum number of buckets to choose from the global bucket instance list
+  uint32_t min_cold_buckets_per_interval{0};
   /// maximum number of buckets to process in parallel
   uint32_t concurrent_buckets{0};
   /// timeout in ms for bucket trim notify replies
