@@ -4346,8 +4346,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           /* get the start and end of our scrub chunk
 	   *
 	   * Our scrub chunk has an important restriction we're going to need to
-	   * respect. We can't let head or snapdir be start or end.
-	   * Using a half-open interval means that if end == head|snapdir,
+	   * respect. We can't let head be start or end.
+	   * Using a half-open interval means that if end == head,
 	   * we'd scrub/lock head and the clone right next to head in different
 	   * chunks which would allow us to miss clones created between
 	   * scrubbing that chunk and scrubbing the chunk including head.
@@ -4373,8 +4373,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
 	  if (!objects.empty()) {
 	    hobject_t back = objects.back();
-	    while (candidate_end.has_snapset() &&
-		      candidate_end.get_head() == back.get_head()) {
+	    while (candidate_end.is_head() &&
+		   candidate_end == back.get_head()) {
 	      candidate_end = back;
 	      objects.pop_back();
 	      if (objects.empty()) {
@@ -4384,8 +4384,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	      }
 	      back = objects.back();
 	    }
-	    if (candidate_end.has_snapset()) {
-	      assert(candidate_end.get_head() != back.get_head());
+	    if (candidate_end.is_head()) {
+	      assert(candidate_end != back.get_head());
 	      candidate_end = candidate_end.get_object_boundary();
 	    }
 	  } else {
