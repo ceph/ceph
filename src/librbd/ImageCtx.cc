@@ -114,7 +114,7 @@ struct C_AsyncCallback : public Context {
     : image_ctx(image_ctx), on_finish(on_finish) {
   }
   virtual void finish(int r) {
-    image_ctx->op_work_queue->queue(on_finish, r);
+    image_ctx->async_finisher->queue(on_finish, r);
   }
 };
 
@@ -163,7 +163,7 @@ void _flush_async_operations(ImageCtx *ictx, Context *on_finish) {
       stripe_unit(0), stripe_count(0), flags(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
-      total_bytes_read(0), copyup_finisher(NULL),
+      total_bytes_read(0), copyup_finisher(NULL), async_finisher(new Finisher(cct)),
       object_map(*this), aio_work_queue(NULL), op_work_queue(NULL)
   {
     md_ctx.dup(p);
@@ -215,6 +215,8 @@ void _flush_async_operations(ImageCtx *ictx, Context *on_finish) {
       copyup_finisher->start();
     }
 
+    async_finisher->start();
+
     ThreadPoolSingleton *thread_pool_singleton;
     cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       thread_pool_singleton, "librbd::thread_pool");
@@ -253,6 +255,8 @@ void _flush_async_operations(ImageCtx *ictx, Context *on_finish) {
 
     delete op_work_queue;
     delete aio_work_queue;
+    delete async_finisher;
+    async_finisher = NULL;
   }
 
   int ImageCtx::init() {

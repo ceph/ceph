@@ -2625,6 +2625,11 @@ reprotect_and_return_err:
       ictx->copyup_finisher->stop();
     }
 
+    if (ictx->async_finisher != NULL) {
+      ictx->async_finisher->wait_for_empty();
+      ictx->async_finisher->stop();
+    }
+
     if (ictx->parent) {
       close_image(ictx->parent);
       ictx->parent = NULL;

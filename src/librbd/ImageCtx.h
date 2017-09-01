@@ -121,6 +121,7 @@ namespace librbd {
     Finisher *copyup_finisher;
     std::map<uint64_t, CopyupRequest*> copyup_list;
 
+    Finisher *async_finisher;
     xlist<AsyncOperation*> async_ops;
     xlist<AsyncRequest*> async_requests;
     Cond async_requests_cond;
