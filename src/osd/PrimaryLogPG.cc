@@ -9864,15 +9864,10 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 	   << " legacy_snaps " << obc->obs.oi.legacy_snaps
 	   << dendl;
   snapid_t first, last;
-  if (obc->ssc->snapset.is_legacy()) {
-    first = obc->obs.oi.legacy_snaps.back();
-    last = obc->obs.oi.legacy_snaps.front();
-  } else {
-    auto p = obc->ssc->snapset.clone_snaps.find(soid.snap);
-    assert(p != obc->ssc->snapset.clone_snaps.end());
-    first = p->second.back();
-    last = p->second.front();
-  }
+  auto p = obc->ssc->snapset.clone_snaps.find(soid.snap);
+  assert(p != obc->ssc->snapset.clone_snaps.end());
+  first = p->second.back();
+  last = p->second.front();
   if (first <= oid.snap) {
     dout(20) << "find_object_context  " << soid << " [" << first << "," << last
 	     << "] contains " << oid.snap << " -- HIT " << obc->obs << dendl;
