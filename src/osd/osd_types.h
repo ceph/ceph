@@ -4452,7 +4452,7 @@ struct SnapSet {
   map<snapid_t, uint64_t> clone_size;
   map<snapid_t, vector<snapid_t>> clone_snaps; // descending
 
-  SnapSet() : seq(0), head_exists(false) {}
+  SnapSet() : seq(0), head_exists(true) {}
   explicit SnapSet(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
     decode(p);
