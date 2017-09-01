@@ -31,17 +31,17 @@ the same id exists and would end up activating the incorrect one.
 
 Discovery
 ---------
-With either existing OSDs or new ones being activated, a *discovery* process is
+With OSDs previously created by ``ceph-volume``, a *discovery* process is
 performed using :term:`LVM tags` to enable the systemd units.
 
 The systemd unit will capture the :term:`OSD id` and :term:`OSD uuid` and
 persist it. Internally, the activation will enable it like::
 
-    systemctl enable ceph-volume@$id-$uuid-lvm
+    systemctl enable ceph-volume@lvm-$id-$uuid
 
 For example::
 
-    systemctl enable ceph-volume@0-8715BEB4-15C5-49DE-BA6F-401086EC7B41-lvm
+    systemctl enable ceph-volume@lvm-0-8715BEB4-15C5-49DE-BA6F-401086EC7B41
 
 Would start the discovery process for the OSD with an id of ``0`` and a UUID of
 ``8715BEB4-15C5-49DE-BA6F-401086EC7B41``.
@@ -54,7 +54,11 @@ The systemd unit will look for the matching OSD device, and by looking at its
 # mount the device in the corresponding location (by convention this is
   ``/var/lib/ceph/osd/<cluster name>-<osd id>/``)
 
-# ensure that all required devices are ready for that OSD
+# ensure that all required devices are ready for that OSD. In the case of
+a journal (when ``--filestore`` is selected) the device will be queried (with
+``blkid`` for partitions, and lvm for logical volumes) to ensure that the
+correct device is being linked. The symbolic link will *always* be re-done to
+ensure that the correct device is linked.
 
 # start the ``ceph-osd@0`` systemd unit
 
