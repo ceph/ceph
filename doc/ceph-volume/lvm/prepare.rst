@@ -92,8 +92,9 @@ already running there are a few things to take into account:
   be removed (like fstab mount points)
 * There is currently no support for encrypted volumes
 
-The one time process for an existing OSD, with an ID of 0 and
-using a ``"ceph"`` cluster name would look like::
+The one time process for an existing OSD, with an ID of 0 and using
+a ``"ceph"`` cluster name would look like (the following command will **destroy
+any data** in the OSD)::
 
     ceph-volume lvm prepare --filestore --osd-id 0 --osd-fsid E3D291C1-E7BF-4984-9794-B60D9FA139CB
 
