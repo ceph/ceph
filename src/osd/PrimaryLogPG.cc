@@ -3601,23 +3601,14 @@ int PrimaryLogPG::trim_object(
 
   SnapSet& snapset = obc->ssc->snapset;
 
-  bool legacy = snapset.is_legacy() ||
-    get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
-
   object_info_t &coi = obc->obs.oi;
-  set<snapid_t> old_snaps;
-  if (legacy) {
-    old_snaps.insert(coi.legacy_snaps.begin(), coi.legacy_snaps.end());
-  } else {
-    auto p = snapset.clone_snaps.find(coid.snap);
-    if (p == snapset.clone_snaps.end()) {
-      osd->clog->error() << "No clone_snaps in snapset " << snapset
-			 << " for object " << coid << "\n";
-      return -ENOENT;
-    }
-    old_snaps.insert(snapset.clone_snaps[coid.snap].begin(),
-		     snapset.clone_snaps[coid.snap].end());
+  auto citer = snapset.clone_snaps.find(coid.snap);
+  if (citer == snapset.clone_snaps.end()) {
+    osd->clog->error() << "No clone_snaps in snapset " << snapset
+		       << " for object " << coid << "\n";
+    return -ENOENT;
   }
+  set<snapid_t> old_snaps(citer->second.begin(), citer->second.end());
   if (old_snaps.empty()) {
     osd->clog->error() << "No object info snaps for object " << coid;
     return -ENOENT;
@@ -3742,14 +3733,10 @@ int PrimaryLogPG::trim_object(
   } else {
     // save adjusted snaps for this object
     dout(10) << coid << " snaps " << old_snaps << " -> " << new_snaps << dendl;
-    if (legacy) {
-      coi.legacy_snaps = vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend());
-    } else {
-      snapset.clone_snaps[coid.snap] = vector<snapid_t>(new_snaps.rbegin(),
-							new_snaps.rend());
-      // we still do a 'modify' event on this object just to trigger a
-      // snapmapper.update ... :(
-    }
+    snapset.clone_snaps[coid.snap] =
+      std::move(vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend()));
+    // we still do a 'modify' event on this object just to trigger a
+    // snapmapper.update ... :(
 
     coi.prior_version = coi.version;
     coi.version = ctx->at_version;
