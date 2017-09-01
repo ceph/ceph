@@ -8268,9 +8268,6 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
 
   tctx->extra_reqids = results->reqids;
 
-  bool legacy_snapset = tctx->new_snapset.is_legacy() ||
-    get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
-
   if (whiteout) {
     // create a whiteout
     tctx->op_t->create(soid);
@@ -8300,13 +8297,7 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     tctx->new_obs.oi.truncate_size = results->truncate_size;
 
     if (soid.snap != CEPH_NOSNAP) {
-      if (legacy_snapset) {
-	tctx->new_obs.oi.legacy_snaps = results->snaps;
-	assert(!tctx->new_obs.oi.legacy_snaps.empty());
-      } else {
-	// it's already in the snapset
-	assert(obc->ssc->snapset.clone_snaps.count(soid.snap));
-      }
+      assert(obc->ssc->snapset.clone_snaps.count(soid.snap));
       assert(obc->ssc->snapset.clone_size.count(soid.snap));
       assert(obc->ssc->snapset.clone_size[soid.snap] ==
 	     results->object_size);
