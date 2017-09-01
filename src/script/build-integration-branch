@@ -25,11 +25,14 @@ j = json.loads(r.text or r.content)
 print("--- found %d issues tagged with %s" % (len(j), label))
 
 prs = []
+prtext = []
 for issue in j:
     if 'pull_request' not in issue:
         continue
     r = requests.get(issue['pull_request']['url'] + '?access_token=' + token)
-    prs.append(json.loads(r.text or r.content))
+    pr = json.loads(r.text or r.content)
+    prs.append(pr)
+    prtext.append(pr['html_url'] + ' - ' + pr['title'])
 print("--- queried %s prs" % len(prs))
 
 # name branch
@@ -50,5 +53,6 @@ for pr in prs:
           pr['head']['repo']['clone_url'],
           pr['head']['ref']
     ])
-print('--- done')
+print('--- done. these PRs were included:')
+print('\n'.join(prtext))
 print('--- perhaps you want to: make && ctest -j12 && git push ci %s' % branch)
