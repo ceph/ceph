@@ -144,6 +144,18 @@
                     content_data.df.stats.total_used_bytes
                     / content_data.df.stats.total_bytes)) + "%";
                 var raw_usage_canvas = $("#raw_usage_chart").get(0).getContext("2d");
+                if (content_data.df.stats.total_used_bytes/content_data.df.stats.total_bytes
+                    >= content_data.osd_map.full_ratio) {
+                    var raw_usage_chart_color = "#ff0000";
+                } else if (content_data.df.stats.total_used_bytes/content_data.df.stats.total_bytes
+                           >= content_data.osd_map.backfillfull_ratio) {
+                    var raw_usage_chart_color = "#ff6600";
+                } else if (content_data.df.stats.total_used_bytes/content_data.df.stats.total_bytes
+                           >= content_data.osd_map.nearfull_ratio) {
+                    var raw_usage_chart_color = "#ffc200";
+                } else {
+                    var raw_usage_chart_color = "#00bb00";
+                }
                 var raw_usage_chart = new Chart(raw_usage_canvas, {
                     type: 'doughnut',
                     data: {
@@ -159,7 +171,7 @@
                                 content_data.df.stats.total_used_bytes,
                                 content_data.df.stats.total_avail_bytes
                             ],
-                            backgroundColor: ["#424d52", "#222d32"]
+                            backgroundColor: [raw_usage_chart_color, "#424d52"]
                             }
                         ]
                     },
