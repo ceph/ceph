@@ -1482,7 +1482,7 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
 }
 namespace {
 struct BufferlistObject : public MemStore::Object {
-  Spinlock mutex;
+  ceph::spinlock mutex;
   bufferlist data;
 
   size_t get_size() const override { return data.length(); }
@@ -1511,7 +1511,7 @@ struct BufferlistObject : public MemStore::Object {
 int BufferlistObject::read(uint64_t offset, uint64_t len,
                                      bufferlist &bl)
 {
-  std::lock_guard<Spinlock> lock(mutex);
+  std::lock_guard<decltype(mutex)> lock(mutex);
   bl.substr_of(data, offset, len);
   return bl.length();
 }
@@ -1520,7 +1520,7 @@ int BufferlistObject::write(uint64_t offset, const bufferlist &src)
 {
   unsigned len = src.length();
 
-  std::lock_guard<Spinlock> lock(mutex);
+  std::lock_guard<decltype(mutex)> lock(mutex);
 
   // before
   bufferlist newdata;
@@ -1555,7 +1555,7 @@ int BufferlistObject::clone(Object *src, uint64_t srcoff,
 
   bufferlist bl;
   {
-    std::lock_guard<Spinlock> lock(srcbl->mutex);
+    std::lock_guard<decltype(srcbl->mutex)> lock(srcbl->mutex);
     if (srcoff == dstoff && len == src->get_size()) {
       data = srcbl->data;
       return 0;
@@ -1567,7 +1567,7 @@ int BufferlistObject::clone(Object *src, uint64_t srcoff,
 
 int BufferlistObject::truncate(uint64_t size)
 {
-  std::lock_guard<Spinlock> lock(mutex);
+  std::lock_guard<decltype(mutex)> lock(mutex);
   if (get_size() > size) {
     bufferlist bl;
     bl.substr_of(data, 0, size);

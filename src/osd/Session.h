@@ -17,7 +17,7 @@
 
 #include "common/RefCountedObj.h"
 #include "common/Mutex.h"
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 #include "OSDCap.h"
 #include "Watch.h"
 #include "OSDMap.h"
@@ -135,9 +135,9 @@ struct Session : public RefCountedObject {
   Mutex session_dispatch_lock;
   boost::intrusive::list<OpRequest> waiting_on_map;
 
-  Spinlock sent_epoch_lock;
+  ceph::spinlock sent_epoch_lock;
   epoch_t last_sent_epoch;
-  Spinlock received_map_lock;
+  ceph::spinlock received_map_lock;
   epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
 
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock

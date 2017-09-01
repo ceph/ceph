@@ -24,7 +24,7 @@
 #include "common/errno.h"
 #include "common/valgrind.h"
 #include "auth/Crypto.h"
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -54,7 +54,6 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
 {
   ANNOTATE_BENIGN_RACE_SIZED(&timeout, sizeof(timeout),
                              "SimpleMessenger read timeout");
-  ceph_spin_init(&global_seq_lock);
   init_local_connection();
 }
 
@@ -67,7 +66,6 @@ SimpleMessenger::~SimpleMessenger()
   assert(!did_bind); // either we didn't bind or we shut down the Accepter
   assert(rank_pipe.empty()); // we don't have any running Pipes.
   assert(!reaper_started); // the reaper thread is stopped
-  ceph_spin_destroy(&global_seq_lock);
 }
 
 void SimpleMessenger::ready()

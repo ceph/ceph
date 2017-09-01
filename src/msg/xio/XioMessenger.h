@@ -29,7 +29,7 @@ extern "C" {
 #include "QueueStrategy.h"
 #include "common/Thread.h"
 #include "common/Mutex.h"
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 
 class XioInit {
   /* safe to be called multiple times */
@@ -47,7 +47,7 @@ private:
   static std::atomic<uint64_t> nInstances = { 0 };
   std::atomic<uint64_t> nsessions = { 0 };
   std::atomic<bool> shutdown_called = { false };
-  Spinlock conns_sp;
+  ceph::spinlock conns_sp;
   XioConnection::ConnList conns_list;
   XioConnection::EntitySet conns_entity_map;
   XioPortals portals;

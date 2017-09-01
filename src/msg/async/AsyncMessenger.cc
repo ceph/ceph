@@ -257,7 +257,6 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   else if (type.find("dpdk") != std::string::npos)
     transport_type = "dpdk";
 
-  ceph_spin_init(&global_seq_lock);
   StackSingleton *single;
   cct->lookup_or_create_singleton_object<StackSingleton>(single, "AsyncMessenger::NetworkStack::"+transport_type);
   single->ready(transport_type);
