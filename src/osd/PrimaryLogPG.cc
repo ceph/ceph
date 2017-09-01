@@ -2119,6 +2119,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     m->has_flag(CEPH_OSD_FLAG_MAP_SNAP_CLONE),
     &missing_oid);
 
+  // LIST_SNAPS needs the ssc too
+  if (obc &&
+      m->get_snapid() == CEPH_SNAPDIR &&
+      !obc->ssc) {
+    obc->ssc = get_snapset_context(oid, true);
+  }
+
   if (r == -EAGAIN) {
     // If we're not the primary of this OSD, we just return -EAGAIN. Otherwise,
     // we have to wait for the object.
@@ -9757,11 +9764,6 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 	     << dendl;
     *pobc = obc;
 
-    // always populate ssc for SNAPDIR...
-    if (!obc->ssc)
-      obc->ssc = get_snapset_context(
-	oid, true);
-    return 0;
   }
 
   // we want a snap
