@@ -2364,7 +2364,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
   switch (obc->obs.oi.manifest.type) {
   case object_manifest_t::TYPE_REDIRECT:
     if (op->may_write() || write_ordered) {
-      do_proxy_write(op, obc->obs.oi.soid, obc);
+      do_proxy_write(op, obc);
     } else {
       do_proxy_read(op, obc);
     }
@@ -2518,7 +2518,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
 
     if (op->may_write() || op->may_cache()) {
       if (can_proxy_write) {
-        do_proxy_write(op, missing_oid);
+        do_proxy_write(op);
       } else {
 	// promote if can't proxy the write
 	promote_object(obc, missing_oid, oloc, op, promote_obc);
@@ -2596,7 +2596,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
     if (!must_promote) {
       if (op->may_write() || op->may_cache() || write_ordered) {
 	if (can_proxy_write) {
-	  do_proxy_write(op, missing_oid);
+	  do_proxy_write(op);
 	  return cache_result_t::HANDLED_PROXY;
 	}
       } else {
@@ -2946,7 +2946,7 @@ struct C_ProxyWrite_Commit : public Context {
   }
 };
 
-void PrimaryLogPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid, ObjectContextRef obc)
+void PrimaryLogPG::do_proxy_write(OpRequestRef op, ObjectContextRef obc)
 {
   // NOTE: non-const because ProxyWriteOp takes a mutable ref
   MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
