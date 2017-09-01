@@ -5434,58 +5434,17 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  hobject_t clone_oid = soid;
 	  clone_oid.snap = *clone_iter;
 
-	  if (!ssc->snapset.is_legacy()) {
-	    auto p = ssc->snapset.clone_snaps.find(*clone_iter);
-	    if (p == ssc->snapset.clone_snaps.end()) {
-	      osd->clog->error() << "osd." << osd->whoami
-				 << ": inconsistent clone_snaps found for oid "
-				 << soid << " clone " << *clone_iter
-				 << " snapset " << ssc->snapset;
-	      result = -EINVAL;
-	      break;
-	    }
-	    for (auto q = p->second.rbegin(); q != p->second.rend(); ++q) {
-	      ci.snaps.push_back(*q);
-	    }
-	  } else {
-	    /* No need to take a lock here.  We are only inspecting state cached on
-	     * in the ObjectContext, so we aren't performing an actual read unless
-	     * the clone obc is not already loaded (in which case, it cannot have
-	     * an in progress write).  We also do not risk exposing uncommitted
-	     * state since we do have a read lock on the head object,
-	     * which we would have to write lock in order to make user visible
-	     * modifications to the snapshot state (snap trim related mutations
-	     * are not user visible).
-	     */
-	    if (is_missing_object(clone_oid)) {
-	      dout(20) << "LIST_SNAPS " << clone_oid << " missing" << dendl;
-	      wait_for_unreadable_object(clone_oid, ctx->op);
-	      result = -EAGAIN;
-	      break;
-	    }
-
-	    ObjectContextRef clone_obc = get_object_context(clone_oid, false);
-	    if (!clone_obc) {
-	      if (maybe_handle_cache(
-		    ctx->op, true, clone_obc, -ENOENT, clone_oid, true)) {
-		// promoting the clone
-		result = -EAGAIN;
-	      } else {
-		osd->clog->error() << "osd." << osd->whoami
-				   << ": missing clone " << clone_oid
-				   << " for oid "
-				   << soid;
-		// should not happen
-		result = -ENOENT;
-	      }
-	      break;
-	    }
-	    for (vector<snapid_t>::reverse_iterator p =
-		   clone_obc->obs.oi.legacy_snaps.rbegin();
-		 p != clone_obc->obs.oi.legacy_snaps.rend();
-		 ++p) {
-	      ci.snaps.push_back(*p);
-	    }
+	  auto p = ssc->snapset.clone_snaps.find(*clone_iter);
+	  if (p == ssc->snapset.clone_snaps.end()) {
+	    osd->clog->error() << "osd." << osd->whoami
+			       << ": inconsistent clone_snaps found for oid "
+			       << soid << " clone " << *clone_iter
+			       << " snapset " << ssc->snapset;
+	    result = -EINVAL;
+	    break;
+	  }
+	  for (auto q = p->second.rbegin(); q != p->second.rend(); ++q) {
+	    ci.snaps.push_back(*q);
 	  }
 
           dout(20) << " clone " << *clone_iter << " snaps " << ci.snaps << dendl;
