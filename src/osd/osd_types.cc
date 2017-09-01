@@ -4717,18 +4717,8 @@ void SnapSet::generate_test_instances(list<SnapSet*>& o)
 
 ostream& operator<<(ostream& out, const SnapSet& cs)
 {
-  if (cs.is_legacy()) {
-    out << cs.seq << "=" << cs.snaps << ":"
-	<< cs.clones
-	<< (cs.head_exists ? "+head":"");
-    if (!cs.clone_snaps.empty()) {
-      out << "+stray_clone_snaps=" << cs.clone_snaps;
-    }
-    return out;
-  } else {
-    return out << cs.seq << "=" << cs.snaps << ":"
-	       << cs.clone_snaps;
-  }
+  return out << cs.seq << "=" << cs.snaps << ":"
+	     << cs.clone_snaps;
 }
 
 void SnapSet::from_snap_set(const librados::snap_set_t& ss, bool legacy)

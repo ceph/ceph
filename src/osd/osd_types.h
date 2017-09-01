@@ -4458,10 +4458,6 @@ struct SnapSet {
     decode(p);
   }
 
-  bool is_legacy() const {
-    return clone_snaps.size() < clones.size() || !head_exists;
-  }
-
   /// populate SnapSet from a librados::snap_set_t
   void from_snap_set(const librados::snap_set_t& ss, bool legacy);
 
