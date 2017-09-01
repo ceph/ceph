@@ -7809,8 +7809,7 @@ void PrimaryLogPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 	   << (mirror_snapset ? " mirror_snapset" : "")
 	   << dendl;
 
-  assert(!mirror_snapset || (src.snap == CEPH_NOSNAP ||
-			     src.snap == CEPH_SNAPDIR));
+  assert(!mirror_snapset || src.snap == CEPH_NOSNAP);
 
   // cancel a previous in-progress copy?
   if (copy_ops.count(dest)) {
