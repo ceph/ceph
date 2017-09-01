@@ -864,7 +864,7 @@ void _flush_async_operations(ImageCtx *ictx, Context *on_finish) {
 
   void ImageCtx::flush_async_operations() {
     C_SaferCond ctx;
-    _flush_async_operations(this, new C_AsyncCallback(this, &ctx));
+    _flush_async_operations(this, &ctx);
     ctx.wait();
   }
 
