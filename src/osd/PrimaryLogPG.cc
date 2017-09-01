@@ -346,16 +346,9 @@ void PrimaryLogPG::on_local_recover(
     set<snapid_t> snaps;
     dout(20) << " snapset " << recovery_info.ss
 	     << " legacy_snaps " << recovery_info.oi.legacy_snaps << dendl;
-    if (recovery_info.ss.is_legacy() ||
-	recovery_info.ss.seq == 0 /* jewel osd doesn't populate this */) {
-      assert(recovery_info.oi.legacy_snaps.size());
-      snaps.insert(recovery_info.oi.legacy_snaps.begin(),
-		   recovery_info.oi.legacy_snaps.end());
-    } else {
-      auto p = recovery_info.ss.clone_snaps.find(hoid.snap);
-      assert(p != recovery_info.ss.clone_snaps.end());  // hmm, should we warn?
-      snaps.insert(p->second.begin(), p->second.end());
-    }
+    auto p = recovery_info.ss.clone_snaps.find(hoid.snap);
+    assert(p != recovery_info.ss.clone_snaps.end());  // hmm, should we warn?
+    snaps.insert(p->second.begin(), p->second.end());
     dout(20) << " snaps " << snaps << dendl;
     snap_mapper.add_oid(
       recovery_info.soid,
