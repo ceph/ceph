@@ -4445,14 +4445,13 @@ inline ostream& operator<<(ostream& out, const OSDSuperblock& sb)
  */
 struct SnapSet {
   snapid_t seq;
-  bool head_exists;
   vector<snapid_t> snaps;    // descending
   vector<snapid_t> clones;   // ascending
   map<snapid_t, interval_set<uint64_t> > clone_overlap;  // overlap w/ next newest
   map<snapid_t, uint64_t> clone_size;
   map<snapid_t, vector<snapid_t>> clone_snaps; // descending
 
-  SnapSet() : seq(0), head_exists(true) {}
+  SnapSet() : seq(0) {}
   explicit SnapSet(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
     decode(p);
