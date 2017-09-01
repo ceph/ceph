@@ -24,13 +24,13 @@
 #include "common/environment.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "common/simple_spin.h"
 #include "common/strtol.h"
 #include "common/likely.h"
 #include "common/valgrind.h"
 #include "common/deleter.h"
 #include "common/RWLock.h"
 #include "include/types.h"
+#include "include/spinlock.h"
 #include "include/scope_guard.h"
 
 #if defined(HAVE_XIO)
@@ -43,9 +43,8 @@ using namespace ceph;
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
 
 #ifdef BUFFER_DEBUG
-static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
-# define bdout { simple_spin_lock(&buffer_debug_lock); std::cout
-# define bendl std::endl; simple_spin_unlock(&buffer_debug_lock); }
+# define bdout { std::lock_guard<ceph::spinlock> lg(ceph::spinlock()); std::cout
+# define bendl std::endl; }
 #else
 # define bdout if (0) { std::cout
 # define bendl std::endl; }
@@ -174,7 +173,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     std::atomic<unsigned> nref { 0 };
     int mempool = mempool::mempool_buffer_anon;
 
-    mutable std::atomic_flag crc_spinlock = ATOMIC_FLAG_INIT;
+    mutable ceph::spinlock crc_spinlock;
     map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
     explicit raw(unsigned l)
@@ -247,29 +246,25 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     }
     bool get_crc(const pair<size_t, size_t> &fromto,
          pair<uint32_t, uint32_t> *crc) const {
-      simple_spin_lock(&crc_spinlock);
+      std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
       map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >::const_iterator i =
       crc_map.find(fromto);
       if (i == crc_map.end()) {
-          simple_spin_unlock(&crc_spinlock);
           return false;
       }
       *crc = i->second;
-      simple_spin_unlock(&crc_spinlock);
       return true;
     }
     void set_crc(const pair<size_t, size_t> &fromto,
          const pair<uint32_t, uint32_t> &crc) {
-      simple_spin_lock(&crc_spinlock);
+      std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
       crc_map[fromto] = crc;
-      simple_spin_unlock(&crc_spinlock);
     }
     void invalidate_crc() {
-      simple_spin_lock(&crc_spinlock);
+      std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
       if (crc_map.size() != 0) {
         crc_map.clear();
       }
-      simple_spin_unlock(&crc_spinlock);
     }
   };
 

@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <mutex>
 #include <random>
+
 #include <netdb.h>
-#include "include/Spinlock.h"
 
 #include "include/types.h"
 #include "Messenger.h"
@@ -31,9 +32,10 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
   if (type == "random") {
     static std::random_device seed;
     static std::default_random_engine random_engine(seed());
-    static Spinlock random_lock;
 
-    std::lock_guard<Spinlock> lock(random_lock);
+    static std::mutex random_lock;
+    std::lock_guard<std::mutex> lock(random_lock);
+
     std::uniform_int_distribution<> dis(0, 1);
     r = dis(random_engine);
   }

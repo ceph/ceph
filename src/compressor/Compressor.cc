@@ -78,12 +78,12 @@ CompressorRef Compressor::create(CephContext *cct, const std::string &type)
   if (type == "random") {
     static std::random_device seed;
     static std::default_random_engine engine(seed());
-    static Spinlock mutex;
+    static ceph::spinlock mutex;
 
     int alg = COMP_ALG_NONE;
     std::uniform_int_distribution<> dist(0, COMP_ALG_LAST - 1);
     {
-      std::lock_guard<Spinlock> lock(mutex);
+      std::lock_guard<decltype(mutex)> lock(mutex);
       alg = dist(engine);
     }
     if (alg == COMP_ALG_NONE) {

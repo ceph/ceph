@@ -44,7 +44,7 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/ceph_hash.h"
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 #include "common/ceph_argparse.h"
 #include "common/Cycles.h"
 #include "common/Cond.h"
@@ -737,7 +737,7 @@ double sfence()
 double test_spinlock()
 {
   int count = 1000000;
-  Spinlock lock;
+  ceph::spinlock lock;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     lock.lock();

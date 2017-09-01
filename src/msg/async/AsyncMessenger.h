@@ -17,11 +17,13 @@
 #ifndef CEPH_ASYNCMESSENGER_H
 #define CEPH_ASYNCMESSENGER_H
 
+#include <map>
+#include <mutex>
+using namespace std;
+
 #include "include/types.h"
 #include "include/xlist.h"
-
-#include <map>
-using namespace std;
+#include "include/spinlock.h"
 #include "include/unordered_map.h"
 #include "include/unordered_set.h"
 
@@ -29,14 +31,12 @@ using namespace std;
 #include "common/Cond.h"
 #include "common/Thread.h"
 
-#include "include/Spinlock.h"
-
 #include "msg/SimplePolicyMessenger.h"
 #include "msg/DispatchQueue.h"
-#include "include/assert.h"
 #include "AsyncConnection.h"
 #include "Event.h"
 
+#include "include/assert.h"
 
 class AsyncMessenger;
 
@@ -262,7 +262,7 @@ private:
   /// counter for the global seq our connection protocol uses
   __u32 global_seq;
   /// lock to protect the global_seq
-  ceph_spinlock_t global_seq_lock;
+  ceph::spinlock global_seq_lock;
 
   /**
    * hash map of addresses to Asyncconnection
@@ -396,11 +396,12 @@ public:
    * @return a global sequence ID that nobody else has seen.
    */
   __u32 get_global_seq(__u32 old=0) {
-    ceph_spin_lock(&global_seq_lock);
+    std::lock_guard<ceph::spinlock> lg(global_seq_lock);
+
     if (old > global_seq)
       global_seq = old;
     __u32 ret = ++global_seq;
-    ceph_spin_unlock(&global_seq_lock);
+
     return ret;
   }
   /**
