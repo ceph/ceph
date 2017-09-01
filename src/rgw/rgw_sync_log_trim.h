@@ -19,6 +19,7 @@
 #include <memory>
 #include <boost/utility/string_view.hpp>
 #include "include/encoding.h"
+#include "common/ceph_time.h"
 
 class CephContext;
 class RGWCoroutine;
@@ -47,6 +48,12 @@ struct BucketTrimConfig {
   uint32_t concurrent_buckets{0};
   /// timeout in ms for bucket trim notify replies
   uint64_t notify_timeout_ms{0};
+  /// maximum number of recently trimmed buckets to remember (should be small
+  /// enough for a linear search)
+  size_t recent_size{0};
+  /// maximum duration to consider a trim as 'recent' (should be some multiple
+  /// of the trim interval, at least)
+  ceph::timespan recent_duration{0};
 };
 
 /// fill out the BucketTrimConfig from the ceph context
