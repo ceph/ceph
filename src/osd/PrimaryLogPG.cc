@@ -3780,14 +3780,14 @@ int PrimaryLogPG::trim_object(
 	pg_log_entry_t::DELETE,
 	head_oid,
 	ctx->at_version,
-	ctx->snapset_obc->obs.oi.version,
+	head_obc->obs.oi.version,
 	0,
 	osd_reqid_t(),
 	ctx->mtime,
 	0)
       );
     derr << "removing snap head" << dendl;
-    object_info_t& oi = ctx->snapset_obc->obs.oi;
+    object_info_t& oi = head_obc->obs.oi;
     ctx->delta_stats.num_objects--;
     if (oi.is_dirty()) {
       ctx->delta_stats.num_objects_dirty--;
@@ -3801,8 +3801,8 @@ int PrimaryLogPG::trim_object(
     if (oi.is_cache_pinned()) {
       ctx->delta_stats.num_objects_pinned--;
     }
-    ctx->snapset_obc->obs.exists = false;
-    ctx->snapset_obc->obs.oi = object_info_t(head_oid);
+    head_obc->obs.exists = false;
+    head_obc->obs.oi = object_info_t(head_oid);
     t->remove(head_oid);
   } else {
     dout(10) << coid << " filtering snapset on " << head_oid << dendl;
@@ -3814,16 +3814,15 @@ int PrimaryLogPG::trim_object(
 	pg_log_entry_t::MODIFY,
 	head_oid,
 	ctx->at_version,
-	ctx->snapset_obc->obs.oi.version,
+	head_obc->obs.oi.version,
 	0,
 	osd_reqid_t(),
 	ctx->mtime,
 	0)
       );
 
-    ctx->snapset_obc->obs.oi.prior_version =
-      ctx->snapset_obc->obs.oi.version;
-    ctx->snapset_obc->obs.oi.version = ctx->at_version;
+    head_obc->obs.oi.prior_version = head_obc->obs.oi.version;
+    head_obc->obs.oi.version = ctx->at_version;
 
     map <string, bufferlist> attrs;
     bl.clear();
@@ -3831,7 +3830,7 @@ int PrimaryLogPG::trim_object(
     attrs[SS_ATTR].claim(bl);
 
     bl.clear();
-    ::encode(ctx->snapset_obc->obs.oi, bl,
+    ::encode(head_obc->obs.oi, bl,
 	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
     attrs[OI_ATTR].claim(bl);
     t->setattrs(head_oid, attrs);
