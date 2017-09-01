@@ -3849,9 +3849,6 @@ void PG::_scan_snaps(ScrubMap &smap)
 	continue;
       }
       head = hoid.get_head();
-      // Make sure head_exists is set
-      if (hoid.is_head())
-	snapset.head_exists = true;
       continue;
     }
     if (hoid.snap < CEPH_MAXSNAP) {
