@@ -3849,7 +3849,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 	continue;
       }
       head = hoid.get_head();
-      // Make sure head_exists is correct for is_legacy() check
+      // Make sure head_exists is set
       if (hoid.is_head())
 	snapset.head_exists = true;
       continue;
@@ -3862,28 +3862,13 @@ void PG::_scan_snaps(ScrubMap &smap)
 	continue;
       }
       set<snapid_t> obj_snaps;
-      if (!snapset.is_legacy()) {
-	auto p = snapset.clone_snaps.find(hoid.snap);
-	if (p == snapset.clone_snaps.end()) {
-	  derr << __func__ << " no clone_snaps for " << hoid << " in " << snapset
-	       << dendl;
-	  continue;
-	}
-	obj_snaps.insert(p->second.begin(), p->second.end());
-      } else {
-	bufferlist bl;
-	if (o.attrs.find(OI_ATTR) == o.attrs.end()) {
-	  continue;
-	}
-	bl.push_back(o.attrs[OI_ATTR]);
-	object_info_t oi;
-	try {
-	  oi.decode(bl);
-	} catch(...) {
-	  continue;
-	}
-	obj_snaps.insert(oi.legacy_snaps.begin(), oi.legacy_snaps.end());
+      auto p = snapset.clone_snaps.find(hoid.snap);
+      if (p == snapset.clone_snaps.end()) {
+	derr << __func__ << " no clone_snaps for " << hoid << " in " << snapset
+	     << dendl;
+	continue;
       }
+      obj_snaps.insert(p->second.begin(), p->second.end());
       set<snapid_t> cur_snaps;
       int r = snap_mapper.get_snaps(hoid, &cur_snaps);
       if (r != 0 && r != -ENOENT) {
