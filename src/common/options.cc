@@ -3227,19 +3227,6 @@ std::vector<Option> get_global_options() {
     .set_description("Default checksum algorithm to use")
     .set_long_description("crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants use only a subset of the bits for more compact (but less reliable) checksumming."),
 
-    Option("bluestore_csum_min_block", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(4096)
-    .set_safe()
-    .set_description("Minimum block size to checksum")
-    .set_long_description("A larger checksum block means less checksum metadata to store, but results in read amplification when doing a read smaller than this size (because the entire block must be read to verify the checksum).")
-    .add_see_also("bluestore_csum_max_block"),
-
-    Option("bluestore_csum_max_block", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(64_K)
-    .set_safe()
-    .set_description("Maximum block size to checksum")
-    .add_see_also("bluestore_csum_min_block"),
-
     Option("bluestore_min_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .add_tag("mkfs")
