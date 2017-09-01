@@ -51,6 +51,8 @@ class BucketTrimManager : public BucketChangeObserver {
   BucketTrimManager(RGWRados *store, const BucketTrimConfig& config);
   ~BucketTrimManager();
 
+  int init();
+
   /// increment a counter for the given bucket instance
   void on_bucket_changed(const boost::string_view& bucket_instance) override;
 };
