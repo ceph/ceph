@@ -8623,7 +8623,7 @@ int PrimaryLogPG::start_flush(
    * for snaps [7, 6] which has been trimmed since they no longer exist.
    * In the base pool, we'd have 5:[4,3,2]:[4(4,3,2)]+head.  When we submit
    * the delete, the snap will be promoted to 5, and the head will become
-   * a snapdir.  When the copy-from goes through, we'll end up with
+   * a whiteout.  When the copy-from goes through, we'll end up with
    * 8:[8,4,3,2]:[4(4,3,2)]+head.
    *
    * Another complication is the case where there is an interval change
