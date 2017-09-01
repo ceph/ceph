@@ -8539,13 +8539,9 @@ int PrimaryLogPG::start_flush(
       snapc.snaps = snapset.snaps;
     } else {
       snapid_t min_included_snap;
-      if (snapset.is_legacy()) {
-	min_included_snap = oi.legacy_snaps.back();
-      } else {
-	auto p = snapset.clone_snaps.find(soid.snap);
-	assert(p != snapset.clone_snaps.end());
-	min_included_snap = p->second.back();
-      }
+      auto p = snapset.clone_snaps.find(soid.snap);
+      assert(p != snapset.clone_snaps.end());
+      min_included_snap = p->second.back();
       snapc = snapset.get_ssc_as_of(min_included_snap - 1);
     }
 
