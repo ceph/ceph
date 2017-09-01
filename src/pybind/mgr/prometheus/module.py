@@ -2,7 +2,6 @@ import cherrypy
 import json
 import math
 import os
-import time
 from collections import OrderedDict
 from mgr_module import MgrModule
 
@@ -296,68 +295,9 @@ class Module(MgrModule):
 
         return metrics
 
-    def _get_ordered_schema(self, **kwargs):
-
-        '''
-        fetch an ordered-by-key performance counter schema
-        ['perf_schema'][daemontype.id][countername] with keys
-        'nick' (if present)
-        'description'
-        'type' (counter type....counter/gauge/avg/histogram/etc.)
-        '''
-
-        daemon_type = kwargs.get('daemon_type', '')
-        daemon_id = kwargs.get('daemon_id', '')
-
-        schema = self.get_perf_schema(daemon_type, daemon_id)
-        if not schema:
-            self.log.warning('_get_ordered_schema: no data')
-            return
-
-        k = '{}.{}'.format(daemon_type, daemon_id)
-        self.log.debug("updating schema for %s" % k)
-        self.schema[k] = schema['perf_schema'][k]
-
     def shutdown(self):
         self.serving = False
         pass
-
-    # XXX duplicated from dashboard; factor out?
-    def get_latest(self, daemon_type, daemon_name, stat):
-        data = self.get_counter(daemon_type, daemon_name, stat)[stat]
-        if data:
-            return data[-1][1]
-        else:
-            return 0
-
-    def get_stat(self, daemon, path):
-
-        if daemon not in self.schema or path not in self.schema[daemon]:
-            self.log.debug('{} for {} not (yet) in schema'.format(path,
-                                                                  daemon))
-            return
-        perfcounter = self.schema[daemon][path]
-        stattype = stattype_to_str(perfcounter['type'])
-        # XXX simplify first effort: no histograms
-        # averages are already collapsed to one value for us
-        if not stattype or stattype == 'histogram':
-            self.log.debug('ignoring %s, type %s' % (path, stattype))
-            return
-
-        daemon_type, daemon_id = daemon.split('.')
-
-        if path not in self.metrics:
-            self.metrics[path] = Metric(
-                stattype,
-                path,
-                perfcounter['description'],
-                (daemon_type,),
-            )
-
-        self.metrics[path].set(
-            self.get_latest(daemon_type, daemon_id, path),
-            (daemon_id,)
-        )
 
     def get_health(self):
         health = json.loads(self.get('health')['json'])
@@ -423,20 +363,33 @@ class Module(MgrModule):
         self.get_quorum_status()
         self.get_metadata()
         self.get_pg_status()
-        for daemon in self.schema.keys():
-            d_type = daemon.split('.')[0]
-            if d_type in PERF_COUNTERS:
-                for path in PERF_COUNTERS[d_type]:
-                    self.get_stat(daemon, path)
-        return self.metrics
 
-    def notify(self, ntype, nid):
-        if ntype == 'perf_schema_update':
-            daemon_type, daemon_id = nid.split('.')
-            self._get_ordered_schema(
-                daemon_type=daemon_type,
-                daemon_id=daemon_id
-            )
+        for daemon, counters in self.get_all_perf_counters().iteritems():
+            for path, counter_info in counters.items():
+                stattype = stattype_to_str(counter_info['type'])
+                # XXX simplify first effort: no histograms
+                # averages are already collapsed to one value for us
+                if not stattype or stattype == 'histogram':
+                    self.log.debug('ignoring %s, type %s' % (path, stattype))
+                    continue
+
+                daemon_type, daemon_id = daemon.split('.')
+
+                if path not in self.metrics:
+                    self.metrics[path] = Metric(
+                        stattype,
+                        path,
+                        counter_info['description'],
+                        (daemon_type,),
+                    )
+
+                self.log.debug("set {0}".format(path))
+                self.metrics[path].set(
+                    counter_info['value'],
+                    (daemon_id,)
+                )
+
+        return self.metrics
 
     def serve(self):
 
