@@ -127,13 +127,13 @@ def maybe_remove_jobs(run_dir, pass_days, fail_days, dry_run=False):
     if PRESERVE_FILE in contents:
         return
     for child in contents:
-        item = os.path.join(run_dir, child)
+        job_path = os.path.join(run_dir, child)
         # Ensure the path isn't marked for preservation and that it is a
         # directory
-        if should_preserve(item) or not os.path.isdir(item):
+        if should_preserve(job_path) or not os.path.isdir(job_path):
             continue
         # Is it a job dir?
-        summary_path = os.path.join(item, 'summary.yaml')
+        summary_path = os.path.join(job_path, 'summary.yaml')
         if not os.path.exists(summary_path):
             continue
         # Depending on whether it passed or failed, we have a different age
@@ -149,12 +149,12 @@ def maybe_remove_jobs(run_dir, pass_days, fail_days, dry_run=False):
         else:
             continue
         # Ensure the directory is old enough to remove
-        if not is_old_enough(item, days):
+        if not is_old_enough(summary_path, days):
             continue
         log.info("{job} is a {days}-day old {status} job; removing".format(
-            job=item, days=days, status=status))
+            job=job_path, days=days, status=status))
         if not dry_run:
-            remove(item)
+            remove(job_path)
 
 
 def maybe_remove_remotes(run_dir, days, dry_run=False):
