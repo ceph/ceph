@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <boost/utility/string_view.hpp>
+#include "include/encoding.h"
 
 class CephContext;
 class RGWCoroutine;
@@ -69,6 +70,27 @@ class BucketTrimManager : public BucketChangeObserver {
   RGWCoroutine* create_bucket_trim_cr();
 };
 
+/// provides persistent storage for the trim manager's current position in the
+/// list of bucket instance metadata
+struct BucketTrimStatus {
+  std::string marker; //< metadata key of current bucket instance
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    DECODE_START(1, p);
+    ::decode(marker, p);
+    DECODE_FINISH(p);
+  }
+
+  static const std::string oid;
+};
+
 } // namespace rgw
+
+WRITE_CLASS_ENCODER(rgw::BucketTrimStatus);
 
 #endif // RGW_SYNC_LOG_TRIM_H

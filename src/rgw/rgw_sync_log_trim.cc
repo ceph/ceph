@@ -18,10 +18,10 @@
 
 #include "common/bounded_key_counter.h"
 #include "common/errno.h"
+#include "rgw_sync_log_trim.h"
 #include "rgw_cr_rados.h"
 #include "rgw_metadata.h"
 #include "rgw_rados.h"
-#include "rgw_sync_log_trim.h"
 #include "rgw_sync.h"
 
 #include <boost/asio/yield.hpp>
@@ -34,6 +34,9 @@
 
 using rgw::BucketTrimConfig;
 using BucketChangeCounter = BoundedKeyCounter<std::string, int>;
+
+const std::string rgw::BucketTrimStatus::oid = "bilog.trim";
+using rgw::BucketTrimStatus;
 
 
 // watch/notify api for gateways to coordinate about which buckets to trim
@@ -614,7 +617,7 @@ class BucketTrimManager::Impl : public TrimCounters::Server {
 
   Impl(RGWRados *store, const BucketTrimConfig& config)
     : store(store), config(config),
-      status_obj(store->get_zone_params().log_pool, "bilog.trim"),
+      status_obj(store->get_zone_params().log_pool, BucketTrimStatus::oid),
       counter(config.counter_size),
       watcher(store, status_obj, this)
   {}
