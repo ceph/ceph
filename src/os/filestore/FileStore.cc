@@ -106,6 +106,10 @@ using ceph::crypto::SHA1;
 #define XATTR_NO_SPILL_OUT "0"
 #define XATTR_SPILL_OUT "1"
 
+static const std::vector<KeyValueDB::ColumnFamily> column_families = {
+  { CEPH_OSD_PGLOG_PREFIX, "" }
+};
+
 //Initial features in new superblock.
 static CompatSet get_fs_initial_compat_set() {
   CompatSet::FeatureSet ceph_osd_feature_compat;
@@ -1534,11 +1538,18 @@ int FileStore::mount()
 
     if (superblock.omap_backend == "rocksdb")
       omap_store->init(g_conf->filestore_rocksdb_options);
-    else
+    else {
       omap_store->init();
+      if (g_conf->filestore_pglog_columnfamily) {
+	derr << "Column families are supported only in RocksDB." << dendl;
+	ret = -1;
+      }
+    }
 
     stringstream err;
-    if (omap_store->create_and_open(err)) {
+    if (g_conf->filestore_pglog_columnfamily ?
+	omap_store->create_and_open(err, column_families) :
+	omap_store->create_and_open(err)) {
       delete omap_store;
       derr << "Error initializing " << superblock.omap_backend
 	   << " : " << err.str() << dendl;
@@ -1547,7 +1558,7 @@ int FileStore::mount()
     }
 
     DBObjectMap *dbomap = new DBObjectMap(omap_store);
-    ret = dbomap->init(do_update);
+    ret = dbomap->init(do_update, g_conf->filestore_pglog_columnfamily);
     if (ret < 0) {
       delete dbomap;
       derr << "Error initializing DBObjectMap: " << ret << dendl;
