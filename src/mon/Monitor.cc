@@ -2439,14 +2439,7 @@ void Monitor::do_health_to_clog(bool force)
 	summary == health_status_cache.summary &&
 	level == health_status_cache.overall)
       return;
-    if (level == HEALTH_OK)
-      clog->info() << "overall " << summary;
-    else if (level == HEALTH_WARN)
-      clog->warn() << "overall " << summary;
-    else if (level == HEALTH_ERR)
-      clog->error() << "overall " << summary;
-    else
-      ceph_abort();
+    clog->health(level) << "overall " << summary;
     health_status_cache.summary = summary;
     health_status_cache.overall = level;
   } else {
@@ -2568,20 +2561,14 @@ void Monitor::log_health(
       ostringstream ss;
       ss << "Health check failed: " << p.second.summary << " ("
          << p.first << ")";
-      if (p.second.severity == HEALTH_WARN)
-	clog->warn() << ss.str();
-      else
-	clog->error() << ss.str();
+      clog->health(p.second.severity) << ss.str();
     } else {
       if (p.second.summary != q->second.summary ||
 	  p.second.severity != q->second.severity) {
 	// summary or severity changed (ignore detail changes at this level)
 	ostringstream ss;
         ss << "Health check update: " << p.second.summary << " (" << p.first << ")";
-	if (p.second.severity == HEALTH_WARN)
-	  clog->warn() << ss.str();
-	else
-	  clog->error() << ss.str();
+        clog->health(p.second.severity) << ss.str();
       }
     }
   }
@@ -4794,10 +4781,7 @@ void Monitor::handle_timecheck_leader(MonOpRequestRef op)
 
   ostringstream ss;
   health_status_t status = timecheck_status(ss, skew_bound, latency);
-  if (status == HEALTH_ERR)
-    clog->error() << other << " " << ss.str();
-  else if (status == HEALTH_WARN)
-    clog->warn() << other << " " << ss.str();
+  clog->health(status) << other << " " << ss.str();
 
   dout(10) << __func__ << " from " << other << " ts " << m->timestamp
 	   << " delta " << delta << " skew_bound " << skew_bound
