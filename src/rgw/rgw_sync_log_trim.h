@@ -17,14 +17,24 @@
 #define RGW_SYNC_LOG_TRIM_H
 
 #include <memory>
+#include <boost/utility/string_view.hpp>
 
 class CephContext;
 class RGWRados;
 
 namespace rgw {
 
+/// Interface to inform the trim process about which buckets are most active
+struct BucketChangeObserver {
+  virtual ~BucketChangeObserver() = default;
+
+  virtual void on_bucket_changed(const boost::string_view& bucket_instance) = 0;
+};
+
 /// Configuration for BucketTrimManager
 struct BucketTrimConfig {
+  /// maximum number of buckets to track with BucketChangeObserver
+  size_t counter_size{0};
 };
 
 /// fill out the BucketTrimConfig from the ceph context
@@ -34,12 +44,15 @@ void configure_bucket_trim(CephContext *cct, BucketTrimConfig& config);
 /// input: the frequency of entries read from the data changes log, and a global
 /// listing of the bucket.instance metadata. This allows us to trim active
 /// buckets quickly, while also ensuring that all buckets will eventually trim
-class BucketTrimManager {
+class BucketTrimManager : public BucketChangeObserver {
   class Impl;
   std::unique_ptr<Impl> impl;
  public:
   BucketTrimManager(RGWRados *store, const BucketTrimConfig& config);
   ~BucketTrimManager();
+
+  /// increment a counter for the given bucket instance
+  void on_bucket_changed(const boost::string_view& bucket_instance) override;
 };
 
 } // namespace rgw

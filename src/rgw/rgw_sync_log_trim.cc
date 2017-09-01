@@ -13,6 +13,9 @@
  * Foundation.  See file COPYING.
  */
 
+#include <mutex>
+
+#include "common/bounded_key_counter.h"
 #include "rgw_sync_log_trim.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -21,6 +24,7 @@
 #define dout_prefix (*_dout << "trim: ")
 
 using rgw::BucketTrimConfig;
+using BucketChangeCounter = BoundedKeyCounter<std::string, int>;
 
 namespace rgw {
 
@@ -29,8 +33,15 @@ class BucketTrimManager::Impl {
   RGWRados *const store;
   const BucketTrimConfig config;
 
+  /// count frequency of bucket instance entries in the data changes log
+  BucketChangeCounter counter;
+
+  /// protect data shared between data sync and trim threads
+  std::mutex mutex;
+
   Impl(RGWRados *store, const BucketTrimConfig& config)
-    : store(store), config(config)
+    : store(store), config(config),
+      counter(config.counter_size)
   {}
 };
 
@@ -40,5 +51,11 @@ BucketTrimManager::BucketTrimManager(RGWRados *store,
 {
 }
 BucketTrimManager::~BucketTrimManager() = default;
+
+void BucketTrimManager::on_bucket_changed(const boost::string_view& bucket)
+{
+  std::lock_guard<std::mutex> lock(impl->mutex);
+  impl->counter.insert(bucket.to_string());
+}
 
 } // namespace rgw
