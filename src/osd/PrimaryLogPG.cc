@@ -3767,10 +3767,9 @@ int PrimaryLogPG::trim_object(
   dout(10) << coid << " new snapset " << snapset << " on "
 	   << head_obc->obs.oi << dendl;
   if (snapset.clones.empty() &&
-      (!snapset.head_exists ||
-       (head_obc->obs.oi.is_whiteout() &&
-	!(head_obc->obs.oi.is_dirty() && pool.info.is_tier()) &&
-	!head_obc->obs.oi.is_cache_pinned()))) {
+      (head_obc->obs.oi.is_whiteout() &&
+       !(head_obc->obs.oi.is_dirty() && pool.info.is_tier()) &&
+       !head_obc->obs.oi.is_cache_pinned())) {
     // NOTE: this arguably constitutes minor interference with the
     // tiering agent if this is a cache tier since a snap trim event
     // is effectively evicting a whiteout we might otherwise want to
@@ -3787,22 +3786,20 @@ int PrimaryLogPG::trim_object(
 	ctx->mtime,
 	0)
       );
-    if (head_oid.is_head()) {
-      derr << "removing snap head" << dendl;
-      object_info_t& oi = ctx->snapset_obc->obs.oi;
-      ctx->delta_stats.num_objects--;
-      if (oi.is_dirty()) {
-	ctx->delta_stats.num_objects_dirty--;
-      }
-      if (oi.is_omap())
-	ctx->delta_stats.num_objects_omap--;
-      if (oi.is_whiteout()) {
-	dout(20) << __func__ << " trimming whiteout on " << oi.soid << dendl;
-	ctx->delta_stats.num_whiteouts--;
-      }
-      if (oi.is_cache_pinned()) {
-	ctx->delta_stats.num_objects_pinned--;
-      }
+    derr << "removing snap head" << dendl;
+    object_info_t& oi = ctx->snapset_obc->obs.oi;
+    ctx->delta_stats.num_objects--;
+    if (oi.is_dirty()) {
+      ctx->delta_stats.num_objects_dirty--;
+    }
+    if (oi.is_omap())
+      ctx->delta_stats.num_objects_omap--;
+    if (oi.is_whiteout()) {
+      dout(20) << __func__ << " trimming whiteout on " << oi.soid << dendl;
+      ctx->delta_stats.num_whiteouts--;
+    }
+    if (oi.is_cache_pinned()) {
+      ctx->delta_stats.num_objects_pinned--;
     }
     ctx->snapset_obc->obs.exists = false;
     ctx->snapset_obc->obs.oi = object_info_t(head_oid);
