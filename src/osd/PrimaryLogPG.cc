@@ -9100,16 +9100,13 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
 
   ctx->obc->ondisk_write_lock();
 
-  bool unlock_head_obc = false;
   ctx->op_t->add_obc(ctx->obc);
   if (ctx->clone_obc) {
     ctx->clone_obc->ondisk_write_lock();
     ctx->op_t->add_obc(ctx->clone_obc);
   }
-  if (ctx->head_obc &&
-      ctx->head_obc->obs.oi.soid != ctx->obc->obs.oi.soid) {
+  if (ctx->head_obc) {
     ctx->head_obc->ondisk_write_lock();
-    unlock_head_obc = true;
     ctx->op_t->add_obc(ctx->head_obc);
   }
 
@@ -9118,7 +9115,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
   Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(
     ctx->obc,
     ctx->clone_obc,
-    unlock_head_obc ? ctx->head_obc : ObjectContextRef());
+    ctx->head_obc);
   if (!(ctx->log.empty())) {
     assert(ctx->at_version >= projected_last_update);
     projected_last_update = ctx->at_version;
