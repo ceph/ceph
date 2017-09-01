@@ -4639,9 +4639,6 @@ struct object_info_t {
     return get_flag_string(flags);
   }
 
-  /// [clone] descending. pre-luminous; moved to SnapSet
-  vector<snapid_t> legacy_snaps;
-
   uint64_t truncate_seq, truncate_size;
 
   map<pair<uint64_t, entity_name_t>, watch_info_t> watchers;
