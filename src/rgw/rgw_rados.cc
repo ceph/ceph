@@ -7282,6 +7282,10 @@ public:
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
 
       src_attrs.erase(RGW_ATTR_COMPRESSION);
+      src_attrs.erase(RGW_ATTR_OLH_INFO);
+      src_attrs.erase(RGW_ATTR_OLH_VER);
+      src_attrs.erase(RGW_ATTR_OLH_ID_TAG);
+      src_attrs.erase(RGW_ATTR_OLH_PENDING_PREFIX);
       src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
     }
 
