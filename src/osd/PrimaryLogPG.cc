@@ -6680,25 +6680,20 @@ inline int PrimaryLogPG::_delete_oid(
       && !try_no_whiteout) {
     whiteout = true;
   }
-  bool legacy;
-  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-    legacy = false;
-    // in luminous or later, we can't delete the head if there are
-    // clones. we trust the caller passing no_whiteout has already
-    // verified they don't exist.
-    if (!snapset.clones.empty() ||
-	(!ctx->snapc.snaps.empty() && ctx->snapc.snaps[0] > snapset.seq)) {
-      if (no_whiteout) {
-	dout(20) << __func__ << " has or will have clones but no_whiteout=1"
-		 << dendl;
-      } else {
-	dout(20) << __func__ << " has or will have clones; will whiteout"
-		 << dendl;
-	whiteout = true;
-      }
+
+  // in luminous or later, we can't delete the head if there are
+  // clones. we trust the caller passing no_whiteout has already
+  // verified they don't exist.
+  if (!snapset.clones.empty() ||
+      (!ctx->snapc.snaps.empty() && ctx->snapc.snaps[0] > snapset.seq)) {
+    if (no_whiteout) {
+      dout(20) << __func__ << " has or will have clones but no_whiteout=1"
+	       << dendl;
+    } else {
+      dout(20) << __func__ << " has or will have clones; will whiteout"
+	       << dendl;
+      whiteout = true;
     }
-  } else {
-    legacy = false;
   }
   dout(20) << __func__ << " " << soid << " whiteout=" << (int)whiteout
 	   << " no_whiteout=" << (int)no_whiteout
@@ -6756,9 +6751,6 @@ inline int PrimaryLogPG::_delete_oid(
   }
   if (oi.is_cache_pinned()) {
     ctx->delta_stats.num_objects_pinned--;
-  }
-  if ((legacy || snapset.is_legacy()) && soid.is_head()) {
-    snapset.head_exists = false;
   }
   obs.exists = false;
   return 0;
