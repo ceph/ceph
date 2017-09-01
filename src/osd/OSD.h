@@ -1186,7 +1186,7 @@ public:
 
   static ghobject_t make_pg_log_oid(spg_t pg) {
     stringstream ss;
-    ss << "pglog_" << pg;
+    ss << CEPH_OSD_PGLOG_PREFIX << pg;
     string s;
     getline(ss, s);
     return ghobject_t(hobject_t(sobject_t(object_t(s.c_str()), 0)));
