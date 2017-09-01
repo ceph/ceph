@@ -1,3 +1,4 @@
+
 * The 'mon_warn_osd_usage_min_max_delta' health warning has been disabled because
   it does not address clusters undergoing recovery or CRUSH rules that do
   not target all devices in the cluster.
@@ -15,3 +16,14 @@
 * The RBD C API's rbd_discard method and the C++ API's Image::discard method
   now enforce a maximum length of 2GB. This restriction prevents overflow of
   the result code.
+
+* The maximum number of PGs per OSD before the monitor issues a
+  warning has been reduced from 300 to 200 PGs.  200 is still twice
+  the generally recommended target of 100 PGs per OSD.  This limit can
+  be adjusted via the ``mon_pg_warn_max_per_osd`` option on the
+  monitors.
+
+* Creating pools or adjusting pg_num will now fail if the change would
+  make the number of PGs per OSD exceed the configured
+  ``mon_pg_warn_max_per_osd`` limit.  The option can be adjusted if it
+  is really necessary to create a pool with more PGs.
