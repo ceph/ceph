@@ -2232,17 +2232,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   OpContext *ctx = new OpContext(op, m->get_reqid(), &m->ops, obc, this);
 
-  if (!obc->obs.exists)
-    ctx->snapset_obc = get_object_context(obc->obs.oi.soid.get_snapdir(), false);
-
-  /* Due to obc caching, we might have a cached non-existent snapset_obc
-   * for the snapdir.  If so, we can ignore it.  Subsequent parts of the
-   * do_op pipeline make decisions based on whether snapset_obc is
-   * populated.
-   */
-  if (ctx->snapset_obc && !ctx->snapset_obc->obs.exists)
-    ctx->snapset_obc = ObjectContextRef();
-
   if (m->has_flag(CEPH_OSD_FLAG_SKIPRWLOCKS)) {
     dout(20) << __func__ << ": skipping rw locks" << dendl;
   } else if (m->get_flags() & CEPH_OSD_FLAG_FLUSH) {
