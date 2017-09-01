@@ -3629,7 +3629,7 @@ int PrimaryLogPG::trim_object(
   }
 
   OpContextUPtr ctx = simple_opc_create(obc);
-  ctx->snapset_obc = head_obc;
+  ctx->head_obc = head_obc;
 
   if (!ctx->lock_manager.get_snaptrimmer_write(
 	coid,
@@ -9100,17 +9100,17 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
 
   ctx->obc->ondisk_write_lock();
 
-  bool unlock_snapset_obc = false;
+  bool unlock_head_obc = false;
   ctx->op_t->add_obc(ctx->obc);
   if (ctx->clone_obc) {
     ctx->clone_obc->ondisk_write_lock();
     ctx->op_t->add_obc(ctx->clone_obc);
   }
-  if (ctx->snapset_obc && ctx->snapset_obc->obs.oi.soid !=
-      ctx->obc->obs.oi.soid) {
-    ctx->snapset_obc->ondisk_write_lock();
-    unlock_snapset_obc = true;
-    ctx->op_t->add_obc(ctx->snapset_obc);
+  if (ctx->head_obc &&
+      ctx->head_obc->obs.oi.soid != ctx->obc->obs.oi.soid) {
+    ctx->head_obc->ondisk_write_lock();
+    unlock_head_obc = true;
+    ctx->op_t->add_obc(ctx->head_obc);
   }
 
   Context *on_all_commit = new C_OSD_RepopCommit(this, repop);
@@ -9118,7 +9118,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
   Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(
     ctx->obc,
     ctx->clone_obc,
-    unlock_snapset_obc ? ctx->snapset_obc : ObjectContextRef());
+    unlock_head_obc ? ctx->head_obc : ObjectContextRef());
   if (!(ctx->log.empty())) {
     assert(ctx->at_version >= projected_last_update);
     projected_last_update = ctx->at_version;
