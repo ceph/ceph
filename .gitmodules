@@ -40,9 +40,6 @@
 [submodule "src/Beast"]
 	path = src/Beast
 	url = https://github.com/ceph/Beast.git
-[submodule "src/boost"]
-	path = src/boost
-	url = https://github.com/boostorg/boost.git
 [submodule "src/dpdk"]
 	path = src/dpdk
 	url = https://github.com/ceph/dpdk
