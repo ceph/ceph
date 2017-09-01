@@ -344,8 +344,7 @@ void PrimaryLogPG::on_local_recover(
   if (!is_delete && recovery_info.soid.is_snap()) {
     OSDriver::OSTransaction _t(osdriver.get_transaction(t));
     set<snapid_t> snaps;
-    dout(20) << " snapset " << recovery_info.ss
-	     << " legacy_snaps " << recovery_info.oi.legacy_snaps << dendl;
+    dout(20) << " snapset " << recovery_info.ss << dendl;
     auto p = recovery_info.ss.clone_snaps.find(hoid.snap);
     assert(p != recovery_info.ss.clone_snaps.end());  // hmm, should we warn?
     snaps.insert(p->second.begin(), p->second.end());
@@ -9775,7 +9774,6 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
   // clone
   dout(20) << "find_object_context  " << soid
 	   << " snapset " << obc->ssc->snapset
-	   << " legacy_snaps " << obc->obs.oi.legacy_snaps
 	   << dendl;
   snapid_t first, last;
   auto p = obc->ssc->snapset.clone_snaps.find(soid.snap);
