@@ -41,10 +41,25 @@ following the minimum size requirements for data and journal.
 
 The API call looks like::
 
-    ceph-volume prepare --filestore --data data --journal journal
+    ceph-volume prepare --filestore --data volume_group/lv_name --journal journal
 
-The journal *must* be a logical volume, just like the data volume, and that
-argument is always required even if both live under the same group.
+The ``--data`` value *must* be a volume group name and a logical volume name
+separated by a ``/``. Since logical volume names are not enforced for
+uniqueness, this prevents using the wrong volume. The ``--journal`` can be
+either a logical volume *or* a partition.
+
+When using a partition, it *must* contain a ``PARTUUID`` discoverable by
+``blkid``, so that it can later be identified correctly regardless of the
+device name (or path).
+
+When using a partition, this is how it would look for ``/dev/sdc1``::
+
+    ceph-volume prepare --filestore --data volume_group/lv_name --journal /dev/sdc1
+
+For a logical volume, just like for ``--data``, a volume group and logical
+volume name are required::
+
+    ceph-volume prepare --filestore --data volume_group/lv_name --journal volume_group/journal_lv
 
 A generated uuid is used to ask the cluster for a new OSD. These two pieces are
 crucial for identifying an OSD and will later be used throughout the
