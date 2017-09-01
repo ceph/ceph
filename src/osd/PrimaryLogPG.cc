@@ -5489,7 +5489,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	     * in the ObjectContext, so we aren't performing an actual read unless
 	     * the clone obc is not already loaded (in which case, it cannot have
 	     * an in progress write).  We also do not risk exposing uncommitted
-	     * state since we do have a read lock on the head object or snapdir,
+	     * state since we do have a read lock on the head object,
 	     * which we would have to write lock in order to make user visible
 	     * modifications to the snapshot state (snap trim related mutations
 	     * are not user visible).
