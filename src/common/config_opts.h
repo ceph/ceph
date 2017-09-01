@@ -828,6 +828,8 @@ OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD 
 OPTION(osd_pg_object_context_cache_count, OPT_INT, 64)
 OPTION(osd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 
+OPTION(osd_hack_prune_past_intervals, OPT_BOOL, false)  // simplify past intervals on startup -- last ditch method of reducing memory usage for very unhappy clusters
+
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
 OPTION(osd_loop_before_reset_tphandle, OPT_U32, 64) // Max number of loop before we reset thread-pool's handle
