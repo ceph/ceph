@@ -20,6 +20,7 @@
 #include <boost/utility/string_view.hpp>
 
 class CephContext;
+class RGWCoroutine;
 class RGWRados;
 
 namespace rgw {
@@ -33,6 +34,8 @@ struct BucketChangeObserver {
 
 /// Configuration for BucketTrimManager
 struct BucketTrimConfig {
+  /// time interval in seconds between bucket trim attempts
+  uint32_t trim_interval_sec{0};
   /// maximum number of buckets to track with BucketChangeObserver
   size_t counter_size{0};
 };
@@ -55,6 +58,9 @@ class BucketTrimManager : public BucketChangeObserver {
 
   /// increment a counter for the given bucket instance
   void on_bucket_changed(const boost::string_view& bucket_instance) override;
+
+  /// create a coroutine to run the bucket trim process every trim interval
+  RGWCoroutine* create_bucket_trim_cr();
 };
 
 } // namespace rgw

@@ -18,8 +18,11 @@
 
 #include "common/bounded_key_counter.h"
 #include "common/errno.h"
+#include "rgw_cr_rados.h"
 #include "rgw_rados.h"
 #include "rgw_sync_log_trim.h"
+
+#include <boost/asio/yield.hpp>
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -263,6 +266,53 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
 };
 
 
+class BucketTrimPollCR : public RGWCoroutine {
+  RGWRados *const store;
+  const BucketTrimConfig& config;
+  const rgw_raw_obj& obj;
+  const std::string name{"trim"}; //< lock name
+  const std::string cookie;
+
+ public:
+  BucketTrimPollCR(RGWRados *store, const BucketTrimConfig& config,
+                   const rgw_raw_obj& obj)
+    : RGWCoroutine(store->ctx()), store(store), config(config), obj(obj),
+      cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
+  {}
+
+  int operate();
+};
+
+int BucketTrimPollCR::operate()
+{
+  reenter(this) {
+    for (;;) {
+      set_status("sleeping");
+      wait(utime_t{config.trim_interval_sec, 0});
+
+      // prevent others from trimming for our entire wait interval
+      set_status("acquiring trim lock");
+      yield call(new RGWSimpleRadosLockCR(store->get_async_rados(), store,
+                                          obj, name, cookie,
+                                          config.trim_interval_sec));
+      if (retcode < 0) {
+        ldout(cct, 4) << "failed to lock: " << cpp_strerror(retcode) << dendl;
+        continue;
+      }
+
+      set_status("trimming");
+      // TODO: spawn trim logic
+      if (retcode < 0) {
+        // on errors, unlock so other gateways can try
+        set_status("unlocking");
+        yield call(new RGWSimpleRadosUnlockCR(store->get_async_rados(), store,
+                                              obj, name, cookie));
+      }
+    }
+  }
+  return 0;
+}
+
 namespace rgw {
 
 class BucketTrimManager::Impl : public TrimCounters::Server {
@@ -316,6 +366,11 @@ void BucketTrimManager::on_bucket_changed(const boost::string_view& bucket)
 {
   std::lock_guard<std::mutex> lock(impl->mutex);
   impl->counter.insert(bucket.to_string());
+}
+
+RGWCoroutine* BucketTrimManager::create_bucket_trim_cr()
+{
+  return new BucketTrimPollCR(impl->store, impl->config, impl->status_obj);
 }
 
 } // namespace rgw
