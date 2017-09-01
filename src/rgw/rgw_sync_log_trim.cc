@@ -21,6 +21,7 @@
 #include "rgw_cr_rados.h"
 #include "rgw_rados.h"
 #include "rgw_sync_log_trim.h"
+#include "rgw_sync.h"
 
 #include <boost/asio/yield.hpp>
 #include "include/assert.h"
@@ -266,6 +267,141 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
 };
 
 
+/// trim the bilog of all of the given bucket instance's shards
+class BucketTrimInstanceCR : public RGWCoroutine {
+  RGWRados *const store;
+  std::string bucket_instance;
+
+ public:
+  BucketTrimInstanceCR(RGWRados *store, const std::string& bucket_instance)
+    : RGWCoroutine(store->ctx()), store(store),
+      bucket_instance(bucket_instance)
+  {}
+  int operate() {
+    return set_cr_done();
+  }
+};
+
+/// trim each bucket instance while limiting the number of concurrent operations
+class BucketTrimInstanceCollectCR : public RGWShardCollectCR {
+  RGWRados *const store;
+  std::vector<std::string>::const_iterator bucket;
+  std::vector<std::string>::const_iterator end;
+ public:
+  BucketTrimInstanceCollectCR(RGWRados *store,
+                              const std::vector<std::string>& buckets,
+                              int max_concurrent)
+    : RGWShardCollectCR(store->ctx(), max_concurrent),
+      store(store),
+      bucket(buckets.begin()), end(buckets.end())
+  {}
+  bool spawn_next() override;
+};
+
+bool BucketTrimInstanceCollectCR::spawn_next()
+{
+  if (bucket == end) {
+    return false;
+  }
+  spawn(new BucketTrimInstanceCR(store, *bucket), false);
+  ++bucket;
+  return true;
+}
+
+/// correlate the replies from each peer gateway into the given counter
+int accumulate_peer_counters(bufferlist& bl, BucketChangeCounter& counter)
+{
+  counter.clear();
+
+  try {
+    // decode notify responses
+    auto p = bl.begin();
+    std::map<std::pair<uint64_t, uint64_t>, bufferlist> replies;
+    std::set<std::pair<uint64_t, uint64_t>> timeouts;
+    ::decode(replies, p);
+    ::decode(timeouts, p);
+
+    for (auto& peer : replies) {
+      auto q = peer.second.begin();
+      TrimCounters::Response response;
+      ::decode(response, q);
+      for (const auto& b : response.bucket_counters) {
+        counter.insert(b.bucket, b.count);
+      }
+    }
+  } catch (const buffer::error& e) {
+    return -EIO;
+  }
+  return 0;
+}
+
+class BucketTrimCR : public RGWCoroutine {
+  RGWRados *const store;
+  const BucketTrimConfig& config;
+  const rgw_raw_obj& obj;
+  bufferlist notify_replies;
+  BucketChangeCounter counter;
+  std::vector<std::string> buckets; //< buckets selected for trim
+
+ public:
+  BucketTrimCR(RGWRados *store, const BucketTrimConfig& config,
+               const rgw_raw_obj& obj)
+    : RGWCoroutine(store->ctx()), store(store), config(config),
+      obj(obj), counter(config.counter_size)
+  {}
+
+  int operate();
+};
+
+int BucketTrimCR::operate()
+{
+  reenter(this) {
+    if (config.buckets_per_interval) {
+      // query watch/notify for hot buckets
+      ldout(cct, 10) << "fetching active bucket counters" << dendl;
+      set_status("fetching active bucket counters");
+      yield {
+        // request the top bucket counters from each peer gateway
+        const TrimNotifyType type = NotifyTrimCounters;
+        TrimCounters::Request request{32};
+        bufferlist bl;
+        ::encode(type, bl);
+        ::encode(request, bl);
+        call(new RGWRadosNotifyCR(store, obj, bl, config.notify_timeout_ms,
+                                  &notify_replies));
+      }
+      if (retcode < 0) {
+        ldout(cct, 10) << "failed to fetch peer bucket counters" << dendl;
+        return set_cr_error(retcode);
+      }
+
+      // select the hottest buckets for trim
+      retcode = accumulate_peer_counters(notify_replies, counter);
+      if (retcode < 0) {
+        ldout(cct, 4) << "failed to correlate peer bucket counters" << dendl;
+        return set_cr_error(retcode);
+      }
+      buckets.reserve(config.buckets_per_interval);
+
+      const int max_count = config.buckets_per_interval;
+      counter.get_highest(max_count,
+        [this] (const std::string& bucket, int count) {
+          buckets.push_back(bucket);
+        });
+    }
+
+    // trim bucket instances with limited concurrency
+    set_status("trimming buckets");
+    ldout(cct, 4) << "collected " << buckets.size() << " buckets for trim" << dendl;
+    yield call(new BucketTrimInstanceCollectCR(store, buckets,
+                                               config.concurrent_buckets));
+    // ignore errors from individual buckets
+
+    return set_cr_done();
+  }
+  return 0;
+}
+
 class BucketTrimPollCR : public RGWCoroutine {
   RGWRados *const store;
   const BucketTrimConfig& config;
@@ -301,7 +437,7 @@ int BucketTrimPollCR::operate()
       }
 
       set_status("trimming");
-      // TODO: spawn trim logic
+      yield call(new BucketTrimCR(store, config, obj));
       if (retcode < 0) {
         // on errors, unlock so other gateways can try
         set_status("unlocking");
