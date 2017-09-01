@@ -29,27 +29,36 @@ public:
   std::string nick;
   enum perfcounter_type_d type;
 
+  // For older clients that did not send priority, pretend everything
+  // is "useful" so that mgr plugins filtering on prio will get some
+  // data (albeit probably more than they wanted)
+  uint8_t priority = PerfCountersBuilder::PRIO_USEFUL;
+
   void encode(bufferlist &bl) const
   {
     // TODO: decide whether to drop the per-type
     // encoding here, we could rely on the MgrReport
     // verisoning instead.
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(path, bl);
     ::encode(description, bl);
     ::encode(nick, bl);
     static_assert(sizeof(type) == 1, "perfcounter_type_d must be one byte");
     ::encode((uint8_t)type, bl);
+    ::encode(priority, bl);
     ENCODE_FINISH(bl);
   }
   
   void decode(bufferlist::iterator &p)
   {
-    DECODE_START(1, p);
+    DECODE_START(2, p);
     ::decode(path, p);
     ::decode(description, p);
     ::decode(nick, p);
     ::decode((uint8_t&)type, p);
+    if (struct_v >= 2) {
+      ::decode(priority, p);
+    }
     DECODE_FINISH(p);
   }
 };
