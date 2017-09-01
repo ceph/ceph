@@ -18,6 +18,7 @@
 #include <atomic>
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
+#include "include/health.h"
 
 class LogClient;
 class MLog;
@@ -90,6 +91,23 @@ public:
   }
   void debug(std::stringstream &s) {
     do_log(CLOG_DEBUG, s);
+  }
+  /**
+   * Convenience function mapping health status to
+   * the appropriate cluster log severity.
+   */
+  LogClientTemp health(health_status_t health) {
+    switch(health) {
+      case HEALTH_OK:
+        return info();
+      case HEALTH_WARN:
+        return warn();
+      case HEALTH_ERR:
+        return error();
+      default:
+        // Invalid health_status_t value
+        ceph_abort();
+    }
   }
   LogClientTemp info() {
     return LogClientTemp(CLOG_INFO, *this);
