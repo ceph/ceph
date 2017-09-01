@@ -96,7 +96,7 @@ public:
     const char *name;
     const char *description;
     const char *nick;
-    int prio = 0;
+    uint8_t prio = 0;
     enum perfcounter_type_d type;
     std::atomic<uint64_t> u64 = { 0 };
     std::atomic<uint64_t> avgcount = { 0 };
