@@ -41,10 +41,25 @@ following the minimum size requirements for data and journal.
 
 The API call looks like::
 
-    ceph-volume prepare --filestore --data data --journal journal
+    ceph-volume prepare --filestore --data volume_group/lv_name --journal journal
 
-The journal *must* be a logical volume, just like the data volume, and that
-argument is always required even if both live under the same group.
+The ``--data`` value *must* be a volume group name and a logical volume name
+separated by a ``/``. Since logical volume names are not enforced for
+uniqueness, this prevents using the wrong volume. The ``--journal`` can be
+either a logical volume *or* a partition.
+
+When using a partition, it *must* contain a ``PARTUUID`` discoverable by
+``blkid``, so that it can later be identified correctly regardless of the
+device name (or path).
+
+When using a partition, this is how it would look for ``/dev/sdc1``::
+
+    ceph-volume prepare --filestore --data volume_group/lv_name --journal /dev/sdc1
+
+For a logical volume, just like for ``--data``, a volume group and logical
+volume name are required::
+
+    ceph-volume prepare --filestore --data volume_group/lv_name --journal volume_group/journal_lv
 
 A generated uuid is used to ask the cluster for a new OSD. These two pieces are
 crucial for identifying an OSD and will later be used throughout the
@@ -74,6 +89,46 @@ mounted, re-using all the pieces of information from the initial steps::
       --osd-uuid <osd uuid> --keyring /var/lib/ceph/osd/<cluster name>-<osd id>/keyring \
       --setuser ceph --setgroup ceph
 
+
+.. _ceph-volume-lvm-partitions:
+
+Partitioning
+------------
+``ceph-volume lvm`` does not currently create partitions from a whole device.
+If using device partitions the only requirement is that they contain the
+``PARTUUID`` and that it is discoverable by ``blkid``. Both ``fdisk`` and
+``parted`` will create that automatically for a new partition.
+
+For example, using a new, unformatted drive (``/dev/sdd`` in this case) we can
+use ``parted`` to create a new partition. First we list the device
+information::
+
+    $ parted --script /dev/sdd print
+    Model: VBOX HARDDISK (scsi)
+    Disk /dev/sdd: 11.5GB
+    Sector size (logical/physical): 512B/512B
+    Disk Flags:
+
+This device is not even labeled yet, so we can use ``parted`` to create
+a ``gpt`` label before we create a partition, and verify again with ``parted
+print``::
+
+    $ parted --script /dev/sdd mklabel gpt
+    $ parted --script /dev/sdd print
+    Model: VBOX HARDDISK (scsi)
+    Disk /dev/sdd: 11.5GB
+    Sector size (logical/physical): 512B/512B
+    Partition Table: gpt
+    Disk Flags:
+
+Now lets create a single partition, and verify later if ``blkid`` can find
+a ``PARTUUID`` that is needed by ``ceph-volume``::
+
+    $ parted --script /dev/sdd mkpart primary 1 100%
+    $ blkid /dev/sdd1
+    /dev/sdd1: PARTLABEL="primary" PARTUUID="16399d72-1e1f-467d-96ee-6fe371a7d0d4"
+
+
 .. _ceph-volume-lvm-existing-osds:
 
 Existing OSDs
@@ -92,8 +147,9 @@ already running there are a few things to take into account:
   be removed (like fstab mount points)
 * There is currently no support for encrypted volumes
 
-The one time process for an existing OSD, with an ID of 0 and
-using a ``"ceph"`` cluster name would look like::
+The one time process for an existing OSD, with an ID of 0 and using
+a ``"ceph"`` cluster name would look like (the following command will **destroy
+any data** in the OSD)::
 
     ceph-volume lvm prepare --filestore --osd-id 0 --osd-fsid E3D291C1-E7BF-4984-9794-B60D9FA139CB
 
