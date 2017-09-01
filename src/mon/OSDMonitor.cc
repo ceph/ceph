@@ -5797,6 +5797,35 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
   return 0;
 }
 
+int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
+{
+  int64_t max_pgs_per_osd = g_conf->mon_pg_warn_max_per_osd;
+  int64_t max_pgs = max_pgs_per_osd * osdmap.get_num_in_osds();
+  int64_t projected = 0;
+  if (pool < 0) {
+    projected += pg_num * size;
+  }
+  for (const auto& i : osdmap.get_pools()) {
+    if (i.first == pool) {
+      projected += pg_num * size;
+    } else {
+      projected += i.second.get_pg_num() * i.second.get_size();
+    }
+  }
+  if (projected > max_pgs) {
+    if (pool >= 0) {
+      *ss << "pool id " << pool;
+    }
+    *ss << " pg_num " << pg_num << " size " << size
+	<< " would mean " << projected
+	<< " total pgs, which exceeds max " << max_pgs
+	<< " (mon_pg_warn_max_per_osd " << max_pgs_per_osd
+	<< " * num_in_osds " << osdmap.get_num_in_osds() << ")";
+    return -ERANGE;
+  }
+  return 0;
+}
+
 /**
  * @param name The name of the new pool
  * @param auid The auid of the pool owner. Can be -1
@@ -5872,6 +5901,11 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   }
   unsigned size, min_size;
   r = prepare_pool_size(pool_type, erasure_code_profile, &size, &min_size, ss);
+  if (r) {
+    dout(10) << " prepare_pool_size returns " << r << dendl;
+    return r;
+  }
+  r = check_pg_num(-1, pg_num, size, ss);
   if (r) {
     dout(10) << " prepare_pool_size returns " << r << dendl;
     return r;
@@ -6052,6 +6086,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "pool size must be between 1 and 10";
       return -EINVAL;
     }
+    int r = check_pg_num(pool, p.get_pg_num(), n, &ss);
+    if (r < 0) {
+      return r;
+    }
     p.size = n;
     if (n < p.min_size)
       p.min_size = n;
@@ -6120,6 +6158,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
          << g_conf->mon_max_pool_pg_num
          << " (you may adjust 'mon max pool pg num' for higher values)";
       return -ERANGE;
+    }
+    int r = check_pg_num(pool, n, p.get_size(), &ss);
+    if (r) {
+      return r;
     }
     string force;
     cmd_getval(g_ceph_context,cmdmap, "force", force);
