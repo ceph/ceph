@@ -7548,13 +7548,9 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
   reply_obj.mtime = oi.mtime;
   assert(obc->ssc);
   if (soid.snap < CEPH_NOSNAP) {
-    if (obc->ssc->snapset.is_legacy()) {
-      reply_obj.snaps = oi.legacy_snaps;
-    } else {
-      auto p = obc->ssc->snapset.clone_snaps.find(soid.snap);
-      assert(p != obc->ssc->snapset.clone_snaps.end()); // warn?
-      reply_obj.snaps = p->second;
-    }
+    auto p = obc->ssc->snapset.clone_snaps.find(soid.snap);
+    assert(p != obc->ssc->snapset.clone_snaps.end()); // warn?
+    reply_obj.snaps = p->second;
   } else {
     reply_obj.snap_seq = obc->ssc->snapset.seq;
   }
