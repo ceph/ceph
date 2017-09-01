@@ -263,6 +263,7 @@ void MgrClient::send_report()
 	  type.nick = data.nick;
 	}
 	type.type = data.type;
+        type.priority = data.prio;
 	report->declare_types.push_back(std::move(type));
 	session->declared.insert(path);
       }
