@@ -9716,27 +9716,19 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
  
   // head?
   if (oid.snap > ssc->snapset.seq) {
-    if (ssc->snapset.head_exists) {
-      ObjectContextRef obc = get_object_context(head, false);
-      dout(10) << "find_object_context  " << head
-	       << " want " << oid.snap << " > snapset seq " << ssc->snapset.seq
-	       << " -- HIT " << obc->obs
-	       << dendl;
-      if (!obc->ssc)
-	obc->ssc = ssc;
-      else {
-	assert(ssc == obc->ssc);
-	put_snapset_context(ssc);
-      }
-      *pobc = obc;
-      return 0;
-    }
+    ObjectContextRef obc = get_object_context(head, false);
     dout(10) << "find_object_context  " << head
 	     << " want " << oid.snap << " > snapset seq " << ssc->snapset.seq
-	     << " but head dne -- DNE"
+	     << " -- HIT " << obc->obs
 	     << dendl;
-    put_snapset_context(ssc);
-    return -ENOENT;
+    if (!obc->ssc)
+      obc->ssc = ssc;
+    else {
+      assert(ssc == obc->ssc);
+      put_snapset_context(ssc);
+    }
+    *pobc = obc;
+    return 0;
   }
 
   // which clone would it be?
