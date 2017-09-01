@@ -1,0 +1,17 @@
+meta:
+- desc: install ceph/luminous latest
+tasks:
+- install:
+    branch: luminous
+- print: "**** done install luminous"
+- ceph:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release luminous
+      - ceph osd set-require-min-compat-client luminous
+- print: "**** done ceph"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false
