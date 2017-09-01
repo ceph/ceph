@@ -396,12 +396,10 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       } else {
         f->dump_string("nick", "");
       }
-      if (d->prio) {
-	int p = std::max(std::min(d->prio + prio_adjust,
-				  (int)PerfCountersBuilder::PRIO_CRITICAL),
-			 0);
-	f->dump_int("priority", p);
-      }
+      int p = std::max(std::min(d->prio + prio_adjust,
+                                (int)PerfCountersBuilder::PRIO_CRITICAL),
+                       0);
+      f->dump_int("priority", p);
       f->close_section();
     } else {
       if (d->type & PERFCOUNTER_LONGRUNAVG) {
