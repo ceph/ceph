@@ -5293,7 +5293,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	result = _delete_oid(ctx, true, false);
 	if (result >= 0) {
 	  // mark that this is a cache eviction to avoid triggering normal
-	  // make_writeable() clone or snapdir object creation in finish_ctx()
+	  // make_writeable() clone creation in finish_ctx()
 	  ctx->cache_evict = true;
 	}
 	osd->logger->inc(l_osd_tier_evict);
