@@ -75,6 +75,9 @@ void RGWOp_MDLog_List::execute() {
       http_ret = -EINVAL;
       return;
     }
+    if (max_entries > LOG_CLASS_LIST_MAX_ENTRIES) {
+      max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
+    }
   } 
 
   if (period.empty()) {
@@ -91,15 +94,8 @@ void RGWOp_MDLog_List::execute() {
 
   meta_log.init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
 
-  do {
-    http_ret = meta_log.list_entries(handle, max_entries, entries,
-				     &last_marker, &truncated);
-    if (http_ret < 0) 
-      break;
-
-    if (!max_entries_str.empty()) 
-      max_entries -= entries.size();
-  } while (truncated && (max_entries > 0));
+  http_ret = meta_log.list_entries(handle, max_entries, entries,
+                                   &last_marker, &truncated);
 
   meta_log.complete_list_entries(handle);
 }
@@ -600,20 +596,16 @@ void RGWOp_DATALog_List::execute() {
       http_ret = -EINVAL;
       return;
     }
-  } 
-  
-  do {
-    // Note that last_marker is updated to be the marker of the last
-    // entry listed
-    http_ret = store->data_log->list_entries(shard_id, ut_st, ut_et, 
-					     max_entries, entries, marker,
-					     &last_marker, &truncated);
-    if (http_ret < 0) 
-      break;
+    if (max_entries > LOG_CLASS_LIST_MAX_ENTRIES) {
+      max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
+    }
+  }
 
-    if (!max_entries_str.empty()) 
-      max_entries -= entries.size();
-  } while (truncated && (max_entries > 0));
+  // Note that last_marker is updated to be the marker of the last
+  // entry listed
+  http_ret = store->data_log->list_entries(shard_id, ut_st, ut_et,
+                                           max_entries, entries, marker,
+                                           &last_marker, &truncated);
 }
 
 void RGWOp_DATALog_List::send_response() {
