@@ -340,6 +340,7 @@ namespace rgw {
     uint32_t get_owner_uid() const { return state.owner_uid; }
     uint32_t get_owner_gid() const { return state.owner_gid; }
 
+    struct timespec get_ctime() const { return state.ctime; }
     struct timespec get_mtime() const { return state.mtime; }
 
     void create_stat(struct stat* st, uint32_t mask) {
