@@ -240,7 +240,9 @@ void OSDMonitor::create_initial()
     derr << __func__ << " mon_debug_no_require_luminous=true" << dendl;
   } else {
     newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
-    newmap.flags |= CEPH_OSDMAP_RECOVERY_DELETES;
+    newmap.flags |=
+      CEPH_OSDMAP_RECOVERY_DELETES |
+      CEPH_OSDMAP_PURGED_SNAPDIRS;
     newmap.full_ratio = g_conf->mon_osd_full_ratio;
     if (newmap.full_ratio > 1.0) newmap.full_ratio /= 100;
     newmap.backfillfull_ratio = g_conf->mon_osd_backfillfull_ratio;
@@ -3324,6 +3326,15 @@ void OSDMonitor::tick()
     if (handle_osd_timeouts(now, last_osd_report)) {
       do_propose = true;
     }
+  }
+  if (!osdmap.test_flag(CEPH_OSDMAP_PURGED_SNAPDIRS) &&
+      osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+      mon->mgrstatmon()->is_readable() &&
+      mon->mgrstatmon()->definitely_converted_snapsets()) {
+    dout(1) << __func__ << " all snapsets converted, setting purged_snapdirs"
+	    << dendl;
+    add_flag(CEPH_OSDMAP_PURGED_SNAPDIRS);
+    do_propose = true;
   }
 
   // mark osds down?
