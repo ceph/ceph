@@ -1324,25 +1324,6 @@ Usage::
 
 	ceph pg scrub <pgid>
 
-Subcommand ``set_full_ratio`` sets ratio at which pgs are considered full.
-
-Usage::
-
-	ceph pg set_full_ratio <float[0.0-1.0]>
-
-Subcommand ``set_backfillfull_ratio`` sets ratio at which pgs are considered too full to backfill.
-
-Usage::
-
-	ceph pg set_backfillfull_ratio <float[0.0-1.0]>
-
-Subcommand ``set_nearfull_ratio`` sets ratio at which pgs are considered nearly
-full.
-
-Usage::
-
-	ceph pg set_nearfull_ratio <float[0.0-1.0]>
-
 Subcommand ``stat`` shows placement group status.
 
 Usage::
