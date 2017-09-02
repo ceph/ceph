@@ -4124,6 +4124,13 @@ int BlueStore::_open_bdev(bool create)
   if (r < 0) {
     goto fail_close;
   }
+  if (bdev->get_size() < cct->_conf->bluestore_bluefs_min) {
+    dout(1) << __func__ << " main device size " << si_t(bdev->get_size())
+            << " is too small, disable bluestore_bluefs_min for now"
+            << dendl;
+    int r = cct->_conf->set_val("bluestore_bluefs_min", "0");
+    assert(r == 0);
+  }
   return 0;
 
  fail_close:
