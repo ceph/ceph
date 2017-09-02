@@ -56,9 +56,14 @@ int execute(const po::variables_map &vm, bool enabled) {
     return r;
   }
 
-  const std::vector<std::string> &args = vm[at::POSITIONAL_ARGUMENTS]
-    .as<std::vector<std::string> >();
-  std::vector<std::string> feature_names(args.begin() + 1, args.end());
+  std::vector<std::string> feature_names;
+  if (vm.count(at::POSITIONAL_ARGUMENTS)) {
+    const std::vector<std::string> &args =
+      vm[at::POSITIONAL_ARGUMENTS].as<std::vector<std::string> >();
+    feature_names.insert(feature_names.end(), args.begin() + arg_index,
+                         args.end());
+  }
+
   if (feature_names.empty()) {
     std::cerr << "rbd: at least one feature name must be specified"
               << std::endl;
