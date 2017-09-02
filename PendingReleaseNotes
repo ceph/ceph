@@ -11,3 +11,10 @@
   New commands "pg cancel-force-recovery" and "pg cancel-force-backfill"
   restore default recovery/backfill priority of previously forced pgs.
 
+
+12.2.1
+------
+
+* Clusters will need to upgrade to 12.2.1 before upgrading to any
+  Mimic 13.y.z version (either a development release or an eventual
+  stable Mimic release).
