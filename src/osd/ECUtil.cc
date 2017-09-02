@@ -52,6 +52,13 @@ int ECUtil::decode(
 
   assert(to_decode.size());
 
+  for (auto i = to_decode.begin();
+       i != to_decode.end();
+       ++i) {
+    if(i->second.length() == 0)
+      return 0;
+  }
+
   set<int> need;
   for (map<int, bufferlist*>::iterator i = out.begin();
        i != out.end();
