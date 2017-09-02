@@ -27,8 +27,12 @@ template<typename T>
 using remove_reference_t = typename std::remove_reference<T>::type;
 template<typename T>
 using result_of_t = typename std::result_of<T>::type;
+
 template<typename T>
 using decay_t = typename std::decay<T>::type;
+
+template<bool T, typename F = void>
+using enable_if_t = typename std::enable_if<T,F>::type;
 
 namespace _backport14 {
 template<typename T>

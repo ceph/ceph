@@ -95,6 +95,13 @@ add_executable(unittest_util
 add_ceph_unittest(unittest_util ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_util)
 target_link_libraries(unittest_util global ${BLKID_LIBRARIES})
 
+# unittest_random
+add_executable(unittest_random
+  test_random.cc
+  )
+add_ceph_unittest(unittest_random ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_random)
+target_link_libraries(unittest_random global ${BLKID_LIBRARIES})
+
 # unittest_throttle
 add_executable(unittest_throttle
   Throttle.cc
