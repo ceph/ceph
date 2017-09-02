@@ -147,6 +147,8 @@ void ObjectCopyRequest<I>::send_read_object() {
       dout(20) << ": read op: " << sync_op.offset << "~" << sync_op.length
                << dendl;
       op.read(sync_op.offset, sync_op.length, &sync_op.out_bl, nullptr);
+      op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
+                       LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
       break;
     default:
       break;
@@ -222,6 +224,8 @@ void ObjectCopyRequest<I>::send_write_object() {
       dout(20) << ": write op: " << sync_op.offset << "~"
                << sync_op.out_bl.length() << dendl;
       op.write(sync_op.offset, sync_op.out_bl);
+      op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
+                       LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
       break;
     case SYNC_OP_TYPE_TRUNC:
       dout(20) << ": trunc op: " << sync_op.offset << dendl;
