@@ -1207,7 +1207,7 @@ struct RGWBucketInfo
   bool has_website;
   RGWBucketWebsiteConf website_conf;
 
-  RGWBucketIndexType index_type;
+  RGWBucketIndexType index_type = RGWBIType_Normal;
 
   bool swift_versioning;
   string swift_ver_location;
