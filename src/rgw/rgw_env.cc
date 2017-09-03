@@ -14,7 +14,7 @@
 
 void RGWEnv::init(CephContext *cct)
 {
-  conf.init(cct, this);
+  conf.init(cct);
 }
 
 void RGWEnv::set(const boost::string_ref& name, const boost::string_ref& val)
@@ -127,7 +127,7 @@ void RGWEnv::remove(const char *name)
     env_map.erase(iter);
 }
 
-void RGWConf::init(CephContext *cct, RGWEnv *env)
+void RGWConf::init(CephContext *cct)
 {
   enable_ops_log = cct->_conf->rgw_enable_ops_log;
   enable_usage_log = cct->_conf->rgw_enable_usage_log;
