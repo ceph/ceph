@@ -3883,12 +3883,16 @@ void PrimaryLogPG::oio_throttle_get(OpRequestRef op)
     osd->oio_mon.get();
     double cur_load = osd->oio_mon.get_tot();
     double target_load = osd->oio_mon.get_target_load();
+    bool is_sus = osd->osd->op_shardedwq.is_suspended();
 
-    dout(30) << "oio get: "
-      << " " << *(op->get_req())
-      << " cur_load " << cur_load
-      << " tar_load " << target_load
+    if (!is_sus && cur_load >= target_load) {
+      osd->osd->op_shardedwq.set_suspend(true);
+
+      dout(30) << " suspend true "
+      << " cur " << cur_load
+      << " tar " << target_load
       << dendl;
+    }
   }
 }
 
@@ -3900,9 +3904,18 @@ void PrimaryLogPG::oio_throttle_put(OpRequestRef op)
     osd->oio_mon.add_load(cur_load);
     bool is_up = osd->oio_mon.update();
     double target_load = osd->oio_mon.get_target_load();
+    bool is_sus = osd->osd->op_shardedwq.is_suspended();
+
+    if (is_sus && cur_load < target_load) {
+      osd->osd->op_shardedwq.set_suspend(false);
+      dout(30) << " suspend false "
+	<< " cur " << cur_load
+	<< " tar " << target_load
+	<< dendl;
+    }
 
     if (is_up) {
-      generic_dout(30) << "oio put: "
+      dout(30) << "oio put: "
 	<< *(op->get_req())
 	<< " avg_tput " << osd->oio_mon.get_tput()
 	<< " avg_load " << osd->oio_mon.get_load()

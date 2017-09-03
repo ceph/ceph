@@ -1831,6 +1831,8 @@ protected:
     : public ShardedThreadPool::ShardedWQ<OpQueueItem>
   {
     OSD *osd;
+    bool suspended;
+    Mutex lock;
 
   public:
     ShardedOpWQ(OSD *o,
@@ -1838,8 +1840,10 @@ protected:
 		time_t si,
 		ShardedThreadPool* tp)
       : ShardedThreadPool::ShardedWQ<OpQueueItem>(ti, si, tp),
-        osd(o) {
-    }
+        osd(o),
+	suspended(false),
+	lock("ShardedOpWQ_lock")
+    { }
 
     void _add_slot_waiter(
       spg_t token,
@@ -1855,6 +1859,32 @@ protected:
     /// requeue an old item (at the front of the line)
     void _enqueue_front(OpQueueItem&& item) override;
       
+
+    void set_suspend(bool sus) {
+      bool need_sig = false;
+      {
+	Mutex::Locker l(lock);
+
+	if (!sus && suspended)
+	  need_sig = true;
+
+	suspended = sus;
+	for(uint32_t i = 0; i < num_shards; i++) {
+	  ShardData* sdata = shard_list[i];
+	  assert (NULL != sdata); 
+	  sdata->pqueue->set_suspend(sus);
+        }
+      }
+
+      if (need_sig)
+	return_waiting_threads();
+    }
+
+    bool is_suspended() { 
+      Mutex::Locker l(lock);
+      return suspended;
+    }
+
     void return_waiting_threads() override {
       for(uint32_t i = 0; i < osd->num_shards; i++) {
 	OSDShard* sdata = osd->shards[i];

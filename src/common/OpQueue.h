@@ -58,6 +58,9 @@ class OpQueue {
     virtual T dequeue() = 0;
     // Formatted output of the queue
     virtual void dump(ceph::Formatter *f) const = 0;
+    // Suspend dequeue. Suspeded queue will return empty item
+    virtual void set_suspend(bool sus) {};
+    virtual bool is_suspended() { return false; }
     // Don't leak resources on destruction
     virtual ~OpQueue() {}; 
 };
