@@ -103,6 +103,8 @@ namespace ceph {
 		 unsigned cost,
 		 Request item) override final;
 
+    inline void set_suspend(bool sus);
+
     // Enqueue the op in the front of the regular queue
     void enqueue_front(Client cl,
 		       unsigned priority,

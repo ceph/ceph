@@ -1807,6 +1807,8 @@ private:
     vector<ShardData*> shard_list;
     OSD *osd;
     uint32_t num_shards;
+    bool suspended;
+    Mutex lock;
 
   public:
     ShardedOpWQ(uint32_t pnum_shards,
@@ -1816,7 +1818,9 @@ private:
 		ShardedThreadPool* tp)
       : ShardedThreadPool::ShardedWQ<pair<spg_t,PGQueueable>>(ti, si, tp),
         osd(o),
-        num_shards(pnum_shards) {
+        num_shards(pnum_shards),
+	suspended(false),
+	lock("ShardedOpWQ_lock") {
       for (uint32_t i = 0; i < num_shards; i++) {
 	char lock_name[32] = {0};
 	snprintf(lock_name, sizeof(lock_name), "%s.%d", "OSD:ShardedOpWQ:", i);
@@ -1863,7 +1867,32 @@ private:
 
     /// requeue an old item (at the front of the line)
     void _enqueue_front(pair <spg_t, PGQueueable> item) override;
-      
+
+    void set_suspend(bool sus) {
+      bool need_sig = false;
+      {
+	Mutex::Locker l(lock);
+
+	if (!sus && suspended)
+	  need_sig = true;
+
+	suspended = sus;
+	for(uint32_t i = 0; i < num_shards; i++) {
+	  ShardData* sdata = shard_list[i];
+	  assert (NULL != sdata); 
+	  sdata->pqueue->set_suspend(sus);
+        }
+      }
+
+      if (need_sig)
+	return_waiting_threads();
+    }
+
+    bool is_suspended() { 
+      Mutex::Locker l(lock);
+      return suspended;
+    }
+
     void return_waiting_threads() override {
       for(uint32_t i = 0; i < num_shards; i++) {
 	ShardData* sdata = shard_list[i];

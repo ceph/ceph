@@ -195,4 +195,8 @@ namespace ceph {
     }
     return retn.first;
   }
+
+  inline void mClockPoolQueue::set_suspend(bool sus) {
+    queue.set_suspend(sus);
+  }
 } // namespace ceph

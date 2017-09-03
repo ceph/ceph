@@ -480,6 +480,9 @@ namespace crimson {
 	return total;
       }
 
+      void set_suspend(bool sus) {
+        is_sus = sus;
+      }
 
       bool remove_by_req_filter(std::function<bool(R&&)> filter_accum,
 				bool visit_backwards = false) {
@@ -724,6 +727,8 @@ namespace crimson {
       // every request creates a tick
       Counter tick = 0;
 
+      Time      last_schd = TimeZero;
+      bool      is_sus = false;
       // performance data collection
       size_t reserv_sched_count = 0;
       size_t prop_sched_count = 0;
@@ -999,6 +1004,20 @@ namespace crimson {
 	  return result;
 	}
 
+        if (is_sus == true) {
+          if (last_schd == TimeZero)
+            last_schd = now;
+
+          // time-out check
+          if (Time(0.04) > now-last_schd) {
+            result.type = NextReqType::future;
+            result.when_ready = now+Time(0.01);
+
+            return result;
+          }
+        }
+        last_schd = TimeZero;
+
 	// no existing reservations before now, so try weight-based
 	// scheduling
 
@@ -1183,7 +1202,7 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
 			bool _allow_limit_break = false,
-			double _anticipation_timeout = 0.0) :
+			double _anticipation_timeout = 0.2) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
 	      _allow_limit_break, _anticipation_timeout)
