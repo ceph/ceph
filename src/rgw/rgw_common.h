@@ -385,7 +385,7 @@ class RGWEnv;
 class RGWConf {
   friend class RGWEnv;
 protected:
-  void init(CephContext *cct, RGWEnv* env);
+  void init(CephContext *cct);
 public:
   RGWConf()
     : enable_ops_log(1),
