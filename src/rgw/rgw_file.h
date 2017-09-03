@@ -91,7 +91,7 @@ namespace rgw {
    */
   struct fh_key
   {
-    rgw_fh_hk fh_hk;
+    rgw_fh_hk fh_hk {};
     uint32_t version;
 
     static constexpr uint64_t seed = 8675309;
