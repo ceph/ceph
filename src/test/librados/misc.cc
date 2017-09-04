@@ -77,6 +77,7 @@ TEST(LibRadosMiscConnectFailure, ConnectFailure) {
       break;  // yay, we timed out
     // try again
     rados_shutdown(cluster);
+    ASSERT_EQ(0, rados_create(&cluster, NULL));
   }
   ASSERT_NE(0, r);
 
