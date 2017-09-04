@@ -306,4 +306,71 @@ public:
   }
 };
 
+class RGWCRHTTPGetDataCB;
+
+class RGWStreamRWHTTPResourceCRF {
+  RGWCoroutinesEnv *env;
+  RGWCoroutine *caller;
+  RGWHTTPManager *http_manager;
+
+  RGWHTTPStreamRWRequest *req;
+
+  RGWCRHTTPGetDataCB *in_cb{nullptr};
+
+  boost::asio::coroutine read_state;
+  boost::asio::coroutine write_state;
+
+
+public:
+  RGWStreamRWHTTPResourceCRF(CephContext *_cct,
+                               RGWCoroutinesEnv *_env,
+                               RGWCoroutine *_caller,
+                               RGWHTTPManager *_http_manager,
+                               RGWHTTPStreamRWRequest *_req) : env(_env),
+                                                               caller(_caller),
+                                                               http_manager(_http_manager),
+                                                               req(_req) {}
+  ~RGWStreamRWHTTPResourceCRF();
+
+  int init();
+  int read(bufferlist *data, uint64_t max, bool *need_retry); /* reentrant */
+  int write(bufferlist& data); /* reentrant */
+};
+
+class TestCR : public RGWCoroutine {
+  CephContext *cct;
+  RGWHTTPManager *http_manager;
+  string url;
+  RGWHTTPStreamRWRequest *req{nullptr};
+  RGWStreamRWHTTPResourceCRF *crf{nullptr};
+  bufferlist bl;
+  bool need_retry{false};
+  int ret{0};
+public:
+  TestCR(CephContext *_cct, RGWHTTPManager *_mgr, RGWHTTPStreamRWRequest *_req);
+  ~TestCR();
+
+  int operate();
+};
+
+class TestSpliceCR : public RGWCoroutine {
+  CephContext *cct;
+  RGWHTTPManager *http_manager;
+  string url;
+  RGWHTTPStreamRWRequest *in_req{nullptr};
+  RGWHTTPStreamRWRequest *out_req{nullptr};
+  RGWStreamRWHTTPResourceCRF *in_crf{nullptr};
+  RGWStreamRWHTTPResourceCRF *out_crf{nullptr};
+  bufferlist bl;
+  bool need_retry{false};
+  int ret{0};
+public:
+  TestSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
+               RGWHTTPStreamRWRequest *_in_req,
+               RGWHTTPStreamRWRequest *_out_req);
+  ~TestSpliceCR();
+
+  int operate();
+};
+
 #endif
