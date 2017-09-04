@@ -941,9 +941,9 @@ void MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval)
 
     if (to_eval && dir->get_inode()->is_auth())
       to_eval->insert(dir->get_inode());
-  } 
 
-  show_subtrees(15);
+    show_subtrees(15);
+  }
 }
 
 void MDCache::subtree_merge_writebehind_finish(CInode *in, MutationRef& mut)
