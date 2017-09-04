@@ -507,7 +507,7 @@ void SharedDriverQueueData::_aio_thread()
             ceph_abort();
           }
           cur = ceph::coarse_real_clock::now();
-          auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
+          auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - t->start);
           logger->tinc(l_bluestore_nvmedevice_write_queue_lat, dur);
           break;
         }
@@ -530,7 +530,7 @@ void SharedDriverQueueData::_aio_thread()
             ceph_abort();
           } else {
             cur = ceph::coarse_real_clock::now();
-            auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
+            auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - t->start);
             logger->tinc(l_bluestore_nvmedevice_read_queue_lat, dur);
           }
           break;
@@ -546,7 +546,7 @@ void SharedDriverQueueData::_aio_thread()
             ceph_abort();
           } else {
             cur = ceph::coarse_real_clock::now();
-            auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
+            auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - t->start);
             logger->tinc(l_bluestore_nvmedevice_flush_queue_lat, dur);
           }
           break;
@@ -581,7 +581,7 @@ void SharedDriverQueueData::_aio_thread()
 
         Mutex::Locker l(queue_lock);
         if (queue_empty.load()) {
-	  cur = ceph::coarse_real_clock::now();
+          cur = ceph::coarse_real_clock::now();
           auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
           logger->tinc(l_bluestore_nvmedevice_polling_lat, dur);
           if (aio_stop)
