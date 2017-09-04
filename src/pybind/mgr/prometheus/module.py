@@ -373,20 +373,17 @@ class Module(MgrModule):
                     self.log.debug('ignoring %s, type %s' % (path, stattype))
                     continue
 
-                daemon_type, daemon_id = daemon.split('.')
-
                 if path not in self.metrics:
                     self.metrics[path] = Metric(
                         stattype,
                         path,
                         counter_info['description'],
-                        (daemon_type,),
+                        ("ceph_daemon",),
                     )
 
-                self.log.debug("set {0}".format(path))
                 self.metrics[path].set(
                     counter_info['value'],
-                    (daemon_id,)
+                    (daemon,)
                 )
 
         return self.metrics
