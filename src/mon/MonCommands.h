@@ -962,7 +962,7 @@ COMMAND("osd pool application enable " \
         "name=pool,type=CephPoolname " \
         "name=app,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=force,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
-        "enable use of an application <app> [cephfs,rbd,rgw] on pool <poolname>",
+        "enable use of an application <app> [cephfs,rbd,rgw] on pool <poolname>.  --yes-i-really-mean-it is optional, unless you want enable multi-application to the same pool",
         "osd", "rw", "cli,rest")
 COMMAND("osd pool application disable " \
         "name=pool,type=CephPoolname " \
