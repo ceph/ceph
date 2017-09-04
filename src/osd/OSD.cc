@@ -218,6 +218,7 @@ OSDService::OSDService(OSD *osd) :
   recovery_gen_wq("recovery_gen_wq", cct->_conf->osd_recovery_thread_timeout,
 		  &osd->disk_tp),
   class_handler(osd->class_handler),
+  oio_mon(osd->cct),
   pg_epoch_lock("OSDService::pg_epoch_lock"),
   publish_lock("OSDService::publish_lock"),
   pre_publish_lock("OSDService::pre_publish_lock"),

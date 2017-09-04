@@ -95,6 +95,7 @@ private:
   static const uint8_t flag_delayed =     1 << 2;
   static const uint8_t flag_started =     1 << 3;
   static const uint8_t flag_sub_op_sent = 1 << 4;
+  static const uint8_t flag_repop_issued =1 << 6;
   static const uint8_t flag_commit_sent = 1 << 5;
 
   std::vector<ClassInfo> classes_;
@@ -135,6 +136,7 @@ public:
     case flag_delayed: return "delayed";
     case flag_started: return "started";
     case flag_sub_op_sent: return "waiting for sub ops";
+    case flag_repop_issued: return "repop issued";
     case flag_commit_sent: return "commit sent; apply or cleanup";
     default: break;
     }
@@ -156,8 +158,15 @@ public:
   void mark_sub_op_sent(const string& s) {
     mark_flag_point_string(flag_sub_op_sent, s);
   }
+  void mark_repop_issued() {
+    mark_flag_point(flag_repop_issued, "repop_issued");
+  }
   void mark_commit_sent() {
     mark_flag_point(flag_commit_sent, "commit_sent");
+  }
+
+  bool is_repop_issued() const {
+    return hit_flag_points & flag_repop_issued;
   }
 
   utime_t get_dequeued_time() const {
