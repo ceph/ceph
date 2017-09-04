@@ -474,10 +474,7 @@ void SharedDriverQueueData::_aio_thread()
  again:
     dout(40) << __func__ << " polling" << dendl;
     if (inflight) {
-      if (!spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion)) {
-        dout(30) << __func__ << " idle, have a pause" << dendl;
-        _mm_pause();
-      }
+      spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion);
     }
 
     for (; t; t = t->next) {
