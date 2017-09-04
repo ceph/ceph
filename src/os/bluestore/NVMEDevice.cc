@@ -58,10 +58,10 @@ static thread_local int queue_id = -1;
 
 enum {
   l_bluestore_nvmedevice_first = 632430,
-  l_bluestore_nvmedevice_aio_write_lat,
+  l_bluestore_nvmedevice_write_lat,
   l_bluestore_nvmedevice_read_lat,
   l_bluestore_nvmedevice_flush_lat,
-  l_bluestore_nvmedevice_aio_write_queue_lat,
+  l_bluestore_nvmedevice_write_queue_lat,
   l_bluestore_nvmedevice_read_queue_lat,
   l_bluestore_nvmedevice_flush_queue_lat,
   l_bluestore_nvmedevice_queue_ops,
@@ -146,12 +146,12 @@ class SharedDriverQueueData {
 
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
-    b.add_time_avg(l_bluestore_nvmedevice_aio_write_lat, "aio_write_lat", "Average write completing latency");
+    b.add_time_avg(l_bluestore_nvmedevice_write_lat, "write_lat", "Average write completing latency");
     b.add_time_avg(l_bluestore_nvmedevice_read_lat, "read_lat", "Average read completing latency");
     b.add_time_avg(l_bluestore_nvmedevice_flush_lat, "flush_lat", "Average flush completing latency");
     b.add_u64(l_bluestore_nvmedevice_queue_ops, "queue_ops", "Operations in nvme queue");
     b.add_time_avg(l_bluestore_nvmedevice_polling_lat, "polling_lat", "Average polling latency");
-    b.add_time_avg(l_bluestore_nvmedevice_aio_write_queue_lat, "aio_write_queue_lat", "Average queue write request latency");
+    b.add_time_avg(l_bluestore_nvmedevice_write_queue_lat, "write_queue_lat", "Average queue write request latency");
     b.add_time_avg(l_bluestore_nvmedevice_read_queue_lat, "read_queue_lat", "Average queue read request latency");
     b.add_time_avg(l_bluestore_nvmedevice_flush_queue_lat, "flush_queue_lat", "Average queue flush request latency");
     b.add_u64_counter(l_bluestore_nvmedevice_buffer_alloc_failed, "buffer_alloc_failed", "Alloc data buffer failed count");
@@ -474,10 +474,7 @@ void SharedDriverQueueData::_aio_thread()
  again:
     dout(40) << __func__ << " polling" << dendl;
     if (inflight) {
-      if (!spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion)) {
-        dout(30) << __func__ << " idle, have a pause" << dendl;
-        _mm_pause();
-      }
+      spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion);
     }
 
     for (; t; t = t->next) {
@@ -510,8 +507,8 @@ void SharedDriverQueueData::_aio_thread()
             ceph_abort();
           }
           cur = ceph::coarse_real_clock::now();
-          auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
-          logger->tinc(l_bluestore_nvmedevice_aio_write_queue_lat, dur);
+          auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - t->start);
+          logger->tinc(l_bluestore_nvmedevice_write_queue_lat, dur);
           break;
         }
         case IOCommand::READ_COMMAND:
@@ -533,7 +530,7 @@ void SharedDriverQueueData::_aio_thread()
             ceph_abort();
           } else {
             cur = ceph::coarse_real_clock::now();
-            auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
+            auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - t->start);
             logger->tinc(l_bluestore_nvmedevice_read_queue_lat, dur);
           }
           break;
@@ -549,7 +546,7 @@ void SharedDriverQueueData::_aio_thread()
             ceph_abort();
           } else {
             cur = ceph::coarse_real_clock::now();
-            auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
+            auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - t->start);
             logger->tinc(l_bluestore_nvmedevice_flush_queue_lat, dur);
           }
           break;
@@ -584,7 +581,7 @@ void SharedDriverQueueData::_aio_thread()
 
         Mutex::Locker l(queue_lock);
         if (queue_empty.load()) {
-	  cur = ceph::coarse_real_clock::now();
+          cur = ceph::coarse_real_clock::now();
           auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
           logger->tinc(l_bluestore_nvmedevice_polling_lat, dur);
           if (aio_stop)
@@ -764,7 +761,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
         int r;
 
         spdk_env_opts_init(&opts);
-        opts.name = "ceph-osd";
+        opts.name = "nvme-device-manager";
         opts.core_mask = coremask_arg;
         opts.master_core = m_core_arg;
         opts.mem_size = mem_size_arg;
@@ -822,7 +819,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
   auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(
       ceph::coarse_real_clock::now() - task->start);
   if (task->command == IOCommand::WRITE_COMMAND) {
-    queue->logger->tinc(l_bluestore_nvmedevice_aio_write_lat, dur);
+    queue->logger->tinc(l_bluestore_nvmedevice_write_lat, dur);
     assert(!spdk_nvme_cpl_is_error(completion));
     dout(20) << __func__ << " write/zero op successfully, left "
              << queue->queue_op_seq - queue->completed_op_seq << dendl;
