@@ -764,7 +764,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
         int r;
 
         spdk_env_opts_init(&opts);
-        opts.name = "ceph-osd";
+        opts.name = "nvme-device-manager";
         opts.core_mask = coremask_arg;
         opts.master_core = m_core_arg;
         opts.mem_size = mem_size_arg;
