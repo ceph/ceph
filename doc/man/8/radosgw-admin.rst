@@ -312,6 +312,11 @@ Options
 
 	Temporary url key.
 
+.. option:: --max-buckets
+
+	max number of buckets for a user (0 for no limit, negative value to disable bucket creation).
+	Default is 1000.
+
 .. option:: --system
 
 	Set the system flag on the user.
