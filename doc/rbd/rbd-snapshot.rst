@@ -294,7 +294,7 @@ a snapshot, you must flatten the child images first. ::
 
 For example:: 
 
-	rbd flatten rbd/my-image
+	rbd flatten rbd/new-image
 
 .. note:: Since a flattened image contains all the information from the snapshot, 
    a flattened image will take up more storage space than a layered clone.
