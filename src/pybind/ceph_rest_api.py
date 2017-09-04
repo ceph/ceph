@@ -118,8 +118,8 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
     addr = app.ceph_cluster.conf_get('public_addr') or DEFAULT_ADDR
 
     if addr == '-':
-        addr = None
-        port = None
+        addr = DEFAULT_ADDR
+        port = int(DEFAULT_PORT)
     else:
         # remove the type prefix from the conf value if any
         for t in ('legacy:', 'msgr2:'):
@@ -129,9 +129,7 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
         # remove any nonce from the conf value
         addr = addr.split('/')[0]
         addr, port = addr.rsplit(':', 1)
-    addr = addr or DEFAULT_ADDR
-    port = port or DEFAULT_PORT
-    port = int(port)
+        port = int(port) or int(DEFAULT_PORT)
 
     loglevel = app.ceph_cluster.conf_get('restapi_log_level') \
         or DEFAULT_LOG_LEVEL
