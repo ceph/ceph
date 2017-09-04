@@ -488,7 +488,8 @@ void bluestore_blob_use_tracker_t::split(
 }
 
 bool bluestore_blob_use_tracker_t::equal(
-  const bluestore_blob_use_tracker_t& other) const
+  const bluestore_blob_use_tracker_t& other,
+  bool strict) const
 {
   if (!num_au && !other.num_au) {
     return total_bytes == other.total_bytes && au_size == other.au_size;
@@ -502,6 +503,10 @@ bool bluestore_blob_use_tracker_t::equal(
       }
     }
     return true;
+  }
+
+  if (strict) {
+    return false;
   }
 
   uint32_t n = num_au ? num_au : other.num_au;
