@@ -452,6 +452,12 @@ void RGWCoroutinesManager::schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *s
   context_stacks.insert(stack);
 }
 
+void RGWCoroutinesManager::set_sleeping(RGWCoroutine *cr, bool flag)
+{
+  RWLock::WLocker wl(lock);
+  cr->set_sleeping(flag);
+}
+
 int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 {
   int ret = 0;
@@ -809,6 +815,11 @@ bool RGWCoroutine::drain_children(int num_cr_left, RGWCoroutinesStack *skip_stac
 void RGWCoroutine::wakeup()
 {
   stack->wakeup();
+}
+
+RGWCoroutinesEnv *RGWCoroutine::get_env() const
+{
+  return stack->get_env();
 }
 
 void RGWCoroutine::dump(Formatter *f) const {

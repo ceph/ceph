@@ -90,7 +90,12 @@ struct rgw_http_req_data : public RefCountedObject {
     cond.Signal();
   }
 
+  bool _is_done() {
+    return done;
+  }
+
   bool is_done() {
+    Mutex::Locker l(lock);
     return done;
   }
 
@@ -526,6 +531,11 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data, bool send_data_hin
   return 0;
 }
 
+bool RGWHTTPClient::is_done()
+{
+  return req_data->is_done();
+}
+
 /*
  * wait for async request to complete
  */
@@ -862,7 +872,7 @@ void RGWHTTPManager::_unlink_request(rgw_http_req_data *req_data)
   if (req_data->curl_handle) {
     curl_multi_remove_handle((CURLM *)multi_handle, req_data->get_easy_handle());
   }
-  if (!req_data->is_done()) {
+  if (!req_data->_is_done()) {
     _finish_request(req_data, -ECANCELED);
   }
 }

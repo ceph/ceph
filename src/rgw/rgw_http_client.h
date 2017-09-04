@@ -145,6 +145,8 @@ public:
   int process();
 
   int wait();
+  bool is_done();
+
   rgw_http_req_data *get_req_data() { return req_data; }
 
   string to_str();

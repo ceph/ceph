@@ -282,6 +282,8 @@ public:
     return stack;
   }
 
+  RGWCoroutinesEnv *get_env() const;
+
   void dump(Formatter *f) const;
 };
 
@@ -463,7 +465,7 @@ public:
 
   bool unblock_stack(RGWCoroutinesStack **s);
 
-  RGWCoroutinesEnv *get_env() { return env; }
+  RGWCoroutinesEnv *get_env() const { return env; }
 
   void dump(Formatter *f) const;
 };
@@ -560,6 +562,8 @@ public:
 
   void schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *stack);
   RGWCoroutinesStack *allocate_stack();
+
+  void set_sleeping(RGWCoroutine *cr, bool flag);
 
   virtual string get_id();
   void dump(Formatter *f) const;
