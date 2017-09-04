@@ -10645,13 +10645,13 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
   while (!done) {
     r = data->wait_next_io(&done);
     if (r < 0) {
-      dout(10) << "get_obj_iterate() r=" << r << ", canceling all io" << dendl;
+      dout(10) << __func__ << " r=" << r << ", canceling all io" << dendl;
       data->cancel_all_io();
       break;
     }
     r = store->flush_read_list(data);
     if (r < 0) {
-      dout(10) << "get_obj_iterate() r=" << r << ", canceling all io" << dendl;
+      dout(10) << __func__ << " r=" << r << ", canceling all io" << dendl;
       data->cancel_all_io();
       break;
     }
