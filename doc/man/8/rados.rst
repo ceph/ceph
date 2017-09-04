@@ -60,7 +60,8 @@ Options
 .. option:: --striper
 
    Uses the striping API of rados rather than the default one.
-   Available for stat, get, put, append, truncate, rm, ls and all xattr related operation
+   Available for stat, stat2, get, put, append, truncate, rm, ls
+   and all xattr related operation
 
 
 Global commands
@@ -151,6 +152,12 @@ Pool specific commands
 
 :command:`rmxattr` *name* *attr*
   Remove *attr* from the extended attributes of an object.
+
+:command:`stat` *name*
+   Get stat (ie. mtime, size) of given object
+
+:command:`stat2` *name*
+   Get stat (similar to stat, but with high precision time) of given object
 
 :command:`listomapkeys` *name*
   List all the keys stored in the object map of object name.

@@ -94,6 +94,7 @@ void usage(ostream& out)
 "   setxattr <obj-name> attr val\n"
 "   rmxattr <obj-name> attr\n"
 "   stat <obj-name>                  stat the named object\n"
+"   stat2 <obj-name>                 stat2 the named object (with high precision time)\n"
 "   mapext <obj-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
@@ -2251,6 +2252,27 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       utime_t t(mtime, 0);
       cout << pool_name << "/" << oid
            << " mtime " << t << ", size " << size << std::endl;
+    }
+  }
+  else if (strcmp(nargs[0], "stat2") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    string oid(nargs[1]);
+    uint64_t size;
+    struct timespec mtime;
+    if (use_striper) {
+      ret = striper.stat2(oid, &size, &mtime);
+    } else {
+      ret = io_ctx.stat2(oid, &size, &mtime);
+    }
+    if (ret < 0) {
+      cerr << " error stat-ing " << pool_name << "/" << oid << ": "
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    } else {
+      utime_t t(mtime);
+      cout << pool_name << "/" << oid
+	   << " mtime " << t << ", size " << size << std::endl;
     }
   }
   else if (strcmp(nargs[0], "get") == 0) {
