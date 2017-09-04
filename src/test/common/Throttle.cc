@@ -427,12 +427,12 @@ TEST(OrderedThrottle, destruct) {
   PrCtl unset_dumpable;
   EXPECT_DEATH({
       auto throttle = ceph::make_unique<OrderedThrottle>(1, false);
-      throttle->start_op(nullptr);
+      throttle->start_op(new FunctionContext(NULL));
       {
 	auto& t = *throttle;
 	std::thread([&t]() {
 	    usleep(5);
-	    t.start_op(nullptr);
+	    t.start_op(new FunctionContext(NULL));
 	  });
       }
       // No equivalent of get_or_fail()
