@@ -8970,8 +8970,9 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
     // as the filesystem statistics.
     const fsblkcnt_t total = quota_root->quota.max_bytes >> CEPH_BLOCK_SHIFT;
     const fsblkcnt_t used = quota_root->rstat.rbytes >> CEPH_BLOCK_SHIFT;
-    const fsblkcnt_t free = total - used;
-
+    // It is possible for a quota to be exceeded: arithmetic here must
+    // handle case where used > total.
+    const fsblkcnt_t free = total > used ? total - used : 0;
 
     stbuf->f_blocks = total;
     stbuf->f_bfree = free;
