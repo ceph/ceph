@@ -106,7 +106,11 @@ overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
 memstore=0
-bluestore=1
+if [ `uname` = FreeBSD ]; then
+    bluestore=0
+else
+    bluestore=1
+fi
 rgw_frontend="civetweb"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
