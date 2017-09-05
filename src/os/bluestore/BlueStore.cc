@@ -8533,11 +8533,7 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   if (!cct->_conf->bluestore_debug_no_reuse_blocks) {
     dout(10) << __func__ << " " << txc << " " << std::hex
              << txc->released << std::dec << dendl;
-    for (interval_set<uint64_t>::iterator p = txc->released.begin();
-	 p != txc->released.end();
-	 ++p) {
-      alloc->release(p.get_start(), p.get_len());
-    }
+    alloc->release(txc->released);
   }
 
   txc->allocated.clear();
@@ -8897,14 +8893,9 @@ void BlueStore::_kv_sync_thread()
 	if (!bluefs_gift_extents.empty()) {
 	  _commit_bluefs_freespace(bluefs_gift_extents);
 	}
-	for (auto p = bluefs_extents_reclaiming.begin();
-	     p != bluefs_extents_reclaiming.end();
-	     ++p) {
-	  dout(20) << __func__ << " releasing old bluefs 0x" << std::hex
-		   << p.get_start() << "~" << p.get_len() << std::dec
-		   << dendl;
-	  alloc->release(p.get_start(), p.get_len());
-	}
+	dout(20) << __func__ << " releasing old bluefs 0x" << std::hex
+		 << bluefs_extents_reclaiming << std::dec << dendl;
+	alloc->release(bluefs_extents_reclaiming);
 	bluefs_extents_reclaiming.clear();
       }
 
