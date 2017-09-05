@@ -8,8 +8,7 @@ overrides:
       osd:
         osd objectstore: bluestore
         bluestore block size: 96636764160
-        debug bluestore: 30
-        debug bdev: 20
+        debug bluestore: 20
         debug bluefs: 20
         debug rocksdb: 10
         bluestore fsck on mount: true
@@ -28,8 +27,7 @@ overrides:
       osd:
         osd objectstore: bluestore
         bluestore block size: 96636764160
-        debug bluestore: 30
-        debug bdev: 20
+        debug bluestore: 20
         debug bluefs: 20
         debug rocksdb: 10
         bluestore fsck on mount: true
