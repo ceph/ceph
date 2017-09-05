@@ -1021,13 +1021,11 @@ def main():
     # of the form 'cmdNNN' followed by an array of argument descriptors)
     # as part of the validated argument JSON object
 
-    targets = [target]
-
     if target[1] == '*':
-        if target[0] == 'osd':
-            targets = [(target[0], o) for o in osdids()]
-        elif target[0] == 'mon':
-            targets = [(target[0], m) for m in monids()]
+        service = target[0]
+        targets = [(service, o) for o in ids_by_service(service)]
+    else:
+        targets = [target]
 
     final_ret = 0
     for target in targets:
