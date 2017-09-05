@@ -8,6 +8,7 @@
 #include "Fh.h"
 #include "MetaSession.h"
 #include "ClientSnapRealm.h"
+#include "Delegation.h"
 
 #include "mds/flock.h"
 
@@ -25,6 +26,12 @@ Inode::~Inode()
     lsubdout(client->cct, client, 0) << __func__ << ": leftover objects on inode 0x"
       << std::hex << ino << std::dec << dendl;
     assert(oset.objects.empty());
+  }
+
+  if (!delegations.empty()) {
+    lsubdout(client->cct, client, 0) << __func__ << ": leftover delegations on inode 0x"
+      << std::hex << ino << std::dec << dendl;
+    assert(delegations.empty());
   }
 
   delete fcntl_locks;
@@ -116,6 +123,7 @@ void Inode::make_nosnap_relative_path(filepath& p)
 void Inode::get_open_ref(int mode)
 {
   open_by_mode[mode]++;
+  break_deleg(!(mode & CEPH_FILE_MODE_WR));
 }
 
 bool Inode::put_open_ref(int mode)
@@ -552,3 +560,146 @@ void Inode::set_async_err(int r)
   }
 }
 
+bool Inode::has_recalled_deleg()
+{
+  if (delegations.empty())
+    return false;
+
+  Delegation *deleg = delegations.front();
+
+  return deleg->is_recalled();
+}
+
+void Inode::recall_deleg(bool skip_read)
+{
+  if (delegations.empty())
+    return;
+
+  // Issue any recalls
+  for (xlist<Delegation*>::iterator p = delegations.begin(); !p.end(); ++p) {
+    Delegation *deleg = *p;
+
+    deleg->recall(skip_read);
+  }
+}
+
+bool Inode::delegations_broken(bool skip_read)
+{
+  if (delegations.empty())
+    return true;
+
+  if (skip_read) {
+    Delegation *deleg = delegations.front();
+    if (deleg->get_mode() == CEPH_FILE_MODE_RD)
+	return true;
+  }
+  return false;
+}
+
+void Inode::break_deleg(bool skip_read)
+{
+  recall_deleg(skip_read);
+
+  while (!delegations_broken(skip_read))
+    client->wait_on_list(waitfor_deleg);
+}
+
+/**
+ * set_deleg: request a delegation on an open Fh
+ * @fh: filehandle on which to acquire it
+ * @ro: r/o or r/w delegation?
+ * @cb: delegation recall callback function
+ * @priv: private pointer to be passed to callback
+ *
+ * Attempt to acquire a delegation on an open file handle. If there are no
+ * conflicts and we have the right caps, allocate a new delegation, fill it
+ * out and return 0. Return an error if we can't get one for any reason.
+ */
+int Inode::set_deleg(Fh *fh, bool ro, ceph_deleg_cb_t cb, void *priv)
+{
+  int filemode;
+
+  lsubdout(client->cct, client, 0) << __func__ << ": inode " << *this << dendl;
+
+  // Just say no if we have any recalled delegs still outstanding
+  if (has_recalled_deleg()) {
+    lsubdout(client->cct, client, 0) << __func__ << ": has_recalled_deleg" << dendl;
+    return -EAGAIN;
+  }
+
+  // check vs. currently open files on this inode
+  if (ro) {
+    if (open_count_for_write()) {
+      lsubdout(client->cct, client, 0) << __func__ << ": open for write" << dendl;
+      return -EAGAIN;
+    }
+    filemode = CEPH_FILE_MODE_RD;
+  } else {
+    if (open_count() > 1) {
+      lsubdout(client->cct, client, 0) << __func__ << ": open" << dendl;
+      return -EAGAIN;
+    }
+    filemode = CEPH_FILE_MODE_RDWR;
+  }
+
+  // Do we have the caps we need for this inode?
+  int need = ceph_caps_for_mode(filemode);
+  if (!caps_issued_mask(need)) {
+    lsubdout(client->cct, client, 0) << __func__ << ": cap mismatch, have="
+      << ccap_string(caps_issued()) << " need=" << ccap_string(need) << dendl;
+    return -EAGAIN;
+  }
+
+  Delegation *deleg, *old = NULL;
+  for (xlist<Delegation*>::iterator p = delegations.begin(); !p.end(); ++p) {
+    deleg = *p;
+    if (deleg->get_fh() == fh) {
+      old = deleg;
+      break;
+    }
+  }
+
+  if (old) {
+    unsigned oldmode = old->get_mode();
+
+    client->get_cap_ref(this, need);
+    old->reinit(filemode, cb, priv);
+    client->put_cap_ref(this, ceph_caps_for_mode(oldmode));
+  } else {
+    deleg = new (std::nothrow) Delegation(fh, filemode, cb, priv);
+    if (!deleg)
+      return -ENOMEM;
+
+    client->get_cap_ref(this, need);
+    delegations.push_back(&deleg->inode_item);
+  }
+  return 0;
+}
+
+/**
+ * unset_deleg - remove a delegation that was previously set
+ * @fh: file handle to clear delegation of
+ *
+ * Unlink delegation from the Inode (if there is one), put caps and free it.
+ */
+void Inode::unset_deleg(Fh *fh)
+{
+  Delegation *deleg = NULL;
+
+  for (xlist<Delegation*>::iterator p = delegations.begin(); !p.end(); ++p) {
+    if ((*p)->get_fh() == fh) {
+      deleg = *p;
+      break;
+    }
+  }
+
+  if (!deleg)
+    return;
+
+  int held = ceph_caps_for_mode(deleg->get_mode());
+
+  client->put_cap_ref(this, held);
+  delegations.remove(&deleg->inode_item);
+  client->signal_cond_list(waitfor_deleg);
+  delete deleg;
+}
