@@ -1841,6 +1841,9 @@ private:
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
 
+  interval_set<uint64_t> lazy_release_extents;
+  std::mutex lazy_release_lock;
+
   std::mutex deferred_lock;
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
@@ -2023,7 +2026,7 @@ private:
   void _txc_applied_kv(TransContext *txc);
   void _txc_committed_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
-  void _txc_release_alloc(TransContext *txc);
+  void _txc_release_alloc_locked(TransContext *txc);
 
   void _osr_drain_preceding(TransContext *txc);
   void _osr_drain_all();

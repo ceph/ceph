@@ -4298,9 +4298,15 @@ int BlueStore::_open_alloc()
 void BlueStore::_close_alloc()
 {
   assert(alloc);
+  std::lock_guard<std::mutex> l(lazy_release_lock);
+  {
+    alloc->release(lazy_release_extents);
+    lazy_release_extents.clear();
+  }
+
   alloc->shutdown();
   delete alloc;
-  alloc = NULL;
+  alloc = nullptr;
 }
 
 int BlueStore::_open_fsid(bool create)
@@ -8098,15 +8104,19 @@ void BlueStore::_txc_finish(TransContext *txc)
       empty = true;
     }
   }
-  while (!releasing_txc.empty()) {
-    // release to allocator only after all preceding txc's have also
-    // finished any deferred writes that potentially land in these
-    // blocks
-    auto txc = &releasing_txc.front();
-    _txc_release_alloc(txc);
-    releasing_txc.pop_front();
-    txc->log_state_latency(logger, l_bluestore_state_done_lat);
-    delete txc;
+
+  {
+    std::lock_guard<std::mutex> l(lazy_release_lock);
+    while (!releasing_txc.empty()) {
+      // release to allocator only after all preceding txc's have also
+      // finished any deferred writes that potentially land in these
+      // blocks
+      auto txc = &releasing_txc.front();
+      _txc_release_alloc_locked(txc);
+      releasing_txc.pop_front();
+      txc->log_state_latency(logger, l_bluestore_state_done_lat);
+      delete txc;
+    }
   }
 
   if (submit_deferred) {
@@ -8121,14 +8131,22 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 }
 
-void BlueStore::_txc_release_alloc(TransContext *txc)
+void BlueStore::_txc_release_alloc_locked(TransContext *txc)
 {
-  // update allocator with full released set
+  // it's expected we're called with lazy_release_lock already taken!
   if (!cct->_conf->bluestore_debug_no_reuse_blocks) {
     dout(10) << __func__ << " " << txc << " " << txc->released << dendl;
-    alloc->release(txc->released);
+    // interval_set seems to be too costly for inserting things in
+    // bstore_kv_final. We could serialize in simpler format and perform
+    // the merge separately, maybe even in a dedicated thread.
+    lazy_release_extents.insert(txc->released);
   }
 
+  if (lazy_release_extents.num_intervals() >= 256) {
+    // the remaining part will be cleaned in _close_alloc().
+    alloc->release(lazy_release_extents);
+    lazy_release_extents.clear();
+  }
   txc->allocated.clear();
   txc->released.clear();
 }
