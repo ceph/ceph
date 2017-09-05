@@ -250,6 +250,22 @@ void StupidAllocator::release(
   num_free += length;
 }
 
+void StupidAllocator::release(
+  const interval_set<uint64_t>& release_set)
+{
+  std::lock_guard<std::mutex> l(lock);
+  for (interval_set<uint64_t>::const_iterator p = release_set.begin();
+       p != release_set.end();
+       ++p) {
+    const auto offset = p.get_start();
+    const auto length = p.get_len();
+    ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
+		   << std::dec << dendl;
+    _insert_free(offset, length);
+    num_free += length;
+  }
+}
+
 uint64_t StupidAllocator::get_free()
 {
   std::lock_guard<std::mutex> l(lock);
