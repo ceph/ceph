@@ -106,7 +106,8 @@ overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
 memstore=0
-bluestore=1
+# default: FreeBSD use filestore otherwise use bluestore
+bluestore=$([ x"`uname`" = x"FreeBSD" ] && echo 0 || echo 1)
 rgw_frontend="civetweb"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
@@ -150,8 +151,8 @@ usage=$usage"\t--mgr_num specify ceph mgr count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
 usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
 usage=$usage"\t--rgw_compression specify the rgw compression plugin\n"
-usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend (default)\n"
-usage=$usage"\t-f, --filestore use filestore as the osd objectstore backend\n"
+usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend (default under non-FreeBSD)\n"
+usage=$usage"\t-f, --filestore use filestore as the osd objectstore backend (default under FreeBSD)\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
