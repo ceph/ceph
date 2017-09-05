@@ -141,3 +141,33 @@ TEST(LibCephFS, DelegSingleClient) {
 
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, DelegTimeout) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  // tweak timeout to run quickly, since we don't plan to return it anyway
+  ASSERT_EQ(ceph_conf_set(cmount, "client_deleg_timeout", "2.0"), 0);
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  Inode *root, *file;
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+
+  char filename[32];
+  sprintf(filename, "delegtimeo%x", getpid());
+
+  Fh *fh;
+  struct ceph_statx stx;
+  UserPerm *perms = ceph_mount_perms(cmount);
+
+  ASSERT_EQ(ceph_ll_create(cmount, root, filename, 0666,
+		    O_RDWR|O_CREAT|O_EXCL, &file, &fh, &stx, 0, 0, perms), 0);
+
+  std::atomic_bool recalled(false);
+  ASSERT_EQ(ceph_ll_delegation(cmount, fh, CEPH_DELEGATION_WR, dummy_deleg_cb, &recalled), 0);
+  std::thread breaker1(breaker_func, nullptr, filename, O_RDWR);
+  breaker1.join();
+  ASSERT_EQ(ceph_ll_getattr(cmount, root, &stx, 0, 0, perms), -ENOTCONN);
+  ceph_release(cmount);
+}
