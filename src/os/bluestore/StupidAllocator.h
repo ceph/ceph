@@ -48,6 +48,8 @@ public:
 
   void release(
     uint64_t offset, uint64_t length) override;
+  void release(
+    const interval_set<uint64_t>& release_set) override;
 
   uint64_t get_free() override;
 
