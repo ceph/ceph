@@ -2392,7 +2392,10 @@ public:
     assert(db);
     db->compact();
   }
-  
+  bool has_builtin_csum() const override {
+    return true;
+  }
+
 private:
   bool _debug_data_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
