@@ -82,8 +82,8 @@ public:
     regetattr_mask(0),
     mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
     num_fwd(0), retry_attempt(0),
-    reply(0), 
-    kick(false), success(false),
+    reply(0),
+    kick(false), success(false), dirp(NULL),
     got_unsafe(false), item(this), unsafe_item(this),
     unsafe_dir_item(this), unsafe_target_item(this),
     caller_cond(0), dispatch_cond(0) {
