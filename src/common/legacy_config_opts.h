@@ -394,6 +394,7 @@ OPTION(client_metadata, OPT_STR)
 OPTION(client_acl_type, OPT_STR)
 OPTION(client_permissions, OPT_BOOL)
 OPTION(client_dirsize_rbytes, OPT_BOOL)
+OPTION(client_deleg_timeout, OPT_DOUBLE)
 
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL) // use fuse 2.8+ invalidate callback to keep page cache consistent

@@ -5832,10 +5832,8 @@ void Client::flush_mdlog(MetaSession *session)
 }
 
 
-void Client::unmount()
+void Client::_unmount()
 {
-  Mutex::Locker lock(client_lock);
-
   if (unmounting)
     return;
 
@@ -5954,6 +5952,12 @@ void Client::unmount()
   mounted = false;
 
   ldout(cct, 2) << "unmounted." << dendl;
+}
+
+void Client::unmount()
+{
+  Mutex::Locker lock(client_lock);
+  _unmount();
 }
 
 void Client::flush_cap_releases()

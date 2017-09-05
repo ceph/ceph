@@ -495,12 +495,16 @@ protected:
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
+  // same as unmount() but for when the client_lock is already held
+  void _unmount();
+
   friend class C_Client_FlushComplete; // calls put_inode()
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
   friend class C_Client_RequestInterrupt;
   friend class C_Client_Remount;
+  friend class C_C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
   friend void intrusive_ptr_release(Inode *in);
 
   //int get_cache_size() { return lru.lru_get_size(); }

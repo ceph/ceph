@@ -1587,7 +1587,13 @@ int ceph_ll_setlk(struct ceph_mount_info *cmount,
  * function will be called.
  *
  * Once the delegation has been recalled, the application should return it as
- * soon as possible.
+ * soon as possible. The application has client_deleg_timeout seconds to
+ * return it, after which the cmount structure is forcibly unmounted and
+ * further calls into it fail.
+ *
+ * The application can frob the client_deleg_timeout config option to suit its
+ * needs, but it should take care to choose a value that allows it to avoid
+ * forcible eviction from the cluster in the event of an application bug.
  */
 typedef void (*ceph_deleg_cb_t)(struct Fh *fh, void *priv);
 
