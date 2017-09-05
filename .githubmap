@@ -1,0 +1,22 @@
+#
+# More information at
+#  https://wiki.ceph.com/Community/Ceph_contributors_list_maintenance_guide
+#
+# See .mailmap for name and mail normalization.
+# See .organizationmap for organization affiliation
+# See .peoplemap for unique list of people
+#
+#
+ajarr Ramana Raja <rraja@redhat.com>
+batrick Patrick Donnelly <pdonnell@redhat.com>
+fullerdj Douglas Fuller <dfuller@redhat.com>
+gregsfortytwo Gregory Farnum <gfarnum@redhat.com>
+jcsp John Spray <john.spray@redhat.com>
+jlayton Jeff Layton <jlayton@redhat.com>
+joscollin Jos Collin <jcollin@redhat.com>
+liewegas Sage Weil <sage@redhat.com>
+renhwztetecs huanwen ren <ren.huanwen@zte.com.cn>
+smithfarm Nathan Cutler <ncutler@suse.com>
+tchaikov Kefu Chai <kchai@redhat.com>
+theanalyst Abhishek Lekshmanan <abhishek.lekshmanan@gmail.com>
+ukernel Zheng Yan <zyan@redhat.com>
