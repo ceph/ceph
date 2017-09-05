@@ -79,6 +79,9 @@ static void usage()
        << "                    journal file or block device\n"
        << "  --mkfs            create a [new] data directory\n"
        << "  --mkkey           generate a new secret key. This is normally used in combination with --mkfs\n"
+       << "  --monmap          specify the path to the monitor map. This is normally used in combination with --mkfs\n"
+       << "  --osd-uuid        specify the OSD's fsid. This is normally used in combination with --mkfs\n"
+       << "  --keyring         specify a path to the osd keyring. This is normally used in combination with --mkfs\n"
        << "  --convert-filestore\n"
        << "                    run any pending upgrade operations\n"
        << "  --flush-journal   flush all data out of journal\n"
@@ -246,6 +249,7 @@ int main(int argc, const char **argv)
       bl.read_fd(fd, 64);
       if (bl.length()) {
 	store_type = string(bl.c_str(), bl.length() - 1);  // drop \n
+	g_conf->set_val("osd_objectstore", store_type);
 	dout(5) << "object store type is " << store_type << dendl;
       }
       ::close(fd);
@@ -285,8 +289,8 @@ int main(int argc, const char **argv)
 	   << g_conf->osd_data << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
-    derr << "created object store " << g_conf->osd_data
-	 << " for osd." << whoami << " fsid " << mc.monmap.fsid << dendl;
+    dout(0) << "created object store " << g_conf->osd_data
+	    << " for osd." << whoami << " fsid " << mc.monmap.fsid << dendl;
   }
   if (mkkey) {
     common_init_finish(g_ceph_context);
@@ -333,28 +337,28 @@ int main(int argc, const char **argv)
   }
   if (check_wants_journal) {
     if (store->wants_journal()) {
-      cout << "yes" << std::endl;
+      cout << "wants journal: yes" << std::endl;
       exit(0);
     } else {
-      cout << "no" << std::endl;
+      cout << "wants journal: no" << std::endl;
       exit(1);
     }
   }
   if (check_allows_journal) {
     if (store->allows_journal()) {
-      cout << "yes" << std::endl;
+      cout << "allows journal: yes" << std::endl;
       exit(0);
     } else {
-      cout << "no" << std::endl;
+      cout << "allows journal: no" << std::endl;
       exit(1);
     }
   }
   if (check_needs_journal) {
     if (store->needs_journal()) {
-      cout << "yes" << std::endl;
+      cout << "needs journal: yes" << std::endl;
       exit(0);
     } else {
-      cout << "no" << std::endl;
+      cout << "needs journal: no" << std::endl;
       exit(1);
     }
   }

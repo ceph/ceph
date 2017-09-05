@@ -1013,7 +1013,6 @@ TEST_F(TestClsRbd, snapshots_namespaces)
 
   ASSERT_EQ(0, create_image(&ioctx, oid, 10, 22, 0, oid, -1));
 
-  vector<string> snap_names;
   vector<cls::rbd::SnapshotNamespace> snap_namespaces;
   SnapContext snapc;
 
@@ -1051,7 +1050,6 @@ TEST_F(TestClsRbd, snapshots_timestamps)
 
   ASSERT_EQ(0, create_image(&ioctx, oid, 10, 22, 0, oid, -1));
 
-  vector<string> snap_names;
   vector<utime_t> snap_timestamps;
   SnapContext snapc;
 

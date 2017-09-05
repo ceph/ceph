@@ -292,7 +292,7 @@ You may specify parameters for ``GET /{bucket}?uploads``, but none of them are r
 +------------------------+-----------+--------------------------------------------------------------------------------------+
 | ``max-uploads``        | Integer   | The maximum number of multipart uploads. The range from 1-1000. The default is 1000. |
 +------------------------+-----------+--------------------------------------------------------------------------------------+
-| ``upload-id-marker``   | String    | Ignored if ``key-marker`` isn't specified. Specifies the ``ID`` of first             |
+| ``upload-id-marker``   | String    | Ignored if ``key-marker`` is not specified. Specifies the ``ID`` of first            |
 |                        |           | upload to list in lexicographical order at or following the ``ID``.                  |
 +------------------------+-----------+--------------------------------------------------------------------------------------+
 

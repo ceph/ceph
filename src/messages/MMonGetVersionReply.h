@@ -53,9 +53,9 @@ public:
       ::decode(oldest_version, p);
   }
 
-  ceph_tid_t handle;
-  version_t version;
-  version_t oldest_version;
+  ceph_tid_t handle = 0;
+  version_t version = 0;
+  version_t oldest_version = 0;
 
 private:
   ~MMonGetVersionReply() override {}

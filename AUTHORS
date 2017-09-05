@@ -9,7 +9,7 @@ RBD             - Jason Dillaman <dillaman@redhat.com>
 RBD (kernel)    - Ilya Dryomov <idryomov@redhat.com>
 RGW             - Yehuda Sadeh <yehuda@redhat.com>
                   Matt Benjamin <mbenjami@redhat.com>
-CephFS          - John Spray <jspray@redhat.com>
+CephFS          - Patrick Donnelly <pdonnell@redhat.com>
 CephFS (kernel) - Yan, Zheng <zyan@redhat.com>
 Deployment      - Alfredo Deza <adeza@redhat.com>
 Teuthology      - Zack Cerza <zack@redhat.com>

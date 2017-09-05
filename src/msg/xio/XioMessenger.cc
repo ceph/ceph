@@ -800,13 +800,12 @@ int XioMessenger::_send_message(Message *m, Connection *con)
 
   /* If con is not in READY state, we have to enforce policy */
   if (xcon->cstate.session_state.read() != XioConnection::UP) {
-    pthread_spin_lock(&xcon->sp);
+    std::lock_guard<decltype(xcon->sp) lg(xcon->sp);
+
     if (xcon->cstate.session_state.read() != XioConnection::UP) {
       xcon->outgoing.mqueue.push_back(*m);
-      pthread_spin_unlock(&xcon->sp);
       return 0;
     }
-    pthread_spin_unlock(&xcon->sp);
   }
 
   return _send_message_impl(m, xcon);
@@ -1046,7 +1045,7 @@ ConnectionRef XioMessenger::get_loopback_connection()
 
 void XioMessenger::unregister_xcon(XioConnection *xcon)
 {
-  Spinlock::Locker lckr(conns_sp);
+  std::lock_guard<decltype(conns_sp)> lckr(conns_sp);
 
   XioConnection::EntitySet::iterator conn_iter =
 	conns_entity_map.find(xcon->peer, XioConnection::EntityComp());
@@ -1069,7 +1068,7 @@ void XioMessenger::unregister_xcon(XioConnection *xcon)
 void XioMessenger::mark_down(const entity_addr_t& addr)
 {
   entity_inst_t inst(entity_name_t(), addr);
-  Spinlock::Locker lckr(conns_sp);
+  std::lock_guard<decltype(conns_sp)> lckr(conns_sp);
   XioConnection::EntitySet::iterator conn_iter =
     conns_entity_map.find(inst, XioConnection::EntityComp());
   if (conn_iter != conns_entity_map.end()) {
@@ -1085,7 +1084,7 @@ void XioMessenger::mark_down(Connection* con)
 
 void XioMessenger::mark_down_all()
 {
-  Spinlock::Locker lckr(conns_sp);
+  std::lock_guard<decltype(conns_sp)> lckr(conns_sp);
   XioConnection::EntitySet::iterator conn_iter;
   for (conn_iter = conns_entity_map.begin(); conn_iter !=
 	 conns_entity_map.begin(); ++conn_iter) {
@@ -1125,7 +1124,7 @@ void XioMessenger::mark_disposable(Connection *con)
 
 void XioMessenger::try_insert(XioConnection *xcon)
 {
-  Spinlock::Locker lckr(conns_sp);
+  std::lock_guard<decltype(conns_sp)> lckr(conns_sp);
   /* already resident in conns_list */
   conns_entity_map.insert(*xcon);
 }

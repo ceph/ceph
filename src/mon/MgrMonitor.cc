@@ -408,6 +408,10 @@ void MgrMonitor::check_sub(Subscription *sub)
     }
   } else {
     assert(sub->type == "mgrdigest");
+    if (sub->next == 0) {
+      // new registration; cancel previous timer
+      cancel_timer();
+    }
     if (digest_event == nullptr) {
       send_digests();
     }
@@ -449,10 +453,11 @@ void MgrMonitor::send_digests()
     sub->session->con->send_message(mdigest);
   }
 
-  digest_event = new C_MonContext(mon, [this](int){
+  digest_event = mon->timer.add_event_after(
+    g_conf->mon_mgr_digest_period,
+    new C_MonContext(mon, [this](int) {
       send_digests();
-  });
-  mon->timer.add_event_after(g_conf->mon_mgr_digest_period, digest_event);
+  }));
 }
 
 void MgrMonitor::cancel_timer()
@@ -934,3 +939,12 @@ int MgrMonitor::dump_metadata(const string& name, Formatter *f, ostream *err)
   return 0;
 }
 
+const std::vector<MonCommand> &MgrMonitor::get_command_descs() const
+{
+  if (command_descs.empty()) {
+    // must have just upgraded; fallback to static commands
+    return mgr_commands;
+  } else {
+    return command_descs;
+  }
+}

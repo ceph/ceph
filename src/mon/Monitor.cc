@@ -103,16 +103,19 @@ const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 #undef FLAG
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
-MonCommand mon_commands[] = {
 #define FLAG(f) (MonCommand::FLAG_##f)
 #define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
   {parsesig, helptext, modulename, req_perms, avail, FLAG(NONE)},
 #define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
   {parsesig, helptext, modulename, req_perms, avail, flags},
+MonCommand mon_commands[] = {
 #include <mon/MonCommands.h>
+};
+MonCommand pgmonitor_commands[] = {
+#include <mon/PGMonitorCommands.h>
+};
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
-};
 
 
 void C_MonContext::finish(int r) {
@@ -143,8 +146,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   auth_service_required(cct,
 			cct->_conf->auth_supported.empty() ?
 			cct->_conf->auth_service_required : cct->_conf->auth_supported ),
-  leader_supported_mon_commands(NULL),
-  leader_supported_mon_commands_size(0),
   mgr_messenger(mgr_m),
   mgr_client(cct_, mgr_m),
   pgservice(nullptr),
@@ -205,14 +206,25 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   exited_quorum = ceph_clock_now();
 
+  // prepare local commands
+  local_mon_commands.resize(ARRAY_SIZE(mon_commands));
+  for (unsigned i = 0; i < ARRAY_SIZE(mon_commands); ++i) {
+    local_mon_commands[i] = mon_commands[i];
+  }
+  MonCommand::encode_vector(local_mon_commands, local_mon_commands_bl);
+
+  local_upgrading_mon_commands = local_mon_commands;
+  for (unsigned i = 0; i < ARRAY_SIZE(pgmonitor_commands); ++i) {
+    local_upgrading_mon_commands.push_back(pgmonitor_commands[i]);
+  }
+  MonCommand::encode_vector(local_upgrading_mon_commands,
+			    local_upgrading_mon_commands_bl);
+
   // assume our commands until we have an election.  this only means
   // we won't reply with EINVAL before the election; any command that
   // actually matters will wait until we have quorum etc and then
   // retry (and revalidate).
-  const MonCommand *cmds;
-  int cmdsize;
-  get_locally_supported_monitor_commands(&cmds, &cmdsize);
-  set_leader_supported_commands(cmds, cmdsize);
+  leader_mon_commands = local_mon_commands;
 
   // note: OSDMonitor may update this based on the luminous flag.
   pgservice = mgrstatmon()->get_pg_stat_service();
@@ -227,8 +239,6 @@ Monitor::~Monitor()
   delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;
-  if (leader_supported_mon_commands != mon_commands)
-    delete[] leader_supported_mon_commands;
 }
 
 
@@ -360,6 +370,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS);
   return compat;
 }
 
@@ -786,13 +797,8 @@ int Monitor::init()
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
 
   bootstrap();
-
-  // encode command sets
-  const MonCommand *cmds;
-  int cmdsize;
-  get_locally_supported_monitor_commands(&cmds, &cmdsize);
-  MonCommand::encode_array(cmds, cmdsize, supported_commands_bl);
-
+  // add features of myself into feature_map
+  session_map.feature_map.add_mon(con_self->get_features());
   return 0;
 }
 
@@ -1055,6 +1061,7 @@ void Monitor::_reset()
   cancel_probe_timeout();
   timecheck_finish();
   health_events_cleanup();
+  health_check_log_times.clear();
   scrub_event_cancel();
 
   leader_since = utime_t();
@@ -1235,10 +1242,11 @@ void Monitor::sync_reset_timeout()
   dout(10) << __func__ << dendl;
   if (sync_timeout_event)
     timer.cancel_event(sync_timeout_event);
-  sync_timeout_event = new C_MonContext(this, [this](int) {
-      sync_timeout();
-    });
-  timer.add_event_after(g_conf->mon_sync_timeout, sync_timeout_event);
+  sync_timeout_event = timer.add_event_after(
+    g_conf->mon_sync_timeout,
+    new C_MonContext(this, [this](int) {
+	sync_timeout();
+      }));
 }
 
 void Monitor::sync_finish(version_t last_committed)
@@ -1581,8 +1589,12 @@ void Monitor::reset_probe_timeout()
       probe_timeout(r);
     });
   double t = g_conf->mon_probe_timeout;
-  timer.add_event_after(t, probe_timeout_event);
-  dout(10) << "reset_probe_timeout " << probe_timeout_event << " after " << t << " seconds" << dendl;
+  if (timer.add_event_after(t, probe_timeout_event)) {
+    dout(10) << "reset_probe_timeout " << probe_timeout_event
+	     << " after " << t << " seconds" << dendl;
+  } else {
+    probe_timeout_event = nullptr;
+  }
 }
 
 void Monitor::probe_timeout(int r)
@@ -1861,14 +1873,10 @@ void Monitor::win_standalone_election()
   map<int,Metadata> metadata;
   collect_metadata(&metadata[0]);
 
-  const MonCommand *my_cmds = nullptr;
-  int cmdsize = 0;
-  get_locally_supported_monitor_commands(&my_cmds, &cmdsize);
   win_election(elector.get_epoch(), q,
                CEPH_FEATURES_ALL,
                ceph::features::mon::get_supported(),
-	       metadata,
-               my_cmds, cmdsize);
+	       metadata);
 }
 
 const utime_t& Monitor::get_leader_since() const
@@ -1896,8 +1904,7 @@ void Monitor::_finish_svc_election()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
-			   const map<int,Metadata>& metadata,
-                           const MonCommand *cmdset, int cmdsize)
+			   const map<int,Metadata>& metadata)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
 	   << " features " << features
@@ -1916,7 +1923,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   clog->info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum;
 
-  set_leader_supported_commands(cmdset, cmdsize);
+  set_leader_commands(get_local_commands(mon_features));
 
   paxos->leader_init();
   // NOTE: tell monmap monitor first.  This is important for the
@@ -2078,6 +2085,13 @@ void Monitor::apply_monmap_to_compatset_features()
     assert(HAVE_FEATURE(quorum_con_features, SERVER_KRAKEN));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_LUMINOUS)) {
+    assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_LUMINOUS));
+    // this feature should only ever be set if the quorum supports it.
+    assert(HAVE_FEATURE(quorum_con_features, SERVER_LUMINOUS));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2102,6 +2116,9 @@ void Monitor::calc_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_KRAKEN)) {
     required_features |= CEPH_FEATUREMASK_SERVER_KRAKEN;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_LUMINOUS;
   }
 
   // monmap
@@ -2279,14 +2296,14 @@ void Monitor::health_tick_start()
   dout(15) << __func__ << dendl;
 
   health_tick_stop();
-  health_tick_event = new C_MonContext(this, [this](int r) {
-      if (r < 0)
-        return;
-      do_health_to_clog();
-      health_tick_start();
-    });
-  timer.add_event_after(cct->_conf->mon_health_to_clog_tick_interval,
-                        health_tick_event);
+  health_tick_event = timer.add_event_after(
+    cct->_conf->mon_health_to_clog_tick_interval,
+    new C_MonContext(this, [this](int r) {
+	if (r < 0)
+	  return;
+	do_health_to_clog();
+	health_tick_start();
+      }));
 }
 
 void Monitor::health_tick_stop()
@@ -2333,7 +2350,9 @@ void Monitor::health_interval_start()
         return;
       do_health_to_clog_interval();
     });
-  timer.add_event_at(next, health_interval_event);
+  if (!timer.add_event_at(next, health_interval_event)) {
+    health_interval_event = nullptr;
+  }
 }
 
 void Monitor::health_interval_stop()
@@ -2359,6 +2378,7 @@ void Monitor::health_to_clog_update_conf(const std::set<std::string> &changed)
   if (changed.count("mon_health_to_clog")) {
     if (!cct->_conf->mon_health_to_clog) {
       health_events_cleanup();
+      return;
     } else {
       if (!health_tick_event) {
         health_tick_start();
@@ -2420,14 +2440,7 @@ void Monitor::do_health_to_clog(bool force)
 	summary == health_status_cache.summary &&
 	level == health_status_cache.overall)
       return;
-    if (level == HEALTH_OK)
-      clog->info() << "overall " << summary;
-    else if (level == HEALTH_WARN)
-      clog->warn() << "overall " << summary;
-    else if (level == HEALTH_ERR)
-      clog->error() << "overall " << summary;
-    else
-      ceph_abort();
+    clog->health(level) << "overall " << summary;
     health_status_cache.summary = summary;
     health_status_cache.overall = level;
   } else {
@@ -2464,6 +2477,7 @@ health_status_t Monitor::get_health_status(
 {
   health_status_t r = HEALTH_OK;
   bool compat = g_conf->mon_health_preluminous_compat;
+  bool compat_warn = g_conf->get_val<bool>("mon_health_preluminous_compat_warning");
   if (f) {
     f->open_object_section("health");
     f->open_object_section("checks");
@@ -2489,25 +2503,37 @@ health_status_t Monitor::get_health_status(
     *plain += "\n";
   }
 
-  if (f && compat) {
-    f->open_array_section("summary");
-    for (auto& svc : paxos_service) {
-      svc->get_health_checks().dump_summary_compat(f);
+  if (f && (compat || compat_warn)) {
+    health_status_t cr = compat_warn ? min(HEALTH_WARN, r) : r;
+    if (compat) {
+      f->open_array_section("summary");
+      if (compat_warn) {
+	f->open_object_section("item");
+	f->dump_stream("severity") << HEALTH_WARN;
+	f->dump_string("summary", "'ceph health' JSON format has changed in luminous; update your health monitoring scripts");
+	f->close_section();
+      }
+      for (auto& svc : paxos_service) {
+	svc->get_health_checks().dump_summary_compat(f);
+      }
+      f->close_section();
     }
-    f->close_section();
-    f->dump_stream("overall_status") << r;
+    f->dump_stream("overall_status") << cr;
   }
 
   if (want_detail) {
-    if (f && compat) {
+    if (f && (compat || compat_warn)) {
       f->open_array_section("detail");
+      if (compat_warn) {
+	f->dump_string("item", "'ceph health' JSON format has changed in luminous. If you see this your monitoring system is scraping the wrong fields. Disable this with 'mon health preluminous compat warning = false'");
+      }
     }
 
     for (auto& svc : paxos_service) {
       svc->get_health_checks().dump_detail(f, plain, compat);
     }
 
-    if (f && compat) {
+    if (f && (compat || compat_warn)) {
       f->close_section();
     }
   }
@@ -2525,31 +2551,60 @@ void Monitor::log_health(
   if (!g_conf->mon_health_to_clog) {
     return;
   }
+
+  const utime_t now = ceph_clock_now();
+
   // FIXME: log atomically as part of @t instead of using clog.
   dout(10) << __func__ << " updated " << updated.checks.size()
 	   << " previous " << previous.checks.size()
 	   << dendl;
+  const auto min_log_period = g_conf->get_val<int64_t>(
+      "mon_health_log_update_period");
   for (auto& p : updated.checks) {
     auto q = previous.checks.find(p.first);
+    bool logged = false;
     if (q == previous.checks.end()) {
       // new
       ostringstream ss;
       ss << "Health check failed: " << p.second.summary << " ("
          << p.first << ")";
-      if (p.second.severity == HEALTH_WARN)
-	clog->warn() << ss.str();
-      else
-	clog->error() << ss.str();
+      clog->health(p.second.severity) << ss.str();
+
+      logged = true;
     } else {
       if (p.second.summary != q->second.summary ||
 	  p.second.severity != q->second.severity) {
-	// summary or severity changed (ignore detail changes at this level)
-	ostringstream ss;
+
+        auto status_iter = health_check_log_times.find(p.first);
+        if (status_iter != health_check_log_times.end()) {
+          if (p.second.severity == q->second.severity &&
+              now - status_iter->second.updated_at < min_log_period) {
+            // We already logged this recently and the severity is unchanged,
+            // so skip emitting an update of the summary string.
+            // We'll get an update out of tick() later if the check
+            // is still failing.
+            continue;
+          }
+        }
+
+        // summary or severity changed (ignore detail changes at this level)
+        ostringstream ss;
         ss << "Health check update: " << p.second.summary << " (" << p.first << ")";
-	if (p.second.severity == HEALTH_WARN)
-	  clog->warn() << ss.str();
-	else
-	  clog->error() << ss.str();
+        clog->health(p.second.severity) << ss.str();
+
+        logged = true;
+      }
+    }
+    // Record the time at which we last logged, so that we can check this
+    // when considering whether/when to print update messages.
+    if (logged) {
+      auto iter = health_check_log_times.find(p.first);
+      if (iter == health_check_log_times.end()) {
+        health_check_log_times.emplace(p.first, HealthCheckLogStatus(
+          p.second.severity, p.second.summary, now));
+      } else {
+        iter->second = HealthCheckLogStatus(
+          p.second.severity, p.second.summary, now);
       }
     }
   }
@@ -2564,6 +2619,10 @@ void Monitor::log_health(
       } else {
         clog->info() << "Health check cleared: " << p.first << " (was: "
                      << p.second.summary << ")";
+      }
+
+      if (health_check_log_times.count(p.first)) {
+        health_check_log_times.erase(p.first);
       }
     }
   }
@@ -2696,7 +2755,12 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
-    get_health_status(false, f, nullptr);
+    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      get_health_status(false, f, nullptr);
+    } else {
+      list<string> health_str;
+      get_health(health_str, nullptr, f);
+    }
     f->dump_unsigned("election_epoch", get_epoch());
     {
       f->open_array_section("quorum");
@@ -2812,18 +2876,14 @@ void Monitor::_generate_command_map(map<string,cmd_vartype>& cmdmap,
 
 const MonCommand *Monitor::_get_moncommand(
   const string &cmd_prefix,
-  const MonCommand *cmds,
-  int cmds_size)
+  const vector<MonCommand>& cmds)
 {
-  const MonCommand *this_cmd = NULL;
-  for (const MonCommand *cp = cmds;
-       cp < &cmds[cmds_size]; cp++) {
-    if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
-      this_cmd = cp;
-      break;
+  for (auto& c : cmds) {
+    if (c.cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
+      return &c;
     }
   }
-  return this_cmd;
+  return nullptr;
 }
 
 bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
@@ -2868,20 +2928,6 @@ void Monitor::format_command_descriptions(const std::vector<MonCommand> &command
   f->close_section();	// command_descriptions
 
   f->flush(*rdata);
-}
-
-void Monitor::get_locally_supported_monitor_commands(const MonCommand **cmds,
-						     int *count)
-{
-  *cmds = mon_commands;
-  *count = ARRAY_SIZE(mon_commands);
-}
-void Monitor::set_leader_supported_commands(const MonCommand *cmds, int size)
-{
-  if (leader_supported_mon_commands != mon_commands)
-    delete[] leader_supported_mon_commands;
-  leader_supported_mon_commands = cmds;
-  leader_supported_mon_commands_size = size;
 }
 
 bool Monitor::is_keyring_required()
@@ -2975,11 +3021,16 @@ void Monitor::handle_command(MonOpRequestRef op)
       osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS;
 
     std::vector<MonCommand> commands;
-    commands = static_cast<MgrMonitor*>(
-        paxos_service[PAXOS_MGR])->get_command_descs();
 
-    for (int i = 0 ; i < leader_supported_mon_commands_size; ++i) {
-      commands.push_back(leader_supported_mon_commands[i]);
+    // only include mgr commands once all mons are upgrade (and we've dropped
+    // the hard-coded PGMonitor commands)
+    if (quorum_mon_features.contains_all(ceph::features::mon::FEATURE_LUMINOUS)) {
+      commands = static_cast<MgrMonitor*>(
+        paxos_service[PAXOS_MGR])->get_command_descs();
+    }
+
+    for (auto& c : leader_mon_commands) {
+      commands.push_back(c);
     }
 
     format_command_descriptions(commands, f, &rdata, hide_mgr_flag);
@@ -3015,12 +3066,9 @@ void Monitor::handle_command(MonOpRequestRef op)
   const auto& mgr_cmds = mgrmon()->get_command_descs();
   const MonCommand *mgr_cmd = nullptr;
   if (!mgr_cmds.empty()) {
-    mgr_cmd = _get_moncommand(prefix, &mgr_cmds.at(0), mgr_cmds.size());
+    mgr_cmd = _get_moncommand(prefix, mgr_cmds);
   }
-  leader_cmd = _get_moncommand(prefix,
-                               // the boost underlying this isn't const for some reason
-                               const_cast<MonCommand*>(leader_supported_mon_commands),
-                               leader_supported_mon_commands_size);
+  leader_cmd = _get_moncommand(prefix, leader_mon_commands);
   if (!leader_cmd) {
     leader_cmd = mgr_cmd;
     if (!leader_cmd) {
@@ -3029,8 +3077,9 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
   }
   // validate command is in our map & matches, or forward if it is allowed
-  const MonCommand *mon_cmd = _get_moncommand(prefix, mon_commands,
-                                              ARRAY_SIZE(mon_commands));
+  const MonCommand *mon_cmd = _get_moncommand(
+    prefix,
+    get_local_commands(quorum_mon_features));
   if (!mon_cmd) {
     mon_cmd = mgr_cmd;
   }
@@ -3128,7 +3177,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  if (module == "mds" || module == "fs") {
+  if ((module == "mds" || module == "fs")  &&
+      prefix != "fs authorize") {
     mdsmon()->dispatch(op);
     return;
   }
@@ -3157,7 +3207,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     monmon()->dispatch(op);
     return;
   }
-  if (module == "auth") {
+  if (module == "auth" || prefix == "fs authorize") {
     authmon()->dispatch(op);
     return;
   }
@@ -3269,6 +3319,9 @@ void Monitor::handle_command(MonOpRequestRef op)
     std::string val;
     cmd_getval(cct, cmdmap, "value", val);
     r = g_conf->set_val(key, val, true, &ss);
+    if (r == 0) {
+      g_conf->apply_changes(nullptr);
+    }
     rs = ss.str();
     goto out;
   } else if (prefix == "status" ||
@@ -3356,8 +3409,12 @@ void Monitor::handle_command(MonOpRequestRef op)
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
     f->dump_string("tag", tagstr);
 
-    list<string> hs;
-    get_health(hs, NULL, f.get());
+    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      get_health_status(true, f.get(), nullptr);
+    } else {
+      list<string> health_str;
+      get_health(health_str, nullptr, f.get());
+    }
 
     monmon()->dump_info(f.get());
     osdmon()->dump_info(f.get());
@@ -3599,7 +3656,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 
     mdsmon()->count_metadata("ceph_version", &mds);
     f->open_object_section("mds");
-    for (auto& p : mon) {
+    for (auto& p : mds) {
       f->dump_int(p.first.c_str(), p.second);
       overall[p.first] += p.second;
     }
@@ -4392,8 +4449,13 @@ void Monitor::handle_ping(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(new JSONFormatter(true));
   f->open_object_section("pong");
 
-  list<string> health_str;
-  get_health(health_str, NULL, f.get());
+  if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    get_health_status(false, f.get(), nullptr);
+  } else {
+    list<string> health_str;
+    get_health(health_str, nullptr, f.get());
+  }
+
   {
     stringstream ss;
     get_mon_status(f.get(), ss);
@@ -4524,10 +4586,11 @@ void Monitor::timecheck_reset_event()
            << " rounds_since_clean " << timecheck_rounds_since_clean
            << dendl;
 
-  timecheck_event = new C_MonContext(this, [this](int) {
-      timecheck_start_round();
-    });
-  timer.add_event_after(delay, timecheck_event);
+  timecheck_event = timer.add_event_after(
+    delay,
+    new C_MonContext(this, [this](int) {
+	timecheck_start_round();
+      }));
 }
 
 void Monitor::timecheck_check_skews()
@@ -4758,10 +4821,7 @@ void Monitor::handle_timecheck_leader(MonOpRequestRef op)
 
   ostringstream ss;
   health_status_t status = timecheck_status(ss, skew_bound, latency);
-  if (status == HEALTH_ERR)
-    clog->error() << other << " " << ss.str();
-  else if (status == HEALTH_WARN)
-    clog->warn() << other << " " << ss.str();
+  clog->health(status) << other << " " << ss.str();
 
   dout(10) << __func__ << " from " << other << " ts " << m->timestamp
 	   << " delta " << delta << " skew_bound " << skew_bound
@@ -5318,7 +5378,7 @@ void Monitor::scrub_check_results()
     }
   }
   if (!errors)
-    clog->info() << "scrub ok on " << quorum << ": " << mine;
+    clog->debug() << "scrub ok on " << quorum << ": " << mine;
 }
 
 inline void Monitor::scrub_timeout()
@@ -5376,10 +5436,11 @@ void Monitor::scrub_event_start()
     return;
   }
 
-  scrub_event = new C_MonContext(this, [this](int) {
+  scrub_event = timer.add_event_after(
+    cct->_conf->mon_scrub_interval,
+    new C_MonContext(this, [this](int) {
       scrub_start();
-    });
-  timer.add_event_after(cct->_conf->mon_scrub_interval, scrub_event);
+      }));
 }
 
 void Monitor::scrub_event_cancel()
@@ -5403,11 +5464,11 @@ void Monitor::scrub_reset_timeout()
 {
   dout(15) << __func__ << " reset timeout event" << dendl;
   scrub_cancel_timeout();
-
-  scrub_timeout_event = new C_MonContext(this, [this](int) {
+  scrub_timeout_event = timer.add_event_after(
+    g_conf->mon_scrub_timeout,
+    new C_MonContext(this, [this](int) {
       scrub_timeout();
-    });
-  timer.add_event_after(g_conf->mon_scrub_timeout, scrub_timeout_event);
+    }));
 }
 
 /************ TICK ***************/
@@ -5422,14 +5483,49 @@ void Monitor::tick()
 {
   // ok go.
   dout(11) << "tick" << dendl;
+  const utime_t now = ceph_clock_now();
   
+  // Check if we need to emit any delayed health check updated messages
+  if (is_leader()) {
+    const auto min_period = g_conf->get_val<int64_t>(
+                              "mon_health_log_update_period");
+    for (auto& svc : paxos_service) {
+      auto health = svc->get_health_checks();
+
+      for (const auto &i : health.checks) {
+        const std::string &code = i.first;
+        const std::string &summary = i.second.summary;
+        const health_status_t severity = i.second.severity;
+
+        auto status_iter = health_check_log_times.find(code);
+        if (status_iter == health_check_log_times.end()) {
+          continue;
+        }
+
+        auto &log_status = status_iter->second;
+        bool const changed = log_status.last_message != summary
+                             || log_status.severity != severity;
+
+        if (changed && now - log_status.updated_at > min_period) {
+          log_status.last_message = summary;
+          log_status.updated_at = now;
+          log_status.severity = severity;
+
+          ostringstream ss;
+          ss << "Health check update: " << summary << " (" << code << ")";
+          clog->health(severity) << ss.str();
+        }
+      }
+    }
+  }
+
+
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p) {
     (*p)->tick();
     (*p)->maybe_trim();
   }
   
   // trim sessions
-  utime_t now = ceph_clock_now();
   {
     Mutex::Locker l(session_map_lock);
     auto p = session_map.sessions.begin();

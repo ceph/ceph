@@ -32,7 +32,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   g_code_env = code_env;
 
   // Create a configuration object
-  CephContext *cct = new CephContext(iparams.module_type, flags);
+  CephContext *cct = new CephContext(iparams.module_type, code_env, flags);
 
   md_config_t *conf = cct->_conf;
   // add config observers here
@@ -43,44 +43,20 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   if (data_dir_option)
     conf->data_dir_option = data_dir_option;
 
-  // Set some defaults based on code type
-  switch (code_env) {
-  case CODE_ENVIRONMENT_DAEMON:
-    conf->set_val_or_die("daemonize", "true");
-    conf->set_val_or_die("log_to_stderr", "false");
-    conf->set_val_or_die("err_to_stderr", "true");
+  // different default keyring locations for osd and mds.  this is
+  // for backward compatibility.  moving forward, we want all keyrings
+  // in these locations.  the mon already forces $mon_data/keyring.
+  if (conf->name.is_mds()) {
+    conf->set_val("keyring", "$mds_data/keyring", false);
+  } else if (conf->name.is_osd()) {
+    conf->set_val("keyring", "$osd_data/keyring", false);
+  }
 
-    // different default keyring locations for osd and mds.  this is
-    // for backward compatibility.  moving forward, we want all keyrings
-    // in these locations.  the mon already forces $mon_data/keyring.
-    if (conf->name.is_mds())
-      conf->set_val("keyring", "$mds_data/keyring", false);
-    else if (conf->name.is_osd())
-      conf->set_val("keyring", "$osd_data/keyring", false);
-    break;
-
-  case CODE_ENVIRONMENT_UTILITY_NODOUT:
-  case CODE_ENVIRONMENT_LIBRARY:
+  if (code_env == CODE_ENVIRONMENT_LIBRARY ||
+      code_env == CODE_ENVIRONMENT_UTILITY_NODOUT) {
     conf->set_val_or_die("log_to_stderr", "false");
     conf->set_val_or_die("err_to_stderr", "false");
     conf->set_val_or_die("log_flush_on_exit", "false");
-    break;
-
-  default:
-    break;
-  }
-
-  if (flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS) {
-    // do nothing special!  we used to do no default log, pid_file,
-    // admin_socket, but changed our minds.  let's make ceph-fuse
-    // and radosgw use the same defaults as ceph-{osd,mon,mds,...}
-  } else if (code_env != CODE_ENVIRONMENT_DAEMON) {
-    // no default log, pid_file, admin_socket
-    conf->set_val_or_die("pid_file", "");
-    conf->set_val_or_die("admin_socket", "");
-    conf->set_val_or_die("log_file", "");
-    // use less memory for logs
-    conf->set_val_or_die("log_max_recent", "500");
   }
 
   return cct;

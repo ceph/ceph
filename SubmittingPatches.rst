@@ -392,16 +392,19 @@ Title of pull requests and title of commits
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The text up to the first empty line in a commit message is the commit
-title. Ideally it is a single short line less than 50 characters,
+title. Ideally it is a single short line of at most 72 characters,
 summarizing the change. It is required to prefix it with the
 subsystem or module you are changing. For instance, the prefix
 could be "doc:", "osd:", or "common:". One can use::
 
      git log
 
-for more examples. Please use this convention for naming pull requests
-(subsystem: short description) also, as it feeds directly into the script
-that generates release notes and it's tedious to clean up at release time.
+for more examples. Please use this "subsystem: short description"
+convention for naming pull requests (PRs) also, as it feeds directly
+into the script that generates release notes and it's tedious to clean
+up at release time. This document places no limit on the length of PR
+titles, but be aware that they are subject to editing as part of the
+release process.
 
 Commit message
 ^^^^^^^^^^^^^^
@@ -470,15 +473,31 @@ in your patch description.
 If you cannot condense your patch set into a smaller set of patches,
 then only post say 15 or so at a time and wait for review and integration.
 
+5. Document your changes
+------------------------
 
-5. Style check your changes
+If you have added or modified any user-facing functionality, such
+as CLI commands or their output, then the patch series or pull request
+must include appropriate updates to documentation.
+
+It is the submitter's responsibility to make the changes, and the reviewer's
+responsibility to make sure they are not merging changes that do not 
+have the needed updates to documentation.
+
+Where there are areas that have absent documentation, or there is no
+clear place to note the change that is being made, the reviewer should
+contact the component lead, who should arrange for the missing section
+to be created with sufficient detail for the patch submitter to
+document their changes.
+
+6. Style check your changes
 ---------------------------
 
 Check your patch for basic style violations, details of which can be
 found in CodingStyle.
 
 
-6. No MIME, no links, no compression, no attachments.  Just plain text
+7. No MIME, no links, no compression, no attachments.  Just plain text
 ----------------------------------------------------------------------
 
 Developers need to be able to read and comment on the changes you are

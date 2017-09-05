@@ -117,8 +117,8 @@ start_mirror ${CLUSTER2}
 # demote and promote same cluster
 demote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
-wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
@@ -130,15 +130,16 @@ compare_images ${POOL} ${image}
 # failover (unmodified)
 demote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
-wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER2} ${POOL} ${image}
 
 # failback (unmodified)
 demote_image ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
@@ -149,8 +150,8 @@ compare_images ${POOL} ${image}
 # failover
 demote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
-wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER2} ${POOL} ${image}
 write_image ${CLUSTER1} ${POOL} ${image} 100
@@ -162,7 +163,8 @@ compare_images ${POOL} ${image}
 # failback
 demote_image ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
@@ -213,6 +215,24 @@ compare_images ${POOL} ${clone_image}
 
 expect_failure "is non-primary" clone_image ${CLUSTER1} ${PARENT_POOL} \
     ${parent_image} ${parent_snap} ${POOL} ${clone_image}1
+
+testlog "TEST: data pool"
+dp_image=test_data_pool
+create_image ${CLUSTER2} ${POOL} ${dp_image} 128 --data-pool ${PARENT_POOL}
+data_pool=$(get_image_data_pool ${CLUSTER2} ${POOL} ${dp_image})
+test "${data_pool}" = "${PARENT_POOL}"
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${dp_image}
+data_pool=$(get_image_data_pool ${CLUSTER1} ${POOL} ${dp_image})
+test "${data_pool}" = "${PARENT_POOL}"
+create_snapshot ${CLUSTER2} ${POOL} ${dp_image} 'snap1'
+write_image ${CLUSTER2} ${POOL} ${dp_image} 100
+create_snapshot ${CLUSTER2} ${POOL} ${dp_image} 'snap2'
+write_image ${CLUSTER2} ${POOL} ${dp_image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${dp_image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${dp_image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${dp_image}@snap1
+compare_images ${POOL} ${dp_image}@snap2
+compare_images ${POOL} ${dp_image}
 
 testlog "TEST: disable mirroring / delete non-primary image"
 image2=test2
@@ -284,6 +304,7 @@ wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 testlog "TEST: simple image resync"
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${image}
@@ -295,6 +316,7 @@ request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${image}
@@ -304,6 +326,7 @@ stop_mirror ${CLUSTER1}
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 start_mirror ${CLUSTER1}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${image}
@@ -325,6 +348,7 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'disconnecte
 testlog " - replay started after resync requested"
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
 test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
@@ -350,6 +374,7 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'disconnecte
 testlog " - replay started after resync requested"
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
 test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
@@ -359,8 +384,10 @@ testlog " - rbd_mirroring_resync_after_disconnect config option"
 set_image_meta ${CLUSTER2} ${POOL} ${image} \
 	       conf_rbd_mirroring_resync_after_disconnect true
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+image_id=$(get_image_id ${CLUSTER1} ${pool} ${image})
 disconnect_image ${CLUSTER2} ${POOL} ${image}
-wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
 test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
@@ -378,7 +405,7 @@ image=split-brain
 create_image ${CLUSTER2} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 demote_image ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER1} ${POOL} ${image} 10
 demote_image ${CLUSTER1} ${POOL} ${image}

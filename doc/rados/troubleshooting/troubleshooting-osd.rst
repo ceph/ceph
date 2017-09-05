@@ -162,7 +162,7 @@ If you start your cluster and an OSD won't start, check the following:
   to ensure you have addressed any issues related to your kernel.
 
 - **Segment Fault:** If there is a segment fault, turn your logging up
-  (if it isn't already), and try again. If it segment faults again,
+  (if it is not already), and try again. If it segment faults again,
   contact the ceph-devel email list and provide your Ceph configuration
   file, your monitor output and the contents of your log file(s).
 
@@ -256,7 +256,7 @@ and your OSDs are running. Check to see if OSDs are throttling recovery traffic.
 
 .. tip:: Newer versions of Ceph provide better recovery handling by preventing
    recovering OSDs from using up system resources so that ``up`` and ``in``
-   OSDs aren't available or are otherwise slow.
+   OSDs are not available or are otherwise slow.
 
 
 Networking Issues
@@ -479,7 +479,7 @@ Flapping OSDs
 We recommend using both a public (front-end) network and a cluster (back-end)
 network so that you can better meet the capacity requirements of object
 replication. Another advantage is that you can run a cluster network such that
-it isn't connected to the internet, thereby preventing some denial of service
+it is not connected to the internet, thereby preventing some denial of service
 attacks. When OSDs peer and check heartbeats, they use the cluster (back-end)
 network when it's available. See `Monitor/OSD Interaction`_ for details.
 

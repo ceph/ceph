@@ -79,7 +79,7 @@ that Ceph uses the entire partition for the journal.
 ``osd client message size cap`` 
 
 :Description: The largest client data message allowed in memory.
-:Type: 64-bit Integer Unsigned
+:Type: 64-bit Unsigned Integer
 :Default: 500MB default. ``500*1024L*1024L`` 
 
 
@@ -377,13 +377,18 @@ recovery operations to ensure optimal performance during recovery.
               token bucket system which when there are sufficient tokens will
               dequeue high priority queues first. If there are not enough
               tokens available, queues are dequeued low priority to high priority.
-              The new WeightedPriorityQueue (``wpq``) dequeues all priorities in
+              The WeightedPriorityQueue (``wpq``) dequeues all priorities in
               relation to their priorities to prevent starvation of any queue.
               WPQ should help in cases where a few OSDs are more overloaded
-              than others. Requires a restart.
+              than others. The new mClock based OpClassQueue
+              (``mclock_opclass``) prioritizes operations based on which class
+              they belong to (recovery, scrub, snaptrim, client op, osd subop).
+              And, the mClock based ClientQueue (``mclock_client``) also
+              incorporates the client identifier in order to promote fairness
+              between clients. See `QoS Based on mClock`_. Requires a restart.
 
 :Type: String
-:Valid Choices: prio, wpq
+:Valid Choices: prio, wpq, mclock_opclass, mclock_client
 :Default: ``prio``
 
 
@@ -523,6 +528,274 @@ recovery operations to ensure optimal performance during recovery.
 :Type: 32-bit Integer
 :Default: ``5``
 
+
+QoS Based on mClock
+-------------------
+
+Ceph's use of mClock is currently in the experimental phase and should
+be approached with an exploratory mindset.
+
+Core Concepts
+`````````````
+
+The QoS support of Ceph is implemented using a queueing scheduler
+based on `the dmClock algorithm`_. This algorithm allocates the I/O
+resources of the Ceph cluster in proportion to weights, and enforces
+the constraits of minimum reservation and maximum limitation, so that
+the services can compete for the resources fairly. Currently the
+*mclock_opclass* operation queue divides Ceph services involving I/O
+resources into following buckets:
+
+- client op: the iops issued by client
+- osd subop: the iops issued by primary OSD
+- snap trim: the snap trimming related requests
+- pg recovery: the recovery related requests
+- pg scrub: the scrub related requests
+
+And the resources are partitioned using following three sets of tags. In other
+words, the share of each type of service is controlled by three tags:
+
+#. reservation: the minimum IOPS allocated for the service.
+#. limitation: the maximum IOPS allocated for the service.
+#. weight: the proportional share of capacity if extra capacity or system
+   oversubscribed.
+
+In Ceph operations are graded with "cost". And the resources allocated
+for serving various services are consumed by these "costs". So, for
+example, the more reservation a services has, the more resource it is
+guaranteed to possess, as long as it requires. Assuming there are 2
+services: recovery and client ops:
+
+- recovery: (r:1, l:5, w:1)
+- client ops: (r:2, l:0, w:9)
+
+The settings above ensure that the recovery won't get more than 5
+requests per second serviced, even if it requires so (see CURRENT
+IMPLEMENTATION NOTE below), and no other services are competing with
+it. But if the clients start to issue large amount of I/O requests,
+neither will they exhaust all the I/O resources. 1 request per second
+is always allocated for recovery jobs as long as there are any such
+requests. So the recovery jobs won't be starved even in a cluster with
+high load. And in the meantime, the client ops can enjoy a larger
+portion of the I/O resource, because its weight is "9", while its
+competitor "1". In the case of client ops, it is not clamped by the
+limit setting, so it can make use of all the resources if there is no
+recovery ongoing.
+
+Along with *mclock_opclass* another mclock operation queue named
+*mclock_client* is available. It divides operations based on category
+but also divides them based on the client making the request. This
+helps not only manage the distribution of resources spent on different
+classes of operations but also tries to insure fairness among clients.
+
+CURRENT IMPLEMENTATION NOTE: the current experimental implementation
+does not enforce the limit values. As a first approximation we decided
+not to prevent operations that would otherwise enter the operation
+sequencer from doing so.
+
+Subtleties of mClock
+````````````````````
+
+The reservation and limit values have a unit of requests per
+second. The weight, however, does not technically have a unit and the
+weights are relative to one another. So if one class of requests has a
+weight of 1 and another a weight of 9, then the latter class of
+requests should get 9 executed at a 9 to 1 ratio as the first class.
+However that will only happen once the reservations are met and those
+values include the operations executed under the reservation phase.
+
+Even though the weights do not have units, one must be careful in
+choosing their values due how the algorithm assigns weight tags to
+requests. If the weight is *W*, then for a given class of requests,
+the next one that comes in will have a weight tag of *1/W* plus the
+previous weight tag or the current time, whichever is larger. That
+means if *W* is sufficiently large and therefore *1/W* is sufficiently
+small, the calculated tag may never be assigned as it will get a value
+of the current time. The ultimate lesson is that values for weight
+should not be too large. They should be under the number of requests
+one expects to ve serviced each second.
+
+Caveats
+```````
+
+There are some factors that can reduce the impact of the mClock op
+queues within Ceph. First, requests to an OSD are sharded by their
+placement group identifier. Each shard has its own mClock queue and
+these queues neither interact nor share information among them. The
+number of shards can be controlled with the configuration options
+``osd_op_num_shards``, ``osd_op_num_shards_hdd``, and
+``osd_op_num_shards_ssd``. A lower number of shards will increase the
+impact of the mClock queues, but may have other deliterious effects.
+
+Second, requests are transferred from the operation queue to the
+operation sequencer, in which they go through the phases of
+execution. The operation queue is where mClock resides and mClock
+determines the next op to transfer to the operation sequencer. The
+number of operations allowed in the operation sequencer is a complex
+issue. In general we want to keep enough operations in the sequencer
+so it's always getting work done on some operations while it's waiting
+for disk and network access to complete on other operations. On the
+other hand, once an operation is transferred to the operation
+sequencer, mClock no longer has control over it. Therefore to maximize
+the impact of mClock, we want to keep as few operations in the
+operation sequencer as possible. So we have an inherent tension.
+
+The configuration options that influence the number of operations in
+the operation sequencer are ``bluestore_throttle_bytes``,
+``bluestore_throttle_deferred_bytes``,
+``bluestore_throttle_cost_per_io``,
+``bluestore_throttle_cost_per_io_hdd``, and
+``bluestore_throttle_cost_per_io_ssd``.
+
+A third factor that affects the impact of the mClock algorithm is that
+we're using a distributed system, where requests are made to multiple
+OSDs and each OSD has (can have) multiple shards. Yet we're currently
+using the mClock algorithm, which is not distributed (note: dmClock is
+the distributed version of mClock).
+
+Various organizations and individuals are currently experimenting with
+mClock as it exists in this code base along with their modifications
+to the code base. We hope you'll share you're experiences with your
+mClock and dmClock experiments in the ceph-devel mailing list.
+
+
+``osd push per object cost``
+
+:Description: the overhead for serving a push op
+
+:Type: Unsigned Integer
+:Default: 1000
+
+``osd recovery max chunk``
+
+:Description: the maximum total size of data chunks a recovery op can carry.
+
+:Type: Unsigned Integer
+:Default: 8 MiB
+
+
+``osd op queue mclock client op res``
+
+:Description: the reservation of client op.
+
+:Type: Float
+:Default: 1000.0
+
+
+``osd op queue mclock client op wgt``
+
+:Description: the weight of client op.
+
+:Type: Float
+:Default: 500.0
+
+
+``osd op queue mclock client op lim``
+
+:Description: the limit of client op.
+
+:Type: Float
+:Default: 1000.0
+
+
+``osd op queue mclock osd subop res``
+
+:Description: the reservation of osd subop.
+
+:Type: Float
+:Default: 1000.0
+
+
+``osd op queue mclock osd subop wgt``
+
+:Description: the weight of osd subop.
+
+:Type: Float
+:Default: 500.0
+
+
+``osd op queue mclock osd subop lim``
+
+:Description: the limit of osd subop.
+
+:Type: Float
+:Default: 0.0
+
+
+``osd op queue mclock snap res``
+
+:Description: the reservation of snap trimming.
+
+:Type: Float
+:Default: 0.0
+
+
+``osd op queue mclock snap wgt``
+
+:Description: the weight of snap trimming.
+
+:Type: Float
+:Default: 1.0
+
+
+``osd op queue mclock snap lim``
+
+:Description: the limit of snap trimming.
+
+:Type: Float
+:Default: 0.001
+
+
+``osd op queue mclock recov res``
+
+:Description: the reservation of recovery.
+
+:Type: Float
+:Default: 0.0
+
+
+``osd op queue mclock recov wgt``
+
+:Description: the weight of recovery.
+
+:Type: Float
+:Default: 1.0
+
+
+``osd op queue mclock recov lim``
+
+:Description: the limit of recovery.
+
+:Type: Float
+:Default: 0.001
+
+
+``osd op queue mclock scrub res``
+
+:Description: the reservation of scrub jobs.
+
+:Type: Float
+:Default: 0.0
+
+
+``osd op queue mclock scrub wgt``
+
+:Description: the weight of scrub jobs.
+
+:Type: Float
+:Default: 1.0
+
+
+``osd op queue mclock scrub lim``
+
+:Description: the limit of scrub jobs.
+
+:Type: Float
+:Default: 0.001
+
+.. _the dmClock algorithm: https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Gulati.pdf
+
+
 .. index:: OSD; backfilling
 
 Backfilling
@@ -660,7 +933,7 @@ perform well in a degraded state.
 ``osd recovery max chunk`` 
 
 :Description: The maximum size of a recovered chunk of data to push. 
-:Type: 64-bit Integer Unsigned
+:Type: 64-bit Unsigned Integer
 :Default: ``8 << 20`` 
 
 
@@ -668,7 +941,7 @@ perform well in a degraded state.
 
 :Description: The maximum number of recovery operations per OSD that will be
               newly started when an OSD is recovering.
-:Type: 64-bit Integer Unsigned
+:Type: 64-bit Unsigned Integer
 :Default: ``1``
 
 
@@ -715,6 +988,15 @@ perform well in a degraded state.
 :Type: Float
 :Default: ``0``
 
+
+``osd recovery sleep hybrid``
+
+:Description: Time in seconds to sleep before next recovery or backfill op
+              when osd data is on HDD and osd journal is on SSD.
+
+:Type: Float
+:Default: ``0.025``
+
 Tiering
 =======
 
@@ -757,7 +1039,7 @@ Miscellaneous
 ``osd default notify timeout`` 
 
 :Description: The OSD default notification timeout (in seconds).
-:Type: 32-bit Integer Unsigned
+:Type: 32-bit Unsigned Integer
 :Default: ``30`` 
 
 

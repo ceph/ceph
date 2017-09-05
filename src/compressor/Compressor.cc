@@ -27,7 +27,9 @@ const char * Compressor::get_comp_alg_name(int a) {
   case COMP_ALG_SNAPPY: return "snappy";
   case COMP_ALG_ZLIB: return "zlib";
   case COMP_ALG_ZSTD: return "zstd";
+#ifdef HAVE_LZ4
   case COMP_ALG_LZ4: return "lz4";
+#endif
   default: return "???";
   }
 }
@@ -39,9 +41,11 @@ boost::optional<Compressor::CompressionAlgorithm> Compressor::get_comp_alg_type(
     return COMP_ALG_ZLIB;
   if (s == "zstd")
     return COMP_ALG_ZSTD;
+#ifdef HAVE_LZ4
   if (s == "lz4")
     return COMP_ALG_LZ4;
-  if (s == "")
+#endif
+  if (s == "" || s == "none")
     return COMP_ALG_NONE;
 
   return boost::optional<CompressionAlgorithm>();
@@ -74,12 +78,12 @@ CompressorRef Compressor::create(CephContext *cct, const std::string &type)
   if (type == "random") {
     static std::random_device seed;
     static std::default_random_engine engine(seed());
-    static Spinlock mutex;
+    static ceph::spinlock mutex;
 
     int alg = COMP_ALG_NONE;
     std::uniform_int_distribution<> dist(0, COMP_ALG_LAST - 1);
     {
-      std::lock_guard<Spinlock> lock(mutex);
+      std::lock_guard<decltype(mutex)> lock(mutex);
       alg = dist(engine);
     }
     if (alg == COMP_ALG_NONE) {

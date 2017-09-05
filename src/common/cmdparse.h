@@ -21,7 +21,8 @@ typedef boost::variant<std::string,
 		       int64_t,
 		       double,
 		       std::vector<std::string>,
-		       std::vector<int64_t>>  cmd_vartype;
+		       std::vector<int64_t>,
+		       std::vector<double>>  cmd_vartype;
 typedef std::map<std::string, cmd_vartype> cmdmap_t;
 
 std::string cmddesc_get_prefix(const std::string &cmddesc);

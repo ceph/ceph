@@ -173,7 +173,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
   std::list<obj_watch_t> watches;
   ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
-  ASSERT_EQ(watches.size(), 1u);
+  ASSERT_EQ(1u, watches.size());
   bufferlist bl2;
   ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
   TestAlarm alarm;
@@ -209,7 +209,7 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
   std::list<obj_watch_t> watches;
   ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
-  ASSERT_EQ(watches.size(), 1u);
+  ASSERT_EQ(1u, watches.size());
   bufferlist bl2;
   ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
   TestAlarm alarm;

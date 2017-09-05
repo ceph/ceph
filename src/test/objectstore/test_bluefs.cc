@@ -377,18 +377,17 @@ TEST(BlueFS, test_simple_compaction_sync) {
        }
     }
   }
-  // Don't remove all
   {
     for (int i=0; i<10; i+=2) {
        string dir = "dir.";
        dir.append(to_string(i));
-       for (int j=0; j<10; j+=2) {
+       for (int j=0; j<10; j++) {
           string file = "file.";
 	  file.append(to_string(j));
           fs.unlink(dir, file);
 	  fs.flush_log();
        }
-       fs.rmdir(dir);
+       ASSERT_EQ(0, fs.rmdir(dir));
        fs.flush_log();
     }
   }
@@ -430,18 +429,17 @@ TEST(BlueFS, test_simple_compaction_async) {
        }
     }
   }
-  // Don't remove all
   {
     for (int i=0; i<10; i+=2) {
        string dir = "dir.";
        dir.append(to_string(i));
-       for (int j=0; j<10; j+=2) {
+       for (int j=0; j<10; j++) {
           string file = "file.";
 	  file.append(to_string(j));
           fs.unlink(dir, file);
 	  fs.flush_log();
        }
-       fs.rmdir(dir);
+       ASSERT_EQ(0, fs.rmdir(dir));
        fs.flush_log();
     }
   }

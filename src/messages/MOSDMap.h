@@ -28,7 +28,7 @@ class MOSDMap : public Message {
   uuid_d fsid;
   map<epoch_t, bufferlist> maps;
   map<epoch_t, bufferlist> incremental_maps;
-  epoch_t oldest_map, newest_map;
+  epoch_t oldest_map =0, newest_map = 0;
 
   epoch_t get_first() const {
     epoch_t e = 0;

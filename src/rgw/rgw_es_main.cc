@@ -22,8 +22,6 @@ int main(int argc, char *argv[])
 
   common_init_finish(g_ceph_context);
 
-  list<string> infix;
-
   string expr;
 
   if (argc > 1) {

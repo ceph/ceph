@@ -87,6 +87,27 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
     }
     ::close(fd);
   }
+  // journal rotational?
+  {
+    // NOTE: the below won't work on btrfs; we'll assume rotational.
+    string fn = get_journal_path();
+    int fd = ::open(fn.c_str(), O_RDONLY);
+    if (fd < 0) {
+      return;
+    }
+    char partition[PATH_MAX], devname[PATH_MAX];
+    int r = get_device_by_fd(fd, partition, devname, sizeof(devname));
+    if (r < 0) {
+      dout(1) << "unable to get journal device name for "
+              << get_journal_path() << ": " << cpp_strerror(r) << dendl;
+      m_journal_rotational = true;
+    } else {
+      m_journal_rotational = block_device_is_rotational(devname);
+      dout(20) << __func__ << " journal devname " << devname
+               << " journal rotational " << (int)m_journal_rotational << dendl;
+    }
+    ::close(fd);
+  }
 }
 
 int GenericFileStoreBackend::detect_features()

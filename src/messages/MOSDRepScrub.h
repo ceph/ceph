@@ -30,7 +30,7 @@ struct MOSDRepScrub : public MOSDFastDispatchOp {
   spg_t pgid;             // PG to scrub
   eversion_t scrub_from; // only scrub log entries after scrub_from
   eversion_t scrub_to;   // last_update_applied when message sent
-  epoch_t map_epoch, min_epoch;
+  epoch_t map_epoch = 0, min_epoch = 0;
   bool chunky;           // true for chunky scrubs
   hobject_t start;       // lower bound of scrub, inclusive
   hobject_t end;         // upper bound of scrub, exclusive

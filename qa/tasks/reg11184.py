@@ -193,12 +193,11 @@ def task(ctx, config):
     manager.mark_down_osd(non_divergent[0])
     # manager.mark_out_osd(non_divergent[0])
 
-    # An empty collection for pg 2.0 needs to be cleaned up
+    # An empty collection for pg 2.0 might need to be cleaned up
     cmd = ((prefix + "--op remove --pgid 2.0").
            format(id=non_divergent[0]))
     proc = exp_remote.run(args=cmd, wait=True,
                           check_status=False, stdout=StringIO())
-    assert proc.exitstatus == 0
 
     cmd = ((prefix + "--op import --file {file}").
            format(id=non_divergent[0], file=expfile))

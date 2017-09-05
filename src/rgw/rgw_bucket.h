@@ -199,7 +199,7 @@ struct RGWBucketAdminOpState {
   bool fix_index;
   bool delete_child_objects;
   bool bucket_stored;
-  int max_aio;
+  int max_aio = 0;
 
   rgw_bucket bucket;
 
@@ -274,7 +274,7 @@ public:
   int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-          list<rgw_obj_index_key>& objs_to_unlink, std::string *err_msg = NULL);
+              RGWFormatterFlusher& flusher, std::string *err_msg = NULL);
 
   int check_object_index(RGWBucketAdminOpState& op_state,
                          RGWFormatterFlusher& flusher,

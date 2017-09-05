@@ -10,6 +10,9 @@ roles:
 tasks:
 - install:
 - ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(POOL_APP_NOT_ENABLED\)
 - workunit:
     clients:
       all:

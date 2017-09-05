@@ -214,6 +214,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_TAG          2210
 #define ERR_ZERO_IN_URL          2211
 #define ERR_MALFORMED_ACL_ERROR  2212
+#define ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION 2213
 
 #define ERR_BUSY_RESHARDING      2300
 
@@ -336,6 +337,8 @@ class RGWHTTPArgs
   void append(const string& name, const string& val);
   /** Get the value for a specific argument parameter */
   const string& get(const string& name, bool *exists = NULL) const;
+  boost::optional<const std::string&>
+  get_optional(const std::string& name) const;
   int get_bool(const string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
@@ -382,7 +385,7 @@ class RGWEnv;
 class RGWConf {
   friend class RGWEnv;
 protected:
-  void init(CephContext *cct, RGWEnv* env);
+  void init(CephContext *cct);
 public:
   RGWConf()
     : enable_ops_log(1),
@@ -433,6 +436,7 @@ enum RGWOpType {
   RGW_OP_STAT_ACCOUNT,
   RGW_OP_LIST_BUCKET,
   RGW_OP_GET_BUCKET_LOGGING,
+  RGW_OP_GET_BUCKET_LOCATION,
   RGW_OP_GET_BUCKET_VERSIONING,
   RGW_OP_SET_BUCKET_VERSIONING,
   RGW_OP_GET_BUCKET_WEBSITE,
@@ -483,6 +487,9 @@ enum RGWOpType {
   RGW_OP_PUT_OBJ_TAGGING,
   RGW_OP_GET_OBJ_TAGGING,
   RGW_OP_DELETE_OBJ_TAGGING,
+  RGW_OP_PUT_LC,
+  RGW_OP_GET_LC,
+  RGW_OP_DELETE_LC,
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA,
   RGW_OP_GET_OBJ_LAYOUT,
@@ -1063,10 +1070,16 @@ struct rgw_bucket {
   static void generate_test_instances(list<rgw_bucket*>& o);
 
   bool operator<(const rgw_bucket& b) const {
-    return name.compare(b.name) < 0;
+    if (tenant == b.tenant) {
+      return name < b.name;
+    } else {
+      return tenant < b.tenant;
+    }
   }
+
   bool operator==(const rgw_bucket& b) const {
-    return (name == b.name) && (bucket_id == b.bucket_id);
+    return (tenant == b.tenant) && (name == b.name) && \
+           (bucket_id == b.bucket_id);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
@@ -1140,6 +1153,7 @@ enum RGWBucketFlags {
   BUCKET_SUSPENDED = 0x1,
   BUCKET_VERSIONED = 0x2,
   BUCKET_VERSIONS_SUSPENDED = 0x4,
+  BUCKET_DATASYNC_DISABLED = 0X8,
 };
 
 enum RGWBucketIndexType {
@@ -1193,7 +1207,7 @@ struct RGWBucketInfo
   bool has_website;
   RGWBucketWebsiteConf website_conf;
 
-  RGWBucketIndexType index_type;
+  RGWBucketIndexType index_type = RGWBIType_Normal;
 
   bool swift_versioning;
   string swift_ver_location;
@@ -1309,6 +1323,7 @@ struct RGWBucketInfo
   bool versioned() const { return (flags & BUCKET_VERSIONED) != 0; }
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
+  bool datasync_flag_enabled() const { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
 
   bool has_swift_versioning() const {
     /* A bucket may be versioned through one mechanism only. */
@@ -1627,7 +1642,6 @@ struct rgw_obj_key {
    * part of the given namespace, it returns false.
    */
   static bool oid_to_key_in_ns(const string& oid, rgw_obj_key *key, const string& ns) {
-    string obj_ns;
     bool ret = parse_raw_oid(oid, key);
     if (!ret) {
       return ret;
@@ -1803,8 +1817,8 @@ struct req_state {
   } auth;
 
   std::unique_ptr<RGWAccessControlPolicy> user_acl;
-  RGWAccessControlPolicy *bucket_acl;
-  RGWAccessControlPolicy *object_acl;
+  std::unique_ptr<RGWAccessControlPolicy> bucket_acl;
+  std::unique_ptr<RGWAccessControlPolicy> object_acl;
 
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
@@ -2183,6 +2197,7 @@ extern string rgw_trim_quotes(const string& val);
 
 extern void rgw_to_iso8601(const real_time& t, char *dest, int buf_size);
 extern void rgw_to_iso8601(const real_time& t, string *dest);
+extern std::string rgw_to_asctime(const utime_t& t);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
@@ -2303,12 +2318,12 @@ extern std::string calc_hash_sha256_restart_stream(ceph::crypto::SHA256** phash)
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
-namespace {
-  constexpr uint32_t MATCH_POLICY_ACTION = 0x01;
-  constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;
-  constexpr uint32_t MATCH_POLICY_ARN = 0x04;
-  constexpr uint32_t MATCH_POLICY_STRING = 0x08;
-}
+static constexpr uint32_t MATCH_POLICY_ACTION = 0x01;
+static constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;
+static constexpr uint32_t MATCH_POLICY_ARN = 0x04;
+static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
 
-int match(const std::string& pattern, const std::string& input, uint32_t flag);
+extern bool match_policy(boost::string_view pattern, boost::string_view input,
+                         uint32_t flag);
+
 #endif

@@ -488,7 +488,8 @@ void bluestore_blob_use_tracker_t::split(
 }
 
 bool bluestore_blob_use_tracker_t::equal(
-  const bluestore_blob_use_tracker_t& other) const
+  const bluestore_blob_use_tracker_t& other,
+  bool strict) const
 {
   if (!num_au && !other.num_au) {
     return total_bytes == other.total_bytes && au_size == other.au_size;
@@ -502,6 +503,10 @@ bool bluestore_blob_use_tracker_t::equal(
       }
     }
     return true;
+  }
+
+  if (strict) {
+    return false;
   }
 
   uint32_t n = num_au ? num_au : other.num_au;
@@ -674,7 +679,7 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   if (o.flags) {
     out << " " << o.get_flags_string();
   }
-  if (o.csum_type) {
+  if (o.has_csum()) {
     out << " " << Checksummer::get_csum_type_string(o.csum_type)
 	<< "/0x" << std::hex << (1ull << o.csum_chunk_order) << std::dec;
   }

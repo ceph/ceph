@@ -83,8 +83,8 @@ static int do_metadata_list(librbd::Image& image, Formatter *f)
   return 0;
 }
 
-static int do_metadata_set(librbd::Image& image, const char *key,
-                          const char *value)
+static int do_metadata_set(librbd::Image& image, std::string &key,
+                          std::string &value)
 {
   int r = image.metadata_set(key, value);
   if (r < 0) {
@@ -94,17 +94,20 @@ static int do_metadata_set(librbd::Image& image, const char *key,
   return r;
 }
 
-static int do_metadata_remove(librbd::Image& image, const char *key)
+static int do_metadata_remove(librbd::Image& image, std::string &key)
 {
   int r = image.metadata_remove(key);
-  if (r < 0) {
-    std::cerr << "failed to remove metadata " << key << " of image : "
-              << cpp_strerror(r) << std::endl;
+  if (r == -ENOENT) {
+      std::cerr << "rbd: no existing metadata key " << key << " of image : "
+                << cpp_strerror(r) << std::endl;
+  } else if(r < 0) {
+      std::cerr << "failed to remove metadata " << key << " of image : "
+                << cpp_strerror(r) << std::endl;
   }
   return r;
 }
 
-static int do_metadata_get(librbd::Image& image, const char *key)
+static int do_metadata_get(librbd::Image& image, std::string &key)
 {
   std::string s;
   int r = image.metadata_get(key, &s);
@@ -192,7 +195,7 @@ int execute_get(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_metadata_get(image, key.c_str());
+  r = do_metadata_get(image, key);
   if (r < 0) {
     std::cerr << "rbd: getting metadata failed: " << cpp_strerror(r)
               << std::endl;
@@ -242,7 +245,7 @@ int execute_set(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_metadata_set(image, key.c_str(), value.c_str());
+  r = do_metadata_set(image, key, value);
   if (r < 0) {
     std::cerr << "rbd: setting metadata failed: " << cpp_strerror(r)
               << std::endl;
@@ -284,7 +287,7 @@ int execute_remove(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_metadata_remove(image, key.c_str());
+  r = do_metadata_remove(image, key);
   if (r < 0) {
     std::cerr << "rbd: removing metadata failed: " << cpp_strerror(r)
               << std::endl;
@@ -294,7 +297,7 @@ int execute_remove(const po::variables_map &vm) {
 }
 
 Shell::Action action_list(
-  {"image-meta", "list"}, {}, "Image metadata list keys with values.", "",
+  {"image-meta", "list"}, {"image-meta", "ls"}, "Image metadata list keys with values.", "",
   &get_list_arguments, &execute_list);
 Shell::Action action_get(
   {"image-meta", "get"}, {},
@@ -304,7 +307,7 @@ Shell::Action action_set(
   {"image-meta", "set"}, {}, "Image metadata set key with value.", "",
   &get_set_arguments, &execute_set);
 Shell::Action action_remove(
-  {"image-meta", "remove"}, {},
+  {"image-meta", "remove"}, {"image-meta", "rm"},
   "Image metadata remove the key and value associated.", "",
   &get_remove_arguments, &execute_remove);
 

@@ -1030,12 +1030,11 @@ int crush_remove_straw_bucket_item(struct crush_map *map,
 
 	for (i = 0; i < bucket->h.size; i++) {
 		if (bucket->h.items[i] == item) {
-			bucket->h.size--;
 			if (bucket->item_weights[i] < bucket->h.weight)
 				bucket->h.weight -= bucket->item_weights[i];
 			else
 				bucket->h.weight = 0;
-			for (j = i; j < bucket->h.size; j++) {
+			for (j = i; j < bucket->h.size - 1; j++) {
 				bucket->h.items[j] = bucket->h.items[j+1];
 				bucket->item_weights[j] = bucket->item_weights[j+1];
 			}
@@ -1044,7 +1043,11 @@ int crush_remove_straw_bucket_item(struct crush_map *map,
 	}
 	if (i == bucket->h.size)
 		return -ENOENT;
-	
+	bucket->h.size--;
+	if (bucket->h.size == 0) {
+		/* don't bother reallocating */
+		return 0;
+	}
 	void *_realloc = NULL;
 
 	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
@@ -1074,12 +1077,11 @@ int crush_remove_straw2_bucket_item(struct crush_map *map,
 
 	for (i = 0; i < bucket->h.size; i++) {
 		if (bucket->h.items[i] == item) {
-			bucket->h.size--;
 			if (bucket->item_weights[i] < bucket->h.weight)
 				bucket->h.weight -= bucket->item_weights[i];
 			else
 				bucket->h.weight = 0;
-			for (j = i; j < bucket->h.size; j++) {
+			for (j = i; j < bucket->h.size - 1; j++) {
 				bucket->h.items[j] = bucket->h.items[j+1];
 				bucket->item_weights[j] = bucket->item_weights[j+1];
 			}
@@ -1088,6 +1090,12 @@ int crush_remove_straw2_bucket_item(struct crush_map *map,
 	}
 	if (i == bucket->h.size)
 		return -ENOENT;
+
+	bucket->h.size--;
+	if (!newsize) {
+		/* don't bother reallocating a 0-length array. */
+		return 0;
+	}
 
 	void *_realloc = NULL;
 

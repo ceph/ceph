@@ -32,6 +32,12 @@ how many ranks will be created.  The actual number of ranks
 in the filesystem will only be increased if a spare daemon is
 available to take on the new rank. For example, if there is only one MDS daemon running, and max_mds is set to two, no second rank will be created.
 
+Before ``max_mds`` can be increased, the ``allow_multimds`` flag must be set.
+The following command sets this flag for a filesystem instance.
+
+::
+    # ceph fs set <fs_name> cephfs allow_multimds true --yes-i-really-mean-it
+
 Set ``max_mds`` to the desired number of ranks.  In the following examples
 the "fsmap" line of "ceph status" is shown to illustrate the expected
 result of commands.
@@ -40,7 +46,7 @@ result of commands.
 
     # fsmap e5: 1/1/1 up {0=a=up:active}, 2 up:standby
 
-    ceph fs set max_mds 2
+    ceph fs set <fs_name> max_mds 2
 
     # fsmap e8: 2/2/2 up {0=a=up:active,1=c=up:creating}, 1 up:standby
     # fsmap e9: 2/2/2 up {0=a=up:active,1=c=up:active}, 1 up:standby
@@ -74,14 +80,14 @@ having just a single active MDS:
 ::
     
     # fsmap e9: 2/2/2 up {0=a=up:active,1=c=up:active}, 1 up:standby
-    ceph fs set max_mds 1
+    ceph fs set <fs_name> max_mds 1
     # fsmap e10: 2/2/1 up {0=a=up:active,1=c=up:active}, 1 up:standby
 
 Note that we still have two active MDSs: the ranks still exist even though
 we have decreased max_mds, because max_mds only restricts creation
 of new ranks.
 
-Next, use the ``ceph mds deactivate <rank>`` command to remove the
+Next, use the ``ceph mds deactivate <role>`` command to remove the
 unneeded rank:
 
 ::
@@ -92,6 +98,9 @@ unneeded rank:
     # fsmap e11: 2/2/1 up {0=a=up:active,1=c=up:stopping}, 1 up:standby
     # fsmap e12: 1/1/1 up {0=a=up:active}, 1 up:standby
     # fsmap e13: 1/1/1 up {0=a=up:active}, 2 up:standby
+
+See :doc:`/cephfs/administration` for more details which forms ``<role>`` can
+take.
 
 The deactivated rank will first enter the stopping state for a period
 of time while it hands off its share of the metadata to the remaining

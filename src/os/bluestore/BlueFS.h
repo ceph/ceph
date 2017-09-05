@@ -370,6 +370,7 @@ public:
   int unlink(const string& dirname, const string& filename);
   int mkdir(const string& dirname);
   int rmdir(const string& dirname);
+  bool wal_is_rotational();
 
   bool dir_exists(const string& dirname);
   int stat(const string& dirname, const string& filename,
@@ -384,7 +385,7 @@ public:
   /// sync any uncommitted state to disk
   void sync_metadata();
 
-  int add_block_device(unsigned bdev, string path);
+  int add_block_device(unsigned bdev, const string& path);
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev);
 

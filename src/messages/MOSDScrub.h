@@ -29,8 +29,8 @@ struct MOSDScrub : public Message {
 
   uuid_d fsid;
   vector<pg_t> scrub_pgs;
-  bool repair;
-  bool deep;
+  bool repair = false;
+  bool deep = false;
 
   MOSDScrub() : Message(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDScrub(const uuid_d& f, bool r, bool d) :

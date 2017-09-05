@@ -309,6 +309,7 @@ void osd_stat_t::dump(Formatter *f) const
 {
   f->dump_unsigned("up_from", up_from);
   f->dump_unsigned("seq", seq);
+  f->dump_unsigned("num_pgs", num_pgs);
   f->dump_unsigned("kb", kb);
   f->dump_unsigned("kb_used", kb_used);
   f->dump_unsigned("kb_avail", kb_avail);
@@ -328,7 +329,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(6, 2, bl);
+  ENCODE_START(7, 2, bl);
   ::encode(kb, bl);
   ::encode(kb_used, bl);
   ::encode(kb_avail, bl);
@@ -340,6 +341,7 @@ void osd_stat_t::encode(bufferlist &bl) const
   ::encode(os_perf_stat, bl);
   ::encode(up_from, bl);
   ::encode(seq, bl);
+  ::encode(num_pgs, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -361,6 +363,9 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 6) {
     ::decode(up_from, bl);
     ::decode(seq, bl);
+  }
+  if (struct_v >= 7) {
+    ::decode(num_pgs, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -802,6 +807,8 @@ std::string pg_state_string(int state)
     oss << "recovery_toofull+";
   if (state & PG_STATE_RECOVERING)
     oss << "recovering+";
+  if (state & PG_STATE_FORCED_RECOVERY)
+    oss << "forced_recovery+";
   if (state & PG_STATE_DOWN)
     oss << "down+";
   if (state & PG_STATE_UNDERSIZED)
@@ -825,6 +832,8 @@ std::string pg_state_string(int state)
     oss << "backfill_wait+";
   if (state & PG_STATE_BACKFILL)
     oss << "backfilling+";
+  if (state & PG_STATE_FORCED_BACKFILL)
+    oss << "forced_backfill+";
   if (state & PG_STATE_BACKFILL_TOOFULL)
     oss << "backfill_toofull+";
   if (state & PG_STATE_INCOMPLETE)
@@ -866,6 +875,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_REPAIR;
   else if (state == "recovering")
     type = PG_STATE_RECOVERING;
+  else if (state == "forced_recovery")
+    type = PG_STATE_FORCED_RECOVERY;
   else if (state == "backfill_wait")
     type = PG_STATE_BACKFILL_WAIT;
   else if (state == "incomplete")
@@ -878,6 +889,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_DEEP_SCRUB;
   else if (state == "backfill")
     type = PG_STATE_BACKFILL;
+  else if (state == "forced_backfill")
+    type = PG_STATE_FORCED_BACKFILL;
   else if (state == "backfill_toofull")
     type = PG_STATE_BACKFILL_TOOFULL;
   else if (state == "recovery_wait")
@@ -904,15 +917,11 @@ int pg_string_state(const std::string& state)
 // -- eversion_t --
 string eversion_t::get_key_name() const
 {
-  char key[32];
-  // Below is equivalent of sprintf("%010u.%020llu");
-  key[31] = 0;
-  ritoa<uint64_t, 10, 20>(version, key + 31);
-  key[10] = '.';
-  ritoa<uint32_t, 10, 10>(epoch, key + 10);
-  return string(key);
+  std::string key(32, ' ');
+  get_key_name(&key[0]);
+  key.resize(31); // remove the null terminator
+  return key;
 }
-
 
 // -- pool_snap_info_t --
 void pool_snap_info_t::dump(Formatter *f) const
@@ -2944,154 +2953,6 @@ void PastIntervals::pg_interval_t::generate_test_instances(list<pg_interval_t*>&
 
 WRITE_CLASS_ENCODER(PastIntervals::pg_interval_t)
 
-class pi_simple_rep : public PastIntervals::interval_rep {
-  map<epoch_t, PastIntervals::pg_interval_t> interval_map;
-
-  pi_simple_rep(
-    bool ec_pool,
-    std::list<PastIntervals::pg_interval_t> &&intervals) {
-    for (auto &&i: intervals)
-      add_interval(ec_pool, i);
-  }
-
-public:
-  pi_simple_rep() = default;
-  pi_simple_rep(const pi_simple_rep &) = default;
-  pi_simple_rep(pi_simple_rep &&) = default;
-  pi_simple_rep &operator=(pi_simple_rep &&) = default;
-  pi_simple_rep &operator=(const pi_simple_rep &) = default;
-
-  size_t size() const override { return interval_map.size(); }
-  bool empty() const override { return interval_map.empty(); }
-  void clear() override { interval_map.clear(); }
-  pair<epoch_t, epoch_t> get_bounds() const override {
-    auto iter = interval_map.begin();
-    if (iter != interval_map.end()) {
-      auto riter = interval_map.rbegin();
-      return make_pair(
-	iter->second.first,
-	riter->second.last + 1);
-    } else {
-      return make_pair(0, 0);
-    }
-  }
-  set<pg_shard_t> get_all_participants(
-    bool ec_pool) const override {
-    set<pg_shard_t> all_participants;
-
-    // We need to decide who might have unfound objects that we need
-    auto p = interval_map.rbegin();
-    auto end = interval_map.rend();
-    for (; p != end; ++p) {
-      const PastIntervals::pg_interval_t &interval(p->second);
-      // If nothing changed, we don't care about this interval.
-      if (!interval.maybe_went_rw)
-	continue;
-
-      int i = 0;
-      std::vector<int>::const_iterator a = interval.acting.begin();
-      std::vector<int>::const_iterator a_end = interval.acting.end();
-      for (; a != a_end; ++a, ++i) {
-	pg_shard_t shard(*a, ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD);
-	if (*a != CRUSH_ITEM_NONE)
-	  all_participants.insert(shard);
-      }
-    }
-    return all_participants;
-  }
-  void add_interval(
-    bool ec_pool,
-    const PastIntervals::pg_interval_t &interval) override {
-    interval_map[interval.first] = interval;
-  }
-  unique_ptr<PastIntervals::interval_rep> clone() const override {
-    return unique_ptr<PastIntervals::interval_rep>(new pi_simple_rep(*this));
-  }
-  ostream &print(ostream &out) const override {
-    return out << interval_map;
-  }
-  void encode(bufferlist &bl) const override {
-    ::encode(interval_map, bl);
-  }
-  void decode(bufferlist::iterator &bl) override {
-    ::decode(interval_map, bl);
-  }
-  void dump(Formatter *f) const override {
-    f->open_array_section("PastIntervals::compat_rep");
-    for (auto &&i: interval_map) {
-      f->open_object_section("pg_interval_t");
-      f->dump_int("epoch", i.first);
-      f->open_object_section("interval");
-      i.second.dump(f);
-      f->close_section();
-      f->close_section();
-    }
-    f->close_section();
-  }
-  bool is_classic() const override {
-    return true;
-  }
-  static void generate_test_instances(list<pi_simple_rep*> &o) {
-    using ival = PastIntervals::pg_interval_t;
-    using ivallst = std::list<ival>;
-    o.push_back(
-      new pi_simple_rep(
-	true, ivallst
-	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
-	, ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
-	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
-	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
-	}));
-    o.push_back(
-      new pi_simple_rep(
-	false, ivallst
-	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
-	, ival{{   1, 2}, {   1, 2}, 20, 30,  true, 1, 1}
-	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
-	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
-	}));
-    o.push_back(
-      new pi_simple_rep(
-	true, ivallst
-	{ ival{{2, 1, 0}, {2, 1, 0}, 10, 20,  true, 1, 1}
-	, ival{{   0, 2}, {   0, 2}, 21, 30,  true, 0, 0}
-	, ival{{   0, 2}, {2,    0}, 31, 35,  true, 2, 2}
-	, ival{{   0, 2}, {   0, 2}, 36, 50,  true, 0, 0}
-	}));
-    return;
-  }
-  void iterate_mayberw_back_to(
-    bool ec_pool,
-    epoch_t les,
-    std::function<void(epoch_t, const set<pg_shard_t> &)> &&f) const override {
-    for (auto i = interval_map.rbegin(); i != interval_map.rend(); ++i) {
-      if (!i->second.maybe_went_rw)
-	continue;
-      if (i->second.last < les)
-	break;
-      set<pg_shard_t> actingset;
-      for (unsigned j = 0; j < i->second.acting.size(); ++j) {
-	if (i->second.acting[j] == CRUSH_ITEM_NONE)
-	  continue;
-	actingset.insert(
-	  pg_shard_t(
-	    i->second.acting[j],
-	    ec_pool ? shard_id_t(j) : shard_id_t::NO_SHARD));
-      }
-      f(i->second.first, actingset);
-    }
-  }
-
-  bool has_full_intervals() const override { return true; }
-  void iterate_all_intervals(
-    std::function<void(const PastIntervals::pg_interval_t &)> &&f
-    ) const override {
-    for (auto &&i: interval_map) {
-      f(i.second);
-    }
-  }
-  virtual ~pi_simple_rep() override {}
-};
 
 /**
  * pi_compact_rep
@@ -3254,9 +3115,6 @@ public:
     f->close_section();
     f->close_section();
   }
-  bool is_classic() const override {
-    return false;
-  }
   static void generate_test_instances(list<pi_compact_rep*> &o) {
     using ival = PastIntervals::pg_interval_t;
     using ivallst = std::list<ival>;
@@ -3299,6 +3157,11 @@ public:
 };
 WRITE_CLASS_ENCODER(pi_compact_rep)
 
+PastIntervals::PastIntervals()
+{
+  past_intervals.reset(new pi_compact_rep);
+}
+
 PastIntervals::PastIntervals(const PastIntervals &rhs)
   : past_intervals(rhs.past_intervals ?
 		   rhs.past_intervals->clone() :
@@ -3340,8 +3203,7 @@ void PastIntervals::decode(bufferlist::iterator &bl)
   case 0:
     break;
   case 1:
-    past_intervals.reset(new pi_simple_rep);
-    past_intervals->decode(bl);
+    assert(0 == "pi_simple_rep support removed post-luminous");
     break;
   case 2:
     past_intervals.reset(new pi_compact_rep);
@@ -3351,22 +3213,8 @@ void PastIntervals::decode(bufferlist::iterator &bl)
   DECODE_FINISH(bl);
 }
 
-void PastIntervals::decode_classic(bufferlist::iterator &bl)
-{
-  past_intervals.reset(new pi_simple_rep);
-  past_intervals->decode(bl);
-}
-
 void PastIntervals::generate_test_instances(list<PastIntervals*> &o)
 {
-  {
-    list<pi_simple_rep *> simple;
-    pi_simple_rep::generate_test_instances(simple);
-    for (auto &&i: simple) {
-      // takes ownership of contents
-      o.push_back(new PastIntervals(i));
-    }
-  }
   {
     list<pi_compact_rep *> compact;
     pi_compact_rep::generate_test_instances(compact);
@@ -3376,34 +3224,6 @@ void PastIntervals::generate_test_instances(list<PastIntervals*> &o)
     }
   }
   return;
-}
-
-void PastIntervals::update_type(bool ec_pool, bool compact)
-{
-  if (!compact) {
-    if (!past_intervals) {
-      past_intervals.reset(new pi_simple_rep);
-    } else {
-      // we never convert from compact back to classic
-      assert(is_classic());
-    }
-  } else {
-    if (!past_intervals) {
-      past_intervals.reset(new pi_compact_rep);
-    } else if (is_classic()) {
-      auto old = std::move(past_intervals);
-      past_intervals.reset(new pi_compact_rep);
-      assert(old->has_full_intervals());
-      old->iterate_all_intervals([&](const pg_interval_t &i) {
-	  past_intervals->add_interval(ec_pool, i);
-	});
-    }
-  }
-}
-
-void PastIntervals::update_type_from_map(bool ec_pool, const OSDMap &osdmap)
-{
-  update_type(ec_pool, osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
 }
 
 bool PastIntervals::is_new_interval(
@@ -4110,6 +3930,66 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
   return out;
 }
 
+// -- pg_log_dup_t --
+
+std::string pg_log_dup_t::get_key_name() const
+{
+  static const char prefix[] = "dup_";
+  std::string key(36, ' ');
+  memcpy(&key[0], prefix, 4);
+  version.get_key_name(&key[4]);
+  key.resize(35); // remove the null terminator
+  return key;
+}
+
+void pg_log_dup_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(reqid, bl);
+  ::encode(version, bl);
+  ::encode(user_version, bl);
+  ::encode(return_code, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_log_dup_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(reqid, bl);
+  ::decode(version, bl);
+  ::decode(user_version, bl);
+  ::decode(return_code, bl);
+  DECODE_FINISH(bl);
+}
+
+void pg_log_dup_t::dump(Formatter *f) const
+{
+  f->dump_stream("reqid") << reqid;
+  f->dump_stream("version") << version;
+  f->dump_stream("user_version") << user_version;
+  f->dump_stream("return_code") << return_code;
+}
+
+void pg_log_dup_t::generate_test_instances(list<pg_log_dup_t*>& o)
+{
+  o.push_back(new pg_log_dup_t());
+  o.push_back(new pg_log_dup_t(eversion_t(1,2),
+			       1,
+			       osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+			       0));
+  o.push_back(new pg_log_dup_t(eversion_t(1,2),
+			       2,
+			       osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+			       -ENOENT));
+}
+
+
+std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e) {
+  return out << "log_dup(reqid=" << e.reqid <<
+    " v=" << e.version << " uv=" << e.user_version <<
+    " rc=" << e.return_code << ")";
+}
+
 
 // -- pg_log_t --
 
@@ -4151,18 +4031,19 @@ void pg_log_t::filter_log(spg_t import_pgid, const OSDMap &curmap,
 
 void pg_log_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(6, 3, bl);
+  ENCODE_START(7, 3, bl);
   ::encode(head, bl);
   ::encode(tail, bl);
   ::encode(log, bl);
   ::encode(can_rollback_to, bl);
   ::encode(rollback_info_trimmed_to, bl);
+  ::encode(dups, bl);
   ENCODE_FINISH(bl);
 }
  
 void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
   ::decode(head, bl);
   ::decode(tail, bl);
   if (struct_v < 2) {
@@ -4177,6 +4058,10 @@ void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
     ::decode(rollback_info_trimmed_to, bl);
   else
     rollback_info_trimmed_to = tail;
+
+  if (struct_v >= 7)
+    ::decode(dups, bl);
+
   DECODE_FINISH(bl);
 
   // handle hobject_t format change
@@ -4198,6 +4083,13 @@ void pg_log_t::dump(Formatter *f) const
   for (list<pg_log_entry_t>::const_iterator p = log.begin(); p != log.end(); ++p) {
     f->open_object_section("entry");
     p->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("dups");
+  for (const auto& entry : dups) {
+    f->open_object_section("entry");
+    entry.dump(f);
     f->close_section();
   }
   f->close_section();
@@ -4272,13 +4164,16 @@ void pg_log_t::copy_up_to(const pg_log_t &other, int max)
   }
 }
 
-ostream& pg_log_t::print(ostream& out) const 
+ostream& pg_log_t::print(ostream& out) const
 {
   out << *this << std::endl;
   for (list<pg_log_entry_t>::const_iterator p = log.begin();
        p != log.end();
-       ++p) 
+       ++p)
     out << *p << std::endl;
+  for (const auto& entry : dups) {
+    out << " dup entry: " << entry << std::endl;
+  }
   return out;
 }
 

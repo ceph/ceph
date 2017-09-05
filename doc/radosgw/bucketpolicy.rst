@@ -22,7 +22,7 @@ For example, one may use s3cmd to set or delete a policy thus::
     "Statement": [{
       "Effect": "Allow",
       "Principal": {"AWS": ["arn:aws:iam::usfolks:user/fred"]},
-      "Action": "s3PutObjectAcl",
+      "Action": "s3:PutObjectAcl",
       "Resource": [
         "arn:aws:s3:::happybucket/*"
       ]
@@ -119,6 +119,11 @@ Currently, the only condition keys we support are:
 - aws:SourceIp
 - aws:UserAgent
 - aws:username
+
+We support the following condition keys for ListBucket Op
+- s3:prefix
+- s3:delimiter
+- s3:max-keys
 
 More may be supported soon as we integrate with the recently rewritten
 Authentication/Authorization subsystem.

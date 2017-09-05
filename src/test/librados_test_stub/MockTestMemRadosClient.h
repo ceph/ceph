@@ -35,11 +35,29 @@ public:
     return TestMemRadosClient::blacklist_add(client_address, expire_seconds);
   }
 
+  MOCK_METHOD3(service_daemon_register,
+               int(const std::string&,
+                   const std::string&,
+                   const std::map<std::string,std::string>&));
+  int do_service_daemon_register(const std::string& service,
+                                 const std::string& name,
+                                 const std::map<std::string,std::string>& metadata) {
+    return TestMemRadosClient::service_daemon_register(service, name, metadata);
+  }
+
+  MOCK_METHOD1(service_daemon_update_status,
+               int(const std::map<std::string,std::string>&));
+  int do_service_daemon_update_status(const std::map<std::string,std::string>& status) {
+    return TestMemRadosClient::service_daemon_update_status(status);
+  }
+
   void default_to_dispatch() {
     using namespace ::testing;
 
     ON_CALL(*this, create_ioctx(_, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_create_ioctx));
     ON_CALL(*this, blacklist_add(_, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_blacklist_add));
+    ON_CALL(*this, service_daemon_register(_, _, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_service_daemon_register));
+    ON_CALL(*this, service_daemon_update_status(_)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_service_daemon_update_status));
   }
 };
 

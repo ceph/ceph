@@ -68,8 +68,9 @@
 #define MSG_OSD_MARK_ME_DOWN 74
 #define MSG_OSD_FULL         75
 
-#define MSG_OSD_SUBOP        76
-#define MSG_OSD_SUBOPREPLY   77
+// removed right after luminous
+//#define MSG_OSD_SUBOP        76
+//#define MSG_OSD_SUBOPREPLY   77
 
 #define MSG_OSD_PGTEMP       78
 
@@ -101,6 +102,7 @@
 
 #define MSG_OSD_BACKFILL_RESERVE 99
 #define MSG_OSD_RECOVERY_RESERVE 150
+#define MSG_OSD_FORCE_RECOVERY 151
 
 #define MSG_OSD_PG_PUSH        105
 #define MSG_OSD_PG_PULL        106

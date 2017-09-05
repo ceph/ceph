@@ -342,6 +342,13 @@ def create_rbd_pool(ctx, config):
     mon_remote.run(
         args=['sudo', 'ceph', '--cluster', cluster_name,
               'osd', 'pool', 'create', 'rbd', '8'])
+    mon_remote.run(
+        args=[
+            'sudo', 'ceph', '--cluster', cluster_name,
+            'osd', 'pool', 'application', 'enable',
+            'rbd', 'rbd', '--yes-i-really-mean-it'
+        ],
+        check_status=False)
     yield
 
 @contextlib.contextmanager
@@ -686,6 +693,7 @@ def cluster(ctx, config):
                     '-p',
                     mnt_point,
                 ])
+            log.info(str(roles_to_devs))
             log.info(str(roles_to_journals))
             log.info(role)
             if roles_to_devs.get(role):
@@ -1022,8 +1030,8 @@ def osd_scrub_pgs(ctx, config):
     indicate the last scrub completed.  Time out if no progess is made
     here after two minutes.
     """
-    retries = 20
-    delays = 10
+    retries = 40
+    delays = 20
     cluster_name = config['cluster']
     manager = ctx.managers[cluster_name]
     all_clean = False
@@ -1222,7 +1230,13 @@ def healthy(ctx, config):
     """
     config = config if isinstance(config, dict) else dict()
     cluster_name = config.get('cluster', 'ceph')
-    log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
+    log.info('Waiting until %s daemons up and pgs clean...', cluster_name)
+    manager = ctx.managers[cluster_name]
+    try:
+        manager.wait_for_mgr_available(timeout=30)
+    except (run.CommandFailedError, AssertionError) as e:
+        log.info('ignoring mgr wait error, probably testing upgrade: %s', e)
+
     firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
     (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     teuthology.wait_until_osds_up(
@@ -1231,6 +1245,14 @@ def healthy(ctx, config):
         remote=mon0_remote,
         ceph_cluster=cluster_name,
     )
+
+    try:
+        manager.flush_all_pg_stats()
+    except (run.CommandFailedError, Exception) as e:
+        log.info('ignoring flush pg stats error, probably testing upgrade: %s', e)
+    manager.wait_for_clean()
+
+    log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
     teuthology.wait_until_healthy(
         ctx,
         remote=mon0_remote,

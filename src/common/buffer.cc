@@ -24,13 +24,13 @@
 #include "common/environment.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "common/simple_spin.h"
 #include "common/strtol.h"
 #include "common/likely.h"
 #include "common/valgrind.h"
 #include "common/deleter.h"
 #include "common/RWLock.h"
 #include "include/types.h"
+#include "include/spinlock.h"
 #include "include/scope_guard.h"
 
 #if defined(HAVE_XIO)
@@ -43,9 +43,8 @@ using namespace ceph;
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
 
 #ifdef BUFFER_DEBUG
-static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
-# define bdout { simple_spin_lock(&buffer_debug_lock); std::cout
-# define bendl std::endl; simple_spin_unlock(&buffer_debug_lock); }
+# define bdout { std::lock_guard<ceph::spinlock> lg(ceph::spinlock()); std::cout
+# define bendl std::endl; }
 #else
 # define bdout if (0) { std::cout
 # define bendl std::endl; }
@@ -117,9 +116,9 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     return buffer_c_str_accesses;
   }
 
+#ifdef CEPH_HAVE_SETPIPE_SZ
   static std::atomic<unsigned> buffer_max_pipe_size { 0 };
   int update_max_pipe_size() {
-#ifdef CEPH_HAVE_SETPIPE_SZ
     char buf[32];
     int r;
     std::string err;
@@ -135,21 +134,22 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     if (!err.empty())
       return -EIO;
     buffer_max_pipe_size = size;
-#endif
     return 0;
   }
 
   size_t get_max_pipe_size() {
-#ifdef CEPH_HAVE_SETPIPE_SZ
     size_t size = buffer_max_pipe_size;
     if (size)
       return size;
     if (update_max_pipe_size() == 0)
       return buffer_max_pipe_size;
-#endif
     // this is the max size hardcoded in linux before 2.6.35
     return 65536;
   }
+#else
+  size_t get_max_pipe_size() { return 65536; }
+#endif
+
 
   const char * buffer::error::what() const throw () {
     return "buffer::exception";
@@ -173,7 +173,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     std::atomic<unsigned> nref { 0 };
     int mempool = mempool::mempool_buffer_anon;
 
-    mutable std::atomic_flag crc_spinlock = ATOMIC_FLAG_INIT;
+    mutable ceph::spinlock crc_spinlock;
     map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
     explicit raw(unsigned l)
@@ -246,29 +246,25 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     }
     bool get_crc(const pair<size_t, size_t> &fromto,
          pair<uint32_t, uint32_t> *crc) const {
-      simple_spin_lock(&crc_spinlock);
+      std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
       map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >::const_iterator i =
       crc_map.find(fromto);
       if (i == crc_map.end()) {
-          simple_spin_unlock(&crc_spinlock);
           return false;
       }
       *crc = i->second;
-      simple_spin_unlock(&crc_spinlock);
       return true;
     }
     void set_crc(const pair<size_t, size_t> &fromto,
          const pair<uint32_t, uint32_t> &crc) {
-      simple_spin_lock(&crc_spinlock);
+      std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
       crc_map[fromto] = crc;
-      simple_spin_unlock(&crc_spinlock);
     }
     void invalidate_crc() {
-      simple_spin_lock(&crc_spinlock);
+      std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
       if (crc_map.size() != 0) {
         crc_map.clear();
       }
-      simple_spin_unlock(&crc_spinlock);
     }
   };
 
@@ -2381,7 +2377,7 @@ int buffer::list::write_fd(int fd) const
     }
     ++p;
 
-    if (iovlen == IOV_MAX-1 ||
+    if (iovlen == IOV_MAX ||
 	p == _buffers.end()) {
       iovec *start = iov;
       int num = iovlen;

@@ -6,6 +6,10 @@ meta:
 overrides:
   ceph:
     fs: xfs
+    log-whitelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+      - \(MGR_DOWN\)
     conf:
       global:
         enable experimental unrecoverable data corrupting features: "*"

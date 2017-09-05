@@ -100,6 +100,7 @@ def task(ctx, config):
     log.info('stopping first osd')
     manager.kill_osd(0)
     manager.mark_down_osd(0)
+    manager.wait_for_active(timeout)
 
     log.info('waiting for all to be unclean')
     starttime = time.time()

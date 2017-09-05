@@ -63,6 +63,18 @@ struct ImageRequest<MockReplayImageCtx> {
     s_instance->aio_writesame(c, off, len, bl, op_flags);
   }
 
+  MOCK_METHOD6(aio_compare_and_write, void(AioCompletion *c, const Extents &image_extents,
+                                           const bufferlist &cmp_bl, const bufferlist &bl,
+                                           uint64_t *mismatch_offset, int op_flags));
+  static void aio_compare_and_write(MockReplayImageCtx *ictx, AioCompletion *c,
+                                    Extents &&image_extents, bufferlist &&cmp_bl,
+                                    bufferlist &&bl, uint64_t *mismatch_offset,
+                                    int op_flags, const ZTracer::Trace &parent_trace) {
+    assert(s_instance != nullptr);
+    s_instance->aio_compare_and_write(c, image_extents, cmp_bl, bl,
+                                      mismatch_offset, op_flags);
+  }
+
   ImageRequest() {
     s_instance = this;
   }
@@ -165,6 +177,16 @@ public:
                             uint64_t len, const char *data) {
     EXPECT_CALL(mock_io_image_request,
                 aio_writesame(_, off, len, BufferlistEqual(data), _))
+                  .WillOnce(SaveArg<0>(aio_comp));
+  }
+
+  void expect_aio_compare_and_write(MockIoImageRequest &mock_io_image_request,
+                                    io::AioCompletion **aio_comp, uint64_t off,
+                                    uint64_t len, const char *cmp_data, const char *data,
+                                    uint64_t *mismatch_offset) {
+    EXPECT_CALL(mock_io_image_request,
+                aio_compare_and_write(_, io::Extents{{off, len}},
+                  BufferlistEqual(cmp_data), BufferlistEqual(data), mismatch_offset, _))
                   .WillOnce(SaveArg<0>(aio_comp));
   }
 
@@ -459,6 +481,69 @@ TEST_F(TestMockJournalReplay, AioWriteSame) {
   expect_aio_flush(mock_image_ctx, mock_io_image_request, 0);
   ASSERT_EQ(0, when_shut_down(mock_journal_replay, false));
   ASSERT_EQ(0, on_safe.wait());
+}
+
+
+TEST_F(TestMockJournalReplay, AioCompareAndWrite) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  expect_accept_ops(mock_exclusive_lock, true);
+
+  MockJournalReplay mock_write_journal_replay(mock_image_ctx);
+  MockJournalReplay mock_compare_and_write_journal_replay(mock_image_ctx);
+  MockJournalReplay mock_mis_compare_and_write_journal_replay(mock_image_ctx);
+  MockIoImageRequest mock_io_image_request;
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  io::AioCompletion *aio_comp;
+  C_SaferCond on_ready;
+  C_SaferCond on_safe;
+  expect_aio_write(mock_io_image_request, &aio_comp, 512, 512, "test");
+  when_process(mock_write_journal_replay,
+               EventEntry{AioWriteEvent(512, 512, to_bl("test"))},
+               &on_ready, &on_safe);
+
+  when_complete(mock_image_ctx, aio_comp, 0);
+  ASSERT_EQ(0, on_ready.wait());
+
+  expect_aio_flush(mock_image_ctx, mock_io_image_request, 0);
+  ASSERT_EQ(0, when_shut_down(mock_write_journal_replay, false));
+  ASSERT_EQ(0, on_safe.wait());
+
+  expect_aio_compare_and_write(mock_io_image_request, &aio_comp,
+                               512, 512, "test", "test", nullptr);
+  when_process(mock_compare_and_write_journal_replay,
+               EventEntry{AioCompareAndWriteEvent(512, 512, to_bl("test"),
+               to_bl("test"))}, &on_ready, &on_safe);
+
+  when_complete(mock_image_ctx, aio_comp, 0);
+  ASSERT_EQ(0, on_ready.wait());
+
+  expect_aio_flush(mock_image_ctx, mock_io_image_request, 0);
+  ASSERT_EQ(0, when_shut_down(mock_compare_and_write_journal_replay, false));
+  ASSERT_EQ(0, on_safe.wait());
+
+  expect_aio_compare_and_write(mock_io_image_request, &aio_comp,
+                               512, 512, "111", "test", nullptr);
+  when_process(mock_mis_compare_and_write_journal_replay,
+               EventEntry{AioCompareAndWriteEvent(512, 512, to_bl("111"),
+               to_bl("test"))}, &on_ready, &on_safe);
+
+  when_complete(mock_image_ctx, aio_comp, 0);
+  ASSERT_EQ(0, on_ready.wait());
+
+  expect_aio_flush(mock_image_ctx, mock_io_image_request, 0);
+  ASSERT_EQ(0, when_shut_down(mock_mis_compare_and_write_journal_replay, false));
+  ASSERT_EQ(0, on_safe.wait());
+
 }
 
 TEST_F(TestMockJournalReplay, IOError) {

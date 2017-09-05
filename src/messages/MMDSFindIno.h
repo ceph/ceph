@@ -19,7 +19,7 @@
 #include "include/filepath.h"
 
 struct MMDSFindIno : public Message {
-  ceph_tid_t tid;
+  ceph_tid_t tid {0};
   inodeno_t ino;
 
   MMDSFindIno() : Message(MSG_MDS_FINDINO) {}

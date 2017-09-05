@@ -3,5 +3,5 @@ tasks:
 - ceph:
     log-whitelist:
       - overall HEALTH_
-      - (MON_DOWN)
+      - \(MON_DOWN\)
 - mon_recovery:

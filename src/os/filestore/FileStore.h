@@ -135,8 +135,8 @@ public:
 
     objectstore_perf_stat_t get_cur_stats() const {
       objectstore_perf_stat_t ret;
-      ret.os_commit_latency = os_commit_latency.avg();
-      ret.os_apply_latency = os_apply_latency.avg();
+      ret.os_commit_latency = os_commit_latency.current_avg();
+      ret.os_apply_latency = os_apply_latency.current_avg();
       return ret;
     }
 
@@ -484,6 +484,7 @@ public:
   }
 
   bool is_rotational() override;
+  bool is_journal_rotational() override;
 
   void dump_perf_counters(Formatter *f) override {
     f->open_object_section("perf_counters");
@@ -614,8 +615,6 @@ public:
   int _fgetattr(int fd, const char *name, bufferptr& bp);
   int _fgetattrs(int fd, map<string,bufferptr>& aset);
   int _fsetattrs(int fd, map<string, bufferptr> &aset);
-
-  void _start_sync();
 
   void do_force_sync();
   void start_sync(Context *onsafe);
@@ -837,6 +836,9 @@ protected:
   const string& get_basedir_path() {
     return filestore->basedir;
   }
+  const string& get_journal_path() {
+    return filestore->journalpath;
+  }
   const string& get_current_path() {
     return filestore->current_fn;
   }
@@ -874,6 +876,7 @@ public:
   virtual bool has_fiemap() = 0;
   virtual bool has_seek_data_hole() = 0;
   virtual bool is_rotational() = 0;
+  virtual bool is_journal_rotational() = 0;
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
   virtual int set_alloc_hint(int fd, uint64_t hint) = 0;

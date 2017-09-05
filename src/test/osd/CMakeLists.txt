@@ -18,18 +18,7 @@ install(TARGETS
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # scripts
-add_ceph_test(osd-bench.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-bench.sh) 
-add_ceph_test(osd-config.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-config.sh)
-add_ceph_test(osd-markdown.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-markdown.sh) 
-add_ceph_test(osd-reactivate.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reactivate.sh) 
-add_ceph_test(osd-reuse-id.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reuse-id.sh)
-add_ceph_test(osd-scrub-repair.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh) 
-add_ceph_test(osd-scrub-snaps.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-snaps.sh)
-add_ceph_test(osd-copy-from.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-copy-from.sh)
-add_ceph_test(osd-fast-mark-down.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-fast-mark-down.sh)
-if(HAVE_LIBAIO)
-  add_ceph_test(osd-dup.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-dup.sh)
-endif()
+add_ceph_test(osd-bench.sh ${CMAKE_CURRENT_SOURCE_DIR}/safe-to-destroy.sh)
 
 # unittest_osdmap
 add_executable(unittest_osdmap

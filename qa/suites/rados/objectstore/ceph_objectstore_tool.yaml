@@ -14,9 +14,10 @@ tasks:
         osd max object namespace len: 64
     log-whitelist:
       - overall HEALTH_
-      - (OSDMAP_FLAGS)
-      - (OSD_
-      - (PG_
-      - (TOO_FEW_PGS)
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(TOO_FEW_PGS\)
+      - \(POOL_APP_NOT_ENABLED\)
 - ceph_objectstore_tool:
     objects: 20

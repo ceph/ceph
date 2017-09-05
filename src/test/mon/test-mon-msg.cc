@@ -63,6 +63,7 @@ public:
   explicit MonClientHelper(CephContext *cct_)
     : Dispatcher(cct_),
       cct(cct_),
+      msg(NULL),
       monc(cct_),
       lock("mon-msg-test::lock")
   { }

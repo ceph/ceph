@@ -1,3 +1,7 @@
+Skip test on FreeBSD as it generates different output there.
+
+  $ test "$(uname)" = "FreeBSD" && exit 80 || true
+
   $ rbd --help
   usage: rbd <command> ...
   
@@ -5,94 +9,103 @@
   
   Positional arguments:
     <command>
-      bench                       Simple benchmark.
-      children                    Display children of snapshot.
-      clone                       Clone a snapshot into a COW child image.
-      copy (cp)                   Copy src image to dest.
-      create                      Create an empty image.
-      diff                        Print extents that differ since a previous
-                                  snap, or image creation.
-      disk-usage (du)             Show disk usage stats for pool, image or
-                                  snapshot
-      export                      Export image to file.
-      export-diff                 Export incremental diff to file.
-      feature disable             Disable the specified image feature.
-      feature enable              Enable the specified image feature.
-      flatten                     Fill clone with parent data (make it
-                                  independent).
-      group create                Create a consistency group.
-      group image add             Add an image to a consistency group.
-      group image list            List images in a consistency group.
-      group image remove          Remove an image from a consistency group.
-      group list (group ls)       List rbd consistency groups.
-      group remove (group rm)     Delete a consistency group.
-      image-meta get              Image metadata get the value associated with
-                                  the key.
-      image-meta list             Image metadata list keys with values.
-      image-meta remove           Image metadata remove the key and value
-                                  associated.
-      image-meta set              Image metadata set key with value.
-      import                      Import image from file.
-      import-diff                 Import an incremental diff.
-      info                        Show information about image size, striping,
-                                  etc.
-      journal client disconnect   Flag image journal client as disconnected.
-      journal export              Export image journal.
-      journal import              Import image journal.
-      journal info                Show information about image journal.
-      journal inspect             Inspect image journal for structural errors.
-      journal reset               Reset image journal.
-      journal status              Show status of image journal.
-      list (ls)                   List rbd images.
-      lock add                    Take a lock on an image.
-      lock list (lock ls)         Show locks held on an image.
-      lock remove (lock rm)       Release a lock on an image.
-      map                         Map image to a block device using the kernel.
-      merge-diff                  Merge two diff exports together.
-      mirror image demote         Demote an image to non-primary for RBD
-                                  mirroring.
-      mirror image disable        Disable RBD mirroring for an image.
-      mirror image enable         Enable RBD mirroring for an image.
-      mirror image promote        Promote an image to primary for RBD mirroring.
-      mirror image resync         Force resync to primary image for RBD mirroring.
-      mirror image status         Show RDB mirroring status for an image.
-      mirror pool demote          Demote all primary images in the pool.
-      mirror pool disable         Disable RBD mirroring by default within a pool.
-      mirror pool enable          Enable RBD mirroring by default within a pool.
-      mirror pool info            Show information about the pool mirroring
-                                  configuration.
-      mirror pool peer add        Add a mirroring peer to a pool.
-      mirror pool peer remove     Remove a mirroring peer from a pool.
-      mirror pool peer set        Update mirroring peer settings.
-      mirror pool promote         Promote all non-primary images in the pool.
-      mirror pool status          Show status for all mirrored images in the pool.
-      nbd list (nbd ls)           List the nbd devices already used.
-      nbd map                     Map image to a nbd device.
-      nbd unmap                   Unmap a nbd device.
-      object-map check            Verify the object map is correct.
-      object-map rebuild          Rebuild an invalid object map.
-      pool init                   Initialize pool for use by RBD.
-      remove (rm)                 Delete an image.
-      rename (mv)                 Rename image within pool.
-      resize                      Resize (expand or shrink) image.
-      showmapped                  Show the rbd images mapped by the kernel.
-      snap create (snap add)      Create a snapshot.
-      snap limit clear            Remove snapshot limit.
-      snap limit set              Limit the number of snapshots.
-      snap list (snap ls)         Dump list of image snapshots.
-      snap protect                Prevent a snapshot from being deleted.
-      snap purge                  Deletes all snapshots.
-      snap remove (snap rm)       Deletes a snapshot.
-      snap rename                 Rename a snapshot.
-      snap rollback (snap revert) Rollback image to snapshot.
-      snap unprotect              Allow a snapshot to be deleted.
-      status                      Show the status of this image.
-      trash list (trash ls)       List trash images.
-      trash move (trash mv)       Moves an image to the trash.
-      trash remove (trash rm)     Removes an image from trash.
-      trash restore               Restores an image from trash.
-      unmap                       Unmap a rbd device that was used by the kernel.
-      watch                       Watch events on image.
+      bench                             Simple benchmark.
+      children                          Display children of snapshot.
+      clone                             Clone a snapshot into a COW child image.
+      copy (cp)                         Copy src image to dest.
+      create                            Create an empty image.
+      diff                              Print extents that differ since a
+                                        previous snap, or image creation.
+      disk-usage (du)                   Show disk usage stats for pool, image or
+                                        snapshot
+      export                            Export image to file.
+      export-diff                       Export incremental diff to file.
+      feature disable                   Disable the specified image feature.
+      feature enable                    Enable the specified image feature.
+      flatten                           Fill clone with parent data (make it
+                                        independent).
+      group create                      Create a consistency group.
+      group image add                   Add an image to a consistency group.
+      group image list                  List images in a consistency group.
+      group image remove                Remove an image from a consistency group.
+      group list (group ls)             List rbd consistency groups.
+      group remove (group rm)           Delete a consistency group.
+      image-meta get                    Image metadata get the value associated
+                                        with the key.
+      image-meta list (image-meta ls)   Image metadata list keys with values.
+      image-meta remove (image-meta rm) Image metadata remove the key and value
+                                        associated.
+      image-meta set                    Image metadata set key with value.
+      import                            Import image from file.
+      import-diff                       Import an incremental diff.
+      info                              Show information about image size,
+                                        striping, etc.
+      journal client disconnect         Flag image journal client as disconnected.
+      journal export                    Export image journal.
+      journal import                    Import image journal.
+      journal info                      Show information about image journal.
+      journal inspect                   Inspect image journal for structural
+                                        errors.
+      journal reset                     Reset image journal.
+      journal status                    Show status of image journal.
+      list (ls)                         List rbd images.
+      lock add                          Take a lock on an image.
+      lock list (lock ls)               Show locks held on an image.
+      lock remove (lock rm)             Release a lock on an image.
+      map                               Map image to a block device using the
+                                        kernel.
+      merge-diff                        Merge two diff exports together.
+      mirror image demote               Demote an image to non-primary for RBD
+                                        mirroring.
+      mirror image disable              Disable RBD mirroring for an image.
+      mirror image enable               Enable RBD mirroring for an image.
+      mirror image promote              Promote an image to primary for RBD
+                                        mirroring.
+      mirror image resync               Force resync to primary image for RBD
+                                        mirroring.
+      mirror image status               Show RDB mirroring status for an image.
+      mirror pool demote                Demote all primary images in the pool.
+      mirror pool disable               Disable RBD mirroring by default within a
+                                        pool.
+      mirror pool enable                Enable RBD mirroring by default within a
+                                        pool.
+      mirror pool info                  Show information about the pool mirroring
+                                        configuration.
+      mirror pool peer add              Add a mirroring peer to a pool.
+      mirror pool peer remove           Remove a mirroring peer from a pool.
+      mirror pool peer set              Update mirroring peer settings.
+      mirror pool promote               Promote all non-primary images in the
+                                        pool.
+      mirror pool status                Show status for all mirrored images in
+                                        the pool.
+      nbd list (nbd ls)                 List the nbd devices already used.
+      nbd map                           Map image to a nbd device.
+      nbd unmap                         Unmap a nbd device.
+      object-map check                  Verify the object map is correct.
+      object-map rebuild                Rebuild an invalid object map.
+      pool init                         Initialize pool for use by RBD.
+      remove (rm)                       Delete an image.
+      rename (mv)                       Rename image within pool.
+      resize                            Resize (expand or shrink) image.
+      showmapped                        Show the rbd images mapped by the kernel.
+      snap create (snap add)            Create a snapshot.
+      snap limit clear                  Remove snapshot limit.
+      snap limit set                    Limit the number of snapshots.
+      snap list (snap ls)               Dump list of image snapshots.
+      snap protect                      Prevent a snapshot from being deleted.
+      snap purge                        Delete all snapshots.
+      snap remove (snap rm)             Delete a snapshot.
+      snap rename                       Rename a snapshot.
+      snap rollback (snap revert)       Rollback image to snapshot.
+      snap unprotect                    Allow a snapshot to be deleted.
+      status                            Show the status of this image.
+      trash list (trash ls)             List trash images.
+      trash move (trash mv)             Move an image to the trash.
+      trash remove (trash rm)           Remove an image from trash.
+      trash restore                     Restore an image from trash.
+      unmap                             Unmap a rbd device that was used by the
+                                        kernel.
+      watch                             Watch events on image.
   
   Optional arguments:
     -c [ --conf ] arg     path to cluster configuration
@@ -143,7 +156,7 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --snap arg           snapshot name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help clone
@@ -303,7 +316,7 @@
     --snap arg            snapshot name
     --from-snap arg       snapshot starting point
     --whole-object        compare whole object
-    --format arg          output format [plain, json, or xml]
+    --format arg          output format (plain, json, or xml) [default: plain]
     --pretty-format       pretty formatting (json and xml)
   
   rbd help disk-usage
@@ -322,7 +335,7 @@
     -p [ --pool ] arg     pool name
     --image arg           image name
     --snap arg            snapshot name
-    --format arg          output format [plain, json, or xml]
+    --format arg          output format (plain, json, or xml) [default: plain]
     --pretty-format       pretty formatting (json and xml)
     --from-snap arg       snapshot starting point
   
@@ -473,7 +486,7 @@
                          (example: [<pool-name>/]<group-name>)
   
   Optional arguments
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
     -p [ --pool ] arg    pool name
     --group arg          group name
@@ -507,7 +520,7 @@
   
   Optional arguments
     -p [ --pool ] arg    pool name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help group remove
@@ -553,7 +566,7 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help image-meta remove
@@ -675,7 +688,7 @@
     --image arg           image name
     --snap arg            snapshot name
     --image-id arg        image id
-    --format arg          output format [plain, json, or xml]
+    --format arg          output format (plain, json, or xml) [default: plain]
     --pretty-format       pretty formatting (json and xml)
   
   rbd help journal client disconnect
@@ -754,7 +767,7 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --journal arg        journal name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help journal inspect
@@ -806,7 +819,7 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --journal arg        journal name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help list
@@ -821,7 +834,7 @@
   Optional arguments
     -l [ --long ]        long listing format
     -p [ --pool ] arg    pool name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help lock add
@@ -854,7 +867,7 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help lock remove
@@ -993,7 +1006,7 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help mirror pool demote
@@ -1045,7 +1058,7 @@
   
   Optional arguments
     -p [ --pool ] arg    pool name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help mirror pool peer add
@@ -1119,7 +1132,7 @@
   
   Optional arguments
     -p [ --pool ] arg    pool name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
     --verbose            be verbose
   
@@ -1265,7 +1278,7 @@
   Show the rbd images mapped by the kernel.
   
   Optional arguments
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help snap create
@@ -1327,7 +1340,7 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --image-id arg       image id
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help snap protect
@@ -1350,7 +1363,7 @@
                         [--image-id <image-id>] [--no-progress] 
                         <image-spec> 
   
-  Deletes all snapshots.
+  Delete all snapshots.
   
   Positional arguments
     <image-spec>         image specification
@@ -1367,7 +1380,7 @@
                          [--no-progress] [--image-id <image-id>] [--force] 
                          <snap-spec> 
   
-  Deletes a snapshot.
+  Delete a snapshot.
   
   Positional arguments
     <snap-spec>          snapshot specification
@@ -1451,7 +1464,7 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help trash list
@@ -1468,14 +1481,14 @@
     -p [ --pool ] arg    pool name
     -a [ --all ]         list images from all sources
     -l [ --long ]        long listing format
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help trash move
   usage: rbd trash move [--pool <pool>] [--image <image>] [--delay <delay>] 
                         <image-spec> 
   
-  Moves an image to the trash.
+  Move an image to the trash.
   
   Positional arguments
     <image-spec>         image specification
@@ -1491,7 +1504,7 @@
                           [--no-progress] [--force] 
                           <image-id> 
   
-  Removes an image from trash.
+  Remove an image from trash.
   
   Positional arguments
     <image-id>           image id
@@ -1508,7 +1521,7 @@
                            [--image <image>] 
                            <image-id> 
   
-  Restores an image from trash.
+  Restore an image from trash.
   
   Positional arguments
     <image-id>           image id

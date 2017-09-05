@@ -42,6 +42,7 @@ def setup_module():
     rados.create_pool(pool_name)
     global ioctx
     ioctx = rados.open_ioctx(pool_name)
+    ioctx.application_enable('rbd')
     global features
     features = os.getenv("RBD_FEATURES")
     features = int(features) if features is not None else 61
@@ -949,6 +950,7 @@ class TestClone(object):
         pool_name2 = get_temp_pool_name()
         rados.create_pool(pool_name2)
         other_ioctx = rados.open_ioctx(pool_name2)
+        other_ioctx.application_enable('rbd')
 
         # ...with a clone of the same parent
         other_clone_name = get_temp_image_name()

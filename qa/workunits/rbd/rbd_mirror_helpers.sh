@@ -217,6 +217,11 @@ setup()
     CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool create ${PARENT_POOL} 64 64
     CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool create ${POOL} 64 64
 
+    CEPH_ARGS='' rbd --cluster ${CLUSTER1} pool init ${POOL}
+    CEPH_ARGS='' rbd --cluster ${CLUSTER2} pool init ${POOL}
+    CEPH_ARGS='' rbd --cluster ${CLUSTER1} pool init ${PARENT_POOL}
+    CEPH_ARGS='' rbd --cluster ${CLUSTER2} pool init ${PARENT_POOL}
+
     rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} pool
     rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} pool
     rbd --cluster ${CLUSTER1} mirror pool enable ${PARENT_POOL} image
@@ -860,6 +865,16 @@ request_resync_image()
     eval 'test -n "$'${image_id_var_name}'"'
 
     rbd --cluster=${cluster} -p ${pool} mirror image resync ${image}
+}
+
+get_image_data_pool()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster ${cluster} -p ${pool} info ${image} |
+        awk '$1 == "data_pool:" {print $2}'
 }
 
 #

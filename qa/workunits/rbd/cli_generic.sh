@@ -123,6 +123,7 @@ test_rename() {
     rbd rename bar2 foo2 2>&1 | grep exists
 
     rados mkpool rbd2
+    rbd pool init rbd2
     rbd create -p rbd2 -s 1 foo
     rbd rename rbd2/foo rbd2/bar
     rbd -p rbd2 ls | grep bar
@@ -146,8 +147,8 @@ test_ls() {
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
     # look for fields in output of ls -l without worrying about space
-    rbd ls -l | grep 'test1.*1024k.*1'
-    rbd ls -l | grep 'test2.*1024k.*1'
+    rbd ls -l | grep 'test1.*1M.*1'
+    rbd ls -l | grep 'test2.*1M.*1'
 
     rbd rm test1
     rbd rm test2
@@ -157,8 +158,8 @@ test_ls() {
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
-    rbd ls -l | grep 'test1.*1024k.*2'
-    rbd ls -l | grep 'test2.*1024k.*2'
+    rbd ls -l | grep 'test1.*1M.*2'
+    rbd ls -l | grep 'test2.*1M.*2'
 
     rbd rm test1
     rbd rm test2
@@ -168,8 +169,8 @@ test_ls() {
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
-    rbd ls -l | grep 'test1.*1024k.*2'
-    rbd ls -l | grep 'test2.*1024k.*1'
+    rbd ls -l | grep 'test1.*1M.*2'
+    rbd ls -l | grep 'test2.*1M.*1'
     remove_images
 	
     # test that many images can be shown by ls
@@ -359,6 +360,7 @@ test_clone() {
     rbd snap protect test1@s1
 
     rados mkpool rbd2
+    rbd pool init rbd2
     rbd clone test1@s1 rbd2/clone
     rbd -p rbd2 ls | grep clone
     rbd -p rbd2 ls -l | grep clone | grep test1@s1

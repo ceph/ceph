@@ -305,7 +305,11 @@ def main():
         type_='mds',
         wait_count=args.timeout,
         )
-
+    bootstrap_key(
+        cluster=args.cluster,
+        type_='rbd',
+        wait_count=args.timeout,
+        )
 
 if __name__ == '__main__':
     main()

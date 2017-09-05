@@ -1,8 +1,9 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
 # -*- mode:shell-script; tab-width:8; sh-basic-offset:2; indent-tabs-mode:t -*-
 # vim: ts=8 sw=8 ft=bash smarttab
+set -x
 
-source $(dirname $0)/../ceph-helpers.sh
+source $(dirname $0)/../../standalone/ceph-helpers.sh
 
 set -e
 set -o functrace
@@ -1327,9 +1328,10 @@ function test_mon_osd_create_destroy()
   expect_false ceph auth get-key client.osd-lockbox.$uuid3
   expect_false ceph config-key exists dm-crypt/osd/$uuid3/luks
   ceph osd purge osd.$id3 --yes-i-really-mean-it
-  ceph osd purge osd.$id3 --yes-i-really-mean-it
+  ceph osd purge osd.$id3 --yes-i-really-mean-it # idempotent
 
   ceph osd purge osd.$id --yes-i-really-mean-it
+  ceph osd purge 123456 --yes-i-really-mean-it
   expect_false ceph osd find $id
   expect_false ceph auth get-key osd.$id
   expect_false ceph auth get-key client.osd-lockbox.$uuid
@@ -1347,6 +1349,21 @@ function test_mon_osd_create_destroy()
   [[ "$(ceph osd ls | wc -l)" == "$num_osds" ]]
   ceph osd setmaxosd $old_maxosd
 
+}
+
+function test_mon_config_key()
+{
+  key=asdfasdfqwerqwreasdfuniquesa123df
+  ceph config-key list | grep -c $key | grep 0
+  ceph config-key get $key | grep -c bar | grep 0
+  ceph config-key set $key bar
+  ceph config-key get $key | grep bar
+  ceph config-key list | grep -c $key | grep 1
+  ceph config-key dump | grep $key | grep bar
+  ceph config-key rm $key
+  expect_false ceph config-key get $key
+  ceph config-key list | grep -c $key | grep 0
+  ceph config-key dump | grep -c $key | grep 0
 }
 
 function test_mon_osd()
@@ -1618,12 +1635,16 @@ function test_mon_osd()
   ceph osd tree down
   ceph osd tree in
   ceph osd tree out
+  ceph osd tree destroyed
   ceph osd tree up in
   ceph osd tree up out
   ceph osd tree down in
   ceph osd tree down out
   ceph osd tree out down
   expect_false ceph osd tree up down
+  expect_false ceph osd tree up destroyed
+  expect_false ceph osd tree down destroyed
+  expect_false ceph osd tree up down destroyed
   expect_false ceph osd tree in out
   expect_false ceph osd tree up foo
 
@@ -1687,10 +1708,10 @@ function test_mon_osd_pool()
   ceph osd pool create ec_test 1 1 erasure
   ceph osd pool application enable ec_test rados
   set +e
-  ceph osd metadata | grep osd_objectstore_type | grep -qc bluestore
-  if [ $? -eq 0 ]; then
+  ceph osd count-metadata osd_objectstore | grep 'bluestore'
+  if [ $? -eq 1 ]; then # enable ec_overwrites on non-bluestore pools should fail
       ceph osd pool set ec_test allow_ec_overwrites true >& $TMPFILE
-      check_response $? 22 "pool must only be stored on bluestore for scrubbing to work"
+      check_response "pool must only be stored on bluestore for scrubbing to work" $? 22
   else
       ceph osd pool set ec_test allow_ec_overwrites true || return 1
       expect_false ceph osd pool set ec_test allow_ec_overwrites false
@@ -1724,7 +1745,7 @@ function test_mon_osd_pool_quota()
   # get quotas
   #
   ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10B'
-  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10240k objects'
+  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10M objects'
   #
   # get quotas in json-pretty format
   #
@@ -1876,7 +1897,7 @@ function test_mon_pg()
   expect_false ceph osd pg-temp 1.0 0 1 2
   expect_false ceph osd pg-temp asdf qwer
   expect_false ceph osd pg-temp 1.0 asdf
-  expect_false ceph osd pg-temp 1.0
+  ceph osd pg-temp 1.0 # cleanup pg-temp
 
   # don't test ceph osd primary-temp for now
 }
@@ -2365,6 +2386,9 @@ function test_mon_pool_application()
   ceph osd pool application set app_for_test rbd key1 value1
   ceph osd pool application set app_for_test rbd key2 value2
   ceph osd pool application set app_for_test rgw key1 value1
+  ceph osd pool application get app_for_test rbd key1 | grep 'value1'
+  ceph osd pool application get app_for_test rbd key2 | grep 'value2'
+  ceph osd pool application get app_for_test rgw key1 | grep 'value1'
 
   ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{"key1":"value1","key2":"value2"},"rgw":{"key1":"value1"}}'
 
@@ -2374,9 +2398,11 @@ function test_mon_pool_application()
   ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{"key1":"value1"},"rgw":{}}'
   ceph osd pool application rm app_for_test rbd key1
   ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{},"rgw":{}}'
+  ceph osd pool application rm app_for_test rbd key1 # should be idempotent
 
   expect_false ceph osd pool application disable app_for_test rgw
   ceph osd pool application disable app_for_test rgw --yes-i-really-mean-it
+  ceph osd pool application disable app_for_test rgw --yes-i-really-mean-it # should be idempotent
   ceph osd pool ls detail | grep "application rbd"
   ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{}}'
 
@@ -2397,7 +2423,7 @@ function test_mon_tell_help_command()
 
 function test_mon_stdin_stdout()
 {
-  echo foo | ceph config-key put test_key -i -
+  echo foo | ceph config-key set test_key -i -
   ceph config-key get test_key -o - | grep -c foo | grep -q 1
 }
 
@@ -2439,7 +2465,7 @@ function test_mds_tell_help_command()
 function test_mgr_tell()
 {
   ceph tell mgr help
-  ceph tell mgr fs status
+  #ceph tell mgr fs status   # see http://tracker.ceph.com/issues/20761
   ceph tell mgr osd status
 }
 
@@ -2470,6 +2496,7 @@ MON_TESTS+=" auth_profiles"
 MON_TESTS+=" mon_misc"
 MON_TESTS+=" mon_mon"
 MON_TESTS+=" mon_osd"
+MON_TESTS+=" mon_config_key"
 MON_TESTS+=" mon_crush"
 MON_TESTS+=" mon_osd_create_destroy"
 MON_TESTS+=" mon_osd_pool"

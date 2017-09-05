@@ -215,11 +215,13 @@ if platform.system() == 'FreeBSD':
     PROCDIR = '/compat/linux/proc'
     # FreeBSD does not have blockdevices any more
     BLOCKDIR = '/dev'
+    ROOTGROUP = 'wheel'
 else:
     FREEBSD = False
     DEFAULT_FS_TYPE = 'xfs'
     PROCDIR = '/proc'
     BLOCKDIR = '/sys/block'
+    ROOTGROUP = 'root'
 
 """
 OSD STATUS Definition
@@ -1088,7 +1090,7 @@ def allocate_osd_id(
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', keyring,
-                '-i', '/dev/fd/0',
+                '-i', '-',
                 'osd', 'new',
                 fsid,
             ] + id_arg,
@@ -1277,11 +1279,14 @@ def get_dmcrypt_key(
         osd_uuid = get_oneliner(path, 'osd-uuid')
         ceph_fsid = read_one_line(path, 'ceph_fsid')
         if ceph_fsid is None:
-            raise Error('No cluster uuid assigned.')
-        cluster = find_cluster_by_uuid(ceph_fsid)
-        if cluster is None:
-            raise Error('No cluster conf found in ' + SYSCONFDIR +
-                        ' with fsid %s' % ceph_fsid)
+            LOG.warning("no `ceph_fsid` found falling back to 'ceph' "
+                        "for cluster name")
+            cluster = 'ceph'
+        else:
+            cluster = find_cluster_by_uuid(ceph_fsid)
+            if cluster is None:
+                raise Error('No cluster conf found in ' + SYSCONFDIR +
+                            ' with fsid %s' % ceph_fsid)
 
         if mode == KEY_MANAGEMENT_MODE_V1:
             key, stderr, ret = command(
@@ -1448,6 +1453,7 @@ def mount(
 
 def unmount(
     path,
+    do_rm=True,
 ):
     """
     Unmount and removes the given mount point.
@@ -1471,7 +1477,8 @@ def unmount(
             else:
                 time.sleep(0.5 + retries * 1.0)
                 retries += 1
-
+    if not do_rm:
+        return
     os.rmdir(path)
 
 
@@ -2707,7 +2714,7 @@ class Lockbox(object):
 
     def create_partition(self):
         self.device = Device.factory(self.args.lockbox, argparse.Namespace())
-        partition_number = 3
+        partition_number = 5
         self.device.create_partition(uuid=self.args.lockbox_uuid,
                                      name='lockbox',
                                      num=partition_number,
@@ -2743,7 +2750,7 @@ class Lockbox(object):
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
-                '-i', '/dev/fd/0',
+                '-i', '-',
                 'osd', 'new', self.args.osd_uuid,
             ] + id_arg,
             secrets.get_json()
@@ -3110,36 +3117,6 @@ class PrepareBluestoreData(PrepareData):
         write_one_line(path, 'type', 'bluestore')
 
 
-#
-# Temporary workaround: if ceph-osd --mkfs does not
-# complete within 5 minutes, assume it is blocked
-# because of http://tracker.ceph.com/issues/13522
-# and retry a few times.
-#
-# Remove this function calls with command_check_call
-# when http://tracker.ceph.com/issues/13522 is fixed
-#
-def ceph_osd_mkfs(arguments):
-    timeout = _get_command_executable(['timeout'])
-    mkfs_ok = False
-    error = 'unknown error'
-    for delay in os.environ.get('CEPH_OSD_MKFS_DELAYS',
-                                '300 300 300 300 300').split():
-        try:
-            _check_output(timeout + [delay] + arguments)
-            mkfs_ok = True
-            break
-        except subprocess.CalledProcessError as e:
-            error = e.output
-            if e.returncode == 124:  # timeout fired, retry
-                LOG.debug('%s timed out : %s (retry)'
-                          % (str(arguments), error))
-            else:
-                break
-    if not mkfs_ok:
-        raise Error('%s failed : %s' % (str(arguments), error))
-
-
 def mkfs(
     path,
     cluster,
@@ -3161,7 +3138,7 @@ def mkfs(
     osd_type = read_one_line(path, 'type')
 
     if osd_type == 'bluestore':
-        ceph_osd_mkfs(
+        command_check_call(
             [
                 'ceph-osd',
                 '--cluster', cluster,
@@ -3175,7 +3152,7 @@ def mkfs(
             ],
         )
     elif osd_type == 'filestore':
-        ceph_osd_mkfs(
+        command_check_call(
             [
                 'ceph-osd',
                 '--cluster', cluster,
@@ -3783,6 +3760,25 @@ def main_activate(args):
             )
             osd_data = get_mount_point(cluster, osd_id)
 
+            args.cluster = cluster
+
+            # Check if encrypted block device in journal
+
+            block_dmcrypt_path = os.path.join(osd_data, 'block_dmcrypt')
+
+            if args.dmcrypt and os.path.exists(block_dmcrypt_path):
+                partition = DevicePartition.factory(
+                    path=None,
+                    dev=os.path.join(osd_data, 'block_dmcrypt'),
+                    args=args)
+
+                partition.osd_dm_key = get_dmcrypt_key(
+                    get_partition_uuid(args.path),
+                    args.dmcrypt_key_dir,
+                    CryptHelpers.get_dmcrypt_type(args) == "luks")
+
+                partition.map()
+
         elif stat.S_ISDIR(mode):
             (cluster, osd_id) = activate_dir(
                 path=args.path,
@@ -3970,7 +3966,7 @@ def main_deactivate_locked(args):
         with open(os.path.join(mounted_path, 'deactive'), 'w'):
             path_set_context(os.path.join(mounted_path, 'deactive'))
 
-    unmount(mounted_path)
+    unmount(mounted_path, do_rm=not args.once)
     LOG.info("Umount `%s` successfully.", mounted_path)
 
     if dmcrypt:
@@ -4097,7 +4093,7 @@ def get_space_osd_uuid(name, path):
     if not os.path.exists(path):
         raise Error('%s does not exist' % path)
 
-    if path_is_diskdevice(path):
+    if not path_is_diskdevice(path):
         raise Error('%s is not a block device' % path)
 
     if (is_partition(path) and
@@ -4129,6 +4125,10 @@ def get_space_osd_uuid(name, path):
 def main_activate_space(name, args):
     if not os.path.exists(args.dev):
         raise Error('%s does not exist' % args.dev)
+
+    if is_suppressed(args.dev):
+        LOG.info('suppressed activate request on space %s', args.dev)
+        return
 
     cluster = None
     osd_id = None
@@ -4701,7 +4701,7 @@ def set_suppress(path):
     disk = os.path.realpath(path)
     if not os.path.exists(disk):
         raise Error('does not exist', path)
-    if ldev_is_diskdevice(path):
+    if not ldev_is_diskdevice(path):
         raise Error('not a block device', path)
     base = get_dev_name(disk)
 
@@ -4883,11 +4883,11 @@ def main_trigger(args):
 def main_fix(args):
     # A hash table containing 'path': ('uid', 'gid', blocking, recursive)
     fix_table = [
-        ('/usr/bin/ceph-mon', 'root', 'root', True, False),
-        ('/usr/bin/ceph-mds', 'root', 'root', True, False),
-        ('/usr/bin/ceph-osd', 'root', 'root', True, False),
-        ('/usr/bin/radosgw', 'root', 'root', True, False),
-        ('/etc/ceph', 'root', 'root', True, True),
+        ('/usr/bin/ceph-mon', 'root', ROOTGROUP, True, False),
+        ('/usr/bin/ceph-mds', 'root', ROOTGROUP, True, False),
+        ('/usr/bin/ceph-osd', 'root', ROOTGROUP, True, False),
+        ('/usr/bin/radosgw', 'root', ROOTGROUP, True, False),
+        ('/etc/ceph', 'root', ROOTGROUP, True, True),
         ('/var/run/ceph', 'ceph', 'ceph', True, True),
         ('/var/log/ceph', 'ceph', 'ceph', True, True),
         ('/var/log/radosgw', 'ceph', 'ceph', True, True),

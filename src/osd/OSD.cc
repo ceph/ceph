@@ -45,6 +45,7 @@
 #include "common/ceph_time.h"
 #include "common/version.h"
 #include "common/io_priority.h"
+#include "common/pick_address.h"
 
 #include "os/ObjectStore.h"
 #ifdef HAVE_LIBFUSE
@@ -88,6 +89,7 @@
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
+#include "messages/MOSDForceRecovery.h"
 #include "messages/MOSDECSubOpWrite.h"
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
@@ -236,7 +238,7 @@ OSDService::OSDService(OSD *osd) :
   promote_max_objects(0),
   promote_max_bytes(0),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
-  objecter_finisher(osd->client_messenger->cct),
+  m_objecter_finishers(cct->_conf->osd_objecter_finishers),
   watch_lock("OSDService::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
@@ -279,11 +281,23 @@ OSDService::OSDService(OSD *osd) :
 #endif
 {
   objecter->init();
+
+  for (int i = 0; i < m_objecter_finishers; i++) {
+    ostringstream str;
+    str << "objecter-finisher-" << i;
+    Finisher *fin = new Finisher(osd->client_messenger->cct, str.str(), "finisher");
+    objecter_finishers.push_back(fin);
+  }
 }
 
 OSDService::~OSDService()
 {
   delete objecter;
+
+  for (auto f : objecter_finishers) {
+    delete f;
+    f = NULL;
+  }
 }
 
 
@@ -488,16 +502,6 @@ void OSDService::need_heartbeat_peer_update()
   osd->need_heartbeat_peer_update();
 }
 
-void OSDService::pg_stat_queue_enqueue(PG *pg)
-{
-  osd->pg_stat_queue_enqueue(pg);
-}
-
-void OSDService::pg_stat_queue_dequeue(PG *pg)
-{
-  osd->pg_stat_queue_dequeue(pg);
-}
-
 void OSDService::start_shutdown()
 {
   {
@@ -525,8 +529,10 @@ void OSDService::shutdown()
   }
 
   objecter->shutdown();
-  objecter_finisher.wait_for_empty();
-  objecter_finisher.stop();
+  for (auto f : objecter_finishers) {
+    f->wait_for_empty();
+    f->stop();
+  }
 
   {
     Mutex::Locker l(recovery_request_lock);
@@ -550,7 +556,9 @@ void OSDService::shutdown()
 void OSDService::init()
 {
   reserver_finisher.start();
-  objecter_finisher.start();
+  for (auto f : objecter_finishers) {
+    f->start();
+  }
   objecter->set_client_incarnation(0);
 
   // deprioritize objecter in daemonperf output
@@ -819,11 +827,11 @@ void OSDService::check_full_status(float ratio)
     dout(10) << __func__ << " " << get_full_state_name(cur_state)
 	     << " -> " << get_full_state_name(new_state) << dendl;
     if (new_state == FAILSAFE) {
-      clog->error() << "failsafe engaged, dropping updates, now "
+      clog->error() << "full status failsafe engaged, dropping updates, now "
 		    << (int)roundf(ratio * 100) << "% full";
     } else if (cur_state == FAILSAFE) {
-      clog->error() << "failsafe disengaged, no longer dropping updates, now "
-		    << (int)roundf(ratio * 100) << "% full";
+      clog->error() << "full status failsafe disengaged, no longer dropping "
+		     << "updates, now " << (int)roundf(ratio * 100) << "% full";
     }
     cur_state = new_state;
   }
@@ -922,7 +930,8 @@ void OSDService::set_injectfull(s_names type, int64_t count)
 }
 
 osd_stat_t OSDService::set_osd_stat(const struct store_statfs_t &stbuf,
-                                    vector<int>& hb_peers)
+                                    vector<int>& hb_peers,
+				    int num_pgs)
 {
   uint64_t bytes = stbuf.total;
   uint64_t used = bytes - stbuf.available;
@@ -939,6 +948,7 @@ osd_stat_t OSDService::set_osd_stat(const struct store_statfs_t &stbuf,
     osd_stat.kb = bytes >> 10;
     osd_stat.kb_used = used >> 10;
     osd_stat.kb_avail = avail >> 10;
+    osd_stat.num_pgs = num_pgs;
     return osd_stat;
   }
 }
@@ -953,7 +963,7 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
     return;
   }
 
-  auto new_stat = set_osd_stat(stbuf, hb_peers);
+  auto new_stat = set_osd_stat(stbuf, hb_peers, osd->get_num_pgs());
   dout(20) << "update_osd_stat " << new_stat << dendl;
   assert(new_stat.kb);
   float ratio = ((float)new_stat.kb_used) / ((float)new_stat.kb);
@@ -1079,7 +1089,9 @@ void OSDService::send_pg_temp()
 void OSDService::send_pg_created(pg_t pgid)
 {
   dout(20) << __func__ << dendl;
-  monc->send_mon_message(new MOSDPGCreated(pgid));
+  if (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    monc->send_mon_message(new MOSDPGCreated(pgid));
+  }
 }
 
 // --------------------------------------
@@ -1937,13 +1949,9 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   pg_map_lock("OSD::pg_map_lock"),
   last_pg_create_epoch(0),
   mon_report_lock("OSD::mon_report_lock"),
-  stats_ack_timeout(cct->_conf->osd_mon_ack_timeout),
   up_thru_wanted(0),
   requested_full_first(0),
   requested_full_last(0),
-  pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
-  osd_stat_updated(false),
-  pg_stat_tid(0), pg_stat_tid_flushed(0),
   command_wq(
     this,
     cct->_conf->osd_command_thread_timeout,
@@ -2043,30 +2051,48 @@ bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
   } else if (admin_command == "flush_journal") {
     store->flush_journal();
   } else if (admin_command == "dump_ops_in_flight" ||
-	     admin_command == "ops") {
-    if (!op_tracker.dump_ops_in_flight(f)) {
-      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+             admin_command == "ops" ||
+             admin_command == "dump_blocked_ops" ||
+             admin_command == "dump_historic_ops" ||
+             admin_command == "dump_historic_ops_by_duration" ||
+             admin_command == "dump_historic_slow_ops") {
+
+    const string error_str = "op_tracker tracking is not enabled now, so no ops are tracked currently, \
+even those get stuck. Please enable \"osd_enable_op_tracker\", and the tracker \
+will start to track new ops received afterwards.";
+
+    set<string> filters;
+    vector<string> filter_str;
+    if (cmd_getval(cct, cmdmap, "filterstr", filter_str)) {
+        copy(filter_str.begin(), filter_str.end(),
+           inserter(filters, filters.end()));
     }
-  } else if (admin_command == "dump_blocked_ops") {
-    if (!op_tracker.dump_ops_in_flight(f, true)) {
-      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+
+    if (admin_command == "dump_ops_in_flight" ||
+        admin_command == "ops") {
+      if (!op_tracker.dump_ops_in_flight(f, false, filters)) {
+        ss << error_str;
+      }
     }
-  } else if (admin_command == "dump_historic_ops") {
-    if (!op_tracker.dump_historic_ops(f, false)) {
-      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    if (admin_command == "dump_blocked_ops") {
+      if (!op_tracker.dump_ops_in_flight(f, true, filters)) {
+        ss << error_str;
+      }
     }
-  } else if (admin_command == "dump_historic_ops_by_duration") {
-    if (!op_tracker.dump_historic_ops(f, true)) {
-      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    if (admin_command == "dump_historic_ops") {
+      if (!op_tracker.dump_historic_ops(f, false, filters)) {
+        ss << error_str;
+      }
     }
-  } else if (admin_command == "dump_historic_slow_ops") {
-    if (!op_tracker.dump_historic_slow_ops(f)) {
-      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    if (admin_command == "dump_historic_ops_by_duration") {
+      if (!op_tracker.dump_historic_ops(f, true, filters)) {
+        ss << error_str;
+      }
+    }
+    if (admin_command == "dump_historic_slow_ops") {
+      if (!op_tracker.dump_historic_slow_ops(f, filters)) {
+        ss << error_str;
+      }
     }
   } else if (admin_command == "dump_op_pq_state") {
     f->open_object_section("pq");
@@ -2336,10 +2362,12 @@ float OSD::get_osd_recovery_sleep()
 {
   if (cct->_conf->osd_recovery_sleep)
     return cct->_conf->osd_recovery_sleep;
-  if (store_is_rotational)
-    return cct->_conf->osd_recovery_sleep_hdd;
-  else
+  if (!store_is_rotational && !journal_is_rotational)
     return cct->_conf->osd_recovery_sleep_ssd;
+  else if (store_is_rotational && !journal_is_rotational)
+    return cct->_conf->get_val<double>("osd_recovery_sleep_hybrid");
+  else
+    return cct->_conf->osd_recovery_sleep_hdd;
 }
 
 int OSD::init()
@@ -2358,6 +2386,7 @@ int OSD::init()
   dout(2) << "init " << dev_path
 	  << " (looks like " << (store_is_rotational ? "hdd" : "ssd") << ")"
 	  << dendl;
+  dout(2) << "journal " << journal_path << dendl;
   assert(store);  // call pre_init() first!
 
   store->set_cache_shards(get_num_op_shards());
@@ -2367,6 +2396,9 @@ int OSD::init()
     derr << "OSD:init: unable to mount object store" << dendl;
     return r;
   }
+  journal_is_rotational = store->is_journal_rotational();
+  dout(2) << "journal looks like " << (journal_is_rotational ? "hdd" : "ssd")
+          << dendl;
 
   enable_disable_fuse(false);
 
@@ -2494,6 +2526,9 @@ int OSD::init()
 
   clear_temp_objects();
 
+  // initialize osdmap references in sharded wq
+  op_shardedwq.prune_pg_waiters(osdmap, whoami);
+
   // load up pgs (as they previously existed)
   load_pgs();
 
@@ -2520,13 +2555,10 @@ int OSD::init()
   if (r < 0)
     goto out;
 
-  /**
-   * FIXME: this is a placeholder implementation that unconditionally
-   * sends every is_primary PG's stats every time we're called, unlike
-   * the existing mon PGStats mechanism that uses pg_stat_queue and acks.
-   * This has equivalent cost to the existing worst case where all
-   * PGs are busy and their stats are always enqueued for sending.
-   */
+  // This implementation unconditionally sends every is_primary PG's
+  // stats every time we're called.  This has equivalent cost to the
+  // previous implementation's worst case where all PGs are busy and
+  // their stats are always enqueued for sending.
   mgrc.set_pgstats_cb([this](){
       RWLock::RLocker l(map_lock);
       
@@ -2595,10 +2627,7 @@ int OSD::init()
   if (r < 0) {
     derr << __func__ << " authentication failed: " << cpp_strerror(r)
          << dendl;
-    osd_lock.Lock(); // locker is going to unlock this on function exit
-    if (is_stopping())
-      r = 0;
-    goto monout;
+    exit(1);
   }
 
   while (monc->wait_auth_rotating(30.0) < 0) {
@@ -2606,28 +2635,22 @@ int OSD::init()
     ++rotating_auth_attempts;
     if (rotating_auth_attempts > g_conf->max_rotating_auth_attempts) {
         derr << __func__ << " wait_auth_rotating timed out" << dendl;
-        osd_lock.Lock(); // make locker happy
-        if (!is_stopping()) {
-            r = -ETIMEDOUT;
-        }
-        goto monout;
+	exit(1);
     }
   }
 
   r = update_crush_device_class();
   if (r < 0) {
-    derr << __func__ <<" unable to update_crush_device_class: "
-         << cpp_strerror(r) << dendl;
-    osd_lock.Lock();
-    goto monout;
+    derr << __func__ << " unable to update_crush_device_class: "
+	 << cpp_strerror(r) << dendl;
+    exit(1);
   }
 
   r = update_crush_location();
   if (r < 0) {
-    derr << __func__ <<" unable to update_crush_location: "
+    derr << __func__ << " unable to update_crush_location: "
          << cpp_strerror(r) << dendl;
-    osd_lock.Lock();
-    goto monout;
+    exit(1);
   }
 
   osd_lock.Lock();
@@ -2660,8 +2683,6 @@ int OSD::init()
   start_boot();
 
   return 0;
-monout:
-  exit(1);
 
 out:
   enable_disable_fuse(true);
@@ -2683,26 +2704,38 @@ void OSD::final_init()
                                      "flush the journal to permanent store");
   assert(r == 0);
   r = admin_socket->register_command("dump_ops_in_flight",
-				     "dump_ops_in_flight", asok_hook,
+				     "dump_ops_in_flight " \
+				     "name=filterstr,type=CephString,n=N,req=false",
+				     asok_hook,
 				     "show the ops currently in flight");
   assert(r == 0);
   r = admin_socket->register_command("ops",
-				     "ops", asok_hook,
+				     "ops " \
+				     "name=filterstr,type=CephString,n=N,req=false",
+				     asok_hook,
 				     "show the ops currently in flight");
   assert(r == 0);
   r = admin_socket->register_command("dump_blocked_ops",
-				     "dump_blocked_ops", asok_hook,
+				     "dump_blocked_ops " \
+				     "name=filterstr,type=CephString,n=N,req=false",
+				     asok_hook,
 				     "show the blocked ops currently in flight");
   assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
+  r = admin_socket->register_command("dump_historic_ops",
+                                     "dump_historic_ops " \
+                                     "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show recent ops");
   assert(r == 0);
-  r = admin_socket->register_command("dump_historic_slow_ops", "dump_historic_slow_ops",
+  r = admin_socket->register_command("dump_historic_slow_ops",
+                                     "dump_historic_slow_ops " \
+                                     "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show slowest recent ops");
   assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops_by_duration", "dump_historic_ops_by_duration",
+  r = admin_socket->register_command("dump_historic_ops_by_duration",
+                                     "dump_historic_ops_by_duration " \
+                                     "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show slowest recent ops, sorted by duration");
   assert(r == 0);
@@ -3227,7 +3260,6 @@ int OSD::shutdown()
       p->second->osr->flush();
     }
   }
-  clear_pg_stat_queue();
 
   // drain op queue again (in case PGs requeued something)
   op_shardedwq.drain();
@@ -3327,11 +3359,6 @@ int OSD::shutdown()
 	 << cpp_strerror(r) << dendl;
   }
 
-
-  {
-    Mutex::Locker l(pg_stat_queue_lock);
-    assert(pg_stat_queue.empty());
-  }
 
   service.shutdown_reserver();
 
@@ -3493,6 +3520,7 @@ int OSD::update_crush_device_class()
   }
 
   if (device_class.empty()) {
+    dout(20) << __func__ << " no device class stored locally" << dendl;
     return 0;
   }
 
@@ -3502,11 +3530,12 @@ int OSD::update_crush_device_class()
     string("\"ids\": [\"") + stringify(whoami) + string("\"]}");
 
   r = mon_cmd_maybe_osd_create(cmd);
-  if (r == -EPERM) {
-    r = 0;
-  }
-
-  return r;
+  // the above cmd can fail for various reasons, e.g.:
+  //   (1) we are connecting to a pre-luminous monitor
+  //   (2) user manually specify a class other than
+  //       'ceph-disk prepare --crush-device-class'
+  // simply skip result-checking for now
+  return 0;
 }
 
 void OSD::write_superblock(ObjectStore::Transaction& t)
@@ -4394,12 +4423,21 @@ void OSD::build_initial_pg_history(
       &debug);
     if (new_interval) {
       h->same_interval_since = e;
-    }
-    if (up != new_up) {
-      h->same_up_since = e;
-    }
-    if (acting_primary != new_acting_primary) {
-      h->same_primary_since = e;
+      if (up != new_up) {
+        h->same_up_since = e;
+      }
+      if (acting_primary != new_acting_primary) {
+        h->same_primary_since = e;
+      }
+      if (pgid.pgid.is_split(lastmap->get_pg_num(pgid.pgid.pool()),
+                             osdmap->get_pg_num(pgid.pgid.pool()),
+                             nullptr)) {
+        h->last_epoch_split = e;
+      }
+      up = new_up;
+      acting = new_acting;
+      up_primary = new_up_primary;
+      acting_primary = new_acting_primary;
     }
     lastmap = osdmap;
   }
@@ -5033,12 +5071,6 @@ void OSD::tick()
 
   if (is_waiting_for_healthy()) {
     start_boot();
-  } else if (is_preboot() &&
-	     waiting_for_luminous_mons &&
-	     monc->monmap.get_required_features().contains_all(
-	       ceph::features::mon::FEATURE_LUMINOUS)) {
-    // mon upgrade finished!
-    start_boot();
   }
 
   do_waiters();
@@ -5069,60 +5101,12 @@ void OSD::tick_without_osd_lock()
     Mutex::Locker l(mon_report_lock);
 
     // mon report?
-    bool reset = false;
-    bool report = false;
     utime_t now = ceph_clock_now();
-    pg_stat_queue_lock.Lock();
-    double backoff = stats_ack_timeout / cct->_conf->osd_mon_ack_timeout;
-    double adjusted_min = cct->_conf->osd_mon_report_interval_min * backoff;
-    // note: we shouldn't adjust max because it must remain < the
-    // mon's mon_osd_report_timeout (which defaults to 1.5x our
-    // value).
-    double max = cct->_conf->osd_mon_report_interval_max;
-    if (!outstanding_pg_stats.empty() &&
-	(now - stats_ack_timeout) > last_pg_stats_ack) {
-      dout(1) << __func__ << " mon hasn't acked PGStats in "
-	      << now - last_pg_stats_ack
-	      << " seconds, reconnecting elsewhere" << dendl;
-      reset = true;
-      last_pg_stats_ack = now;  // reset clock
-      last_pg_stats_sent = utime_t();
-      stats_ack_timeout =
-	MAX(cct->_conf->osd_mon_ack_timeout,
-	    stats_ack_timeout * cct->_conf->osd_stats_ack_timeout_factor);
-      outstanding_pg_stats.clear();
-    }
-    if (now - last_pg_stats_sent > max) {
-      osd_stat_updated = true;
-      report = true;
-    } else if (service.need_fullness_update()) {
-      report = true;
-    } else if ((int)outstanding_pg_stats.size() >=
-	       cct->_conf->osd_mon_report_max_in_flight) {
-      dout(20) << __func__ << " have max " << outstanding_pg_stats
-	       << " stats updates in flight" << dendl;
-    } else {
-      if (now - last_mon_report > adjusted_min) {
-	dout(20) << __func__ << " stats backoff " << backoff
-		 << " adjusted_min " << adjusted_min << " - sending report"
-		 << dendl;
-        osd_stat_updated = true;
-	report = true;
-      }
-    }
-    pg_stat_queue_lock.Unlock();
-
-    if (reset) {
-      monc->reopen_session();
-    } else if (report) {
+    if (service.need_fullness_update() ||
+	now - last_mon_report > cct->_conf->osd_mon_report_interval_min) {
       last_mon_report = now;
-
-      // do any pending reports
       send_full_update();
       send_failures();
-      if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
-	send_pg_stats(now);
-      }
     }
     map_lock.put_read();
   }
@@ -5199,7 +5183,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     if (pool < 0 && isdigit(poolstr[0]))
       pool = atoll(poolstr.c_str());
     if (pool < 0) {
-      ss << "Invalid pool" << poolstr;
+      ss << "Invalid pool '" << poolstr << "''";
       return;
     }
 
@@ -5526,9 +5510,6 @@ void OSD::ms_handle_connect(Connection *con)
       service.send_pg_temp();
       requeue_failures();
       send_failures();
-      if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
-	send_pg_stats(now);
-      }
 
       map_lock.put_read();
       if (is_active()) {
@@ -5651,7 +5632,6 @@ void OSD::start_boot()
   }
   dout(1) << __func__ << dendl;
   set_state(STATE_PREBOOT);
-  waiting_for_luminous_mons = false;
   dout(10) << "start_boot - have maps " << superblock.oldest_map
 	   << ".." << superblock.newest_map << dendl;
   C_OSD_GetVersion *c = new C_OSD_GetVersion(this);
@@ -5678,19 +5658,17 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->get_epoch() == 0) {
     derr << "waiting for initial osdmap" << dendl;
+  } else if (osdmap->is_destroyed(whoami)) {
+    derr << "osdmap says I am destroyed, exiting" << dendl;
+    exit(0);
   } else if (osdmap->test_flag(CEPH_OSDMAP_NOUP) || osdmap->is_noup(whoami)) {
     derr << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     derr << "osdmap SORTBITWISE OSDMap flag is NOT set; please set it"
 	 << dendl;
-  } else if (osdmap->require_osd_release < CEPH_RELEASE_JEWEL) {
-    derr << "osdmap REQUIRE_JEWEL OSDMap flag is NOT set; please set it"
+  } else if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+    derr << "osdmap require_osd_release < luminous; please upgrade to luminous"
 	 << dendl;
-  } else if (!monc->monmap.get_required_features().contains_all(
-	       ceph::features::mon::FEATURE_LUMINOUS)) {
-    derr << "monmap REQUIRE_LUMINOUS is NOT set; must upgrade all monitors to "
-	 << "Luminous or later before Luminous OSDs will boot" << dendl;
-    waiting_for_luminous_mons = true;
   } else if (service.need_fullness_update()) {
     derr << "osdmap fullness state needs update" << dendl;
     send_full_update();
@@ -5730,6 +5708,9 @@ void OSD::start_waiting_for_healthy()
   dout(1) << "start_waiting_for_healthy" << dendl;
   set_state(STATE_WAITING_FOR_HEALTHY);
   last_heartbeat_resample = utime_t();
+
+  // subscribe to osdmap updates, in case our peers really are known to be dead
+  osdmap_subscribe(osdmap->get_epoch() + 1, false);
 }
 
 bool OSD::_is_healthy()
@@ -5841,9 +5822,16 @@ void OSD::_collect_metadata(map<string,string> *pm)
   // backend
   (*pm)["osd_objectstore"] = store->get_type();
   (*pm)["rotational"] = store_is_rotational ? "1" : "0";
+  (*pm)["journal_rotational"] = journal_is_rotational ? "1" : "0";
+  (*pm)["default_device_class"] = store->get_default_device_class();
   store->collect_metadata(pm);
 
   collect_sys_info(pm, cct);
+
+  (*pm)["front_iface"] = pick_iface(cct,
+      client_messenger->get_myaddr().get_sockaddr_storage());
+  (*pm)["back_iface"] = pick_iface(cct,
+      cluster_messenger->get_myaddr().get_sockaddr_storage());
 
   dout(10) << __func__ << " " << *pm << dendl;
 }
@@ -5972,152 +5960,6 @@ void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
 {
   MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, 0, epoch, MOSDFailure::FLAG_ALIVE);
   monc->send_mon_message(m);
-}
-
-void OSD::send_pg_stats(const utime_t &now)
-{
-  assert(map_lock.is_locked());
-  assert(osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS);
-  dout(20) << "send_pg_stats" << dendl;
-
-  osd_stat_t cur_stat = service.get_osd_stat();
-
-  cur_stat.os_perf_stat = store->get_cur_stats();
-
-  pg_stat_queue_lock.Lock();
-
-  if (osd_stat_updated || !pg_stat_queue.empty()) {
-    last_pg_stats_sent = now;
-    osd_stat_updated = false;
-
-    dout(10) << "send_pg_stats - " << pg_stat_queue.size() << " pgs updated" << dendl;
-
-    utime_t had_for(now);
-    had_for -= had_map_since;
-
-    MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
-
-    uint64_t tid = ++pg_stat_tid;
-    m->set_tid(tid);
-    m->osd_stat = cur_stat;
-
-    xlist<PG*>::iterator p = pg_stat_queue.begin();
-    while (!p.end()) {
-      PG *pg = *p;
-      ++p;
-      if (!pg->is_primary()) {  // we hold map_lock; role is stable.
-	pg->stat_queue_item.remove_myself();
-	pg->put("pg_stat_queue");
-	continue;
-      }
-      pg->pg_stats_publish_lock.Lock();
-      if (pg->pg_stats_publish_valid) {
-	m->pg_stat[pg->info.pgid.pgid] = pg->pg_stats_publish;
-	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch << ":"
-		 << pg->pg_stats_publish.reported_seq << dendl;
-      } else {
-	dout(25) << " NOT sending " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch << ":"
-		 << pg->pg_stats_publish.reported_seq << ", not valid" << dendl;
-      }
-      pg->pg_stats_publish_lock.Unlock();
-    }
-
-    if (last_pg_stats_ack == utime_t() || !outstanding_pg_stats.empty()) {
-      last_pg_stats_ack = ceph_clock_now();
-    }
-    outstanding_pg_stats.insert(tid);
-    dout(20) << __func__ << "  updates pending: " << outstanding_pg_stats << dendl;
-
-    monc->send_mon_message(m);
-  }
-
-  pg_stat_queue_lock.Unlock();
-}
-
-void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
-{
-  dout(10) << "handle_pg_stats_ack " << dendl;
-
-  if (!require_mon_peer(ack)) {
-    ack->put();
-    return;
-  }
-
-  // NOTE: we may get replies from a previous mon even while
-  // outstanding_pg_stats is empty if reconnecting races with replies
-  // in flight.
-
-  pg_stat_queue_lock.Lock();
-
-  last_pg_stats_ack = ceph_clock_now();
-
-  // decay timeout slowly (analogous to TCP)
-  stats_ack_timeout =
-    MAX(cct->_conf->osd_mon_ack_timeout,
-	stats_ack_timeout * cct->_conf->osd_stats_ack_timeout_decay);
-  dout(20) << __func__ << "  timeout now " << stats_ack_timeout << dendl;
-
-  if (ack->get_tid() > pg_stat_tid_flushed) {
-    pg_stat_tid_flushed = ack->get_tid();
-    pg_stat_queue_cond.Signal();
-  }
-
-  xlist<PG*>::iterator p = pg_stat_queue.begin();
-  while (!p.end()) {
-    PG *pg = *p;
-    PGRef _pg(pg);
-    ++p;
-
-    auto acked = ack->pg_stat.find(pg->info.pgid.pgid);
-    if (acked != ack->pg_stat.end()) {
-      pg->pg_stats_publish_lock.Lock();
-      if (acked->second.first == pg->pg_stats_publish.reported_seq &&
-	  acked->second.second == pg->pg_stats_publish.reported_epoch) {
-	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
-		 << ":" << pg->pg_stats_publish.reported_seq << dendl;
-	pg->stat_queue_item.remove_myself();
-	pg->put("pg_stat_queue");
-      } else {
-	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
-		 << ":" << pg->pg_stats_publish.reported_seq << " > acked "
-		 << acked->second << dendl;
-      }
-      pg->pg_stats_publish_lock.Unlock();
-    } else {
-      dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
-	       << ":" << pg->pg_stats_publish.reported_seq << dendl;
-    }
-  }
-
-  outstanding_pg_stats.erase(ack->get_tid());
-  dout(20) << __func__ << "  still pending: " << outstanding_pg_stats << dendl;
-
-  pg_stat_queue_lock.Unlock();
-
-  ack->put();
-}
-
-void OSD::flush_pg_stats()
-{
-  dout(10) << "flush_pg_stats" << dendl;
-  osd_lock.Unlock();
-  utime_t now = ceph_clock_now();
-  map_lock.get_read();
-  mon_report_lock.Lock();
-  send_pg_stats(now);
-  mon_report_lock.Unlock();
-  map_lock.put_read();
-
-
-  pg_stat_queue_lock.Lock();
-  uint64_t tid = pg_stat_tid;
-  dout(10) << "flush_pg_stats waiting for stats tid " << tid << " to flush" << dendl;
-  while (tid > pg_stat_tid_flushed)
-    pg_stat_queue_cond.Wait(pg_stat_queue_lock);
-  dout(10) << "flush_pg_stats finished waiting for stats tid " << tid << " to flush" << dendl;
-  pg_stat_queue_lock.Unlock();
-
-  osd_lock.Lock();
 }
 
 void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
@@ -6362,6 +6204,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     cmd_getval(cct, cmdmap, "value", val);
     osd_lock.Unlock();
     r = cct->_conf->set_val(key, val, true, &ss);
+    if (r == 0) {
+      cct->_conf->apply_changes(nullptr);
+    }
     osd_lock.Lock();
   }
   else if (prefix == "cluster_log") {
@@ -6595,12 +6440,8 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   }
 
   else if (prefix == "flush_pg_stats") {
-    if (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      mgrc.send_pgstats();
-      ds << service.get_osd_stat_seq() << "\n";
-    } else {
-      flush_pg_stats();
-    }
+    mgrc.send_pgstats();
+    ds << service.get_osd_stat_seq() << "\n";
   }
 
   else if (prefix == "heap") {
@@ -7000,12 +6841,15 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 	::decode(str, p);
       }
       catch (buffer::error& e) {
+        isvalid = false;
       }
       bool success = s->caps.parse(str);
       if (success)
 	dout(10) << " session " << s << " " << s->entity_name << " has caps " << s->caps << " '" << str << "'" << dendl;
-      else
+      else {
 	dout(10) << " session " << s << " " << s->entity_name << " failed to parse caps '" << str << "'" << dendl;
+        isvalid = false;
+      }
     }
 
     s->put();
@@ -7081,10 +6925,6 @@ void OSD::_dispatch(Message *m)
     break;
 
     // osd
-  case MSG_PGSTATSACK:
-    handle_pg_stats_ack(static_cast<MPGStatsAck*>(m));
-    break;
-
   case MSG_MON_COMMAND:
     handle_command(static_cast<MMonCommand*>(m));
     break;
@@ -7094,6 +6934,10 @@ void OSD::_dispatch(Message *m)
 
   case MSG_OSD_SCRUB:
     handle_scrub(static_cast<MOSDScrub*>(m));
+    break;
+
+  case MSG_OSD_FORCE_RECOVERY:
+    handle_force_recovery(m);
     break;
 
     // -- need OSDMap --
@@ -7285,6 +7129,11 @@ void OSD::sched_scrub()
   if (!service.can_inc_scrubs_pending()) {
     return;
   }
+  if (!cct->_conf->osd_scrub_during_recovery && service.is_recovery_active()) {
+    dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
+    return;
+  }
+
 
   utime_t now = ceph_clock_now();
   bool time_permit = scrub_time_permit(now);
@@ -7301,11 +7150,6 @@ void OSD::sched_scrub()
 	dout(10) << "sched_scrub " << scrub.pgid << " scheduled at " << scrub.sched_time
 		 << " > " << now << dendl;
 	break;
-      }
-
-      if (!cct->_conf->osd_scrub_during_recovery && service.is_recovery_active()) {
-        dout(10) << __func__ << "not scheduling scrub of " << scrub.pgid << " due to active recovery ops" << dendl;
-        break;
       }
 
       if ((scrub.deadline >= now) && !(time_permit && load_is_low)) {
@@ -7732,13 +7576,6 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	do_restart = true;
       }
     }
-    if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS &&
-	newmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      dout(10) << __func__ << " require_osd_release reached luminous in "
-	       << newmap->get_epoch() << dendl;
-      clear_pg_stat_queue();
-      clear_outstanding_pg_stats();
-    }
 
     osdmap = newmap;
     epoch_t up_epoch;
@@ -7794,9 +7631,11 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	if (service.is_preparing_to_stop() || service.is_stopping()) {
 	  service.got_stop_ack();
 	} else {
-	  clog->warn() << "map e" << osdmap->get_epoch()
-		       << " wrongly marked me down at e"
-		       << osdmap->get_down_at(whoami);
+          clog->warn() << "Monitor daemon marked osd." << whoami << " down, "
+                          "but it is still running";
+          clog->debug() << "map e" << osdmap->get_epoch()
+                        << " wrongly marked me down at e"
+                        << osdmap->get_down_at(whoami);
 	}
       } else if (!osdmap->get_addr(whoami).probably_equals(
 		   client_messenger->get_myaddr())) {
@@ -7812,7 +7651,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       } else if (!osdmap->get_hb_back_addr(whoami).probably_equals(
 		   hb_back_server_messenger->get_myaddr())) {
 	clog->error() << "map e" << osdmap->get_epoch()
-		      << " had wrong hb back addr ("
+		      << " had wrong heartbeat back addr ("
 		      << osdmap->get_hb_back_addr(whoami)
 		      << " != my " << hb_back_server_messenger->get_myaddr()
 		      << ")";
@@ -7820,7 +7659,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 		 !osdmap->get_hb_front_addr(whoami).probably_equals(
 		   hb_front_server_messenger->get_myaddr())) {
 	clog->error() << "map e" << osdmap->get_epoch()
-		      << " had wrong hb front addr ("
+		      << " had wrong heartbeat front addr ("
 		      << osdmap->get_hb_front_addr(whoami)
 		      << " != my " << hb_front_server_messenger->get_myaddr()
 		      << ")";
@@ -8421,9 +8260,7 @@ void OSD::handle_pg_create(OpRequestRef op)
     bool mapped = osdmap->get_primary_shard(on, &pgid);
     assert(mapped);
 
-    PastIntervals pi(
-      osdmap->get_pools().at(pgid.pool()).ec_pool(),
-      *osdmap);
+    PastIntervals pi;
     pg_history_t history;
     build_initial_pg_history(pgid, created, ci->second, &history, &pi);
 
@@ -8903,6 +8740,33 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
   pg->unlock();
 }
 
+void OSD::handle_force_recovery(Message *m)
+{
+  MOSDForceRecovery *msg = static_cast<MOSDForceRecovery*>(m);
+  assert(msg->get_type() == MSG_OSD_FORCE_RECOVERY);
+
+  vector<PGRef> local_pgs;
+  local_pgs.reserve(msg->forced_pgs.size());
+
+  {
+    RWLock::RLocker l(pg_map_lock);
+    for (auto& i : msg->forced_pgs) {
+      spg_t locpg;
+      if (osdmap->get_primary_shard(i, &locpg)) {
+	auto pg_map_entry = pg_map.find(locpg);
+	if (pg_map_entry != pg_map.end()) {
+	  local_pgs.push_back(pg_map_entry->second);
+	}
+      }
+    }
+  }
+
+  if (local_pgs.size()) {
+    service.adjust_pg_priorities(local_pgs, msg->options);
+  }
+
+  msg->put();
+}
 
 /** PGQuery
  * from primary to replica | stray
@@ -9010,9 +8874,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 	    it->second.epoch_sent,
 	    osdmap->get_epoch(),
 	    empty),
-	  PastIntervals(
-	    osdmap->get_pools().at(pgid.pool()).ec_pool(),
-	    *osdmap)));
+	  PastIntervals()));
     }
   }
   do_notifies(notify_list, osdmap);
@@ -9155,6 +9017,52 @@ bool OSDService::_recover_now(uint64_t *available_pushes)
     *available_pushes = max - recovery_ops_active - recovery_ops_reserved;
 
   return true;
+}
+
+
+void OSDService::adjust_pg_priorities(const vector<PGRef>& pgs, int newflags)
+{
+  if (!pgs.size() || !(newflags & (OFR_BACKFILL | OFR_RECOVERY)))
+    return;
+  int newstate = 0;
+
+  if (newflags & OFR_BACKFILL) {
+    newstate = PG_STATE_FORCED_BACKFILL;
+  } else if (newflags & OFR_RECOVERY) {
+    newstate = PG_STATE_FORCED_RECOVERY;
+  }
+
+  // debug output here may get large, don't generate it if debug level is below
+  // 10 and use abbreviated pg ids otherwise
+  if ((cct)->_conf->subsys.should_gather(ceph_subsys_osd, 10)) {
+    stringstream ss;
+
+    for (auto& i : pgs) {
+      ss << i->get_pgid() << " ";
+    }
+
+    dout(10) << __func__ << " working on " << ss.str() << dendl;
+  }
+
+  if (newflags & OFR_CANCEL) {
+    for (auto& i : pgs) {
+      i->lock();
+      i->_change_recovery_force_mode(newstate, true);
+      i->unlock();
+    }
+  } else {
+    for (auto& i : pgs) {
+      // make sure the PG is in correct state before forcing backfill or recovery, or
+      // else we'll make PG keeping FORCE_* flag forever, requiring osds restart
+      // or forcing somehow recovery/backfill.
+      i->lock();
+      int pgstate = i->get_state();
+      if ( ((newstate == PG_STATE_FORCED_RECOVERY) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_RECOVERY_WAIT | PG_STATE_RECOVERING))) ||
+	    ((newstate == PG_STATE_FORCED_BACKFILL) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILL))) )
+        i->_change_recovery_force_mode(newstate, false);
+      i->unlock();
+    }
+  }
 }
 
 void OSD::do_recovery(
@@ -9308,8 +9216,7 @@ void OSDService::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 
 bool OSDService::is_recovery_active()
 {
-  Mutex::Locker l(recovery_lock);
-  return recovery_ops_active > 0;
+  return local_reserver.has_reservation() || remote_reserver.has_reservation();
 }
 
 // =========================================================
@@ -9680,8 +9587,8 @@ int OSD::init_op_flags(OpRequestRef& op)
     if ((iter->op.op == CEPH_OSD_OP_WATCH &&
 	 iter->op.watch.op == CEPH_OSD_WATCH_OP_PING)) {
       /* This a bit odd.  PING isn't actually a write.  It can't
-       * result in an update to the object_info.  PINGs also aren'ty
-       * resent, so there's no reason to write out a log entry
+       * result in an update to the object_info.  PINGs also aren't
+       * resent, so there's no reason to write out a log entry.
        *
        * However, we pipeline them behind writes, so let's force
        * the write_ordered flag.
@@ -9713,6 +9620,7 @@ int OSD::init_op_flags(OpRequestRef& op)
       if (base_pool && base_pool->require_rollback()) {
         if ((iter->op.op != CEPH_OSD_OP_READ) &&
             (iter->op.op != CEPH_OSD_OP_CHECKSUM) &&
+            (iter->op.op != CEPH_OSD_OP_CMPEXT) &&
             (iter->op.op != CEPH_OSD_OP_STAT) &&
             (iter->op.op != CEPH_OSD_OP_ISDIRTY) &&
             (iter->op.op != CEPH_OSD_OP_UNDIRTY) &&
@@ -10101,7 +10009,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     OSDMapRef osdmap = sdata->waiting_for_pg_osdmap;
     if (osdmap->is_up_acting_osd_shard(item.first, osd->whoami)) {
       dout(20) << __func__ << " " << item.first
-	       << " no pg, should exist, will wait" << " on " << *qi << dendl;
+	       << " no pg, should exist, will wait on " << *qi << dendl;
       slot.to_process.push_front(*qi);
       slot.waiting_for_pg = true;
     } else if (qi->get_map_epoch() > osdmap->get_epoch()) {

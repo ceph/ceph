@@ -35,6 +35,12 @@ public:
                     const std::string &filter_prefix,
                     uint64_t max_return,
                     std::map<std::string, bufferlist> *out_vals) override;
+  int omap_get_vals2(const std::string& oid,
+                    const std::string& start_after,
+                    const std::string &filter_prefix,
+                    uint64_t max_return,
+                    std::map<std::string, bufferlist> *out_vals,
+                    bool *pmore) override;
   int omap_rm_keys(const std::string& oid,
                    const std::set<std::string>& keys) override;
   int omap_set(const std::string& oid, const std::map<std::string,
@@ -57,11 +63,13 @@ public:
                  const SnapContext &snapc) override;
   int writesame(const std::string& oid, bufferlist& bl, size_t len,
                 uint64_t off, const SnapContext &snapc) override;
+  int cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl) override;
   int xattr_get(const std::string& oid,
                 std::map<std::string, bufferlist>* attrset) override;
   int xattr_set(const std::string& oid, const std::string &name,
                 bufferlist& bl) override;
-  int zero(const std::string& oid, uint64_t off, uint64_t len) override;
+  int zero(const std::string& oid, uint64_t off, uint64_t len,
+           const SnapContext &snapc) override;
 
 protected:
   TestMemCluster::Pool *get_pool() {
@@ -71,8 +79,8 @@ protected:
 private:
   TestMemIoCtxImpl(const TestMemIoCtxImpl&);
 
-  TestMemRadosClient *m_client;
-  TestMemCluster::Pool *m_pool;
+  TestMemRadosClient *m_client = nullptr;
+  TestMemCluster::Pool *m_pool = nullptr;
 
   void append_clone(bufferlist& src, bufferlist* dest);
   size_t clip_io(size_t off, size_t len, size_t bl_len);

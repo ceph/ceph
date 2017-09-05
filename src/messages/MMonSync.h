@@ -53,9 +53,9 @@ public:
     }
   }
 
-  uint32_t op;
-  uint64_t cookie;
-  version_t last_committed;
+  uint32_t op = 0;
+  uint64_t cookie = 0;
+  version_t last_committed = 0;
   pair<string,string> last_key;
   bufferlist chunk_bl;
   entity_inst_t reply_to;

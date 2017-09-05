@@ -16,6 +16,7 @@
 #ifndef CEPH_FILEJOURNAL_H
 #define CEPH_FILEJOURNAL_H
 
+#include <stdlib.h>
 #include <deque>
 using std::deque;
 
@@ -250,7 +251,7 @@ private:
   /// state associated with an in-flight aio request
   /// Protected by aio_lock
   struct aio_info {
-    struct iocb iocb;
+    struct iocb iocb {};
     bufferlist bl;
     struct iovec *iov;
     bool done;
@@ -433,7 +434,7 @@ private:
         aio = false;
       }
 #ifndef HAVE_LIBAIO
-      if (aio) {
+      if (aio && ::getenv("CEPH_DEV") == NULL) {
 	lderr(cct) << "FileJournal::_open_any: libaio not compiled in; disabling aio" << dendl;
         aio = false;
       }

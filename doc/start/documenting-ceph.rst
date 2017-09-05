@@ -284,7 +284,7 @@ the following packages are required:
 	</td></tr></tbody></table>
 
 
-Install each dependency that isn't installed on your host. For Debian/Ubuntu
+Install each dependency that is not installed on your host. For Debian/Ubuntu
 distributions, execute the following::
 
 	sudo apt-get install gcc python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen graphviz ant ditaa
@@ -322,7 +322,7 @@ packages. Then, download them from a mirror and install them. For example::
 	wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-sphinx-1.1.3-11.el7.noarch.rpm
 	sudo yum install python-sphinx-1.1.3-11.el7.noarch.rpm
 
-Ceph documentation makes extensive use of `ditaa`_, which isn't presently built
+Ceph documentation makes extensive use of `ditaa`_, which is not presently built
 for CentOS/RHEL7. You must install ``ditaa`` if you are making changes to
 ``ditaa`` diagrams so that you can verify that they render properly before you
 commit new or modified ``ditaa`` diagrams. You may retrieve compatible required
@@ -464,7 +464,7 @@ its native format. You may notice that it is generally as legible in a terminal
 as it is in its rendered HTML format. Additionally, you may also notice that
 diagrams in ``ditaa`` format also render reasonably well in text mode. ::
 
-	cat doc/architecture.rst | less
+	less doc/architecture.rst
 
 Review the following style guides to maintain this consistency.
 

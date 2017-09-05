@@ -1,0 +1,23 @@
+meta:
+- desc: |
+    install upgrade on remaining node
+    restartin remaining osds
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(FS_DEGRADED\)
+      - \(MDS_
+tasks:
+- install.upgrade:
+    osd.3:
+- ceph.restart:
+    daemons: [osd.3, osd.4, osd.5]
+    wait-for-up: true
+    wait-for-healthy: false
+- ceph.restart:
+    daemons: [mds.a]
+    wait-for-up: true
+    wait-for-healthy: false
+- install.upgrade:
+    client.0:

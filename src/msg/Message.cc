@@ -65,8 +65,6 @@ using namespace std;
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include "messages/MOSDSubOp.h"
-#include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDMap.h"
@@ -84,6 +82,7 @@ using namespace std;
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDRepScrubMap.h"
+#include "messages/MOSDForceRecovery.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDBackoff.h"
@@ -402,6 +401,9 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_RECOVERY_RESERVE:
     m = new MRecoveryReserve;
     break;
+  case MSG_OSD_FORCE_RECOVERY:
+    m = new MOSDForceRecovery;
+    break;
 
   case MSG_ROUTE:
     m = new MRoute;
@@ -458,12 +460,6 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case CEPH_MSG_OSD_OPREPLY:
     m = new MOSDOpReply();
-    break;
-  case MSG_OSD_SUBOP:
-    m = new MOSDSubOp();
-    break;
-  case MSG_OSD_SUBOPREPLY:
-    m = new MOSDSubOpReply();
     break;
   case MSG_OSD_REPOP:
     m = new MOSDRepOp();

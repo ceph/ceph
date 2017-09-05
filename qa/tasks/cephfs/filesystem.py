@@ -453,6 +453,8 @@ class Filesystem(MDSCluster):
                                          data_pool_name, pgs_per_fs_pool.__str__())
         self.mon_manager.raw_cluster_cmd('fs', 'new',
                                          self.name, self.metadata_pool_name, data_pool_name)
+        self.check_pool_application(self.metadata_pool_name)
+        self.check_pool_application(data_pool_name)
         # Turn off spurious standby count warnings from modifying max_mds in tests.
         try:
             self.mon_manager.raw_cluster_cmd('fs', 'set', self.name, 'standby_count_wanted', '0')
@@ -464,6 +466,17 @@ class Filesystem(MDSCluster):
                 raise
 
         self.getinfo(refresh = True)
+
+        
+    def check_pool_application(self, pool_name):
+        osd_map = self.mon_manager.get_osd_dump_json()
+        for pool in osd_map['pools']:
+            if pool['pool_name'] == pool_name:
+                if "application_metadata" in pool:
+                    if not "cephfs" in pool['application_metadata']:
+                        raise RuntimeError("Pool %p does not name cephfs as application!".\
+                                           format(pool_name))
+        
 
     def __del__(self):
         if getattr(self._ctx, "filesystem", None) == self:

@@ -107,6 +107,12 @@ public:
                             const std::string &filter_prefix,
                             uint64_t max_return,
                             std::map<std::string, bufferlist> *out_vals) = 0;
+  virtual int omap_get_vals2(const std::string& oid,
+                            const std::string& start_after,
+                            const std::string &filter_prefix,
+                            uint64_t max_return,
+                            std::map<std::string, bufferlist> *out_vals,
+                            bool *pmore) = 0;
   virtual int omap_rm_keys(const std::string& oid,
                            const std::set<std::string>& keys) = 0;
   virtual int omap_set(const std::string& oid,
@@ -147,11 +153,13 @@ public:
                          const SnapContext &snapc) = 0;
   virtual int writesame(const std::string& oid, bufferlist& bl, size_t len,
                         uint64_t off, const SnapContext &snapc) = 0;
+  virtual int cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl) = 0;
   virtual int xattr_get(const std::string& oid,
                         std::map<std::string, bufferlist>* attrset) = 0;
   virtual int xattr_set(const std::string& oid, const std::string &name,
                         bufferlist& bl) = 0;
-  virtual int zero(const std::string& oid, uint64_t off, uint64_t len) = 0;
+  virtual int zero(const std::string& oid, uint64_t off, uint64_t len,
+                   const SnapContext &snapc) = 0;
 
   int execute_operation(const std::string& oid,
                         const Operation &operation);

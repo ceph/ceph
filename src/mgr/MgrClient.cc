@@ -114,11 +114,12 @@ void MgrClient::reconnect()
     when += cct->_conf->mgr_connect_retry_interval;
     if (now < when) {
       if (!connect_retry_callback) {
-	connect_retry_callback = new FunctionContext([this](int r){
-	    connect_retry_callback = nullptr;
-	    reconnect();
-	  });
-	timer.add_event_at(when, connect_retry_callback);
+	connect_retry_callback = timer.add_event_at(
+	  when,
+	  new FunctionContext([this](int r){
+	      connect_retry_callback = nullptr;
+	      reconnect();
+	    }));
       }
       ldout(cct, 4) << "waiting to retry connect until " << when << dendl;
       return;
@@ -146,8 +147,7 @@ void MgrClient::reconnect()
 
   // Don't send an open if we're just a client (i.e. doing
   // command-sending, not stats etc)
-  if ((g_conf && !g_conf->name.is_client()) ||
-      service_daemon) {
+  if (!cct->_conf->name.is_client() || service_daemon) {
     _send_open();
   }
 
@@ -168,7 +168,7 @@ void MgrClient::_send_open()
       open->service_name = service_name;
       open->daemon_name = daemon_name;
     } else {
-      open->daemon_name = g_conf->name.get_id();
+      open->daemon_name = cct->_conf->name.get_id();
     }
     if (service_daemon) {
       open->service_daemon = service_daemon;
@@ -274,7 +274,7 @@ void MgrClient::send_report()
   if (daemon_name.size()) {
     report->daemon_name = daemon_name;
   } else {
-    report->daemon_name = g_conf->name.get_id();
+    report->daemon_name = cct->_conf->name.get_id();
   }
   report->service_name = service_name;
 
@@ -410,7 +410,7 @@ int MgrClient::service_daemon_register(
   daemon_dirty_status = true;
 
   // late register?
-  if (g_conf->name.is_client() && session && session->con) {
+  if (cct->_conf->name.is_client() && session && session->con) {
     _send_open();
   }
 

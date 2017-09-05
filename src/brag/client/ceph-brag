@@ -226,10 +226,10 @@ def get_uuid():
   if rc:
     #uuid is not yet set.
     uid = str(uuid.uuid4())
-    (rc, o, e) = run_command(['ceph', 'config-key', 'put',
+    (rc, o, e) = run_command(['ceph', 'config-key', 'set',
                              CLUSTER_UUID_NAME, uid])
     if rc:
-      raise RuntimeError("\'ceph config-key put\' failed -" + e)
+      raise RuntimeError("\'ceph config-key set\' failed -" + e)
 
   return uid
 

@@ -144,6 +144,18 @@
                     content_data.df.stats.total_used_bytes
                     / content_data.df.stats.total_bytes)) + "%";
                 var raw_usage_canvas = $("#raw_usage_chart").get(0).getContext("2d");
+                if (content_data.df.stats.total_used_bytes/content_data.df.stats.total_bytes
+                    >= content_data.osd_map.full_ratio) {
+                    var raw_usage_chart_color = "#ff0000";
+                } else if (content_data.df.stats.total_used_bytes/content_data.df.stats.total_bytes
+                           >= content_data.osd_map.backfillfull_ratio) {
+                    var raw_usage_chart_color = "#ff6600";
+                } else if (content_data.df.stats.total_used_bytes/content_data.df.stats.total_bytes
+                           >= content_data.osd_map.nearfull_ratio) {
+                    var raw_usage_chart_color = "#ffc200";
+                } else {
+                    var raw_usage_chart_color = "#00bb00";
+                }
                 var raw_usage_chart = new Chart(raw_usage_canvas, {
                     type: 'doughnut',
                     data: {
@@ -159,13 +171,13 @@
                                 content_data.df.stats.total_used_bytes,
                                 content_data.df.stats.total_avail_bytes
                             ],
-                            backgroundColor: ["#424d52", "#222d32"]
+                            backgroundColor: [raw_usage_chart_color, "#424d52"]
                             }
                         ]
                     },
                     options: {
                         center_text: raw_usage_text,
-                        responsive: false,
+                        responsive: true,
                         legend: {display: false},
                         animation: {duration: 0}
                     }
@@ -199,7 +211,7 @@
                         ]
                     },
                     options: {
-                        responsive: false,
+                        responsive: true,
                         legend: {display: false},
                         animation: {duration: 0}
                     }
@@ -210,7 +222,7 @@
             rivets.bind($("#content"), content_data);
 
             var refresh = function() {
-                $.get("/health_data", function(data) {
+                $.get("{{ url_prefix }}/health_data", function(data) {
                     _.extend(content_data, data);
                     draw_usage_charts();
                     setTimeout(refresh, 5000);
@@ -235,7 +247,7 @@
                         <ul>
                             <li rv-each-check="health.checks">
                                 <span rv-style="check.severity | health_color">{check.type}</span>:
-                                {check.message}
+                                {check.summary.message}
                             </li>
                         </ul>
                     </div>
@@ -297,13 +309,15 @@
                                 <td>
                                     <span style="font-size: 45px;">{df.stats.total_objects | dimless}</span>
                                 </td>
-                                <td>
-                                    <canvas id="raw_usage_chart"
-                                            style="height:120px; width:120px;"></canvas>
+                                <td >
+                                    <div style="height:120px; width: 120px;">
+                                        <canvas id="raw_usage_chart"></canvas>
+                                    </div>
                                 </td>
                                 <td>
-                                    <canvas id="pool_usage_chart"
-                                            style="height:120px; width: 120px;"></canvas>
+                                    <div style="height:120px; width: 120px;">
+                                        <canvas id="pool_usage_chart"></canvas>
+                                    </div>
                                 </td>
                             </tr>
                             <tr>
@@ -332,15 +346,15 @@
                             </thead>
                             <tbody>
                             <tr rv-each-pool="pools">
-                                <td style="text-align: right;">
+                                <td>
                                     {pool.pool_name}
                                 </td>
                                 <td rv-style="pool.pg_status | pg_status_style">
                                     {pool.pg_status | pg_status}
                                 </td>
                                 <td>
-                                    {pool.stats.bytes_used.latest | dimless} /
-                                    {pool.stats.max_avail.latest | dimless }
+                                    {pool.stats.bytes_used.latest | dimless_binary } /
+                                    {pool.stats.max_avail.latest | dimless_binary }
                                 </td>
                                 <td>
                                     {pool.stats.rd_bytes.rate | dimless } rd, {

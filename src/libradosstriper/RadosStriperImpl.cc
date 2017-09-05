@@ -247,10 +247,10 @@ void ReadCompletionData::complete_unlock(int r) {
 struct WriteCompletionData : CompletionData {
   /// safe completion handler
   librados::IoCtxImpl::C_aio_Complete *m_safe;
-  /// return code of write completion, to be remembered until unlocking happened
-  int m_writeRc;
   /// completion object for the unlocking of the striped object at the end of the write
   librados::AioCompletion *m_unlockCompletion;
+  /// return code of write completion, to be remembered until unlocking happened
+  int m_writeRc;
   /// constructor
   WriteCompletionData(libradosstriper::RadosStriperImpl * striper,
 		      const std::string& soid,
@@ -274,7 +274,7 @@ WriteCompletionData::WriteCompletionData
  librados::AioCompletionImpl *userCompletion,
  int n) :
   CompletionData(striper, soid, lockCookie, userCompletion, n), m_safe(0),
-  m_unlockCompletion(0) {
+  m_unlockCompletion(0), m_writeRc(0) {
   if (userCompletion) {
     m_safe = new librados::IoCtxImpl::C_aio_Complete(userCompletion);
   }

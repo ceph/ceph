@@ -177,8 +177,8 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
     }
   }
   ExportDiffContext edc(&image, fd, info.size,
-                        g_conf->rbd_concurrent_management_ops, no_progress,
-			export_format);
+                        g_conf->get_val<int64_t>("rbd_concurrent_management_ops"),
+                        no_progress, export_format);
   r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
                           &C_ExportDiff::export_diff_cb, (void *)&edc);
   if (r < 0) {
@@ -509,7 +509,7 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress, i
     fd = STDOUT_FILENO;
     max_concurrent_ops = 1;
   } else {
-    max_concurrent_ops = g_conf->rbd_concurrent_management_ops;
+    max_concurrent_ops = g_conf->get_val<int64_t>("rbd_concurrent_management_ops");
     fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
       return -errno;

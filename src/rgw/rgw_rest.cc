@@ -1138,7 +1138,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   }
 
   int len = 0;
-  if (cl) {
+  {
     ACCOUNTING_IO(s)->set_account(true);
     bufferptr bp(cl);
 
@@ -1832,18 +1832,6 @@ int RGWHandler_REST::allocate_formatter(struct req_state *s,
   //s->formatter->reset(); // All formatters should reset on create already
 
   return 0;
-}
-
-int RGWHandler_REST::validate_tenant_name(string const& t)
-{
-  struct tench {
-    static bool is_good(char ch) {
-      return isalnum(ch) || ch == '_';
-    }
-  };
-  std::string::const_iterator it =
-    std::find_if_not(t.begin(), t.end(), tench::is_good);
-  return (it == t.end())? 0: -ERR_INVALID_TENANT_NAME;
 }
 
 // This function enforces Amazon's spec for bucket names.

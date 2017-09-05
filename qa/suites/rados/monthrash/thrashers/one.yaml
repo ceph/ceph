@@ -2,7 +2,7 @@ overrides:
   ceph:
     log-whitelist:
       - overall HEALTH_
-      - (MON_DOWN)
+      - \(MON_DOWN\)
 tasks:
 - mon_thrash:
     revive_delay: 20

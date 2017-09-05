@@ -195,14 +195,14 @@ void Paxos::collect(version_t oldpn)
   }
 
   // set timeout event
-  collect_timeout_event = new C_MonContext(mon, [this](int r) {
+  collect_timeout_event = mon->timer.add_event_after(
+    g_conf->mon_accept_timeout_factor *
+    g_conf->mon_lease,
+    new C_MonContext(mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
 	collect_timeout();
-    });
-  mon->timer.add_event_after(g_conf->mon_accept_timeout_factor *
-			     g_conf->mon_lease,
-			     collect_timeout_event);
+    }));
 }
 
 
@@ -687,14 +687,13 @@ void Paxos::begin(bufferlist& v)
   }
 
   // set timeout event
-  accept_timeout_event = new C_MonContext(mon, [this](int r) {
-      if (r == -ECANCELED)
-	return;
-      accept_timeout();
-    });
-  mon->timer.add_event_after(g_conf->mon_accept_timeout_factor *
-			     g_conf->mon_lease,
-			     accept_timeout_event);
+  accept_timeout_event = mon->timer.add_event_after(
+    g_conf->mon_accept_timeout_factor * g_conf->mon_lease,
+    new C_MonContext(mon, [this](int r) {
+	if (r == -ECANCELED)
+	  return;
+	accept_timeout();
+      }));
 }
 
 // peon
@@ -817,9 +816,21 @@ struct C_Committed : public Context {
   void finish(int r) override {
     assert(r >= 0);
     Mutex::Locker l(paxos->mon->lock);
+    if (paxos->is_shutdown()) {
+      paxos->abort_commit();
+      return;
+    }
     paxos->commit_finish();
   }
 };
+
+void Paxos::abort_commit()
+{
+  assert(commits_started > 0);
+  --commits_started;
+  if (commits_started == 0)
+    shutdown_cond.Signal();
+}
 
 void Paxos::commit_start()
 {
@@ -855,6 +866,7 @@ void Paxos::commit_start()
     state = STATE_WRITING;
   else
     ceph_abort();
+  ++commits_started;
 
   if (mon->get_quorum().size() > 1) {
     // cancel timeout event
@@ -910,6 +922,8 @@ void Paxos::commit_finish()
   // it doesn't need to flush the store queue
   assert(is_writing() || is_writing_previous());
   state = STATE_REFRESH;
+  assert(commits_started > 0);
+  --commits_started;
 
   if (do_refresh()) {
     commit_proposal();
@@ -977,26 +991,25 @@ void Paxos::extend_lease()
   // set timeout event.
   //  if old timeout is still in place, leave it.
   if (!lease_ack_timeout_event) {
-    lease_ack_timeout_event = new C_MonContext(mon, [this](int r) {
-	if (r == -ECANCELED)
-	  return;
-	lease_ack_timeout();
-      });
-    mon->timer.add_event_after(g_conf->mon_lease_ack_timeout_factor *
-			       g_conf->mon_lease,
-			       lease_ack_timeout_event);
+    lease_ack_timeout_event = mon->timer.add_event_after(
+      g_conf->mon_lease_ack_timeout_factor * g_conf->mon_lease,
+      new C_MonContext(mon, [this](int r) {
+	  if (r == -ECANCELED)
+	    return;
+	  lease_ack_timeout();
+	}));
   }
 
   // set renew event
-  lease_renew_event = new C_MonContext(mon, [this](int r) {
-      if (r == -ECANCELED)
-	return;
-      lease_renew_timeout();
-    });
   utime_t at = lease_expire;
   at -= g_conf->mon_lease;
   at += g_conf->mon_lease_renew_interval_factor * g_conf->mon_lease;
-  mon->timer.add_event_at(at, lease_renew_event);
+  lease_renew_event = mon->timer.add_event_at(
+    at, new C_MonContext(mon, [this](int r) {
+	if (r == -ECANCELED)
+	  return;
+	lease_renew_timeout();
+    }));
 }
 
 void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
@@ -1180,14 +1193,13 @@ void Paxos::reset_lease_timeout()
   dout(20) << "reset_lease_timeout - setting timeout event" << dendl;
   if (lease_timeout_event)
     mon->timer.cancel_event(lease_timeout_event);
-  lease_timeout_event = new C_MonContext(mon, [this](int r) {
-      if (r == -ECANCELED)
-	return;
-      lease_timeout();
-    });
-  mon->timer.add_event_after(g_conf->mon_lease_ack_timeout_factor *
-			     g_conf->mon_lease,
-			     lease_timeout_event);
+  lease_timeout_event = mon->timer.add_event_after(
+    g_conf->mon_lease_ack_timeout_factor * g_conf->mon_lease,
+    new C_MonContext(mon, [this](int r) {
+	if (r == -ECANCELED)
+	  return;
+	lease_timeout();
+      }));
 }
 
 void Paxos::lease_timeout()
@@ -1301,8 +1313,16 @@ void Paxos::shutdown()
 {
   dout(10) << __func__ << " cancel all contexts" << dendl;
 
+  state = STATE_SHUTDOWN;
+
   // discard pending transaction
   pending_proposal.reset();
+
+  // Let store finish commits in progress
+  // XXX: I assume I can't use finish_contexts() because the store
+  // is going to trigger
+  while(commits_started > 0)
+    shutdown_cond.Wait(mon->lock);
 
   finish_contexts(g_ceph_context, waiting_for_writeable, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_commit, -ECANCELED);

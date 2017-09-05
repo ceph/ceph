@@ -16,6 +16,7 @@ rocksdb::Status err_to_status(int r)
   case -EINVAL:
     return rocksdb::Status::InvalidArgument(rocksdb::Status::kNone);
   case -EIO:
+  case -EEXIST:
     return rocksdb::Status::IOError(rocksdb::Status::kNone);
   default:
     // FIXME :(
@@ -407,6 +408,7 @@ rocksdb::Status BlueRocksEnv::GetChildren(
   const std::string& dir,
   std::vector<std::string>* result)
 {
+  result->clear();
   int r = fs->readdir(dir, result);
   if (r < 0)
     return rocksdb::Status::IOError(dir, strerror(ENOENT));//    return err_to_status(r);

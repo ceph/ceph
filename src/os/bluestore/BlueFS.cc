@@ -129,7 +129,7 @@ void BlueFS::_update_logger_stats()
   }
 }
 
-int BlueFS::add_block_device(unsigned id, string path)
+int BlueFS::add_block_device(unsigned id, const string& path)
 {
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   assert(id < bdev.size());
@@ -1136,12 +1136,13 @@ void BlueFS::_compact_log_sync()
   log_writer->append(bl);
   int r = _flush(log_writer, true);
   assert(r == 0);
-  wait_for_aio(log_writer);
-
-  list<aio_t> completed_ios;
-  _claim_completed_aios(log_writer, &completed_ios);
+  if (!cct->_conf->bluefs_sync_write) {
+    list<aio_t> completed_ios;
+    _claim_completed_aios(log_writer, &completed_ios);
+    wait_for_aio(log_writer);
+    completed_ios.clear();
+  }
   flush_bdev();
-  completed_ios.clear();
 
   dout(10) << __func__ << " writing super" << dendl;
   super.log_fnode = log_file->fnode;
@@ -1240,21 +1241,11 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   // 3. flush
   r = _flush(new_log_writer, true);
   assert(r == 0);
-  lock.unlock();
 
   // 4. wait
-  dout(10) << __func__ << " waiting for compacted log to sync" << dendl;
-  wait_for_aio(new_log_writer);
+  _flush_bdev_safely(new_log_writer);
 
-  list<aio_t> completed_ios;
-  _claim_completed_aios(new_log_writer, &completed_ios);
-  flush_bdev();
-  completed_ios.clear();
-
-  // 5. retake lock
-  lock.lock();
-
-  // 6. update our log fnode
+  // 5. update our log fnode
   // discard first old_log_jump_to extents
   dout(10) << __func__ << " remove 0x" << std::hex << old_log_jump_to << std::dec
 	   << " of " << log_file->fnode.extents << dendl;
@@ -1293,7 +1284,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   log_writer->pos = log_writer->file->fnode.size =
     log_writer->pos - old_log_jump_to + new_log_jump_to;
 
-  // 7. write the super block to reflect the changes
+  // 6. write the super block to reflect the changes
   dout(10) << __func__ << " writing super" << dendl;
   super.log_fnode = log_file->fnode;
   ++super.version;
@@ -1303,7 +1294,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   flush_bdev();
   lock.lock();
 
-  // 8. release old space
+  // 7. release old space
   dout(10) << __func__ << " release old log extents " << old_extents << dendl;
   for (auto& r : old_extents) {
     pending_release[r.bdev].insert(r.offset, r.length);
@@ -1891,18 +1882,21 @@ void BlueFS::sync_metadata()
   std::unique_lock<std::mutex> l(lock);
   if (log_t.empty()) {
     dout(10) << __func__ << " - no pending log events" << dendl;
-    return;
-  }
-  dout(10) << __func__ << dendl;
-  utime_t start = ceph_clock_now();
-  vector<interval_set<uint64_t>> to_release(pending_release.size());
-  to_release.swap(pending_release);
-  flush_bdev(); // FIXME?
-  _flush_and_sync_log(l);
-  for (unsigned i = 0; i < to_release.size(); ++i) {
-    for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
-      alloc[i]->release(p.get_start(), p.get_len());
+  } else {
+    dout(10) << __func__ << dendl;
+    utime_t start = ceph_clock_now();
+    vector<interval_set<uint64_t>> to_release(pending_release.size());
+    to_release.swap(pending_release);
+    flush_bdev(); // FIXME?
+    _flush_and_sync_log(l);
+    for (unsigned i = 0; i < to_release.size(); ++i) {
+      for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
+	alloc[i]->release(p.get_start(), p.get_len());
+      }
     }
+    utime_t end = ceph_clock_now();
+    utime_t dur = end - start;
+    dout(10) << __func__ << " done in " << dur << dendl;
   }
 
   if (_should_compact_log()) {
@@ -1912,10 +1906,6 @@ void BlueFS::sync_metadata()
       _compact_log_async(l);
     }
   }
-
-  utime_t end = ceph_clock_now();
-  utime_t dur = end - start;
-  dout(10) << __func__ << " done in " << dur << dendl;
 }
 
 int BlueFS::open_for_write(
@@ -2291,4 +2281,11 @@ int BlueFS::unlink(const string& dirname, const string& filename)
   log_t.op_dir_unlink(dirname, filename);
   _drop_link(file);
   return 0;
+}
+
+bool BlueFS::wal_is_rotational()
+{
+  if (!bdev[BDEV_WAL] || bdev[BDEV_WAL]->is_rotational())
+    return true;
+  return false;
 }

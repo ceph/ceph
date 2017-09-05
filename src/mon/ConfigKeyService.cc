@@ -184,7 +184,8 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     }
     ss << "obtained '" << key << "'";
 
-  } else if (prefix == "config-key put") {
+  } else if (prefix == "config-key put" ||
+	     prefix == "config-key set") {
     if (!mon->is_leader()) {
       mon->forward_request_leader(op);
       // we forward the message; so return now.

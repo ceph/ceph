@@ -11,6 +11,7 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
+#include "common/backport14.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 
@@ -576,6 +577,18 @@ uint32_t rgw_str_to_perm(const char *str)
     return RGW_PERM_FULL_CONTROL;
 
   return RGW_PERM_INVALID;
+}
+
+int rgw_validate_tenant_name(const string& t)
+{
+  struct tench {
+    static bool is_good(char ch) {
+      return isalnum(ch) || ch == '_';
+    }
+  };
+  std::string::const_iterator it =
+    std::find_if_not(t.begin(), t.end(), tench::is_good);
+  return (it == t.end())? 0: -ERR_INVALID_TENANT_NAME;
 }
 
 static bool validate_access_key(string& key)
@@ -1886,6 +1899,13 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
     return -EINVAL;
   }
 
+  int ret = rgw_validate_tenant_name(op_id.tenant);
+  if (ret) {
+    set_err_msg(err_msg,
+		"invalid tenant only alphanumeric and _ characters are allowed");
+    return ret;
+  }
+
   //set key type when it not set or set by context
   if ((op_state.get_key_type() < 0) || op_state.key_type_setbycontext) {
     op_state.set_key_type(KEY_TYPE_S3);
@@ -2753,13 +2773,19 @@ public:
     pool = store->get_zone_params().user_uid_pool;
   }
 
-  int list_keys_init(RGWRados *store, void **phandle) override
+  int list_keys_init(RGWRados *store, const string& marker, void **phandle) override
   {
-    list_keys_info *info = new list_keys_info;
+    auto info = ceph::make_unique<list_keys_info>();
 
     info->store = store;
 
-    *phandle = (void *)info;
+    int ret = store->list_raw_objects_init(store->get_zone_params().user_uid_pool, marker,
+                                           &info->ctx);
+    if (ret < 0) {
+      return ret;
+    }
+
+    *phandle = (void *)info.release();
 
     return 0;
   }
@@ -2775,8 +2801,8 @@ public:
 
     list<string> unfiltered_keys;
 
-    int ret = store->list_raw_objects(store->get_zone_params().user_uid_pool, no_filter,
-                                      max, info->ctx, unfiltered_keys, truncated);
+    int ret = store->list_raw_objects_next(no_filter, max, info->ctx,
+                                           unfiltered_keys, truncated);
     if (ret < 0 && ret != -ENOENT)
       return ret;		        
     if (ret == -ENOENT) {
@@ -2801,6 +2827,11 @@ public:
   void list_keys_complete(void *handle) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
     delete info;
+  }
+
+  string get_marker(void *handle) {
+    list_keys_info *info = static_cast<list_keys_info *>(handle);
+    return info->store->list_raw_objs_get_cursor(info->ctx);
   }
 };
 

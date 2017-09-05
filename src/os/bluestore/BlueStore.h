@@ -1556,8 +1556,6 @@ public:
     IOContext ioc;
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 
-    CollectionRef first_collection;  ///< first referenced collection
-
     uint64_t seq = 0;
     utime_t start;
     utime_t last_stamp;
@@ -1848,6 +1846,7 @@ private:
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
   atomic_int deferred_aggressive = {0}; ///< aggressive wakeup of kv thread
+  Finisher deferred_finisher;
 
   int m_finisher_num = 1;
   vector<Finisher*> finishers;
@@ -2111,6 +2110,7 @@ public:
   bool allows_journal() override { return false; };
 
   bool is_rotational() override;
+  bool is_journal_rotational() override;
 
   string get_default_device_class() override {
     string device_class;
@@ -2357,8 +2357,8 @@ public:
 
     objectstore_perf_stat_t get_cur_stats() const {
       objectstore_perf_stat_t ret;
-      ret.os_commit_latency = os_commit_latency.avg();
-      ret.os_apply_latency = os_apply_latency.avg();
+      ret.os_commit_latency = os_commit_latency.current_avg();
+      ret.os_apply_latency = os_apply_latency.current_avg();
       return ret;
     }
 
@@ -2592,7 +2592,7 @@ private:
 		   OnodeRef o,
 		   uint64_t offset,
 		   set<SharedBlob*> *maybe_unshared_blobs=0);
-  void _truncate(TransContext *txc,
+  int _truncate(TransContext *txc,
 		CollectionRef& c,
 		OnodeRef& o,
 		uint64_t offset);

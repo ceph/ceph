@@ -5212,7 +5212,7 @@ ostream& operator<<(ostream &out, const UserPerm& perm) {
 int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
 			const UserPerm& perms)
 {
-  ldout(cct, 20) << __func__ << *in << "; " << perms << dendl;
+  ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
@@ -5268,7 +5268,7 @@ out:
 
 int Client::may_open(Inode *in, int flags, const UserPerm& perms)
 {
-  ldout(cct, 20) << __func__ << *in << "; " << perms << dendl;
+  ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
   unsigned want = 0;
 
   if ((flags & O_ACCMODE) == O_WRONLY)
@@ -5305,7 +5305,7 @@ out:
 
 int Client::may_lookup(Inode *dir, const UserPerm& perms)
 {
-  ldout(cct, 20) << __func__ << *dir << "; " << perms << dendl;
+  ldout(cct, 20) << __func__ << " " << *dir << "; " << perms << dendl;
   int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
@@ -5318,7 +5318,7 @@ out:
 
 int Client::may_create(Inode *dir, const UserPerm& perms)
 {
-  ldout(cct, 20) << __func__ << *dir << "; " << perms << dendl;
+  ldout(cct, 20) << __func__ << " " << *dir << "; " << perms << dendl;
   int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
@@ -5331,7 +5331,7 @@ out:
 
 int Client::may_delete(Inode *dir, const char *name, const UserPerm& perms)
 {
-  ldout(cct, 20) << __func__ << *dir << "; " << "; name " << name << "; " << perms << dendl;
+  ldout(cct, 20) << __func__ << " " << *dir << "; " << "; name " << name << "; " << perms << dendl;
   int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
@@ -5356,7 +5356,7 @@ out:
 
 int Client::may_hardlink(Inode *in, const UserPerm& perms)
 {
-  ldout(cct, 20) << __func__ << *in << "; " << perms << dendl;
+  ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
@@ -5944,19 +5944,6 @@ void Client::unmount()
   ldout(cct, 2) << "unmounted." << dendl;
 }
 
-
-
-class C_C_Tick : public Context {
-  Client *client;
-public:
-  explicit C_C_Tick(Client *c) : client(c) {}
-  void finish(int r) override {
-    // Called back via Timer, which takes client_lock for us
-    assert(client->client_lock.is_locked_by_me());
-    client->tick();
-  }
-};
-
 void Client::flush_cap_releases()
 {
   // send any cap releases
@@ -5985,9 +5972,13 @@ void Client::tick()
   }
 
   ldout(cct, 21) << "tick" << dendl;
-  tick_event = new C_C_Tick(this);
-  timer.add_event_after(cct->_conf->client_tick_interval, tick_event);
-
+  tick_event = timer.add_event_after(
+    cct->_conf->client_tick_interval,
+    new FunctionContext([this](int) {
+	// Called back via Timer, which takes client_lock for us
+	assert(client_lock.is_locked_by_me());
+	tick();
+      }));
   utime_t now = ceph_clock_now();
 
   if (!mounted && !mds_requests.empty()) {
@@ -6698,11 +6689,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
       ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
-    } else if (kill_sguid && S_ISREG(in->mode)) {
+    } else if (kill_sguid && S_ISREG(in->mode) && (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
       /* Must squash the any setuid/setgid bits with an ownership change */
-      in->mode &= ~S_ISUID;
-      if ((in->mode & (S_ISGID|S_IXGRP)) == (S_ISGID|S_IXGRP))
-	in->mode &= ~S_ISGID;
+      in->mode &= ~(S_ISUID|S_ISGID);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
     }
 
@@ -6845,6 +6834,14 @@ int Client::_setattr(InodeRef &in, struct stat *attr, int mask,
 
   stat_to_statx(attr, &stx);
   mask &= ~CEPH_SETATTR_BTIME;
+
+  if ((mask & CEPH_SETATTR_UID) && attr->st_uid == static_cast<uid_t>(-1)) {
+    mask &= ~CEPH_SETATTR_UID;
+  }
+  if ((mask & CEPH_SETATTR_GID) && attr->st_gid == static_cast<uid_t>(-1)) {
+    mask &= ~CEPH_SETATTR_GID;
+  }
+
   return _setattrx(in, &stx, mask, perms);
 }
 
@@ -7196,10 +7193,7 @@ int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
   struct stat attr;
   attr.st_uid = new_uid;
   attr.st_gid = new_gid;
-  int mask = 0;
-  if (new_uid != static_cast<uid_t>(-1)) mask |= CEPH_SETATTR_UID;
-  if (new_gid != static_cast<gid_t>(-1)) mask |= CEPH_SETATTR_GID;
-  return _setattr(in, &attr, mask, perms);
+  return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID, perms);
 }
 
 int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
@@ -9015,8 +9009,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     return r;
 
   /* clear the setuid/setgid bits, if any */
-  if (unlikely((in->mode & S_ISUID) ||
-	       (in->mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
+  if (unlikely(in->mode & (S_ISUID|S_ISGID)) && size > 0) {
     struct ceph_statx stx = { 0 };
 
     put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
@@ -9378,11 +9371,11 @@ int Client::chdir(const char *relpath, std::string &new_cwd,
     cwd.swap(in);
   ldout(cct, 3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
 
-  getcwd(new_cwd, perms);
+  _getcwd(new_cwd, perms);
   return 0;
 }
 
-void Client::getcwd(string& dir, const UserPerm& perms)
+void Client::_getcwd(string& dir, const UserPerm& perms)
 {
   filepath path;
   ldout(cct, 10) << "getcwd " << *cwd << dendl;
@@ -9422,6 +9415,12 @@ void Client::getcwd(string& dir, const UserPerm& perms)
   dir += path.get_path();
 }
 
+void Client::getcwd(string& dir, const UserPerm& perms)
+{
+  Mutex::Locker l(client_lock);
+  _getcwd(dir, perms);
+}
+
 int Client::statfs(const char *path, struct statvfs *stbuf,
 		   const UserPerm& perms)
 {
@@ -9430,7 +9429,13 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
 
   ceph_statfs stats;
   C_SaferCond cond;
-  objecter->get_fs_stats(stats, &cond);
+
+  const vector<int64_t> &data_pools = mdsmap->get_data_pools();
+  if (data_pools.size() == 1) {
+    objecter->get_fs_stats(stats, data_pools[0], &cond);
+  } else {
+    objecter->get_fs_stats(stats, boost::optional<int64_t>(), &cond);
+  }
 
   client_lock.Unlock();
   int rval = cond.wait();
@@ -9501,7 +9506,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     stbuf->f_bfree = free;
     stbuf->f_bavail = free;
   } else {
-    // General case: report the overall RADOS cluster's statistics.  Because
+    // General case: report the cluster statistics returned from RADOS. Because
     // multiple pools may be used without one filesystem namespace via
     // layouts, this is the most correct thing we can do.
     stbuf->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
@@ -12708,6 +12713,12 @@ int Client::fdescribe_layout(int fd, file_layout_t *lp)
   return 0;
 }
 
+int64_t Client::get_default_pool_id()
+{
+  Mutex::Locker lock(client_lock);
+  /* first data pool is the default */ 
+  return mdsmap->get_first_data_pool(); 
+}
 
 // expose osdmap
 
@@ -12900,6 +12911,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 	}
       }
       if (mds >= 0) {
+	assert (s != NULL);
 	switch (s->state) {
 	case MetaSession::STATE_CLOSING:
 	  ldout(cct, 1) << "reset from mds we were closing; we'll call that closed" << dendl;
@@ -12993,6 +13005,12 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
 
     if (cur == root_ancestor)
       break;
+
+    // deleted inode
+    if (cur->nlink == 0) {
+      cur = root_ancestor;
+      break;
+    }
 
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPNAME);
     filepath path(cur->ino);

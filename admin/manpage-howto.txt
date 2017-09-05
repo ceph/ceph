@@ -1,8 +1,0 @@
-Updating the manpages is a semi-manual process:
-(all paths below relative to top of git tree):
-
-1) make changes to the .rst files in doc/man.
-2) if adding or removing pages, update man/CMakeLists.txt
-3) use admin/build-doc to build the doc tree into build-doc/output
-4) copy changed manpage files from build-doc/output/man to man/
-5) commit both doc/man .rst changes and man/ changes

@@ -36,18 +36,11 @@ On Fedora:
 
 Enabling
 --------
-
-Add this to your ceph.conf on nodes where you run ceph-mgr:
+You can enable the *zabbix* module with:
 
 ::
 
-    [mgr]
-        mgr modules = zabbix
-
-If you use any other ceph-mgr modules, make sure they're in the list too.
-
-Restart the ceph-mgr daemon after modifying the setting to load the module.
-
+    ceph mgr module enable zabbix
 
 Configuration
 -------------
@@ -79,14 +72,14 @@ these are usually Monitors where the *client.admin* key is present.
 
 ::
 
-    ceph config-key put <key> <value>
+    ceph config-key set <key> <value>
 
 For example:
 
 ::
 
-    ceph config-key put mgr/zabbix/zabbix_host zabbix.localdomain
-    ceph config-key put mgr/zabbix/identifier ceph.eu-ams02.local
+    ceph config-key set mgr/zabbix/zabbix_host zabbix.localdomain
+    ceph config-key set mgr/zabbix/identifier ceph.eu-ams02.local
 
 Debugging
 ---------

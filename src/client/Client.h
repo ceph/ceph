@@ -498,7 +498,6 @@ protected:
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
-  friend class C_C_Tick; // Asserts on client_lock
   friend class C_Client_RequestInterrupt;
   friend class C_Client_Remount;
   friend void intrusive_ptr_release(Inode *in);
@@ -956,6 +955,7 @@ public:
 
   // crap
   int chdir(const char *s, std::string &new_cwd, const UserPerm& perms);
+  void _getcwd(std::string& cwd, const UserPerm& perms);
   void getcwd(std::string& cwd, const UserPerm& perms);
 
   // namespace ops
@@ -1101,6 +1101,9 @@ public:
   int get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address);
   int get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds);
   int get_osd_addr(int osd, entity_addr_t& addr);
+  
+  // expose mdsmap
+  int64_t get_default_pool_id();
 
   // expose osdmap
   int get_local_osd();

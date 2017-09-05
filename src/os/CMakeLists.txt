@@ -65,11 +65,17 @@ endif()
 if(WITH_SPDK)
   list(APPEND libos_srcs
     bluestore/NVMEDevice.cc)
-  ADD_DEFINITIONS(-D__SSE4_2__ -D__SSE4_1__ -D__SSSE3__ -D__SSE3__)
-  add_compile_options(-mcrc32 -msse3 -mssse3 -msse4.1 -msse4.2)
 endif()
 
 add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
+
+if(WITH_BLUEFS)
+  add_library(bluefs SHARED 
+    bluestore/BlueRocksEnv.cc)
+  target_include_directories(bluefs PUBLIC ${ROCKSDB_INCLUDE_DIR})
+  target_link_libraries(bluefs global)
+  install(TARGETS bluefs DESTINATION lib)
+endif(WITH_BLUEFS)
 
 if(HAVE_LIBAIO)
   target_link_libraries(os ${AIO_LIBRARIES})

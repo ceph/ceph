@@ -2,7 +2,7 @@
 overrides:
   ceph:
     log-whitelist:
-      - bad backtrace on dir ino
+      - bad backtrace on directory inode
       - error reading table object
       - Metadata damage detected
       - slow requests are blocked

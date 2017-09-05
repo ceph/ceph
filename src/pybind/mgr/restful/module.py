@@ -272,7 +272,7 @@ class Module(MgrModule):
 
         server_addr = self.get_localized_config('server_addr', '::')
         if server_addr is None:
-            raise RuntimeError('no server_addr configured; try "ceph config-key put mgr/restful/server_addr <ip>"')
+            raise RuntimeError('no server_addr configured; try "ceph config-key set mgr/restful/server_addr <ip>"')
         server_port = int(self.get_localized_config('server_port', '8003'))
         self.log.info('server_addr: %s server_port: %d',
                       server_addr, server_port)

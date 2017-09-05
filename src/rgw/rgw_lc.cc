@@ -67,7 +67,14 @@ bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
     op.mp_expiration = rule->get_mp_expiration().get_days();
   }
   op.dm_expiration = rule->get_dm_expiration();
-  auto ret = prefix_map.insert(pair<string, lc_op>(rule->get_prefix(), op));
+
+  std::string prefix;
+  if (rule->get_filter().has_prefix()){
+    prefix = rule->get_filter().get_prefix();
+  } else {
+    prefix = rule->get_prefix();
+  }
+  auto ret = prefix_map.emplace(std::move(prefix), std::move(op));
   return ret.second;
 }
 
@@ -147,10 +154,10 @@ void *RGWLC::LCWorker::entry() {
 
     utime_t end = ceph_clock_now();
     int secs = schedule_next_start_time(start, end);
-    time_t next_time = end + secs;
-    char buf[30];
-    char *nt = ctime_r(&next_time, buf);
-    dout(5) << "schedule life cycle next start time: " << nt <<dendl;
+    utime_t next;
+    next.set_from_double(end + secs);
+
+    dout(5) << "schedule life cycle next start time: " << rgw_to_asctime(next) <<dendl;
 
     lock.Lock();
     cond.WaitInterval(lock, utime_t(secs, 0));

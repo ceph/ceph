@@ -30,6 +30,7 @@
 #include "ClusterState.h"
 
 class ServeThread;
+class health_check_map_t;
 
 class PyModules
 {
@@ -43,7 +44,7 @@ class PyModules
   Client   &client;
   Finisher &finisher;
 
-  mutable Mutex lock{"PyModules"};
+  mutable Mutex lock{"PyModules::lock"};
 
   std::string get_site_packages();
 
@@ -113,7 +114,11 @@ public:
   PyObject *get_config_prefix(const std::string &handle,
 			      const std::string &prefix) const;
   void set_config(const std::string &handle,
-      const std::string &key, const std::string &val);
+      const std::string &key, const boost::optional<std::string> &val);
+
+  void set_health_checks(const std::string& handle,
+			 health_check_map_t&& checks);
+  void get_health_checks(health_check_map_t *checks);
 
   void log(const std::string &handle,
            int level, const std::string &record);

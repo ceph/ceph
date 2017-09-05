@@ -52,6 +52,7 @@ public:
       pthread_rwlockattr_setkind_np(&attr,
           PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
       pthread_rwlock_init(&L, &attr);
+      pthread_rwlockattr_destroy(&attr);
     } else 
 #endif 
     // Next block is in {} to possibly connect to the above if when code is used.

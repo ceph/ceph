@@ -396,7 +396,7 @@ void PGMapDigest::recovery_summary(Formatter *f, list<string> *psl,
     } else {
       ostringstream ss;
       ss << delta_sum.stats.sum.num_objects_unfound
-         << "/" << delta_sum.stats.sum.num_objects << " unfound (" << b << "%)";
+         << "/" << delta_sum.stats.sum.num_objects << " objects unfound (" << b << "%)";
       psl->push_back(ss.str());
     }
   }
@@ -614,6 +614,68 @@ void PGMapDigest::pool_cache_io_rate_summary(Formatter *f, ostream *out,
   cache_io_rate_summary(f, out, p->second.first, ts->second);
 }
 
+static float pool_raw_used_rate(const OSDMap &osd_map, int64_t poolid)
+{
+  const pg_pool_t *pool = osd_map.get_pg_pool(poolid);
+
+  switch (pool->get_type()) {
+  case pg_pool_t::TYPE_REPLICATED:
+    return pool->get_size();
+    break;
+  case pg_pool_t::TYPE_ERASURE:
+  {
+    auto& ecp =
+      osd_map.get_erasure_code_profile(pool->erasure_code_profile);
+    auto pm = ecp.find("m");
+    auto pk = ecp.find("k");
+    if (pm != ecp.end() && pk != ecp.end()) {
+      int k = atoi(pk->second.c_str());
+      int m = atoi(pm->second.c_str());
+      int mk = m + k;
+      assert(mk != 0);
+      assert(k != 0);
+      return (float)mk / k;
+    } else {
+      return 0.0;
+    }
+  }
+  break;
+  default:
+    assert(0 == "unrecognized pool type");
+  }
+}
+
+ceph_statfs PGMapDigest::get_statfs(OSDMap &osdmap,
+				    boost::optional<int64_t> data_pool) const
+{
+  ceph_statfs statfs;
+  bool filter = false;
+  object_stat_sum_t sum;
+
+  if (data_pool) {
+    auto i = pg_pool_sum.find(*data_pool);
+    if (i != pg_pool_sum.end()) {
+      sum = i->second.stats.sum;
+      filter = true;
+    }
+  }
+
+  if (filter) {
+    statfs.kb_used = (sum.num_bytes >> 10);
+    statfs.kb_avail = get_pool_free_space(osdmap, *data_pool) >> 10;
+    statfs.num_objects = sum.num_objects;
+    statfs.kb = statfs.kb_used + statfs.kb_avail;
+  } else {
+    // these are in KB.
+    statfs.kb = osd_sum.kb;
+    statfs.kb_used = osd_sum.kb_used;
+    statfs.kb_avail = osd_sum.kb_avail;
+    statfs.num_objects = pg_sum.stats.sum.num_objects;
+  }
+
+  return statfs;
+}
+
 void PGMapDigest::dump_pool_stats_full(
   const OSDMap &osd_map,
   stringstream *ss,
@@ -668,33 +730,8 @@ void PGMapDigest::dump_pool_stats_full(
     } else {
       avail = avail_by_rule[ruleno];
     }
-    switch (pool->get_type()) {
-    case pg_pool_t::TYPE_REPLICATED:
-      avail /= pool->get_size();
-      raw_used_rate = pool->get_size();
-      break;
-    case pg_pool_t::TYPE_ERASURE:
-    {
-      auto& ecp =
-        osd_map.get_erasure_code_profile(pool->erasure_code_profile);
-      auto pm = ecp.find("m");
-      auto pk = ecp.find("k");
-      if (pm != ecp.end() && pk != ecp.end()) {
-	int k = atoi(pk->second.c_str());
-	int m = atoi(pm->second.c_str());
-	int mk = m + k;
-	assert(mk != 0);
-	avail = avail * k / mk;
-	assert(k != 0);
-	raw_used_rate = (float)mk / k;
-      } else {
-	raw_used_rate = 0.0;
-      }
-    }
-    break;
-    default:
-      assert(0 == "unrecognized pool type");
-    }
+
+    raw_used_rate = ::pool_raw_used_rate(osd_map, pool_id);
 
     if (f) {
       f->open_object_section("pool");
@@ -822,6 +859,21 @@ void PGMapDigest::dump_object_stat_sum(
           << stringify(si_t(sum.num_bytes * raw_used_rate * curr_object_copies_rate));
     }
   }
+}
+
+int64_t PGMapDigest::get_pool_free_space(const OSDMap &osd_map,
+					 int64_t poolid) const
+{
+  const pg_pool_t *pool = osd_map.get_pg_pool(poolid);
+  int ruleno = osd_map.crush->find_rule(pool->get_crush_rule(),
+					pool->get_type(),
+					pool->get_size());
+  int64_t avail;
+  avail = get_rule_avail(ruleno);
+  if (avail < 0)
+    avail = 0;
+
+  return avail / ::pool_raw_used_rate(osd_map, poolid);
 }
 
 int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
@@ -2562,8 +2614,6 @@ void PGMap::get_health_checks(
   const unsigned max = cct->_conf->mon_health_max_detail;
   const auto& pools = osdmap.get_pools();
 
-  checks->clear();
-
   typedef enum pg_consequence_t {
     UNAVAILABLE = 1,   // Client IO to the pool may block
     DEGRADED = 2,      // Fewer than the requested number of replicas are present
@@ -2609,11 +2659,11 @@ void PGMap::get_health_checks(
   std::map<unsigned, PgStateResponse> state_to_response = {
     // Immediate reports
     { PG_STATE_INCONSISTENT,     {DAMAGED,     {}} },
-    { PG_STATE_INCOMPLETE,       {DEGRADED,    {}} },
+    { PG_STATE_INCOMPLETE,       {UNAVAILABLE, {}} },
     { PG_STATE_REPAIR,           {DAMAGED,     {}} },
     { PG_STATE_SNAPTRIM_ERROR,   {DAMAGED,     {}} },
-    { PG_STATE_BACKFILL_TOOFULL, {DEGRADED,    {}} },
-    { PG_STATE_RECOVERY_TOOFULL, {DEGRADED,    {}} },
+    { PG_STATE_BACKFILL_TOOFULL, {DEGRADED_FULL, {}} },
+    { PG_STATE_RECOVERY_TOOFULL, {DEGRADED_FULL, {}} },
     { PG_STATE_DEGRADED,         {DEGRADED,    {}} },
     { PG_STATE_DOWN,             {UNAVAILABLE, {}} },
     // Delayed (wait until stuck) reports
@@ -3018,7 +3068,7 @@ void PGMap::get_health_checks(
     }
     if (nearfull_pools) {
       ostringstream ss;
-      ss << nearfull_pools << " pools full";
+      ss << nearfull_pools << " pools nearfull";
       auto& d = checks->add("POOL_NEAR_FULL", HEALTH_WARN, ss.str());
       d.detail.swap(nearfull_detail);
     }
@@ -3047,14 +3097,29 @@ void PGMap::get_health_checks(
     snprintf(b, sizeof(b), "%.3lf", pc);
     ostringstream ss;
     ss << pg_sum.stats.sum.num_objects_unfound
-       << "/" << pg_sum.stats.sum.num_objects << " unfound (" << b << "%)";
-    checks->add("OBJECT_UNFOUND", HEALTH_WARN, ss.str());
+       << "/" << pg_sum.stats.sum.num_objects << " objects unfound (" << b << "%)";
+    auto& d = checks->add("OBJECT_UNFOUND", HEALTH_WARN, ss.str());
+
+    for (auto& p : pg_stat) {
+      if (p.second.stats.sum.num_objects_unfound) {
+	ostringstream ss;
+	ss << "pg " << p.first
+	   << " has " << p.second.stats.sum.num_objects_unfound
+	   << " unfound objects";
+	d.detail.push_back(ss.str());
+	if (d.detail.size() > max) {
+	  d.detail.push_back("(additional pgs left out for brevity)");
+	  break;
+	}
+      }
+    }
   }
 
   // REQUEST_SLOW
   // REQUEST_STUCK
   if (cct->_conf->mon_osd_warn_op_age > 0 &&
-      osd_sum.op_queue_age_hist.upper_bound() >
+      !osd_sum.op_queue_age_hist.h.empty() &&
+      osd_sum.op_queue_age_hist.upper_bound() / 1000.0 >
       cct->_conf->mon_osd_warn_op_age) {
     list<string> warn_detail, error_detail;
     unsigned warn = 0, error = 0;
@@ -3109,11 +3174,12 @@ void PGMap::get_health_checks(
       for (auto& p : warn_osd_by_max) {
 	ostringstream ss;
 	if (p.second.size() > 1) {
-	  ss << "osds " << p.second;
+	  ss << "osds " << p.second
+             << " have blocked requests > " << p.first << " sec";
 	} else {
-	  ss << "osd." << *p.second.begin();
+	  ss << "osd." << *p.second.begin()
+             << " has blocked requests > " << p.first << " sec";
 	}
-	ss << " have blocked requests > " << p.first << " sec";
 	d.detail.push_back(ss.str());
 	if (--left == 0) {
 	  break;
@@ -3122,7 +3188,7 @@ void PGMap::get_health_checks(
     }
     if (!error_detail.empty()) {
       ostringstream ss;
-      ss << warn << " stuck requests are blocked > "
+      ss << error << " stuck requests are blocked > "
 	 << err_age << " sec";
       auto& d = checks->add("REQUEST_STUCK", HEALTH_ERR, ss.str());
       d.detail.swap(error_detail);
@@ -3130,11 +3196,12 @@ void PGMap::get_health_checks(
       for (auto& p : error_osd_by_max) {
 	ostringstream ss;
 	if (p.second.size() > 1) {
-	  ss << "osds " << p.second;
+	  ss << "osds " << p.second
+             << " have stuck requests > " << p.first << " sec";
 	} else {
-	  ss << "osd." << *p.second.begin();
+	  ss << "osd." << *p.second.begin()
+             << " has stuck requests > " << p.first << " sec";
 	}
-	ss << " have stuck requests > " << p.first << " sec";
 	d.detail.push_back(ss.str());
 	if (--left == 0) {
 	  break;
@@ -3185,6 +3252,44 @@ void PGMap::get_health_checks(
         auto& d = checks->add("PG_NOT_DEEP_SCRUBBED", HEALTH_WARN, ss.str());
         d.detail.swap(deep_detail);
       }
+    }
+  }
+
+  // POOL_APP
+  if (g_conf->get_val<bool>("mon_warn_on_pool_no_app")) {
+    list<string> detail;
+    for (auto &it : pools) {
+      const pg_pool_t &pool = it.second;
+      const string& pool_name = osdmap.get_pool_name(it.first);
+      auto it2 = pg_pool_sum.find(it.first);
+      if (it2 == pg_pool_sum.end()) {
+        continue;
+      }
+      const pool_stat_t *pstat = &it2->second;
+      if (pstat == nullptr) {
+        continue;
+      }
+      const object_stat_sum_t& sum = pstat->stats.sum;
+      // application metadata is not encoded until luminous is minimum
+      // required release
+      if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+          sum.num_objects > 0 && pool.application_metadata.empty() &&
+          !pool.is_tier() && !g_conf->mon_debug_no_require_luminous) {
+        stringstream ss;
+        ss << "application not enabled on pool '" << pool_name << "'";
+        detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << "application not enabled on " << detail.size() << " pool(s)";
+      auto& d = checks->add("POOL_APP_NOT_ENABLED", HEALTH_WARN, ss.str());
+      stringstream tip;
+      tip << "use 'ceph osd pool application enable <pool-name> "
+          << "<app-name>', where <app-name> is 'cephfs', 'rbd', 'rgw', "
+          << "or freeform for custom applications.";
+      detail.push_back(tip.str());
+      d.detail.swap(detail);
     }
   }
 }
@@ -3362,7 +3467,8 @@ void PGMap::get_health(
 
   // slow requests
   if (cct->_conf->mon_osd_warn_op_age > 0 &&
-      osd_sum.op_queue_age_hist.upper_bound() > cct->_conf->mon_osd_warn_op_age) {
+      osd_sum.op_queue_age_hist.upper_bound() / 1000.0  >
+      cct->_conf->mon_osd_warn_op_age) {
     auto sum = _warn_slow_request_histogram(
       cct, osd_sum.op_queue_age_hist, "", summary, NULL);
     if (sum.first > 0 || sum.second > 0) {
@@ -3375,7 +3481,7 @@ void PGMap::get_health(
       }
       if (sum.second > 0) {
 	ostringstream ss;
-	ss << sum.first << " requests are blocked > "
+	ss << sum.second << " requests are blocked > "
 	   << (cct->_conf->mon_osd_warn_op_age *
 	       cct->_conf->mon_osd_err_op_age_ratio)
 	   << " sec";
@@ -3778,7 +3884,8 @@ int process_pg_map_command(
       } else {
         int filter = pg_string_state(state_str);
         if (filter < 0) {
-          *ss << "'" << state_str << "' is not a valid pg state";
+          *ss << "'" << state_str << "' is not a valid pg state,"
+              << " available choices: " << pg_state_string(0xFFFFFFFF);
           return -EINVAL;
         }
         state |= filter;
@@ -4460,6 +4567,9 @@ int reweight::by_utilization(
       if (pools && pools->count(pg.first.pool()) == 0)
 	continue;
       for (const auto acting : pg.second.acting) {
+        if (!osdmap.exists(acting)) {
+          continue;
+        }
 	if (acting >= (int)pgs_by_osd.size())
 	  pgs_by_osd.resize(acting);
 	if (pgs_by_osd[acting] == 0) {

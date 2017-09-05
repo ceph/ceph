@@ -298,7 +298,7 @@ namespace ceph {
 
     void enqueue(K cl, unsigned priority, unsigned cost, T item) override final {
       // priority is ignored
-      queue.add_request(item, cl, cost);
+      queue.add_request(std::move(item), cl, cost);
     }
 
     void enqueue_front(K cl,

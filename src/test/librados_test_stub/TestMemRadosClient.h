@@ -32,6 +32,15 @@ public:
   void object_list(int64_t pool_id,
                    std::list<librados::TestRadosClient::Object> *list) override;
 
+  int service_daemon_register(const std::string& service,
+                              const std::string& name,
+                              const std::map<std::string,std::string>& metadata) override {
+    return 0;
+  }
+  int service_daemon_update_status(const std::map<std::string,std::string>& status) override {
+    return 0;
+  }
+
   int pool_create(const std::string &pool_name) override;
   int pool_delete(const std::string &pool_name) override;
   int pool_get_base_tier(int64_t pool_id, int64_t* base_tier) override;

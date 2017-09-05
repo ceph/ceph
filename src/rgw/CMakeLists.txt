@@ -110,6 +110,7 @@ set(rgw_a_srcs
   rgw_rest_usage.cc
   rgw_rest_user.cc
   rgw_role.cc
+  rgw_string.cc
   rgw_swift_auth.cc
   rgw_tag.cc
   rgw_tag_s3.cc

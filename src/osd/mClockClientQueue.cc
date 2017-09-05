@@ -109,10 +109,12 @@ namespace ceph {
 
     if (osd_op_type_t::client_op != type) {
       return type;
+      /* fixme: this should match REPOP and probably others
     } else if (MSG_OSD_SUBOP ==
 	       boost::get<OpRequestRef>(
 		 request.second.get_variant())->get_req()->get_header().type) {
       return osd_op_type_t::osd_subop;
+      */
     } else {
       return osd_op_type_t::client_op;
     }

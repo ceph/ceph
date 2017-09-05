@@ -55,12 +55,10 @@ dump_cmd_to_json(Formatter *f, const string& cmd)
   // elements are: "name", meaning "the typeless name that means a literal"
   // an object {} with key:value pairs representing an argument
 
-  int argnum = 0;
   stringstream ss(cmd);
   std::string word;
 
   while (std::getline(ss, word, ' ')) {
-    argnum++;
     // if no , or =, must be a plain word to put out
     if (word.find_first_of(",=") == string::npos) {
       f->dump_string("arg", word);
@@ -185,6 +183,15 @@ void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
       }
       f->close_section();
     }
+
+    void operator()(const std::vector<double> &operand) const
+    {
+      f->open_array_section(key.c_str());
+      for (const auto i : operand) {
+        f->dump_float("item", i);
+      }
+      f->close_section();
+    }
   };
 
   //f->open_object_section("cmdmap");
@@ -240,7 +247,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
       case json_spirit::array_type:
 	{
 	  // array is a vector of values.  Unpack it to a vector
-	  // of strings or int64_t, the only types we handle.
+	  // of strings, doubles, or int64_t, the only types we handle.
 	  const vector<json_spirit::mValue>& spvals = it->second.get_array();
 	  if (spvals.empty()) {
 	    // if an empty array is acceptable, the caller should always check for
@@ -265,9 +272,18 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
 	      outv.push_back(sv.get_int64());
 	    }
 	    (*mapp)[it->first] = std::move(outv);
+	  } else if (spvals.front().type() == json_spirit::real_type) {
+	    vector<double> outv;
+	    for (const auto& sv : spvals) {
+	      if (spvals.front().type() != json_spirit::real_type) {
+		throw(runtime_error("Can't handle arrays of multiple types"));
+	      }
+	      outv.push_back(sv.get_real());
+	    }
+	    (*mapp)[it->first] = std::move(outv);
 	  } else {
 	    throw(runtime_error("Can't handle arrays of types other than "
-				"int or string"));
+				"int, string, or double"));
 	  }
 	}
 	break;

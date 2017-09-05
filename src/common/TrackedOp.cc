@@ -68,7 +68,7 @@ void OpHistory::cleanup(utime_t now)
   }
 }
 
-void OpHistory::dump_ops(utime_t now, Formatter *f)
+void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters)
 {
   Mutex::Locker history_lock(ops_history_lock);
   cleanup(now);
@@ -81,6 +81,8 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
 	   arrived.begin();
 	 i != arrived.end();
 	 ++i) {
+      if (!i->second->filter_out(filters))
+        continue;
       f->open_object_section("op");
       i->second->dump(now, f);
       f->close_section();
@@ -90,7 +92,7 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
   f->close_section();
 }
 
-void OpHistory::dump_ops_by_duration(utime_t now, Formatter *f)
+void OpHistory::dump_ops_by_duration(utime_t now, Formatter *f, set<string> filters)
 {
   Mutex::Locker history_lock(ops_history_lock);
   cleanup(now);
@@ -107,6 +109,8 @@ void OpHistory::dump_ops_by_duration(utime_t now, Formatter *f)
 	     arrived.begin();
 	   i != arrived.end();
 	   ++i) {
+	if (!i->second->filter_out(filters))
+	  continue;
 	durationvec.push_back(pair<double, TrackedOpRef>(i->second->get_duration(), i->second));
       }
 
@@ -152,7 +156,7 @@ OpTracker::~OpTracker() {
   }
 }
 
-bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration)
+bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration, set<string> filters)
 {
   RWLock::RLocker l(lock);
   if (!tracking_enabled)
@@ -160,14 +164,14 @@ bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration)
 
   utime_t now = ceph_clock_now();
   if (by_duration) {
-    history.dump_ops_by_duration(now, f);
+    history.dump_ops_by_duration(now, f, filters);
   } else {
-    history.dump_ops(now, f);
+    history.dump_ops(now, f, filters);
   }
   return true;
 }
 
-void OpHistory::dump_slow_ops(utime_t now, Formatter *f)
+void OpHistory::dump_slow_ops(utime_t now, Formatter *f, set<string> filters)
 {
   Mutex::Locker history_lock(ops_history_lock);
   cleanup(now);
@@ -180,6 +184,8 @@ void OpHistory::dump_slow_ops(utime_t now, Formatter *f)
 	   slow_op.begin();
 	 i != slow_op.end();
 	 ++i) {
+      if (!i->second->filter_out(filters))
+        continue;
       f->open_object_section("Op");
       i->second->dump(now, f);
       f->close_section();
@@ -189,18 +195,18 @@ void OpHistory::dump_slow_ops(utime_t now, Formatter *f)
   f->close_section();
 }
 
-bool OpTracker::dump_historic_slow_ops(Formatter *f)
+bool OpTracker::dump_historic_slow_ops(Formatter *f, set<string> filters)
 {
   RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
   utime_t now = ceph_clock_now();
-  history.dump_slow_ops(now, f);
+  history.dump_slow_ops(now, f, filters);
   return true;
 }
 
-bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
+bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<string> filters)
 {
   RWLock::RLocker l(lock);
   if (!tracking_enabled)
@@ -216,7 +222,9 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
     for (auto& op : sdata->ops_in_flight_sharded) {
       if (print_only_blocked && (now - op.get_initiated() <= complaint_time))
-	break;
+        break;
+      if (!op.filter_out(filters))
+        continue;
       f->open_object_section("op");
       op.dump(now, f);
       f->close_section(); // this TrackedOp
@@ -401,7 +409,7 @@ void TrackedOp::mark_event_string(const string &event, utime_t stamp)
     events.push_back(Event(stamp, event));
     current = events.back().c_str();
   }
-  dout(6) <<  "seq: " << seq
+  dout(6) << " seq: " << seq
 	  << ", time: " << stamp
 	  << ", event: " << event
 	  << ", op: " << get_desc()
@@ -419,7 +427,7 @@ void TrackedOp::mark_event(const char *event, utime_t stamp)
     events.push_back(Event(stamp, event));
     current = event;
   }
-  dout(6) <<  "seq: " << seq
+  dout(6) << " seq: " << seq
 	  << ", time: " << stamp
 	  << ", event: " << event
 	  << ", op: " << get_desc()
@@ -437,7 +445,7 @@ void TrackedOp::dump(utime_t now, Formatter *f) const
   f->dump_float("age", now - get_initiated());
   f->dump_float("duration", get_duration());
   {
-    f->open_array_section("type_data");
+    f->open_object_section("type_data");
     _dump(f);
     f->close_section();
   }

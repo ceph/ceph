@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 if [[ -z "${IMAGE_NAME}" ]]; then
   echo image name must be provided

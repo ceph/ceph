@@ -112,14 +112,15 @@ static int getgroups(fuse_req_t req, gid_t **sgids)
     return 0;
   }
 
-  *sgids = (gid_t*)malloc(c*sizeof(**sgids));
-  if (!*sgids) {
+  gid_t *gids = new (std::nothrow) gid_t[c];
+  if (!gids) {
     return -ENOMEM;
   }
-  c = fuse_req_getgroups(req, c, *sgids);
+  c = fuse_req_getgroups(req, c, gids);
   if (c < 0) {
-    free(*sgids);
-    return c;
+    delete gids;
+  } else {
+    *sgids = gids;
   }
   return c;
 #endif
@@ -134,7 +135,7 @@ static int getgroups_cb(void *handle, gid_t **sgids)
 }
 
 #define GET_GROUPS(perms, req)	{				\
-  if (cfuse->client->cct->_conf->fuse_set_user_groups) {	\
+  if (g_conf->get_val<bool>("fuse_set_user_groups")) {	\
     gid_t *gids = NULL;						\
     int count = getgroups(req, &gids);				\
     perms.init_gids(gids, count);				\

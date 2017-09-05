@@ -235,6 +235,60 @@ class interval_set {
     }
     return p;
   }
+
+  void intersection_size_asym(const interval_set &s, const interval_set &l) {
+    typename decltype(m)::const_iterator ps = s.m.begin(), pl;
+    assert(ps != s.m.end());
+    T offset = ps->first, prev_offset;
+    bool first = true;
+    typename decltype(m)::iterator mi = m.begin();
+
+    while (1) {
+      if (first)
+        first = false;
+      else
+        assert(offset > prev_offset);
+      pl = l.find_inc(offset);
+      prev_offset = offset;
+      if (pl == l.m.end())
+        break;
+      while (ps != s.m.end() && ps->first + ps->second <= pl->first)
+        ++ps;
+      if (ps == s.m.end())
+        break;
+      offset = pl->first + pl->second;
+      if (offset <= ps->first) {
+        offset = ps->first;
+        continue;
+      }
+
+      if (*ps == *pl) {
+        do {
+          mi = m.insert(mi, *ps);
+          _size += ps->second;
+          ++ps;
+          ++pl;
+        } while (ps != s.m.end() && pl != l.m.end() && *ps == *pl);
+        if (ps == s.m.end())
+          break;
+        offset = ps->first;
+        continue;
+      }
+
+      T start = std::max<T>(ps->first, pl->first);
+      T en = std::min<T>(ps->first + ps->second, offset);
+      assert(en > start);
+      typename decltype(m)::value_type i{start, en - start};
+      mi = m.insert(mi, i);
+      _size += i.second;
+      if (ps->first + ps->second <= offset) {
+        ++ps;
+        if (ps == s.m.end())
+          break;
+        offset = ps->first;
+      }
+    }
+  }
   
  public:
   bool operator==(const interval_set& other) const {
@@ -461,19 +515,56 @@ class interval_set {
     assert(&b != this);
     clear();
 
+    const interval_set *s, *l;
+
+    if (a.size() < b.size()) {
+      s = &a;
+      l = &b;
+    } else {
+      s = &b;
+      l = &a;
+    }
+
+    if (!s->size())
+      return;
+
+    /*
+     * Use the lower_bound algorithm for larger size ratios
+     * where it performs better, but not for smaller size
+     * ratios where sequential search performs better.
+     */
+    if (l->size() / s->size() >= 10) {
+      intersection_size_asym(*s, *l);
+      return;
+    }
+
     typename std::map<T,T>::const_iterator pa = a.m.begin();
     typename std::map<T,T>::const_iterator pb = b.m.begin();
-    
+    typename decltype(m)::iterator mi = m.begin();
+
     while (pa != a.m.end() && pb != b.m.end()) {
       // passing?
       if (pa->first + pa->second <= pb->first) 
         { pa++;  continue; }
       if (pb->first + pb->second <= pa->first) 
         { pb++;  continue; }
+
+      if (*pa == *pb) {
+        do {
+          mi = m.insert(mi, *pa);
+          _size += pa->second;
+          ++pa;
+          ++pb;
+        } while (pa != a.m.end() && pb != b.m.end() && *pa == *pb);
+        continue;
+      }
+
       T start = MAX(pa->first, pb->first);
       T en = MIN(pa->first+pa->second, pb->first+pb->second);
       assert(en > start);
-      insert(start, en-start);
+      typename decltype(m)::value_type i{start, en - start};
+      mi = m.insert(mi, i);
+      _size += i.second;
       if (pa->first+pa->second > pb->first+pb->second)
         pb++;
       else

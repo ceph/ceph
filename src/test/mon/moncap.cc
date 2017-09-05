@@ -237,6 +237,8 @@ TEST(MonCap, ProfileOSD) {
   ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
 			     name, "", "config-key put", ca, true, true, true));
   ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key set", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
 			     name, "", "config-key exists", ca, true, true, true));
   ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
 			     name, "", "config-key delete", ca, true, true, true));
@@ -257,4 +259,31 @@ TEST(MonCap, CommandRegEx) {
   ASSERT_TRUE(cap.parse("allow command abc with arg regex \"[*\"", NULL));
   ASSERT_FALSE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_OSD, name, "",
                               "abc", {{"arg", ""}}, true, true, true));
+}
+
+TEST(MonCap, ProfileBootstrapRBD) {
+  MonCap cap;
+  ASSERT_FALSE(cap.is_allow_all());
+  ASSERT_TRUE(cap.parse("profile bootstrap-rbd", NULL));
+
+  EntityName name;
+  name.from_str("mon.a");
+  ASSERT_TRUE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_MON, name, "",
+                             "auth get-or-create", {
+                               {"entity", "client.rbd"},
+                               {"caps_mon", "profile rbd"},
+                               {"caps_osd", "profile rbd pool=foo, profile rbd-read-only"},
+                             }, true, true, true));
+  ASSERT_FALSE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_MON, name, "",
+                              "auth get-or-create", {
+                                {"entity", "client.rbd"},
+                                {"caps_mon", "allow *"},
+                                {"caps_osd", "profile rbd"},
+                              }, true, true, true));
+  ASSERT_FALSE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_MON, name, "",
+                              "auth get-or-create", {
+                                {"entity", "client.rbd"},
+                                {"caps_mon", "profile rbd"},
+                                {"caps_osd", "profile rbd pool=foo, allow *, profile rbd-read-only"},
+                              }, true, true, true));
 }

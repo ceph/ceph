@@ -129,6 +129,12 @@ int RGWGetObj_ObjStore_S3::get_params()
   // all of the data from its parts. the parts will sync as separate objects
   skip_manifest = s->info.args.exists(RGW_SYS_PARAM_PREFIX "sync-manifest");
 
+  // multisite sync requests should fetch encrypted data, along with the
+  // attributes needed to support decryption on the other zone
+  if (s->system_request) {
+    skip_decrypt = s->info.args.exists(RGW_SYS_PARAM_PREFIX "skip-decrypt");
+  }
+
   return RGWGetObj_ObjStore::get_params();
 }
 
@@ -337,6 +343,10 @@ send_data:
 
 int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetDataCB> *filter, RGWGetDataCB* cb, bufferlist* manifest_bl)
 {
+  if (skip_decrypt) { // bypass decryption for multisite sync requests
+    return 0;
+  }
+
   int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
   res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
@@ -3206,7 +3216,7 @@ int RGWHandler_REST_S3::postauth_init()
            << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
 
   int ret;
-  ret = validate_tenant_name(s->bucket_tenant);
+  ret = rgw_validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
   if (!s->bucket_name.empty()) {
@@ -3221,7 +3231,7 @@ int RGWHandler_REST_S3::postauth_init()
   if (!t->src_bucket.empty()) {
     rgw_parse_url_bucket(t->src_bucket, s->user->user_id.tenant,
 			s->src_tenant_name, s->src_bucket_name);
-    ret = validate_tenant_name(s->src_tenant_name);
+    ret = rgw_validate_tenant_name(s->src_tenant_name);
     if (ret)
       return ret;
     ret = valid_s3_bucket_name(s->src_bucket_name, relaxed_names);
@@ -3237,8 +3247,8 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
   int ret;
 
   s->dialect = "s3";
-  
-  ret = validate_tenant_name(s->bucket_tenant);
+
+  ret = rgw_validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
@@ -3320,12 +3330,6 @@ discover_aws_flavour(const req_info& info)
   return std::make_pair(version, route);
 }
 
-static void init_anon_user(struct req_state *s)
-{
-  rgw_get_anon_user(*(s->user));
-  s->perm_mask = RGW_PERM_FULL_CONTROL;
-}
-
 /*
  * verify that a signed request comes from the keyholder
  * by checking the signature against our locally-computed version
@@ -3345,32 +3349,6 @@ int RGW_Auth_S3::authorize(RGWRados* const store,
     return -EPERM;
   }
 
-  if (s->op == OP_OPTIONS) {
-    init_anon_user(s);
-    return 0;
-  }
-
-  AwsVersion version;
-  AwsRoute route;
-  std::tie(version, route) = discover_aws_flavour(s->info);
-
-  if (route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKOWN) {
-    /* FIXME(rzarzynski): handle anon user. */
-    init_anon_user(const_cast<req_state*>(s));
-    return 0;
-  }
-
-  return authorize_v2(store, auth_registry, s);
-}
-
-
-/*
- * handle v2 signatures
- */
-int RGW_Auth_S3::authorize_v2(RGWRados* const store,
-                              const rgw::auth::StrategyRegistry& auth_registry,
-                              struct req_state* const s)
-{
   const auto ret = rgw::auth::Strategy::apply(auth_registry.get_s3_main(), s);
   if (ret == 0) {
     /* Populate the owner info. */
@@ -3847,6 +3825,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_SET_BUCKET_WEBSITE:
         case RGW_OP_PUT_BUCKET_POLICY:
         case RGW_OP_PUT_OBJ_TAGGING:
+        case RGW_OP_PUT_LC:
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
@@ -4205,4 +4184,18 @@ rgw::auth::s3::LocalEngine::authenticate(
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser);
   return result_t::grant(std::move(apl), completer_factory(k.key));
+}
+
+bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
+  const req_state* s
+) const noexcept {
+  if (s->op == OP_OPTIONS) {
+    return true;
+  }
+
+  AwsVersion version;
+  AwsRoute route;
+  std::tie(version, route) = discover_aws_flavour(s->info);
+
+  return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKOWN;
 }

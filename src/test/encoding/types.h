@@ -397,6 +397,7 @@ TYPE(cls_rbd_snap)
 #include "cls/rbd/cls_rbd_types.h"
 TYPE(cls::rbd::MirrorPeer)
 TYPE(cls::rbd::MirrorImage)
+TYPE(cls::rbd::MirrorImageMap)
 #endif
 
 #endif
@@ -609,10 +610,8 @@ MESSAGE(MOSDPing)
 MESSAGE(MOSDRepScrub)
 #include "messages/MOSDScrub.h"
 MESSAGE(MOSDScrub)
-#include "messages/MOSDSubOp.h"
-MESSAGE(MOSDSubOp)
-#include "messages/MOSDSubOpReply.h"
-MESSAGE(MOSDSubOpReply)
+#include "messages/MOSDForceRecovery.h"
+MESSAGE(MOSDForceRecovery)
 #include "messages/MPGStats.h"
 MESSAGE(MPGStats)
 #include "messages/MPGStatsAck.h"

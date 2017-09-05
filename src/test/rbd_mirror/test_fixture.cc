@@ -141,12 +141,19 @@ int TestFixture::create_image_data_pool(std::string &data_pool) {
   }
 
   r = _rados->pool_create(pool.c_str());
-  if (r == 0) {
-    data_pool = pool;
-    return 0;
+  if (r < 0) {
+    return r;
   }
 
-  return r;
+  librados::IoCtx data_ioctx;
+  r = _rados->ioctx_create(pool.c_str(), data_ioctx);
+  if (r < 0) {
+    return r;
+  }
+
+  data_ioctx.application_enable("rbd", true);
+  data_pool = pool;
+  return 0;
 }
 
 } // namespace mirror

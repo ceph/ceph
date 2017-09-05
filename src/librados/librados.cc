@@ -3293,6 +3293,42 @@ CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
   return retval;
 }
 
+
+static void dict_to_map(const char *dict,
+                        std::map<std::string, std::string>* dict_map)
+{
+  while (*dict != '\0') {
+    const char* key = dict;
+    dict += strlen(key) + 1;
+    const char* value = dict;
+    dict += strlen(value) + 1;
+    (*dict_map)[key] = value;
+  }
+}
+
+CEPH_RADOS_API int rados_service_register(rados_t cluster, const char *service,
+                                          const char *daemon,
+                                          const char *metadata_dict)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+
+  std::map<std::string, std::string> metadata;
+  dict_to_map(metadata_dict, &metadata);
+
+  return client->service_daemon_register(service, daemon, metadata);
+}
+
+CEPH_RADOS_API int rados_service_update_status(rados_t cluster,
+                                               const char *status_dict)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+
+  std::map<std::string, std::string> status;
+  dict_to_map(status_dict, &status);
+
+  return client->service_daemon_update_status(status);
+}
+
 static void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen)
 {
   if (outbuf) {

@@ -35,8 +35,8 @@ public:
     }
   }
 
-  op_type_t op;
-  version_t version;
+  op_type_t op = OP_SCRUB;
+  version_t version = 0;
   ScrubResult result;
   int32_t num_keys;
   pair<string,string> key;

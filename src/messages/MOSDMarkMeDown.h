@@ -25,8 +25,8 @@ class MOSDMarkMeDown : public PaxosServiceMessage {
  public:
   uuid_d fsid;
   entity_inst_t target_osd;
-  epoch_t epoch;
-  bool request_ack;          // ack requested
+  epoch_t epoch = 0;
+  bool request_ack = false;          // ack requested
 
   MOSDMarkMeDown()
     : PaxosServiceMessage(MSG_OSD_MARK_ME_DOWN, 0,

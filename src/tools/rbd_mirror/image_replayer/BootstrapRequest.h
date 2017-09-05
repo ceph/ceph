@@ -80,6 +80,8 @@ public:
                    bool *do_resync, ProgressContext *progress_ctx = nullptr);
   ~BootstrapRequest() override;
 
+  bool is_syncing() const;
+
   void send() override;
   void cancel() override;
 
@@ -90,57 +92,55 @@ private:
    * <start>
    *    |
    *    v
-   * GET_REMOTE_TAG_CLASS * * * * * * * * * * * * * * * *
-   *    |                                               *
-   *    v                                               *
-   * GET_CLIENT * * * * * * * * * * * * * * * * * * * * *
-   *    |                                               *
-   *    v (skip if not needed)                          * (error)
-   * REGISTER_CLIENT  * * * * * * * * * * * * * * * * * *
-   *    |                                               *
-   *    v                                               *
-   * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * *
-   *    |                                               *
-   *    v                                               *
-   * IS_PRIMARY * * * * * * * * * * * * * * * * * * * * *
-   *    |                                               *
-   *    | (remote image primary)                        *
-   *    \----> OPEN_LOCAL_IMAGE * * * * * * * * * * * * *
-   *    |         |   .   ^                             *
-   *    |         |   .   |                             *
-   *    |         |   .   \-----------------------\     *
-   *    |         |   .                           |     *
-   *    |         |   . (image sync requested)    |     *
-   *    |         |   . . > REMOVE_LOCAL_IMAGE  * * * * *
-   *    |         |   .                   |       |     *
-   *    |         |   . (image doesn't    |       |     *
-   *    |         |   .  exist)           v       |     *
-   *    |         |   . . > CREATE_LOCAL_IMAGE  * * * * *
-   *    |         |             |                 |     *
-   *    |         |             \-----------------/     *
-   *    |         |                                     *
-   *    |         v (skip if not needed)                *
-   *    |      UPDATE_CLIENT_IMAGE  * * * * *           *
-   *    |         |                         *           *
-   *    |         v (skip if not needed)    *           *
-   *    |      GET_REMOTE_TAGS  * * * * * * *           *
-   *    |         |                         *           *
-   *    |         v (skip if not needed)    v           *
-   *    |      IMAGE_SYNC * * * > CLOSE_LOCAL_IMAGE     *
-   *    |         |                         |           *
-   *    |         \-----------------\ /-----/           *
-   *    |                            |                  *
-   *    |                            |                  *
-   *    | (skip if not needed)       |                  *
-   *    \----> UPDATE_CLIENT_STATE  *|* * * * * * * * * *
-   *                |                |                  *
-   *    /-----------/----------------/                  *
-   *    |                                               *
-   *    v                                               *
-   * CLOSE_REMOTE_IMAGE < * * * * * * * * * * * * * * * *
-   *    |
-   *    v
-   * <finish>
+   * GET_REMOTE_TAG_CLASS * * * * * * * * * * * * * * * * * *
+   *    |                                                   * (error)
+   *    v                                                   *
+   * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * * * *
+   *    |                                                   *
+   *    v                                                   *
+   * GET_CLIENT * * * * * * * * * * * * * * * * * * * * *   *
+   *    |                                               *   *
+   *    |/----------------------------------------------*---*---\
+   *    v (skip if not needed)                          *   *   |
+   * REGISTER_CLIENT  * * * * * * * * * * * * * * * * * *   *   |
+   *    |                                               *   *   |
+   *    v                                               *   *   |
+   * IS_PRIMARY * * * * * * * * * * * * * * * * * * * * *   *   |
+   *    |                                               *   *   |
+   *    | (remote image primary, no local image id)     *   *   |
+   *    \----> UPDATE_CLIENT_IMAGE  * * * * * * * * * * *   *   |
+   *    |         |                                     *   *   |
+   *    |         v                                     *   *   |
+   *    \----> CREATE_LOCAL_IMAGE * * * * * * * * * * * *   *   |
+   *    |         |                                     *   *   |
+   *    |         v                                     *   *   |
+   *    | (remote image primary)                        *   *   |
+   *    \----> OPEN_LOCAL_IMAGE * * * * * * * * * * * * *   *   |
+   *    |         |   .                                 *   *   |
+   *    |         |   . (image doesn't exist)           *   *   |
+   *    |         |   . . > UNREGISTER_CLIENT * * * * * *   *   |
+   *    |         |             |                       *   *   |
+   *    |         |             \-----------------------*---*---/
+   *    |         |                                     *   *
+   *    |         v (skip if not needed)                *   *
+   *    |      GET_REMOTE_TAGS  * * * * * * *           *   *
+   *    |         |                         *           *   *
+   *    |         v (skip if not needed)    v           *   *
+   *    |      IMAGE_SYNC * * * > CLOSE_LOCAL_IMAGE     *   *
+   *    |         |                         |           *   *
+   *    |         \-----------------\ /-----/           *   *
+   *    |                            |                  *   *
+   *    |                            |                  *   *
+   *    | (skip if not needed)       |                  *   *
+   *    \----> UPDATE_CLIENT_STATE  *|* * * * * * * * * *   *
+   *                |                |                  *   *
+   *    /-----------/----------------/                  *   *
+   *    |                                               *   *
+   *    v                                               *   *
+   * CLOSE_REMOTE_IMAGE < * * * * * * * * * * * * * * * *   *
+   *    |                                                   *
+   *    v                                                   *
+   * <finish> < * * * * * * * * * * * * * * * * * * * * * * *
    *
    * @endverbatim
    */
@@ -163,7 +163,7 @@ private:
   ProgressContext *m_progress_ctx;
   bool *m_do_resync;
 
-  Mutex m_lock;
+  mutable Mutex m_lock;
   bool m_canceled = false;
 
   Tags m_remote_tags;
@@ -197,8 +197,8 @@ private:
   void open_local_image();
   void handle_open_local_image(int r);
 
-  void remove_local_image();
-  void handle_remove_local_image(int r);
+  void unregister_client();
+  void handle_unregister_client(int r);
 
   void create_local_image();
   void handle_create_local_image(int r);

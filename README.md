@@ -48,7 +48,7 @@ The list of Debian or RPM packages dependencies can be installed with:
 Note that these instructions are meant for developers who are
 compiling the code for development and testing.  To build binaries
 suitable for installation we recommend you build deb or rpm packages,
-or refer to the ceph.spec.in or debian/rules to see which
+or refer to the `ceph.spec.in` or `debian/rules` to see which
 configuration options are specified for production builds.
 
 Prerequisite: CMake 2.8.11
@@ -60,7 +60,7 @@ Build instructions:
 	make
 
 This assumes you make your build dir a subdirectory of the ceph.git
-checkout. If you put it elsewhere, just replace .. in do_cmake.sh with a
+checkout. If you put it elsewhere, just replace `..` in do_cmake.sh with a
 correct path to the checkout.
 
 To build only certain targets use:
@@ -175,7 +175,7 @@ To run an individual test manually and see all the tests output, run
 	ctest -V -R [regex matching test name(s)]
 
 To run an tests manually and run the jobs in parallel, run `ctest` with 
-the -j flag:
+the `-j` flag:
 
 	ctest -j [number of jobs]
 
@@ -190,14 +190,14 @@ over manual test execution. To view these options run:
 ### Prerequisites
 
 The list of package dependencies for building the documentation can be
-found in doc_deps.deb.txt:
+found in `doc_deps.deb.txt`:
 
 	sudo apt-get install `cat doc_deps.deb.txt`
 
 ### Building the Documentation
 
 To build the documentation, ensure that you are in the top-level
-`/ceph directory, and execute the build script. For example:
+`/ceph` directory, and execute the build script. For example:
 
 	admin/build-doc
 

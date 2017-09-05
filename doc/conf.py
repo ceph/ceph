@@ -11,16 +11,21 @@ source_suffix = '.rst'
 master_doc = 'index'
 exclude_patterns = ['**/.#*', '**/*~', 'start/quick-common.rst']
 if tags.has('man'):
-    exclude_patterns += ['architecture.rst', 'glossary.rst', 'release*.rst',
+    master_doc = 'man_index'
+    exclude_patterns += ['index.rst', 'architecture.rst', 'glossary.rst', 'release*.rst',
                          'api/*',
                          'cephfs/*',
                          'dev/*',
                          'install/*',
                          'mon/*',
                          'rados/*',
+                         'mgr/*',
+                         'ceph-volume/*',
                          'radosgw/*',
                          'rbd/*',
                          'start/*']
+else:
+    exclude_patterns += ['man_index.rst']
 
 pygments_style = 'sphinx'
 
@@ -29,7 +34,6 @@ html_theme_path = ['_themes']
 html_title = "Ceph Documentation"
 html_logo = 'logo.png'
 html_favicon = 'favicon.ico'
-html_use_smartypants = True
 html_show_sphinx = False
 html_sidebars = {
     '**': ['smarttoc.html', 'searchbox.html'],

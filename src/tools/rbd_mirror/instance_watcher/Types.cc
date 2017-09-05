@@ -73,37 +73,34 @@ void PayloadBase::dump(Formatter *f) const {
 void ImagePayloadBase::encode(bufferlist &bl) const {
   PayloadBase::encode(bl);
   ::encode(global_image_id, bl);
-  ::encode(peer_mirror_uuid, bl);
-  ::encode(peer_image_id, bl);
 }
 
 void ImagePayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
   PayloadBase::decode(version, iter);
   ::decode(global_image_id, iter);
-  ::decode(peer_mirror_uuid, iter);
-  ::decode(peer_image_id, iter);
 }
 
 void ImagePayloadBase::dump(Formatter *f) const {
   PayloadBase::dump(f);
   f->dump_string("global_image_id", global_image_id);
+}
+
+void PeerImageRemovedPayload::encode(bufferlist &bl) const {
+  PayloadBase::encode(bl);
+  ::encode(global_image_id, bl);
+  ::encode(peer_mirror_uuid, bl);
+}
+
+void PeerImageRemovedPayload::decode(__u8 version, bufferlist::iterator &iter) {
+  PayloadBase::decode(version, iter);
+  ::decode(global_image_id, iter);
+  ::decode(peer_mirror_uuid, iter);
+}
+
+void PeerImageRemovedPayload::dump(Formatter *f) const {
+  PayloadBase::dump(f);
+  f->dump_string("global_image_id", global_image_id);
   f->dump_string("peer_mirror_uuid", peer_mirror_uuid);
-  f->dump_string("peer_image_id", peer_image_id);
-}
-
-void ImageReleasePayload::encode(bufferlist &bl) const {
-  ImagePayloadBase::encode(bl);
-  ::encode(schedule_delete, bl);
-}
-
-void ImageReleasePayload::decode(__u8 version, bufferlist::iterator &iter) {
-  ImagePayloadBase::decode(version, iter);
-  ::decode(schedule_delete, iter);
-}
-
-void ImageReleasePayload::dump(Formatter *f) const {
-  ImagePayloadBase::dump(f);
-  f->dump_bool("schedule_delete", schedule_delete);
 }
 
 void SyncPayloadBase::encode(bufferlist &bl) const {
@@ -132,13 +129,13 @@ void UnknownPayload::dump(Formatter *f) const {
 }
 
 void NotifyMessage::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 2, bl);
   boost::apply_visitor(EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
 
 void NotifyMessage::decode(bufferlist::iterator& iter) {
-  DECODE_START(1, iter);
+  DECODE_START(2, iter);
 
   uint32_t notify_op;
   ::decode(notify_op, iter);
@@ -150,6 +147,9 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
     break;
   case NOTIFY_OP_IMAGE_RELEASE:
     payload = ImageReleasePayload();
+    break;
+  case NOTIFY_OP_PEER_IMAGE_REMOVED:
+    payload = PeerImageRemovedPayload();
     break;
   case NOTIFY_OP_SYNC_REQUEST:
     payload = SyncRequestPayload();
@@ -172,11 +172,13 @@ void NotifyMessage::dump(Formatter *f) const {
 
 void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(ImageAcquirePayload()));
-  o.push_back(new NotifyMessage(ImageAcquirePayload(1, "gid", "uuid", "id")));
+  o.push_back(new NotifyMessage(ImageAcquirePayload(1, "gid")));
 
   o.push_back(new NotifyMessage(ImageReleasePayload()));
-  o.push_back(new NotifyMessage(ImageReleasePayload(1, "gid", "uuid", "id",
-                                                    true)));
+  o.push_back(new NotifyMessage(ImageReleasePayload(1, "gid")));
+
+  o.push_back(new NotifyMessage(PeerImageRemovedPayload()));
+  o.push_back(new NotifyMessage(PeerImageRemovedPayload(1, "gid", "uuid")));
 
   o.push_back(new NotifyMessage(SyncRequestPayload()));
   o.push_back(new NotifyMessage(SyncRequestPayload(1, "sync_id")));
@@ -192,6 +194,9 @@ std::ostream &operator<<(std::ostream &out, const NotifyOp &op) {
     break;
   case NOTIFY_OP_IMAGE_RELEASE:
     out << "ImageRelease";
+    break;
+  case NOTIFY_OP_PEER_IMAGE_REMOVED:
+    out << "PeerImageRemoved";
     break;
   case NOTIFY_OP_SYNC_REQUEST:
     out << "SyncRequest";

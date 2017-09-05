@@ -33,11 +33,12 @@
 #include "assert.h"
 #include "encoding_btree.h"
 
-template<typename T>
+template<typename T,
+	 typename Alloc = std::allocator<std::pair<const T, T>>>
 class btree_interval_set {
  public:
 
-  typedef btree::btree_map<T,T> map_t;
+  typedef btree::btree_map<T,T, std::less<T>, Alloc> map_t;
 
   class const_iterator;
 
@@ -164,28 +165,28 @@ class btree_interval_set {
     return m.size();
   }
 
-  typename btree_interval_set<T>::iterator begin() {
-    return typename btree_interval_set<T>::iterator(m.begin());
+  typename btree_interval_set<T,Alloc>::iterator begin() {
+    return typename btree_interval_set<T,Alloc>::iterator(m.begin());
   }
 
-  typename btree_interval_set<T>::iterator lower_bound(T start) {
-    return typename btree_interval_set<T>::iterator(find_inc_m(start));
+  typename btree_interval_set<T,Alloc>::iterator lower_bound(T start) {
+    return typename btree_interval_set<T,Alloc>::iterator(find_inc_m(start));
   }
 
-  typename btree_interval_set<T>::iterator end() {
-    return typename btree_interval_set<T>::iterator(m.end());
+  typename btree_interval_set<T,Alloc>::iterator end() {
+    return typename btree_interval_set<T,Alloc>::iterator(m.end());
   }
 
-  typename btree_interval_set<T>::const_iterator begin() const {
-    return typename btree_interval_set<T>::const_iterator(m.begin());
+  typename btree_interval_set<T,Alloc>::const_iterator begin() const {
+    return typename btree_interval_set<T,Alloc>::const_iterator(m.begin());
   }
 
-  typename btree_interval_set<T>::const_iterator lower_bound(T start) const {
-    return typename btree_interval_set<T>::const_iterator(find_inc(start));
+  typename btree_interval_set<T,Alloc>::const_iterator lower_bound(T start) const {
+    return typename btree_interval_set<T,Alloc>::const_iterator(find_inc(start));
   }
 
-  typename btree_interval_set<T>::const_iterator end() const {
-    return typename btree_interval_set<T>::const_iterator(m.end());
+  typename btree_interval_set<T,Alloc>::const_iterator end() const {
+    return typename btree_interval_set<T,Alloc>::const_iterator(m.end());
   }
 
   // helpers
@@ -555,11 +556,11 @@ private:
 };
 
 
-template<class T>
-inline std::ostream& operator<<(std::ostream& out, const btree_interval_set<T> &s) {
+template<class T, class A>
+inline std::ostream& operator<<(std::ostream& out, const btree_interval_set<T,A> &s) {
   out << "[";
   const char *prequel = "";
-  for (typename btree_interval_set<T>::const_iterator i = s.begin();
+  for (auto i = s.begin();
        i != s.end();
        ++i)
   {
@@ -570,13 +571,13 @@ inline std::ostream& operator<<(std::ostream& out, const btree_interval_set<T> &
   return out;
 }
 
-template<class T>
-inline void encode(const btree_interval_set<T>& s, bufferlist& bl)
+template<class T,typename A>
+inline void encode(const btree_interval_set<T,A>& s, bufferlist& bl)
 {
   s.encode(bl);
 }
-template<class T>
-inline void decode(btree_interval_set<T>& s, bufferlist::iterator& p)
+template<class T,typename A>
+inline void decode(btree_interval_set<T,A>& s, bufferlist::iterator& p)
 {
   s.decode(p);
 }

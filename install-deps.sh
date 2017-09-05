@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
 #
 # Ceph distributed storage system
 #
@@ -11,6 +11,7 @@
 #  License as published by the Free Software Foundation; either
 #  version 2.1 of the License, or (at your option) any later version.
 #
+set -e
 DIR=/tmp/install-deps.$$
 trap "rm -fr $DIR" EXIT
 mkdir -p $DIR
@@ -26,6 +27,7 @@ function munge_ceph_spec_in {
 
 if [ x`uname`x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
+        devel/babeltrace \
         devel/git \
         devel/gperf \
         devel/gmake \
@@ -41,7 +43,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         lang/cython \
         devel/py-virtualenv \
         databases/leveldb \
-	net/openldap24-client \
+        net/openldap-client \
         security/nss \
         security/cryptopp \
         archivers/snappy \
@@ -53,14 +55,16 @@ if [ x`uname`x = xFreeBSDx ]; then
         textproc/gsed \
         textproc/libxml2 \
         textproc/xmlstarlet \
-	textproc/jq \
-	textproc/sphinx \
+        textproc/jq \
+        textproc/py-sphinx \
         emulators/fuse \
         java/junit \
+        lang/python \
         lang/python27 \
-	devel/py-pip \
+        devel/py-pip \
         devel/py-argparse \
         devel/py-nose \
+        devel/py-prettytable \
         www/py-flask \
         www/fcgi \
         sysutils/flock \

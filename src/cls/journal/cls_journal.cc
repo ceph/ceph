@@ -101,13 +101,13 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
     skip_client_key = key_from_client_id(*skip_client_id);
   }
 
-  int r;
   uint64_t minimum_tag_tid = std::numeric_limits<uint64_t>::max();
   std::string last_read = HEADER_KEY_CLIENT_PREFIX;
+  bool more;
   do {
     std::map<std::string, bufferlist> vals;
-    r = cls_cxx_map_get_vals(hctx, last_read, HEADER_KEY_CLIENT_PREFIX,
-                             MAX_KEYS_READ, &vals);
+    int r = cls_cxx_map_get_vals(hctx, last_read, HEADER_KEY_CLIENT_PREFIX,
+                                 MAX_KEYS_READ, &vals, &more);
     if (r < 0 && r != -ENOENT) {
       CLS_ERR("failed to retrieve registered clients: %s",
               cpp_strerror(r).c_str());
@@ -137,7 +137,7 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
     if (!vals.empty()) {
       last_read = vals.rbegin()->first;
     }
-  } while (r == MAX_KEYS_READ);
+  } while (more);
 
   // cannot expire tags if a client hasn't committed yet
   if (minimum_tag_tid == std::numeric_limits<uint64_t>::max()) {
@@ -153,8 +153,8 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
   last_read = HEADER_KEY_TAG_PREFIX;
   do {
     std::map<std::string, bufferlist> vals;
-    r = cls_cxx_map_get_vals(hctx, last_read, HEADER_KEY_TAG_PREFIX,
-                             MAX_KEYS_READ, &vals);
+    int r = cls_cxx_map_get_vals(hctx, last_read, HEADER_KEY_TAG_PREFIX,
+                             MAX_KEYS_READ, &vals, &more);
     if (r < 0 && r != -ENOENT) {
       CLS_ERR("failed to retrieve tags: %s", cpp_strerror(r).c_str());
       return r;
@@ -192,7 +192,7 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
       }
     }
 
-    if (tag_pass != TAG_PASS_DONE && vals.size() < MAX_KEYS_READ) {
+    if (tag_pass != TAG_PASS_DONE && !more) {
       last_read = HEADER_KEY_TAG_PREFIX;
       ++tag_pass;
     } else if (!vals.empty()) {
@@ -211,8 +211,9 @@ int get_client_list_range(cls_method_context_t hctx,
   }
 
   std::map<std::string, bufferlist> vals;
+  bool more;
   int r = cls_cxx_map_get_vals(hctx, last_read, HEADER_KEY_CLIENT_PREFIX,
-                               max_return, &vals);
+                               max_return, &vals, &more);
   if (r < 0) {
     CLS_ERR("failed to retrieve omap values: %s", cpp_strerror(r).c_str());
     return r;
@@ -1022,8 +1023,9 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
   std::string last_read = HEADER_KEY_TAG_PREFIX;
   do {
     std::map<std::string, bufferlist> vals;
+    bool more;
     r = cls_cxx_map_get_vals(hctx, last_read, HEADER_KEY_TAG_PREFIX,
-                             MAX_KEYS_READ, &vals);
+                             MAX_KEYS_READ, &vals, &more);
     if (r < 0 && r != -ENOENT) {
       CLS_ERR("failed to retrieve tags: %s", cpp_strerror(r).c_str());
       return r;
@@ -1062,7 +1064,7 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
       }
     }
 
-    if (tag_pass != TAG_PASS_DONE && vals.size() < MAX_KEYS_READ) {
+    if (tag_pass != TAG_PASS_DONE && !more) {
       last_read = HEADER_KEY_TAG_PREFIX;
       ++tag_pass;
     } else if (!vals.empty()) {

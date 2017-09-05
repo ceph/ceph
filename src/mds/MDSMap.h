@@ -135,7 +135,7 @@ public:
     fs_cluster_id_t standby_for_fscid;
     bool standby_replay;
     std::set<mds_rank_t> export_targets;
-    uint64_t mds_features;
+    uint64_t mds_features = 0;
 
     mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0),
                    state(STATE_STANDBY), state_seq(0),
@@ -156,6 +156,10 @@ public:
     void decode(bufferlist::iterator& p);
     void dump(Formatter *f) const;
     void print_summary(ostream &out) const;
+
+    // The long form name for use in cluster log messages`
+    std::string human_name() const;
+
     static void generate_test_instances(list<mds_info_t*>& ls);
   private:
     void encode_versioned(bufferlist& bl, uint64_t features) const;

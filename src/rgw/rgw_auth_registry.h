@@ -21,14 +21,16 @@ namespace auth {
 /* A class aggregating the knowledge about all Strategies in RadosGW. It is
  * responsible for handling the dynamic reconfiguration on e.g. realm update. */
 class StrategyRegistry {
-  template <class AbstractorT>
-  using s3_strategy_t = rgw::auth::s3::AWSAuthStrategy<AbstractorT>;
+  template <class AbstractorT,
+            bool AllowAnonAccessT = false>
+  using s3_strategy_t = \
+    rgw::auth::s3::AWSAuthStrategy<AbstractorT, AllowAnonAccessT>;
 
   struct s3_main_strategy_t : public Strategy {
     using s3_main_strategy_plain_t = \
-      s3_strategy_t<rgw::auth::s3::AWSGeneralAbstractor>;
+      s3_strategy_t<rgw::auth::s3::AWSGeneralAbstractor, true>;
     using s3_main_strategy_boto2_t = \
-      s3_strategy_t<rgw::auth::s3::AWSGeneralBoto2Abstractor>;
+      s3_strategy_t<rgw::auth::s3::AWSGeneralBoto2Abstractor, true>;
 
     s3_main_strategy_plain_t s3_main_strategy_plain;
     s3_main_strategy_boto2_t s3_main_strategy_boto2;

@@ -53,6 +53,15 @@ COMMAND("pg deep-scrub name=pgid,type=CephPgid", "start deep-scrub on <pgid>", \
 COMMAND("pg repair name=pgid,type=CephPgid", "start repair on <pgid>", \
 	"pg", "rw", "cli,rest")
 
+COMMAND("pg force-recovery name=pgid,type=CephPgid,n=N", "force recovery of <pgid> first", \
+	"pg", "rw", "cli,rest")
+COMMAND("pg force-backfill name=pgid,type=CephPgid,n=N", "force backfill of <pgid> first", \
+	"pg", "rw", "cli,rest")
+COMMAND("pg cancel-force-recovery name=pgid,type=CephPgid,n=N", "restore normal recovery priority of <pgid>", \
+	"pg", "rw", "cli,rest")
+COMMAND("pg cancel-force-backfill name=pgid,type=CephPgid,n=N", "restore normal backfill priority of <pgid>", \
+	"pg", "rw", "cli,rest")
+
 // stuff in osd namespace
 COMMAND("osd perf", \
         "print dump of OSD perf summary stats", \
@@ -97,6 +106,13 @@ COMMAND("osd test-reweight-by-pg " \
 	"name=pools,type=CephPoolname,n=N,req=false",			\
 	"dry run of reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
 	"osd", "r", "cli,rest")
+
+COMMAND("osd safe-to-destroy name=ids,type=CephString,n=N",
+	"check whether osd(s) can be safely destroyed without reducing data durability",
+	"osd", "r", "cli,rest")
+COMMAND("osd ok-to-stop name=ids,type=CephString,n=N",
+	"check whether osd(s) can be safely stopped without reducing immediate"\
+	" data availability", "osd", "r", "cli,rest")
 
 COMMAND("osd scrub " \
 	"name=who,type=CephString", \

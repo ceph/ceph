@@ -26,7 +26,8 @@ struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
   }
 
   MOSDPGRecoveryDeleteReply()
-    : MOSDFastDispatchOp(MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION)
+    : MOSDFastDispatchOp(MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION),
+      map_epoch(0), min_epoch(0)
     {}
 
   void decode_payload() override {

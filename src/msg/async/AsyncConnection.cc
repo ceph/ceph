@@ -1609,6 +1609,11 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
         ldout(async_msgr->cct, 10) << __func__ << " accept connection race, existing " << existing
                              << ".cseq " << existing->connect_seq << " == "
                              << connect.connect_seq << ", OPEN|STANDBY, RETRY_SESSION" << dendl;
+        // if connect_seq both zero, dont stuck into dead lock. it's ok to replace
+        if (policy.resetcheck && existing->connect_seq == 0) {
+          goto replace;
+        }
+
         reply.connect_seq = existing->connect_seq + 1;
         existing->lock.unlock();
         return _reply_accept(CEPH_MSGR_TAG_RETRY_SESSION, connect, reply, authorizer_reply);
@@ -2061,11 +2066,11 @@ void AsyncConnection::fault()
   requeue_sent();
   recv_start = recv_end = 0;
   state_offset = 0;
-  replacing = false;
   is_reset_from_peer = false;
   outcoming_bl.clear();
   if (!once_ready && !is_queued() &&
-      state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
+      state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH &&
+      !replacing) {
     ldout(async_msgr->cct, 10) << __func__ << " with nothing to send and in the half "
                               << " accept state just closed" << dendl;
     write_lock.unlock();
@@ -2073,6 +2078,7 @@ void AsyncConnection::fault()
     dispatch_queue->queue_reset(this);
     return ;
   }
+  replacing = false;
   reset_recv_state();
   if (policy.standby && !is_queued() && state != STATE_WAIT) {
     ldout(async_msgr->cct, 10) << __func__ << " with nothing to send, going to standby" << dendl;
@@ -2240,9 +2246,8 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
                              << " off " << header.data_off << dendl;
 
   if ((bl.length() <= ASYNC_COALESCE_THRESHOLD) && (bl.buffers().size() > 1)) {
-    std::list<buffer::ptr>::const_iterator pb;
-    for (pb = bl.buffers().begin(); pb != bl.buffers().end(); ++pb) {
-      outcoming_bl.append((char*)pb->c_str(), pb->length());
+    for (const auto &pb : bl.buffers()) {
+      outcoming_bl.append((char*)pb.c_str(), pb.length());
     }
   } else {
     outcoming_bl.claim_append(bl);  
@@ -2266,16 +2271,18 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   }
 
   m->trace.event("async writing message");
-  logger->inc(l_msgr_send_bytes, outcoming_bl.length() - original_bl_len);
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()
                              << " " << m << dendl;
+  ssize_t total_send_size = outcoming_bl.length();
   ssize_t rc = _try_send(more);
   if (rc < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " error sending " << m << ", "
                               << cpp_strerror(rc) << dendl;
   } else if (rc == 0) {
+    logger->inc(l_msgr_send_bytes, total_send_size - original_bl_len);
     ldout(async_msgr->cct, 10) << __func__ << " sending " << m << " done." << dendl;
   } else {
+    logger->inc(l_msgr_send_bytes, total_send_size - outcoming_bl.length());
     ldout(async_msgr->cct, 10) << __func__ << " sending " << m << " continuely." << dendl;
   }
   if (m->get_type() == CEPH_MSG_OSD_OP)

@@ -69,18 +69,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << name << ' '
 
-
-class MDSDaemon::C_MDS_Tick : public Context {
-  protected:
-    MDSDaemon *mds_daemon;
-public:
-  explicit C_MDS_Tick(MDSDaemon *m) : mds_daemon(m) {}
-  void finish(int r) override {
-    assert(mds_daemon->mds_lock.is_locked_by_me());
-    mds_daemon->tick();
-  }
-};
-
 // cons/des
 MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
@@ -102,7 +90,6 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   mgrc(m->cct, m),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   mds_rank(NULL),
-  tick_event(0),
   asok_hook(NULL)
 {
   orig_argc = 0;
@@ -539,8 +526,12 @@ void MDSDaemon::reset_tick()
   if (tick_event) timer.cancel_event(tick_event);
 
   // schedule
-  tick_event = new C_MDS_Tick(this);
-  timer.add_event_after(g_conf->mds_tick_interval, tick_event);
+  tick_event = timer.add_event_after(
+    g_conf->mds_tick_interval,
+    new FunctionContext([this](int) {
+	assert(mds_lock.is_locked_by_me());
+	tick();
+      }));
 }
 
 void MDSDaemon::tick()
@@ -781,6 +772,9 @@ int MDSDaemon::_handle_command(
     std::string val;
     cmd_getval(cct, cmdmap, "value", val);
     r = cct->_conf->set_val(key, val, true, &ss);
+    if (r == 0) {
+      cct->_conf->apply_changes(nullptr);
+    }
   } else if (prefix == "exit") {
     // We will send response before executing
     ss << "Exiting...";
@@ -1340,26 +1334,28 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
     if (caps_info.allow_all) {
       // Flag for auth providers that don't provide cap strings
       s->auth_caps.set_allow_all();
-    }
+    } else {
+      bufferlist::iterator p = caps_info.caps.begin();
+      string auth_cap_str;
+      try {
+        ::decode(auth_cap_str, p);
 
-    bufferlist::iterator p = caps_info.caps.begin();
-    string auth_cap_str;
-    try {
-      ::decode(auth_cap_str, p);
-
-      dout(10) << __func__ << ": parsing auth_cap_str='" << auth_cap_str << "'" << dendl;
-      std::ostringstream errstr;
-      if (!s->auth_caps.parse(g_ceph_context, auth_cap_str, &errstr)) {
-        dout(1) << __func__ << ": auth cap parse error: " << errstr.str()
-		<< " parsing '" << auth_cap_str << "'" << dendl;
-	clog->warn() << name << " mds cap '" << auth_cap_str
-		     << "' does not parse: " << errstr.str();
+        dout(10) << __func__ << ": parsing auth_cap_str='" << auth_cap_str << "'" << dendl;
+        std::ostringstream errstr;
+        if (!s->auth_caps.parse(g_ceph_context, auth_cap_str, &errstr)) {
+          dout(1) << __func__ << ": auth cap parse error: " << errstr.str()
+		  << " parsing '" << auth_cap_str << "'" << dendl;
+	  clog->warn() << name << " mds cap '" << auth_cap_str
+		       << "' does not parse: " << errstr.str();
+          is_valid = false;
+        }
+      } catch (buffer::error& e) {
+        // Assume legacy auth, defaults to:
+        //  * permit all filesystem ops
+        //  * permit no `tell` ops
+        dout(1) << __func__ << ": cannot decode auth caps bl of length " << caps_info.caps.length() << dendl;
+        is_valid = false;
       }
-    } catch (buffer::error& e) {
-      // Assume legacy auth, defaults to:
-      //  * permit all filesystem ops
-      //  * permit no `tell` ops
-      dout(1) << __func__ << ": cannot decode auth caps bl of length " << caps_info.caps.length() << dendl;
     }
   }
 

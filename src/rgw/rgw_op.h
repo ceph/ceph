@@ -203,6 +203,7 @@ protected:
   bool partial_content;
   bool range_parsed;
   bool skip_manifest;
+  bool skip_decrypt{false};
   rgw_obj obj;
   utime_t gc_invalidate_time;
   bool is_slo;
@@ -738,6 +739,7 @@ public:
 
   void send_response() override = 0;
   const string name() override { return "get_bucket_location"; }
+  RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOCATION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
@@ -1390,6 +1392,7 @@ public:
 
   void send_response() override = 0;
   const string name() override { return "get_lifecycle"; }
+  RGWOpType get_type() override { return RGW_OP_GET_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
@@ -1425,6 +1428,7 @@ public:
   virtual int get_params() = 0;
   void send_response() override = 0;
   const string name() override { return "put_lifecycle"; }
+  RGWOpType get_type() override { return RGW_OP_PUT_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -1448,6 +1452,7 @@ public:
 
   void send_response() override = 0;
   const string name() override { return "delete_lifecycle"; }
+  RGWOpType get_type() override { return RGW_OP_DELETE_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 

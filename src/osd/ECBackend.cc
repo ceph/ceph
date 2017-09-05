@@ -996,7 +996,8 @@ void ECBackend::handle_sub_read(
       hinfo = get_hash_info(i->first);
       if (!hinfo) {
 	r = -EIO;
-	get_parent()->clog_error() << __func__ << ": No hinfo for " << i->first;
+	get_parent()->clog_error() << "Corruption detected: object " << i->first
+                                   << " is missing hash_info";
 	dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
 	goto error;
       }
@@ -1010,9 +1011,8 @@ void ECBackend::handle_sub_read(
 	j->get<1>(),
 	bl, j->get<2>());
       if (r < 0) {
-	get_parent()->clog_error() << __func__
-				   << ": Error " << r
-				   << " reading "
+	get_parent()->clog_error() << "Error " << r
+				   << " reading object "
 				   << i->first;
 	dout(5) << __func__ << ": Error " << r
 		<< " reading " << i->first << dendl;
@@ -1038,7 +1038,7 @@ void ECBackend::handle_sub_read(
 	  bufferhash h(-1);
 	  h << bl;
 	  if (h.digest() != hinfo->get_chunk_hash(shard)) {
-	    get_parent()->clog_error() << __func__ << ": Bad hash for " << i->first << " digest 0x"
+	    get_parent()->clog_error() << "Bad hash for " << i->first << " digest 0x"
 				       << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec;
 	    dout(5) << __func__ << ": Bad hash for " << i->first << " digest 0x"
 		    << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << dendl;
@@ -1217,13 +1217,11 @@ void ECBackend::handle_sub_read_reply(
 	    }
 	    // Couldn't read any additional shards so handle as completed with errors
 	  }
-	  if (rop.complete[iter->first].errors.empty()) {
-	    dout(20) << __func__ << " simply not enough copies err=" << err << dendl;
-	  } else {
-	    // Grab the first error
-	    err = rop.complete[iter->first].errors.begin()->second;
-	    dout(20) << __func__ << ": Use one of the shard errors err=" << err << dendl;
-	  }
+	  // We don't want to confuse clients / RBD with objectstore error
+	  // values in particular ENOENT.  We may have different error returns
+	  // from different shards, so we'll return minimum_to_decode() error
+	  // (usually EIO) to reader.  It is likely an error here is due to a
+	  // damaged pg.
 	  rop.complete[iter->first].r = err;
 	  ++is_complete;
 	}
@@ -1235,7 +1233,7 @@ void ECBackend::handle_sub_read_reply(
 	    err = rop.complete[iter->first].errors.begin()->second;
             rop.complete[iter->first].r = err;
 	  } else {
-	    get_parent()->clog_error() << __func__ << ": Error(s) ignored for "
+	    get_parent()->clog_warn() << "Error(s) ignored for "
 				       << iter->first << " enough copies available";
 	    dout(10) << __func__ << " Error(s) ignored for " << iter->first
 		     << " enough copies available" << dendl;

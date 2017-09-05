@@ -33,9 +33,9 @@ class MOSDFailure : public PaxosServiceMessage {
   
   uuid_d fsid;
   entity_inst_t target_osd;
-  __u8 flags;
-  epoch_t       epoch;
-  int32_t failed_for;  // known to be failed since at least this long
+  __u8 flags = 0;
+  epoch_t       epoch = 0;
+  int32_t failed_for = 0;  // known to be failed since at least this long
 
   MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0, HEAD_VERSION) { }
   MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, epoch_t e)

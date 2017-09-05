@@ -1,6 +1,7 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
+set -e
 
-. $(dirname $0)/../ceph-helpers.sh
+. $(dirname $0)/../../standalone/ceph-helpers.sh
 
 function list_tests()
 {

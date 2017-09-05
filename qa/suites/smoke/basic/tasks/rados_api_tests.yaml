@@ -4,8 +4,9 @@ tasks:
     fs: ext4
     log-whitelist:
     - reached quota
-    - wrongly marked me down
+    - but it is still running
     - objects unfound and apparently lost
+    - (POOL_APP_NOT_ENABLED)
 - thrashosds:
     chance_pgnum_grow: 2
     chance_pgpnum_fix: 1

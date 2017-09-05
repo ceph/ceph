@@ -33,9 +33,10 @@ from types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
 import rados
+import rbd_iscsi
+import rbd_mirroring
 from rbd_ls import RbdLs, RbdPoolLs
 from cephfs_clients import CephFSClients
-
 
 log = logging.getLogger("dashboard")
 
@@ -61,6 +62,10 @@ def recurse_refs(root, path):
 
     log.info("%s %d (%s)" % (path, sys.getrefcount(root), root.__class__))
 
+def get_prefixed_url(url):
+    return global_instance().url_prefix + url
+
+
 
 class Module(MgrModule):
     def __init__(self, *args, **kwargs):
@@ -84,6 +89,12 @@ class Module(MgrModule):
         # pools
         self.rbd_pool_ls = RbdPoolLs(self)
 
+        # Stateful instance of RbdISCSI
+        self.rbd_iscsi = rbd_iscsi.Controller(self)
+
+        # Stateful instance of RbdMirroring, hold cached results.
+        self.rbd_mirroring = rbd_mirroring.Controller(self)
+
         # Stateful instances of CephFSClients, hold cached results.  Key to
         # dict is FSCID
         self.cephfs_clients = {}
@@ -91,6 +102,9 @@ class Module(MgrModule):
         # A short history of pool df stats
         self.pool_stats = defaultdict(lambda: defaultdict(
             lambda: collections.deque(maxlen=10)))
+
+        # A prefix for all URLs to use the dashboard with a reverse http proxy
+        self.url_prefix = ''
 
     @property
     def rados(self):
@@ -288,7 +302,7 @@ class Module(MgrModule):
                     ) + "/s"
 
                 metadata = self.get_metadata('mds', info['name'])
-                mds_versions[metadata['ceph_version']].append(info['name'])
+                mds_versions[metadata.get('ceph_version', 'unknown')].append(info['name'])
                 rank_table.append(
                     {
                         "rank": rank,
@@ -357,7 +371,7 @@ class Module(MgrModule):
         standby_table = []
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'])
-            mds_versions[metadata['ceph_version']].append(standby['name'])
+            mds_versions[metadata.get('ceph_version', 'unknown')].append(standby['name'])
 
             standby_table.append({
                 'name': standby['name']
@@ -368,7 +382,7 @@ class Module(MgrModule):
                 "id": fs_id,
                 "name": mdsmap['fs_name'],
                 "client_count": client_count,
-                "clients_url": "/clients/{0}/".format(fs_id),
+                "clients_url": get_prefixed_url("/clients/{0}/".format(fs_id)),
                 "ranks": rank_table,
                 "pools": pools_table
             },
@@ -434,23 +448,29 @@ class Module(MgrModule):
                 rbd_pools = sorted([
                     {
                         "name": name,
-                        "url": "/rbd/{0}/".format(name)
+                        "url": get_prefixed_url("/rbd_pool/{0}/".format(name))
                     }
                     for name in data
                 ], key=lambda k: k['name'])
+
+                status, rbd_mirroring = global_instance().rbd_mirroring.toplevel.get()
+                if rbd_mirroring is None:
+                    log.warning("Failed to get RBD mirroring summary")
+                    rbd_mirroring = {}
 
                 fsmap = global_instance().get_sync_object(FsMap)
                 filesystems = [
                     {
                         "id": f['id'],
                         "name": f['mdsmap']['fs_name'],
-                        "url": "/filesystem/{0}/".format(f['id'])
+                        "url": get_prefixed_url("/filesystem/{0}/".format(f['id']))
                     }
                     for f in fsmap.data['filesystems']
                 ]
 
                 return {
                     'rbd_pools': rbd_pools,
+                    'rbd_mirroring': rbd_mirroring,
                     'health_status': self._health_data()['status'],
                     'filesystems': filesystems
                 }
@@ -467,7 +487,9 @@ class Module(MgrModule):
                 }
 
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
@@ -529,12 +551,14 @@ class Module(MgrModule):
                     "clients": clients,
                     "fs_name": fs_name,
                     "fscid": fscid,
-                    "fs_url": "/filesystem/" + fscid_str + "/"
+                    "fs_url": get_prefixed_url("/filesystem/" + fscid_str + "/")
                 }
 
                 template = env.get_template("clients.html")
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
@@ -544,7 +568,7 @@ class Module(MgrModule):
             def clients_data(self, fs_id):
                 return self._clients(int(fs_id))
 
-            def _rbd(self, pool_name):
+            def _rbd_pool(self, pool_name):
                 rbd_ls = global_instance().rbd_ls.get(pool_name, None)
                 if rbd_ls is None:
                     rbd_ls = RbdLs(global_instance(), pool_name)
@@ -565,33 +589,91 @@ class Module(MgrModule):
                 return value
 
             @cherrypy.expose
-            def rbd(self, pool_name):
-                template = env.get_template("rbd.html")
+            def rbd_pool(self, pool_name):
+                template = env.get_template("rbd_pool.html")
 
                 toplevel_data = self._toplevel_data()
 
-                images = self._rbd(pool_name)
+                images = self._rbd_pool(pool_name)
                 content_data = {
                     "images": images,
                     "pool_name": pool_name
                 }
 
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
 
             @cherrypy.expose
             @cherrypy.tools.json_out()
-            def rbd_data(self, pool_name):
-                return self._rbd(pool_name)
+            def rbd_pool_data(self, pool_name):
+                return self._rbd_pool(pool_name)
+
+            def _rbd_mirroring(self):
+                status, data = global_instance().rbd_mirroring.content_data.get()
+                if data is None:
+                    log.warning("Failed to get RBD mirroring status")
+                    return {}
+                return data
+
+            @cherrypy.expose
+            def rbd_mirroring(self):
+                template = env.get_template("rbd_mirroring.html")
+
+                toplevel_data = self._toplevel_data()
+                content_data = self._rbd_mirroring()
+
+                return template.render(
+                    url_prefix = global_instance().url_prefix,
+                    ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
+                    toplevel_data=json.dumps(toplevel_data, indent=2),
+                    content_data=json.dumps(content_data, indent=2)
+                )
+
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def rbd_mirroring_data(self):
+                return self._rbd_mirroring()
+
+            def _rbd_iscsi(self):
+                status, data = global_instance().rbd_iscsi.content_data.get()
+                if data is None:
+                    log.warning("Failed to get RBD iSCSI status")
+                    return {}
+                return data
+
+            @cherrypy.expose
+            def rbd_iscsi(self):
+                template = env.get_template("rbd_iscsi.html")
+
+                toplevel_data = self._toplevel_data()
+                content_data = self._rbd_iscsi()
+
+                return template.render(
+                    url_prefix = global_instance().url_prefix,
+                    ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
+                    toplevel_data=json.dumps(toplevel_data, indent=2),
+                    content_data=json.dumps(content_data, indent=2)
+                )
+
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def rbd_iscsi_data(self):
+                return self._rbd_iscsi()
 
             @cherrypy.expose
             def health(self):
                 template = env.get_template("health.html")
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
                     content_data=json.dumps(self._health(), indent=2)
                 )
@@ -600,7 +682,9 @@ class Module(MgrModule):
             def servers(self):
                 template = env.get_template("servers.html")
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
                     content_data=json.dumps(self._servers(), indent=2)
                 )
@@ -876,10 +960,21 @@ class Module(MgrModule):
                     content_data=json.dumps(content_data, indent=2)
                 )
 
+        url_prefix = self.get_config('url_prefix')
+        if url_prefix == None:
+            url_prefix = ''
+        else:
+            if len(url_prefix) != 0:
+                if url_prefix[0] != '/':
+                    url_prefix = '/'+url_prefix
+                if url_prefix[-1] == '/':
+                    url_prefix = url_prefix[:-1]
+        self.url_prefix = url_prefix
+
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '7000')
         if server_addr is None:
-            raise RuntimeError('no server_addr configured; try "ceph config-key put mgr/dashboard/server_addr <ip>"')
+            raise RuntimeError('no server_addr configured; try "ceph config-key set mgr/dashboard/server_addr <ip>"')
         log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
         cherrypy.config.update({
             'server.socket_host': server_addr,
@@ -937,7 +1032,9 @@ class Module(MgrModule):
                 toplevel_data = self._toplevel_data()
 
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
+                    path_info='/osd' + cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(self._osd(osd_id), indent=2)
                 )
@@ -977,7 +1074,7 @@ class Module(MgrModule):
                 result['up'] = osd_info['up']
                 result['in'] = osd_info['in']
 
-                result['url'] = "/osd/perf/{0}".format(osd_id)
+                result['url'] = get_prefixed_url("/osd/perf/{0}".format(osd_id))
 
                 return result
 
@@ -1030,13 +1127,15 @@ class Module(MgrModule):
                 }
 
                 return template.render(
+                    url_prefix = global_instance().url_prefix,
                     ceph_version=global_instance().version,
+                    path_info='/osd' + cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
 
-        cherrypy.tree.mount(Root(), "/", conf)
-        cherrypy.tree.mount(OSDEndpoint(), "/osd", conf)
+        cherrypy.tree.mount(Root(), get_prefixed_url("/"), conf)
+        cherrypy.tree.mount(OSDEndpoint(), get_prefixed_url("/osd"), conf)
 
         log.info("Starting engine...")
         cherrypy.engine.start()

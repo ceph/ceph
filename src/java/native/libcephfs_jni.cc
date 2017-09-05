@@ -2580,6 +2580,51 @@ out:
 	return pool;
 }
 
+/**
+ * Class: com_ceph_fs_CephMount
+ * Method: native_ceph_get_default_data_pool_name
+ * Signature: (J)Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1default_1data_1pool_1name
+  (JNIEnv *env, jclass clz, jlong j_mntp)
+{
+	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+	CephContext *cct = ceph_get_mount_context(cmount);
+	jstring pool = NULL;
+	int ret, buflen = 0;
+	char *buf = NULL;
+        
+	CHECK_MOUNTED(cmount, NULL);
+	 
+	ldout(cct, 10) << "jni: get_default_data_pool_name" << dendl;
+
+	ret = ceph_get_default_data_pool_name(cmount, NULL, 0);
+	if (ret < 0)
+		goto out;
+	buflen = ret;
+	buf = new (std::nothrow) char[buflen+1]; /* +1 for '\0' */
+	if (!buf) {
+		cephThrowOutOfMemory(env, "head allocation failed");
+		goto out;
+	}
+	memset(buf, 0, (buflen+1)*sizeof(*buf));
+	ret = ceph_get_default_data_pool_name(cmount, buf, buflen);
+	
+	ldout(cct, 10) << "jni: get_default_data_pool_name: ret " << ret << dendl;
+	
+	if (ret < 0)
+		handle_error(env, ret);
+	else
+		pool = env->NewStringUTF(buf);
+
+out:
+	if (buf)
+	delete [] buf;
+
+	return pool;        
+}
+
+
 /*
  * Class:     com_ceph_fs_CephMount
  * Method:    native_ceph_localize_reads

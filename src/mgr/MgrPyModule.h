@@ -21,6 +21,8 @@
 
 #include "common/cmdparse.h"
 #include "common/LogEntry.h"
+#include "common/Mutex.h"
+#include "mon/health_check.h"
 
 #include <vector>
 #include <string>
@@ -46,6 +48,8 @@ private:
   PyObject *pClassInstance;
   PyThreadState *pMainThreadState;
   PyThreadState *pMyThreadState = nullptr;
+
+  health_check_map_t health_checks;
 
   std::vector<ModuleCommand> commands;
 
@@ -75,6 +79,11 @@ public:
     const cmdmap_t &cmdmap,
     std::stringstream *ds,
     std::stringstream *ss);
+
+  void set_health_checks(health_check_map_t&& c) {
+    health_checks = std::move(c);
+  }
+  void get_health_checks(health_check_map_t *checks);
 };
 
 std::string handle_pyerror();

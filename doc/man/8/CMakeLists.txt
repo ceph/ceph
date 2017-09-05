@@ -3,6 +3,7 @@ set(client_srcs
   ceph-conf.rst
   ceph.rst
   ceph-authtool.rst
+  ceph-kvstore-tool.rst
   rados.rst
   ceph-post-file.rst
   ceph-dencoder.rst)
@@ -23,6 +24,8 @@ set(osd_srcs
   ceph-clsinfo.rst
   ceph-detect-init.rst
   ceph-disk.rst
+  ceph-volume.rst
+  ceph-volume-systemd.rst
   ceph-osd.rst
   osdmaptool.rst)
 
@@ -54,12 +57,17 @@ if(WITH_RBD)
   list(APPEND man_srcs
 	ceph-rbdnamer.rst
 	rbd-mirror.rst
-	rbd-nbd.rst
 	rbd-replay-many.rst
 	rbd-replay-prep.rst
 	rbd-replay.rst
 	rbdmap.rst
 	rbd.rst)
+  if(LINUX)
+    list(APPEND man_srcs rbd-nbd.rst)
+  endif()
+  if(FREEBSD)
+    list(APPEND man_srcs rbd-ggate.rst)
+  endif()
 endif()
 
 foreach(man ${man_srcs})

@@ -34,9 +34,8 @@
 #define dout_prefix *_dout << "bdev-PMEM("  << path << ") "
 
 PMEMDevice::PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv)
-  : BlockDevice(cct),
+  : BlockDevice(cct, cb, cbpriv),
     fd(-1), addr(0),
-    size(0), block_size(0),
     debug_lock("PMEMDevice::debug_lock"),
     injecting_crash(0)
 {
@@ -147,7 +146,7 @@ static string get_dev_property(const char *dev, const char *property)
   return val;
 }
 
-int PMEMDevice::collect_metadata(string prefix, map<string,string> *pm) const
+int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
 {
   (*pm)[prefix + "rotational"] = stringify((int)(bool)rotational);
   (*pm)[prefix + "size"] = stringify(get_size());
@@ -218,9 +217,7 @@ int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered)
 {
   uint64_t len = bl.length();
   dout(20) << __func__ << " " << off << "~" << len  << dendl;
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  assert(is_valid_io(off, len));
 
   dout(40) << "data: ";
   bl.hexdump(*_dout);
@@ -262,9 +259,7 @@ int PMEMDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      bool buffered)
 {
   dout(5) << __func__ << " " << off << "~" << len  << dendl;
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  assert(is_valid_io(off, len));
 
   bufferptr p = buffer::create_page_aligned(len);
   memcpy(p.c_str(), addr + off, len);
@@ -287,9 +282,8 @@ int PMEMDevice::aio_read(uint64_t off, uint64_t len, bufferlist *pbl,
 
 int PMEMDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered)
 {
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  dout(5) << __func__ << " " << off << "~" << len << dendl;
+  assert(is_valid_io(off, len));
 
   memcpy(buf, addr + off, len);
   return 0;

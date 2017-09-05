@@ -291,8 +291,6 @@ int CrushCompiler::decompile_choose_args(const std::pair<const long unsigned int
 
 int CrushCompiler::decompile(ostream &out)
 {
-  crush.cleanup_classes();
-
   out << "# begin crush map\n";
 
   // only dump tunables if they differ from the defaults
@@ -589,11 +587,10 @@ int CrushCompiler::parse_bucket(iter_t const& i)
       if (verbose) err << "bucket " << name << " id " << maybe_id;
       if (sub->children.size() > 2) {
         string class_name = string_node(sub->children[3]);
-        if (!crush.class_exists(class_name)) {
-          err << " unknown device class '" << class_name << "'" << std::endl;
-          return -EINVAL;
-        }
-        int cid = crush.get_class_id(class_name);
+        // note that we do not verify class existence here,
+        // as this bucket might come from an empty shadow tree
+        // which currently has no OSDs but is still referenced by a rule!
+        int cid = crush.get_or_create_class_id(class_name);
         if (class_id.count(cid) != 0) {
           err << "duplicate device class " << class_name << " for bucket " << name << std::endl;
           return -ERANGE;
@@ -734,7 +731,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   }
 
   for (auto &i : class_id)
-    crush.class_bucket[id][i.first] = i.second;
+    class_bucket[id][i.first] = i.second;
 
   if (verbose) err << "bucket " << name << " (" << id << ") " << size << " items and weight "
 		   << (float)bucketweight / (float)0x10000 << std::endl;
@@ -743,7 +740,9 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   item_weight[id] = bucketweight;
   
   assert(id != 0);
-  int r = crush.add_bucket(id, alg, hash, type, size, &items[0], &weights[0], NULL);
+  int idout;
+  int r = crush.add_bucket(id, alg, hash, type, size,
+                           &items[0], &weights[0], &idout);
   if (r < 0) {
     if (r == -EEXIST)
       err << "Duplicate bucket id " << id << std::endl;
@@ -1084,7 +1083,7 @@ int CrushCompiler::parse_crush(iter_t const& i)
     case crush_grammar::_crushrule:
       if (!saw_rule) {
 	saw_rule = true;
-	crush.populate_classes();
+	crush.populate_classes(class_bucket);
       }
       r = parse_rule(p);
       break;
@@ -1100,7 +1099,6 @@ int CrushCompiler::parse_crush(iter_t const& i)
   }
 
   //err << "max_devices " << crush.get_max_devices() << std::endl;
-  crush.cleanup_classes();
   crush.finalize();
 
   return 0;

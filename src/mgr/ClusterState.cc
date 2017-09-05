@@ -70,16 +70,8 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
   Mutex::Locker l(lock);
 
   const int from = stats->get_orig_source().num();
-  bool is_in = false;
-  objecter->with_osdmap([&is_in, from](const OSDMap &osd_map){
-      is_in = osd_map.is_in(from);
-  });
 
-  if (is_in) {
-    pending_inc.update_stat(from, stats->epoch, std::move(stats->osd_stat));
-  } else {
-    pending_inc.update_stat(from, stats->epoch, osd_stat_t());
-  }
+  pending_inc.update_stat(from, stats->epoch, std::move(stats->osd_stat));
 
   for (auto p : stats->pg_stat) {
     pg_t pgid = p.first;

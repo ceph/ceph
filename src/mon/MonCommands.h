@@ -123,8 +123,9 @@
  */
 
 // note: this should be replaced shortly!
-COMMAND("pg force_create_pg name=pgid,type=CephPgid", \
-	"force creation of pg <pgid>", "pg", "rw", "cli,rest")
+COMMAND_WITH_FLAG("pg force_create_pg name=pgid,type=CephPgid", \
+		  "force creation of pg <pgid>", "pg", "rw", "cli,rest",
+		  FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("pg set_full_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
 		  "set ratio at which pgs are considered full", \
 		  "pg", "rw", "cli,rest", FLAG(DEPRECATED))
@@ -175,6 +176,12 @@ COMMAND("auth get-or-create " \
 	"name=caps,type=CephString,n=N,req=false", \
 	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command", \
 	"auth", "rwx", "cli,rest")
+COMMAND("fs authorize " \
+   "name=filesystem,type=CephString " \
+   "name=entity,type=CephString " \
+	"name=caps,type=CephString,n=N", \
+	"add auth for <entity> to access file system <filesystem> based on following directory and permissions pairs", \
+	"auth", "rwx", "cli,rest")
 COMMAND("auth caps " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N", \
@@ -192,7 +199,7 @@ COMMAND("auth rm " \
 /*
  * Monitor commands (Monitor.cc)
  */
-COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage", \
+COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb/rocksdb storage", \
 	     "mon", "rw", "cli,rest", \
              FLAG(NOFORWARD)|FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("scrub", "scrub the monitor stores", \
@@ -257,7 +264,7 @@ COMMAND("node ls " \
  * Monitor-specific commands under module 'mon'
  */
 COMMAND_WITH_FLAG("mon compact", \
-    "cause compaction of monitor's leveldb storage", \
+    "cause compaction of monitor's leveldb/rocksdb storage", \
     "mon", "rw", "cli,rest", \
     FLAG(NOFORWARD))
 COMMAND_WITH_FLAG("mon scrub",
@@ -460,7 +467,7 @@ COMMAND("osd dump " \
 	"print summary of OSD map", "osd", "r", "cli,rest")
 COMMAND("osd tree " \
 	"name=epoch,type=CephInt,range=0,req=false " \
-	"name=states,type=CephChoices,strings=up|down|in|out,n=N,req=false", \
+	"name=states,type=CephChoices,strings=up|down|in|out|destroyed,n=N,req=false", \
 	"print OSD tree", "osd", "r", "cli,rest")
 COMMAND("osd ls " \
 	"name=epoch,type=CephInt,range=0,req=false", \
@@ -499,12 +506,13 @@ COMMAND("osd map " \
 COMMAND("osd lspools " \
 	"name=auid,type=CephInt,req=false", \
 	"list pools", "osd", "r", "cli,rest")
-COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
-COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw",
-        "cli,rest")
 COMMAND_WITH_FLAG("osd crush rule list", "list crush rules", "osd", "r", "cli,rest",
 		  FLAG(DEPRECATED))
 COMMAND("osd crush rule ls", "list crush rules", "osd", "r", "cli,rest")
+COMMAND("osd crush rule ls-by-class " \
+        "name=class,type=CephString,goodchars=[A-Za-z0-9-_.]", \
+        "list all crush rules that reference the same <class>", \
+        "osd", "r", "cli,rest")
 COMMAND("osd crush rule dump " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.],req=false", \
 	"dump crush rule <name> (default all)", \
@@ -520,8 +528,10 @@ COMMAND("osd crush set name=prior_version,type=CephInt,req=false", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush add-bucket " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
-	"name=type,type=CephString", \
-	"add no-parent (probably root) crush bucket <name> of type <type>", \
+        "name=type,type=CephString " \
+        "name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=],req=false", \
+	"add no-parent (probably root) crush bucket <name> of type <type> " \
+        "to location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rename-bucket " \
 	"name=srcname,type=CephString,goodchars=[A-Za-z0-9-_.] " \
@@ -546,6 +556,16 @@ COMMAND("osd crush set-device-class " \
 	"set the <class> of the osd(s) <id> [<id>...]," \
         "or use <all|any|*> to set all.", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush rm-device-class " \
+        "name=ids,type=CephString,n=N", \
+        "remove class of the osd(s) <id> [<id>...]," \
+        "or use <all|any|*> to remove all.", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd crush class rename " \
+        "name=srcname,type=CephString,goodchars=[A-Za-z0-9-_] " \
+        "name=dstname,type=CephString,goodchars=[A-Za-z0-9-_]", \
+        "rename crush device class <srcname> to <dstname>", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd crush create-or-move " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
@@ -632,22 +652,18 @@ COMMAND("osd crush rule create-erasure " \
 COMMAND("osd crush rule rm " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",	\
 	"remove crush rule <name>", "osd", "rw", "cli,rest")
-COMMAND("osd crush tree",
+COMMAND("osd crush rule rename " \
+        "name=srcname,type=CephString,goodchars=[A-Za-z0-9-_.] "  \
+        "name=dstname,type=CephString,goodchars=[A-Za-z0-9-_.]",  \
+        "rename crush rule <srcname> to <dstname>",
+        "osd", "rw", "cli,rest")
+COMMAND("osd crush tree "
+        "name=shadow,type=CephChoices,strings=--show-shadow,req=false", \
 	"dump crush buckets and items in a tree view",
 	"osd", "r", "cli,rest")
-COMMAND("osd crush class create " \
-	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
-	"create crush device class <class>", \
-	"osd", "rw", "cli,rest")
-COMMAND("osd crush class rm " \
-	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
-	"remove crush device class <class>", \
-	"osd", "rw", "cli,rest")
-COMMAND("osd crush class rename " \
-        "name=srcname,type=CephString,goodchars=[A-Za-z0-9-_] " \
-        "name=dstname,type=CephString,goodchars=[A-Za-z0-9-_]", \
-        "rename crush device class <srcname> to <dstname>", \
-        "osd", "rw", "cli,rest")
+COMMAND("osd crush ls name=node,type=CephString,goodchars=goodchars=[A-Za-z0-9-_.]",
+	"list items beneath a node in the CRUSH tree",
+	"osd", "r", "cli,rest")
 COMMAND("osd crush class ls", \
 	"list all crush device classes", \
 	"osd", "r", "cli,rest")
@@ -655,6 +671,37 @@ COMMAND("osd crush class ls-osd " \
         "name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
         "list all osds belonging to the specific <class>", \
         "osd", "r", "cli,rest")
+COMMAND("osd crush weight-set ls",
+	"list crush weight sets",
+	"osd", "r", "cli,rest")
+COMMAND("osd crush weight-set dump",
+	"dump crush weight sets",
+	"osd", "r", "cli,rest")
+COMMAND("osd crush weight-set create-compat",
+	"create a default backward-compatible weight-set",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush weight-set create "		\
+        "name=pool,type=CephPoolname "\
+        "name=mode,type=CephChoices,strings=flat|positional",
+	"create a weight-set for a given pool",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush weight-set rm name=pool,type=CephPoolname",
+	"remove the weight-set for a given pool",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush weight-set rm-compat",
+	"remove the backward-compatible weight-set",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush weight-set reweight "		\
+        "name=pool,type=CephPoolname "			\
+	"name=item,type=CephString "			\
+        "name=weight,type=CephFloat,range=0.0,n=N",
+	"set weight for an item (bucket or osd) in a pool's weight-set",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush weight-set reweight-compat "		\
+	"name=item,type=CephString "			\
+        "name=weight,type=CephFloat,range=0.0,n=N",
+	"set weight for an item (bucket or osd) in the backward-compatible weight-set",
+	"osd", "rw", "cli,rest")
 COMMAND("osd setmaxosd " \
 	"name=newmax,type=CephInt,range=0", \
 	"set new maximum osd value", "osd", "rw", "cli,rest")
@@ -700,7 +747,7 @@ COMMAND("osd unset " \
 	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent", \
 	"unset <key>", "osd", "rw", "cli,rest")
 COMMAND("osd require-osd-release "\
-	"name=release,type=CephChoices,strings=luminous",
+	"name=release,type=CephChoices,strings=luminous|mimic",
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw", "cli,rest")
 COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
@@ -850,6 +897,9 @@ COMMAND("osd blacklist " \
 	"name=expire,type=CephFloat,range=0.0,req=false", \
 	"add (optionally until <expire> seconds from now) or remove <addr> from blacklist", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
+COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw",
+        "cli,rest")
 COMMAND("osd pool mksnap " \
 	"name=pool,type=CephPoolname " \
 	"name=snap,type=CephString", \
@@ -933,6 +983,12 @@ COMMAND("osd pool application rm " \
         "name=key,type=CephString",
         "removes application <app> metadata key <key> on pool <poolname>",
         "osd", "rw", "cli,rest")
+COMMAND("osd pool application get " \
+        "name=pool,type=CephPoolname,req=fasle " \
+        "name=app,type=CephString,req=false " \
+        "name=key,type=CephString,req=false",
+        "get value of key <key> of application <app> on pool <poolname>",
+        "osd", "r", "cli,rest")
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r", "cli,rest")
@@ -984,10 +1040,15 @@ COMMAND("osd tier add-cache " \
 COMMAND("config-key get " \
 	"name=key,type=CephString", \
 	"get <key>", "config-key", "r", "cli,rest")
-COMMAND("config-key put " \
+COMMAND("config-key set " \
 	"name=key,type=CephString " \
 	"name=val,type=CephString,req=false", \
-	"put <key>, value <val>", "config-key", "rw", "cli,rest")
+	"set <key> to value <val>", "config-key", "rw", "cli,rest")
+COMMAND_WITH_FLAG("config-key put " \
+		  "name=key,type=CephString " \
+		  "name=val,type=CephString,req=false",			\
+		  "put <key>, value <val>", "config-key", "rw", "cli,rest",
+		  FLAG(DEPRECATED))
 COMMAND("config-key del " \
 	"name=key,type=CephString", \
 	"delete <key>", "config-key", "rw", "cli,rest")

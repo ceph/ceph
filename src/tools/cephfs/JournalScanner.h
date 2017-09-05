@@ -35,7 +35,7 @@ class JournalScanner
   librados::IoCtx &io;
 
   // Input constraints
-  int const rank;
+  const int rank;
   JournalFilter const filter;
 
   void gap_advance();

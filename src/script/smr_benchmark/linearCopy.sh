@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/usr/bin/env bash
 
 # copy a linear file from srcFile to destination disk in a loop until writeSize MBs is written
 # destinationDisk is a SMR Host Aware Disk eg. /dev/sdb

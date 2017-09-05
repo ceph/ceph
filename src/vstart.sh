@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # abort on failure
 set -e
@@ -106,7 +106,7 @@ overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
 memstore=0
-bluestore=0
+bluestore=1
 rgw_frontend="civetweb"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
@@ -150,7 +150,8 @@ usage=$usage"\t--mgr_num specify ceph mgr count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
 usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
 usage=$usage"\t--rgw_compression specify the rgw compression plugin\n"
-usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend\n"
+usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend (default)\n"
+usage=$usage"\t-f, --filestore use filestore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
@@ -291,6 +292,9 @@ case $1 in
     -b | --bluestore )
 	    bluestore=1
 	    ;;
+    -f | --filestore )
+	    bluestore=0
+	    ;;
     --hitset )
 	    hitset="$hitset $2 $3"
 	    shift
@@ -343,7 +347,9 @@ else
     if [ "$new" -ne 0 ]; then
         # only delete if -n
         asok_dir=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
-        [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
+        if [ $asok_dir != /var/run/ceph ]; then
+            [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
+        fi
         if [ -z "$CEPH_ASOK_DIR" ]; then
             CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
         fi
@@ -358,12 +364,12 @@ fi
 ARGS="-c $conf_fn"
 
 prunb() {
-    echo "$* &"
+    printf "'%s' " "$@"; echo '&'
     "$@" &
 }
 
 prun() {
-    echo "$*"
+    printf "'%s' " "$@"; echo
     "$@"
 }
 
@@ -656,11 +662,11 @@ start_mgr() {
         host = $HOSTNAME
 EOF
 
-	ceph_adm config-key put mgr/dashboard/$name/server_port $MGR_PORT
+	ceph_adm config-key set mgr/dashboard/$name/server_port $MGR_PORT
 	DASH_URLS+="http://$IP:$MGR_PORT/"
 	MGR_PORT=$(($MGR_PORT + 1000))
 
-	ceph_adm config-key put mgr/restful/$name/server_port $MGR_PORT
+	ceph_adm config-key set mgr/restful/$name/server_port $MGR_PORT
 
 	RESTFUL_URLS+="https://$IP:$MGR_PORT"
 	MGR_PORT=$(($MGR_PORT + 1000))
@@ -669,7 +675,9 @@ EOF
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
-    if ceph_adm restful create-self-signed-cert; then
+    # use tell mgr here because the first mgr might not have activated yet
+    # to register the python module commands.
+    if ceph_adm tell mgr restful create-self-signed-cert; then
         SF=`mktemp`
         ceph_adm restful create-key admin -o $SF
         RESTFUL_SECRET=`cat $SF`
@@ -863,6 +871,10 @@ if [ $CEPH_NUM_MON -gt 0 ]; then
     start_mon
 fi
 
+if [ $CEPH_NUM_MGR -gt 0 ]; then
+    start_mgr
+fi
+
 # osd
 if [ $CEPH_NUM_OSD -gt 0 ]; then
     start_osd
@@ -898,10 +910,6 @@ do
 done
 
 # mgr
-
-if [ $CEPH_NUM_MGR -gt 0 ]; then
-    start_mgr
-fi
 
 if [ "$ec" -eq 1 ]; then
     ceph_adm <<EOF

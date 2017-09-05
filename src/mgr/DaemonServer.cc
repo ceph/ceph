@@ -27,6 +27,7 @@
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDForceRecovery.h"
 #include "common/errno.h"
 
 #define dout_context g_ceph_context
@@ -174,6 +175,7 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
 	::decode(str, p);
       }
       catch (buffer::error& e) {
+        is_valid = false;
       }
       bool success = s->caps.parse(str);
       if (success) {
@@ -398,9 +400,11 @@ bool DaemonServer::handle_report(MMgrReport *m)
     // always contains metadata.
   }
   assert(daemon != nullptr);
-  Mutex::Locker l(daemon->lock);
   auto &daemon_counters = daemon->perf_counters;
-  daemon_counters.update(m);
+  {
+    Mutex::Locker l(daemon->lock);
+    daemon_counters.update(m);
+  }
   // if there are any schema updates, notify the python modules
   if (!m->declare_types.empty() || !m->undeclare_types.empty()) {
     ostringstream oss;
@@ -921,6 +925,305 @@ bool DaemonServer::handle_command(MCommand *m)
       });
     cmdctx->reply(r, "");
     return true;
+  } else if (prefix == "osd safe-to-destroy") {
+    vector<string> ids;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "ids", ids);
+    set<int> osds;
+    int r;
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	r = osdmap.parse_osd_id_list(ids, &osds, &ss);
+      });
+    if (!r && osds.empty()) {
+      ss << "must specify one or more OSDs";
+      r = -EINVAL;
+    }
+    if (r < 0) {
+      cmdctx->reply(r, ss);
+      return true;
+    }
+    set<int> active_osds, missing_stats, stored_pgs;
+    int affected_pgs = 0;
+    cluster_state.with_pgmap([&](const PGMap& pg_map) {
+	if (pg_map.num_pg_unknown > 0) {
+	  ss << pg_map.num_pg_unknown << " pgs have unknown state; cannot draw"
+	     << " any conclusions";
+	  r = -EAGAIN;
+	  return;
+	}
+	int num_active_clean = 0;
+	for (auto& p : pg_map.num_pg_by_state) {
+	  unsigned want = PG_STATE_ACTIVE|PG_STATE_CLEAN;
+	  if ((p.first & want) == want) {
+	    num_active_clean += p.second;
+	  }
+	}
+	cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    for (auto osd : osds) {
+	      if (!osdmap.exists(osd)) {
+		continue;  // clearly safe to destroy
+	      }
+	      auto q = pg_map.num_pg_by_osd.find(osd);
+	      if (q != pg_map.num_pg_by_osd.end()) {
+		if (q->second.acting > 0 || q->second.up > 0) {
+		  active_osds.insert(osd);
+		  affected_pgs += q->second.acting + q->second.up;
+		  continue;
+		}
+	      }
+	      if (num_active_clean < pg_map.num_pg) {
+		// all pgs aren't active+clean; we need to be careful.
+		auto p = pg_map.osd_stat.find(osd);
+		if (p == pg_map.osd_stat.end()) {
+		  missing_stats.insert(osd);
+		}
+		if (p->second.num_pgs > 0) {
+		  stored_pgs.insert(osd);
+		}
+	      }
+	    }
+	  });
+      });
+    if (!r && !active_osds.empty()) {
+      ss << "OSD(s) " << active_osds << " have " << affected_pgs
+	 << " pgs currently mapped to them";
+      r = -EBUSY;
+    } else if (!missing_stats.empty()) {
+      ss << "OSD(s) " << missing_stats << " have no reported stats, and not all"
+	 << " PGs are active+clean; we cannot draw any conclusions";
+      r = -EAGAIN;
+    } else if (!stored_pgs.empty()) {
+      ss << "OSD(s) " << stored_pgs << " last reported they still store some PG"
+	 << " data, and not all PGs are active+clean; we cannot be sure they"
+	 << " aren't still needed.";
+      r = -EBUSY;
+    }
+    if (r) {
+      cmdctx->reply(r, ss);
+      return true;
+    }
+    ss << "OSD(s) " << osds << " are safe to destroy without reducing data"
+       << " durability.";
+    cmdctx->reply(0, ss);
+    return true;
+  } else if (prefix == "osd ok-to-stop") {
+    vector<string> ids;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "ids", ids);
+    set<int> osds;
+    int r;
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	r = osdmap.parse_osd_id_list(ids, &osds, &ss);
+      });
+    if (!r && osds.empty()) {
+      ss << "must specify one or more OSDs";
+      r = -EINVAL;
+    }
+    if (r < 0) {
+      cmdctx->reply(r, ss);
+      return true;
+    }
+    map<pg_t,int> pg_delta;  // pgid -> net acting set size change
+    int dangerous_pgs = 0;
+    cluster_state.with_pgmap([&](const PGMap& pg_map) {
+	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    if (pg_map.num_pg_unknown > 0) {
+	      ss << pg_map.num_pg_unknown << " pgs have unknown state; "
+		 << "cannot draw any conclusions";
+	      r = -EAGAIN;
+	      return;
+	    }
+	    for (auto osd : osds) {
+	      auto p = pg_map.pg_by_osd.find(osd);
+	      if (p != pg_map.pg_by_osd.end()) {
+		for (auto& pgid : p->second) {
+		  --pg_delta[pgid];
+		}
+	      }
+	    }
+	    for (auto& p : pg_delta) {
+	      auto q = pg_map.pg_stat.find(p.first);
+	      if (q == pg_map.pg_stat.end()) {
+		ss << "missing information about " << p.first << "; cannot draw"
+		   << " any conclusions";
+		r = -EAGAIN;
+		return;
+	      }
+	      if (!(q->second.state & PG_STATE_ACTIVE) ||
+		  (q->second.state & PG_STATE_DEGRADED)) {
+		// we don't currently have a good way to tell *how* degraded
+		// a degraded PG is, so we have to assume we cannot remove
+		// any more replicas/shards.
+		++dangerous_pgs;
+		continue;
+	      }
+	      const pg_pool_t *pi = osdmap.get_pg_pool(p.first.pool());
+	      if (!pi) {
+		++dangerous_pgs; // pool is creating or deleting
+	      } else {
+		if (q->second.acting.size() + p.second < pi->min_size) {
+		  ++dangerous_pgs;
+		}
+	      }
+	    }
+	  });
+      });
+    if (r) {
+      cmdctx->reply(r, ss);
+      return true;
+    }
+    if (dangerous_pgs) {
+      ss << dangerous_pgs << " PGs are already degraded or might become "
+	 << "unavailable";
+      cmdctx->reply(-EBUSY, ss);
+      return true;
+    }
+    ss << "OSD(s) " << osds << " are ok to stop without reducing"
+       << " availability, provided there are no other concurrent failures"
+       << " or interventions. " << pg_delta.size() << " PGs are likely to be"
+       << " degraded (but remain available) as a result.";
+    cmdctx->reply(0, ss);
+    return true;
+  } else if (prefix == "pg force-recovery" ||
+  	       prefix == "pg force-backfill" ||
+  	       prefix == "pg cancel-force-recovery" ||
+  	       prefix == "pg cancel-force-backfill") {
+    string forceop = prefix.substr(3, string::npos);
+    list<pg_t> parsed_pgs;
+    map<int, list<pg_t> > osdpgs;
+
+    // figure out actual op just once
+    int actual_op = 0;
+    if (forceop == "force-recovery") {
+      actual_op = OFR_RECOVERY;
+    } else if (forceop == "force-backfill") {
+      actual_op = OFR_BACKFILL;
+    } else if (forceop == "cancel-force-backfill") {
+      actual_op = OFR_BACKFILL | OFR_CANCEL;
+    } else if (forceop == "cancel-force-recovery") {
+      actual_op = OFR_RECOVERY | OFR_CANCEL;
+    }
+
+    // covnert pg names to pgs, discard any invalid ones while at it
+    {
+      // we don't want to keep pgidstr and pgidstr_nodup forever
+      vector<string> pgidstr;
+      // get pgids to process and prune duplicates
+      cmd_getval(g_ceph_context, cmdctx->cmdmap, "pgid", pgidstr);
+      set<string> pgidstr_nodup(pgidstr.begin(), pgidstr.end());
+      if (pgidstr.size() != pgidstr_nodup.size()) {
+	// move elements only when there were duplicates, as this
+	// reorders them
+	pgidstr.resize(pgidstr_nodup.size());
+	auto it = pgidstr_nodup.begin();
+	for (size_t i = 0 ; i < pgidstr_nodup.size(); i++) {
+	  pgidstr[i] = std::move(*it++);
+	}
+      }
+
+      cluster_state.with_pgmap([&](const PGMap& pg_map) {
+	for (auto& pstr : pgidstr) {
+	  pg_t parsed_pg;
+	  if (!parsed_pg.parse(pstr.c_str())) {
+	    ss << "invalid pgid '" << pstr << "'; ";
+	    r = -EINVAL;
+	  } else {
+	    auto workit = pg_map.pg_stat.find(parsed_pg);
+	    if (workit == pg_map.pg_stat.end()) {
+	      ss << "pg " << pstr << " not exists; ";
+	      r = -ENOENT;
+	    } else {
+	      pg_stat_t workpg = workit->second;
+
+	      // discard pgs for which user requests are pointless
+	      switch (actual_op)
+	      {
+		case OFR_RECOVERY:
+		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_RECOVERY_WAIT | PG_STATE_RECOVERING)) == 0) {
+		    // don't return error, user script may be racing with cluster. not fatal.
+		    ss << "pg " << pstr << " doesn't require recovery; ";
+		    continue;
+		  } else  if (workpg.state & PG_STATE_FORCED_RECOVERY) {
+		    ss << "pg " << pstr << " recovery already forced; ";
+		    // return error, as it may be a bug in user script
+		    r = -EINVAL;
+		    continue;
+		  }
+		  break;
+		case OFR_BACKFILL:
+		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILL)) == 0) {
+		    ss << "pg " << pstr << " doesn't require backfilling; ";
+		    continue;
+		  } else  if (workpg.state & PG_STATE_FORCED_BACKFILL) {
+		    ss << "pg " << pstr << " backfill already forced; ";
+		    r = -EINVAL;
+		    continue;
+		  }
+		  break;
+		case OFR_BACKFILL | OFR_CANCEL:
+		  if ((workpg.state & PG_STATE_FORCED_BACKFILL) == 0) {
+		    ss << "pg " << pstr << " backfill not forced; ";
+		    continue;
+		  }
+		  break;
+		case OFR_RECOVERY | OFR_CANCEL:
+		  if ((workpg.state & PG_STATE_FORCED_RECOVERY) == 0) {
+		    ss << "pg " << pstr << " recovery not forced; ";
+		    continue;
+		  }
+		  break;
+		default:
+		  assert(0 == "actual_op value is not supported");
+	      }
+
+	      parsed_pgs.push_back(std::move(parsed_pg));
+	    }
+	  }
+	}
+
+	// group pgs to process by osd
+	for (auto& pgid : parsed_pgs) {
+	  auto workit = pg_map.pg_stat.find(pgid);
+	  if (workit != pg_map.pg_stat.end()) {
+	    pg_stat_t workpg = workit->second;
+	    set<int32_t> osds(workpg.up.begin(), workpg.up.end());
+	    osds.insert(workpg.acting.begin(), workpg.acting.end());
+	    for (auto i : osds) {
+	      osdpgs[i].push_back(pgid);
+	    }
+	  }
+	}
+
+      });
+    }
+
+    // respond with error only when no pgs are correct
+    // yes, in case of mixed errors, only the last one will be emitted,
+    // but the message presented will be fine
+    if (parsed_pgs.size() != 0) {
+      // clear error to not confuse users/scripts
+      r = 0;
+    }
+
+    // optimize the command -> messages conversion, use only one message per distinct OSD
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+      for (auto& i : osdpgs) {
+	if (osdmap.is_up(i.first)) {
+	  vector<pg_t> pgvec(make_move_iterator(i.second.begin()), make_move_iterator(i.second.end()));
+	  auto p = osd_cons.find(i.first);
+	  if (p == osd_cons.end()) {
+	    ss << "osd." << i.first << " is not currently connected";
+	    r = -EAGAIN;
+	    continue;
+	  }
+	  for (auto& con : p->second) {
+	    con->send_message(new MOSDForceRecovery(monc->get_fsid(), pgvec, actual_op));
+	  }
+	  ss << "instructing pg(s) " << i.second << " on osd." << i.first << " to " << forceop << "; ";
+	}
+      }
+    });
+    ss << std::endl;
+    cmdctx->reply(r, ss);
+    return true;
   } else {
     r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
 	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
@@ -1024,6 +1327,8 @@ void DaemonServer::send_report()
   }
 
   auto m = new MMonMgrReport();
+  py_modules.get_health_checks(&m->health_checks);
+
   cluster_state.with_pgmap([&](const PGMap& pg_map) {
       cluster_state.update_delta_stats();
 
@@ -1046,6 +1351,7 @@ void DaemonServer::send_report()
 
 	  pg_map.get_health_checks(g_ceph_context, osdmap,
 				   &m->health_checks);
+
 	  dout(10) << m->health_checks.checks.size() << " health checks"
 		   << dendl;
 	  dout(20) << "health checks:\n";

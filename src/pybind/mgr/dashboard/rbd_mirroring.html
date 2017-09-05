@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<script>
+        $(document).ready(function(){
+            // Pre-populated initial data at page load
+            var content_data = {{ content_data }};
+
+            var refresh = function() {
+                $.get("{{ url_prefix }}/rbd_mirroring_data", function(data) {
+                    _.extend(content_data, data);
+                    setTimeout(refresh, 30000);
+                });
+            };
+
+            console.log(content_data);
+
+            rivets.formatters.mirror_health_color = function(status_str) {
+                if (status_str == "warning") {
+                    return "label label-warning";
+                } else if (status_str == "error") {
+                    return "label label-danger";
+                } else if (status_str == "success") {
+                    return "label label-success";
+                }
+                return "label label-info";
+            }
+            rivets.formatters.sync_progress_bar = function(progress){
+                var ratio = progress / 100.0;
+                return "width: " + Math.round(ratio * 100).toString() + "%";
+            };
+
+            rivets.bind($("div#content"), content_data);
+            setTimeout(refresh, 30000);
+
+            var table_ids = ["daemons", "pools"];
+            for (var i = 0; i < table_ids.length; ++i) {
+                $('#' + table_ids[i]).DataTable({
+                    'paging'      : true,
+                    'pageLength'  : 5,
+                    'lengthChange': false,
+                    'info'        : false,
+                    'autoWidth'   : false,
+                    'searching'   : false
+                });
+            }
+
+            var table_ids = ["image_errors", "image_syncing", "image_ready"];
+            for (var i = 0; i < table_ids.length; ++i) {
+                $('#' + table_ids[i]).DataTable({
+                    'paging'      : true,
+                    'pageLength'  : 10,
+                    'lengthChange': false,
+                    'searching'   : true,
+                    'ordering'    : true,
+                    'info'        : false
+                });
+            };
+        });
+</script>
+
+
+<section class="content-header">
+    <h1>
+        Block Mirroring
+    </h1>
+</section>
+
+<section class="content">
+    <div class="row">
+        <div class="col-sm-6">
+            <div class="box">
+                <div class="box-header">
+                    <h3 class="box-title">Daemons</h3>
+                </div>
+                <div class="box-body">
+                    <table id="daemons" class="table table-condensed">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Instance</th>
+                            <th>Hostname</th>
+                            <th>Version</th>
+                            <th>Health</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                            <tr rv-each-daemon="daemons">
+                                <td>{daemon.id}</td>
+                                <td>{daemon.instance_id}</td>
+                                <td>{daemon.server_hostname}</td>
+                                <td>{daemon.version | short_version}</td>
+                                <td><span rv-class="daemon.health_color | mirror_health_color">{daemon.health}</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6">
+            <div class="box">
+                <div class="box-header">
+                    <h3 class="box-title">Pools</h3>
+                </div>
+                <div class="box-body">
+                    <table id="pools" class="table table-condensed">
+                        <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Mode</th>
+                            <th>Leader</th>
+                            <th># Local</th>
+                            <th># Remote</th>
+                            <th>Health</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                            <tr rv-each-pool="pools">
+                                <td>{pool.name}</td>
+                                <td>{pool.mirror_mode}</td>
+                                <td>{pool.leader_id}</td>
+                                <td>{pool.image_local_count}</td>
+                                <td>{pool.image_remote_count}</td>
+                                <td><span rv-class="pool.health_color | mirror_health_color">{pool.health}</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="box">
+        <div class="box-header">
+            <h3 class="box-title">Images</h3>
+        </div>
+        <div class="box-body">
+            <div class="nav-tabs-custom">
+                <ul class="nav nav-tabs">
+                    <li class="active"><a href="#tab_1" data-toggle="tab">Issues</a></li>
+                    <li><a href="#tab_2" data-toggle="tab">Syncing</a></li>
+                    <li><a href="#tab_3" data-toggle="tab">Ready</a></li>
+                </ul>
+                <div class="tab-content">
+                    <div class="tab-pane active" id="tab_1">
+                        <table id="image_errors" class="table table-condensed">
+                            <thead>
+                            <tr>
+                                <th>Pool</th>
+                                <th>Image</th>
+                                <th>Issue</th>
+                                <th>State</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                                <tr rv-each-image="image_error">
+                                    <td>{image.pool_name}</td>
+                                    <td>{image.name}</td>
+                                    <td>{image.description}</td>
+                                    <td><span rv-class="image.state_color | mirror_health_color">{image.state}</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="tab-pane" id="tab_2">
+                        <table id="image_syncing" class="table table-condensed">
+                            <thead>
+                            <tr>
+                                <th>Pool</th>
+                                <th>Image</th>
+                                <th>Progress</th>
+                                <th>State</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                                <tr rv-each-image="image_syncing">
+                                    <td>{image.pool_name}</td>
+                                    <td>{image.name}</td>
+                                    <td>
+                                        <div class="progress" style="width: 100px; height: 18px;">
+                                            <div class="progress-bar progress-bar-aqua" rv-style="image.progress | sync_progress_bar">
+                                                {image.progress}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span class="label label-info">Syncing</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="tab-pane" id="tab_3">
+                        <table id="image_ready" class="table table-condensed">
+                            <thead>
+                            <tr>
+                                <th>Pool</th>
+                                <th>Image</th>
+                                <th>Description</th>
+                                <th>State</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                                <tr rv-each-image="image_ready">
+                                    <td>{image.pool_name}</td>
+                                    <td>{image.name}</td>
+                                    <td>{image.description}</td>
+                                    <td><span rv-class="image.state_color | mirror_health_color">{image.state}</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- /.content -->
+
+{% endblock %}

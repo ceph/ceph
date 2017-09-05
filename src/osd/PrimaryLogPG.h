@@ -177,6 +177,7 @@ public:
   typedef boost::tuple<int, CopyResults*> CopyCallbackResults;
 
   friend class CopyFromCallback;
+  friend class CopyFromFinisher;
   friend class PromoteCallback;
 
   struct ProxyReadOp {
@@ -459,6 +460,7 @@ public:
   ceph_tid_t get_tid() override { return osd->get_tid(); }
 
   LogClientTemp clog_error() override { return osd->clog->error(); }
+  LogClientTemp clog_warn() override { return osd->clog->warn(); }
 
   struct watch_disconnect_t {
     uint64_t cookie;
@@ -471,13 +473,20 @@ public:
     ObjectContextRef obc,
     const list<watch_disconnect_t> &to_disconnect);
 
+  struct OpFinisher {
+    virtual ~OpFinisher() {
+    }
+
+    virtual int execute() = 0;
+  };
+
   /*
    * Capture all object state associated with an in-progress read or write.
    */
   struct OpContext {
     OpRequestRef op;
     osd_reqid_t reqid;
-    vector<OSDOp> &ops;
+    vector<OSDOp> *ops;
 
     const ObjectState *obs; // Old objectstate
     const SnapSet *snapset; // Old snapset
@@ -529,7 +538,8 @@ public:
     ObjectContextRef clone_obc;    // if we created a clone
     ObjectContextRef snapset_obc;  // if we created/deleted a snapdir
 
-    int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
+    // FIXME: we may want to kill this msgr hint off at some point!
+    boost::optional<int> data_off = boost::none;
 
     MOSDOpReply *reply;
 
@@ -539,8 +549,6 @@ public:
     int num_write;   ///< count update ops
 
     mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
-
-    CopyFromCallback *copy_cb;
 
     hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
 
@@ -570,7 +578,6 @@ public:
     // pending async reads <off, len, op_flags> -> <outbl, outr>
     list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 	      pair<bufferlist*, Context*> > > pending_async_reads;
-    int async_read_result;
     int inflightreads;
     friend struct OnReadComplete;
     void start_async_reads(PrimaryLogPG *pg);
@@ -582,10 +589,12 @@ public:
     ObjectContext::RWState::State lock_type;
     ObcLockManager lock_manager;
 
+    std::map<int, std::unique_ptr<OpFinisher>> op_finishers;
+
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
-    OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
+    OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>* _ops,
 	      ObjectContextRef& obc,
 	      PrimaryLogPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops),
@@ -597,12 +606,10 @@ public:
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       obc(obc),
-      data_off(0), reply(NULL), pg(_pg),
+      reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
-      copy_cb(NULL),
       sent_reply(false),
-      async_read_result(0),
       inflightreads(0),
       lock_type(ObjectContext::RWState::RWNONE) {
       if (obc->ssc) {
@@ -611,17 +618,15 @@ public:
       }
     }
     OpContext(OpRequestRef _op, osd_reqid_t _reqid,
-              vector<OSDOp>& _ops, PrimaryLogPG *_pg) :
+              vector<OSDOp>* _ops, PrimaryLogPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
       ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
-      data_off(0), reply(NULL), pg(_pg),
+      reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
-      copy_cb(NULL),
-      async_read_result(0),
       inflightreads(0),
       lock_type(ObjectContext::RWState::RWNONE) {}
     void reset_obs(ObjectContextRef obc) {
@@ -794,16 +799,7 @@ protected:
    *
    * @param ctx [in] ctx to clean up
    */
-  void close_op_ctx(OpContext *ctx) {
-    release_object_locks(ctx->lock_manager);
-    ctx->op_t.reset();
-    for (auto p = ctx->on_finish.begin();
-	 p != ctx->on_finish.end();
-	 ctx->on_finish.erase(p++)) {
-      (*p)();
-    }
-    delete ctx;
-  }
+  void close_op_ctx(OpContext *ctx);
 
   /**
    * Releases locks
@@ -1242,7 +1238,6 @@ protected:
   class C_OSD_AppliedRecoveredObject;
   class C_OSD_CommittedPushedObject;
   class C_OSD_AppliedRecoveredObjectReplica;
-  void sub_op_remove(OpRequestRef op);
 
   void _applied_recovered_object(ObjectContextRef obc);
   void _applied_recovered_object_replica();
@@ -1252,11 +1247,10 @@ protected:
   // -- copyfrom --
   map<hobject_t, CopyOpRef> copy_ops;
 
-  int fill_in_copy_get(
-    OpContext *ctx,
-    bufferlist::iterator& bp,
-    OSDOp& op,
-    ObjectContextRef& obc);
+  int do_copy_get(OpContext *ctx, bufferlist::iterator& bp, OSDOp& op,
+		  ObjectContextRef& obc);
+  int finish_copy_get();
+
   void fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
                               OSDOp& osd_op);
 
@@ -1286,7 +1280,7 @@ protected:
     return size;
   }
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
-  void finish_copyfrom(OpContext *ctx);
+  void finish_copyfrom(CopyFromCallback *cb);
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
@@ -1330,8 +1324,7 @@ protected:
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
 
   // -- checksum --
-  int do_checksum(OpContext *ctx, OSDOp& osd_op, bufferlist::iterator *bl_it,
-		  bool *async_read);
+  int do_checksum(OpContext *ctx, OSDOp& osd_op, bufferlist::iterator *bl_it);
   int finish_checksum(OSDOp& osd_op, Checksummer::CSumType csum_type,
                       bufferlist::iterator *init_value_bl_it,
                       const bufferlist &read_bl);
@@ -1339,6 +1332,12 @@ protected:
   friend class C_ChecksumRead;
 
   int do_extent_cmp(OpContext *ctx, OSDOp& osd_op);
+  int finish_extent_cmp(OSDOp& osd_op, const bufferlist &read_bl);
+
+  friend class C_ExtentCmpRead;
+
+  int do_read(OpContext *ctx, OSDOp& osd_op);
+  int do_sparse_read(OpContext *ctx, OSDOp& osd_op);
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 
   bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
@@ -1360,7 +1359,7 @@ protected:
   // -- proxywrite --
   map<ceph_tid_t, ProxyWriteOpRef> proxywrite_ops;
 
-  void do_proxy_write(OpRequestRef op, const hobject_t& missing_oid, ObjectContextRef obc = NULL);
+  void do_proxy_write(OpRequestRef op, ObjectContextRef obc = NULL);
   void finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r);
   void cancel_proxy_write(ProxyWriteOpRef pwop);
 
@@ -1386,8 +1385,6 @@ public:
   void record_write_error(OpRequestRef op, const hobject_t &soid,
 			  MOSDOpReply *orig_reply, int r);
   void do_pg_op(OpRequestRef op);
-  void do_sub_op(OpRequestRef op) override;
-  void do_sub_op_reply(OpRequestRef op) override;
   void do_scan(
     OpRequestRef op,
     ThreadPool::TPHandle &handle) override;
@@ -1551,10 +1548,10 @@ private:
       };
       auto *pg = context< SnapTrimmer >().pg;
       if (pg->cct->_conf->osd_snap_trim_sleep > 0) {
-	wakeup = new OnTimer{pg, pg->get_osdmap()->get_epoch()};
 	Mutex::Locker l(pg->osd->snap_sleep_lock);
-	pg->osd->snap_sleep_timer.add_event_after(
-	  pg->cct->_conf->osd_snap_trim_sleep, wakeup);
+	wakeup = pg->osd->snap_sleep_timer.add_event_after(
+	  pg->cct->_conf->osd_snap_trim_sleep,
+	  new OnTimer{pg, pg->get_osdmap()->get_epoch()});
       } else {
 	post_event(SnapTrimTimerReady());
       }

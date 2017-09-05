@@ -16,7 +16,7 @@ overrides:
       - scrub [0-9]+ errors
       - 'size 1 != size'
       - attr name mismatch
-      - Regular scrub request, losing deep-scrub details
+      - Regular scrub request, deep-scrub details will be lost
       - overall HEALTH_
       - (OSDMAP_FLAGS)
       - (OSD_

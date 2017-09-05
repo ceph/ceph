@@ -384,7 +384,8 @@ static void dump_container_metadata(struct req_state *s,
   dump_header(s, "X-Container-Bytes-Used-Actual", bucket.size_rounded);
 
   if (s->object.empty()) {
-    auto swift_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl);
+    auto swift_policy = \
+      static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
     std::string read_acl, write_acl;
     swift_policy->to_str(read_acl, write_acl);
 
@@ -2557,7 +2558,7 @@ int RGWHandler_REST_SWIFT::postauth_init()
 	   << dendl;
 
   int ret;
-  ret = validate_tenant_name(s->bucket_tenant);
+  ret = rgw_validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
   ret = validate_bucket_name(s->bucket_name);

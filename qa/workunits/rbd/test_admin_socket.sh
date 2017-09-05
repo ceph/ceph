@@ -1,10 +1,11 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 TMPDIR=/tmp/rbd_test_admin_socket$$
 mkdir $TMPDIR
 trap "rm -fr $TMPDIR" 0
 
-. $(dirname $0)/../ceph-helpers.sh
+. $(dirname $0)/../../standalone/ceph-helpers.sh
 
 function expect_false()
 {
@@ -62,15 +63,17 @@ function rbd_check_perfcounter()
 function rbd_watch_start()
 {
     local image=$1
+    local asok=$(rbd_watch_asok ${image})
 
     mkfifo $(rbd_watch_fifo ${image})
     (cat $(rbd_watch_fifo ${image}) |
-	    rbd watch ${image} > $(rbd_watch_out_file ${image}) 2>&1)&
+	    rbd --admin-socket ${asok} watch ${image} \
+                > $(rbd_watch_out_file ${image}) 2>&1)&
 
     # find pid of the started rbd watch process
     local pid
     for i in `seq 10`; do
-	pid=$(ps auxww | awk "/[r]bd watch ${image}/ {print \$2}")
+	pid=$(ps auxww | awk "/[r]bd --admin.* watch ${image}/ {print \$2}")
 	test -n "${pid}" && break
 	sleep 0.1
     done
@@ -78,14 +81,12 @@ function rbd_watch_start()
     echo ${pid} > $(rbd_watch_pid_file ${image})
 
     # find watcher admin socket
-    local asok=$(ceph-conf admin_socket | sed -E "s/[0-9]+/${pid}/")
     test -n "${asok}"
     for i in `seq 10`; do
 	test -S "${asok}" && break
 	sleep 0.1
     done
     test -S "${asok}"
-    ln -s "${asok}" $(rbd_watch_asok ${image})
 
     # configure debug level
     ceph --admin-daemon "${asok}" config set debug_rbd 20

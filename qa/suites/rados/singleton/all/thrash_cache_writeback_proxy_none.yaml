@@ -16,7 +16,7 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-      - wrongly marked me down
+      - but it is still running
       - slow request
       - overall HEALTH_
       - (CACHE_POOL_

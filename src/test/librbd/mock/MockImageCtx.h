@@ -105,7 +105,8 @@ struct MockImageCtx {
       mirroring_resync_after_disconnect(
           image_ctx.mirroring_resync_after_disconnect),
       mirroring_replay_delay(image_ctx.mirroring_replay_delay),
-      non_blocking_aio(image_ctx.non_blocking_aio)
+      non_blocking_aio(image_ctx.non_blocking_aio),
+      blkin_trace_all(image_ctx.blkin_trace_all)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -194,9 +195,8 @@ struct MockImageCtx {
   MOCK_METHOD1(notify_update, void(Context *));
 
   MOCK_CONST_METHOD0(get_exclusive_lock_policy, exclusive_lock::Policy*());
-
   MOCK_CONST_METHOD0(get_journal_policy, journal::Policy*());
-  MOCK_CONST_METHOD1(set_journal_policy, void(journal::Policy*));
+  MOCK_METHOD1(set_journal_policy, void(journal::Policy*));
 
   MOCK_METHOD8(aio_read_from_cache, void(object_t, uint64_t, bufferlist *,
                                          size_t, uint64_t, Context *, int, ZTracer::Trace *));
@@ -297,6 +297,7 @@ struct MockImageCtx {
   bool mirroring_resync_after_disconnect;
   int mirroring_replay_delay;
   bool non_blocking_aio;
+  bool blkin_trace_all;
 };
 
 } // namespace librbd

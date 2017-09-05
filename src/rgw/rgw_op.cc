@@ -16,6 +16,7 @@
 
 #include "common/Clock.h"
 #include "common/armor.h"
+#include "common/backport14.h"
 #include "common/errno.h"
 #include "common/mime.h"
 #include "common/utf8.h"
@@ -401,18 +402,17 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   }
 
   if(s->dialect.compare("s3") == 0) {
-    s->bucket_acl = new RGWAccessControlPolicy_S3(s->cct);
+    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy_S3>(s->cct);
   } else if(s->dialect.compare("swift")  == 0) {
     /* We aren't allocating the account policy for those operations using
      * the Swift's infrastructure that don't really need req_state::user.
      * Typical example here is the implementation of /info. */
     if (!s->user->user_id.empty()) {
-      s->user_acl = std::unique_ptr<RGWAccessControlPolicy>(
-          new RGWAccessControlPolicy_SWIFTAcct(s->cct));
+      s->user_acl = ceph::make_unique<RGWAccessControlPolicy_SWIFTAcct>(s->cct);
     }
-    s->bucket_acl = new RGWAccessControlPolicy_SWIFT(s->cct);
+    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy_SWIFT>(s->cct);
   } else {
-    s->bucket_acl = new RGWAccessControlPolicy(s->cct);
+    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy>(s->cct);
   }
 
   /* check if copy source is within the current domain */
@@ -457,7 +457,8 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     s->bucket = s->bucket_info.bucket;
 
     if (s->bucket_exists) {
-      ret = read_bucket_policy(store, s, s->bucket_info, s->bucket_attrs, s->bucket_acl, s->bucket);
+      ret = read_bucket_policy(store, s, s->bucket_info, s->bucket_attrs,
+                               s->bucket_acl.get(), s->bucket);
       acct_acl_user = {
         s->bucket_info.owner,
         s->bucket_acl->get_owner().get_display_name(),
@@ -494,6 +495,8 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
        */
       if (store->get_zonegroup().is_master_zonegroup() && s->system_request) {
         /*If this is the master, don't redirect*/
+      } else if (s->op_type == RGW_OP_GET_BUCKET_LOCATION ) {
+        /* If op is get bucket location, don't redirect */
       } else if (!s->local_source ||
           (s->op != OP_PUT && s->op != OP_COPY) ||
           s->object.empty()) {
@@ -560,7 +563,7 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
     if (!s->bucket_exists) {
       return -ERR_NO_SUCH_BUCKET;
     }
-    s->object_acl = new RGWAccessControlPolicy(s->cct);
+    s->object_acl = ceph::make_unique<RGWAccessControlPolicy>(s->cct);
 
     rgw_obj obj(s->bucket, s->object);
       
@@ -568,7 +571,9 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
     if (prefetch_data) {
       store->set_prefetch_data(s->obj_ctx, obj);
     }
-    ret = read_obj_policy(store, s, s->bucket_info, s->bucket_attrs, s->object_acl, s->iam_policy, s->bucket, s->object);
+    ret = read_obj_policy(store, s, s->bucket_info, s->bucket_attrs,
+			  s->object_acl.get(), s->iam_policy, s->bucket,
+                          s->object);
   }
 
   return ret;
@@ -717,6 +722,12 @@ void RGWGetObjTags::execute()
   store->set_atomic(s->obj_ctx, obj);
 
   op_ret = get_obj_attrs(store, s, obj, attrs);
+  if (op_ret < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to get obj attrs, obj=" << obj
+		     << " ret=" << op_ret << dendl;
+    return;
+  }
+
   auto tags = attrs.find(RGW_ATTR_TAGS);
   if(tags != attrs.end()){
     has_tags = true;
@@ -1327,7 +1338,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   } else {
     bucket = s->bucket;
     pbucket_info = &s->bucket_info;
-    bucket_acl = s->bucket_acl;
+    bucket_acl = s->bucket_acl.get();
     bucket_policy = &s->iam_policy;
   }
 
@@ -1464,7 +1475,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
       }
     } else {
       bucket = s->bucket;
-      bucket_acl = s->bucket_acl;
+      bucket_acl = s->bucket_acl.get();
       bucket_policy = s->iam_policy.get_ptr();
     }
 
@@ -2168,6 +2179,19 @@ int RGWListBucket::verify_permission()
   if (op_ret < 0) {
     return op_ret;
   }
+  if (!prefix.empty())
+    s->env.emplace(std::piecewise_construct,
+		   std::forward_as_tuple("s3:prefix"),
+		   std::forward_as_tuple(prefix));
+
+  if (!delimiter.empty())
+    s->env.emplace(std::piecewise_construct,
+		   std::forward_as_tuple("s3:delimiter"),
+		   std::forward_as_tuple(delimiter));
+
+  s->env.emplace(std::piecewise_construct,
+		 std::forward_as_tuple("s3:max-keys"),
+		 std::forward_as_tuple(to_string(max)));
 
   if (!verify_bucket_permission(s,
 				list_versions ?
@@ -2520,13 +2544,24 @@ void RGWCreateBucket::execute()
       return;
   }
 
-  if (!store->get_zonegroup().is_master_zonegroup() &&
+  if (!store->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
       store->get_zonegroup().api_name != location_constraint) {
     ldout(s->cct, 0) << "location constraint (" << location_constraint << ")"
                      << " doesn't match zonegroup" << " (" << store->get_zonegroup().api_name << ")"
                      << dendl;
     op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
     s->err.message = "The specified location-constraint is not valid";
+    return;
+  }
+
+  const auto& zonegroup = store->get_zonegroup();
+  if (!placement_rule.empty() &&
+      !zonegroup.placement_targets.count(placement_rule)) {
+    ldout(s->cct, 0) << "placement target (" << placement_rule << ")"
+                     << " doesn't exist in the placement targets of zonegroup"
+                     << " (" << store->get_zonegroup().api_name << ")" << dendl;
+    op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
+    s->err.message = "The specified placement target does not exist";
     return;
   }
 
@@ -3929,7 +3964,8 @@ void RGWPutMetadataBucket::execute()
    * contain such keys yet. */
   if (has_policy) {
     if (s->dialect.compare("swift") == 0) {
-	auto old_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl);
+	auto old_policy = \
+          static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
 	auto new_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(&policy);
 	new_policy->filter_merge(policy_rw_mask, old_policy);
 	policy = *new_policy;
@@ -4470,7 +4506,7 @@ int RGWGetACLs::verify_permission()
 				    rgw::IAM::s3GetObjectAcl :
 				    rgw::IAM::s3GetObjectVersionAcl);
   } else {
-    perm = verify_bucket_permission(s, rgw::IAM::s3GetObjectAcl);
+    perm = verify_bucket_permission(s, rgw::IAM::s3GetBucketAcl);
   }
   if (!perm)
     return -EACCES;
@@ -4486,8 +4522,10 @@ void RGWGetACLs::pre_exec()
 void RGWGetACLs::execute()
 {
   stringstream ss;
-  RGWAccessControlPolicy *acl = (!s->object.empty() ? s->object_acl : s->bucket_acl);
-  RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(acl);
+  RGWAccessControlPolicy* const acl = \
+    (!s->object.empty() ? s->object_acl.get() : s->bucket_acl.get());
+  RGWAccessControlPolicy_S3* const s3policy = \
+    static_cast<RGWAccessControlPolicy_S3*>(acl);
   s3policy->to_xml(ss);
   acls = ss.str();
 }
@@ -4580,7 +4618,8 @@ void RGWPutACLs::execute()
   }
 
 
-  RGWAccessControlPolicy *existing_policy = (s->object.empty() ? s->bucket_acl : s->object_acl);
+  RGWAccessControlPolicy* const existing_policy = \
+    (s->object.empty() ? s->bucket_acl.get() : s->object_acl.get());
 
   owner = existing_policy->get_owner();
 
@@ -4735,12 +4774,6 @@ void RGWPutLC::execute()
     return;
   }
 
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
-    ldout(s->cct, 15) << "Old LifecycleConfiguration:";
-    config->to_xml(*_dout);
-    *_dout << dendl;
-  }
-
   op_ret = config->rebuild(store, new_config);
   if (op_ret < 0)
     return;
@@ -4811,6 +4844,11 @@ void RGWDeleteLC::execute()
       }
     }
   op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  if (op_ret < 0) {
+    ldout(s->cct, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket=" << s->bucket.name
+            << " returned err=" << op_ret << dendl;
+    return;
+  }
   string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
   pair<string, int> entry(shard_id, lc_uninitial);
   string oid; 
@@ -5258,6 +5296,33 @@ void RGWCompleteMultipart::execute()
   meta_obj.set_in_extra_data(true);
   meta_obj.index_hash_source = s->object.name;
 
+  /*take a cls lock on meta_obj to prevent racing completions (or retries)
+    from deleting the parts*/
+  rgw_pool meta_pool;
+  rgw_raw_obj raw_obj;
+  librados::ObjectWriteOperation op;
+  librados::IoCtx ioctx;
+  rados::cls::lock::Lock l("RGWCompleteMultipart");
+  int max_lock_secs_mp = s->cct->_conf->get_val<int64_t>("rgw_mp_lock_max_time");
+
+  op.assert_exists();
+  store->obj_to_raw((s->bucket_info).placement_rule, meta_obj, &raw_obj);
+  store->get_obj_data_pool((s->bucket_info).placement_rule,meta_obj,&meta_pool);
+  store->open_pool_ctx(meta_pool, ioctx);
+
+  const string raw_meta_oid = raw_obj.oid;
+  utime_t time(max_lock_secs_mp, 0);
+  l.set_duration(time);
+  l.lock_exclusive(&op);
+  op_ret = ioctx.operate(raw_meta_oid, &op);
+
+  if (op_ret < 0) {
+    dout(0) << "RGWCompleteMultipart::execute() failed to acquire lock " << dendl;
+    op_ret = -ERR_INTERNAL_ERROR;
+    s->err.message = "This multipart completion is already in progress";
+    return;
+  }
+
   op_ret = get_obj_attrs(store, s, meta_obj, attrs);
 
   if (op_ret < 0) {
@@ -5408,6 +5473,10 @@ void RGWCompleteMultipart::execute()
 			    s->bucket_info, meta_obj, 0);
   if (r < 0) {
     ldout(store->ctx(), 0) << "WARNING: failed to remove object " << meta_obj << dendl;
+    r = l.unlock(&ioctx, raw_meta_oid);
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "WARNING: failed to unlock " << raw_meta_oid << dendl;
+    }
   }
 }
 

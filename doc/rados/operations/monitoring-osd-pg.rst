@@ -10,7 +10,7 @@ particular OSD addresses. This means that tracking down system faults requires
 finding the `placement group`_ and the underlying OSDs at root of the problem.
 
 .. tip:: A fault in one part of the cluster may prevent you from accessing a 
-   particular object, but that doesn't mean that you can't access other objects.
+   particular object, but that doesn't mean that you cannot access other objects.
    When you run into a fault, don't panic. Just follow the steps for monitoring
    your OSDs and placement groups. Then, begin troubleshooting.
 
@@ -73,7 +73,7 @@ how many are ``up`` (y) and how many are ``in`` (z). ::
 
 If the number of OSDs that are ``in`` the cluster is more than the number of
 OSDs that are ``up``, execute the following command to identify the ``ceph-osd``
-daemons that aren't running:: 
+daemons that are not running:: 
 
 	ceph osd tree
 
@@ -221,7 +221,7 @@ storage capacity for the placement group. These numbers can be important in a
 few cases: 
 
 - You are reaching your ``near full ratio`` or ``full ratio``. 
-- Your data isn't getting distributed across the cluster due to an 
+- Your data is not getting distributed across the cluster due to an 
   error in your CRUSH configuration.
 
 
@@ -458,7 +458,7 @@ back ``up``, the contents of the placement groups must be updated to reflect the
 current state. During that time period, the OSD may reflect a ``recovering``
 state.
 
-Recovery isn't always trivial, because a hardware failure might cause a
+Recovery is not always trivial, because a hardware failure might cause a
 cascading failure of multiple OSDs. For example, a network switch for a rack or
 cabinet may fail, which can cause the OSDs of a number of host machines to fall
 behind the current state  of the cluster. Each one of the OSDs must recover once
@@ -487,11 +487,11 @@ the background.  Once backfilling is complete, the new OSD will begin serving
 requests when it is ready.
 
 During the backfill operations, you may see one of several states:
-``backfill_wait`` indicates that a backfill operation is pending, but isn't
+``backfill_wait`` indicates that a backfill operation is pending, but is not
 underway yet; ``backfill`` indicates that a backfill operation is underway;
 and, ``backfill_too_full`` indicates that a backfill operation was requested,
 but couldn't be completed due to insufficient storage capacity. When a 
-placement group can't be backfilled, it may be considered ``incomplete``.
+placement group cannot be backfilled, it may be considered ``incomplete``.
 
 Ceph provides a number of settings to manage the load spike associated with
 reassigning placement groups to an OSD (especially a new OSD). By default,
@@ -519,7 +519,7 @@ Stale
 -----
 
 While Ceph uses heartbeats to ensure that hosts and daemons are running, the
-``ceph-osd`` daemons may also get into a ``stuck`` state where they aren't
+``ceph-osd`` daemons may also get into a ``stuck`` state where they are not
 reporting statistics in a timely manner (e.g., a temporary network fault). By
 default, OSD daemons report their placement group, up thru, boot and failure
 statistics every half second (i.e., ``0.5``),  which is more frequent than the
@@ -537,8 +537,8 @@ to the monitor.
 Identifying Troubled PGs
 ========================
 
-As previously noted, a placement group isn't necessarily problematic just 
-because its state isn't ``active+clean``. Generally, Ceph's ability to self
+As previously noted, a placement group is not necessarily problematic just 
+because its state is not ``active+clean``. Generally, Ceph's ability to self
 repair may not be working when placement groups get stuck. The stuck states
 include:
 

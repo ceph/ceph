@@ -338,8 +338,8 @@ private:
   bool m_ec_pool;
   bool m_balance_reads;
   bool m_set_redirect;
-  int m_redirect_objects;
-  int m_initial_redirected_objects; 
+  int m_redirect_objects{0};
+  int m_initial_redirected_objects{0}; 
 };
 
 int main(int argc, char **argv)
@@ -487,8 +487,8 @@ int main(int argc, char **argv)
        << "\tWrite stride min: " << min_stride_size << std::endl
        << "\tWrite stride max: " << max_stride_size << std::endl;
 
-  if (min_stride_size > max_stride_size) {
-    cerr << "Error: min_stride_size cannot be more than max_stride_size"
+  if (min_stride_size >= max_stride_size) {
+    cerr << "Error: max_stride_size must be more than min_stride_size"
 	 << std::endl;
     return 1;
   }

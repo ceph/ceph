@@ -184,7 +184,7 @@ often ``192.168.0.0`` or ``10.0.0.0``.
 
 .. note:: Ceph uses `CIDR`_ notation for subnets (e.g., ``10.0.0.0/24``).
 
-When you've configured your networks, you may restart your cluster or restart
+When you have configured your networks, you may restart your cluster or restart
 each daemon. Ceph daemons bind dynamically, so you do not have to restart the
 entire cluster at once if you change your network configuration.
 
@@ -198,7 +198,7 @@ section of your Ceph configuration file.
 .. code-block:: ini
 
 	[global]
-		...
+		# ... elided configuration
 		public network = {public-network/netmask}
 
 
@@ -213,7 +213,7 @@ following option to the ``[global]`` section of your Ceph configuration file.
 .. code-block:: ini
 
 	[global]
-		...
+		# ... elided configuration
 		cluster network = {cluster-network/netmask}
 
 We prefer that the cluster network is **NOT** reachable from the public network
@@ -370,7 +370,7 @@ addresses.
 ``ms bind ipv6``
 
 :Description: Enables Ceph daemons to bind to IPv6 addresses. Currently the
-              messenger *either* uses IPv4 or IPv6, but it can't do both.
+              messenger *either* uses IPv4 or IPv6, but it cannot do both.
 :Type: Boolean
 :Default: ``false``
 :Required: No

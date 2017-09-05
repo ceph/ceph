@@ -76,6 +76,7 @@ void RGWOp_User_Create::execute()
   std::string secret_key;
   std::string key_type_str;
   std::string caps;
+  std::string tenant_name;
 
   bool gen_key;
   bool suspended;
@@ -96,6 +97,7 @@ void RGWOp_User_Create::execute()
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
   RESTArgs::get_string(s, "user-caps", caps, &caps);
+  RESTArgs::get_string(s, "tenant", tenant_name, &tenant_name);
   RESTArgs::get_bool(s, "generate-key", true, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
   RESTArgs::get_int32(s, "max-buckets", default_max_buckets, &max_buckets);
@@ -106,6 +108,10 @@ void RGWOp_User_Create::execute()
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
     http_ret = -EINVAL;
     return;
+  }
+
+  if (!tenant_name.empty()) {
+    uid.tenant = tenant_name;
   }
 
   // TODO: validate required args are passed in. (for eg. uid and display_name here)

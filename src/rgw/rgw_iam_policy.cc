@@ -8,9 +8,10 @@
 #include <utility>
 
 #include <boost/regex.hpp>
-
+#include <iostream>
 #include "rapidjson/reader.h"
 
+#include "common/backport14.h"
 #include "rgw_auth.h"
 #include <arpa/inet.h>
 #include "rgw_iam_policy.h"
@@ -389,15 +390,15 @@ bool ARN::match(const ARN& candidate) const {
     return false;
   }
 
-  if (!::match(region, candidate.region, MATCH_POLICY_ARN)) {
+  if (!match_policy(region, candidate.region, MATCH_POLICY_ARN)) {
     return false;
   }
 
-  if (!::match(account, candidate.account, MATCH_POLICY_ARN)) {
+  if (!match_policy(account, candidate.account, MATCH_POLICY_ARN)) {
     return false;
   }
 
-  if (!::match(resource, candidate.resource, MATCH_POLICY_ARN)) {
+  if (!match_policy(resource, candidate.resource, MATCH_POLICY_ARN)) {
     return false;
   }
 
@@ -473,6 +474,7 @@ struct ParseState {
 
   bool arraying = false;
   bool objecting = false;
+  bool cond_ifexists = false;
 
   void reset();
 
@@ -505,6 +507,7 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
   CephContext* cct;
   const string& tenant;
   Policy& policy;
+  uint32_t v = 0;
 
   uint32_t seen = 0;
 
@@ -551,19 +554,59 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
   }
   void set(TokenID in) {
     seen |= dex(in);
+    if (dex(in) & (dex(TokenID::Sid) | dex(TokenID::Effect) |
+		   dex(TokenID::Principal) | dex(TokenID::NotPrincipal) |
+		   dex(TokenID::Action) | dex(TokenID::NotAction) |
+		   dex(TokenID::Resource) | dex(TokenID::NotResource) |
+		   dex(TokenID::Condition) | dex(TokenID::AWS) |
+		   dex(TokenID::Federated) | dex(TokenID::Service) |
+		   dex(TokenID::CanonicalUser))) {
+      v |= dex(in);
+    }
   }
   void set(std::initializer_list<TokenID> l) {
     for (auto in : l) {
       seen |= dex(in);
+      if (dex(in) & (dex(TokenID::Sid) | dex(TokenID::Effect) |
+		     dex(TokenID::Principal) | dex(TokenID::NotPrincipal) |
+		     dex(TokenID::Action) | dex(TokenID::NotAction) |
+		     dex(TokenID::Resource) | dex(TokenID::NotResource) |
+		     dex(TokenID::Condition) | dex(TokenID::AWS) |
+		     dex(TokenID::Federated) | dex(TokenID::Service) |
+		     dex(TokenID::CanonicalUser))) {
+	v |= dex(in);
+      }
     }
   }
   void reset(TokenID in) {
     seen &= ~dex(in);
+    if (dex(in) & (dex(TokenID::Sid) | dex(TokenID::Effect) |
+		   dex(TokenID::Principal) | dex(TokenID::NotPrincipal) |
+		   dex(TokenID::Action) | dex(TokenID::NotAction) |
+		   dex(TokenID::Resource) | dex(TokenID::NotResource) |
+		   dex(TokenID::Condition) | dex(TokenID::AWS) |
+		   dex(TokenID::Federated) | dex(TokenID::Service) |
+		   dex(TokenID::CanonicalUser))) {
+      v &= ~dex(in);
+    }
   }
   void reset(std::initializer_list<TokenID> l) {
     for (auto in : l) {
       seen &= ~dex(in);
+      if (dex(in) & (dex(TokenID::Sid) | dex(TokenID::Effect) |
+		     dex(TokenID::Principal) | dex(TokenID::NotPrincipal) |
+		     dex(TokenID::Action) | dex(TokenID::NotAction) |
+		     dex(TokenID::Resource) | dex(TokenID::NotResource) |
+		     dex(TokenID::Condition) | dex(TokenID::AWS) |
+		     dex(TokenID::Federated) | dex(TokenID::Service) |
+		     dex(TokenID::CanonicalUser))) {
+	v &= ~dex(in);
+      }
     }
+  }
+  void reset(uint32_t& v) {
+    seen &= ~v;
+    v = 0;
   }
 
   PolicyParser(CephContext* cct, const string& tenant, Policy& policy)
@@ -583,14 +626,12 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
     if (s.empty()) {
       return false;
     }
-
     return s.back().obj_end();
   }
   bool Key(const char* str, SizeType length, bool copy) {
     if (s.empty()) {
       return false;
     }
-
     return s.back().key(str, length);
   }
 
@@ -598,7 +639,6 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
     if (s.empty()) {
       return false;
     }
-
     return s.back().do_string(cct, str, length);
   }
   bool RawNumber(const char* str, SizeType length, bool copy) {
@@ -645,13 +685,24 @@ bool ParseState::obj_end() {
 }
 
 bool ParseState::key(const char* s, size_t l) {
-  auto k = pp->tokens.lookup(s, l);
+  auto token_len = l;
+  bool ifexists = false;
+  if (w->id == TokenID::Condition && w->kind == TokenKind::statement) {
+    static constexpr char IfExists[] = "IfExists";
+    if (boost::algorithm::ends_with(boost::string_view{s, l}, IfExists)) {
+      ifexists = true;
+      token_len -= sizeof(IfExists)-1;
+    }
+  }
+  auto k = pp->tokens.lookup(s, token_len);
 
   if (!k) {
     if (w->kind == TokenKind::cond_op) {
+      auto id = w->id;
       auto& t = pp->policy.statements.back();
+      auto c_ife =  cond_ifexists;
       pp->s.emplace_back(pp, cond_key);
-      t.conditions.emplace_back(w->id, s, l);
+      t.conditions.emplace_back(id, s, l, c_ife);
       return true;
     } else {
       return false;
@@ -661,7 +712,6 @@ bool ParseState::key(const char* s, size_t l) {
   // If the token we're going with belongs within the condition at the
   // top of the stack and we haven't already encountered it, push it
   // on the stack
-
   // Top
   if ((((w->id == TokenID::Top) && (k->kind == TokenKind::top)) ||
        // Statement
@@ -680,6 +730,7 @@ bool ParseState::key(const char* s, size_t l) {
   } else if ((w->id == TokenID::Condition) &&
 	     (k->kind == TokenKind::cond_op)) {
     pp->s.emplace_back(pp, k);
+    pp->s.back().cond_ifexists = ifexists;
     return true;
   }
   return false;
@@ -764,7 +815,7 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
   } else if ((w->id == TokenID::Action) ||
 	     (w->id == TokenID::NotAction)) {
     for (auto& p : actpairs) {
-      if (match({s, l}, p.name, MATCH_POLICY_ACTION)) {
+      if (match_policy({s, l}, p.name, MATCH_POLICY_ACTION)) {
 	(w->id == TokenID::Action ? t->action : t->notaction) |= p.bit;
       }
     }
@@ -829,9 +880,7 @@ bool ParseState::number(const char* s, size_t l) {
 }
 
 void ParseState::reset() {
-  pp->reset({TokenID::Sid, TokenID::Effect, TokenID::Principal,
-	TokenID::NotPrincipal, TokenID::Action, TokenID::NotAction,
-	TokenID::Resource, TokenID::NotResource, TokenID::Condition});
+  pp->reset(pp->v);
 }
 
 bool ParseState::obj_start() {
@@ -901,7 +950,7 @@ bool Condition::eval(const Environment& env) const {
   }
 
   if (i == env.end()) {
-    return false;
+    return ifexists;
   }
   const auto& s = i->second;
 
@@ -911,28 +960,27 @@ bool Condition::eval(const Environment& env) const {
     return orrible(std::equal_to<std::string>(), s, vals);
 
   case TokenID::StringNotEquals:
-    return orrible(std::not2(std::equal_to<std::string>()),
+    return orrible(ceph::not_fn(std::equal_to<std::string>()),
 		   s, vals);
 
   case TokenID::StringEqualsIgnoreCase:
     return orrible(ci_equal_to(), s, vals);
 
   case TokenID::StringNotEqualsIgnoreCase:
-    return orrible(std::not2(ci_equal_to()), s, vals);
+    return orrible(ceph::not_fn(ci_equal_to()), s, vals);
 
-    // Implement actual StringLike with wildcarding later
   case TokenID::StringLike:
-    return orrible(std::equal_to<std::string>(), s, vals);
+    return orrible(string_like(), s, vals);
+
   case TokenID::StringNotLike:
-    return orrible(std::not2(std::equal_to<std::string>()),
-		   s, vals);
+    return orrible(ceph::not_fn(string_like()), s, vals);
 
     // Numeric
   case TokenID::NumericEquals:
     return shortible(std::equal_to<double>(), as_number, s, vals);
 
   case TokenID::NumericNotEquals:
-    return shortible(std::not2(std::equal_to<double>()),
+    return shortible(ceph::not_fn(std::equal_to<double>()),
 		     as_number, s, vals);
 
 
@@ -954,7 +1002,7 @@ bool Condition::eval(const Environment& env) const {
     return shortible(std::equal_to<ceph::real_time>(), as_date, s, vals);
 
   case TokenID::DateNotEquals:
-    return shortible(std::not2(std::equal_to<ceph::real_time>()),
+    return shortible(ceph::not_fn(std::equal_to<ceph::real_time>()),
 		     as_date, s, vals);
 
   case TokenID::DateLessThan:
@@ -985,7 +1033,7 @@ bool Condition::eval(const Environment& env) const {
     return shortible(std::equal_to<MaskedIP>(), as_network, s, vals);
 
   case TokenID::NotIpAddress:
-    return shortible(std::not2(std::equal_to<MaskedIP>()), as_network, s,
+    return shortible(ceph::not_fn(std::equal_to<MaskedIP>()), as_network, s,
 		     vals);
 
 #if 0

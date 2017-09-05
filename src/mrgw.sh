@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 
@@ -22,7 +22,7 @@ shift 2
 
 run_root=$script_root/run/$name
 pidfile=$run_root/out/radosgw.${port}.pid
-asokfile=$($ceph_bin/ceph-conf --show-config-value admin_socket --name radosgw.${port})
+asokfile=$run_root/out/radosgw.${port}.asok
 logfile=$run_root/out/radosgw.${port}.log
 
 $vstart_path/mstop.sh $name radosgw $port

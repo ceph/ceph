@@ -99,9 +99,7 @@ public:
 
   void print_summary(Formatter *f, std::ostream *ss) const;
 
-  const std::vector<MonCommand> &get_command_descs() const {
-    return command_descs;
-  }
+  const std::vector<MonCommand> &get_command_descs() const;
 
   int load_metadata(const string& name, std::map<string, string>& m,
 		    ostream *err);

@@ -61,7 +61,9 @@ using rgw::IAM::s3GetObject;
 using rgw::IAM::s3GetObjectAcl;
 using rgw::IAM::s3GetObjectVersionAcl;
 using rgw::IAM::s3GetObjectTorrent;
+using rgw::IAM::s3GetObjectTagging;
 using rgw::IAM::s3GetObjectVersion;
+using rgw::IAM::s3GetObjectVersionTagging;
 using rgw::IAM::s3GetObjectVersionTorrent;
 using rgw::IAM::s3GetReplicationConfiguration;
 using rgw::IAM::s3ListAllMyBuckets;
@@ -324,7 +326,9 @@ TEST_F(PolicyTest, Parse3) {
 				      s3GetBucketTagging |
 				      s3GetBucketWebsite |
 				      s3GetLifecycleConfiguration |
-				      s3GetReplicationConfiguration));
+				      s3GetReplicationConfiguration |
+				      s3GetObjectTagging |
+				      s3GetObjectVersionTagging));
   EXPECT_EQ(p->statements[2].notaction, s3None);
   ASSERT_FALSE(p->statements[2].resource.empty());
   ASSERT_EQ(p->statements[2].resource.size(), 2U);
@@ -370,7 +374,8 @@ TEST_F(PolicyTest, Eval3) {
 		  s3GetBucketPolicy | s3GetBucketNotification |
 		  s3GetBucketLogging | s3GetBucketTagging |
 		  s3GetBucketWebsite | s3GetLifecycleConfiguration |
-		  s3GetReplicationConfiguration);
+		  s3GetReplicationConfiguration |
+		  s3GetObjectTagging | s3GetObjectVersionTagging);
 
   EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy,
 		   ARN(Partition::aws, Service::s3,
@@ -505,3 +510,120 @@ string PolicyTest::example3 = R"(
   ]
 }
 )";
+
+TEST(MatchWildcards, Simple)
+{
+  EXPECT_TRUE(match_wildcards("", ""));
+  EXPECT_TRUE(match_wildcards("", "", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("", "abc"));
+  EXPECT_FALSE(match_wildcards("", "abc", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("abc", ""));
+  EXPECT_FALSE(match_wildcards("abc", "", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("abc", "abc"));
+  EXPECT_TRUE(match_wildcards("abc", "abc", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("abc", "abC"));
+  EXPECT_TRUE(match_wildcards("abc", "abC", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("abC", "abc"));
+  EXPECT_TRUE(match_wildcards("abC", "abc", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("abc", "abcd"));
+  EXPECT_FALSE(match_wildcards("abc", "abcd", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("abcd", "abc"));
+  EXPECT_FALSE(match_wildcards("abcd", "abc", MATCH_CASE_INSENSITIVE));
+}
+
+TEST(MatchWildcards, QuestionMark)
+{
+  EXPECT_FALSE(match_wildcards("?", ""));
+  EXPECT_FALSE(match_wildcards("?", "", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("?", "a"));
+  EXPECT_TRUE(match_wildcards("?", "a", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("?bc", "abc"));
+  EXPECT_TRUE(match_wildcards("?bc", "abc", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("a?c", "abc"));
+  EXPECT_TRUE(match_wildcards("a?c", "abc", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("abc", "a?c"));
+  EXPECT_FALSE(match_wildcards("abc", "a?c", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("a?c", "abC"));
+  EXPECT_TRUE(match_wildcards("a?c", "abC", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("ab?", "abc"));
+  EXPECT_TRUE(match_wildcards("ab?", "abc", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("a?c?e", "abcde"));
+  EXPECT_TRUE(match_wildcards("a?c?e", "abcde", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("???", "abc"));
+  EXPECT_TRUE(match_wildcards("???", "abc", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("???", "abcd"));
+  EXPECT_FALSE(match_wildcards("???", "abcd", MATCH_CASE_INSENSITIVE));
+}
+
+TEST(MatchWildcards, Asterisk)
+{
+  EXPECT_TRUE(match_wildcards("*", ""));
+  EXPECT_TRUE(match_wildcards("*", "", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("", "*"));
+  EXPECT_FALSE(match_wildcards("", "*", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("*a", ""));
+  EXPECT_FALSE(match_wildcards("*a", "", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("*a", "a"));
+  EXPECT_TRUE(match_wildcards("*a", "a", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("a*", "a"));
+  EXPECT_TRUE(match_wildcards("a*", "a", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("a*c", "ac"));
+  EXPECT_TRUE(match_wildcards("a*c", "ac", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("a*c", "abbc"));
+  EXPECT_TRUE(match_wildcards("a*c", "abbc", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("a*c", "abbC"));
+  EXPECT_TRUE(match_wildcards("a*c", "abbC", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("a*c*e", "abBce"));
+  EXPECT_TRUE(match_wildcards("a*c*e", "abBce", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("http://*.example.com",
+                              "http://www.example.com"));
+  EXPECT_TRUE(match_wildcards("http://*.example.com",
+                              "http://www.example.com", MATCH_CASE_INSENSITIVE));
+  EXPECT_FALSE(match_wildcards("http://*.example.com",
+                               "http://www.Example.com"));
+  EXPECT_TRUE(match_wildcards("http://*.example.com",
+                              "http://www.Example.com", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("http://example.com/*",
+                              "http://example.com/index.html"));
+  EXPECT_TRUE(match_wildcards("http://example.com/*/*.jpg",
+                              "http://example.com/fun/smiley.jpg"));
+  // note: parsing of * is not greedy, so * does not match 'bc' here
+  EXPECT_FALSE(match_wildcards("a*c", "abcc"));
+  EXPECT_FALSE(match_wildcards("a*c", "abcc", MATCH_CASE_INSENSITIVE));
+}
+
+TEST(MatchPolicy, Action)
+{
+  constexpr auto flag = MATCH_POLICY_ACTION;
+  EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
+  EXPECT_TRUE(match_policy("a:b:c", "A:B:C", flag)); // case insensitive
+  EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
+  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
+}
+
+TEST(MatchPolicy, Resource)
+{
+  constexpr auto flag = MATCH_POLICY_RESOURCE;
+  EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
+  EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
+  EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
+  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
+}
+
+TEST(MatchPolicy, ARN)
+{
+  constexpr auto flag = MATCH_POLICY_ARN;
+  EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
+  EXPECT_TRUE(match_policy("a:b:c", "A:B:C", flag)); // case insensitive
+  EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
+  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
+}
+
+TEST(MatchPolicy, String)
+{
+  constexpr auto flag = MATCH_POLICY_STRING;
+  EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
+  EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
+  EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
+  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
+}

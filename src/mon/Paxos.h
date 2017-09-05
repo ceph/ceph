@@ -230,6 +230,8 @@ public:
     STATE_WRITING_PREVIOUS,
     // leader: refresh following a commit
     STATE_REFRESH,
+    // Shutdown after WRITING or WRITING_PREVIOUS
+    STATE_SHUTDOWN
   };
 
   /**
@@ -257,6 +259,8 @@ public:
       return "writing-previous";
     case STATE_REFRESH:
       return "refresh";
+    case STATE_SHUTDOWN:
+      return "shutdown";
     default:
       return "UNKNOWN";
     }
@@ -270,6 +274,9 @@ private:
   /**
    * @}
    */
+  int commits_started = 0;
+
+  Cond shutdown_cond;
 
 public:
   /**
@@ -305,6 +312,9 @@ public:
 
   /// @return 'true' if we are refreshing an update just committed
   bool is_refresh() const { return state == STATE_REFRESH; }
+
+  /// @return 'true' if we are in the process of shutting down
+  bool is_shutdown() const { return state == STATE_SHUTDOWN; }
 
 private:
   /**
@@ -880,6 +890,7 @@ private:
    */
   void commit_start();
   void commit_finish();   ///< finish a commit after txn becomes durable
+  void abort_commit();    ///< Handle commit finish after shutdown started
   /**
    * Commit the new value to stable storage as being the latest available
    * version.

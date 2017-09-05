@@ -1,4 +1,4 @@
-#/bin/bash -fv
+#!/usr/bin/env bash
 #
 # Install openstack by running packstack.
 #
@@ -7,6 +7,7 @@
 #
 # The directory named files contains a template for the kilo.conf file used by packstack.
 #
+set -fv
 source ./copy_func.sh
 source ./fix_conf_file.sh
 openstack_node=${1}

@@ -156,13 +156,15 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_REQUIRE_KRAKEN   (1<<17) /* require kraken for booting osds */
 #define CEPH_OSDMAP_REQUIRE_LUMINOUS (1<<18) /* require l for booting osds */
 #define CEPH_OSDMAP_RECOVERY_DELETES (1<<19) /* deletes performed during recovery instead of peering */
+#define CEPH_OSDMAP_PURGED_SNAPDIRS  (1<<20) /* osds have converted snapsets */
 
 /* these are hidden in 'ceph status' view */
 #define CEPH_OSDMAP_SEMIHIDDEN_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL|	\
 				      CEPH_OSDMAP_REQUIRE_KRAKEN |	\
 				      CEPH_OSDMAP_REQUIRE_LUMINOUS |	\
 				      CEPH_OSDMAP_RECOVERY_DELETES |	\
-				      CEPH_OSDMAP_SORTBITWISE)
+				      CEPH_OSDMAP_SORTBITWISE |		\
+				      CEPH_OSDMAP_PURGED_SNAPDIRS)
 #define CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL |	\
 					  CEPH_OSDMAP_REQUIRE_KRAKEN |	\
 					  CEPH_OSDMAP_REQUIRE_LUMINOUS)
@@ -183,7 +185,8 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_RELEASE_KRAKEN     11
 #define CEPH_RELEASE_LUMINOUS   12
 #define CEPH_RELEASE_MIMIC      13
-#define CEPH_RELEASE_MAX        14  /* highest + 1 */
+#define CEPH_RELEASE_NAUTILUS   14
+#define CEPH_RELEASE_MAX        15  /* highest + 1 */
 
 extern const char *ceph_release_name(int r);
 extern int ceph_release_from_name(const char *s);

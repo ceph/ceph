@@ -14,6 +14,8 @@
  *
  */
 
+#include <mutex>
+
 #include "include/compat.h"
 #include "common/Cond.h"
 #include "common/errno.h"
@@ -123,9 +125,9 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(fa
 
 void NetworkStack::start()
 {
-  pool_spin.lock();
+  std::unique_lock<decltype(pool_spin)> lk(pool_spin);
+
   if (started) {
-    pool_spin.unlock();
     return ;
   }
 
@@ -136,7 +138,7 @@ void NetworkStack::start()
     spawn_worker(i, std::move(thread));
   }
   started = true;
-  pool_spin.unlock();
+  lk.unlock();
 
   for (unsigned i = 0; i < num_workers; ++i)
     workers[i]->wait_for_init();
@@ -170,7 +172,7 @@ Worker* NetworkStack::get_worker()
 
 void NetworkStack::stop()
 {
-  Spinlock::Locker l(pool_spin);
+  std::lock_guard<decltype(pool_spin)> lk(pool_spin);
   for (unsigned i = 0; i < num_workers; ++i) {
     workers[i]->done = true;
     workers[i]->center.wakeup();

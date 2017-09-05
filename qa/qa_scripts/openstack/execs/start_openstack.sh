@@ -1,4 +1,6 @@
-#!/bin/bash -fv
+#!/usr/bin/env bash
+set -fv
+
 #
 # start the Openstack services
 #

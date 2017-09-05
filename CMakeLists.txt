@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(ceph)
-set(VERSION 12.1.1)
+set(VERSION 12.1.2)
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
@@ -237,6 +237,8 @@ if(WITH_PMEM)
   set(HAVE_PMEM ${PMEM_FOUND})
 endif(WITH_PMEM)
 
+option(WITH_BLUEFS "libbluefs library" OFF)
+
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
@@ -274,7 +276,7 @@ find_package(snappy REQUIRED)
 
 option(WITH_LZ4 "LZ4 compression support" OFF)
 if(WITH_LZ4)
-  find_package(LZ4 REQUIRED)
+  find_package(LZ4 1.7 REQUIRED)
   set(HAVE_LZ4 ${LZ4_FOUND})
 endif(WITH_LZ4)
 

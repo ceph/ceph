@@ -49,6 +49,7 @@ class TempURLEngine : public rgw::auth::Engine {
   bool is_expired(const std::string& expires) const;
 
   class SignatureHelper;
+  class PrefixableSignatureHelper;
 
 public:
   TempURLEngine(CephContext* const cct,

@@ -298,8 +298,7 @@ void OutputDataSocket::handle_connection(int fd)
 int OutputDataSocket::dump_data(int fd)
 {
   m_lock.Lock(); 
-  list<bufferlist> l;
-  l = data;
+  list<bufferlist> l = std::move(data);
   data.clear();
   data_size = 0;
   m_lock.Unlock();

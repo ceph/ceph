@@ -1254,7 +1254,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (struct_v >= 7) {
       ::decode(lc_pool, bl);
     } else {
-      lc_pool.init(name + ".rgw.lc");
+      lc_pool = log_pool.name + ":lc";
     }
     if (struct_v >= 8) {
       ::decode(tier_config, bl);
@@ -1262,7 +1262,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (struct_v >= 9) {
       ::decode(roles_pool, bl);
     } else {
-      roles_pool = name + ".rgw.roles";
+      roles_pool = name + ".rgw.meta:roles";
     }
     if (struct_v >= 10) {
       ::decode(reshard_pool, bl);
@@ -1416,7 +1416,7 @@ struct RGWZoneGroupPlacementTarget {
   string name;
   set<string> tags;
 
-  bool user_permitted(list<string>& user_tags) {
+  bool user_permitted(list<string>& user_tags) const {
     if (tags.empty()) {
       return true;
     }
@@ -1450,7 +1450,7 @@ WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTarget)
 struct RGWZoneGroup : public RGWSystemMetaObj {
   string api_name;
   list<string> endpoints;
-  bool is_master;
+  bool is_master = false;
 
   string master_zone;
   map<string, RGWZone> zones;
@@ -2213,6 +2213,7 @@ class RGWRados
   friend class RGWReshard;
   friend class RGWBucketReshard;
   friend class BucketIndexLockGuard;
+  friend class RGWCompleteMultipart;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
@@ -2516,11 +2517,17 @@ public:
     return rgw_shards_max();
   }
 
+
   int get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref);
 
+  int list_raw_objects_init(const rgw_pool& pool, const string& marker, RGWListRawObjsCtx *ctx);
+  int list_raw_objects_next(const string& prefix_filter, int max,
+                            RGWListRawObjsCtx& ctx, list<string>& oids,
+                            bool *is_truncated);
   int list_raw_objects(const rgw_pool& pool, const string& prefix_filter, int max,
                        RGWListRawObjsCtx& ctx, list<string>& oids,
                        bool *is_truncated);
+  string list_raw_objs_get_cursor(RGWListRawObjsCtx& ctx);
 
   int list_raw_prefixed_objs(const rgw_pool& pool, const string& prefix, list<string>& result);
   int list_zonegroups(list<string>& zonegroups);
@@ -3358,7 +3365,7 @@ public:
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
-      map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker);
+      map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool* syncstopped = NULL);
   int get_bucket_stats_async(RGWBucketInfo& bucket_info, int shard_id, RGWGetBucketStats_CB *cb);
   int get_user_stats(const rgw_user& user, RGWStorageStats& stats);
   int get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *cb);
@@ -3404,6 +3411,8 @@ public:
   int cls_bucket_head_async(const RGWBucketInfo& bucket_info, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
   int list_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
   int trim_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, string& marker, string& end_marker);
+  int resync_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id);
+  int stop_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id);
   int get_bi_log_status(RGWBucketInfo& bucket_info, int shard_id, map<int, string>& max_marker);
 
   int bi_get_instance(const RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_bucket_dir_entry *dirent);
@@ -3640,6 +3649,22 @@ public:
    * Returns: 0 on success, -ERR# otherwise.
    */
   int pool_iterate_begin(const rgw_pool& pool, RGWPoolIterCtx& ctx);
+
+  /**
+   * Init pool iteration
+   * pool: pool to use
+   * cursor: position to start iteration
+   * ctx: context object to use for the iteration
+   * Returns: 0 on success, -ERR# otherwise.
+   */
+  int pool_iterate_begin(const rgw_pool& pool, const string& cursor, RGWPoolIterCtx& ctx);
+
+  /**
+   * Get pool iteration position
+   * ctx: context object to use for the iteration
+   * Returns: string representation of position
+   */
+  string pool_iterate_get_cursor(RGWPoolIterCtx& ctx);
 
   /**
    * Iterate over pool return object names, use optional filter

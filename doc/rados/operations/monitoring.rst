@@ -6,8 +6,11 @@ Once you have a running cluster, you may use the ``ceph`` tool to monitor your
 cluster. Monitoring a cluster typically involves checking OSD status, monitor 
 status, placement group status and metadata server status.
 
-Interactive Mode
-================
+Using the command line
+======================
+
+Interactive mode
+----------------
 
 To run the ``ceph`` tool in interactive mode, type ``ceph`` at the command line
 with no arguments.  For example:: 
@@ -17,72 +20,58 @@ with no arguments.  For example::
 	ceph> status
 	ceph> quorum_status
 	ceph> mon_status
-	
 
-Checking Cluster Health
-=======================
-
-After you start your cluster, and before you start reading and/or
-writing data, check your cluster's health first. You can check on the 
-health of your Ceph cluster with the following::
-
-	ceph health
+Non-default paths
+-----------------
 
 If you specified non-default locations for your configuration or keyring,
 you may specify their locations::
 
    ceph -c /path/to/conf -k /path/to/keyring health
 
-Upon starting the Ceph cluster, you will likely encounter a health
-warning such as ``HEALTH_WARN XXX num placement groups stale``. Wait a few moments and check
-it again. When your cluster is ready, ``ceph health`` should return a message
-such as ``HEALTH_OK``. At that point, it is okay to begin using the cluster.
+Checking a Cluster's Status
+===========================
 
-Watching a Cluster
-==================
+After you start your cluster, and before you start reading and/or
+writing data, check your cluster's status first.
 
-To watch the cluster's ongoing events, open a new terminal. Then, enter:: 
+To check a cluster's status, execute the following:: 
 
-	ceph -w
+	ceph status
+	
+Or:: 
 
-Ceph will print each event.  For example, a tiny Ceph cluster consisting of 
-one monitor, and two OSDs may print the following:: 
+	ceph -s
 
-    cluster b370a29d-9287-4ca3-ab57-3d824f65e339
-     health HEALTH_OK
-     monmap e1: 1 mons at {ceph1=10.0.0.8:6789/0}, election epoch 2, quorum 0 ceph1
-     osdmap e63: 2 osds: 2 up, 2 in
-      pgmap v41338: 952 pgs, 20 pools, 17130 MB data, 2199 objects
-            115 GB used, 167 GB / 297 GB avail
-                 952 active+clean
+In interactive mode, type ``status`` and press **Enter**. ::
 
-    2014-06-02 15:45:21.655871 osd.0 [INF] 17.71 deep-scrub ok
-    2014-06-02 15:45:47.880608 osd.1 [INF] 1.0 scrub ok
-    2014-06-02 15:45:48.865375 osd.1 [INF] 1.3 scrub ok
-    2014-06-02 15:45:50.866479 osd.1 [INF] 1.4 scrub ok
-    2014-06-02 15:45:01.345821 mon.0 [INF] pgmap v41339: 952 pgs: 952 active+clean; 17130 MB data, 115 GB used, 167 GB / 297 GB avail
-    2014-06-02 15:45:05.718640 mon.0 [INF] pgmap v41340: 952 pgs: 1 active+clean+scrubbing+deep, 951 active+clean; 17130 MB data, 115 GB used, 167 GB / 297 GB avail
-    2014-06-02 15:45:53.997726 osd.1 [INF] 1.5 scrub ok
-    2014-06-02 15:45:06.734270 mon.0 [INF] pgmap v41341: 952 pgs: 1 active+clean+scrubbing+deep, 951 active+clean; 17130 MB data, 115 GB used, 167 GB / 297 GB avail
-    2014-06-02 15:45:15.722456 mon.0 [INF] pgmap v41342: 952 pgs: 952 active+clean; 17130 MB data, 115 GB used, 167 GB / 297 GB avail
-    2014-06-02 15:46:06.836430 osd.0 [INF] 17.75 deep-scrub ok
-    2014-06-02 15:45:55.720929 mon.0 [INF] pgmap v41343: 952 pgs: 1 active+clean+scrubbing+deep, 951 active+clean; 17130 MB data, 115 GB used, 167 GB / 297 GB avail
+	ceph> status
 
+Ceph will print the cluster status. For example, a tiny Ceph demonstration
+cluster with one of each service may print the following:
 
-The output provides:
+::
 
-- Cluster ID
-- Cluster health status
-- The monitor map epoch and the status of the monitor quorum
-- The OSD map epoch and the status of OSDs 
-- The placement group map version
-- The number of placement groups and pools
-- The *notional* amount of data stored and the number of objects stored; and,
-- The total amount of data stored.
+  cluster:
+    id:     477e46f1-ae41-4e43-9c8f-72c918ab0a20
+    health: HEALTH_OK
+   
+  services:
+    mon: 1 daemons, quorum a
+    mgr: x(active)
+    mds: 1/1/1 up {0=a=up:active}
+    osd: 1 osds: 1 up, 1 in
+  
+  data:
+    pools:   2 pools, 16 pgs
+    objects: 21 objects, 2246 bytes
+    usage:   546 GB used, 384 GB / 931 GB avail
+    pgs:     16 active+clean
+
 
 .. topic:: How Ceph Calculates Data Usage
 
-   The ``used`` value reflects the *actual* amount of raw storage used. The 
+   The ``usage`` value reflects the *actual* amount of raw storage used. The 
    ``xxx GB / xxx GB`` value means the amount available (the lesser number)
    of the overall storage capacity of the cluster. The notional number reflects 
    the size of the stored data before it is replicated, cloned or snapshotted.
@@ -90,6 +79,96 @@ The output provides:
    amount stored, because Ceph creates replicas of the data and may also use 
    storage capacity for cloning and snapshotting.
 
+
+Watching a Cluster
+==================
+
+In addition to local logging by each daemon, Ceph clusters maintain
+a *cluster log* that records high level events about the whole system.
+This is logged to disk on monitor servers (as ``/var/log/ceph/ceph.log`` by
+default), but can also be monitored via the command line.
+
+To follow the cluster log, use the following command
+
+:: 
+
+	ceph -w
+
+Ceph will print the status of the system, followed by each log message as it
+is emitted.  For example:
+
+:: 
+
+  cluster:
+    id:     477e46f1-ae41-4e43-9c8f-72c918ab0a20
+    health: HEALTH_OK
+  
+  services:
+    mon: 1 daemons, quorum a
+    mgr: x(active)
+    mds: 1/1/1 up {0=a=up:active}
+    osd: 1 osds: 1 up, 1 in
+  
+  data:
+    pools:   2 pools, 16 pgs
+    objects: 21 objects, 2246 bytes
+    usage:   546 GB used, 384 GB / 931 GB avail
+    pgs:     16 active+clean
+  
+  
+  2017-07-24 08:15:11.329298 mon.a mon.0 172.21.9.34:6789/0 23 : cluster [INF] osd.0 172.21.9.34:6806/20527 boot
+  2017-07-24 08:15:14.258143 mon.a mon.0 172.21.9.34:6789/0 39 : cluster [INF] Activating manager daemon x
+  2017-07-24 08:15:15.446025 mon.a mon.0 172.21.9.34:6789/0 47 : cluster [INF] Manager daemon x is now available
+
+
+In addition to using ``ceph -w`` to print log lines as they are emitted,
+use ``ceph log last [n]`` to see the most recent ``n`` lines from the cluster
+log.
+
+Monitoring Health Checks
+========================
+
+Ceph continously runs various *health checks* against its own status.  When
+a health check fails, this is reflected in the output of ``ceph status`` (or
+``ceph health``).  In addition, messages are sent to the cluster log to
+indicate when a check fails, and when the cluster recovers.
+
+For example, when an OSD goes down, the ``health`` section of the status
+output may be updated as follows:
+
+::
+
+    health: HEALTH_WARN
+            1 osds down
+            Degraded data redundancy: 21/63 objects degraded (33.333%), 16 pgs unclean, 16 pgs degraded
+
+At this time, cluster log messages are also emitted to record the failure of the 
+health checks:
+
+::
+
+    2017-07-25 10:08:58.265945 mon.a mon.0 172.21.9.34:6789/0 91 : cluster [WRN] Health check failed: 1 osds down (OSD_DOWN)
+    2017-07-25 10:09:01.302624 mon.a mon.0 172.21.9.34:6789/0 94 : cluster [WRN] Health check failed: Degraded data redundancy: 21/63 objects degraded (33.333%), 16 pgs unclean, 16 pgs degraded (PG_DEGRADED)
+
+When the OSD comes back online, the cluster log records the cluster's return
+to a health state:
+
+::
+
+    2017-07-25 10:11:11.526841 mon.a mon.0 172.21.9.34:6789/0 109 : cluster [WRN] Health check update: Degraded data redundancy: 2 pgs unclean, 2 pgs degraded, 2 pgs undersized (PG_DEGRADED)
+    2017-07-25 10:11:13.535493 mon.a mon.0 172.21.9.34:6789/0 110 : cluster [INF] Health check cleared: PG_DEGRADED (was: Degraded data redundancy: 2 pgs unclean, 2 pgs degraded, 2 pgs undersized)
+    2017-07-25 10:11:13.535577 mon.a mon.0 172.21.9.34:6789/0 111 : cluster [INF] Cluster is now healthy
+
+
+Detecting configuration issues
+==============================
+
+In addition to the health checks that Ceph continuously runs on its
+own status, there are some configuration issues that may only be detected
+by an external tool.
+
+Use the `ceph-medic`_ tool to run these additional checks on your Ceph
+cluster's configuration.
 
 Checking a Cluster's Usage Stats
 ================================
@@ -137,33 +216,6 @@ on the number of replicas, clones and snapshots.
    to devices, the utilization of those devices, and the configured
    mon_osd_full_ratio.
 
-
-Checking a Cluster's Status
-===========================
-
-To check a cluster's status, execute the following:: 
-
-	ceph status
-	
-Or:: 
-
-	ceph -s
-
-In interactive mode, type ``status`` and press **Enter**. ::
-
-	ceph> status
-
-Ceph will print the cluster status. For example, a tiny Ceph  cluster consisting
-of one monitor, and two OSDs may print the following::
-
-    cluster b370a29d-9287-4ca3-ab57-3d824f65e339
-     health HEALTH_OK
-     monmap e1: 1 mons at {ceph1=10.0.0.8:6789/0}, election epoch 2, quorum 0 ceph1
-     osdmap e63: 2 osds: 2 up, 2 in
-      pgmap v41332: 952 pgs, 20 pools, 17130 MB data, 2199 objects
-            115 GB used, 167 GB / 297 GB avail
-                   1 active+clean+scrubbing+deep
-                 951 active+clean
 
 
 Checking OSD Status
@@ -296,3 +348,4 @@ directly to the host in question ).
 
 .. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#ceph-runtime-config
 .. _Storage Capacity: ../../configuration/mon-config-ref#storage-capacity
+.. _ceph-medic: http://docs.ceph.com/ceph-medic/master/

@@ -87,7 +87,7 @@ class Module(MgrModule):
             value = self.get_localized_config(key, default)
             if value is None:
                 raise RuntimeError('Configuration key {0} not set; "ceph '
-                                   'config-key put mgr/zabbix/{0} '
+                                   'config-key set mgr/zabbix/{0} '
                                    '<value>"'.format(key))
 
             self.set_config_option(key, value)
@@ -113,7 +113,9 @@ class Module(MgrModule):
         data = dict()
 
         health = json.loads(self.get('health')['json'])
-        data['overall_status'] = health['overall_status']
+        # 'status' is luminous+, 'overall_status' is legacy mode.
+        data['overall_status'] = health.get('status',
+                                            health.get('overall_status'))
         data['overall_status_int'] = \
             self.ceph_health_mapping.get(data['overall_status'])
 

@@ -80,7 +80,8 @@ public:
 };
 
 
-template <class AbstractorT>
+template <class AbstractorT,
+          bool AllowAnonAccessT = false>
 class AWSAuthStrategy : public rgw::auth::Strategy,
                         public rgw::auth::LocalApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
@@ -92,6 +93,7 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
   RGWRados* const store;
   AbstractorT ver_abstractor;
 
+  S3AnonymousEngine anonymous_engine;
   ExternalAuthStrategy external_engines;
   LocalEngine local_engine;
 
@@ -110,10 +112,17 @@ public:
                   RGWRados* const store)
     : store(store),
       ver_abstractor(cct),
+      anonymous_engine(cct,
+                       static_cast<rgw::auth::LocalApplier::Factory*>(this)),
       external_engines(cct, store, &ver_abstractor),
       local_engine(cct, store, ver_abstractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
+    /* The anynoymous auth. */
+    if (AllowAnonAccessT) {
+      add_engine(Control::SUFFICIENT, anonymous_engine);
+    }
 
+    /* The external auth. */
     Control local_engine_mode;
     if (! external_engines.is_empty()) {
       add_engine(Control::SUFFICIENT, external_engines);
@@ -123,6 +132,7 @@ public:
       local_engine_mode = Control::SUFFICIENT;
     }
 
+    /* The local auth. */
     if (cct->_conf->rgw_s3_auth_use_rados) {
       add_engine(local_engine_mode, local_engine);
     }

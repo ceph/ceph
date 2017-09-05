@@ -39,7 +39,7 @@ Synopsis
 
 | **ceph** **mon_status**
 
-| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lspools* \| *map* \| *metadata* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
+| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
 
 | **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
@@ -207,11 +207,11 @@ Usage::
 
 	ceph config-key dump
 
-Subcommand ``put`` puts configuration key and value.
+Subcommand ``set`` puts configuration key and value.
 
 Usage::
 
-	ceph config-key put <key> {<val>}
+	ceph config-key set <key> {<val>}
 
 
 daemon
@@ -247,6 +247,22 @@ Usage::
 
 	ceph df {detail}
 
+.. _ceph features:
+
+features
+--------
+
+Show the releases and features of all connected daemons and clients connected
+to the cluster, along with the numbers of them in each bucket grouped by the
+corresponding features/releases. Each release of Ceph supports a different set
+of features, expressed by the features bitmask. New cluster features require
+that clients support the feature, or else they are not allowed to connect to
+these new features. As new features or capabilities are enabled after an
+upgrade, older clients are prevented from connecting.
+
+Usage::
+
+    ceph features
 
 fs
 --
@@ -544,17 +560,19 @@ Usage::
 
 	ceph osd create {<uuid>} {<id>}
 
-Subcommand ``new`` reuses a previously destroyed OSD *id*. The new OSD will
-have the specified *uuid*, and the command expects a JSON file containing
-the base64 cephx key for auth entity *client.osd.<id>*, as well as optional
-base64 cepx key for dm-crypt lockbox access and a dm-crypt key. Specifying
-a dm-crypt requires specifying the accompanying lockbox cephx key.
+Subcommand ``new`` can be used to create a new OSD or to recreate a previously
+destroyed OSD with a specific *id*. The new OSD will have the specified *uuid*,
+and the command expects a JSON file containing the base64 cephx key for auth
+entity *client.osd.<id>*, as well as optional base64 cepx key for dm-crypt
+lockbox access and a dm-crypt key. Specifying a dm-crypt requires specifying
+the accompanying lockbox cephx key.
 
 Usage::
 
-    ceph osd new {<id>} {<uuid>} -i {<secrets.json>}
+    ceph osd new {<uuid>} {<id>} -i {<secrets.json>}
 
-The secrets JSON file is expected to maintain a form of the following format::
+The secrets JSON file is optional but if provided, is expected to maintain
+a form of the following format::
 
     {
         "cephx_secret": "AQBWtwhZdBO5ExAAIDyjK2Bh16ZXylmzgYYEjg=="
@@ -858,6 +876,18 @@ Usage::
 
 	ceph osd out <ids> [<ids>...]
 
+Subcommand ``ok-to-stop`` checks whether the list of OSD(s) can be
+stopped without immediately making data unavailable.  That is, all
+data should remain readable and writeable, although data redundancy
+may be reduced as some PGs may end up in a degraded (but active)
+state.  It will return a success code if it is okay to stop the
+OSD(s), or an error code and informative message if it is not or if no
+conclusion can be drawn at the current time.
+
+Usage::
+
+  ceph osd ok-to-stop <id> [<ids>...]
+
 Subcommand ``pause`` pauses osd.
 
 Usage::
@@ -1050,6 +1080,16 @@ Usage::
 
     ceph osd purge <id> {--yes-i-really-mean-it}
 
+Subcommand ``safe-to-destroy`` checks whether it is safe to remove or
+destroy an OSD without reducing overall data redundancy or durability.
+It will return a success code if it is definitely safe, or an error
+code and informative message if it is not or if no conclusion can be
+drawn at the current time.
+
+Usage::
+
+  ceph osd safe-to-destroy <id> [<ids>...]
+
 Subcommand ``scrub`` initiates scrub on specified osd.
 
 Usage::
@@ -1074,6 +1114,18 @@ Subcommand ``setmaxosd`` sets new maximum osd value.
 Usage::
 
 	ceph osd setmaxosd <int[0-]>
+
+Subcommand ``set-require-min-compat-client`` enforces the cluster to be backward
+compatible with the specified client version. This subcommand prevents you from
+making any changes (e.g., crush tunables, or using new features) that
+would violate the current setting. Please note, This subcommand will fail if
+any connected daemon or client is not compatible with the features offered by
+the given <version>. To see the features and releases of all clients connected
+to cluster, please see `ceph features`_.
+
+Usage::
+
+    ceph osd set-require-min-compat-client <version>
 
 Subcommand ``stat`` prints summary of OSD map.
 

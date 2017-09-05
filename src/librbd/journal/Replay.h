@@ -77,11 +77,14 @@ private:
     Replay *replay;
     Context *on_ready;
     Context *on_safe;
-    C_AioModifyComplete(Replay *replay, Context *on_ready, Context *on_safe)
-      : replay(replay), on_ready(on_ready), on_safe(on_safe) {
+    std::set<int> filters;
+    C_AioModifyComplete(Replay *replay, Context *on_ready,
+                        Context *on_safe, std::set<int> &&filters)
+      : replay(replay), on_ready(on_ready), on_safe(on_safe),
+        filters(std::move(filters)) {
     }
     void finish(int r) override {
-      replay->handle_aio_modify_complete(on_ready, on_safe, r);
+      replay->handle_aio_modify_complete(on_ready, on_safe, r, filters);
     }
   };
 
@@ -136,6 +139,8 @@ private:
                     Context *on_safe);
   void handle_event(const AioWriteSameEvent &event, Context *on_ready,
                     Context *on_safe);
+  void handle_event(const AioCompareAndWriteEvent &event, Context *on_ready,
+                    Context *on_safe);
   void handle_event(const AioFlushEvent &event, Context *on_ready,
                     Context *on_safe);
   void handle_event(const OpFinishEvent &event, Context *on_ready,
@@ -171,7 +176,8 @@ private:
   void handle_event(const UnknownEvent &event, Context *on_ready,
                     Context *on_safe);
 
-  void handle_aio_modify_complete(Context *on_ready, Context *on_safe, int r);
+  void handle_aio_modify_complete(Context *on_ready, Context *on_safe,
+                                  int r, std::set<int> &filters);
   void handle_aio_flush_complete(Context *on_flush_safe, Contexts &on_safe_ctxs,
                                  int r);
 
@@ -182,7 +188,8 @@ private:
   io::AioCompletion *create_aio_modify_completion(Context *on_ready,
                                                   Context *on_safe,
                                                   io::aio_type_t aio_type,
-                                                  bool *flush_required);
+                                                  bool *flush_required,
+                                                  std::set<int> &&filters);
   io::AioCompletion *create_aio_flush_completion(Context *on_safe);
   void handle_aio_completion(io::AioCompletion *aio_comp);
 

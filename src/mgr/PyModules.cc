@@ -577,7 +577,7 @@ PyObject *PyModules::get_config_prefix(const std::string &handle,
 }
 
 void PyModules::set_config(const std::string &handle,
-    const std::string &key, const std::string &val)
+    const std::string &key, const boost::optional<std::string>& val)
 {
   const std::string global_key = config_prefix + handle + "/" + key;
 
@@ -586,27 +586,34 @@ void PyModules::set_config(const std::string &handle,
     PyThreadState *tstate = PyEval_SaveThread();
     Mutex::Locker l(lock);
     PyEval_RestoreThread(tstate);
-    config_cache[global_key] = val;
+    if (val) {
+      config_cache[global_key] = *val;
+    } else {
+      config_cache.erase(global_key);
+    }
 
     std::ostringstream cmd_json;
-
     JSONFormatter jf;
     jf.open_object_section("cmd");
-    jf.dump_string("prefix", "config-key put");
-    jf.dump_string("key", global_key);
-    jf.dump_string("val", val);
+    if (val) {
+      jf.dump_string("prefix", "config-key set");
+      jf.dump_string("key", global_key);
+      jf.dump_string("val", *val);
+    } else {
+      jf.dump_string("prefix", "config-key del");
+      jf.dump_string("key", global_key);
+    }
     jf.close_section();
     jf.flush(cmd_json);
-
     set_cmd.run(&monc, cmd_json.str());
   }
   set_cmd.wait();
 
   if (set_cmd.r != 0) {
-    // config-key put will fail if mgr's auth key has insufficient
+    // config-key set will fail if mgr's auth key has insufficient
     // permission to set config keys
     // FIXME: should this somehow raise an exception back into Python land?
-    dout(0) << "`config-key put " << global_key << " " << val << "` failed: "
+    dout(0) << "`config-key set " << global_key << " " << val << "` failed: "
       << cpp_strerror(set_cmd.r) << dendl;
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
   }
@@ -799,4 +806,22 @@ static void _list_modules(
 void PyModules::list_modules(std::set<std::string> *modules)
 {
   _list_modules(g_conf->mgr_module_path, modules);
+}
+
+void PyModules::set_health_checks(const std::string& handle,
+				  health_check_map_t&& checks)
+{
+  Mutex::Locker l(lock);
+  auto p = modules.find(handle);
+  if (p != modules.end()) {
+    p->second->set_health_checks(std::move(checks));
+  }
+}
+
+void PyModules::get_health_checks(health_check_map_t *checks)
+{
+  Mutex::Locker l(lock);
+  for (auto& p : modules) {
+    p.second->get_health_checks(checks);
+  }
 }

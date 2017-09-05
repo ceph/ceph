@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "include/types.h"
 #include "include/buffer.h"
 #include "osd/osd_types.h"

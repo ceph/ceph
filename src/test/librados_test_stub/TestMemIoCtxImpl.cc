@@ -5,6 +5,7 @@
 #include "test/librados_test_stub/TestMemRadosClient.h"
 #include "common/Clock.h"
 #include "common/RWLock.h"
+#include "include/err.h"
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/bind.hpp>
 #include <errno.h>
@@ -167,11 +168,12 @@ int TestMemIoCtxImpl::list_snaps(const std::string& oid, snap_set_t *out_snaps) 
 
 }
 
-int TestMemIoCtxImpl::omap_get_vals(const std::string& oid,
+int TestMemIoCtxImpl::omap_get_vals2(const std::string& oid,
                                     const std::string& start_after,
                                     const std::string &filter_prefix,
                                     uint64_t max_return,
-                                    std::map<std::string, bufferlist> *out_vals) {
+                                    std::map<std::string, bufferlist> *out_vals,
+                                    bool *pmore) {
   if (out_vals == NULL) {
     return -EINVAL;
   } else if (m_client->is_blacklisted()) {
@@ -192,6 +194,9 @@ int TestMemIoCtxImpl::omap_get_vals(const std::string& oid,
   RWLock::RLocker l(file->lock);
   TestMemCluster::FileOMaps::iterator o_it = m_pool->file_omaps.find(oid);
   if (o_it == m_pool->file_omaps.end()) {
+    if (pmore) {
+      *pmore = false;
+    }
     return 0;
   }
 
@@ -209,7 +214,18 @@ int TestMemIoCtxImpl::omap_get_vals(const std::string& oid,
     }
     ++it;
   }
+  if (pmore) {
+    *pmore = (it != omap.end());
+  }
   return 0;
+}
+
+int TestMemIoCtxImpl::omap_get_vals(const std::string& oid,
+                                    const std::string& start_after,
+                                    const std::string &filter_prefix,
+                                    uint64_t max_return,
+                                    std::map<std::string, bufferlist> *out_vals) {
+  return omap_get_vals2(oid, start_after, filter_prefix, max_return, out_vals, nullptr);
 }
 
 int TestMemIoCtxImpl::omap_rm_keys(const std::string& oid,
@@ -557,7 +573,6 @@ int TestMemIoCtxImpl::writesame(const std::string& oid, bufferlist& bl, size_t l
     return -EBLACKLISTED;
   }
 
-
   if (len == 0 || (len % bl.length())) {
     return -EINVAL;
   }
@@ -581,6 +596,36 @@ int TestMemIoCtxImpl::writesame(const std::string& oid, bufferlist& bl, size_t l
     file->data.copy_in(off, bl.length(), bl);
     off += bl.length();
     len -= bl.length();
+  }
+  return 0;
+}
+
+int TestMemIoCtxImpl::cmpext(const std::string& oid, uint64_t off,
+                             bufferlist& cmp_bl) {
+  if (get_snap_read() != CEPH_NOSNAP) {
+    return -EROFS;
+  } else if (m_client->is_blacklisted()) {
+    return -EBLACKLISTED;
+  }
+
+  if (cmp_bl.length() == 0) {
+    return -EINVAL;
+  }
+
+  TestMemCluster::SharedFile file;
+  {
+    RWLock::WLocker l(m_pool->file_lock);
+    file = get_file(oid, true, get_snap_context());
+  }
+
+  RWLock::RLocker l(file->lock);
+  size_t len = cmp_bl.length();
+  ensure_minimum_length(off + len, &file->data);
+  if (len > 0 && off <= len) {
+    for (uint64_t p = off; p < len; p++)  {
+      if (file->data[p] != cmp_bl[p])
+        return -MAX_ERRNO - p;
+    }
   }
   return 0;
 }
@@ -612,7 +657,8 @@ int TestMemIoCtxImpl::xattr_set(const std::string& oid, const std::string &name,
   return 0;
 }
 
-int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len) {
+int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
+                           const SnapContext &snapc) {
   if (m_client->is_blacklisted()) {
     return -EBLACKLISTED;
   }
@@ -621,11 +667,11 @@ int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len) {
   TestMemCluster::SharedFile file;
   {
     RWLock::WLocker l(m_pool->file_lock);
-    file = get_file(oid, false, get_snap_context());
+    file = get_file(oid, false, snapc);
     if (!file) {
       return 0;
     }
-    file = get_file(oid, true, get_snap_context());
+    file = get_file(oid, true, snapc);
 
     RWLock::RLocker l2(file->lock);
     if (len > 0 && off + len >= file->data.length()) {
@@ -634,12 +680,12 @@ int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len) {
     }
   }
   if (truncate_redirect) {
-    return truncate(oid, off, get_snap_context());
+    return truncate(oid, off, snapc);
   }
 
   bufferlist bl;
   bl.append_zero(len);
-  return write(oid, bl, len, off, get_snap_context());
+  return write(oid, bl, len, off, snapc);
 }
 
 void TestMemIoCtxImpl::append_clone(bufferlist& src, bufferlist* dest) {

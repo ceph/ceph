@@ -18,6 +18,9 @@ class TestExports(CephFSTestCase):
             filtered = sorted([(s['dir']['path'], s['auth_first']) for s in subtrees])
             log.info("%s =?= %s", filtered, test)
             if filtered == test:
+                # Confirm export_pin in output is correct:
+                for s in subtrees:
+                    self.assertTrue(s['export_pin'] == s['auth_first'])
                 return subtrees
             time.sleep(pause)
         raise RuntimeError("rank {0} failed to reach desired subtree state", rank)

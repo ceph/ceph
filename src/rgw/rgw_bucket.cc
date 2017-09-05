@@ -12,6 +12,7 @@
 
 #include "common/errno.h"
 #include "common/ceph_json.h"
+#include "common/backport14.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
@@ -422,16 +423,9 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
 static void dump_mulipart_index_results(list<rgw_obj_index_key>& objs_to_unlink,
         Formatter *f)
 {
-  // make sure that an appropiately titled header has been opened previously
-  auto oiter = objs_to_unlink.begin();
-
-  f->open_array_section("invalid_multipart_entries");
-
-  for ( ; oiter != objs_to_unlink.end(); ++oiter) {
-    f->dump_string("object",  oiter->name);
+  for (const auto& o : objs_to_unlink) {
+    f->dump_string("object",  o.name);
   }
-
-  f->close_section();
 }
 
 void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
@@ -1005,12 +999,12 @@ static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats
 }
 
 int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-        list<rgw_obj_index_key>& objs_to_unlink, std::string *err_msg)
+               RGWFormatterFlusher& flusher ,std::string *err_msg)
 {
   bool fix_index = op_state.will_fix_index();
   rgw_bucket bucket = op_state.get_bucket();
 
-  int max = 1000;
+  size_t max = 1000;
 
   map<string, bool> common_prefixes;
 
@@ -1067,16 +1061,33 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   } while (is_truncated);
 
+  list<rgw_obj_index_key> objs_to_unlink;
+  Formatter *f =  flusher.get_formatter();
+
+  f->open_array_section("invalid_multipart_entries");
+
   for (auto aiter = all_objs.begin(); aiter != all_objs.end(); ++aiter) {
     string& name = aiter->second;
 
     if (meta_objs.find(name) == meta_objs.end()) {
       objs_to_unlink.push_back(aiter->first);
     }
-  }
 
-  if (objs_to_unlink.empty())
-    return 0;
+    if (objs_to_unlink.size() > max) {
+      if (fix_index) {
+	int r = store->remove_objs_from_index(bucket_info, objs_to_unlink);
+	if (r < 0) {
+	  set_err_msg(err_msg, "ERROR: remove_obj_from_index() returned error: " +
+		      cpp_strerror(-r));
+	  return r;
+	}
+      }
+
+      dump_mulipart_index_results(objs_to_unlink, flusher.get_formatter());
+      flusher.flush();
+      objs_to_unlink.clear();
+    }
+  }
 
   if (fix_index) {
     int r = store->remove_objs_from_index(bucket_info, objs_to_unlink);
@@ -1088,6 +1099,10 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
     }
   }
 
+  dump_mulipart_index_results(objs_to_unlink, f);
+  f->close_section();
+  flusher.flush();
+
   return 0;
 }
 
@@ -1097,8 +1112,6 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
 {
 
   bool fix_index = op_state.will_fix_index();
-
-  rgw_bucket bucket = op_state.get_bucket();
 
   if (!fix_index) {
     set_err_msg(err_msg, "check-objects flag requires fix index enabled");
@@ -1144,7 +1157,6 @@ int RGWBucket::check_index(RGWBucketAdminOpState& op_state,
         map<RGWObjCategory, RGWStorageStats>& calculated_stats,
         std::string *err_msg)
 {
-  rgw_bucket bucket = op_state.get_bucket();
   bool fix_index = op_state.will_fix_index();
 
   int r = store->bucket_check_index(bucket_info, &existing_stats, &calculated_stats);
@@ -1309,10 +1321,9 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
                   RGWFormatterFlusher& flusher)
 {
   int ret;
-  map<string, rgw_bucket_dir_entry> result;
   map<RGWObjCategory, RGWStorageStats> existing_stats;
   map<RGWObjCategory, RGWStorageStats> calculated_stats;
-  list<rgw_obj_index_key> objs_to_unlink;
+
 
   RGWBucket bucket;
 
@@ -1323,12 +1334,9 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
-  ret = bucket.check_bad_index_multipart(op_state, objs_to_unlink);
+  ret = bucket.check_bad_index_multipart(op_state, flusher);
   if (ret < 0)
     return ret;
-
-  dump_mulipart_index_results(objs_to_unlink, formatter);
-  flusher.flush();
 
   ret = bucket.check_object_index(op_state, flusher);
   if (ret < 0)
@@ -2154,13 +2162,17 @@ public:
     pool = store->get_zone_params().domain_root;
   }
 
-  int list_keys_init(RGWRados *store, void **phandle) override
-  {
-    list_keys_info *info = new list_keys_info;
+  int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
+    auto info = ceph::make_unique<list_keys_info>();
 
     info->store = store;
 
-    *phandle = (void *)info;
+    int ret = store->list_raw_objects_init(store->get_zone_params().domain_root, marker,
+                                           &info->ctx);
+    if (ret < 0) {
+      return ret;
+    }
+    *phandle = (void *)info.release();
 
     return 0;
   }
@@ -2176,8 +2188,8 @@ public:
 
     list<string> unfiltered_keys;
 
-    int ret = store->list_raw_objects(store->get_zone_params().domain_root, no_filter,
-                                      max, info->ctx, unfiltered_keys, truncated);
+    int ret = store->list_raw_objects_next(no_filter, max, info->ctx,
+                                           unfiltered_keys, truncated);
     if (ret < 0 && ret != -ENOENT)
       return ret;
     if (ret == -ENOENT) {
@@ -2202,6 +2214,11 @@ public:
   void list_keys_complete(void *handle) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
     delete info;
+  }
+
+  string get_marker(void *handle) {
+    list_keys_info *info = static_cast<list_keys_info *>(handle);
+    return info->store->list_raw_objs_get_cursor(info->ctx);
   }
 };
 
@@ -2270,6 +2287,33 @@ public:
       bci.info.placement_rule = old_bci.info.placement_rule;
     }
 
+    if (exists && old_bci.info.datasync_flag_enabled() != bci.info.datasync_flag_enabled()) {
+      int shards_num = bci.info.num_shards? bci.info.num_shards : 1;
+      int shard_id = bci.info.num_shards? 0 : -1;
+
+      if (!bci.info.datasync_flag_enabled()) {
+      ret = store->stop_bi_log_entries(bci.info, -1);
+        if (ret < 0) {
+	   lderr(store->ctx()) << "ERROR: failed writing bilog" << dendl;
+	   return ret;
+        }
+      } else {
+        ret = store->resync_bi_log_entries(bci.info, -1);
+        if (ret < 0) {
+	   lderr(store->ctx()) << "ERROR: failed writing bilog" << dendl;
+	   return ret;
+        }
+      }
+
+      for (int i = 0; i < shards_num; ++i, ++shard_id) {
+        ret = store->data_log->add_entry(bci.info.bucket, shard_id);
+        if (ret < 0) {
+	   lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+	   return ret;
+        }
+      }
+    }
+
     // are we actually going to perform this put, or is it too old?
     if (exists &&
         !check_versions(old_bci.info.objv_tracker.read_version, orig_mtime,
@@ -2317,13 +2361,17 @@ public:
     pool = store->get_zone_params().domain_root;
   }
 
-  int list_keys_init(RGWRados *store, void **phandle) override
-  {
-    list_keys_info *info = new list_keys_info;
+  int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
+    auto info = ceph::make_unique<list_keys_info>();
 
     info->store = store;
 
-    *phandle = (void *)info;
+    int ret = store->list_raw_objects_init(store->get_zone_params().domain_root, marker,
+                                           &info->ctx);
+    if (ret < 0) {
+      return ret;
+    }
+    *phandle = (void *)info.release();
 
     return 0;
   }
@@ -2339,8 +2387,8 @@ public:
 
     list<string> unfiltered_keys;
 
-    int ret = store->list_raw_objects(store->get_zone_params().domain_root, no_filter,
-                                      max, info->ctx, unfiltered_keys, truncated);
+    int ret = store->list_raw_objects_next(no_filter, max, info->ctx,
+                                           unfiltered_keys, truncated);
     if (ret < 0 && ret != -ENOENT)
       return ret;
     if (ret == -ENOENT) {
@@ -2368,6 +2416,11 @@ public:
   void list_keys_complete(void *handle) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
     delete info;
+  }
+
+  string get_marker(void *handle) {
+    list_keys_info *info = static_cast<list_keys_info *>(handle);
+    return info->store->list_raw_objs_get_cursor(info->ctx);
   }
 
   /*

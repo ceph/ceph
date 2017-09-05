@@ -81,8 +81,11 @@
 /// base backfill priority for MBackfillReserve (inactive PG)
 #define OSD_BACKFILL_INACTIVE_PRIORITY_BASE 220
 
-/// max recovery priority for MBackfillReserve
-#define OSD_RECOVERY_PRIORITY_MAX 255
+/// max manually/automatically set recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_MAX 254
+
+/// max recovery priority for MBackfillReserve, only when forced manually
+#define OSD_RECOVERY_PRIORITY_FORCED 255
 
 
 typedef hobject_t collection_list_handle_t;
@@ -107,13 +110,18 @@ string ceph_osd_alloc_hint_flag_string(unsigned flags);
  */
 struct osd_reqid_t {
   entity_name_t name; // who
-  ceph_tid_t         tid;
+  ceph_tid_t    tid;
   int32_t       inc;  // incarnation
 
   osd_reqid_t()
-    : tid(0), inc(0) {}
+    : tid(0), inc(0)
+  {}
+  osd_reqid_t(const osd_reqid_t& other)
+    : name(other.name), tid(other.tid), inc(other.inc)
+  {}
   osd_reqid_t(const entity_name_t& a, int i, ceph_tid_t t)
-    : name(a), tid(t), inc(i) {}
+    : name(a), tid(t), inc(i)
+  {}
 
   DENC(osd_reqid_t, v, p) {
     DENC_START(2, 2, p);
@@ -780,7 +788,7 @@ public:
   eversion_t(epoch_t e, version_t v) : version(v), epoch(e), __pad(0) {}
 
   // cppcheck-suppress noExplicitConstructor
-  eversion_t(const ceph_eversion& ce) : 
+  eversion_t(const ceph_eversion& ce) :
     version(ce.version),
     epoch(ce.epoch),
     __pad(0) { }
@@ -802,6 +810,15 @@ public:
   }
 
   string get_key_name() const;
+
+  // key must point to the beginning of a block of 32 chars
+  inline void get_key_name(char* key) const {
+    // Below is equivalent of sprintf("%010u.%020llu");
+    key[31] = 0;
+    ritoa<uint64_t, 10, 20>(version, key + 31);
+    key[10] = '.';
+    ritoa<uint32_t, 10, 10>(epoch, key + 10);
+  }
 
   void encode(bufferlist &bl) const {
 #if defined(CEPH_LITTLE_ENDIAN)
@@ -896,6 +913,8 @@ struct osd_stat_t {
   epoch_t up_from = 0;
   uint64_t seq = 0;
 
+  uint32_t num_pgs = 0;
+
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 
@@ -907,6 +926,7 @@ struct osd_stat_t {
     num_snap_trimming += o.num_snap_trimming;
     op_queue_age_hist.add(o.op_queue_age_hist);
     os_perf_stat.add(o.os_perf_stat);
+    num_pgs += o.num_pgs;
   }
   void sub(const osd_stat_t& o) {
     kb -= o.kb;
@@ -916,6 +936,7 @@ struct osd_stat_t {
     num_snap_trimming -= o.num_snap_trimming;
     op_queue_age_hist.sub(o.op_queue_age_hist);
     os_perf_stat.sub(o.os_perf_stat);
+    num_pgs -= o.num_pgs;
   }
 
   void dump(Formatter *f) const;
@@ -933,7 +954,8 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
     l.num_snap_trimming == r.num_snap_trimming &&
     l.hb_peers == r.hb_peers &&
     l.op_queue_age_hist == r.op_queue_age_hist &&
-    l.os_perf_stat == r.os_perf_stat;
+    l.os_perf_stat == r.os_perf_stat &&
+    l.num_pgs == r.num_pgs;
 }
 inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
@@ -983,6 +1005,8 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_SNAPTRIM_WAIT (1<<27) // queued to trim snaps
 #define PG_STATE_RECOVERY_TOOFULL (1<<28) // recovery can't proceed: too full
 #define PG_STATE_SNAPTRIM_ERROR (1<<29) // error stopped trimming snaps
+#define PG_STATE_FORCED_RECOVERY (1<<30) // force recovery of this pg before any other
+#define PG_STATE_FORCED_BACKFILL (1<<31) // force backfill of this pg before any other
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);
@@ -2576,13 +2600,7 @@ public:
     static void generate_test_instances(list<pg_interval_t*>& o);
   };
 
-  PastIntervals() = default;
-  PastIntervals(bool ec_pool, const OSDMap &osdmap) : PastIntervals() {
-    update_type_from_map(ec_pool, osdmap);
-  }
-  PastIntervals(bool ec_pool, bool compact) : PastIntervals() {
-    update_type(ec_pool, compact);
-  }
+  PastIntervals();
   PastIntervals(PastIntervals &&rhs) = default;
   PastIntervals &operator=(PastIntervals &&rhs) = default;
 
@@ -2603,7 +2621,6 @@ public:
     virtual void encode(bufferlist &bl) const = 0;
     virtual void decode(bufferlist::iterator &bl) = 0;
     virtual void dump(Formatter *f) const = 0;
-    virtual bool is_classic() const = 0;
     virtual void iterate_mayberw_back_to(
       bool ec_pool,
       epoch_t les,
@@ -2618,7 +2635,6 @@ public:
 
     virtual ~interval_rep() {}
   };
-  friend class pi_simple_rep;
   friend class pi_compact_rep;
 private:
 
@@ -2632,15 +2648,10 @@ public:
     return past_intervals->add_interval(ec_pool, interval);
   }
 
-  bool is_classic() const {
-    assert(past_intervals);
-    return past_intervals->is_classic();
-  }
-
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     if (past_intervals) {
-      __u8 type = is_classic() ? 1 : 2;
+      __u8 type = 2;
       ::encode(type, bl);
       past_intervals->encode(bl);
     } else {
@@ -2648,18 +2659,8 @@ public:
     }
     ENCODE_FINISH(bl);
   }
-  void encode_classic(bufferlist &bl) const {
-    if (past_intervals) {
-      assert(past_intervals->is_classic());
-      past_intervals->encode(bl);
-    } else {
-      // it's a map<>
-      ::encode((uint32_t)0, bl);
-    }
-  }
 
   void decode(bufferlist::iterator &bl);
-  void decode_classic(bufferlist::iterator &bl);
 
   void dump(Formatter *f) const {
     assert(past_intervals);
@@ -2855,9 +2856,6 @@ public:
 
     friend class PastIntervals;
   };
-
-  void update_type(bool ec_pool, bool compact);
-  void update_type_from_map(bool ec_pool, const OSDMap &osdmap);
 
   template <typename... Args>
   PriorSet get_prior_set(Args&&... args) const {
@@ -3400,7 +3398,46 @@ WRITE_CLASS_ENCODER(pg_log_entry_t)
 
 ostream& operator<<(ostream& out, const pg_log_entry_t& e);
 
+struct pg_log_dup_t {
+  osd_reqid_t reqid;  // caller+tid to uniquely identify request
+  eversion_t version;
+  version_t user_version; // the user version for this entry
+  int32_t return_code; // only stored for ERRORs for dup detection
 
+  pg_log_dup_t()
+    : user_version(0), return_code(0)
+  {}
+  explicit pg_log_dup_t(const pg_log_entry_t& entry)
+    : reqid(entry.reqid), version(entry.version),
+      user_version(entry.user_version), return_code(entry.return_code)
+  {}
+  pg_log_dup_t(const eversion_t& v, version_t uv,
+	       const osd_reqid_t& rid, int return_code)
+    : reqid(rid), version(v), user_version(uv),
+      return_code(return_code)
+  {}
+
+  string get_key_name() const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_log_dup_t*>& o);
+
+  bool operator==(const pg_log_dup_t &rhs) const {
+    return reqid == rhs.reqid &&
+      version == rhs.version &&
+      user_version == rhs.user_version &&
+      return_code == rhs.return_code;
+  }
+  bool operator!=(const pg_log_dup_t &rhs) const {
+    return !(*this == rhs);
+  }
+
+  friend std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e);
+};
+WRITE_CLASS_ENCODER(pg_log_dup_t)
+
+std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e);
 
 /**
  * pg_log_t - incremental log of recent pg changes.
@@ -3426,26 +3463,35 @@ protected:
   eversion_t rollback_info_trimmed_to;
 
 public:
-  mempool::osd_pglog::list<pg_log_entry_t> log;  // the actual log.
-  
+  // the actual log
+  mempool::osd_pglog::list<pg_log_entry_t> log;
+
+  // entries just for dup op detection ordered oldest to newest
+  mempool::osd_pglog::list<pg_log_dup_t> dups;
+
   pg_log_t() = default;
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
 	   const eversion_t &can_rollback_to,
 	   const eversion_t &rollback_info_trimmed_to,
-	   mempool::osd_pglog::list<pg_log_entry_t> &&entries)
+	   mempool::osd_pglog::list<pg_log_entry_t> &&entries,
+	   mempool::osd_pglog::list<pg_log_dup_t> &&dup_entries)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
       rollback_info_trimmed_to(rollback_info_trimmed_to),
-      log(std::move(entries)) {}
+      log(std::move(entries)), dups(std::move(dup_entries)) {}
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
 	   const eversion_t &can_rollback_to,
 	   const eversion_t &rollback_info_trimmed_to,
-	   const std::list<pg_log_entry_t> &entries)
+	   const std::list<pg_log_entry_t> &entries,
+	   const std::list<pg_log_dup_t> &dup_entries)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
       rollback_info_trimmed_to(rollback_info_trimmed_to) {
     for (auto &&entry: entries) {
       log.push_back(entry);
+    }
+    for (auto &&entry: dup_entries) {
+      dups.push_back(entry);
     }
   }
 
@@ -3453,6 +3499,7 @@ public:
     eversion_t z;
     rollback_info_trimmed_to = can_rollback_to = head = tail = z;
     log.clear();
+    dups.clear();
   }
 
   eversion_t get_rollback_info_trimmed_to() const {
@@ -3480,13 +3527,19 @@ public:
       oldlog.erase(i++);
     }
 
+    // osd_reqid is unique, so it doesn't matter if there are extra
+    // dup entries in each pg. To avoid storing oid with the dup
+    // entries, just copy the whole list.
+    auto childdups(dups);
+
     return pg_log_t(
       head,
       tail,
       can_rollback_to,
       rollback_info_trimmed_to,
-      std::move(childlog));
-  }
+      std::move(childlog),
+      std::move(childdups));
+    }
 
   mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
     assert(newhead >= tail);
@@ -3577,7 +3630,7 @@ public:
 };
 WRITE_CLASS_ENCODER(pg_log_t)
 
-inline ostream& operator<<(ostream& out, const pg_log_t& log) 
+inline ostream& operator<<(ostream& out, const pg_log_t& log)
 {
   out << "log((" << log.tail << "," << log.head << "], crt="
       << log.get_can_rollback_to() << ")";
@@ -4340,10 +4393,6 @@ inline ostream& operator<<(ostream& out, const ObjectExtent &ex)
 }
 
 
-
-
-
-
 // ---------------------------------------
 
 class OSDSuperblock {
@@ -4868,7 +4917,6 @@ struct ScrubMap {
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
-
 
 struct OSDOp {
   ceph_osd_op op;

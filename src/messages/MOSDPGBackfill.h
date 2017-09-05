@@ -35,8 +35,8 @@ public:
     }
   }
 
-  __u32 op;
-  epoch_t map_epoch, query_epoch;
+  __u32 op = 0;
+  epoch_t map_epoch = 0, query_epoch = 0;
   spg_t pgid;
   hobject_t last_backfill;
   pg_stat_t stats;

@@ -1,0 +1,76 @@
+tasks:
+- install:
+    flavor: notcmalloc
+- ceph:
+- tox: [ client.0 ]
+- keystone:
+    client.0:
+      sha1: 12.0.0.0b2
+      force-branch: master
+      tenants:
+        - name: admin
+          description:  Admin Tenant
+      users:
+        - name: admin
+          password: ADMIN
+          project: admin
+      roles: [ name: admin, name: Member ]
+      role-mappings:
+        - name: admin
+          user: admin
+          project: admin
+      services:
+        - name: keystone
+          type: identity
+          description: Keystone Identity Service
+        - name: swift
+          type: object-store
+          description: Swift Service
+- rgw:
+    client.0:
+      valgrind: [--tool=memcheck]
+      frontend_prefix: /swift
+      use-keystone-role: client.0
+- tempest:
+    client.0:
+      sha1: d3fa46495a78160989120ba39793f7ba2e22d81c
+      force-branch: master
+      use-keystone-role: client.0
+      auth:
+        admin_username: admin
+        admin_project_name: admin
+        admin_password: ADMIN
+        admin_domain_name: Default
+      identity:
+        uri: http://{keystone_public_host}:{keystone_public_port}/v2.0/
+        uri_v3: http://{keystone_public_host}:{keystone_public_port}/v3/
+        admin_role: admin
+      object-storage:
+        reseller_admin_role: admin
+      object-storage-feature-enabled:
+        container_sync: false
+        discoverability: false
+      blacklist:
+        # TODO(rzarzynski): we really need to update the list after
+        # merging PRs #15369 and #12704. Additionally, we would be
+        # able to enable the discoverability API testing above.
+        - .*test_list_containers_reverse_order.*
+        - .*test_list_container_contents_with_end_marker.*
+        - .*test_delete_non_empty_container.*
+        - .*test_container_synchronization.*
+        - .*test_get_object_after_expiration_time.*
+        - .*test_create_object_with_transfer_encoding.*
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_min_pg_log_entries: 10
+        osd_max_pg_log_entries: 10
+      client:
+        rgw keystone admin token: ADMIN
+        rgw keystone accepted roles: admin,Member
+        rgw keystone implicit tenants: true
+        rgw keystone accepted admin roles: admin
+        rgw swift enforce content length: true
+        rgw swift account in url: true
+        rgw swift versioning enabled: true

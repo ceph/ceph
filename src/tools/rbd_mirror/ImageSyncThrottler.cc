@@ -31,8 +31,8 @@ template <typename I>
 ImageSyncThrottler<I>::ImageSyncThrottler()
   : m_lock(librbd::util::unique_lock_name("rbd::mirror::ImageSyncThrottler",
                                           this)),
-    m_max_concurrent_syncs(
-      g_ceph_context->_conf->rbd_mirror_concurrent_image_syncs) {
+    m_max_concurrent_syncs(g_ceph_context->_conf->get_val<uint64_t>(
+      "rbd_mirror_concurrent_image_syncs")) {
   dout(20) << "max_concurrent_syncs=" << m_max_concurrent_syncs << dendl;
   g_ceph_context->_conf->add_observer(this);
 }
@@ -205,7 +205,7 @@ template <typename I>
 void ImageSyncThrottler<I>::handle_conf_change(const struct md_config_t *conf,
                                       const set<string> &changed) {
   if (changed.count("rbd_mirror_concurrent_image_syncs")) {
-    set_max_concurrent_syncs(conf->rbd_mirror_concurrent_image_syncs);
+    set_max_concurrent_syncs(conf->get_val<uint64_t>("rbd_mirror_concurrent_image_syncs"));
   }
 }
 

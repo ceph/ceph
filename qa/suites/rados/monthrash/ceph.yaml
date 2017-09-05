@@ -4,6 +4,11 @@ overrides:
       mon:
         mon min osdmap epochs: 25
         paxos service trim min: 5
+# thrashing monitors may make mgr have trouble w/ its keepalive
+    log-whitelist:
+      - daemon x is unresponsive
+      - overall HEALTH_
+      - \(MGR_DOWN\)
 tasks:
 - install:
 - ceph:

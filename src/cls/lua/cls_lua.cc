@@ -429,7 +429,8 @@ static int clslua_map_get_keys(lua_State *L)
   int max_to_get = luaL_checkinteger(L, 2);
 
   std::set<string> keys;
-  int ret = cls_cxx_map_get_keys(hctx, start_after, max_to_get, &keys);
+  bool more;
+  int ret = cls_cxx_map_get_keys(hctx, start_after, max_to_get, &keys, &more);
   if (ret < 0)
     return clslua_opresult(L, 0, ret, 0);
 
@@ -456,8 +457,9 @@ static int clslua_map_get_vals(lua_State *L)
   int max_to_get = luaL_checkinteger(L, 3);
 
   map<string, bufferlist> kvpairs;
+  bool more;
   int ret = cls_cxx_map_get_vals(hctx, start_after, filter_prefix,
-      max_to_get, &kvpairs);
+      max_to_get, &kvpairs, &more);
   if (ret < 0)
     return clslua_opresult(L, 0, ret, 0);
 
@@ -641,7 +643,7 @@ static const luaL_Reg clslua_lib[] = {
 };
 
 /*
- * Set int const in table at top of stack
+ * Set const int in table at top of stack
  */
 #define SET_INT_CONST(var) do { \
   lua_pushinteger(L, var); \

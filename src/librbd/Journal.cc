@@ -64,7 +64,7 @@ struct C_IsTagOwner : public Context {
   Journaler *journaler;
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
-  uint64_t tag_tid;
+  uint64_t tag_tid = 0;
   journal::TagData tag_data;
 
   C_IsTagOwner(librados::IoCtx &io_ctx, const std::string &image_id,
@@ -337,7 +337,7 @@ Journal<I>::Journal(I &image_ctx)
   cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
     thread_pool_singleton, "librbd::journal::thread_pool");
   m_work_queue = new ContextWQ("librbd::journal::work_queue",
-                               cct->_conf->rbd_op_thread_timeout,
+                               cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
                                thread_pool_singleton);
   ImageCtx::get_timer_instance(cct, &m_timer, &m_timer_lock);
 }

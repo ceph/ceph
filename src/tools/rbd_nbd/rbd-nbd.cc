@@ -159,11 +159,11 @@ private:
   struct IOContext
   {
     xlist<IOContext*>::item item;
-    NBDServer *server;
+    NBDServer *server = nullptr;
     struct nbd_request request;
     struct nbd_reply reply;
     bufferlist data;
-    int command;
+    int command = 0;
 
     IOContext()
       : item(this)
@@ -246,7 +246,7 @@ private:
       ctx->data.append_zero(pad_byte_count);
       dout(20) << __func__ << ": " << *ctx << ": Pad byte count: "
                << pad_byte_count << dendl;
-      ctx->reply.error = 0;
+      ctx->reply.error = htonl(0);
     } else {
       ctx->reply.error = htonl(0);
     }
@@ -396,7 +396,7 @@ public:
     }
   }
 
-  void stop()
+  ~NBDServer()
   {
     if (started) {
       dout(10) << __func__ << ": terminating" << dendl;
@@ -410,11 +410,6 @@ public:
 
       started = false;
     }
-  }
-
-  ~NBDServer()
-  {
-    stop();
   }
 };
 
@@ -761,8 +756,6 @@ static int do_map(int argc, const char *argv[], Config *cfg)
       unregister_async_signal_handler(SIGINT, handle_signal);
       unregister_async_signal_handler(SIGTERM, handle_signal);
       shutdown_async_signal_handler();
-      
-      server.stop();
     }
 
     r = image.update_unwatch(handle);
@@ -931,7 +924,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg, Config *
   config.parse_config_files(nullptr, nullptr, 0);
   config.parse_env();
   config.parse_argv(args);
-  cfg->poolname = config.rbd_default_pool;
+  cfg->poolname = config.get_val<std::string>("rbd_default_pool");
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -1028,7 +1021,7 @@ static int rbd_nbd(int argc, const char *argv[])
   r = parse_args(args, &err_msg, &cfg);
   if (r == HELP_INFO) {
     usage();
-    return 0;
+    assert(false);
   } else if (r == VERSION_INFO) {
     std::cout << pretty_version_to_str() << std::endl;
     return 0;
@@ -1061,7 +1054,8 @@ static int rbd_nbd(int argc, const char *argv[])
       break;
     default:
       usage();
-      return -EINVAL;
+      assert(false);
+      break;
   }
 
   return 0;

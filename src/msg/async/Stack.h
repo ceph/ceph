@@ -17,9 +17,8 @@
 #ifndef CEPH_MSG_ASYNC_STACK_H
 #define CEPH_MSG_ASYNC_STACK_H
 
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 #include "common/perf_counters.h"
-#include "common/simple_spin.h"
 #include "msg/msg_types.h"
 #include "msg/async/Event.h"
 
@@ -230,7 +229,7 @@ class Worker {
     plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
     plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
     plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes");
-    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network received bytes");
+    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network sent bytes");
     plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
     plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
 
@@ -288,7 +287,7 @@ class Worker {
 class NetworkStack : public CephContext::ForkWatcher {
   std::string type;
   unsigned num_workers = 0;
-  Spinlock pool_spin;
+  ceph::spinlock pool_spin;
   bool started = false;
 
   std::function<void ()> add_thread(unsigned i);

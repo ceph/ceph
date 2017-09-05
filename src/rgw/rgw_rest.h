@@ -501,7 +501,6 @@ public:
   RGWHandler_REST() {}
   ~RGWHandler_REST() override {}
 
-  static int validate_tenant_name(const string& bucket);
   static int validate_bucket_name(const string& bucket);
   static int validate_object_name(const string& object);
 

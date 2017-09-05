@@ -55,7 +55,7 @@ When run as ``rbdmap unmap``, images listed in the configuration file will
 be unmounted and unmapped.
 
 ``rbdmap unmap-all`` attempts to unmount and subsequently unmap all currently
-mapped RBD images, regardless of whether or not they're listed in the
+mapped RBD images, regardless of whether or not they are listed in the
 configuration file.
 
 If successful, the ``rbd map`` operation maps the image to a ``/dev/rbdX``

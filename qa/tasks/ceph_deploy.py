@@ -297,7 +297,6 @@ def build_ceph_cluster(ctx, config):
         # are taking way more than a minute/monitor to form quorum, so lets
         # try the next block which will wait up to 15 minutes to gatherkeys.
         execute_ceph_deploy(mon_create_nodes)
-        execute_ceph_deploy(mgr_create)
 
         # create-keys is explicit now
         # http://tracker.ceph.com/issues/16036
@@ -307,6 +306,9 @@ def build_ceph_cluster(ctx, config):
                              '--id', remote.shortname])
 
         estatus_gather = execute_ceph_deploy(gather_keys)
+
+        execute_ceph_deploy(mgr_create)
+
         if mds_nodes:
             estatus_mds = execute_ceph_deploy(deploy_mds)
             if estatus_mds != 0:
@@ -329,6 +331,11 @@ def build_ceph_cluster(ctx, config):
                 if estatus != 0:
                     raise RuntimeError("ceph-deploy: Failed to zap osds")
             osd_create_cmd = './ceph-deploy osd create '
+            # first check for filestore, default is bluestore with ceph-deploy
+            if config.get('filestore') is not None:
+                osd_create_cmd += '--filestore '
+            else:
+                osd_create_cmd += '--bluestore '
             if config.get('dmcrypt') is not None:
                 osd_create_cmd += '--dmcrypt '
             osd_create_cmd += ":".join(d)
@@ -689,6 +696,10 @@ def task(ctx, config):
              mon_initial_members: 1
              only_mon: true
              keep_running: true
+             # either choose bluestore or filestore, default is bluestore
+             bluestore: True
+             # or
+             filestore: True
 
         tasks:
         - install:

@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - \(MDS_TRIM\)
+      - Behind on trimming

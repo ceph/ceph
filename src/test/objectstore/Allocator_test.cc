@@ -273,6 +273,23 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   EXPECT_EQ(1, (int)extents.size());
 }
 
+TEST_P(AllocTest, test_alloc_non_aligned_len)
+{
+  int64_t block_size = 1 << 12;
+  int64_t blocks = (1 << 20) * 100;
+  int64_t want_size = 1 << 22;
+  int64_t alloc_unit = 1 << 20;
+  
+  init_alloc(blocks*block_size, block_size);
+  alloc->init_add_free(0, 2097152);
+  alloc->init_add_free(2097152, 1064960);
+  alloc->init_add_free(3670016, 2097152);
+
+  EXPECT_EQ(0, alloc->reserve(want_size));
+  AllocExtentVector extents;
+  EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, &extents));
+}
+
 
 INSTANTIATE_TEST_CASE_P(
   Allocator,

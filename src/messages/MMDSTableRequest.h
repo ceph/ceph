@@ -21,9 +21,9 @@
 
 class MMDSTableRequest : public Message {
  public:
-  __u16 table;
-  __s16 op;
-  uint64_t reqid;
+  __u16 table = 0;
+  __s16 op = 0;
+  uint64_t reqid = 0;
   bufferlist bl;
 
   MMDSTableRequest() : Message(MSG_MDS_TABLE_REQUEST) {}

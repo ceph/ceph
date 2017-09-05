@@ -60,7 +60,8 @@ Options
 .. option:: --striper
 
    Uses the striping API of rados rather than the default one.
-   Available for stat, get, put, append, truncate, rm, ls and all xattr related operation
+   Available for stat, stat2, get, put, append, truncate, rm, ls
+   and all xattr related operation
 
 
 Global commands
@@ -136,7 +137,9 @@ Pool specific commands
   Note: *write* and *seq* must be run on the same host otherwise the
   objects created by *write* will have names that will fail *seq*.
 
-:command:`cleanup`
+:command:`cleanup` [ --run-name *run_name* ] [ --prefix *prefix* ]
+  Clean up a previous benchmark operation.
+  Note: the default run-name is "benchmark_last_metadata"
 
 :command:`listxattr` *name*
   List all extended attributes of an object.
@@ -150,6 +153,12 @@ Pool specific commands
 :command:`rmxattr` *name* *attr*
   Remove *attr* from the extended attributes of an object.
 
+:command:`stat` *name*
+   Get stat (ie. mtime, size) of given object
+
+:command:`stat2` *name*
+   Get stat (similar to stat, but with high precision time) of given object
+
 :command:`listomapkeys` *name*
   List all the keys stored in the object map of object name.
 
@@ -159,12 +168,12 @@ Pool specific commands
 
 :command:`getomapval` [ --omap-key-file *file* ] *name* *key* [ *out-file* ]
   Dump the hexadecimal value of key in the object map of object name.
-  If the optional *out-file* argument isn't provided, the value will be
+  If the optional *out-file* argument is not provided, the value will be
   written to standard output.
 
 :command:`setomapval` [ --omap-key-file *file* ] *name* *key* [ *value* ]
   Set the value of key in the object map of object name. If the optional
-  *value* argument isn't provided, the value will be read from standard
+  *value* argument is not provided, the value will be read from standard
   input.
 
 :command:`rmomapkey` [ --omap-key-file *file* ] *name* *key*

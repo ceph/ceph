@@ -82,7 +82,7 @@ void *ObjBencher::status_printer(void *_bencher) {
   int previous_writes = 0;
   int cycleSinceChange = 0;
   double bandwidth;
-  int iops;
+  int iops = 0;
   utime_t ONE_SECOND;
   ONE_SECOND.set_from_double(1.0);
   bencher->lock.Lock();
@@ -202,6 +202,10 @@ void *ObjBencher::status_printer(void *_bencher) {
   }
   if (formatter)
     formatter->close_section(); //datas
+  if (iops < 0) {
+    auto runtime = ceph_clock_now() - data.start_time;
+    data.idata.min_iops = data.idata.max_iops = data.finished / runtime;
+  }
   bencher->lock.Unlock();
   return NULL;
 }
@@ -460,7 +464,7 @@ int ObjBencher::write_bench(int secondsToRun,
   stopTime = data.start_time + runtime;
   slot = 0;
   lock.Lock();
-  while (!secondsToRun || ceph_clock_now() < stopTime) {
+  while (secondsToRun && ceph_clock_now() < stopTime) {
     bool found = false;
     while (1) {
       int old_slot = slot;
@@ -690,7 +694,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   bufferlist *cur_contents;
 
   slot = 0;
-  while ((!seconds_to_run || ceph_clock_now() < finish_time) &&
+  while ((seconds_to_run && ceph_clock_now() < finish_time) &&
 	 num_objects > data.started) {
     lock.Lock();
     int old_slot = slot;
@@ -920,7 +924,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   int rand_id;
 
   slot = 0;
-  while ((!seconds_to_run || ceph_clock_now() < finish_time)) {
+  while ((seconds_to_run && ceph_clock_now() < finish_time)) {
     lock.Lock();
     int old_slot = slot;
     bool found = false;

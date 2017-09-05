@@ -2,7 +2,7 @@ overrides:
   ceph:
     log-whitelist:
       - overall HEALTH_
-      - (MON_DOWN)
+      - \(MON_DOWN\)
     conf:
       osd:
         mon client ping interval: 4

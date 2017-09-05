@@ -1,11 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 
 #Generic create pool use crush rule  test
 #
 
 # Includes
-source ../qa/workunits/ceph-helpers.sh
+source ../qa/standalone/ceph-helpers.sh
 
 function run() {
     local dir=$1

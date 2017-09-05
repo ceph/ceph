@@ -10,7 +10,7 @@ tasks:
 - ceph:
     log-whitelist:
       - overall HEALTH_
-      - (CACHE_POOL_NO_HIT_SET)
+      - \(CACHE_POOL_NO_HIT_SET\)
     conf:
       global:
         osd max object name len: 460

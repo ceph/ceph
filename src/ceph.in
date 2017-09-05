@@ -276,8 +276,6 @@ def parse_cmdargs(args=None, target=''):
 
     parser.add_argument('--admin-daemon', dest='admin_socket',
                         help='submit admin-socket commands (\"help\" for help')
-    parser.add_argument('--admin-socket', dest='admin_socket_nope',
-                        help='you probably mean --admin-daemon')
 
     parser.add_argument('-s', '--status', action='store_true',
                         help='show cluster status')
@@ -357,6 +355,9 @@ def do_extended_help(parser, args, target, partial):
                          partial=partial))
 
     def help_for_target(target, partial=None):
+        # wait for osdmap because we know this is sent after the mgrmap
+        # and monmap (it's alphabetical).
+        cluster_handle.wait_for_latest_osdmap()
         ret, outbuf, outs = json_command(cluster_handle, target=target,
                                          prefix='get_command_descriptions',
                                          timeout=10)
@@ -798,11 +799,6 @@ def main():
 
     if verbose:
         print("parsed_args: {0}, childargs: {1}".format(parsed_args, childargs), file=sys.stderr)
-
-    if parsed_args.admin_socket_nope:
-        print('--admin-socket is used by daemons; '
-              'you probably mean --admin-daemon/daemon', file=sys.stderr)
-        return 1
 
     # pass on --id, --name, --conf
     name = 'client.admin'

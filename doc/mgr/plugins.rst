@@ -97,6 +97,9 @@ have no metadata, or vice versa.  On a healthy cluster these
 will be very rare transient states, but plugins should be written
 to cope with the possibility.
 
+Note that these accessors must not be called in the modules ``__init__``
+function. This will result in a circular locking exception.
+
 ``get(self, data_name)``
 
 Fetch named cluster-wide objects such as the OSDMap.  Valid things

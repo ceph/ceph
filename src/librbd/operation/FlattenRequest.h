@@ -73,7 +73,7 @@ private:
   uint64_t m_overlap_objects;
   ::SnapContext m_snapc;
   ProgressContext &m_prog_ctx;
-  State m_state;
+  State m_state = STATE_FLATTEN_OBJECTS;
 
   ParentSpec m_parent_spec;
   bool m_ignore_enoent;

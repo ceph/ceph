@@ -97,6 +97,11 @@ struct C_AsyncCallback : public Context {
 
 std::string generate_image_id(librados::IoCtx &ioctx);
 
+template <typename T>
+inline std::string generate_image_id(librados::IoCtx &ioctx) {
+  return generate_image_id(ioctx);
+}
+
 const std::string group_header_name(const std::string &group_id);
 const std::string id_obj_name(const std::string &name);
 const std::string header_name(const std::string &image_id);

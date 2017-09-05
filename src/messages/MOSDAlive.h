@@ -21,7 +21,7 @@
 
 class MOSDAlive : public PaxosServiceMessage {
  public:
-  epoch_t want;
+  epoch_t want = 0;
 
   MOSDAlive(epoch_t h, epoch_t w) : PaxosServiceMessage(MSG_OSD_ALIVE, h), want(w) { }
   MOSDAlive() : PaxosServiceMessage(MSG_OSD_ALIVE, 0) {}

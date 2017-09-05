@@ -382,6 +382,10 @@ Options
 
 	List of caps (e.g., "usage=read, write; user=read".
 
+.. option:: --compression=<compression-algorithm>
+
+    Placement target compression algorithm (lz4|snappy|zlib|zstd)
+
 .. option:: --yes-i-really-mean-it
 
 	Required for certain operations.

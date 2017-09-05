@@ -73,14 +73,12 @@ public:
 class C_IO_PurgeStrayPurged : public StrayManagerIOContext {
   CDentry *dn;
   bool only_head;
-  // How many ops_in_flight were allocated to this purge?
-  uint32_t ops_allowance;
 public:
   C_IO_PurgeStrayPurged(StrayManager *sm_, CDentry *d, bool oh) : 
     StrayManagerIOContext(sm_), dn(d), only_head(oh) { }
   void finish(int r) override {
     assert(r == 0 || r == -ENOENT);
-    sm->_purge_stray_purged(dn, ops_allowance, only_head);
+    sm->_purge_stray_purged(dn, only_head);
   }
 };
 
@@ -163,7 +161,7 @@ public:
 };
 
 void StrayManager::_purge_stray_purged(
-    CDentry *dn, uint32_t ops_allowance, bool only_head)
+    CDentry *dn, bool only_head)
 {
   CInode *in = dn->get_projected_linkage()->get_inode();
   dout(10) << "_purge_stray_purged " << *dn << " " << *in << dendl;

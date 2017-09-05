@@ -99,10 +99,7 @@ int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
 
 static void get_new_date_str(string& date_str)
 {
-  utime_t tm = ceph_clock_now();
-  stringstream s;
-  tm.asctime(s);
-  date_str = s.str();
+  date_str = rgw_to_asctime(ceph_clock_now());
 }
 
 int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const char *resource)
@@ -394,7 +391,7 @@ struct grant_type_to_header grants_headers_def[] = {
 
 static bool grants_by_type_check_perm(map<int, string>& grants_by_type, int perm, ACLGrant& grant, int check_perm)
 {
-  if ((perm & check_perm) == perm) {
+  if ((perm & check_perm) == check_perm) {
     grants_by_type_add_one_grant(grants_by_type, check_perm, grant);
     return true;
   }

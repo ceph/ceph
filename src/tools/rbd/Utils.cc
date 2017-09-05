@@ -84,7 +84,7 @@ int read_string(int fd, unsigned max, std::string *out) {
 int extract_spec(const std::string &spec, std::string *pool_name,
                  std::string *image_name, std::string *snap_name,
                  SpecValidation spec_validation) {
-  if (!g_ceph_context->_conf->rbd_validate_names) {
+  if (!g_ceph_context->_conf->get_val<bool>("rbd_validate_names")) {
     spec_validation = SPEC_VALIDATION_NONE;
   }
 
@@ -184,7 +184,7 @@ std::string get_positional_argument(const po::variables_map &vm, size_t index) {
 }
 
 std::string get_default_pool_name() {
-  return g_ceph_context->_conf->rbd_default_pool;
+  return g_ceph_context->_conf->get_val<std::string>("rbd_default_pool");
 }
 
 std::string get_pool_name(const po::variables_map &vm, size_t *arg_index) {
@@ -831,7 +831,13 @@ int get_formatter(const po::variables_map &vm,
       std::cerr << "rbd: --pretty-format only works when --format "
                 << "is json or xml" << std::endl;
       return -EINVAL;
+    } else if (*formatter != nullptr && !pretty) {
+      formatter->get()->enable_line_break();
     }
+  } else if (vm[at::PRETTY_FORMAT].as<bool>()) {
+    std::cerr << "rbd: --pretty-format only works when --format "
+              << "is json or xml" << std::endl;
+    return -EINVAL;
   }
   return 0;
 }

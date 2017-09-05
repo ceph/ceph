@@ -49,16 +49,16 @@ their nicks on `GitHub`_:
 
 .. _github: https://github.com/
 
-========= =============== =============
-Scope     Lead            GitHub nick
-========= =============== =============
-Ceph      Sage Weil       liewegas
-RADOS     Samuel Just     athanatos
-RGW       Yehuda Sadeh    yehudasa
-RBD       Jason Dillaman  dillaman
-CephFS    John Spray      jcsp
-Build/Ops Ken Dreyer      ktdreyer
-========= =============== =============
+========= ================ =============
+Scope     Lead             GitHub nick
+========= ================ =============
+Ceph      Sage Weil        liewegas
+RADOS     Josh Durgin      jdurgin
+RGW       Yehuda Sadeh     yehudasa
+RBD       Jason Dillaman   dillaman
+CephFS    Patrick Donnelly batrick
+Build/Ops Ken Dreyer       ktdreyer
+========= ================ =============
 
 The Ceph-specific acronyms in the table are explained in
 :doc:`/architecture`.
@@ -215,6 +215,12 @@ The rest (including the actual backporting) will be taken care of by the
 
 .. _`tracker issue`: http://tracker.ceph.com/
 .. _`Stable Releases and Backports`: http://tracker.ceph.com/projects/ceph-releases/wiki
+
+Guidance for use of cluster log
+-------------------------------
+
+If your patches emit messages to the Ceph cluster log, please consult
+this guidance: :doc:`/dev/logging`.
 
 
 What is merged where and when ?

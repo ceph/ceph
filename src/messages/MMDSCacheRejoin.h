@@ -197,8 +197,8 @@ class MMDSCacheRejoin : public Message {
   map<dirfrag_t, map<string_snap_t, slave_reqid> > xlocked_dentries;
   
   MMDSCacheRejoin() :
-    Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION)
-  {}
+    Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
+    op(0) {}
   MMDSCacheRejoin(int o) : 
     Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(o) {}

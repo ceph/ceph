@@ -56,7 +56,7 @@ protected:
   bool should_complete(int r) override;
 
 private:
-  State m_state;
+  State m_state = STATE_READ_MAP;
   uint64_t m_snap_id;
   int m_ret_val;
 
