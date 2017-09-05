@@ -1,8 +1,0 @@
-tasks:
-- ssh-keys:
-- ceph-deploy:
-    fs: xfs
-- workunit:
-    clients:
-      all:
-        - rados/load-gen-mix.sh
