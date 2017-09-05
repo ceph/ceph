@@ -1023,8 +1023,13 @@ int CrushCompiler::parse_choose_args(iter_t const& i)
     err << choose_arg_index << " duplicated" << std::endl;
     return -1;
   }
+  const auto max_buckets = crush.get_max_buckets();
+  if (max_buckets < 0) {
+    err << "get_max_buckets() returned error" << std::endl;
+    return -1;
+  }
   crush_choose_arg_map arg_map;
-  arg_map.size = crush.get_max_buckets();
+  arg_map.size = max_buckets;
   arg_map.args = (crush_choose_arg *)calloc(arg_map.size, sizeof(crush_choose_arg));
   for (iter_t p = i->children.begin() + 2; p != i->children.end(); p++) {
     int r = 0;
