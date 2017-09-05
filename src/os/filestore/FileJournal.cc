@@ -511,9 +511,10 @@ void FileJournal::close()
   // close
   assert(writeq_empty());
   assert(!must_write_header);
-  assert(fd >= 0);
-  _close(fd);
-  fd = -1;
+  if (fd >= 0) {
+    _close(fd);
+    fd = -1;
+  }
 }
 
 
