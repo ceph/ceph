@@ -1293,9 +1293,25 @@ void pg_pool_t::build_removed_snaps(interval_set<snapid_t>& rs) const
 {
   if (is_pool_snaps_mode()) {
     rs.clear();
-    for (snapid_t s = 1; s <= get_snap_seq(); s = s + 1)
-      if (snaps.count(s) == 0)
-	rs.insert(s);
+    snapid_t last = 0;
+    snapid_t snapseq_max = get_snap_seq();
+    auto snapiter = snaps.begin();
+    while (snapiter != snaps.end()) {
+      snapid_t curr = snapiter->first;
+      if (curr > snapseq_max) {
+        break;
+      }
+      if (curr - last > 1) {
+        // there's a hole between last seen snap and current snap
+        // add a new interval
+        rs.insert(last + 1, curr - last - 1);
+      }
+      last = curr;
+      snapiter++;
+    }
+    if (last != snapseq_max) {
+      rs.insert(last + 1, snapseq_max - last);
+    }
   } else {
     rs = removed_snaps;
   }
