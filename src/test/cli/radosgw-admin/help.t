@@ -93,7 +93,8 @@
     usage trim                 trim usage (by user, date range)
     gc list                    dump expired garbage collection objects (specify
                                --include-all to list all entries, including unexpired)
-    gc process                 manually process garbage
+    gc process                 manually process garbage (specify
+                               --include-all to process all entries, including unexpired)
     metadata get               get metadata info
     metadata put               put metadata info
     metadata rm                remove metadata info
