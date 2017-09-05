@@ -173,15 +173,17 @@ def monids():
 
 
 def mdsids():
-    ret, outbuf, outs = json_command(cluster_handle, prefix='mds dump',
+    ret, outbuf, outs = json_command(cluster_handle, prefix='fs dump',
                                      argdict={'format': 'json'})
     if ret:
         raise RuntimeError('Can\'t contact mon for mds list')
     d = json.loads(outbuf.decode('utf-8'))
     l = []
-    infodict = d['info']
-    for mdsdict in infodict.values():
-        l.append(mdsdict['name'])
+    for info in d['standbys']:
+        l.append(info['name'])
+    for fs in d['filesystems']:
+        for info in fs['mdsmap']['info'].values():
+            l.append(info['name'])
     return l
 
 
