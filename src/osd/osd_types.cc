@@ -2960,7 +2960,7 @@ WRITE_CLASS_ENCODER(PastIntervals::pg_interval_t)
  * PastIntervals only needs to be able to answer two questions:
  * 1) Where should the primary look for unfound objects?
  * 2) List a set of subsets of the OSDs such that contacting at least
- *    one from each subset guarrantees we speak to at least one witness
+ *    one from each subset guarantees we speak to at least one witness
  *    of any completed write.
  *
  * Crucially, 2) does not require keeping *all* past intervals.  Certainly,

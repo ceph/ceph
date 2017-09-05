@@ -338,7 +338,6 @@ public:
 void generate_transaction(
   PGTransactionUPtr &pgt,
   const coll_t &coll,
-  bool legacy_log_entries,
   vector<pg_log_entry_t> &log_entries,
   ObjectStore::Transaction *t,
   set<hobject_t> *added,
@@ -508,7 +507,6 @@ void ReplicatedBackend::submit_transaction(
   generate_transaction(
     t,
     coll,
-    (get_osdmap()->require_osd_release < CEPH_RELEASE_KRAKEN),
     log_entries,
     &op_t,
     &added,
@@ -2111,7 +2109,7 @@ bool ReplicatedBackend::handle_push_reply(
 	pi->recovery_progress, &new_progress, reply,
 	&(pi->stat));
       // Handle the case of a read error right after we wrote, which is
-      // hopefuilly extremely rare.
+      // hopefully extremely rare.
       if (r < 0) {
         dout(5) << __func__ << ": oid " << soid << " error " << r << dendl;
 
