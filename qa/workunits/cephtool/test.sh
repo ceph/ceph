@@ -2178,9 +2178,6 @@ function test_mon_osd_misc()
   # expect error about unused argument foo
   ceph osd ls foo 2>$TMPFILE; check_response 'unused' $? 22 
 
-  # expect "not in range" for invalid full ratio
-  ceph pg set_full_ratio 95 2>$TMPFILE; check_response 'not in range' $? 22
-
   # expect "not in range" for invalid overload percentage
   ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response 'higher than 100' $? 22
 
