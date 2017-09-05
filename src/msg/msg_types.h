@@ -384,6 +384,8 @@ struct entity_addr_t {
     }
   }
 
+  std::string ip_only_to_str() const;
+
   bool parse(const char *s, const char **end = 0);
 
   void decode_legacy_addr_after_marker(bufferlist::iterator& bl)

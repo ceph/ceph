@@ -162,6 +162,7 @@ void MgrStandby::send_beacon()
 	   << " modules " << modules << dendl;
 
   map<string,string> metadata;
+  metadata["addr"] = monc.get_my_addr().ip_only_to_str();
   collect_sys_info(&metadata, g_ceph_context);
 
   MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
