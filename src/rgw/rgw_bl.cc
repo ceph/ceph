@@ -253,7 +253,7 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
                  << error_code << row_separator                                // Error Code
                  << entry.bytes_sent << row_separator                          // Bytes Sent
                  << entry.obj_size << row_separator                            // Object Size
-                 << entry.total_time << row_separator                          // Total Time
+                 << entry.total_time.to_msec() << row_separator                // Total Time
                  << "-" << row_separator                                       // Turn-Around Time
                  << referrer << row_separator                                  // Referrer
                  << user_agent << row_separator                                // User-Agent
