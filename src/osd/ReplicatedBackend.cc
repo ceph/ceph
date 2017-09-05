@@ -804,13 +804,8 @@ void ReplicatedBackend::be_deep_scrub(
     ghobject_t(
       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   assert(iter);
-  uint64_t keys_scanned = 0;
   for (iter->seek_to_first(); iter->valid() ; iter->next(false)) {
-    if (cct->_conf->osd_scan_list_ping_tp_interval &&
-	(keys_scanned % cct->_conf->osd_scan_list_ping_tp_interval == 0)) {
-      handle.reset_tp_timeout();
-    }
-    ++keys_scanned;
+    handle.reset_tp_timeout();
 
     dout(25) << "CRC key " << iter->key() << " value:\n";
     iter->value().hexdump(*_dout);
