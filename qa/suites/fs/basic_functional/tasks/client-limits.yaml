@@ -10,6 +10,7 @@ overrides:
       - slow requests are blocked
       - failing to respond to capability release
       - \(MDS_CLIENT_OLDEST_TID\)
+      - \(MDS_CACHE_OVERSIZED\)
 
 tasks:
   - cephfs_test_runner:
