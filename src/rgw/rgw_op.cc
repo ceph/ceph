@@ -2304,7 +2304,7 @@ protected:
   int prepare(RGWRados *store, string *oid_rand);
   int do_complete(string& etag, real_time *mtime, real_time set_mtime,
                   map<string, bufferlist>& attrs, real_time delete_at,
-                  const char *if_match = NULL, const char *if_nomatch = NULL);
+                  const char *if_match = NULL, const char *if_nomatch = NULL, const string *user_data = nullptr);
 
 public:
   bool immutable_head() { return true; }
@@ -2378,7 +2378,7 @@ static bool is_v2_upload_id(const string& upload_id)
 
 int RGWPutObjProcessor_Multipart::do_complete(string& etag, real_time *mtime, real_time set_mtime,
                                               map<string, bufferlist>& attrs, real_time delete_at,
-                                              const char *if_match, const char *if_nomatch)
+                                              const char *if_match, const char *if_nomatch, const string *user_data)
 {
   complete_writing_data();
 
@@ -2799,7 +2799,8 @@ void RGWPutObj::execute()
   }
 
   op_ret = processor->complete(etag, &mtime, real_time(), attrs,
-                               (delete_at ? *delete_at : real_time()), if_match, if_nomatch);
+                               (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
+                               (user_data.empty() ? nullptr : &user_data));
 
 done:
   dispose_processor(processor);

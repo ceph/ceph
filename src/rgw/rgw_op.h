@@ -669,6 +669,7 @@ protected:
   uint64_t olh_epoch;
   string version_id;
   bufferlist bl_aux;
+  string user_data;
 
   boost::optional<ceph::real_time> delete_at;
 

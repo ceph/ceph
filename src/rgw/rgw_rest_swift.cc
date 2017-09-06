@@ -275,6 +275,8 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       s->formatter->dump_string("name", key.name);
       s->formatter->dump_string("hash", iter->etag);
       s->formatter->dump_int("bytes", iter->size);
+      if (!iter->user_data.empty())
+        s->formatter->dump_string("user_custom_data", iter->user_data);
       string single_content_type = iter->content_type;
       if (iter->content_type.size()) {
         // content type might hold multiple values, just dump the last one
@@ -668,6 +670,13 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
   if (r < 0) {
     ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
     return r;
+  }
+
+  if (!s->cct->_conf->rgw_swift_custom_header.empty()) {
+    string custom_header = s->cct->_conf->rgw_swift_custom_header;
+    if (s->info.env->exists(custom_header.c_str())) {
+      user_data = s->info.env->get(custom_header.c_str());
+    }
   }
 
   dlo_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
