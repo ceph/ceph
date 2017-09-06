@@ -7181,16 +7181,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    const auto& osdmap_pools = osdmap.get_pools();
-    for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
-      const int64_t pool_id = pit->first;
-      const pg_pool_t &pool = pit->second;
-      int ruleno = pool.get_crush_rule();
-      if (!crush.rule_exists(ruleno)) {
-	ss << " the crush rule no "<< ruleno << " for pool id " << pool_id << " is in use";
-	err = -EINVAL;
-	goto reply;
-      }
+    err = osdmap.validate_crush_rules(&crush, &ss);
+    if (err < 0) {
+      goto reply;
     }
 
     if (g_conf->mon_osd_crush_smoke_test) {
