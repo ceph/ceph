@@ -970,8 +970,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ImageCtx *ictx = new ImageCtx(srcname, "", "", io_ctx, false);
     int r = ictx->state->open(false);
     if (r < 0) {
-      lderr(ictx->cct) << "error opening source image: " << cpp_strerror(r)
-		       << dendl;
+      lderr(cct) << "error opening source image: " << cpp_strerror(r) << dendl;
       return r;
     }
     BOOST_SCOPE_EXIT((ictx)) {
