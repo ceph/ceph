@@ -5768,10 +5768,8 @@ void PG::update_store_on_load()
     // legacy filestore didn't store collection bit width; fix.
     int bits = osd->store->collection_bits(coll);
     if (bits < 0) {
-      if (coll.is_meta())
-	bits = 0;
-      else
-	bits = info.pgid.get_split_bits(pool.info.get_pg_num());
+      assert(!coll.is_meta()); // otherwise OSD::load_pgs() did a bad thing
+      bits = info.pgid.get_split_bits(pool.info.get_pg_num());
       lderr(cct) << __func__ << " setting bit width to " << bits << dendl;
       ObjectStore::Transaction t;
       t.collection_set_bits(coll, bits);
