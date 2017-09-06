@@ -120,14 +120,25 @@ public:
     set_tunables_default();
   }
 
-  /// true if any rule has a ruleset != the rule id
-  bool has_legacy_rulesets() const;
+  /**
+   * true if any rule has a rule id != its position in the array
+   *
+   * These indicate "ruleset" IDs that were created by older versions
+   * of Ceph.  They are cleaned up in renumber_rules so that eventually
+   * we can remove the code for handling them.
+   */
+  bool has_legacy_rule_ids() const;
 
-  /// fix rules whose ruleid != ruleset
-  int renumber_rules_by_ruleset();
-
-  /// true if any ruleset has more than 1 rule
-  bool has_multirule_rulesets() const;
+  /**
+   * fix rules whose ruleid != ruleset
+   *
+   * These rules were created in older versions of Ceph.  The concept
+   * of a ruleset no longer exists.
+   *
+   * Return a map of old ID -> new ID.  Caller must update OSDMap
+   * to use new IDs.
+   */
+  std::map<int, int> renumber_rules();
 
   /// true if any buckets that aren't straw2
   bool has_non_straw2_buckets() const;
@@ -981,10 +992,10 @@ public:
     if (IS_ERR(r)) return PTR_ERR(r);
     return r->len;
   }
-  int get_rule_mask_ruleset(unsigned ruleno) const {
+  int get_rule_mask_rule_id(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return -1;
-    return r->mask.ruleset;
+    return r->mask.rule_id;
   }
   int get_rule_mask_type(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
@@ -1209,7 +1220,7 @@ public:
   void finalize() {
     assert(crush);
     crush_finalize(crush);
-    have_uniform_rules = !has_legacy_rulesets();
+    have_uniform_rules = !has_legacy_rule_ids();
   }
 
   int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
@@ -1259,21 +1270,29 @@ public:
     crush->max_devices = m;
   }
 
-  int find_rule(int ruleset, int type, int size) const {
+  int find_rule(int rule_id, int type, int size) const {
     if (!crush) return -1;
     if (!have_uniform_rules) {
-      return crush_find_rule(crush, ruleset, type, size);
+      // Apply legacy "ruleset" logic for old maps where multiple
+      // rules have the same rule_id and we must select among them
+      // based on pool size.
+      return crush_find_rule(crush, rule_id, type, size);
     } else {
-      if (ruleset < (int)crush->max_rules &&
-	  crush->rules[ruleset])
-	return ruleset;
+      if (rule_id < (int)crush->max_rules &&
+	  crush->rules[rule_id])
+	return rule_id;
       return -1;
     }
   }
 
-  bool ruleset_exists(const int ruleset) const {
+  /**
+   * This check handles legacy ruleset case where we have multiple
+   * rules with the same ID and/or rules with an ID not equal to
+   * their location in the array.
+   */
+  bool rule_id_exists(const int rule_id) const {
     for (size_t i = 0; i < crush->max_rules; ++i) {
-      if (rule_exists(i) && crush->rules[i]->mask.ruleset == ruleset) {
+      if (rule_exists(i) && crush->rules[i]->mask.rule_id == rule_id) {
 	return true;
       }
     }
@@ -1282,18 +1301,18 @@ public:
   }
 
   /**
-   * Return the lowest numbered ruleset of type `type`
+   * Return the lowest numbered rule_id of type `type`
    *
-   * @returns a ruleset ID, or -1 if no matching rulesets found.
+   * @returns a rule ID, or -1 if no matching rules found.
    */
-  int find_first_ruleset(int type) const {
+  int find_first_rule_id(int type) const {
     int result = -1;
 
     for (size_t i = 0; i < crush->max_rules; ++i) {
       if (crush->rules[i]
           && crush->rules[i]->mask.type == type
-          && (crush->rules[i]->mask.ruleset < result || result == -1)) {
-        result = crush->rules[i]->mask.ruleset;
+          && (crush->rules[i]->mask.rule_id < result || result == -1)) {
+        result = crush->rules[i]->mask.rule_id;
       }
     }
 
@@ -1466,13 +1485,16 @@ public:
     const vector<int>& orig,
     vector<int> *out) const;
 
-  bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
+  bool check_crush_rule(int rule_id, int type, int size,  ostream& ss) {
     assert(crush);
 
     __u32 i;
+    // Iterate through rules rather than looking up rule_id directly,
+    // to handle legacy maps with "rulesets" where rule_id != the
+    // array offset.
     for (i = 0; i < crush->max_rules; i++) {
       if (crush->rules[i] &&
-	  crush->rules[i]->mask.ruleset == ruleset &&
+	  crush->rules[i]->mask.rule_id == rule_id &&
 	  crush->rules[i]->mask.type == type) {
 
         if (crush->rules[i]->mask.min_size <= size &&
@@ -1496,7 +1518,7 @@ public:
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
   void dump(Formatter *f) const;
   void dump_rules(Formatter *f) const;
-  void dump_rule(int ruleset, Formatter *f) const;
+  void dump_rule(int rule_id, Formatter *f) const;
   void dump_tunables(Formatter *f) const;
   void dump_choose_args(Formatter *f) const;
   void list_rules(Formatter *f) const;
@@ -1512,7 +1534,7 @@ public:
 		 const CrushTreeDumper::name_map_t& ws) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
-  int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
+  int get_osd_pool_default_crush_replicated_rule(CephContext *cct);
 
   static bool is_valid_crush_name(const string& s);
   static bool is_valid_crush_loc(CephContext *cct,

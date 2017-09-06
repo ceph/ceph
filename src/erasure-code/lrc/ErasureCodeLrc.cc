@@ -73,7 +73,7 @@ int ErasureCodeLrc::create_rule(const string &name,
 
   int rno = 0;
   for (rno = 0; rno < crush.get_max_rules(); rno++) {
-    if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+    if (!crush.rule_exists(rno) && !crush.rule_id_exists(rno))
        break;
   }
 

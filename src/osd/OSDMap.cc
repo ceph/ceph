@@ -3252,10 +3252,10 @@ void OSDMap::print_oneline_summary(ostream& out) const
     out << " nearfull";
 }
 
-bool OSDMap::crush_ruleset_in_use(int ruleset) const
+bool OSDMap::crush_rule_in_use(int rule_id) const
 {
   for (const auto &pool : pools) {
-    if (pool.second.crush_rule == ruleset)
+    if (pool.second.crush_rule == rule_id)
       return true;
   }
   return false;
@@ -3313,7 +3313,7 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
 
   int poolbase = get_max_osd() ? get_max_osd() : 1;
 
-  const int default_replicated_rule = crush->get_osd_pool_default_crush_replicated_ruleset(cct);
+  const int default_replicated_rule = crush->get_osd_pool_default_crush_replicated_rule(cct);
   assert(default_replicated_rule >= 0);
 
   if (default_pool) {
@@ -3497,7 +3497,7 @@ int OSDMap::build_simple_crush_rules(
   const string& root,
   ostream *ss)
 {
-  int crush_rule = crush.get_osd_pool_default_crush_replicated_ruleset(cct);
+  int crush_rule = crush.get_osd_pool_default_crush_replicated_rule(cct);
   string failure_domain =
     crush.get_type_name(cct->_conf->osd_crush_chooseleaf_type);
 
