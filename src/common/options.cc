@@ -3396,7 +3396,7 @@ std::vector<Option> get_global_options() {
     .add_tag("mkfs")
     .set_description("Key value database to use for bluestore"),
 
-    Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("stupid")
     .set_enum_allowed({"bitmap", "stupid"})
     .set_description("Allocator policy"),
