@@ -319,6 +319,7 @@ class FuseMount(CephFSMount):
         """
         Terminate the client without removing the mount point.
         """
+        log.info('Killing ceph-fuse connection on {name}...'.format(name=self.client_remote.name))
         self.fuse_daemon.stdin.close()
         try:
             self.fuse_daemon.wait()
@@ -329,6 +330,7 @@ class FuseMount(CephFSMount):
         """
         Follow up ``kill`` to get to a clean unmounted state.
         """
+        log.info('Cleaning up killed ceph-fuse connection')
         self.umount()
         self.cleanup()
 
