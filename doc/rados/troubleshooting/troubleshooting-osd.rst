@@ -219,7 +219,7 @@ cluster, you should leave ample free disk space and consider temporarily
 lowering the ``mon osd full ratio``, ``mon osd backfillfull ratio``  and
 ``mon osd nearfull ratio``.
 
-Full ``ceph-osds`` will be reported by ``ceph health``::
+Full ``ceph-osds`` will be reported by ``ceph health`` and ``ceph health detail``::
 
 	ceph health
 	HEALTH_WARN 1 nearfull osd(s)
@@ -235,10 +235,21 @@ Or::
 The best way to deal with a full cluster is to add new ``ceph-osds``, allowing
 the cluster to redistribute data to the newly available storage.
 
-If you cannot start an OSD because it is full, you may delete some data by deleting
-some placement group directories in the full OSD.
+If you cannot add a new OSD, you can do the following:
 
-.. important:: If you choose to delete a placement group directory on a full OSD,
+1. Establish rules to lock out all clients (e.g. firewall rules)
+
+2. Reweigh OSDs, if necessary, with ``ceph osd crush reweight <osd.ID> <weight>``
+
+3. Change the osd full limit with ``ceph pg set_full_ratio <weight>``
+
+4. Wait for the cluster to recover
+
+5. Let clients access the cluster again
+
+6. And add at the very least one additional OSD as soon as possible
+
+.. important:: This guide once recommended removing PGs. If you choose to delete a placement group directory on a full OSD,
    **DO NOT** delete the same placement group directory on another full OSD, or
    **YOU MAY LOSE DATA**. You **MUST** maintain at least one copy of your data on
    at least one OSD.
