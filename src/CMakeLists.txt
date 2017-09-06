@@ -540,12 +540,14 @@ set(libcommon_files
   ${auth_files}
   ${mds_files})
 
-CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
-if(HAS_VTA)
-  set_source_files_properties(
-    common/config.cc
-    common/options.cc
-    PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
+  if(HAS_VTA)
+    set_source_files_properties(
+      common/config.cc
+      common/options.cc
+      PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
+  endif()
 endif()
 
 if(FREEBSD)
