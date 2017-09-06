@@ -234,6 +234,10 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       p.second.summary,
       boost::regex("%isorare%"),
       p.second.detail.size() > 1 ? "are" : "is");
+    p.second.summary = boost::regex_replace(
+      p.second.summary,
+      boost::regex("%hasorhave%"),
+      p.second.detail.size() > 1 ? "have" : "has");
   }
   encode_health(new_checks, t);
 }
