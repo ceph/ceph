@@ -12004,6 +12004,7 @@ int MDCache::dump_cache(const char *fn, Formatter *f,
       f->close_section();  // inode
     }
   }
+  r = 0;
 
  out:
   if (f) {
