@@ -67,6 +67,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_EXPIRES	RGW_ATTR_PREFIX "expires"
 #define RGW_ATTR_DELETE_AT 	RGW_ATTR_PREFIX "delete_at"
 #define RGW_ATTR_ID_TAG    	RGW_ATTR_PREFIX "idtag"
+#define RGW_ATTR_TAIL_TAG    	RGW_ATTR_PREFIX "tail_tag"
 #define RGW_ATTR_SHADOW_OBJ    	RGW_ATTR_PREFIX "shadow_name"
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
