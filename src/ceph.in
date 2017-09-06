@@ -173,15 +173,17 @@ def monids():
 
 
 def mdsids():
-    ret, outbuf, outs = json_command(cluster_handle, prefix='mds dump',
+    ret, outbuf, outs = json_command(cluster_handle, prefix='fs dump',
                                      argdict={'format': 'json'})
     if ret:
         raise RuntimeError('Can\'t contact mon for mds list')
     d = json.loads(outbuf.decode('utf-8'))
     l = []
-    infodict = d['info']
-    for mdsdict in infodict.values():
-        l.append(mdsdict['name'])
+    for info in d['standbys']:
+        l.append(info['name'])
+    for fs in d['filesystems']:
+        for info in fs['mdsmap']['info'].values():
+            l.append(info['name'])
     return l
 
 
@@ -199,6 +201,14 @@ def mgrids():
     return l
 
 
+def ids_by_service(service):
+    ids = {"mon": monids,
+           "osd": osdids,
+           "mds": mdsids,
+           "mgr": mgrids}
+    return ids[service]()
+
+
 def validate_target(target):
     """
       this function will return true iff target is a correct
@@ -211,16 +221,9 @@ def validate_target(target):
     if len(target) == 2:
         # for case "service.id"
         service_name, service_id = target[0], target[1]
-        exist_ids = []
-        if service_name == "mon":
-            exist_ids = monids()
-        elif service_name == "osd":
-            exist_ids = osdids()
-        elif service_name == "mds":
-            exist_ids = mdsids()
-        elif service_name == "mgr":
-            exist_ids = mgrids()
-        else:
+        try:
+            exist_ids = ids_by_service(service_name)
+        except KeyError:
             print('WARN: {0} is not a legal service name, should be one of mon/osd/mds/mgr'.format(service_name),
                   file=sys.stderr)
             return False
@@ -1020,13 +1023,11 @@ def main():
     # of the form 'cmdNNN' followed by an array of argument descriptors)
     # as part of the validated argument JSON object
 
-    targets = [target]
-
     if target[1] == '*':
-        if target[0] == 'osd':
-            targets = [(target[0], o) for o in osdids()]
-        elif target[0] == 'mon':
-            targets = [(target[0], m) for m in monids()]
+        service = target[0]
+        targets = [(service, o) for o in ids_by_service(service)]
+    else:
+        targets = [target]
 
     final_ret = 0
     for target in targets:
