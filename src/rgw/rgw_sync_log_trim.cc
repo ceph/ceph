@@ -840,4 +840,11 @@ RGWCoroutine* BucketTrimManager::create_bucket_trim_cr()
                               impl.get(), impl->status_obj);
 }
 
+RGWCoroutine* BucketTrimManager::create_admin_bucket_trim_cr()
+{
+  // return the trim coroutine without any polling
+  return new BucketTrimCR(impl->store, impl->config,
+                          impl.get(), impl->status_obj);
+}
+
 } // namespace rgw
