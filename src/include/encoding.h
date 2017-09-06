@@ -297,7 +297,9 @@ inline void encode(const boost::optional<T> &p, bufferlist &bl)
 #pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wuninitialized"
+#if !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
 template<typename T>
 inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
 {
