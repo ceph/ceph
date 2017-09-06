@@ -342,6 +342,7 @@ void KernelDevice::_aio_thread()
 					 aio, max);
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
+      assert(0 == "got unexpected error from io_getevents");
     }
     if (r > 0) {
       dout(30) << __func__ << " got " << r << " completed aios" << dendl;
@@ -362,11 +363,21 @@ void KernelDevice::_aio_thread()
 	io_since_flush.store(true);
 
 	int r = aio[i]->get_return_value();
-	dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
-		 << " ioc " << ioc
-		 << " with " << (ioc->num_running.load() - 1)
-		 << " aios left" << dendl;
-	assert(r >= 0);
+       if (r < 0) {
+         derr << __func__ << " got " << cpp_strerror(r) << dendl;
+         assert(0 == "got unexpected error from io_getevents");
+       }
+	
+       if (aio[i]->length != (uint64_t)r) {
+         derr << "aio to " << aio[i]->offset << "~" << aio[i]->length
+              << " but returned: " << r << dendl;
+         assert(0 == "unexpected aio error");
+       }
+
+       dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
+                << " ioc " << ioc
+                << " with " << (ioc->num_running.load() - 1)
+                << " aios left" << dendl;
 
 	// NOTE: once num_running and we either call the callback or
 	// call aio_wake we cannot touch ioc or aio[] as the caller
