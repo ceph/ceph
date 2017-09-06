@@ -355,7 +355,7 @@ void FSMap::get_health_checks(health_check_map_t *checks) const
     if (!stuck_failed.empty()) {
       health_check_t& fscheck = checks->get_or_add(
         "FS_WITH_FAILED_MDS", HEALTH_WARN,
-        "%num% filesystem%plurals% %isorare% have a failed mds daemon");
+        "%num% filesystem%plurals% %hasorhave% a failed mds daemon");
       ostringstream ss;
       ss << "fs " << fs->mds_map.fs_name << " has " << stuck_failed.size()
          << " failed mds" << (stuck_failed.size() > 1 ? "s" : "");
