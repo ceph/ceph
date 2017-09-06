@@ -27,7 +27,7 @@ using namespace std;
 
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
-  string store_path, cmd, out_path, oid;
+  string store_path, cmd, oid;
   bool debug = false;
   desc.add_options()
     ("help", "produce help message")
