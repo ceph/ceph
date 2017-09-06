@@ -29,7 +29,7 @@ public:
 
   EUpdate() : LogEvent(EVENT_UPDATE), cmapv(0), had_slaves(false) { }
   EUpdate(MDLog *mdlog, const char *s) : 
-    LogEvent(EVENT_UPDATE), metablob(mdlog),
+    LogEvent(EVENT_UPDATE),
     type(s), cmapv(0), had_slaves(false) { }
   
   void print(ostream& out) const override {
@@ -47,7 +47,6 @@ public:
 
   void update_segment() override;
   void replay(MDSRank *mds) override;
-  EMetaBlob const *get_metablob() const {return &metablob;}
 };
 WRITE_CLASS_ENCODER_FEATURES(EUpdate)
 

@@ -37,7 +37,7 @@ public:
 
   EImportStart(MDLog *log, dirfrag_t di, vector<dirfrag_t>& b, mds_rank_t f) :
     LogEvent(EVENT_IMPORTSTART),
-    base(di), bounds(b), from(f), metablob(log) { }
+    base(di), bounds(b), from(f) { }
   EImportStart() :
     LogEvent(EVENT_IMPORTSTART), from(MDS_RANK_NONE) { }
   
