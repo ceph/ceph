@@ -1344,6 +1344,8 @@ public:
 
   bool crush_rule_in_use(int rule_id) const;
 
+  int validate_crush_rules(CrushWrapper *crush, ostream *ss) const;
+
   void clear_temp() {
     pg_temp->clear();
     primary_temp->clear();
