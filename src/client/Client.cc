@@ -8537,6 +8537,7 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
 {
   Inode *in = f->inode.get();
   int r;
+  loff_t old_pos = f->pos;
 
   switch (whence) {
   case SEEK_SET:
@@ -8558,8 +8559,15 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
     ceph_abort();
   }
 
+  if (f->pos < 0){
+    f->pos = old_pos;
+    r = -EINVAL;
+  }else{
+    r = f->pos;
+  }
+
   ldout(cct, 3) << "_lseek(" << f << ", " << offset << ", " << whence << ") = " << f->pos << dendl;
-  return f->pos;
+  return r;
 }
 
 
@@ -8686,6 +8694,8 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     offset = f->pos;
     movepos = true;
   }
+  if (offset < 0)
+    return -EINVAL;
   loff_t start_pos = offset;
 
   if (in->inline_version == 0) {
@@ -9106,6 +9116,8 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     f->pos = offset+size;
     unlock_fh_pos(f);
   }
+  if (offset < 0)
+    return -EINVAL;
 
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
