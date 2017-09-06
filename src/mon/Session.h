@@ -225,9 +225,10 @@ struct MonSessionMap {
 
 inline ostream& operator<<(ostream& out, const MonSession& s)
 {
-  out << "MonSession(" << s.inst << " is "
-      << (s.closed ? "closed" : "open");
-  out << " " << s.caps << ")";
+  out << "MonSession(" << s.inst << " is " << (s.closed ? "closed" : "open")
+      << " " << s.caps << ", features 0x" << std::hex << s.con_features << std::dec
+      <<  " (" << ceph_release_name(ceph_release_from_features(s.con_features))
+      << "))";
   return out;
 }
 
