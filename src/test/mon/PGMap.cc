@@ -180,7 +180,7 @@ TEST(pgmap, dump_object_stat_sum_0)
   unsigned col = 0;
   ASSERT_EQ(stringify(si_t(sum.num_bytes)), tbl.get(0, col++));
   ASSERT_EQ(percentify(used_percent), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(avail)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_t(avail/pool.size)), tbl.get(0, col++));
   ASSERT_EQ(stringify(sum.num_objects), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_t(sum.num_objects_dirty)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_t(sum.num_rd)), tbl.get(0, col++));
@@ -210,7 +210,7 @@ TEST(pgmap, dump_object_stat_sum_1)
   unsigned col = 0;
   ASSERT_EQ(stringify(si_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(0), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(avail)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_t(avail/pool.size)), tbl.get(0, col++));
   ASSERT_EQ(stringify(0), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_t(0)), tbl.get(0, col++));
@@ -239,6 +239,6 @@ TEST(pgmap, dump_object_stat_sum_2)
   unsigned col = 0;
   ASSERT_EQ(stringify(si_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(0), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(avail)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_t(avail/pool.size)), tbl.get(0, col++));
   ASSERT_EQ(stringify(0), tbl.get(0, col++));
 }
