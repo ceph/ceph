@@ -1791,7 +1791,6 @@ static int update_period(const string& realm_id, const string& realm_name,
   }
   encode_json("period", period, formatter);
   formatter->flush(cout);
-  cout << std::endl;
   return 0;
 }
 
@@ -2995,7 +2994,6 @@ int main(int argc, const char **argv)
 	}
 	encode_json("period", period, formatter);
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_PERIOD_GET_CURRENT:
@@ -3022,7 +3020,6 @@ int main(int argc, const char **argv)
 	encode_json("periods", periods, formatter);
 	formatter->close_section();
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_PERIOD_UPDATE:
@@ -3077,7 +3074,6 @@ int main(int argc, const char **argv)
 
         encode_json("period", period, formatter);
         formatter->flush(cout);
-        cout << std::endl;
       }
       break;
     case OPT_GLOBAL_QUOTA_GET:
@@ -3155,7 +3151,6 @@ int main(int argc, const char **argv)
         }
 
         formatter->flush(cout);
-        cout << std::endl;
       }
       break;
     case OPT_REALM_CREATE:
@@ -3181,7 +3176,6 @@ int main(int argc, const char **argv)
 
 	encode_json("realm", realm, formatter);
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_REALM_DELETE:
@@ -3218,7 +3212,6 @@ int main(int argc, const char **argv)
 	}
 	encode_json("realm", realm, formatter);
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_REALM_GET_DEFAULT:
@@ -3255,7 +3248,6 @@ int main(int argc, const char **argv)
 	encode_json("realms", realms, formatter);
 	formatter->close_section();
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_REALM_LIST_PERIODS:
@@ -3275,7 +3267,6 @@ int main(int argc, const char **argv)
 	encode_json("periods", periods, formatter);
 	formatter->close_section();
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
 
@@ -3443,7 +3434,6 @@ int main(int argc, const char **argv)
 
         encode_json("realm", realm, formatter);
         formatter->flush(cout);
-        cout << std::endl;
       }
       return 0;
 
@@ -3526,7 +3516,6 @@ int main(int argc, const char **argv)
 
 	encode_json("zonegroup", zonegroup, formatter);
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_ZONEGROUP_DEFAULT:
@@ -3580,7 +3569,6 @@ int main(int argc, const char **argv)
 
 	encode_json("zonegroup", zonegroup, formatter);
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_ZONEGROUP_LIST:
@@ -3608,7 +3596,6 @@ int main(int argc, const char **argv)
 	encode_json("zonegroups", zonegroups, formatter);
 	formatter->close_section();
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_ZONEGROUP_MODIFY:
@@ -3799,7 +3786,6 @@ int main(int argc, const char **argv)
 
 	encode_json("placement_targets", zonegroup.placement_targets, formatter);
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_ZONEGROUP_PLACEMENT_ADD:
@@ -3927,7 +3913,6 @@ int main(int argc, const char **argv)
 
 	encode_json("zone", zone, formatter);
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_ZONE_DEFAULT:
@@ -4115,7 +4100,6 @@ int main(int argc, const char **argv)
 	encode_json("zones", zones, formatter);
 	formatter->close_section();
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_ZONE_MODIFY:
@@ -4598,7 +4582,6 @@ int main(int argc, const char **argv)
 
       encode_json("period", period, formatter);
       formatter->flush(cout);
-      cout << std::endl;
     }
     return 0;
   case OPT_ROLE_CREATE:
