@@ -299,11 +299,6 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 // -----------------------
 // EMetaBlob
 
-EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0), renamed_dirino(0),
-				     inotablev(0), sessionmapv(0), allocated_ino(0),
-				     last_subtree_map(0), event_seq(0)
-{ }
-
 void EMetaBlob::add_dir_context(CDir *dir, int mode)
 {
   MDSRank *mds = dir->cache->mds;

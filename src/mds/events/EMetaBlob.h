@@ -335,7 +335,10 @@ private:
   // for replay, in certain cases
   //LogSegment *_segment;
 
-  explicit EMetaBlob(MDLog *mdl = 0);  // defined in journal.cc
+  EMetaBlob() : opened_ino(0), renamed_dirino(0),
+                inotablev(0), sessionmapv(0), allocated_ino(0),
+                last_subtree_map(0), event_seq(0)
+                {}
   ~EMetaBlob() { }
 
   void print(ostream& out) {
