@@ -3445,7 +3445,7 @@ int main(int argc, const char **argv)
         formatter->flush(cout);
         cout << std::endl;
       }
-      return 0;
+      break;
 
     case OPT_ZONEGROUP_ADD:
       {
