@@ -203,7 +203,6 @@ Description: debugging symbols for ceph-mgr
 Package: ceph-mon
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
-         python-flask,
          ${misc:Depends},
          ${shlibs:Depends},
 Recommends: ceph-common,
