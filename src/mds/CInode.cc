@@ -3775,6 +3775,14 @@ void InodeStore::generate_test_instances(list<InodeStore*> &ls)
   ls.push_back(populated);
 }
 
+void InodeStoreBare::generate_test_instances(list<InodeStoreBare*> &ls)
+{
+  InodeStoreBare *populated = new InodeStoreBare;
+  populated->inode.ino = 0xdeadbeef;
+  populated->symlink = "rhubarb";
+  ls.push_back(populated);
+}
+
 void CInode::validate_disk_state(CInode::validated_data *results,
                                  MDSInternalContext *fin)
 {
