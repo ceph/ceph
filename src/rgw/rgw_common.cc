@@ -320,7 +320,7 @@ void set_req_state_err(struct rgw_err& err,	/* out */
   err.ret = -err_no;
   bool is_website_redirect = false;
 
-  if (prot_flags & RGW_REST_SWIFT) {
+  if (prot_flags & (RGW_REST_SWIFT | RGW_REST_SWIFT_AUTH)) {
     if (search_err(rgw_http_swift_errors, err_no, is_website_redirect, err.http_ret, err.err_code))
       return;
   }
