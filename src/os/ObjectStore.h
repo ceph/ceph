@@ -1534,6 +1534,9 @@ public:
   virtual int fsck(bool deep) {
     return -EOPNOTSUPP;
   }
+  virtual int repair(bool deep) {
+    return -EOPNOTSUPP;
+  }
 
   virtual void set_cache_shards(unsigned num) { }
 
