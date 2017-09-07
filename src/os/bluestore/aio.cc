@@ -46,8 +46,11 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
     ++pos;
     ++cur;
   }
+
+  int submit_size = pos;
+  pos = 0;
   while (true) {
-    r = io_submit(ctx, pos, piocb);
+    r = io_submit(ctx, submit_size, piocb + pos);
     if (r < 0) {
       if (r == -EAGAIN && attempts-- > 0) {
 	usleep(delay);
@@ -55,6 +58,11 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
 	(*retries)++;
 	continue;
       }
+    } else if (r < submit_size) {
+      pos += r;
+      submit_size -= r;
+      usleep(delay);
+      continue;
     }
     break;
   }
