@@ -483,6 +483,19 @@ def build_ceph_cluster(ctx, config):
         elif not config.get('only_mon'):
             raise RuntimeError(
                 "The cluster is NOT operational due to insufficient OSDs")
+        # create rbd pool
+        ceph_admin.run(
+            args=[
+                'sudo', 'ceph', '--cluster', 'ceph',
+                'osd', 'pool', 'create', 'rbd', '128', '128'],
+            check_status=False)
+        ceph_admin.run(
+            args=[
+                'sudo', 'ceph', '--cluster', 'ceph',
+                'osd', 'pool', 'application', 'enable',
+                'rbd', 'rbd', '--yes-i-really-mean-it'
+                ],
+            check_status=False)
         yield
 
     except Exception:
