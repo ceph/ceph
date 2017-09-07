@@ -1436,7 +1436,7 @@ function test_mon_osd()
   expect_false ceph osd unset sortbitwise  # cannot be unset
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
-  ceph osd require-osd-release luminous
+  ceph osd require-osd-release mimic
   # can't lower (or use new command for anything but jewel)
   expect_false ceph osd require-osd-release jewel
   # these are no-ops but should succeed.
