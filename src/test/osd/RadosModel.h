@@ -66,7 +66,8 @@ enum TestOpType {
   TEST_OP_APPEND,
   TEST_OP_APPEND_EXCL,
   TEST_OP_SET_REDIRECT,
-  TEST_OP_UNSET_REDIRECT
+  TEST_OP_UNSET_REDIRECT,
+  TEST_OP_CHUNK_READ
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -485,6 +486,22 @@ public:
   void update_object_redirect_target(const string &oid, const string &target)
   {
     redirect_objs[oid] = target;
+  }
+
+  void update_object_chunk_target(const string &oid, uint64_t offset, ChunkDesc info)
+  {
+    for (map<int, map<string,ObjectDesc> >::const_reverse_iterator i = 
+	   pool_obj_cont.rbegin();
+	 i != pool_obj_cont.rend();
+	 ++i) {
+      if (i->second.count(oid) != 0) {
+	ObjectDesc obj_desc = i->second.find(oid)->second;
+	obj_desc.chunk_info[offset] = info;
+	update_object_full(oid, obj_desc);
+	return ;
+      }
+    }
+    return;
   }
 
   bool object_existed_at(const string &oid, int snap = -1) const
@@ -1953,6 +1970,371 @@ public:
   string getType() override
   {
     return "CopyFromOp";
+  }
+};
+
+class ChunkReadOp : public TestOp {
+public:
+  vector<librados::AioCompletion *> completions;
+  librados::ObjectReadOperation op;
+  string oid;
+  ObjectDesc old_value;
+  ObjectDesc tgt_value;
+  int snap;
+  bool balance_reads;
+
+  ceph::shared_ptr<int> in_use;
+
+  vector<bufferlist> results;
+  vector<int> retvals;
+  vector<bool> is_sparse_read;
+  uint64_t waiting_on;
+
+  vector<bufferlist> checksums;
+  vector<int> checksum_retvals;
+  uint32_t offset;
+  uint32_t length;
+  string tgt_oid;
+  string tgt_pool_name;
+  uint32_t tgt_offset;
+
+  ChunkReadOp(int n,
+	 RadosTestContext *context,
+	 const string &oid,
+	 string tgt_pool_name,
+	 bool balance_reads,
+	 TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      completions(2),
+      oid(oid),
+      snap(0),
+      balance_reads(balance_reads),
+      results(2),
+      retvals(2),
+      waiting_on(0),
+      checksums(2),
+      checksum_retvals(2),
+      tgt_pool_name(tgt_pool_name)
+  {}
+
+  void _do_read(librados::ObjectReadOperation& read_op, uint32_t offset, uint32_t length, int index) {
+    read_op.read(offset,
+		 length,
+		 &results[index],
+		 &retvals[index]);
+    if (index != 0) {
+      bufferlist init_value_bl;
+      ::encode(static_cast<uint32_t>(-1), init_value_bl);
+      read_op.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init_value_bl, offset, length,
+		       0, &checksums[index], &checksum_retvals[index]);
+    }
+
+  }
+
+  void _begin() override
+  {
+    context->state_lock.Lock();
+    std::cout << num << ": chunk read oid " << oid << " snap " << snap << std::endl;
+    done = 0;
+    for (uint32_t i = 0; i < 2; i++) {
+      completions[i] = context->rados.aio_create_completion((void *) this, &read_callback, 0);
+    }
+
+    context->find_object(oid, &old_value);
+
+    if (old_value.chunk_info.size() == 0) {
+      std::cout << ":  no chunks" << std::endl;
+      context->kick();
+      context->state_lock.Unlock();
+      done = true;
+      return;
+    }
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+    if (old_value.deleted()) {
+      std::cout << num << ":  expect deleted" << std::endl;
+    } else {
+      std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
+    }
+
+    int rand_index = rand() % old_value.chunk_info.size();
+    auto iter = old_value.chunk_info.begin();
+    for (int i = 0; i < rand_index; i++) {
+      iter++;
+    }
+    offset = iter->first;
+    offset += (rand() % iter->second.length)/2;
+    uint32_t t_length = rand() % iter->second.length;
+    while (t_length + offset > iter->first + iter->second.length) {
+      t_length = rand() % iter->second.length;
+    }
+    length = t_length;
+    tgt_offset = iter->second.offset + offset - iter->first;
+    tgt_oid = iter->second.oid;
+
+    std::cout << num << ": ori offset " << iter->first << " req offset " << offset 
+	      << " ori length " << iter->second.length << " req length " << length
+	      << " ori tgt_offset " << iter->second.offset << " req tgt_offset " << tgt_offset 
+	      << " tgt_oid " << tgt_oid << std::endl;
+
+    TestWatchContext *ctx = context->get_watch_context(oid);
+    context->state_lock.Unlock();
+    if (ctx) {
+      assert(old_value.exists);
+      TestAlarm alarm;
+      std::cerr << num << ":  about to start" << std::endl;
+      ctx->start();
+      std::cerr << num << ":  started" << std::endl;
+      bufferlist bl;
+      context->io_ctx.set_notify_timeout(600);
+      int r = context->io_ctx.notify2(context->prefix+oid, bl, 0, NULL);
+      if (r < 0) {
+	std::cerr << "r is " << r << std::endl;
+	ceph_abort();
+      }
+      std::cerr << num << ":  notified, waiting" << std::endl;
+      ctx->wait();
+    }
+    context->state_lock.Lock();
+
+    _do_read(op, offset, length, 0);
+
+    unsigned flags = 0;
+    if (balance_reads)
+      flags |= librados::OPERATION_BALANCE_READS;
+
+    assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[0], &op,
+					flags, NULL));
+    waiting_on++;
+
+    _do_read(op, tgt_offset, length, 1);
+    assert(!context->io_ctx.aio_operate(context->prefix+tgt_oid, completions[1], &op,
+					flags, NULL));
+
+    waiting_on++;
+    context->state_lock.Unlock();
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    Mutex::Locker l(context->state_lock);
+    assert(!done);
+    assert(waiting_on > 0);
+    if (--waiting_on) {
+      return;
+    }
+
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    int retval = completions[0]->get_return_value();
+    std::cout << ":  finish!! ret: " << retval << std::endl;
+    context->find_object(tgt_oid, &tgt_value);
+
+    for (int i = 0; i < 2; i++) {
+      assert(completions[i]->is_complete()); 
+      uint64_t version = completions[i]->get_version64();
+      int err = completions[i]->get_return_value();
+      if (err != retval) {
+        cerr << num << ": Error: oid " << oid << " read returned different error codes: "
+             << retval << " and " << err << std::endl;
+	ceph_abort();
+      }
+      if (err) {
+        if (!(err == -ENOENT && old_value.deleted())) {
+          cerr << num << ": Error: oid " << oid << " read returned error code "
+               << err << std::endl;
+          ceph_abort();
+        }
+      }
+      if (version != tgt_value.version) {
+	cerr << num << ": oid " << oid << " version is " << version
+	     << " and expected " << tgt_value.version << std::endl;
+	assert(version == tgt_value.version);
+      }
+    }
+
+    if (!retval) {
+      if (old_value.deleted()) {
+	std::cout << num << ":  expect deleted" << std::endl;
+	assert(0 == "expected deleted");
+      } else {
+	std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
+      }
+      if (tgt_value.has_contents()) {
+	uint32_t checksum[2] = {0};
+	if (checksum_retvals[1] == 0) {
+	  try {
+	    auto bl_it = checksums[1].begin();
+	    uint32_t csum_count;
+	    ::decode(csum_count, bl_it);
+	    ::decode(checksum[1], bl_it);
+	  } catch (const buffer::error &err) {
+	    checksum_retvals[1] = -EBADMSG;
+	  }
+	}
+    
+	if (checksum_retvals[1] != 0) {
+	  cerr << num << ": oid " << oid << " checksum retvals " << checksums[0]
+	       << " error " << std::endl;
+	  context->errors++;
+	}
+
+	checksum[0] = results[0].crc32c(-1);
+      
+	if (checksum[0] != checksum[1]) {
+	  cerr << num << ": oid " << oid << " checksum src " << checksum[0]
+	       << " chunksum tgt " << checksum[1] << " incorrect, expecting " 
+	       << results[0].crc32c(-1)
+	       << std::endl;
+	  context->errors++;
+	}
+	if (context->errors) ceph_abort();
+      }
+    }
+    for (vector<librados::AioCompletion *>::iterator it = completions.begin();
+         it != completions.end(); ++it) {
+      (*it)->release();
+    }
+    context->kick();
+    done = true;
+  }
+
+  bool finished() override
+  {
+    return done;
+  }
+
+  string getType() override
+  {
+    return "ChunkReadOp";
+  }
+};
+
+class SetChunkOp : public TestOp {
+public:
+  string oid, oid_tgt, tgt_pool_name;
+  ObjectDesc src_value, tgt_value;
+  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation rd_op;
+  librados::AioCompletion *comp;
+  ceph::shared_ptr<int> in_use;
+  int done;
+  int r;
+  uint64_t offset;
+  uint32_t length;
+  uint64_t tgt_offset;
+  SetChunkOp(int n,
+	     RadosTestContext *context,
+	     const string &oid,
+	     uint64_t offset,
+	     uint32_t length,
+	     const string &oid_tgt,
+	     const string &tgt_pool_name,
+	     uint64_t tgt_offset,
+	     TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      oid(oid), oid_tgt(oid_tgt), tgt_pool_name(tgt_pool_name),
+      comp(NULL), done(0), 
+      r(0), offset(offset), length(length), 
+      tgt_offset(tgt_offset)
+  {}
+
+  void _begin() override
+  {
+    Mutex::Locker l(context->state_lock);
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
+    context->find_object(oid, &src_value); 
+
+    comp = context->rados.aio_create_completion();
+    rd_op.stat(NULL, NULL, NULL);
+    context->io_ctx.aio_operate(context->prefix+oid, comp, &rd_op,
+     			  librados::OPERATION_ORDER_READS_WRITES,
+     			  NULL);
+    comp->wait_for_safe();
+    if ((r = comp->get_return_value()) && !src_value.deleted()) {
+      cerr << "Error: oid " << oid << " stat returned error code "
+	   << r << std::endl;
+      ceph_abort();
+    }
+    context->update_object_version(oid, comp->get_version64());
+    comp->release();
+
+    context->find_object(oid, &src_value); 
+    context->find_object(oid_tgt, &tgt_value);
+
+    if (src_value.version != 0 && !src_value.deleted())
+      op.assert_version(src_value.version);
+    op.set_chunk(offset, length, context->io_ctx, context->prefix+oid_tgt, tgt_offset);
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+						&write_callback);
+    context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
+				librados::OPERATION_ORDER_READS_WRITES);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    Mutex::Locker l(context->state_lock);
+
+    if (info->id == 0) {
+      assert(comp->is_complete());
+      cout << num << ":  finishing set_chunk to oid " << oid << std::endl;
+      if ((r = comp->get_return_value())) {
+	if (r == -ENOENT && src_value.deleted()) {
+	  cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+	} else if (r == -EOPNOTSUPP) {
+	  bool is_overlapped = false;
+	  for (auto &p : src_value.chunk_info) {
+	    if ((p.first <= offset && p.first + p.second.length > offset) ||
+                (p.first > offset && p.first <= offset + length)) {
+	      cout << " range is overlapped  offset: " << offset << " length: " << length
+		    << " chunk_info offset: " << p.second.offset << " length " 
+		    << p.second.length << std::endl;
+	      is_overlapped = true;
+	      context->update_object_version(oid, comp->get_version64());
+	    } 
+	  }
+	  if (!is_overlapped) {
+	    cerr << "Error: oid " << oid << " set_chunk " << oid_tgt << " returned error code "
+		  << r << " offset: " << offset << " length: " << length <<  std::endl;
+	    ceph_abort();
+	  }
+	} else {
+	  cerr << "Error: oid " << oid << " set_chunk " << oid_tgt << " returned error code "
+	       << r << std::endl;
+	  ceph_abort();
+	}
+      } else {
+	ChunkDesc info;
+	info.offset = tgt_offset;
+	info.length = length;
+	info.oid = oid_tgt;
+	context->update_object_chunk_target(oid, offset, info);
+	context->update_object_version(oid, comp->get_version64());
+      }
+    }
+
+    if (++done == 1) {
+      context->oid_in_use.erase(oid);
+      context->oid_not_in_use.insert(oid);
+      context->kick();
+    }
+  }
+
+  bool finished() override
+  {
+    return done == 1;
+  }
+
+  string getType() override
+  {
+    return "SetChunkOp";
   }
 };
 

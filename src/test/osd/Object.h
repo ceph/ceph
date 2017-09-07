@@ -51,6 +51,13 @@ WRITE_CLASS_ENCODER(ContDesc)
 
 std::ostream &operator<<(std::ostream &out, const ContDesc &rhs);
 
+class ChunkDesc {
+public:
+  uint32_t offset;
+  uint32_t length;
+  std::string oid;
+};
+
 class ContentsGenerator {
 public:
 
@@ -507,6 +514,7 @@ public:
 
   uint64_t version;
   std::string redirect_target;
+  std::map<uint64_t, ChunkDesc> chunk_info;
 private:
   std::list<std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc> > layers;
 };
