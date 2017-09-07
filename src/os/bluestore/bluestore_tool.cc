@@ -139,7 +139,7 @@ int main(int argc, char **argv)
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, show-label")
+    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, show-label")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -207,6 +207,20 @@ int main(int argc, char **argv)
       }
     }
   }
+  if (action == "bluefs-bdev-sizes") {
+    if (path.empty()) {
+      cerr << "must specify bluestore path" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    cout << "infering bluefs devices from bluestore path" << std::endl;
+    for (auto fn : {"block", "block.wal", "block.db"}) {
+      string p = path + "/" + fn;
+      struct stat st;
+      if (::stat(p.c_str(), &st) == 0) {
+        devs.push_back(p);
+      }
+    }
+  }
 
   vector<const char*> args;
   for (auto& i : ceph_option_strings) {
@@ -252,6 +266,11 @@ int main(int argc, char **argv)
     }
     jf.close_section();
     jf.flush(cout);
+  }
+  else if (action == "bluefs-bdev-sizes") {
+    BlueFS *fs = open_bluefs(cct.get(), path, devs);
+    fs->dump_block_extents(cout);
+    delete fs;
   }
   else if (action == "bluefs-export") {
     BlueFS *fs = open_bluefs(cct.get(), path, devs);
