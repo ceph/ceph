@@ -184,6 +184,16 @@ class TestVolumes(object):
         assert len(volumes) == 1
         assert volumes[0].lv_name == 'volume1'
 
+    def test_filter_by_tag_does_not_match_one(self, volumes):
+        lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
+        osd = api.Volume(lv_name='volume1', lv_path='/dev/vg/lv', lv_tags=lv_tags)
+        journal = api.Volume(lv_name='volume2', lv_path='/dev/vg/lv', lv_tags='ceph.osd_id=1,ceph.type=journal')
+        volumes.append(osd)
+        volumes.append(journal)
+        # note the different osd_id!
+        volumes.filter(lv_tags={'ceph.type': 'data', 'ceph.osd_id': '2'})
+        assert volumes == []
+
     def test_filter_by_vg_name(self, volumes):
         lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
         osd = api.Volume(lv_name='volume1', vg_name='ceph_vg', lv_tags=lv_tags)
