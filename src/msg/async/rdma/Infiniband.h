@@ -340,7 +340,7 @@ class Infiniband {
     // TODO: Cluster -> TxPool txbuf_pool
     // chunk layout fix
     //  
-    Cluster* send;// SEND
+    Cluster* send = nullptr;// SEND
     Device *device;
     ProtectionDomain *pd;
     MemPoolContext rxbuf_pool_ctx;
