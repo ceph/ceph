@@ -39,15 +39,16 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
 
   aio_iter cur = begin;
   struct iocb *piocb[aios_size];
-  int r, pos = 0;
+  int left = 0;
   while (cur != end) {
     cur->priv = priv;
-    *(piocb+pos) = &cur->iocb;
-    ++pos;
+    *(piocb+left) = &cur->iocb;
+    ++left;
     ++cur;
   }
-  while (true) {
-    r = io_submit(ctx, pos, piocb);
+  int done = 0;
+  while (left > 0) {
+    int r = io_submit(ctx, left, piocb + done);
     if (r < 0) {
       if (r == -EAGAIN && attempts-- > 0) {
 	usleep(delay);
@@ -55,10 +56,13 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
 	(*retries)++;
 	continue;
       }
+      return r;
     }
-    break;
+    assert(r > 0);
+    done += r;
+    left -= r;
   }
-  return r;
+  return done;
 }
 
 int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
