@@ -3,6 +3,7 @@ meta:
 overrides:
  ceph_ansible:
    vars:
+      osd_scenario: collocated
       ceph_conf_overrides:
         global:
           osd_default_pool_size: 2
