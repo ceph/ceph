@@ -19,6 +19,7 @@
 #include "common/bounded_key_counter.h"
 #include "common/errno.h"
 #include "rgw_cr_rados.h"
+#include "rgw_metadata.h"
 #include "rgw_rados.h"
 #include "rgw_sync_log_trim.h"
 #include "rgw_sync.h"
@@ -334,6 +335,150 @@ int accumulate_peer_counters(bufferlist& bl, BucketChangeCounter& counter)
   }
   return 0;
 }
+
+/// metadata callback has the signature bool(string&& key, string&& marker)
+using MetadataListCallback = std::function<bool(std::string&&, std::string&&)>;
+
+/// lists metadata keys, passing each to a callback until it returns false.
+/// on reaching the end, it will restart at the beginning and list up to the
+/// initial marker
+class AsyncMetadataList : public RGWAsyncRadosRequest {
+  CephContext *const cct;
+  RGWMetadataManager *const mgr;
+  const std::string section;
+  const std::string start_marker;
+  MetadataListCallback callback;
+  void *handle{nullptr};
+
+  int _send_request() override;
+ public:
+  AsyncMetadataList(CephContext *cct, RGWCoroutine *caller,
+                    RGWAioCompletionNotifier *cn, RGWMetadataManager *mgr,
+                    const std::string& section, const std::string& start_marker,
+                    const MetadataListCallback& callback)
+    : RGWAsyncRadosRequest(caller, cn), cct(cct), mgr(mgr),
+      section(section), start_marker(start_marker), callback(callback)
+  {}
+  ~AsyncMetadataList() override {
+    if (handle) {
+      mgr->list_keys_complete(handle);
+    }
+  }
+};
+
+int AsyncMetadataList::_send_request()
+{
+  // start a listing at the given marker
+  int r = mgr->list_keys_init(section, start_marker, &handle);
+  if (r < 0) {
+    ldout(cct, 10) << "failed to init metadata listing: "
+        << cpp_strerror(r) << dendl;
+    return r;
+  }
+  ldout(cct, 20) << "starting metadata listing at " << start_marker << dendl;
+
+  std::list<std::string> keys;
+  bool truncated{false};
+  std::string marker;
+
+  do {
+    // get the next key and marker
+    r = mgr->list_keys_next(handle, 1, keys, &truncated);
+    if (r < 0) {
+      ldout(cct, 10) << "failed to list metadata: "
+          << cpp_strerror(r) << dendl;
+      return r;
+    }
+    marker = mgr->get_marker(handle);
+
+    if (!keys.empty()) {
+      assert(keys.size() == 1);
+      auto& key = keys.front();
+      if (!callback(std::move(key), std::move(marker))) {
+        return 0;
+      }
+    }
+  } while (truncated);
+
+  if (start_marker.empty()) {
+    // already listed all keys
+    return 0;
+  }
+
+  // restart the listing from the beginning (empty marker)
+  mgr->list_keys_complete(handle);
+  handle = nullptr;
+
+  r = mgr->list_keys_init(section, "", &handle);
+  if (r < 0) {
+    ldout(cct, 10) << "failed to restart metadata listing: "
+        << cpp_strerror(r) << dendl;
+    return r;
+  }
+  ldout(cct, 20) << "restarting metadata listing" << dendl;
+
+  do {
+    // get the next key and marker
+    r = mgr->list_keys_next(handle, 1, keys, &truncated);
+    if (r < 0) {
+      ldout(cct, 10) << "failed to list metadata: "
+          << cpp_strerror(r) << dendl;
+      return r;
+    }
+    marker = mgr->get_marker(handle);
+
+    if (!keys.empty()) {
+      assert(keys.size() == 1);
+      auto& key = keys.front();
+      // stop at original marker
+      if (marker >= start_marker) {
+        return 0;
+      }
+      if (!callback(std::move(key), std::move(marker))) {
+        return 0;
+      }
+    }
+  } while (truncated);
+
+  return 0;
+}
+
+/// coroutine wrapper for AsyncMetadataList
+class MetadataListCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *const async_rados;
+  RGWMetadataManager *const mgr;
+  const std::string& section;
+  const std::string& start_marker;
+  MetadataListCallback callback;
+  RGWAsyncRadosRequest *req{nullptr};
+ public:
+  MetadataListCR(CephContext *cct, RGWAsyncRadosProcessor *async_rados,
+                 RGWMetadataManager *mgr, const std::string& section,
+                 const std::string& start_marker,
+                 const MetadataListCallback& callback)
+    : RGWSimpleCoroutine(cct), async_rados(async_rados), mgr(mgr),
+      section(section), start_marker(start_marker), callback(callback)
+  {}
+  ~MetadataListCR() override {
+    request_cleanup();
+  }
+
+  int send_request() override {
+    req = new AsyncMetadataList(cct, this, stack->create_completion_notifier(),
+                                mgr, section, start_marker, callback);
+    async_rados->queue(req);
+    return 0;
+  }
+  int request_complete() override {
+    return req->get_ret_status();
+  }
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = nullptr;
+    }
+  }
+};
 
 class BucketTrimCR : public RGWCoroutine {
   RGWRados *const store;
