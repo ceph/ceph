@@ -43,7 +43,7 @@ add_ceph_unittest(unittest_prioritized_queue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/u
 target_link_libraries(unittest_prioritized_queue global ${BLKID_LIBRARIES})
 
 # unittest_mclock_priority_queue
-add_executable(unittest_mclock_priority_queue EXCLUDE_FROM_ALL
+add_executable(unittest_mclock_priority_queue
   test_mclock_priority_queue.cc
   )
 add_ceph_unittest(unittest_mclock_priority_queue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mclock_priority_queue)
