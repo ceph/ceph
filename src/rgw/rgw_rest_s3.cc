@@ -493,8 +493,11 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
   s->formatter->dump_string("Name", s->bucket_name);
   s->formatter->dump_string("Prefix", prefix);
   s->formatter->dump_string("KeyMarker", marker.name);
-  if (is_truncated && !next_marker.empty())
+  s->formatter->dump_string("VersionIdMarker", marker.instance);
+  if (is_truncated && !next_marker.empty()) {
     s->formatter->dump_string("NextKeyMarker", next_marker.name);
+    s->formatter->dump_string("NextVersionIdMarker", next_marker.instance);
+  }
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty())
     s->formatter->dump_string("Delimiter", delimiter);
