@@ -36,7 +36,6 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
-#include "messages/MMonHealth.h"
 #include "messages/MMonMetadata.h"
 #include "messages/MMonSync.h"
 #include "messages/MMonScrub.h"
@@ -71,13 +70,11 @@
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
 #include "MonmapMonitor.h"
-#include "PGMonitor.h"
 #include "LogMonitor.h"
 #include "AuthMonitor.h"
 #include "MgrMonitor.h"
 #include "MgrStatMonitor.h"
 #include "mon/QuorumService.h"
-#include "mon/OldHealthMonitor.h"
 #include "mon/HealthMonitor.h"
 #include "mon/ConfigKeyService.h"
 #include "common/config.h"
@@ -110,9 +107,6 @@ const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
   {parsesig, helptext, modulename, req_perms, avail, flags},
 MonCommand mon_commands[] = {
 #include <mon/MonCommands.h>
-};
-MonCommand pgmonitor_commands[] = {
-#include <mon/PGMonitorCommands.h>
 };
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
@@ -148,7 +142,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 			cct->_conf->auth_service_required : cct->_conf->auth_supported ),
   mgr_messenger(mgr_m),
   mgr_client(cct_, mgr_m),
-  pgservice(nullptr),
   store(s),
   
   state(STATE_PROBING),
@@ -190,14 +183,12 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, paxos, "mdsmap");
   paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, paxos, "monmap");
   paxos_service[PAXOS_OSDMAP] = new OSDMonitor(cct, this, paxos, "osdmap");
-  paxos_service[PAXOS_PGMAP] = new PGMonitor(this, paxos, "pgmap");
   paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
   paxos_service[PAXOS_MGR] = new MgrMonitor(this, paxos, "mgr");
   paxos_service[PAXOS_MGRSTAT] = new MgrStatMonitor(this, paxos, "mgrstat");
   paxos_service[PAXOS_HEALTH] = new HealthMonitor(this, paxos, "health");
 
-  health_monitor = new OldHealthMonitor(this);
   config_key_service = new ConfigKeyService(this, paxos);
 
   mon_caps = new MonCap();
@@ -213,28 +204,17 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   }
   MonCommand::encode_vector(local_mon_commands, local_mon_commands_bl);
 
-  local_upgrading_mon_commands = local_mon_commands;
-  for (unsigned i = 0; i < ARRAY_SIZE(pgmonitor_commands); ++i) {
-    local_upgrading_mon_commands.push_back(pgmonitor_commands[i]);
-  }
-  MonCommand::encode_vector(local_upgrading_mon_commands,
-			    local_upgrading_mon_commands_bl);
-
   // assume our commands until we have an election.  this only means
   // we won't reply with EINVAL before the election; any command that
   // actually matters will wait until we have quorum etc and then
   // retry (and revalidate).
   leader_mon_commands = local_mon_commands;
-
-  // note: OSDMonitor may update this based on the luminous flag.
-  pgservice = mgrstatmon()->get_pg_stat_service();
 }
 
 Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     delete *p;
-  delete health_monitor;
   delete config_key_service;
   delete paxos;
   assert(session_map.sessions.empty());
@@ -371,6 +351,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_MIMIC);
   return compat;
 }
 
@@ -684,7 +665,6 @@ int Monitor::preinit()
   dout(10) << "sync_last_committed_floor " << sync_last_committed_floor << dendl;
 
   init_paxos();
-  health_monitor->init();
 
   if (is_keyring_required()) {
     // we need to bootstrap authentication keys so we can form an
@@ -909,7 +889,6 @@ void Monitor::shutdown()
   paxos->shutdown();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->shutdown();
-  health_monitor->shutdown();
 
   finish_contexts(g_ceph_context, waitfor_quorum, -ECANCELED);
   finish_contexts(g_ceph_context, maybe_wait_for_quorum, -ECANCELED);
@@ -1078,7 +1057,6 @@ void Monitor::_reset()
 
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->restart();
-  health_monitor->finish();
 }
 
 
@@ -1790,6 +1768,22 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
     }
   }
 
+  // did the existing cluster complete upgrade to luminous?
+  if (osdmon()->osdmap.get_epoch()) {
+    if (osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      derr << __func__ << " existing cluster has not completed upgrade to"
+	   << " luminous; 'ceph osd require_osd_release luminous' before"
+	   << " upgrading" << dendl;
+      exit(0);
+    }
+    if (!osdmon()->osdmap.test_flag(CEPH_OSDMAP_PURGED_SNAPDIRS)) {
+      derr << __func__ << " existing cluster has not completed a full luminous"
+	   << " scrub to purge legacy snapdir objects; please scrub before"
+	   << " upgrading beyond luminous." << dendl;
+      exit(0);
+    }
+  }
+
   // is there an existing quorum?
   if (m->quorum.size()) {
     dout(10) << " existing quorum " << m->quorum << dendl;
@@ -1933,7 +1927,6 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   // round without agreeing on who the participants are.
   monmon()->election_finished();
   _finish_svc_election();
-  health_monitor->start(epoch);
 
   logger->inc(l_mon_election_win);
 
@@ -1986,7 +1979,6 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
 
   paxos->peon_init();
   _finish_svc_election();
-  health_monitor->start(epoch);
 
   logger->inc(l_mon_election_lose);
 
@@ -2092,6 +2084,13 @@ void Monitor::apply_monmap_to_compatset_features()
     assert(HAVE_FEATURE(quorum_con_features, SERVER_LUMINOUS));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_MIMIC)) {
+    assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_MIMIC));
+    // this feature should only ever be set if the quorum supports it.
+    assert(HAVE_FEATURE(quorum_con_features, SERVER_MIMIC));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_MIMIC);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2120,6 +2119,9 @@ void Monitor::calc_quorum_requirements()
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS)) {
     required_features |= CEPH_FEATUREMASK_SERVER_LUMINOUS;
   }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_MIMIC)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_MIMIC;
+  }
 
   // monmap
   if (monmap->get_required_features().contains_all(
@@ -2129,6 +2131,10 @@ void Monitor::calc_quorum_requirements()
   if (monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {
     required_features |= CEPH_FEATUREMASK_SERVER_LUMINOUS;
+  }
+  if (monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_MIMIC)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_MIMIC;
   }
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }
@@ -2433,39 +2439,15 @@ void Monitor::do_health_to_clog(bool force)
 
   dout(10) << __func__ << (force ? " (force)" : "") << dendl;
 
-  if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-    string summary;
-    health_status_t level = get_health_status(false, nullptr, &summary);
-    if (!force &&
-	summary == health_status_cache.summary &&
-	level == health_status_cache.overall)
-      return;
-    clog->health(level) << "overall " << summary;
-    health_status_cache.summary = summary;
-    health_status_cache.overall = level;
-  } else {
-    // for jewel only
-    list<string> status;
-    health_status_t overall = get_health(status, NULL, NULL);
-    dout(25) << __func__
-	     << (force ? " (force)" : "")
-	     << dendl;
-
-    string summary = joinify(status.begin(), status.end(), string("; "));
-
-    if (!force &&
-	overall == health_status_cache.overall &&
-	!health_status_cache.summary.empty() &&
-	health_status_cache.summary == summary) {
-      // we got a dup!
-      return;
-    }
-
-    clog->info() << summary;
-
-    health_status_cache.overall = overall;
-    health_status_cache.summary = summary;
-  }
+  string summary;
+  health_status_t level = get_health_status(false, nullptr, &summary);
+  if (!force &&
+      summary == health_status_cache.summary &&
+      level == health_status_cache.overall)
+    return;
+  clog->health(level) << "overall " << summary;
+  health_status_cache.summary = summary;
+  health_status_cache.overall = level;
 }
 
 health_status_t Monitor::get_health_status(
@@ -2648,106 +2630,6 @@ void Monitor::log_health(
   }
 }
 
-health_status_t Monitor::get_health(list<string>& status,
-                                    bufferlist *detailbl,
-                                    Formatter *f)
-{
-  list<pair<health_status_t,string> > summary;
-  list<pair<health_status_t,string> > detail;
-
-  if (f)
-    f->open_object_section("health");
-
-  for (vector<PaxosService*>::iterator p = paxos_service.begin();
-       p != paxos_service.end();
-       ++p) {
-    PaxosService *s = *p;
-    s->get_health(summary, detailbl ? &detail : NULL, cct);
-  }
-
-  health_monitor->get_health(summary, (detailbl ? &detail : NULL));
-
-  health_status_t overall = HEALTH_OK;
-  if (!timecheck_skews.empty()) {
-    list<string> warns;
-    for (map<entity_inst_t,double>::iterator i = timecheck_skews.begin();
-         i != timecheck_skews.end(); ++i) {
-      entity_inst_t inst = i->first;
-      double skew = i->second;
-      double latency = timecheck_latencies[inst];
-      string name = monmap->get_name(inst.addr);
-      ostringstream tcss;
-      health_status_t tcstatus = timecheck_status(tcss, skew, latency);
-      if (tcstatus != HEALTH_OK) {
-        if (overall > tcstatus)
-          overall = tcstatus;
-        warns.push_back(name);
-        ostringstream tmp_ss;
-        tmp_ss << "mon." << name
-               << " addr " << inst.addr << " " << tcss.str()
-	       << " (latency " << latency << "s)";
-        detail.push_back(make_pair(tcstatus, tmp_ss.str()));
-      }
-    }
-    if (!warns.empty()) {
-      ostringstream ss;
-      ss << "clock skew detected on";
-      while (!warns.empty()) {
-        ss << " mon." << warns.front();
-        warns.pop_front();
-        if (!warns.empty())
-          ss << ",";
-      }
-      status.push_back(ss.str());
-      summary.push_back(make_pair(HEALTH_WARN, "Monitor clock skew detected "));
-    }
-  }
-
-  if (f)
-    f->open_array_section("summary");
-  if (!summary.empty()) {
-    while (!summary.empty()) {
-      if (overall > summary.front().first)
-	overall = summary.front().first;
-      status.push_back(summary.front().second);
-      if (f) {
-        f->open_object_section("item");
-        f->dump_stream("severity") <<  summary.front().first;
-        f->dump_string("summary", summary.front().second);
-        f->close_section();
-      }
-      summary.pop_front();
-    }
-  }
-  if (f)
-    f->close_section();
-
-  stringstream fss;
-  fss << overall;
-  status.push_front(fss.str());
-  if (f)
-    f->dump_stream("overall_status") << overall;
-
-  if (f)
-    f->open_array_section("detail");
-  while (!detail.empty()) {
-    if (f)
-      f->dump_string("item", detail.front().second);
-    else if (detailbl != NULL) {
-      detailbl->append(detail.front().second);
-      detailbl->append('\n');
-    }
-    detail.pop_front();
-  }
-  if (f)
-    f->close_section();
-
-  if (f)
-    f->close_section();
-
-  return overall;
-}
-
 void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 {
   if (f)
@@ -2755,12 +2637,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
-    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      get_health_status(false, f, nullptr);
-    } else {
-      list<string> health_str;
-      get_health(health_str, nullptr, f);
-    }
+    get_health_status(false, f, nullptr);
     f->dump_unsigned("election_epoch", get_epoch());
     {
       f->open_array_section("quorum");
@@ -2779,7 +2656,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     osdmon()->osdmap.print_summary(f, cout, string(12, ' '));
     f->close_section();
     f->open_object_section("pgmap");
-    pgservice->print_summary(f, NULL);
+    mgrstatmon()->print_summary(f, NULL);
     f->close_section();
     f->open_object_section("fsmap");
     mdsmon()->get_fsmap().print_summary(f, NULL);
@@ -2795,15 +2672,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     ss << "    id:     " << monmap->get_fsid() << "\n";
 
     string health;
-    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      get_health_status(false, nullptr, &health,
-			"\n            ", "\n            ");
-    } else {
-      list<string> ls;
-      get_health(ls, NULL, f);
-      health = joinify(ls.begin(), ls.end(),
-		       string("\n            "));
-    }
+    get_health_status(false, nullptr, &health,
+		      "\n            ", "\n            ");
     ss << "    health: " << health << "\n";
 
     ss << "\n \n  services:\n";
@@ -2847,7 +2717,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     }
 
     ss << "\n \n  data:\n";
-    pgservice->print_summary(NULL, &ss);
+    mgrstatmon()->print_summary(NULL, &ss);
     ss << "\n ";
   }
 }
@@ -2908,16 +2778,12 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
 
 void Monitor::format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
-					  bufferlist *rdata,
-					  bool hide_mgr_flag)
+					  bufferlist *rdata)
 {
   int cmdnum = 0;
   f->open_object_section("command_descriptions");
   for (const auto &cmd : commands) {
     unsigned flags = cmd.flags;
-    if (hide_mgr_flag) {
-      flags &= ~MonCommand::FLAG_MGR;
-    }
     ostringstream secname;
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
     dump_cmddesc_to_json(f, secname.str(),
@@ -3016,24 +2882,15 @@ void Monitor::handle_command(MonOpRequestRef op)
   if (prefix == "get_command_descriptions") {
     bufferlist rdata;
     Formatter *f = Formatter::create("json");
-    // hide mgr commands until luminous upgrade is complete
-    bool hide_mgr_flag =
-      osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS;
 
-    std::vector<MonCommand> commands;
-
-    // only include mgr commands once all mons are upgrade (and we've dropped
-    // the hard-coded PGMonitor commands)
-    if (quorum_mon_features.contains_all(ceph::features::mon::FEATURE_LUMINOUS)) {
-      commands = static_cast<MgrMonitor*>(
+    std::vector<MonCommand> commands = static_cast<MgrMonitor*>(
         paxos_service[PAXOS_MGR])->get_command_descs();
-    }
 
     for (auto& c : leader_mon_commands) {
       commands.push_back(c);
     }
 
-    format_command_descriptions(commands, f, &rdata, hide_mgr_flag);
+    format_command_descriptions(commands, f, &rdata);
     delete f;
     reply_command(op, 0, "", rdata, 0);
     return;
@@ -3188,10 +3045,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  if (module == "pg") {
-    pgmon()->dispatch(op);
-    return;
-  }
   if (module == "mon" &&
       /* Let the Monitor class handle the following commands:
        *  'mon compact'
@@ -3340,44 +3193,22 @@ void Monitor::handle_command(MonOpRequestRef op)
       }
       rdata.append(ds);
     } else if (prefix == "health") {
-      if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-	string plain;
-	get_health_status(detail == "detail", f.get(), f ? nullptr : &plain);
-	if (f) {
-	  f->flush(rdata);
-	} else {
-	  rdata.append(plain);
-	}
+      string plain;
+      get_health_status(detail == "detail", f.get(), f ? nullptr : &plain);
+      if (f) {
+	f->flush(rdata);
       } else {
-	list<string> health_str;
-	get_health(health_str, detail == "detail" ? &rdata : NULL, f.get());
-	if (f) {
-	  f->flush(ds);
-	  ds << '\n';
-	} else {
-	  assert(!health_str.empty());
-	  ds << health_str.front();
-	  health_str.pop_front();
-	  if (!health_str.empty()) {
-	    ds << ' ';
-	    ds << joinify(health_str.begin(), health_str.end(), string("; "));
-	  }
-	}
-	bufferlist comb;
-	comb.append(ds);
-	if (detail == "detail")
-	  comb.append(rdata);
-	rdata = comb;
+	rdata.append(plain);
       }
     } else if (prefix == "df") {
       bool verbose = (detail == "detail");
       if (f)
         f->open_object_section("stats");
 
-      pgservice->dump_fs_stats(&ds, f.get(), verbose);
+      mgrstatmon()->dump_fs_stats(&ds, f.get(), verbose);
       if (!f)
         ds << '\n';
-      pgservice->dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
+      mgrstatmon()->dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
 
       if (f) {
         f->close_section();
@@ -3409,18 +3240,13 @@ void Monitor::handle_command(MonOpRequestRef op)
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
     f->dump_string("tag", tagstr);
 
-    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      get_health_status(true, f.get(), nullptr);
-    } else {
-      list<string> health_str;
-      get_health(health_str, nullptr, f.get());
-    }
+    get_health_status(true, f.get(), nullptr);
 
     monmon()->dump_info(f.get());
     osdmon()->dump_info(f.get());
     mdsmon()->dump_info(f.get());
     authmon()->dump_info(f.get());
-    pgservice->dump_info(f.get());
+    mgrstatmon()->dump_info(f.get());
 
     paxos->dump_info(f.get());
 
@@ -4268,11 +4094,6 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       paxos_service[PAXOS_MGRSTAT]->dispatch(op);
       break;
 
-    // pg
-    case MSG_PGSTATS:
-      paxos_service[PAXOS_PGMAP]->dispatch(op);
-      break;
-
     // log
     case MSG_LOG:
       paxos_service[PAXOS_LOG]->dispatch(op);
@@ -4416,10 +4237,6 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       handle_timecheck(op);
       break;
 
-    case MSG_MON_HEALTH:
-      health_monitor->dispatch(op);
-      break;
-
     case MSG_MON_HEALTH_CHECKS:
       op->set_type_service();
       paxos_service[PAXOS_HEALTH]->dispatch(op);
@@ -4449,13 +4266,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(new JSONFormatter(true));
   f->open_object_section("pong");
 
-  if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-    get_health_status(false, f.get(), nullptr);
-  } else {
-    list<string> health_str;
-    get_health(health_str, nullptr, f.get());
-  }
-
+  get_health_status(false, f.get(), nullptr);
   {
     stringstream ss;
     get_mon_status(f.get(), ss);
@@ -4958,12 +4769,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       }
     } else if (p->first == "osd_pg_creates") {
       if ((int)s->is_capable("osd", MON_CAP_W)) {
-	if (monmap->get_required_features().contains_all(
-	      ceph::features::mon::FEATURE_LUMINOUS)) {
-	  osdmon()->check_pg_creates_sub(s->sub_map["osd_pg_creates"]);
-	} else {
-	  pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
-	}
+	osdmon()->check_pg_creates_sub(s->sub_map["osd_pg_creates"]);
       }
     } else if (p->first == "monmap") {
       monmon()->check_sub(s->sub_map[p->first]);

@@ -172,7 +172,7 @@
 
 // *** generic ***
 #define MSG_TIMECHECK             0x600
-#define MSG_MON_HEALTH            0x601
+//#define MSG_MON_HEALTH            0x601  // remove post-luminous
 
 // *** Message::encode() crcflags bits ***
 #define MSG_CRC_DATA           (1 << 0)

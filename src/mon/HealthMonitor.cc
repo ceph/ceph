@@ -23,9 +23,7 @@
 #include "mon/Monitor.h"
 #include "mon/HealthService.h"
 #include "mon/HealthMonitor.h"
-#include "mon/DataHealthService.h"
 
-#include "messages/MMonHealth.h"
 #include "messages/MMonHealthChecks.h"
 
 #include "common/Formatter.h"
@@ -162,17 +160,6 @@ bool HealthMonitor::prepare_update(MonOpRequestRef op)
   dout(7) << "prepare_update " << *m
 	  << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
-  case MSG_MON_HEALTH:
-    {
-      MMonHealth *hm = static_cast<MMonHealth*>(op->get_req());
-      int service_type = hm->get_service_type();
-      if (services.count(service_type) == 0) {
-	dout(1) << __func__ << " service type " << service_type
-		<< " not registered -- drop message!" << dendl;
-	return false;
-      }
-      return services[service_type]->service_dispatch(op);
-    }
   case MSG_MON_HEALTH_CHECKS:
     return prepare_health_checks(op);
   default:

@@ -914,9 +914,9 @@ bool DaemonServer::handle_command(MCommand *m)
   } else if (prefix == "osd df") {
     string method;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "output_method", method);
-    r = cluster_state.with_pgservice([&](const PGMapStatService& pgservice) {
+    r = cluster_state.with_pgmap([&](const PGMap& pgmap) {
 	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	    print_osd_utilization(osdmap, &pgservice, ss,
+	    print_osd_utilization(osdmap, pgmap, ss,
 				  f.get(), method == "tree");
 				  
 	    cmdctx->odata.append(ss);
