@@ -536,7 +536,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
 
   if (size() == 0) {
     // no info found from conf options lets try use DNS SRV records
-    string srv_name = conf->mon_dns_srv_name;
+    string srv_name = conf->get_val<std::string>("mon_dns_srv_name");
     string domain;
     // check if domain is also provided and extract it from srv_name
     size_t idx = srv_name.find("_");
