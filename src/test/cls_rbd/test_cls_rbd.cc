@@ -100,7 +100,8 @@ TEST_F(TestClsRbd, get_all_features)
 
   uint64_t all_features = 0;
   ASSERT_EQ(0, get_all_features(&ioctx, oid, &all_features));
-  ASSERT_EQ(RBD_FEATURES_ALL, all_features);
+  ASSERT_EQ(static_cast<uint64_t>(RBD_FEATURES_ALL),
+            static_cast<uint64_t>(all_features & RBD_FEATURES_ALL));
 
   ioctx.close();
 }
