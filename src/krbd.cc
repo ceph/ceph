@@ -376,6 +376,34 @@ out_enm:
   return r;
 }
 
+static int enumerate_devices(struct udev_enumerate *enm, const char *pool,
+                             const char *image, const char *snap)
+{
+  int r;
+
+  r = udev_enumerate_add_match_subsystem(enm, "rbd");
+  if (r < 0)
+    return r;
+
+  r = udev_enumerate_add_match_sysattr(enm, "pool", pool);
+  if (r < 0)
+    return r;
+
+  r = udev_enumerate_add_match_sysattr(enm, "name", image);
+  if (r < 0)
+    return r;
+
+  r = udev_enumerate_add_match_sysattr(enm, "current_snap", snap);
+  if (r < 0)
+    return r;
+
+  r = udev_enumerate_scan_devices(enm);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
                                      const char *image, const char *snap,
                                      dev_t *pdevno, string *pid)
@@ -391,23 +419,7 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
   if (!enm)
     return -ENOMEM;
 
-  r = udev_enumerate_add_match_subsystem(enm, "rbd");
-  if (r < 0)
-    goto out_enm;
-
-  r = udev_enumerate_add_match_sysattr(enm, "pool", pool);
-  if (r < 0)
-    goto out_enm;
-
-  r = udev_enumerate_add_match_sysattr(enm, "name", image);
-  if (r < 0)
-    goto out_enm;
-
-  r = udev_enumerate_add_match_sysattr(enm, "current_snap", snap);
-  if (r < 0)
-    goto out_enm;
-
-  r = udev_enumerate_scan_devices(enm);
+  r = enumerate_devices(enm, pool, image, snap);
   if (r < 0)
     goto out_enm;
 
