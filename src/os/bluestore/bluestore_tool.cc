@@ -82,7 +82,7 @@ int main(int argc, char **argv)
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "fsck, bluefs-export, show-label")
+    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, show-label")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -112,7 +112,7 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  if (action == "fsck") {
+  if (action == "fsck" || action == "repair") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -164,10 +164,15 @@ int main(int argc, char **argv)
   cout << "action " << action << std::endl;
 
   if (action == "fsck" ||
-      action == "fsck-deep") {
+      action == "repair") {
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.fsck(fsck_deep);
+    int r;
+    if (action == "fsck") {
+      r = bluestore.fsck(fsck_deep);
+    } else {
+      r = bluestore.repair(fsck_deep);
+    }
     if (r < 0) {
       cerr << "error from fsck: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
