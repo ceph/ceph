@@ -822,8 +822,8 @@ int XioConnection::CState::state_fail(Message* m, uint32_t flags)
     pthread_spin_lock(&xcon->sp);
 
   // advance to state FAIL, drop queued, msgs, adjust LRU
-  session_state = session_states::DISCONNECTED);
-  startup_state = session_startup_states::FAIL);
+  session_state = session_states::DISCONNECTED;
+  startup_state = session_startup_states::FAIL;
 
   xcon->discard_out_queues(flags|OP_FLAG_LOCKED);
   xcon->adjust_clru(flags|OP_FLAG_LOCKED|OP_FLAG_LRU);
