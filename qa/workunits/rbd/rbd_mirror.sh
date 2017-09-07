@@ -111,6 +111,18 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+replaying'
 admin_daemon ${CLUSTER1} rbd mirror flush
 admin_daemon ${CLUSTER1} rbd mirror status
 
+testlog "TEST: test image rename"
+new_name="${image}_RENAMED"
+rename_image ${CLUSTER2} ${POOL} ${image} ${new_name}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${new_name}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${new_name} 'up+replaying'
+admin_daemon ${CLUSTER1} rbd mirror status ${POOL}/${new_name}
+admin_daemon ${CLUSTER1} rbd mirror restart ${POOL}/${new_name}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${new_name}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${new_name} 'up+replaying'
+rename_image ${CLUSTER2} ${POOL} ${new_name} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+
 testlog "TEST: failover and failback"
 start_mirror ${CLUSTER2}
 
