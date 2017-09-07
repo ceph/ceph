@@ -101,9 +101,10 @@ public:
   RGWRESTMgr_Opstate() = default;
   ~RGWRESTMgr_Opstate() override = default;
 
-  RGWHandler_REST* get_handler(struct req_state*,
+  RGWHandler_REST* get_handler(struct req_state* const s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
+    s->prot_flags |= RGW_REST_ADMIN;
     return new RGWHandler_Opstate(auth_registry);
   }
 };

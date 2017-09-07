@@ -326,7 +326,7 @@ void set_req_state_err(struct rgw_err& err,	/* out */
   }
 
   //Default to searching in s3 errors
-  is_website_redirect |= (prot_flags & RGW_REST_WEBSITE)
+  is_website_redirect |= (prot_flags & RGW_REST_S3WEBSITE)
 		&& err_no == ERR_WEBSITE_REDIRECT && err.is_clear();
   if (search_err(rgw_http_s3_errors, err_no, is_website_redirect, err.http_ret, err.err_code))
       return;
