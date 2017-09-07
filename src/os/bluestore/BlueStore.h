@@ -2150,7 +2150,13 @@ public:
     return 0;
   }
 
-  int fsck(bool deep) override;
+  int fsck(bool deep) override {
+    return _fsck(deep, false);
+  }
+  int repair(bool deep) override {
+    return _fsck(deep, true);
+  }
+  int _fsck(bool deep, bool repair);
 
   void set_cache_shards(unsigned num) override;
 
