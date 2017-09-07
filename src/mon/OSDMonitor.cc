@@ -5867,7 +5867,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
       *ss << "crush test failed with " << r << ": " << err.str();
       return r;
     }
-    dout(10) << __func__ << " crush somke test duration: "
+    dout(10) << __func__ << " crush smoke test duration: "
              << duration << dendl;
   }
   unsigned size, min_size;
