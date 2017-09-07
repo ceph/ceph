@@ -139,7 +139,7 @@ int main(int argc, char **argv)
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, show-label")
+    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, show-label")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -207,7 +207,7 @@ int main(int argc, char **argv)
       }
     }
   }
-  if (action == "bluefs-bdev-sizes") {
+  if (action == "bluefs-bdev-sizes" || action == "bluefs-bdev-expand") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -270,6 +270,23 @@ int main(int argc, char **argv)
   else if (action == "bluefs-bdev-sizes") {
     BlueFS *fs = open_bluefs(cct.get(), path, devs);
     fs->dump_block_extents(cout);
+    delete fs;
+  }
+  else if (action == "bluefs-bdev-expand") {
+    BlueFS *fs = open_bluefs(cct.get(), path, devs);
+    cout << "start:" << std::endl;
+    fs->dump_block_extents(cout);
+    for (int devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB }) {
+      interval_set<uint64_t> before;
+      fs->get_block_extents(devid, &before);
+      uint64_t end = before.range_end();
+      uint64_t size = fs->get_block_device_size(devid);
+      if (end < size) {
+	cout << "expanding dev " << devid << " from 0x" << std::hex
+	     << end << " to 0x" << size << std::dec << std::endl;
+	fs->add_block_extent(devid, end, size-end);
+      }
+    }
     delete fs;
   }
   else if (action == "bluefs-export") {
