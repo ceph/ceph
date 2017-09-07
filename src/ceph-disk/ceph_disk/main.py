@@ -428,6 +428,26 @@ def command(arguments, **kwargs):
     return _bytes2str(out), _bytes2str(err), process.returncode
 
 
+def command_with_stdin(arguments, stdin):
+    LOG.info("Running command with stdin: " + " ".join(arguments))
+    process = subprocess.Popen(
+        arguments,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE)
+    out, err = process.communicate(stdin)
+    LOG.debug(out)
+    if process.returncode != 0:
+        LOG.error(err)
+        raise SystemExit(
+            "'{cmd}' failed with status code {returncode}".format(
+                cmd=arguments,
+                returncode=process.returncode,
+            )
+        )
+    return out
+
+
 def _bytes2str(string):
     return string.decode('utf-8') if isinstance(string, bytes) else string
 
@@ -2367,17 +2387,18 @@ class Lockbox(object):
         cluster = self.args.cluster
         bootstrap = self.args.prepare_key_template.format(cluster=cluster,
                                                           statedir=STATEDIR)
-        command_check_call(
+        command_with_stdin(
             [
                 'ceph',
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
+                '-i', '-',
                 'config-key',
                 'put',
                 'dm-crypt/osd/' + self.args.osd_uuid + '/luks',
-                base64_key,
             ],
+            base64_key
         )
         keyring, stderr, ret = command(
             [
