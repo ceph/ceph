@@ -356,10 +356,8 @@ struct rgw_bucket_shard_full_sync_marker {
      DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const {
-    encode_json("position", position, f);
-    encode_json("count", count, f);
-  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_full_sync_marker)
 
@@ -382,9 +380,8 @@ struct rgw_bucket_shard_inc_sync_marker {
      DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const {
-    encode_json("position", position, f);
-  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 
   bool operator<(const rgw_bucket_shard_inc_sync_marker& m) const {
     return (position < m.position);
@@ -423,26 +420,8 @@ struct rgw_bucket_shard_sync_info {
      DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const {
-    string s;
-    switch ((SyncState)state) {
-      case StateInit:
-	s = "init";
-	break;
-      case StateFullSync:
-	s = "full-sync";
-	break;
-      case StateIncrementalSync:
-	s = "incremental-sync";
-	break;
-      default:
-	s = "unknown";
-	break;
-    }
-    encode_json("status", s, f);
-    encode_json("full_marker", full_marker, f);
-    encode_json("inc_marker", inc_marker, f);
-  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 
   rgw_bucket_shard_sync_info() : state((int)StateInit) {}
 
