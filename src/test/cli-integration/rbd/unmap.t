@@ -388,6 +388,7 @@ img:
   $ sudo rbd map img
   /dev/rbd? (glob)
   $ sudo rbd map img
+  rbd: warning: image already mapped as /dev/rbd? (glob)
   /dev/rbd? (glob)
   $ rbd showmapped
   id pool image snap device    
@@ -406,6 +407,7 @@ img@snap:
   $ sudo rbd map img@snap
   /dev/rbd? (glob)
   $ sudo rbd map img@snap
+  rbd: warning: image already mapped as /dev/rbd? (glob)
   /dev/rbd? (glob)
   $ rbd showmapped
   id pool image snap device    
@@ -424,6 +426,7 @@ pool/img@snap, default pool:
   $ sudo rbd map rbd/img@snap
   /dev/rbd? (glob)
   $ sudo rbd map rbd/img@snap
+  rbd: warning: image already mapped as /dev/rbd? (glob)
   /dev/rbd? (glob)
   $ rbd showmapped
   id pool image snap device    
@@ -442,6 +445,7 @@ pool/img@snap, custom pool:
   $ sudo rbd map custom/img@snap
   /dev/rbd? (glob)
   $ sudo rbd map custom/img@snap
+  rbd: warning: image already mapped as /dev/rbd? (glob)
   /dev/rbd? (glob)
   $ rbd showmapped
   id pool   image snap device    
