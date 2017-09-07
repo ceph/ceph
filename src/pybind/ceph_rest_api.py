@@ -318,7 +318,7 @@ def make_response(fmt, output, statusmsg, errorcode):
     if fmt:
         if 'json' in fmt:
             try:
-                native_output = json.loads(output or '[]')
+                native_output = json.loads(output.replace('-nan','"-nan"') or '[]')
                 response = json.dumps({"output": native_output,
                                        "status": statusmsg})
             except:
