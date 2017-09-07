@@ -112,7 +112,7 @@ private:
   // when we last received PG stats from each osd
   map<int,utime_t> last_osd_report;
 
-  void register_pg(OSDMap *osdmap, pg_pool_t& pool, pg_t pgid,
+  void register_pg(OSDMap *osdmap, pg_t pgid,
 		   epoch_t epoch, bool new_pool);
 
   /**
