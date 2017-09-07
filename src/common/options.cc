@@ -4931,6 +4931,18 @@ std::vector<Option> get_rgw_options() {
     .set_default(1200)
     .set_description(""),
 
+    Option("rgw_sync_log_trim_max_buckets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(16)
+    .set_description("Maximum number of buckets to trim per interval"),
+
+    Option("rgw_sync_log_trim_min_cold_buckets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(4)
+    .set_description("Minimum number of cold buckets to trim per interval"),
+
+    Option("rgw_sync_log_trim_concurrent_buckets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(4)
+    .set_description("Maximum number of buckets to trim in parallel"),
+
     Option("rgw_sync_data_inject_err_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
