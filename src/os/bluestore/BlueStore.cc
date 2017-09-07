@@ -5481,10 +5481,13 @@ int BlueStore::_fsck_check_extents(
   return errors;
 }
 
-int BlueStore::fsck(bool deep)
+int BlueStore::_fsck(bool deep, bool repair)
 {
-  dout(1) << __func__ << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
+  dout(1) << __func__
+	  << (repair ? " fsck" : " repair")
+	  << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
   int errors = 0;
+  int repaired = 0;
 
   typedef btree::btree_set<
     uint64_t,std::less<uint64_t>,
@@ -6071,9 +6074,10 @@ int BlueStore::fsck(bool deep)
 	  << dendl;
 
   utime_t duration = ceph_clock_now() - start;
-  dout(1) << __func__ << " finish with " << errors << " errors in "
+  dout(1) << __func__ << " finish with " << errors << " errors, " << repaired
+	  << " repaired, " << (errors - repaired) << " remaining in "
 	  << duration << " seconds" << dendl;
-  return errors;
+  return errors - repaired;
 }
 
 void BlueStore::collect_metadata(map<string,string> *pm)
