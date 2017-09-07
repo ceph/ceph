@@ -447,17 +447,31 @@ class interval_set {
 
     typename std::map<T,T>::const_iterator pa = a.m.begin();
     typename std::map<T,T>::const_iterator pb = b.m.begin();
-    
+    typename decltype(m)::iterator mi = m.begin();
+
     while (pa != a.m.end() && pb != b.m.end()) {
       // passing?
       if (pa->first + pa->second <= pb->first) 
         { pa++;  continue; }
       if (pb->first + pb->second <= pa->first) 
         { pb++;  continue; }
+
+      if (*pa == *pb) {
+        do {
+          mi = m.insert(mi, *pa);
+          _size += pa->second;
+          ++pa;
+          ++pb;
+        } while (pa != a.m.end() && pb != b.m.end() && *pa == *pb);
+        continue;
+      }
+
       T start = MAX(pa->first, pb->first);
       T en = MIN(pa->first+pa->second, pb->first+pb->second);
       assert(en > start);
-      insert(start, en-start);
+      typename decltype(m)::value_type i{start, en - start};
+      mi = m.insert(mi, i);
+      _size += i.second;
       if (pa->first+pa->second > pb->first+pb->second)
         pb++;
       else
