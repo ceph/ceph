@@ -307,9 +307,10 @@ public:
     return this;
   }
 
-  RGWHandler_REST* get_handler(struct req_state*,
+  RGWHandler_REST* get_handler(struct req_state* const s,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
+    s->prot_flags |= RGW_REST_SWIFT_AUTH;
     return new RGWHandler_SWIFT_Auth;
   }
 };
