@@ -440,6 +440,7 @@ prepare_conf() {
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
+$extra_conf
 EOF
 	if [ "$lockdep" -eq 1 ] ; then
 		wconf <<EOF
@@ -468,7 +469,7 @@ EOF
         keyring = $keyring_fn
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
-
+$extra_conf
 [client.rgw]
 
 [mds]
@@ -531,8 +532,6 @@ $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
         mon cluster log file = $CEPH_OUT_DIR/cluster.mon.\$id.log
-[global]
-$extra_conf
 EOF
 }
 
