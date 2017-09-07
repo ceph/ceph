@@ -214,7 +214,7 @@ private:
   const std::string m_image_name;
 
   librbd::Image m_image;
-  Context *m_finalize_ctx;
+  Context *m_finalize_ctx = nullptr;
 
   librbd::mirror_image_info_t m_mirror_image_info;
 
