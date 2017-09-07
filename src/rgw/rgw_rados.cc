@@ -10099,6 +10099,10 @@ int RGWRados::Bucket::UpdateIndex::cancel()
     return store->cls_obj_complete_cancel(*bs, optag, obj, bilog_flags, zones_trace);
   });
 
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "failed to get BucketShard object: ret=" << ret << dendl;
+    return ret;
+  }
   /*
    * need to update data log anyhow, so that whoever follows needs to update its internal markers
    * for following the specific bucket shard log. Otherwise they end up staying behind, and users
