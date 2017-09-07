@@ -221,9 +221,14 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   uint64_t i;
   uint64_t start_pos;
 
-  // disturb all thread's offset, used by seq IO
+  uint64_t unit_len = size/io_size/io_threads;
+  // disturb all thread's offset
   for (i = 0; i < io_threads; i++) {
-    start_pos = (rand() % (size / io_size)) * io_size;
+    if (random) {
+      start_pos = (rand() % (size / io_size)) * io_size;
+    } else {
+      start_pos = unit_len * i * io_size;
+    }
     thread_offset.push_back(start_pos);
   }
 
