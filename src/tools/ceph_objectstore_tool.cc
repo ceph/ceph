@@ -2086,14 +2086,6 @@ int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
   if (ret < 0)
     return ret;
 
-  // Use "head" to set head_exists incorrectly
-  if (arg == "corrupt" || arg == "head")
-    ss.head_exists = !ghobj.hobj.is_head();
-  else if (ss.head_exists != ghobj.hobj.is_head()) {
-    cerr << "Correcting head_exists, set to "
-         << (ghobj.hobj.is_head() ? "true" : "false") << std::endl;
-    ss.head_exists = ghobj.hobj.is_head();
-  }
   // Use "corrupt" to clear entire SnapSet
   // Use "seq" to just corrupt SnapSet.seq
   if (arg == "corrupt" || arg == "seq")
