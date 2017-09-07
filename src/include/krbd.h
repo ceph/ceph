@@ -26,6 +26,8 @@ void krbd_destroy(struct krbd_ctx *ctx);
 
 int krbd_map(struct krbd_ctx *ctx, const char *pool, const char *image,
              const char *snap, const char *options, char **pdevnode);
+int krbd_is_mapped(struct krbd_ctx *ctx, const char *pool, const char *image,
+                   const char *snap, char **pdevnode);
 
 int krbd_unmap(struct krbd_ctx *ctx, const char *devnode,
                const char *options);
@@ -44,10 +46,6 @@ namespace ceph {
 }
 
 int krbd_showmapped(struct krbd_ctx *ctx, ceph::Formatter *f);
-
-int krbd_is_image_mapped(struct krbd_ctx *ctx, const char *poolname, 
-                         const char *imgname, const char *snapname,
-                         std::ostringstream &mapped_info, bool &is_mapped);
 
 #endif /* __cplusplus */
 
