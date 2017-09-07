@@ -2537,7 +2537,7 @@ int main(int argc, char **argv)
     ("pool", po::value<string>(&pool),
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, mkfs, fsck, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+     "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
@@ -2802,6 +2802,19 @@ int main(int argc, char **argv)
     cout << "fsck found no errors" << std::endl;
     return 0;
   }
+  if (op == "repair" || op == "repair-deep") {
+    int r = fs->repair(op == "repair-deep");
+    if (r < 0) {
+      cerr << "repair failed: " << cpp_strerror(r) << std::endl;
+      return 1;
+    }
+    if (r > 0) {
+      cerr << "repair found " << r << " errors" << std::endl;
+      return 1;
+    }
+    cout << "repair found no errors" << std::endl;
+    return 0;
+  }
   if (op == "mkfs") {
     if (fsid.length()) {
       uuid_d f;
@@ -2814,7 +2827,7 @@ int main(int argc, char **argv)
     }
     int r = fs->mkfs();
     if (r < 0) {
-      cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
+      cerr << "mkfs failed: " << cpp_strerror(r) << std::endl;
       return 1;
     }
     return 0;
@@ -3218,7 +3231,7 @@ int main(int argc, char **argv)
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
-    cerr << "Must provide --op (info, log, remove, mkfs, fsck, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+    cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
       "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)"
 	 << std::endl;
     usage(desc);
