@@ -23,6 +23,7 @@
 
 class CephContext;
 class RGWCoroutine;
+class RGWHTTPManager;
 class RGWRados;
 
 namespace rgw {
@@ -76,10 +77,10 @@ class BucketTrimManager : public BucketChangeObserver {
   void on_bucket_changed(const boost::string_view& bucket_instance) override;
 
   /// create a coroutine to run the bucket trim process every trim interval
-  RGWCoroutine* create_bucket_trim_cr();
+  RGWCoroutine* create_bucket_trim_cr(RGWHTTPManager *http);
 
   /// create a coroutine to trim buckets directly via radosgw-admin
-  RGWCoroutine* create_admin_bucket_trim_cr();
+  RGWCoroutine* create_admin_bucket_trim_cr(RGWHTTPManager *http);
 };
 
 /// provides persistent storage for the trim manager's current position in the

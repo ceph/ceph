@@ -6733,6 +6733,14 @@ next:
   }
 
   if (opt_cmd == OPT_BILOG_AUTOTRIM) {
+    RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+    RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
+    int ret = http.set_threaded();
+    if (ret < 0) {
+      cerr << "failed to initialize http client with " << cpp_strerror(ret) << std::endl;
+      return -ret;
+    }
+
     rgw::BucketTrimConfig config;
     configure_bucket_trim(store->ctx(), config);
 
@@ -6742,9 +6750,7 @@ next:
       cerr << "trim manager init failed with " << cpp_strerror(ret) << std::endl;
       return -ret;
     }
-
-    RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
-    ret = crs.run(trim.create_admin_bucket_trim_cr());
+    ret = crs.run(trim.create_admin_bucket_trim_cr(&http));
     if (ret < 0) {
       cerr << "automated bilog trim failed with " << cpp_strerror(ret) << std::endl;
       return -ret;
