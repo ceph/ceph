@@ -1451,20 +1451,20 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
 void FileJournal::write_finish_thread_entry()
 {
 #ifdef HAVE_LIBAIO
-  dout(10) << "write_finish_thread_entry enter" << dendl;
+  dout(10) << __func__ << " enter" << dendl;
   while (true) {
     {
       Mutex::Locker locker(aio_lock);
       if (aio_queue.empty()) {
 	if (aio_stop)
 	  break;
-	dout(20) << "write_finish_thread_entry sleeping" << dendl;
+	dout(20) << __func__ << " sleeping" << dendl;
 	write_finish_cond.Wait(aio_lock);
 	continue;
       }
     }
 
-    dout(20) << "write_finish_thread_entry waiting for aio(s)" << dendl;
+    dout(20) << __func__ << " waiting for aio(s)" << dendl;
     io_event event[16];
     int r = io_getevents(aio_ctx, 1, 16, event, NULL);
     if (r < 0) {
@@ -1485,14 +1485,14 @@ void FileJournal::write_finish_thread_entry()
 	       << " returned: " << (int)event[i].res << dendl;
 	  assert(0 == "unexpected aio error");
 	}
-	dout(10) << "write_finish_thread_entry aio " << ai->off
+	dout(10) << __func__ << " aio " << ai->off
 		 << "~" << ai->len << " done" << dendl;
 	ai->done = true;
       }
       check_aio_completion();
     }
   }
-  dout(10) << "write_finish_thread_entry exit" << dendl;
+  dout(10) << __func__ << " exit" << dendl;
 #endif
 }
 
