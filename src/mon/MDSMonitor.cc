@@ -324,7 +324,8 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
 
   // check privileges, ignore if fails
   MonSession *session = m->get_session();
-  assert(session);
+  if (!session)
+    goto ignore;
   if (!session->is_capable("mds", MON_CAP_X)) {
     dout(0) << "preprocess_beacon got MMDSBeacon from entity with insufficient privileges "
 	    << session->caps << dendl;
