@@ -430,6 +430,19 @@ def build_ceph_cluster(ctx, config):
         elif not config.get('only_mon'):
             raise RuntimeError(
                 "The cluster is NOT operational due to insufficient OSDs")
+        # create rbd pool
+        ceph_admin.run(
+            args=[
+                'sudo', 'ceph', '--cluster', 'ceph',
+                'osd', 'pool', 'create', 'rbd', '128', '128'],
+            check_status=False)
+        ceph_admin.run(
+            args=[
+                'sudo', 'ceph', '--cluster', 'ceph',
+                'osd', 'pool', 'application', 'enable',
+                'rbd', 'rbd', '--yes-i-really-mean-it'
+                ],
+            check_status=False)
         yield
 
     except Exception:
@@ -596,6 +609,7 @@ def cli_test(ctx, config):
         branch=test_branch) + nodename
     new_admin = 'install {branch} --cli '.format(branch=test_branch) + nodename
     create_initial = 'mon create-initial '
+    mgr_create = 'mgr create ' + nodename
     # either use create-keys or push command
     push_keys = 'admin ' + nodename
     execute_cdeploy(admin, new_mon_install, path)
@@ -603,6 +617,7 @@ def cli_test(ctx, config):
     execute_cdeploy(admin, new_osd_install, path)
     execute_cdeploy(admin, new_admin, path)
     execute_cdeploy(admin, create_initial, path)
+    execute_cdeploy(admin, mgr_create, path)
     execute_cdeploy(admin, push_keys, path)
 
     for i in range(3):
