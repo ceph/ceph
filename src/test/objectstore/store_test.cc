@@ -476,9 +476,11 @@ TEST_P(StoreTest, FiemapHoles) {
       for (uint64_t i = 0; i < MAX_EXTENTS; i++)
         extents_exist = extents_exist && m.count(SKIP_STEP*i);
     }
+    
+    map<uint64_t,uint64_t>::iterator last = --m.end();
     ASSERT_TRUE((m.size() == 1 &&
 		 m[0] > SKIP_STEP * (MAX_EXTENTS - 1)) ||
-		 (m.size() == MAX_EXTENTS && extents_exist));
+		 ((last->first + last->second) > SKIP_STEP * (MAX_EXTENTS - 1) && extents_exist));
 
     // fiemap test from SKIP_STEP to SKIP_STEP * (MAX_EXTENTS - 2) + 3
     // reset bufferlist and map
@@ -494,16 +496,18 @@ TEST_P(StoreTest, FiemapHoles) {
     // kstore always return [0, object_size] regardless of offset and length
     // FIXME: if fiemap logic in kstore is refined
     if (string(GetParam()) != "kstore") {
+      last = --m.end();
       ASSERT_GE(m[SKIP_STEP], 3u);
+    
+      extents_exist = true;
+      if (m.size() == (MAX_EXTENTS - 2)) {
+        for (uint64_t i = 1; i < MAX_EXTENTS - 1; i++)
+	  extents_exist = extents_exist && m.count(SKIP_STEP*i);
+      }
+      ASSERT_TRUE((m.size() == 1 &&
+		   m[SKIP_STEP] > SKIP_STEP * (MAX_EXTENTS - 2)) ||
+		   ((last->first + last->second) > SKIP_STEP * (MAX_EXTENTS - 2) && extents_exist));
     }
-    extents_exist = true;
-    if (m.size() == (MAX_EXTENTS - 2)) {
-      for (uint64_t i = 1; i < MAX_EXTENTS - 1; i++)
-	extents_exist = extents_exist && m.count(SKIP_STEP*i);
-    }
-    ASSERT_TRUE((m.size() == 1 &&
-		 m[SKIP_STEP] > SKIP_STEP * (MAX_EXTENTS - 2)) ||
-		 (m.size() == (MAX_EXTENTS - 1) && extents_exist));
   }
   {
     ObjectStore::Transaction t;
@@ -6653,7 +6657,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("filestore_index_retry_probability", "0.5");
   g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
   g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
-  //g_ceph_context->_conf->set_val("filestore_fiemap", "true");
+  g_ceph_context->_conf->set_val("filestore_fiemap", "true");
   g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "true");
   g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "true");
   g_ceph_context->_conf->set_val("bluestore_debug_misc", "true");
