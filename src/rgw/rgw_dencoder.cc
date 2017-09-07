@@ -98,9 +98,9 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
 
   if (!rule.part_size) {
     stripe_size = rule.stripe_max_size;
-    stripe_size = MIN(manifest->get_obj_size() - stripe_ofs, stripe_size);
+    stripe_size = std::min(manifest->get_obj_size() - stripe_ofs, stripe_size);
   } else {
-    uint64_t next = MIN(stripe_ofs + rule.stripe_max_size, part_ofs + rule.part_size);
+    uint64_t next = std::min(stripe_ofs + rule.stripe_max_size, part_ofs + rule.part_size);
     stripe_size = next - stripe_ofs;
   }
 
