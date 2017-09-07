@@ -33,10 +33,11 @@ struct rgw_log_entry {
   string user_agent;
   string referrer;
   string bucket_id;
+  int prot_flags;
   headers_map x_headers;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(9, 5, bl);
+    ENCODE_START(10, 5, bl);
     ::encode(object_owner.id, bl);
     ::encode(bucket_owner.id, bl);
     ::encode(bucket, bl);
@@ -59,6 +60,7 @@ struct rgw_log_entry {
     ::encode(object_owner, bl);
     ::encode(bucket_owner, bl);
     ::encode(x_headers, bl);
+    ::encode(prot_flags, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
@@ -107,6 +109,9 @@ struct rgw_log_entry {
     }
     if (struct_v >= 9) {
       ::decode(x_headers, p);
+    }
+    if (struct_v >= 10) {
+      ::decode(prot_flags, p);
     }
     DECODE_FINISH(p);
   }

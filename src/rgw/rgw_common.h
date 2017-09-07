@@ -262,6 +262,8 @@ enum {
   l_rgw_last,
 };
 
+typedef std::map<int, std::string> rgw_prot_flags_map;
+extern rgw_prot_flags_map rgw_prot_flags;
 
  /* size should be the required string size + 1 */
 int gen_rand_base64(CephContext *cct, char *dest, int size);
