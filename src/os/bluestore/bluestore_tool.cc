@@ -65,6 +65,63 @@ void validate_path(CephContext *cct, const string& path, bool bluefs)
   }
 }
 
+BlueFS *open_bluefs(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  validate_path(cct, path, true);
+  BlueFS *fs = new BlueFS(cct);
+
+  string main;
+  set<int> got;
+  for (auto& i : devs) {
+    bluestore_bdev_label_t label;
+    int r = BlueStore::_read_bdev_label(cct, i, &label);
+    if (r < 0) {
+      cerr << "unable to read label for " << i << ": "
+	   << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    int id = -1;
+    if (label.description == "main")
+      main = i;
+    else if (label.description == "bluefs db")
+      id = BlueFS::BDEV_DB;
+    else if (label.description == "bluefs wal")
+      id = BlueFS::BDEV_WAL;
+    if (id >= 0) {
+      got.insert(id);
+      cout << " slot " << id << " " << i << std::endl;
+      int r = fs->add_block_device(id, i);
+      if (r < 0) {
+	cerr << "unable to open " << i << ": " << cpp_strerror(r) << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    }
+  }
+  if (main.length()) {
+    int id = BlueFS::BDEV_DB;
+    if (got.count(BlueFS::BDEV_DB))
+      id = BlueFS::BDEV_SLOW;
+    cout << " slot " << id << " " << main << std::endl;
+    int r = fs->add_block_device(id, main);
+    if (r < 0) {
+      cerr << "unable to open " << main << ": " << cpp_strerror(r)
+	   << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  int r = fs->mount();
+  if (r < 0) {
+    cerr << "unable to mount bluefs: " << cpp_strerror(r)
+	 << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  return fs;
+}
+
 int main(int argc, char **argv)
 {
   string out_dir;
@@ -197,57 +254,10 @@ int main(int argc, char **argv)
     jf.flush(cout);
   }
   else if (action == "bluefs-export") {
-    validate_path(cct.get(), path, true);
-    BlueFS fs(&(*cct));
-    string main;
-    set<int> got;
-    for (auto& i : devs) {
-      bluestore_bdev_label_t label;
-      int r = BlueStore::_read_bdev_label(cct.get(), i, &label);
-      if (r < 0) {
-	cerr << "unable to read label for " << i << ": "
-	     << cpp_strerror(r) << std::endl;
-	exit(EXIT_FAILURE);
-      }
-      int id = -1;
-      if (label.description == "main")
-	main = i;
-      else if (label.description == "bluefs db")
-	id = BlueFS::BDEV_DB;
-      else if (label.description == "bluefs wal")
-	id = BlueFS::BDEV_WAL;
-      if (id >= 0) {
-	got.insert(id);
-	cout << " slot " << id << " " << i << std::endl;
-	int r = fs.add_block_device(id, i);
-	if (r < 0) {
-	  cerr << "unable to open " << i << ": " << cpp_strerror(r) << std::endl;
-	  exit(EXIT_FAILURE);
-	}
-      }
-    }
-    if (main.length()) {
-      int id = BlueFS::BDEV_DB;
-      if (got.count(BlueFS::BDEV_DB))
-	id = BlueFS::BDEV_SLOW;
-      cout << " slot " << id << " " << main << std::endl;
-      int r = fs.add_block_device(id, main);
-      if (r < 0) {
-	cerr << "unable to open " << main << ": " << cpp_strerror(r)
-	     << std::endl;
-	exit(EXIT_FAILURE);
-      }
-    }
-
-    int r = fs.mount();
-    if (r < 0) {
-      cerr << "unable to mount bluefs: " << cpp_strerror(r)
-	   << std::endl;
-      exit(EXIT_FAILURE);
-    }
+    BlueFS *fs = open_bluefs(cct.get(), path, devs);
 
     vector<string> dirs;
-    r = fs.readdir("", &dirs);
+    int r = fs->readdir("", &dirs);
     if (r < 0) {
       cerr << "readdir in root failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -257,7 +267,7 @@ int main(int argc, char **argv)
 	continue;
       cout << dir << "/" << std::endl;
       vector<string> ls;
-      r = fs.readdir(dir, &ls);
+      r = fs->readdir(dir, &ls);
       if (r < 0) {
 	cerr << "readdir " << dir << " failed: " << cpp_strerror(r) << std::endl;
 	exit(EXIT_FAILURE);
@@ -275,7 +285,7 @@ int main(int argc, char **argv)
 	cout << dir << "/" << file << std::endl;
 	uint64_t size;
 	utime_t mtime;
-	r = fs.stat(dir, file, &size, &mtime);
+	r = fs->stat(dir, file, &size, &mtime);
 	if (r < 0) {
 	  cerr << "stat " << file << " failed: " << cpp_strerror(r) << std::endl;
 	  exit(EXIT_FAILURE);
@@ -290,7 +300,7 @@ int main(int argc, char **argv)
 	assert(fd >= 0);
 	if (size > 0) {
 	  BlueFS::FileReader *h;
-	  r = fs.open_for_read(dir, file, &h, false);
+	  r = fs->open_for_read(dir, file, &h, false);
 	  if (r < 0) {
 	    cerr << "open_for_read " << dir << "/" << file << " failed: "
 		 << cpp_strerror(r) << std::endl;
@@ -300,7 +310,7 @@ int main(int argc, char **argv)
 	  int left = size;
 	  while (left) {
 	    bufferlist bl;
-	    r = fs.read(h, &h->buf, pos, left, &bl, NULL);
+	    r = fs->read(h, &h->buf, pos, left, &bl, NULL);
 	    if (r <= 0) {
 	      cerr << "read " << dir << "/" << file << " from " << pos
 		   << " failed: " << cpp_strerror(r) << std::endl;
@@ -320,7 +330,8 @@ int main(int argc, char **argv)
 	::close(fd);
       }
     }
-    fs.umount();
+    fs->umount();
+    delete fs;
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;
