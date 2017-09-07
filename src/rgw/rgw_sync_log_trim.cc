@@ -283,14 +283,16 @@ struct BucketTrimObserver {
 /// trim the bilog of all of the given bucket instance's shards
 class BucketTrimInstanceCR : public RGWCoroutine {
   RGWRados *const store;
+  RGWHTTPManager *const http;
   BucketTrimObserver *const observer;
   std::string bucket_instance;
 
  public:
-  BucketTrimInstanceCR(RGWRados *store, BucketTrimObserver *observer,
+  BucketTrimInstanceCR(RGWRados *store, RGWHTTPManager *http,
+                       BucketTrimObserver *observer,
                        const std::string& bucket_instance)
     : RGWCoroutine(store->ctx()), store(store),
-      observer(observer),
+      http(http), observer(observer),
       bucket_instance(bucket_instance)
   {}
   int operate() {
@@ -302,15 +304,17 @@ class BucketTrimInstanceCR : public RGWCoroutine {
 /// trim each bucket instance while limiting the number of concurrent operations
 class BucketTrimInstanceCollectCR : public RGWShardCollectCR {
   RGWRados *const store;
+  RGWHTTPManager *const http;
   BucketTrimObserver *const observer;
   std::vector<std::string>::const_iterator bucket;
   std::vector<std::string>::const_iterator end;
  public:
-  BucketTrimInstanceCollectCR(RGWRados *store, BucketTrimObserver *observer,
+  BucketTrimInstanceCollectCR(RGWRados *store, RGWHTTPManager *http,
+                              BucketTrimObserver *observer,
                               const std::vector<std::string>& buckets,
                               int max_concurrent)
     : RGWShardCollectCR(store->ctx(), max_concurrent),
-      store(store), observer(observer),
+      store(store), http(http), observer(observer),
       bucket(buckets.begin()), end(buckets.end())
   {}
   bool spawn_next() override;
@@ -321,7 +325,7 @@ bool BucketTrimInstanceCollectCR::spawn_next()
   if (bucket == end) {
     return false;
   }
-  spawn(new BucketTrimInstanceCR(store, observer, *bucket), false);
+  spawn(new BucketTrimInstanceCR(store, http, observer, *bucket), false);
   ++bucket;
   return true;
 }
@@ -499,6 +503,7 @@ class MetadataListCR : public RGWSimpleCoroutine {
 
 class BucketTrimCR : public RGWCoroutine {
   RGWRados *const store;
+  RGWHTTPManager *const http;
   const BucketTrimConfig& config;
   BucketTrimObserver *const observer;
   const rgw_raw_obj& obj;
@@ -511,9 +516,10 @@ class BucketTrimCR : public RGWCoroutine {
 
   static const std::string section; //< metadata section for bucket instances
  public:
-  BucketTrimCR(RGWRados *store, const BucketTrimConfig& config,
-               BucketTrimObserver *observer, const rgw_raw_obj& obj)
-    : RGWCoroutine(store->ctx()), store(store), config(config),
+  BucketTrimCR(RGWRados *store, RGWHTTPManager *http,
+               const BucketTrimConfig& config, BucketTrimObserver *observer,
+               const rgw_raw_obj& obj)
+    : RGWCoroutine(store->ctx()), store(store), http(http), config(config),
       observer(observer), obj(obj), counter(config.counter_size)
   {}
 
@@ -610,7 +616,7 @@ int BucketTrimCR::operate()
     // trim bucket instances with limited concurrency
     set_status("trimming buckets");
     ldout(cct, 4) << "collected " << buckets.size() << " buckets for trim" << dendl;
-    yield call(new BucketTrimInstanceCollectCR(store, observer, buckets,
+    yield call(new BucketTrimInstanceCollectCR(store, http, observer, buckets,
                                                config.concurrent_buckets));
     // ignore errors from individual buckets
 
@@ -636,6 +642,7 @@ int BucketTrimCR::operate()
 
 class BucketTrimPollCR : public RGWCoroutine {
   RGWRados *const store;
+  RGWHTTPManager *const http;
   const BucketTrimConfig& config;
   BucketTrimObserver *const observer;
   const rgw_raw_obj& obj;
@@ -643,10 +650,11 @@ class BucketTrimPollCR : public RGWCoroutine {
   const std::string cookie;
 
  public:
-  BucketTrimPollCR(RGWRados *store, const BucketTrimConfig& config,
+  BucketTrimPollCR(RGWRados *store, RGWHTTPManager *http,
+                   const BucketTrimConfig& config,
                    BucketTrimObserver *observer, const rgw_raw_obj& obj)
-    : RGWCoroutine(store->ctx()), store(store), config(config),
-      observer(observer), obj(obj),
+    : RGWCoroutine(store->ctx()), store(store), http(http),
+      config(config), observer(observer), obj(obj),
       cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
   {}
 
@@ -671,7 +679,7 @@ int BucketTrimPollCR::operate()
       }
 
       set_status("trimming");
-      yield call(new BucketTrimCR(store, config, observer, obj));
+      yield call(new BucketTrimCR(store, http, config, observer, obj));
       if (retcode < 0) {
         // on errors, unlock so other gateways can try
         set_status("unlocking");
@@ -834,16 +842,16 @@ void BucketTrimManager::on_bucket_changed(const boost::string_view& bucket)
   impl->counter.insert(bucket.to_string());
 }
 
-RGWCoroutine* BucketTrimManager::create_bucket_trim_cr()
+RGWCoroutine* BucketTrimManager::create_bucket_trim_cr(RGWHTTPManager *http)
 {
-  return new BucketTrimPollCR(impl->store, impl->config,
+  return new BucketTrimPollCR(impl->store, http, impl->config,
                               impl.get(), impl->status_obj);
 }
 
-RGWCoroutine* BucketTrimManager::create_admin_bucket_trim_cr()
+RGWCoroutine* BucketTrimManager::create_admin_bucket_trim_cr(RGWHTTPManager *http)
 {
   // return the trim coroutine without any polling
-  return new BucketTrimCR(impl->store, impl->config,
+  return new BucketTrimCR(impl->store, http, impl->config,
                           impl.get(), impl->status_obj);
 }
 
