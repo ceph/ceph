@@ -152,7 +152,7 @@ def cat_file(level, filename):
 def vstart(new, opt=""):
     print("vstarting....", end="")
     NEW = new and "-n" or "-N"
-    call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 {path}/src/vstart.sh --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
+    call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
     print("DONE")
 
 
@@ -388,14 +388,18 @@ CEPH_ROOT = os.environ.get('CEPH_ROOT')
 if not CEPH_BUILD_DIR:
     CEPH_BUILD_DIR=os.getcwd()
     os.putenv('CEPH_BUILD_DIR', CEPH_BUILD_DIR)
-    CEPH_BIN=CEPH_BUILD_DIR
+    CEPH_BIN=os.path.join(CEPH_BUILD_DIR, 'bin')
     os.putenv('CEPH_BIN', CEPH_BIN)
     CEPH_ROOT=os.path.dirname(CEPH_BUILD_DIR)
     os.putenv('CEPH_ROOT', CEPH_ROOT)
-    CEPH_LIB=os.path.join(CEPH_BIN, '.libs')
+    CEPH_LIB=os.path.join(CEPH_BUILD_DIR, 'lib')
     os.putenv('CEPH_LIB', CEPH_LIB)
 
-CEPH_DIR = CEPH_BUILD_DIR + "/cot_dir"
+try:
+    os.mkdir("td")
+except:
+    pass # ok if this is already there
+CEPH_DIR = os.path.join(CEPH_BUILD_DIR, os.path.join("td", "cot_dir"))
 CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
 def kill_daemons():
@@ -518,7 +522,7 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
         if linev[0] is '':
             linev.pop(0)
         print('linev %s' % linev)
-        weights.append(float(linev[1]))
+        weights.append(float(linev[2]))
 
     return weights
 
@@ -672,9 +676,10 @@ def main(argv):
     else:
         nullfd = DEVNULL
 
-    call("rm -fr {dir}; mkdir {dir}".format(dir=CEPH_DIR), shell=True)
+    call("rm -fr {dir}; mkdir -p {dir}".format(dir=CEPH_DIR), shell=True)
+    os.chdir(CEPH_DIR)
     os.environ["CEPH_DIR"] = CEPH_DIR
-    OSDDIR = os.path.join(CEPH_DIR, "dev")
+    OSDDIR = "dev"
     REP_POOL = "rep_pool"
     REP_NAME = "REPobject"
     EC_POOL = "ec_pool"
@@ -713,6 +718,7 @@ def main(argv):
     cmd = "{path}/ceph osd pool create {pool} {pg} {pg} replicated".format(pool=REP_POOL, pg=PG_COUNT, path=CEPH_BIN)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    time.sleep(2)
     REPID = get_pool_id(REP_POOL, nullfd)
 
     print("Created Replicated pool #{repid}".format(repid=REPID))
@@ -1961,6 +1967,17 @@ def main(argv):
     # vstart() starts 4 OSDs
     ERRORS += test_get_set_osdmap(CFSD_PREFIX, list(range(4)), ALLOSDS)
     ERRORS += test_get_set_inc_osdmap(CFSD_PREFIX, ALLOSDS[0])
+
+    kill_daemons()
+    CORES = [f for f in os.listdir(CEPH_DIR) if f.startswith("core.")]
+    if CORES:
+        CORE_DIR = os.path.join("/tmp", "cores.{pid}".format(pid=os.getpid()))
+        os.mkdir(CORE_DIR)
+        call("/bin/mv {ceph_dir}/core.* {core_dir}".format(ceph_dir=CEPH_DIR, core_dir=CORE_DIR), shell=True)
+        logging.error("Failure due to cores found")
+        logging.error("See {core_dir} for cores".format(core_dir=CORE_DIR))
+        ERRORS += len(CORES)
+
     if ERRORS == 0:
         print("TEST PASSED")
         return 0
@@ -1992,6 +2009,7 @@ if __name__ == "__main__":
         status = main(sys.argv[1:])
     finally:
         kill_daemons()
+        os.chdir(CEPH_BUILD_DIR)
         remove_btrfs_subvolumes(CEPH_DIR)
         call("/bin/rm -fr {dir}".format(dir=CEPH_DIR), shell=True)
     sys.exit(status)
