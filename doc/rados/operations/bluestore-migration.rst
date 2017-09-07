@@ -174,7 +174,7 @@ the data migrating only once.
 
      ssh $OLDHOST
      systemctl kill ceph-osd.target
-     umount /var/log/ceph/osd/ceph-*
+     umount /var/lib/ceph/osd/ceph-*
 
 #. Destroy and purge the old OSDs::
 
