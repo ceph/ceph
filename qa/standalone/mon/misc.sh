@@ -164,7 +164,7 @@ function TEST_mon_features() {
     CEPH_ARGS+="--mon-initial-members=a,b,c "
     CEPH_ARGS+="--mon-host=$MONA,$MONB,$MONC "
     CEPH_ARGS+="--mon-debug-no-initial-persistent-features "
-    CEPH_ARGS+="--mon-debug-no-require-luminous "
+    CEPH_ARGS+="--mon-debug-no-require-mimic "
 
     run_mon $dir a --public-addr $MONA || return 1
     run_mon $dir b --public-addr $MONB || return 1
@@ -175,11 +175,13 @@ function TEST_mon_features() {
     jq_success "$jqinput" '.monmap.mons | length == 3' || return 1
     # quorum contains two monitors
     jq_success "$jqinput" '.quorum | length == 2' || return 1
-    # quorum's monitor features contain kraken and luminous
+    # quorum's monitor features contain kraken, luminous, and mimic
     jqfilter='.features.quorum_mon[]|select(. == "kraken")'
     jq_success "$jqinput" "$jqfilter" "kraken" || return 1
     jqfilter='.features.quorum_mon[]|select(. == "luminous")'
     jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+    jqfilter='.features.quorum_mon[]|select(. == "mimic")'
+    jq_success "$jqinput" "$jqfilter" "mimic" || return 1
 
     # monmap must have no persistent features set, because we
     # don't currently have a quorum made out of all the monitors
@@ -194,11 +196,13 @@ function TEST_mon_features() {
     # validate 'mon feature ls'
 
     jqinput="$(ceph mon feature ls --format=json 2>/dev/null)"
-    # 'kraken' and 'luminous' are supported
+    # k l m are supported
     jqfilter='.all.supported[] | select(. == "kraken")'
     jq_success "$jqinput" "$jqfilter" "kraken" || return 1
     jqfilter='.all.supported[] | select(. == "luminous")'
     jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+    jqfilter='.all.supported[] | select(. == "mimic")'
+    jq_success "$jqinput" "$jqfilter" "mimic" || return 1
 
     # start third monitor
     run_mon $dir c --public-addr $MONC || return 1
@@ -211,20 +215,24 @@ function TEST_mon_features() {
     # expect quorum to have all three monitors
     jqfilter='.quorum | length == 3'
     jq_success "$jqinput" "$jqfilter" || return 1
-    # quorum's monitor features contain kraken and luminous
+    # quorum's monitor features contain k and l and m
     jqfilter='.features.quorum_mon[]|select(. == "kraken")'
     jq_success "$jqinput" "$jqfilter" "kraken" || return 1
     jqfilter='.features.quorum_mon[]|select(. == "luminous")'
     jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+    jqfilter='.features.quorum_mon[]|select(. == "mimic")'
+    jq_success "$jqinput" "$jqfilter" "mimic" || return 1
 
-    # monmap must have no both 'kraken' and 'luminous' persistent
+    # monmap must have not all k l m persistent
     # features set.
-    jqfilter='.monmap.features.persistent | length == 2'
+    jqfilter='.monmap.features.persistent | length == 3'
     jq_success "$jqinput" "$jqfilter" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "kraken")'
     jq_success "$jqinput" "$jqfilter" "kraken" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "luminous")'
     jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "mimic")'
+    jq_success "$jqinput" "$jqfilter" "mimic" || return 1
 
     CEPH_ARGS=$CEPH_ARGS_orig
     # that's all folks. thank you for tuning in.

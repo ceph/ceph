@@ -14,10 +14,10 @@
 
 
 #include "OSDMonitor.h"
-#include "PGMonitor.h"
 
 #include "FSCommands.h"
 #include "MDSMonitor.h"
+#include "MgrStatMonitor.h"
 
 
 
@@ -109,7 +109,7 @@ class FsNewHandler : public FileSystemCommandHandler
     string force_str;
     cmd_getval(g_ceph_context,cmdmap, "force", force_str);
     bool force = (force_str == "--force");
-    const pool_stat_t *stat = mon->pgservice->get_pool_stat(metadata);
+    const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
     if (stat) {
       int64_t metadata_num_objects = stat->stats.sum.num_objects;
       if (!force && metadata_num_objects > 0) {

@@ -18,7 +18,7 @@ install(TARGETS
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # scripts
-add_ceph_test(osd-bench.sh ${CMAKE_CURRENT_SOURCE_DIR}/safe-to-destroy.sh)
+add_ceph_test(safe-to-destroy.sh ${CMAKE_CURRENT_SOURCE_DIR}/safe-to-destroy.sh)
 
 # unittest_osdmap
 add_executable(unittest_osdmap

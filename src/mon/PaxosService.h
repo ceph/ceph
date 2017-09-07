@@ -425,16 +425,6 @@ public:
    */
   virtual void tick() {}
 
-  /**
-   * Get health information
-   *
-   * @param summary list of summary strings and associated severity
-   * @param detail optional list of detailed problem reports; may be NULL
-   */
-  virtual void get_health(list<pair<health_status_t,string> >& summary,
-			  list<pair<health_status_t,string> > *detail,
-			  CephContext *cct) const { }
-
   void encode_health(const health_check_map_t& next,
 		     MonitorDBStore::TransactionRef t) {
     bufferlist bl;

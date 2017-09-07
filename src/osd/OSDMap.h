@@ -645,12 +645,6 @@ public:
     return nearfull_ratio;
   }
   void count_full_nearfull_osds(int *full, int *backfill, int *nearfull) const;
-  void get_full_osd_util(
-    const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &osd_stat,
-    map<int, float> *full,
-    map<int, float> *backfill,
-    map<int, float> *nearfull) const;
-
   void get_full_osd_counts(set<int> *full, set<int> *backfill,
 			   set<int> *nearfull) const;
 
@@ -1384,10 +1378,10 @@ inline ostream& operator<<(ostream& out, const OSDMap& m) {
   return out;
 }
 
-class PGStatService;
+class PGMap;
 
 void print_osd_utilization(const OSDMap& osdmap,
-			   const PGStatService *pgstat,
+			   const PGMap& pgmap,
 			   ostream& out,
 			   Formatter *f,
 			   bool tree);
