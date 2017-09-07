@@ -3264,8 +3264,9 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   assert(in->is_auth());
 
   // FIXME
-  if (in->is_frozen())
+  if (!in->can_auth_pin())
     return;
+  in->auth_pin(this);
 
   C_M_LoggedImportCaps *finish = new C_M_LoggedImportCaps(
       this, in, mds_rank_t(ex->get_source().num()));
@@ -3306,4 +3307,5 @@ void Migrator::logged_import_caps(CInode *in,
   // clients will release caps from the exporter when they receive the cap import message.
   finish_import_inode_caps(in, from, false, peer_exports[in], imported_caps);
   mds->locker->eval(in, CEPH_CAP_LOCKS, true);
+  in->auth_unpin(this);
 }
