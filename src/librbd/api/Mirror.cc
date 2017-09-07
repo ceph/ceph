@@ -765,6 +765,11 @@ int Mirror<I>::peer_set_cluster(librados::IoCtx& io_ctx,
   ldout(cct, 20) << "uuid=" << uuid << ", "
                  << "cluster=" << cluster_name << dendl;
 
+  if (cct->_conf->cluster == cluster_name) {
+    lderr(cct) << "cannot set self as remote peer" << dendl;
+    return -EINVAL;
+  }
+
   int r = cls_client::mirror_peer_set_cluster(&io_ctx, uuid, cluster_name);
   if (r < 0) {
     lderr(cct) << "failed to update cluster '" << uuid << "': "
