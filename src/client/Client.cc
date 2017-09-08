@@ -10952,6 +10952,7 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
   req->head.args.setxattr.flags = xattr_flags;
 
   bufferlist bl;
+  assert (value || size == 0);
   bl.append((const char*)value, size);
   req->set_data(bl);
 
