@@ -7298,7 +7298,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
   return result;
 }
 
-void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc)
+void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
   dout(20) << __func__ << " " << soid << " " << ctx
@@ -7382,9 +7382,7 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
 
-  if (soid.is_head() &&
-      !ctx->obc->obs.exists &&
-      (!maintain_ssc || ctx->cache_evict)) {
+  if (soid.is_head() && !ctx->obc->obs.exists) {
     ctx->obc->ssc->exists = false;
     ctx->obc->ssc->snapset = SnapSet();
   } else {
@@ -12776,7 +12774,7 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
   if (obc->obs.oi.is_dirty())
     --ctx->delta_stats.num_objects_dirty;
   assert(r == 0);
-  finish_ctx(ctx.get(), pg_log_entry_t::DELETE, false);
+  finish_ctx(ctx.get(), pg_log_entry_t::DELETE);
   simple_opc_submit(std::move(ctx));
   osd->logger->inc(l_osd_tier_evict);
   osd->logger->inc(l_osd_agent_evict);
