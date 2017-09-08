@@ -12686,6 +12686,7 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   client_lock.Lock();
   if (unmounting) {
     client_lock.Unlock();
+    delete onsafe;
     return -ENOTCONN;
   }
 
