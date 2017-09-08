@@ -163,6 +163,7 @@ struct RGWUserAdminOpState {
   __u8 system;
   __u8 exclusive;
   __u8 fetch_stats;
+  __u8 sync_stats;
   std::string caps;
   RGWObjVersionTracker objv;
   uint32_t op_mask;
@@ -332,6 +333,10 @@ struct RGWUserAdminOpState {
 
   void set_fetch_stats(__u8 is_fetch_stats) {
     fetch_stats = is_fetch_stats;
+  }
+
+  void set_sync_stats(__u8 is_sync_stats) {
+    sync_stats = is_sync_stats;
   }
 
   void set_user_info(RGWUserInfo& user_info) {
