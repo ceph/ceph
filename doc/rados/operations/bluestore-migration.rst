@@ -116,30 +116,62 @@ to evacuate an entire host in order to use it as a spare, then the
 conversion can be done on a host-by-host basis with each stored copy of
 the data migrating only once.
 
-#. Identify an empty host.  Ideally the host should have roughly the
-   same capacity as other hosts you will be converting (although it
-   doesn't strictly matter). ::
+First, you need have empty host that has no data.  There are two ways to do this: either by starting with a new, empty host that isn't yet part of the cluster, or by offloading data from an existing host that in the cluster.
 
-     NEWHOST=<empty-host-name>
+Use a new, empty host
+^^^^^^^^^^^^^^^^^^^^^
 
-#. Add the host to the CRUSH hierarchy, but do not attach it to the root::
+Ideally the host should have roughly the
+same capacity as other hosts you will be converting (although it
+doesn't strictly matter). ::
 
-     ceph osd crush add-bucket $NEWHOST host
+  NEWHOST=<empty-host-name>
 
-   If you would like to use an existing host that is already part of the cluster,
-   and there is sufficient free space on that host so that all of its data can
-   be migrated off, then you can instead do::
+Add the host to the CRUSH hierarchy, but do not attach it to the root::
 
-     ceph osd crush unlink $NEWHOST default
+  ceph osd crush add-bucket $NEWHOST host
 
-   where "default" is the immediate ancestor in the CRUSH map. (For smaller
-   clusters with unmodified configurations this will normally be "default", but
-   it might also be a rack name.) This will move the host out of the CRUSH
-   hierarchy and cause all data to be migrated off. Once it is completely empty of
-   data, you can proceed::
+Make sure the ceph packages are installed.
 
-     while ! ceph osd safe-to-destroy $(ceph osd ls-tree $NEWHOST); do sleep 60 ; done
+Use an existing host
+^^^^^^^^^^^^^^^^^^^^
 
+If you would like to use an existing host
+that is already part of the cluster, and there is sufficient free
+space on that host so that all of its data can be migrated off,
+then you can instead do::
+
+  OLDHOST=<existing-cluster-host-to-offload>
+  ceph osd crush unlink $OLDHOST default
+
+where "default" is the immediate ancestor in the CRUSH map. (For
+smaller clusters with unmodified configurations this will normally
+be "default", but it might also be a rack name.)  You should now
+see the host at the top of the OSD tree output with no parent::
+
+  $ bin/ceph osd tree
+  ID CLASS WEIGHT  TYPE NAME     STATUS REWEIGHT PRI-AFF
+  -5             0 host oldhost
+  10   ssd 1.00000     osd.10        up  1.00000 1.00000
+  11   ssd 1.00000     osd.11        up  1.00000 1.00000
+  12   ssd 1.00000     osd.12        up  1.00000 1.00000
+  -1       3.00000 root default
+  -2       3.00000     host foo
+   0   ssd 1.00000         osd.0     up  1.00000 1.00000
+   1   ssd 1.00000         osd.1     up  1.00000 1.00000
+   2   ssd 1.00000         osd.2     up  1.00000 1.00000
+  ...
+
+If everything looks good, jump directly to the "Wait for data
+migration to complete" step below and proceed from there to clean up
+the old OSDs.
+
+Migration process
+^^^^^^^^^^^^^^^^^
+
+If you're using a new host, start at step #1.  For an existing host,
+jump to step #5 below.
+     
 #. Provision new BlueStore OSDs for all devices::
 
      ceph-disk prepare --bluestore /dev/$DEVICE
@@ -168,7 +200,7 @@ the data migrating only once.
 
 #. Identify the first target host to convert ::
 
-     OLDHOST=<old-host-name>
+     OLDHOST=<existing-cluster-host-to-convert>
 
 #. Swap the new host into the old host's position in the cluster::
 
