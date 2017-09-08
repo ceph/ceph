@@ -1,0 +1,25 @@
+tasks:
+- cbt:
+    benchmarks:
+      librbdfio:
+        op_size: [4096]
+        time: 60
+        mode: ['randwrite']
+        norandommap: True
+        vol_size: 4096
+        procs_per_volume: [1]
+        volumes_per_client: [2]
+        iodepth: [32]
+        osd_ra: [4096]
+        pool_profile: 'rbd'
+        log_avg_msec: 100
+        cmd_path: '/usr/local/bin/fio'
+    cluster:
+      user: 'ubuntu'
+      osds_per_node: 3
+      iterations: 1
+      pool_profiles:
+        rbd:
+          pg_size: 512
+          pgp_size: 512
+          replication: 3
