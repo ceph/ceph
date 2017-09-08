@@ -5800,7 +5800,8 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
 int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
 {
   int64_t max_pgs_per_osd = g_conf->mon_pg_warn_max_per_osd;
-  int64_t max_pgs = max_pgs_per_osd * osdmap.get_num_in_osds();
+  int num_osds = MAX(osdmap.get_num_in_osds(), 3);   // assume min cluster size 3
+  int64_t max_pgs = max_pgs_per_osd * num_osds;
   int64_t projected = 0;
   if (pool < 0) {
     projected += pg_num * size;
@@ -5820,7 +5821,7 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
 	<< " would mean " << projected
 	<< " total pgs, which exceeds max " << max_pgs
 	<< " (mon_pg_warn_max_per_osd " << max_pgs_per_osd
-	<< " * num_in_osds " << osdmap.get_num_in_osds() << ")";
+	<< " * num_in_osds " << num_osds << ")";
     return -ERANGE;
   }
   return 0;
