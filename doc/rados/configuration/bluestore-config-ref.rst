@@ -49,7 +49,7 @@ A single-device BlueStore OSD can be provisioned with::
 
 To specify a WAL device and/or DB device, ::
 
-  ceph-disk prepare --bluestore <device> --block.wal <wal-device> --block-db <db-device>
+  ceph-disk prepare --bluestore <device> --block.wal <wal-device> --block.db <db-device>
 
 Cache size
 ==========
