@@ -319,6 +319,9 @@ void rgw_bucket_olh_log_entry::dump(Formatter *f) const
     case CLS_RGW_OLH_OP_REMOVE_INSTANCE:
       op_str = "remove_instance";
       break;
+    case CLS_RGW_OLH_OP_REMOVE_PENDING:
+      op_str = "remove_pending";
+      break;
     default:
       op_str = "unknown";
   }
@@ -339,6 +342,8 @@ void rgw_bucket_olh_log_entry::decode_json(JSONObj *obj)
     op = CLS_RGW_OLH_OP_UNLINK_OLH;
   } else if (op_str == "remove_instance") {
     op = CLS_RGW_OLH_OP_REMOVE_INSTANCE;
+  } else if (op_str == "remove_pending") {
+    op = CLS_RGW_OLH_OP_REMOVE_PENDING;
   } else {
     op = CLS_RGW_OLH_OP_UNKNOWN;
   }
