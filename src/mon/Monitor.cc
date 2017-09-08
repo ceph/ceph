@@ -1776,7 +1776,8 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
 	   << " upgrading" << dendl;
       exit(0);
     }
-    if (!osdmon()->osdmap.test_flag(CEPH_OSDMAP_PURGED_SNAPDIRS)) {
+    if (!osdmon()->osdmap.test_flag(CEPH_OSDMAP_PURGED_SNAPDIRS) ||
+	!osdmon()->osdmap.test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
       derr << __func__ << " existing cluster has not completed a full luminous"
 	   << " scrub to purge legacy snapdir objects; please scrub before"
 	   << " upgrading beyond luminous." << dendl;
