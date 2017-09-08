@@ -47,3 +47,43 @@ POSIX semantics for various reasons:
   code.  The name of this hidden directory can be changed at mount
   time with ``-o snapdirname=.somethingelse`` (Linux) or the config
   option ``client_snapdir`` (libcephfs, ceph-fuse).
+
+Perspective
+-----------
+
+People talk a lot about "POSIX compliance," but in reality most file
+system implementations do not strictly adhere to the spec, including
+local Linux file systems like ext4 and XFS.  For example, for
+performance reasons, the atomicity requirements for reads are relaxed:
+processing reading from a file that is also being written may see torn
+results.
+
+Similarly, NFS has extremely weak consistency semantics when multiple
+clients are interacting with the same files or directories, opting
+instead for "close-to-open".  In the world of network attached
+storage, where most environments use NFS, whether or not the server's
+file system is "fully POSIX" may not be relevant, and whether client
+applications notice depends on whether data is being shared between
+clients or not.  NFS may also "tear" the results of concurrent writers
+as client data may not even be flushed to the server until the file is
+closed (and more generally writes will be significantly more
+time-shifted than CephFS, leading to less predictable results).
+
+However, all of there are very close to POSIX, and most of the time
+applications don't notice too much.  Many other storage systems (e.g.,
+HDFS) claim to be "POSIX-like" but diverge significantly from the
+standard by dropping support for things like in-place file
+modifications, truncate, or directory renames.
+
+
+Bottom line
+-----------
+
+CephFS relaxes more than local Linux kernel file systems (e.g., writes
+spanning object boundaries may be torn).  It relaxes strictly less
+than NFS when it comes to multiclient consistency, and generally less
+than NFS when it comes to write atomicity.
+
+In other words, when it comes to POSIX, ::
+
+  HDFS < NFS < CephFS < {XFS, ext4}
