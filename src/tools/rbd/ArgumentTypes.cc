@@ -332,7 +332,7 @@ void add_no_progress_option(boost::program_options::options_description *opt) {
 
 void add_format_options(boost::program_options::options_description *opt) {
   opt->add_options()
-    (FORMAT.c_str(), po::value<Format>(), "output format [plain, json, or xml]")
+    (FORMAT.c_str(), po::value<Format>(), "output format (plain, json, or xml) [default: plain]")
     (PRETTY_FORMAT.c_str(), po::bool_switch(),
      "pretty formatting (json and xml)");
 }
