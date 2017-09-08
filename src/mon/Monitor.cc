@@ -3001,8 +3001,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     << "entity='" << session->entity_name << "' "
     << "cmd=" << m->cmd << ": dispatch";
 
-  if (mon_cmd->is_mgr() &&
-      osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+  if (mon_cmd->is_mgr()) {
     const auto& hdr = m->get_header();
     uint64_t size = hdr.front_len + hdr.middle_len + hdr.data_len;
     uint64_t max =
