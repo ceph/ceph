@@ -6498,7 +6498,7 @@ bool MDCache::trim(int max, int count)
       if (!diri->is_auth() && !diri->is_base() &&
 	  dir->get_num_head_items() == 0) {
 	if (dir->state_test(CDir::STATE_EXPORTING) ||
-	    dir->is_freezing() || dir->is_frozen())
+	    dir->is_freezing() || dir->is_frozen() || !mds->is_active())
 	  continue;
 
 	migrator->export_empty_import(dir);

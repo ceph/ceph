@@ -793,6 +793,10 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
     //ceph_abort();
     return;
   }
+  if (!mds->is_active()) {
+    dout(7) << "i'm not active, no exports for now" << dendl;
+    return;
+  }
 
   if (!dir->inode->is_base() && dir->inode->get_projected_parent_dir()->inode->is_stray() &&
       dir->inode->get_projected_parent_dir()->get_parent_dir()->ino() != MDS_INO_MDSDIR(dest)) {
