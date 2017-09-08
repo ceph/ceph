@@ -3144,8 +3144,7 @@ void OSDMonitor::do_application_enable(int64_t pool_id,
   dout(20) << __func__ << ": pool_id=" << pool_id << ", app_name=" << app_name
            << dendl;
 
-  assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS ||
-	 pending_inc.new_require_osd_release >= CEPH_RELEASE_LUMINOUS);
+  assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
 
   auto pp = osdmap.get_pg_pool(pool_id);
   assert(pp != nullptr);
