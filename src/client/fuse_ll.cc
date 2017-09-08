@@ -118,7 +118,7 @@ static int getgroups(fuse_req_t req, gid_t **sgids)
   }
   c = fuse_req_getgroups(req, c, gids);
   if (c < 0) {
-    delete gids;
+    delete[] gids;
   } else {
     *sgids = gids;
   }
