@@ -1983,15 +1983,6 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
   logger->inc(l_mon_election_lose);
 
   finish_election();
-
-  if ((quorum_con_features & CEPH_FEATURE_MON_METADATA) &&
-      !HAVE_FEATURE(quorum_con_features, SERVER_LUMINOUS)) {
-    // for pre-luminous mons only
-    Metadata sys_info;
-    collect_metadata(&sys_info);
-    messenger->send_message(new MMonMetadata(sys_info),
-			    monmap->get_inst(get_leader()));
-  }
 }
 
 void Monitor::collect_metadata(Metadata *m)
