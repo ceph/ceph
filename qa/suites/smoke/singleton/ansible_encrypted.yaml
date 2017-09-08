@@ -1,22 +1,21 @@
 overrides:
   ceph-ansible:
-    group_vars:
-      all:
-        ceph_conf_overrides:
+    rhbuild: '2.2'
+    vars:
+      ceph_conf_overrides:
           global:
             osd_default_pool_size: 2
             osd_pool_default_pg_num: 128
             osd_pool_default_pgp_num: 128
-    osd_auto_discovery: false
-    rhbuild: '2.2'
-    vars:
       dmcrypt_journal_collocation: true
+      ceph_stable_release: luminous
       ceph_origin: distro
       ceph_stable: true
       ceph_stable_rh_storage: true
       ceph_test: true
       journal_size: 1024
       osd_auto_discovery: false
+      osd_scenario: collocated
 roles:
 - - mon.a
 - - mon.b
@@ -32,9 +31,9 @@ roles:
   - osd.8
   - client.0
 tasks:
-- ssh-keys: 
-- ceph-ansible: 
-- install.ship_utilities: 
+- ssh-keys:
+- ceph-ansible:
+- install.ship_utilities:
 - workunit:
     clients:
       client.0:

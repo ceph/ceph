@@ -12,6 +12,7 @@ overrides:
         ceph_test: true
         journal_collocation: true
         osd_scenario: collocated
+        ceph_stable_release: luminous
         journal_size: 1024
 roles:
 - [mon.a, osd.0, osd.1, osd.2, rgw.0]

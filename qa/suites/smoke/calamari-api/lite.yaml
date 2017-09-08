@@ -8,6 +8,7 @@ overrides:
       journal_size: 1024
       osd_auto_discovery: false
       osd_scenario: collocated
+      ceph_stable_release: luminous
       calamari: true
       ceph_conf_overrides:
           global:
