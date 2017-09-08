@@ -23,6 +23,23 @@ namespace po = boost::program_options;
 
 namespace {
 
+int validate_mirroring_enabled(librados::IoCtx& io_ctx) {
+  librbd::RBD rbd;
+  rbd_mirror_mode_t mirror_mode;
+  int r = rbd.mirror_mode_get(io_ctx, &mirror_mode);
+  if (r < 0) {
+    std::cerr << "rbd: failed to retrieve mirror mode: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  if (mirror_mode == RBD_MIRROR_MODE_DISABLED) {
+    std::cerr << "rbd: mirroring not enabled on the pool" << std::endl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 int validate_uuid(const std::string &uuid) {
   boost::regex pattern("^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$",
                        boost::regex::icase);
@@ -153,6 +170,11 @@ int execute_peer_add(const po::variables_map &vm) {
     return r;
   }
 
+  r = validate_mirroring_enabled(io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
   // TODO: temporary restriction to prevent adding multiple peers
   // until rbd-mirror daemon can properly handle the scenario
   librbd::RBD rbd;
@@ -201,6 +223,11 @@ int execute_peer_remove(const po::variables_map &vm) {
     return r;
   }
 
+  r = validate_mirroring_enabled(io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
   librbd::RBD rbd;
   r = rbd.mirror_peer_remove(io_ctx, uuid);
   if (r < 0) {
@@ -243,6 +270,11 @@ int execute_peer_set(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  r = validate_mirroring_enabled(io_ctx);
   if (r < 0) {
     return r;
   }
@@ -418,6 +450,11 @@ int execute_status(const po::variables_map &vm) {
     return r;
   }
 
+  r = validate_mirroring_enabled(io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
   librbd::RBD rbd;
 
   std::map<librbd::mirror_image_status_state_t, int> states;
@@ -489,6 +526,10 @@ int execute_status(const po::variables_map &vm) {
       }
       for (auto it = mirror_images.begin(); it != mirror_images.end(); ++it) {
 	librbd::mirror_image_status_t &status = it->second;
+        if (status.info.global_id.empty()) {
+          continue;
+        }
+
 	const std::string &image_name = status.name;
 	std::string &global_image_id = status.info.global_id;
 	std::string state = utils::mirror_image_status_state(status);
