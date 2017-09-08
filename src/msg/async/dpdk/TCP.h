@@ -29,7 +29,6 @@
 #include <functional>
 #include <deque>
 #include <chrono>
-#include <random>
 #include <stdexcept>
 #include <system_error>
 
@@ -48,6 +47,8 @@
 #include "byteorder.h"
 #include "shared_ptr.h"
 #include "PacketUtil.h"
+
+#include "include/random.h"
 
 struct tcp_hdr;
 
@@ -381,11 +382,8 @@ class tcp {
       // 512 bits secretkey for ISN generating
       uint32_t key[16];
       isn_secret () {
-        std::random_device rd;
-        std::default_random_engine e(rd());
-        std::uniform_int_distribution<uint32_t> dist{};
         for (auto& k : key) {
-          k = dist(e);
+          k = ceph::util::generate_random_number<uint32_t>();
         }
       }
     };
