@@ -46,6 +46,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
     ++left;
     ++cur;
   }
+  assert(aios_size >= left);
   int done = 0;
   while (left > 0) {
     int r = io_submit(ctx, left, piocb + done);
