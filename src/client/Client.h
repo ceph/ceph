@@ -503,7 +503,6 @@ protected:
   friend void intrusive_ptr_release(Inode *in);
 
   //int get_cache_size() { return lru.lru_get_size(); }
-  //void set_cache_size(int m) { lru.lru_set_max(m); }
 
   /**
    * Don't call this with in==NULL, use get_or_create for that

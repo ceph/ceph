@@ -202,10 +202,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   cap_imports_num_opening = 0;
 
   opening_root = open = false;
-  lru.lru_set_max(g_conf->mds_cache_size);
   lru.lru_set_midpoint(g_conf->mds_cache_mid);
 
-  bottom_lru.lru_set_max(0);
   bottom_lru.lru_set_midpoint(0);
 
   decayrate.set_halflife(g_conf->mds_decay_halflife);
