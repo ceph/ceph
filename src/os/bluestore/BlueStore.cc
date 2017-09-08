@@ -3474,6 +3474,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
+    deferred_finisher(cct, "defered_finisher", "dfin"),
     kv_sync_thread(this),
     kv_finalize_thread(this),
     mempool_thread(this)
@@ -3492,6 +3493,7 @@ BlueStore::BlueStore(CephContext *cct,
     throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
+    deferred_finisher(cct, "defered_finisher", "dfin"),
     kv_sync_thread(this),
     kv_finalize_thread(this),
     min_alloc_size(_min_alloc_size),
@@ -8296,6 +8298,7 @@ void BlueStore::_kv_start()
     finishers.push_back(f);
   }
 
+  deferred_finisher.start();
   for (auto f : finishers) {
     f->start();
   }
@@ -8333,6 +8336,8 @@ void BlueStore::_kv_stop()
     kv_finalize_stop = false;
   }
   dout(10) << __func__ << " stopping finishers" << dendl;
+  deferred_finisher.wait_for_empty();
+  deferred_finisher.stop();
   for (auto f : finishers) {
     f->wait_for_empty();
     f->stop();
@@ -8777,7 +8782,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
       deferred_queue.erase(q);
     } else if (deferred_aggressive) {
       dout(20) << __func__ << " queuing async deferred_try_submit" << dendl;
-      finishers[0]->queue(new FunctionContext([&](int) {
+      deferred_finisher.queue(new FunctionContext([&](int) {
 	    deferred_try_submit();
 	  }));
     }
