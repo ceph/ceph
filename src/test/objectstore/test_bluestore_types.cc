@@ -1441,43 +1441,7 @@ TEST(GarbageCollector, BasicTest)
     em.clear();
     old_extents.clear();
   }
-}
-
-TEST(bluestore_blob_use_tracker_t, equal)
-{
-  bluestore_blob_use_tracker_t t1, t2, t3;
-
-  ASSERT_TRUE(t1.equal(t2));
-  ASSERT_TRUE(t1.equal(t2, false));
-
-  t1.init(0x8000, 0x1000);
-  t2.init(0x8000, 0x1000);
-  ASSERT_TRUE(t1.equal(t2));
-  ASSERT_TRUE(t1.equal(t2, false));
-
-  t1.get(0, 0x1000);
-  ASSERT_TRUE(!t1.equal(t2));
-  ASSERT_TRUE(!t1.equal(t2, false));
-  t2.get(0, 0x1000);
-  ASSERT_TRUE(t1.equal(t2));
-  ASSERT_TRUE(t1.equal(t2, false));
-
-  t1.get(0x1000, 0x1000);
-  t2.get(0x2000, 0x1000);
-  ASSERT_TRUE(!t1.equal(t2));
-  ASSERT_TRUE(!t1.equal(t2, false));
-
-  t3.init(0x8000, 0x8000);
-  t3.get(0x4000, 0x2000);
-  ASSERT_TRUE(!t3.equal(t1));
-  ASSERT_TRUE(t3.equal(t1, false));
-  ASSERT_TRUE(!t3.equal(t2));
-  ASSERT_TRUE(t3.equal(t2, false));
-
-  t1.clear();
-  t2.clear();
-  t3.clear();
-}
+ }
 
 int main(int argc, char **argv) {
   vector<const char*> args;
