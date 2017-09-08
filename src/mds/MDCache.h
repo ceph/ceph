@@ -672,8 +672,6 @@ public:
   CInode *get_root() { return root; }
   CInode *get_myin() { return myin; }
 
-  // cache
-  void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
 
   // trimming
