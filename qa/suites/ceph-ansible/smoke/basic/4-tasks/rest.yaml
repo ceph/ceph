@@ -1,5 +1,10 @@
 tasks:
 - exec:
+    mgr.x:
+      - systemctl stop ceph-mgr.target
+      - sleep 5
+      - ceph -s
+- exec:
     mon.a:
       - ceph restful create-key admin
       - ceph restful create-self-signed-cert
