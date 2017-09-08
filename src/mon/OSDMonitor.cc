@@ -8706,13 +8706,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = 0;
       goto reply;
     }
-    if (rel == CEPH_RELEASE_LUMINOUS) {
-      if (!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS)) {
-	ss << "not all up OSDs have CEPH_FEATURE_SERVER_LUMINOUS feature";
-	err = -EPERM;
-	goto reply;
-      }
-    } else if (rel == CEPH_RELEASE_MIMIC) {
+    assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
+    if (rel == CEPH_RELEASE_MIMIC) {
       if (!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_MIMIC)) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_MIMIC feature";
 	err = -EPERM;
