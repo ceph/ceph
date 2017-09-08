@@ -8729,10 +8729,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     pending_inc.new_require_osd_release = rel;
-    if (rel >= CEPH_RELEASE_LUMINOUS &&
-	!osdmap.test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
-      return prepare_set_flag(op, CEPH_OSDMAP_RECOVERY_DELETES);
-    }
     goto update;
   } else if (prefix == "osd cluster_snap") {
     // ** DISABLE THIS FOR NOW **
