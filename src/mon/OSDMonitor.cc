@@ -344,20 +344,17 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     osdmap.decode(latest_bl);
   }
 
-  if (mon->monmap->get_required_features().contains_all(
-	ceph::features::mon::FEATURE_LUMINOUS)) {
-    bufferlist bl;
-    if (!mon->store->get(OSD_PG_CREATING_PREFIX, "creating", bl)) {
-      auto p = bl.begin();
-      std::lock_guard<std::mutex> l(creating_pgs_lock);
-      creating_pgs.decode(p);
-      dout(7) << __func__ << " loading creating_pgs last_scan_epoch "
-	      << creating_pgs.last_scan_epoch
-	      << " with " << creating_pgs.pgs.size() << " pgs" << dendl;
-    } else {
-      dout(1) << __func__ << " missing creating pgs; upgrade from post-kraken?"
-	      << dendl;
-    }
+  bufferlist bl;
+  if (!mon->store->get(OSD_PG_CREATING_PREFIX, "creating", bl)) {
+    auto p = bl.begin();
+    std::lock_guard<std::mutex> l(creating_pgs_lock);
+    creating_pgs.decode(p);
+    dout(7) << __func__ << " loading creating_pgs last_scan_epoch "
+	    << creating_pgs.last_scan_epoch
+	    << " with " << creating_pgs.pgs.size() << " pgs" << dendl;
+  } else {
+    dout(1) << __func__ << " missing creating pgs; upgrade from post-kraken?"
+	    << dendl;
   }
 
   // walk through incrementals
@@ -426,17 +423,14 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       t = MonitorDBStore::TransactionRef();
       tx_size = 0;
     }
-    if (mon->monmap->get_required_features().contains_all(
-          ceph::features::mon::FEATURE_LUMINOUS)) {
-      for (const auto &osd_state : inc.new_state) {
-	if (osd_state.second & CEPH_OSD_UP) {
-	  // could be marked up *or* down, but we're too lazy to check which
-	  last_osd_report.erase(osd_state.first);
-	}
-	if (osd_state.second & CEPH_OSD_EXISTS) {
-	  // could be created *or* destroyed, but we can safely drop it
-	  osd_epochs.erase(osd_state.first);
-	}
+    for (const auto &osd_state : inc.new_state) {
+      if (osd_state.second & CEPH_OSD_UP) {
+	// could be marked up *or* down, but we're too lazy to check which
+	last_osd_report.erase(osd_state.first);
+      }
+      if (osd_state.second & CEPH_OSD_EXISTS) {
+	// could be created *or* destroyed, but we can safely drop it
+	osd_epochs.erase(osd_state.first);
       }
     }
   }
@@ -1301,13 +1295,10 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_metadata_rm.clear();
 
   // and pg creating, also!
-  if (mon->monmap->get_required_features().contains_all(
-	ceph::features::mon::FEATURE_LUMINOUS)) {
-    auto pending_creatings = update_pending_pgs(pending_inc);
-    bufferlist creatings_bl;
-    ::encode(pending_creatings, creatings_bl);
-    t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
-  }
+  auto pending_creatings = update_pending_pgs(pending_inc);
+  bufferlist creatings_bl;
+  ::encode(pending_creatings, creatings_bl);
+  t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
 
   // health
   health_check_map_t next;
