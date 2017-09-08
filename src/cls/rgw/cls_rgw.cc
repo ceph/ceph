@@ -1218,15 +1218,6 @@ public:
     return 0;
   }
 
-  bool apply_epoch(uint64_t candidate_epoch) {
-    if (candidate_epoch < olh_data_entry.epoch) {
-      return false;
-    }
-
-    olh_data_entry.epoch = candidate_epoch;
-    return true;
-  }
-
   bool start_modify(uint64_t candidate_epoch) {
     if (candidate_epoch) {
       if (candidate_epoch < olh_data_entry.epoch) {
