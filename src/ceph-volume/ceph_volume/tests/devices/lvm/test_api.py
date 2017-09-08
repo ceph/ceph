@@ -267,6 +267,13 @@ class TestVolumeGroups(object):
         assert len(volume_groups) == 1
         assert volume_groups[0].vg_name == 'volume1'
 
+    def test_filter_by_tag_does_not_match_one(self, volume_groups):
+        vg_tags = "ceph.group=dmcache,ceph.disk_type=ssd"
+        osd = api.VolumeGroup(vg_name='volume1', vg_path='/dev/vg/lv', vg_tags=vg_tags)
+        volume_groups.append(osd)
+        volume_groups.filter(vg_tags={'ceph.group': 'data', 'ceph.disk_type': 'ssd'})
+        assert volume_groups == []
+
     def test_filter_by_vg_name(self, volume_groups):
         vg_tags = "ceph.type=data,ceph.fsid=000-aaa"
         osd = api.VolumeGroup(vg_name='ceph_vg', vg_tags=vg_tags)
