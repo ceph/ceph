@@ -1187,6 +1187,12 @@ std::vector<Option> get_global_options() {
     .set_default(50)
     .set_description(""),
 
+    Option("mon_health_log_update_period", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(5)
+    .set_description("Minimum time in seconds between log messages about "
+                     "each health check")
+    .set_min(0),
+
     Option("mon_data_avail_crit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description(""),
