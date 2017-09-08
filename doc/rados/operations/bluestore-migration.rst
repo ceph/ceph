@@ -126,6 +126,20 @@ the data migrating only once.
 
      ceph osd crush add-bucket $NEWHOST host
 
+   If you would like to use an existing host that is already part of the cluster,
+   and there is sufficient free space on that host so that all of its data can
+   be migrated off, then you can instead do::
+
+     ceph osd crush unlink $NEWHOST default
+
+   where "default" is the immediate ancestor in the CRUSH map. (For smaller
+   clusters with unmodified configurations this will normally be "default", but
+   it might also be a rack name.) This will move the host out of the CRUSH
+   hierarchy and cause all data to be migrated off. Once it is completely empty of
+   data, you can proceed::
+
+     while ! ceph osd safe-to-destroy $(ceph osd ls-tree $NEWHOST); do sleep 60 ; done
+
 #. Provision new BlueStore OSDs for all devices::
 
      ceph-disk prepare --bluestore /dev/$DEVICE
