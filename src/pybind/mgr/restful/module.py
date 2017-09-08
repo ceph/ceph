@@ -26,6 +26,9 @@ from mgr_module import MgrModule, CommandResult
 instance = None
 
 
+class CannotServe(Exception):
+    pass
+
 
 class CommandsRequest(object):
     """
@@ -247,6 +250,8 @@ class Module(MgrModule):
             try:
                 self._serve()
                 self.server.socket.close()
+            except CannotServe as cs:
+                self.log.warn("server not running: {0}".format(cs.message))
             except:
                 self.log.error(str(traceback.format_exc()))
 
@@ -272,7 +277,8 @@ class Module(MgrModule):
 
         server_addr = self.get_localized_config('server_addr', '::')
         if server_addr is None:
-            raise RuntimeError('no server_addr configured; try "ceph config-key set mgr/restful/server_addr <ip>"')
+            raise CannotServe('no server_addr configured; try "ceph config-key set mgr/restful/server_addr <ip>"')
+
         server_port = int(self.get_localized_config('server_port', '8003'))
         self.log.info('server_addr: %s server_port: %d',
                       server_addr, server_port)
@@ -296,11 +302,11 @@ class Module(MgrModule):
             pkey_fname = self.get_localized_config('key_file')
 
         if not cert_fname or not pkey_fname:
-            raise RuntimeError('no certificate configured')
+            raise CannotServe('no certificate configured')
         if not os.path.isfile(cert_fname):
-            raise RuntimeError('certificate %s does not exist' % cert_fname)
+            raise CannotServe('certificate %s does not exist' % cert_fname)
         if not os.path.isfile(pkey_fname):
-            raise RuntimeError('private key %s does not exist' % pkey_fname)
+            raise CannotServe('private key %s does not exist' % pkey_fname)
 
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(
