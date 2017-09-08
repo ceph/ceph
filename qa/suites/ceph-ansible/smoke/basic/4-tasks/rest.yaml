@@ -1,0 +1,10 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph restful create-key admin
+      - ceph restful create-self-signed-cert
+      - ceph restful restart
+- workunit:
+    clients:
+      client.0:
+        - rest/test-restful.sh
