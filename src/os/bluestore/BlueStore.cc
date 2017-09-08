@@ -8646,9 +8646,16 @@ void BlueStore::deferred_try_submit()
     osrs.push_back(&osr);
   }
   for (auto& osr : osrs) {
-    if (osr->deferred_pending && !osr->deferred_running) {
-      _deferred_submit_unlock(osr.get());
-      deferred_lock.lock();
+    if (osr->deferred_pending) {
+      if (!osr->deferred_running) {
+	_deferred_submit_unlock(osr.get());
+	deferred_lock.lock();
+      } else {
+	dout(20) << __func__ << "  osr " << osr << " already has running"
+		 << dendl;
+      }
+    } else {
+      dout(20) << __func__ << "  osr " << osr << " has no pending" << dendl;
     }
   }
 }
@@ -8705,8 +8712,6 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
     ++i;
   }
 
-  // demote to deferred_submit_lock, then drop that too
-  std::lock_guard<std::mutex> l(deferred_submit_lock);
   deferred_lock.unlock();
   bdev->aio_submit(&b->ioc);
 }
@@ -8722,6 +8727,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
     assert(osr->deferred_running == b);
     osr->deferred_running = nullptr;
     if (!osr->deferred_pending) {
+      dout(20) << __func__ << " dequeueing" << dendl;
       auto q = deferred_queue.iterator_to(*osr);
       deferred_queue.erase(q);
     } else if (deferred_aggressive) {
@@ -8729,6 +8735,8 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
       deferred_finisher.queue(new FunctionContext([&](int) {
 	    deferred_try_submit();
 	  }));
+    } else {
+      dout(20) << __func__ << " leaving queued, more pending" << dendl;
     }
   }
 
