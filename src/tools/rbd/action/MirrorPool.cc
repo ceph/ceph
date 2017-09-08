@@ -36,6 +36,23 @@ namespace po = boost::program_options;
 
 namespace {
 
+int validate_mirroring_enabled(librados::IoCtx& io_ctx) {
+  librbd::RBD rbd;
+  rbd_mirror_mode_t mirror_mode;
+  int r = rbd.mirror_mode_get(io_ctx, &mirror_mode);
+  if (r < 0) {
+    std::cerr << "rbd: failed to retrieve mirror mode: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  if (mirror_mode == RBD_MIRROR_MODE_DISABLED) {
+    std::cerr << "rbd: mirroring not enabled on the pool" << std::endl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 int validate_uuid(const std::string &uuid) {
   boost::regex pattern("^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$",
                        boost::regex::icase);
@@ -328,7 +345,7 @@ public:
 
 protected:
   bool skip_action(const librbd::mirror_image_info_t &info) const override {
-    return info.primary;
+    return (info.state != RBD_MIRROR_IMAGE_ENABLED || info.primary);
   }
 
   void execute_action(librbd::Image &image,
@@ -340,6 +357,7 @@ protected:
     if (r >= 0) {
       (*m_counter)++;
     }
+    ImageRequestBase::handle_execute_action(r);
   }
 
   std::string get_action_type() const override {
@@ -360,7 +378,7 @@ public:
 
 protected:
   bool skip_action(const librbd::mirror_image_info_t &info) const override {
-    return !info.primary;
+    return (info.state != RBD_MIRROR_IMAGE_ENABLED || !info.primary);
   }
 
   void execute_action(librbd::Image &image,
@@ -403,6 +421,10 @@ protected:
   }
 
   void finalize_action() override {
+    if (m_mirror_image_status.info.global_id.empty()) {
+      return;
+    }
+
     std::string state = utils::mirror_image_status_state(m_mirror_image_status);
     std::string last_update = (
       m_mirror_image_status.last_update == 0 ?
@@ -529,25 +551,15 @@ int execute_peer_add(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
-  
-  librbd::RBD rbd;
-  rbd_mirror_mode_t mirror_mode;
-  r = rbd.mirror_mode_get(io_ctx, &mirror_mode);
+
+  r = validate_mirroring_enabled(io_ctx);
   if (r < 0) {
-    std::cerr << "rbd: failed to retrieve mirror mode: " 
-              << cpp_strerror(r) << std::endl;
     return r;
-  }
-  
-  if (mirror_mode == RBD_MIRROR_MODE_DISABLED) {
-    std::cerr << "rbd: failed to add mirror peer: "
-              << "mirroring must be enabled on the pool " 
-              << pool_name << std::endl;
-    return -EINVAL;
   }
 
   // TODO: temporary restriction to prevent adding multiple peers
   // until rbd-mirror daemon can properly handle the scenario
+  librbd::RBD rbd;
   std::vector<librbd::mirror_peer_t> mirror_peers;
   r = rbd.mirror_peer_list(io_ctx, &mirror_peers);
   if (r < 0) {
@@ -589,6 +601,11 @@ int execute_peer_remove(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  r = validate_mirroring_enabled(io_ctx);
   if (r < 0) {
     return r;
   }
@@ -635,6 +652,11 @@ int execute_peer_set(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  r = validate_mirroring_enabled(io_ctx);
   if (r < 0) {
     return r;
   }
@@ -839,6 +861,11 @@ int execute_status(const po::variables_map &vm) {
     return r;
   }
 
+  r = validate_mirroring_enabled(io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
   librbd::RBD rbd;
 
   std::map<librbd::mirror_image_status_state_t, int> states;
@@ -932,6 +959,11 @@ int execute_promote(const po::variables_map &vm) {
     return r;
   }
 
+  r = validate_mirroring_enabled(io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
   std::atomic<unsigned> counter = { 0 };
   ImageRequestGenerator<PromoteImageRequest> generator(io_ctx, &counter,
                                                        vm["force"].as<bool>());
@@ -953,6 +985,11 @@ int execute_demote(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   int r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  r = validate_mirroring_enabled(io_ctx);
   if (r < 0) {
     return r;
   }

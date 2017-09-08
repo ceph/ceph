@@ -31,6 +31,25 @@ namespace mirror_image {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+namespace {
+
+int validate_mirroring_enabled(librbd::Image& image) {
+  librbd::mirror_image_info_t mirror_image;
+  int r = image.mirror_image_get_info(&mirror_image, sizeof(mirror_image));
+  if (r < 0) {
+    std::cerr << "rbd: failed to retrieve mirror mode: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  if (mirror_image.state != RBD_MIRROR_IMAGE_ENABLED) {
+    std::cerr << "rbd: mirroring not enabled on the image" << std::endl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+} // anonymous namespace
 
 void get_arguments(po::options_description *positional,
                            po::options_description *options) {
@@ -115,6 +134,11 @@ int execute_promote(const po::variables_map &vm) {
     return r;
   }
 
+  r = validate_mirroring_enabled(image);
+  if (r < 0) {
+    return r;
+  }
+
   r = image.mirror_image_promote(force);
   if (r < 0) {
     std::cerr << "rbd: error promoting image to primary" << std::endl;
@@ -146,6 +170,11 @@ int execute_demote(const po::variables_map &vm) {
     return r;
   }
 
+  r = validate_mirroring_enabled(image);
+  if (r < 0) {
+    return r;
+  }
+
   r = image.mirror_image_demote();
   if (r < 0) {
     std::cerr << "rbd: error demoting image to non-primary" << std::endl;
@@ -173,6 +202,11 @@ int execute_resync(const po::variables_map &vm) {
   librbd::Image image;
   r = utils::init_and_open_image(pool_name, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
+  if (r < 0) {
+    return r;
+  }
+
+  r = validate_mirroring_enabled(image);
   if (r < 0) {
     return r;
   }
@@ -216,6 +250,11 @@ int execute_status(const po::variables_map &vm) {
   librbd::Image image;
   r = utils::init_and_open_image(pool_name, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
+  if (r < 0) {
+    return r;
+  }
+
+  r = validate_mirroring_enabled(image);
   if (r < 0) {
     return r;
   }
