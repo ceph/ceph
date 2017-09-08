@@ -254,7 +254,22 @@ PyObject *PyModules::get_python(const std::string &what)
         }
     );
     return f.get();
-
+  } else if (what == "pg_status") {
+    PyFormatter f;
+    cluster_state.with_pgmap(
+        [&f](const PGMap &pg_map) {
+	  pg_map.print_summary(&f, nullptr);
+        }
+    );
+    return f.get();
+  } else if (what == "pg_dump") {
+    PyFormatter f;
+        cluster_state.with_pgmap(
+        [&f](const PGMap &pg_map) {
+	  pg_map.dump(&f);
+        }
+    );
+    return f.get();
   } else if (what == "df") {
     PyFormatter f;
 
@@ -776,6 +791,29 @@ PyObject *PyModules::get_context()
   // it's the global one and it has process lifetime.
   auto capsule = PyCapsule_New(g_ceph_context, nullptr, nullptr);
   return capsule;
+}
+
+static void delete_osdmap(PyObject *object)
+{
+  OSDMap *osdmap = static_cast<OSDMap*>(PyCapsule_GetPointer(object, nullptr));
+  assert(osdmap);
+  dout(10) << __func__ << " " << osdmap << dendl;
+  delete osdmap;
+}
+
+PyObject *PyModules::get_osdmap()
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
+  // Construct a capsule containing an OSDMap.
+  OSDMap *newmap = new OSDMap;
+  cluster_state.with_osdmap([&](const OSDMap& o) {
+      newmap->deepish_copy_from(o);
+    });
+  dout(10) << __func__ << " " << newmap << dendl;
+  return PyCapsule_New(newmap, nullptr, &delete_osdmap);
 }
 
 static void _list_modules(

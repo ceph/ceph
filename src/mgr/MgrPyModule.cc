@@ -12,6 +12,7 @@
  */
 
 #include "PyState.h"
+#include "PyOSDMap.h"
 #include "Gil.h"
 
 #include "PyFormatter.h"
@@ -109,6 +110,9 @@ MgrPyModule::MgrPyModule(const std::string &module_name_, const std::string &sys
     }
     // Populate python namespace with callable hooks
     Py_InitModule("ceph_state", CephStateMethods);
+    Py_InitModule("ceph_osdmap", OSDMapMethods);
+    Py_InitModule("ceph_osdmap_incremental", OSDMapIncrementalMethods);
+    Py_InitModule("ceph_crushmap", CRUSHMapMethods);
 
     PySys_SetPath(const_cast<char*>(sys_path.c_str()));
   }

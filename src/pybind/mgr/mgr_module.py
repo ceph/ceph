@@ -1,5 +1,8 @@
 
 import ceph_state  #noqa
+import ceph_osdmap  #noqa
+import ceph_osdmap_incremental  #noqa
+import ceph_crushmap  #noqa
 import json
 import logging
 import threading
@@ -28,6 +31,87 @@ class CommandResult(object):
     def wait(self):
         self.ev.wait()
         return self.r, self.outb, self.outs
+
+
+class OSDMap(object):
+    def __init__(self, handle):
+        self._handle = handle
+
+    def get_epoch(self):
+        return ceph_osdmap.get_epoch(self._handle)
+
+    def get_crush_version(self):
+        return ceph_osdmap.get_crush_version(self._handle)
+
+    def dump(self):
+        return ceph_osdmap.dump(self._handle)
+
+    def new_incremental(self):
+        return OSDMapIncremental(ceph_osdmap.new_incremental(self._handle))
+
+    def apply_incremental(self, inc):
+        return OSDMap(ceph_osdmap.apply_incremental(self._handle, inc._handle))
+
+    def get_crush(self):
+        return CRUSHMap(ceph_osdmap.get_crush(self._handle), self)
+
+    def get_pools_by_take(self, take):
+        return ceph_osdmap.get_pools_by_take(self._handle, take).get('pools', [])
+
+    def calc_pg_upmaps(self, inc,
+                       max_deviation=.01, max_iterations=10, pools=[]):
+        return ceph_osdmap.calc_pg_upmaps(
+            self._handle,
+            inc._handle,
+            max_deviation, max_iterations, pools)
+
+    def map_pool_pgs_up(self, poolid):
+        return ceph_osdmap.map_pool_pgs_up(self._handle, poolid)
+
+class OSDMapIncremental(object):
+    def __init__(self, handle):
+        self._handle = handle
+
+    def get_epoch(self):
+        return ceph_osdmap_incremental.get_epoch(self._handle)
+
+    def dump(self):
+        return ceph_osdmap_incremental.dump(self._handle)
+
+    def set_osd_reweights(self, weightmap):
+        """
+        weightmap is a dict, int to float.  e.g. { 0: .9, 1: 1.0, 3: .997 }
+        """
+        return ceph_osdmap_incremental.set_osd_reweights(self._handle, weightmap)
+
+    def set_crush_compat_weight_set_weights(self, weightmap):
+        """
+        weightmap is a dict, int to float.  devices only.  e.g.,
+        { 0: 3.4, 1: 3.3, 2: 3.334 }
+        """
+        return ceph_osdmap_incremental.set_crush_compat_weight_set_weights(
+            self._handle, weightmap)
+
+
+
+class CRUSHMap(object):
+    def __init__(self, handle, parent_osdmap):
+        self._handle = handle
+        # keep ref to parent osdmap since handle lifecycle is owned by it
+        self._parent_osdmap = parent_osdmap
+
+    def dump(self):
+        return ceph_crushmap.dump(self._handle)
+
+    def get_item_name(self, item):
+        return ceph_crushmap.get_item_name(self._handle, item)
+
+    def find_takes(self):
+        return ceph_crushmap.find_takes(self._handle).get('takes',[])
+
+    def get_take_weight_osd_map(self, root):
+        uglymap = ceph_crushmap.get_take_weight_osd_map(self._handle, root)
+        return { int(k): v for k, v in uglymap.get('weights', {}).iteritems() }
 
 
 class MgrModule(object):
@@ -219,14 +303,18 @@ class MgrModule(object):
         """
         return ceph_state.get_mgr_id()
 
-    def get_config(self, key):
+    def get_config(self, key, default=None):
         """
         Retrieve the value of a persistent configuration setting
 
         :param key: str
         :return: str
         """
-        return ceph_state.get_config(self._handle, key)
+        r = ceph_state.get_config(self._handle, key)
+        if r is None:
+            return default
+        else:
+            return r
 
     def get_config_prefix(self, key_prefix):
         """
@@ -299,3 +387,11 @@ class MgrModule(object):
         :return: bool
         """
         pass
+
+    def get_osdmap(self):
+        """
+        Get a handle to an OSDMap.  If epoch==0, get a handle for the latest
+        OSDMap.
+        :return: OSDMap
+        """
+        return OSDMap(ceph_state.get_osdmap())
