@@ -5167,6 +5167,28 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_fsid;
 
+  // choose min_alloc_size
+  if (cct->_conf->bluestore_min_alloc_size) {
+    min_alloc_size = cct->_conf->bluestore_min_alloc_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      min_alloc_size = cct->_conf->bluestore_min_alloc_size_hdd;
+    } else {
+      min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
+    }
+  }
+
+  // make sure min_alloc_size is power of 2 aligned.
+  if (!ISP2(min_alloc_size)) {
+    derr << __func__ << " min_alloc_size 0x"
+	 << std::hex << min_alloc_size << std::dec
+	 << " is not power of 2 aligned!"
+	 << dendl;
+    r = -EINVAL;
+    goto out_close_bdev;
+  }
+
   r = _open_db(true);
   if (r < 0)
     goto out_close_bdev;
@@ -5182,28 +5204,6 @@ int BlueStore::mkfs()
       ::encode((uint64_t)0, bl);
       t->set(PREFIX_SUPER, "nid_max", bl);
       t->set(PREFIX_SUPER, "blobid_max", bl);
-    }
-
-    // choose min_alloc_size
-    if (cct->_conf->bluestore_min_alloc_size) {
-      min_alloc_size = cct->_conf->bluestore_min_alloc_size;
-    } else {
-      assert(bdev);
-      if (bdev->is_rotational()) {
-	min_alloc_size = cct->_conf->bluestore_min_alloc_size_hdd;
-      } else {
-	min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
-      }
-    }
-
-    // make sure min_alloc_size is power of 2 aligned.
-    if (!ISP2(min_alloc_size)) {
-      derr << __func__ << " min_alloc_size 0x"
-           << std::hex << min_alloc_size << std::dec
-           << " is not power of 2 aligned!"
-           << dendl;
-      r = -EINVAL;
-      goto out_close_fm;
     }
 
     {
