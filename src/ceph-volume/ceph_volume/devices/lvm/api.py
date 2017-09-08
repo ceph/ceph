@@ -284,13 +284,10 @@ class VolumeGroups(list):
         # actual filtered list if any filters were applied
         if vg_tags:
             tag_filtered = []
-            for k, v in vg_tags.items():
-                for volume in filtered:
-                    if volume.tags.get(k) == str(v):
-                        if volume not in tag_filtered:
-                            tag_filtered.append(volume)
-            # return the tag_filtered volumes here, the `filtered` list is no
-            # longer useable
+            for volume in filtered:
+                matches = all(volume.tags.get(k) == str(v) for k, v in vg_tags.items())
+                if matches:
+                    tag_filtered.append(volume)
             return tag_filtered
 
         return filtered
