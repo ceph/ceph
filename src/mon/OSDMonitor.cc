@@ -5171,6 +5171,87 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rs << "\n";
       rdata.append(rs.str());
     }
+  } else if (prefix == "osd pool application get") {
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty",
+                                                     "json-pretty"));
+    string pool_name;
+    cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
+    string app;
+    cmd_getval(g_ceph_context, cmdmap, "app", app);
+    string key;
+    cmd_getval(g_ceph_context, cmdmap, "key", key);
+
+    if (pool_name.empty()) {
+      // all
+      f->open_object_section("pools");
+      for (const auto &pool : osdmap.pools) {
+        std::string name("<unknown>");
+        const auto &pni = osdmap.pool_name.find(pool.first);
+        if (pni != osdmap.pool_name.end())
+          name = pni->second;
+        f->open_object_section(name.c_str());
+        for (auto &app_pair : pool.second.application_metadata) {
+          f->open_object_section(app_pair.first.c_str());
+          for (auto &kv_pair : app_pair.second) {
+            f->dump_string(kv_pair.first.c_str(), kv_pair.second);
+          }
+          f->close_section();
+        }
+        f->close_section(); // name
+      }
+      f->close_section(); // pools
+      f->flush(rdata);
+    } else {
+      int64_t pool = osdmap.lookup_pg_pool_name(pool_name.c_str());
+      if (pool < 0) {
+        ss << "unrecognized pool '" << pool_name << "'";
+        r = -ENOENT;
+        goto reply;
+      }
+      auto p = osdmap.get_pg_pool(pool);
+      // filter by pool
+      if (app.empty()) {
+        f->open_object_section(pool_name.c_str());
+        for (auto &app_pair : p->application_metadata) {
+          f->open_object_section(app_pair.first.c_str());
+          for (auto &kv_pair : app_pair.second) {
+            f->dump_string(kv_pair.first.c_str(), kv_pair.second);
+          }
+          f->close_section(); // application
+        }
+        f->close_section(); // pool_name
+        f->flush(rdata);
+        goto reply;
+      }
+
+      auto app_it = p->application_metadata.find(app);
+      if (app_it == p->application_metadata.end()) {
+        ss << "pool '" << pool_name << "' has no application '" << app << "'";
+        r = -ENOENT;
+        goto reply;
+      }
+      // filter by pool + app
+      if (key.empty()) {
+        f->open_object_section(app_it->first.c_str());
+        for (auto &kv_pair : app_it->second) {
+          f->dump_string(kv_pair.first.c_str(), kv_pair.second);
+        }
+        f->close_section(); // application
+        f->flush(rdata);
+        goto reply;
+      }
+      // filter by pool + app + key
+      auto key_it = app_it->second.find(key);
+      if (key_it == app_it->second.end()) {
+        ss << "application '" << app << "' on pool '" << pool_name
+           << "' does not have key '" << key << "'";
+        r = -ENOENT;
+        goto reply;
+      }
+      ss << key_it->second << "\n";
+      rdata.append(ss.str());
+      ss.str("");
+    }
   } else {
     // try prepare update
     return false;
