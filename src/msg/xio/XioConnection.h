@@ -72,7 +72,7 @@ private:
   entity_inst_t peer;
   struct xio_session *session;
   struct xio_connection	*conn;
-  std::atomic_flag sp = ATOMIC_FLAG_INIT;
+  ceph::util::spinlock sp;
   std::atomic<int64_t> send = { 0 };
   std::atomic<int64_t> recv = { 0 };
   uint32_t n_reqs; // Accelio-initiated reqs in progress (!counting partials)
