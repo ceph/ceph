@@ -2070,7 +2070,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   ObjectContextRef obc;
-  bool can_create = op->may_write() || op->may_cache();
+  bool can_create = op->may_write();
   hobject_t missing_oid;
 
   // kludge around the fact that LIST_SNAPS sets CEPH_SNAPDIR for LIST_SNAPS
