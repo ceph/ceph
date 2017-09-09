@@ -156,13 +156,7 @@ def task(ctx, config):
               format(fpath=FSPATH, jpath=JPATH))
     pid = os.getpid()
     expfile = os.path.join(testdir, "exp.{pid}.out".format(pid=pid))
-    cmd = ((prefix + "--op export --pgid 2.0 --file {file}").
-           format(id=divergent, file=expfile))
-    proc = exp_remote.run(args=cmd, wait=True,
-                          check_status=False, stdout=StringIO())
-    assert proc.exitstatus == 0
-
-    cmd = ((prefix + "--op remove --pgid 2.0").
+    cmd = ((prefix + "--op export-remove --pgid 2.0 --file {file}").
            format(id=divergent, file=expfile))
     proc = exp_remote.run(args=cmd, wait=True,
                           check_status=False, stdout=StringIO())
