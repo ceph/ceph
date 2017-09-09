@@ -1060,7 +1060,7 @@ int Pipe::connect()
 
   // identify peer
   {
-#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
     bufferptr p(sizeof(ceph_entity_addr) * 2);
 #else
     int wirelen = sizeof(__u32) * 2 + sizeof(ceph_sockaddr_storage);

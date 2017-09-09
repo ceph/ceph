@@ -25,7 +25,7 @@
 #include <sys/vfs.h>
 #endif
 
-#if defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/param.h>
 #include <sys/mount.h>
 #endif

@@ -30,7 +30,7 @@
 #include "XFS.h"
 #endif
 
-#if defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/mount.h>
 #else
 #include <sys/vfs.h>
@@ -151,7 +151,7 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
    So: we only do this is PUNCH_HOLE *and* KEEP_SIZE are defined.
 
   */
-#if !defined(DARWIN) && !defined(__FreeBSD__)
+#if !defined(__APPLE__) && !defined(__FreeBSD__)
 # ifdef CEPH_HAVE_FALLOCATE
 #  ifdef FALLOC_FL_KEEP_SIZE
   // first try fallocate
