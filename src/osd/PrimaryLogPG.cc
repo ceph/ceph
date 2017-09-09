@@ -2334,19 +2334,15 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
   bool write_ordered,
   ObjectContextRef obc)
 {
+  assert(obc);
   if (static_cast<const MOSDOp *>(op->get_req())->get_flags() &
       CEPH_OSD_FLAG_IGNORE_REDIRECT) {
     dout(20) << __func__ << ": ignoring redirect due to flag" << dendl;
     return cache_result_t::NOOP;
   }
 
-  if (obc)
-    dout(10) << __func__ << " " << obc->obs.oi << " "
-       << (obc->obs.exists ? "exists" : "DNE")
-       << dendl;
-
   // if it is write-ordered and blocked, stop now
-  if (obc.get() && obc->is_blocked() && write_ordered) {
+  if (obc->is_blocked() && write_ordered) {
     // we're already doing something with this object
     dout(20) << __func__ << " blocked on " << obc->obs.oi.soid << dendl;
     return cache_result_t::NOOP;
