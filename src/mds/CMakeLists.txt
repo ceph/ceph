@@ -37,6 +37,7 @@ set(mds_srcs
   MDSCacheObject.cc
   Mantle.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
+  ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
 add_library(mds STATIC ${mds_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>)
