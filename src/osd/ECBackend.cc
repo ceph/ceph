@@ -1088,7 +1088,8 @@ void ECBackend::handle_sub_write_reply(
     assert(i->second.pending_commit.count(from));
     i->second.pending_commit.erase(from);
     if (from != get_parent()->whoami_shard()) {
-      get_parent()->update_peer_last_complete_ondisk(from, op.last_complete);
+      get_parent()->update_peer_last_complete_ondisk(from, op.last_complete,
+						     i->second.version);
     }
   }
   if (op.applied) {

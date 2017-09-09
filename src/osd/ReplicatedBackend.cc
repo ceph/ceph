@@ -672,7 +672,7 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
 
     parent->update_peer_last_complete_ondisk(
       from,
-      r->get_last_complete_ondisk());
+      r->get_last_complete_ondisk(), ip_op.v);
 
     if (ip_op.waiting_for_applied.empty() &&
         ip_op.on_applied) {

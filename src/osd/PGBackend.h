@@ -235,7 +235,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual void update_peer_last_complete_ondisk(
        pg_shard_t fromosd,
-       eversion_t lcod) = 0;
+       eversion_t lcod,
+       eversion_t v) = 0;
 
      virtual void update_last_complete_ondisk(
        eversion_t lcod) = 0;
