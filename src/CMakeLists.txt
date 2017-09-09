@@ -443,7 +443,6 @@ set(libcommon_files
   common/run_cmd.cc
   common/WorkQueue.cc
   common/ConfUtils.cc
-  common/MemoryModel.cc
   common/fd.cc
   common/xattr.c
   common/str_list.cc
