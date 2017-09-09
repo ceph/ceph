@@ -2036,17 +2036,17 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     if (!formatter) {
       tab.define_column("POOL_NAME", TextTable::LEFT, TextTable::LEFT);
-      tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("CLONES", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("COPIES", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("RD_OPS", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("RD", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("WR_OPS", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("WR", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("OBJECTS", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("CLONES", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("COPIES", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("MISSING_ON_PRIMARY", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("UNFOUND", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("DEGRADED", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("RD_OPS", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("RD", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("WR_OPS", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("WR", TextTable::RIGHT, TextTable::RIGHT);
     } else {
       formatter->open_object_section("stats");
       formatter->open_array_section("pools");
