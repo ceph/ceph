@@ -2503,6 +2503,20 @@ int main(int argc, char **argv)
     return 1;
   }
 
+  //Verify that the journal-path really exists
+  if (type == "filestore") {
+    if (::stat(jpath.c_str(), &st) == -1) {
+      string err = string("journal-path: ") + jpath;
+      perror(err.c_str());
+      return 1;
+    }
+    if (S_ISDIR(st.st_mode)) {
+      cerr << "journal-path: " << jpath << ": "
+	   << cpp_strerror(EISDIR) << std::endl;
+      return 1;
+    }
+  }
+
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
     cerr << "Unable to create store of type " << type << std::endl;

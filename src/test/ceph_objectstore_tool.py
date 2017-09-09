@@ -894,6 +894,12 @@ def main(argv):
     cmd = "{path}/ceph-objectstore-tool --journal-path BAD_JOURNAL_PATH --op dump-journal".format(path=CEPH_BIN)
     ERRORS += test_failure(cmd, "journal-path: BAD_JOURNAL_PATH: (2) No such file or directory")
 
+    cmd = (CFSD_PREFIX + "--journal-path BAD_JOURNAL_PATH --op list").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "journal-path: BAD_JOURNAL_PATH: No such file or directory")
+
+    cmd = (CFSD_PREFIX + "--journal-path /bin --op list").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "journal-path: /bin: (21) Is a directory")
+
     # On import can't use stdin from a terminal
     cmd = (CFSD_PREFIX + "--op import --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "stdin is a tty and no --file filename specified", tty=True)
