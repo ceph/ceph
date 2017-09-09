@@ -310,7 +310,7 @@ int main(int argc, const char **argv)
     monmap.created = ceph_clock_now();
     monmap.last_changed = monmap.created;
     srand(getpid() + time(0));
-    if (g_conf->fsid.is_zero()) {
+    if (g_conf->get_val<uuid_d>("fsid").is_zero()) {
       monmap.generate_fsid();
       cout << me << ": generated fsid " << monmap.fsid << std::endl;
     }
@@ -338,8 +338,8 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  if (!g_conf->fsid.is_zero()) {
-    monmap.fsid = g_conf->fsid;
+  if (!g_conf->get_val<uuid_d>("fsid").is_zero()) {
+    monmap.fsid = g_conf->get_val<uuid_d>("fsid");
     cout << me << ": set fsid to " << monmap.fsid << std::endl;
     modified = true;
   }

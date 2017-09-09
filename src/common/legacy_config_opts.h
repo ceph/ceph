@@ -14,15 +14,11 @@
 
 /* note: no header guard */
 OPTION(host, OPT_STR) // "" means that ceph will use short hostname
-OPTION(fsid, OPT_UUID)
 OPTION(public_addr, OPT_ADDR)
 OPTION(public_bind_addr, OPT_ADDR)
 OPTION(cluster_addr, OPT_ADDR)
 OPTION(public_network, OPT_STR)
 OPTION(cluster_network, OPT_STR)
-OPTION(monmap, OPT_STR)
-OPTION(mon_host, OPT_STR)
-OPTION(mon_dns_srv_name, OPT_STR)
 OPTION(lockdep, OPT_BOOL)
 OPTION(lockdep_force_backtrace, OPT_BOOL) // always gather current backtrace at every lock
 OPTION(run_dir, OPT_STR)       // the "/var/run/ceph" dir, created on daemon startup
