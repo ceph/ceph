@@ -550,7 +550,7 @@ endif()
 
 if(FREEBSD)
   list(APPEND libcommon_files common/freebsd_errno.cc)
-elseif(DARWIN)
+elseif(APPLE)
   list(APPEND libcommon_files common/darwin_errno.cc)
 elseif(SUN)
   list(APPEND libcommon_files common/solaris_errno.cc)
