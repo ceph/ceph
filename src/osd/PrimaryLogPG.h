@@ -414,8 +414,18 @@ public:
   
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
-    eversion_t lcod) override {
-    peer_last_complete_ondisk[fromosd] = lcod;
+    eversion_t lcod,
+    eversion_t lu) override {
+    if (actingset.count(fromosd)) {
+      // for acting set, we do not want to trim the pg log past last_complete
+      // or else we'll prevent log-based recovery.
+      peer_last_complete_ondisk[fromosd] = lcod;
+    } else {
+      // if we are already backfilling, we don't care about the peer's
+      // last_complete; we just want to make sure the leading-edge log
+      // entries are persisted.
+      peer_last_complete_ondisk[fromosd] = lu;
+    }
   }
 
   void update_last_complete_ondisk(
