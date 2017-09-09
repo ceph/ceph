@@ -88,11 +88,16 @@ endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 include(SIMDExt)
 if(HAVE_INTEL)
   set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
-  set(CMAKE_ASM_FLAGS "-f elf64")
+  if(APPLE)
+    set(object_format "macho64")
+  else()
+    set(object_format "elf64")
+  endif()
+  set(CMAKE_ASM_FLAGS "-f ${object_format}")
 endif()
 
 execute_process(
-  COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.s -o /dev/null
+  COMMAND yasm -f "${object_format}" ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.s -o /dev/null
   RESULT_VARIABLE no_yasm
   OUTPUT_QUIET)
 if(no_yasm)
@@ -114,7 +119,7 @@ else(no_yasm)
     if(not_arch_x32)
       message(STATUS " we are not x32")
       set(HAVE_GOOD_YASM_ELF64 1)
-      execute_process(COMMAND yasm -f elf64 -i
+      execute_process(COMMAND yasm -f ${object_format} -i
         ${CMAKE_SOURCE_DIR}/src/isa-l/include/
         ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm
         -o /dev/null
