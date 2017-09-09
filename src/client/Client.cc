@@ -7521,7 +7521,7 @@ void Client::fill_dirent(struct dirent *de, const char *name, int type, uint64_t
   de->d_name[255] = '\0';
 #ifndef __CYGWIN__
   de->d_ino = ino;
-#if !defined(DARWIN) && !defined(__FreeBSD__)
+#if !defined(__APPLE__) && !defined(__FreeBSD__)
   de->d_off = next_off;
 #endif
   de->d_reclen = 1;

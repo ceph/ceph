@@ -19,7 +19,7 @@
 
 #include "include/encoding.h"
 
-#if defined(DARWIN)
+#if defined(__APPLE__)
 #include <sys/_types/_timespec.h>
 #include <mach/mach.h>
 #include <mach/clock.h>

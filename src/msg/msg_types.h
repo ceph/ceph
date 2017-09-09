@@ -155,13 +155,13 @@ namespace std {
  * ipv4 for now.
  */
 
-#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
 /*
  * encode sockaddr.ss_family as network byte order 
  */
 static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   struct sockaddr_storage ss = a;
-#if defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
   unsigned short *ss_family = reinterpret_cast<unsigned short*>(&ss);
   *ss_family = htons(a.ss_family);
 #else
@@ -171,7 +171,7 @@ static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
 }
 static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
   ::decode_raw(a, bl);
-#if defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
   unsigned short *ss_family = reinterpret_cast<unsigned short *>(&a);
   a.ss_family = ntohs(*ss_family);
   a.ss_len = 0;
@@ -397,7 +397,7 @@ struct entity_addr_t {
     type = TYPE_LEGACY;
     ::decode(nonce, bl);
     sockaddr_storage ss;
-#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
     ::decode(ss, bl);
 #else
     ceph_sockaddr_storage wireaddr;
@@ -418,7 +418,7 @@ struct entity_addr_t {
       ::encode((__u32)0, bl);
       ::encode(nonce, bl);
       sockaddr_storage ss = get_sockaddr_storage();
-#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
       ::encode(ss, bl);
 #else
       ceph_sockaddr_storage wireaddr;
