@@ -266,12 +266,12 @@ endif()
 
 if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread rt)
+  list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread)
 endif(HAVE_XIO)
 
 if(HAVE_RDMA)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${RDMA_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${RDMA_LIBRARIES} pthread rt)
+  list(APPEND EXTRALIBS ${RDMA_LIBRARIES} pthread)
 endif(HAVE_RDMA)
 
 if(HAVE_DPDK)
@@ -626,7 +626,7 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:global_common_objs>
   $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
-  json_spirit erasure_code rt ${LIB_RESOLV}
+  json_spirit erasure_code ${LIB_RESOLV}
   Boost::thread
   Boost::system
   Boost::regex
