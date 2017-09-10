@@ -1607,22 +1607,21 @@ bool PeeringState::recoverable_and_ge_min_size(const vector<int> &want) const
           pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
   }
-  // We go incomplete if below min_size for ec_pools since backfill
-  // does not currently maintain rollbackability
-  // Otherwise, we will go "peered", but not "active"
-  if (num_want_acting < pool.info.min_size &&
-      (pool.info.is_erasure() ||
-       !cct->_conf->osd_allow_recovery_below_min_size)) {
-    psdout(10) << __func__ << " failed, below min size" << dendl;
-    return false;
-  }
 
   /* Check whether we have enough acting shards to later perform recovery */
-  if (!missing_loc.get_recoverable_predicate()(have)) {
-    psdout(10) << __func__ << " failed, not recoverable" << dendl;
-    return false;
+  if (num_want_acting < pool.info.min_size) {
+    if (cct->_conf->osd_allow_recovery_below_min_size && 
+	missing_loc.get_recoverable_predicate()(have)) {
+      dout(20) << "choose_acting successfully, we allow osd recovery below min "
+               << "size and osd is recoverable"
+               << dendl;
+      // do nothing here
+    } else {
+      dout(10) << "choose_acting failed, below min size and is not recoverable "
+               << dendl;
+      return false;
+    }
   }
-
   return true;
 }
 
