@@ -4454,6 +4454,10 @@ void OSD::build_initial_pg_history(
       h->last_epoch_split = e;
     }
     lastmap = osdmap;
+    up_primary = new_up_primary;
+    acting_primary = new_acting_primary;
+    up = new_up;
+    acting = new_acting;
   }
   dout(20) << __func__ << " " << debug.str() << dendl;
   dout(10) << __func__ << " " << *h << " " << *pi
