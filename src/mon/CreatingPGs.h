@@ -60,6 +60,7 @@ struct creating_pgs_t {
     auto last = pgs.lower_bound(pg_t{0, (uint64_t)removed_pool + 1});
     pgs.erase(first, last);
     created_pools.erase(removed_pool);
+    queue.erase(removed_pool);
     return total - pgs.size();
   }
   void encode(bufferlist& bl) const {
