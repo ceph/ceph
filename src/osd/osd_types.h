@@ -795,10 +795,8 @@ public:
 
   explicit eversion_t(bufferlist& bl) : __pad(0) { decode(bl); }
 
-  static eversion_t max() {
-    eversion_t max;
-    max.version -= 1;
-    max.epoch -= 1;
+  static const eversion_t& max() {
+    static const eversion_t max(-1,-1);
     return max;
   }
 
