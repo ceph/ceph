@@ -3112,16 +3112,13 @@ more:
     i++;
     last = extent++;
   }
-  const bool is_last = last->fe_flags & FIEMAP_EXTENT_LAST;
+  uint64_t xoffset = last->fe_logical + last->fe_length - offset;
+  offset = last->fe_logical + last->fe_length;
+  len -= xoffset;
+  const bool is_last = (last->fe_flags & FIEMAP_EXTENT_LAST) || (len == 0);
+  free(fiemap);
   if (!is_last) {
-    uint64_t xoffset = last->fe_logical + last->fe_length - offset;
-    offset = last->fe_logical + last->fe_length;
-    len -= xoffset;
-    free(fiemap); /* fix clang warn: use-after-free */
     goto more;
-  }
-  else {
-    free(fiemap);
   }
 
   return r;
