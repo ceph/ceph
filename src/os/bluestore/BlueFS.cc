@@ -1455,8 +1455,9 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   }
 
   for (unsigned i = 0; i < to_release.size(); ++i) {
-    for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
-      alloc[i]->release(p.get_start(), p.get_len());
+    if (!to_release[i].empty()) {
+      /* OK, now we have the guarantee alloc[i] won't be null. */
+      alloc[i]->release(to_release[i]);
     }
   }
 
