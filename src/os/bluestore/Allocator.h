@@ -48,15 +48,7 @@ public:
 
   /* Bulk release. Implementations may override this method to handle the whole
    * set at once. This could save e.g. unnecessary mutex dance. */
-  virtual void release(const interval_set<uint64_t>& release_set) {
-    /* TODO(rzarzynski): make this pure virtual and eradicate the single-op
-     * release() after switching all allocators. */
-    for (interval_set<uint64_t>::const_iterator p = release_set.begin();
-	 p != release_set.end();
-	 ++p) {
-      release(p.get_start(), p.get_len());
-    }
-  }
+  virtual void release(const interval_set<uint64_t>& release_set) = 0;
 
   virtual void dump() = 0;
 
