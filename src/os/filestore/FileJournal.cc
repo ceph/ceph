@@ -1378,7 +1378,7 @@ void FileJournal::do_aio_write(bufferlist& bl)
 int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
 {
   dout(20) << "write_aio_bl " << pos << "~" << bl.length() << " seq " << seq << dendl;
-
+  std::list<aio_info> pending_aios;
   while (bl.length() > 0) {
     int max = MIN(bl.get_num_buffers(), IOV_MAX-1);
     iovec *iov = new iovec[max];
@@ -1396,11 +1396,8 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
     bufferlist tbl;
     bl.splice(0, len, &tbl);  // move bytes from bl -> tbl
 
-    // lock only aio_queue, current aio, aio_num, aio_bytes, which may be
-    // modified in check_aio_completion
-    aio_lock.Lock();
-    aio_queue.push_back(aio_info(tbl, pos, bl.length() > 0 ? 0 : seq));
-    aio_info& aio = aio_queue.back();
+    pending_aios.push_back(aio_info(tbl, pos, bl.length() > 0 ? 0 : seq));
+    aio_info& aio = pending_aios.back();
     aio.iov = iov;
 
     io_prep_pwritev(&aio.iocb, fd, aio.iov, n, pos);
@@ -1414,33 +1411,47 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
     // need to save current aio len to update write_pos later because current
     // aio could be ereased from aio_queue once it is done
     uint64_t cur_len = aio.len;
-    // unlock aio_lock because following io_submit might take time to return
-    aio_lock.Unlock();
 
-    iocb *piocb = &aio.iocb;
-
-    // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
-    int attempts = 16;
-    int delay = 125;
-    do {
-      int r = io_submit(aio_ctx, 1, &piocb);
-      dout(20) << "write_aio_bl io_submit return value: " << r << dendl;
-      if (r < 0) {
-	derr << "io_submit to " << aio.off << "~" << cur_len
-	     << " got " << cpp_strerror(r) << dendl;
-	if (r == -EAGAIN && attempts-- > 0) {
-	  usleep(delay);
-	  delay *= 2;
-	  continue;
-	}
-	check_align(pos, tbl);
-	assert(0 == "io_submit got unexpected error");
-      } else {
-	break;
-      }
-    } while (true);
     pos += cur_len;
   }
+
+  // lock only aio_queue, current aio, aio_num, aio_bytes, which may be
+  // modified in check_aio_completion
+  aio_lock.Lock();
+  aio_queue.insert(aio_queue.end(), pending_aios.begin(), pending_aios.end());
+  // unlock aio_lock because following io_submit might take time to return
+  aio_lock.Unlock();
+
+  int pending_cnt = pending_aios.size();
+  int _i = 0;
+  struct iocb *piocb[pending_cnt];
+  for (auto &_it : pending_aios) {
+    piocb[_i++] = &_it.iocb;
+  }
+
+  // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
+  int attempts = 16;
+  int delay = 125;
+
+  //now submit batch
+  int left = pending_cnt;
+  int done = 0;
+  while (left > 0) {
+    int r = io_submit(aio_ctx, left, piocb + done);
+    if (r < 0) {
+      if (r == -EAGAIN && attempts-- > 0) {
+        usleep(delay);
+        delay *= 2;
+        continue;
+      }
+      derr << "io_submit " << " got " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    assert(r > 0);
+    done += r;
+    left -= r;
+  }
+
   aio_lock.Lock();
   write_finish_cond.Signal();
   aio_lock.Unlock();
