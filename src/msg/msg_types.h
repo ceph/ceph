@@ -178,7 +178,16 @@ static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   ::encode_raw(ss, bl);
 #elif defined(__FreeBSD__) || defined(__APPLE__)
   ceph_sockaddr_storage ss{};
-  ::memcpy(&ss, &(a.ss_family), std::min(sizeof(ss), (size_t)a.ss_len));
+  auto src = (unsigned char const *)&a;
+  auto dst = (unsigned char *)&ss;
+  src += sizeof(a.ss_len);
+  ss.ss_family = a.ss_family;
+  src += sizeof(a.ss_family);
+  dst += sizeof(ss.ss_family);
+  const auto copy_size = std::min((unsigned char*)(&a + 1) - src,
+				  (unsigned char*)(&ss + 1) - dst);
+  ::memcpy(dst, src, copy_size);
+  ::encode(ss, bl);
 #else
   ceph_sockaddr_storage ss{};
   ::memset(&ss, '\0', sizeof(ss));
@@ -193,20 +202,16 @@ static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
 #elif defined(__FreeBSD__) || defined(__APPLE__)
   ceph_sockaddr_storage ss{};
   ::decode(ss, bl);
-  auto const ss_len = std::min(sizeof(ss), sizeof(a)) - sizeof(a.ss_len);
-  ::memcpy(&(a.ss_family), &ss, ss_len);
-  sockaddr *sa = (sockaddr*)&a;
-  switch (sa->sa_family) {
-  case AF_INET:
-    a.ss_len = sizeof(sockaddr_in);
-    break;
-  case AF_INET6:
-    a.ss_len = sizeof(sockaddr_in6);
-    break;
-  default:
-    a.ss_len = sizeof(sockaddr);
-    break;
-  }
+  auto src = (unsigned char const *)&ss;
+  auto dst = (unsigned char *)&a;
+  a.ss_len = 0;
+  dst += sizeof(a.ss_len);
+  a.ss_family = ss.ss_family;
+  src += sizeof(ss.ss_family);
+  dst += sizeof(a.ss_family);
+  auto const copy_size = std::min((unsigned char*)(&ss + 1) - src,
+				  (unsigned char*)(&a + 1) - dst);
+  ::memcpy(dst, src, copy_size);
 #else
   ceph_sockaddr_storage ss{};
   ::decode(ss, bl);
