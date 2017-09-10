@@ -154,6 +154,21 @@ void BitMapAllocator::release(
   insert_free(offset, length);
 }
 
+void BitMapAllocator::release(
+  const interval_set<uint64_t>& release_set)
+{
+  for (interval_set<uint64_t>::const_iterator p = release_set.begin();
+       p != release_set.end();
+       ++p) {
+    const auto offset = p.get_start();
+    const auto length = p.get_len();
+    dout(10) << __func__ << " 0x"
+             << std::hex << offset << "~" << length << std::dec
+             << dendl;
+    insert_free(offset, length);
+  }
+}
+
 uint64_t BitMapAllocator::get_free()
 {
   assert(m_bit_alloc->total_blocks() >= m_bit_alloc->get_used_blocks());
