@@ -1893,8 +1893,9 @@ void BlueFS::sync_metadata()
     flush_bdev(); // FIXME?
     _flush_and_sync_log(l);
     for (unsigned i = 0; i < to_release.size(); ++i) {
-      for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
-	alloc[i]->release(p.get_start(), p.get_len());
+      if (!to_release[i].empty()) {
+        /* OK, now we have the guarantee alloc[i] won't be null. */
+        alloc[i]->release(to_release[i]);
       }
     }
     utime_t end = ceph_clock_now();
