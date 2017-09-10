@@ -241,16 +241,6 @@ int64_t StupidAllocator::allocate(
 }
 
 void StupidAllocator::release(
-  uint64_t offset, uint64_t length)
-{
-  std::lock_guard<std::mutex> l(lock);
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << std::dec << dendl;
-  _insert_free(offset, length);
-  num_free += length;
-}
-
-void StupidAllocator::release(
   const interval_set<uint64_t>& release_set)
 {
   std::lock_guard<std::mutex> l(lock);
