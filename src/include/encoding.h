@@ -297,16 +297,16 @@ inline void encode(const boost::optional<T> &p, bufferlist &bl)
 #pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wuninitialized"
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 template<typename T>
 inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
 {
   __u8 present;
   ::decode(present, bp);
   if (present) {
-    T t;
-    p = t;
+    p = T{};
     decode(p.get(), bp);
+  } else {
+    p = boost::none;
   }
 }
 #pragma GCC diagnostic pop
