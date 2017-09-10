@@ -43,7 +43,16 @@ class MgrMonitor: public PaxosService
    */
   bool promote_standby();
   void drop_active();
-  void drop_standby(uint64_t gid);
+
+  /**
+   * Remove this gid from the list of standbys.  By default,
+   * also remove metadata (i.e. forget the daemon entirely).
+   *
+   * Set `drop_meta` to false if you would like to keep
+   * the daemon's metadata, for example if you're dropping
+   * it as a standby before reinstating it as the active daemon.
+   */
+  void drop_standby(uint64_t gid, bool drop_meta=true);
 
   Context *digest_event = nullptr;
   void cancel_timer();
