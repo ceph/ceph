@@ -148,39 +148,6 @@ namespace std {
   };
 } // namespace std
 
-/*
- * an entity's network address.
- * includes a random value that prevents it from being reused.
- * thus identifies a particular process instance.
- * ipv4 for now.
- */
-
-#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
-/*
- * encode sockaddr.ss_family as network byte order 
- */
-static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
-  struct sockaddr_storage ss = a;
-#if defined(__APPLE__) || defined(__FreeBSD__)
-  unsigned short *ss_family = reinterpret_cast<unsigned short*>(&ss);
-  *ss_family = htons(a.ss_family);
-#else
-  ss.ss_family = htons(ss.ss_family);
-#endif
-  ::encode_raw(ss, bl);
-}
-static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
-  ::decode_raw(a, bl);
-#if defined(__APPLE__) || defined(__FreeBSD__)
-  unsigned short *ss_family = reinterpret_cast<unsigned short *>(&a);
-  a.ss_family = ntohs(*ss_family);
-  a.ss_len = 0;
-#else
-  a.ss_family = ntohs(a.ss_family);
-#endif
-}
-#endif
-
 // define a wire format for sockaddr that matches Linux's.
 struct ceph_sockaddr_storage {
   __le16 ss_family;
@@ -201,6 +168,58 @@ struct ceph_sockaddr_storage {
 } __attribute__ ((__packed__));
 WRITE_CLASS_ENCODER(ceph_sockaddr_storage)
 
+/*
+ * encode sockaddr.ss_family as network byte order
+ */
+static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
+#if defined(__linux__)
+  struct sockaddr_storage ss = a;
+  ss.ss_family = htons(ss.ss_family);
+  ::encode_raw(ss, bl);
+#elif defined(__FreeBSD__) || defined(__APPLE__)
+  ceph_sockaddr_storage ss{};
+  ::memcpy(&ss, &(a.ss_family), std::min(sizeof(ss), (size_t)a.ss_len));
+#else
+  ceph_sockaddr_storage ss{};
+  ::memset(&ss, '\0', sizeof(ss));
+  ::memcpy(&wireaddr, &ss, std::min(sizeof(ss), sizeof(a)));
+  ::encode(ss, bl);
+#endif
+}
+static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
+#if defined(__linux__)
+  ::decode_raw(a, bl);
+  a.ss_family = ntohs(a.ss_family);
+#elif defined(__FreeBSD__) || defined(__APPLE__)
+  ceph_sockaddr_storage ss{};
+  ::decode(ss, bl);
+  auto const ss_len = std::min(sizeof(ss), sizeof(a)) - sizeof(a.ss_len);
+  ::memcpy(&(a.ss_family), &ss, ss_len);
+  sockaddr *sa = (sockaddr*)&a;
+  switch (sa->sa_family) {
+  case AF_INET:
+    a.ss_len = sizeof(sockaddr_in);
+    break;
+  case AF_INET6:
+    a.ss_len = sizeof(sockaddr_in6);
+    break;
+  default:
+    a.ss_len = sizeof(sockaddr);
+    break;
+  }
+#else
+  ceph_sockaddr_storage ss{};
+  ::decode(ss, bl);
+  ::memcpy(&a, &ss, std::min(sizeof(ss), sizeof(a)));
+#endif
+}
+
+/*
+ * an entity's network address.
+ * includes a random value that prevents it from being reused.
+ * thus identifies a particular process instance.
+ * ipv4 for now.
+ */
 struct entity_addr_t {
   typedef enum {
     TYPE_NONE = 0,
@@ -397,15 +416,7 @@ struct entity_addr_t {
     type = TYPE_LEGACY;
     ::decode(nonce, bl);
     sockaddr_storage ss;
-#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
     ::decode(ss, bl);
-#else
-    ceph_sockaddr_storage wireaddr;
-    ::memset(&wireaddr, '\0', sizeof(wireaddr));
-    ::decode(wireaddr, bl);
-    unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
-    ::memcpy(&ss, &wireaddr, copysize);
-#endif
     set_sockaddr((sockaddr*)&ss);
   }
 
@@ -418,16 +429,7 @@ struct entity_addr_t {
       ::encode((__u32)0, bl);
       ::encode(nonce, bl);
       sockaddr_storage ss = get_sockaddr_storage();
-#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
       ::encode(ss, bl);
-#else
-      ceph_sockaddr_storage wireaddr;
-      ::memset(&wireaddr, '\0', sizeof(wireaddr));
-      unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
-      // ceph_sockaddr_storage is in host byte order
-      ::memcpy(&wireaddr, &ss, copysize);
-      ::encode(wireaddr, bl);
-#endif
       return;
     }
     ::encode((__u8)1, bl);
