@@ -136,8 +136,11 @@ if(ENABLE_SHARED)
     OUTPUT_NAME rbd
     VERSION 1.12.0
     SOVERSION 1
-    COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden"
-    LINK_FLAGS "-Wl,--exclude-libs,ALL")
+    COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
+    if(NOT APPLE)
+      set_property(TARGET librbd APPEND_STRING PROPERTY
+        LINK_FLAGS " -Wl,--exclude-libs,ALL")
+    endif()
 endif(ENABLE_SHARED)
 install(TARGETS librbd DESTINATION ${CMAKE_INSTALL_LIBDIR})
 

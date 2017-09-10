@@ -994,14 +994,16 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(cephfs LINK_PRIVATE client ceph-common
     ${CRYPTO_LIBS} ${EXTRALIBS})
   if(ENABLE_SHARED)
-    foreach(name ceph-common client osdc)
-      set(CEPHFS_LINK_FLAGS "${CEPHFS_LINK_FLAGS} -Wl,--exclude-libs,lib${name}.a")
-    endforeach()
     set_target_properties(cephfs PROPERTIES
       OUTPUT_NAME cephfs
       VERSION 2.0.0
-      SOVERSION 2
-      LINK_FLAGS ${CEPHFS_LINK_FLAGS})
+      SOVERSION 2)
+    if(NOT APPLE)
+      foreach(name ceph-common client osdc)
+        set_property(TARGET cephfs APPEND_STRING PROPERTY
+          LINK_FLAGS " -Wl,--exclude-libs,lib${name}.a")
+      endforeach()
+    endif()
   endif(ENABLE_SHARED)
   install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(DIRECTORY
