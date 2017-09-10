@@ -1503,8 +1503,9 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   }
 
   for (unsigned i = 0; i < to_release.size(); ++i) {
-    for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
-      alloc[i]->release(p.get_start(), p.get_len());
+    if (!to_release[i].empty()) {
+      /* OK, now we have the guarantee alloc[i] won't be null. */
+      alloc[i]->release(to_release[i]);
     }
   }
 
@@ -1881,9 +1882,11 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   if (r < 0 || (alloc_len < (int64_t)left)) {
     if (r == 0) {
       alloc[id]->unreserve(left - alloc_len);
+      interval_set<uint64_t> to_release;
       for (auto& p : extents) {
-        alloc[id]->release(p.offset, p.length);
+        to_release.insert(p.offset, p.length);
       }
+      alloc[id]->release(to_release);
     }
     if (id != BDEV_SLOW) {
       if (bdev[id]) {
