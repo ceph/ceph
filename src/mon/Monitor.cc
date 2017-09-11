@@ -370,6 +370,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS);
   return compat;
 }
 
@@ -1060,6 +1061,7 @@ void Monitor::_reset()
   cancel_probe_timeout();
   timecheck_finish();
   health_events_cleanup();
+  health_check_log_times.clear();
   scrub_event_cancel();
 
   leader_since = utime_t();
@@ -2078,6 +2080,13 @@ void Monitor::apply_monmap_to_compatset_features()
     assert(HAVE_FEATURE(quorum_con_features, SERVER_KRAKEN));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_LUMINOUS)) {
+    assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_LUMINOUS));
+    // this feature should only ever be set if the quorum supports it.
+    assert(HAVE_FEATURE(quorum_con_features, SERVER_LUMINOUS));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2102,6 +2111,9 @@ void Monitor::calc_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_KRAKEN)) {
     required_features |= CEPH_FEATUREMASK_SERVER_KRAKEN;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_LUMINOUS;
   }
 
   // monmap
@@ -2420,14 +2432,7 @@ void Monitor::do_health_to_clog(bool force)
 	summary == health_status_cache.summary &&
 	level == health_status_cache.overall)
       return;
-    if (level == HEALTH_OK)
-      clog->info() << "overall " << summary;
-    else if (level == HEALTH_WARN)
-      clog->warn() << "overall " << summary;
-    else if (level == HEALTH_ERR)
-      clog->error() << "overall " << summary;
-    else
-      ceph_abort();
+    clog->health(level) << "overall " << summary;
     health_status_cache.summary = summary;
     health_status_cache.overall = level;
   } else {
@@ -2538,31 +2543,60 @@ void Monitor::log_health(
   if (!g_conf->mon_health_to_clog) {
     return;
   }
+
+  const utime_t now = ceph_clock_now();
+
   // FIXME: log atomically as part of @t instead of using clog.
   dout(10) << __func__ << " updated " << updated.checks.size()
 	   << " previous " << previous.checks.size()
 	   << dendl;
+  const auto min_log_period = g_conf->get_val<int64_t>(
+      "mon_health_log_update_period");
   for (auto& p : updated.checks) {
     auto q = previous.checks.find(p.first);
+    bool logged = false;
     if (q == previous.checks.end()) {
       // new
       ostringstream ss;
       ss << "Health check failed: " << p.second.summary << " ("
          << p.first << ")";
-      if (p.second.severity == HEALTH_WARN)
-	clog->warn() << ss.str();
-      else
-	clog->error() << ss.str();
+      clog->health(p.second.severity) << ss.str();
+
+      logged = true;
     } else {
       if (p.second.summary != q->second.summary ||
 	  p.second.severity != q->second.severity) {
-	// summary or severity changed (ignore detail changes at this level)
-	ostringstream ss;
+
+        auto status_iter = health_check_log_times.find(p.first);
+        if (status_iter != health_check_log_times.end()) {
+          if (p.second.severity == q->second.severity &&
+              now - status_iter->second.updated_at < min_log_period) {
+            // We already logged this recently and the severity is unchanged,
+            // so skip emitting an update of the summary string.
+            // We'll get an update out of tick() later if the check
+            // is still failing.
+            continue;
+          }
+        }
+
+        // summary or severity changed (ignore detail changes at this level)
+        ostringstream ss;
         ss << "Health check update: " << p.second.summary << " (" << p.first << ")";
-	if (p.second.severity == HEALTH_WARN)
-	  clog->warn() << ss.str();
-	else
-	  clog->error() << ss.str();
+        clog->health(p.second.severity) << ss.str();
+
+        logged = true;
+      }
+    }
+    // Record the time at which we last logged, so that we can check this
+    // when considering whether/when to print update messages.
+    if (logged) {
+      auto iter = health_check_log_times.find(p.first);
+      if (iter == health_check_log_times.end()) {
+        health_check_log_times.emplace(p.first, HealthCheckLogStatus(
+          p.second.severity, p.second.summary, now));
+      } else {
+        iter->second = HealthCheckLogStatus(
+          p.second.severity, p.second.summary, now);
       }
     }
   }
@@ -2577,6 +2611,10 @@ void Monitor::log_health(
       } else {
         clog->info() << "Health check cleared: " << p.first << " (was: "
                      << p.second.summary << ")";
+      }
+
+      if (health_check_log_times.count(p.first)) {
+        health_check_log_times.erase(p.first);
       }
     }
   }
@@ -3363,8 +3401,12 @@ void Monitor::handle_command(MonOpRequestRef op)
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
     f->dump_string("tag", tagstr);
 
-    list<string> hs;
-    get_health(hs, NULL, f.get());
+    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      get_health_status(true, f.get(), nullptr);
+    } else {
+      list<string> health_str;
+      get_health(health_str, nullptr, f.get());
+    }
 
     monmon()->dump_info(f.get());
     osdmon()->dump_info(f.get());
@@ -4399,8 +4441,13 @@ void Monitor::handle_ping(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(new JSONFormatter(true));
   f->open_object_section("pong");
 
-  list<string> health_str;
-  get_health(health_str, NULL, f.get());
+  if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    get_health_status(false, f.get(), nullptr);
+  } else {
+    list<string> health_str;
+    get_health(health_str, nullptr, f.get());
+  }
+
   {
     stringstream ss;
     get_mon_status(f.get(), ss);
@@ -4765,10 +4812,7 @@ void Monitor::handle_timecheck_leader(MonOpRequestRef op)
 
   ostringstream ss;
   health_status_t status = timecheck_status(ss, skew_bound, latency);
-  if (status == HEALTH_ERR)
-    clog->error() << other << " " << ss.str();
-  else if (status == HEALTH_WARN)
-    clog->warn() << other << " " << ss.str();
+  clog->health(status) << other << " " << ss.str();
 
   dout(10) << __func__ << " from " << other << " ts " << m->timestamp
 	   << " delta " << delta << " skew_bound " << skew_bound
@@ -5429,14 +5473,49 @@ void Monitor::tick()
 {
   // ok go.
   dout(11) << "tick" << dendl;
+  const utime_t now = ceph_clock_now();
   
+  // Check if we need to emit any delayed health check updated messages
+  if (is_leader()) {
+    const auto min_period = g_conf->get_val<int64_t>(
+                              "mon_health_log_update_period");
+    for (auto& svc : paxos_service) {
+      auto health = svc->get_health_checks();
+
+      for (const auto &i : health.checks) {
+        const std::string &code = i.first;
+        const std::string &summary = i.second.summary;
+        const health_status_t severity = i.second.severity;
+
+        auto status_iter = health_check_log_times.find(code);
+        if (status_iter == health_check_log_times.end()) {
+          continue;
+        }
+
+        auto &log_status = status_iter->second;
+        bool const changed = log_status.last_message != summary
+                             || log_status.severity != severity;
+
+        if (changed && now - log_status.updated_at > min_period) {
+          log_status.last_message = summary;
+          log_status.updated_at = now;
+          log_status.severity = severity;
+
+          ostringstream ss;
+          ss << "Health check update: " << summary << " (" << code << ")";
+          clog->health(severity) << ss.str();
+        }
+      }
+    }
+  }
+
+
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p) {
     (*p)->tick();
     (*p)->maybe_trim();
   }
   
   // trim sessions
-  utime_t now = ceph_clock_now();
   {
     Mutex::Locker l(session_map_lock);
     auto p = session_map.sessions.begin();

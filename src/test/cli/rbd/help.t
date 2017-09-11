@@ -141,7 +141,7 @@ Skip test on FreeBSD as it generates different output there.
     -p [ --pool ] arg    pool name
     --image arg          image name
     --snap arg           snapshot name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help clone
@@ -301,7 +301,7 @@ Skip test on FreeBSD as it generates different output there.
     --snap arg            snapshot name
     --from-snap arg       snapshot starting point
     --whole-object        compare whole object
-    --format arg          output format [plain, json, or xml]
+    --format arg          output format (plain, json, or xml) [default: plain]
     --pretty-format       pretty formatting (json and xml)
   
   rbd help disk-usage
@@ -320,7 +320,7 @@ Skip test on FreeBSD as it generates different output there.
     -p [ --pool ] arg     pool name
     --image arg           image name
     --snap arg            snapshot name
-    --format arg          output format [plain, json, or xml]
+    --format arg          output format (plain, json, or xml) [default: plain]
     --pretty-format       pretty formatting (json and xml)
     --from-snap arg       snapshot starting point
   
@@ -453,7 +453,7 @@ Skip test on FreeBSD as it generates different output there.
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help image-meta remove
@@ -575,7 +575,7 @@ Skip test on FreeBSD as it generates different output there.
     --image arg           image name
     --snap arg            snapshot name
     --image-id arg        image id
-    --format arg          output format [plain, json, or xml]
+    --format arg          output format (plain, json, or xml) [default: plain]
     --pretty-format       pretty formatting (json and xml)
   
   rbd help journal client disconnect
@@ -654,7 +654,7 @@ Skip test on FreeBSD as it generates different output there.
     -p [ --pool ] arg    pool name
     --image arg          image name
     --journal arg        journal name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help journal inspect
@@ -706,7 +706,7 @@ Skip test on FreeBSD as it generates different output there.
     -p [ --pool ] arg    pool name
     --image arg          image name
     --journal arg        journal name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help list
@@ -721,7 +721,7 @@ Skip test on FreeBSD as it generates different output there.
   Optional arguments
     -l [ --long ]        long listing format
     -p [ --pool ] arg    pool name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help lock add
@@ -754,7 +754,7 @@ Skip test on FreeBSD as it generates different output there.
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help lock remove
@@ -893,7 +893,7 @@ Skip test on FreeBSD as it generates different output there.
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help mirror pool demote
@@ -945,7 +945,7 @@ Skip test on FreeBSD as it generates different output there.
   
   Optional arguments
     -p [ --pool ] arg    pool name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help mirror pool peer add
@@ -1019,7 +1019,7 @@ Skip test on FreeBSD as it generates different output there.
   
   Optional arguments
     -p [ --pool ] arg    pool name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
     --verbose            be verbose
   
@@ -1165,7 +1165,7 @@ Skip test on FreeBSD as it generates different output there.
   Show the rbd images mapped by the kernel.
   
   Optional arguments
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help snap create
@@ -1227,7 +1227,7 @@ Skip test on FreeBSD as it generates different output there.
     -p [ --pool ] arg    pool name
     --image arg          image name
     --image-id arg       image id
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help snap protect
@@ -1351,7 +1351,7 @@ Skip test on FreeBSD as it generates different output there.
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help trash list
@@ -1368,7 +1368,7 @@ Skip test on FreeBSD as it generates different output there.
     -p [ --pool ] arg    pool name
     -a [ --all ]         list images from all sources
     -l [ --long ]        long listing format
-    --format arg         output format [plain, json, or xml]
+    --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
   rbd help trash move

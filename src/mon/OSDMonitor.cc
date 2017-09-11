@@ -240,7 +240,9 @@ void OSDMonitor::create_initial()
     derr << __func__ << " mon_debug_no_require_luminous=true" << dendl;
   } else {
     newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
-    newmap.flags |= CEPH_OSDMAP_RECOVERY_DELETES;
+    newmap.flags |=
+      CEPH_OSDMAP_RECOVERY_DELETES |
+      CEPH_OSDMAP_PURGED_SNAPDIRS;
     newmap.full_ratio = g_conf->mon_osd_full_ratio;
     if (newmap.full_ratio > 1.0) newmap.full_ratio /= 100;
     newmap.backfillfull_ratio = g_conf->mon_osd_backfillfull_ratio;
@@ -3325,6 +3327,15 @@ void OSDMonitor::tick()
       do_propose = true;
     }
   }
+  if (!osdmap.test_flag(CEPH_OSDMAP_PURGED_SNAPDIRS) &&
+      osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+      mon->mgrstatmon()->is_readable() &&
+      mon->mgrstatmon()->definitely_converted_snapsets()) {
+    dout(1) << __func__ << " all snapsets converted, setting purged_snapdirs"
+	    << dendl;
+    add_flag(CEPH_OSDMAP_PURGED_SNAPDIRS);
+    do_propose = true;
+  }
 
   // mark osds down?
   if (check_failures(now))
@@ -5159,6 +5170,87 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->flush(rs);
       rs << "\n";
       rdata.append(rs.str());
+    }
+  } else if (prefix == "osd pool application get") {
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty",
+                                                     "json-pretty"));
+    string pool_name;
+    cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
+    string app;
+    cmd_getval(g_ceph_context, cmdmap, "app", app);
+    string key;
+    cmd_getval(g_ceph_context, cmdmap, "key", key);
+
+    if (pool_name.empty()) {
+      // all
+      f->open_object_section("pools");
+      for (const auto &pool : osdmap.pools) {
+        std::string name("<unknown>");
+        const auto &pni = osdmap.pool_name.find(pool.first);
+        if (pni != osdmap.pool_name.end())
+          name = pni->second;
+        f->open_object_section(name.c_str());
+        for (auto &app_pair : pool.second.application_metadata) {
+          f->open_object_section(app_pair.first.c_str());
+          for (auto &kv_pair : app_pair.second) {
+            f->dump_string(kv_pair.first.c_str(), kv_pair.second);
+          }
+          f->close_section();
+        }
+        f->close_section(); // name
+      }
+      f->close_section(); // pools
+      f->flush(rdata);
+    } else {
+      int64_t pool = osdmap.lookup_pg_pool_name(pool_name.c_str());
+      if (pool < 0) {
+        ss << "unrecognized pool '" << pool_name << "'";
+        r = -ENOENT;
+        goto reply;
+      }
+      auto p = osdmap.get_pg_pool(pool);
+      // filter by pool
+      if (app.empty()) {
+        f->open_object_section(pool_name.c_str());
+        for (auto &app_pair : p->application_metadata) {
+          f->open_object_section(app_pair.first.c_str());
+          for (auto &kv_pair : app_pair.second) {
+            f->dump_string(kv_pair.first.c_str(), kv_pair.second);
+          }
+          f->close_section(); // application
+        }
+        f->close_section(); // pool_name
+        f->flush(rdata);
+        goto reply;
+      }
+
+      auto app_it = p->application_metadata.find(app);
+      if (app_it == p->application_metadata.end()) {
+        ss << "pool '" << pool_name << "' has no application '" << app << "'";
+        r = -ENOENT;
+        goto reply;
+      }
+      // filter by pool + app
+      if (key.empty()) {
+        f->open_object_section(app_it->first.c_str());
+        for (auto &kv_pair : app_it->second) {
+          f->dump_string(kv_pair.first.c_str(), kv_pair.second);
+        }
+        f->close_section(); // application
+        f->flush(rdata);
+        goto reply;
+      }
+      // filter by pool + app + key
+      auto key_it = app_it->second.find(key);
+      if (key_it == app_it->second.end()) {
+        ss << "application '" << app << "' on pool '" << pool_name
+           << "' does not have key '" << key << "'";
+        r = -ENOENT;
+        goto reply;
+      }
+      ss << key_it->second << "\n";
+      rdata.append(ss.str());
+      ss.str("");
     }
   } else {
     // try prepare update
@@ -7528,16 +7620,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
-
-    if (!newcrush.class_exists(srcname)) {
-      err = -ENOENT;
-      ss << "class '" << srcname << "' does not exist";
-      goto reply;
-    }
-
-    if (newcrush.class_exists(dstname)) {
-      err = -EEXIST;
-      ss << "class '" << dstname << "' already exists";
+    if (!newcrush.class_exists(srcname) && newcrush.class_exists(dstname)) {
+      // suppose this is a replay and return success
+      // so command is idempotent
+      ss << "already renamed to '" << dstname << "'";
+      err = 0;
       goto reply;
     }
 
@@ -8546,6 +8633,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
+    if (!newcrush.rule_exists(srcname) && newcrush.rule_exists(dstname)) {
+      // srcname does not exist and dstname already exists
+      // suppose this is a replay and return success
+      // (so this command is idempotent)
+      ss << "already renamed to '" << dstname << "'";
+      err = 0;
+      goto reply;
+    }
+
     err = newcrush.rename_rule(srcname, dstname, &ss);
     if (err < 0) {
       // ss has reason for failure

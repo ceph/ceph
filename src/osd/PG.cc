@@ -5700,12 +5700,21 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
   const T *m = static_cast<const T *>(op->get_req());
   assert(m->get_type() == MSGTYPE);
 
+  int from = m->get_source().num();
+
+  // if a repop is replied after a replica goes down in a new osdmap, and
+  // before the pg advances to this new osdmap, the repop replies before this
+  // repop can be discarded by that replica OSD, because the primary resets the
+  // connection to it when handling the new osdmap marking it down, and also
+  // resets the messenger sesssion when the replica reconnects. to avoid the
+  // out-of-order replies, the messages from that replica should be discarded.
+  if (osd->get_osdmap()->is_down(from))
+    return true;
   /* Mostly, this overlaps with the old_peering_msg
    * condition.  An important exception is pushes
    * sent by replicas not in the acting set, since
    * if such a replica goes down it does not cause
    * a new interval. */
-  int from = m->get_source().num();
   if (get_osdmap()->get_down_at(from) >= m->map_epoch)
     return true;
 

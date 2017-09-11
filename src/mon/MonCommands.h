@@ -981,6 +981,12 @@ COMMAND("osd pool application rm " \
         "name=key,type=CephString",
         "removes application <app> metadata key <key> on pool <poolname>",
         "osd", "rw", "cli,rest")
+COMMAND("osd pool application get " \
+        "name=pool,type=CephPoolname,req=fasle " \
+        "name=app,type=CephString,req=false " \
+        "name=key,type=CephString,req=false",
+        "get value of key <key> of application <app> on pool <poolname>",
+        "osd", "r", "cli,rest")
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r", "cli,rest")

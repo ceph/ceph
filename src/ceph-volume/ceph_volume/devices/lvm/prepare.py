@@ -3,8 +3,8 @@ import json
 import os
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
-from ceph_volume.util import system
-from ceph_volume import conf, decorators
+from ceph_volume.util import system, disk
+from ceph_volume import conf, decorators, terminal
 from . import api
 from .common import prepare_parser
 
@@ -51,6 +51,13 @@ class Prepare(object):
     def __init__(self, argv):
         self.argv = argv
 
+    def get_journal_ptuuid(self, argument):
+        uuid = disk.get_partuuid(argument)
+        if not uuid:
+            terminal.error('blkid could not detect a PARTUUID for device: %s' % argument)
+            raise RuntimeError('unable to use device for a journal')
+        return uuid
+
     def get_journal_lv(self, argument):
         """
         Perform some parsing of the value of ``--journal`` so that the process
@@ -88,28 +95,33 @@ class Prepare(object):
 
             if not args.journal:
                 raise RuntimeError('--journal is required when using --filestore')
-            journal_device = None
-            journal_lv = self.get_journal_lv(args.journal)
 
-            # check if we have an actual path to a device, which is allowed
-            if not journal_lv:
-                if os.path.exists(args.journal):
-                    journal_device = args.journal
-                else:
-                    raise RuntimeError(
-                        '--journal specified an invalid or non-existent device: %s' % args.journal
-                    )
-            # Otherwise the journal_device is the path to the lv
-            else:
+            journal_lv = self.get_journal_lv(args.journal)
+            if journal_lv:
                 journal_device = journal_lv.lv_path
+                journal_uuid = journal_lv.lv_uuid
+                # we can only set tags on an lv, the pv (if any) can't as we
+                # aren't making it part of an lvm group (vg)
                 journal_lv.set_tags({
                     'ceph.type': 'journal',
                     'ceph.osd_fsid': fsid,
                     'ceph.osd_id': osd_id,
                     'ceph.cluster_fsid': cluster_fsid,
                     'ceph.journal_device': journal_device,
+                    'ceph.journal_uuid': journal_uuid,
                     'ceph.data_device': data_lv.lv_path,
+                    'ceph.data_uuid': data_lv.lv_uuid,
                 })
+
+            # allow a file
+            elif os.path.isfile(args.journal):
+                journal_uuid = ''
+                journal_device = args.journal
+
+            # otherwise assume this is a regular disk partition
+            else:
+                journal_uuid = self.get_journal_ptuuid(args.journal)
+                journal_device = args.journal
 
             data_lv.set_tags({
                 'ceph.type': 'data',
@@ -117,7 +129,9 @@ class Prepare(object):
                 'ceph.osd_id': osd_id,
                 'ceph.cluster_fsid': cluster_fsid,
                 'ceph.journal_device': journal_device,
+                'ceph.journal_uuid': journal_uuid,
                 'ceph.data_device': data_lv.lv_path,
+                'ceph.data_uuid': data_lv.lv_uuid,
             })
 
             prepare_filestore(

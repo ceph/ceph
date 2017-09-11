@@ -536,7 +536,7 @@ public:
   explicit GetdescsHook(AdminSocket *as) : m_as(as) {}
   bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) override {
     int cmdnum = 0;
-    JSONFormatter jf(false);
+    JSONFormatter jf;
     jf.open_object_section("command_descriptions");
     for (map<string,string>::iterator p = m_as->m_descs.begin();
 	 p != m_as->m_descs.end();
@@ -550,6 +550,7 @@ public:
       cmdnum++;
     }
     jf.close_section(); // command_descriptions
+    jf.enable_line_break();
     ostringstream ss;
     jf.flush(ss);
     out.append(ss.str());
