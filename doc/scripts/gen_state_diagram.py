@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import print_function
+
 import re
 import sys
 
@@ -148,16 +150,16 @@ class StateMachineRenderer(object):
         for state in self.machines.keys():
             if state not in self.states.keys():
                 top_level.append(state)
-        print >> sys.stderr, "Top Level States: ", str(top_level)
-        print """digraph G {"""
-        print '\tsize="7,7"'
-        print """\tcompound=true;"""
+        print('Top Level States: ', top_level, file=sys.stderr)
+        print('digraph G {')
+        print('\tsize="7,7"')
+        print('\tcompound=true;')
         for i in self.emit_state(top_level[0]):
-            print '\t' + i
+            print('\t' + i)
         for i in self.edges.keys():
             for j in self.emit_event(i):
-                print j
-        print """}"""
+                print(j)
+        print('}')
 
     def emit_state(self, state):
         if state in self.state_contents.keys():
@@ -200,7 +202,7 @@ class StateMachineRenderer(object):
             yield("%s -> %s %s;" % (fro, to, append(appendix)))
 
 
-INPUT_GENERATOR = do_filter(sys.stdin.xreadlines())
+INPUT_GENERATOR = do_filter(line for line in sys.stdin)
 RENDERER = StateMachineRenderer()
 RENDERER.read_input(INPUT_GENERATOR)
 RENDERER.emit_dot()
