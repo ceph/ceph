@@ -935,7 +935,7 @@ def test_encrypted_object_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
 
-    (zone1, zone2,) = zonegroup_conns.rw_zones
+    (zone1, zone2) = zonegroup_conns.rw_zones[0:2]
 
     # create a bucket on the first zone
     bucket_name = gen_bucket_name()
