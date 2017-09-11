@@ -133,7 +133,7 @@ public:
   void reconnect_tick();
   void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
-  void recall_client_state(float ratio);
+  void recall_client_state(void);
   void force_clients_readonly();
 
   // -- requests --
