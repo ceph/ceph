@@ -36,13 +36,6 @@ Ceph clusters.
    configuration file of the same name (e.g. /etc/ceph/remote.conf).  See the
    `ceph-conf`_ documentation for how to configure multiple clusters.
 
-.. note:: Images in a given pool will be mirrored to a pool with the same name
-   on the remote cluster. Images using a separate data-pool will use a data-pool
-   with the same name on the remote cluster. E.g., if an image being mirrored is
-   in the ``rbd`` pool on the local cluster and using a data-pool called
-   ``rbd-ec``, pools called ``rbd`` and ``rbd-ec`` must exist on the remote
-   cluster and will be used for mirroring the image.
-
 Enable Mirroring
 ----------------
 
@@ -62,6 +55,21 @@ For example::
 
         rbd --cluster local mirror pool enable image-pool pool
         rbd --cluster remote mirror pool enable image-pool pool
+
+By default images using a separate data-pool will use a data-pool with the same
+name when they are mirrored, and that pool must exist. You can control the
+data-pool used by images being mirrored into a given pool by specifying the
+``--data-pool`` option when enabling mirroring.
+
+For example, to have images mirrored into ``image-pool`` use a data-pool called
+``data-pool``::
+
+        rbd --cluster local mirror pool enable --data-pool data-pool image-pool pool
+
+Alternatively, to force images mirrored into ``image-pool`` to have their data
+in ``image-pool``, regardless of the data pool they use on the remote cluster::
+
+        rbd --cluster local mirror pool enable --data-pool image-pool image-pool pool
 
 Disable Mirroring
 -----------------
