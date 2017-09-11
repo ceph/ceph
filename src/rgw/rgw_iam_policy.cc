@@ -1576,9 +1576,8 @@ ostream& operator <<(ostream& m, const Policy& p) {
   }
 
   if (!p.statements.empty()) {
-    m << "Statements: ";
+    m << "Statement: ";
     print_array(m, p.statements.cbegin(), p.statements.cend());
-    m << ", ";
   }
   return m << " }";
 }
