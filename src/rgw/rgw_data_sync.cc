@@ -1359,7 +1359,7 @@ public:
 	ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " datalog_marker=" << datalog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
 	if (datalog_marker == sync_marker.marker || remote_trimmed == RemoteTrimmed) {
 #define INCREMENTAL_INTERVAL 20
-	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
+	  yield wait(std::chrono::seconds(INCREMENTAL_INTERVAL));
 	}
       } while (true);
     }
@@ -3103,16 +3103,16 @@ class DataLogTrimPollCR : public RGWCoroutine {
   RGWRados *store;
   RGWHTTPManager *http;
   const int num_shards;
-  const utime_t interval; //< polling interval
+  const uint32_t interval_sec; //< polling interval
   const std::string lock_oid; //< use first data log shard for lock
   const std::string lock_cookie;
   std::vector<std::string> last_trim; //< last trimmed marker per shard
 
  public:
   DataLogTrimPollCR(RGWRados *store, RGWHTTPManager *http,
-                    int num_shards, utime_t interval)
+                    int num_shards, uint32_t interval_sec)
     : RGWCoroutine(store->ctx()), store(store), http(http),
-      num_shards(num_shards), interval(interval),
+      num_shards(num_shards), interval_sec(interval_sec),
       lock_oid(store->data_log->get_oid(0)),
       lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
       last_trim(num_shards)
@@ -3126,7 +3126,7 @@ int DataLogTrimPollCR::operate()
   reenter(this) {
     for (;;) {
       set_status("sleeping");
-      wait(interval);
+      wait(std::chrono::seconds(interval_sec));
 
       // request a 'data_trim' lock that covers the entire wait interval to
       // prevent other gateways from attempting to trim for the duration
@@ -3134,11 +3134,11 @@ int DataLogTrimPollCR::operate()
       yield call(new RGWSimpleRadosLockCR(store->get_async_rados(), store,
                                           rgw_raw_obj(store->get_zone_params().log_pool, lock_oid),
                                           "data_trim", lock_cookie,
-                                          interval.sec()));
+                                          interval_sec));
       if (retcode < 0) {
         // if the lock is already held, go back to sleep and try again later
         ldout(cct, 4) << "failed to lock " << lock_oid << ", trying again in "
-            << interval.sec() << "s" << dendl;
+            << interval_sec << "s" << dendl;
         continue;
       }
 
@@ -3152,9 +3152,8 @@ int DataLogTrimPollCR::operate()
   return 0;
 }
 
-RGWCoroutine* create_data_log_trim_cr(RGWRados *store,
-                                      RGWHTTPManager *http,
-                                      int num_shards, utime_t interval)
+RGWCoroutine* create_data_log_trim_cr(RGWRados *store, RGWHTTPManager *http,
+                                      int num_shards, uint32_t interval_sec)
 {
-  return new DataLogTrimPollCR(store, http, num_shards, interval);
+  return new DataLogTrimPollCR(store, http, num_shards, interval_sec);
 }

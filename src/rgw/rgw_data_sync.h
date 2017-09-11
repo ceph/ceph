@@ -533,6 +533,7 @@ public:
 // DataLogTrimCR factory function
 extern RGWCoroutine* create_data_log_trim_cr(RGWRados *store,
                                              RGWHTTPManager *http,
-                                             int num_shards, utime_t interval);
+                                             int num_shards,
+                                             uint32_t interval_sec);
 
 #endif

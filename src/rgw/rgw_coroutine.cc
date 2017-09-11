@@ -10,27 +10,8 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-class RGWCompletionManager::WaitContext : public Context {
-  RGWCompletionManager *manager;
-  void *opaque;
-public:
-  WaitContext(RGWCompletionManager *_cm, void *_opaque) : manager(_cm), opaque(_opaque) {}
-  void finish(int r) override {
-    manager->_wakeup(opaque);
-  }
-};
-
-RGWCompletionManager::RGWCompletionManager(CephContext *_cct) : cct(_cct), lock("RGWCompletionManager::lock"),
-                                            timer(cct, lock)
+RGWCompletionManager::RGWCompletionManager(CephContext *_cct) : cct(_cct), lock("RGWCompletionManager::lock")
 {
-  timer.init();
-}
-
-RGWCompletionManager::~RGWCompletionManager()
-{
-  Mutex::Locker l(lock);
-  timer.cancel_all_events();
-  timer.shutdown();
 }
 
 void RGWCompletionManager::complete(RGWAioCompletionNotifier *cn, void *user_info)
@@ -99,12 +80,14 @@ void RGWCompletionManager::go_down()
   cond.Signal();
 }
 
-void RGWCompletionManager::wait_interval(void *opaque, const utime_t& interval, void *user_info)
+void RGWCompletionManager::wait_interval(void *opaque,
+                                         const ceph::timespan& interval,
+                                         void *user_info)
 {
   Mutex::Locker l(lock);
   assert(waiters.find(opaque) == waiters.end());
   waiters[opaque] = user_info;
-  timer.add_event_after(interval, new WaitContext(this, opaque));
+  timer.add_event(interval, [this, opaque] { _wakeup(opaque); });
 }
 
 void RGWCompletionManager::wakeup(void *opaque)
@@ -265,7 +248,7 @@ RGWCoroutinesStack *RGWCoroutinesStack::spawn(RGWCoroutine *op, bool wait)
   return spawn(NULL, op, wait);
 }
 
-int RGWCoroutinesStack::wait(const utime_t& interval)
+int RGWCoroutinesStack::wait(const ceph::timespan& interval)
 {
   RGWCompletionManager *completion_mgr = env->manager->get_completion_mgr();
   completion_mgr->wait_interval((void *)this, interval, (void *)this);
@@ -751,7 +734,7 @@ bool RGWCoroutine::collect_next(int *ret, RGWCoroutinesStack **collected_stack) 
   return stack->collect_next(this, ret, collected_stack);
 }
 
-int RGWCoroutine::wait(const utime_t& interval)
+int RGWCoroutine::wait(const ceph::timespan& interval)
 {
   return stack->wait(interval);
 }

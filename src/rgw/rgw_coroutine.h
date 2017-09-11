@@ -18,6 +18,8 @@
 #include "common/debug.h"
 #include "common/Timer.h"
 #include "common/admin_socket.h"
+#include "common/ceph_time.h"
+#include "common/ceph_timer.h"
 
 #include "rgw_common.h"
 #include <boost/asio/coroutine.hpp>
@@ -39,20 +41,17 @@ class RGWCompletionManager : public RefCountedObject {
   Mutex lock;
   Cond cond;
 
-  SafeTimer timer;
+  ceph::timer<ceph::mono_clock> timer;
 
   std::atomic<bool> going_down = { false };
 
   map<void *, void *> waiters;
-
-  class WaitContext;
 
 protected:
   void _wakeup(void *opaque);
   void _complete(RGWAioCompletionNotifier *cn, void *user_info);
 public:
   RGWCompletionManager(CephContext *_cct);
-  ~RGWCompletionManager() override;
 
   void complete(RGWAioCompletionNotifier *cn, void *user_info);
   int get_next(void **user_info);
@@ -63,7 +62,7 @@ public:
   /*
    * wait for interval length to complete user_info
    */
-  void wait_interval(void *opaque, const utime_t& interval, void *user_info);
+  void wait_interval(void *opaque, const ceph::timespan& interval, void *user_info);
   void wakeup(void *opaque);
 
   void register_completion_notifier(RGWAioCompletionNotifier *cn);
@@ -262,7 +261,7 @@ public:
   bool collect(int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
   bool collect_next(int *ret, RGWCoroutinesStack **collected_stack = NULL); /* returns true if found a stack to collect */
 
-  int wait(const utime_t& interval);
+  int wait(const ceph::timespan& interval);
   bool drain_children(int num_cr_left, RGWCoroutinesStack *skip_stack = NULL); /* returns true if needed to be called again */
   void wakeup();
   void set_sleeping(bool flag); /* put in sleep, or wakeup from sleep */
@@ -437,7 +436,7 @@ public:
   RGWCoroutinesStack *spawn(RGWCoroutine *next_op, bool wait);
   int unwind(int retcode);
 
-  int wait(const utime_t& interval);
+  int wait(const ceph::timespan& interval);
   void wakeup();
 
   bool collect(int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */

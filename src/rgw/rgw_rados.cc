@@ -3248,16 +3248,16 @@ class RGWSyncLogTrimThread : public RGWSyncProcessorThread
   RGWCoroutinesManager crs;
   RGWRados *store;
   RGWHTTPManager http;
-  const utime_t trim_interval;
+  const uint32_t trim_interval_sec;
 
   uint64_t interval_msec() override { return 0; }
   void stop_process() override { crs.stop(); }
 public:
-  RGWSyncLogTrimThread(RGWRados *store, int interval)
+  RGWSyncLogTrimThread(RGWRados *store, uint32_t interval_sec)
     : RGWSyncProcessorThread(store, "sync-log-trim"),
       crs(store->ctx(), store->get_cr_registry()), store(store),
       http(store->ctx(), crs.get_completion_mgr()),
-      trim_interval(interval, 0)
+      trim_interval_sec(interval_sec)
   {}
 
   int init() override {
@@ -3268,13 +3268,13 @@ public:
     auto meta = new RGWCoroutinesStack(store->ctx(), &crs);
     meta->call(create_meta_log_trim_cr(store, &http,
                                        cct->_conf->rgw_md_log_max_shards,
-                                       trim_interval));
+                                       trim_interval_sec));
     stacks.push_back(meta);
 
     auto data = new RGWCoroutinesStack(store->ctx(), &crs);
     data->call(create_data_log_trim_cr(store, &http,
                                        cct->_conf->rgw_data_log_num_shards,
-                                       trim_interval));
+                                       trim_interval_sec));
     stacks.push_back(data);
 
     crs.run(stacks);
