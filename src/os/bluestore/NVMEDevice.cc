@@ -842,14 +842,12 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
           task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
 	}
       } else {
-	ctx->try_aio_wake();
+        ctx->try_aio_wake();
       }
       delete task;
     } else {
       task->return_code = 0;
-      if (!--ctx->num_running) {
-        task->io_wake();
-      }
+      ctx->try_aio_wake();
     }
   } else {
     assert(task->command == IOCommand::FLUSH_COMMAND);
@@ -1068,14 +1066,11 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     t->copy_to_buf(buf, 0, t->len);
   };
 
-  ++ioc->num_running;
-  if(queue_id == -1)
-    queue_id = ceph_gettid();
-  driver->get_queue(queue_id)->queue_task(t);
+  ++ioc->num_pending;
+  ioc->nvme_task_first = t;
+  aio_submit(ioc);
+  ioc->aio_wait();
 
-  while(t->return_code > 0) {
-    t->io_wait();
-  }
   pbl->push_back(std::move(p));
   r = t->return_code;
   delete t;
@@ -1130,14 +1125,12 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   t->fill_cb = [buf, t, off, len]() {
     t->copy_to_buf(buf, off-t->offset, len);
   };
-  ++ioc.num_running;
-  if(queue_id == -1)
-    queue_id = ceph_gettid();
-  driver->get_queue(queue_id)->queue_task(t);
 
-  while(t->return_code > 0) {
-    t->io_wait();
-  }
+  ++ioc.num_pending;
+  ioc.nvme_task_first = t;
+  aio_submit(&ioc);
+  ioc.aio_wait();
+
   r = t->return_code;
   delete t;
   return r;
