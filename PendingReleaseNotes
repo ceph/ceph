@@ -1,2 +1,11 @@
 >= 12.2.0
 ---------
+
+- *CephFS*:
+
+  * Limiting MDS cache via a memory limit is now supported using the new
+    mds_cache_memory_limit config option (1GB by default).  A cache reservation
+    can also be specified using mds_cache_reservation as a percentage of the
+    limit (5% by default). Limits by inode count are still supported using
+    mds_cache_size. Setting mds_cache_size to 0 (the default) disables the
+    inode limit.

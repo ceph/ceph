@@ -15,6 +15,7 @@
 
 #include "common/dout.h"
 #include "common/HeartbeatMap.h"
+
 #include "include/stringify.h"
 #include "include/util.h"
 
@@ -475,11 +476,10 @@ void Beacon::notify_health(MDSRank const *mds)
   }
 
   // Report if we have significantly exceeded our cache size limit
-  if (mds->mdcache->get_cache_size() >
-        g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
+  if (mds->mdcache->cache_overfull()) {
     std::ostringstream oss;
-    oss << "Too many inodes in cache (" << mds->mdcache->get_cache_size()
-        << "/" << g_conf->mds_cache_size << "), "
+    oss << "MDS cache is too large (" << bytes2str(mds->mdcache->cache_size())
+        << "/" << bytes2str(mds->mdcache->cache_limit_memory()) << "); "
         << mds->mdcache->num_inodes_with_caps << " inodes in use by clients, "
         << mds->mdcache->get_num_strays() << " stray files";
 

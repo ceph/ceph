@@ -2007,7 +2007,7 @@ void Migrator::export_finish(CDir *dir)
   cache->show_subtrees();
   audit();
 
-  cache->trim(-1, num_dentries); // try trimming exported dentries
+  cache->trim(num_dentries); // try trimming exported dentries
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
@@ -2650,7 +2650,7 @@ void Migrator::import_reverse(CDir *dir)
   // log our failure
   mds->mdlog->start_submit_entry(new EImportFinish(dir, false));	// log failure
 
-  cache->trim(-1, num_dentries); // try trimming dentries
+  cache->trim(num_dentries); // try trimming dentries
 
   // notify bystanders; wait in aborting state
   import_notify_abort(dir, bounds);
