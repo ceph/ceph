@@ -284,13 +284,10 @@ class VolumeGroups(list):
         # actual filtered list if any filters were applied
         if vg_tags:
             tag_filtered = []
-            for k, v in vg_tags.items():
-                for volume in filtered:
-                    if volume.tags.get(k) == str(v):
-                        if volume not in tag_filtered:
-                            tag_filtered.append(volume)
-            # return the tag_filtered volumes here, the `filtered` list is no
-            # longer useable
+            for volume in filtered:
+                matches = all(volume.tags.get(k) == str(v) for k, v in vg_tags.items())
+                if matches:
+                    tag_filtered.append(volume)
             return tag_filtered
 
         return filtered
@@ -390,13 +387,11 @@ class Volumes(list):
         # actual filtered list if any filters were applied
         if lv_tags:
             tag_filtered = []
-            for k, v in lv_tags.items():
-                for volume in filtered:
-                    if volume.tags.get(k) == str(v):
-                        if volume not in tag_filtered:
-                            tag_filtered.append(volume)
-            # return the tag_filtered volumes here, the `filtered` list is no
-            # longer useable
+            for volume in filtered:
+                # all the tags we got need to match on the volume
+                matches = all(volume.tags.get(k) == str(v) for k, v in lv_tags.items())
+                if matches:
+                    tag_filtered.append(volume)
             return tag_filtered
 
         return filtered
@@ -493,11 +488,10 @@ class PVolumes(list):
         # or is an actual filtered list if any filters were applied
         if pv_tags:
             tag_filtered = []
-            for k, v in pv_tags.items():
-                for pvolume in filtered:
-                    if pvolume.tags.get(k) == str(v):
-                        if pvolume not in tag_filtered:
-                            tag_filtered.append(pvolume)
+            for pvolume in filtered:
+                matches = all(pvolume.tags.get(k) == str(v) for k, v in pv_tags.items())
+                if matches:
+                    tag_filtered.append(pvolume)
             # return the tag_filtered pvolumes here, the `filtered` list is no
             # longer useable
             return tag_filtered
