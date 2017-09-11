@@ -10,6 +10,7 @@
 #include "common/ceph_json.h"
 
 #include "common/dout.h"
+#include "include/scope_guard.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -778,6 +779,8 @@ int RGWReshard::process_single_logshard(int logshard_num)
     return ret;
   }
 
+  auto sg = make_scope_guard([&] { l.unlock(&store->reshard_pool_ctx, logshard_oid); });
+
   utime_t lock_start_time = ceph_clock_now();
 
   do {
@@ -834,13 +837,15 @@ int RGWReshard::process_single_logshard(int logshard_num)
           ldout(store->ctx(), 5) << __func__ << "(): failed to acquire lock on " << logshard_oid << dendl;
           return ret;
         }
+
+        auto sg = make_scope_guard([&] { l.unlock(&store->reshard_pool_ctx, logshard_oid); });
+
         lock_start_time = now;
       }
       entry.get_key(&marker);
     }
   } while (truncated);
 
-  l.unlock(&store->reshard_pool_ctx, logshard_oid);
   return 0;
 }
 
