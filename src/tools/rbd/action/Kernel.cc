@@ -289,10 +289,9 @@ static int do_kernel_map(const char *poolname, const char *imgname,
 {
 #if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
-  std::ostringstream oss, mapped_info;
+  std::ostringstream oss;
   char *devnode;
   int r;
-  bool img_mapped;
 
   r = krbd_create_from_context(g_ceph_context, &krbd);
   if (r < 0)
@@ -313,13 +312,14 @@ static int do_kernel_map(const char *poolname, const char *imgname,
     }
   }
 
-  r = krbd_is_image_mapped(krbd, poolname, imgname, snapname,
-			   mapped_info, img_mapped);
+  r = krbd_is_mapped(krbd, poolname, imgname, snapname, &devnode);
   if (r < 0) {
     std::cerr << "rbd: warning: can't get image map infomation: "
 	      << cpp_strerror(r) << std::endl;
-  } else if (img_mapped) {
-    std::cerr << "rbd: warning: " << mapped_info.str() << std::endl;
+  } else if (r > 0) {
+    std::cerr << "rbd: warning: image already mapped as " << devnode
+              << std::endl;
+    free(devnode);
   }
 
   r = krbd_map(krbd, poolname, imgname, snapname, oss.str().c_str(), &devnode);

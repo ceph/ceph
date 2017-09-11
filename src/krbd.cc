@@ -376,6 +376,34 @@ out_enm:
   return r;
 }
 
+static int enumerate_devices(struct udev_enumerate *enm, const char *pool,
+                             const char *image, const char *snap)
+{
+  int r;
+
+  r = udev_enumerate_add_match_subsystem(enm, "rbd");
+  if (r < 0)
+    return r;
+
+  r = udev_enumerate_add_match_sysattr(enm, "pool", pool);
+  if (r < 0)
+    return r;
+
+  r = udev_enumerate_add_match_sysattr(enm, "name", image);
+  if (r < 0)
+    return r;
+
+  r = udev_enumerate_add_match_sysattr(enm, "current_snap", snap);
+  if (r < 0)
+    return r;
+
+  r = udev_enumerate_scan_devices(enm);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
                                      const char *image, const char *snap,
                                      dev_t *pdevno, string *pid)
@@ -391,23 +419,7 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
   if (!enm)
     return -ENOMEM;
 
-  r = udev_enumerate_add_match_subsystem(enm, "rbd");
-  if (r < 0)
-    goto out_enm;
-
-  r = udev_enumerate_add_match_sysattr(enm, "pool", pool);
-  if (r < 0)
-    goto out_enm;
-
-  r = udev_enumerate_add_match_sysattr(enm, "name", image);
-  if (r < 0)
-    goto out_enm;
-
-  r = udev_enumerate_add_match_sysattr(enm, "current_snap", snap);
-  if (r < 0)
-    goto out_enm;
-
-  r = udev_enumerate_scan_devices(enm);
+  r = enumerate_devices(enm, pool, image, snap);
   if (r < 0)
     goto out_enm;
 
@@ -701,6 +713,46 @@ int dump_images(struct krbd_ctx *ctx, Formatter *f)
   return r;
 }
 
+static int is_mapped_image(struct udev *udev, const char *pool,
+                           const char *image, const char *snap, string *pname)
+{
+  struct udev_enumerate *enm;
+  struct udev_list_entry *l;
+  int r;
+
+  if (strcmp(snap, "") == 0)
+    snap = "-";
+
+  enm = udev_enumerate_new(udev);
+  if (!enm)
+    return -ENOMEM;
+
+  r = enumerate_devices(enm, pool, image, snap);
+  if (r < 0)
+    goto out_enm;
+
+  l = udev_enumerate_get_list_entry(enm);
+  if (l) {
+    struct udev_device *dev;
+
+    dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(l));
+    if (!dev) {
+      r = -ENOMEM;
+      goto out_enm;
+    }
+
+    r = 1;
+    *pname = get_kernel_rbd_name(udev_device_get_sysname(dev));
+    udev_device_unref(dev);
+  } else {
+    r = 0;  /* not mapped */
+  }
+
+out_enm:
+  udev_enumerate_unref(enm);
+  return r;
+}
+
 extern "C" int krbd_create_from_context(rados_config_t cct,
                                         struct krbd_ctx **pctx)
 {
@@ -765,58 +817,22 @@ int krbd_showmapped(struct krbd_ctx *ctx, Formatter *f)
   return dump_images(ctx, f);
 }
 
-int krbd_is_image_mapped(struct krbd_ctx *ctx, const char *poolname, 
-                         const char *imgname, const char *snapname,
-                         std::ostringstream &mapped_info, bool &is_mapped) {
-  struct udev_enumerate *enm;
-  struct udev_list_entry *l;
-  struct udev *udev = ctx->udev; 
-  const char *mapped_id, *mapped_pool, *mapped_image, *mapped_snap;
+extern "C" int krbd_is_mapped(struct krbd_ctx *ctx, const char *pool,
+                              const char *image, const char *snap,
+                              char **pdevnode)
+{
+  string name;
+  char *devnode;
   int r;
-  is_mapped = false;
 
-  enm = udev_enumerate_new(udev);
-  if(!enm)
+  r = is_mapped_image(ctx->udev, pool, image, snap, &name);
+  if (r <= 0)  /* error or not mapped */
+    return r;
+
+  devnode = strdup(name.c_str());
+  if (!devnode)
     return -ENOMEM;
 
-  r = udev_enumerate_add_match_subsystem(enm, "rbd");
-  if (r < 0)
-    goto out_enm;
-
-  r = udev_enumerate_scan_devices(enm);
-  if (r < 0)
-    goto out_enm;
-
-  udev_list_entry_foreach(l, udev_enumerate_get_list_entry(enm)) {
-    struct udev_device *dev;
-
-    dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(l));
-    if (dev) {
-      mapped_id = udev_device_get_sysname(dev);
-      mapped_pool = udev_device_get_sysattr_value(dev, "pool");
-      mapped_image = udev_device_get_sysattr_value(dev, "name");
-      mapped_snap = udev_device_get_sysattr_value(dev, "current_snap");
-      string kname = get_kernel_rbd_name(mapped_id);
-
-      udev_device_unref(dev);
-      if (mapped_pool && poolname && strcmp(mapped_pool, poolname) == 0 &&
-          mapped_image && imgname && strcmp(mapped_image, imgname) == 0) {
-        if (!snapname || snapname[0] == '\0') {
-          mapped_info << "image " << *poolname << "/" << *imgname
-                      << " already mapped as " << kname;
-          is_mapped = true;
-          goto out_enm;
-        } else if (snapname && mapped_snap &&
-		   strcmp(snapname, mapped_snap) == 0) {
-          mapped_info << "image " << *poolname << "/" << *imgname << "@"
-                     << *snapname << " already mapped as " << kname;
-          is_mapped = true;
-          goto out_enm;
-        }
-      }
-    }
-  }
-out_enm:
-  udev_enumerate_unref(enm);
+  *pdevnode = devnode;
   return r;
 }
