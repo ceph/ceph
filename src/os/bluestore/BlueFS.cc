@@ -1675,9 +1675,7 @@ void BlueFS::wait_for_aio(FileWriter *h)
       p->aio_wait();
     }
   }
-  utime_t end = ceph_clock_now();
-  utime_t dur = end - start;
-  dout(10) << __func__ << " " << h << " done in " << dur << dendl;
+  dout(10) << __func__ << " " << h << " done in " << (ceph_clock_now() - start) << dendl;
 }
 
 int BlueFS::_flush(FileWriter *h, bool force)
@@ -1897,9 +1895,7 @@ void BlueFS::sync_metadata()
 	alloc[i]->release(p.get_start(), p.get_len());
       }
     }
-    utime_t end = ceph_clock_now();
-    utime_t dur = end - start;
-    dout(10) << __func__ << " done in " << dur << dendl;
+    dout(10) << __func__ << " done in " << (ceph_clock_now() - start) << dendl;
   }
 
   if (_should_compact_log()) {
