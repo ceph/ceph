@@ -2521,11 +2521,17 @@ public:
     return rgw_shards_max();
   }
 
+
   int get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref);
 
+  int list_raw_objects_init(const rgw_pool& pool, const string& marker, RGWListRawObjsCtx *ctx);
+  int list_raw_objects_next(const string& prefix_filter, int max,
+                            RGWListRawObjsCtx& ctx, list<string>& oids,
+                            bool *is_truncated);
   int list_raw_objects(const rgw_pool& pool, const string& prefix_filter, int max,
                        RGWListRawObjsCtx& ctx, list<string>& oids,
                        bool *is_truncated);
+  string list_raw_objs_get_cursor(RGWListRawObjsCtx& ctx);
 
   int list_raw_prefixed_objs(const rgw_pool& pool, const string& prefix, list<string>& result);
   int list_zonegroups(list<string>& zonegroups);
@@ -3649,6 +3655,22 @@ public:
    * Returns: 0 on success, -ERR# otherwise.
    */
   int pool_iterate_begin(const rgw_pool& pool, RGWPoolIterCtx& ctx);
+
+  /**
+   * Init pool iteration
+   * pool: pool to use
+   * cursor: position to start iteration
+   * ctx: context object to use for the iteration
+   * Returns: 0 on success, -ERR# otherwise.
+   */
+  int pool_iterate_begin(const rgw_pool& pool, const string& cursor, RGWPoolIterCtx& ctx);
+
+  /**
+   * Get pool iteration position
+   * ctx: context object to use for the iteration
+   * Returns: string representation of position
+   */
+  string pool_iterate_get_cursor(RGWPoolIterCtx& ctx);
 
   /**
    * Iterate over pool return object names, use optional filter
