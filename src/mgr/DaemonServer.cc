@@ -1224,6 +1224,22 @@ bool DaemonServer::handle_command(MCommand *m)
     ss << std::endl;
     cmdctx->reply(r, ss);
     return true;
+  } else if (prefix == "injectargs") {
+    vector<string> argsvec;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "injected_args", argsvec);
+
+    if (argsvec.empty()) {
+      r = -EINVAL;
+      ss << "ignoring empty injectargs";
+      cmdctx->reply(r, ss);
+      return true;
+    }
+    string args = argsvec.front();
+    for (auto it = ++argsvec.begin(); it != argsvec.end(); ++it)
+      args += " " + *it;
+    r = g_ceph_context->_conf->injectargs(args, &ss);
+    cmdctx->reply(r, ss);
+    return true;
   } else {
     r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
 	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
