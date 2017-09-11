@@ -18,7 +18,7 @@ def parse_osd_id(string):
 def parse_osd_uuid(string):
     osd_id = '%s-' % parse_osd_id(string)
     # remove the id first
-    osd_uuid = string.split(osd_id)[-1]
+    osd_uuid = string.split(osd_id, 1)[-1]
     if not osd_uuid:
         raise SuffixParsingError('OSD uuid', string)
     return osd_uuid
