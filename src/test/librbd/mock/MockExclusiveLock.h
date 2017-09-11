@@ -18,6 +18,8 @@ struct MockExclusiveLock {
   MOCK_METHOD2(init, void(uint64_t features, Context*));
   MOCK_METHOD1(shut_down, void(Context*));
 
+  MOCK_METHOD1(request_lock, void(Context *));
+
   MOCK_METHOD0(reacquire_lock, void());
 };
 

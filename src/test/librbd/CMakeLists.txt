@@ -19,6 +19,7 @@ set(unittest_librbd_srcs
   test_main.cc
   test_mock_fixture.cc
   test_mock_AioImageRequest.cc
+  test_mock_AioImageRequestWQ.cc
   test_mock_ExclusiveLock.cc
   test_mock_Journal.cc
   test_mock_ObjectMap.cc

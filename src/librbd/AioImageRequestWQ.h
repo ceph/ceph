@@ -16,9 +16,17 @@ class AioCompletion;
 template <typename> class AioImageRequest;
 class ImageCtx;
 
-class AioImageRequestWQ : protected ThreadPool::PointerWQ<AioImageRequest<ImageCtx> > {
+enum AioDirection {
+  AIO_DIRECTION_READ,
+  AIO_DIRECTION_WRITE,
+  AIO_DIRECTION_BOTH
+};
+
+template <typename ImageCtxT = librbd::ImageCtx>
+class AioImageRequestWQ
+  : public ThreadPool::PointerWQ<AioImageRequest<ImageCtxT> > {
 public:
-  AioImageRequestWQ(ImageCtx *image_ctx, const string &name, time_t ti,
+  AioImageRequestWQ(ImageCtxT *image_ctx, const string &name, time_t ti,
                     ThreadPool *tp);
 
   ssize_t read(uint64_t off, uint64_t len, char *buf, int op_flags);
@@ -33,13 +41,10 @@ public:
                    bool native_async=true);
   void aio_flush(AioCompletion *c, bool native_async=true);
 
-  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::drain;
-  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::empty;
+  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtxT> >::drain;
+  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtxT> >::empty;
 
   void shut_down(Context *on_shutdown);
-
-  bool is_lock_required() const;
-  bool is_lock_request_needed() const;
 
   inline bool writes_blocked() const {
     RWLock::RLocker locker(m_lock);
@@ -50,72 +55,62 @@ public:
   void block_writes(Context *on_blocked);
   void unblock_writes();
 
-  void set_require_lock_on_read();
-  void clear_require_lock_on_read();
+  void set_require_lock(AioDirection aio_direction, bool enabled);
 
 protected:
   virtual void *_void_dequeue();
-  virtual void process(AioImageRequest<ImageCtx> *req);
+  virtual void process(AioImageRequest<ImageCtxT> *req);
 
 private:
   typedef std::list<Context *> Contexts;
 
-  struct C_RefreshFinish : public Context {
-    AioImageRequestWQ *aio_work_queue;
-    AioImageRequest<ImageCtx> *aio_image_request;
+  struct C_AcquireLock;
+  struct C_BlockedWrites;
+  struct C_RefreshFinish;
 
-    C_RefreshFinish(AioImageRequestWQ *aio_work_queue,
-                    AioImageRequest<ImageCtx> *aio_image_request)
-      : aio_work_queue(aio_work_queue), aio_image_request(aio_image_request) {
-    }
-    virtual void finish(int r) override {
-      aio_work_queue->handle_refreshed(r, aio_image_request);
-    }
-  };
-
-  struct C_BlockedWrites : public Context {
-    AioImageRequestWQ *aio_work_queue;
-    C_BlockedWrites(AioImageRequestWQ *_aio_work_queue)
-      : aio_work_queue(_aio_work_queue) {
-    }
-
-    virtual void finish(int r) {
-      aio_work_queue->handle_blocked_writes(r);
-    }
-  };
-
-  ImageCtx &m_image_ctx;
+  ImageCtxT &m_image_ctx;
   mutable RWLock m_lock;
   Contexts m_write_blocker_contexts;
-  uint32_t m_write_blockers;
+  uint32_t m_write_blockers = 0;
   bool m_require_lock_on_read = false;
-  atomic_t m_in_progress_writes;
-  atomic_t m_queued_reads;
-  atomic_t m_queued_writes;
-  atomic_t m_in_flight_ops;
+  bool m_require_lock_on_write = false;
+  atomic_t m_in_flight_writes {0};
+  atomic_t m_queued_reads {0};
+  atomic_t m_queued_writes {0};
+  atomic_t m_in_flight_ios {0};
+  atomic_t m_io_blockers {0};
 
-  bool m_refresh_in_progress;
+  bool m_shutdown = false;
+  Context *m_on_shutdown = nullptr;
 
-  bool m_shutdown;
-  Context *m_on_shutdown;
+  bool is_lock_required(bool write_op) const;
 
+  inline bool require_lock_on_read() const {
+    RWLock::RLocker locker(m_lock);
+    return m_require_lock_on_read;
+
+  }
   inline bool writes_empty() const {
     RWLock::RLocker locker(m_lock);
     return (m_queued_writes.read() == 0);
   }
 
-  void finish_queued_op(AioImageRequest<ImageCtx> *req);
-  void finish_in_progress_write();
+  void finish_queued_io(AioImageRequest<ImageCtxT> *req);
+  void finish_in_flight_write();
 
-  int start_in_flight_op(AioCompletion *c);
-  void finish_in_flight_op();
+  int start_in_flight_io(AioCompletion *c);
+  void finish_in_flight_io();
+  void fail_in_flight_io(int r, AioImageRequest<ImageCtxT> *req);
 
-  void queue(AioImageRequest<ImageCtx> *req);
+  void queue(AioImageRequest<ImageCtxT> *req);
 
-  void handle_refreshed(int r, AioImageRequest<ImageCtx> *req);
+  void handle_acquire_lock(int r, AioImageRequest<ImageCtxT> *req);
+  void handle_refreshed(int r, AioImageRequest<ImageCtxT> *req);
   void handle_blocked_writes(int r);
 };
 
 } // namespace librbd
+
+extern template class librbd::AioImageRequestWQ<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_AIO_IMAGE_REQUEST_WQ_H

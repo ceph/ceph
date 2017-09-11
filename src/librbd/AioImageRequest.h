@@ -26,6 +26,21 @@ public:
 
   virtual ~AioImageRequest() {}
 
+  static AioImageRequest* create_read_request(ImageCtxT &image_ctx,
+					      AioCompletion *aio_comp,
+					      uint64_t off, size_t len,
+					      char *buf, bufferlist *pbl,
+					      int op_flags);
+  static AioImageRequest* create_write_request(ImageCtxT &image_ctx,
+					       AioCompletion *aio_comp,
+					       uint64_t off, size_t len,
+					       const char *buf, int op_flags);
+  static AioImageRequest* create_discard_request(ImageCtxT &image_ctx,
+						 AioCompletion *aio_comp,
+						 uint64_t off, uint64_t len);
+  static AioImageRequest* create_flush_request(ImageCtxT &image_ctx,
+					       AioCompletion *aio_comp);
+
   static void aio_read(ImageCtxT *ictx, AioCompletion *c,
                        const std::vector<std::pair<uint64_t,uint64_t> > &extents,
                        char *buf, bufferlist *pbl, int op_flags);

@@ -150,6 +150,33 @@ private:
 } // anonymous namespace
 
 template <typename I>
+AioImageRequest<I>* AioImageRequest<I>::create_read_request(
+    I &image_ctx, AioCompletion *aio_comp, uint64_t off, size_t len,
+    char *buf, bufferlist *pbl, int op_flags) {
+  return new AioImageRead<I>(image_ctx, aio_comp, off, len, buf, pbl,
+			     op_flags);
+}
+
+template <typename I>
+AioImageRequest<I>* AioImageRequest<I>::create_write_request(
+    I &image_ctx, AioCompletion *aio_comp, uint64_t off, size_t len,
+    const char *buf, int op_flags) {
+  return new AioImageWrite<I>(image_ctx, aio_comp, off, len, buf, op_flags);
+}
+
+template <typename I>
+AioImageRequest<I>* AioImageRequest<I>::create_discard_request(
+    I &image_ctx, AioCompletion *aio_comp, uint64_t off, uint64_t len) {
+  return new AioImageDiscard<I>(image_ctx, aio_comp, off, len);
+}
+
+template <typename I>
+AioImageRequest<I>* AioImageRequest<I>::create_flush_request(
+    I &image_ctx, AioCompletion *aio_comp) {
+  return new AioImageFlush<I>(image_ctx, aio_comp);
+}
+
+template <typename I>
 void AioImageRequest<I>::aio_read(
     I *ictx, AioCompletion *c,
     const std::vector<std::pair<uint64_t,uint64_t> > &extents,

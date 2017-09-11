@@ -389,6 +389,8 @@ unittest_librbd_SOURCES = \
         test/librbd/test_BlockGuard.cc \
         test/librbd/test_main.cc \
 	test/librbd/test_mock_fixture.cc \
+	test/librbd/test_mock_AioImageRequest.cc \
+	test/librbd/test_mock_AioImageRequestWQ.cc \
 	test/librbd/test_mock_ExclusiveLock.cc \
 	test/librbd/test_mock_Journal.cc \
 	test/librbd/test_mock_ObjectWatcher.cc \

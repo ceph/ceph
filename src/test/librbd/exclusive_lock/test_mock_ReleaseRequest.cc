@@ -51,15 +51,20 @@ public:
                   .WillOnce(Return(enabled));
   }
 
-  void expect_set_require_lock_on_read(MockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.aio_work_queue, set_require_lock_on_read());
+  void expect_set_require_lock(MockImageCtx &mock_image_ctx,
+                               AioDirection direction, bool enabled) {
+    EXPECT_CALL(*mock_image_ctx.aio_work_queue, set_require_lock(direction,
+                                                                 enabled));
   }
 
   void expect_block_writes(MockImageCtx &mock_image_ctx, int r) {
     expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING,
                          ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0));
-    if ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
-      expect_set_require_lock_on_read(mock_image_ctx);
+    if (mock_image_ctx.clone_copy_on_read ||
+        (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
+      expect_set_require_lock(mock_image_ctx, AIO_DIRECTION_BOTH, true);
+    } else {
+      expect_set_require_lock(mock_image_ctx, AIO_DIRECTION_WRITE, true);
     }
     EXPECT_CALL(*mock_image_ctx.aio_work_queue, block_writes(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
