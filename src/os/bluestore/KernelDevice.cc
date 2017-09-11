@@ -431,7 +431,7 @@ void KernelDevice::_aio_log_start(
   uint64_t offset,
   uint64_t length)
 {
-  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
+  dout(20) << __func__ << " " << aio << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (cct->_conf->bdev_debug_inflight_ios) {
     Mutex::Locker l(debug_lock);
@@ -613,10 +613,9 @@ int KernelDevice::aio_write(
   bl.hexdump(*_dout);
   *_dout << dendl;
 
-  _aio_log_start(ioc, off, len);
-
 #ifdef HAVE_LIBAIO
   if (aio && dio && !buffered) {
+    _aio_log_start(ioc, off, len); 
     ioc->pending_aios.push_back(aio_t(ioc, fd_direct));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
@@ -644,7 +643,6 @@ int KernelDevice::aio_write(
 #endif
   {
     int r = _sync_write(off, bl, buffered);
-    _aio_log_finish(ioc, off, len);
     if (r < 0)
       return r;
   }
@@ -659,8 +657,6 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 	  << (buffered ? " (buffered)" : " (direct)")
 	  << dendl;
   assert(is_valid_io(off, len));
-
-  _aio_log_start(ioc, off, len);
 
   bufferptr p = buffer::create_page_aligned(len);
   int r = ::pread(buffered ? fd_buffered : fd_direct,
@@ -677,7 +673,6 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   *_dout << dendl;
 
  out:
-  _aio_log_finish(ioc, off, len);
   return r < 0 ? r : 0;
 }
 
