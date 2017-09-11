@@ -1311,6 +1311,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   const std::string& period_marker; //< max marker stored in next period
 
   map<string, bufferlist> entries;
+  bool more = false;
   map<string, bufferlist>::iterator iter;
 
   string oid;
@@ -1493,7 +1494,7 @@ public:
           break;
         }
         yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid),
-                                             marker, &entries, max_entries));
+                                             marker, &entries, max_entries, &more));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
           yield lease_cr->go_down();
@@ -1518,7 +1519,7 @@ public:
           marker = iter->first;
         }
         collect_children();
-      } while ((int)entries.size() == max_entries && can_adjust_marker);
+      } while (more && can_adjust_marker);
 
       while (num_spawned() > 1) {
         yield wait_for_child();
