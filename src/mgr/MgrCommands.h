@@ -127,6 +127,12 @@ COMMAND("osd repair " \
 	"initiate repair on osd <who>, or use <all|any|*> to repair all", \
         "osd", "rw", "cli,rest")
 
+COMMAND("injectargs " \
+	"name=injected_args,type=CephString,n=N",
+	"inject configuration arguments into running MGR",
+	"mgr", "rw", "cli,rest")
+
+
 COMMAND("service dump",
         "dump service map", "service", "r", "cli,rest")
 COMMAND("service status",
