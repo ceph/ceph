@@ -279,9 +279,14 @@ public:
 
   // prio values: higher is better, and higher values get included in
   // 'ceph daemonperf' (and similar) results.
+  // Use of priorities enables us to add large numbers of counters
+  // internally without necessarily overwhelming consumers.
   enum {
     PRIO_CRITICAL = 10,
+    // 'interesting' is the default threshold for `daemonperf` output
     PRIO_INTERESTING = 8,
+    // `useful` is the default threshold for transmission to ceph-mgr
+    // and inclusion in prometheus/influxdb plugin output
     PRIO_USEFUL = 5,
     PRIO_UNINTERESTING = 2,
     PRIO_DEBUGONLY = 0,
