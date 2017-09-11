@@ -339,8 +339,8 @@ class RGWRestfulIO : public rgw::io::AccountingFilter<rgw::io::RestfulClient*> {
 public:
   ~RGWRestfulIO() override = default;
 
-  RGWRestfulIO(rgw::io::RestfulClient* engine)
-    : AccountingFilter<rgw::io::RestfulClient*>(std::move(engine)) {
+  RGWRestfulIO(CephContext *_cx, rgw::io::RestfulClient* engine)
+    : AccountingFilter<rgw::io::RestfulClient*>(_cx, std::move(engine)) {
   }
 
   void add_filter(std::shared_ptr<DecoratedRestfulClient> new_filter) {
