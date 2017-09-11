@@ -179,12 +179,12 @@ public:
     PoolMirrorModeEnabler(librados::IoCtx &ioctx) : m_ioctx(ioctx) {
       EXPECT_EQ(0, librbd::cls_client::mirror_uuid_set(&m_ioctx, "test-uuid"));
       EXPECT_EQ(0, librbd::cls_client::mirror_mode_set(
-		  &m_ioctx, cls::rbd::MIRROR_MODE_POOL));
+		  &m_ioctx, cls::rbd::MIRROR_MODE_POOL, "test-data-pool-name"));
     }
 
     ~PoolMirrorModeEnabler() {
       EXPECT_EQ(0, librbd::cls_client::mirror_mode_set(
-		&m_ioctx, cls::rbd::MIRROR_MODE_DISABLED));
+		  &m_ioctx, cls::rbd::MIRROR_MODE_DISABLED, ""));
     }
   private:
     librados::IoCtx &m_ioctx;

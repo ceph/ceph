@@ -3169,6 +3169,7 @@ namespace mirror {
 
 static const std::string UUID("mirror_uuid");
 static const std::string MODE("mirror_mode");
+static const std::string DATA_POOL_NAME("data_pool_name");
 static const std::string PEER_KEY_PREFIX("mirror_peer_");
 static const std::string IMAGE_KEY_PREFIX("image_");
 static const std::string GLOBAL_KEY_PREFIX("global_");
@@ -3852,6 +3853,7 @@ int mirror_uuid_set(cls_method_context_t hctx, bufferlist *in,
  *
  * Output:
  * @param cls::rbd::MirrorMode (uint32_t)
+ * @param std::string
  * @returns 0 on success, negative error code on failure
  */
 int mirror_mode_get(cls_method_context_t hctx, bufferlist *in,
@@ -3862,13 +3864,21 @@ int mirror_mode_get(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
+  std::string data_pool_name;
+  r = read_key(hctx, mirror::DATA_POOL_NAME, &data_pool_name);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
   ::encode(mirror_mode_decode, *out);
+  ::encode(data_pool_name, *out);
   return 0;
 }
 
 /**
  * Input:
  * @param mirror_mode (cls::rbd::MirrorMode) (uint32_t)
+ * @param data_pool_name (std::string)
  *
  * Output:
  * @returns 0 on success, negative error code on failure
@@ -3876,9 +3886,13 @@ int mirror_mode_get(cls_method_context_t hctx, bufferlist *in,
 int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
                     bufferlist *out) {
   uint32_t mirror_mode_decode;
+  std::string data_pool_name;
   try {
     bufferlist::iterator bl_it = in->begin();
     ::decode(mirror_mode_decode, bl_it);
+    if (!bl_it.end()) {
+      ::decode(data_pool_name, bl_it);
+    }
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
@@ -3915,6 +3929,15 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
       CLS_ERR("error enabling mirroring: %s", cpp_strerror(r).c_str());
       return r;
     }
+
+    bl.clear();
+    ::encode(data_pool_name, bl);
+
+    r = cls_cxx_map_set_val(hctx, mirror::DATA_POOL_NAME, &bl);
+    if (r < 0) {
+      CLS_ERR("error setting data pool name for mirroring: %s", cpp_strerror(r).c_str());
+      return r;
+    }
   } else {
     std::vector<cls::rbd::MirrorPeer> peers;
     r = mirror::read_peers(hctx, &peers);
@@ -3925,6 +3948,11 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
     if (!peers.empty()) {
       CLS_ERR("mirroring peers still registered");
       return -EBUSY;
+    }
+
+    r = remove_key(hctx, mirror::DATA_POOL_NAME);
+    if (r < 0) {
+      return r;
     }
 
     r = remove_key(hctx, mirror::MODE);

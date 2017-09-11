@@ -22,8 +22,10 @@ struct Mirror {
   typedef std::map<std::string, mirror_image_status_t> IdToMirrorImageStatus;
   typedef std::map<mirror_image_status_state_t, int> MirrorImageStatusStates;
 
-  static int mode_get(librados::IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
-  static int mode_set(librados::IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
+  static int mode_get(librados::IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode,
+		      std::string *data_pool_name = nullptr);
+  static int mode_set(librados::IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode,
+		      const std::string &data_pool_name = "");
 
   static int peer_add(librados::IoCtx& io_ctx, std::string *uuid,
                       const std::string &cluster_name,

@@ -631,12 +631,14 @@ namespace librbd {
     return r;
   }
 
-  int RBD::mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode) {
-    return librbd::api::Mirror<>::mode_get(io_ctx, mirror_mode);
+  int RBD::mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode,
+			   std::string *data_pool_name) {
+    return librbd::api::Mirror<>::mode_get(io_ctx, mirror_mode, data_pool_name);
   }
 
-  int RBD::mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode) {
-    return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
+  int RBD::mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode,
+			   const std::string &data_pool_name) {
+    return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode, data_pool_name);
   }
 
   int RBD::mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
@@ -2039,16 +2041,42 @@ extern "C" int rbd_image_options_is_empty(rbd_image_options_t opts)
 /* pool mirroring */
 extern "C" int rbd_mirror_mode_get(rados_ioctx_t p,
                                    rbd_mirror_mode_t *mirror_mode) {
+  return rbd_mirror_mode_get2(p, mirror_mode, nullptr, 0);
+}
+
+extern "C" int rbd_mirror_mode_get2(rados_ioctx_t p,
+				    rbd_mirror_mode_t *mirror_mode,
+				    char *data_pool_name, size_t poolnamelen) {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::api::Mirror<>::mode_get(io_ctx, mirror_mode);
+  std::string d_pool_name;
+
+  int r = librbd::api::Mirror<>::mode_get(io_ctx, mirror_mode, &d_pool_name);
+  if (r < 0) {
+    return r;
+  }
+
+  if (data_pool_name) {
+    if (d_pool_name.length() + 1 > poolnamelen) {
+      return -ERANGE;
+    }
+    strcpy(data_pool_name, d_pool_name.c_str());
+  }
+
+  return 0;
 }
 
 extern "C" int rbd_mirror_mode_set(rados_ioctx_t p,
                                    rbd_mirror_mode_t mirror_mode) {
+  return rbd_mirror_mode_set2(p, mirror_mode, "");
+}
+
+extern "C" int rbd_mirror_mode_set2(rados_ioctx_t p,
+				    rbd_mirror_mode_t mirror_mode,
+				    const char *data_pool_name) {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
+  return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode, data_pool_name);
 }
 
 extern "C" int rbd_mirror_peer_add(rados_ioctx_t p, char *uuid,

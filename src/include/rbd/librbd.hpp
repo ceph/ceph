@@ -169,8 +169,10 @@ public:
   int trash_restore(IoCtx &io_ctx, const char *id, const char *name);
 
   // RBD pool mirroring support functions
-  int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
-  int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
+  int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode,
+		      std::string *data_pool_name = nullptr);
+  int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode,
+		      const std::string &data_pool_name = "");
   int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
                       const std::string &cluster_name,
                       const std::string &client_name);
