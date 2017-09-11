@@ -4998,6 +4998,15 @@ int BlueStore::_setup_block_symlink_or_file(
       string serial_number = epath.substr(strlen(SPDK_PREFIX));
       r = ::write(fd, serial_number.c_str(), serial_number.size());
       assert(r == (int)serial_number.size());
+      string::size_type pos = serial_number.find(":");
+      char buf[40];
+      if (pos == serial_number.npos) {
+        snprintf(buf, sizeof(buf), ":0:%" PRIx64, size);
+      } else {
+        snprintf(buf, sizeof(buf), ":%" PRIx64, size);
+      }
+
+      r = ::write(fd, buf, strlen(buf));
       dout(1) << __func__ << " created " << name << " symlink to "
               << epath << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(fd));
