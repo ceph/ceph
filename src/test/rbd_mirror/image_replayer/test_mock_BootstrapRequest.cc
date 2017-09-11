@@ -135,6 +135,7 @@ struct CreateImageRequest<librbd::MockTestImageCtx> {
                                     const std::string &local_image_name,
 				    const std::string &local_image_id,
                                     librbd::MockTestImageCtx *remote_image_ctx,
+				    const std::string &local_data_pool_name,
                                     Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
@@ -448,6 +449,7 @@ public:
                                        const std::string &global_image_id,
                                        const std::string &local_mirror_uuid,
                                        const std::string &remote_mirror_uuid,
+				       const std::string &local_data_pool_name,
                                        Context *on_finish) {
     return new MockBootstrapRequest(m_local_io_ctx,
                                     m_remote_io_ctx,
@@ -463,7 +465,8 @@ public:
                                     remote_mirror_uuid,
                                     &mock_journaler,
                                     &m_mirror_peer_client_meta,
-                                    on_finish, &m_do_resync);
+                                    on_finish, &m_do_resync,
+				    local_data_pool_name);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;
@@ -523,7 +526,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, NonPrimaryRemoteSyncingState) {
   MockBootstrapRequest *request = create_request(
     &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
-    "remote mirror uuid", &ctx);
+    "remote mirror uuid", "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(-EREMOTEIO, ctx.wait());
 }
@@ -599,7 +602,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, RemoteDemotePromote) {
   MockBootstrapRequest *request = create_request(
     &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
-    "remote mirror uuid", &ctx);
+    "remote mirror uuid", "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -685,7 +688,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, MultipleRemoteDemotePromotes) {
   MockBootstrapRequest *request = create_request(
     &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
-    "remote mirror uuid", &ctx);
+    "remote mirror uuid", "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -759,7 +762,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, LocalDemoteRemotePromote) {
   MockBootstrapRequest *request = create_request(
     &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
-    "remote mirror uuid", &ctx);
+    "remote mirror uuid", "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -832,7 +835,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, SplitBrainForcePromote) {
   MockBootstrapRequest *request = create_request(
     &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
-    "remote mirror uuid", &ctx);
+    "remote mirror uuid", "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(-EEXIST, ctx.wait());
   ASSERT_EQ(NULL, m_local_test_image_ctx);
@@ -893,7 +896,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, ResyncRequested) {
   MockBootstrapRequest *request = create_request(
     &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
-    "remote mirror uuid", &ctx);
+    "remote mirror uuid", "local data pool name", &ctx);
   m_do_resync = false;
   request->send();
   ASSERT_EQ(0, ctx.wait());
@@ -970,7 +973,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemote) {
   MockBootstrapRequest *request = create_request(
     &mock_instance_watcher, mock_journaler, "",
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
-    "remote mirror uuid", &ctx);
+    "remote mirror uuid", "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -1058,7 +1061,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemoteLocalDeleted) {
   MockBootstrapRequest *request = create_request(
     &mock_instance_watcher, mock_journaler, "",
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
-    "remote mirror uuid", &ctx);
+    "remote mirror uuid", "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }

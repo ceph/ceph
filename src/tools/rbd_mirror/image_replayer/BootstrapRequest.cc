@@ -54,6 +54,7 @@ BootstrapRequest<I>::BootstrapRequest(
         MirrorPeerClientMeta *client_meta,
         Context *on_finish,
         bool *do_resync,
+	const std::string &local_data_pool_name,
         rbd::mirror::ProgressContext *progress_ctx)
   : BaseRequest("rbd::mirror::image_replayer::BootstrapRequest",
 		reinterpret_cast<CephContext*>(local_io_ctx.cct()), on_finish),
@@ -65,7 +66,7 @@ BootstrapRequest<I>::BootstrapRequest(
     m_local_mirror_uuid(local_mirror_uuid),
     m_remote_mirror_uuid(remote_mirror_uuid), m_journaler(journaler),
     m_client_meta(client_meta), m_progress_ctx(progress_ctx),
-    m_do_resync(do_resync),
+    m_do_resync(do_resync), m_local_data_pool_name(local_data_pool_name),
     m_lock(unique_lock_name("BootstrapRequest::m_lock", this)) {
 }
 
@@ -478,7 +479,8 @@ void BootstrapRequest<I>::create_local_image() {
       this);
   CreateImageRequest<I> *request = CreateImageRequest<I>::create(
     m_local_io_ctx, m_work_queue, m_global_image_id, m_remote_mirror_uuid,
-    image_name, m_local_image_id, m_remote_image_ctx, ctx);
+    image_name, m_local_image_id, m_remote_image_ctx, m_local_data_pool_name,
+    ctx);
   request->send();
 }
 

@@ -56,6 +56,7 @@ public:
         MirrorPeerClientMeta *client_meta,
         Context *on_finish,
         bool *do_resync,
+	const std::string &local_data_pool_name,
         ProgressContext *progress_ctx = nullptr) {
     return new BootstrapRequest(local_io_ctx, remote_io_ctx,
                                 instance_watcher, local_image_ctx,
@@ -63,7 +64,7 @@ public:
                                 global_image_id, work_queue, timer, timer_lock,
                                 local_mirror_uuid, remote_mirror_uuid,
                                 journaler, client_meta, on_finish, do_resync,
-                                progress_ctx);
+				local_data_pool_name, progress_ctx);
   }
 
   BootstrapRequest(librados::IoCtx &local_io_ctx,
@@ -77,7 +78,8 @@ public:
                    const std::string &local_mirror_uuid,
                    const std::string &remote_mirror_uuid, Journaler *journaler,
                    MirrorPeerClientMeta *client_meta, Context *on_finish,
-                   bool *do_resync, ProgressContext *progress_ctx = nullptr);
+                   bool *do_resync, const std::string &local_data_pool_name,
+		   ProgressContext *progress_ctx = nullptr);
   ~BootstrapRequest() override;
 
   bool is_syncing() const;
@@ -162,6 +164,7 @@ private:
   MirrorPeerClientMeta *m_client_meta;
   ProgressContext *m_progress_ctx;
   bool *m_do_resync;
+  std::string m_local_data_pool_name;
 
   mutable Mutex m_lock;
   bool m_canceled = false;

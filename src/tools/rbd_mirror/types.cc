@@ -17,5 +17,17 @@ std::ostream& operator<<(std::ostream& lhs, const peer_t &peer) {
 	     << " client: " << peer.client_name;
 }
 
+std::ostream& operator<<(std::ostream& lhs, const pool_config_t &pool_config) {
+  lhs << "pool name: " << pool_config.pool_name
+      << " data pool name: " << pool_config.data_pool_name
+      << " peers: [ ";
+
+  for (auto& peer : pool_config.peers) {
+    lhs << peer << ", ";
+  }
+
+  return lhs << "]";
+}
+
 } // namespace mirror
 } // namespace rbd

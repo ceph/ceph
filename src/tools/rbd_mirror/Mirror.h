@@ -51,10 +51,10 @@ public:
   void release_leader();
 
 private:
-  typedef ClusterWatcher::PoolPeers PoolPeers;
+  typedef ClusterWatcher::PoolConfigs PoolConfigs;
   typedef std::pair<int64_t, peer_t> PoolPeer;
 
-  void update_pool_replayers(const PoolPeers &pool_peers);
+  void update_pool_replayers(const PoolConfigs &pool_configs);
 
   CephContext *m_cct;
   std::vector<const char*> m_args;

@@ -35,12 +35,14 @@ CreateImageRequest<I>::CreateImageRequest(librados::IoCtx &local_io_ctx,
                                           const std::string &local_image_name,
 					  const std::string &local_image_id,
                                           I *remote_image_ctx,
+					  const std::string &local_data_pool_name,
                                           Context *on_finish)
   : m_local_io_ctx(local_io_ctx), m_work_queue(work_queue),
     m_global_image_id(global_image_id),
     m_remote_mirror_uuid(remote_mirror_uuid),
     m_local_image_name(local_image_name), m_local_image_id(local_image_id),
-    m_remote_image_ctx(remote_image_ctx), m_on_finish(on_finish) {
+    m_remote_image_ctx(remote_image_ctx),
+    m_local_data_pool_name(local_data_pool_name), m_on_finish(on_finish) {
 }
 
 template <typename I>
@@ -74,8 +76,14 @@ void CreateImageRequest<I>::create_image() {
                     m_remote_image_ctx->stripe_unit);
   image_options.set(RBD_IMAGE_OPTION_STRIPE_COUNT,
                     m_remote_image_ctx->stripe_count);
-  image_options.set(RBD_IMAGE_OPTION_DATA_POOL,
-		    m_remote_image_ctx->data_ctx.get_pool_name());
+
+  // Use the configured data pool. If none was specified default to the same
+  // data pool name used on the remote.
+  std::string &data_pool = m_local_data_pool_name;
+  if (data_pool.length() == 0) {
+    data_pool = m_remote_image_ctx->data_ctx.get_pool_name();
+  }
+  image_options.set(RBD_IMAGE_OPTION_DATA_POOL, data_pool);
 
   librbd::image::CreateRequest<I> *req = librbd::image::CreateRequest<I>::create(
     m_local_io_ctx, m_local_image_name, m_local_image_id,

@@ -30,7 +30,7 @@ template <typename> class ServiceDaemon;
 class ClusterWatcher {
 public:
   typedef std::set<peer_t> Peers;
-  typedef std::map<int64_t, Peers>  PoolPeers;
+  typedef std::map<int64_t, pool_config_t> PoolConfigs;
   typedef std::set<std::string> PoolNames;
 
   ClusterWatcher(RadosRef cluster, Mutex &lock,
@@ -41,7 +41,7 @@ public:
 
   // Caller controls frequency of calls
   void refresh_pools();
-  const PoolPeers& get_pool_peers() const;
+  const PoolConfigs& get_pool_configs() const;
 
 private:
   typedef std::unordered_map<int64_t, service_daemon::CalloutId> ServicePools;
@@ -51,9 +51,9 @@ private:
   ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
 
   ServicePools m_service_pools;
-  PoolPeers m_pool_peers;
+  PoolConfigs m_pool_configs;
 
-  void read_pool_peers(PoolPeers *pool_peers, PoolNames *pool_names);
+  void read_pool_configs(PoolConfigs *pool_configs, PoolNames *pool_names);
 };
 
 } // namespace mirror

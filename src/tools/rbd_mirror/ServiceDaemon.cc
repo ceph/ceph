@@ -89,12 +89,15 @@ int ServiceDaemon<I>::init() {
 }
 
 template <typename I>
-void ServiceDaemon<I>::add_pool(int64_t pool_id, const std::string& pool_name) {
-  dout(20) << "pool_id=" << pool_id << ", pool_name=" << pool_name << dendl;
+void ServiceDaemon<I>::add_pool(int64_t pool_id, const std::string& pool_name,
+				const std::string& data_pool_name) {
+  dout(20) << "pool_id=" << pool_id
+	   << ", pool_name=" << pool_name
+	   << ", data_pool_name=" << data_pool_name << dendl;
 
   {
     Mutex::Locker locker(m_lock);
-    m_pools.insert({pool_id, {pool_name}});
+    m_pools.insert({pool_id, {pool_name, data_pool_name}});
   }
   schedule_update_status();
 }
@@ -217,6 +220,7 @@ void ServiceDaemon<I>::update_status() {
     for (auto& pool_pair : m_pools) {
       f.open_object_section(stringify(pool_pair.first).c_str());
       f.dump_string("name", pool_pair.second.name);
+      f.dump_string("data_pool_name", pool_pair.second.data_pool_name);
       f.open_object_section("callouts");
       for (auto& callout : pool_pair.second.callouts) {
         f.open_object_section(stringify(callout.first).c_str());

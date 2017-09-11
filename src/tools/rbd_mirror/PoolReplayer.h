@@ -43,8 +43,8 @@ public:
   PoolReplayer(Threads<librbd::ImageCtx> *threads,
                ServiceDaemon<librbd::ImageCtx>* service_daemon,
 	       ImageDeleter<>* image_deleter,
-	       int64_t local_pool_id, const peer_t &peer,
-	       const std::vector<const char*> &args);
+	       int64_t local_pool_id, const std::string &local_data_pool_name,
+	       const peer_t &peer, const std::vector<const char*> &args);
   ~PoolReplayer();
   PoolReplayer(const PoolReplayer&) = delete;
   PoolReplayer& operator=(const PoolReplayer&) = delete;
@@ -111,6 +111,7 @@ private:
   ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
   ImageDeleter<>* m_image_deleter;
   int64_t m_local_pool_id = -1;
+  std::string m_local_data_pool_name;
   peer_t m_peer;
   std::vector<const char*> m_args;
 

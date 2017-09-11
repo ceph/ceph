@@ -34,28 +34,28 @@ ClusterWatcher::ClusterWatcher(RadosRef cluster, Mutex &lock,
 {
 }
 
-const ClusterWatcher::PoolPeers& ClusterWatcher::get_pool_peers() const
+const ClusterWatcher::PoolConfigs& ClusterWatcher::get_pool_configs() const
 {
   assert(m_lock.is_locked());
-  return m_pool_peers;
+  return m_pool_configs;
 }
 
 void ClusterWatcher::refresh_pools()
 {
   dout(20) << "enter" << dendl;
 
-  PoolPeers pool_peers;
+  PoolConfigs pool_configs;
   PoolNames pool_names;
-  read_pool_peers(&pool_peers, &pool_names);
+  read_pool_configs(&pool_configs, &pool_names);
 
   Mutex::Locker l(m_lock);
-  m_pool_peers = pool_peers;
+  m_pool_configs = pool_configs;
   // TODO: perhaps use a workqueue instead, once we get notifications
   // about config changes for existing pools
 }
 
-void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
-				     PoolNames *pool_names)
+void ClusterWatcher::read_pool_configs(PoolConfigs *pool_configs,
+				       PoolNames *pool_names)
 {
   list<pair<int64_t, string> > pools;
   int r = m_cluster->pool_list2(pools);
@@ -93,7 +93,8 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
     }
 
     cls::rbd::MirrorMode mirror_mode_internal;
-    r = librbd::cls_client::mirror_mode_get(&ioctx, &mirror_mode_internal);
+    std::string data_pool_name;
+    r = librbd::cls_client::mirror_mode_get(&ioctx, &mirror_mode_internal, &data_pool_name);
     if (r == 0 && mirror_mode_internal == cls::rbd::MIRROR_MODE_DISABLED) {
       dout(10) << "mirroring is disabled for pool " << pool_name << dendl;
       continue;
@@ -102,7 +103,7 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
     service_pool_ids.insert(pool_id);
     if (m_service_pools.find(pool_id) == m_service_pools.end()) {
       m_service_pools[pool_id] = {};
-      m_service_daemon->add_pool(pool_id, pool_name);
+      m_service_daemon->add_pool(pool_id, pool_name, data_pool_name);
     }
 
     if (r == -EPERM) {
@@ -136,7 +137,7 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
       m_service_pools[pool_id] = service_daemon::CALLOUT_ID_NONE;
     }
 
-    pool_peers->insert({pool_id, Peers{configs.begin(), configs.end()}});
+    pool_configs->insert({pool_id, pool_config_t{pool_name, data_pool_name, Peers{configs.begin(), configs.end()}}});
     pool_names->insert(pool_name);
   }
 

@@ -263,6 +263,7 @@ ImageReplayer<I>::ImageReplayer(Threads<I> *threads,
                                 RadosRef local,
                                 const std::string &local_mirror_uuid,
                                 int64_t local_pool_id,
+				const std::string &local_data_pool_name,
                                 const std::string &global_image_id) :
   m_threads(threads),
   m_image_deleter(image_deleter),
@@ -270,6 +271,7 @@ ImageReplayer<I>::ImageReplayer(Threads<I> *threads,
   m_local(local),
   m_local_mirror_uuid(local_mirror_uuid),
   m_local_pool_id(local_pool_id),
+  m_local_data_pool_name(local_data_pool_name),
   m_global_image_id(global_image_id),
   m_lock("rbd::mirror::ImageReplayer " + stringify(local_pool_id) + " " +
 	 global_image_id),
@@ -520,7 +522,7 @@ void ImageReplayer<I>::bootstrap() {
     m_global_image_id, m_threads->work_queue, m_threads->timer,
     &m_threads->timer_lock, m_local_mirror_uuid, m_remote_image.mirror_uuid,
     m_remote_journaler, &m_client_meta, ctx, &m_resync_requested,
-    &m_progress_cxt);
+    m_local_data_pool_name, &m_progress_cxt);
 
   {
     Mutex::Locker locker(m_lock);

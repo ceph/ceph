@@ -315,11 +315,13 @@ public:
                                          const std::string &local_image_name,
 					 const std::string &local_image_id,
                                          librbd::MockTestImageCtx &mock_remote_image_ctx,
+					 const std::string &local_data_pool_name,
                                          Context *on_finish) {
     return new MockCreateImageRequest(m_local_io_ctx, m_threads->work_queue,
                                       global_image_id, remote_mirror_uuid,
                                       local_image_name, local_image_id,
-                                      &mock_remote_image_ctx, on_finish);
+                                      &mock_remote_image_ctx, local_data_pool_name,
+				      on_finish);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;
@@ -335,7 +337,8 @@ TEST_F(TestMockImageReplayerCreateImageRequest, Create) {
   C_SaferCond ctx;
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
                                                    "image name", "101241a7c4c9",
-                                                   mock_remote_image_ctx, &ctx);
+                                                   mock_remote_image_ctx,
+						   "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -350,7 +353,8 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CreateError) {
   C_SaferCond ctx;
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
                                                    "image name", "101241a7c4c9",
-                                                   mock_remote_image_ctx, &ctx);
+                                                   mock_remote_image_ctx,
+						   "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -394,7 +398,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, Clone) {
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
                                                    "image name", "101241a7c4c9",
                                                    mock_remote_clone_image_ctx,
-                                                   &ctx);
+						   "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -419,7 +423,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneGetGlobalImageIdError) {
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
                                                    "image name", "101241a7c4c9",
                                                    mock_remote_clone_image_ctx,
-                                                   &ctx);
+                                                   "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -445,7 +449,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneGetLocalParentImageIdError)
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
                                                    "image name", "101241a7c4c9",
                                                    mock_remote_clone_image_ctx,
-                                                   &ctx);
+                                                   "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -476,7 +480,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneOpenRemoteParentError) {
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
                                                    "image name", "101241a7c4c9",
                                                    mock_remote_clone_image_ctx,
-                                                   &ctx);
+                                                   "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -517,7 +521,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneOpenLocalParentError) {
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
                                                    "image name", "101241a7c4c9",
                                                    mock_remote_clone_image_ctx,
-                                                   &ctx);
+                                                   "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -560,7 +564,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneSnapSetError) {
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
                                                    "image name", "101241a7c4c9",
                                                    mock_remote_clone_image_ctx,
-                                                   &ctx);
+                                                   "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -604,7 +608,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneError) {
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
                                                    "image name", "101241a7c4c9",
                                                    mock_remote_clone_image_ctx,
-                                                   &ctx);
+                                                   "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -648,7 +652,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneLocalParentCloseError) {
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
                                                    "image name", "101241a7c4c9",
                                                    mock_remote_clone_image_ctx,
-                                                   &ctx);
+                                                   "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -692,7 +696,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneRemoteParentCloseError) {
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
                                                    "image name", "101241a7c4c9",
                                                    mock_remote_clone_image_ctx,
-                                                   &ctx);
+                                                   "local data pool name", &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }

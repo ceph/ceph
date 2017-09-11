@@ -27,7 +27,8 @@ public:
 
   int init();
 
-  void add_pool(int64_t pool_id, const std::string& pool_name);
+  void add_pool(int64_t pool_id, const std::string& pool_name,
+		const std::string& data_pool_name);
   void remove_pool(int64_t pool_id);
 
   uint64_t add_or_update_callout(int64_t pool_id, uint64_t callout_id,
@@ -55,10 +56,12 @@ private:
 
   struct Pool {
     std::string name;
+    std::string data_pool_name;
     Callouts callouts;
     Attributes attributes;
 
-    Pool(const std::string& name) : name(name) {
+    Pool(const std::string& name, const std::string& data_pool_name)
+      : name(name), data_pool_name(data_pool_name) {
     }
   };
 

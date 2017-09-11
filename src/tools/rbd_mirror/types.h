@@ -90,6 +90,26 @@ struct peer_t {
 
 std::ostream& operator<<(std::ostream& lhs, const peer_t &peer);
 
+struct pool_config_t {
+  pool_config_t() = default;
+  pool_config_t(const std::string &pool_name, const std::string &data_pool_name,
+		const std::set<peer_t> &peers)
+    : pool_name(pool_name), data_pool_name(data_pool_name), peers(peers)
+    {
+    }
+  std::string pool_name;
+  std::string data_pool_name;
+  std::set<peer_t> peers;
+  bool operator<(const pool_config_t &rhs) const {
+    return pool_name < rhs.pool_name;
+  }
+  bool operator==(const pool_config_t &rhs) const {
+    return pool_name == rhs.pool_name;
+  }
+};
+
+std::ostream& operator<<(std::ostream &lhs, const pool_config_t &pool_config);
+
 } // namespace mirror
 } // namespace rbd
 

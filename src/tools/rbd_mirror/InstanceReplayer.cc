@@ -35,10 +35,12 @@ template <typename I>
 InstanceReplayer<I>::InstanceReplayer(
     Threads<I> *threads, ServiceDaemon<I>* service_daemon,
     ImageDeleter<I>* image_deleter, RadosRef local_rados,
-    const std::string &local_mirror_uuid, int64_t local_pool_id)
+    const std::string &local_mirror_uuid, int64_t local_pool_id,
+    const std::string &local_data_pool_name)
   : m_threads(threads), m_service_daemon(service_daemon),
     m_image_deleter(image_deleter), m_local_rados(local_rados),
     m_local_mirror_uuid(local_mirror_uuid), m_local_pool_id(local_pool_id),
+    m_local_data_pool_name(local_data_pool_name),
     m_lock("rbd::mirror::InstanceReplayer " + stringify(local_pool_id)) {
 }
 
@@ -143,7 +145,8 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
   if (it == m_image_replayers.end()) {
     auto image_replayer = ImageReplayer<I>::create(
         m_threads, m_image_deleter, instance_watcher, m_local_rados,
-        m_local_mirror_uuid, m_local_pool_id, global_image_id);
+        m_local_mirror_uuid, m_local_pool_id, m_local_data_pool_name,
+	global_image_id);
 
     dout(20) << global_image_id << ": creating replayer " << image_replayer
              << dendl;
