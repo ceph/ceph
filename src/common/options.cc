@@ -4846,6 +4846,18 @@ std::vector<Option> get_rgw_options() {
     .set_default(0)
     .set_description(""),
 
+    Option("rgw_sync_trace_history_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(4096)
+    .set_description(""),
+
+    Option("rgw_sync_trace_per_node_log_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(32)
+    .set_description(""),
+
+    Option("rgw_sync_trace_servicemap_update_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description(""),
+
     Option("rgw_period_push_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(2)
     .set_description(""),
@@ -5772,6 +5784,7 @@ std::vector<Option> get_mds_client_options() {
     Option("client_trace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description(""),
+
 
     Option("client_readahead_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(128*1024)
