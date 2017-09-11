@@ -39,14 +39,16 @@
 
 #include "include/ceph_fs.h"
 #include "include/filepath.h"
+#include "include/util.h"
 
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
-#include "common/errno.h"
-#include "common/safe_io.h"
-#include "common/perf_counters.h"
 #include "common/MemoryModel.h"
+#include "common/errno.h"
+#include "common/perf_counters.h"
+#include "common/safe_io.h"
+
 #include "osdc/Journaler.h"
 #include "osdc/Filer.h"
 
@@ -202,7 +204,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   cap_imports_num_opening = 0;
 
   opening_root = open = false;
-  lru.lru_set_midpoint(g_conf->mds_cache_mid);
+  lru.lru_set_midpoint(cache_mid());
 
   bottom_lru.lru_set_midpoint(0);
 
@@ -222,7 +224,7 @@ MDCache::~MDCache()
 
 void MDCache::log_stat()
 {
-  mds->logger->set(l_mds_inode_max, g_conf->mds_cache_size);
+  mds->logger->set(l_mds_inode_max, cache_limit_inodes() == 0 ? INT_MAX : cache_limit_inodes());
   mds->logger->set(l_mds_inodes, lru.lru_get_size());
   mds->logger->set(l_mds_inodes_pinned, lru.lru_get_num_pinned());
   mds->logger->set(l_mds_inodes_top, lru.lru_get_top());
@@ -277,8 +279,7 @@ void MDCache::add_inode(CInode *in)
       base_inodes.insert(in);
   }
 
-  if (CInode::count() >
-        g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
+  if (cache_toofull()) {
     exceeded_size_limit = true;
   }
 }
@@ -6412,34 +6413,19 @@ void MDCache::start_recovered_truncates()
 // ================================================================================
 // cache trimming
 
-
-/*
- * note: only called while MDS is active or stopping... NOT during recovery.
- * however, we may expire a replica whose authority is recovering.
- * 
- */
-bool MDCache::trim(int max, int count)
+void MDCache::trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*> &expiremap)
 {
-  // trim LRU
-  if (count > 0) {
-    max = lru.lru_get_size() - count;
-    if (max <= 0)
-      max = 1;
-  } else if (max < 0) {
-    max = g_conf->mds_cache_size;
-    if (max <= 0)
-      return false;
-  }
-  dout(7) << "trim max=" << max << "  cur=" << lru.lru_get_size()
-	  << "/" << bottom_lru.lru_get_size() << dendl;
-
-  // process delayed eval_stray()
-  stray_manager.advance_delayed();
-
-  map<mds_rank_t, MCacheExpire*> expiremap;
   bool is_standby_replay = mds->is_standby_replay();
-  int unexpirable = 0;
-  list<CDentry*> unexpirables;
+  std::vector<CDentry *> unexpirables;
+  uint64_t trimmed = 0;
+
+  dout(7) << "trim_lru trimming " << count
+          << " items from LRU"
+          << " size=" << lru.lru_get_size()
+          << " mid=" << lru.lru_get_top()
+          << " pintail=" << lru.lru_get_pintail()
+          << " pinned=" << lru.lru_get_num_pinned()
+          << dendl;
 
   for (;;) {
     CDentry *dn = static_cast<CDentry*>(bottom_lru.lru_expire());
@@ -6447,34 +6433,65 @@ bool MDCache::trim(int max, int count)
       break;
     if (trim_dentry(dn, expiremap)) {
       unexpirables.push_back(dn);
-      ++unexpirable;
+    } else {
+      trimmed++;
     }
   }
 
-  for(auto dn : unexpirables)
+  for (auto &dn : unexpirables) {
     bottom_lru.lru_insert_mid(dn);
+  }
   unexpirables.clear();
 
-  // trim dentries from the LRU: only enough to satisfy `max`,
-  while (lru.lru_get_size() + unexpirable > (unsigned)max) {
+  // trim dentries from the LRU until count is reached
+  while (cache_toofull() || count > 0) {
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) {
       break;
     }
     if ((is_standby_replay && dn->get_linkage()->inode &&
-        dn->get_linkage()->inode->item_open_file.is_on_list()) ||
-	trim_dentry(dn, expiremap)) {
+        dn->get_linkage()->inode->item_open_file.is_on_list())) {
       unexpirables.push_back(dn);
-      ++unexpirable;
+    } else if (trim_dentry(dn, expiremap)) {
+      unexpirables.push_back(dn);
+    } else {
+      trimmed++;
     }
+    count--;
   }
-  for(auto dn : unexpirables)
+
+  for (auto &dn : unexpirables) {
     lru.lru_insert_mid(dn);
+  }
   unexpirables.clear();
 
+  dout(7) << "trim_lru trimmed " << trimmed << " items" << dendl;
+}
+
+/*
+ * note: only called while MDS is active or stopping... NOT during recovery.
+ * however, we may expire a replica whose authority is recovering.
+ *
+ * @param count is number of dentries to try to expire
+ */
+bool MDCache::trim(uint64_t count)
+{
+  uint64_t used = cache_size();
+  uint64_t limit = cache_limit_memory();
+  map<mds_rank_t, MCacheExpire*> expiremap;
+
+  dout(7) << "trim bytes_used=" << bytes2str(used)
+          << " limit=" << bytes2str(limit)
+          << " reservation=" << cache_reservation()
+          << "% count=" << count << dendl;
+
+  // process delayed eval_stray()
+  stray_manager.advance_delayed();
+
+  trim_lru(count, expiremap);
+
   // trim non-auth, non-bound subtrees
-  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();) {
+  for (auto p = subtrees.begin(); p != subtrees.end();) {
     CDir *dir = p->first;
     ++p;
     CInode *diri = dir->get_inode();
@@ -6507,7 +6524,7 @@ bool MDCache::trim(int max, int count)
   }
 
   // trim root?
-  if (max == 0 && root) {
+  if (mds->is_stopping() && root) {
     list<CDir*> ls;
     root->get_dirfrags(ls);
     for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
@@ -6550,7 +6567,7 @@ bool MDCache::trim(int max, int count)
   }
 
   // Other rank's base inodes (when I'm stopping)
-  if (max == 0) {
+  if (mds->is_stopping()) {
     for (set<CInode*>::iterator p = base_inodes.begin();
          p != base_inodes.end(); ++p) {
       if (MDS_INO_MDSDIR_OWNER((*p)->ino()) != mds->get_nodeid()) {
@@ -7400,9 +7417,9 @@ void MDCache::check_memory_usage()
 
   // check client caps
   assert(CInode::count() == inode_map.size() + snap_inode_map.size());
-  float caps_per_inode = 0.0;
+  double caps_per_inode = 0.0;
   if (CInode::count())
-    caps_per_inode = (float)Capability::count() / (float)CInode::count();
+    caps_per_inode = (double)Capability::count() / (double)CInode::count();
 
   dout(2) << "check_memory_usage"
 	   << " total " << last.get_total()
@@ -7418,20 +7435,15 @@ void MDCache::check_memory_usage()
   mds->mlogger->set(l_mdm_rss, last.get_rss());
   mds->mlogger->set(l_mdm_heap, last.get_heap());
 
-  if (num_inodes_with_caps > g_conf->mds_cache_size) {
-    float ratio = (float)g_conf->mds_cache_size * .9 / (float)num_inodes_with_caps;
-    if (ratio < 1.0) {
-      last_recall_state = ceph_clock_now();
-      mds->server->recall_client_state(ratio);
-    }
+  if (cache_toofull()) {
+    last_recall_state = ceph_clock_now();
+    mds->server->recall_client_state();
   }
 
   // If the cache size had exceeded its limit, but we're back in bounds
   // now, free any unused pool memory so that our memory usage isn't
   // permanently bloated.
-  if (exceeded_size_limit
-      && CInode::count() <=
-        g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
+  if (exceeded_size_limit && !cache_toofull()) {
     // Only do this once we are back in bounds: otherwise the releases would
     // slow down whatever process caused us to exceed bounds to begin with
     if (ceph_using_tcmalloc()) {
@@ -7523,7 +7535,7 @@ bool MDCache::shutdown_pass()
   }
 
   // trim cache
-  trim(0);
+  trim(UINT64_MAX);
   dout(5) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
 
   // SUBTREES

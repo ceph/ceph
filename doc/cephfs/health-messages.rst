@@ -73,14 +73,14 @@ so at all.  This message appears if a client has taken longer than
 
 Message: "Client *name* failing to respond to cache pressure"
 Code: MDS_HEALTH_CLIENT_RECALL, MDS_HEALTH_CLIENT_RECALL_MANY
-Description: Clients maintain a metadata cache.  Items (such as inodes)
-in the client cache are also pinned in the MDS cache, so when the MDS
-needs to shrink its cache (to stay within ``mds_cache_size``), it
-sends messages to clients to shrink their caches too.  If the client
-is unresponsive or buggy, this can prevent the MDS from properly staying
-within its ``mds_cache_size`` and it may eventually run out of memory
-and crash.  This message appears if a client has taken more than
-``mds_recall_state_timeout`` (default 60s) to comply.
+Description: Clients maintain a metadata cache.  Items (such as inodes) in the
+client cache are also pinned in the MDS cache, so when the MDS needs to shrink
+its cache (to stay within ``mds_cache_size`` or ``mds_cache_memory_limit``), it
+sends messages to clients to shrink their caches too.  If the client is
+unresponsive or buggy, this can prevent the MDS from properly staying within
+its cache limits and it may eventually run out of memory and crash.  This
+message appears if a client has taken more than ``mds_recall_state_timeout``
+(default 60s) to comply.
 
 Message: "Client *name* failing to advance its oldest client/flush tid"
 Code: MDS_HEALTH_CLIENT_OLDEST_TID, MDS_HEALTH_CLIENT_OLDEST_TID_MANY
@@ -121,9 +121,9 @@ This message appears if any client requests have taken longer than
 
 Message: "Too many inodes in cache"
 Code: MDS_HEALTH_CACHE_OVERSIZED
-Description: The MDS is not succeeding in trimming its cache to comply
-with the limit set by the administrator.  If the MDS cache becomes too large,
-the daemon may exhaust available memory and crash.
-This message appears if the actual cache size (in inodes) is at least 50%
-greater than ``mds_cache_size`` (default 100000).
-
+Description: The MDS is not succeeding in trimming its cache to comply with the
+limit set by the administrator.  If the MDS cache becomes too large, the daemon
+may exhaust available memory and crash.  By default, this message appears if
+the actual cache size (in inodes or memory) is at least 50% greater than
+``mds_cache_size`` (default 100000) or ``mds_cache_memory_limit`` (default
+1GB). Modify ``mds_health_cache_threshold`` to set the warning ratio.
