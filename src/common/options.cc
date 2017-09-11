@@ -4950,7 +4950,7 @@ static std::vector<Option> get_rbd_options() {
   return std::vector<Option>({
     Option("rbd_default_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("rbd")
-    .set_description("")
+    .set_description("default pool for storing new images")
     .set_validator([](std::string *value, std::string *error_message){
       boost::regex pattern("^[^@/]+$");
       if (!boost::regex_match (*value, pattern)) {
@@ -4962,7 +4962,7 @@ static std::vector<Option> get_rbd_options() {
 
     Option("rbd_default_data_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("")
+    .set_description("default pool for storing data blocks for new images")
     .set_validator([](std::string *value, std::string *error_message){
       boost::regex pattern("^[^@/]*$");
       if (!boost::regex_match (*value, pattern)) {
@@ -4974,7 +4974,15 @@ static std::vector<Option> get_rbd_options() {
 
     Option("rbd_default_features", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("layering,exclusive-lock,object-map,fast-diff,deep-flatten")
-    .set_description("")
+    .set_description("default v2 image features for new images")
+    .set_long_description(
+        "RBD features are only applicable for v2 images. This setting accepts "
+        "either an integer bitmask value or comma-delimited string of RBD "
+        "feature names. This setting is always internally stored as an integer "
+        "bitmask value. The mapping between feature bitmask value and feature "
+        "name is as follows: +1 -> layering, +2 -> striping, "
+        "+4 -> exclusive-lock, +8 -> object-map, +16 -> fast-diff, "
+        "+32 -> deep-flatten, +64 -> journaling, +128 -> data-pool")
     .set_safe()
     .set_validator([](std::string *value, std::string *error_message){
       static const std::map<std::string, uint64_t> FEATURE_MAP = {
@@ -5035,234 +5043,241 @@ static std::vector<Option> get_rbd_options() {
 
     Option("rbd_op_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description(""),
+    .set_description("number of threads to utilize for internal processing"),
 
     Option("rbd_op_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
-    .set_description(""),
+    .set_description("time in seconds for detecting a hung thread"),
 
     Option("rbd_non_blocking_aio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("process AIO ops from a dispatch thread to prevent blocking"),
 
     Option("rbd_cache", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("whether to enable caching (writeback unless rbd_cache_max_dirty is 0)"),
 
     Option("rbd_cache_writethrough_until_flush", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("whether to make writeback caching writethrough until "
+                     "flush is called, to be sure the user of librbd will send "
+                     "flushes so that writeback is safe"),
 
     Option("rbd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(32<<20)
-    .set_description(""),
+    .set_description("cache size in bytes"),
 
     Option("rbd_cache_max_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(24<<20)
-    .set_description(""),
+    .set_description("dirty limit in bytes - set to 0 for write-through caching"),
 
     Option("rbd_cache_target_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(16<<20)
-    .set_description(""),
+    .set_description("target dirty limit in bytes"),
 
     Option("rbd_cache_max_dirty_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1.0)
-    .set_description(""),
+    .set_description("seconds in cache before writeback starts"),
 
     Option("rbd_cache_max_dirty_object", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("dirty limit for objects - set to 0 for auto calculate from rbd_cache_size"),
 
     Option("rbd_cache_block_writes_upfront", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("whether to block writes to the cache before the aio_write call completes"),
 
     Option("rbd_concurrent_management_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_min(1)
-    .set_description(""),
+    .set_description("how many operations can be in flight for a management operation like deleting or resizing an image"),
 
     Option("rbd_balance_snap_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("distribute snap read requests to random OSD"),
 
     Option("rbd_localize_snap_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("localize snap read requests to closest OSD"),
 
     Option("rbd_balance_parent_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("distribute parent read requests to random OSD"),
 
     Option("rbd_localize_parent_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("localize parent requests to closest OSD"),
 
     Option("rbd_readahead_trigger_requests", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
-    .set_description(""),
+    .set_description("number of sequential requests necessary to trigger readahead"),
 
     Option("rbd_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(512 * 1024)
-    .set_description(""),
+    .set_description("set to 0 to disable readahead"),
 
     Option("rbd_readahead_disable_after_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(50 * 1024 * 1024)
-    .set_description(""),
+    .set_description("how many bytes are read in total before readahead is disabled"),
 
     Option("rbd_clone_copy_on_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("copy-up parent image blocks to clone upon read request"),
 
     Option("rbd_blacklist_on_break_lock", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("whether to blacklist clients whose lock was broken"),
 
     Option("rbd_blacklist_expire_seconds", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("number of seconds to blacklist - set to 0 for OSD default"),
 
     Option("rbd_request_timed_out_seconds", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
+    .set_description("number of seconds before maintenance request times out"),
 
     Option("rbd_skip_partial_discard", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("when trying to discard a range inside an object, set to true to skip zeroing the range"),
 
     Option("rbd_enable_alloc_hint", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("when writing a object, it will issue a hint to osd backend to indicate the expected size object need"),
 
     Option("rbd_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("true if LTTng-UST tracepoints should be enabled"),
 
     Option("rbd_blkin_trace_all", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("create a blkin trace for all RBD requests"),
 
     Option("rbd_validate_pool", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("validate empty pools for RBD compatibility"),
 
     Option("rbd_validate_names", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("validate new image names for RBD compatibility"),
 
     Option("rbd_auto_exclusive_lock_until_manual_request", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("automatically acquire/release exclusive lock until it is explicitly requested"),
 
     Option("rbd_mirroring_resync_after_disconnect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("automatically start image resync after mirroring is disconnected due to being laggy"),
 
     Option("rbd_mirroring_replay_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("time-delay in seconds for rbd-mirror asynchronous replication"),
 
     Option("rbd_default_format", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2)
-    .set_description(""),
+    .set_description("default image format for new images"),
 
     Option("rbd_default_order", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(22)
-    .set_description(""),
+    .set_description("default order (data block object size) for new images"),
 
     Option("rbd_default_stripe_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("default stripe count for new images"),
 
     Option("rbd_default_stripe_unit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("default stripe width for new images"),
 
     Option("rbd_default_map_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("default krbd map options"),
 
     Option("rbd_journal_order", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_min(12)
     .set_default(24)
-    .set_description(""),
+    .set_description("default order (object size) for journal data objects"),
 
     Option("rbd_journal_splay_width", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(4)
-    .set_description(""),
+    .set_description("number of active journal objects"),
 
     Option("rbd_journal_commit_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("commit time interval, seconds"),
 
     Option("rbd_journal_object_flush_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("maximum number of pending commits per journal object"),
 
     Option("rbd_journal_object_flush_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("maximum number of pending bytes per journal object"),
 
     Option("rbd_journal_object_flush_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("maximum age (in seconds) for pending commits"),
 
     Option("rbd_journal_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("pool for journal objects"),
 
     Option("rbd_journal_max_payload_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(16384)
-    .set_description(""),
+    .set_description("maximum journal payload size before splitting"),
 
     Option("rbd_journal_max_concurrent_object_sets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("maximum number of object sets a journal client can be behind before it is automatically unregistered"),
+  });
+}
 
+static std::vector<Option> get_rbd_mirror_options() {
+  return std::vector<Option>({
     Option("rbd_mirror_journal_commit_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("commit time interval, seconds"),
 
     Option("rbd_mirror_journal_poll_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("maximum age (in seconds) between successive journal polls"),
 
     Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(32768)
-    .set_description(""),
+    .set_description("maximum bytes to read from each journal data object per fetch"),
 
     Option("rbd_mirror_sync_point_update_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
+    .set_description("number of seconds between each update of the image sync point object number"),
 
     Option("rbd_mirror_concurrent_image_syncs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("maximum number of image syncs in parallel"),
 
     Option("rbd_mirror_pool_replayers_refresh_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
+    .set_description("interval to refresh peers in rbd-mirror daemon"),
 
     Option("rbd_mirror_delete_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
+    .set_description("interval to check and retry the failed requests in deleter"),
 
     Option("rbd_mirror_image_state_check_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(30)
     .set_min(1)
-    .set_description(""),
+    .set_description("interval to get images from pool watcher and set sources in replayer"),
 
     Option("rbd_mirror_leader_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_min(1)
-    .set_description(""),
+    .set_description("interval (in seconds) between mirror leader heartbeats"),
 
     Option("rbd_mirror_leader_max_missed_heartbeats", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2)
-    .set_description(""),
+    .set_description("number of missed heartbeats for non-lock owner to attempt to acquire lock"),
 
     Option("rbd_mirror_leader_max_acquire_attempts_before_break", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(3)
-    .set_description(""),
+    .set_description("number of failed attempts to acquire lock after missing heartbeats before breaking lock"),
   });
 }
 
@@ -5945,6 +5960,7 @@ static std::vector<Option> build_options()
 
   ingest(get_rgw_options(), "rgw");
   ingest(get_rbd_options(), "rbd");
+  ingest(get_rbd_mirror_options(), "rbd-mirror");
   ingest(get_mds_options(), "mds");
   ingest(get_mds_client_options(), "mds_client");
 

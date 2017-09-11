@@ -623,8 +623,8 @@ TEST_F(TestMockLeaderWatcher, Break) {
   EXPECT_EQ(0, _rados->conf_set("rbd_mirror_leader_max_missed_heartbeats",
                                 "1"));
   CephContext *cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
-  int max_acquire_attempts =
-    cct->_conf->rbd_mirror_leader_max_acquire_attempts_before_break;
+  int max_acquire_attempts = cct->_conf->get_val<int64_t>(
+    "rbd_mirror_leader_max_acquire_attempts_before_break");
 
   MockManagedLock mock_managed_lock;
   MockMirrorStatusWatcher mock_mirror_status_watcher;

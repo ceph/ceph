@@ -39,7 +39,8 @@ ImageCopyRequest<I>::ImageCopyRequest(I *local_image_ctx, I *remote_image_ctx,
     m_progress_ctx(progress_ctx),
     m_lock(unique_lock_name("ImageCopyRequest::m_lock", this)),
     m_updating_sync_point(false), m_update_sync_ctx(nullptr),
-    m_update_sync_point_interval(m_local_image_ctx->cct->_conf->rbd_mirror_sync_point_update_age),
+    m_update_sync_point_interval(m_local_image_ctx->cct->_conf->template get_val<double>(
+      "rbd_mirror_sync_point_update_age")),
     m_client_meta_copy(*client_meta) {
   assert(!m_client_meta_copy.sync_points.empty());
 }
@@ -142,7 +143,7 @@ void ImageCopyRequest<I>::send_object_copies() {
   bool complete;
   {
     Mutex::Locker locker(m_lock);
-    for (int i = 0; i < cct->_conf->rbd_concurrent_management_ops; ++i) {
+    for (int i = 0; i < cct->_conf->get_val<int64_t>("rbd_concurrent_management_ops"); ++i) {
       send_next_object_copy();
       if (m_ret_val < 0 && m_current_ops == 0) {
         break;

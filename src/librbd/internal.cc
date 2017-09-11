@@ -75,7 +75,7 @@ namespace librbd {
 namespace {
 
 int validate_pool(IoCtx &io_ctx, CephContext *cct) {
-  if (!cct->_conf->rbd_validate_pool) {
+  if (!cct->_conf->get_val<bool>("rbd_validate_pool")) {
     return 0;
   }
 
@@ -833,7 +833,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     uint64_t format;
     if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0)
-      format = cct->_conf->rbd_default_format;
+      format = cct->_conf->get_val<int64_t>("rbd_default_format");
     bool old_format = format == 1;
 
     // make sure it doesn't already exist, in either format
@@ -850,7 +850,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     uint64_t order = 0;
     if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0 || order == 0) {
-      order = cct->_conf->rbd_default_order;
+      order = cct->_conf->get_val<int64_t>("rbd_default_order");
     }
     r = image::CreateRequest<>::validate_order(cct, order);
     if (r < 0) {
@@ -1905,7 +1905,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     ZTracer::Trace trace;
-    if (cct->_conf->rbd_blkin_trace_all) {
+    if (src->blkin_trace_all) {
       trace.init("copy", &src->trace_endpoint);
     }
 
@@ -2146,7 +2146,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     uint64_t left = mylen;
 
     ZTracer::Trace trace;
-    if (ictx->cct->_conf->rbd_blkin_trace_all) {
+    if (ictx->blkin_trace_all) {
       trace.init("read_iterate", &ictx->trace_endpoint);
     }
 
