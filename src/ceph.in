@@ -48,7 +48,7 @@ PRIO_USEFUL = 5
 PRIO_UNINTERESTING = 2
 PRIO_DEBUGONLY = 0
 
-PRIO_DEFAULT = PRIO_USEFUL
+PRIO_DEFAULT = PRIO_INTERESTING
 
 # Make life easier on developers:
 # If our parent dir contains CMakeCache.txt and bin/init-ceph,
