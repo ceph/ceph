@@ -67,13 +67,13 @@ int KernelDevice::open(const string& p)
   fd_direct = ::open(path.c_str(), O_RDWR | O_DIRECT);
   if (fd_direct < 0) {
     r = -errno;
-    derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
+    derr << __func__ << " got: " << cpp_strerror(r) << dendl;
     return r;
   }
   fd_buffered = ::open(path.c_str(), O_RDWR);
   if (fd_buffered < 0) {
     r = -errno;
-    derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
+    derr << __func__ << " got: " << cpp_strerror(r) << dendl;
     goto out_direct;
   }
   dio = true;
@@ -87,7 +87,7 @@ int KernelDevice::open(const string& p)
   r = posix_fadvise(fd_buffered, 0, 0, POSIX_FADV_RANDOM);
   if (r) {
     r = -r;
-    derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
+    derr << __func__ << " got: " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
 

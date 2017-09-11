@@ -64,7 +64,7 @@ int PMEMDevice::open(const string& p)
   fd = ::open(path.c_str(), O_RDWR);
   if (fd < 0) {
     r = -errno;
-    derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
+    derr << __func__ << " got: " << cpp_strerror(r) << dendl;
     return r;
   }
 
