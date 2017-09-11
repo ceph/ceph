@@ -58,7 +58,9 @@ public:
     dout(10) << "MonCommandCompletion::finish()" << dendl;
     {
       // Scoped so the Gil is released before calling notify_all()
-      Gil gil(pThreadState);
+      // Create new thread state because this is called via the MonClient
+      // Finisher, not the PyModules finisher.
+      Gil gil(pThreadState, true);
 
       auto set_fn = PyObject_GetAttrString(python_completion, "complete");
       assert(set_fn != nullptr);
