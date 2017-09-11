@@ -8,8 +8,8 @@
 
 int aio_queue_t::submit(aio_t &aio, int *retries)
 {
-  // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
-  int attempts = 16;
+  // 2^19 * 125us = ~64 seconds, so max sleep is ~128 seconds
+  int attempts = 19;
   int delay = 125;
   iocb *piocb = &aio.iocb;
   int r;
@@ -33,8 +33,8 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
 			      uint16_t aios_size, void *priv, 
 			      int *retries)
 {
-  // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
-  int attempts = 16;
+  // 2^19 * 125us = ~64 seconds, so max sleep is ~128 seconds
+  int attempts = 19;
   int delay = 125;
 
   aio_iter cur = begin;
