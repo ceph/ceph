@@ -17,7 +17,7 @@ tasks:
         scratch_image: 'scratch_image-0'
         scratch_size: 5120  # MB
         fs_type: ext4
-        tests: '-g auto -x clone'
+        tests: '-g auto -g blockdev -x clone'
         exclude:
         - generic/042
         - generic/392
