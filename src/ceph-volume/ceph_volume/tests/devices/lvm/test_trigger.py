@@ -36,4 +36,10 @@ class TestParseOSDUUID(object):
         with pytest.raises(exceptions.SuffixParsingError):
             trigger.parse_osd_uuid('ljahs-dfa-slkjhdfa-foo')
 
+    def test_robust_double_id_in_uuid(self):
+        # it is possible to have the id in the SHA1, this should
+        # be fine parsing that
+        result = trigger.parse_osd_uuid("1-abc959fd-1ec9-4864-b141-3154f9b9f8ed")
+        assert result == 'abc959fd-1ec9-4864-b141-3154f9b9f8ed'
+
 
