@@ -1512,19 +1512,19 @@ def task(ctx, config):
     ]
 
     with contextutil.nested(*subtasks):
+        first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
+        (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+        if not hasattr(ctx, 'managers'):
+            ctx.managers = {}
+        ctx.managers[config['cluster']] = CephManager(
+            mon,
+            ctx=ctx,
+            logger=log.getChild('ceph_manager.' + config['cluster']),
+            cluster=config['cluster'],
+        )
         try:
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=dict(cluster=config['cluster']))
-            first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
-            (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-            if not hasattr(ctx, 'managers'):
-                ctx.managers = {}
-            ctx.managers[config['cluster']] = CephManager(
-                mon,
-                ctx=ctx,
-                logger=log.getChild('ceph_manager.' + config['cluster']),
-                cluster=config['cluster'],
-            )
             yield
         finally:
             if config.get('wait-for-scrub', True):
