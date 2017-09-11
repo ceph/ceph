@@ -230,6 +230,8 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
     // Actually we don't allow any failed error code, caller doesn't prepare to
     // handle error status. So now we need to assert failure here. In practice,
     // add_event shouldn't report error, otherwise it must be a innermost bug!
+    lderr(cct) << __func__ << " add event failed, ret=" << r << " fd=" << fd
+               << " mask=" << mask << " original mask is " << event->mask << dendl;
     assert(0 == "BUG!");
     return r;
   }
