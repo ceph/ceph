@@ -24,14 +24,24 @@
 #include "include/stringify.h"
 #include "common/errno.h"
 #include "common/debug.h"
-#include "common/blkdev.h"
 #include "common/align.h"
 #include "common/blkdev.h"
+#include "common/perf_counters.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
+
+enum {
+  l_bluestore_kerneldevice_first = 633430,
+  l_bluestore_kerneldevice_aio_write_lat,
+  l_bluestore_kerneldevice_aio_read_lat,
+  l_bluestore_kerneldevice_write_lat,
+  l_bluestore_kerneldevice_read_lat,
+  l_bluestore_kerneldevice_flush_lat,
+  l_bluestore_kerneldevice_last
+};
 
 KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
   : BlockDevice(cct, cb, cbpriv),
@@ -44,6 +54,22 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
     aio_thread(this),
     injecting_crash(0)
 {
+  PerfCountersBuilder b(g_ceph_context, "KernelDevice", 
+                        l_bluestore_kerneldevice_first,
+                        l_bluestore_kerneldevice_last);
+  b.add_time_avg(l_bluestore_kerneldevice_aio_write_lat, "aio write lat", "average aio write completing latency");
+  b.add_time_avg(l_bluestore_kerneldevice_aio_read_lat, "aio write lat", "average aio write completing latency");
+  b.add_time_avg(l_bluestore_kerneldevice_write_lat, "write lat", "average synchronize write completing latency");
+  b.add_time_avg(l_bluestore_kerneldevice_read_lat, "write lat", "average synchronize read completing latency");
+  b.add_time_avg(l_bluestore_kerneldevice_flush_lat, "flush lat", "average flush completing latency"); 
+  logger = b.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(logger);
+}
+
+KernelDevice::~KernelDevice() 
+{
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  delete logger;
 }
 
 int KernelDevice::_lock()
@@ -289,13 +315,14 @@ int KernelDevice::flush()
   }
   utime_t start = ceph_clock_now();
   int r = ::fdatasync(fd_direct);
-  utime_t end = ceph_clock_now();
-  utime_t dur = end - start;
   if (r < 0) {
     r = -errno;
     derr << __func__ << " fdatasync got: " << cpp_strerror(r) << dendl;
     ceph_abort();
   }
+  
+  utime_t dur = ceph_clock_now() - start;
+  logger->tinc(l_bluestore_kerneldevice_flush_lat, dur);
   dout(5) << __func__ << " in " << dur << dendl;;
   return r;
 }
@@ -378,6 +405,13 @@ void KernelDevice::_aio_thread()
                 << " ioc " << ioc
                 << " with " << (ioc->num_running.load() - 1)
                 << " aios left" << dendl;
+
+       if (aio[i]->command == IOCommand::READ_COMMAND) {
+         logger->tinc(l_bluestore_kerneldevice_aio_read_lat, ceph_clock_now() - aio[i]->start);  
+       } else {
+         assert(aio[i]->command == IOCommand::WRITE_COMMAND);
+         logger->tinc(l_bluestore_kerneldevice_aio_write_lat, ceph_clock_now() - aio[i]->start);
+       }
 
 	// NOTE: once num_running and we either call the callback or
 	// call aio_wake we cannot touch ioc or aio[] as the caller
@@ -542,6 +576,8 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered)
     ++injecting_crash;
     return 0;
   }
+
+  utime_t write_start = ceph_clock_now();
   vector<iovec> iov;
   bl.prepare_iov(&iov);
   int r = ::pwritev(buffered ? fd_buffered : fd_direct,
@@ -550,7 +586,7 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered)
   if (r < 0) {
     r = -errno;
     derr << __func__ << " pwritev error: " << cpp_strerror(r) << dendl;
-    return r;
+    goto out;
   }
   if (buffered) {
     // initiate IO (but do not wait)
@@ -558,13 +594,15 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered)
     if (r < 0) {
       r = -errno;
       derr << __func__ << " sync_file_range error: " << cpp_strerror(r) << dendl;
-      return r;
+      goto out; 
     }
   }
 
   io_since_flush.store(true);
 
-  return 0;
+ out:
+  logger->tinc(l_bluestore_kerneldevice_write_lat, ceph_clock_now() - write_start);
+  return r < 0 ? r : 0;
 }
 
 int KernelDevice::write(
@@ -616,7 +654,7 @@ int KernelDevice::aio_write(
 #ifdef HAVE_LIBAIO
   if (aio && dio && !buffered) {
     _aio_log_start(ioc, off, len); 
-    ioc->pending_aios.push_back(aio_t(ioc, fd_direct));
+    ioc->pending_aios.push_back(aio_t(ioc, fd_direct, IOCommand::WRITE_COMMAND));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     if (cct->_conf->bdev_inject_crash &&
@@ -653,6 +691,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)
 {
+  utime_t read_start = ceph_clock_now();
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	  << (buffered ? " (buffered)" : " (direct)")
 	  << dendl;
@@ -673,6 +712,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   *_dout << dendl;
 
  out:
+  logger->tinc(l_bluestore_kerneldevice_read_lat, ceph_clock_now() - read_start);
   return r < 0 ? r : 0;
 }
 
@@ -689,7 +729,7 @@ int KernelDevice::aio_read(
 #ifdef HAVE_LIBAIO
   if (aio && dio) {
     _aio_log_start(ioc, off, len);
-    ioc->pending_aios.push_back(aio_t(ioc, fd_direct));
+    ioc->pending_aios.push_back(aio_t(ioc, fd_direct, IOCommand::READ_COMMAND));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     aio.pread(off, len);

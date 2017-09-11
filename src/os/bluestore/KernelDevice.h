@@ -38,6 +38,8 @@ class KernelDevice : public BlockDevice {
   aio_queue_t aio_queue;
   bool aio_stop;
 
+  PerfCounters *logger = nullptr;
+
   struct AioCompletionThread : public Thread {
     KernelDevice *bdev;
     explicit AioCompletionThread(KernelDevice *b) : bdev(b) {}
@@ -72,6 +74,7 @@ class KernelDevice : public BlockDevice {
 
 public:
   KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);
+  ~KernelDevice();
 
   void aio_submit(IOContext *ioc) override;
 

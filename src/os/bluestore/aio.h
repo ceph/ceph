@@ -12,6 +12,12 @@
 
 #include "include/buffer.h"
 #include "include/types.h"
+#include "common/Clock.h"
+
+enum class IOCommand {
+  READ_COMMAND,
+  WRITE_COMMAND
+};
 
 struct aio_t {
   struct iocb iocb;  // must be first element; see shenanigans in aio_queue_t
@@ -22,17 +28,23 @@ struct aio_t {
   int rval;
   bufferlist bl;  ///< write payload (so that it remains stable for duration)
 
+  utime_t start;
+  IOCommand command;  
+  
   boost::intrusive::list_member_hook<> queue_item;
 
-  aio_t(void *p, int f) : priv(p), fd(f), offset(0), length(0), rval(-1000) {
+  aio_t(void *p, int f, IOCommand c) : priv(p), fd(f), offset(0), length(0), 
+                                       rval(-1000), start(ceph_clock_now()), command(c) {
   }
 
   void pwritev(uint64_t _offset, uint64_t len) {
+    command = IOCommand::WRITE_COMMAND;
     offset = _offset;
     length = len;
     io_prep_pwritev(&iocb, fd, &iov[0], iov.size(), offset);
   }
   void pread(uint64_t _offset, uint64_t len) {
+    command = IOCommand::READ_COMMAND;
     offset = _offset;
     length = len;
     bufferptr p = buffer::create_page_aligned(length);
