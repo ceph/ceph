@@ -9729,6 +9729,10 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
     op.setxattr(RGW_ATTR_ID_TAG,  bl);
   }
 
+
+  real_time mtime = real_clock::now();
+  struct timespec mtime_ts = real_clock::to_timespec(mtime);
+  op.mtime2(&mtime_ts);
   r = ref.ioctx.operate(ref.oid, &op);
   if (state) {
     if (r >= 0) {
@@ -9739,7 +9743,6 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
       string content_type(content_type_bl.c_str(), content_type_bl.length());
       uint64_t epoch = ref.ioctx.get_last_version();
       int64_t poolid = ref.ioctx.get_id();
-      real_time mtime = real_clock::now();
       r = index_op.complete(poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, &acl_bl,
                             RGW_OBJ_CATEGORY_MAIN, NULL);
