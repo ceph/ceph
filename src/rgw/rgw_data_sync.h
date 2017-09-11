@@ -6,6 +6,7 @@
 #include "rgw_bucket.h"
 
 #include "rgw_sync_module.h"
+#include "rgw_sync_trace.h"
 
 #include "common/RWLock.h"
 #include "common/ceph_json.h"
@@ -208,27 +209,29 @@ struct rgw_bucket_entry_owner {
 class RGWSyncErrorLogger;
 
 struct RGWDataSyncEnv {
-  CephContext *cct;
-  RGWRados *store;
-  RGWRESTConn *conn;
-  RGWAsyncRadosProcessor *async_rados;
-  RGWHTTPManager *http_manager;
-  RGWSyncErrorLogger *error_logger;
+  CephContext *cct{nullptr};
+  RGWRados *store{nullptr};
+  RGWRESTConn *conn{nullptr};
+  RGWAsyncRadosProcessor *async_rados{nullptr};
+  RGWHTTPManager *http_manager{nullptr};
+  RGWSyncErrorLogger *error_logger{nullptr};
+  RGWSyncTraceManager *sync_tracer{nullptr};
   string source_zone;
-  RGWSyncModuleInstanceRef sync_module;
+  RGWSyncModuleInstanceRef sync_module{nullptr};
 
-  RGWDataSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL), error_logger(NULL), sync_module(NULL) {}
+  RGWDataSyncEnv() {}
 
   void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
-            RGWSyncErrorLogger *_error_logger, const string& _source_zone,
-            RGWSyncModuleInstanceRef& _sync_module) {
+            RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer,
+            const string& _source_zone, RGWSyncModuleInstanceRef& _sync_module) {
     cct = _cct;
     store = _store;
     conn = _conn;
     async_rados = _async_rados;
     http_manager = _http_manager;
     error_logger = _error_logger;
+    sync_tracer = _sync_tracer;
     source_zone = _source_zone;
     sync_module = _sync_module;
   }
@@ -247,6 +250,8 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   RWLock lock;
   RGWDataSyncControlCR *data_sync_cr;
 
+  RGWSyncTraceNodeRef tn;
+
   bool initialized;
 
 public:
@@ -256,7 +261,8 @@ public:
       http_manager(store->ctx(), completion_mgr),
       lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
       initialized(false) {}
-  int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger, RGWSyncModuleInstanceRef& module);
+  int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
+           RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& module);
   void finish();
 
   int read_log_info(rgw_datalog_info *log_info);
@@ -467,6 +473,7 @@ public:
   int init(const string& _source_zone, RGWRESTConn *_conn,
            const rgw_bucket& bucket, int shard_id,
            RGWSyncErrorLogger *_error_logger,
+           RGWSyncTraceManager *_sync_tracer,
            RGWSyncModuleInstanceRef& _sync_module);
   void finish();
 
