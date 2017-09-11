@@ -41,9 +41,10 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.graphviz',
     'sphinx.ext.todo',
-    'sphinx_ditaa',
+    'sphinxcontrib.ditaa',
     'breathe',
     ]
+ditaa = 'ditaa'
 todo_include_todos = True
 
 top_level = os.path.dirname(
