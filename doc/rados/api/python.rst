@@ -374,7 +374,7 @@ of objects or XATTRs and iterate over them.
 
 .. automethod:: Ioctx.set_xattr(key, xattr_name, xattr_value)
 .. automethod:: Ioctx.get_xattrs(oid)
-.. automethod:: XattrIterator.next()
+.. automethod:: XattrIterator.__next__()
 .. automethod:: Ioctx.get_xattr(key, xattr_name)
 .. automethod:: Ioctx.rm_xattr(key, xattr_name)
 
@@ -389,7 +389,7 @@ you may perform synchronous operations on the  objects. For asynchronous
 operations, you should use the I/O context methods.
 
 .. automethod:: Ioctx.list_objects()
-.. automethod:: ObjectIterator.next()
+.. automethod:: ObjectIterator.__next__()
 .. automethod:: Object.read(length = 1024*1024)
 .. automethod:: Object.write(string_to_write)
 .. automethod:: Object.get_xattrs()
