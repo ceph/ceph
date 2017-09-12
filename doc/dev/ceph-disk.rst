@@ -66,12 +66,12 @@ prepare class hierarchy
 The ``ceph-disk`` prepare class hierarchy can be challenging to read
 and this guide is designed to explain how it is structured.
 
-The Prepare class roughly replaces the prepare_main function but also
-handles the prepare subcommand argument parsing. It creates the data
+The ``Prepare`` class roughly replaces the ``prepare_main`` function but also
+handles the ``prepare`` subcommand argument parsing. It creates the data
 and journal objects and delegate the actual work to them via the
-prepare() method.
+``prepare()`` method.
 
-The Prepare class assumes that preparing an OSD consists on the
+The ``Prepare`` class assumes that preparing an OSD consists of the
 following phases:
 
 * optionally prepare auxiliary devices, such as the journal
@@ -79,28 +79,31 @@ following phases:
 * populate the data directory with fsid etc. and optionally symbolic
   links to the auxiliary devices
 
-The PrepareDefault class is derived from Prepare and implements the
-current model where there only is one auxiliary device, the journal.
+The ``PrepareFilestore`` class is derived from ``Prepare`` and implements the
+current model where there only is one auxiliary device, the journal. It
+utilizes ``PrepareJournal`` and ``PrepareFilestoredata`` for preparing its
+journal and its data directory respectively. The latter is a derived class
+of ``PrepareData``.
 
-The PrepareJournal class implements the *journal* functions and is
-based on a generic class, PrepareSpace which handles the allocation of
+The ``PrepareJournal`` class implements the *journal* functions and is
+based on a generic class ``PrepareSpace``, which handles the allocation of
 an auxiliary device. The only journal specific feature is left to the
-PrepareJournal class: querying the OSD to figure out if a journal is
+``PrepareJournal`` class: querying the OSD to figure out if a journal is
 wanted or not.
 
-The OSD data directory is prepared via the PrepareData class. It
-creates a file system if necessary (i.e. if a device) and populate the
+The OSD data directory is prepared via the ``PrepareData`` class. It
+creates a file system if necessary (i.e. if a device) and populates the
 data directory. Further preparation is then delegated to the auxiliary
 devices (i.e. adding a symlink to the device for a journal).
 
 There was some code paths related dmcrypt / multipath devices in the
-prepare functions, although it is orthogonal. A class tree for Devices
+prepare functions, although it is orthogonal. A class tree for ``Devices``
 was created to isolate that.
 
 Although that was the primary reason for adding a new class tree, two
 other aspects have also been moved there: ``ptypes`` (i.e. partition
 types) and partition creation.  The ``ptypes`` are organized into a data
-structure with a few helpers in the hope it will be easier to
+structure with a few helpers in the hope that it will be easier to
 maintain. All references to the ``*_UUID`` variables have been
 updated.
 
@@ -112,7 +115,7 @@ it dmcrypt'ed or a multipath device ?). It is best implemented by
 derivation so the prepare function does not need to be concerned about
 how the ``ptype`` of a partition is determined.
 
-Many functions could be refactored into a Device class and its
+Many functions could be refactored into a ``Device`` class and its
 derivatives, but that was not done to minimize the size of the
 refactor.
 
@@ -123,10 +126,27 @@ refactor.
 * ``DevicePartitionCryptPlain`` knows how to setup dmcrypt plain
 * ``DevicePartitionCryptLuks`` knows how to setup dmcrypt luks
 
-The CryptHelpers class is introduced to factorize the code snippets
+The ``CryptHelpers`` class is introduced to factorize the code snippets
 that were duplicated in various places but that do not really belong
 because they are convenience wrappers to figure out:
 
 * if dcmrypt should be used
 * the keysize
 * the dmcrypt type (plain or luks)
+
+
+state transition of partitions
+==============================
+
+
+.. ditaa::
+
+   /--------\            /---------\           /----------\
+   | unused | ---------> | created |---------> | prepared |
+   |        |            | (tobe)  |           | (ready)  |
+   \--------/            \---------/           \----------/
+       |                      ^
+       |     /---------\      |
+       +-----| zapped  | -----+
+   zap-disk  |         |
+             \---------/
