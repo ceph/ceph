@@ -8,5 +8,5 @@ tasks:
 - install:
 - exec:
     client.0:
-      - mkdir $TESTDIR/ostest && cd $TESTDIR/ostest && ceph_test_objectstore --gtest_filter=-*/2
+      - mkdir $TESTDIR/ostest && cd $TESTDIR/ostest && ceph_test_objectstore --gtest_filter=-*/2:-*/3
       - rm -rf $TESTDIR/ostest
