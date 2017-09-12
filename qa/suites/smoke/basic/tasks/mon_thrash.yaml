@@ -4,6 +4,17 @@ overrides:
       - reached quota
       - \(POOL_APP_NOT_ENABLED\)
       - \(OSD_SLOW_PING_TIME
+      - mons down
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
+      - \(REQUEST_SLOW\)
+      - \(TOO_FEW_PGS\)
     conf:
       global:
         ms inject delay max: 1
