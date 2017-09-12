@@ -2910,7 +2910,8 @@ int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
 }
 
 int apply_layout_settings(ObjectStore *os, const OSDSuperblock &superblock,
-			  const string &pool_name, const spg_t &pgid, bool dry_run)
+			  const string &pool_name, const spg_t &pgid, bool dry_run,
+                          int target_level)
 {
   int r = 0;
 
@@ -2960,7 +2961,7 @@ int apply_layout_settings(ObjectStore *os, const OSDSuperblock &superblock,
       cerr << "Would apply layout settings to " << coll << std::endl;
     } else {
       cerr << "Finished " << done << "/" << total << " collections" << "\r";
-      r = fs->apply_layout_settings(coll);
+      r = fs->apply_layout_settings(coll, target_level);
       if (r < 0) {
 	cerr << "Error applying layout settings to " << coll << std::endl;
 	return r;
@@ -3030,7 +3031,8 @@ int main(int argc, char **argv)
   positional.add_options()
     ("object", po::value<string>(&object), "'' for pgmeta_oid, object name or ghobject in json")
     ("objcmd", po::value<string>(&objcmd), "command [(get|set)-bytes, (get|set|rm)-(attr|omap), (get|set)-omaphdr, list-attrs, list-omap, remove]")
-    ("arg1", po::value<string>(&arg1), "arg1 based on cmd")
+    ("arg1", po::value<string>(&arg1), "arg1 based on cmd, "
+     "for apply-layout-settings: target hash level split to")
     ("arg2", po::value<string>(&arg2), "arg2 based on cmd")
     ;
 
@@ -3401,7 +3403,11 @@ int main(int argc, char **argv)
   }
 
   if (op == "apply-layout-settings") {
-    ret = apply_layout_settings(fs, superblock, pool, pgid, dry_run);
+    int target_level = 0;
+    if (vm.count("arg1") && isdigit(arg1[0])) {
+      target_level = atoi(arg1.c_str());
+    }
+    ret = apply_layout_settings(fs, superblock, pool, pgid, dry_run, target_level);
     goto out;
   }
 

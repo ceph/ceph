@@ -739,7 +739,7 @@ public:
   void dump_stop();
   void dump_transactions(vector<Transaction>& ls, uint64_t seq, OpSequencer *osr);
 
-  virtual int apply_layout_settings(const coll_t &cid);
+  virtual int apply_layout_settings(const coll_t &cid, int target_level);
 
 private:
   void _inject_failure();
