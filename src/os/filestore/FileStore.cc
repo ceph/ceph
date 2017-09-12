@@ -106,8 +106,15 @@ using ceph::crypto::SHA1;
 #define XATTR_NO_SPILL_OUT "0"
 #define XATTR_SPILL_OUT "1"
 
+
+// All right! Let's add some optimizations
+//
+// Increase the write_buffer_size. This gives better write performance
+// at the cost of increased time when we open the database at OSD start.
+//
+// Disable auto compactions might be interesting.
 static const std::vector<KeyValueDB::ColumnFamily> column_families = {
-  { CEPH_OSD_PGLOG_PREFIX, "" }
+  { CEPH_OSD_PGLOG_PREFIX, "write_buffer_size=268435456;" }
 };
 
 //Initial features in new superblock.
