@@ -189,7 +189,7 @@ public:
     ) override;
 
   /// @see CollectionIndex
-  int apply_layout_settings() override;
+  int apply_layout_settings(int target_level) override;
 
 protected:
   int _init() override;
@@ -272,7 +272,8 @@ private:
 
   /// Encapsulates logic for when to merge.
   bool must_split(
-    const subdir_info_s &info ///< [in] Info to check
+    const subdir_info_s &info, ///< [in] Info to check
+    int target_level = 0
     ); /// @return True if info must be split, False otherwise
 
   /// Initiates merge
@@ -436,7 +437,7 @@ private:
   int recursive_create_path(vector<string>& path, int level);
 
   /// split each dir below the given path
-  int split_dirs(const vector<string> &path);
+  int split_dirs(const vector<string> &path, int target_level = 0);
 
   int write_settings();
 };
