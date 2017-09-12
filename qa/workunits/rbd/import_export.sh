@@ -80,7 +80,7 @@ dd if=/dev/urandom bs=1M count=1 of=${TMPDIR}/sparse2; truncate ${TMPDIR}/sparse
 
 # 1M sparse, 1M data
 rbd import $RBD_CREATE_ARGS --order 20 ${TMPDIR}/sparse1
-rbd ls -l | grep sparse1 | grep -i '2048k'
+rbd ls -l | grep sparse1 | grep -Ei '(2M|2048k)'
 [ $tiered -eq 1 -o "$(objects sparse1)" = '1' ]
 
 # export, compare contents and on-disk size
@@ -91,7 +91,7 @@ rbd rm sparse1
 
 # 1M data, 1M sparse
 rbd import $RBD_CREATE_ARGS --order 20 ${TMPDIR}/sparse2
-rbd ls -l | grep sparse2 | grep -i '2048k'
+rbd ls -l | grep sparse2 | grep -Ei '(2M|2048k)'
 [ $tiered -eq 1 -o "$(objects sparse2)" = '0' ]
 rbd export sparse2 ${TMPDIR}/sparse2.out
 compare_files_and_ondisk_sizes ${TMPDIR}/sparse2 ${TMPDIR}/sparse2.out
@@ -102,7 +102,7 @@ rbd rm sparse2
 truncate ${TMPDIR}/sparse1 -s 10M
 # import from stdin just for fun, verify still sparse
 rbd import $RBD_CREATE_ARGS --order 20 - sparse1 < ${TMPDIR}/sparse1
-rbd ls -l | grep sparse1 | grep -i '10240k'
+rbd ls -l | grep sparse1 | grep -Ei '(10M|10240k)'
 [ $tiered -eq 1 -o "$(objects sparse1)" = '1' ]
 rbd export sparse1 ${TMPDIR}/sparse1.out
 compare_files_and_ondisk_sizes ${TMPDIR}/sparse1 ${TMPDIR}/sparse1.out
@@ -113,7 +113,7 @@ rbd rm sparse1
 dd if=/dev/urandom bs=2M count=1 of=${TMPDIR}/sparse2 oflag=append conv=notrunc
 # again from stding
 rbd import $RBD_CREATE_ARGS --order 20 - sparse2 < ${TMPDIR}/sparse2
-rbd ls -l | grep sparse2 | grep -i '4096k'
+rbd ls -l | grep sparse2 | grep -Ei '(4M|4096k)'
 [ $tiered -eq 1 -o "$(objects sparse2)" = '0 2 3' ]
 rbd export sparse2 ${TMPDIR}/sparse2.out
 compare_files_and_ondisk_sizes ${TMPDIR}/sparse2 ${TMPDIR}/sparse2.out
