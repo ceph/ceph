@@ -3,6 +3,7 @@ roles:
 tasks:
 - install:
 - ceph:
+    fs: xfs
     conf:
       osd:
 # we may land on ext4
