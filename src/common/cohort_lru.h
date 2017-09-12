@@ -136,6 +136,7 @@ namespace cohort {
 	for (int ix = 0; ix < n_lanes; ++ix,
 	       lane_ix = next_evict_lane()) {
 	  Lane& lane = qlane[lane_ix];
+	  lane.lock.lock();
 	  /* if object at LRU has refcnt==1, it may be reclaimable */
 	  Object* o = &(lane.q.back());
 	  if (can_reclaim(o)) {
@@ -156,7 +157,6 @@ namespace cohort {
 	      return o;
 	    } else {
 	      // XXX can't make unreachable (means what?)
-	      lane.lock.lock();
 	      --(o->lru_refcnt);
 	      o->lru_flags &= ~FLAG_EVICTING;
 	      /* unlock in next block */
