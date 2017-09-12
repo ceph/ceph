@@ -215,6 +215,11 @@ TEST(DaemonConfig, InjectArgsReject) {
   ret = g_ceph_context->_conf->get_val("osd_data", &tmp2, sizeof(buf2));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string(buf), string(buf2));
+
+  // We should complain about the missing arguments.
+  std::string injection3("--log-graylog-port 28 --debug_ms");
+  ret = g_ceph_context->_conf->injectargs(injection3, &cout);
+  ASSERT_EQ(-EINVAL, ret);
 }
 
 TEST(DaemonConfig, InjectArgsBooleans) {
