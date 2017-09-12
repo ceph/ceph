@@ -301,7 +301,7 @@ protected:
 
   // ---------------------------------------------
   // waiting
- protected:
+ private:
   alloc_ptr<mempool::mds_co::multimap<uint64_t, std::pair<uint64_t, MDSInternalContextBase*>>> waiting;
   static uint64_t last_wait_seq;
 
@@ -310,13 +310,13 @@ protected:
     if (!min) {
       min = mask;
       while (min & (min-1))  // if more than one bit is set
-	min &= min-1;        //  clear LSB
+        min &= min-1;        //  clear LSB
     }
-    for (auto p = waiting->lower_bound(min);
-	 p != waiting->end();
-	 ++p) {
-      if (p->first & mask) return true;
-      if (p->first > mask) return false;
+    if (waiting) {
+      for (auto p = waiting->lower_bound(min); p != waiting->end(); ++p) {
+        if (p->first & mask) return true;
+        if (p->first > mask) return false;
+      }
     }
     return false;
   }
@@ -339,7 +339,7 @@ protected:
     
   }
   virtual void take_waiting(uint64_t mask, std::list<MDSInternalContextBase*>& ls) {
-    if (waiting->empty()) return;
+    if (!waiting || waiting->empty()) return;
 
     // process ordered waiters in the same order that they were added.
     std::map<uint64_t, MDSInternalContextBase*> ordered_waiters;
