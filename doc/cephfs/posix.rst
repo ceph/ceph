@@ -21,13 +21,6 @@ POSIX semantics for various reasons:
   could have writer A write "aa|aa" and writer B write "bb|bb"
   simultaneously (where | is the object boundary), and end up with
   "aa|bb" rather than the proper "aa|aa" or "bb|bb".
-- POSIX includes the telldir(2) and seekdir(2) system calls that allow
-  you to obtain the current directory offset and seek back to it.
-  Because CephFS may refragment directories at any time, it is
-  difficult to return a stable integer offset for a directory.  As
-  such, a seekdir to a non-zero offset may often work but is not
-  guaranteed to do so.  A seekdir to offset 0 will always work (and is
-  equivalent to rewinddir(2)).
 - Sparse files propagate incorrectly to the stat(2) st_blocks field.
   Because CephFS does not explicitly track which parts of a file are
   allocated/written, the st_blocks field is always populated by the
