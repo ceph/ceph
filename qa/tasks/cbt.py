@@ -38,9 +38,14 @@ class CBT(Task):
             tmp_dir='/tmp/cbt',
             pool_profiles=self.config.get('cluster', {}).get('pool_profiles'),
             )
+        benchmark_config = self.config.get('benchmarks')
+        benchmark_type = benchmark_config.keys()[0]
+        if benchmark_type == 'librbdfio':
+          testdir = misc.get_testdir(self.ctx)
+          benchmark_config['librbdfio']['cmd_path'] = os.path.join(testdir, 'fio/fio')
         return dict(
             cluster=cluster_config,
-            benchmarks=self.config.get('benchmarks'),
+            benchmarks=benchmark_config,
             )
 
     def install_dependencies(self):
@@ -67,8 +72,7 @@ class CBT(Task):
             args=[
                 'cd', os.path.join(testdir, 'fio'), run.Raw('&&'),
                 './configure', run.Raw('&&'),
-                'make', run.Raw('&&'),
-                'sudo', 'make', 'install'
+                'make'
             ]
         )
 
