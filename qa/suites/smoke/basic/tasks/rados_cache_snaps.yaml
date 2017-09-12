@@ -2,8 +2,16 @@ tasks:
 - install: null
 - ceph:
     log-whitelist:
-    - but it is still running
-    - objects unfound and apparently lost
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
+      - \(REQUEST_SLOW\)
+      - \(TOO_FEW_PGS\)
 - thrashosds:
     chance_pgnum_grow: 2
     chance_pgpnum_fix: 1
