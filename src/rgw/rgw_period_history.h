@@ -75,6 +75,9 @@ class RGWPeriodHistory final {
     void prev() { epoch--; }
     void next() { epoch++; }
 
+    friend bool operator==(const Cursor& lhs, const Cursor& rhs);
+    friend bool operator!=(const Cursor& lhs, const Cursor& rhs);
+
    private:
     // private constructors for RGWPeriodHistory
     friend class RGWPeriodHistory::Impl;

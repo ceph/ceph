@@ -69,6 +69,15 @@ bool Cursor::has_next() const
   return epoch < history->get_newest_epoch();
 }
 
+bool operator==(const Cursor& lhs, const Cursor& rhs)
+{
+  return lhs.history == rhs.history && lhs.epoch == rhs.epoch;
+}
+
+bool operator!=(const Cursor& lhs, const Cursor& rhs)
+{
+  return !(lhs == rhs);
+}
 
 class RGWPeriodHistory::Impl final {
  public:

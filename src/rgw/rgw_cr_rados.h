@@ -182,22 +182,21 @@ class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
   rgw_bucket pool;
   string oid;
 
-  map<string, bufferlist> *pattrs;
+  map<string, bufferlist> *pattrs{nullptr};
 
   T *result;
+  /// on ENOENT, call handle_data() with an empty object instead of failing
+  const bool empty_on_enoent;
 
-  RGWAsyncGetSystemObj *req;
+  RGWAsyncGetSystemObj *req{nullptr};
 
 public:
   RGWSimpleRadosReadCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      const rgw_bucket& _pool, const string& _oid,
-		      T *_result) : RGWSimpleCoroutine(_store->ctx()),
-                                                async_rados(_async_rados), store(_store),
-                                                obj_ctx(store),
-						pool(_pool), oid(_oid),
-                                                pattrs(NULL),
-						result(_result),
-                                                req(NULL) { }
+		      T *_result, bool empty_on_enoent = true)
+    : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+      obj_ctx(store), pool(_pool), oid(_oid), result(_result),
+      empty_on_enoent(empty_on_enoent) {}
   ~RGWSimpleRadosReadCR() {
     request_cleanup();
   }
@@ -237,7 +236,9 @@ int RGWSimpleRadosReadCR<T>::request_complete()
 {
   int ret = req->get_ret_status();
   retcode = ret;
-  if (ret != -ENOENT) {
+  if (ret == -ENOENT && empty_on_enoent) {
+    *result = T();
+  } else {
     if (ret < 0) {
       return ret;
     }
@@ -255,8 +256,6 @@ int RGWSimpleRadosReadCR<T>::request_complete()
     } catch (buffer::error& err) {
       return -EIO;
     }
-  } else {
-    *result = T();
   }
 
   return handle_data(*result);

@@ -10,8 +10,8 @@
 class RGWRados;
 
 /**
- * RGWRealmReloader responds to notifications by recreating RGWRados with the
- * updated realm configuration.
+ * RGWRealmReloader responds to new period notifications by recreating RGWRados
+ * with the updated realm configuration.
  */
 class RGWRealmReloader : public RGWRealmWatcher::Watcher {
  public:
@@ -20,8 +20,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
    * is required to ensure that they stop issuing requests on the old
    * RGWRados instance, and restart with the updated configuration.
    *
-   * This abstraction avoids a depency on class RGWFrontend, which is only
-   * defined in rgw_main.cc
+   * This abstraction avoids a depency on class RGWFrontend.
    */
   class Pauser {
    public:
@@ -50,9 +49,9 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   Pauser *const frontends;
 
   /// reload() takes a significant amount of time, so we don't want to run
-  /// it in the handle_notify() thread. we choose a timer thread because we
-  /// also want to add a delay (see rgw_realm_reconfigure_delay) so that we
-  /// can batch up notifications within that window
+  /// it in the handle_notify() thread. we choose a timer thread instead of a
+  /// Finisher because it allows us to cancel events that were scheduled while
+  /// reload() is still running
   SafeTimer timer;
   Mutex mutex; //< protects access to timer and reload_scheduled
   Cond cond; //< to signal reload() after an invalid realm config
