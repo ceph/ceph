@@ -182,7 +182,7 @@ class MMDSBeacon : public PaxosServiceMessage {
   string name;
 
   MDSMap::DaemonState state;
-  version_t seq;
+  version_t seq = 0;
 
   mds_rank_t      standby_for_rank;
   string          standby_for_name;
