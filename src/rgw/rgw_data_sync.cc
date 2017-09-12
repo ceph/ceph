@@ -2967,6 +2967,61 @@ string RGWBucketSyncStatusManager::status_oid(const string& source_zone,
   return bucket_status_oid_prefix + "." + source_zone + ":" + bs.get_key();
 }
 
+class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
+  static constexpr int max_concurrent_shards = 16;
+  RGWRados *const store;
+  RGWDataSyncEnv *const env;
+  const int num_shards;
+  rgw_bucket_shard bs;
+
+  using Vector = std::vector<rgw_bucket_shard_sync_info>;
+  Vector::iterator i, end;
+
+ public:
+  RGWCollectBucketSyncStatusCR(RGWRados *store, RGWDataSyncEnv *env,
+                               int num_shards, const rgw_bucket& bucket,
+                               Vector *status)
+    : RGWShardCollectCR(store->ctx(), max_concurrent_shards),
+      store(store), env(env), num_shards(num_shards),
+      bs(bucket, num_shards > 0 ? 0 : -1), // start at shard 0 or -1
+      i(status->begin()), end(status->end())
+  {}
+
+  bool spawn_next() override {
+    if (i == end) {
+      return false;
+    }
+    spawn(new RGWReadBucketSyncStatusCoroutine(env, bs, &*i), false);
+    ++i;
+    ++bs.shard_id;
+    return true;
+  }
+};
+
+int rgw_bucket_sync_status(RGWRados *store, const std::string& source_zone,
+                           const rgw_bucket& bucket,
+                           std::vector<rgw_bucket_shard_sync_info> *status)
+{
+  // read the bucket instance info for num_shards
+  RGWObjectCtx ctx(store);
+  RGWBucketInfo info;
+  int ret = store->get_bucket_instance_info(ctx, bucket, info, nullptr, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+  status->clear();
+  status->resize(std::max<size_t>(1, info.num_shards));
+
+  RGWDataSyncEnv env;
+  RGWSyncModuleInstanceRef module; // null sync module
+  env.init(store->ctx(), store, nullptr, store->get_async_rados(),
+           nullptr, nullptr, nullptr, source_zone, module);
+
+  RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+  return crs.run(new RGWCollectBucketSyncStatusCR(store, &env, info.num_shards,
+                                                  bucket, status));
+}
+
 
 // TODO: move into rgw_data_sync_trim.cc
 #undef dout_prefix
