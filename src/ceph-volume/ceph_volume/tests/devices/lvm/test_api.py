@@ -131,13 +131,35 @@ class TestGetPV(object):
         monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
         assert api.get_pv(pv_uuid='0000') == FooPVolume
 
-    def test_single_pv_is_matched_by_uuid(self, volumes, monkeypatch):
-        FooVolume = api.Volume(
-            lv_name='foo', lv_path='/dev/vg/foo',
-            lv_uuid='1111', lv_tags="ceph.type=data")
-        volumes.append(FooVolume)
-        monkeypatch.setattr(api, 'Volumes', lambda: volumes)
-        assert api.get_lv(lv_uuid='1111') == FooVolume
+    def test_single_pv_is_matched_by_uuid(self, pvolumes, monkeypatch):
+        FooPVolume = api.PVolume(
+            pv_name='/dev/vg/foo',
+            pv_uuid='1111', pv_tags="ceph.type=data")
+        pvolumes.append(FooPVolume)
+        monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
+        assert api.get_pv(pv_uuid='1111') == FooPVolume
+
+
+class TestPVolumes(object):
+
+    def test_filter_by_tag_does_not_match_one(self, pvolumes, monkeypatch):
+        pv_tags = "ceph.type=journal,ceph.osd_id=1,ceph.fsid=000-aaa"
+        FooPVolume = api.PVolume(
+            pv_name='/dev/vg/foo',
+            pv_uuid='1111', pv_tags=pv_tags)
+        pvolumes.append(FooPVolume)
+        pvolumes.filter(pv_tags={'ceph.type': 'journal', 'ceph.osd_id': '2'})
+        assert pvolumes == []
+
+    def test_filter_by_tags_matches(self, pvolumes, monkeypatch):
+        pv_tags = "ceph.type=journal,ceph.osd_id=1"
+        FooPVolume = api.PVolume(
+            pv_name='/dev/vg/foo',
+            pv_uuid='1111', pv_tags=pv_tags)
+        pvolumes.append(FooPVolume)
+        pvolumes.filter(pv_tags={'ceph.type': 'journal', 'ceph.osd_id': '1'})
+        assert pvolumes == [FooPVolume]
+
 
 class TestGetVG(object):
 
@@ -183,6 +205,16 @@ class TestVolumes(object):
         volumes.filter(lv_tags={'ceph.type': 'data'})
         assert len(volumes) == 1
         assert volumes[0].lv_name == 'volume1'
+
+    def test_filter_by_tag_does_not_match_one(self, volumes):
+        lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
+        osd = api.Volume(lv_name='volume1', lv_path='/dev/vg/lv', lv_tags=lv_tags)
+        journal = api.Volume(lv_name='volume2', lv_path='/dev/vg/lv', lv_tags='ceph.osd_id=1,ceph.type=journal')
+        volumes.append(osd)
+        volumes.append(journal)
+        # note the different osd_id!
+        volumes.filter(lv_tags={'ceph.type': 'data', 'ceph.osd_id': '2'})
+        assert volumes == []
 
     def test_filter_by_vg_name(self, volumes):
         lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
@@ -256,6 +288,13 @@ class TestVolumeGroups(object):
         volume_groups.filter(vg_tags={'ceph.group': 'dmcache'})
         assert len(volume_groups) == 1
         assert volume_groups[0].vg_name == 'volume1'
+
+    def test_filter_by_tag_does_not_match_one(self, volume_groups):
+        vg_tags = "ceph.group=dmcache,ceph.disk_type=ssd"
+        osd = api.VolumeGroup(vg_name='volume1', vg_path='/dev/vg/lv', vg_tags=vg_tags)
+        volume_groups.append(osd)
+        volume_groups.filter(vg_tags={'ceph.group': 'data', 'ceph.disk_type': 'ssd'})
+        assert volume_groups == []
 
     def test_filter_by_vg_name(self, volume_groups):
         vg_tags = "ceph.type=data,ceph.fsid=000-aaa"
