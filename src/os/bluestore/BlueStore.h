@@ -1360,7 +1360,7 @@ public:
     //  loaded = SharedBlob::shared_blob_t is loaded from kv store
     void open_shared_blob(uint64_t sbid, BlobRef b);
     void load_shared_blob(SharedBlobRef sb);
-    void make_blob_shared(uint64_t sbid, BlobRef b);
+    void make_blob_shared(uint64_t sbid, BlobRef b, const ghobject_t& oid);
     uint64_t make_blob_unshared(SharedBlob *sb);
 
     BlobRef new_blob() {

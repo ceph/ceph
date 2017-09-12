@@ -1021,6 +1021,11 @@ void bluestore_shared_blob_t::generate_test_instances(
 ostream& operator<<(ostream& out, const bluestore_shared_blob_t& sb)
 {
   out << "(sbid 0x" << std::hex << sb.sbid << std::dec;
+  if (sb.pool >= 0) {
+    out << " " << ghobject_t(hobject_t(object_t(), string(), CEPH_NOSNAP, sb.hash,
+				       sb.pool, string()),
+			     ghobject_t::NO_GEN, sb.shard);
+  }
   out << " " << sb.ref_map << ")";
   return out;
 }
