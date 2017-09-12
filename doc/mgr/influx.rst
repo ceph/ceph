@@ -2,73 +2,58 @@
 Influx Plugin 
 =============
 
-The influx plugin continuously collects and sends time series data to an influxdb database. Users have the option to specify what type of stats they want to collect. 
-Some default counters are already set. However, users will have the option to choose some additional counters to collect. 
+The influx plugin continuously collects and sends time series data to an
+influxdb database.
 
--------------
-Configuration 
--------------
-
-In order for this module to work, the following configuration should be created ``/etc/ceph/influx.conf``.
-
-^^^^^^^^
-Required 
-^^^^^^^^
-
-The configurations must include the following under the header ``[influx]``.
-
-:Configuration: **Description**
-:interval: Sets how often the module will collect the stats and send it to influx
-:hostname: Influx host
-:username: Influx username
-:password: Influx password
-:database: Influx database (if a database does not already exist in influx, the module will create one)
-:port: Influx port 
-:stats: Stats about the osd, pool, and cluster can be collected. Specify as many as you would like, but seperate each type by a comma.
-
-
-^^^^^^^^
-Optional 
-^^^^^^^^
-
-Users have the ability to collect additional counters for each osd or each cluster under the the header ``[extended]``.
-More information on the extended option can be found below under the *extended* section. Seperate each additional configurations with a comma.  
-
-Example config file:
-
-::
-
-    [influx]
-        interval = 10
-        hostname = samplehost
-        username = admin
-        password = pass 
-        database = default 
-        port = 8086 
-        stats = osd, pool, cluster
-
-    [extended]
-        osd = op_latency, recovery_ops
-        cluster = op_latency
+The influx plugin was introduced in the 13.x *Mimic* release.
 
 --------
 Enabling 
 --------
 
-To enable the module, the following should be performed:
+To enable the module, use the following command:
 
-- Load module by including this in the ceph.conf file.::
+::
 
-    [mgr]
-        mgr_modules = influx  
+    ceph mgr module enable influx
 
-- Initialize the module to run every set interval  ``ceph mgr module enable influx``.
+If you wish to subsequently disable the module, you can use the equivalent
+*disable* command:
 
----------
-Disabling
----------
+::
 
-``ceph mgr module disable influx``
+    ceph mgr module disable influx
+
+-------------
+Configuration 
+-------------
+
+For the influx module to send statistics to an InfluxDB server, it
+is necessary to configure the servers address and some authentication
+credentials.
+
+Set configuration values using the following command:
+
+::
+
+    ceph config-key set mgr/influx/<key> <value>
+
+
+The most important settings are ``hostname``, ``username`` and ``password``.  
+For example, a typical configuration might look like this:
+
+::
+
+    ceph config-key set mgr/influx/hostname influx.mydomain.com
+    ceph config-key set mgr/influx/username admin123
+    ceph config-key set mgr/influx/password p4ssw0rd
+    
+Additional optional configuration settings are:
+
+:interval: Time between reports to InfluxDB.  Default 5 seconds.
+:database: InfluxDB database name.  Default "ceph"
+:port: InfluxDB server port.  Default 8086
+    
 
 ---------
 Debugging 
@@ -85,15 +70,16 @@ To make use of the debugging option in the module:
 - Use this command ``ceph tell mgr.<mymonitor> influx self-test``.
 - Check the log files. Users may find it easier to filter the log files using *mgr[influx]*.
 
------
-Usage
------
+--------------------
+Interesting counters
+--------------------
 
-^^^^^^^^^^^^^^^^
-Default Counters
-^^^^^^^^^^^^^^^^
+The following tables describe a subset of the values output by
+this module.
 
-**pool** 
+^^^^^
+Pools
+^^^^^
 
 +---------------+-----------------------------------------------------+
 |Counter        | Description                                         |
@@ -113,7 +99,9 @@ Default Counters
 |raw_bytes_used | Bytes used in pool including copies made            |
 +---------------+-----------------------------------------------------+
 
-**osd**
+^^^^
+OSDs
+^^^^
 
 +------------+------------------------------------+
 |Counter     | Description                        |
@@ -127,20 +115,6 @@ Default Counters
 |op_out_bytes| Client operations total read size  |
 +------------+------------------------------------+
 
-
-**cluster**
-The cluster will collect the same type of data as the osd by default but instead of collecting per osd, it will sum up the performance counter 
-for all osd.
-
-^^^^^^^^
-extended
-^^^^^^^^
-There are many other counters that can be collected by configuring the module such as operational counters and suboperational counters. A couple of counters are listed and described below, but additional counters 
-can be found here https://github.com/ceph/ceph/blob/5a197c5817f591fc514f55b9929982e90d90084e/src/osd/OSD.cc
-
-**Operations**
-
-- Latency counters are measured in microseconds unless otherwise specified in the description.
 
 +------------------------+--------------------------------------------------------------------------+
 |Counter                 | Description                                                              |
@@ -183,3 +157,6 @@ can be found here https://github.com/ceph/ceph/blob/5a197c5817f591fc514f55b99299
 +------------------------+--------------------------------------------------------------------------+
 |op_before_dequeue_op_lat| Latency of IO before calling dequeue_op(already dequeued and get PG lock)|
 +------------------------+--------------------------------------------------------------------------+
+
+Latency counters are measured in microseconds unless otherwise specified in the description.
+
