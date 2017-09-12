@@ -16,6 +16,17 @@ PRIO_USEFUL = 5
 PRIO_UNINTERESTING = 2
 PRIO_DEBUGONLY = 0
 
+# counter value types
+PERFCOUNTER_TIME = 1
+PERFCOUNTER_U64 = 2
+
+# counter types
+PERFCOUNTER_LONGRUNAVG = 4
+PERFCOUNTER_COUNTER = 8
+PERFCOUNTER_HISTOGRAM = 0x10
+PERFCOUNTER_TYPE_MASK = ~2
+
+
 class CommandResult(object):
     """
     Use with MgrModule.send_command
