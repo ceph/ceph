@@ -58,6 +58,7 @@
 
 #include "common/BackTrace.h"
 #include "common/EventTrace.h"
+#include "include/array_interval_set.hpp"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -236,7 +237,12 @@ void PGPool::update(OSDMapRef map)
       (pi->get_snap_epoch() == map->get_epoch())) {
     updated = true;
     pi->build_removed_snaps(newly_removed_snaps);
-    interval_set<snapid_t> intersection;
+   /*
+    * Use array_interval_set for the intersection variable, since
+    * std::vector outperforms std::map for all operations that
+    * this variable is involved in.
+    */
+    array_interval_set<snapid_t> intersection;
     intersection.intersection_of(newly_removed_snaps, cached_removed_snaps);
     if (intersection == cached_removed_snaps) {
         cached_removed_snaps.swap(newly_removed_snaps);
