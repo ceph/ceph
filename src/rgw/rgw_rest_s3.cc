@@ -893,21 +893,22 @@ public:
   RGWSetBucketVersioningParser() {}
   ~RGWSetBucketVersioningParser() override {}
 
-  int get_versioning_status(bool *status) {
+  int get_versioning_status(int *status) {
     XMLObj *config = find_first("VersioningConfiguration");
     if (!config)
       return -EINVAL;
 
-    *status = false;
+    *status = VersioningNotChanged;
 
     XMLObj *field = config->find_first("Status");
     if (!field)
       return 0;
 
+    *status = VersioningSuspended;
     string& s = field->get_data();
 
     if (stringcasecmp(s, "Enabled") == 0) {
-      *status = true;
+      *status = VersioningEnabled;
     } else if (stringcasecmp(s, "Suspended") != 0) {
       return -EINVAL;
     }
@@ -952,7 +953,7 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     in_data.append(data, len);
   }
 
-  r = parser.get_versioning_status(&enable_versioning);
+  r = parser.get_versioning_status(&versioning_status);
   
   return r;
 }
