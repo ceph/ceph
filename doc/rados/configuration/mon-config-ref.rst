@@ -1032,7 +1032,7 @@ Miscellaneous
               and log information.
 
 :Type: Double
-:Default: ``300`` 
+:Default: ``86400`` 
 
 
 ``mon stat smooth intervals``
