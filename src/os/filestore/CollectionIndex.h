@@ -191,7 +191,7 @@ protected:
       uint64_t expected_num_objs  ///< [in] expected number of objects this collection has
       ) { ceph_abort(); return 0; }
 
-  virtual int apply_layout_settings() { ceph_abort(); return 0; }
+  virtual int apply_layout_settings(int target_level) { ceph_abort(); return 0; }
 
   /// Read index-wide settings (should be called after construction)
   virtual int read_settings() { return 0; }
