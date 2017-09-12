@@ -1802,8 +1802,7 @@ public:
     bufferlist *val);
   int getattrs_maybe_cache(
     ObjectContextRef obc,
-    map<string, bufferlist> *out,
-    bool user_only = false);
+    map<string, bufferlist> *out);
 };
 
 inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)
