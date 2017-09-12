@@ -826,7 +826,7 @@ void Session::notify_cap_release(size_t n_caps)
  * in order to generate health metrics if the session doesn't see
  * a commensurate number of calls to ::notify_cap_release
  */
-void Session::notify_recall_sent(const int new_limit)
+void Session::notify_recall_sent(const size_t new_limit)
 {
   if (recalled_at.is_zero()) {
     // Entering recall phase, set up counters so we can later
