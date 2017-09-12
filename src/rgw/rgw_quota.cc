@@ -82,6 +82,7 @@ public:
   void set_stats(const rgw_user& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs, RGWStorageStats& stats);
   int async_refresh(const rgw_user& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs);
   void async_refresh_response(const rgw_user& user, rgw_bucket& bucket, RGWStorageStats& stats);
+  void async_refresh_fail(const rgw_user& user, rgw_bucket& bucket);
 
   class AsyncRefreshHandler {
   protected:
@@ -151,6 +152,14 @@ int RGWQuotaCache<T>::async_refresh(const rgw_user& user, rgw_bucket& bucket, RG
   }
 
   return 0;
+}
+
+template<class T>
+void RGWQuotaCache<T>::async_refresh_fail(const rgw_user& user, rgw_bucket& bucket)
+{
+  ldout(store->ctx(), 20) << "async stats refresh response for bucket=" << bucket << dendl;
+
+  async_refcount->put();
 }
 
 template<class T>
@@ -287,7 +296,8 @@ void BucketAsyncRefreshHandler::handle_response(int r)
 {
   if (r < 0) {
     ldout(store->ctx(), 20) << "AsyncRefreshHandler::handle_response() r=" << r << dendl;
-    return; /* nothing to do here */
+    cache->async_refresh_fail(user, bucket);
+    return;
   }
 
   RGWStorageStats bs;
@@ -388,7 +398,8 @@ void UserAsyncRefreshHandler::handle_response(int r)
 {
   if (r < 0) {
     ldout(store->ctx(), 20) << "AsyncRefreshHandler::handle_response() r=" << r << dendl;
-    return; /* nothing to do here */
+    cache->async_refresh_fail(user, bucket);
+    return;
   }
 
   cache->async_refresh_response(user, bucket, stats);
