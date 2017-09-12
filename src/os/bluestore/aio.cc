@@ -5,30 +5,6 @@
 
 #if defined(HAVE_LIBAIO)
 
-
-int aio_queue_t::submit(aio_t &aio, int *retries)
-{
-  // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
-  int attempts = 16;
-  int delay = 125;
-  iocb *piocb = &aio.iocb;
-  int r;
-  while (true) {
-    r = io_submit(ctx, 1, &piocb);
-    if (r < 0) {
-      if (r == -EAGAIN && attempts-- > 0) {
-	usleep(delay);
-	delay *= 2;
-	(*retries)++;
-	continue;
-      }
-    }
-    assert(r == 1);
-    break;
-  }
-  return r;
-}
-
 int aio_queue_t::submit_batch(aio_iter begin, aio_iter end, 
 			      uint16_t aios_size, void *priv, 
 			      int *retries)
