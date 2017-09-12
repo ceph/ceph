@@ -85,7 +85,6 @@ struct aio_queue_t {
     }
   }
 
-  int submit(aio_t &aio, int *retries);
   int submit_batch(aio_iter begin, aio_iter end, uint16_t aios_size, 
 		   void *priv, int *retries);
   int get_next_completed(int timeout_ms, aio_t **paio, int max);
