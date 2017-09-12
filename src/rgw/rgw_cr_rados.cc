@@ -321,6 +321,15 @@ int RGWRadosRemoveOmapKeysCR::send_request() {
   return ioctx.aio_operate(oid, cn->completion(), &op);
 }
 
+int RGWRadosRemoveOmapKeysCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
+}
+
 RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
                       const rgw_bucket& _pool, const string& _oid, const string& _lock_name,
                       const string& _cookie,
