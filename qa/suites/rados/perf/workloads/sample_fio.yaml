@@ -13,7 +13,6 @@ tasks:
         osd_ra: [4096]
         pool_profile: 'rbd'
         log_avg_msec: 100
-        cmd_path: '/usr/local/bin/fio'
     cluster:
       user: 'ubuntu'
       osds_per_node: 3
