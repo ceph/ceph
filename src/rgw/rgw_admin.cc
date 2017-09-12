@@ -1640,7 +1640,8 @@ static int do_period_pull(const string& remote, const string& url, const string&
   if (ret < 0) {
     cerr << "Error storing period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
   }
-
+  // store latest epoch (ignore errors)
+  period->update_latest_epoch(period->get_epoch());
   return 0;
 }
 
