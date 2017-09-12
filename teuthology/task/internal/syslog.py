@@ -130,6 +130,8 @@ def syslog(ctx, config):
                     run.Raw('|'),
                     'grep', '-v', 'INFO:ceph-create-keys',
                     run.Raw('|'),
+                    'grep', '-v', 'Loaded datasource DataSourceOpenStack',
+                    run.Raw('|'),
                     'head', '-n', '1',
                 ],
                 stdout=StringIO(),
