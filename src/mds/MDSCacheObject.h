@@ -253,8 +253,8 @@ protected:
   // replication (across mds cluster)
  protected:
   unsigned		replica_nonce; // [replica] defined on replica
-  typedef mempool::mds_co::map<mds_rank_t,unsigned> replica_map_type;
-  alloc_ptr<replica_map_type> replica_map;   // [auth] mds -> nonce
+  typedef compact_map<mds_rank_t,unsigned> replica_map_type;
+  replica_map_type replica_map;   // [auth] mds -> nonce
 
  public:
   bool is_replicated() const { return !get_replicas().empty(); }
@@ -281,16 +281,14 @@ protected:
     get_replicas().erase(mds);
     if (get_replicas().empty()) {
       put(PIN_REPLICATED);
-      replica_map.reset();
     }
   }
   void clear_replica_map() {
     if (!get_replicas().empty())
       put(PIN_REPLICATED);
-    replica_map.reset();
   }
-  replica_map_type& get_replicas() { return *replica_map; }
-  const replica_map_type& get_replicas() const { return *replica_map; }
+  replica_map_type& get_replicas() { return replica_map; }
+  const replica_map_type& get_replicas() const { return replica_map; }
   void list_replicas(std::set<mds_rank_t>& ls) const {
     for (const auto &p : get_replicas()) {
       ls.insert(p.first);
