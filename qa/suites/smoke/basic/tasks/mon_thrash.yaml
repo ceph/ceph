@@ -3,6 +3,7 @@ overrides:
     log-whitelist:
       - reached quota
       - \(POOL_APP_NOT_ENABLED\)
+      - mons down
     conf:
       global:
         ms inject delay max: 1

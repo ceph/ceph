@@ -3,6 +3,7 @@ tasks:
 - ceph:
     log-whitelist:
       - but it is still running
+      - 'noup flag(s) set'
 - ceph-fuse:
 - workunit:
     clients:

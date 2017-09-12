@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-whitelist:
+    - 'noscrub flag(s) set'
     conf:
       client:
         rbd cache: true
