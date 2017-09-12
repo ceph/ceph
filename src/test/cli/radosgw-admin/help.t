@@ -186,6 +186,7 @@
      --metadata-key=<key>      key to retrieve metadata from with metadata get
      --remote=<remote>         zone or zonegroup id of remote gateway
      --period=<id>             period id
+     --url=<url>               url for pushing/pulling period/realm
      --epoch=<number>          period epoch
      --commit                  commit the period during 'period update'
      --staging                 get staging period info
