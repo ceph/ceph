@@ -139,24 +139,64 @@ function rados_put_get() {
     rm $dir/ORIGINAL
 }
 
-function rados_get_data_eio() {
+function inject_remove() {
+    local pooltype=$1
+    shift
+    local which=$1
+    shift
+    local poolname=$1
+    shift
+    local objname=$1
+    shift
     local dir=$1
     shift
     local shard_id=$1
     shift
-    local recovery=$1
+
+    local -a initial_osds=($(get_osds $poolname $objname))
+    local osd_id=${initial_osds[$shard_id]}
+    objectstore_tool $dir $osd_id $objname remove || return 1
+}
+
+function rados_get_data_recovery() {
+    local inject=$1
     shift
+    local dir=$1
+    shift
+    local shard_id=$1
 
     # inject eio to speificied shard
     #
     local poolname=pool-jerasure
-    local objname=obj-eio-$$-$shard_id
-    inject_eio ec data $poolname $objname $dir $shard_id || return 1
-    rados_put_get $dir $poolname $objname $recovery || return 1
+    local objname=obj-$inject-$$-$shard_id
+    inject_$inject ec data $poolname $objname $dir $shard_id || return 1
+    rados_put_get $dir $poolname $objname recovery || return 1
 
     shard_id=$(expr $shard_id + 1)
-    inject_eio ec data $poolname $objname $dir $shard_id || return 1
+    inject_$inject ec data $poolname $objname $dir $shard_id || return 1
     # Now 2 out of 3 shards get EIO, so should fail
+    rados_get $dir $poolname $objname fail || return 1
+}
+
+# Test with an inject error
+function rados_get_data() {
+    local inject=$1
+    shift
+    local dir=$1
+    shift
+    local shard_id=$1
+
+    # inject eio to speificied shard
+    #
+    local poolname=pool-jerasure
+    local objname=obj-$inject-$$-$shard_id
+    rados_put $dir $poolname $objname || return 1
+    inject_$inject ec data $poolname $objname $dir $shard_id || return 1
+    rados_get $dir $poolname $objname || return 1
+
+    shard_id=$(expr $shard_id + 1)
+    inject_$inject ec data $poolname $objname $dir $shard_id || return 1
+    # Now 2 out of 3 shards get an error, so should fail
     rados_get $dir $poolname $objname fail || return 1
 }
 
@@ -230,7 +270,7 @@ function TEST_rados_get_subread_eio_shard_0() {
     create_erasure_coded_pool $poolname || return 1
     # inject eio on primary OSD (0) and replica OSD (1)
     local shard_id=0
-    rados_get_data_eio $dir $shard_id || return 1
+    rados_get_data eio $dir $shard_id || return 1
     delete_pool $poolname
 }
 
@@ -242,10 +282,26 @@ function TEST_rados_get_subread_eio_shard_1() {
     create_erasure_coded_pool $poolname || return 1
     # inject eio into replicas OSD (1) and OSD (2)
     local shard_id=1
-    rados_get_data_eio $dir $shard_id || return 1
+    rados_get_data eio $dir $shard_id || return 1
     delete_pool $poolname
 }
 
+# We don't remove the object from the primary because
+# that just causes it to appear to be missing
+
+function TEST_rados_get_subread_missing() {
+    local dir=$1
+    setup_osds || return 1
+
+    local poolname=pool-jerasure
+    create_erasure_coded_pool $poolname || return 1
+    # inject remove into replicas OSD (1) and OSD (2)
+    local shard_id=1
+    rados_get_data remove $dir $shard_id || return 1
+    delete_pool $poolname
+}
+
+#
 #
 # These two test cases try to validate that following behavior:
 #  For object on EC pool, if there is one shard which an incorrect
@@ -291,7 +347,7 @@ function TEST_rados_get_with_subreadall_eio_shard_0() {
     create_erasure_coded_pool $poolname || return 1
     # inject eio on primary OSD (0)
     local shard_id=0
-    rados_get_data_eio $dir $shard_id recovery || return 1
+    rados_get_data_recovery eio $dir $shard_id || return 1
 
     delete_pool $poolname
 }
@@ -306,7 +362,7 @@ function TEST_rados_get_with_subreadall_eio_shard_1() {
     create_erasure_coded_pool $poolname || return 1
     # inject eio on replica OSD (1)
     local shard_id=1
-    rados_get_data_eio $dir $shard_id recovery || return 1
+    rados_get_data_recovery eio $dir $shard_id || return 1
 
     delete_pool $poolname
 }
