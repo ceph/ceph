@@ -419,7 +419,18 @@ class LocalFuseMount(FuseMount):
         # the PID of the launching process, not the long running ceph-fuse process.  Therefore
         # we need to give an exact path here as the logic for checking /proc/ for which
         # asok is alive does not work.
-        path = "./out/client.{0}.{1}.asok".format(self.client_id, self.fuse_daemon.subproc.pid)
+
+        # Load the asok path from ceph.conf as vstart.sh now puts admin sockets
+        # in a tmpdir. All of the paths are the same, so no need to select
+        # based off of the service type.
+        d = "./out"
+        with open(self.config_path) as f:
+            for line in f:
+                asok_conf = re.search("^\s*admin\s+socket\s*=\s*(.*?)[^/]+$", line)
+                if asok_conf:
+                    d = asok_conf.groups(1)[0]
+                    break
+        path = "{0}/client.{1}.{2}.asok".format(d, self.client_id, self.fuse_daemon.subproc.pid)
         log.info("I think my launching pid was {0}".format(self.fuse_daemon.subproc.pid))
         return path
 
@@ -624,7 +635,7 @@ class LocalCephCluster(CephCluster):
         # In teuthology, we have the honour of writing the entire ceph.conf, but
         # in vstart land it has mostly already been written and we need to carefully
         # append to it.
-        conf_path = "./ceph.conf"
+        conf_path = self.config_path
         banner = "\n#LOCAL_TEST\n"
         existing_str = open(conf_path).read()
 
@@ -704,7 +715,7 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
 
         # Hack: cheeky inspection of ceph.conf to see what MDSs exist
         self.mds_ids = set()
-        for line in open("ceph.conf").readlines():
+        for line in open(self.config_path).readlines():
             match = re.match("^\[mds\.(.+)\]$", line)
             if match:
                 self.mds_ids.add(match.group(1))
@@ -838,7 +849,7 @@ class LocalContext(object):
         # Shove some LocalDaemons into the ctx.daemons DaemonGroup instance so that any
         # tests that want to look these up via ctx can do so.
         # Inspect ceph.conf to see what roles exist
-        for conf_line in open("ceph.conf").readlines():
+        for conf_line in open(self.config_path).readlines():
             for svc_type in ["mon", "osd", "mds", "mgr"]:
                 if svc_type not in self.daemons.daemons:
                     self.daemons.daemons[svc_type] = {}
