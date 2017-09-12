@@ -119,7 +119,6 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   check_subs();
-  update_logger();
 }
 
 void MDSMonitor::init()
@@ -257,26 +256,6 @@ version_t MDSMonitor::get_trim_to()
   if (last - get_first_committed() > max && floor < last - max)
     return last - max;
   return floor;
-}
-
-void MDSMonitor::update_logger()
-{
-  dout(10) << "update_logger" << dendl;
-
-  uint64_t up = 0;
-  uint64_t in = 0;
-  uint64_t failed = 0;
-  for (const auto &i : fsmap.filesystems) {
-    const MDSMap &mds_map = i.second->mds_map;
-
-    up += mds_map.get_num_up_mds();
-    in += mds_map.get_num_in_mds();
-    failed += mds_map.get_num_failed_mds();
-  }
-  mon->cluster_logger->set(l_cluster_num_mds_up, up);
-  mon->cluster_logger->set(l_cluster_num_mds_in, in);
-  mon->cluster_logger->set(l_cluster_num_mds_failed, failed);
-  mon->cluster_logger->set(l_cluster_mds_epoch, fsmap.get_epoch());
 }
 
 bool MDSMonitor::preprocess_query(MonOpRequestRef op)
@@ -823,7 +802,6 @@ void MDSMonitor::_updated(MonOpRequestRef op)
 void MDSMonitor::on_active()
 {
   tick();
-  update_logger();
 
   if (mon->is_leader()) {
     mon->clog->debug() << "fsmap " << fsmap;
