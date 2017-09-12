@@ -1,7 +1,6 @@
 
 from datetime import datetime
 from threading import Event
-from ConfigParser import SafeConfigParser
 import json
 import errno
 
@@ -98,35 +97,28 @@ class Module(MgrModule):
         return data
 
     def send_to_influx(self):
-        config = SafeConfigParser()
-        config.read('/etc/ceph/influx.conf')
-        host = config.get('influx','hostname')
-        username = config.get('influx', 'username')
-        password = config.get('influx', 'password')
-        database = config.get('influx', 'database')
-        port = int(config.get('influx','port'))
-        stats = config.get('influx', 'stats').replace(' ', '').split(',')
-        client = InfluxDBClient(host, port, username, password, database) 
+        host = self.get_config("hostname")
+        if not host:
+            self.log.error("No InfluxDB server configured, please set"
+                           "`hostname` configuration key.")
+            return
+
+        port = int(self.get_config("port", default="8086"))
+        database = self.get_config("database", default="ceph")
+
+        # If influx server has authentication turned off then
+        # missing username/password is valid.
+        username = self.get_config("username", default="")
+        password = self.get_config("password", default="")
+
+        client = InfluxDBClient(host, port, username, password, database)
         databases_avail = client.get_list_database()
-        daemon_stats = self.get_daemon_stats()
-        for database_avail in databases_avail:
-            if database_avail == database: 
-                break
-            else: 
-                client.create_database(database)
+        if database not in databases_avail:
+            self.log.info("Creating database '{0}'".format(database))
+            client.create_database(database)
 
-        for stat in stats:
-            if stat == "pool": 
-                client.write_points(self.get_df_stats(), 'ms')
-
-            elif stat == "osd":
-                client.write_points(daemon_stats, 'ms')
-                self.log.debug("wrote osd stats")
-
-            elif stat == "cluster": 
-                self.log.debug("wrote cluster stats")
-            else:
-                self.log.error("invalid stat")
+        client.write_points(self.get_df_stats(), 'ms')
+        client.write_points(self.get_daemon_stats(), 'ms')
 
     def shutdown(self):
         self.log.info('Stopping influx module')
@@ -155,12 +147,12 @@ class Module(MgrModule):
 
         self.log.info('Starting influx module')
         self.run = True
-        config = SafeConfigParser()
-        config.read('/etc/ceph/influx.conf')
         while self.run:
             self.send_to_influx()
             self.log.debug("Running interval loop")
-            interval = int(config.get('influx','interval'))
+            interval = self.get_config("interval")
+            if interval is None:
+                interval = 5
             self.log.debug("sleeping for %d seconds",interval)
             self.event.wait(interval)
             
