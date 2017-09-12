@@ -1,5 +1,6 @@
 import cherrypy
 import json
+import errno
 import math
 import os
 from collections import OrderedDict
@@ -234,6 +235,13 @@ class Metric(object):
 
 
 class Module(MgrModule):
+    COMMANDS = [
+        {
+            "cmd": "prometheus self-test",
+            "desc": "Run a self test on the prometheus module",
+            "perm": "rw"
+        },
+    ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -387,6 +395,14 @@ class Module(MgrModule):
                 )
 
         return self.metrics
+
+    def handle_command(self, cmd):
+        if cmd['prefix'] == 'prometheus self-test':
+            self.collect()
+            return 0, '', 'Self-test OK'
+        else:
+            return (-errno.EINVAL, '',
+                    "Command not found '{0}'".format(cmd['prefix']))
 
     def serve(self):
 
