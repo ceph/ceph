@@ -591,7 +591,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
                 continue
 
             for pg in pgs[osdid]:
-                cmd = ((prefix + "--op remove --pgid {pg}").
+                cmd = ((prefix + "--force --op remove --pgid {pg}").
                        format(pg=pg, id=osdid))
                 proc = remote.run(args=cmd, check_status=False,
                                   stdout=StringIO())
