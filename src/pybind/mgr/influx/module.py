@@ -2,9 +2,16 @@
 from datetime import datetime
 from threading import Event
 from ConfigParser import SafeConfigParser
-from influxdb import InfluxDBClient
+import json
+import errno
+
 from mgr_module import MgrModule
 from mgr_module import PERFCOUNTER_HISTOGRAM
+
+try:
+    from influxdb import InfluxDBClient
+except ImportError:
+    InfluxDBClient = None
 
 class Module(MgrModule):
     COMMANDS = [
@@ -128,13 +135,24 @@ class Module(MgrModule):
 
     def handle_command(self, cmd):
         if cmd['prefix'] == 'influx self-test':
-            self.send_to_influx()
-            return 0,' ', 'debugging module'
+            daemon_stats = self.get_daemon_stats()
+            assert len(daemon_stats)
+            df_stats = self.get_df_stats()
+            result = {
+                'daemon_stats': daemon_stats,
+                'df_stats': df_stats
+            }
+            return 0, json.dumps(result, indent=2), 'Self-test OK'
         else:
-            print('not found')
-            raise NotImplementedError(cmd['prefix'])
+            return (-errno.EINVAL, '',
+                    "Command not found '{0}'".format(cmd['prefix']))
 
     def serve(self):
+        if InfluxDBClient is None:
+            self.log.error("Cannot transmit statistics: influxdb python "
+                           "module not found.  Did you install it?")
+            return
+
         self.log.info('Starting influx module')
         self.run = True
         config = SafeConfigParser()
