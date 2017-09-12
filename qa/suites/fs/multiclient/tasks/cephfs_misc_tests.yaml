@@ -7,3 +7,4 @@ overrides:
   ceph:
     log-whitelist:
       - evicting unresponsive client
+      - POOL_APP_NOT_ENABLED
