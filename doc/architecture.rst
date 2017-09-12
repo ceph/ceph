@@ -536,7 +536,7 @@ it calculates a placement group using the object name, a hash code, the
 number of PGs in the pool and the pool name. Ceph clients use the following
 steps to compute PG IDs.
 
-#. The client inputs the pool ID and the object ID. (e.g., pool = "liverpool" 
+#. The client inputs the pool name and the object ID. (e.g., pool = "liverpool" 
    and object-id = "john")
 #. Ceph takes the object ID and hashes it.
 #. Ceph calculates the hash modulo the number of PGs. (e.g., ``58``) to get 
