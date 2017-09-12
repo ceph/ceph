@@ -34,7 +34,7 @@ class LCFilter_S3 : public LCFilter, public XMLObj
   void to_xml(ostream& out){
     out << "<Filter>";
       if (!prefix.empty())
-        out << "<Prefix>" << prefix << "<Prefix>";
+        out << "<Prefix>" << prefix << "</Prefix>";
     out << "</Filter>";
   }
   void dump_xml(Formatter *f) const {
