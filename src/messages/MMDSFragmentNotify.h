@@ -20,7 +20,7 @@
 class MMDSFragmentNotify : public Message {
   inodeno_t ino;
   frag_t basefrag;
-  int8_t bits;
+  int8_t bits = 0;
 
  public:
   inodeno_t get_ino() { return ino; }

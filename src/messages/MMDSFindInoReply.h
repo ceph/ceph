@@ -19,7 +19,7 @@
 #include "include/filepath.h"
 
 struct MMDSFindInoReply : public Message {
-  ceph_tid_t tid;
+  ceph_tid_t tid = 0;
   filepath path;
 
   MMDSFindInoReply() : Message(MSG_MDS_FINDINOREPLY) {}
