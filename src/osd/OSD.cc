@@ -2942,6 +2942,9 @@ void OSD::create_logger()
   };
 
 
+  // All the basic OSD operation stats are to be considered useful
+  osd_plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+
   osd_plb.add_u64(
     l_osd_op_wip, "op_wip",
     "Replication operations currently being processed (primary)");
@@ -3028,6 +3031,10 @@ void OSD::create_logger()
   osd_plb.add_time_avg(
     l_osd_op_rw_prepare_lat, "op_rw_prepare_latency",
     "Latency of read-modify-write operations (excluding queue time and wait for finished)");
+
+  // Now we move on to some more obscure stats, revert to assuming things
+  // are low priority unless otherwise specified.
+  osd_plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
 
   osd_plb.add_time_avg(l_osd_op_before_queue_op_lat, "op_before_queue_op_lat",
     "Latency of IO before calling queue(before really queue into ShardedOpWq)"); // client io before queue op_wq latency
