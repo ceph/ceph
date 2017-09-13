@@ -2275,6 +2275,9 @@ public:
 
   const pg_history_t& get_history() const { return info.history; }
 
+  void set_last_scrub_stamp(utime_t t) {
+    info.history.last_scrub_stamp = t;
+  }
   void reset_min_peer_features() {
     peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   }

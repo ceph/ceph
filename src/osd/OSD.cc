@@ -5348,7 +5348,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       utime_t stamp = ceph_clock_now();
       stamp -= scrub_max_interval;
       stamp -=  100.0;  // push back last scrub more for good measure
-      pg->info.history.last_scrub_stamp = stamp;
+      pg->set_last_scrub_stamp(stamp);
       pg->reg_next_scrub();
       ss << "ok";
     } else {
