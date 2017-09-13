@@ -314,7 +314,12 @@ public:
 
   ZTracer::Endpoint trace_endpoint;
 
-  void lock_suspend_timeout(ThreadPool::TPHandle &handle);
+  void lock_suspend_timeout(ThreadPool::TPHandle &handle) {
+    handle.suspend_tp_timeout();
+    lock();
+    handle.reset_tp_timeout();
+  }
+
   void lock(bool no_lockdep = false) const;
   void unlock() const {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
