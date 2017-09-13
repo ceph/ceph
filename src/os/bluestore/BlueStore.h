@@ -1855,6 +1855,9 @@ private:
   int m_finisher_num = 1;
   vector<Finisher*> finishers;
 
+  bool sync_submit_transaction = false;
+  bool sync_commit_transaction = false;
+
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
   std::condition_variable kv_cond;

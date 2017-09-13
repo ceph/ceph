@@ -7593,6 +7593,9 @@ int BlueStore::_open_super_meta()
   _set_compression();
   _set_blob_size();
 
+  sync_submit_transaction = cct->_conf->get_val<bool>("bluestore_sync_submit_transaction");
+  sync_commit_transaction = cct->_conf->get_val<bool>("bluestore_sync_commit_transaction");
+
   return 0;
 }
 
@@ -7751,7 +7754,8 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       }
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
-      if (cct->_conf->bluestore_sync_submit_transaction) {
+      if (sync_submit_transaction ||
+	  sync_commit_transaction) {
 	if (txc->last_nid >= nid_max ||
 	    txc->last_blobid >= blobid_max) {
 	  dout(20) << __func__
@@ -7774,7 +7778,20 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 		   << dendl;
 	} else {
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
-	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
+	  if (sync_commit_transaction &&
+	      txc->osr->txc_with_unsubmitted_completions.load() == 1) {
+	    dout(20) << __func__ << " sync commit transaction " << txc << dendl;
+	    int r = db->submit_transaction_sync(txc->t);
+	    assert(r == 0);
+	    _txc_applied_kv(txc);
+	    // this matches the put() in kv_sync_thread
+	    throttle_bytes.put(txc->cost);
+	    _txc_state_proc(txc);
+	    return;
+	  }
+	  dout(20) << __func__ << " sync submit transaction " << txc << dendl;
+	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 :
+	    db->submit_transaction(txc->t);
 	  assert(r == 0);
 	  _txc_applied_kv(txc);
 	}
