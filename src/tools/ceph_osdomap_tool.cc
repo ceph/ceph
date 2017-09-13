@@ -188,6 +188,9 @@ int main(int argc, char **argv) {
     for (auto i : headers)
       std::cout << i << std::endl;
     return 0;
+  } else if (cmd == "resetv2") {
+    omap.state.v = 2;
+    omap.set_state();
   } else {
     std::cerr << "Did not recognize command " << cmd << std::endl;
     return 1;
