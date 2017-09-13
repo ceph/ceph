@@ -12,6 +12,7 @@
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
 #include "common/Formatter.h"
+#include "common/perf_counters.h"
 
 using std::string;
 /**
@@ -349,6 +350,15 @@ public:
 
   virtual void get_statistics(Formatter *f) {
     return;
+  }
+
+  /**
+   * Return your perf counters if you have any.  Subclasses are not
+   * required to implement this, and callers must respect a null return
+   * value.
+   */
+  virtual PerfCounters *get_perf_counters() {
+    return nullptr;
   }
 protected:
   /// List of matching prefixes and merge operators
