@@ -1146,9 +1146,18 @@ protected:
     map<int,
       vector<pair<pg_notify_t, PastIntervals> > > *activator_map,
     RecoveryCtx *ctx);
-public:
+
+  struct C_PG_ActivateCommitted : public Context {
+    PGRef pg;
+    epoch_t epoch;
+    epoch_t activation_epoch;
+    C_PG_ActivateCommitted(PG *p, epoch_t e, epoch_t ae)
+      : pg(p), epoch(e), activation_epoch(ae) {}
+    void finish(int r) override {
+      pg->_activate_committed(epoch, activation_epoch);
+    }
+  };
   void _activate_committed(epoch_t epoch, epoch_t activation_epoch);
-protected:
   void all_activated_and_committed();
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
