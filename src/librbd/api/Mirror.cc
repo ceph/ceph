@@ -82,7 +82,7 @@ struct C_ImageGetInfo : public Context {
   Context *on_finish;
 
   cls::rbd::MirrorImage mirror_image;
-  mirror::PromotionState promotion_state;
+  mirror::PromotionState promotion_state = mirror::PROMOTION_STATE_PRIMARY;
 
   C_ImageGetInfo(mirror_image_info_t *mirror_image_info, Context *on_finish)
     : mirror_image_info(mirror_image_info), on_finish(on_finish) {
