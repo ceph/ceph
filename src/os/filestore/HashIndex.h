@@ -44,7 +44,7 @@ extern string reverse_hexdigit_bits_string(string l);
  * would be located in (root)/2/D/0/
  *
  * Subdirectories are created when the number of objects in a
- * directory exceed 16 * (abs(merge_threshhold)) * split_multiplier +
+ * directory exceed 16 * (abs(merge_threshhold) * split_multiplier +
  * split_rand_factor). The number of objects in a directory is encoded
  * as subdir_info_s in an xattr on the directory.
  */
