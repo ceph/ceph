@@ -348,13 +348,6 @@ PG::~PG()
 #endif
 }
 
-void PG::lock_suspend_timeout(ThreadPool::TPHandle &handle)
-{
-  handle.suspend_tp_timeout();
-  lock();
-  handle.reset_tp_timeout();
-}
-
 void PG::lock(bool no_lockdep) const
 {
   _lock.Lock(no_lockdep);
