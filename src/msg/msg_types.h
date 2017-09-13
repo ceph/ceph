@@ -454,7 +454,15 @@ struct entity_addr_t {
     __u32 elen;
     ::decode(elen, bl);
     if (elen) {
-      bl.copy(elen, (char*)get_sockaddr());
+      if (elen < sizeof(u.sa.sa_family)) {
+	throw buffer::malformed_input("elen smaller than family len");
+      }
+      bl.copy(sizeof(u.sa.sa_family), (char*)&u.sa.sa_family);
+      if (elen > get_sockaddr_len()) {
+	throw buffer::malformed_input("elen exceeds sockaddr len");
+      }
+      elen -= sizeof(u.sa.sa_family);
+      bl.copy(elen, u.sa.sa_data);
     }
     DECODE_FINISH(bl);
   }

@@ -1275,10 +1275,13 @@ ssize_t AsyncConnection::_process_connection()
         }
 
         addr_bl.append(state_buffer+strlen(CEPH_BANNER), sizeof(ceph_entity_addr));
-        {
+        try {
           bufferlist::iterator ti = addr_bl.begin();
           ::decode(peer_addr, ti);
-        }
+        } catch (const buffer::error& e) {
+	  lderr(async_msgr->cct) << __func__ <<  " decode peer_addr failed " << dendl;
+          goto fail;
+	}
 
         ldout(async_msgr->cct, 10) << __func__ << " accept peer addr is " << peer_addr << dendl;
         if (peer_addr.is_blank_ip()) {
