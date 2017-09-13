@@ -668,7 +668,7 @@ uint64_t cls_current_version(cls_method_context_t hctx)
 {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
 
-  return ctx->pg->info.last_user_version;
+  return ctx->pg->get_last_user_version();
 }
 
 
