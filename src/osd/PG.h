@@ -1220,7 +1220,7 @@ public:
     bool must_scrub, must_deep_scrub, must_repair;
 
     // Priority to use for scrub scheduling
-    unsigned priority;
+    unsigned priority = 0;
 
     // this flag indicates whether we would like to do auto-repair of the PG or not
     bool auto_repair;
