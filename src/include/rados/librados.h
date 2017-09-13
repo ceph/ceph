@@ -3801,7 +3801,7 @@ CEPH_RADOS_API int rados_monitor_log2(rados_t cluster, const char *level,
  *
  * @param cluster handle
  * @param service service name
- * @param daemon deamon instance name
+ * @param daemon daemon instance name
  * @param metadata_dict static daemon metadata dict
  */
 CEPH_RADOS_API int rados_service_register(

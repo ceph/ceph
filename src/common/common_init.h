@@ -23,7 +23,7 @@ class CephContext;
 class CephInitParameters;
 
 enum common_init_flags_t {
-  // Set up defaults that make sense for an unprivileged deamon
+  // Set up defaults that make sense for an unprivileged daemon
   CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS = 0x1,
 
   // By default, don't read a configuration file
