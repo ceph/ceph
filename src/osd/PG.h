@@ -625,6 +625,10 @@ public:
 
   set<int> blocked_by; ///< osds we are blocked by (for pg stats)
 
+public:
+  const vector<int> get_acting() const {
+    return acting;
+  }
   // [primary only] content recovery state
 
 public:    

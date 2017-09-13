@@ -1670,7 +1670,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
   clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
 	       << " pg " << m->get_raw_pg()
 	       << " to osd." << whoami
-	       << " not " << pg->acting
+	       << " not " << pg->get_acting()
 	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch();
 }
 
