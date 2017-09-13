@@ -2421,7 +2421,7 @@ class CephManager:
     ## monitors
     def signal_mon(self, mon, sig, silent=False):
         """
-        Wrapper to local get_deamon call
+        Wrapper to local get_daemon call
         """
         self.ctx.daemons.get_daemon('mon', mon,
                                     self.cluster).signal(sig, silent=silent)
