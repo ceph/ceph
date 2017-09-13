@@ -128,12 +128,16 @@ int main(int argc, char **argv)
   vector<string> devs;
   string path;
   string action;
+  string log_file;
+  int log_level = 30;
   bool fsck_deep = false;
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
     ("path", po::value<string>(&path), "bluestore path")
     ("out-dir", po::value<string>(&out_dir), "output directory")
+    ("log-file,l", po::value<string>(&log_file), "log file")
+    ("log-level", po::value<int>(&log_level), "log level (30=most, 20=lots, 10=some, 1=little)")
     ("dev", po::value<vector<string>>(&devs), "device(s)")
     ("deep", po::value<bool>(&fsck_deep), "deep fsck (read all data)")
     ;
@@ -223,6 +227,19 @@ int main(int argc, char **argv)
   }
 
   vector<const char*> args;
+  if (log_file.size()) {
+    args.push_back("--log-file");
+    args.push_back(log_file.c_str());
+    static char ll[10];
+    snprintf(ll, sizeof(ll), "%d", log_level);
+    args.push_back("--debug-bluestore");
+    args.push_back(ll);
+    args.push_back("--debug-bluefs");
+    args.push_back(ll);
+  }
+  args.push_back("--no-log-to-stderr");
+  args.push_back("--err-to-stderr");
+
   for (auto& i : ceph_option_strings) {
     args.push_back(i.c_str());
   }
@@ -248,6 +265,7 @@ int main(int argc, char **argv)
       cerr << "error from fsck: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
+    cout << action << " success" << std::endl;
   }
   else if (action == "show-label") {
     JSONFormatter jf(true);
