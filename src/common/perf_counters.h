@@ -318,6 +318,11 @@ public:
     const char* nick = NULL,
     int prio=0);
 
+  void set_prio_default(int prio_)
+  {
+    prio_default = prio_;
+  }
+
   PerfCounters* create_perf_counters();
 private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
@@ -327,6 +332,8 @@ private:
                 unique_ptr<PerfHistogram<>> histogram = nullptr);
 
   PerfCounters *m_perf_counters;
+
+  int prio_default = 0;
 };
 
 class PerfCountersDeleter {
