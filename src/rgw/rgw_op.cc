@@ -4850,7 +4850,7 @@ void RGWDeleteLC::execute()
             << " returned err=" << op_ret << dendl;
     return;
   }
-  string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
+  string shard_id = s->bucket.tenant + ':' + s->bucket.name + ':' + s->bucket.bucket_id;
   pair<string, int> entry(shard_id, lc_uninitial);
   string oid; 
   get_lc_oid(s, oid);
