@@ -29,7 +29,7 @@
 namespace ceph {
 
   using Request = std::pair<spg_t, PGQueueable>;
-  using Client = entity_inst_t;
+  using Client = uint64_t;
 
 
   // This class exists to bridge the ceph code, which treats the class
@@ -41,7 +41,7 @@ namespace ceph {
     enum class osd_op_type_t {
       client_op, osd_subop, bg_snaptrim, bg_recovery, bg_scrub };
 
-    using InnerClient = std::pair<entity_inst_t,osd_op_type_t>;
+    using InnerClient = std::pair<uint64_t,osd_op_type_t>;
 
     using queue_t = mClockQueue<Request, InnerClient>;
 

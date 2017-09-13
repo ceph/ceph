@@ -1697,7 +1697,7 @@ void OSDService::queue_for_snap_trim(PG *pg)
 	cct->_conf->osd_snap_trim_cost,
 	cct->_conf->osd_snap_trim_priority,
 	ceph_clock_now(),
-	entity_inst_t(),
+	0,
 	pg->get_osdmap()->get_epoch())));
 }
 
