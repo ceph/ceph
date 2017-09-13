@@ -2022,17 +2022,48 @@ void PG::mark_clean()
   kick_snap_trim();
 }
 
-void PG::_change_recovery_force_mode(int new_mode, bool clear)
+void PG::set_force_recovery(bool b)
 {
+  lock();
   if (!deleting) {
-    // we can't and shouldn't do anything if the PG is being deleted locally
-    if (clear) {
-      state_clear(new_mode);
-    } else {
-      state_set(new_mode);
+    if (b) {
+      if (!(state & PG_STATE_FORCED_RECOVERY) &&
+	  (state & (PG_STATE_DEGRADED |
+		    PG_STATE_RECOVERY_WAIT |
+		    PG_STATE_RECOVERING))) {
+	dout(20) << __func__ << " set" << dendl;
+	state_set(PG_STATE_FORCED_RECOVERY);
+	publish_stats_to_osd();
+      }
+    } else if (state & PG_STATE_FORCED_RECOVERY) {
+      dout(20) << __func__ << " clear" << dendl;
+      state_clear(PG_STATE_FORCED_RECOVERY);
+      publish_stats_to_osd();
     }
-    publish_stats_to_osd();
   }
+  unlock();
+}
+
+void PG::set_force_backfill(bool b)
+{
+  lock();
+  if (!deleting) {
+    if (b) {
+      if (!(state & PG_STATE_FORCED_RECOVERY) &&
+	  (state & (PG_STATE_DEGRADED |
+		    PG_STATE_BACKFILL_WAIT |
+		    PG_STATE_BACKFILLING))) {
+	dout(10) << __func__ << " set" << dendl;
+	state_set(PG_STATE_FORCED_RECOVERY);
+	publish_stats_to_osd();
+      }
+    } else if (state & PG_STATE_FORCED_RECOVERY) {
+      dout(10) << __func__ << " clear" << dendl;
+      state_clear(PG_STATE_FORCED_RECOVERY);
+      publish_stats_to_osd();
+    }
+  }
+  unlock();
 }
 
 inline int PG::clamp_recovery_priority(int priority)
