@@ -1632,7 +1632,7 @@ private:
       OSDMapRef waiting_for_pg_osdmap;
       struct pg_slot {
 	PGRef pg;                     ///< cached pg reference [optional]
-	list<PGQueueable> to_process; ///< order items for this slot
+	deque<PGQueueable> to_process; ///< order items for this slot
 	int num_running = 0;          ///< _process threads doing pg lookup/lock
 
 	/// true if pg does/did not exist. if so all new items go directly to
