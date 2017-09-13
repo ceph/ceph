@@ -6831,8 +6831,13 @@ void Client::stat_to_statx(struct stat *st, struct ceph_statx *stx)
   stx->stx_mode = st->st_mode;
   stx->stx_uid = st->st_uid;
   stx->stx_gid = st->st_gid;
+#ifdef __APPLE__
+  stx->stx_mtime = st->st_mtimespec;
+  stx->stx_atime = st->st_atimespec;
+#else
   stx->stx_mtime = st->st_mtim;
   stx->stx_atime = st->st_atim;
+#endif
 }
 
 int Client::__setattrx(Inode *in, struct ceph_statx *stx, int mask,
