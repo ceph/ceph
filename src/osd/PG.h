@@ -264,6 +264,7 @@ public:
   CephContext *get_cct() const override { return cct; }
   unsigned get_subsys() const override { return ceph_subsys_osd; }
 
+protected:
   /*** PG ****/
   void update_snap_mapper_bits(uint32_t bits) {
     snap_mapper.update_bits(bits);
@@ -332,20 +333,25 @@ public:
     return _lock.is_locked();
   }
 
+protected:
 #ifdef PG_DEBUG_REFS
   uint64_t get_with_id();
   void put_with_id(uint64_t);
   void dump_live_ids();
 #endif
+
+public:
   void get(const char* tag);
   void put(const char* tag);
 
+protected:
   bool dirty_info, dirty_big_info;
 
 public:
   bool is_ec_pg() const {
     return pool.info.is_erasure();
   }
+protected:
   // pg state
   pg_info_t info;               ///< current pg info
   pg_info_t last_written_info;  ///< last written info
@@ -365,8 +371,10 @@ public:
   }
   void upgrade(ObjectStore *store);
 
+public:
   const coll_t coll;
   ObjectStore::CollectionHandle ch;
+protected:
   PGLog  pg_log;
   static string get_info_key(spg_t pgid) {
     return stringify(pgid) + "_info";
@@ -588,7 +596,7 @@ protected:
 
   bool send_notify;    ///< true if we are non-primary and should notify the primary
 
-public:
+protected:
   eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
   eversion_t  last_complete_ondisk;  // last_complete that has committed.
   eversion_t  last_update_applied;
@@ -613,7 +621,7 @@ public:
   eversion_t  last_rollback_info_trimmed_to_applied;
 
   // primary state
- public:
+protected:
   pg_shard_t primary;
   pg_shard_t pg_whoami;
   pg_shard_t up_primary;
@@ -629,15 +637,16 @@ public:
   const vector<int> get_acting() const {
     return acting;
   }
-  // [primary only] content recovery state
 
-public:    
+protected:
+  // [primary only] content recovery state
   struct BufferedRecoveryMessages {
     map<int, map<spg_t, pg_query_t> > query_map;
     map<int, vector<pair<pg_notify_t, PastIntervals> > > info_map;
     map<int, vector<pair<pg_notify_t, PastIntervals> > > notify_list;
   };
 
+public:
   struct RecoveryCtx {
     utime_t start_time;
     map<int, map<spg_t, pg_query_t> > *query_map;
@@ -706,7 +715,7 @@ public:
       }
     }
   };
-
+protected:
 
   PGStateHistory pgstate_history;
 
@@ -751,11 +760,12 @@ protected:
   /* heartbeat peers */
   void set_probe_targets(const set<pg_shard_t> &probe_set);
   void clear_probe_targets();
-public:
+
   Mutex heartbeat_peer_lock;
   set<int> heartbeat_peers;
   set<int> probe_targets;
 
+public:
   /**
    * BackfillInterval
    *
@@ -848,7 +858,6 @@ protected:
 
   friend class OSD;
 
-public:
   set<pg_shard_t> backfill_targets;
 
   bool is_backfill_targets(pg_shard_t osd) {
@@ -959,7 +968,6 @@ protected:
   void publish_stats_to_osd();
   void clear_publish_stats();
 
-public:
   void clear_primary_state();
 
   bool is_actingbackfill(pg_shard_t osd) const {
@@ -990,7 +998,9 @@ public:
   unsigned get_backfill_priority();
 
   void mark_clean();  ///< mark an active pg clean
+public:
   void _change_recovery_force_mode(int new_mode, bool clear);
+protected:
 
   /// return [start,end) bounds for required past_intervals
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
@@ -1131,7 +1141,9 @@ public:
     map<int,
       vector<pair<pg_notify_t, PastIntervals> > > *activator_map,
     RecoveryCtx *ctx);
+public:
   void _activate_committed(epoch_t epoch, epoch_t activation_epoch);
+protected:
   void all_activated_and_committed();
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
@@ -1161,7 +1173,9 @@ public:
   Context *finish_sync_event;
 
   void finish_recovery(list<Context*>& tfin);
+public:
   void _finish_recovery(Context *c);
+protected:
   void cancel_recovery();
   void clear_recovery_state();
   virtual void _clear_recovery_state() = 0;
@@ -1196,9 +1210,11 @@ public:
     release_backoffs(begin, end);
   }
 
+public:
   void rm_backoff(BackoffRef b);
 
   // -- scrub --
+public:
   struct Scrubber {
     Scrubber();
     ~Scrubber();
@@ -1347,6 +1363,7 @@ public:
     void cleanup_store(ObjectStore::Transaction *t);
   } scrubber;
 
+protected:
   bool scrub_after_recovery;
 
   int active_pushes;
@@ -1355,7 +1372,9 @@ public:
     const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
     pg_shard_t bad_peer);
 
+public:
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+protected:
   void chunky_scrub(ThreadPool::TPHandle &handle);
   void scrub_compare_maps();
   /**
@@ -1402,8 +1421,10 @@ public:
   void scrub_unreserve_replicas();
   bool scrub_all_replicas_reserved() const;
   bool sched_scrub();
+public:
   void reg_next_scrub();
   void unreg_next_scrub();
+protected:
 
   void replica_scrub(
     OpRequestRef op,
@@ -1439,6 +1460,7 @@ public:
     }
   };
 
+public:
   class CephPeeringEvt {
     epoch_t epoch_sent;
     epoch_t epoch_requested;
@@ -1463,6 +1485,7 @@ public:
     const boost::statechart::event_base &get_event() { return *evt; }
     string get_desc() { return desc; }
   };
+protected:
   typedef ceph::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
   list<CephPeeringEvtRef> peering_queue;  // op queue
   list<CephPeeringEvtRef> peering_waiters;
@@ -2270,7 +2293,7 @@ public:
 
   epoch_t last_epoch;
 
- public:
+public:
   const spg_t&      get_pgid() const { return pg_id; }
 
   uint64_t get_last_user_version() const {
@@ -2282,6 +2305,8 @@ public:
   void set_last_scrub_stamp(utime_t t) {
     info.history.last_scrub_stamp = t;
   }
+
+protected:
   void reset_min_peer_features() {
     peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   }
@@ -2341,15 +2366,19 @@ public:
   }
   pg_shard_t get_primary() const { return primary; }
   
+public:
   int        get_role() const { return role; }
+protected:
   void       set_role(int r) { role = r; }
 
+public:
   bool       is_primary() const { return pg_whoami == primary; }
   bool       is_replica() const { return role > 0; }
 
+public:
   epoch_t get_last_peering_reset() const { return last_peering_reset; }
-  
-  //int  get_state() const { return state; }
+
+protected:
   bool state_test(int m) const { return (state & m) != 0; }
   void state_set(int m) { state |= m; }
   void state_clear(int m) { state &= ~m; }
@@ -2357,6 +2386,7 @@ public:
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }
 
+public:
   int get_state() const { return state; }
   bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
   bool       is_activating() const { return state_test(PG_STATE_ACTIVATING); }
@@ -2371,6 +2401,7 @@ public:
   bool       is_peered() const {
     return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
   }
+protected:
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
@@ -2392,13 +2423,12 @@ public:
   static void _init(ObjectStore::Transaction& t,
 		    spg_t pgid, const pg_pool_t *pool);
 
-private:
+protected:
   void prepare_write_info(map<string,bufferlist> *km);
 
   void update_store_with_options();
   void update_store_on_load();
 
-public:
   static int _prepare_write_info(
     CephContext* cct,
     map<string,bufferlist> *km,
@@ -2491,10 +2521,12 @@ public:
 		   list<Context *> *on_applied,
 		   list<Context *> *on_safe);
   void set_last_peering_reset();
+public:
   bool pg_has_reset_since(epoch_t e) {
     assert(is_locked());
     return deleting || e < get_last_peering_reset();
   }
+protected:
 
   void update_history(const pg_history_t& history);
   void fulfill_info(pg_shard_t from, const pg_query_t &query,
@@ -2536,6 +2568,7 @@ public:
 
   // recovery bits
   void take_waiters();
+public:
   void queue_peering_event(CephPeeringEvtRef evt);
   void handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx);
   void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
@@ -2551,24 +2584,25 @@ public:
   void handle_create(RecoveryCtx *rctx);
   void handle_loaded(RecoveryCtx *rctx);
   void handle_query_state(Formatter *f);
-
+protected:
   virtual void on_removal(ObjectStore::Transaction *t) = 0;
 
 
   // abstract bits
+public:
   virtual void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle
   ) = 0;
-
+protected:
   virtual void do_op(OpRequestRef& op) = 0;
   virtual void do_scan(
     OpRequestRef op,
     ThreadPool::TPHandle &handle
   ) = 0;
   virtual void do_backfill(OpRequestRef op) = 0;
+public:
   virtual void snap_trimmer(epoch_t epoch_queued) = 0;
-
   virtual int do_command(
     cmdmap_t cmdmap,
     ostream& ss,
@@ -2577,6 +2611,7 @@ public:
     ConnectionRef conn,
     ceph_tid_t tid) = 0;
 
+protected:
   virtual void on_role_change() = 0;
   virtual void on_pool_change() = 0;
   virtual void on_change(ObjectStore::Transaction *t) = 0;
@@ -2586,15 +2621,18 @@ public:
   virtual void check_blacklisted_watchers() = 0;
   virtual void get_watchers(std::list<obj_watch_item_t>&) = 0;
 
+public:
   virtual bool agent_work(int max) = 0;
   virtual bool agent_work(int max, int agent_flush_quota) = 0;
   virtual void agent_stop() = 0;
   virtual void agent_delay() = 0;
   virtual void agent_clear() = 0;
   virtual void agent_choose_mode_restart() = 0;
+protected:
+
+  friend ostream& operator<<(ostream& out, const PG& pg);
 };
 
-ostream& operator<<(ostream& out, const PG& pg);
 
 ostream& operator<<(ostream& out, const PG::BackfillInterval& bi);
 
