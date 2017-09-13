@@ -277,6 +277,7 @@ void PGPool::update(OSDMapRef map)
 
 PG::PG(OSDService *o, OSDMapRef curmap,
        const PGPool &_pool, spg_t p) :
+  coll(p),
   osd(o),
   cct(o->cct),
   osdriver(osd->store, coll_t(), OSD::make_snapmapper_oid()),
@@ -297,7 +298,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   dirty_info(false), dirty_big_info(false),
   info(p),
   info_struct_v(0),
-  coll(p),
   pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
