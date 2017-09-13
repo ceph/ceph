@@ -4560,9 +4560,10 @@ void MDCache::rejoin_scour_survivor_replicas(mds_rank_t from, MMDSCacheRejoin *a
 	 p != dfs.end();
 	 ++p) {
       CDir *dir = *p;
+      if (!dir->is_auth())
+	continue;
       
-      if (dir->is_auth() &&
-	  dir->is_replica(from) &&
+      if (dir->is_replica(from) &&
 	  (ack == NULL || ack->strong_dirfrags.count(dir->dirfrag()) == 0)) {
 	dir->remove_replica(from);
 	dout(10) << " rem " << *dir << dendl;
