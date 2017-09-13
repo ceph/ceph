@@ -395,14 +395,21 @@ class TestClientRecovery(CephFSTestCase):
         self.assertFalse(lock_holder.finished)
         self.assertFalse(lock_taker.finished)
 
-        mount_a_client_id = self.mount_a.get_global_id()
-        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+        try:
+            mount_a_client_id = self.mount_a.get_global_id()
+            self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
 
-        # Evicting mount_a should let mount_b's attepmt to take the lock
-        # suceed
-        self.wait_until_true(
-            lambda: lock_taker.finished,
-            timeout=10)
+            # Evicting mount_a should let mount_b's attempt to take the lock
+            # succeed
+            self.wait_until_true(lambda: lock_taker.finished, timeout=10)
+        finally:
+            # teardown() doesn't quite handle this case cleanly, so help it out
+            self.mount_a.kill()
+            self.mount_a.kill_cleanup()
+
+        # Bring the client back
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
 
     def test_dir_fsync(self):
 	self._test_fsync(True);
