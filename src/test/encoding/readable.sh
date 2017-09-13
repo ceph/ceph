@@ -192,7 +192,7 @@ do_join() {
 
 # Using $MAX_PARALLEL_JOBS jobs if defined, unless the number of logical
 # processors
-if [ `uname` == FreeBSD ]; then
+if [ `uname` == FreeBSD -o `uname` == Darwin ]; then
   NPROC=`sysctl -n hw.ncpu`
   max_parallel_jobs=${MAX_PARALLEL_JOBS:-${NPROC}}
 else
