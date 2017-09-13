@@ -245,6 +245,10 @@ struct PGPool {
  */
 
 class PG : public DoutPrefixProvider {
+public:
+  bool is_deleting() const {
+    return deleting;
+  }
 protected:
   OSDService *osd;
   CephContext *cct;

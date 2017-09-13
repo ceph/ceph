@@ -9343,7 +9343,7 @@ struct C_CompleteSplits : public Context {
       (*i)->lock();
       PG *pg = i->get();
       osd->add_newly_split_pg(pg, &rctx);
-      if (!((*i)->deleting)) {
+      if (!((*i)->is_deleting())) {
         set<spg_t> to_complete;
         to_complete.insert((*i)->get_pgid());
         osd->service.complete_split(to_complete);
