@@ -19,7 +19,11 @@ set(rbd_mirror_internal
   ServiceDaemon.cc
   Threads.cc
   types.cc
+  image_map/Action.cc
   image_map/LoadRequest.cc
+  image_map/Policy.cc
+  image_map/SimplePolicy.cc
+  image_map/StateTransition.cc
   image_map/UpdateRequest.cc
   image_replayer/BootstrapRequest.cc
   image_replayer/CloseImageRequest.cc
