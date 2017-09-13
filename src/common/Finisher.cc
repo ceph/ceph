@@ -50,11 +50,10 @@ void *Finisher::finisher_thread_entry()
     /// Every time we are woken up, we process the queue until it is empty.
     while (!finisher_queue.empty()) {
       // To reduce lock contention, we swap out the queue to process.
-      // This way other threads can submit new contexts to complete while we are working.
-      vector<Context*> ls;
-      list<pair<Context*,int> > ls_rval;
+      // This way other threads can submit new contexts to complete
+      // while we are working.
+      vector<pair<Context*,int>> ls;
       ls.swap(finisher_queue);
-      ls_rval.swap(finisher_queue_rval);
       finisher_running = true;
       finisher_lock.Unlock();
       ldout(cct, 10) << "finisher_thread doing " << ls << dendl;
@@ -65,21 +64,8 @@ void *Finisher::finisher_thread_entry()
       }
 
       // Now actually process the contexts.
-      for (vector<Context*>::iterator p = ls.begin();
-	   p != ls.end();
-	   ++p) {
-	if (*p) {
-	  (*p)->complete(0);
-	} else {
-	  // When an item is NULL in the finisher_queue, it means
-	  // we should instead process an item from finisher_queue_rval,
-	  // which has a parameter for complete() other than zero.
-	  // This preserves the order while saving some storage.
-	  assert(!ls_rval.empty());
-	  Context *c = ls_rval.front().first;
-	  c->complete(ls_rval.front().second);
-	  ls_rval.pop_front();
-	}
+      for (auto p : ls) {
+	p.first->complete(p.second);
       }
       ldout(cct, 10) << "finisher_thread done with " << ls << dendl;
       ls.clear();
