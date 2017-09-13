@@ -9596,45 +9596,16 @@ bool OSDService::_recover_now(uint64_t *available_pushes)
 
 void OSDService::adjust_pg_priorities(const vector<PGRef>& pgs, int newflags)
 {
-  if (!pgs.size() || !(newflags & (OFR_BACKFILL | OFR_RECOVERY)))
+  if (!pgs.size() || !(newflags & (OFR_BACKFILL | OFR_RECOVERY))) {
     return;
-  int newstate = 0;
-
+  }
   if (newflags & OFR_BACKFILL) {
-    newstate = PG_STATE_FORCED_BACKFILL;
+    for (auto& pg : pgs) {
+      pg->set_force_backfill(!(newflags & OFR_CANCEL));
+    }
   } else if (newflags & OFR_RECOVERY) {
-    newstate = PG_STATE_FORCED_RECOVERY;
-  }
-
-  // debug output here may get large, don't generate it if debug level is below
-  // 10 and use abbreviated pg ids otherwise
-  if ((cct)->_conf->subsys.should_gather(ceph_subsys_osd, 10)) {
-    stringstream ss;
-
-    for (auto& i : pgs) {
-      ss << i->get_pgid() << " ";
-    }
-
-    dout(10) << __func__ << " working on " << ss.str() << dendl;
-  }
-
-  if (newflags & OFR_CANCEL) {
-    for (auto& i : pgs) {
-      i->lock();
-      i->_change_recovery_force_mode(newstate, true);
-      i->unlock();
-    }
-  } else {
-    for (auto& i : pgs) {
-      // make sure the PG is in correct state before forcing backfill or recovery, or
-      // else we'll make PG keeping FORCE_* flag forever, requiring osds restart
-      // or forcing somehow recovery/backfill.
-      i->lock();
-      int pgstate = i->get_state();
-      if ( ((newstate == PG_STATE_FORCED_RECOVERY) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_RECOVERY_WAIT | PG_STATE_RECOVERING))) ||
-	    ((newstate == PG_STATE_FORCED_BACKFILL) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILLING))) )
-        i->_change_recovery_force_mode(newstate, false);
-      i->unlock();
+    for (auto& pg : pgs) {
+      pg->set_force_recovery(!(newflags & OFR_CANCEL));
     }
   }
 }
