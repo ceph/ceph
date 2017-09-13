@@ -1,5 +1,5 @@
 overrides:
-  ceph-ansible:
+  ceph_ansible:
     vars:
       ceph_stable: true
       ceph_origin: distro
