@@ -1317,6 +1317,92 @@ void pg_pool_t::build_removed_snaps(interval_set<snapid_t>& rs) const
   }
 }
 
+// this iterates linearly over snaps map, building deleted snap intervals in rs.
+// it compares that with cached removed snaps (cached) and returns false if any of
+// interval elements in cached doesn't exists in newly removed snaps (rs).
+bool pg_pool_t::build_removed_snaps_and_check_intersect(interval_set<snapid_t>& rs,
+  interval_set<snapid_t>& cached) const
+{
+  snapid_t last = 0;
+  snapid_t snapseq_max = get_snap_seq();
+  auto snapiter = snaps.begin();
+  auto cacheiter = cached.begin();
+  bool intersects = true;
+
+  rs.clear();
+
+  if (snapiter != snaps.end()) {
+    while (snapiter != snaps.end()) {
+      snapid_t curr = snapiter->first;
+      if (curr > snapseq_max) {
+        // prevent crashes when snap map is somehow out of sync with snapseq_max
+        break;
+      }
+      uint64_t remain = curr - last - 1;
+      if (remain > 0) {
+	uint64_t pos = last + 1;
+        rs.insert(pos, remain);
+
+        if (intersects) {
+          // check if it "intersects"*.
+          // it "intersects"* when all old intervals exists in new set
+          // * - according to original algo
+          while (cacheiter != cached.end() && remain > 0) {
+            uint64_t cbegin = cacheiter.get_start();
+            uint64_t clen = cacheiter.get_len();
+            // does current cached interval lies within current new interval?
+            // this takes care of following cases:
+            // 1. intervals overlap entirely
+            // 2a. old interval begins at new interval, it's shorter
+            // 2b. old interval starts somewhere within interval, it doesn't
+            //     end with new interval
+            // 2c. old interval starts somewhere within interval, ends with
+            //     new interval
+            if (cbegin >= pos && cbegin + clen <= pos + remain) {
+              uint64_t diff = cbegin + clen - pos;
+              pos += diff;
+              remain -= diff;
+              cacheiter++;
+              continue;
+            }
+            // remaining cases:
+            // 3. old interval starts before new interval, ends before new interval
+            // 4. old interval starts before new interval, ends in the middle of int
+            // 5. old interval starts in new interval, ends after interval
+            // 6. old interval starts after new interval
+
+            if (cbegin > pos + remain) {
+              // case 6
+              remain = 0;
+              continue;
+            }
+
+            if (cbegin < pos) {
+              // case 3 and 4
+              intersects = false;
+              break;
+            }
+
+            if (cbegin + clen > pos + remain) {
+              // case 5
+              intersects = false;
+              break;
+            }
+
+          }
+        }
+      }
+      last = curr;
+      snapiter++;
+    }
+  }
+
+  if (last != snapseq_max) {
+    rs.insert(last + 1, snapseq_max - last);
+  }
+  return intersects;
+}
+
 snapid_t pg_pool_t::snap_exists(const char *s) const
 {
   for (map<snapid_t,pool_snap_info_t>::const_iterator p = snaps.begin();
