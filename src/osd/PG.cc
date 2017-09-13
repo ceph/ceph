@@ -8124,11 +8124,3 @@ ostream& operator<<(ostream& out, const PG::BackfillInterval& bi)
   out << ")";
   return out;
 }
-
-void intrusive_ptr_add_ref(PG *pg) { pg->get("intptr"); }
-void intrusive_ptr_release(PG *pg) { pg->put("intptr"); }
-
-#ifdef PG_DEBUG_REFS
-  uint64_t get_with_id(PG *pg) { return pg->get_with_id(); }
-  void put_with_id(PG *pg, uint64_t id) { return pg->put_with_id(id); }
-#endif
