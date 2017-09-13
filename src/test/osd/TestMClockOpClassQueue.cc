@@ -27,38 +27,38 @@ class MClockOpClassQueueTest : public testing::Test {
 public:
   mClockOpClassQueue q;
 
-  entity_inst_t client1;
-  entity_inst_t client2;
-  entity_inst_t client3;
+  uint64_t client1;
+  uint64_t client2;
+  uint64_t client3;
 
   MClockOpClassQueueTest() :
     q(g_ceph_context),
-    client1(entity_name_t(CEPH_ENTITY_TYPE_OSD, 1), entity_addr_t()),
-    client2(entity_name_t(CEPH_ENTITY_TYPE_OSD, 2), entity_addr_t()),
-    client3(entity_name_t(CEPH_ENTITY_TYPE_CLIENT, 1), entity_addr_t())
+    client1(1001),
+    client2(9999),
+    client3(100000001)
   {}
 
 #if 0 // more work needed here
-  Request create_client_op(epoch_t e, const entity_inst_t& owner) {
+  Request create_client_op(epoch_t e, uint64_t owner) {
     return Request(spg_t(), PGQueueable(OpRequestRef(), e));
   }
 #endif
 
-  Request create_snaptrim(epoch_t e, const entity_inst_t& owner) {
+  Request create_snaptrim(epoch_t e, uint64_t owner) {
     return Request(spg_t(),
 		   PGQueueable(PGSnapTrim(e),
 			       12, 12,
 			       utime_t(), owner, e));
   }
 
-  Request create_scrub(epoch_t e, const entity_inst_t& owner) {
+  Request create_scrub(epoch_t e, uint64_t owner) {
     return Request(spg_t(),
 		   PGQueueable(PGScrub(e),
 			       12, 12,
 			       utime_t(), owner, e));
   }
 
-  Request create_recovery(epoch_t e, const entity_inst_t& owner) {
+  Request create_recovery(epoch_t e, uint64_t owner) {
     return Request(spg_t(),
 		   PGQueueable(PGRecovery(e, 64),
 			       12, 12,
