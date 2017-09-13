@@ -122,7 +122,7 @@ To run a functional test cluster,
 
 	cd build
 	make vstart        # builds just enough to run vstart
-	../src/vstart.sh -d -n -x -l
+	../src/vstart.sh --debug --new -x --localhost --bluestore
 	./bin/ceph -s
 
 Almost all of the usual commands are available in the bin/ directory.
