@@ -8,6 +8,9 @@ tasks:
     - objects unfound and apparently lost
     - (POOL_APP_NOT_ENABLED)
     - 'noscrub flag(s) set'
+    - OSDMAP_FLAGS
+    - OSD_OUT_OF_ORDER_FULL
+    - CACHE_POOL_NO_HIT_SET
 - thrashosds:
     chance_pgnum_grow: 2
     chance_pgpnum_fix: 1

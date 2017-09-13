@@ -1,7 +1,11 @@
 overrides:
   ceph:
     log-whitelist:
-    - 'noscrub flag(s) set'
+      - but it is still running
+      - 'noup flag(s) set'
+      - OSDMAP_FLAGS
+      - OSD_OUT_OF_ORDER_FULL
+      - CACHE_POOL_NO_HIT_SET  
     conf:
       client:
         rbd cache: true
