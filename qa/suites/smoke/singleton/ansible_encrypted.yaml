@@ -1,5 +1,5 @@
 overrides:
-  ceph-ansible:
+  ceph_ansible:
     rhbuild: '2.2'
     vars:
       ceph_conf_overrides:
