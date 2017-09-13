@@ -7742,7 +7742,10 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       return;
 
     case TransContext::STATE_IO_DONE:
-      //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
+      // NOTE: we are holding osr qlock; see _txc_finish_io.  Note
+      // that that means that any subsequent state is also holding
+      // qlock if in_queue_context is true.
+      // assert(txc->osr->qlock.is_locked());
       if (txc->had_ios) {
 	++txc->osr->txc_with_unstable_io;
       }
@@ -8069,42 +8072,44 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   OpSequencerRef osr = txc->osr;
-  bool empty = false;
-  bool submit_deferred = false;
-  OpSequencer::q_list_t releasing_txc;
-  {
-    std::lock_guard<std::mutex> l(osr->qlock);
-    txc->state = TransContext::STATE_DONE;
-    bool notify = false;
-    while (!osr->q.empty()) {
-      TransContext *txc = &osr->q.front();
-      dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
-	       << dendl;
-      if (txc->state != TransContext::STATE_DONE) {
-	if (txc->state == TransContext::STATE_PREPARE &&
-	  deferred_aggressive) {
-	  // for _osr_drain_preceding()
-          notify = true;
-	}
-	if (txc->state == TransContext::STATE_DEFERRED_QUEUED &&
-	    osr->q.size() > g_conf->bluestore_max_deferred_txc) {
-	  submit_deferred = true;
-	}
-        break;
-      }
-
-      osr->q.pop_front();
-      releasing_txc.push_back(*txc);
-      notify = true;
-    }
-    if (notify) {
-      osr->qcond.notify_all();
-    }
-    if (osr->q.empty()) {
-      dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
-      empty = true;
-    }
+  std::unique_lock<std::mutex> l(osr->qlock, std::defer_lock);
+  bool must_lock_q = !txc->in_queue_context;
+  if (must_lock_q) {
+    l.lock();
   }
+
+  txc->state = TransContext::STATE_DONE;
+
+  OpSequencer::q_list_t releasing_txc;
+  bool submit_deferred = false;
+  bool empty = true;
+  bool notify = false;
+  while (!osr->q.empty()) {
+    TransContext *txc = &osr->q.front();
+    dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
+	     << dendl;
+    if (txc->state != TransContext::STATE_DONE) {
+      if (txc->state == TransContext::STATE_PREPARE &&
+	  deferred_aggressive) {
+	// for _osr_drain_preceding()
+	notify = true;
+      }
+      if (txc->state == TransContext::STATE_DEFERRED_QUEUED &&
+	  osr->q.size() > g_conf->bluestore_max_deferred_txc) {
+	submit_deferred = true;
+      }
+      empty = false;
+      break;
+    }
+
+    osr->q.pop_front();
+    releasing_txc.push_back(*txc);
+    notify = true;
+  }
+  if (notify) {
+    osr->qcond.notify_all();
+  }
+
   while (!releasing_txc.empty()) {
     // release to allocator only after all preceding txc's have also
     // finished any deferred writes that potentially land in these
@@ -8116,12 +8121,15 @@ void BlueStore::_txc_finish(TransContext *txc)
     delete txc;
   }
 
+  if (must_lock_q) {
+    l.unlock();
+  }
+
   if (submit_deferred) {
     // we're pinning memory; flush!  we could be more fine-grained here but
     // i'm not sure it's worth the bother.
     deferred_try_submit();
   }
-
   if (empty && osr->zombie) {
     dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
     osr->_unregister();
