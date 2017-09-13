@@ -29,7 +29,7 @@
 namespace ceph {
 
   using Request = std::pair<spg_t, PGQueueable>;
-  using Client = entity_inst_t;
+  using Client = uint64_t;
 
 
   // This class exists to bridge the ceph code, which treats the class

@@ -65,7 +65,7 @@ class PGQueueable {
   int cost;
   unsigned priority;
   utime_t start_time;
-  entity_inst_t owner;
+  uint64_t owner;  ///< global id (e.g., client.XXX)
   epoch_t map_epoch;    ///< an epoch we expect the PG to exist in
 
   struct RunVis : public boost::static_visitor<> {
@@ -108,22 +108,22 @@ public:
     : qvariant(op), cost(op->get_req()->get_cost()),
       priority(op->get_req()->get_priority()),
       start_time(op->get_req()->get_recv_stamp()),
-      owner(op->get_req()->get_source_inst()),
+      owner(op->get_req()->get_source().num()),
       map_epoch(e)
     {}
   PGQueueable(
     const PGSnapTrim &op, int cost, unsigned priority, utime_t start_time,
-    const entity_inst_t &owner, epoch_t e)
+    uint64_t owner, epoch_t e)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
       owner(owner), map_epoch(e) {}
   PGQueueable(
     const PGScrub &op, int cost, unsigned priority, utime_t start_time,
-    const entity_inst_t &owner, epoch_t e)
+    uint64_t owner, epoch_t e)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
       owner(owner), map_epoch(e) {}
   PGQueueable(
     const PGRecovery &op, int cost, unsigned priority, utime_t start_time,
-    const entity_inst_t &owner, epoch_t e)
+    uint64_t owner, epoch_t e)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
       owner(owner), map_epoch(e) {}
 
@@ -142,7 +142,7 @@ public:
   unsigned get_priority() const { return priority; }
   int get_cost() const { return cost; }
   utime_t get_start_time() const { return start_time; }
-  entity_inst_t get_owner() const { return owner; }
+  uint64_t get_owner() const { return owner; }
   epoch_t get_map_epoch() const { return map_epoch; }
   const QVariant& get_variant() const { return qvariant; }
 }; // struct PGQueueable
