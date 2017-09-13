@@ -645,6 +645,10 @@ public:
     object_map->compact();
   }
 
+  bool has_builtin_csum() const override {
+    return false;
+  }
+
   void debug_obj_on_delete(const ghobject_t &oid);
   bool debug_data_eio(const ghobject_t &oid);
   bool debug_mdata_eio(const ghobject_t &oid);
