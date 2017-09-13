@@ -547,7 +547,7 @@ void PerfCountersBuilder::add_impl(
     assert(strlen(nick) <= 4);
   }
   data.nick = nick;
-  data.prio = prio;
+  data.prio = prio ? prio : prio_default;
   data.type = (enum perfcounter_type_d)ty;
   data.histogram = std::move(histogram);
 }
