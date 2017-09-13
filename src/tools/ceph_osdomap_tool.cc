@@ -113,6 +113,10 @@ int main(int argc, char **argv) {
   // the DBObjectMap which we might want to examine for diagnostic
   // reasons.  Instead use --command repair.
 
+  omap.get_state();
+  std::cout << "Version: " << (int)omap.state.v << std::endl;
+  std::cout << "Seq: " << omap.state.seq << std::endl;
+
   if (cmd == "dump-raw-keys") {
     KeyValueDB::WholeSpaceIterator i = store->get_iterator();
     for (i->seek_to_first(); i->valid(); i->next()) {

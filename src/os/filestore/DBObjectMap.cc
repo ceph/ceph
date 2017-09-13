@@ -1029,7 +1029,7 @@ int DBObjectMap::upgrade_to_v2()
   return 0;
 }
 
-int DBObjectMap::init(bool do_upgrade)
+int DBObjectMap::get_state()
 {
   map<string, bufferlist> result;
   set<string> to_get;
@@ -1040,28 +1040,36 @@ int DBObjectMap::init(bool do_upgrade)
   if (!result.empty()) {
     bufferlist::iterator bliter = result.begin()->second.begin();
     state.decode(bliter);
-    if (state.v < 1) {
-      dout(1) << "DBObjectMap is *very* old; upgrade to an older version first"
-	      << dendl;
-      return -ENOTSUP;
-    }
-    if (state.v < 2) { // Needs upgrade
-      if (!do_upgrade) {
-	dout(1) << "DOBjbectMap requires an upgrade,"
-		<< " set filestore_update_to"
-		<< dendl;
-	return -ENOTSUP;
-      } else {
-	r = upgrade_to_v2();
-	if (r < 0)
-	  return r;
-      }
-    }
   } else {
     // New store
     // Version 3 means that complete regions never used
     state.v = 3;
     state.seq = 1;
+  }
+  return 0;
+}
+
+int DBObjectMap::init(bool do_upgrade)
+{
+  int ret = get_state();
+  if (ret < 0)
+    return ret;
+  if (state.v < 1) {
+    dout(1) << "DBObjectMap is *very* old; upgrade to an older version first"
+	    << dendl;
+    return -ENOTSUP;
+  }
+  if (state.v < 2) { // Needs upgrade
+    if (!do_upgrade) {
+      dout(1) << "DOBjbectMap requires an upgrade,"
+	      << " set filestore_update_to"
+	      << dendl;
+      return -ENOTSUP;
+    } else {
+      int r = upgrade_to_v2();
+      if (r < 0)
+	return r;
+    }
   }
   ostringstream ss;
   int errors = check(ss, true);
