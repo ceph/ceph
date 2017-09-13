@@ -147,5 +147,5 @@ class TestMisc(CephFSTestCase):
         fs_avail = output.split('\n')[1].split()[3]
         fs_avail = float(fs_avail) * 1024
 
-        ratio = (raw_avail / pool_size) / fs_avail
+        ratio = raw_avail / fs_avail
         assert 0.9 < ratio < 1.1
