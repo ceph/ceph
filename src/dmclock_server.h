@@ -968,7 +968,7 @@ namespace crimson {
 
       // data_mtx should be held when called
       NextReq do_next_request(Time now) {
-	NextReq result;
+	NextReq result{};
 
 	// if reservation queue is empty, all are empty (i.e., no active clients)
 	if(resv_heap.empty()) {
