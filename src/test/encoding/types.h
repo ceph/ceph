@@ -281,6 +281,9 @@ TYPE(librbd::watch_notify::ResponseMessage)
 #include "rbd_replay/ActionTypes.h"
 TYPE(rbd_replay::action::Dependency)
 TYPE(rbd_replay::action::ActionEntry);
+
+#include "tools/rbd_mirror/image_map/Types.h"
+TYPE(rbd::mirror::image_map::PolicyData)
 #endif
 
 #ifdef WITH_RADOSGW
