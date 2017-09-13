@@ -86,6 +86,11 @@ void Paxos::init()
 void Paxos::init_logger()
 {
   PerfCountersBuilder pcb(g_ceph_context, "paxos", l_paxos_first, l_paxos_last);
+
+  // Because monitors are so few in number, the resource cost of capturing
+  // almost all their perf counters at USEFUL is trivial.
+  pcb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+
   pcb.add_u64_counter(l_paxos_start_leader, "start_leader", "Starts in leader role");
   pcb.add_u64_counter(l_paxos_start_peon, "start_peon", "Starts in peon role");
   pcb.add_u64_counter(l_paxos_restart, "restart", "Restarts");
