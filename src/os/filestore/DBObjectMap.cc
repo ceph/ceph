@@ -1021,12 +1021,18 @@ int DBObjectMap::upgrade_to_v2()
 
   state.v = 2;
 
+  set_state();
+  return 0;
+}
+
+void DBObjectMap::set_state()
+{
   Mutex::Locker l(header_lock);
   KeyValueDB::Transaction t = db->get_transaction();
   write_state(t);
   db->submit_transaction_sync(t);
   dout(1) << __func__ << " done" << dendl;
-  return 0;
+  return;
 }
 
 int DBObjectMap::get_state()

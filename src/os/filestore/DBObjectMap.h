@@ -220,6 +220,8 @@ public:
 
   /// Read initial state from backing store
   int get_state();
+  /// Write current state settings to DB
+  void set_state();
   /// Read initial state and upgrade or initialize state
   int init(bool upgrade = false);
 
