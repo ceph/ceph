@@ -19,7 +19,7 @@
 
 class MExportDirNotify : public Message {
   dirfrag_t base;
-  bool ack;
+  bool ack = false;
   pair<__s32,__s32> old_auth, new_auth;
   list<dirfrag_t> bounds;  // bounds; these dirs are _not_ included (tho the dirfragdes are)
 

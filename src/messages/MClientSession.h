@@ -22,7 +22,7 @@ class MClientSession : public Message {
   static const int COMPAT_VERSION = 1;
 
 public:
-  ceph_mds_session_head head;
+  ceph_mds_session_head head{};
 
   std::map<std::string, std::string> client_meta;
 

@@ -92,9 +92,9 @@ class MMDSSlaveRequest : public Message {
 
  private:
   metareqid_t reqid;
-  __u32 attempt;
-  __s16 op;
-  __u16 flags;
+  __u32 attempt = 0;
+  __s16 op = 0;
+  __u16 flags = 0;
 
   static const unsigned FLAG_NONBLOCK	=	1<<0;
   static const unsigned FLAG_WOULDBLOCK	=	1<<1;
@@ -104,7 +104,7 @@ class MMDSSlaveRequest : public Message {
   static const unsigned FLAG_INTERRUPTED =	1<<5;
 
   // for locking
-  __u16 lock_type;  // lock object type
+  __u16 lock_type = 0;  // lock object type
   MDSCacheObjectInfo object_info;
   
   // for authpins
@@ -116,9 +116,9 @@ class MMDSSlaveRequest : public Message {
   filepath destdnpath;
   set<mds_rank_t> witnesses;
   bufferlist inode_export;
-  version_t inode_export_v;
+  version_t inode_export_v = 0;
   bufferlist srci_replica;
-  mds_rank_t srcdn_auth;
+  mds_rank_t srcdn_auth = 0;
   utime_t op_stamp;
 
   bufferlist stray;  // stray dir + dentry

@@ -20,7 +20,7 @@
 
 class MExportDirDiscoverAck : public Message {
   dirfrag_t dirfrag;
-  bool success;
+  bool success = false;
 
  public:
   inodeno_t get_ino() { return dirfrag.ino; }
