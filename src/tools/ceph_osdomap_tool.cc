@@ -126,6 +126,7 @@ int main(int argc, char **argv) {
   omap.get_state();
   std::cout << "Version: " << (int)omap.state.v << std::endl;
   std::cout << "Seq: " << omap.state.seq << std::endl;
+  std::cout << "legacy: " << (omap.state.legacy ? "true" : "false") << std::endl;
 
   if (cmd == "dump-raw-keys") {
     KeyValueDB::WholeSpaceIterator i = store->get_iterator();
@@ -178,7 +179,7 @@ int main(int argc, char **argv) {
   } else if (cmd == "check" || cmd == "repair") {
     ostringstream ss;
     bool repair = (cmd == "repair");
-    r = omap.check(ss, repair);
+    r = omap.check(ss, repair, true);
     if (r) {
       std::cerr << ss.str() << std::endl;
       if (r > 0) {
@@ -200,6 +201,7 @@ int main(int argc, char **argv) {
     return 0;
   } else if (cmd == "resetv2") {
     omap.state.v = 2;
+    omap.state.legacy = false;
     omap.set_state();
   } else {
     std::cerr << "Did not recognize command " << cmd << std::endl;
