@@ -701,6 +701,18 @@ COMMAND("osd set-nearfull-ratio " \
 	"name=ratio,type=CephFloat,range=0.0|1.0", \
 	"set usage ratio at which OSDs are marked near-full",
 	"osd", "rw", "cli,rest")
+COMMAND("osd get full-ratio " \
+	"name=ratio,type=CephFloat,range=0.0|1.0", \
+	"get usage ratio at which OSDs are marked full",
+	"osd", "r", "cli,rest")
+COMMAND("osd get backfillfull-ratio " \
+	"name=ratio,type=CephFloat,range=0.0|1.0", \
+	"get usage ratio at which OSDs are marked too full to backfill",
+	"osd", "r", "cli,rest")
+COMMAND("osd get nearfull-ratio " \
+	"name=ratio,type=CephFloat,range=0.0|1.0", \
+	"get usage ratio at which OSDs are marked near-full",
+	"osd", "r", "cli,rest")
 COMMAND("osd set-require-min-compat-client " \
 	"name=version,type=CephString " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \

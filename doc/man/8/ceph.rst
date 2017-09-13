@@ -39,13 +39,15 @@ Synopsis
 
 | **ceph** **mon_status**
 
-| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
+| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* \| *set-full-ratio* \| *set-nearfull-ratio* \| *set-backfillfull-ratio* ] ...
 
 | **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
 | **ceph** **osd** **pool** [ *create* \| *delete* \| *get* \| *get-quota* \| *ls* \| *mksnap* \| *rename* \| *rmsnap* \| *set* \| *set-quota* \| *stats* ] ...
 
 | **ceph** **osd** **tier** [ *add* \| *add-cache* \| *cache-mode* \| *remove* \| *remove-overlay* \| *set-overlay* ] ...
+
+| **ceph** **osd** **get** [ *full-ratio* \| *nearfull-ratio* \| *backfillfull-ratio* ] ...
 
 | **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *getmap* \| *ls* \| *ls-by-osd* \| *ls-by-pool* \| *ls-by-primary* \| *map* \| *repair* \| *scrub* \| *stat* ] ...
 
@@ -1196,6 +1198,41 @@ Usage::
 	ceph osd unset full|pause|noup|nodown|noout|noin|nobackfill|
 	norebalance|norecover|noscrub|nodeep-scrub|notieragent
 
+Subcommand ``set-full-ratio`` set usage ratio at which OSDs are marked full.
+
+Usage::
+
+        ceph osd set-full-ratio {<float[0.0-1.0]>}
+
+Subcommand ``set-nearfull-ratio`` set usage ratio at which OSDs are marked near-full.
+
+Usage::
+
+        ceph osd set-nearfull-ratio {<float[0.0-1.0]>}
+
+Subcommand ``set-backfillfull-ratio`` set usage ratio at which OSDs are marked too full to backfill.
+
+Usage::
+
+        ceph osd set-backfillfull-ratio {<float[0.0-1.0]>}
+
+Subcommand ``get full-ratio`` get usage ratio at which OSDs are marked full.
+
+Usage::
+
+        ceph osd get full-ratio
+
+Subcommand ``get nearfull-ratio`` get usage ratio at which OSDs are marked near-full.
+
+Usage::
+
+        ceph osd get nearfull-ratio
+
+Subcommand ``get backfillfull-ratio`` get usage ratio at which OSDs are marked too full to backfill.
+
+Usage::
+
+        ceph osd get backfillfull-ratio
 
 pg
 --

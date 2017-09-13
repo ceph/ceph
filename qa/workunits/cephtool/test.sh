@@ -1820,10 +1820,13 @@ function test_mon_pg()
   ceph pg scrub 1.0
 
   ceph osd set-full-ratio .962
+  ceph osd get full-ratio
   ceph osd dump | grep '^full_ratio 0.962'
   ceph osd set-backfillfull-ratio .912
+  ceph osd get backfillfull-ratio
   ceph osd dump | grep '^backfillfull_ratio 0.912'
   ceph osd set-nearfull-ratio .892
+  ceph osd get nearfull-ratio
   ceph osd dump | grep '^nearfull_ratio 0.892'
 
   # Check health status

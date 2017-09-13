@@ -3504,13 +3504,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->flush(rdata);
     else
       rdata.append(ds);
-  }
-  else if (prefix == "osd dump" ||
-	   prefix == "osd tree" ||
-	   prefix == "osd ls" ||
-	   prefix == "osd getmap" ||
-	   prefix == "osd getcrushmap" ||
-	   prefix == "osd ls-tree") {
+  } else if (prefix == "osd dump" ||
+             prefix == "osd tree" ||
+             prefix == "osd ls" ||
+             prefix == "osd getmap" ||
+             prefix == "osd getcrushmap" ||
+             prefix == "osd ls-tree") {
     string val;
 
     epoch_t epoch = 0;
@@ -4816,6 +4815,21 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ss.str());
       ss.str("");
     }
+  } else if (prefix == "osd get full-ratio" ||
+             prefix == "osd get backfillfull-ratio" ||
+             prefix == "osd get nearfull-ratio") {
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+         << "luminous' before using the new interface";
+      r = -EPERM;
+      goto reply;
+    }
+    if (prefix == "osd get full-ratio")
+      ss << "full_ratio is " << osdmap.get_full_ratio();
+    else if (prefix == "osd get backfillfull-ratio")
+      ss << "backfillfull_ratio is " << osdmap.get_backfillfull_ratio();
+    else if (prefix == "osd get nearfull-ratio")
+      ss << "nearfull_ratio is " << osdmap.get_nearfull_ratio();
   } else {
     // try prepare update
     return false;

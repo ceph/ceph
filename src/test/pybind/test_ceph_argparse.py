@@ -1148,6 +1148,21 @@ class TestOSD(TestArgparse):
     def test_set_nearfull_ratio(self):
         self.set_ratio('set-nearfull-ratio')
 
+    def get_ratio(self, command):
+        self.assert_valid_command(['osd',
+                                   'get',
+                                   command])
+        assert_equal({}, validate_command(sigdict, ['osd', 'get']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'get', command]))
+
+    def test_get_full_ratio(self):
+        self.get_ratio('full-ratio')
+
+    def test_get_nearfull_ratio(self):
+            self.get_ratio('nearfull-ratio')
+
+    def test_get_backfillfull_ratio(self):
+            self.get_ratio('backfillfull-ratio')
 
 class TestConfigKey(TestArgparse):
 
