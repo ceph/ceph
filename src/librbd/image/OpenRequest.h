@@ -49,9 +49,6 @@ private:
    *            V2_GET_IMMUTABLE_METADATA           |
    *                |                               |
    *                v                               |
-   *            V2_GET_STRIPE_UNIT_COUNT            |
-   *                |                               |
-   *                v                               |
    *            V2_GET_CREATE_TIMESTAMP             |
    *                |                               |
    *                v                               |
@@ -63,6 +60,9 @@ private:
    *      \---------/                               v
    *                                             REFRESH
    *                                                |
+   *                                                v
+   *                          (skip if striping  V2_GET_STRIPE_UNIT_COUNT
+   *                                not enabled)    |
    *                                                v
    *                                             SET_SNAP (skip if no snap)
    *                                                |
@@ -105,9 +105,6 @@ private:
   void send_v2_get_immutable_metadata();
   Context *handle_v2_get_immutable_metadata(int *result);
 
-  void send_v2_get_stripe_unit_count();
-  Context *handle_v2_get_stripe_unit_count(int *result);
-
   void send_v2_get_create_timestamp();
   Context *handle_v2_get_create_timestamp(int *result);
 
@@ -122,6 +119,9 @@ private:
 
   void send_refresh();
   Context *handle_refresh(int *result);
+
+  void send_v2_get_stripe_unit_count();
+  Context *handle_v2_get_stripe_unit_count(int *result);
 
   Context *send_set_snap(int *result);
   Context *handle_set_snap(int *result);
