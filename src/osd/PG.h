@@ -52,9 +52,6 @@
 #include <tuple>
 using namespace std;
 
-// #include "include/unordered_map.h"
-// #include "include/unordered_set.h"
-
 //#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
 
 class OSD;
@@ -73,9 +70,6 @@ class CephContext;
 namespace Scrub {
   class Store;
 }
-
-void intrusive_ptr_add_ref(PG *pg);
-void intrusive_ptr_release(PG *pg);
 
 using state_history_entry = std::tuple<utime_t, utime_t, const char*>;
 using embedded_state = std::pair<utime_t, const char*>;
@@ -308,6 +302,9 @@ protected:
   map<uint64_t, string> _live_ids;
   map<string, uint64_t> _tag_counts;
   uint64_t _ref_id;
+
+  friend uint64_t get_with_id(PG *pg) { return pg->get_with_id(); }
+  friend void put_with_id(PG *pg, uint64_t id) { return pg->put_with_id(id); }
 #endif
 
 public:
@@ -343,6 +340,14 @@ protected:
 public:
   void get(const char* tag);
   void put(const char* tag);
+
+private:
+  friend void intrusive_ptr_add_ref(PG *pg) {
+    pg->get("intptr");
+  }
+  friend void intrusive_ptr_release(PG *pg) {
+    pg->put("intptr");
+  }
 
 protected:
   bool dirty_info, dirty_big_info;
