@@ -865,7 +865,7 @@ public:
       scrub_queue_priority = cct->_conf->osd_client_op_priority;
     }
     enqueue_back(
-      pg->info.pgid,
+      pg->get_pgid(),
       PGQueueable(
 	PGScrub(pg->get_osdmap()->get_epoch()),
 	cct->_conf->osd_scrub_cost,
@@ -893,7 +893,7 @@ private:
     pair<epoch_t, PGRef> p, uint64_t reserved_pushes) {
     assert(recovery_lock.is_locked_by_me());
     enqueue_back(
-      p.second->info.pgid,
+      p.second->get_pgid(),
       PGQueueable(
 	PGRecovery(p.first, reserved_pushes),
 	cct->_conf->osd_recovery_cost,
@@ -2009,7 +2009,7 @@ protected:
   // this must be called with pg->lock held on any pg addition to pg_map
   void wake_pg_waiters(PGRef pg) {
     assert(pg->is_locked());
-    op_shardedwq.wake_pg_waiters(pg->info.pgid);
+    op_shardedwq.wake_pg_waiters(pg->get_pgid());
   }
   epoch_t last_pg_create_epoch;
 
