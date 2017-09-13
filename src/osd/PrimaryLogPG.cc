@@ -4932,6 +4932,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
+  bool skip_data_digest = osd->store->has_builtin_csum() &&
+    g_conf->get_val<bool>("osd_skip_data_digest");
 
   PGTransaction* t = ctx->op_t.get();
 
@@ -5745,12 +5747,18 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	}
 
-	if (op.extent.offset == 0 && op.extent.length >= oi.size)
+	if (op.extent.offset == 0 && op.extent.length >= oi.size
+            && !skip_data_digest) {
 	  obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
-	else if (op.extent.offset == oi.size && obs.oi.is_data_digest())
-	  obs.oi.set_data_digest(osd_op.indata.crc32c(obs.oi.data_digest));
-	else
+	} else if (op.extent.offset == oi.size && obs.oi.is_data_digest()) {
+          if (skip_data_digest) {
+            obs.oi.clear_data_digest();
+          } else {
+	    obs.oi.set_data_digest(osd_op.indata.crc32c(obs.oi.data_digest));
+          }
+	} else {
 	  obs.oi.clear_data_digest();
+        }
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length);
 
@@ -5782,7 +5790,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (op.extent.length) {
 	  t->write(soid, 0, op.extent.length, osd_op.indata, op.flags);
 	}
-	obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
+        if (!skip_data_digest) {
+	  obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
+        }
 
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 	    0, op.extent.length, true);
