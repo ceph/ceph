@@ -246,9 +246,46 @@ struct PGPool {
 
 class PG : public DoutPrefixProvider {
 public:
+  const coll_t coll;
+  ObjectStore::CollectionHandle ch;
+
+  std::string gen_prefix() const override;
+  CephContext *get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return ceph_subsys_osd; }
+
+  OSDMapRef get_osdmap() const {
+    assert(is_locked());
+    assert(osdmap_ref);
+    return osdmap_ref;
+  }
+
+  void lock_suspend_timeout(ThreadPool::TPHandle &handle) {
+    handle.suspend_tp_timeout();
+    lock();
+    handle.reset_tp_timeout();
+  }
+  void lock(bool no_lockdep = false) const;
+  void unlock() const {
+    //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
+    assert(!dirty_info);
+    assert(!dirty_big_info);
+    _lock.Unlock();
+  }
+  bool is_locked() const {
+    return _lock.is_locked();
+  }
+
   bool is_deleting() const {
     return deleting;
   }
+
+  bool is_ec_pg() const {
+    return pool.info.is_erasure();
+  }
+  const vector<int> get_acting() const {
+    return acting;
+  }
+
 protected:
   OSDService *osd;
   CephContext *cct;
@@ -257,10 +294,6 @@ protected:
   bool eio_errors_to_process = false;
 
   virtual PGBackend *get_pgbackend() = 0;
-public:
-  std::string gen_prefix() const override;
-  CephContext *get_cct() const override { return cct; }
-  unsigned get_subsys() const override { return ceph_subsys_osd; }
 
 protected:
   /*** PG ****/
@@ -283,12 +316,6 @@ protected:
     osdmap_ref = std::move(newmap);
   }
 
-public:
-  OSDMapRef get_osdmap() const {
-    assert(is_locked());
-    assert(osdmap_ref);
-    return osdmap_ref;
-  }
 protected:
 
   /** locking and reference counting.
@@ -311,28 +338,9 @@ protected:
   friend void put_with_id(PG *pg, uint64_t id) { return pg->put_with_id(id); }
 #endif
 
-public:
   bool deleting;  // true while in removing or OSD is shutting down
 
   ZTracer::Endpoint trace_endpoint;
-
-  void lock_suspend_timeout(ThreadPool::TPHandle &handle) {
-    handle.suspend_tp_timeout();
-    lock();
-    handle.reset_tp_timeout();
-  }
-
-  void lock(bool no_lockdep = false) const;
-  void unlock() const {
-    //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
-    assert(!dirty_info);
-    assert(!dirty_big_info);
-    _lock.Unlock();
-  }
-
-  bool is_locked() const {
-    return _lock.is_locked();
-  }
 
 protected:
 #ifdef PG_DEBUG_REFS
@@ -356,10 +364,6 @@ private:
 protected:
   bool dirty_info, dirty_big_info;
 
-public:
-  bool is_ec_pg() const {
-    return pool.info.is_erasure();
-  }
 protected:
   // pg state
   pg_info_t info;               ///< current pg info
@@ -380,9 +384,6 @@ protected:
   }
   void upgrade(ObjectStore *store);
 
-public:
-  const coll_t coll;
-  ObjectStore::CollectionHandle ch;
 protected:
   PGLog  pg_log;
   static string get_info_key(spg_t pgid) {
@@ -641,11 +642,6 @@ protected:
   eversion_t  pg_trim_to;
 
   set<int> blocked_by; ///< osds we are blocked by (for pg stats)
-
-public:
-  const vector<int> get_acting() const {
-    return acting;
-  }
 
 protected:
   // [primary only] content recovery state
