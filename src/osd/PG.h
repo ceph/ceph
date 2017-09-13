@@ -1187,9 +1187,14 @@ protected:
   Context *finish_sync_event;
 
   void finish_recovery(list<Context*>& tfin);
-public:
   void _finish_recovery(Context *c);
-protected:
+  struct C_PG_FinishRecovery : public Context {
+    PGRef pg;
+    explicit C_PG_FinishRecovery(PG *p) : pg(p) {}
+    void finish(int r) override {
+      pg->_finish_recovery(this);
+    }
+  };
   void cancel_recovery();
   void clear_recovery_state();
   virtual void _clear_recovery_state() = 0;

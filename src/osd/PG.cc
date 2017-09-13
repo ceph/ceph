@@ -1988,14 +1988,6 @@ unsigned PG::get_scrub_priority()
   return pool_scrub_priority > 0 ? pool_scrub_priority : cct->_conf->osd_scrub_priority;
 }
 
-struct C_PG_FinishRecovery : public Context {
-  PGRef pg;
-  explicit C_PG_FinishRecovery(PG *p) : pg(p) {}
-  void finish(int r) override {
-    pg->_finish_recovery(this);
-  }
-};
-
 void PG::mark_clean()
 {
   if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid)) {
