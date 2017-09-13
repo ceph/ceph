@@ -7730,6 +7730,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       if (txc->ioc.has_pending_aios()) {
 	txc->state = TransContext::STATE_AIO_WAIT;
 	txc->had_ios = true;
+	txc->in_queue_context = false;
 	_txc_aio_submit(txc);
 	return;
       }
@@ -7775,6 +7776,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  _txc_applied_kv(txc);
 	}
       }
+      txc->in_queue_context = false;
       {
 	std::lock_guard<std::mutex> l(kv_lock);
 	kv_queue.push_back(txc);
@@ -7788,6 +7790,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	kv_throttle_costs += txc->cost;
       }
       return;
+
     case TransContext::STATE_KV_SUBMITTED:
       txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
       txc->state = TransContext::STATE_KV_DONE;
@@ -7798,6 +7801,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_kv_done_lat);
       if (txc->deferred_txn) {
 	txc->state = TransContext::STATE_DEFERRED_QUEUED;
+	txc->in_queue_context = false;
 	_deferred_queue(txc);
 	return;
       }
@@ -7845,6 +7849,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
     if (p->state < TransContext::STATE_IO_DONE) {
       dout(20) << __func__ << " " << txc << " blocked by " << &*p << " "
 	       << p->get_state_name() << dendl;
+      txc->in_queue_context = false;
       return;
     }
     if (p->state > TransContext::STATE_IO_DONE) {
@@ -8416,6 +8421,7 @@ void BlueStore::_kv_sync_thread()
 	  assert(txc->state == TransContext::STATE_KV_SUBMITTED);
 	  txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	}
+	assert(!txc->in_queue_context);
 	if (txc->had_ios) {
 	  --txc->osr->txc_with_unstable_io;
 	}
@@ -8564,6 +8570,7 @@ void BlueStore::_kv_finalize_thread()
       while (!kv_committed.empty()) {
 	TransContext *txc = kv_committed.front();
 	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+	assert(!txc->in_queue_context);
 	_txc_state_proc(txc);
 	kv_committed.pop_front();
       }
@@ -8572,6 +8579,7 @@ void BlueStore::_kv_finalize_thread()
 	auto p = b->txcs.begin();
 	while (p != b->txcs.end()) {
 	  TransContext *txc = &*p;
+	  assert(!txc->in_queue_context);
 	  p = b->txcs.erase(p); // unlink here because
 	  _txc_state_proc(txc); // this may destroy txc
 	}

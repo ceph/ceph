@@ -1533,6 +1533,8 @@ public:
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
+    bool in_queue_context = true;  ///< true if we are still in queue context
+
     uint64_t bytes = 0, cost = 0;
 
     set<OnodeRef> onodes;     ///< these need to be updated/written
