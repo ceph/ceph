@@ -2264,6 +2264,10 @@ public:
  public:
   const spg_t&      get_pgid() const { return pg_id; }
 
+  uint64_t get_last_user_version() const {
+    return info.last_user_version;
+  }
+
   void reset_min_peer_features() {
     peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   }
