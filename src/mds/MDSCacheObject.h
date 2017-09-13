@@ -286,6 +286,7 @@ protected:
   void clear_replica_map() {
     if (!get_replicas().empty())
       put(PIN_REPLICATED);
+    replica_map.clear();
   }
   replica_map_type& get_replicas() { return replica_map; }
   const replica_map_type& get_replicas() const { return replica_map; }
