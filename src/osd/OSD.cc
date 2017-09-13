@@ -1628,7 +1628,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
   const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
 
-  assert(m->get_map_epoch() >= pg->info.history.same_primary_since);
+  assert(m->get_map_epoch() >= pg->get_history().same_primary_since);
 
   if (pg->is_ec_pg()) {
     /**
@@ -8941,7 +8941,7 @@ void OSD::handle_pg_remove(OpRequestRef op)
     }
     dout(5) << "queue_pg_for_deletion: " << pgid << dendl;
     PG *pg = _lookup_lock_pg_with_map_lock_held(pgid);
-    pg_history_t history = pg->info.history;
+    pg_history_t history = pg->get_history();
     int up_primary, acting_primary;
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(

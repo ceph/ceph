@@ -2273,6 +2273,8 @@ public:
     return info.last_user_version;
   }
 
+  const pg_history_t& get_history() const { return info.history; }
+
   void reset_min_peer_features() {
     peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   }
