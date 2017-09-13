@@ -8086,7 +8086,7 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
     }
     txc->oncommits.pop_front();
   }
-  if (queued && sync_commit_transactions) {
+  if (queued && sync_commit_transaction) {
     // ensure that if we have something queued for this sequencer we
     // will know about it, and avoid doing a synchronous completion
     // until the async completions have drained.  This is only necessary
