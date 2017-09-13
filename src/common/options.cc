@@ -5476,6 +5476,15 @@ static std::vector<Option> get_rbd_mirror_options() {
     Option("rbd_mirror_leader_max_acquire_attempts_before_break", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(3)
     .set_description("number of failed attempts to acquire lock after missing heartbeats before breaking lock"),
+
+    Option("rbd_mirror_image_policy_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("simple")
+    .set_enum_allowed({"simple"})
+    .set_description("policy type for mapping images to instances"),
+
+    Option("rbd_mirror_image_policy_migration_throttle", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(300)
+    .set_description("number of seconds after which an image can be reshuffled (migrated) again"),
   });
 }
 
