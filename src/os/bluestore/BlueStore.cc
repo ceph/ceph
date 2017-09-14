@@ -8669,15 +8669,17 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
   assert(!osr->deferred_running);
 
   auto b = osr->deferred_pending;
-  for (auto& txc : b->txcs) {
-    txc.log_state_latency(logger, l_bluestore_state_deferred_queued_lat);
-  }
   deferred_queue_size -= b->seq_bytes.size();
   assert(deferred_queue_size >= 0);
 
   osr->deferred_running = osr->deferred_pending;
   osr->deferred_pending = nullptr;
 
+  deferred_lock.unlock();
+
+  for (auto& txc : b->txcs) {
+    txc.log_state_latency(logger, l_bluestore_state_deferred_queued_lat);
+  }
   uint64_t start = 0, pos = 0;
   bufferlist bl;
   auto i = b->iomap.begin();
@@ -8712,7 +8714,6 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
     ++i;
   }
 
-  deferred_lock.unlock();
   bdev->aio_submit(&b->ioc);
 }
 
