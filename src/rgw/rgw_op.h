@@ -2022,7 +2022,7 @@ public:
 };
 
 class RGWPutBucketPolicy : public RGWOp {
-  int len;
+  int len = 0;
   char *data = nullptr;
 public:
   RGWPutBucketPolicy() = default;

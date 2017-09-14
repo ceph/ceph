@@ -947,7 +947,7 @@ struct RGWRawObjState {
   bool exists{false};
   uint64_t size{0};
   ceph::real_time mtime;
-  uint64_t epoch;
+  uint64_t epoch{0};
   bufferlist obj_tag;
   bool has_data{false};
   bufferlist data;
