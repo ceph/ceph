@@ -72,10 +72,13 @@ RGWOp* RGWHandler_Config::op_get() {
   string type = s->info.args.get("type", &exists);
 
   if (type.compare("zonegroup-map") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_ZONEGROUP_MAP;
     return new RGWOp_ZoneGroupMap_Get(false);
   } else if (type.compare("zone") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_ZONE_CONFIG;
     return new RGWOp_ZoneConfig_Get();
   } else {
+    s->resource = RGW_RESOURCE_CATEGORY_ZONEGROUP_MAP;
     return new RGWOp_ZoneGroupMap_Get(true);
   }
 }

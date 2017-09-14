@@ -80,12 +80,8 @@ public:
 
 class RGWHandler_Opstate : public RGWHandler_Auth_S3 {
 protected:
-  RGWOp *op_get() override {
-    return new RGWOp_Opstate_List;
-  }
-  RGWOp *op_delete() override {
-    return new RGWOp_Opstate_Delete;
-  }
+  RGWOp *op_get() override;
+  RGWOp *op_delete() override;
   RGWOp *op_post() override;
 
   int read_permissions(RGWOp*) override {

@@ -280,10 +280,13 @@ RGWOp *RGWHandler_ReplicaLog::op_get() {
   }
 
   if (type.compare("metadata") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_MDLOG_BOUNDS;
     return new RGWOp_OBJLog_GetBounds(META_REPLICA_LOG_OBJ_PREFIX, "mdlog");
   } else if (type.compare("bucket-index") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_BILOG_BOUNDS;
     return new RGWOp_BILog_GetBounds;
   } else if (type.compare("data") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_DATALOG_BOUNDS;
     return new RGWOp_OBJLog_GetBounds(DATA_REPLICA_LOG_OBJ_PREFIX, "datalog");
   }
   return NULL;
@@ -297,12 +300,16 @@ RGWOp *RGWHandler_ReplicaLog::op_delete() {
     return NULL;
   }
 
-  if (type.compare("metadata") == 0)
+  if (type.compare("metadata") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_MDLOG_BOUNDS;
     return new RGWOp_OBJLog_DeleteBounds(META_REPLICA_LOG_OBJ_PREFIX, "mdlog");
-  else if (type.compare("bucket-index") == 0) 
+  } else if (type.compare("bucket-index") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_BILOG_BOUNDS;
     return new RGWOp_BILog_DeleteBounds;
-  else if (type.compare("data") == 0)
+  } else if (type.compare("data") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_DATALOG_BOUNDS;
     return new RGWOp_OBJLog_DeleteBounds(DATA_REPLICA_LOG_OBJ_PREFIX, "datalog");
+  }
   
   return NULL;
 }
@@ -316,10 +323,13 @@ RGWOp *RGWHandler_ReplicaLog::op_post() {
   }
 
   if (type.compare("metadata") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_MDLOG_BOUNDS;
     return new RGWOp_OBJLog_SetBounds(META_REPLICA_LOG_OBJ_PREFIX, "mdlog");
   } else if (type.compare("bucket-index") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_BILOG_BOUNDS;
     return new RGWOp_BILog_SetBounds;
   } else if (type.compare("data") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_DATALOG_BOUNDS;
     return new RGWOp_OBJLog_SetBounds(DATA_REPLICA_LOG_OBJ_PREFIX, "datalog");
   }
   return NULL;

@@ -239,30 +239,39 @@ void RGWOp_Object_Remove::execute()
 RGWOp *RGWHandler_Bucket::op_get()
 {
 
-  if (s->info.args.sub_resource_exists("policy"))
+  if (s->info.args.sub_resource_exists("policy")) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWOp_Get_Policy;
+  }
 
-  if (s->info.args.sub_resource_exists("index"))
+  if (s->info.args.sub_resource_exists("index")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_INDEX;
     return new RGWOp_Check_Bucket_Index;
+  }
 
+  s->resource = RGW_RESOURCE_CATEGORY_BUCKET_INFO;
   return new RGWOp_Bucket_Info;
 }
 
 RGWOp *RGWHandler_Bucket::op_put()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_BUCKET_LINK;
   return new RGWOp_Bucket_Link;
 }
 
 RGWOp *RGWHandler_Bucket::op_post()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_BUCKET_LINK;
   return new RGWOp_Bucket_Unlink;
 }
 
 RGWOp *RGWHandler_Bucket::op_delete()
 {
-  if (s->info.args.sub_resource_exists("object"))
+  if (s->info.args.sub_resource_exists("object")) {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
     return new RGWOp_Object_Remove;
+  }
 
+  s->resource = RGW_RESOURCE_CATEGORY_BUCKET;
   return new RGWOp_Bucket_Remove;
 }
-

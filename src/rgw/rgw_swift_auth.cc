@@ -710,6 +710,7 @@ int RGWHandler_SWIFT_Auth::authorize()
 
 RGWOp *RGWHandler_SWIFT_Auth::op_get()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_AUTH;
   return new RGW_SWIFT_Auth_Get;
 }
 
