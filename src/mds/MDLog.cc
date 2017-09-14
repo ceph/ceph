@@ -1446,7 +1446,7 @@ void MDLog::standby_trim_segments()
 
   if (removed_segment) {
     dout(20) << " calling mdcache->trim!" << dendl;
-    mds->mdcache->trim(-1);
+    mds->mdcache->trim();
   } else {
     dout(20) << " removed no segments!" << dendl;
   }

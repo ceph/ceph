@@ -272,7 +272,6 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
 
-  lru.lru_set_max(cct->_conf->client_cache_size);
   lru.lru_set_midpoint(cct->_conf->client_cache_mid);
 
   // file handles
@@ -332,7 +331,6 @@ void Client::tear_down_cache()
   // *** FIXME ***
 
   // empty lru
-  lru.lru_set_max(0);
   trim_cache();
   assert(lru.lru_get_size() == 0);
 
@@ -601,12 +599,13 @@ void Client::shutdown()
 
 void Client::trim_cache(bool trim_kernel_dcache)
 {
-  ldout(cct, 20) << "trim_cache size " << lru.lru_get_size() << " max " << lru.lru_get_max() << dendl;
+  uint64_t max = cct->_conf->client_cache_size;
+  ldout(cct, 20) << "trim_cache size " << lru.lru_get_size() << " max " << max << dendl;
   unsigned last = 0;
   while (lru.lru_get_size() != last) {
     last = lru.lru_get_size();
 
-    if (lru.lru_get_size() <= lru.lru_get_max())  break;
+    if (!unmounting && lru.lru_get_size() <= max)  break;
 
     // trim!
     Dentry *dn = static_cast<Dentry*>(lru.lru_get_next_expire());
@@ -616,7 +615,7 @@ void Client::trim_cache(bool trim_kernel_dcache)
     trim_dentry(dn);
   }
 
-  if (trim_kernel_dcache && lru.lru_get_size() > lru.lru_get_max())
+  if (trim_kernel_dcache && lru.lru_get_size() > max)
     _invalidate_kernel_dcache();
 
   // hose root?
@@ -5922,7 +5921,6 @@ void Client::unmount()
   wait_sync_caps(last_flush_tid);
 
   // empty lru cache
-  lru.lru_set_max(0);
   trim_cache();
 
   while (lru.lru_get_size() > 0 ||
@@ -13753,9 +13751,7 @@ void Client::handle_conf_change(const struct md_config_t *conf,
 {
   Mutex::Locker lock(client_lock);
 
-  if (changed.count("client_cache_size") ||
-      changed.count("client_cache_mid")) {
-    lru.lru_set_max(cct->_conf->client_cache_size);
+  if (changed.count("client_cache_mid")) {
     lru.lru_set_midpoint(cct->_conf->client_cache_mid);
   }
   if (changed.count("client_acl_type")) {

@@ -39,14 +39,16 @@
 
 #include "include/ceph_fs.h"
 #include "include/filepath.h"
+#include "include/util.h"
 
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
-#include "common/errno.h"
-#include "common/safe_io.h"
-#include "common/perf_counters.h"
 #include "common/MemoryModel.h"
+#include "common/errno.h"
+#include "common/perf_counters.h"
+#include "common/safe_io.h"
+
 #include "osdc/Journaler.h"
 #include "osdc/Filer.h"
 
@@ -202,10 +204,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   cap_imports_num_opening = 0;
 
   opening_root = open = false;
-  lru.lru_set_max(g_conf->mds_cache_size);
-  lru.lru_set_midpoint(g_conf->mds_cache_mid);
+  lru.lru_set_midpoint(cache_mid());
 
-  bottom_lru.lru_set_max(0);
   bottom_lru.lru_set_midpoint(0);
 
   decayrate.set_halflife(g_conf->mds_decay_halflife);
@@ -224,7 +224,7 @@ MDCache::~MDCache()
 
 void MDCache::log_stat()
 {
-  mds->logger->set(l_mds_inode_max, g_conf->mds_cache_size);
+  mds->logger->set(l_mds_inode_max, cache_limit_inodes() == 0 ? INT_MAX : cache_limit_inodes());
   mds->logger->set(l_mds_inodes, lru.lru_get_size());
   mds->logger->set(l_mds_inodes_pinned, lru.lru_get_num_pinned());
   mds->logger->set(l_mds_inodes_top, lru.lru_get_top());
@@ -279,8 +279,7 @@ void MDCache::add_inode(CInode *in)
       base_inodes.insert(in);
   }
 
-  if (CInode::count() >
-        g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
+  if (cache_toofull()) {
     exceeded_size_limit = true;
   }
 }
@@ -2017,12 +2016,10 @@ update:
     msg->quota = i->quota;
     mds->send_message_client_counted(msg, session->connection);
   }
-  for (compact_map<mds_rank_t, unsigned>::iterator it = in->replicas_begin();
-       it != in->replicas_end();
-       ++it) {
+  for (const auto &it : in->get_replicas()) {
     MGatherCaps *msg = new MGatherCaps;
     msg->ino = in->ino();
-    mds->send_message_mds(msg, it->first);
+    mds->send_message_mds(msg, it.first);
   }
 }
 
@@ -4541,9 +4538,10 @@ void MDCache::rejoin_scour_survivor_replicas(mds_rank_t from, MMDSCacheRejoin *a
 	 p != dfs.end();
 	 ++p) {
       CDir *dir = *p;
+      if (!dir->is_auth())
+	continue;
       
-      if (dir->is_auth() &&
-	  dir->is_replica(from) &&
+      if (dir->is_replica(from) &&
 	  (ack == NULL || ack->strong_dirfrags.count(dir->dirfrag()) == 0)) {
 	dir->remove_replica(from);
 	dout(10) << " rem " << *dir << dendl;
@@ -5953,13 +5951,11 @@ void MDCache::rejoin_send_acks()
       dq.pop_front();
       
       // dir
-      for (compact_map<mds_rank_t,unsigned>::iterator r = dir->replicas_begin();
-	   r != dir->replicas_end();
-	   ++r) {
-	auto it = acks.find(r->first);
+      for (auto &r : dir->get_replicas()) {
+	auto it = acks.find(r.first);
 	if (it == acks.end())
 	  continue;
-	it->second->add_strong_dirfrag(dir->dirfrag(), ++r->second, dir->dir_rep);
+	it->second->add_strong_dirfrag(dir->dirfrag(), ++r.second, dir->dir_rep);
 	it->second->add_dirfrag_base(dir);
       }
 	   
@@ -5975,36 +5971,32 @@ void MDCache::rejoin_send_acks()
 	  in = dnl->get_inode();
 
 	// dentry
-	for (compact_map<mds_rank_t,unsigned>::iterator r = dn->replicas_begin();
-	     r != dn->replicas_end();
-	     ++r) {
-	  auto it = acks.find(r->first);
+	for (auto &r : dn->get_replicas()) {
+	  auto it = acks.find(r.first);
 	  if (it == acks.end())
 	    continue;
 	  it->second->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
 					   dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_d_type():0,
-					   ++r->second,
+					   ++r.second,
 					   dn->lock.get_replica_state());
 	  // peer missed MDentrylink message ?
-	  if (in && !in->is_replica(r->first))
-	    in->add_replica(r->first);
+	  if (in && !in->is_replica(r.first))
+	    in->add_replica(r.first);
 	}
 	
 	if (!in)
 	  continue;
 
-	for (compact_map<mds_rank_t,unsigned>::iterator r = in->replicas_begin();
-	     r != in->replicas_end();
-	     ++r) {
-	  auto it = acks.find(r->first);
+	for (auto &r : in->get_replicas()) {
+	  auto it = acks.find(r.first);
 	  if (it == acks.end())
 	    continue;
 	  it->second->add_inode_base(in, mds->mdsmap->get_up_features());
 	  bufferlist bl;
-	  in->_encode_locks_state_for_rejoin(bl, r->first);
-	  it->second->add_inode_locks(in, ++r->second, bl);
+	  in->_encode_locks_state_for_rejoin(bl, r.first);
+	  it->second->add_inode_locks(in, ++r.second, bl);
 	}
 	
 	// subdirs in this subtree?
@@ -6015,28 +6007,24 @@ void MDCache::rejoin_send_acks()
 
   // base inodes too
   if (root && root->is_auth()) 
-    for (compact_map<mds_rank_t,unsigned>::iterator r = root->replicas_begin();
-	 r != root->replicas_end();
-	 ++r) {
-      auto it = acks.find(r->first);
+    for (auto &r : root->get_replicas()) {
+      auto it = acks.find(r.first);
       if (it == acks.end())
 	continue;
       it->second->add_inode_base(root, mds->mdsmap->get_up_features());
       bufferlist bl;
-      root->_encode_locks_state_for_rejoin(bl, r->first);
-      it->second->add_inode_locks(root, ++r->second, bl);
+      root->_encode_locks_state_for_rejoin(bl, r.first);
+      it->second->add_inode_locks(root, ++r.second, bl);
     }
   if (myin)
-    for (compact_map<mds_rank_t,unsigned>::iterator r = myin->replicas_begin();
-	 r != myin->replicas_end();
-	 ++r) {
-      auto it = acks.find(r->first);
+    for (auto &r : myin->get_replicas()) {
+      auto it = acks.find(r.first);
       if (it == acks.end())
 	continue;
       it->second->add_inode_base(myin, mds->mdsmap->get_up_features());
       bufferlist bl;
-      myin->_encode_locks_state_for_rejoin(bl, r->first);
-      it->second->add_inode_locks(myin, ++r->second, bl);
+      myin->_encode_locks_state_for_rejoin(bl, r.first);
+      it->second->add_inode_locks(myin, ++r.second, bl);
     }
 
   // include inode base for any inodes whose scatterlocks may have updated
@@ -6044,10 +6032,8 @@ void MDCache::rejoin_send_acks()
        p != rejoin_potential_updated_scatterlocks.end();
        ++p) {
     CInode *in = *p;
-    for (compact_map<mds_rank_t,unsigned>::iterator r = in->replicas_begin();
-	 r != in->replicas_end();
-	 ++r) {
-      auto it = acks.find(r->first);
+    for (const auto &r : in->get_replicas()) {
+      auto it = acks.find(r.first);
       if (it == acks.end())
 	continue;
       it->second->add_inode_base(in, mds->mdsmap->get_up_features());
@@ -6428,34 +6414,19 @@ void MDCache::start_recovered_truncates()
 // ================================================================================
 // cache trimming
 
-
-/*
- * note: only called while MDS is active or stopping... NOT during recovery.
- * however, we may expire a replica whose authority is recovering.
- * 
- */
-bool MDCache::trim(int max, int count)
+void MDCache::trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*> &expiremap)
 {
-  // trim LRU
-  if (count > 0) {
-    max = lru.lru_get_size() - count;
-    if (max <= 0)
-      max = 1;
-  } else if (max < 0) {
-    max = g_conf->mds_cache_size;
-    if (max <= 0)
-      return false;
-  }
-  dout(7) << "trim max=" << max << "  cur=" << lru.lru_get_size()
-	  << "/" << bottom_lru.lru_get_size() << dendl;
-
-  // process delayed eval_stray()
-  stray_manager.advance_delayed();
-
-  map<mds_rank_t, MCacheExpire*> expiremap;
   bool is_standby_replay = mds->is_standby_replay();
-  int unexpirable = 0;
-  list<CDentry*> unexpirables;
+  std::vector<CDentry *> unexpirables;
+  uint64_t trimmed = 0;
+
+  dout(7) << "trim_lru trimming " << count
+          << " items from LRU"
+          << " size=" << lru.lru_get_size()
+          << " mid=" << lru.lru_get_top()
+          << " pintail=" << lru.lru_get_pintail()
+          << " pinned=" << lru.lru_get_num_pinned()
+          << dendl;
 
   for (;;) {
     CDentry *dn = static_cast<CDentry*>(bottom_lru.lru_expire());
@@ -6463,34 +6434,65 @@ bool MDCache::trim(int max, int count)
       break;
     if (trim_dentry(dn, expiremap)) {
       unexpirables.push_back(dn);
-      ++unexpirable;
+    } else {
+      trimmed++;
     }
   }
 
-  for(auto dn : unexpirables)
+  for (auto &dn : unexpirables) {
     bottom_lru.lru_insert_mid(dn);
+  }
   unexpirables.clear();
 
-  // trim dentries from the LRU: only enough to satisfy `max`,
-  while (lru.lru_get_size() + unexpirable > (unsigned)max) {
+  // trim dentries from the LRU until count is reached
+  while (cache_toofull() || count > 0) {
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) {
       break;
     }
     if ((is_standby_replay && dn->get_linkage()->inode &&
-        dn->get_linkage()->inode->item_open_file.is_on_list()) ||
-	trim_dentry(dn, expiremap)) {
+        dn->get_linkage()->inode->item_open_file.is_on_list())) {
       unexpirables.push_back(dn);
-      ++unexpirable;
+    } else if (trim_dentry(dn, expiremap)) {
+      unexpirables.push_back(dn);
+    } else {
+      trimmed++;
     }
+    count--;
   }
-  for(auto dn : unexpirables)
+
+  for (auto &dn : unexpirables) {
     lru.lru_insert_mid(dn);
+  }
   unexpirables.clear();
 
+  dout(7) << "trim_lru trimmed " << trimmed << " items" << dendl;
+}
+
+/*
+ * note: only called while MDS is active or stopping... NOT during recovery.
+ * however, we may expire a replica whose authority is recovering.
+ *
+ * @param count is number of dentries to try to expire
+ */
+bool MDCache::trim(uint64_t count)
+{
+  uint64_t used = cache_size();
+  uint64_t limit = cache_limit_memory();
+  map<mds_rank_t, MCacheExpire*> expiremap;
+
+  dout(7) << "trim bytes_used=" << bytes2str(used)
+          << " limit=" << bytes2str(limit)
+          << " reservation=" << cache_reservation()
+          << "% count=" << count << dendl;
+
+  // process delayed eval_stray()
+  stray_manager.advance_delayed();
+
+  trim_lru(count, expiremap);
+
   // trim non-auth, non-bound subtrees
-  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();) {
+  for (auto p = subtrees.begin(); p != subtrees.end();) {
     CDir *dir = p->first;
     ++p;
     CInode *diri = dir->get_inode();
@@ -6524,7 +6526,7 @@ bool MDCache::trim(int max, int count)
   }
 
   // trim root?
-  if (max == 0 && root) {
+  if (mds->is_stopping() && root) {
     list<CDir*> ls;
     root->get_dirfrags(ls);
     for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
@@ -6567,7 +6569,7 @@ bool MDCache::trim(int max, int count)
   }
 
   // Other rank's base inodes (when I'm stopping)
-  if (max == 0) {
+  if (mds->is_stopping()) {
     for (set<CInode*>::iterator p = base_inodes.begin();
          p != base_inodes.end(); ++p) {
       if (MDS_INO_MDSDIR_OWNER((*p)->ino()) != mds->get_nodeid()) {
@@ -7252,7 +7254,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       if (nonce == dir->get_replica_nonce(from)) {
 	// remove from our cached_by
 	dout(7) << " dir expire on " << *dir << " from mds." << from
-		<< " replicas was " << dir->replica_map << dendl;
+		<< " replicas was " << dir->get_replicas() << dendl;
 	dir->remove_replica(from);
       } 
       else {
@@ -7417,9 +7419,9 @@ void MDCache::check_memory_usage()
 
   // check client caps
   assert(CInode::count() == inode_map.size() + snap_inode_map.size());
-  float caps_per_inode = 0.0;
+  double caps_per_inode = 0.0;
   if (CInode::count())
-    caps_per_inode = (float)Capability::count() / (float)CInode::count();
+    caps_per_inode = (double)Capability::count() / (double)CInode::count();
 
   dout(2) << "check_memory_usage"
 	   << " total " << last.get_total()
@@ -7435,20 +7437,15 @@ void MDCache::check_memory_usage()
   mds->mlogger->set(l_mdm_rss, last.get_rss());
   mds->mlogger->set(l_mdm_heap, last.get_heap());
 
-  if (num_inodes_with_caps > g_conf->mds_cache_size) {
-    float ratio = (float)g_conf->mds_cache_size * .9 / (float)num_inodes_with_caps;
-    if (ratio < 1.0) {
-      last_recall_state = ceph_clock_now();
-      mds->server->recall_client_state(ratio);
-    }
+  if (cache_toofull()) {
+    last_recall_state = ceph_clock_now();
+    mds->server->recall_client_state();
   }
 
   // If the cache size had exceeded its limit, but we're back in bounds
   // now, free any unused pool memory so that our memory usage isn't
   // permanently bloated.
-  if (exceeded_size_limit
-      && CInode::count() <=
-        g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
+  if (exceeded_size_limit && !cache_toofull()) {
     // Only do this once we are back in bounds: otherwise the releases would
     // slow down whatever process caused us to exceed bounds to begin with
     if (ceph_using_tcmalloc()) {
@@ -7540,7 +7537,7 @@ bool MDCache::shutdown_pass()
   }
 
   // trim cache
-  trim(0);
+  trim(UINT64_MAX);
   dout(5) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
 
   // SUBTREES
@@ -10296,10 +10293,9 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
   if (bcast) {
     mds->get_mds_map()->get_active_mds_set(who);
   } else {
-    for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
-	 p != dir->replicas_end();
-	 ++p)
-      who.insert(p->first);
+    for (const auto &p : dir->get_replicas()) {
+      who.insert(p.first);
+    }
   }
   
   dout(7) << "sending dir_update on " << *dir << " bcast " << bcast << " to " << who << dendl;
@@ -10382,22 +10378,20 @@ void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
   dout(7) << "send_dentry_link " << *dn << dendl;
 
   CDir *subtree = get_subtree_root(dn->get_dir());
-  for (compact_map<mds_rank_t,unsigned>::iterator p = dn->replicas_begin();
-       p != dn->replicas_end();
-       ++p) {
+  for (const auto &p : dn->get_replicas()) {
     // don't tell (rename) witnesses; they already know
-    if (mdr.get() && mdr->more()->witnessed.count(p->first))
+    if (mdr.get() && mdr->more()->witnessed.count(p.first))
       continue;
-    if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN ||
-	(mds->mdsmap->get_state(p->first) == MDSMap::STATE_REJOIN &&
-	 rejoin_gather.count(p->first)))
+    if (mds->mdsmap->get_state(p.first) < MDSMap::STATE_REJOIN ||
+	(mds->mdsmap->get_state(p.first) == MDSMap::STATE_REJOIN &&
+	 rejoin_gather.count(p.first)))
       continue;
     CDentry::linkage_t *dnl = dn->get_linkage();
     MDentryLink *m = new MDentryLink(subtree->dirfrag(), dn->get_dir()->dirfrag(),
 				     dn->name, dnl->is_primary());
     if (dnl->is_primary()) {
       dout(10) << "  primary " << *dnl->get_inode() << dendl;
-      replicate_inode(dnl->get_inode(), p->first, m->bl,
+      replicate_inode(dnl->get_inode(), p.first, m->bl,
 		      mds->mdsmap->get_up_features());
     } else if (dnl->is_remote()) {
       inodeno_t ino = dnl->get_remote_ino();
@@ -10407,7 +10401,7 @@ void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
       ::encode(d_type, m->bl);
     } else
       ceph_abort();   // aie, bad caller!
-    mds->send_message_mds(m, p->first);
+    mds->send_message_mds(m, p.first);
   }
 }
 
@@ -11323,12 +11317,10 @@ void MDCache::_fragment_stored(MDRequestRef& mdr)
 
   // tell peers
   CDir *first = *info.resultfrags.begin();
-  for (compact_map<mds_rank_t,unsigned>::iterator p = first->replicas_begin();
-       p != first->replicas_end();
-       ++p) {
-    if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN ||
-	(mds->mdsmap->get_state(p->first) == MDSMap::STATE_REJOIN &&
-	 rejoin_gather.count(p->first)))
+  for (const auto &p : first->get_replicas()) {
+    if (mds->mdsmap->get_state(p.first) < MDSMap::STATE_REJOIN ||
+	(mds->mdsmap->get_state(p.first) == MDSMap::STATE_REJOIN &&
+	 rejoin_gather.count(p.first)))
       continue;
 
     MMDSFragmentNotify *notify = new MMDSFragmentNotify(basedirfrag, info.bits);
@@ -11337,9 +11329,9 @@ void MDCache::_fragment_stored(MDRequestRef& mdr)
     for (list<CDir*>::iterator q = info.resultfrags.begin();
 	 q != info.resultfrags.end();
 	 ++q)
-      replicate_dir(*q, p->first, notify->basebl);
+      replicate_dir(*q, p.first, notify->basebl);
 
-    mds->send_message_mds(notify, p->first);
+    mds->send_message_mds(notify, p.first);
   }
 
   // journal commit
@@ -11838,6 +11830,18 @@ void MDCache::show_cache()
     show_func(p.second);
   for (auto p : snap_inode_map)
     show_func(p.second);
+}
+
+int MDCache::cache_status(Formatter *f)
+{
+  f->open_object_section("cache");
+
+  f->open_object_section("pool");
+  mempool::get_pool(mempool::mds_co::id).dump(f);
+  f->close_section();
+
+  f->close_section();
+  return 0;
 }
 
 int MDCache::dump_cache(std::string const &file_name)

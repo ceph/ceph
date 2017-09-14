@@ -8,7 +8,7 @@
 uint64_t MDSCacheObject::last_wait_seq = 0;
 
 void MDSCacheObject::finish_waiting(uint64_t mask, int result) {
-  list<MDSInternalContextBase*> finished;
+  std::list<MDSInternalContextBase*> finished;
   take_waiting(mask, finished);
   finish_contexts(g_ceph_context, finished, result);
 }
@@ -21,12 +21,10 @@ void MDSCacheObject::dump(Formatter *f) const
   f->open_object_section("auth_state");
   {
     f->open_object_section("replicas");
-    const compact_map<mds_rank_t,unsigned>& replicas = get_replicas();
-    for (compact_map<mds_rank_t,unsigned>::const_iterator i = replicas.begin();
-         i != replicas.end(); ++i) {
+    for (const auto &it : get_replicas()) {
       std::ostringstream rank_str;
-      rank_str << i->first;
-      f->dump_int(rank_str.str().c_str(), i->second);
+      rank_str << it.first;
+      f->dump_int(rank_str.str().c_str(), it.second);
     }
     f->close_section();
   }

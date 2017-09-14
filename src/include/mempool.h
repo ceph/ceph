@@ -100,6 +100,12 @@ BlueStore::Onode, we need to do
 (This is just because we need to name some static variables and we
 can't use :: in a variable name.)
 
+XXX Note: the new operator hard-codes the allocation size to the size of the
+object given in MEMPOOL_DEFINE_OBJECT_FACTORY. For this reason, you cannot
+incorporate mempools into a base class without also defining a helper/factory
+for the child class as well (as the base class is usually smaller than the
+child class).
+
 In order to use the STL containers, simply use the namespaced variant
 of the container type.  For example,
 
@@ -154,6 +160,7 @@ namespace mempool {
   f(osdmap)			      \
   f(osdmap_mapping)		      \
   f(pgmap)			      \
+  f(mds_co)			      \
   f(unittest_1)			      \
   f(unittest_2)
 

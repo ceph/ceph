@@ -81,12 +81,12 @@ class TestClientLimits(CephFSTestCase):
             pass
 
         # The remaining caps should comply with the numbers sent from MDS in SESSION_RECALL message,
-        # which depend on the cache size and overall ratio
+        # which depend on the caps outstanding, cache size and overall ratio
         self.wait_until_equal(
             lambda: self.get_session(mount_a_client_id)['num_caps'],
-            int(cache_size * 0.8),
-            timeout=600,
-            reject_fn=lambda x: x < int(cache_size*.8))
+            int(open_files * 0.2),
+            timeout=30,
+            reject_fn=lambda x: x < int(open_files*0.2))
 
     @needs_trimming
     def test_client_pin_root(self):

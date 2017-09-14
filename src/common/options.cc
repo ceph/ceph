@@ -5318,8 +5318,22 @@ std::vector<Option> get_mds_options() {
     .set_description(""),
 
     Option("mds_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(100000)
-    .set_description(""),
+    .set_default(0)
+    .set_description("maximum number of inodes in MDS cache (<=0 is unlimited)")
+    .set_long_description("This tunable is no longer recommended. Use mds_cache_memory_limit."),
+
+    Option("mds_cache_memory_limit", Option::TYPE_UINT, Option::LEVEL_BASIC)
+    .set_default(1*(1LL<<30))
+    .set_description("target maximum memory usage of MDS cache")
+    .set_long_description("This sets a target maximum memory usage of the MDS cache and is the primary tunable to limit the MDS memory usage. The MDS will try to stay under a reservation of this limit (by default 95%; 1 - mds_cache_reservation) by trimming unused metadata in its cache and recalling cached items in the client caches. It is possible for the MDS to exceed this limit due to slow recall from clients. The mds_health_cache_threshold (150%) sets a cache full threshold for when the MDS signals a cluster health warning."),
+
+    Option("mds_cache_reservation", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(.05)
+    .set_description("amount of memory to reserve"),
+
+    Option("mds_health_cache_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1.5)
+    .set_description("threshold for cache size to generate health warning"),
 
     Option("mds_cache_mid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.7)
@@ -5391,10 +5405,6 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_health_summarize_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
-    .set_description(""),
-
-    Option("mds_health_cache_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1.5)
     .set_description(""),
 
     Option("mds_reconnect_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
