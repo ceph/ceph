@@ -272,7 +272,6 @@ OPTION(mon_reweight_min_pgs_per_osd, OPT_U64)   // min pgs per osd for reweight-
 OPTION(mon_reweight_min_bytes_per_osd, OPT_U64)   // min bytes per osd for reweight-by-utilization command
 OPTION(mon_reweight_max_osds, OPT_INT)   // max osds to change per reweight-by-* command
 OPTION(mon_reweight_max_change, OPT_DOUBLE)
-OPTION(mon_health_data_update_interval, OPT_FLOAT)
 OPTION(mon_health_to_clog, OPT_BOOL)
 OPTION(mon_health_to_clog_interval, OPT_INT)
 OPTION(mon_health_to_clog_tick_interval, OPT_DOUBLE)
