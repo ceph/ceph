@@ -372,6 +372,7 @@ protected:
   pg_info_t info;               ///< current pg info
   pg_info_t last_written_info;  ///< last written info
   __u8 info_struct_v;
+public:
   static const __u8 cur_struct_v = 10;
   // v10 is the new past_intervals encoding
   // v9 was fastinfo_key addition
@@ -379,6 +380,7 @@ protected:
   // v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
   // (first appeared in cuttlefish).
   static const __u8 compat_struct_v = 10;
+protected:
   bool must_upgrade() {
     return info_struct_v < cur_struct_v;
   }
@@ -2438,6 +2440,7 @@ protected:
   // pg on-disk state
   void do_pending_flush();
 
+public:
   static void _create(ObjectStore::Transaction& t, spg_t pgid, int bits);
   static void _init(ObjectStore::Transaction& t,
 		    spg_t pgid, const pg_pool_t *pool);
@@ -2448,6 +2451,7 @@ protected:
   void update_store_with_options();
   void update_store_on_load();
 
+public:
   static int _prepare_write_info(
     CephContext* cct,
     map<string,bufferlist> *km,
@@ -2459,6 +2463,7 @@ protected:
     bool dirty_epoch,
     bool try_fast_info,
     PerfCounters *logger = nullptr);
+protected:
   void write_if_dirty(ObjectStore::Transaction& t);
 
   PGLog::IndexedLog projected_log;
@@ -2489,14 +2494,18 @@ protected:
   void trim_log();
 
   std::string get_corrupt_pg_log_name() const;
+public:
   static int read_info(
     ObjectStore *store, spg_t pgid, const coll_t &coll,
     bufferlist &bl, pg_info_t &info, PastIntervals &past_intervals,
     __u8 &);
+protected:
   void read_state(ObjectStore *store, bufferlist &bl);
+public:
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
   static int peek_map_epoch(ObjectStore *store, spg_t pgid,
 			    epoch_t *pepoch, bufferlist *bl);
+protected:
   void update_snap_map(
     const vector<pg_log_entry_t> &log_entries,
     ObjectStore::Transaction& t);
