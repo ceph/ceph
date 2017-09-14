@@ -240,7 +240,6 @@ OPTION(mon_timecheck_skew_interval, OPT_FLOAT) // on leader, timecheck (clock dr
 OPTION(mon_pg_stuck_threshold, OPT_INT) // number of seconds after which pgs can be considered stuck inactive, unclean, etc (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_pg_min_inactive, OPT_U64) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
 OPTION(mon_pg_warn_min_per_osd, OPT_INT)  // min # pgs per (in) osd before we warn the admin
-OPTION(mon_pg_warn_max_per_osd, OPT_INT)  // max # pgs per (in) osd before we warn the admin
 OPTION(mon_pg_warn_max_object_skew, OPT_FLOAT) // max skew few average in objects per pg
 OPTION(mon_pg_warn_min_objects, OPT_INT)  // do not warn below this object #
 OPTION(mon_pg_warn_min_pool_objects, OPT_INT)  // do not warn on pools below this object #
