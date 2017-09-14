@@ -2708,6 +2708,7 @@ public:
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
     int init(const rgw_bucket& _bucket, const rgw_obj& obj);
     int init(const rgw_bucket& _bucket, int sid);
+    int init(const RGWBucketInfo& bucket_info, int sid);
   };
 
   class Object {
