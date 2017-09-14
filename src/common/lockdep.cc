@@ -39,7 +39,7 @@ namespace std {
 #define BACKTRACE_SKIP 2
 
 /******* Globals **********/
-int g_lockdep = 0;
+bool g_lockdep;
 struct lockdep_stopper_t {
   // disable lockdep when this module destructs.
   ~lockdep_stopper_t() {
