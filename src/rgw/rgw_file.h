@@ -265,6 +265,8 @@ namespace rgw {
       : fs(_fs), bucket(nullptr), parent(nullptr), variant_type{directory()},
 	depth(0), flags(FLAG_NONE)
       {
+        fh.fh_hk.bucket = 0;
+        fh.fh_hk.object = 0;
 	/* root */
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
 	variant_type = directory();
