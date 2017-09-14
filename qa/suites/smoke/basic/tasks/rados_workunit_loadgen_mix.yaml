@@ -1,7 +1,11 @@
 tasks:
 - install:
 - ceph:
-    fs: ext4
+    fs: xfs
+    log-whitelist:
+    - but it is still running
+    - overall HEALTH_
+    - \(POOL_APP_NOT_ENABLED\)
 - ceph-fuse:
 - workunit:
     clients:

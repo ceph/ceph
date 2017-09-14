@@ -12,12 +12,16 @@ tasks:
 - ceph:
     fs: xfs
     log-whitelist:
-    - but it is still running
-    - objects unfound and apparently lost
-    - 'full ratio(s) out of order '
-    - OSDMAP_FLAGS
-    - OSD_OUT_OF_ORDER_FULL
-    - CACHE_POOL_NO_HIT_SET
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
+      - \(REQUEST_SLOW\)
+      - \(TOO_FEW_PGS\)
 - thrashosds:
     chance_pgnum_grow: 2
     chance_pgpnum_fix: 1

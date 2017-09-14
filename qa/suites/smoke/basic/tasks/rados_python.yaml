@@ -2,11 +2,13 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-      - but it is still running
-      - 'noup flag(s) set'
-      - OSDMAP_FLAGS
-      - OSD_OUT_OF_ORDER_FULL
-      - CACHE_POOL_NO_HIT_SET
+    - but it is still running
+    - overall HEALTH_
+    - \(OSDMAP_FLAGS\)
+    - \(PG_
+    - \(OSD_
+    - \(OBJECT_
+    - \(POOL_APP_NOT_ENABLED\)
 - ceph-fuse:
 - workunit:
     clients:

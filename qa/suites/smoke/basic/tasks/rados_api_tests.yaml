@@ -5,12 +5,12 @@ tasks:
     log-whitelist:
     - reached quota
     - but it is still running
-    - objects unfound and apparently lost
+    - overall HEALTH_
+    - (POOL_FULL)
+    - (SMALLER_PGP_NUM)
+    - (CACHE_POOL_NO_HIT_SET)
+    - (CACHE_POOL_NEAR_FULL)
     - (POOL_APP_NOT_ENABLED)
-    - 'noscrub flag(s) set'
-    - OSDMAP_FLAGS
-    - OSD_OUT_OF_ORDER_FULL
-    - CACHE_POOL_NO_HIT_SET
 - thrashosds:
     chance_pgnum_grow: 2
     chance_pgpnum_fix: 1
