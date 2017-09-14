@@ -3002,6 +3002,10 @@ std::vector<Option> get_global_options() {
     // --------------------------
     // bluestore
 
+    Option("bdev_inject_bad_size", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
+
     Option("bdev_debug_inflight_ios", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),

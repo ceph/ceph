@@ -130,6 +130,11 @@ int KernelDevice::open(const string& p)
   } else {
     size = st.st_size;
   }
+  if (cct->_conf->get_val<bool>("bdev_inject_bad_size")) {
+    derr << "injecting bad size; actual 0x" << std::hex << size
+	 << " but using 0x" << (size & ~block_size) << std::dec << dendl;
+    size &= ~(block_size);
+  }
 
   {
     char partition[PATH_MAX], devname[PATH_MAX];
