@@ -21,20 +21,7 @@ from distutils.sysconfig import customize_compiler
 
 # PEP 440 versioning of the Rados package on PyPI
 # Bump this version, after every changeset
-# NOTE: This version is not the same as get_ceph_version()
-
 __version__ = '2.0.0'
-
-
-def get_ceph_version():
-    try:
-        for line in open(os.path.join(os.path.dirname(__file__), "..", "..", "ceph_ver.h")):
-            if "CEPH_GIT_NICE_VER" in line:
-                return line.split()[2].strip('"')
-        else:
-            return "0"
-    except IOError:
-        return "0"
 
 
 def get_python_flags():
