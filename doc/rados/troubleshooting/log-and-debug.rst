@@ -428,7 +428,7 @@ Filestore
 :Description: Debugging check on synchronization. This is an expensive operation.
 :Type: Boolean
 :Required: No
-:Default: 0
+:Default: ``false``
 
 
 MDS
