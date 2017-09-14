@@ -135,7 +135,7 @@ static int getgroups_cb(void *handle, gid_t **sgids)
 }
 
 #define GET_GROUPS(perms, req)	{				\
-  if (cfuse->client->cct->_conf->fuse_set_user_groups) {	\
+  if (g_conf->get_val<bool>("fuse_set_user_groups")) {	\
     gid_t *gids = NULL;						\
     int count = getgroups(req, &gids);				\
     perms.init_gids(gids, count);				\
