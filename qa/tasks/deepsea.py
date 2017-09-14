@@ -2,6 +2,7 @@
 Task to deploy clusters with DeepSea
 '''
 import logging
+import os.path
 import time
 
 from teuthology import misc
@@ -214,7 +215,26 @@ class DeepSea(Task):
                 'xargs', '-0', '--no-run-if-empty', '--', 'gzip', '--'
                 ])
 
+    def gather_logfile(self, logfile):
+        for _remote in self.ctx.cluster.remotes.iterkeys():
+            try:
+                _remote.run(args = [
+                    'sudo', 'test', '-f', '/var/log/{}'.format(logfile),
+                    ])
+            except CommandFailedError:
+                continue
+            self.log.info("Gathering logfile /var/log/{} from remote {}"
+                .format(logfile, _remote.hostname))
+            _remote.run(args = [
+                'sudo', 'cp', '-a', '/var/log/{}'.format(logfile),
+                '/home/ubuntu/cephtest/archive/',
+                run.Raw(';'),
+                'sudo', 'chown', 'ubuntu',
+                '/home/ubuntu/cephtest/archive/{}'.format(logfile)
+                ])
+
     def end(self):
+        self.gather_logfile('deepsea.log')
         self.purge_osds()
         self.gather_logs('salt')
         self.gather_logs('ganesha')
