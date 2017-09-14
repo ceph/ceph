@@ -58,9 +58,11 @@ BitmapFreelistManager::BitmapFreelistManager(CephContext* cct,
 {
 }
 
-int BitmapFreelistManager::create(uint64_t new_size, KeyValueDB::Transaction txn)
+int BitmapFreelistManager::create(uint64_t new_size, uint64_t min_alloc_size,
+				  KeyValueDB::Transaction txn)
 {
-  bytes_per_block = cct->_conf->bdev_block_size;
+  bytes_per_block = std::max(cct->_conf->bdev_block_size,
+			     (int64_t)min_alloc_size);
   assert(ISP2(bytes_per_block));
   size = P2ALIGN(new_size, bytes_per_block);
   blocks_per_key = cct->_conf->bluestore_freelist_blocks_per_key;
