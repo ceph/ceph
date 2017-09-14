@@ -529,7 +529,7 @@ class CephFSVolumeClient(object):
         # We can't query the actual cluster config remotely, but since this is
         # just a heuristic we'll assume that the ceph.conf we have locally reflects
         # that in use in the rest of the cluster.
-        pg_warn_max_per_osd = int(self.rados.conf_get('mon_pg_warn_max_per_osd'))
+        pg_warn_max_per_osd = int(self.rados.conf_get('mon_max_pg_per_osd'))
 
         other_pgs = 0
         for pool in osd_map['pools']:
