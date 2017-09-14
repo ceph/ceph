@@ -896,7 +896,7 @@ def cluster(ctx, config):
             for exclude in excludes:
                 args.extend([run.Raw('|'), 'egrep', '-v', exclude])
             args.extend([
-                run.Raw('|'), 'head', '-n', '1',
+                run.Raw('|'), 'head', '-n', '50',
             ])
             r = mon0_remote.run(
                 stdout=StringIO(),
