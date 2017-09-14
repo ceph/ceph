@@ -3477,7 +3477,7 @@ int main(int argc, char **argv)
       cerr << "read_info error " << cpp_strerror(ret) << std::endl;
       goto out;
     }
-    if (struct_ver < PG::compat_struct_v) {
+    if (struct_ver < PG::get_compat_struct_v()) {
       cerr << "PG is too old to upgrade, use older Ceph version" << std::endl;
       ret = -EFAULT;
       goto out;
