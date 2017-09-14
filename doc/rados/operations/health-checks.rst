@@ -336,17 +336,20 @@ TOO_MANY_PGS
 ____________
 
 The number of PGs in use in the cluster is above the configurable
-threshold of ``mon_pg_warn_max_per_osd`` PGs per OSD.  This can lead
+threshold of ``mon_max_pg_per_osd`` PGs per OSD.  If this threshold is
+exceed the cluster will not allow new pools to be created, pool `pg_num` to
+be increased, or pool replication to be increased (any of which would lead to
+more PGs in the cluster).  A large number of PGs can lead
 to higher memory utilization for OSD daemons, slower peering after
 cluster state changes (like OSD restarts, additions, or removals), and
 higher load on the Manager and Monitor daemons.
 
-The ``pg_num`` value for existing pools cannot currently be reduced.
-However, the ``pgp_num`` value can, which effectively collocates some
-PGs on the same sets of OSDs, mitigating some of the negative impacts
-described above.  The ``pgp_num`` value can be adjusted with::
+The simplest way to mitigate the problem is to increase the number of
+OSDs in the cluster by adding more hardware.  Note that the OSD count
+used for the purposes of this health check is the number of "in" OSDs,
+so marking "out" OSDs "in" (if there are any) can also help::
 
-  ceph osd pool set <pool> pgp_num <value>
+  ceph osd in <osd id(s)>
 
 Please refer to
 :doc:`placement-groups#Choosing-the-number-of-Placement-Groups` for
@@ -367,7 +370,6 @@ This is normally resolved by setting ``pgp_num`` to match ``pg_num``,
 triggering the data migration, with::
 
   ceph osd pool set <pool> pgp_num <pg-num-value>
-
 
 MANY_OBJECTS_PER_PG
 ___________________
