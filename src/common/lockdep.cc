@@ -111,6 +111,8 @@ void lockdep_unregister_ceph_context(CephContext *cct)
 int lockdep_dump_locks()
 {
   pthread_mutex_lock(&lockdep_mutex);
+  if (!g_lockdep)
+    goto out;
 
   for (ceph::unordered_map<pthread_t, map<int,BackTrace*> >::iterator p = held.begin();
        p != held.end();
@@ -125,7 +127,7 @@ int lockdep_dump_locks()
       *_dout << dendl;
     }
   }
-
+out:
   pthread_mutex_unlock(&lockdep_mutex);
   return 0;
 }
@@ -133,8 +135,10 @@ int lockdep_dump_locks()
 
 static int _lockdep_register(const char *name)
 {
-  int id;
+  int id = -1;
 
+  if (!g_lockdep)
+    return id;
   ceph::unordered_map<std::string, int>::iterator p = lock_ids.find(name);
   if (p == lock_ids.end()) {
     if (free_ids.empty()) {
@@ -178,9 +182,16 @@ void lockdep_unregister(int id)
   }
 
   pthread_mutex_lock(&lockdep_mutex);
+  if (!g_lockdep) {
+    pthread_mutex_unlock(&lockdep_mutex);
+    return;
+  }
 
   map<int, std::string>::iterator p = lock_names.find(id);
-  assert(p != lock_names.end());
+  if (p == lock_names.end()) {
+    pthread_mutex_unlock(&lockdep_mutex);
+    return;
+  }
 
   int &refs = lock_refs[id];
   if (--refs == 0) {
@@ -245,8 +256,14 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace)
   pthread_t p = pthread_self();
 
   pthread_mutex_lock(&lockdep_mutex);
+  if (!g_lockdep) {
+    pthread_mutex_unlock(&lockdep_mutex);
+    return id;
+  }
+
   if (id < 0)
     id = _lockdep_register(name);
+
   lockdep_dout(20) << "_will_lock " << name << " (" << id << ")" << dendl;
 
   // check dependency graph
@@ -309,7 +326,6 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace)
       }
     }
   }
-
   pthread_mutex_unlock(&lockdep_mutex);
   return id;
 }
@@ -319,6 +335,8 @@ int lockdep_locked(const char *name, int id, bool force_backtrace)
   pthread_t p = pthread_self();
 
   pthread_mutex_lock(&lockdep_mutex);
+  if (!g_lockdep)
+    goto out;
   if (id < 0)
     id = _lockdep_register(name);
 
@@ -327,6 +345,7 @@ int lockdep_locked(const char *name, int id, bool force_backtrace)
     held[p][id] = new BackTrace(BACKTRACE_SKIP);
   else
     held[p][id] = 0;
+out:
   pthread_mutex_unlock(&lockdep_mutex);
   return id;
 }
@@ -342,6 +361,8 @@ int lockdep_will_unlock(const char *name, int id)
   }
 
   pthread_mutex_lock(&lockdep_mutex);
+  if (!g_lockdep)
+    goto out;
   lockdep_dout(20) << "_will_unlock " << name << dendl;
 
   // don't assert.. lockdep may be enabled at any point in time
@@ -350,6 +371,7 @@ int lockdep_will_unlock(const char *name, int id)
 
   delete held[p][id];
   held[p].erase(id);
+out:
   pthread_mutex_unlock(&lockdep_mutex);
   return id;
 }
