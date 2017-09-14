@@ -432,8 +432,6 @@ OPTION(mds_data, OPT_STR)
 OPTION(mds_max_file_size, OPT_U64) // Used when creating new CephFS. Change with 'ceph mds set max_file_size <size>' afterwards
 // max xattr kv pairs size for each dir/file
 OPTION(mds_max_xattr_pairs_size, OPT_U32)
-OPTION(mds_cache_size, OPT_INT)
-OPTION(mds_cache_mid, OPT_FLOAT)
 OPTION(mds_max_file_recover, OPT_U32)
 OPTION(mds_dir_max_commit_size, OPT_INT) // MB
 OPTION(mds_dir_keys_per_op, OPT_INT)
@@ -453,7 +451,6 @@ OPTION(mds_recall_state_timeout, OPT_FLOAT)    // detect clients which aren't tr
 OPTION(mds_freeze_tree_timeout, OPT_FLOAT)    // detecting freeze tree deadlock
 OPTION(mds_session_autoclose, OPT_FLOAT) // autoclose idle session
 OPTION(mds_health_summarize_threshold, OPT_INT) // collapse N-client health metrics to a single 'many'
-OPTION(mds_health_cache_threshold, OPT_FLOAT) // warn on cache size if it exceeds mds_cache_size by this factor
 OPTION(mds_reconnect_timeout, OPT_FLOAT)  // seconds to wait for clients during mds restart
 	      //  make it (mds_session_timeout - mds_beacon_grace)
 OPTION(mds_tick_interval, OPT_FLOAT)

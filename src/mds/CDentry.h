@@ -49,6 +49,7 @@ bool operator<(const CDentry& l, const CDentry& r);
 // dentry
 class CDentry : public MDSCacheObject, public LRUObject, public Counter<CDentry> {
 public:
+  MEMPOOL_CLASS_HELPERS();
   friend class CDir;
 
   struct linkage_t {
@@ -266,7 +267,7 @@ public:
     ::encode(version, bl);
     ::encode(projected_version, bl);
     ::encode(lock, bl);
-    ::encode(replica_map, bl);
+    ::encode(get_replicas(), bl);
     get(PIN_TEMPEXPORTING);
   }
   void finish_export() {
@@ -288,14 +289,14 @@ public:
     ::decode(version, blp);
     ::decode(projected_version, blp);
     ::decode(lock, blp);
-    ::decode(replica_map, blp);
+    ::decode(get_replicas(), blp);
 
     // twiddle
     state &= MASK_STATE_IMPORT_KEPT;
     state_set(CDentry::STATE_AUTH);
     if (nstate & STATE_DIRTY)
       _mark_dirty(ls);
-    if (!replica_map.empty())
+    if (is_replicated())
       get(PIN_REPLICATED);
     replica_nonce = 0;
   }

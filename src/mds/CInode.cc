@@ -3622,7 +3622,7 @@ void CInode::encode_export(bufferlist& bl)
 
   ::encode(pop, bl);
 
-  ::encode(replica_map, bl);
+  ::encode(get_replicas(), bl);
 
   // include scatterlock info for any bounding CDirs
   bufferlist bounding;
@@ -3687,8 +3687,8 @@ void CInode::decode_import(bufferlist::iterator& p,
 
   ::decode(pop, ceph_clock_now(), p);
 
-  ::decode(replica_map, p);
-  if (!replica_map.empty())
+  ::decode(get_replicas(), p);
+  if (is_replicated())
     get(PIN_REPLICATED);
   replica_nonce = 0;
 
@@ -4523,3 +4523,5 @@ bool CInode::is_exportable(mds_rank_t dest) const
     return true;
   }
 }
+
+MEMPOOL_DEFINE_OBJECT_FACTORY(CInode, co_inode, mds_co);

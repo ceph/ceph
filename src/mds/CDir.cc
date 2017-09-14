@@ -932,7 +932,7 @@ void CDir::finish_old_fragment(list<MDSInternalContextBase*>& waiters, bool repl
 
 void CDir::init_fragment_pins()
 {
-  if (!replica_map.empty())
+  if (is_replicated())
     get(PIN_REPLICATED);
   if (state_test(STATE_DIRTY))
     get(PIN_DIRTY);
@@ -976,7 +976,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
   for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
     CDir *f = new CDir(inode, *p, cache, is_auth());
     f->state_set(state & (MASK_STATE_FRAGMENT_KEPT | STATE_COMPLETE));
-    f->replica_map = replica_map;
+    f->get_replicas() = get_replicas();
     f->dir_auth = dir_auth;
     f->init_fragment_pins();
     f->set_version(get_version());
@@ -1085,12 +1085,10 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
       steal_dentry(dir->items.begin()->second);
     
     // merge replica map
-    for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
-	 p != dir->replicas_end();
-	 ++p) {
-      unsigned cur = replica_map[p->first];
-      if (p->second > cur)
-	replica_map[p->first] = p->second;
+    for (const auto &p : dir->get_replicas()) {
+      unsigned cur = get_replicas()[p.first];
+      if (p.second > cur)
+	get_replicas()[p.first] = p.second;
     }
 
     // merge version
@@ -2432,7 +2430,7 @@ void CDir::encode_export(bufferlist& bl)
   ::encode(pop_auth_subtree, bl);
 
   ::encode(dir_rep_by, bl);  
-  ::encode(replica_map, bl);
+  ::encode(get_replicas(), bl);
 
   get(PIN_TEMPEXPORTING);
 }
@@ -2473,8 +2471,8 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
   pop_auth_subtree_nested.add(now, cache->decayrate, pop_auth_subtree);
 
   ::decode(dir_rep_by, blp);
-  ::decode(replica_map, blp);
-  if (!replica_map.empty()) get(PIN_REPLICATED);
+  ::decode(get_replicas(), blp);
+  if (is_replicated()) get(PIN_REPLICATED);
 
   replica_nonce = 0;  // no longer defined
 
@@ -3295,3 +3293,4 @@ bool CDir::should_split_fast() const
   return effective_size > fast_limit;
 }
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(CDir, co_dir, mds_co);
