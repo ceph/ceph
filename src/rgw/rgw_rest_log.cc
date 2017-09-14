@@ -923,31 +923,41 @@ RGWOp *RGWHandler_Log::op_get() {
   if (type.compare("metadata") == 0) {
     if (s->info.args.exists("id")) {
       if (s->info.args.exists("info")) {
+        s->resource = RGW_RESOURCE_CATEGORY_MDLOG_SHARDINFO;
         return new RGWOp_MDLog_ShardInfo;
       } else {
+        s->resource = RGW_RESOURCE_CATEGORY_MDLOG_LIST;
         return new RGWOp_MDLog_List;
       }
     } else if (s->info.args.exists("status")) {
+      s->resource = RGW_RESOURCE_CATEGORY_MDLOG_STATUS;
       return new RGWOp_MDLog_Status;
     } else {
+      s->resource = RGW_RESOURCE_CATEGORY_MDLOG_INFO;
       return new RGWOp_MDLog_Info;
     }
   } else if (type.compare("bucket-index") == 0) {
     if (s->info.args.exists("info")) {
+      s->resource = RGW_RESOURCE_CATEGORY_BILOG_INFO;
       return new RGWOp_BILog_Info;
     } else {
+      s->resource = RGW_RESOURCE_CATEGORY_BILOG_LIST;
       return new RGWOp_BILog_List;
     }
   } else if (type.compare("data") == 0) {
     if (s->info.args.exists("id")) {
       if (s->info.args.exists("info")) {
+        s->resource = RGW_RESOURCE_CATEGORY_DATALOG_SHARDINFO;
         return new RGWOp_DATALog_ShardInfo;
       } else {
+        s->resource = RGW_RESOURCE_CATEGORY_DATALOG_LIST;
         return new RGWOp_DATALog_List;
       }
     } else if (s->info.args.exists("status")) {
+      s->resource = RGW_RESOURCE_CATEGORY_DATALOG_STATUS;
       return new RGWOp_DATALog_Status;
     } else {
+      s->resource = RGW_RESOURCE_CATEGORY_DATALOG_INFO;
       return new RGWOp_DATALog_Info;
     }
   }
@@ -962,12 +972,16 @@ RGWOp *RGWHandler_Log::op_delete() {
     return NULL;
   }
 
-  if (type.compare("metadata") == 0)
+  if (type.compare("metadata") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_MDLOG;
     return new RGWOp_MDLog_Delete;
-  else if (type.compare("bucket-index") == 0) 
+  } else if (type.compare("bucket-index") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_BILOG;
     return new RGWOp_BILog_Delete;
-  else if (type.compare("data") == 0)
+  } else if (type.compare("data") == 0) {
+    s->resource = RGW_RESOURCE_CATEGORY_DATALOG;
     return new RGWOp_DATALog_Delete;
+  }
   return NULL;
 }
 
@@ -980,20 +994,27 @@ RGWOp *RGWHandler_Log::op_post() {
   }
 
   if (type.compare("metadata") == 0) {
-    if (s->info.args.exists("lock"))
+    if (s->info.args.exists("lock")) {
+      s->resource = RGW_RESOURCE_CATEGORY_MDLOG_LOCK;
       return new RGWOp_MDLog_Lock;
-    else if (s->info.args.exists("unlock"))
+    } else if (s->info.args.exists("unlock")) {
+      s->resource = RGW_RESOURCE_CATEGORY_MDLOG_UNLOCK;
       return new RGWOp_MDLog_Unlock;
-    else if (s->info.args.exists("notify"))
+    } else if (s->info.args.exists("notify")) {
+      s->resource = RGW_RESOURCE_CATEGORY_MDLOG_NOTIFY;
       return new RGWOp_MDLog_Notify;	    
+    }
   } else if (type.compare("data") == 0) {
-    if (s->info.args.exists("lock"))
+    if (s->info.args.exists("lock")) {
+      s->resource = RGW_RESOURCE_CATEGORY_DATALOG_LOCK;
       return new RGWOp_DATALog_Lock;
-    else if (s->info.args.exists("unlock"))
+    } else if (s->info.args.exists("unlock")) {
+      s->resource = RGW_RESOURCE_CATEGORY_DATALOG_UNLOCK;
       return new RGWOp_DATALog_Unlock;
-    else if (s->info.args.exists("notify"))
+    } else if (s->info.args.exists("notify")) {
+      s->resource = RGW_RESOURCE_CATEGORY_DATALOG_NOTIFY;
       return new RGWOp_DATALog_Notify;	    
+    }
   }
   return NULL;
 }
-

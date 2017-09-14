@@ -2901,14 +2901,17 @@ void RGWDelBucketMetaSearch_ObjStore_S3::send_response()
 RGWOp *RGWHandler_REST_Service_S3::op_get()
 {
   if (is_usage_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_USER_USAGE;
     return new RGWGetUsage_ObjStore_S3;
   } else {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKETS;
     return new RGWListBuckets_ObjStore_S3;
   }
 }
 
 RGWOp *RGWHandler_REST_Service_S3::op_head()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_BUCKETS;
   return new RGWListBuckets_ObjStore_S3;
 }
 
@@ -2916,24 +2919,42 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
 {
   if (s->info.args.exists("Action")) {
     string action = s->info.args.get("Action");
-    if (action.compare("CreateRole") == 0)
+    if (action.compare("CreateRole") == 0) {
+      s->resource = RGW_RESOURCE_CATEGORY_IAM_ROLE;
       return new RGWCreateRole;
-    if (action.compare("DeleteRole") == 0)
+    }
+    if (action.compare("DeleteRole") == 0) {
+      s->resource = RGW_RESOURCE_CATEGORY_IAM_ROLE;
       return new RGWDeleteRole;
-    if (action.compare("GetRole") == 0)
+    }
+    if (action.compare("GetRole") == 0) {
+      s->resource = RGW_RESOURCE_CATEGORY_IAM_ROLE;
       return new RGWGetRole;
-    if (action.compare("UpdateAssumeRolePolicy") == 0)
+    }
+    if (action.compare("UpdateAssumeRolePolicy") == 0) {
+      s->resource = RGW_RESOURCE_CATEGORY_IAM_ROLE;
       return new RGWModifyRole;
-    if (action.compare("ListRoles") == 0)
+    }
+    if (action.compare("ListRoles") == 0) {
+      s->resource = RGW_RESOURCE_CATEGORY_IAM_ROLES;
       return new RGWListRoles;
-    if (action.compare("PutRolePolicy") == 0)
+    }
+    if (action.compare("PutRolePolicy") == 0) {
+      s->resource = RGW_RESOURCE_CATEGORY_IAM_ROLE_POLICY;
       return new RGWPutRolePolicy;
-    if (action.compare("GetRolePolicy") == 0)
+    }
+    if (action.compare("GetRolePolicy") == 0) {
+      s->resource = RGW_RESOURCE_CATEGORY_IAM_ROLE_POLICY;
       return new RGWGetRolePolicy;
-    if (action.compare("ListRolePolicies") == 0)
+    }
+    if (action.compare("ListRolePolicies") == 0) {
+      s->resource = RGW_RESOURCE_CATEGORY_IAM_ROLE_POLICIES;
       return new RGWListRolePolicies;
-    if (action.compare("DeleteRolePolicy") == 0)
+    }
+    if (action.compare("DeleteRolePolicy") == 0) {
+      s->resource = RGW_RESOURCE_CATEGORY_IAM_ROLE_POLICY;
       return new RGWDeleteRolePolicy;
+    }
   }
   return NULL;
 }
@@ -2942,24 +2963,33 @@ RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
 {
   // Non-website mode
   if (get_data) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET;
     return new RGWListBucket_ObjStore_S3;
   } else {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_STATUS;
     return new RGWStatBucket_ObjStore_S3;
   }
 }
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_get()
 {
-  if (s->info.args.sub_resource_exists("logging"))
+  if (s->info.args.sub_resource_exists("logging")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_LOGGING_STATUS;
     return new RGWGetBucketLogging_ObjStore_S3;
+  }
 
-  if (s->info.args.sub_resource_exists("location"))
+  if (s->info.args.sub_resource_exists("location")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_LOCATION;
     return new RGWGetBucketLocation_ObjStore_S3;
+  }
 
-  if (s->info.args.sub_resource_exists("versioning"))
+  if (s->info.args.sub_resource_exists("versioning")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_VERSIONS;
     return new RGWGetBucketVersioning_ObjStore_S3;
+  }
 
   if (s->info.args.sub_resource_exists("website")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_WEBSITE;
     if (!s->cct->_conf->rgw_enable_static_website) {
       return NULL;
     }
@@ -2967,20 +2997,27 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
   }
 
   if (s->info.args.exists("mdsearch")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_MDSEARCH;
     return new RGWGetBucketMetaSearch_ObjStore_S3;
   }
 
   if (is_acl_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWGetACLs_ObjStore_S3;
   } else if (is_cors_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_CORS;
     return new RGWGetCORS_ObjStore_S3;
   } else if (is_request_payment_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_REQUEST_PAYMENT;
     return new RGWGetRequestPayment_ObjStore_S3;
   } else if (s->info.args.exists("uploads")) {
+    s->resource = RGW_RESOURCE_CATEGORY_UPLOADS;
     return new RGWListBucketMultiparts_ObjStore_S3;
   } else if(is_lc_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_LIFECYCLE;
     return new RGWGetLC_ObjStore_S3;
   } else if(is_policy_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_POLICY;
     return new RGWGetBucketPolicy;
   }
   return get_obj_op(true);
@@ -2989,8 +3026,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
 RGWOp *RGWHandler_REST_Bucket_S3::op_head()
 {
   if (is_acl_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWGetACLs_ObjStore_S3;
   } else if (s->info.args.exists("uploads")) {
+    s->resource = RGW_RESOURCE_CATEGORY_UPLOADS;
     return new RGWListBucketMultiparts_ObjStore_S3;
   }
   return get_obj_op(false);
@@ -2998,41 +3037,57 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_head()
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 {
-  if (s->info.args.sub_resource_exists("logging"))
+  if (s->info.args.sub_resource_exists("logging")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_LOGGING_STATUS;
     return NULL;
-  if (s->info.args.sub_resource_exists("versioning"))
+  }
+  if (s->info.args.sub_resource_exists("versioning")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_VERSIONING;
     return new RGWSetBucketVersioning_ObjStore_S3;
+  }
   if (s->info.args.sub_resource_exists("website")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_WEBSITE;
     if (!s->cct->_conf->rgw_enable_static_website) {
       return NULL;
     }
     return new RGWSetBucketWebsite_ObjStore_S3;
   }
   if (is_acl_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_cors_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_CORS;
     return new RGWPutCORS_ObjStore_S3;
   } else if (is_request_payment_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_REQUEST_PAYMENT;
     return new RGWSetRequestPayment_ObjStore_S3;
   } else if(is_lc_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_LIFECYCLE;
     return new RGWPutLC_ObjStore_S3;
   } else if(is_policy_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_POLICY;
     return new RGWPutBucketPolicy;
   }
+
+  s->resource = RGW_RESOURCE_CATEGORY_BUCKET;
   return new RGWCreateBucket_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
 {
   if (is_cors_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_CORS;
     return new RGWDeleteCORS_ObjStore_S3;
   } else if(is_lc_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_LIFECYCLE;
     return new RGWDeleteLC_ObjStore_S3;
   } else if(is_policy_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_POLICY;
     return new RGWDeleteBucketPolicy;
   }
 
   if (s->info.args.sub_resource_exists("website")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_WEBSITE;
     if (!s->cct->_conf->rgw_enable_static_website) {
       return NULL;
     }
@@ -3040,35 +3095,44 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
   }
 
   if (s->info.args.exists("mdsearch")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_MDSEARCH;
     return new RGWDelBucketMetaSearch_ObjStore_S3;
   }
 
+  s->resource = RGW_RESOURCE_CATEGORY_BUCKET;
   return new RGWDeleteBucket_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_post()
 {
   if (s->info.args.exists("delete")) {
+    s->resource = RGW_RESOURCE_CATEGORY_DELETE_MULTI_OBJECT;
     return new RGWDeleteMultiObj_ObjStore_S3;
   }
 
   if (s->info.args.exists("mdsearch")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_MDSEARCH;
     return new RGWConfigBucketMetaSearch_ObjStore_S3;
   }
 
+  s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
   return new RGWPostObj_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_options()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_CORS;
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_REST_Obj_S3::get_obj_op(bool get_data)
 {
   if (is_acl_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWGetACLs_ObjStore_S3;
   }
+
+  s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
   RGWGetObj_ObjStore_S3 *get_obj_op = new RGWGetObj_ObjStore_S3;
   get_obj_op->set_get_data(get_data);
   return get_obj_op;
@@ -3077,12 +3141,16 @@ RGWOp *RGWHandler_REST_Obj_S3::get_obj_op(bool get_data)
 RGWOp *RGWHandler_REST_Obj_S3::op_get()
 {
   if (is_acl_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWGetACLs_ObjStore_S3;
   } else if (s->info.args.exists("uploadId")) {
+    s->resource = RGW_RESOURCE_CATEGORY_UPLOAD;
     return new RGWListMultipart_ObjStore_S3;
   } else if (s->info.args.exists("layout")) {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT_LAYOUT;
     return new RGWGetObjLayout_ObjStore_S3;
   } else if (is_tagging_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT_TAGGING;
     return new RGWGetObjTags_ObjStore_S3;
   }
   return get_obj_op(true);
@@ -3091,8 +3159,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
 RGWOp *RGWHandler_REST_Obj_S3::op_head()
 {
   if (is_acl_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWGetACLs_ObjStore_S3;
   } else if (s->info.args.exists("uploadId")) {
+    s->resource = RGW_RESOURCE_CATEGORY_UPLOAD;
     return new RGWListMultipart_ObjStore_S3;
   }
   return get_obj_op(false);
@@ -3101,43 +3171,58 @@ RGWOp *RGWHandler_REST_Obj_S3::op_head()
 RGWOp *RGWHandler_REST_Obj_S3::op_put()
 {
   if (is_acl_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_tagging_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT_TAGGING;
     return new RGWPutObjTags_ObjStore_S3;
   }
 
-  if (s->init_state.src_bucket.empty())
+  if (s->init_state.src_bucket.empty()) {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
     return new RGWPutObj_ObjStore_S3;
-  else
+  } else {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
     return new RGWCopyObj_ObjStore_S3;
+  }
 }
 
 RGWOp *RGWHandler_REST_Obj_S3::op_delete()
 {
   if (is_tagging_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT_TAGGING;
     return new RGWDeleteObjTags_ObjStore_S3;
   }
   string upload_id = s->info.args.get("uploadId");
 
-  if (upload_id.empty())
+  if (upload_id.empty()) {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
     return new RGWDeleteObj_ObjStore_S3;
-  else
+  } else {
+    s->resource = RGW_RESOURCE_CATEGORY_UPLOAD;
     return new RGWAbortMultipart_ObjStore_S3;
+  }
 }
 
 RGWOp *RGWHandler_REST_Obj_S3::op_post()
 {
-  if (s->info.args.exists("uploadId"))
+  if (s->info.args.exists("uploadId")) {
+    s->resource = RGW_RESOURCE_CATEGORY_UPLOAD;
     return new RGWCompleteMultipart_ObjStore_S3;
+  }
 
-  if (s->info.args.exists("uploads"))
+  if (s->info.args.exists("uploads")) {
+    s->resource = RGW_RESOURCE_CATEGORY_UPLOADS;
     return new RGWInitMultipart_ObjStore_S3;
+  }
 
+  s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
   return new RGWPostObj_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_REST_Obj_S3::op_options()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_CORS;
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
@@ -3627,6 +3712,7 @@ RGWOp* RGWHandler_REST_Obj_S3Website::get_obj_op(bool get_data)
    * HEAD on the actual directory. We must convert the request to run on the
    * suffix object instead!
    */
+  s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
   RGWGetObj_ObjStore_S3Website* op = new RGWGetObj_ObjStore_S3Website;
   op->set_get_data(get_data);
   return op;
@@ -3638,6 +3724,7 @@ RGWOp* RGWHandler_REST_Bucket_S3Website::get_obj_op(bool get_data)
    * HEAD on the actual directory. We must convert the request to run on the
    * suffix object instead!
    */
+  s->resource = RGW_RESOURCE_CATEGORY_BUCKET;
   RGWGetObj_ObjStore_S3Website* op = new RGWGetObj_ObjStore_S3Website;
   op->set_get_data(get_data);
   return op;
@@ -3649,11 +3736,11 @@ RGWOp* RGWHandler_REST_Service_S3Website::get_obj_op(bool get_data)
    * HEAD on the actual directory. We must convert the request to run on the
    * suffix object instead!
    */
+  s->resource = RGW_RESOURCE_CATEGORY_SERVICE;
   RGWGetObj_ObjStore_S3Website* op = new RGWGetObj_ObjStore_S3Website;
   op->set_get_data(get_data);
   return op;
 }
-
 
 namespace rgw {
 namespace auth {

@@ -264,6 +264,9 @@ enum {
 typedef std::map<int, std::string> rgw_prot_flags_map;
 extern rgw_prot_flags_map rgw_prot_flags;
 
+typedef std::map<int, std::string> rgw_resources_map;
+extern rgw_resources_map rgw_resources;
+
  /* size should be the required string size + 1 */
 extern int gen_rand_base64(CephContext *cct, char *dest, int size);
 extern int gen_rand_alphanumeric(CephContext *cct, char *dest, int size);
@@ -277,6 +280,95 @@ extern int gen_rand_alphanumeric_lower(CephContext *cct, string *str, int length
 enum RGWIntentEvent {
   DEL_OBJ = 0,
   DEL_DIR = 1,
+};
+
+enum RGWResourceCategory {
+  RGW_RESOURCE_CATEGORY_NONE                   = 0,
+  // S3,S3website specific resources
+  // rgw_rest_s3.cc
+  RGW_RESOURCE_CATEGORY_BUCKETS                = 1,
+  RGW_RESOURCE_CATEGORY_BUCKET                 = 2,
+  RGW_RESOURCE_CATEGORY_IAM_ROLE               = 3,
+  RGW_RESOURCE_CATEGORY_IAM_ROLES              = 4,
+  RGW_RESOURCE_CATEGORY_IAM_ROLE_POLICY        = 5,
+  RGW_RESOURCE_CATEGORY_IAM_ROLE_POLICIES      = 6,
+  RGW_RESOURCE_CATEGORY_BUCKET_STATUS          = 7,
+  RGW_RESOURCE_CATEGORY_BUCKET_LOGGING_STATUS  = 8,
+  RGW_RESOURCE_CATEGORY_BUCKET_LOCATION        = 9,
+  RGW_RESOURCE_CATEGORY_BUCKET_VERSIONS        = 10,
+  RGW_RESOURCE_CATEGORY_BUCKET_VERSIONING      = 11,
+  RGW_RESOURCE_CATEGORY_BUCKET_WEBSITE         = 12,
+  RGW_RESOURCE_CATEGORY_BUCKET_MDSEARCH        = 13,
+  RGW_RESOURCE_CATEGORY_ACL                    = 14,
+  RGW_RESOURCE_CATEGORY_CORS                   = 15,
+  RGW_RESOURCE_CATEGORY_REQUEST_PAYMENT        = 16,
+  RGW_RESOURCE_CATEGORY_UPLOADS                = 17,
+  RGW_RESOURCE_CATEGORY_UPLOAD                 = 18,
+  RGW_RESOURCE_CATEGORY_LIFECYCLE              = 19,
+  RGW_RESOURCE_CATEGORY_BUCKET_POLICY          = 20,
+  RGW_RESOURCE_CATEGORY_DELETE_MULTI_OBJECT    = 21,
+  RGW_RESOURCE_CATEGORY_OBJECT                 = 22,
+  RGW_RESOURCE_CATEGORY_OBJECT_LAYOUT          = 23,
+  RGW_RESOURCE_CATEGORY_OBJECT_TAGGING         = 24,
+  RGW_RESOURCE_CATEGORY_SERVICE                = 25,
+  // Swift specific resources
+  // rgw_rest_swift.cc
+  RGW_RESOURCE_CATEGORY_ACCOUNT_STATUS         = 26,
+  RGW_RESOURCE_CATEGORY_BULK_UPLOAD            = 27,
+  RGW_RESOURCE_CATEGORY_BULK_DELETE            = 28,
+  RGW_RESOURCE_CATEGORY_ACCOUNT_METADATA       = 29,
+  RGW_RESOURCE_CATEGORY_BUCKET_METADATA        = 30,
+  RGW_RESOURCE_CATEGORY_OBJECT_METADATA        = 31,
+  // rgw_swift_auth.cc
+  RGW_RESOURCE_CATEGORY_AUTH                   = 32,
+  // Admin specific resources
+  // rgw_rest_bucket.cc
+  RGW_RESOURCE_CATEGORY_BUCKET_INDEX           = 33,
+  RGW_RESOURCE_CATEGORY_BUCKET_INFO            = 34,
+  RGW_RESOURCE_CATEGORY_BUCKET_LINK            = 35,
+  // rgw_rest_usage.cc
+  RGW_RESOURCE_CATEGORY_USER_USAGE             = 36,
+  // rgw_rest_user.cc
+  RGW_RESOURCE_CATEGORY_QUOTA                  = 37,
+  RGW_RESOURCE_CATEGORY_USER_INFO              = 38,
+  RGW_RESOURCE_CATEGORY_SUBUSER                = 39,
+  RGW_RESOURCE_CATEGORY_KEY                    = 40,
+  RGW_RESOURCE_CATEGORY_CAPS                   = 41,
+  RGW_RESOURCE_CATEGORY_USER                   = 42,
+  // rgw_rest_metadata.cc
+  RGW_RESOURCE_CATEGORY_METADATA               = 43,
+  // rgw_rest_log.cc
+  RGW_RESOURCE_CATEGORY_MDLOG_SHARDINFO        = 44,
+  RGW_RESOURCE_CATEGORY_MDLOG_LIST             = 45,
+  RGW_RESOURCE_CATEGORY_MDLOG_STATUS           = 46,
+  RGW_RESOURCE_CATEGORY_MDLOG_INFO             = 47,
+  RGW_RESOURCE_CATEGORY_BILOG_INFO             = 48,
+  RGW_RESOURCE_CATEGORY_BILOG_LIST             = 49,
+  RGW_RESOURCE_CATEGORY_DATALOG_SHARDINFO      = 50,
+  RGW_RESOURCE_CATEGORY_DATALOG_LIST           = 51,
+  RGW_RESOURCE_CATEGORY_DATALOG_STATUS         = 52,
+  RGW_RESOURCE_CATEGORY_DATALOG_INFO           = 53,
+  RGW_RESOURCE_CATEGORY_MDLOG                  = 54,
+  RGW_RESOURCE_CATEGORY_BILOG                  = 55,
+  RGW_RESOURCE_CATEGORY_DATALOG                = 56,
+  RGW_RESOURCE_CATEGORY_MDLOG_LOCK             = 57,
+  RGW_RESOURCE_CATEGORY_MDLOG_UNLOCK           = 58,
+  RGW_RESOURCE_CATEGORY_MDLOG_NOTIFY           = 59,
+  RGW_RESOURCE_CATEGORY_DATALOG_LOCK           = 60,
+  RGW_RESOURCE_CATEGORY_DATALOG_UNLOCK         = 61,
+  RGW_RESOURCE_CATEGORY_DATALOG_NOTIFY         = 62,
+  // rgw_rest_opstate.cc
+  RGW_RESOURCE_CATEGORY_OPSTATE                = 63,
+  // rgw_rest_replica_log.cc
+  RGW_RESOURCE_CATEGORY_MDLOG_BOUNDS           = 64,
+  RGW_RESOURCE_CATEGORY_BILOG_BOUNDS           = 65,
+  RGW_RESOURCE_CATEGORY_DATALOG_BOUNDS         = 66,
+  // rgw_rest_config.cc
+  RGW_RESOURCE_CATEGORY_ZONEGROUP_MAP          = 67,
+  RGW_RESOURCE_CATEGORY_ZONE_CONFIG            = 68,
+  // rgw_rest_realm.cc
+  RGW_RESOURCE_CATEGORY_REALM                  = 69,
+  RGW_RESOURCE_CATEGORY_PERIOD                 = 70,
 };
 
 enum RGWObjCategory {
@@ -1836,6 +1928,7 @@ struct req_state {
   bool local_source; /* source is local */
 
   int prot_flags;
+  int resource;
 
   /* Content-Disposition override for TempURL of Swift API. */
   struct {

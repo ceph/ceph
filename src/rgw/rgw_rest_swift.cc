@@ -2066,17 +2066,20 @@ bool RGWFormPost::is_formpost_req(req_state* const s)
 
 RGWOp *RGWHandler_REST_Service_SWIFT::op_get()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_BUCKETS;
   return new RGWListBuckets_ObjStore_SWIFT;
 }
 
 RGWOp *RGWHandler_REST_Service_SWIFT::op_head()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_ACCOUNT_STATUS;
   return new RGWStatAccount_ObjStore_SWIFT;
 }
 
 RGWOp *RGWHandler_REST_Service_SWIFT::op_put()
 {
   if (s->info.args.exists("extract-archive")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BULK_UPLOAD;
     return new RGWBulkUploadOp_ObjStore_SWIFT;
   }
   return nullptr;
@@ -2085,17 +2088,21 @@ RGWOp *RGWHandler_REST_Service_SWIFT::op_put()
 RGWOp *RGWHandler_REST_Service_SWIFT::op_post()
 {
   if (s->info.args.exists("bulk-delete")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BULK_DELETE;
     return new RGWBulkDelete_ObjStore_SWIFT;
   }
+
+  s->resource = RGW_RESOURCE_CATEGORY_ACCOUNT_METADATA;
   return new RGWPutMetadataAccount_ObjStore_SWIFT;
 }
 
 RGWOp *RGWHandler_REST_Service_SWIFT::op_delete()
 {
   if (s->info.args.exists("bulk-delete")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BULK_DELETE;
     return new RGWBulkDelete_ObjStore_SWIFT;
   }
-  return NULL;
+  return nullptr;
 }
 
 int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
@@ -2428,13 +2435,17 @@ int RGWSwiftWebsiteHandler::retarget_object(RGWOp* op, RGWOp** new_op)
 RGWOp *RGWHandler_REST_Bucket_SWIFT::get_obj_op(bool get_data)
 {
   if (is_acl_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWGetACLs_ObjStore_SWIFT;
   }
 
-  if (get_data)
+  if (get_data) {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET;
     return new RGWListBucket_ObjStore_SWIFT;
-  else
+  } else {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_STATUS;
     return new RGWStatBucket_ObjStore_SWIFT;
+  }
 }
 
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_get()
@@ -2450,40 +2461,49 @@ RGWOp *RGWHandler_REST_Bucket_SWIFT::op_head()
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_put()
 {
   if (is_acl_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWPutACLs_ObjStore_SWIFT;
   }
   if(s->info.args.exists("extract-archive")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BULK_UPLOAD;
     return new RGWBulkUploadOp_ObjStore_SWIFT;
   }
+
+  s->resource = RGW_RESOURCE_CATEGORY_BUCKET;
   return new RGWCreateBucket_ObjStore_SWIFT;
 }
 
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_delete()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_BUCKET;
   return new RGWDeleteBucket_ObjStore_SWIFT;
 }
 
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_post()
 {
   if (RGWFormPost::is_formpost_req(s)) {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
     return new RGWFormPost;
   } else {
+    s->resource = RGW_RESOURCE_CATEGORY_BUCKET_METADATA;
     return new RGWPutMetadataBucket_ObjStore_SWIFT;
   }
 }
 
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_options()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_CORS;
   return new RGWOptionsCORS_ObjStore_SWIFT;
 }
-
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::get_obj_op(bool get_data)
 {
   if (is_acl_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWGetACLs_ObjStore_SWIFT;
   }
 
+  s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
   RGWGetObj_ObjStore_SWIFT *get_obj_op = new RGWGetObj_ObjStore_SWIFT;
   get_obj_op->set_get_data(get_data);
   return get_obj_op;
@@ -2502,41 +2522,50 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_head()
 RGWOp *RGWHandler_REST_Obj_SWIFT::op_put()
 {
   if (is_acl_op()) {
+    s->resource = RGW_RESOURCE_CATEGORY_ACL;
     return new RGWPutACLs_ObjStore_SWIFT;
   }
   if(s->info.args.exists("extract-archive")) {
+    s->resource = RGW_RESOURCE_CATEGORY_BULK_UPLOAD;
     return new RGWBulkUploadOp_ObjStore_SWIFT;
   }
-  if (s->init_state.src_bucket.empty())
+  if (s->init_state.src_bucket.empty()) {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
     return new RGWPutObj_ObjStore_SWIFT;
-  else
+  } else {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
     return new RGWCopyObj_ObjStore_SWIFT;
+  }
 }
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::op_delete()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
   return new RGWDeleteObj_ObjStore_SWIFT;
 }
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::op_post()
 {
   if (RGWFormPost::is_formpost_req(s)) {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
     return new RGWFormPost;
   } else {
+    s->resource = RGW_RESOURCE_CATEGORY_OBJECT_METADATA;
     return new RGWPutMetadataObject_ObjStore_SWIFT;
   }
 }
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::op_copy()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_OBJECT;
   return new RGWCopyObj_ObjStore_SWIFT;
 }
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_CORS;
   return new RGWOptionsCORS_ObjStore_SWIFT;
 }
-
 
 int RGWHandler_REST_SWIFT::authorize()
 {

@@ -222,8 +222,14 @@ class RGWHandler_Period : public RGWHandler_Auth_S3 {
  protected:
   using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
 
-  RGWOp *op_get() override { return new RGWOp_Period_Get; }
-  RGWOp *op_post() override { return new RGWOp_Period_Post; }
+  RGWOp *op_get() override {
+    s->resource = RGW_RESOURCE_CATEGORY_PERIOD;
+    return new RGWOp_Period_Get;
+  }
+  RGWOp *op_post() override {
+    s->resource = RGW_RESOURCE_CATEGORY_PERIOD;
+    return new RGWOp_Period_Post;
+  }
 };
 
 class RGWRESTMgr_Period : public RGWRESTMgr {
@@ -279,7 +285,10 @@ void RGWOp_Realm_Get::send_response()
 class RGWHandler_Realm : public RGWHandler_Auth_S3 {
 protected:
   using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
-  RGWOp *op_get() override { return new RGWOp_Realm_Get; }
+  RGWOp *op_get() override {
+    s->resource = RGW_RESOURCE_CATEGORY_REALM;
+    return new RGWOp_Realm_Get;
+  }
 };
 
 RGWRESTMgr_Realm::RGWRESTMgr_Realm()

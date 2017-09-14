@@ -92,12 +92,12 @@ void RGWOp_Usage_Delete::execute() {
 
 RGWOp *RGWHandler_Usage::op_get()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_USER_USAGE;
   return new RGWOp_Usage_Get;
 }
 
 RGWOp *RGWHandler_Usage::op_delete()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_USER_USAGE;
   return new RGWOp_Usage_Delete;
 }
-
-

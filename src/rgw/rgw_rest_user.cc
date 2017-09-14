@@ -908,48 +908,69 @@ void RGWOp_Quota_Set::execute()
 
 RGWOp *RGWHandler_User::op_get()
 {
-  if (s->info.args.sub_resource_exists("quota"))
+  if (s->info.args.sub_resource_exists("quota")) {
+    s->resource = RGW_RESOURCE_CATEGORY_QUOTA;
     return new RGWOp_Quota_Info;
+  }
 
+  s->resource = RGW_RESOURCE_CATEGORY_USER_INFO;
   return new RGWOp_User_Info;
 }
 
 RGWOp *RGWHandler_User::op_put()
 {
-  if (s->info.args.sub_resource_exists("subuser"))
+  if (s->info.args.sub_resource_exists("subuser")) {
+    s->resource = RGW_RESOURCE_CATEGORY_SUBUSER;
     return new RGWOp_Subuser_Create;
+  }
 
-  if (s->info.args.sub_resource_exists("key"))
+  if (s->info.args.sub_resource_exists("key")) {
+    s->resource = RGW_RESOURCE_CATEGORY_KEY;
     return new RGWOp_Key_Create;
+  }
 
-  if (s->info.args.sub_resource_exists("caps"))
+  if (s->info.args.sub_resource_exists("caps")) {
+    s->resource = RGW_RESOURCE_CATEGORY_CAPS;
     return new RGWOp_Caps_Add;
+  }
 
-  if (s->info.args.sub_resource_exists("quota"))
+  if (s->info.args.sub_resource_exists("quota")) {
+    s->resource = RGW_RESOURCE_CATEGORY_QUOTA;
     return new RGWOp_Quota_Set;
+  }
 
+  s->resource = RGW_RESOURCE_CATEGORY_USER;
   return new RGWOp_User_Create;
 }
 
 RGWOp *RGWHandler_User::op_post()
 {
-  if (s->info.args.sub_resource_exists("subuser"))
+  if (s->info.args.sub_resource_exists("subuser")) {
+    s->resource = RGW_RESOURCE_CATEGORY_SUBUSER;
     return new RGWOp_Subuser_Modify;
+  }
 
+  s->resource = RGW_RESOURCE_CATEGORY_USER;
   return new RGWOp_User_Modify;
 }
 
 RGWOp *RGWHandler_User::op_delete()
 {
-  if (s->info.args.sub_resource_exists("subuser"))
+  if (s->info.args.sub_resource_exists("subuser")) {
+    s->resource = RGW_RESOURCE_CATEGORY_SUBUSER;
     return new RGWOp_Subuser_Remove;
+  }
 
-  if (s->info.args.sub_resource_exists("key"))
+  if (s->info.args.sub_resource_exists("key")) {
+    s->resource = RGW_RESOURCE_CATEGORY_KEY;
     return new RGWOp_Key_Remove;
+  }
 
-  if (s->info.args.sub_resource_exists("caps"))
+  if (s->info.args.sub_resource_exists("caps")) {
+    s->resource = RGW_RESOURCE_CATEGORY_CAPS;
     return new RGWOp_Caps_Remove;
+  }
 
+  s->resource = RGW_RESOURCE_CATEGORY_USER;
   return new RGWOp_User_Remove;
 }
-
