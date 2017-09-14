@@ -4226,7 +4226,7 @@ int BlueStore::_open_fm(bool create)
     db->submit_transaction_sync(t);
   }
 
-  int r = fm->init();
+  int r = fm->init(bdev->get_size());
   if (r < 0) {
     derr << __func__ << " freelist init failed: " << cpp_strerror(r) << dendl;
     delete fm;

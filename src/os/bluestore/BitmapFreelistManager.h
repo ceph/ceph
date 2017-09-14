@@ -53,7 +53,7 @@ public:
 
   int create(uint64_t size, KeyValueDB::Transaction txn) override;
 
-  int init() override;
+  int init(uint64_t dev_size) override;
   void shutdown() override;
 
   void dump() override;
