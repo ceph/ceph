@@ -1556,7 +1556,7 @@ void BlueStore::OnodeSpace::clear()
   std::lock_guard<std::recursive_mutex> l(cache->lock);
   ldout(cache->cct, 10) << __func__ << dendl;
   for (auto &p : onode_map) {
-    //cache->_rm_onode(p.second);
+    cache->_rm_onode(p.second);
   }
   onode_map.clear();
 }
@@ -3186,6 +3186,13 @@ uint64_t BlueStore::Collection::make_blob_unshared(SharedBlob *sb)
   return sbid;
 }
 
+int getxxx(){
+  return atoi(getenv("N"));
+}
+
+int xxx=getxxx();
+
+
 BlueStore::OnodeRef BlueStore::Collection::get_onode(
   const ghobject_t& oid,
   bool create)
@@ -3240,7 +3247,8 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     }
   }
   o.reset(on);
-  return o;//onode_map.add(oid, o);
+  if (onode_map.onode_map.size()>=xxx) return o;
+  return onode_map.add(oid, o);
 }
 
 void BlueStore::Collection::split_cache(
