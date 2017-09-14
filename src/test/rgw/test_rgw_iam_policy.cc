@@ -106,7 +106,7 @@ public:
   }
 
   void to_str(std::ostream& out) const override {
-    abort();
+    out << id;
   }
 
   bool is_identity(const flat_set<Principal>& ids) const override {
