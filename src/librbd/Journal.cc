@@ -1642,7 +1642,7 @@ struct C_RefreshTags : public Context {
   Context *on_finish = nullptr;
 
   Mutex lock;
-  uint64_t tag_tid;
+  uint64_t tag_tid = 0;
   journal::TagData tag_data;
 
   C_RefreshTags(util::AsyncOpTracker &async_op_tracker)
