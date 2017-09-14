@@ -165,7 +165,7 @@ public:
   // svc
 public:  
   void create_initial() override;
-  void get_store_prefixes(std::set<string>& s) override;
+  void get_store_prefixes(std::set<string>& s) const override;
 
 private:
   void update_from_paxos(bool *need_bootstrap) override;
@@ -238,7 +238,7 @@ private:
   bool prepare_update(MonOpRequestRef op) override;
   bool should_propose(double &delay) override;
 
-  version_t get_trim_to() override;
+  version_t get_trim_to() const override;
 
   bool can_mark_down(int o);
   bool can_mark_up(int o);

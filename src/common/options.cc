@@ -2567,6 +2567,11 @@ std::vector<Option> get_global_options() {
     .set_default(100)
     .set_description(""),
 
+    Option("osd_pg_max_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(300)
+    .set_description("Maximum number of PG per OSD")
+    .set_long_description("'0' means no limitation. OSD will refuse to instantiate PG if the number of PG it serves exceeeds this number."),
+
     Option("osd_op_complaint_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30)
     .set_description(""),

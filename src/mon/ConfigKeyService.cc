@@ -40,7 +40,7 @@ int ConfigKeyService::store_get(const string &key, bufferlist &bl)
   return mon->store->get(STORE_PREFIX, key, bl);
 }
 
-void ConfigKeyService::get_store_prefixes(set<string>& s)
+void ConfigKeyService::get_store_prefixes(set<string>& s) const
 {
   s.insert(STORE_PREFIX);
 }

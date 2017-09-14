@@ -46,7 +46,7 @@ public:
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;
   void encode_pending(MonitorDBStore::TransactionRef t) override;
-  version_t get_trim_to() override;
+  version_t get_trim_to() const override;
 
   void encode_full(MonitorDBStore::TransactionRef t) override { }
 

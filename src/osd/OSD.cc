@@ -8276,7 +8276,20 @@ void OSD::handle_pg_create(OpRequestRef op)
 	       << dendl;
       continue;
     }
-
+    {
+      RWLock::RLocker l(pg_map_lock);
+      const auto max_pgs_per_osd = cct->_conf->get_val<uint64_t>("osd_pg_max_per_osd");
+      if (max_pgs_per_osd > 0 && pg_map.size() > max_pgs_per_osd) {
+	dout(4) << __func__ << ": skipping " << pgid << ": pg number "
+		<< pg_map.size() << " > "
+		<< max_pgs_per_osd
+		<< dendl;
+	want_to_create++;
+	continue;
+      } else {
+	want_to_create = 0;
+      }
+    }
     if (handle_pg_peering_evt(
           pgid,
           history,
@@ -8291,7 +8304,8 @@ void OSD::handle_pg_create(OpRequestRef op)
       service.send_pg_created(pgid.pgid);
     }
   }
-  last_pg_create_epoch = m->epoch;
+  if (want_to_create == 0)
+    last_pg_create_epoch = m->epoch;
 
   maybe_update_heartbeat_peers();
 }
@@ -8970,6 +8984,20 @@ void OSD::_remove_pg(PG *pg)
   // remove from map
   pg_map.erase(pg->info.pgid);
   pg->put("PGMap"); // since we've taken it out of map
+
+  if (want_to_create > 0) {
+    const auto max_pgs_per_osd = cct->_conf->get_val<uint64_t>("osd_pg_max_per_osd");
+    dout(4) << __func__ << ": " << want_to_create
+	    << " want-to-create pgs ("
+	    << pg_map.size() << '/' << max_pgs_per_osd << ')' << dendl;
+    if (pg_map.size() < max_pgs_per_osd) {
+      if (monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0)) {
+	dout(4) << __func__ << ": resolicit pg creates from mon since "
+		<< last_pg_create_epoch << dendl;
+	monc->renew_subs();
+      }
+    }
+  }
 }
 
 
