@@ -125,12 +125,10 @@ struct rbd_bencher {
   }
 
 
-  bool start_io(int max, uint64_t off, uint64_t len, int op_flags)
+  void start_io(int max, uint64_t off, uint64_t len, int op_flags)
   {
     {
       Mutex::Locker l(lock);
-      if (in_flight >= max)
-        return false;
       in_flight++;
     }
 
@@ -147,8 +145,6 @@ struct rbd_bencher {
     } else {
       assert(0 == "Invalid io_type");
     }
-    //cout << "start " << c << " at " << off << "~" << len << std::endl;
-    return true;
   }
 
   void wait_for(int max) {
@@ -255,13 +251,13 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 
   printf("  SEC       OPS   OPS/SEC   BYTES/SEC\n");
   uint64_t off;
+
   for (off = 0; off < io_bytes; ) {
-    b.wait_for(io_threads - 1);
     i = 0;
     while (i < io_threads && off < io_bytes) {
-      if (!b.start_io(io_threads, thread_offset[i], io_size, op_flags)) {
-        break;
-      }
+      b.wait_for(io_threads - 1);
+      b.start_io(io_threads, thread_offset[i], io_size, op_flags);
+
       if (random) {
         thread_offset[i] = (rand() % (size / io_size)) * io_size;
       } else {
