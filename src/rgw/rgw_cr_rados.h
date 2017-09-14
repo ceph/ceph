@@ -716,6 +716,20 @@ public:
   }
 };
 
+class RGWRadosBILogTrimCR : public RGWSimpleCoroutine {
+  RGWRados::BucketShard bs;
+  std::string start_marker;
+  std::string end_marker;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
+ public:
+  RGWRadosBILogTrimCR(RGWRados *store, const RGWBucketInfo& bucket_info,
+                      int shard_id, const std::string& start_marker,
+                      const std::string& end_marker);
+
+  int send_request() override;
+  int request_complete() override;
+};
+
 class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
   RGWRados *store;
   string source_zone;
