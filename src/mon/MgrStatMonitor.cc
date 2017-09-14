@@ -127,7 +127,7 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   encode_health(pending_health_checks, t);
 }
 
-version_t MgrStatMonitor::get_trim_to()
+version_t MgrStatMonitor::get_trim_to() const
 {
   // we don't actually need *any* old states, but keep a few.
   if (version > 5) {

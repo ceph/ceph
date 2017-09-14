@@ -264,7 +264,7 @@ void OSDMonitor::create_initial()
   dout(20) << " full crc " << pending_inc.full_crc << dendl;
 }
 
-void OSDMonitor::get_store_prefixes(std::set<string>& s)
+void OSDMonitor::get_store_prefixes(std::set<string>& s) const
 {
   s.insert(service_name);
   s.insert(OSD_PG_CREATING_PREFIX);
@@ -1311,7 +1311,7 @@ void OSDMonitor::share_map_with_random_osd()
   // elsewhere) as they may still need to request older values.
 }
 
-version_t OSDMonitor::get_trim_to()
+version_t OSDMonitor::get_trim_to() const
 {
   if (mon->get_quorum().empty()) {
     dout(10) << __func__ << ": quorum not formed" << dendl;
