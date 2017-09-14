@@ -8,7 +8,7 @@
 :Description: Debugging check on synchronization. Expensive. For debugging only.
 :Type: Boolean
 :Required: No
-:Default: ``0``
+:Default: ``false``
 
 
 .. index:: filestore; extended attributes
