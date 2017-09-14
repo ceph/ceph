@@ -2,7 +2,13 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-      - but it is still running
+    - but it is still running
+    - overall HEALTH_
+    - \(OSDMAP_FLAGS\)
+    - \(PG_
+    - \(OSD_
+    - \(OBJECT_
+    - \(POOL_APP_NOT_ENABLED\)
 - ceph-fuse:
 - workunit:
     clients:
