@@ -277,52 +277,9 @@ Context *OpenRequest<I>::handle_v2_get_immutable_metadata(int *result) {
                << cpp_strerror(*result) << dendl;
     send_close_image(*result);
   } else {
-    send_v2_get_stripe_unit_count();
+    send_v2_get_create_timestamp();
   }
 
-  return nullptr;
-}
-
-template <typename I>
-void OpenRequest<I>::send_v2_get_stripe_unit_count() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::get_stripe_unit_count_start(&op);
-
-  using klass = OpenRequest<I>;
-  librados::AioCompletion *comp = create_rados_callback<
-    klass, &klass::handle_v2_get_stripe_unit_count>(this);
-  m_out_bl.clear();
-  m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
-                                  &m_out_bl);
-  comp->release();
-}
-
-template <typename I>
-Context *OpenRequest<I>::handle_v2_get_stripe_unit_count(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
-
-  if (*result == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
-    *result = cls_client::get_stripe_unit_count_finish(
-      &it, &m_image_ctx->stripe_unit, &m_image_ctx->stripe_count);
-  }
-
-  if (*result == -ENOEXEC || *result == -EINVAL) {
-    *result = 0;
-  }
-
-  if (*result < 0) {
-    lderr(cct) << "failed to read striping metadata: " << cpp_strerror(*result)
-               << dendl;
-    send_close_image(*result);
-    return nullptr;
-  }
-
-  send_v2_get_create_timestamp();
   return nullptr;
 }
 
@@ -527,9 +484,50 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
                << dendl;
     send_close_image(*result);
     return nullptr;
+  } else if (m_image_ctx->test_features(RBD_FEATURE_STRIPINGV2)) {
+    send_v2_get_stripe_unit_count();
+    return nullptr;
   } else {
     return send_set_snap(result);
   }
+}
+
+template <typename I>
+void OpenRequest<I>::send_v2_get_stripe_unit_count() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::get_stripe_unit_count_start(&op);
+
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp = create_rados_callback<
+    klass, &klass::handle_v2_get_stripe_unit_count>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
+                                  &m_out_bl);
+  comp->release();
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_v2_get_stripe_unit_count(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::get_stripe_unit_count_finish(
+      &it, &m_image_ctx->stripe_unit, &m_image_ctx->stripe_count);
+  }
+
+  if (*result < 0) {
+    lderr(cct) << "failed to read striping metadata: " << cpp_strerror(*result)
+               << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
+  return send_set_snap(result);
 }
 
 template <typename I>
