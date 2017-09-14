@@ -163,11 +163,10 @@ int lockdep_get_free_id(void)
   return -1;
 }
 
-int lockdep_register(const char *name)
+static int _lockdep_register(const char *name)
 {
   int id;
 
-  pthread_mutex_lock(&lockdep_mutex);
   ceph::unordered_map<std::string, int>::iterator p = lock_ids.find(name);
   if (p == lock_ids.end()) {
     id = lockdep_get_free_id();
@@ -191,8 +190,17 @@ int lockdep_register(const char *name)
   }
 
   ++lock_refs[id];
-  pthread_mutex_unlock(&lockdep_mutex);
 
+  return id;
+}
+
+int lockdep_register(const char *name)
+{
+  int id;
+
+  pthread_mutex_lock(&lockdep_mutex);
+  id = _lockdep_register(name);
+  pthread_mutex_unlock(&lockdep_mutex);
   return id;
 }
 
@@ -269,9 +277,10 @@ static bool does_follow(int a, int b)
 int lockdep_will_lock(const char *name, int id, bool force_backtrace)
 {
   pthread_t p = pthread_self();
-  if (id < 0) id = lockdep_register(name);
 
   pthread_mutex_lock(&lockdep_mutex);
+  if (id < 0)
+    id = _lockdep_register(name);
   lockdep_dout(20) << "_will_lock " << name << " (" << id << ")" << dendl;
 
   // check dependency graph
@@ -343,9 +352,10 @@ int lockdep_locked(const char *name, int id, bool force_backtrace)
 {
   pthread_t p = pthread_self();
 
-  if (id < 0) id = lockdep_register(name);
-
   pthread_mutex_lock(&lockdep_mutex);
+  if (id < 0)
+    id = _lockdep_register(name);
+
   lockdep_dout(20) << "_locked " << name << dendl;
   if (force_backtrace || lockdep_force_backtrace())
     held[p][id] = new BackTrace(BACKTRACE_SKIP);
