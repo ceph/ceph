@@ -552,14 +552,23 @@ int Monitor::preinit()
   assert(!logger);
   {
     PerfCountersBuilder pcb(g_ceph_context, "mon", l_mon_first, l_mon_last);
-    pcb.add_u64(l_mon_num_sessions, "num_sessions", "Open sessions", "sess");
-    pcb.add_u64_counter(l_mon_session_add, "session_add", "Created sessions", "sadd");
-    pcb.add_u64_counter(l_mon_session_rm, "session_rm", "Removed sessions", "srm");
+    pcb.add_u64(l_mon_num_sessions, "num_sessions", "Open sessions", "ses",
+		PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_session_add, "session_add", "Created sessions",
+			"ses+", PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_session_rm, "session_rm", "Removed sessions",
+			"ses-", PerfCountersBuilder::PRIO_USEFUL);
     pcb.add_u64_counter(l_mon_session_trim, "session_trim", "Trimmed sessions");
-    pcb.add_u64_counter(l_mon_num_elections, "num_elections", "Elections participated in");
-    pcb.add_u64_counter(l_mon_election_call, "election_call", "Elections started");
-    pcb.add_u64_counter(l_mon_election_win, "election_win", "Elections won");
-    pcb.add_u64_counter(l_mon_election_lose, "election_lose", "Elections lost");
+    pcb.add_u64_counter(l_mon_num_elections, "num_elections",
+			"Elections participated in",
+			"elec", PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_election_call, "election_call",
+			"Elections started",
+			"el_c", PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_election_win, "election_win", "Elections won",
+			"el_w", PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_election_lose, "election_lose", "Elections lost",
+			"el_l", PerfCountersBuilder::PRIO_USEFUL);
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }
