@@ -208,7 +208,7 @@ protected:
   utime_t gc_invalidate_time;
   bool is_slo;
   string lo_etag;
-  bool rgwx_stat; /* extended rgw stat operation */
+  bool rgwx_stat = false; /* extended rgw stat operation */
   string version_id;
 
   // compression attrs

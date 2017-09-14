@@ -3646,7 +3646,7 @@ void RGWPostObj::execute()
    * is capable to handle multiple files in single form. */
   do {
     std::unique_ptr<RGWPutObjDataProcessor> encrypt;
-    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1] = "";
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
     MD5 hash;
     ceph::buffer::list bl, aclbl;
