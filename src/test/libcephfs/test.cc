@@ -23,6 +23,8 @@
 #include <dirent.h>
 #include <sys/xattr.h>
 #include <sys/uio.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #ifdef __linux__
 #include <limits.h>
@@ -30,6 +32,7 @@
 
 #include <map>
 #include <vector>
+#include <thread>
 
 TEST(LibCephFS, OpenEmptyComponent) {
 
@@ -1857,4 +1860,37 @@ TEST(LibCephFS, OperationsOnRoot)
   ASSERT_EQ(ceph_symlink(cmount, "nonExistingDir", "/"), -EEXIST);
 
   ceph_shutdown(cmount);
+}
+
+#define NTHREADS 128
+
+static void shutdown_racer_func()
+{
+  struct ceph_mount_info *cmount;
+
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+  ceph_shutdown(cmount);
+}
+
+// See tracker #20988
+TEST(LibCephFS, ShutdownRace)
+{
+  std::thread threads[NTHREADS];
+
+  // Need a bunch of fd's for this test
+  struct rlimit rold, rnew;
+  ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &rold), 0);
+  rnew = rold;
+  rnew.rlim_cur = rnew.rlim_max;
+  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rnew), 0);
+
+  for (int i = 0; i < NTHREADS; ++i)
+    threads[i] = std::thread(shutdown_racer_func);
+
+  for (int i = 0; i < NTHREADS; ++i)
+    threads[i].join();
+  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
 }
