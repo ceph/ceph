@@ -36,8 +36,6 @@ To list your cluster's pools, execute::
 
 	ceph osd lspools
 
-On a freshly installed cluster, only the ``rbd`` pool exists.
-
 
 .. _createpool:
 
