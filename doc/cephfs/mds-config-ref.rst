@@ -569,7 +569,7 @@
               (for testing only).
               
 :Type:  Boolean
-:Default: ``0``
+:Default: ``false``
 
 
 ``mds wipe ino prealloc``
@@ -578,7 +578,7 @@
               (for testing only).
               
 :Type:  Boolean
-:Default: ``0``
+:Default: ``false``
 
 
 ``mds skip ino``
