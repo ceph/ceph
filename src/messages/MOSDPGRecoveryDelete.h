@@ -5,6 +5,7 @@
 #define CEPH_MOSDPGRECOVERYDELETE_H
 
 #include "MOSDFastDispatchOp.h"
+#include "include/ceph_features.h"
 
 /*
  * instruct non-primary to remove some objects during recovery
@@ -12,7 +13,7 @@
 
 struct MOSDPGRecoveryDelete : public MOSDFastDispatchOp {
 
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
   pg_shard_t from;
@@ -70,7 +71,9 @@ public:
     ::encode(from, payload);
     ::encode(pgid, payload);
     ::encode(map_epoch, payload);
-    ::encode(min_epoch, payload);
+    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      ::encode(min_epoch, payload);
+    }
     ::encode(cost, payload);
     ::encode(objects, payload);
   }
@@ -79,7 +82,12 @@ public:
     ::decode(from, p);
     ::decode(pgid, p);
     ::decode(map_epoch, p);
-    ::decode(min_epoch, p);
+    if (header.version == 1 &&
+	!HAVE_FEATURE(get_connection()->get_features(), SERVER_LUMINOUS)) {
+      min_epoch = map_epoch;
+    } else {
+      ::decode(min_epoch, p);
+    }
     ::decode(cost, p);
     ::decode(objects, p);
   }

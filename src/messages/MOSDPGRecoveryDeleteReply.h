@@ -5,9 +5,10 @@
 #define MOSDRECOVERYDELETEREPLY_H
 
 #include "MOSDFastDispatchOp.h"
+#include "include/ceph_features.h"
 
 struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
   pg_shard_t from;
@@ -34,7 +35,12 @@ struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid.pgid, p);
     ::decode(map_epoch, p);
-    ::decode(min_epoch, p);
+    if (header.version == 1 &&
+	!HAVE_FEATURE(get_connection()->get_features(), SERVER_LUMINOUS)) {
+      min_epoch = map_epoch;
+    } else {
+      ::decode(min_epoch, p);
+    }
     ::decode(objects, p);
     ::decode(pgid.shard, p);
     ::decode(from, p);
@@ -43,7 +49,9 @@ struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
   void encode_payload(uint64_t features) override {
     ::encode(pgid.pgid, payload);
     ::encode(map_epoch, payload);
-    ::encode(min_epoch, payload);
+    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      ::encode(min_epoch, payload);
+    }
     ::encode(objects, payload);
     ::encode(pgid.shard, payload);
     ::encode(from, payload);
