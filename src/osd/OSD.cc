@@ -4006,19 +4006,6 @@ void OSD::load_pgs()
     dout(0) << "load_pgs opened " << pg_map.size() << " pgs" << dendl;
   }
 
-  // clean up old infos object?
-  if (has_upgraded && store->exists(coll_t::meta(), OSD::make_infos_oid())) {
-    dout(1) << __func__ << " removing legacy infos object" << dendl;
-    ObjectStore::Transaction t;
-    t.remove(coll_t::meta(), OSD::make_infos_oid());
-    int r = store->apply_transaction(service.meta_osr.get(), std::move(t));
-    if (r != 0) {
-      derr << __func__ << ": apply_transaction returned "
-	   << cpp_strerror(r) << dendl;
-      ceph_abort();
-    }
-  }
-
   build_past_intervals_parallel();
 }
 
