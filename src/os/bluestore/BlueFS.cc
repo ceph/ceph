@@ -1355,6 +1355,9 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
     return 0;
   }
 
+  vector<interval_set<uint64_t>> to_release(pending_release.size());
+  to_release.swap(pending_release);
+
   uint64_t seq = log_t.seq = ++log_seq;
   assert(want_seq == 0 || want_seq <= seq);
   log_t.uuid = super.uuid;
@@ -1448,6 +1451,13 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
              << " already >= out seq " << seq
              << ", we lost a race against another log flush, done" << dendl;
   }
+
+  for (unsigned i = 0; i < to_release.size(); ++i) {
+    for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
+      alloc[i]->release(p.get_start(), p.get_len());
+    }
+  }
+
   _update_logger_stats();
 
   return 0;
@@ -1886,15 +1896,8 @@ void BlueFS::sync_metadata()
   } else {
     dout(10) << __func__ << dendl;
     utime_t start = ceph_clock_now();
-    vector<interval_set<uint64_t>> to_release(pending_release.size());
-    to_release.swap(pending_release);
     flush_bdev(); // FIXME?
     _flush_and_sync_log(l);
-    for (unsigned i = 0; i < to_release.size(); ++i) {
-      for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
-	alloc[i]->release(p.get_start(), p.get_len());
-      }
-    }
     dout(10) << __func__ << " done in " << (ceph_clock_now() - start) << dendl;
   }
 
