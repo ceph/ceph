@@ -646,7 +646,7 @@ void OSDService::agent_entry()
 	     << " flush_quota " << agent_flush_quota << dendl;
     agent_lock.Unlock();
     if (!pg->agent_work(max, agent_flush_quota)) {
-      dout(10) << __func__ << " " << pg->get_pgid()
+      dout(10) << __func__ << " " << pg->pg_id
 	<< " no agent_work, delay for " << cct->_conf->osd_agent_delay_time
 	<< " seconds" << dendl;
 
@@ -1659,7 +1659,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
     if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0)
       _pgid = opmap->raw_pg_to_pg(_pgid);
     if (opmap->get_primary_shard(_pgid, &pgid) &&
-	pgid.shard != pg->get_pgid().shard) {
+	pgid.shard != pg->pg_id.shard) {
       dout(7) << __func__ << ": " << *pg << " primary changed since "
 	      << m->get_map_epoch() << ", dropping" << dendl;
       return;
@@ -1694,7 +1694,7 @@ void OSDService::queue_for_snap_trim(PG *pg)
   dout(10) << "queueing " << *pg << " for snaptrim" << dendl;
   osd->op_shardedwq.queue(
     make_pair(
-      pg->get_pgid(),
+      pg->pg_id,
       PGQueueable(
 	PGSnapTrim(pg->get_osdmap()->get_epoch()),
 	cct->_conf->osd_snap_trim_cost,
@@ -2239,7 +2239,7 @@ will start to track new ops received afterwards.";
         ++it) {
 
       PG *pg = it->second;
-      f->dump_stream("pg") << pg->get_pgid();
+      f->dump_stream("pg") << pg->pg_id;
       pg->lock();
       pg->pgstate_history.dump(f);
       pg->unlock();
@@ -2585,10 +2585,10 @@ int OSD::init()
 
         pg->pg_stats_publish_lock.Lock();
         if (pg->pg_stats_publish_valid) {
-          m->pg_stat[pg->info.pgid.pgid] = pg->pg_stats_publish;
+          m->pg_stat[pg->pg_id.pgid] = pg->pg_stats_publish;
 	  const auto lec = pg->pg_stats_publish.get_effective_last_epoch_clean();
 	  min_last_epoch_clean = min(min_last_epoch_clean, lec);
-	  min_last_epoch_clean_pgs.push_back(pg->info.pgid.pgid);
+	  min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
         }
         pg->pg_stats_publish_lock.Unlock();
       }
@@ -3710,7 +3710,7 @@ PG *OSD::_open_lock_pg(
     pg->lock(no_lockdep_check);
     pg_map[pgid] = pg;
     pg->get("PGMap");  // because it's in pg_map
-    service.pg_add_epoch(pg->info.pgid, createmap->get_epoch());
+    service.pg_add_epoch(pg->pg_id, createmap->get_epoch());
   }
   return pg;
 }
@@ -3738,15 +3738,15 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
 {
   epoch_t e(service.get_osdmap()->get_epoch());
   pg->get("PGMap");  // For pg_map
-  pg_map[pg->info.pgid] = pg;
-  service.pg_add_epoch(pg->info.pgid, pg->get_osdmap()->get_epoch());
+  pg_map[pg->pg_id] = pg;
+  service.pg_add_epoch(pg->pg_id, pg->get_osdmap()->get_epoch());
 
   dout(10) << "Adding newly split pg " << *pg << dendl;
   pg->handle_loaded(rctx);
   pg->write_if_dirty(*(rctx->transaction));
   pg->queue_null(e, e);
   map<spg_t, list<PG::CephPeeringEvtRef> >::iterator to_wake =
-    peering_wait_for_split.find(pg->info.pgid);
+    peering_wait_for_split.find(pg->pg_id);
   if (to_wake != peering_wait_for_split.end()) {
     for (list<PG::CephPeeringEvtRef>::iterator i =
 	   to_wake->second.begin();
@@ -3756,7 +3756,7 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
     }
     peering_wait_for_split.erase(to_wake);
   }
-  if (!service.get_osdmap()->have_pg_pool(pg->info.pgid.pool()))
+  if (!service.get_osdmap()->have_pg_pool(pg->pg_id.pool()))
     _remove_pg(pg);
 }
 
@@ -3965,12 +3965,12 @@ void OSD::load_pgs()
 	derr << "PGs are upgrading" << dendl;
 	has_upgraded = true;
       }
-      dout(10) << "PG " << pg->info.pgid
+      dout(10) << "PG " << pg->pg_id
 	       << " must upgrade..." << dendl;
       pg->upgrade(store);
     }
 
-    service.init_splits_between(pg->info.pgid, pg->get_osdmap(), osdmap);
+    service.init_splits_between(pg->pg_id, pg->get_osdmap(), osdmap);
 
     // generate state for PG's current mapping
     int primary, up_primary;
@@ -4072,7 +4072,7 @@ void OSD::build_past_intervals_parallel()
 	}
       }
 
-      dout(10) << pg->info.pgid << " needs " << rpib.first << "-"
+      dout(10) << pg->pg_id << " needs " << rpib.first << "-"
 	       << rpib.second << dendl;
       pistate& p = pis[pg];
       p.start = rpib.first;
@@ -4109,14 +4109,14 @@ void OSD::build_past_intervals_parallel()
       vector<int> acting, up;
       int up_primary;
       int primary;
-      pg_t pgid = pg->info.pgid.pgid;
+      pg_t pgid = pg->pg_id.pgid;
       if (p.same_interval_since && last_map->get_pools().count(pgid.pool()))
 	pgid = pgid.get_ancestor(last_map->get_pg_num(pgid.pool()));
       cur_map->pg_to_up_acting_osds(
 	pgid, &up, &up_primary, &acting, &primary);
 
       if (p.same_interval_since == 0) {
-	dout(10) << __func__ << " epoch " << cur_epoch << " pg " << pg->info.pgid
+	dout(10) << __func__ << " epoch " << cur_epoch << " pg " << pg->pg_id
 		 << " first map, acting " << acting
 		 << " up " << up << ", same_interval_since = " << cur_epoch << dendl;
 	p.same_interval_since = cur_epoch;
@@ -4146,7 +4146,7 @@ void OSD::build_past_intervals_parallel()
 	&pg->past_intervals,
 	&debug);
       if (new_interval) {
-	dout(10) << __func__ << " epoch " << cur_epoch << " pg " << pg->info.pgid
+	dout(10) << __func__ << " epoch " << cur_epoch << " pg " << pg->pg_id
 		 << " " << debug.str() << dendl;
 	p.old_up = up;
 	p.old_acting = acting;
@@ -5453,7 +5453,7 @@ void OSD::RemoveWQ::_process(
   PGRef pg(item.first);
   SnapMapper &mapper = pg->snap_mapper;
   OSDriver &driver = pg->osdriver;
-  coll_t coll = coll_t(pg->info.pgid);
+  coll_t coll = coll_t(pg->pg_id);
   pg->osr->flush();
   bool finished = false;
 
@@ -5475,7 +5475,7 @@ void OSD::RemoveWQ::_process(
     return;
 
   ObjectStore::Transaction t;
-  PGLog::clear_info_log(pg->info.pgid, &t);
+  PGLog::clear_info_log(pg->pg_id, &t);
 
   if (cct->_conf->osd_inject_failure_on_pg_removal) {
     generic_derr << "osd_inject_failure_on_pg_removal" << dendl;
@@ -7897,7 +7897,7 @@ bool OSD::advance_pg(
     vector<int> newup, newacting;
     int up_primary, acting_primary;
     nextmap->pg_to_up_acting_osds(
-      pg->get_pgid().pgid,
+      pg->pg_id.pgid,
       &newup, &up_primary,
       &newacting, &acting_primary);
     pg->handle_advance_map(
@@ -7906,12 +7906,12 @@ bool OSD::advance_pg(
 
     // Check for split!
     set<spg_t> children;
-    spg_t parent(pg->get_pgid());
+    spg_t parent(pg->pg_id);
     if (parent.is_split(
 	lastmap->get_pg_num(pg->pool.id),
 	nextmap->get_pg_num(pg->pool.id),
 	&children)) {
-      service.mark_split_in_progress(pg->get_pgid(), children);
+      service.mark_split_in_progress(pg->pg_id, children);
       split_pgs(
 	pg, children, new_pgs, lastmap, nextmap,
 	rctx);
@@ -7920,7 +7920,7 @@ bool OSD::advance_pg(
     lastmap = nextmap;
     handle.reset_tp_timeout();
   }
-  service.pg_update_epoch(pg->get_pgid(), lastmap->get_epoch());
+  service.pg_update_epoch(pg->pg_id, lastmap->get_epoch());
   pg->handle_activate_map(rctx);
   if (next_epoch <= osd_epoch) {
     dout(10) << __func__ << " advanced to max " << max
@@ -7954,7 +7954,7 @@ void OSD::consume_map()
       else
         num_pg_stray++;
 
-      if (!osdmap->have_pg_pool(pg->get_pgid().pool())) {
+      if (!osdmap->have_pg_pool(pg->pg_id.pool())) {
         //pool is deleted!
         to_remove.push_back(PGRef(pg));
       } else {
@@ -8947,7 +8947,7 @@ void OSD::handle_pg_remove(OpRequestRef op)
     osdmap->pg_to_up_acting_osds(
       pgid.pgid, &up, &up_primary, &acting, &acting_primary);
     bool valid_history = project_pg_history(
-      pg->get_pgid(), history, pg->get_osdmap()->get_epoch(),
+      pg->pg_id, history, pg->get_osdmap()->get_epoch(),
       up, up_primary, acting, acting_primary);
     if (valid_history &&
         history.same_interval_since <= m->get_epoch()) {
@@ -8974,7 +8974,7 @@ void OSD::_remove_pg(PG *pg)
   // and handle_notify_timeout
   pg->on_removal(&rmt);
 
-  service.cancel_pending_splits_for_parent(pg->get_pgid());
+  service.cancel_pending_splits_for_parent(pg->pg_id);
   int tr = store->queue_transaction(
     pg->osr.get(), std::move(rmt), NULL, 
     new ContainerContext<
@@ -8982,20 +8982,20 @@ void OSD::_remove_pg(PG *pg)
   assert(tr == 0);
 
   DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(
-    pg->get_pgid(),
+    pg->pg_id,
     make_pair(
-      pg->get_pgid(),
+      pg->pg_id,
       PGRef(pg))
     );
   remove_wq.queue(make_pair(PGRef(pg), deleting));
 
-  service.pg_remove_epoch(pg->get_pgid());
+  service.pg_remove_epoch(pg->pg_id);
 
   // dereference from op_wq
-  op_shardedwq.clear_pg_pointer(pg->get_pgid());
+  op_shardedwq.clear_pg_pointer(pg->pg_id);
 
   // remove from map
-  pg_map.erase(pg->get_pgid());
+  pg_map.erase(pg->pg_id);
   pg->put("PGMap"); // since we've taken it out of map
 }
 
@@ -9123,7 +9123,7 @@ void OSD::do_recovery(
 
     dout(10) << "do_recovery starting " << reserved_pushes << " " << *pg << dendl;
 #ifdef DEBUG_RECOVERY_OIDS
-    dout(20) << "  active was " << service.recovery_oids[pg->get_pgid()] << dendl;
+    dout(20) << "  active was " << service.recovery_oids[pg->pg_id] << dendl;
 #endif
 
     bool more = pg->start_recovery_ops(reserved_pushes, handle, &started);
@@ -9192,9 +9192,9 @@ void OSDService::start_recovery_op(PG *pg, const hobject_t& soid)
   recovery_ops_active++;
 
 #ifdef DEBUG_RECOVERY_OIDS
-  dout(20) << "  active was " << recovery_oids[pg->get_pgid()] << dendl;
-  assert(recovery_oids[pg->get_pgid()].count(soid) == 0);
-  recovery_oids[pg->get_pgid()].insert(soid);
+  dout(20) << "  active was " << recovery_oids[pg->pg_id] << dendl;
+  assert(recovery_oids[pg->pg_id].count(soid) == 0);
+  recovery_oids[pg->pg_id].insert(soid);
 #endif
 }
 
@@ -9211,9 +9211,9 @@ void OSDService::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
   recovery_ops_active--;
 
 #ifdef DEBUG_RECOVERY_OIDS
-  dout(20) << "  active oids was " << recovery_oids[pg->get_pgid()] << dendl;
-  assert(recovery_oids[pg->get_pgid()].count(soid));
-  recovery_oids[pg->get_pgid()].erase(soid);
+  dout(20) << "  active oids was " << recovery_oids[pg->pg_id] << dendl;
+  assert(recovery_oids[pg->pg_id].count(soid));
+  recovery_oids[pg->pg_id].erase(soid);
 #endif
 
   _maybe_queue_recovery();
