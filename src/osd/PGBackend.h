@@ -216,6 +216,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        pg_shard_t peer,
        const hobject_t &hoid) = 0;
 
+     virtual bool pg_is_undersized() const = 0;
+
      virtual void log_operation(
        const vector<pg_log_entry_t> &logv,
        const boost::optional<pg_hit_set_history_t> &hset_history,

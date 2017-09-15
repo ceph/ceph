@@ -954,9 +954,9 @@ void ECBackend::handle_sub_write(
     !op.backfill,
     localt);
 
-  PrimaryLogPG *_rPG = dynamic_cast<PrimaryLogPG *>(get_parent());
-  if (_rPG && !_rPG->is_undersized() &&
-      (unsigned)get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
+  if (!get_parent()->pg_is_undersized() &&
+      (unsigned)get_parent()->whoami_shard().shard >=
+      ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   if (on_local_applied_sync) {

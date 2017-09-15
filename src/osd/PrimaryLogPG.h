@@ -415,6 +415,10 @@ public:
       assert(is_backfill_targets(peer));
     return should_send;
   }
+
+  bool pg_is_undersized() const override {
+    return is_undersized();
+  }
   
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
