@@ -1,17 +1,17 @@
 #ifndef CEPH_MDSCACHEOBJECT_H
 #define CEPH_MDSCACHEOBJECT_H
 
-#include <set>
-#include <map>
 #include <ostream>
-using namespace std;
-
 
 #include "common/config.h"
+
+#include "include/Context.h"
+#include "include/alloc_ptr.h"
 #include "include/assert.h"
+#include "include/mempool.h"
 #include "include/types.h"
 #include "include/xlist.h"
-#include "include/Context.h"
+
 #include "mdstypes.h"
 
 #define MDS_REF_SET      // define me for improved debug output, sanity checking
@@ -145,7 +145,7 @@ class MDSCacheObject {
 protected:
   __s32      ref;       // reference count
 #ifdef MDS_REF_SET
-  std::map<int,int> ref_map;
+  mempool::mds_co::map<int,int> ref_map;
 #endif
 
  public:
@@ -226,7 +226,7 @@ protected:
   int auth_pins;
   int nested_auth_pins;
 #ifdef MDS_AUTHPIN_SET
-  multiset<void*> auth_pin_set;
+  mempool::mds_co::multiset<void*> auth_pin_set;
 #endif
 
   public:
@@ -253,47 +253,47 @@ protected:
   // replication (across mds cluster)
  protected:
   unsigned		replica_nonce; // [replica] defined on replica
-  compact_map<mds_rank_t,unsigned>	replica_map;   // [auth] mds -> nonce
+  typedef compact_map<mds_rank_t,unsigned> replica_map_type;
+  replica_map_type replica_map;   // [auth] mds -> nonce
 
  public:
-  bool is_replicated() const { return !replica_map.empty(); }
-  bool is_replica(mds_rank_t mds) const { return replica_map.count(mds); }
-  int num_replicas() const { return replica_map.size(); }
+  bool is_replicated() const { return !get_replicas().empty(); }
+  bool is_replica(mds_rank_t mds) const { return get_replicas().count(mds); }
+  int num_replicas() const { return get_replicas().size(); }
   unsigned add_replica(mds_rank_t mds) {
-    if (replica_map.count(mds)) 
-      return ++replica_map[mds];  // inc nonce
-    if (replica_map.empty()) 
+    if (get_replicas().count(mds))
+      return ++get_replicas()[mds];  // inc nonce
+    if (get_replicas().empty())
       get(PIN_REPLICATED);
-    return replica_map[mds] = 1;
+    return get_replicas()[mds] = 1;
   }
   void add_replica(mds_rank_t mds, unsigned nonce) {
-    if (replica_map.empty()) 
+    if (get_replicas().empty())
       get(PIN_REPLICATED);
-    replica_map[mds] = nonce;
+    get_replicas()[mds] = nonce;
   }
   unsigned get_replica_nonce(mds_rank_t mds) {
-    assert(replica_map.count(mds));
-    return replica_map[mds];
+    assert(get_replicas().count(mds));
+    return get_replicas()[mds];
   }
   void remove_replica(mds_rank_t mds) {
-    assert(replica_map.count(mds));
-    replica_map.erase(mds);
-    if (replica_map.empty())
+    assert(get_replicas().count(mds));
+    get_replicas().erase(mds);
+    if (get_replicas().empty()) {
       put(PIN_REPLICATED);
+    }
   }
   void clear_replica_map() {
-    if (!replica_map.empty())
+    if (!get_replicas().empty())
       put(PIN_REPLICATED);
     replica_map.clear();
   }
-  compact_map<mds_rank_t,unsigned>::iterator replicas_begin() { return replica_map.begin(); }
-  compact_map<mds_rank_t,unsigned>::iterator replicas_end() { return replica_map.end(); }
-  const compact_map<mds_rank_t,unsigned>& get_replicas() const { return replica_map; }
+  replica_map_type& get_replicas() { return replica_map; }
+  const replica_map_type& get_replicas() const { return replica_map; }
   void list_replicas(std::set<mds_rank_t>& ls) const {
-    for (compact_map<mds_rank_t,unsigned>::const_iterator p = replica_map.begin();
-	 p != replica_map.end();
-	 ++p)
-      ls.insert(p->first);
+    for (const auto &p : get_replicas()) {
+      ls.insert(p.first);
+    }
   }
 
   unsigned get_replica_nonce() const { return replica_nonce; }
@@ -302,8 +302,8 @@ protected:
 
   // ---------------------------------------------
   // waiting
- protected:
-  compact_multimap<uint64_t, pair<uint64_t, MDSInternalContextBase*> > waiting;
+ private:
+  alloc_ptr<mempool::mds_co::multimap<uint64_t, std::pair<uint64_t, MDSInternalContextBase*>>> waiting;
   static uint64_t last_wait_seq;
 
  public:
@@ -311,18 +311,18 @@ protected:
     if (!min) {
       min = mask;
       while (min & (min-1))  // if more than one bit is set
-	min &= min-1;        //  clear LSB
+        min &= min-1;        //  clear LSB
     }
-    for (auto p = waiting.lower_bound(min);
-	 p != waiting.end();
-	 ++p) {
-      if (p->first & mask) return true;
-      if (p->first > mask) return false;
+    if (waiting) {
+      for (auto p = waiting->lower_bound(min); p != waiting->end(); ++p) {
+        if (p->first & mask) return true;
+        if (p->first > mask) return false;
+      }
     }
     return false;
   }
   virtual void add_waiter(uint64_t mask, MDSInternalContextBase *c) {
-    if (waiting.empty())
+    if (waiting->empty())
       get(PIN_WAITER);
 
     uint64_t seq = 0;
@@ -330,7 +330,7 @@ protected:
       seq = ++last_wait_seq;
       mask &= ~WAIT_ORDERED;
     }
-    waiting.insert(pair<uint64_t, pair<uint64_t, MDSInternalContextBase*> >(
+    waiting->insert(pair<uint64_t, pair<uint64_t, MDSInternalContextBase*> >(
 			    mask,
 			    pair<uint64_t, MDSInternalContextBase*>(seq, c)));
 //    pdout(10,g_conf->debug_mds) << (mdsco_db_line_prefix(this)) 
@@ -339,41 +339,40 @@ protected:
 //			       << dendl;
     
   }
-  virtual void take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls) {
-    if (waiting.empty()) return;
+  virtual void take_waiting(uint64_t mask, std::list<MDSInternalContextBase*>& ls) {
+    if (!waiting || waiting->empty()) return;
 
     // process ordered waiters in the same order that they were added.
     std::map<uint64_t, MDSInternalContextBase*> ordered_waiters;
 
-    for (auto it = waiting.begin();
-	 it != waiting.end(); ) {
+    for (auto it = waiting->begin(); it != waiting->end(); ) {
       if (it->first & mask) {
-
-	if (it->second.first > 0)
-	  ordered_waiters.insert(it->second);
-	else
-	  ls.push_back(it->second.second);
+	    if (it->second.first > 0) {
+	      ordered_waiters.insert(it->second);
+	    } else {
+	      ls.push_back(it->second.second);
+        }
 //	pdout(10,g_conf->debug_mds) << (mdsco_db_line_prefix(this))
 //				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
 //				   << " tag " << hex << it->first << dec
 //				   << " on " << *this
 //				   << dendl;
-	waiting.erase(it++);
+        waiting->erase(it++);
       } else {
 //	pdout(10,g_conf->debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
 //				   << " tag " << hex << it->first << dec
 //				   << " on " << *this 
 //				   << dendl;
-	++it;
+	      ++it;
       }
     }
-    for (auto it = ordered_waiters.begin();
-	 it != ordered_waiters.end();
-	 ++it) {
+    for (auto it = ordered_waiters.begin(); it != ordered_waiters.end(); ++it) {
       ls.push_back(it->second);
     }
-    if (waiting.empty())
+    if (waiting->empty()) {
       put(PIN_WAITER);
+      waiting.release();
+    }
   }
   void finish_waiting(uint64_t mask, int result = 0);
 

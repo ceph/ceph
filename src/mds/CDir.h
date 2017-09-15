@@ -46,6 +46,7 @@ class CDir : public MDSCacheObject, public Counter<CDir> {
   friend ostream& operator<<(ostream& out, const class CDir& dir);
 
 public:
+  MEMPOOL_CLASS_HELPERS();
   // -- pins --
   static const int PIN_DNWAITER =     1;
   static const int PIN_INOWAITER =    2;
