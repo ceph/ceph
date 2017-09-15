@@ -6522,6 +6522,7 @@ bool MDCache::trim(int max, int count)
       if (!diri->is_auth() && !diri->is_base() &&
 	  dir->get_num_head_items() == 0) {
 	if (dir->state_test(CDir::STATE_EXPORTING) ||
+	    !(mds->is_active() || mds->is_stopping()) ||
 	    dir->is_freezing() || dir->is_frozen())
 	  continue;
 

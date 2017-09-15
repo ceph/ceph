@@ -776,6 +776,10 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   assert(dir->is_auth());
   assert(dest != mds->get_nodeid());
    
+  if (!(mds->is_active() || mds->is_stopping())) {
+    dout(7) << "i'm not active, no exports for now" << dendl;
+    return;
+  }
   if (mds->mdcache->is_readonly()) {
     dout(7) << "read-only FS, no exports for now" << dendl;
     return;
