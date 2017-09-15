@@ -45,9 +45,9 @@ class MMDSCacheRejoin : public Message {
 
   // -- types --
   struct inode_strong { 
-    uint32_t nonce;
-    int32_t caps_wanted;
-    int32_t filelock, nestlock, dftlock;
+    uint32_t nonce = 0;
+    int32_t caps_wanted = 0;
+    int32_t filelock = 0, nestlock = 0, dftlock = 0;
     inode_strong() {}
     inode_strong(int n, int cw, int dl, int nl, int dftl) :
       nonce(n), caps_wanted(cw),
@@ -70,8 +70,8 @@ class MMDSCacheRejoin : public Message {
   WRITE_CLASS_ENCODER(inode_strong)
 
   struct dirfrag_strong {
-    uint32_t nonce;
-    int8_t  dir_rep;
+    uint32_t nonce = 0;
+    int8_t  dir_rep = 0;
     dirfrag_strong() {}
     dirfrag_strong(int n, int dr) : nonce(n), dir_rep(dr) {}
     void encode(bufferlist &bl) const {
