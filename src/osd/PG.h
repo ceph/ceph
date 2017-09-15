@@ -325,9 +325,6 @@ public:
   bool is_deleting() const {
     return deleting;
   }
-  int get_role() const {
-    return role;
-  }
   bool is_replica() const {
     return role > 0;
   }
@@ -2450,7 +2447,12 @@ protected:
   }
   pg_shard_t get_primary() const { return primary; }
 
-  void       set_role(int r) { role = r; }
+  int get_role() const {
+    return role;
+  }
+  void set_role(int r) {
+    role = r;
+  }
 
   bool state_test(int m) const { return (state & m) != 0; }
   void state_set(int m) { state |= m; }
