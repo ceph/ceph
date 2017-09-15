@@ -3210,8 +3210,10 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
   }
 public:
   RGWDataSyncProcessorThread(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
-                             const string& _source_zone)
-    : RGWSyncProcessorThread(_store, "data-sync"), sync(_store, async_rados, _source_zone),
+                             const string& _source_zone,
+                             rgw::BucketChangeObserver *observer)
+    : RGWSyncProcessorThread(_store, "data-sync"),
+      sync(_store, async_rados, _source_zone, observer),
       initialized(false) {}
 
   void wakeup_sync_shards(map<int, set<string> >& shard_ids) {
@@ -4554,7 +4556,8 @@ int RGWRados::init_complete()
     Mutex::Locker dl(data_sync_thread_lock);
     for (auto iter : zone_data_sync_from_map) {
       ldout(cct, 5) << "starting data sync thread for zone " << iter.first << dendl;
-      RGWDataSyncProcessorThread *thread = new RGWDataSyncProcessorThread(this, async_rados, iter.first);
+      auto *thread = new RGWDataSyncProcessorThread(this, async_rados, iter.first,
+                                                    &*bucket_trim);
       ret = thread->init();
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: failed to initialize data sync thread" << dendl;
