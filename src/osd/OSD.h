@@ -841,7 +841,7 @@ private:
   map<pg_t, vector<int> > pg_temp_pending;
   void _sent_pg_temp();
 public:
-  void queue_want_pg_temp(pg_t pgid, vector<int>& want);
+  void queue_want_pg_temp(pg_t pgid, const vector<int>& want);
   void remove_want_pg_temp(pg_t pgid);
   void requeue_pg_temp();
   void send_pg_temp();
@@ -1149,7 +1149,7 @@ public:
     PREPARING_TO_STOP,
     STOPPING };
   std::atomic_int state{NOT_STOPPING};
-  int get_state() {
+  int get_state() const {
     return state;
   }
   void set_state(int s) {
