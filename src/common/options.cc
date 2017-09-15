@@ -4933,7 +4933,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_dynamic_resharding", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_description(""),
 
     Option("rgw_max_objs_per_shard", Option::TYPE_INT, Option::LEVEL_ADVANCED)
