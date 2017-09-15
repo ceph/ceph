@@ -935,16 +935,10 @@ public:
   }
   void clear_queued_recovery(PG *pg) {
     Mutex::Locker l(recovery_lock);
-    for (list<pair<epoch_t, PGRef> >::iterator i = awaiting_throttle.begin();
-	 i != awaiting_throttle.end();
-      ) {
-      if (i->second.get() == pg) {
-	awaiting_throttle.erase(i);
-	return;
-      } else {
-	++i;
-      }
-    }
+    awaiting_throttle.remove_if(
+      [pg](decltype(awaiting_throttle)::const_reference awaiting ) {
+	return awaiting.second.get() == pg;
+      });
   }
   // delayed pg activation
   void queue_for_recovery(PG *pg) {
