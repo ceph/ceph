@@ -45,22 +45,19 @@ public:
 #endif
 
   Request create_snaptrim(epoch_t e, uint64_t owner) {
-    return Request(spg_t(),
-		   OpQueueItem(PGSnapTrim(e),
+    return Request(OpQueueItem(unique_ptr<OpQueueItem::OpQueueable>(new PGSnapTrim(spg_t(), e)),
 			       12, 12,
 			       utime_t(), owner, e));
   }
 
   Request create_scrub(epoch_t e, uint64_t owner) {
-    return Request(spg_t(),
-		   OpQueueItem(PGScrub(e),
+    return Request(OpQueueItem(unique_ptr<OpQueueItem::OpQueueable>(new PGScrub(spg_t(), e)),
 			       12, 12,
 			       utime_t(), owner, e));
   }
 
   Request create_recovery(epoch_t e, uint64_t owner) {
-    return Request(spg_t(),
-		   OpQueueItem(PGRecovery(e, 64),
+    return Request(OpQueueItem(unique_ptr<OpQueueItem::OpQueueable>(new PGRecovery(spg_t(), e, 64)),
 			       12, 12,
 			       utime_t(), owner, e));
   }
@@ -118,19 +115,19 @@ TEST_F(MClockOpClassQueueTest, TestEnqueue) {
   q.enqueue(client1, 12, 0, create_snaptrim(104, client1));
 
   Request r = q.dequeue();
-  ASSERT_EQ(100u, r.second.get_map_epoch());
+  ASSERT_EQ(100u, r.get_map_epoch());
 
   r = q.dequeue();
-  ASSERT_EQ(101u, r.second.get_map_epoch());
+  ASSERT_EQ(101u, r.get_map_epoch());
 
   r = q.dequeue();
-  ASSERT_EQ(102u, r.second.get_map_epoch());
+  ASSERT_EQ(102u, r.get_map_epoch());
 
   r = q.dequeue();
-  ASSERT_EQ(103u, r.second.get_map_epoch());
+  ASSERT_EQ(103u, r.get_map_epoch());
 
   r = q.dequeue();
-  ASSERT_EQ(104u, r.second.get_map_epoch());
+  ASSERT_EQ(104u, r.get_map_epoch());
 }
 
 
@@ -142,19 +139,19 @@ TEST_F(MClockOpClassQueueTest, TestEnqueueStrict) {
   q.enqueue_strict(client1, 15, create_snaptrim(104, client1));
 
   Request r = q.dequeue();
-  ASSERT_EQ(102u, r.second.get_map_epoch());
+  ASSERT_EQ(102u, r.get_map_epoch());
 
   r = q.dequeue();
-  ASSERT_EQ(104u, r.second.get_map_epoch());
+  ASSERT_EQ(104u, r.get_map_epoch());
 
   r = q.dequeue();
-  ASSERT_EQ(103u, r.second.get_map_epoch());
+  ASSERT_EQ(103u, r.get_map_epoch());
 
   r = q.dequeue();
-  ASSERT_EQ(101u, r.second.get_map_epoch());
+  ASSERT_EQ(101u, r.get_map_epoch());
 
   r = q.dequeue();
-  ASSERT_EQ(100u, r.second.get_map_epoch());
+  ASSERT_EQ(100u, r.get_map_epoch());
 }
 
 
@@ -170,18 +167,18 @@ TEST_F(MClockOpClassQueueTest, TestRemoveByClass) {
 
   ASSERT_EQ(2u, filtered_out.size());
   while (!filtered_out.empty()) {
-    auto e = filtered_out.front().second.get_map_epoch() ;
+    auto e = filtered_out.front().get_map_epoch() ;
     ASSERT_TRUE(e == 101 || e == 102);
     filtered_out.pop_front();
   }
 
   ASSERT_EQ(3u, q.length());
   Request r = q.dequeue();
-  ASSERT_EQ(103u, r.second.get_map_epoch());
+  ASSERT_EQ(103u, r.get_map_epoch());
 
   r = q.dequeue();
-  ASSERT_EQ(100u, r.second.get_map_epoch());
+  ASSERT_EQ(100u, r.get_map_epoch());
 
   r = q.dequeue();
-  ASSERT_EQ(104u, r.second.get_map_epoch());
+  ASSERT_EQ(104u, r.get_map_epoch());
 }

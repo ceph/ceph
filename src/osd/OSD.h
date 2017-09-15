@@ -1593,6 +1593,7 @@ private:
    * and already requeued the items.
    */
   friend class PGOpItem;
+  friend class PGRecovery;
 
   class ShardedOpWQ
     : public ShardedThreadPool::ShardedWQ<OpQueueItem>
