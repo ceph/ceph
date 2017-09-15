@@ -331,9 +331,6 @@ public:
   bool is_primary() const {
     return pg_whoami == primary;
   }
-  epoch_t get_last_peering_reset() const {
-    return last_peering_reset;
-  }
   bool pg_has_reset_since(epoch_t e) {
     assert(is_locked());
     return deleting || e < get_last_peering_reset();
@@ -874,6 +871,9 @@ protected:
                                        // which are unfound on the primary
   epoch_t last_peering_reset;
 
+  epoch_t get_last_peering_reset() const {
+    return last_peering_reset;
+  }
 
   /* heartbeat peers */
   void set_probe_targets(const set<pg_shard_t> &probe_set);
