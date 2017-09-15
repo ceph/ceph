@@ -492,7 +492,10 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
       set_val_or_die("client_mountpoint", val.c_str());
     }
     else {
-      parse_option(args, i, NULL);
+      int r = parse_option(args, i, NULL);
+      if (r < 0) {
+        return r;
+      }
     }
   }
 
@@ -536,8 +539,16 @@ int md_config_t::parse_option(std::vector<const char*>& args,
     std::string as_option("--");
     as_option += "debug_";
     as_option += subsys.get_name(o);
-    if (ceph_argparse_witharg(args, i, &val,
+    ostringstream err;
+    if (ceph_argparse_witharg(args, i, &val, err,
 			      as_option.c_str(), (char*)NULL)) {
+      if (err.tellp()) {
+        if (oss) {
+          *oss << err.str();
+        }
+        ret = -EINVAL;
+        break;
+      }
       int log, gather;
       int r = sscanf(val.c_str(), "%d/%d", &log, &gather);
       if (r >= 1) {
