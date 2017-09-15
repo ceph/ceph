@@ -377,11 +377,11 @@ Commands
   Release a lock on an image. The lock id and locker are
   as output by lock ls.
 
-:command:`bench` --io-type <read | write> [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *size-in-B/K/M/G/T*] [--io-pattern seq | rand] *image-spec*
+:command:`bench` --io-type <read | write | readwrite | rw> [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *size-in-B/K/M/G/T*] [--io-pattern seq | rand] [--rw-mix-read *read proportion in readwrite*] *image-spec*
   Generate a series of IOs to the image and measure the IO throughput and
   latency.  If no suffix is given, unit B is assumed for both --io-size and
   --io-total.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
-  --io-pattern seq.
+  --io-pattern seq, --rw-mix-read 50.
 
 :command:`trash ls` [*pool-name*]
   List all entries from trash.
