@@ -246,9 +246,40 @@ struct PGPool {
 
 class PG : public DoutPrefixProvider {
 public:
+  // -- members --
   const coll_t coll;
   ObjectStore::CollectionHandle ch;
 
+  // -- classes --
+  class CephPeeringEvt {
+    epoch_t epoch_sent;
+    epoch_t epoch_requested;
+    boost::intrusive_ptr< const boost::statechart::event_base > evt;
+    string desc;
+  public:
+    MEMPOOL_CLASS_HELPERS();
+    template <class T>
+    CephPeeringEvt(epoch_t epoch_sent,
+		   epoch_t epoch_requested,
+		   const T &evt_) :
+      epoch_sent(epoch_sent), epoch_requested(epoch_requested),
+      evt(evt_.intrusive_from_this()) {
+      stringstream out;
+      out << "epoch_sent: " << epoch_sent
+	  << " epoch_requested: " << epoch_requested << " ";
+      evt_.print(&out);
+      desc = out.str();
+    }
+    epoch_t get_epoch_sent() { return epoch_sent; }
+    epoch_t get_epoch_requested() { return epoch_requested; }
+    const boost::statechart::event_base &get_event() { return *evt; }
+    string get_desc() { return desc; }
+  };
+  typedef ceph::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
+
+  class RecoveryCtx;
+
+  // -- methods --
   std::string gen_prefix() const override;
   CephContext *get_cct() const override { return cct; }
   unsigned get_subsys() const override { return ceph_subsys_osd; }
@@ -275,8 +306,39 @@ public:
     return _lock.is_locked();
   }
 
+  const spg_t& get_pgid() const {
+    return pg_id;
+  }
+
+  uint64_t get_last_user_version() const {
+    return info.last_user_version;
+  }
+  const pg_history_t& get_history() const {
+    return info.history;
+  }
+
+  void set_last_scrub_stamp(utime_t t) {
+    info.history.last_scrub_stamp = t;
+  }
+
   bool is_deleting() const {
     return deleting;
+  }
+  int get_role() const {
+    return role;
+  }
+  bool is_replica() const {
+    return role > 0;
+  }
+  bool is_primary() const {
+    return pg_whoami == primary;
+  }
+  epoch_t get_last_peering_reset() const {
+    return last_peering_reset;
+  }
+  bool pg_has_reset_since(epoch_t e) {
+    assert(is_locked());
+    return deleting || e < get_last_peering_reset();
   }
 
   bool is_ec_pg() const {
@@ -286,8 +348,52 @@ public:
     return acting;
   }
 
+  void rm_backoff(BackoffRef b);
+
+  void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+  void reg_next_scrub();
+  void unreg_next_scrub();
+
   void set_force_recovery(bool b);
   void set_force_backfill(bool b);
+
+  void queue_peering_event(CephPeeringEvtRef evt);
+  void handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx);
+  void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
+		   pg_shard_t from, const pg_query_t& q);
+  void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
+  void queue_flushed(epoch_t started_at);
+  void handle_advance_map(
+    OSDMapRef osdmap, OSDMapRef lastmap,
+    vector<int>& newup, int up_primary,
+    vector<int>& newacting, int acting_primary,
+    RecoveryCtx *rctx);
+  void handle_activate_map(RecoveryCtx *rctx);
+  void handle_create(RecoveryCtx *rctx);
+  void handle_loaded(RecoveryCtx *rctx);
+  void handle_query_state(Formatter *f);
+
+  virtual void do_request(
+    OpRequestRef& op,
+    ThreadPool::TPHandle &handle
+  ) = 0;
+
+  virtual void snap_trimmer(epoch_t epoch_queued) = 0;
+  virtual int do_command(
+    cmdmap_t cmdmap,
+    ostream& ss,
+    bufferlist& idata,
+    bufferlist& odata,
+    ConnectionRef conn,
+    ceph_tid_t tid) = 0;
+
+  virtual bool agent_work(int max) = 0;
+  virtual bool agent_work(int max, int agent_flush_quota) = 0;
+  virtual void agent_stop() = 0;
+  virtual void agent_delay() = 0;
+  virtual void agent_clear() = 0;
+  virtual void agent_choose_mode_restart() = 0;
+
 
 protected:
   OSDService *osd;
@@ -1231,9 +1337,6 @@ protected:
     release_backoffs(begin, end);
   }
 
-public:
-  void rm_backoff(BackoffRef b);
-
   // -- scrub --
 public:
   struct Scrubber {
@@ -1393,9 +1496,6 @@ protected:
     const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
     pg_shard_t bad_peer);
 
-public:
-  void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
-protected:
   void chunky_scrub(ThreadPool::TPHandle &handle);
   void scrub_compare_maps();
   /**
@@ -1442,10 +1542,6 @@ protected:
   void scrub_unreserve_replicas();
   bool scrub_all_replicas_reserved() const;
   bool sched_scrub();
-public:
-  void reg_next_scrub();
-  void unreg_next_scrub();
-protected:
 
   void replica_scrub(
     OpRequestRef op,
@@ -1481,33 +1577,7 @@ protected:
     }
   };
 
-public:
-  class CephPeeringEvt {
-    epoch_t epoch_sent;
-    epoch_t epoch_requested;
-    boost::intrusive_ptr< const boost::statechart::event_base > evt;
-    string desc;
-  public:
-    MEMPOOL_CLASS_HELPERS();
-    template <class T>
-    CephPeeringEvt(epoch_t epoch_sent,
-		   epoch_t epoch_requested,
-		   const T &evt_) :
-      epoch_sent(epoch_sent), epoch_requested(epoch_requested),
-      evt(evt_.intrusive_from_this()) {
-      stringstream out;
-      out << "epoch_sent: " << epoch_sent
-	  << " epoch_requested: " << epoch_requested << " ";
-      evt_.print(&out);
-      desc = out.str();
-    }
-    epoch_t get_epoch_sent() { return epoch_sent; }
-    epoch_t get_epoch_requested() { return epoch_requested; }
-    const boost::statechart::event_base &get_event() { return *evt; }
-    string get_desc() { return desc; }
-  };
-protected:
-  typedef ceph::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
+
   list<CephPeeringEvtRef> peering_queue;  // op queue
   list<CephPeeringEvtRef> peering_waiters;
 
@@ -2307,25 +2377,13 @@ protected:
   // Prevent copying
   explicit PG(const PG& rhs);
   PG& operator=(const PG& rhs);
+
   const spg_t pg_id;
   uint64_t peer_features;
   uint64_t acting_features;
   uint64_t upacting_features;
 
   epoch_t last_epoch;
-
-public:
-  const spg_t&      get_pgid() const { return pg_id; }
-
-  uint64_t get_last_user_version() const {
-    return info.last_user_version;
-  }
-
-  const pg_history_t& get_history() const { return info.history; }
-
-  void set_last_scrub_stamp(utime_t t) {
-    info.history.last_scrub_stamp = t;
-  }
 
 protected:
   void reset_min_peer_features() {
@@ -2386,20 +2444,9 @@ protected:
     assert(primary.osd == new_acting_primary);
   }
   pg_shard_t get_primary() const { return primary; }
-  
-public:
-  int        get_role() const { return role; }
-protected:
+
   void       set_role(int r) { role = r; }
 
-public:
-  bool       is_primary() const { return pg_whoami == primary; }
-  bool       is_replica() const { return role > 0; }
-
-public:
-  epoch_t get_last_peering_reset() const { return last_peering_reset; }
-
-protected:
   bool state_test(int m) const { return (state & m) != 0; }
   void state_set(int m) { state |= m; }
   void state_clear(int m) { state &= ~m; }
@@ -2549,12 +2596,6 @@ protected:
 		   list<Context *> *on_applied,
 		   list<Context *> *on_safe);
   void set_last_peering_reset();
-public:
-  bool pg_has_reset_since(epoch_t e) {
-    assert(is_locked());
-    return deleting || e < get_last_peering_reset();
-  }
-protected:
 
   void update_history(const pg_history_t& history);
   void fulfill_info(pg_shard_t from, const pg_query_t &query,
@@ -2596,50 +2637,17 @@ protected:
 
   // recovery bits
   void take_waiters();
-public:
-  void queue_peering_event(CephPeeringEvtRef evt);
-  void handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx);
-  void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
-		   pg_shard_t from, const pg_query_t& q);
-  void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
-  void queue_flushed(epoch_t started_at);
-  void handle_advance_map(
-    OSDMapRef osdmap, OSDMapRef lastmap,
-    vector<int>& newup, int up_primary,
-    vector<int>& newacting, int acting_primary,
-    RecoveryCtx *rctx);
-  void handle_activate_map(RecoveryCtx *rctx);
-  void handle_create(RecoveryCtx *rctx);
-  void handle_loaded(RecoveryCtx *rctx);
-  void handle_query_state(Formatter *f);
-protected:
   virtual void on_removal(ObjectStore::Transaction *t) = 0;
 
 
   // abstract bits
-public:
-  virtual void do_request(
-    OpRequestRef& op,
-    ThreadPool::TPHandle &handle
-  ) = 0;
-protected:
   virtual void do_op(OpRequestRef& op) = 0;
   virtual void do_scan(
     OpRequestRef op,
     ThreadPool::TPHandle &handle
   ) = 0;
   virtual void do_backfill(OpRequestRef op) = 0;
-public:
-  virtual void snap_trimmer(epoch_t epoch_queued) = 0;
-  virtual int do_command(
-    cmdmap_t cmdmap,
-    ostream& ss,
-    bufferlist& idata,
-    bufferlist& odata,
-    ConnectionRef conn,
-    ceph_tid_t tid) = 0;
 
-protected:
   virtual void on_role_change() = 0;
   virtual void on_pool_change() = 0;
   virtual void on_change(ObjectStore::Transaction *t) = 0;
@@ -2648,15 +2656,6 @@ protected:
   virtual void on_shutdown() = 0;
   virtual void check_blacklisted_watchers() = 0;
   virtual void get_watchers(std::list<obj_watch_item_t>&) = 0;
-
-public:
-  virtual bool agent_work(int max) = 0;
-  virtual bool agent_work(int max, int agent_flush_quota) = 0;
-  virtual void agent_stop() = 0;
-  virtual void agent_delay() = 0;
-  virtual void agent_clear() = 0;
-  virtual void agent_choose_mode_restart() = 0;
-protected:
 
   friend ostream& operator<<(ostream& out, const PG& pg);
 };
