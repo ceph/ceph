@@ -1,6 +1,15 @@
 >= 12.2.0
 ---------
 
+
+12.2.1
+------
+
+- *RGW*
+
+  * dynamic resharding is now enabled by default, RGW will now automatically
+  reshard the bucket index once the index grows beyond `rgw_max_objs_per_shard`
+
 - *CephFS*:
 
   * Limiting MDS cache via a memory limit is now supported using the new
