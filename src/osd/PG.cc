@@ -277,9 +277,12 @@ void PGPool::update(OSDMapRef map)
 
 PG::PG(OSDService *o, OSDMapRef curmap,
        const PGPool &_pool, spg_t p) :
+  pg_id(p),
   coll(p),
   osd(o),
   cct(o->cct),
+  osdmap_ref(curmap),
+  pool(_pool),
   osdriver(osd->store, coll_t(), OSD::make_snapmapper_oid()),
   snap_mapper(
     cct,
@@ -288,11 +291,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     p.get_split_bits(curmap->get_pg_num(_pool.id)),
     _pool.id,
     p.shard),
-  osdmap_ref(curmap), last_persisted_osdmap_ref(curmap), pool(_pool),
-  _lock("PG::_lock"),
-  #ifdef PG_DEBUG_REFS
-  _ref_id_lock("PG::_ref_id_lock"), _ref_id(0),
-  #endif
+  last_persisted_osdmap_ref(curmap),
   deleting(false),
   trace_endpoint("0.0.0.0", 0, "PG"),
   dirty_info(false), dirty_big_info(false),
@@ -323,7 +322,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   scrub_after_recovery(false),
   active_pushes(0),
   recovery_state(this),
-  pg_id(p),
   peer_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   acting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   upacting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
