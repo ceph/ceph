@@ -25,34 +25,6 @@
 
 class OSD;
 
-
-struct PGScrub {
-  epoch_t epoch_queued;
-  explicit PGScrub(epoch_t e) : epoch_queued(e) {}
-  ostream &operator<<(ostream &rhs) {
-    return rhs << "PGScrub";
-  }
-};
-
-struct PGSnapTrim {
-  epoch_t epoch_queued;
-  explicit PGSnapTrim(epoch_t e) : epoch_queued(e) {}
-  ostream &operator<<(ostream &rhs) {
-    return rhs << "PGSnapTrim";
-  }
-};
-
-struct PGRecovery {
-  epoch_t epoch_queued;
-  uint64_t reserved_pushes;
-  PGRecovery(epoch_t e, uint64_t reserved_pushes)
-    : epoch_queued(e), reserved_pushes(reserved_pushes) {}
-  ostream &operator<<(ostream &rhs) {
-    return rhs << "PGRecovery(epoch=" << epoch_queued
-	       << ", reserved_pushes: " << reserved_pushes << ")";
-  }
-};
-
 class OpQueueItem {
 public:
   class OrderLocker {
@@ -212,4 +184,69 @@ public:
     return op;
   }
   void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+};
+
+class PGSnapTrim : public PGOpQueueable {
+  epoch_t epoch_queued;
+public:
+  PGSnapTrim(
+    spg_t pg,
+    epoch_t epoch_queued)
+    : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
+  op_type_t get_op_type() const override final {
+    return op_type_t::bg_snaptrim;
+  }
+  ostream &print(ostream &rhs) const override final {
+    return rhs << "PGSnapTrim(pgid=" << get_pgid()
+	       << "epoch_queued=" << epoch_queued
+	       << ")";
+  }
+  void run(
+    OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+};
+
+class PGScrub : public PGOpQueueable {
+  epoch_t epoch_queued;
+public:
+  PGScrub(
+    spg_t pg,
+    epoch_t epoch_queued)
+    : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
+  op_type_t get_op_type() const override final {
+    return op_type_t::bg_scrub;
+  }
+  ostream &print(ostream &rhs) const override final {
+    return rhs << "PGScrub(pgid=" << get_pgid()
+	       << "epoch_queued=" << epoch_queued
+	       << ")";
+  }
+  void run(
+    OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+};
+
+class PGRecovery : public PGOpQueueable {
+  epoch_t epoch_queued;
+  uint64_t reserved_pushes;
+public:
+  PGRecovery(
+    spg_t pg,
+    epoch_t epoch_queued,
+    uint64_t reserved_pushes)
+    : PGOpQueueable(pg),
+      epoch_queued(epoch_queued),
+      reserved_pushes(reserved_pushes) {}
+  op_type_t get_op_type() const override final {
+    return op_type_t::bg_recovery;
+  }
+  virtual ostream &print(ostream &rhs) const override final {
+    return rhs << "PGRecovery(pgid=" << get_pgid()
+	       << "epoch_queued=" << epoch_queued
+	       << "reserved_pushes=" << reserved_pushes
+	       << ")";
+  }
+  virtual uint64_t get_reserved_pushes() const override final {
+    return reserved_pushes;
+  }
+  virtual void run(
+    OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };

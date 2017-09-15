@@ -21,3 +21,26 @@ void PGOpItem::run(OSD *osd,
 {
   osd->dequeue_op(pg, op, handle);
 }
+
+void PGSnapTrim::run(OSD *osd,
+                   PGRef& pg,
+                   ThreadPool::TPHandle &handle)
+{
+  pg->snap_trimmer(epoch_queued);
+}
+
+void PGScrub::run(OSD *osd,
+                   PGRef& pg,
+                   ThreadPool::TPHandle &handle)
+{
+  pg->scrub(epoch_queued, handle);
+}
+
+void PGRecovery::run(OSD *osd,
+                   PGRef& pg,
+                   ThreadPool::TPHandle &handle)
+{
+  osd->do_recovery(pg.get(), epoch_queued, reserved_pushes, handle);
+}
+
+
