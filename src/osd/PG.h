@@ -251,6 +251,9 @@ public:
   const spg_t pg_id;
   const coll_t coll;
 
+  // for ordering writes
+  ceph::shared_ptr<ObjectStore::Sequencer> osr;
+
   ObjectStore::CollectionHandle ch;
 
   // -- classes --
@@ -1105,9 +1108,6 @@ protected:
   Mutex pg_stats_publish_lock;
   bool pg_stats_publish_valid;
   pg_stat_t pg_stats_publish;
-
-  // for ordering writes
-  ceph::shared_ptr<ObjectStore::Sequencer> osr;
 
   void _update_calc_stats();
   void _update_blocked_by();
