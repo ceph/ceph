@@ -174,6 +174,7 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
   if (!cur_part_id) {
     if (ofs < max_head_size) {
       location->set_placement_rule(head_placement_rule);
+      location->using_tail_data_pool = false;
       *location = obj;
       return;
     } else {
@@ -206,6 +207,9 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
   loc.key.set_instance(tail_instance);
 
   location->set_placement_rule(tail_placement.placement_rule);
+  location->using_tail_data_pool = true;
+  using_tail_data_pool = true;
+
   *location = loc;
 }
 
