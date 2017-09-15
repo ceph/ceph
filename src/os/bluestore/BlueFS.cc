@@ -255,6 +255,16 @@ void BlueFS::dump_perf_counters(Formatter *f)
   f->close_section();
 }
 
+void BlueFS::dump_block_extents(ostream& out)
+{
+  for (unsigned i = 0; i < MAX_BDEV; ++i) {
+    if (!bdev[i]) {
+      continue;
+    }
+    out << i << " : size 0x" << std::hex << bdev[i]->get_size()
+	<< " : own 0x" << block_all[i] << std::dec << "\n";
+  }
+}
 
 void BlueFS::get_usage(vector<pair<uint64_t,uint64_t>> *usage)
 {
