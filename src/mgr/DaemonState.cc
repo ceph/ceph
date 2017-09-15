@@ -85,7 +85,12 @@ DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
 {
   Mutex::Locker l(lock);
 
-  return all.at(key);
+  auto iter = all.find(key);
+  if (iter != all.end()) {
+    return iter->second;
+  } else {
+    return nullptr;
+  }
 }
 
 void DaemonStateIndex::cull(const std::string& svc_name,
