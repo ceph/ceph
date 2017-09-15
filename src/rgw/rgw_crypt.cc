@@ -1155,6 +1155,12 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
   ldout(s->cct, 15) << "Encryption mode: " << stored_mode << dendl;
+
+  const char *req_sse = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION", NULL);
+  if (nullptr != req_sse && (s->op == OP_GET || s->op == OP_HEAD)) {
+    return -ERR_INVALID_REQUEST;
+  }
+
   if (stored_mode == "SSE-C-AES256") {
     if (s->cct->_conf->rgw_crypt_require_ssl &&
         !s->info.env->exists("SERVER_PORT_SECURE")) {
