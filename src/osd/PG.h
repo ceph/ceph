@@ -53,6 +53,7 @@
 using namespace std;
 
 //#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
+//#define PG_DEBUG_REFS    // track provenance of pg refs, helpful for finding leaks
 
 class OSD;
 class OSDService;
@@ -398,6 +399,18 @@ public:
   virtual void agent_choose_mode_restart() = 0;
 
 
+  // reference counting
+#ifdef PG_DEBUG_REFS
+  uint64_t get_with_id();
+  void put_with_id(uint64_t);
+  void dump_live_ids();
+#endif
+
+  void get(const char* tag);
+  void put(const char* tag);
+
+
+
 protected:
   OSDService *osd;
   CephContext *cct;
@@ -453,17 +466,6 @@ protected:
   bool deleting;  // true while in removing or OSD is shutting down
 
   ZTracer::Endpoint trace_endpoint;
-
-protected:
-#ifdef PG_DEBUG_REFS
-  uint64_t get_with_id();
-  void put_with_id(uint64_t);
-  void dump_live_ids();
-#endif
-
-public:
-  void get(const char* tag);
-  void put(const char* tag);
 
 private:
   friend void intrusive_ptr_add_ref(PG *pg) {
