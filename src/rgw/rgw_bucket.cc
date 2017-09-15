@@ -12,6 +12,7 @@
 
 #include "common/errno.h"
 #include "common/ceph_json.h"
+#include "common/backport14.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
@@ -2164,9 +2165,8 @@ public:
     pool = store->get_zone_params().domain_root;
   }
 
-  int list_keys_init(RGWRados *store, const string& marker, void **phandle)
-  {
-    list_keys_info *info = new list_keys_info;
+  int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
+    auto info = ceph::make_unique<list_keys_info>();
 
     info->store = store;
 
@@ -2175,7 +2175,7 @@ public:
     if (ret < 0) {
       return ret;
     }
-    *phandle = (void *)info;
+    *phandle = (void *)info.release();
 
     return 0;
   }
@@ -2365,7 +2365,7 @@ public:
   }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
-    list_keys_info *info = new list_keys_info;
+    auto info = ceph::make_unique<list_keys_info>();
 
     info->store = store;
 
@@ -2374,7 +2374,7 @@ public:
     if (ret < 0) {
       return ret;
     }
-    *phandle = (void *)info;
+    *phandle = (void *)info.release();
 
     return 0;
   }
