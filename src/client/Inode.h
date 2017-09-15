@@ -4,6 +4,8 @@
 #ifndef CEPH_CLIENT_INODE_H
 #define CEPH_CLIENT_INODE_H
 
+#include <numeric>
+
 #include "include/types.h"
 #include "include/xlist.h"
 
@@ -14,6 +16,7 @@
 
 #include "InodeRef.h"
 #include "UserPerm.h"
+#include "Delegation.h"
 
 class Client;
 struct MetaSession;
@@ -77,6 +80,8 @@ struct CapSnap {
 
   void dump(Formatter *f) const;
 };
+
+class Delegation;
 
 // inode flags
 #define I_COMPLETE	1
@@ -198,6 +203,7 @@ struct Inode {
 
   list<Cond*>       waitfor_caps;
   list<Cond*>       waitfor_commit;
+  list<Cond*>	    waitfor_deleg;
 
   Dentry *get_first_parent() {
     assert(!dn_set.empty());
@@ -225,6 +231,8 @@ struct Inode {
   // file locks
   ceph_lock_state_t *fcntl_locks;
   ceph_lock_state_t *flock_locks;
+
+  xlist<Delegation*> delegations;
 
   xlist<MetaRequest*> unsafe_ops;
 
@@ -292,6 +300,34 @@ struct Inode {
   void rm_fh(Fh *f) {fhs.erase(f);}
   void set_async_err(int r);
   void dump(Formatter *f) const;
+
+  bool has_recalled_deleg();
+  void recall_deleg(bool skip_read);
+  void break_deleg(bool skip_read);
+
+  void break_all_delegs()
+  {
+    break_deleg(false);
+  };
+
+  bool delegations_broken(bool skip_read);
+  int set_deleg(Fh *fh, bool ro, ceph_deleg_cb_t cb, void *priv);
+  void unset_deleg(Fh *fh);
+
+  // does anything have this Inode open for write?
+  long open_count_for_write()
+  {
+    return (long)(open_by_mode[CEPH_FILE_MODE_RDWR] +
+		  open_by_mode[CEPH_FILE_MODE_WR]);
+  };
+
+  // how many opens currently vs. this inode
+  long open_count()
+  {
+    return (long) std::accumulate(open_by_mode.begin(), open_by_mode.end(), 0,
+				  [] (int value, const std::map<int, int>::value_type& p)
+                   { return value + p.second; });
+  };
 };
 
 ostream& operator<<(ostream &out, const Inode &in);

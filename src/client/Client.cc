@@ -83,6 +83,7 @@
 #include "Client.h"
 #include "Inode.h"
 #include "Dentry.h"
+#include "Delegation.h"
 #include "Dir.h"
 #include "ClientSnapRealm.h"
 #include "Fh.h"
@@ -5065,10 +5066,17 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   check_cap_issue(in, cap, new_caps);
 
   // update caps
-  if (old_caps & ~new_caps) { 
-    ldout(cct, 10) << "  revocation of " << ccap_string(~new_caps & old_caps) << dendl;
+  int revoked = old_caps & ~new_caps;
+  if (revoked) {
+    ldout(cct, 10) << "  revocation of " << ccap_string(revoked) << dendl;
     cap->issued = new_caps;
     cap->implemented |= new_caps;
+
+    // recall delegations if we're losing caps necessary for them
+    if (revoked & ceph_caps_for_mode(CEPH_FILE_MODE_RD))
+      in->recall_deleg(false);
+    else if (revoked & ceph_caps_for_mode(CEPH_FILE_MODE_WR))
+      in->recall_deleg(true);
 
     if (((used & ~new_caps) & CEPH_CAP_FILE_BUFFER)
         && !_flush(in, new C_Client_FlushComplete(this, in))) {
@@ -5828,10 +5836,8 @@ void Client::flush_mdlog(MetaSession *session)
 }
 
 
-void Client::unmount()
+void Client::_unmount()
 {
-  Mutex::Locker lock(client_lock);
-
   if (unmounting)
     return;
 
@@ -5949,6 +5955,12 @@ void Client::unmount()
   mounted = false;
 
   ldout(cct, 2) << "unmounted." << dendl;
+}
+
+void Client::unmount()
+{
+  Mutex::Locker lock(client_lock);
+  _unmount();
 }
 
 void Client::flush_cap_releases()
@@ -8367,6 +8379,8 @@ int Client::_release_fh(Fh *f)
   //ldout(cct, 3) << "op: open_files.erase( " << fh << " );" << dendl;
   Inode *in = f->inode.get();
   ldout(cct, 5) << "_release_fh " << f << " mode " << f->mode << " on " << *in << dendl;
+
+  in->unset_deleg(f);
 
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
@@ -11919,8 +11933,9 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
   req->set_filepath(path);
 
   InodeRef otherin;
-
+  Inode *in;
   Dentry *de;
+
   int res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
@@ -11931,7 +11946,10 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
   res = _lookup(dir, name, 0, &otherin, perm);
   if (res < 0)
     goto fail;
-  req->set_other_inode(otherin.get());
+
+  in = otherin.get();
+  req->set_other_inode(in);
+  in->break_all_delegs();
   req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 
   req->set_inode(dir);
@@ -12101,15 +12119,26 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     res = _lookup(fromdir, fromname, 0, &oldin, perm);
     if (res < 0)
       goto fail;
-    req->set_old_inode(oldin.get());
+
+    Inode *oldinode = oldin.get();
+    oldinode->break_all_delegs();
+    req->set_old_inode(oldinode);
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
 
     res = _lookup(todir, toname, 0, &otherin, perm);
-    if (res != 0 && res != -ENOENT) {
-      goto fail;
-    } else if (res == 0) {
-      req->set_other_inode(otherin.get());
+    switch (res) {
+    case 0:
+      {
+	Inode *in = otherin.get();
+	req->set_other_inode(in);
+	in->break_all_delegs();
+      }
       req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+      break;
+    case -ENOENT:
+      break;
+    default:
+      goto fail;
     }
 
     req->set_inode(todir);
@@ -12180,6 +12209,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
     return -EDQUOT;
   }
 
+  in->break_all_delegs();
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
   filepath path(newname, dir->ino);
@@ -13021,6 +13051,29 @@ int Client::ll_flock(Fh *fh, int cmd, uint64_t owner)
   return _flock(fh, cmd, owner);
 }
 
+int Client::ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv)
+{
+  int ret = -EINVAL;
+
+  Mutex::Locker lock(client_lock);
+
+  if (!mounted)
+    return -ENOTCONN;
+
+  Inode *inode = fh->inode.get();
+
+  switch(cmd) {
+  case CEPH_DELEGATION_RD:
+  case CEPH_DELEGATION_WR:
+    ret = inode->set_deleg(fh, (cmd == CEPH_DELEGATION_RD), cb, priv);
+    break;
+  case CEPH_DELEGATION_NONE:
+    inode->unset_deleg(fh);
+    ret = 0;
+  }
+  return ret;
+}
+
 class C_Client_RequestInterrupt : public Context  {
 private:
   Client *client;
@@ -13844,4 +13897,3 @@ void StandaloneClient::shutdown()
   objecter->shutdown();
   monclient->shutdown();
 }
-

@@ -48,6 +48,7 @@ using std::fstream;
 
 #include "InodeRef.h"
 #include "UserPerm.h"
+#include "Delegation.h"
 #include "include/cephfs/ceph_statx.h"
 
 class FSMap;
@@ -404,6 +405,8 @@ protected:
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
   void _sync_write_commit(Inode *in);
+  void wait_on_list(list<Cond*>& ls);
+  void signal_cond_list(list<Cond*>& ls);
 
 protected:
   std::unique_ptr<Filer>             filer;
@@ -482,8 +485,6 @@ protected:
 
   // helpers
   void wake_inode_waiters(MetaSession *s);
-  void wait_on_list(list<Cond*>& ls);
-  void signal_cond_list(list<Cond*>& ls);
 
   void wait_on_context_list(list<Context*>& ls);
   void signal_context_list(list<Context*>& ls);
@@ -494,12 +495,16 @@ protected:
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
+  // same as unmount() but for when the client_lock is already held
+  void _unmount();
+
   friend class C_Client_FlushComplete; // calls put_inode()
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
   friend class C_Client_RequestInterrupt;
   friend class C_Client_Remount;
+  friend class C_C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
   friend void intrusive_ptr_release(Inode *in);
 
   //int get_cache_size() { return lru.lru_get_size(); }
@@ -1217,6 +1222,7 @@ public:
   int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
   int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
   int ll_flock(Fh *fh, int cmd, uint64_t owner);
+  int ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv);
   int ll_file_layout(Fh *fh, file_layout_t *layout);
   void ll_interrupt(void *d);
   bool ll_handle_umask() {

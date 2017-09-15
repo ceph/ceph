@@ -5923,6 +5923,10 @@ std::vector<Option> get_mds_client_options() {
     .set_default(true)
     .set_description(""),
 
+    Option("client_deleg_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(75.0)
+    .set_description("time (in seconds) that application has to return delegation after recall"),
+
     Option("fuse_use_invalidate_cb", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
