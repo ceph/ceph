@@ -944,7 +944,7 @@ public:
   void queue_for_recovery(PG *pg) {
     Mutex::Locker l(recovery_lock);
 
-    if (pg->get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL)) {
+    if (pg->is_forced_recovery_or_backfill()) {
       awaiting_throttle.push_front(make_pair(pg->get_osdmap()->get_epoch(), pg));
     } else {
       awaiting_throttle.push_back(make_pair(pg->get_osdmap()->get_epoch(), pg));

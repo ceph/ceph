@@ -354,6 +354,9 @@ public:
   void reg_next_scrub();
   void unreg_next_scrub();
 
+  bool is_forced_recovery_or_backfill() const {
+    return get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
+  }
   void set_force_recovery(bool b);
   void set_force_backfill(bool b);
 
