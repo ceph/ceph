@@ -76,7 +76,6 @@ class MDSMonitor : public PaxosService {
 
   // my helpers
   void print_map(FSMap &m, int dbl=7);
-  void update_logger();
 
   void _updated(MonOpRequestRef op);
 

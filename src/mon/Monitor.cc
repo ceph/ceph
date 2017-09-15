@@ -586,10 +586,6 @@ int Monitor::preinit()
     pcb.add_u64(l_cluster_num_object_misplaced, "num_object_misplaced", "Misplaced (wrong location in the cluster) objects");
     pcb.add_u64(l_cluster_num_object_unfound, "num_object_unfound", "Unfound objects");
     pcb.add_u64(l_cluster_num_bytes, "num_bytes", "Size of all objects");
-    pcb.add_u64(l_cluster_num_mds_up, "num_mds_up", "MDSs that are up");
-    pcb.add_u64(l_cluster_num_mds_in, "num_mds_in", "MDS in state \"in\" (they are in cluster)");
-    pcb.add_u64(l_cluster_num_mds_failed, "num_mds_failed", "Failed MDS");
-    pcb.add_u64(l_cluster_mds_epoch, "mds_epoch", "Current epoch of MDS map");
     cluster_logger = pcb.create_perf_counters();
   }
 
