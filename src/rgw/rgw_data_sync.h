@@ -11,6 +11,9 @@
 #include "common/RWLock.h"
 #include "common/ceph_json.h"
 
+namespace rgw {
+class BucketChangeObserver;
+}
 
 struct rgw_datalog_info {
   uint32_t num_shards;
@@ -218,13 +221,15 @@ struct RGWDataSyncEnv {
   RGWSyncTraceManager *sync_tracer{nullptr};
   string source_zone;
   RGWSyncModuleInstanceRef sync_module{nullptr};
+  rgw::BucketChangeObserver *observer{nullptr};
 
   RGWDataSyncEnv() {}
 
   void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer,
-            const string& _source_zone, RGWSyncModuleInstanceRef& _sync_module) {
+            const string& _source_zone, RGWSyncModuleInstanceRef& _sync_module,
+            rgw::BucketChangeObserver *_observer) {
     cct = _cct;
     store = _store;
     conn = _conn;
@@ -234,6 +239,7 @@ struct RGWDataSyncEnv {
     sync_tracer = _sync_tracer;
     source_zone = _source_zone;
     sync_module = _sync_module;
+    observer = _observer;
   }
 
   string shard_obj_name(int shard_id);
@@ -243,6 +249,7 @@ struct RGWDataSyncEnv {
 class RGWRemoteDataLog : public RGWCoroutinesManager {
   RGWRados *store;
   RGWAsyncRadosProcessor *async_rados;
+  rgw::BucketChangeObserver *observer;
   RGWHTTPManager http_manager;
 
   RGWDataSyncEnv sync_env;
@@ -255,9 +262,10 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   bool initialized;
 
 public:
-  RGWRemoteDataLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados)
+  RGWRemoteDataLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+                   rgw::BucketChangeObserver *observer)
     : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
-      store(_store), async_rados(async_rados),
+      store(_store), async_rados(async_rados), observer(observer),
       http_manager(store->ctx(), completion_mgr),
       lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
       initialized(false) {}
@@ -295,10 +303,11 @@ class RGWDataSyncStatusManager {
 
 public:
   RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
-                           const string& _source_zone)
+                           const string& _source_zone,
+                           rgw::BucketChangeObserver *observer = nullptr)
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
       sync_module(nullptr),
-      source_log(store, async_rados), num_shards(0) {}
+      source_log(store, async_rados, observer), num_shards(0) {}
   ~RGWDataSyncStatusManager() {
     finalize();
   }

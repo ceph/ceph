@@ -18,6 +18,7 @@
 #include "rgw_bucket.h"
 #include "rgw_metadata.h"
 #include "rgw_sync_module.h"
+#include "rgw_sync_log_trim.h"
 
 #include "cls/lock/cls_lock_client.h"
 
@@ -626,7 +627,7 @@ int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSy
                            RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& _sync_module)
 {
   sync_env.init(store->ctx(), store, _conn, async_rados, &http_manager, _error_logger,
-                _sync_tracer, _source_zone, _sync_module);
+                _sync_tracer, _source_zone, _sync_module, observer);
 
   if (initialized) {
     return 0;
@@ -1049,6 +1050,9 @@ public:
           tn->log(0, SSTR("ERROR: failed to remove omap key from error repo ("
              << error_repo->get_obj() << " retcode=" << retcode));
         }
+      }
+      if (sync_env->observer) {
+        sync_env->observer->on_bucket_changed(bs.bucket.get_key());
       }
       /* FIXME: what do do in case of error */
       if (marker_tracker && !entry_marker.empty()) {
@@ -1835,7 +1839,9 @@ int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn,
   bs.bucket = bucket;
   bs.shard_id = shard_id;
 
-  sync_env.init(store->ctx(), store, conn, async_rados, http_manager, _error_logger, _sync_tracer, source_zone, _sync_module);
+  sync_env.init(store->ctx(), store, conn, async_rados, http_manager,
+                _error_logger, _sync_tracer, source_zone, _sync_module,
+                nullptr);
 
   return 0;
 }
@@ -3154,7 +3160,7 @@ int rgw_bucket_sync_status(RGWRados *store, const std::string& source_zone,
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
   env.init(store->ctx(), store, nullptr, store->get_async_rados(),
-           nullptr, nullptr, nullptr, source_zone, module);
+           nullptr, nullptr, nullptr, source_zone, module, nullptr);
 
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   return crs.run(new RGWCollectBucketSyncStatusCR(store, &env, info.num_shards,
