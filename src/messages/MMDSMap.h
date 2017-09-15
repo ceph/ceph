@@ -26,7 +26,7 @@ class MMDSMap : public Message {
 public:
 
   uuid_d fsid;
-  epoch_t epoch;
+  epoch_t epoch = 0;
   bufferlist encoded;
 
   version_t get_epoch() const { return epoch; }
