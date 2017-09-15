@@ -26,6 +26,25 @@ public:
   string& to_str() { return data; }
 };
 
+class LCFilter_S3 : public LCFilter, public XMLObj
+{
+ public:
+  ~LCFilter_S3() override {}
+  string& to_str() { return data; }
+  void to_xml(ostream& out){
+    out << "<Filter>";
+      if (!prefix.empty())
+        out << "<Prefix>" << prefix << "</Prefix>";
+    out << "</Filter>";
+  }
+  void dump_xml(Formatter *f) const {
+    f->open_object_section("Filter");
+    if (!prefix.empty())
+      encode_xml("Prefix", prefix, f);
+    f->close_section(); // Filter
+  }
+};
+
 class LCStatus_S3 : public XMLObj
 {
 public:
@@ -150,7 +169,13 @@ public:
   void dump_xml(Formatter *f) const {
     f->open_object_section("Rule");
     encode_xml("ID", id, f);
-    encode_xml("Prefix", prefix, f);
+    // In case of an empty filter and an empty Prefix, we defer to Prefix.
+    if (!filter.empty()) {
+      const LCFilter_S3& lc_filter = static_cast<const LCFilter_S3&>(filter);
+      lc_filter.dump_xml(f);
+    } else {
+      encode_xml("Prefix", prefix, f);
+    }
     encode_xml("Status", status, f);
     if (!expiration.empty() || dm_expiration) {
       LCExpiration_S3 expir(expiration.get_days_str(), expiration.get_date(), dm_expiration);
@@ -164,6 +189,7 @@ public:
       const LCMPExpiration_S3& mp_expir = static_cast<const LCMPExpiration_S3&>(mp_expiration);
       mp_expir.dump_xml(f);
     }
+
     f->close_section(); // Rule
   }
 };
