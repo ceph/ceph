@@ -371,21 +371,23 @@ void KernelDevice::_aio_thread()
 	io_since_flush.store(true);
 
 	int r = aio[i]->get_return_value();
-       if (r < 0) {
-         derr << __func__ << " got " << cpp_strerror(r) << dendl;
-         assert(0 == "got unexpected error from io_getevents");
-       }
-	
-       if (aio[i]->length != (uint64_t)r) {
-         derr << "aio to " << aio[i]->offset << "~" << aio[i]->length
-              << " but returned: " << r << dendl;
-         assert(0 == "unexpected aio error");
-       }
+        if (r < 0) {
+          derr << __func__ << " got " << cpp_strerror(r) << dendl;
+          if (ioc->allow_eio && r == -EIO) {
+            ioc->set_return_value(r);
+          } else {
+            assert(0 == "got unexpected error from io_getevents");
+          }
+        } else if (aio[i]->length != (uint64_t)r) {
+          derr << "aio to " << aio[i]->offset << "~" << aio[i]->length
+               << " but returned: " << r << dendl;
+          assert(0 == "unexpected aio error");
+        }
 
-       dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
-                << " ioc " << ioc
-                << " with " << (ioc->num_running.load() - 1)
-                << " aios left" << dendl;
+        dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
+                 << " ioc " << ioc
+                 << " with " << (ioc->num_running.load() - 1)
+                 << " aios left" << dendl;
 
 	// NOTE: once num_running and we either call the callback or
 	// call aio_wake we cannot touch ioc or aio[] as the caller
