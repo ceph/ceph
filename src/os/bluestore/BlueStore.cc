@@ -5481,10 +5481,13 @@ int BlueStore::_fsck_check_extents(
   return errors;
 }
 
-int BlueStore::fsck(bool deep)
+int BlueStore::_fsck(bool deep, bool repair)
 {
-  dout(1) << __func__ << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
+  dout(1) << __func__
+	  << (repair ? " fsck" : " repair")
+	  << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
   int errors = 0;
+  int repaired = 0;
 
   typedef btree::btree_set<
     uint64_t,std::less<uint64_t>,
@@ -5608,7 +5611,7 @@ int BlueStore::fsck(bool deep)
       if (is_extent_shard_key(it->key())) {
 	while (!expecting_shards.empty() &&
 	       expecting_shards.front() < it->key()) {
-	  derr << __func__ << " error: missing shard key "
+	  derr << "fsck error: missing shard key "
 	       << pretty_binary_string(expecting_shards.front())
 	       << dendl;
 	  ++errors;
@@ -5624,18 +5627,18 @@ int BlueStore::fsck(bool deep)
         uint32_t offset;
         string okey;
         get_key_extent_shard(it->key(), &okey, &offset);
-        derr << __func__ << " error: stray shard 0x" << std::hex << offset
+        derr << "fsck error: stray shard 0x" << std::hex << offset
 	     << std::dec << dendl;
         if (expecting_shards.empty()) {
-          derr << __func__ << " error: " << pretty_binary_string(it->key())
+          derr << "fsck error: " << pretty_binary_string(it->key())
                << " is unexpected" << dendl;
           ++errors;
           continue;
         }
 	while (expecting_shards.front() > it->key()) {
-	  derr << __func__ << " error:   saw " << pretty_binary_string(it->key())
+	  derr << "fsck error:   saw " << pretty_binary_string(it->key())
 	       << dendl;
-	  derr << __func__ << " error:   exp "
+	  derr << "fsck error:   exp "
 	       << pretty_binary_string(expecting_shards.front()) << dendl;
 	  ++errors;
 	  expecting_shards.pop_front();
@@ -5649,7 +5652,7 @@ int BlueStore::fsck(bool deep)
       ghobject_t oid;
       int r = get_key_object(it->key(), &oid);
       if (r < 0) {
-        derr << __func__ << " error: bad object key "
+        derr << "fsck error: bad object key "
              << pretty_binary_string(it->key()) << dendl;
 	++errors;
 	continue;
@@ -5669,7 +5672,7 @@ int BlueStore::fsck(bool deep)
 	  }
 	}
 	if (!c) {
-          derr << __func__ << " error: stray object " << oid
+          derr << "fsck error: stray object " << oid
                << " not owned by any collection" << dendl;
 	  ++errors;
 	  continue;
@@ -5680,7 +5683,7 @@ int BlueStore::fsck(bool deep)
 
       if (!expecting_shards.empty()) {
 	for (auto &k : expecting_shards) {
-	  derr << __func__ << " error: missing shard key "
+	  derr << "fsck error: missing shard key "
 	       << pretty_binary_string(k) << dendl;
 	}
 	++errors;
@@ -5692,12 +5695,12 @@ int BlueStore::fsck(bool deep)
       OnodeRef o = c->get_onode(oid, false);
       if (o->onode.nid) {
 	if (o->onode.nid > nid_max) {
-	  derr << __func__ << " error: " << oid << " nid " << o->onode.nid
+	  derr << "fsck error: " << oid << " nid " << o->onode.nid
 	       << " > nid_max " << nid_max << dendl;
 	  ++errors;
 	}
 	if (used_nids.count(o->onode.nid)) {
-	  derr << __func__ << " error: " << oid << " nid " << o->onode.nid
+	  derr << "fsck error: " << oid << " nid " << o->onode.nid
 	       << " already in use" << dendl;
 	  ++errors;
 	  continue; // go for next object
@@ -5719,7 +5722,7 @@ int BlueStore::fsck(bool deep)
 	get_extent_shard_key(o->key, s.shard_info->offset,
 			     &expecting_shards.back());
 	if (s.shard_info->offset >= o->onode.size) {
-	  derr << __func__ << " error: " << oid << " shard 0x" << std::hex
+	  derr << "fsck error: " << oid << " shard 0x" << std::hex
 	       << s.shard_info->offset << " past EOF at 0x" << o->onode.size
 	       << std::dec << dendl;
 	  ++errors;
@@ -5733,14 +5736,14 @@ int BlueStore::fsck(bool deep)
       for (auto& l : o->extent_map.extent_map) {
 	dout(20) << __func__ << "    " << l << dendl;
 	if (l.logical_offset < pos) {
-	  derr << __func__ << " error: " << oid << " lextent at 0x"
+	  derr << "fsck error: " << oid << " lextent at 0x"
 	       << std::hex << l.logical_offset
 	       << " overlaps with the previous, which ends at 0x" << pos
 	       << std::dec << dendl;
 	  ++errors;
 	}
 	if (o->extent_map.spans_shard(l.logical_offset, l.length)) {
-	  derr << __func__ << " error: " << oid << " lextent at 0x"
+	  derr << "fsck error: " << oid << " lextent at 0x"
 	       << std::hex << l.logical_offset << "~" << l.length
 	       << " spans a shard boundary"
 	       << std::dec << dendl;
@@ -5786,7 +5789,7 @@ int BlueStore::fsck(bool deep)
 		 << std::dec << " for " << *i.first << dendl;
 	const bluestore_blob_t& blob = i.first->get_blob();
 	if (i.second & blob.unused) {
-	  derr << __func__ << " error: " << oid << " blob claims unused 0x"
+	  derr << "fsck error: " << oid << " blob claims unused 0x"
 	       << std::hex << blob.unused
 	       << " but extents reference 0x" << i.second
 	       << " on blob " << *i.first << dendl;
@@ -5808,7 +5811,7 @@ int BlueStore::fsck(bool deep)
 	    if ((blob.unused & mask) == mask) {
 	      // this csum chunk region is marked unused
 	      if (blob.get_csum_item(p) != 0) {
-		derr << __func__ << " error: " << oid
+		derr << "fsck error: " << oid
 		     << " blob claims csum chunk 0x" << std::hex << pos
 		     << "~" << csum_chunk_size
 		     << " is unused (mask 0x" << mask << " of unused 0x"
@@ -5826,7 +5829,7 @@ int BlueStore::fsck(bool deep)
 	const bluestore_blob_t& blob = i.first->get_blob();
 	bool equal = i.first->get_blob_use_tracker().equal(i.second);
 	if (!equal) {
-	  derr << __func__ << " error: " << oid << " blob " << *i.first
+	  derr << "fsck error: " << oid << " blob " << *i.first
 	       << " doesn't match expected ref_map " << i.second << dendl;
 	  ++errors;
 	}
@@ -5837,12 +5840,12 @@ int BlueStore::fsck(bool deep)
 	}
 	if (blob.is_shared()) {
 	  if (i.first->shared_blob->get_sbid() > blobid_max) {
-	    derr << __func__ << " error: " << oid << " blob " << blob
+	    derr << "fsck error: " << oid << " blob " << blob
 		 << " sbid " << i.first->shared_blob->get_sbid() << " > blobid_max "
 		 << blobid_max << dendl;
 	    ++errors;
 	  } else if (i.first->shared_blob->get_sbid() == 0) {
-            derr << __func__ << " error: " << oid << " blob " << blob
+            derr << "fsck error: " << oid << " blob " << blob
                  << " marked as shared but has uninitialized sbid"
                  << dendl;
             ++errors;
@@ -5868,14 +5871,14 @@ int BlueStore::fsck(bool deep)
 	int r = _do_read(c.get(), o, 0, o->onode.size, bl, 0);
 	if (r < 0) {
 	  ++errors;
-	  derr << __func__ << " error: " << oid << " error during read: "
+	  derr << "fsck error: " << oid << " error during read: "
 	       << cpp_strerror(r) << dendl;
 	}
       }
       // omap
       if (o->onode.has_omap()) {
 	if (used_omap_head.count(o->onode.nid)) {
-	  derr << __func__ << " error: " << oid << " omap_head " << o->onode.nid
+	  derr << "fsck error: " << oid << " omap_head " << o->onode.nid
 	       << " already in use" << dendl;
 	  ++errors;
 	} else {
@@ -5891,14 +5894,14 @@ int BlueStore::fsck(bool deep)
       string key = it->key();
       uint64_t sbid;
       if (get_key_shared_blob(key, &sbid)) {
-	derr << __func__ << " error: bad key '" << key
+	derr << "fsck error: bad key '" << key
 	     << "' in shared blob namespace" << dendl;
 	++errors;
 	continue;
       }
       auto p = sb_info.find(sbid);
       if (p == sb_info.end()) {
-	derr << __func__ << " error: found stray shared blob data for sbid 0x"
+	derr << "fsck error: found stray shared blob data for sbid 0x"
 	     << std::hex << sbid << std::dec << dendl;
 	++errors;
       } else {
@@ -5910,7 +5913,7 @@ int BlueStore::fsck(bool deep)
 	::decode(shared_blob, blp);
 	dout(20) << __func__ << "  " << *sbi.sb << " " << shared_blob << dendl;
 	if (shared_blob.ref_map != sbi.ref_map) {
-	  derr << __func__ << " error: shared blob 0x" << std::hex << sbid
+	  derr << "fsck error: shared blob 0x" << std::hex << sbid
 	       << std::dec << " ref_map " << shared_blob.ref_map
 	       << " != expected " << sbi.ref_map << dendl;
 	  ++errors;
@@ -5928,12 +5931,12 @@ int BlueStore::fsck(bool deep)
     }
   }
   for (auto &p : sb_info) {
-    derr << __func__ << " error: shared_blob 0x" << p.first
+    derr << "fsck error: shared_blob 0x" << p.first
 	 << " key is missing (" << *p.second.sb << ")" << dendl;
     ++errors;
   }
   if (!(actual_statfs == expected_statfs)) {
-    derr << __func__ << " error: actual " << actual_statfs
+    derr << "fsck error: actual " << actual_statfs
 	 << " != expected " << expected_statfs << dendl;
     ++errors;
   }
@@ -5945,7 +5948,7 @@ int BlueStore::fsck(bool deep)
       uint64_t omap_head;
       _key_decode_u64(it->key().c_str(), &omap_head);
       if (used_omap_head.count(omap_head) == 0) {
-	derr << __func__ << " error: found stray omap data on omap_head "
+	derr << "fsck error: found stray omap data on omap_head "
 	     << omap_head << dendl;
 	++errors;
       }
@@ -5962,7 +5965,7 @@ int BlueStore::fsck(bool deep)
       try {
 	::decode(wt, p);
       } catch (buffer::error& e) {
-	derr << __func__ << " error: failed to decode deferred txn "
+	derr << "fsck error: failed to decode deferred txn "
 	     << pretty_binary_string(it->key()) << dendl;
 	r = -EIO;
         goto out_scan;
@@ -6008,7 +6011,7 @@ int BlueStore::fsck(bool deep)
         }
       );
       if (intersects) {
-	derr << __func__ << " error: free extent 0x" << std::hex << offset
+	derr << "fsck error: free extent 0x" << std::hex << offset
 	     << "~" << length << std::dec
 	     << " intersects allocated blocks" << dendl;
 	++errors;
@@ -6026,7 +6029,7 @@ int BlueStore::fsck(bool deep)
 	while (true) {
 	  size_t next = used_blocks.find_next(cur);
 	  if (next != cur + 1) {
-	    derr << __func__ << " error: leaked extent 0x" << std::hex
+	    derr << "fsck error: leaked extent 0x" << std::hex
 		 << ((uint64_t)start * min_alloc_size) << "~"
 		 << ((cur + 1 - start) * min_alloc_size) << std::dec
 		 << dendl;
@@ -6071,9 +6074,10 @@ int BlueStore::fsck(bool deep)
 	  << dendl;
 
   utime_t duration = ceph_clock_now() - start;
-  dout(1) << __func__ << " finish with " << errors << " errors in "
+  dout(1) << __func__ << " finish with " << errors << " errors, " << repaired
+	  << " repaired, " << (errors - repaired) << " remaining in "
 	  << duration << " seconds" << dendl;
-  return errors;
+  return errors - repaired;
 }
 
 void BlueStore::collect_metadata(map<string,string> *pm)

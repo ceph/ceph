@@ -65,24 +65,85 @@ void validate_path(CephContext *cct, const string& path, bool bluefs)
   }
 }
 
+BlueFS *open_bluefs(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  validate_path(cct, path, true);
+  BlueFS *fs = new BlueFS(cct);
+
+  string main;
+  set<int> got;
+  for (auto& i : devs) {
+    bluestore_bdev_label_t label;
+    int r = BlueStore::_read_bdev_label(cct, i, &label);
+    if (r < 0) {
+      cerr << "unable to read label for " << i << ": "
+	   << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    int id = -1;
+    if (label.description == "main")
+      main = i;
+    else if (label.description == "bluefs db")
+      id = BlueFS::BDEV_DB;
+    else if (label.description == "bluefs wal")
+      id = BlueFS::BDEV_WAL;
+    if (id >= 0) {
+      got.insert(id);
+      cout << " slot " << id << " " << i << std::endl;
+      int r = fs->add_block_device(id, i);
+      if (r < 0) {
+	cerr << "unable to open " << i << ": " << cpp_strerror(r) << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    }
+  }
+  if (main.length()) {
+    int id = BlueFS::BDEV_DB;
+    if (got.count(BlueFS::BDEV_DB))
+      id = BlueFS::BDEV_SLOW;
+    cout << " slot " << id << " " << main << std::endl;
+    int r = fs->add_block_device(id, main);
+    if (r < 0) {
+      cerr << "unable to open " << main << ": " << cpp_strerror(r)
+	   << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  int r = fs->mount();
+  if (r < 0) {
+    cerr << "unable to mount bluefs: " << cpp_strerror(r)
+	 << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  return fs;
+}
+
 int main(int argc, char **argv)
 {
   string out_dir;
   vector<string> devs;
   string path;
   string action;
+  string log_file;
+  int log_level = 30;
   bool fsck_deep = false;
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
     ("path", po::value<string>(&path), "bluestore path")
     ("out-dir", po::value<string>(&out_dir), "output directory")
+    ("log-file,l", po::value<string>(&log_file), "log file")
+    ("log-level", po::value<int>(&log_level), "log level (30=most, 20=lots, 10=some, 1=little)")
     ("dev", po::value<vector<string>>(&devs), "device(s)")
     ("deep", po::value<bool>(&fsck_deep), "deep fsck (read all data)")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "fsck, bluefs-export, show-label")
+    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, show-label")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -112,7 +173,7 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  if (action == "fsck") {
+  if (action == "fsck" || action == "repair") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -150,8 +211,35 @@ int main(int argc, char **argv)
       }
     }
   }
+  if (action == "bluefs-bdev-sizes" || action == "bluefs-bdev-expand") {
+    if (path.empty()) {
+      cerr << "must specify bluestore path" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    cout << "infering bluefs devices from bluestore path" << std::endl;
+    for (auto fn : {"block", "block.wal", "block.db"}) {
+      string p = path + "/" + fn;
+      struct stat st;
+      if (::stat(p.c_str(), &st) == 0) {
+        devs.push_back(p);
+      }
+    }
+  }
 
   vector<const char*> args;
+  if (log_file.size()) {
+    args.push_back("--log-file");
+    args.push_back(log_file.c_str());
+    static char ll[10];
+    snprintf(ll, sizeof(ll), "%d", log_level);
+    args.push_back("--debug-bluestore");
+    args.push_back(ll);
+    args.push_back("--debug-bluefs");
+    args.push_back(ll);
+  }
+  args.push_back("--no-log-to-stderr");
+  args.push_back("--err-to-stderr");
+
   for (auto& i : ceph_option_strings) {
     args.push_back(i.c_str());
   }
@@ -164,14 +252,20 @@ int main(int argc, char **argv)
   cout << "action " << action << std::endl;
 
   if (action == "fsck" ||
-      action == "fsck-deep") {
+      action == "repair") {
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.fsck(fsck_deep);
+    int r;
+    if (action == "fsck") {
+      r = bluestore.fsck(fsck_deep);
+    } else {
+      r = bluestore.repair(fsck_deep);
+    }
     if (r < 0) {
       cerr << "error from fsck: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
+    cout << action << " success" << std::endl;
   }
   else if (action == "show-label") {
     JSONFormatter jf(true);
@@ -191,58 +285,33 @@ int main(int argc, char **argv)
     jf.close_section();
     jf.flush(cout);
   }
+  else if (action == "bluefs-bdev-sizes") {
+    BlueFS *fs = open_bluefs(cct.get(), path, devs);
+    fs->dump_block_extents(cout);
+    delete fs;
+  }
+  else if (action == "bluefs-bdev-expand") {
+    BlueFS *fs = open_bluefs(cct.get(), path, devs);
+    cout << "start:" << std::endl;
+    fs->dump_block_extents(cout);
+    for (int devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB }) {
+      interval_set<uint64_t> before;
+      fs->get_block_extents(devid, &before);
+      uint64_t end = before.range_end();
+      uint64_t size = fs->get_block_device_size(devid);
+      if (end < size) {
+	cout << "expanding dev " << devid << " from 0x" << std::hex
+	     << end << " to 0x" << size << std::dec << std::endl;
+	fs->add_block_extent(devid, end, size-end);
+      }
+    }
+    delete fs;
+  }
   else if (action == "bluefs-export") {
-    validate_path(cct.get(), path, true);
-    BlueFS fs(&(*cct));
-    string main;
-    set<int> got;
-    for (auto& i : devs) {
-      bluestore_bdev_label_t label;
-      int r = BlueStore::_read_bdev_label(cct.get(), i, &label);
-      if (r < 0) {
-	cerr << "unable to read label for " << i << ": "
-	     << cpp_strerror(r) << std::endl;
-	exit(EXIT_FAILURE);
-      }
-      int id = -1;
-      if (label.description == "main")
-	main = i;
-      else if (label.description == "bluefs db")
-	id = BlueFS::BDEV_DB;
-      else if (label.description == "bluefs wal")
-	id = BlueFS::BDEV_WAL;
-      if (id >= 0) {
-	got.insert(id);
-	cout << " slot " << id << " " << i << std::endl;
-	int r = fs.add_block_device(id, i);
-	if (r < 0) {
-	  cerr << "unable to open " << i << ": " << cpp_strerror(r) << std::endl;
-	  exit(EXIT_FAILURE);
-	}
-      }
-    }
-    if (main.length()) {
-      int id = BlueFS::BDEV_DB;
-      if (got.count(BlueFS::BDEV_DB))
-	id = BlueFS::BDEV_SLOW;
-      cout << " slot " << id << " " << main << std::endl;
-      int r = fs.add_block_device(id, main);
-      if (r < 0) {
-	cerr << "unable to open " << main << ": " << cpp_strerror(r)
-	     << std::endl;
-	exit(EXIT_FAILURE);
-      }
-    }
-
-    int r = fs.mount();
-    if (r < 0) {
-      cerr << "unable to mount bluefs: " << cpp_strerror(r)
-	   << std::endl;
-      exit(EXIT_FAILURE);
-    }
+    BlueFS *fs = open_bluefs(cct.get(), path, devs);
 
     vector<string> dirs;
-    r = fs.readdir("", &dirs);
+    int r = fs->readdir("", &dirs);
     if (r < 0) {
       cerr << "readdir in root failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -252,7 +321,7 @@ int main(int argc, char **argv)
 	continue;
       cout << dir << "/" << std::endl;
       vector<string> ls;
-      r = fs.readdir(dir, &ls);
+      r = fs->readdir(dir, &ls);
       if (r < 0) {
 	cerr << "readdir " << dir << " failed: " << cpp_strerror(r) << std::endl;
 	exit(EXIT_FAILURE);
@@ -270,7 +339,7 @@ int main(int argc, char **argv)
 	cout << dir << "/" << file << std::endl;
 	uint64_t size;
 	utime_t mtime;
-	r = fs.stat(dir, file, &size, &mtime);
+	r = fs->stat(dir, file, &size, &mtime);
 	if (r < 0) {
 	  cerr << "stat " << file << " failed: " << cpp_strerror(r) << std::endl;
 	  exit(EXIT_FAILURE);
@@ -285,7 +354,7 @@ int main(int argc, char **argv)
 	assert(fd >= 0);
 	if (size > 0) {
 	  BlueFS::FileReader *h;
-	  r = fs.open_for_read(dir, file, &h, false);
+	  r = fs->open_for_read(dir, file, &h, false);
 	  if (r < 0) {
 	    cerr << "open_for_read " << dir << "/" << file << " failed: "
 		 << cpp_strerror(r) << std::endl;
@@ -295,7 +364,7 @@ int main(int argc, char **argv)
 	  int left = size;
 	  while (left) {
 	    bufferlist bl;
-	    r = fs.read(h, &h->buf, pos, left, &bl, NULL);
+	    r = fs->read(h, &h->buf, pos, left, &bl, NULL);
 	    if (r <= 0) {
 	      cerr << "read " << dir << "/" << file << " from " << pos
 		   << " failed: " << cpp_strerror(r) << std::endl;
@@ -315,7 +384,8 @@ int main(int argc, char **argv)
 	::close(fd);
       }
     }
-    fs.umount();
+    fs->umount();
+    delete fs;
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;
