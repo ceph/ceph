@@ -12651,7 +12651,7 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   Cond cond;
   bool done;
   int r = 0;
-  Context *onsafe;
+  Context *onsafe = nullptr;
 
   if (length == 0) {
     return -EINVAL;
@@ -12685,6 +12685,7 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   client_lock.Lock();
   if (unmounting) {
     client_lock.Unlock();
+    delete onsafe;
     return -ENOTCONN;
   }
 
