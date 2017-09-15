@@ -2286,9 +2286,13 @@ int dup(string srcpath, ObjectStore *src, string dstpath, ObjectStore *dst)
       ObjectStore::Transaction t;
       int bits = src->collection_bits(cid);
       if (bits < 0) {
-	cerr << "cannot get bit count for collection " << cid << ": "
-	     << cpp_strerror(bits) << std::endl;
-	goto out;
+        if (src->get_type() == "filestore" && cid.is_meta()) {
+          bits = 0;
+        } else {
+          cerr << "cannot get bit count for collection " << cid << ": "
+               << cpp_strerror(bits) << std::endl;
+          goto out;
+        }
       }
       t.create_collection(cid, bits);
       dst->apply_transaction(&osr, std::move(t));
