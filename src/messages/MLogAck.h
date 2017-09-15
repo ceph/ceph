@@ -18,7 +18,7 @@
 class MLogAck : public Message {
 public:
   uuid_d fsid;
-  version_t last;
+  version_t last = 0;
   std::string channel;
 
   MLogAck() : Message(MSG_LOGACK) {}
