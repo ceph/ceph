@@ -3671,12 +3671,11 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   bufferlist dnbl;
   __u32 numfiles = 0;
   bool start = !offset_hash && offset_str.empty();
-  bool end = (dir->begin() == dir->end());
   // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
   dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
-  for (CDir::map_t::iterator it = start ? dir->begin() : dir->lower_bound(skip_key);
-       !end && numfiles < max;
-       end = (it == dir->end())) {
+  auto it = start ? dir->begin() : dir->lower_bound(skip_key);
+  bool end = (it == dir->end());
+  for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;
     ++it;
 
