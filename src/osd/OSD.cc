@@ -1035,7 +1035,7 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
 }
 
 
-void OSDService::queue_want_pg_temp(pg_t pgid, vector<int>& want)
+void OSDService::queue_want_pg_temp(pg_t pgid, const vector<int>& want)
 {
   Mutex::Locker l(pg_temp_lock);
   map<pg_t,vector<int> >::iterator p = pg_temp_pending.find(pgid);
@@ -1054,10 +1054,8 @@ void OSDService::remove_want_pg_temp(pg_t pgid)
 
 void OSDService::_sent_pg_temp()
 {
-  for (map<pg_t,vector<int> >::iterator p = pg_temp_wanted.begin();
-       p != pg_temp_wanted.end();
-       ++p)
-    pg_temp_pending[p->first] = p->second;
+  pg_temp_pending.insert(make_move_iterator(begin(pg_temp_wanted)),
+			 make_move_iterator(end(pg_temp_wanted)));
   pg_temp_wanted.clear();
 }
 
