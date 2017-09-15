@@ -2457,24 +2457,21 @@ protected:
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }
 
-public:
   int get_state() const { return state; }
-  bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
-  bool       is_activating() const { return state_test(PG_STATE_ACTIVATING); }
-  bool       is_peering() const { return state_test(PG_STATE_PEERING); }
-  bool       is_down() const { return state_test(PG_STATE_DOWN); }
-  bool       is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
-  bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
-  bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
-  bool       is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
-
-  bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
-  bool       is_peered() const {
+  bool is_active() const { return state_test(PG_STATE_ACTIVE); }
+  bool is_activating() const { return state_test(PG_STATE_ACTIVATING); }
+  bool is_peering() const { return state_test(PG_STATE_PEERING); }
+  bool is_down() const { return state_test(PG_STATE_DOWN); }
+  bool is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
+  bool is_clean() const { return state_test(PG_STATE_CLEAN); }
+  bool is_degraded() const { return state_test(PG_STATE_DEGRADED); }
+  bool is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
+  bool is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
+  bool is_peered() const {
     return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
   }
-protected:
 
-  bool  is_empty() const { return info.last_update == eversion_t(0,0); }
+  bool is_empty() const { return info.last_update == eversion_t(0,0); }
 
   void init(
     int role,
