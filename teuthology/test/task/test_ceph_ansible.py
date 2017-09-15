@@ -79,6 +79,7 @@ class TestCephAnsibleTask(TestTask):
             vars=dict(
                 osd_auto_discovery=True,
                 monitor_interface='eth0',
+                radosgw_interface='eth0',
                 public_network='172.21.0.0/20',
             ),
         ))
@@ -110,6 +111,7 @@ class TestCephAnsibleTask(TestTask):
             playbook=[],
             vars=dict(
                 monitor_interface='eth0',
+                radosgw_interface='eth0',
                 public_network='172.21.0.0/20',
             ),
         ))
@@ -157,11 +159,11 @@ class TestCephAnsibleTask(TestTask):
         hosts_file_obj.seek(0)
         assert hosts_file_obj.read() == '\n'.join([
             '[mdss]',
-            "remote2 monitor_interface='eth0' public_network='172.21.0.0/20'",
+            "remote2 monitor_interface='eth0' public_network='172.21.0.0/20' radosgw_interface='eth0'",
             '',
             '[mons]',
-            "remote1 monitor_interface='eth0' public_network='172.21.0.0/20'",
+            "remote1 monitor_interface='eth0' public_network='172.21.0.0/20' radosgw_interface='eth0'",
             '',
             '[osds]',
-            "remote3 monitor_interface='eth0' public_network='172.21.0.0/20'",
+            "remote3 monitor_interface='eth0' public_network='172.21.0.0/20' radosgw_interface='eth0'",
         ])
