@@ -332,7 +332,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
   } else if (pending_map.active_gid == 0) {
     // There is no currently active daemon, select this one.
     if (pending_map.standbys.count(m->get_gid())) {
-      drop_standby(m->get_gid());
+      drop_standby(m->get_gid(), false);
     }
     dout(4) << "selecting new active " << m->get_gid()
 	    << " " << m->get_name()
@@ -599,7 +599,8 @@ bool MgrMonitor::promote_standby()
     pending_map.available = false;
     pending_map.active_addr = entity_addr_t();
 
-    drop_standby(replacement_gid);
+    drop_standby(replacement_gid, false);
+
     return true;
   } else {
     return false;
@@ -624,10 +625,12 @@ void MgrMonitor::drop_active()
   cancel_timer();
 }
 
-void MgrMonitor::drop_standby(uint64_t gid)
+void MgrMonitor::drop_standby(uint64_t gid, bool drop_meta)
 {
-  pending_metadata_rm.insert(pending_map.standbys[gid].name);
-  pending_metadata.erase(pending_map.standbys[gid].name);
+  if (drop_meta) {
+    pending_metadata_rm.insert(pending_map.standbys[gid].name);
+    pending_metadata.erase(pending_map.standbys[gid].name);
+  }
   pending_map.standbys.erase(gid);
   if (last_beacon.count(gid) > 0) {
     last_beacon.erase(gid);
