@@ -16,23 +16,24 @@ def avg(data):
 
 
 class ZabbixSender(object):
-    def __init__(self, sender, host, port, log):
+    def __init__(self, sender, host, port, hostname,log):
         self.sender = sender
         self.host = host
         self.port = port
+	self.hostname = hostname
         self.log = log
 
-    def send(self, hostname, data):
+    def send(self, data):
         if len(data) == 0:
             return
 
         cmd = [self.sender, '-z', self.host, '-p', str(self.port), '-s',
-               hostname, '-vv', '-i', '-']
+               self.hostname, '-vv', '-i', '-']      
 
         proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
         for key, value in data.items():
-            proc.stdin.write('{0} ceph.{1} {2}\n'.format(hostname, key, value))
+            proc.stdin.write('{0} ceph.{1} {2}\n'.format(self.hostname, key, value))
 
         stdout, stderr = proc.communicate()
         if proc.returncode != 0:
@@ -212,8 +213,10 @@ class Module(MgrModule):
         try:
             zabbix = ZabbixSender(self.config['zabbix_sender'],
                                   self.config['zabbix_host'],
-                                  self.config['zabbix_port'], self.log)
-            zabbix.send(self.config['identifier'], data)
+                                  self.config['zabbix_port'],
+				  self.config['identifier'],
+				  self.log)
+            zabbix.send(data)
         except Exception as exc:
             self.log.error('Exception when sending: %s', exc)
 
