@@ -19,7 +19,7 @@
 #
 TIMEOUT=300
 PG_NUM=4
-: ${CEPH_BUILD_VIRTUALENV:=/tmp}
+CEPH_BUILD_VIRTUALENV=${TMPDIR:-/tmp}
 
 if type xmlstarlet > /dev/null 2>&1; then
     XMLSTARLET=xmlstarlet
