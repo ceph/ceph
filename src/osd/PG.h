@@ -248,7 +248,9 @@ struct PGPool {
 class PG : public DoutPrefixProvider {
 public:
   // -- members --
+  const spg_t pg_id;
   const coll_t coll;
+
   ObjectStore::CollectionHandle ch;
 
   // -- classes --
@@ -282,8 +284,12 @@ public:
 
   // -- methods --
   std::string gen_prefix() const override;
-  CephContext *get_cct() const override { return cct; }
-  unsigned get_subsys() const override { return ceph_subsys_osd; }
+  CephContext *get_cct() const override {
+    return cct;
+  }
+  unsigned get_subsys() const override {
+    return ceph_subsys_osd;
+  }
 
   OSDMapRef get_osdmap() const {
     assert(is_locked());
@@ -399,15 +405,65 @@ public:
   void put_with_id(uint64_t);
   void dump_live_ids();
 #endif
-
   void get(const char* tag);
   void put(const char* tag);
 
 
+  // ctor
+  PG(OSDService *o, OSDMapRef curmap,
+     const PGPool &pool, spg_t p);
+  ~PG() override;
+
+  // prevent copying
+  explicit PG(const PG& rhs) = delete;
+  PG& operator=(const PG& rhs) = delete;
 
 protected:
+  // -------------
+  // protected
   OSDService *osd;
   CephContext *cct;
+
+  // osdmap
+  OSDMapRef osdmap_ref;
+
+  PGPool pool;
+
+  // locking and reference counting.
+  // I destroy myself when the reference count hits zero.
+  // lock() should be called before doing anything.
+  // get() should be called on pointer copy (to another thread, etc.).
+  // put() should be called on destruction of some previously copied pointer.
+  // unlock() when done with the current pointer (_most common_).
+  mutable Mutex _lock = {"PG::_lock"};
+
+  std::atomic_uint ref{0};
+
+#ifdef PG_DEBUG_REFS
+  Mutex _ref_id_lock = {"PG::_ref_id_lock"};
+  map<uint64_t, string> _live_ids;
+  map<string, uint64_t> _tag_counts;
+  uint64_t _ref_id = 0;
+
+  friend uint64_t get_with_id(PG *pg) { return pg->get_with_id(); }
+  friend void put_with_id(PG *pg, uint64_t id) { return pg->put_with_id(id); }
+#endif
+
+private:
+  friend void intrusive_ptr_add_ref(PG *pg) {
+    pg->get("intptr");
+  }
+  friend void intrusive_ptr_release(PG *pg) {
+    pg->put("intptr");
+  }
+
+
+protected:
+
+
+  // =====================
+
+protected:
   OSDriver osdriver;
   SnapMapper snap_mapper;
   bool eio_errors_to_process = false;
@@ -424,9 +480,7 @@ protected:
     return get_pgbackend()->get_is_recoverable_predicate();
   }
 protected:
-  OSDMapRef osdmap_ref;
   OSDMapRef last_persisted_osdmap_ref;
-  PGPool pool;
 
   void requeue_map_waiters();
 
@@ -437,37 +491,11 @@ protected:
 
 protected:
 
-  /** locking and reference counting.
-   * I destroy myself when the reference count hits zero.
-   * lock() should be called before doing anything.
-   * get() should be called on pointer copy (to another thread, etc.).
-   * put() should be called on destruction of some previously copied pointer.
-   * unlock() when done with the current pointer (_most common_).
-   */  
-  mutable Mutex _lock;
-  std::atomic_uint ref{0};
-
-#ifdef PG_DEBUG_REFS
-  Mutex _ref_id_lock;
-  map<uint64_t, string> _live_ids;
-  map<string, uint64_t> _tag_counts;
-  uint64_t _ref_id;
-
-  friend uint64_t get_with_id(PG *pg) { return pg->get_with_id(); }
-  friend void put_with_id(PG *pg, uint64_t id) { return pg->put_with_id(id); }
-#endif
 
   bool deleting;  // true while in removing or OSD is shutting down
 
   ZTracer::Endpoint trace_endpoint;
 
-private:
-  friend void intrusive_ptr_add_ref(PG *pg) {
-    pg->get("intptr");
-  }
-  friend void intrusive_ptr_release(PG *pg) {
-    pg->put("intptr");
-  }
 
 protected:
   bool dirty_info, dirty_big_info;
@@ -2370,17 +2398,7 @@ protected:
   } recovery_state;
 
 
- public:
-  PG(OSDService *o, OSDMapRef curmap,
-     const PGPool &pool, spg_t p);
-  ~PG() override;
 
- private:
-  // Prevent copying
-  explicit PG(const PG& rhs);
-  PG& operator=(const PG& rhs);
-
-  const spg_t pg_id;
   uint64_t peer_features;
   uint64_t acting_features;
   uint64_t upacting_features;
