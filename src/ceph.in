@@ -65,28 +65,27 @@ DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH *
 
 
 def respawn_in_path(lib_path, pybind_path, pythonlib_path):
-    execv_cmd = ['python']
+    execv_cmd = []
     if 'CEPH_DBG' in os.environ:
-        execv_cmd += ['-mpdb']
+        execv_cmd += ['@PYTHON_EXECUTABLE@', '-mpdb']
 
     if platform.system() == "Darwin":
         lib_path_var = "DYLD_LIBRARY_PATH"
     else:
         lib_path_var = "LD_LIBRARY_PATH"
 
-    py_binary = os.environ.get("PYTHON", "python")
-
+    execv_cmd += sys.argv
     if lib_path_var in os.environ:
         if lib_path not in os.environ[lib_path_var]:
             os.environ[lib_path_var] += ':' + lib_path
             if "CEPH_DEV" not in os.environ:
                 print(DEVMODEMSG, file=sys.stderr)
-            os.execvp(py_binary, execv_cmd + sys.argv)
+            os.execvp(execv_cmd[0], execv_cmd)
     else:
         os.environ[lib_path_var] = lib_path
         if "CEPH_DEV" not in os.environ:
             print(DEVMODEMSG, file=sys.stderr)
-        os.execvp(py_binary, execv_cmd + sys.argv)
+        os.execvp(execv_cmd[0], execv_cmd)
     sys.path.insert(0, os.path.join(MYDIR, pybind_path))
     sys.path.insert(0, os.path.join(MYDIR, pythonlib_path))
 
