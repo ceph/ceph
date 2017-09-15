@@ -1701,15 +1701,6 @@ void PrimaryLogPG::do_request(
     }
   }
 
-  if (flushes_in_progress > 0) {
-    dout(20) << flushes_in_progress
-	     << " flushes_in_progress pending "
-	     << "waiting for active on " << op << dendl;
-    waiting_for_peered.push_back(op);
-    op->mark_delayed("waiting for peered");
-    return;
-  }
-
   if (!is_peered()) {
     // Delay unless PGBackend says it's ok
     if (pgbackend->can_handle_while_inactive(op)) {
@@ -1721,6 +1712,15 @@ void PrimaryLogPG::do_request(
       op->mark_delayed("waiting for peered");
       return;
     }
+  }
+
+  if (flushes_in_progress > 0) {
+    dout(20) << flushes_in_progress
+	     << " flushes_in_progress pending "
+	     << "waiting for flush on " << op << dendl;
+    waiting_for_flush.push_back(op);
+    op->mark_delayed("waiting for flush");
+    return;
   }
 
   assert(is_peered() && flushes_in_progress == 0);
@@ -10904,7 +10904,7 @@ void PrimaryLogPG::on_flushed()
   assert(flushes_in_progress > 0);
   flushes_in_progress--;
   if (flushes_in_progress == 0) {
-    requeue_ops(waiting_for_peered);
+    requeue_ops(waiting_for_flush);
   }
   if (!is_peered() || !is_primary()) {
     pair<hobject_t, ObjectContextRef> i;
@@ -11070,6 +11070,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
   // requeue everything in the reverse order they should be
   // reexamined.
   requeue_ops(waiting_for_peered);
+  requeue_ops(waiting_for_flush);
   requeue_ops(waiting_for_active);
 
   clear_scrub_reserved();
@@ -13470,6 +13471,7 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
 	is_active()) {
       if (op)
 	requeue_op(op);
+      requeue_ops(waiting_for_flush);
       requeue_ops(waiting_for_active);
       requeue_ops(waiting_for_scrub);
       requeue_ops(waiting_for_cache_not_full);
