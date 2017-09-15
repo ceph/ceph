@@ -258,6 +258,7 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   formatter->dump_string("referrer",  entry.referrer);
   formatter->dump_string("prot_flags", rgw_prot_flags[entry.prot_flags]);
   formatter->dump_string("resource", rgw_resources[entry.resource]);
+  formatter->dump_string("http_method", rgw_http_methods[entry.http_method]);
   if (entry.x_headers.size() > 0) {
     formatter->open_array_section("http_x_headers");
     for (const auto& iter: entry.x_headers) {
@@ -360,6 +361,8 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     set_param_str(s, "HTTP_REFERER", entry.referrer);
   set_param_str(s, "REQUEST_URI", entry.uri);
   set_param_str(s, "REQUEST_METHOD", entry.op);
+
+  entry.http_method = s->op; // track parsed http method
 
   /* custom header logging */
   if (rest) {

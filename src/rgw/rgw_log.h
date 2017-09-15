@@ -36,6 +36,7 @@ struct rgw_log_entry {
   int prot_flags;
   headers_map x_headers;
   int resource;
+  int http_method;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(10, 5, bl);
@@ -63,6 +64,7 @@ struct rgw_log_entry {
     ::encode(x_headers, bl);
     ::encode(prot_flags, bl);
     ::encode(resource, bl);
+    ::encode(http_method, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
@@ -115,6 +117,7 @@ struct rgw_log_entry {
     if (struct_v >= 10) {
       ::decode(prot_flags, p);
       ::decode(resource, p);
+      ::decode(http_method, p);
     }
     DECODE_FINISH(p);
   }

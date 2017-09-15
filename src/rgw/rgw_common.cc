@@ -223,6 +223,17 @@ rgw_resources_map rgw_resources({
     { RGW_RESOURCE_CATEGORY_PERIOD, "PERIOD" },
 });
 
+rgw_http_methods_map rgw_http_methods({
+    { OP_GET, "GET" },
+    { OP_PUT, "PUT" },
+    { OP_DELETE, "DELETE" },
+    { OP_HEAD, "HEAD" },
+    { OP_POST, "POST" },
+    { OP_COPY, "COPY" },
+    { OP_OPTIONS, "OPTIONS" },
+    { OP_UNKNOWN, "UNKNOWN" },
+});
+
 int rgw_perf_start(CephContext *cct)
 {
   PerfCountersBuilder plb(cct, cct->_conf->name.to_str(), l_rgw_first, l_rgw_last);
