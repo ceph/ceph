@@ -40,9 +40,9 @@ class RDMADispatcher {
 
   std::thread t;
   CephContext *cct;
-  Infiniband::CompletionQueue* tx_cq;
-  Infiniband::CompletionQueue* rx_cq;
-  Infiniband::CompletionChannel *tx_cc, *rx_cc;
+  Infiniband::CompletionQueue* tx_cq = nullptr;
+  Infiniband::CompletionQueue* rx_cq = nullptr;
+  Infiniband::CompletionChannel *tx_cc = nullptr, *rx_cc = nullptr;
   EventCallbackRef async_handler;
   bool done = false;
   std::atomic<uint64_t> num_dead_queue_pair = {0};
