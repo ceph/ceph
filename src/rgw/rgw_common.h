@@ -268,6 +268,9 @@ extern rgw_prot_flags_map rgw_prot_flags;
 typedef std::map<int, std::string> rgw_resources_map;
 extern rgw_resources_map rgw_resources;
 
+typedef std::map<int, std::string> rgw_http_methods_map;
+extern rgw_http_methods_map rgw_http_methods;
+
  /* size should be the required string size + 1 */
 int gen_rand_base64(CephContext *cct, char *dest, int size);
 void gen_rand_alphanumeric(CephContext *cct, char *dest, int size);
