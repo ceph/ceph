@@ -9985,7 +9985,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     sdata->sdata_op_ordering_lock.Unlock();
     return;
   }
-  if (pg && !slot.pg && !pg->deleting) {
+  if (pg && !slot.pg && !pg->is_deleting()) {
     dout(20) << __func__ << " " << item.first << " set pg to " << pg << dendl;
     slot.pg = pg;
   }
