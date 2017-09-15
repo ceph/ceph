@@ -292,6 +292,7 @@ case $1 in
 	    ;;
     --memstore )
 	    memstore=1
+	    bluestore=0
 	    ;;
     -b | --bluestore )
 	    bluestore=1
