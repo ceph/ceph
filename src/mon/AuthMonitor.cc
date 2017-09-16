@@ -271,7 +271,7 @@ void AuthMonitor::encode_full(MonitorDBStore::TransactionRef t)
   put_version_latest_full(t, version);
 }
 
-version_t AuthMonitor::get_trim_to()
+version_t AuthMonitor::get_trim_to() const
 {
   unsigned max = g_conf->paxos_max_join_drift * 2;
   version_t version = get_last_committed();

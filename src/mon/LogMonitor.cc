@@ -234,7 +234,7 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
   put_version_latest_full(t, summary.version);
 }
 
-version_t LogMonitor::get_trim_to()
+version_t LogMonitor::get_trim_to() const
 {
   if (!mon->is_leader())
     return 0;

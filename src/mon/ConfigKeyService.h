@@ -79,7 +79,7 @@ public:
   string get_name() const override {
     return "config_key";
   }
-  virtual void get_store_prefixes(set<string>& s);
+  void get_store_prefixes(set<string>& s) const;
   /**
    * @} // ConfigKeyService_Inherited_h
    */
