@@ -19,11 +19,6 @@
 #include "mon/MonMap.h"
 #include "common/Graylog.h"
 
-#ifdef DARWIN
-#include <sys/param.h>
-#include <sys/mount.h>
-#endif // DARWIN
-
 #define dout_subsys ceph_subsys_monc
 
 int parse_log_client_options(CephContext *cct,

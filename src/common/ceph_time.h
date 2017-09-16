@@ -19,13 +19,9 @@
 
 #include "include/encoding.h"
 
-#if defined(DARWIN)
+#if defined(__APPLE__)
 #include <sys/_types/_timespec.h>
-#include <mach/mach.h>
-#include <mach/clock.h>
 
-#define CLOCK_REALTIME CALENDAR_CLOCK
-#define CLOCK_MONOTONIC SYSTEM_CLOCK
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #define CLOCK_MONOTONIC_COARSE CLOCK_MONOTONIC
 

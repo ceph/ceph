@@ -6831,8 +6831,13 @@ void Client::stat_to_statx(struct stat *st, struct ceph_statx *stx)
   stx->stx_mode = st->st_mode;
   stx->stx_uid = st->st_uid;
   stx->stx_gid = st->st_gid;
+#ifdef __APPLE__
+  stx->stx_mtime = st->st_mtimespec;
+  stx->stx_atime = st->st_atimespec;
+#else
   stx->stx_mtime = st->st_mtim;
   stx->stx_atime = st->st_atim;
+#endif
 }
 
 int Client::__setattrx(Inode *in, struct ceph_statx *stx, int mask,
@@ -7521,7 +7526,7 @@ void Client::fill_dirent(struct dirent *de, const char *name, int type, uint64_t
   de->d_name[255] = '\0';
 #ifndef __CYGWIN__
   de->d_ino = ino;
-#if !defined(DARWIN) && !defined(__FreeBSD__)
+#if !defined(__APPLE__) && !defined(__FreeBSD__)
   de->d_off = next_off;
 #endif
   de->d_reclen = 1;

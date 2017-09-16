@@ -25,9 +25,13 @@
 #include <sys/vfs.h>
 #endif
 
-#if defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/param.h>
 #include <sys/mount.h>
+#if defined(__APPLE__)
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#endif
 #endif
 
 #include <string>
@@ -203,7 +207,35 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
     (*m)["hostname"] = u.nodename;
     (*m)["arch"] = u.machine;
   }
-
+#ifdef __APPLE__
+  // memory
+  {
+    uint64_t size;
+    size_t len = sizeof(size);
+    r = sysctlbyname("hw.memsize", &size, &len, NULL, 0);
+    if (r == 0) {
+      (*m)["mem_total_kb"] = std::to_string(size);
+    }
+  }
+  {
+    xsw_usage vmusage;
+    size_t len = sizeof(vmusage);
+    r = sysctlbyname("vm.swapusage", &vmusage, &len, NULL, 0);
+    if (r == 0) {
+      (*m)["mem_swap_kb"] = std::to_string(vmusage.xsu_total);
+    }
+  }
+  // processor
+  {
+    char buf[100];
+    size_t len = sizeof(buf);
+    r = sysctlbyname("machdep.cpu.brand_string", buf, &len, NULL, 0);
+    if (r == 0) {
+      buf[len - 1] = '\0';
+      (*m)["cpu"] = buf;
+    }
+  }
+#else
   // memory
   FILE *f = fopen(PROCPREFIX "/proc/meminfo", "r");
   if (f) {
@@ -248,7 +280,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
     }
     fclose(f);
   }
-
+#endif
   // distro info
   distro_detect(m, cct);
 }

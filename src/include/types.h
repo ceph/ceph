@@ -71,7 +71,7 @@ using namespace std;
 #include "assert.h"
 
 // DARWIN compatibility
-#ifdef DARWIN
+#ifdef __APPLE__
 typedef long long loff_t;
 typedef long long off64_t;
 #define O_DIRECT 00040000
@@ -471,7 +471,7 @@ WRITE_EQ_OPERATORS_1(shard_id_t, id)
 WRITE_CMP_OPERATORS_1(shard_id_t, id)
 ostream &operator<<(ostream &lhs, const shard_id_t &rhs);
 
-#if defined(__sun) || defined(_AIX) || defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__sun) || defined(_AIX) || defined(__APPLE__) || defined(__FreeBSD__)
 __s32  ceph_to_hostos_errno(__s32 e);
 __s32  hostos_to_ceph_errno(__s32 e);
 #else

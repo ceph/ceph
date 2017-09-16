@@ -43,8 +43,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
   endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-  set(CMAKE_EXE_LINKER_FLAGS "-Wl,-export-dynamic")
-  set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -rdynamic -Wl,-export-dynamic -export-dynamic")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_EXPORTS_C_FLAG}")
+  set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -rdynamic -export-dynamic ${CMAKE_EXE_EXPORTS_C_FLAG}")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-inconsistent-missing-override -Wno-mismatched-tags")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-private-field")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
@@ -52,6 +52,9 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-varargs")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-gnu-designator")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-braces -Wno-parentheses -Wno-deprecated-register")
+  if(APPLE)
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -undefined dynamic_lookup")
+  endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}")
 
@@ -88,11 +91,16 @@ endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 include(SIMDExt)
 if(HAVE_INTEL)
   set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
-  set(CMAKE_ASM_FLAGS "-f elf64")
+  if(APPLE)
+    set(object_format "macho64")
+  else()
+    set(object_format "elf64")
+  endif()
+  set(CMAKE_ASM_FLAGS "-f ${object_format}")
 endif()
 
 execute_process(
-  COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.s -o /dev/null
+  COMMAND yasm -f "${object_format}" ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.s -o /dev/null
   RESULT_VARIABLE no_yasm
   OUTPUT_QUIET)
 if(no_yasm)
@@ -114,7 +122,7 @@ else(no_yasm)
     if(not_arch_x32)
       message(STATUS " we are not x32")
       set(HAVE_GOOD_YASM_ELF64 1)
-      execute_process(COMMAND yasm -f elf64 -i
+      execute_process(COMMAND yasm -f ${object_format} -i
         ${CMAKE_SOURCE_DIR}/src/isa-l/include/
         ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm
         -o /dev/null
@@ -170,11 +178,14 @@ if(COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=${DIAGNOSTICS_COLOR}")
 endif()
 
-set(EXTRALIBS rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
-if(LINUX)
+set(EXTRALIBS ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
+if(NOT APPLE)
+  list(APPEND EXTRALIBS rt)
+endif()
+if(LINUX OR APPLE)
   set(LIB_RESOLV resolv)
   list(APPEND EXTRALIBS ${LIB_RESOLV})
-endif(LINUX)
+endif()
 
 option(WITH_PROFILER "build extra profiler binaries" OFF)
 if(WITH_PROFILER)
@@ -263,12 +274,12 @@ endif()
 
 if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread rt)
+  list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread)
 endif(HAVE_XIO)
 
 if(HAVE_RDMA)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${RDMA_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${RDMA_LIBRARIES} pthread rt)
+  list(APPEND EXTRALIBS ${RDMA_LIBRARIES} pthread)
 endif(HAVE_RDMA)
 
 if(HAVE_DPDK)
@@ -443,7 +454,6 @@ set(libcommon_files
   common/run_cmd.cc
   common/WorkQueue.cc
   common/ConfUtils.cc
-  common/MemoryModel.cc
   common/fd.cc
   common/xattr.c
   common/str_list.cc
@@ -550,7 +560,7 @@ endif()
 
 if(FREEBSD)
   list(APPEND libcommon_files common/freebsd_errno.cc)
-elseif(DARWIN)
+elseif(APPLE)
   list(APPEND libcommon_files common/darwin_errno.cc)
 elseif(SUN)
   list(APPEND libcommon_files common/solaris_errno.cc)
@@ -624,7 +634,7 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:global_common_objs>
   $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
-  json_spirit erasure_code rt ${LIB_RESOLV}
+  json_spirit erasure_code ${LIB_RESOLV}
   Boost::thread
   Boost::system
   Boost::regex
@@ -910,9 +920,9 @@ if(WITH_TESTS AND WITH_DMCLOCK_TESTS)
   add_subdirectory(dmclock/support/test)
 endif(WITH_TESTS AND WITH_DMCLOCK_TESTS)
 
-if(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
+if(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64 AND (NOT APPLE))
   add_subdirectory(crypto/isa-l)
-endif(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
+endif()
 
 if(WITH_TESTS)
 
@@ -987,14 +997,16 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(cephfs LINK_PRIVATE client ceph-common
     ${CRYPTO_LIBS} ${EXTRALIBS})
   if(ENABLE_SHARED)
-    foreach(name ceph-common client osdc)
-      set(CEPHFS_LINK_FLAGS "${CEPHFS_LINK_FLAGS} -Wl,--exclude-libs,lib${name}.a")
-    endforeach()
     set_target_properties(cephfs PROPERTIES
       OUTPUT_NAME cephfs
       VERSION 2.0.0
-      SOVERSION 2
-      LINK_FLAGS ${CEPHFS_LINK_FLAGS})
+      SOVERSION 2)
+    if(NOT APPLE)
+      foreach(name ceph-common client osdc)
+        set_property(TARGET cephfs APPEND_STRING PROPERTY
+          LINK_FLAGS " -Wl,--exclude-libs,lib${name}.a")
+      endforeach()
+    endif()
   endif(ENABLE_SHARED)
   install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(DIRECTORY
