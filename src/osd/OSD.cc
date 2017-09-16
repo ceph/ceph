@@ -2130,9 +2130,7 @@ will start to track new ops received afterwards.";
 
         list<obj_watch_item_t> pg_watchers;
         PG *pg = it->second;
-        pg->lock();
-        pg->get_watchers(pg_watchers);
-        pg->unlock();
+        pg->get_watchers(&pg_watchers);
         watchers.splice(watchers.end(), pg_watchers);
       }
     }
