@@ -240,7 +240,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   encode_health(new_checks, t);
 }
 
-version_t MDSMonitor::get_trim_to()
+version_t MDSMonitor::get_trim_to() const
 {
   version_t floor = 0;
   if (g_conf->mon_mds_force_trim_to > 0 &&

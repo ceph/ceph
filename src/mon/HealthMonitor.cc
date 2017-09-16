@@ -140,7 +140,7 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   encode_health(pending_health, t);
 }
 
-version_t HealthMonitor::get_trim_to()
+version_t HealthMonitor::get_trim_to() const
 {
   // we don't actually need *any* old states, but keep a few.
   if (version > 5) {
