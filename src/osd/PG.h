@@ -2577,14 +2577,14 @@ protected:
 public:
   static int read_info(
     ObjectStore *store, spg_t pgid, const coll_t &coll,
-    bufferlist &bl, pg_info_t &info, PastIntervals &past_intervals,
+    pg_info_t &info, PastIntervals &past_intervals,
     __u8 &);
 protected:
-  void read_state(ObjectStore *store, bufferlist &bl);
+  void read_state(ObjectStore *store);
 public:
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
   static int peek_map_epoch(ObjectStore *store, spg_t pgid,
-			    epoch_t *pepoch, bufferlist *bl);
+			    epoch_t *pepoch);
 protected:
   void update_snap_map(
     const vector<pg_log_entry_t> &log_entries,
