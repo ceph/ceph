@@ -3087,6 +3087,18 @@ extern "C" int rados_blacklist_add(rados_t cluster, char *client_address,
   return radosp->blacklist_add(client_address, expire_seconds);
 }
 
+extern "C" void rados_set_osdmap_full_try(rados_ioctx_t io)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  ctx->objecter->set_osdmap_full_try();
+}
+
+extern "C" void rados_unset_osdmap_full_try(rados_ioctx_t io)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  ctx->objecter->unset_osdmap_full_try();
+}
+
 extern "C" int rados_application_enable(rados_ioctx_t io, const char *app_name,
                                         int force)
 {
