@@ -384,6 +384,8 @@ public:
 
   void dump_pgstate_history(Formatter *f);
 
+  void get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f);
+
   virtual void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle

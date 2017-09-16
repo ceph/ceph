@@ -2579,14 +2579,11 @@ int OSD::init()
           continue;
         }
 
-        pg->pg_stats_publish_lock.Lock();
-        if (pg->pg_stats_publish_valid) {
-          m->pg_stat[pg->pg_id.pgid] = pg->pg_stats_publish;
-	  const auto lec = pg->pg_stats_publish.get_effective_last_epoch_clean();
-	  min_last_epoch_clean = min(min_last_epoch_clean, lec);
-	  min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
-        }
-        pg->pg_stats_publish_lock.Unlock();
+	pg->get_pg_stats([&](const pg_stat_t& s, epoch_t lec) {
+	    m->pg_stat[pg->pg_id.pgid] = s;
+	    min_last_epoch_clean = min(min_last_epoch_clean, lec);
+	    min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
+	  });
       }
 
       return m;
