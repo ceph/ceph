@@ -105,11 +105,10 @@ hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
-memstore=0
 if [ `uname` = FreeBSD ]; then
-    bluestore=0
+    objectstore="filestore"
 else
-    bluestore=1
+    objectstore="bluestore"
 fi
 rgw_frontend="civetweb"
 rgw_compression=""
@@ -291,13 +290,13 @@ case $1 in
 	    overwrite_conf=0
 	    ;;
     --memstore )
-	    memstore=1
+	    objectstore="memstore"
 	    ;;
     -b | --bluestore )
-	    bluestore=1
+	    objectstore="bluestore"
 	    ;;
     -f | --filestore )
-	    bluestore=0
+	    objectstore="filestore"
 	    ;;
     --hitset )
 	    hitset="$hitset $2 $3"
@@ -521,7 +520,7 @@ $DAEMONOPTS
         bluestore block wal size = 1048576000
         bluestore block wal create = true
 $COSDDEBUG
-$COSDMEMSTORE
+        osd objectstore = $objectstore
 $COSDSHORT
 $extra_conf
 [mon]
@@ -804,15 +803,6 @@ if [ -n "$MON_ADDR" ]; then
 	CMON_ARGS=" -m "$MON_ADDR
 	COSD_ARGS=" -m "$MON_ADDR
 	CMDS_ARGS=" -m "$MON_ADDR
-fi
-
-if [ "$memstore" -eq 1 ]; then
-    COSDMEMSTORE='
-	osd objectstore = memstore'
-fi
-if [ "$bluestore" -eq 1 ]; then
-    COSDMEMSTORE='
-	osd objectstore = bluestore'
 fi
 
 if [ -z "$CEPH_PORT" ]; then
