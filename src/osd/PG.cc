@@ -8141,3 +8141,12 @@ void PG::dump_pgstate_history(Formatter *f)
   pgstate_history.dump(f);
   unlock();
 }
+
+void PG::get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f)
+{
+  pg_stats_publish_lock.Lock();
+  if (pg_stats_publish_valid) {
+    f(pg_stats_publish, pg_stats_publish.get_effective_last_epoch_clean());
+  }
+  pg_stats_publish_lock.Unlock();
+}
