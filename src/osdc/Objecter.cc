@@ -2708,7 +2708,7 @@ bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
  */
 bool Objecter::_osdmap_full_flag() const
 {
-  // Ignore the FULL flag if the caller has honor_osdmap_full
+  // Ignore the FULL flag if the caller does not have honor_osdmap_full
   return osdmap->test_flag(CEPH_OSDMAP_FULL) && honor_osdmap_full;
 }
 
