@@ -3879,8 +3879,6 @@ void OSD::load_pgs()
     derr << "failed to list pgs: " << cpp_strerror(-r) << dendl;
   }
 
-  bool has_upgraded = false;
-
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
        ++it) {
@@ -3940,21 +3938,6 @@ void OSD::load_pgs()
 
     // read pg state, log
     pg->read_state(store);
-
-    if (pg->must_upgrade()) {
-      if (!pg->can_upgrade()) {
-	derr << "PG needs upgrade, but on-disk data is too old; upgrade to"
-	     << " an older version first." << dendl;
-	assert(0 == "PG too old to upgrade");
-      }
-      if (!has_upgraded) {
-	derr << "PGs are upgrading" << dendl;
-	has_upgraded = true;
-      }
-      dout(10) << "PG " << pg->pg_id
-	       << " must upgrade..." << dendl;
-      pg->upgrade(store);
-    }
 
     service.init_splits_between(pg->pg_id, pg->get_osdmap(), osdmap);
 
