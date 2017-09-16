@@ -9452,13 +9452,15 @@ void PrimaryLogPG::cancel_log_updates()
 
 // -------------------------------------------------------
 
-void PrimaryLogPG::get_watchers(list<obj_watch_item_t> &pg_watchers)
+void PrimaryLogPG::get_watchers(list<obj_watch_item_t> *ls)
 {
+  lock();
   pair<hobject_t, ObjectContextRef> i;
   while (object_contexts.get_next(i.first, &i)) {
     ObjectContextRef obc(i.second);
-    get_obc_watchers(obc, pg_watchers);
+    get_obc_watchers(obc, *ls);
   }
+  unlock();
 }
 
 void PrimaryLogPG::get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t> &pg_watchers)

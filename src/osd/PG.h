@@ -380,6 +380,8 @@ public:
   void handle_loaded(RecoveryCtx *rctx);
   void handle_query_state(Formatter *f);
 
+  virtual void get_watchers(std::list<obj_watch_item_t> *ls) = 0;
+
   virtual void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle
@@ -2677,7 +2679,6 @@ protected:
   virtual void on_flushed() = 0;
   virtual void on_shutdown() = 0;
   virtual void check_blacklisted_watchers() = 0;
-  virtual void get_watchers(std::list<obj_watch_item_t>&) = 0;
 
   friend ostream& operator<<(ostream& out, const PG& pg);
 };
