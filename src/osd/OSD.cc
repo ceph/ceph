@@ -3941,38 +3941,15 @@ void OSD::load_pgs()
 
     service.init_splits_between(pg->pg_id, pg->get_osdmap(), osdmap);
 
-    // generate state for PG's current mapping
-    int primary, up_primary;
-    vector<int> acting, up;
-    pg->get_osdmap()->pg_to_up_acting_osds(
-      pgid.pgid, &up, &up_primary, &acting, &primary);
-    pg->init_primary_up_acting(
-      up,
-      acting,
-      up_primary,
-      primary);
-    int role = OSDMap::calc_pg_role(whoami, pg->acting);
-    if (pg->pool.info.is_replicated() || role == pg->pg_whoami.shard)
-      pg->set_role(role);
-    else
-      pg->set_role(-1);
-
     pg->reg_next_scrub();
 
-    PG::RecoveryCtx rctx(0, 0, 0, 0, 0, 0);
-    pg->handle_loaded(&rctx);
-
-    dout(10) << "load_pgs loaded " << *pg << " " << pg->pg_log.get_log() << dendl;
-    if (pg->pg_log.is_dirty()) {
-      ObjectStore::Transaction t;
-      pg->write_if_dirty(t);
-      store->apply_transaction(pg->osr.get(), std::move(t));
-    }
+    dout(10) << __func__ << " loaded " << *pg << " " << pg->pg_log.get_log()
+	     << dendl;
     pg->unlock();
   }
   {
     RWLock::RLocker l(pg_map_lock);
-    dout(0) << "load_pgs opened " << pg_map.size() << " pgs" << dendl;
+    dout(0) << __func__ << " opened " << pg_map.size() << " pgs" << dendl;
   }
 
   build_past_intervals_parallel();

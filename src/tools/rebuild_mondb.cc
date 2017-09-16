@@ -370,7 +370,7 @@ int update_pgmap_pg(ObjectStore& fs, MonitorDBStore& ms)
       cerr << "failed to read_info: " << cpp_strerror(r) << std::endl;
       return r;
     }
-    if (struct_v < PG::cur_struct_v) {
+    if (struct_v < PG::get_latest_struct_v()) {
       cerr << "incompatible pg_info: v" << struct_v << std::endl;
       return -EINVAL;
     }
