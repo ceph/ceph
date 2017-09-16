@@ -38,10 +38,10 @@
 #include "common/xattr.h"
 #include "chain_xattr.h"
 
-#if defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/param.h>
 #include <sys/mount.h>
-#endif // DARWIN
+#endif
 
 
 #include <fstream>
@@ -3550,7 +3550,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
 
   if (cct->_conf->filestore_punch_hole) {
 #ifdef CEPH_HAVE_FALLOCATE
-# if !defined(DARWIN) && !defined(__FreeBSD__)
+# if !defined(__APPLE__) && !defined(__FreeBSD__)
 #    ifdef FALLOC_FL_KEEP_SIZE
     // first try to punch a hole.
     FDRef fd;
@@ -3609,7 +3609,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
   }
 
 #ifdef CEPH_HAVE_FALLOCATE
-# if !defined(DARWIN) && !defined(__FreeBSD__)
+# if !defined(__APPLE__) && !defined(__FreeBSD__)
 #    ifdef FALLOC_FL_KEEP_SIZE
  out:
 #    endif

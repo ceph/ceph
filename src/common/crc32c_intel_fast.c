@@ -1,8 +1,8 @@
 #include "acconfig.h"
 #include "common/crc32c_intel_baseline.h"
 
-extern unsigned int crc32_iscsi_00(unsigned char const *buffer, int len, unsigned int crc);
-extern unsigned int crc32_iscsi_zero_00(unsigned char const *buffer, int len, unsigned int crc);
+extern unsigned int crc32_iscsi_00(unsigned char const *buffer, uint64_t len, uint64_t crc) asm("crc32_iscsi_00");
+extern unsigned int crc32_iscsi_zero_00(unsigned char const *buffer, uint64_t len, uint64_t crc) asm("crc32_iscsi_zero_00");
 
 #ifdef HAVE_GOOD_YASM_ELF64
 

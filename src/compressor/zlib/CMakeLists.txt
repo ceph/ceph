@@ -1,6 +1,6 @@
 # zlib
 
-if(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
+if(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64 AND (NOT APPLE))
 	set(zlib_sources
 	  CompressionPluginZlib.cc
 	  ZlibCompressor.cc
@@ -30,12 +30,12 @@ if(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
 	  ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/proc_heap.asm
 	  ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/rfc1951_lookup.asm
 	)
-else(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
+else(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64 AND (NOT APPLE))
 	set(zlib_sources
 	  CompressionPluginZlib.cc
 	  ZlibCompressor.cc
 	)
-endif(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
+endif(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64 AND (NOT APPLE))
 
 add_library(ceph_zlib SHARED ${zlib_sources})
 add_dependencies(ceph_zlib ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)

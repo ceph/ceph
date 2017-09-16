@@ -130,6 +130,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+%ifidn __OUTPUT_FORMAT__, elf64
+%define ABI_IS_AMD64
+%elifidn __OUTPUT_FORMAT__, macho64
+%define ABI_IS_AMD64
+%endif
+
 ;;; ISCSI CRC 32 Implementation with crc32 Instruction
 
 ;;; unsigned int crc32_iscsi_00(unsigned char * buffer, int len, unsigned int crc_init);
@@ -142,7 +148,7 @@
 global  crc32_iscsi_00:function
 crc32_iscsi_00:
 
-%ifidn __OUTPUT_FORMAT__, elf64
+%ifdef ABI_IS_AMD64
 %define bufp            rdi
 %define bufp_dw         edi
 %define bufp_w          di
@@ -662,5 +668,7 @@ global %1_slver
 %endmacro
 ;;;       func            core, ver, snum
 slversion crc32_iscsi_00, 00,   02,  0014
+%ifidn __OUTPUT_FORMAT__, elf64
 ; inform linker that this doesn't require executable stack
 section .note.GNU-stack noalloc noexec nowrite progbits
+%endif
