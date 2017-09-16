@@ -352,6 +352,7 @@ public:
     return acting;
   }
 
+  /// initialize created PG
   void init(
     int role,
     const vector<int>& up,
@@ -362,6 +363,10 @@ public:
     const PastIntervals& pim,
     bool backfill,
     ObjectStore::Transaction *t);
+
+  /// read existing pg state off disk
+  void read_state(ObjectStore *store);
+  static int peek_map_epoch(ObjectStore *store, spg_t pgid, epoch_t *pepoch);
 
   void rm_backoff(BackoffRef b);
 
@@ -2571,12 +2576,8 @@ public:
     ObjectStore *store, spg_t pgid, const coll_t &coll,
     pg_info_t &info, PastIntervals &past_intervals,
     __u8 &);
-protected:
-  void read_state(ObjectStore *store);
-public:
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
-  static int peek_map_epoch(ObjectStore *store, spg_t pgid,
-			    epoch_t *pepoch);
+
 protected:
   void update_snap_map(
     const vector<pg_log_entry_t> &log_entries,
