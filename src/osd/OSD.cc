@@ -2238,9 +2238,7 @@ will start to track new ops received afterwards.";
 
       PG *pg = it->second;
       f->dump_stream("pg") << pg->pg_id;
-      pg->lock();
-      pg->pgstate_history.dump(f);
-      pg->unlock();
+      pg->dump_pgstate_history(f);
     }
     f->close_section();
   } else if (admin_command == "compact") {

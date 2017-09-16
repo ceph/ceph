@@ -382,6 +382,8 @@ public:
 
   virtual void get_watchers(std::list<obj_watch_item_t> *ls) = 0;
 
+  void dump_pgstate_history(Formatter *f);
+
   virtual void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle

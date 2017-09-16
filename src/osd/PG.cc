@@ -8134,3 +8134,10 @@ ostream& operator<<(ostream& out, const PG::BackfillInterval& bi)
   out << ")";
   return out;
 }
+
+void PG::dump_pgstate_history(Formatter *f)
+{
+  lock();
+  pgstate_history.dump(f);
+  unlock();
+}
