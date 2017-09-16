@@ -1987,7 +1987,6 @@ protected:
     PG::CephPeeringEvtRef evt);
   
   void load_pgs();
-  void build_past_intervals_parallel();
 
   /// build initial pg history and intervals on create
   void build_initial_pg_history(
