@@ -3260,6 +3260,30 @@ void PG::read_state(ObjectStore *store)
   if (info_struct_v < latest_struct_v) {
     upgrade(store);
   }
+
+  // initialize current mapping
+  {
+    int primary, up_primary;
+    vector<int> acting, up;
+    get_osdmap()->pg_to_up_acting_osds(
+      pg_id.pgid, &up, &up_primary, &acting, &primary);
+    init_primary_up_acting(
+      up,
+      acting,
+      up_primary,
+      primary);
+    int rr = OSDMap::calc_pg_role(osd->whoami, acting);
+    if (pool.info.is_replicated() || rr == pg_whoami.shard)
+      set_role(rr);
+    else
+      set_role(-1);
+  }
+
+  PG::RecoveryCtx rctx(0, 0, 0, 0, 0, new ObjectStore::Transaction);
+  handle_loaded(&rctx);
+  write_if_dirty(*rctx.transaction);
+  store->apply_transaction(osr.get(), std::move(*rctx.transaction));
+  delete rctx.transaction;
 }
 
 void PG::log_weirdness()
@@ -5801,8 +5825,8 @@ boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
 
   // do we tell someone we're here?
   pg->send_notify = (!pg->is_primary());
-  pg->update_store_with_options();
 
+  pg->update_store_with_options();
   pg->update_store_on_load();
 
   return transit< Reset >();

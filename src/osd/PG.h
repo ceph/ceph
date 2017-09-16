@@ -368,6 +368,18 @@ public:
   void read_state(ObjectStore *store);
   static int peek_map_epoch(ObjectStore *store, spg_t pgid, epoch_t *pepoch);
 
+  static int get_latest_struct_v() {
+    return latest_struct_v;
+  }
+  static int get_compat_struct_v() {
+    return compat_struct_v;
+  }
+  static int read_info(
+    ObjectStore *store, spg_t pgid, const coll_t &coll,
+    pg_info_t &info, PastIntervals &past_intervals,
+    __u8 &);
+  static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
+
   void rm_backoff(BackoffRef b);
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
@@ -2571,14 +2583,7 @@ protected:
   void trim_log();
 
   std::string get_corrupt_pg_log_name() const;
-public:
-  static int read_info(
-    ObjectStore *store, spg_t pgid, const coll_t &coll,
-    pg_info_t &info, PastIntervals &past_intervals,
-    __u8 &);
-  static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
 
-protected:
   void update_snap_map(
     const vector<pg_log_entry_t> &log_entries,
     ObjectStore::Transaction& t);
