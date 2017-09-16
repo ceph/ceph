@@ -307,8 +307,9 @@ int HashIndex::_split(
     &mkdirred);
 }
 
-int HashIndex::split_dirs(const vector<string> &path) {
-  dout(20) << __func__ << " " << path << dendl;
+int HashIndex::split_dirs(const vector<string> &path, int target_level) {
+  dout(20) << __func__ << " " << path << " target level: " 
+           << target_level << dendl;
   subdir_info_s info;
   int r = get_info(path, &info);
   if (r < 0) {
@@ -317,9 +318,10 @@ int HashIndex::split_dirs(const vector<string> &path) {
     return r;
   }
 
-  if (must_split(info)) {
+  if (must_split(info, target_level)) {
     dout(1) << __func__ << " " << path << " has " << info.objs
-            << " objects, starting split." << dendl;
+            << " objects, " << info.hash_level 
+            << " level, starting split." << dendl;
     r = initiate_split(path, info);
     if (r < 0) {
       dout(10) << "error initiating split on " << path << ": "
@@ -348,7 +350,7 @@ int HashIndex::split_dirs(const vector<string> &path) {
        it != subdirs.end(); ++it) {
     vector<string> subdir_path(path);
     subdir_path.push_back(*it);
-    r = split_dirs(subdir_path);
+    r = split_dirs(subdir_path, target_level);
     if (r < 0) {
       return r;
     }
@@ -357,16 +359,17 @@ int HashIndex::split_dirs(const vector<string> &path) {
   return r;
 }
 
-int HashIndex::apply_layout_settings() {
+int HashIndex::apply_layout_settings(int target_level) {
   vector<string> path;
   dout(10) << __func__ << " split multiple = " << split_multiplier
 	   << " merge threshold = " << merge_threshold
 	   << " split rand factor = " << cct->_conf->filestore_split_rand_factor
+	   << " target level = " << target_level
 	   << dendl;
   int r = write_settings();
   if (r < 0)
     return r;
-  return split_dirs(path);
+  return split_dirs(path, target_level);
 }
 
 int HashIndex::_init() {
@@ -741,10 +744,13 @@ bool HashIndex::must_merge(const subdir_info_s &info) {
 	  info.subdirs == 0);
 }
 
-bool HashIndex::must_split(const subdir_info_s &info) {
+bool HashIndex::must_split(const subdir_info_s &info, int target_level) {
+  // target_level is used for ceph-objectstore-tool to split dirs offline.
+  // if it is set (defalult is 0) and current hash level < target_level, 
+  // this dir would be split no matters how many objects it has.
   return (info.hash_level < (unsigned)MAX_HASH_LEVEL &&
-	  info.objs > ((unsigned)(abs(merge_threshold) * split_multiplier + settings.split_rand_factor) * 16));
-
+         ((target_level > 0 && info.hash_level < (unsigned)target_level) ||
+         (info.objs > ((unsigned)(abs(merge_threshold) * split_multiplier + settings.split_rand_factor) * 16))));
 }
 
 int HashIndex::initiate_merge(const vector<string> &path, subdir_info_s info) {
