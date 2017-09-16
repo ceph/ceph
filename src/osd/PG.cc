@@ -2819,6 +2819,8 @@ void PG::init(
 
 void PG::upgrade(ObjectStore *store)
 {
+  dout(0) << __func__ << " " << info_struct_v << " -> " << latest_struct_v
+	  << dendl;
   assert(info_struct_v <= 10);
   ObjectStore::Transaction t;
 
@@ -2828,9 +2830,9 @@ void PG::upgrade(ObjectStore *store)
   assert(info_struct_v == 10);
 
   // update infover_key
-  if (info_struct_v < cur_struct_v) {
+  if (info_struct_v < latest_struct_v) {
     map<string,bufferlist> v;
-    __u8 ver = cur_struct_v;
+    __u8 ver = latest_struct_v;
     ::encode(ver, v[infover_key]);
     t.omap_setkeys(coll, pgmeta_oid, v);
   }
@@ -2947,7 +2949,7 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   t.touch(coll, pgmeta_oid);
   map<string,bufferlist> values;
-  __u8 struct_v = cur_struct_v;
+  __u8 struct_v = latest_struct_v;
   ::encode(struct_v, values[infover_key]);
   t.omap_setkeys(coll, pgmeta_oid, values);
 }
@@ -3231,6 +3233,12 @@ void PG::read_state(ObjectStore *store)
 		    info_struct_v);
   assert(r >= 0);
 
+  if (info_struct_v < compat_struct_v) {
+    derr << "PG needs upgrade, but on-disk data is too old; upgrade to"
+	 << " an older version first." << dendl;
+    assert(0 == "PG too old to upgrade");
+  }
+
   last_written_info = info;
 
   ostringstream oss;
@@ -3248,6 +3256,10 @@ void PG::read_state(ObjectStore *store)
 
   // log any weirdness
   log_weirdness();
+
+  if (info_struct_v < latest_struct_v) {
+    upgrade(store);
+  }
 }
 
 void PG::log_weirdness()

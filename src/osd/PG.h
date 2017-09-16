@@ -529,22 +529,14 @@ protected:
   // pg state
   pg_info_t info;               ///< current pg info
   pg_info_t last_written_info;  ///< last written info
-  __u8 info_struct_v;
-public:
-  static const __u8 cur_struct_v = 10;
+  __u8 info_struct_v = 0;
+  static const __u8 latest_struct_v = 10;
   // v10 is the new past_intervals encoding
   // v9 was fastinfo_key addition
   // v8 was the move to a per-pg pgmeta object
   // v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
   // (first appeared in cuttlefish).
   static const __u8 compat_struct_v = 10;
-protected:
-  bool must_upgrade() {
-    return info_struct_v < cur_struct_v;
-  }
-  bool can_upgrade() {
-    return info_struct_v >= compat_struct_v;
-  }
   void upgrade(ObjectStore *store);
 
 protected:
