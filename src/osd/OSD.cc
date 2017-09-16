@@ -3380,9 +3380,9 @@ int OSD::shutdown()
         ++p) {
       dout(20) << " kicking pg " << p->first << dendl;
       p->second->lock();
-      if (p->second->ref != 1) {
+      if (p->second->get_num_ref() != 1) {
         derr << "pgid " << p->first << " has ref count of "
-            << p->second->ref << dendl;
+	     << p->second->get_num_ref() << dendl;
 #ifdef PG_DEBUG_REFS
 	p->second->dump_live_ids();
 #endif

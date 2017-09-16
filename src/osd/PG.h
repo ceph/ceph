@@ -416,6 +416,9 @@ public:
 #endif
   void get(const char* tag);
   void put(const char* tag);
+  int get_num_ref() {
+    return ref;
+  }
 
 
   // ctor
