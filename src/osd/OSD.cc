@@ -3904,9 +3904,8 @@ void OSD::load_pgs()
     }
 
     dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
-    bufferlist bl;
     epoch_t map_epoch = 0;
-    int r = PG::peek_map_epoch(store, pgid, &map_epoch, &bl);
+    int r = PG::peek_map_epoch(store, pgid, &map_epoch);
     if (r < 0) {
       derr << __func__ << " unable to peek at " << pgid << " metadata, skipping"
 	   << dendl;
@@ -3940,7 +3939,7 @@ void OSD::load_pgs()
     pg->ch = store->open_collection(pg->coll);
 
     // read pg state, log
-    pg->read_state(store, bl);
+    pg->read_state(store);
 
     if (pg->must_upgrade()) {
       if (!pg->can_upgrade()) {

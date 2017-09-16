@@ -397,14 +397,13 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   coll_t coll(pgid);
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
 
-  bufferlist bl;
   epoch_t map_epoch = 0;
-  int r = PG::peek_map_epoch(fs, pgid, &map_epoch, &bl);
+  int r = PG::peek_map_epoch(fs, pgid, &map_epoch);
   if (r < 0)
     cerr << __func__ << " warning: peek_map_epoch reported error" << std::endl;
   PastIntervals past_intervals;
   __u8 struct_v;
-  r = PG::read_info(fs, pgid, coll, bl, info, past_intervals, struct_v);
+  r = PG::read_info(fs, pgid, coll, info, past_intervals, struct_v);
   if (r < 0) {
     cerr << __func__ << " error on read_info " << cpp_strerror(r) << std::endl;
     return r;
@@ -3460,9 +3459,8 @@ int main(int argc, char **argv)
       goto out;
     }
 
-    bufferlist bl;
     map_epoch = 0;
-    ret = PG::peek_map_epoch(fs, pgid, &map_epoch, &bl);
+    ret = PG::peek_map_epoch(fs, pgid, &map_epoch);
     if (ret < 0)
       cerr << "peek_map_epoch reports error" << std::endl;
     if (debug)
@@ -3471,8 +3469,7 @@ int main(int argc, char **argv)
     pg_info_t info(pgid);
     PastIntervals past_intervals;
     __u8 struct_ver;
-    ret = PG::read_info(fs, pgid, coll, bl, info, past_intervals,
-		      struct_ver);
+    ret = PG::read_info(fs, pgid, coll, info, past_intervals, struct_ver);
     if (ret < 0) {
       cerr << "read_info error " << cpp_strerror(ret) << std::endl;
       goto out;

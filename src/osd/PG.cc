@@ -2997,19 +2997,15 @@ bool PG::_has_removal_flag(ObjectStore *store,
 
 int PG::peek_map_epoch(ObjectStore *store,
 		       spg_t pgid,
-		       epoch_t *pepoch,
-		       bufferlist *bl)
+		       epoch_t *pepoch)
 {
   coll_t coll(pgid);
   ghobject_t legacy_infos_oid(OSD::make_infos_oid());
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   epoch_t cur_epoch = 0;
 
-  assert(bl);
-  {
-    // validate collection name
-    assert(coll.is_pg());
-  }
+  // validate collection name
+  assert(coll.is_pg());
 
   // try for v8
   set<string> keys;
@@ -3193,7 +3189,7 @@ std::string PG::get_corrupt_pg_log_name() const
 }
 
 int PG::read_info(
-  ObjectStore *store, spg_t pgid, const coll_t &coll, bufferlist &bl,
+  ObjectStore *store, spg_t pgid, const coll_t &coll,
   pg_info_t &info, PastIntervals &past_intervals,
   __u8 &struct_v)
 {
@@ -3229,9 +3225,9 @@ int PG::read_info(
   return 0;
 }
 
-void PG::read_state(ObjectStore *store, bufferlist &bl)
+void PG::read_state(ObjectStore *store)
 {
-  int r = read_info(store, pg_id, coll, bl, info, past_intervals,
+  int r = read_info(store, pg_id, coll, info, past_intervals,
 		    info_struct_v);
   assert(r >= 0);
 
