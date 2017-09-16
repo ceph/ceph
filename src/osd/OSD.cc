@@ -3257,14 +3257,8 @@ int OSD::shutdown()
   // Shutdown PGs
   {
     RWLock::RLocker l(pg_map_lock);
-    for (ceph::unordered_map<spg_t, PG*>::iterator p = pg_map.begin();
-        p != pg_map.end();
-        ++p) {
-      dout(20) << " kicking pg " << p->first << dendl;
-      p->second->lock();
-      p->second->on_shutdown();
-      p->second->unlock();
-      p->second->osr->flush();
+    for (auto& p : pg_map) {
+      p.second->shutdown();
     }
   }
 

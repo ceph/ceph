@@ -1784,7 +1784,8 @@ public:
   void on_activate() override;
   void on_flushed() override;
   void on_removal(ObjectStore::Transaction *t) override;
-  void on_shutdown() override;
+  void shutdown() override;
+  void on_shutdown();
   bool check_failsafe_full(ostream &ss) override;
   bool check_osdmap_full(const set<pg_shard_t> &missing_on) override;
   int rep_repair_primary_object(const hobject_t& soid, OpRequestRef op);
