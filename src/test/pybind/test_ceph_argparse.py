@@ -860,14 +860,15 @@ class TestOSD(TestArgparse):
 
     def test_set_unset(self):
         for action in ('set', 'unset'):
-            for flag in ('pause', 'noup', 'nodown', 'noout', 'noin',
-                         'nobackfill', 'norecover', 'noscrub', 'nodeep-scrub'):
-                self.assert_valid_command(['osd', action, flag])
-            assert_equal({}, validate_command(sigdict, ['osd', action]))
-            assert_equal({}, validate_command(sigdict, ['osd', action,
-                                                        'invalid']))
-            assert_equal({}, validate_command(sigdict, ['osd', action,
-                                                        'pause', 'toomany']))
+            self.check_1_or_more_string_args('osd', action)
+        flagset = ('pause', 'noup', 'nodown', 'noout', 'noin', 'norebalance',
+                   'nobackfill', 'norecover', 'noscrub', 'nodeep-scrub')
+        for i in range(1, len(flagset) + 1):
+            flags = ''
+            for j in range(0, i):
+                flags += ' ' + flagset[j]
+            self.assert_valid_command(['osd', 'set', flags])
+            self.assert_valid_command(['osd', 'unset', flags])
 
     def test_cluster_snap(self):
         assert_equal(None, validate_command(sigdict, ['osd', 'cluster_snap']))

@@ -725,12 +725,14 @@ COMMAND("osd erasure-code-profile ls", \
 	"list all erasure code profiles", \
 	"osd", "r", "cli,rest")
 COMMAND("osd set " \
-	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|sortbitwise|recovery_deletes|require_jewel_osds|require_kraken_osds " \
+        "name=key,type=CephString,n=N " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
-	"set <key>", "osd", "rw", "cli,rest")
+	"set flag(s) <key> [<key>...] that is within full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|sortbitwise|recovery_deletes|require_jewel_osds|require_kraken_osds",
+	"osd", "rw", "cli,rest")
 COMMAND("osd unset " \
-	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent", \
-	"unset <key>", "osd", "rw", "cli,rest")
+        "name=key,type=CephString,n=N", \
+	"unset flag(s) <key> [<key>...] that is within full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent",
+	"osd", "rw", "cli,rest")
 COMMAND("osd require-osd-release "\
 	"name=release,type=CephChoices,strings=luminous|mimic " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
