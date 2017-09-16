@@ -871,7 +871,7 @@ public:
 	cct->_conf->osd_scrub_cost,
 	scrub_queue_priority,
 	ceph_clock_now(),
-	entity_inst_t(),
+	0,
 	pg->get_osdmap()->get_epoch()));
   }
 
@@ -899,7 +899,7 @@ private:
 	cct->_conf->osd_recovery_cost,
 	cct->_conf->osd_recovery_priority,
 	ceph_clock_now(),
-	entity_inst_t(),
+	0,
 	p.first));
   }
 public:
@@ -1632,7 +1632,7 @@ private:
       OSDMapRef waiting_for_pg_osdmap;
       struct pg_slot {
 	PGRef pg;                     ///< cached pg reference [optional]
-	list<PGQueueable> to_process; ///< order items for this slot
+	deque<PGQueueable> to_process; ///< order items for this slot
 	int num_running = 0;          ///< _process threads doing pg lookup/lock
 
 	/// true if pg does/did not exist. if so all new items go directly to
@@ -1650,7 +1650,7 @@ private:
       unordered_map<spg_t,pg_slot> pg_slots;
 
       /// priority queue
-      std::unique_ptr<OpQueue< pair<spg_t, PGQueueable>, entity_inst_t>> pqueue;
+      std::unique_ptr<OpQueue< pair<spg_t, PGQueueable>, uint64_t>> pqueue;
 
       void _enqueue_front(pair<spg_t, PGQueueable> item, unsigned cutoff) {
 	unsigned priority = item.second.get_priority();
@@ -1674,13 +1674,13 @@ private:
 				 false, cct) {
 	if (opqueue == io_queue::weightedpriority) {
 	  pqueue = std::unique_ptr
-	    <WeightedPriorityQueue<pair<spg_t,PGQueueable>,entity_inst_t>>(
-	      new WeightedPriorityQueue<pair<spg_t,PGQueueable>,entity_inst_t>(
+	    <WeightedPriorityQueue<pair<spg_t,PGQueueable>,uint64_t>>(
+	      new WeightedPriorityQueue<pair<spg_t,PGQueueable>,uint64_t>(
 		max_tok_per_prio, min_cost));
 	} else if (opqueue == io_queue::prioritized) {
 	  pqueue = std::unique_ptr
-	    <PrioritizedQueue<pair<spg_t,PGQueueable>,entity_inst_t>>(
-	      new PrioritizedQueue<pair<spg_t,PGQueueable>,entity_inst_t>(
+	    <PrioritizedQueue<pair<spg_t,PGQueueable>,uint64_t>>(
+	      new PrioritizedQueue<pair<spg_t,PGQueueable>,uint64_t>(
 		max_tok_per_prio, min_cost));
 	} else if (opqueue == io_queue::mclock_opclass) {
 	  pqueue = std::unique_ptr
