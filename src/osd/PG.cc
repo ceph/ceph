@@ -2273,6 +2273,18 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   dirty_big_info = true;
 }
 
+void PG::start_split_stats(const set<spg_t>& childpgs, vector<object_stat_sum_t> *out)
+{
+  out->resize(childpgs.size() + 1);
+  info.stats.stats.sum.split(*out);
+}
+
+void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t)
+{
+  info.stats.stats.sum = stats;
+  write_if_dirty(*t);
+}
+
 void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
 {
   ConnectionRef con = s->con;

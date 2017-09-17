@@ -388,6 +388,16 @@ public:
 
   void rm_backoff(BackoffRef b);
 
+  void start_split_stats(const set<spg_t>& childpgs, vector<object_stat_sum_t> *v);
+  virtual void split_colls(
+    spg_t child,
+    int split_bits,
+    int seed,
+    const pg_pool_t *pool,
+    ObjectStore::Transaction *t) = 0;
+  void split_into(pg_t child_pgid, PG *child, unsigned split_bits);
+  void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t);
+
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
   void reg_next_scrub();
   void unreg_next_scrub();
@@ -1382,7 +1392,6 @@ protected:
   void start_recovery_op(const hobject_t& soid);
   void finish_recovery_op(const hobject_t& soid, bool dequeue=false);
 
-  void split_into(pg_t child_pgid, PG *child, unsigned split_bits);
   virtual void _split_into(pg_t child_pgid, PG *child, unsigned split_bits) = 0;
 
   friend class C_OSD_RepModify_Commit;
@@ -1603,12 +1612,6 @@ protected:
                         boost::optional<uint32_t>>> &missing_digest) { }
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
-  virtual void split_colls(
-    spg_t child,
-    int split_bits,
-    int seed,
-    const pg_pool_t *pool,
-    ObjectStore::Transaction *t) = 0;
   void clear_scrub_reserved();
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();
