@@ -8846,11 +8846,11 @@ void OSD::do_recovery(
     dout(20) << "  active was " << service.recovery_oids[pg->pg_id] << dendl;
 #endif
 
-    bool wip = pg->start_recovery_ops(reserved_pushes, handle, &started);
+    bool do_unfound = pg->start_recovery_ops(reserved_pushes, handle, &started);
     dout(10) << "do_recovery started " << started << "/" << reserved_pushes 
 	     << " on " << *pg << dendl;
 
-    if (!wip && pg->have_unfound()) {
+    if (do_unfound) {
       PG::RecoveryCtx rctx = create_context();
       rctx.handle = &handle;
       pg->find_unfound(queued, &rctx);
