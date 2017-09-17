@@ -1,4 +1,5 @@
 import cherrypy
+import json
 import math
 import os
 import time
@@ -59,6 +60,115 @@ def stattype_to_str(stattype):
     return ''
 
 
+def health_status_to_number(status):
+
+    if status == 'HEALTH_OK':
+        return 0
+    elif status == 'HEALTH_WARN':
+        return 1
+    elif status == 'HEALTH_ERR':
+        return 2
+
+PG_STATES = ['creating', 'active', 'clean', 'down', 'scrubbing', 'degraded',
+        'inconsistent', 'peering', 'repair', 'recovering', 'forced-recovery',
+        'backfill', 'forced-backfill', 'wait-backfill', 'backfill-toofull',
+        'incomplete', 'stale', 'remapped', 'undersized', 'peered']
+
+DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
+
+DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
+           'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
+
+OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr', 'weight')
+
+POOL_METADATA= ('pool_id', 'name')
+
+PERF_COUNTERS = {
+    'mon': [
+        'mon.election_call',
+        'mon.election_lose',
+        'mon.election_win',
+        'mon.num_elections',
+        'mon.num_sessions',
+        'mon.session_add',
+        'mon.session_rm',
+        'mon.session_trim',
+        'paxos.accept_timeout',
+        'paxos.begin',
+        'paxos.begin_bytes',
+        'paxos.begin_keys',
+        'paxos.begin_latency',
+        'paxos.collect',
+        'paxos.collect_bytes',
+        'paxos.collect_keys',
+        'paxos.collect_latency',
+        'paxos.collect_timeout',
+        'paxos.collect_uncommitted',
+        'paxos.commit',
+        'paxos.commit_bytes',
+        'paxos.commit_keys',
+        'paxos.commit_latency',
+        'paxos.lease_ack_timeout',
+        'paxos.lease_timeout',
+        'paxos.new_pn',
+        'paxos.new_pn_latency',
+        'paxos.refresh',
+        'paxos.refresh_latency',
+        'paxos.restart',
+        'paxos.share_state',
+        'paxos.share_state_bytes',
+        'paxos.share_state_keys',
+        'paxos.start_leader',
+        'paxos.start_peon',
+        'paxos.store_state',
+        'paxos.store_state_bytes',
+        'paxos.store_state_keys',
+        'paxos.store_state_latency',
+        'rocksdb.compact',
+        'rocksdb.compact_queue_len',
+        'rocksdb.compact_queue_merge',
+        'rocksdb.compact_range',
+        'rocksdb.get',
+        'rocksdb.get_latency',
+        'rocksdb.rocksdb_write_delay_time',
+        'rocksdb.rocksdb_write_memtable_time',
+        'rocksdb.rocksdb_write_pre_and_post_time',
+        'rocksdb.rocksdb_write_wal_time',
+        'rocksdb.submit_latency',
+        'rocksdb.submit_sync_latency',
+        'rocksdb.submit_transaction',
+        'rocksdb.submit_transaction_sync'
+    ],
+    'osd': [
+        'osd.stat_bytes',
+        'osd.stat_bytes_used',
+        'osd.buffer_size',
+        'osd.op_cache_hit',
+        'osd.op_in_bytes',
+        'osd.op_latency',
+        'osd.op_out_bytes',
+        'osd.op_prepare_latency',
+        'osd.op_process_latency',
+        'osd.op_r',
+        'osd.op_r_latency',
+        'osd.op_r_out_bytes',
+        'osd.op_r_prepare_latency',
+        'osd.op_r_process_latency',
+        'osd.op_rw',
+        'osd.op_rw_in_bytes',
+        'osd.op_rw_latency',
+        'osd.op_rw_out_bytes',
+        'osd.op_rw_prepare_latency',
+        'osd.op_rw_process_latency',
+        'osd.op_w',
+        'osd.op_w_in_bytes',
+        'osd.op_w_latency',
+        'osd.op_w_prepare_latency',
+        'osd.op_w_process_latency',
+    ]
+}
+
+
 class Metric(object):
     def __init__(self, mtype, name, desc, labels=None):
         self.mtype = mtype
@@ -76,7 +186,8 @@ class Metric(object):
 
         def promethize(path):
             ''' replace illegal metric name characters '''
-            return path.replace('.', '_').replace('-', '_')
+            return 'ceph_{}'.format(
+                    path.replace('.', '_').replace('-', '_').replace('::', '_'))
 
         def floatstr(value):
             ''' represent as Go-compatible float '''
@@ -121,9 +232,61 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self.notified = False
         self.serving = False
-        self.metrics = dict()
+        self.metrics = self._setup_static_metrics()
         self.schema = OrderedDict()
         _global_instance['plugin'] = self
+
+    def _setup_static_metrics(self):
+        metrics = {}
+        metrics['health_status'] = Metric(
+            'undef',
+            'health_status',
+            'Cluster health status'
+        )
+        metrics['mon_quorum_count'] = Metric(
+            'gauge',
+            'mon_quorum_count',
+            'Monitors in quorum'
+        )
+        metrics['osd_metadata'] = Metric(
+            'undef',
+            'osd_metadata',
+            'OSD Metadata',
+            OSD_METADATA
+        )
+        metrics['pool_metadata'] = Metric(
+            'undef',
+            'pool_metadata',
+            'POOL Metadata',
+            POOL_METADATA
+        )
+        for state in PG_STATES:
+            path = 'pg_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'PG {}'.format(state),
+            )
+        for state in DF_CLUSTER:
+            path = 'cluster_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'DF {}'.format(state),
+            )
+        for state in DF_POOL:
+            path = 'pool_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'DF pool {}'.format(state),
+                ('pool_id',)
+            )
+
+        return metrics
 
     def _get_ordered_schema(self, **kwargs):
 
@@ -143,16 +306,9 @@ class Module(MgrModule):
             self.log.warning('_get_ordered_schema: no data')
             return
 
-        new_schema = dict()
-        for k1 in schema.keys():    # 'perf_schema', but assume only one
-            for k2 in sorted(schema[k1].keys()):
-                sorted_dict = OrderedDict(
-                    sorted(schema[k1][k2].items(), key=lambda i: i[0])
-                )
-                new_schema[k2] = sorted_dict
-        for k in sorted(new_schema.keys()):
-            self.log.debug("updating schema for %s" % k)
-            self.schema[k] = new_schema[k]
+        k = '{}.{}'.format(daemon_type, daemon_id)
+        self.log.debug("updating schema for %s" % k)
+        self.schema[k] = schema['perf_schema'][k]
 
     def shutdown(self):
         self.serving = False
@@ -168,6 +324,10 @@ class Module(MgrModule):
 
     def get_stat(self, daemon, path):
 
+        if daemon not in self.schema or path not in self.schema[daemon]:
+            self.log.debug('{} for {} not (yet) in schema'.format(path,
+                                                                  daemon))
+            return
         perfcounter = self.schema[daemon][path]
         stattype = stattype_to_str(perfcounter['type'])
         # XXX simplify first effort: no histograms
@@ -176,32 +336,93 @@ class Module(MgrModule):
             self.log.debug('ignoring %s, type %s' % (path, stattype))
             return
 
+        daemon_type, daemon_id = daemon.split('.')
+
         if path not in self.metrics:
             self.metrics[path] = Metric(
                 stattype,
                 path,
                 perfcounter['description'],
-                ('daemon',),
+                (daemon_type,),
             )
-
-        daemon_type, daemon_id = daemon.split('.')
 
         self.metrics[path].set(
             self.get_latest(daemon_type, daemon_id, path),
-            (daemon,)
+            (daemon_id,)
         )
 
+    def get_health(self):
+        health = json.loads(self.get('health')['json'])
+        self.metrics['health_status'].set(
+            health_status_to_number(health['status'])
+        )
+
+    def get_df(self):
+        # maybe get the to-be-exported metrics from a config?
+        df = self.get('df')
+        for stat in DF_CLUSTER:
+            path = 'cluster_{}'.format(stat)
+            self.metrics[path].set(df['stats'][stat])
+
+        for pool in df['pools']:
+            for stat in DF_POOL:
+                path = 'pool_{}'.format(stat)
+                self.metrics[path].set(pool['stats'][stat], (pool['id'],))
+
+    def get_quorum_status(self):
+        mon_status = json.loads(self.get('mon_status')['json'])
+        self.metrics['mon_quorum_count'].set(len(mon_status['quorum']))
+
+    def get_pg_status(self):
+        # TODO add per pool status?
+        pg_s = self.get('pg_summary')['all']
+        reported_pg_s = [(s,v) for key, v in pg_s.items() for s in
+                         key.split('+')]
+        for state, value in reported_pg_s:
+            path = 'pg_{}'.format(state)
+            self.metrics[path].set(value)
+        reported_states = [s[0] for s in reported_pg_s]
+        for state in PG_STATES:
+            path = 'pg_{}'.format(state)
+            if state not in reported_states:
+                self.metrics[path].set(0)
+
+    def get_metadata(self):
+        osd_map = self.get('osd_map')
+        osd_dev = self.get('osd_map_crush')['devices']
+        for osd in osd_map['osds']:
+            id_ = osd['osd']
+            p_addr = osd['public_addr']
+            c_addr = osd['cluster_addr']
+            w = osd['weight']
+            dev_class = next((osd for osd in osd_dev if osd['id'] == id_))
+            self.metrics['osd_metadata'].set(0, (
+                c_addr,
+                dev_class['class'],
+                id_,
+                p_addr,
+                w
+            ))
+
+        for pool in osd_map['pools']:
+            id_ = pool['pool']
+            name = pool['pool_name']
+            self.metrics['pool_metadata'].set(0, (id_, name))
+
     def collect(self):
+        self.get_health()
+        self.get_df()
+        self.get_quorum_status()
+        self.get_metadata()
+        self.get_pg_status()
         for daemon in self.schema.keys():
-            for path in self.schema[daemon].keys():
-                self.get_stat(daemon, path)
+            d_type = daemon.split('.')[0]
+            if d_type in PERF_COUNTERS:
+                for path in PERF_COUNTERS[d_type]:
+                    self.get_stat(daemon, path)
         return self.metrics
 
     def notify(self, ntype, nid):
-        ''' Just try to sync and not run until we're notified once '''
-        if not self.notified:
-            self.serving = True
-            self.notified = True
         if ntype == 'perf_schema_update':
             daemon_type, daemon_id = nid.split('.')
             self._get_ordered_schema(
@@ -226,6 +447,17 @@ class Module(MgrModule):
 
             @cherrypy.expose
             def index(self):
+                return '''<!DOCTYPE html>
+<html>
+	<head><title>Ceph Exporter</title></head>
+	<body>
+		<h1>Ceph Exporter</h1>
+		<p><a href='/metrics'>Metrics</a></p>
+	</body>
+</html>'''
+
+            @cherrypy.expose
+            def metrics(self):
                 metrics = global_instance().collect()
                 cherrypy.response.headers['Content-Type'] = 'text/plain'
                 if metrics:
@@ -237,9 +469,6 @@ class Module(MgrModule):
             "server_addr: %s server_port: %s" %
             (server_addr, server_port)
         )
-        # wait for first notification (of any kind) to start up
-        while not self.serving:
-            time.sleep(1)
 
         cherrypy.config.update({
             'server.socket_host': server_addr,
