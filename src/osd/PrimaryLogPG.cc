@@ -11094,7 +11094,7 @@ bool PrimaryLogPG::start_recovery_ops(
     /* TODO: I think this case is broken and will make do_recovery()
      * unhappy since we're returning false */
     dout(10) << "recovery raced and were queued twice, ignoring!" << dendl;
-    return false;
+    return have_unfound();
   }
 
   const auto &missing = pg_log.get_missing();
@@ -11159,7 +11159,7 @@ bool PrimaryLogPG::start_recovery_ops(
 
   if (!recovering.empty() ||
       work_in_progress || recovery_ops_active > 0 || deferred_backfill)
-    return work_in_progress;
+    return !work_in_progress && have_unfound();
 
   assert(recovering.empty());
   assert(recovery_ops_active == 0);
@@ -11173,14 +11173,14 @@ bool PrimaryLogPG::start_recovery_ops(
   int unfound = get_num_unfound();
   if (unfound) {
     dout(10) << " still have " << unfound << " unfound" << dendl;
-    return work_in_progress;
+    return true;
   }
 
   if (missing.num_missing() > 0) {
     // this shouldn't happen!
     osd->clog->error() << info.pgid << " Unexpected Error: recovery ending with "
 		       << missing.num_missing() << ": " << missing.get_items();
-    return work_in_progress;
+    return false;
   }
 
   if (needs_recovery()) {
@@ -11188,7 +11188,7 @@ bool PrimaryLogPG::start_recovery_ops(
     // We already checked num_missing() so we must have missing replicas
     osd->clog->error() << info.pgid 
                        << " Unexpected Error: recovery ending with missing replicas";
-    return work_in_progress;
+    return false;
   }
 
   if (state_test(PG_STATE_RECOVERING)) {
