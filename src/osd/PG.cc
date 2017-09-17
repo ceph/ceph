@@ -5722,6 +5722,46 @@ void PG::queue_query(epoch_t msg_epoch,
 					 MQuery(from, q, query_epoch))));
 }
 
+void PG::stuck_on_unfound(epoch_t queued, bool wip, RecoveryCtx *rctx)
+{
+  /*
+    * if we couldn't start any recovery ops and things are still
+    * unfound, see if we can discover more missing object locations.
+    * It may be that our initial locations were bad and we errored
+    * out while trying to pull.
+    */
+  if (!wip && have_unfound()) {
+    discover_all_missing(*rctx->query_map);
+    if (rctx->query_map->empty()) {
+      string action;
+      if (state_test(PG_STATE_BACKFILLING)) {
+	auto evt = PG::CephPeeringEvtRef(
+	  new PG::CephPeeringEvt(
+	    queued,
+	    queued,
+	    PG::DeferBackfill(cct->_conf->osd_recovery_retry_interval)));
+	queue_peering_event(evt);
+	action = "in backfill";
+      } else if (state_test(PG_STATE_RECOVERING)) {
+	auto evt = PG::CephPeeringEvtRef(
+	  new PG::CephPeeringEvt(
+	    queued,
+	    queued,
+	    PG::DeferRecovery(cct->_conf->osd_recovery_retry_interval)));
+	queue_peering_event(evt);
+	action = "in recovery";
+      } else {
+	action = "already out of recovery/backfill";
+      }
+      dout(10) << __func__ << ": no luck, giving up on this pg for now (" << action << ")" << dendl;
+    } else {
+      dout(10) << __func__ << ": no luck, giving up on this pg for now (queue_recovery)" << dendl;
+      queue_recovery();
+    }
+  }
+  write_if_dirty(*rctx->transaction);
+}
+
 void PG::handle_advance_map(
   OSDMapRef osdmap, OSDMapRef lastmap,
   vector<int>& newup, int up_primary,

@@ -410,6 +410,18 @@ public:
 
   void handle_pg_trim(epoch_t epoch, int from, shard_id_t shard, eversion_t trim_to);
 
+  /**
+   * @param ops_begun returns how many recovery ops the function started
+   * @returns true if any useful work was accomplished; false otherwise
+   */
+  virtual bool start_recovery_ops(
+    uint64_t max,
+    ThreadPool::TPHandle &handle,
+    uint64_t *ops_begun) = 0;
+
+  // more work after the above, but with a RecoveryCtx
+  void stuck_on_unfound(epoch_t queued, bool wip, RecoveryCtx *rctx);
+
   virtual void get_watchers(std::list<obj_watch_item_t> *ls) = 0;
 
   void dump_pgstate_history(Formatter *f);
@@ -1341,15 +1353,6 @@ protected:
   }
 
   virtual void check_local() = 0;
-
-  /**
-   * @param ops_begun returns how many recovery ops the function started
-   * @returns true if any useful work was accomplished; false otherwise
-   */
-  virtual bool start_recovery_ops(
-    uint64_t max,
-    ThreadPool::TPHandle &handle,
-    uint64_t *ops_begun) = 0;
 
   void purge_strays();
 
