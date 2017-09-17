@@ -3730,7 +3730,6 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
 
   dout(10) << "Adding newly split pg " << *pg << dendl;
   pg->handle_loaded(rctx);
-  pg->write_if_dirty(*(rctx->transaction));
   pg->queue_null(e, e);
   map<spg_t, list<PG::CephPeeringEvtRef> >::iterator to_wake =
     peering_wait_for_split.find(pg->pg_id);
@@ -4029,7 +4028,6 @@ int OSD::handle_pg_peering_evt(
 	history, pi,
 	*rctx.transaction);
       pg->handle_create(&rctx);
-      pg->write_if_dirty(*rctx.transaction);
       dispatch_context(rctx, pg, osdmap);
 
       dout(10) << *pg << " is new" << dendl;
@@ -4064,7 +4062,6 @@ int OSD::handle_pg_peering_evt(
 	old_past_intervals,
 	*rctx.transaction);
       pg->handle_create(&rctx);
-      pg->write_if_dirty(*rctx.transaction);
       dispatch_context(rctx, pg, osdmap);
 
       dout(10) << *pg << " is new (resurrected)" << dendl;
@@ -4101,7 +4098,6 @@ int OSD::handle_pg_peering_evt(
 	*rctx.transaction
 	);
       parent->handle_create(&rctx);
-      parent->write_if_dirty(*rctx.transaction);
       dispatch_context(rctx, parent, osdmap);
 
       dout(10) << *parent << " is new" << dendl;
