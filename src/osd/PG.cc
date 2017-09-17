@@ -3076,6 +3076,31 @@ void PG::trim_log()
   }
 }
 
+void PG::handle_pg_trim(epoch_t epoch, int from, shard_id_t shard, eversion_t trim_to)
+{
+  if (epoch < info.history.same_interval_since) {
+    dout(10) << " got old trim to " << trim_to << ", ignoring" << dendl;
+    return;
+  }
+
+  if (is_primary()) {
+    // peer is informing us of their last_complete_ondisk
+    dout(10) << " replica osd." << from << " lcod " << trim_to << dendl;
+    peer_last_complete_ondisk[pg_shard_t(from, shard)] = trim_to;
+
+    // trim log when the pg is recovered
+    calc_min_last_complete_ondisk();
+  } else {
+    // primary is instructing us to trim
+    ObjectStore::Transaction t;
+    pg_log.trim(trim_to, info);
+    dirty_info = true;
+    write_if_dirty(t);
+    int tr = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+    assert(tr == 0);
+  }
+}
+
 void PG::add_log_entry(const pg_log_entry_t& e, bool applied)
 {
   // raise last_complete only if we were previously up to date

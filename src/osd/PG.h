@@ -408,6 +408,8 @@ public:
   void handle_loaded(RecoveryCtx *rctx);
   void handle_query_state(Formatter *f);
 
+  void handle_pg_trim(epoch_t epoch, int from, shard_id_t shard, eversion_t trim_to);
+
   virtual void get_watchers(std::list<obj_watch_item_t> *ls) = 0;
 
   void dump_pgstate_history(Formatter *f);
