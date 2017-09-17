@@ -11083,6 +11083,11 @@ bool PrimaryLogPG::start_recovery_ops(
   started = 0;
   bool work_in_progress = false;
   assert(is_primary());
+  assert(is_peered());
+  assert(!is_deleting());
+
+  assert(recovery_queued);
+  recovery_queued = false;
 
   if (!state_test(PG_STATE_RECOVERING) &&
       !state_test(PG_STATE_BACKFILLING)) {

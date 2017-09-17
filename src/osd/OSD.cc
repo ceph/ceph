@@ -8841,12 +8841,6 @@ void OSD::do_recovery(
       goto out;
     }
 
-    assert(!pg->is_deleting());
-    assert(pg->is_peered() && pg->is_primary());
-
-    assert(pg->recovery_queued);
-    pg->recovery_queued = false;
-
     dout(10) << "do_recovery starting " << reserved_pushes << " " << *pg << dendl;
 #ifdef DEBUG_RECOVERY_OIDS
     dout(20) << "  active was " << service.recovery_oids[pg->pg_id] << dendl;
