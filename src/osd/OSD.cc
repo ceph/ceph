@@ -8850,15 +8850,12 @@ void OSD::do_recovery(
     dout(10) << "do_recovery started " << started << "/" << reserved_pushes 
 	     << " on " << *pg << dendl;
 
-    // If no recovery op is started, don't bother to manipulate the RecoveryCtx
-    if (!started && (wip || !pg->have_unfound())) {
-      goto out;
+    if (!wip && pg->have_unfound()) {
+      PG::RecoveryCtx rctx = create_context();
+      rctx.handle = &handle;
+      pg->find_unfound(queued, &rctx);
+      dispatch_context(rctx, pg, pg->get_osdmap());
     }
-
-    PG::RecoveryCtx rctx = create_context();
-    rctx.handle = &handle;
-    pg->stuck_on_unfound(queued, wip, &rctx);
-    dispatch_context(rctx, pg, pg->get_osdmap());
   }
 
  out:
