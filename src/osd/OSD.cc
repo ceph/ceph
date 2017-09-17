@@ -7930,8 +7930,8 @@ void OSD::split_pgs(
     parent->get_pgid().get_split_bits(pg_num)
     );
 
-  vector<object_stat_sum_t> updated_stats(childpgids.size() + 1);
-  parent->info.stats.stats.sum.split(updated_stats);
+  vector<object_stat_sum_t> updated_stats;
+  parent->start_split_stats(childpgids, &updated_stats);
 
   vector<object_stat_sum_t>::iterator stat_iter = updated_stats.begin();
   for (set<spg_t>::const_iterator i = childpgids.begin();
@@ -7960,14 +7960,12 @@ void OSD::split_pgs(
       i->pgid,
       child,
       split_bits);
-    child->info.stats.stats.sum = *stat_iter;
 
-    child->write_if_dirty(*(rctx->transaction));
+    child->finish_split_stats(*stat_iter, rctx->transaction);
     child->unlock();
   }
   assert(stat_iter != updated_stats.end());
-  parent->info.stats.stats.sum = *stat_iter;
-  parent->write_if_dirty(*(rctx->transaction));
+  parent->finish_split_stats(*stat_iter, rctx->transaction);
 }
 
 /*
