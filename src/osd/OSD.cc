@@ -8391,29 +8391,7 @@ void OSD::handle_pg_trim(OpRequestRef op)
     dout(10) << " don't have pg " << m->pgid << dendl;
     return;
   }
-
-  if (m->epoch < pg->info.history.same_interval_since) {
-    dout(10) << *pg << " got old trim to " << m->trim_to << ", ignoring" << dendl;
-    pg->unlock();
-    return;
-  }
-
-  if (pg->is_primary()) {
-    // peer is informing us of their last_complete_ondisk
-    dout(10) << *pg << " replica osd." << from << " lcod " << m->trim_to << dendl;
-    pg->peer_last_complete_ondisk[pg_shard_t(from, m->pgid.shard)] =
-      m->trim_to;
-    // trim log when the pg is recovered
-    pg->calc_min_last_complete_ondisk();
-  } else {
-    // primary is instructing us to trim
-    ObjectStore::Transaction t;
-    pg->pg_log.trim(m->trim_to, pg->info);
-    pg->dirty_info = true;
-    pg->write_if_dirty(t);
-    int tr = store->queue_transaction(pg->osr.get(), std::move(t), NULL);
-    assert(tr == 0);
-  }
+  pg->handle_pg_trim(m->epoch, from, m->pgid.shard, m->trim_to);
   pg->unlock();
 }
 
