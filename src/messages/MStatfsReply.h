@@ -18,7 +18,7 @@
 
 class MStatfsReply : public Message {
 public:
-  struct ceph_mon_statfs_reply h;
+  struct ceph_mon_statfs_reply h{};
 
   MStatfsReply() : Message(CEPH_MSG_STATFS_REPLY) {}
   MStatfsReply(uuid_d &f, ceph_tid_t t, epoch_t epoch) : Message(CEPH_MSG_STATFS_REPLY) {
