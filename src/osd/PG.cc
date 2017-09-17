@@ -5644,9 +5644,13 @@ void PG::take_waiters()
 		       peering_waiters.begin(), peering_waiters.end());
 }
 
-void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
+void PG::process_peering_event(RecoveryCtx *rctx)
 {
-  dout(10) << "handle_peering_event: " << evt->get_desc() << dendl;
+  assert(!peering_queue.empty());
+  CephPeeringEvtRef evt = peering_queue.front();
+  peering_queue.pop_front();
+
+  dout(10) << __func__ << ": " << evt->get_desc() << dendl;
   if (!have_same_or_newer_map(evt->get_epoch_sent())) {
     dout(10) << "deferring event " << evt->get_desc() << dendl;
     peering_waiters.push_back(evt);
@@ -5655,6 +5659,7 @@ void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
   if (old_peering_evt(evt))
     return;
   recovery_state.handle_event(evt, rctx);
+  write_if_dirty(*rctx->transaction);
 }
 
 void PG::queue_peering_event(CephPeeringEvtRef evt)
@@ -5745,7 +5750,10 @@ void PG::handle_activate_map(RecoveryCtx *rctx)
 	     << last_persisted_osdmap_ref->get_epoch()
 	     << " while current is " << osdmap_ref->get_epoch() << dendl;
   }
-  if (osdmap_ref->check_new_blacklist_entries()) check_blacklisted_watchers();
+  if (osdmap_ref->check_new_blacklist_entries()) {
+    check_blacklisted_watchers();
+  }
+  write_if_dirty(*rctx->transaction);
 }
 
 void PG::handle_loaded(RecoveryCtx *rctx)

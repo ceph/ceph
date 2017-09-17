@@ -9110,15 +9110,11 @@ void OSD::process_peering_events(
       // handle an event
       peering_wq.queue(pg);
     } else {
-      assert(!pg->peering_queue.empty());
-      PG::CephPeeringEvtRef evt = pg->peering_queue.front();
-      pg->peering_queue.pop_front();
-      pg->handle_peering_event(evt, &rctx);
+      pg->process_peering_event(&rctx);
     }
     need_up_thru = pg->need_up_thru || need_up_thru;
     same_interval_since = MAX(pg->info.history.same_interval_since,
 			      same_interval_since);
-    pg->write_if_dirty(*rctx.transaction);
     if (!split_pgs.empty()) {
       rctx.on_applied->add(new C_CompleteSplits(this, split_pgs));
       split_pgs.clear();

@@ -393,7 +393,7 @@ public:
   void set_force_backfill(bool b);
 
   void queue_peering_event(CephPeeringEvtRef evt);
-  void handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx);
+  void process_peering_event(RecoveryCtx *rctx);
   void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
 		   pg_shard_t from, const pg_query_t& q);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
