@@ -8859,55 +8859,19 @@ void OSD::do_recovery(
     dout(20) << "  active was " << service.recovery_oids[pg->pg_id] << dendl;
 #endif
 
-    bool more = pg->start_recovery_ops(reserved_pushes, handle, &started);
+    bool wip = pg->start_recovery_ops(reserved_pushes, handle, &started);
     dout(10) << "do_recovery started " << started << "/" << reserved_pushes 
 	     << " on " << *pg << dendl;
 
     // If no recovery op is started, don't bother to manipulate the RecoveryCtx
-    if (!started && (more || !pg->have_unfound())) {
+    if (!started && (wip || !pg->have_unfound())) {
       goto out;
     }
 
     PG::RecoveryCtx rctx = create_context();
     rctx.handle = &handle;
-
-    /*
-     * if we couldn't start any recovery ops and things are still
-     * unfound, see if we can discover more missing object locations.
-     * It may be that our initial locations were bad and we errored
-     * out while trying to pull.
-     */
-    if (!more && pg->have_unfound()) {
-      pg->discover_all_missing(*rctx.query_map);
-      if (rctx.query_map->empty()) {
-	string action;
-        if (pg->state_test(PG_STATE_BACKFILLING)) {
-	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
-	    queued,
-	    queued,
-	    PG::DeferBackfill(cct->_conf->osd_recovery_retry_interval)));
-	  pg->queue_peering_event(evt);
-	  action = "in backfill";
-        } else if (pg->state_test(PG_STATE_RECOVERING)) {
-	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
-	    queued,
-	    queued,
-	    PG::DeferRecovery(cct->_conf->osd_recovery_retry_interval)));
-	  pg->queue_peering_event(evt);
-	  action = "in recovery";
-	} else {
-	  action = "already out of recovery/backfill";
-	}
-	dout(10) << __func__ << ": no luck, giving up on this pg for now (" << action << ")" << dendl;
-      } else {
-	dout(10) << __func__ << ": no luck, giving up on this pg for now (queue_recovery)" << dendl;
-	pg->queue_recovery();
-      }
-    }
-
-    pg->write_if_dirty(*rctx.transaction);
-    OSDMapRef curmap = pg->get_osdmap();
-    dispatch_context(rctx, pg, curmap);
+    pg->stuck_on_unfound(queued, wip, &rctx);
+    dispatch_context(rctx, pg, pg->get_osdmap());
   }
 
  out:
