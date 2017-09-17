@@ -436,7 +436,7 @@ public:
     uint64_t *ops_begun) = 0;
 
   // more work after the above, but with a RecoveryCtx
-  void stuck_on_unfound(epoch_t queued, bool wip, RecoveryCtx *rctx);
+  void find_unfound(epoch_t queued, RecoveryCtx *rctx);
 
   virtual void get_watchers(std::list<obj_watch_item_t> *ls) = 0;
 
