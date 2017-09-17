@@ -219,7 +219,7 @@ class MonMsgTest : public MonClientHelper,
                    public ::testing::Test
 {
 protected:
-  int reply_type;
+  int reply_type = 0;
   Message *reply_msg = nullptr;
   Mutex lock;
   Cond cond;
