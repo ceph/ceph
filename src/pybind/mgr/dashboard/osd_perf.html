@@ -42,7 +42,6 @@
                     });
                 });
 
-
                 $.each(data.values, function(i, row) {
                     var tr = $("<tr style='height: 10px;'></tr>").appendTo(hist_table);
                     $.each(row, function(j, col) {
@@ -121,26 +120,29 @@
 
 <section class="content">
 
-    <table>
-        <tr>
-            <td>
-                <h3>Writes</h3>
-                <table id="heatmap_write">
-                </table>
-            </td><td>&nbsp;</td><td>
-                <h3>Reads</h3>
-                <table id="heatmap_read">
-                </table>
-            </td>
-        </tr>
-    </table>
+<div class="row">
+    <div class="col-md-4">
+        <h3>Writes</h3>
+        <table id="heatmap_write">
+        </table>
+    </div>
+    <div class="col-md-4">
+        <h3>Reads</h3>
+        <table id="heatmap_read">
+        </table>
+    </div>
+</div>
+<hr>
 
+<div class="row">
+
+<div class="col-md-6">
 <div class="box">
     <div class="box-header">
         <h3 class="box-title">Attributes (OSD map)</h3>
     </div>
     <div class="box-body">
-        <table>
+        <table id="attribute-table" class="sorting_asc table table-condensed">
             <thead>
             <tr>
                 <th>Key</th>
@@ -156,13 +158,15 @@
         </table>
     </div>
 </div>
+</div>
 
+<div class="col-md-6">
 <div class="box">
     <div class="box-header">
         <h3 class="box-title">Metadata</h3>
     </div>
     <div class="box-body">
-        <table>
+        <table id="metadata-table" class="sorting_asc table table-condensed back_edit">
             <thead>
             <tr>
                 <th>Key</th>
@@ -178,7 +182,19 @@
         </table>
     </div>
 </div>
+</div>
+</div>
 
+<script>
+  $(function () {
+    $("#attribute-table").DataTable({
+        paging: false
+    });
+    $('#metadata-table').DataTable({
+        paging: false
+    });
+  });
+</script>
 
 </section>
 <!-- /.content -->

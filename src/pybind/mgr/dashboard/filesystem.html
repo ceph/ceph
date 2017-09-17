@@ -201,7 +201,7 @@
                     <h3 class="box-title">Ranks</h3>
                 </div>
                 <div class="box-body">
-                    <table class="table table-condensed">
+                    <table id="ranks-table" class="sorting_asc table table-condensed">
                         <thead>
                         <tr>
                             <th>Rank</th>
@@ -232,7 +232,7 @@
                     <h3 class="box-title">Pools</h3>
                 </div>
                 <div class="box-body">
-                    <table class="table table-condensed">
+                    <table id="pools-table" class="sorting_asc table table-condensed">
                         <thead>
                         <tr>
                             <th>Pool</th>
@@ -286,6 +286,16 @@
     <div id="mds_charts" style="color: #ddd;">
     </div>
 
+    <script>
+      $(function () {
+        $("#pools-table").DataTable({
+            paging: false
+        });
+        $('#ranks-table').DataTable({
+            paging: false
+        });
+      });
+    </script>
 </section>
 <!-- /.content -->
 
