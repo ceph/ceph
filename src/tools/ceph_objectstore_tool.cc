@@ -468,6 +468,7 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
 	     divergent_priors_t &divergent,
 	     pg_missing_t &missing)
 {
+  cout << __func__ << " info " << info << std::endl;
   int ret = write_info(t, epoch, info, past_intervals);
   if (ret)
     return ret;
@@ -754,7 +755,7 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
   PGLog::IndexedLog log;
   pg_missing_t missing;
 
-  cerr << "Exporting " << pgid << std::endl;
+  cerr << "Exporting " << pgid << " info " << info << std::endl;
 
   int ret = get_log(fs, struct_ver, coll, pgid, info, log, missing);
   if (ret > 0)
