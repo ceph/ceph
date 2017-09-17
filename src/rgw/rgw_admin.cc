@@ -249,6 +249,7 @@ void usage()
   cout << "   --source-zone             specify the source zone (for data sync)\n";
   cout << "   --default                 set entity (realm, zonegroup, zone) as default\n";
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
+  cout << "   --redirect-zone           specify zone id to redirect when response is 404 (not found)\n";
   cout << "   --placement-id            placement id for zonegroup placement commands\n";
   cout << "   --tags=<list>             list of tags for zonegroup placement add and modify commands\n";
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
@@ -2341,6 +2342,8 @@ int main(int argc, const char **argv)
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix;
+  std::string redirect_zone;
+  bool redirect_zone_set = false;
   list<string> endpoints;
   int tmp_int;
   int sync_from_all_specified = false;
@@ -2703,6 +2706,9 @@ int main(int argc, const char **argv)
       is_master_set = true;
     } else if (ceph_argparse_binary_flag(args, i, &set_default, NULL, "--default", (char*)NULL)) {
       /* do nothing */
+    } else if (ceph_argparse_witharg(args, i, &val, "--redirect-zone", (char*)NULL)) {
+      redirect_zone = val;
+      redirect_zone_set = true;
     } else if (ceph_argparse_binary_flag(args, i, &read_only_int, NULL, "--read-only", (char*)NULL)) {
       read_only = (bool)read_only_int;
       is_read_only_set = true;
@@ -3470,12 +3476,14 @@ int main(int argc, const char **argv)
         zone.tier_config = tier_config_add;
 
         bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
+        string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 
         ret = zonegroup.add_zone(zone,
                                  (is_master_set ? &is_master : NULL),
                                  (is_read_only_set ? &read_only : NULL),
                                  endpoints, ptier_type,
-                                 psync_from_all, sync_from, sync_from_rm);
+                                 psync_from_all, sync_from, sync_from_rm,
+                                 predirect_zone);
 	if (ret < 0) {
 	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
 	       << cpp_strerror(-ret) << std::endl;
@@ -3890,13 +3898,15 @@ int main(int argc, const char **argv)
 	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
           string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
           bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
+          string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 	  ret = zonegroup.add_zone(zone,
                                    (is_master_set ? &is_master : NULL),
                                    (is_read_only_set ? &read_only : NULL),
                                    endpoints,
                                    ptier_type,
                                    psync_from_all,
-                                   sync_from, sync_from_rm);
+                                   sync_from, sync_from_rm,
+                                   predirect_zone);
 	  if (ret < 0) {
 	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name()
 		 << ": " << cpp_strerror(-ret) << std::endl;
@@ -4163,12 +4173,14 @@ int main(int argc, const char **argv)
         string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
 
         bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
+        string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 
         ret = zonegroup.add_zone(zone,
                                  (is_master_set ? &is_master : NULL),
                                  (is_read_only_set ? &read_only : NULL),
                                  endpoints, ptier_type,
-                                 psync_from_all, sync_from, sync_from_rm);
+                                 psync_from_all, sync_from, sync_from_rm,
+                                 predirect_zone);
 	if (ret < 0) {
 	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
