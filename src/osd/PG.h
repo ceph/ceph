@@ -326,6 +326,12 @@ public:
   const pg_history_t& get_history() const {
     return info.history;
   }
+  bool get_need_up_thru() const {
+    return need_up_thru;
+  }
+  epoch_t get_same_interval_since() const {
+    return info.history.same_interval_since;
+  }
 
   void set_last_scrub_stamp(utime_t t) {
     info.history.last_scrub_stamp = t;

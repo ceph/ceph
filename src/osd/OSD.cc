@@ -4121,9 +4121,9 @@ int OSD::handle_pg_peering_evt(
     }
   } else {
     // already had it.  did the mapping change?
-    if (epoch < pg->info.history.same_interval_since) {
+    if (epoch < pg->get_same_interval_since()) {
       dout(10) << *pg << __func__ << " acting changed in "
-	       << pg->info.history.same_interval_since
+	       << pg->get_same_interval_since()
 	       << " (msg from " << epoch << ")" << dendl;
     } else {
       pg->queue_peering_event(evt);
@@ -9053,8 +9053,8 @@ void OSD::process_peering_events(
     } else {
       pg->process_peering_event(&rctx);
     }
-    need_up_thru = pg->need_up_thru || need_up_thru;
-    same_interval_since = MAX(pg->info.history.same_interval_since,
+    need_up_thru = pg->get_need_up_thru() || need_up_thru;
+    same_interval_since = MAX(pg->get_same_interval_since(),
 			      same_interval_since);
     if (!split_pgs.empty()) {
       rctx.on_applied->add(new C_CompleteSplits(this, split_pgs));
