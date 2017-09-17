@@ -5826,6 +5826,7 @@ void PG::handle_loaded(RecoveryCtx *rctx)
   dout(10) << "handle_loaded" << dendl;
   Load evt;
   recovery_state.handle_event(evt, rctx);
+  write_if_dirty(*rctx->transaction);
 }
 
 void PG::handle_create(RecoveryCtx *rctx)
@@ -5836,6 +5837,7 @@ void PG::handle_create(RecoveryCtx *rctx)
   recovery_state.handle_event(evt, rctx);
   ActMap evt2;
   recovery_state.handle_event(evt2, rctx);
+  write_if_dirty(*rctx->transaction);
 }
 
 void PG::handle_query_state(Formatter *f)
