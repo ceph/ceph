@@ -6889,15 +6889,13 @@ void OSD::sched_scrub()
       PG *pg = _lookup_lock_pg(scrub.pgid);
       if (!pg)
 	continue;
-      if (pg->is_active()) {
-	dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time
-		 << (pg->get_must_scrub() ? ", explicitly requested" :
-		     (load_is_low ? ", load_is_low" : " deadline < now"))
-		 << dendl;
-	if (pg->sched_scrub()) {
-	  pg->unlock();
-	  break;
-	}
+      dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time
+	       << (pg->get_must_scrub() ? ", explicitly requested" :
+		   (load_is_low ? ", load_is_low" : " deadline < now"))
+	       << dendl;
+      if (pg->sched_scrub()) {
+	pg->unlock();
+	break;
       }
       pg->unlock();
     } while (service.next_scrub_stamp(scrub, &scrub));
