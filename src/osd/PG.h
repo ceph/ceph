@@ -495,6 +495,8 @@ public:
   virtual void agent_clear() = 0;
   virtual void agent_choose_mode_restart() = 0;
 
+  virtual void on_removal(ObjectStore::Transaction *t) = 0;
+
   void pg_remove_object(const ghobject_t& oid, ObjectStore::Transaction *t);
 
   // reference counting
@@ -2706,7 +2708,6 @@ protected:
 
   // recovery bits
   void take_waiters();
-  virtual void on_removal(ObjectStore::Transaction *t) = 0;
 
 
   // abstract bits
