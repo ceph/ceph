@@ -409,6 +409,9 @@ public:
 
   void rm_backoff(BackoffRef b);
 
+  void update_snap_mapper_bits(uint32_t bits) {
+    snap_mapper.update_bits(bits);
+  }
   void start_split_stats(const set<spg_t>& childpgs, vector<object_stat_sum_t> *v);
   virtual void split_colls(
     spg_t child,
@@ -575,9 +578,6 @@ protected:
 
 protected:
   /*** PG ****/
-  void update_snap_mapper_bits(uint32_t bits) {
-    snap_mapper.update_bits(bits);
-  }
   /// get_is_recoverable_predicate: caller owns returned pointer and must delete when done
   IsPGRecoverablePredicate *get_is_recoverable_predicate() {
     return get_pgbackend()->get_is_recoverable_predicate();
