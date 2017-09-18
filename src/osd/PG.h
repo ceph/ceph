@@ -466,6 +466,7 @@ public:
   bool get_must_scrub() const {
     return scrubber.must_scrub;
   }
+  bool sched_scrub();
 
   virtual void do_request(
     OpRequestRef& op,
@@ -1638,7 +1639,6 @@ protected:
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();
   bool scrub_all_replicas_reserved() const;
-  bool sched_scrub();
 
   void replica_scrub(
     OpRequestRef op,
