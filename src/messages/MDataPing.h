@@ -36,7 +36,7 @@ class MDataPing : public Message {
   static const int COMPAT_VERSION = 1;
 
   std::string tag;
-  uint32_t counter;
+  uint32_t counter = 0;
   mdata_hook_func mdata_hook;
   struct xio_reg_mem mp;
   bool free_data;
