@@ -104,10 +104,14 @@ public:
  */
 class RGWUserBuckets
 {
-  map<string, RGWBucketEnt> buckets;
+  std::map<std::string, RGWBucketEnt> buckets;
 
 public:
-  RGWUserBuckets() {}
+  RGWUserBuckets() = default;
+  RGWUserBuckets(RGWUserBuckets&&) = default;
+
+  RGWUserBuckets& operator=(const RGWUserBuckets&) = default;
+
   void encode(bufferlist& bl) const {
     ::encode(buckets, bl);
   }
