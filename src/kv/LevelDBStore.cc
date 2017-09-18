@@ -143,10 +143,10 @@ LevelDBStore::~LevelDBStore()
 {
   close();
   delete logger;
-  delete ceph_logger;
 
   // Ensure db is destroyed before dependent db_cache and filterpolicy
   db.reset();
+  delete ceph_logger;
 }
 
 void LevelDBStore::close()
