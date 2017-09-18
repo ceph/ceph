@@ -463,6 +463,10 @@ public:
 
   virtual void shutdown() = 0;
 
+  bool get_must_scrub() const {
+    return scrubber.must_scrub;
+  }
+
   virtual void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle
