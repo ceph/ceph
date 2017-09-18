@@ -774,8 +774,8 @@ struct Payload {
     PING = 0,
     PONG = 1,
   };
-  uint8_t who;
-  uint64_t seq;
+  uint8_t who = 0;
+  uint64_t seq = 0;
   bufferlist data;
 
   Payload(Who who, uint64_t seq, const bufferlist& data)
