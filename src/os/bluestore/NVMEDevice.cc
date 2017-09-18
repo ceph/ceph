@@ -365,7 +365,12 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
  again:
     dout(40) << __func__ << " polling" << dendl;
     if (current_queue_depth) {
-      spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion);
+      r = spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion);
+      if (r < 0) {
+        ceph_abort();
+      } else if (r == 0) {
+        usleep(g_conf->get_val<uint64_t>("bluestore_spdk_io_sleep"));
+      }
     }
 
     for (; t; t = t->next) {
@@ -626,6 +631,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
         opts.master_core = m_core_arg;
         opts.mem_size = mem_size_arg;
         spdk_env_init(&opts);
+        spdk_unaffinitize_thread();
 
         spdk_nvme_retry_count = g_ceph_context->_conf->bdev_nvme_retry_count;
         if (spdk_nvme_retry_count < 0)
