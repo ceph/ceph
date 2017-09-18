@@ -276,12 +276,11 @@ bool DaemonServer::ms_dispatch(Message *m)
 
 void DaemonServer::maybe_ready(int32_t osd_id)
 {
-  Mutex::Locker l(lock);
-
-  if (!pgmap_ready && reported_osds.find(osd_id) == reported_osds.end()) {
-    dout(4) << "initial report from osd " << osd_id << dendl;
-    reported_osds.insert(osd_id);
-    std::set<int32_t> up_osds;
+  if (pgmap_ready.load()) {
+    // Fast path: we don't need to take lock because pgmap_ready
+    // is already set
+  } else {
+    Mutex::Locker l(lock);
 
     if (reported_osds.find(osd_id) == reported_osds.end()) {
       dout(4) << "initial report from osd " << osd_id << dendl;
