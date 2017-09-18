@@ -1,0 +1,15 @@
+roles:
+- [mon.a, osd.0, osd.1, client.0]
+tasks:
+- install:
+- ceph:
+    fs: xfs
+    conf:
+      osd:
+# we may land on ext4
+        osd max object name len: 400
+        osd max object namespace len: 64
+- workunit:
+    clients:
+      all:
+        - rados/test_pool_access.sh

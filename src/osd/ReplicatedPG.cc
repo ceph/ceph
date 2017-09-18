@@ -1620,17 +1620,17 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     }
   }
 
+  if (!op_has_sufficient_caps(op)) {
+    osd->reply_op_error(op, -EPERM);
+    return;
+  }
+
   if (op->includes_pg_op()) {
     if (pg_op_must_wait(m)) {
       wait_for_all_missing(op);
       return;
     }
     return do_pg_op(op);
-  }
-
-  if (!op_has_sufficient_caps(op)) {
-    osd->reply_op_error(op, -EPERM);
-    return;
   }
 
   hobject_t head(m->get_oid(), m->get_object_locator().key,
