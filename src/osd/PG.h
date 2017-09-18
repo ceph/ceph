@@ -320,6 +320,9 @@ public:
     return pg_id;
   }
 
+  const PGPool& get_pool() const {
+    return pool;
+  }
   uint64_t get_last_user_version() const {
     return info.last_user_version;
   }

@@ -7916,7 +7916,7 @@ void OSD::split_pgs(
       *i,
       split_bits,
       i->ps(),
-      &child->pool.info,
+      &child->get_pool().info,
       rctx->transaction);
     parent->split_into(
       i->pgid,
