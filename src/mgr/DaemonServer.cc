@@ -73,7 +73,8 @@ DaemonServer::DaemonServer(MonClient *monc_,
                     g_conf->auth_supported.empty() ?
                       g_conf->auth_cluster_required :
                       g_conf->auth_supported),
-      lock("DaemonServer")
+      lock("DaemonServer"),
+      pgmap_ready(false)
 {
   g_conf->add_observer(this);
 }
@@ -275,31 +276,36 @@ bool DaemonServer::ms_dispatch(Message *m)
 
 void DaemonServer::maybe_ready(int32_t osd_id)
 {
-  Mutex::Locker l(lock);
+  if (pgmap_ready.load()) {
+    // Fast path: we don't need to take lock because pgmap_ready
+    // is already set
+  } else {
+    Mutex::Locker l(lock);
 
-  if (!pgmap_ready && reported_osds.find(osd_id) == reported_osds.end()) {
-    dout(4) << "initial report from osd " << osd_id << dendl;
-    reported_osds.insert(osd_id);
-    std::set<int32_t> up_osds;
+    if (reported_osds.find(osd_id) == reported_osds.end()) {
+      dout(4) << "initial report from osd " << osd_id << dendl;
+      reported_osds.insert(osd_id);
+      std::set<int32_t> up_osds;
 
-    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-        osdmap.get_up_osds(up_osds);
-    });
+      cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+          osdmap.get_up_osds(up_osds);
+      });
 
-    std::set<int32_t> unreported_osds;
-    std::set_difference(up_osds.begin(), up_osds.end(),
-                        reported_osds.begin(), reported_osds.end(),
-                        std::inserter(unreported_osds, unreported_osds.begin()));
+      std::set<int32_t> unreported_osds;
+      std::set_difference(up_osds.begin(), up_osds.end(),
+                          reported_osds.begin(), reported_osds.end(),
+                          std::inserter(unreported_osds, unreported_osds.begin()));
 
-    if (unreported_osds.size() == 0) {
-      dout(4) << "all osds have reported, sending PG state to mon" << dendl;
-      pgmap_ready = true;
-      reported_osds.clear();
-      // Avoid waiting for next tick
-      send_report();
-    } else {
-      dout(4) << "still waiting for " << unreported_osds.size() << " osds"
-                 " to report in before PGMap is ready" << dendl;
+      if (unreported_osds.size() == 0) {
+        dout(4) << "all osds have reported, sending PG state to mon" << dendl;
+        pgmap_ready = true;
+        reported_osds.clear();
+        // Avoid waiting for next tick
+        send_report();
+      } else {
+        dout(4) << "still waiting for " << unreported_osds.size() << " osds"
+                   " to report in before PGMap is ready" << dendl;
+      }
     }
   }
 }
