@@ -4040,13 +4040,13 @@ int OSD::handle_pg_peering_evt(
     case RES_SELF: {
       old_pg_state->lock();
       OSDMapRef old_osd_map = old_pg_state->get_osdmap();
-      int old_role = old_pg_state->role;
-      vector<int> old_up = old_pg_state->up;
-      int old_up_primary = old_pg_state->up_primary.osd;
-      vector<int> old_acting = old_pg_state->acting;
-      int old_primary = old_pg_state->primary.osd;
-      pg_history_t old_history = old_pg_state->info.history;
-      PastIntervals old_past_intervals = old_pg_state->past_intervals;
+      int old_role = old_pg_state->get_role();
+      vector<int> old_up = old_pg_state->get_up();
+      int old_up_primary = old_pg_state->get_up_primary();
+      vector<int> old_acting = old_pg_state->get_acting();
+      int old_primary = old_pg_state->get_acting_primary();
+      pg_history_t old_history = old_pg_state->get_history();
+      PastIntervals old_past_intervals = old_pg_state->get_past_intervals();
       old_pg_state->unlock();
       pg = _create_lock_pg(
 	old_osd_map,
@@ -4075,13 +4075,13 @@ int OSD::handle_pg_peering_evt(
       assert(old_pg_state);
       old_pg_state->lock();
       OSDMapRef old_osd_map = old_pg_state->get_osdmap();
-      int old_role = old_pg_state->role;
-      vector<int> old_up = old_pg_state->up;
-      int old_up_primary = old_pg_state->up_primary.osd;
-      vector<int> old_acting = old_pg_state->acting;
-      int old_primary = old_pg_state->primary.osd;
-      pg_history_t old_history = old_pg_state->info.history;
-      PastIntervals old_past_intervals = old_pg_state->past_intervals;
+      int old_role = old_pg_state->get_role();
+      vector<int> old_up = old_pg_state->get_up();
+      int old_up_primary = old_pg_state->get_up_primary();
+      vector<int> old_acting = old_pg_state->get_acting();
+      int old_primary = old_pg_state->get_acting_primary();
+      pg_history_t old_history = old_pg_state->get_history();
+      PastIntervals old_past_intervals = old_pg_state->get_past_intervals();
       old_pg_state->unlock();
       PG *parent = _create_lock_pg(
 	old_osd_map,
