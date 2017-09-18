@@ -182,7 +182,7 @@ static void distro_detect(map<string, string> *m, CephContext *cct)
     lderr(cct) << "distro_detect - /etc/os-release is required" << dendl;
   }
 
-  for (const char* rk: {"distro", "distro_version"}) {
+  for (const char* rk: {"distro", "distro_description"}) {
     if (m->find(rk) == m->end())
       lderr(cct) << "distro_detect - can't detect " << rk << dendl;
   }
