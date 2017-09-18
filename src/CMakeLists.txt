@@ -297,7 +297,7 @@ elseif(ALLOCATOR STREQUAL "libc")
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
 else()
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-  message(WARNING "Possibly incorrect allocator selected:" ${ALLOCATOR})
+  message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
 endif()
 
 # tcmalloc heap profiler
