@@ -6864,7 +6864,7 @@ inline int PrimaryLogPG::_delete_oid(
       }
     }
   } else {
-    legacy = false;
+    legacy = true;
   }
   dout(20) << __func__ << " " << soid << " whiteout=" << (int)whiteout
 	   << " no_whiteout=" << (int)no_whiteout
