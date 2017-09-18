@@ -564,9 +564,6 @@ private:
   }
 
 
-protected:
-
-
   // =====================
 
 protected:
@@ -1096,8 +1093,6 @@ protected:
   map<pg_shard_t, BackfillInterval> peer_backfill_info;
   bool backfill_reserved;
   bool backfill_reserving;
-
-  friend class OSD;
 
   set<pg_shard_t> backfill_targets;
 
