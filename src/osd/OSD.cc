@@ -6891,7 +6891,7 @@ void OSD::sched_scrub()
 	continue;
       if (pg->is_active()) {
 	dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time
-		 << (pg->scrubber.must_scrub ? ", explicitly requested" :
+		 << (pg->get_must_scrub() ? ", explicitly requested" :
 		     (load_is_low ? ", load_is_low" : " deadline < now"))
 		 << dendl;
 	if (pg->sched_scrub()) {
