@@ -229,8 +229,6 @@ class CephFSVolumeClient(object):
 
     # Current version
     version = 1
-    # Earliest compatible version
-    compat_version = 1
 
     # Where shall we create our volumes?
     POOL_PREFIX = "fsvolume_"
