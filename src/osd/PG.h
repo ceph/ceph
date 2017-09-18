@@ -253,8 +253,8 @@ struct PGPool {
 
 class PG : public DoutPrefixProvider {
 public:
-  void set_force_recovery(bool b);
-  void set_force_backfill(bool b);
+  bool set_force_recovery(bool b);
+  bool set_force_backfill(bool b);
 
 protected:
   OSDService *osd;
@@ -2484,12 +2484,12 @@ protected:
   PG(OSDService *o, OSDMapRef curmap,
      const PGPool &pool, spg_t p);
   ~PG() override;
+  const spg_t pg_id;
 
  private:
   // Prevent copying
   explicit PG(const PG& rhs);
   PG& operator=(const PG& rhs);
-  const spg_t pg_id;
   uint64_t peer_features;
   uint64_t acting_features;
   uint64_t upacting_features;
