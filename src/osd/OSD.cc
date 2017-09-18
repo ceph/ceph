@@ -6889,7 +6889,7 @@ void OSD::sched_scrub()
       PG *pg = _lookup_lock_pg(scrub.pgid);
       if (!pg)
 	continue;
-      if (pg->get_pgbackend()->scrub_supported() && pg->is_active()) {
+      if (pg->is_active()) {
 	dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time
 		 << (pg->scrubber.must_scrub ? ", explicitly requested" :
 		     (load_is_low ? ", load_is_low" : " deadline < now"))

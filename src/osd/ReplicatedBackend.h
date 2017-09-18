@@ -426,7 +426,6 @@ private:
 
   void repop_applied(RepModifyRef rm);
   void repop_commit(RepModifyRef rm);
-  bool scrub_supported() override { return true; }
   bool auto_repair_supported() const override { return false; }
 
 

@@ -552,7 +552,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
 
-   virtual bool scrub_supported() = 0;
    virtual bool auto_repair_supported() const = 0;
    void be_scan_list(
      ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
