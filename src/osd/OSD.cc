@@ -5122,21 +5122,20 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
 // =========================================
 bool remove_dir(
-  CephContext *cct,
-  ObjectStore *store, SnapMapper *mapper,
-  OSDriver *osdriver,
-  ObjectStore::Sequencer *osr,
-  coll_t coll, DeletingStateRef dstate,
+  PGRef pg,
+  ObjectStore *store,
+  DeletingStateRef dstate,
   bool *finished,
   ThreadPool::TPHandle &handle)
 {
+  CephContext *cct = pg->get_cct();
   vector<ghobject_t> olist;
   int64_t num = 0;
   ObjectStore::Transaction t;
   ghobject_t next;
   handle.reset_tp_timeout();
   store->collection_list(
-    coll,
+    pg->coll,
     next,
     ghobject_t::get_max(),
     store->get_ideal_list_max(),
@@ -5151,15 +5150,10 @@ bool remove_dir(
        ++i) {
     if (i->is_pgmeta())
       continue;
-    OSDriver::OSTransaction _t(osdriver->get_transaction(&t));
-    int r = mapper->remove_oid(i->hobj, &_t);
-    if (r != 0 && r != -ENOENT) {
-      ceph_abort();
-    }
-    t.remove(coll, *i);
+    pg->pg_remove_object(*i, &t);
     if (++num >= cct->_conf->osd_target_transaction_size) {
       C_SaferCond waiter;
-      store->queue_transaction(osr, std::move(t), &waiter);
+      store->queue_transaction(pg->osr.get(), std::move(t), &waiter);
       cont = dstate->pause_clearing();
       handle.suspend_tp_timeout();
       waiter.wait();
@@ -5174,7 +5168,7 @@ bool remove_dir(
   }
   if (num) {
     C_SaferCond waiter;
-    store->queue_transaction(osr, std::move(t), &waiter);
+    store->queue_transaction(pg->osr.get(), std::move(t), &waiter);
     cont = dstate->pause_clearing();
     handle.suspend_tp_timeout();
     waiter.wait();
@@ -5193,8 +5187,6 @@ void OSD::RemoveWQ::_process(
 {
   FUNCTRACE();
   PGRef pg(item.first);
-  SnapMapper &mapper = pg->snap_mapper;
-  OSDriver &driver = pg->osdriver;
   coll_t coll = coll_t(pg->pg_id);
   pg->osr->flush();
   bool finished = false;
@@ -5202,9 +5194,7 @@ void OSD::RemoveWQ::_process(
   if (!item.second->start_or_resume_clearing())
     return;
 
-  bool cont = remove_dir(
-    pg->cct, store, &mapper, &driver, pg->osr.get(), coll, item.second,
-    &finished, handle);
+  bool cont = remove_dir(pg, store, item.second, &finished, handle);
   if (!cont)
     return;
   if (!finished) {

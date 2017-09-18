@@ -483,6 +483,7 @@ public:
   virtual void agent_clear() = 0;
   virtual void agent_choose_mode_restart() = 0;
 
+  void pg_remove_object(const ghobject_t& oid, ObjectStore::Transaction *t);
 
   // reference counting
 #ifdef PG_DEBUG_REFS
