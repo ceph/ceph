@@ -366,6 +366,9 @@ public:
   int get_acting_primary() const {
     return primary.osd;
   }
+  pg_shard_t get_primary() const {
+    return primary;
+  }
   const vector<int> get_up() const {
     return up;
   }
@@ -2533,7 +2536,6 @@ protected:
     assert(up_primary.osd == new_up_primary);
     assert(primary.osd == new_acting_primary);
   }
-  pg_shard_t get_primary() const { return primary; }
 
   void set_role(int r) {
     role = r;
