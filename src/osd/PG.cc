@@ -8266,3 +8266,15 @@ void PG::get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f)
   }
   pg_stats_publish_lock.Unlock();
 }
+
+void PG::with_heartbeat_peers(std::function<void(int)> f)
+{
+  heartbeat_peer_lock.Lock();
+  for (auto p : heartbeat_peers) {
+    f(p);
+  }
+  for (auto p : probe_targets) {
+    f(p);
+  }
+  heartbeat_peer_lock.Unlock();
+}
