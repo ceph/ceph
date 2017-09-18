@@ -6195,43 +6195,23 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   }
 
   else if (prefix == "debug dump_missing") {
-    string file_name;
-    cmd_getval(cct, cmdmap, "filename", file_name);
-    std::ofstream fout(file_name.c_str());
-    if (!fout.is_open()) {
-	ss << "failed to open file '" << file_name << "'";
-	r = -EINVAL;
-	goto out;
+    if (!f) {
+      f.reset(new JSONFormatter(true));
     }
-
-    fout << "*** osd " << whoami << ": dump_missing ***" << std::endl;
+    f->open_array_section("pgs");
     RWLock::RLocker l(pg_map_lock);
     for (ceph::unordered_map<spg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
 	 pg_map_e != pg_map.end(); ++pg_map_e) {
       PG *pg = pg_map_e->second;
+      string s = stringify(pg->pg_id);
+      f->open_array_section(s.c_str());
       pg->lock();
-
-      fout << *pg << std::endl;
-      std::map<hobject_t, pg_missing_item>::const_iterator mend =
-	pg->pg_log.get_missing().get_items().end();
-      std::map<hobject_t, pg_missing_item>::const_iterator mi =
-	pg->pg_log.get_missing().get_items().begin();
-      for (; mi != mend; ++mi) {
-	fout << mi->first << " -> " << mi->second << std::endl;
-	if (!pg->missing_loc.needs_recovery(mi->first))
-	  continue;
-	if (pg->missing_loc.is_unfound(mi->first))
-	  fout << " unfound ";
-	const set<pg_shard_t> &mls(pg->missing_loc.get_locations(mi->first));
-	if (mls.empty())
-	  continue;
-	fout << "missing_loc: " << mls << std::endl;
-      }
+      pg->dump_missing(f.get());
       pg->unlock();
-      fout << std::endl;
+      f->close_section();
     }
-
-    fout.close();
+    f->close_section();
+    f->flush(ss);
   }
   else if (prefix == "debug kick_recovery_wq") {
     int64_t delay;

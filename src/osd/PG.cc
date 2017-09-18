@@ -8258,6 +8258,24 @@ void PG::dump_pgstate_history(Formatter *f)
   unlock();
 }
 
+void PG::dump_missing(Formatter *f)
+{
+  for (auto& i : pg_log.get_missing().get_items()) {
+    f->open_object_section("object");
+    f->dump_object("oid", i.first);
+    f->dump_object("missing_info", i.second);
+    if (missing_loc.needs_recovery(i.first)) {
+      f->dump_bool("unfound", missing_loc.is_unfound(i.first));
+      f->open_array_section("locations");
+      for (auto l : missing_loc.get_locations(i.first)) {
+	f->dump_object("shard", l);
+      }
+      f->close_section();
+    }
+    f->close_section();
+  }
+}
+
 void PG::get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f)
 {
   pg_stats_publish_lock.Lock();
