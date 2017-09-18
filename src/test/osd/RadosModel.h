@@ -2314,7 +2314,7 @@ public:
   string oid;
   bool dirty;
   ObjectDesc old_value;
-  int snap;
+  int snap = 0;
   ceph::shared_ptr<int> in_use;
 
   IsDirtyOp(int n,
