@@ -16,11 +16,11 @@ def avg(data):
 
 
 class ZabbixSender(object):
-    def __init__(self, sender, host, port, hostname,log):
+    def __init__(self, sender, host, port, hostname, log):
         self.sender = sender
         self.host = host
         self.port = port
-	self.hostname = hostname
+        self.hostname = hostname
         self.log = log
 
     def send(self, data):
@@ -214,8 +214,8 @@ class Module(MgrModule):
             zabbix = ZabbixSender(self.config['zabbix_sender'],
                                   self.config['zabbix_host'],
                                   self.config['zabbix_port'],
-				  self.config['identifier'],
-				  self.log)
+                                  self.config['identifier'],
+                                  self.log)
             zabbix.send(data)
         except Exception as exc:
             self.log.error('Exception when sending: %s', exc)
