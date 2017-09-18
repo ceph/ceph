@@ -182,7 +182,7 @@ TEST(PerfCounters, MultiplePerfCounters) {
   ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":13,\"element2\":0.000000000,"
 	    "\"element3\":{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}}}"), msg);
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf schema\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":{\"type\":2,\"metric_type\":\"gauge\",\"value_type\":\"integer\",\"description\":\"\",\"nick\":\"\"},\"element2\":{\"type\":1,\"metric_type\":\"gauge\",\"value_type\":\"real\",\"description\":\"\",\"nick\":\"\"},\"element3\":{\"type\":5,\"metric_type\":\"gauge\",\"value_type\":\"real-integer-pair\",\"description\":\"\",\"nick\":\"\"}}}"), msg);
+  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":{\"type\":2,\"metric_type\":\"gauge\",\"value_type\":\"integer\",\"description\":\"\",\"nick\":\"\",\"priority\":0},\"element2\":{\"type\":1,\"metric_type\":\"gauge\",\"value_type\":\"real\",\"description\":\"\",\"nick\":\"\",\"priority\":0},\"element3\":{\"type\":5,\"metric_type\":\"gauge\",\"value_type\":\"real-integer-pair\",\"description\":\"\",\"nick\":\"\",\"priority\":0}}}"), msg);
   coll->clear();
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
   ASSERT_EQ("{}", msg);
