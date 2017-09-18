@@ -851,7 +851,7 @@ class CephFSVolumeClient(object):
         that encoded the metadata.
         """
         data['compat_version'] = 1
-        data['version'] = 1
+        data['version'] = self.version
         return self._metadata_set(self._auth_metadata_path(auth_id), data)
 
     def _volume_metadata_path(self, volume_path):
@@ -904,7 +904,7 @@ class CephFSVolumeClient(object):
         that encoded the metadata.
         """
         data['compat_version'] = 1
-        data['version'] = 1
+        data['version'] = self.version
         return self._metadata_set(self._volume_metadata_path(volume_path), data)
 
     def authorize(self, volume_path, auth_id, readonly=False, tenant_id=None):
