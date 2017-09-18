@@ -2001,8 +2001,9 @@ void PG::mark_clean()
   kick_snap_trim();
 }
 
-void PG::set_force_recovery(bool b)
+bool PG::set_force_recovery(bool b)
 {
+  bool did = false;
   lock();
   if (!deleting) {
     if (b) {
@@ -2013,18 +2014,22 @@ void PG::set_force_recovery(bool b)
 	dout(20) << __func__ << " set" << dendl;
 	state_set(PG_STATE_FORCED_RECOVERY);
 	publish_stats_to_osd();
+	did = true;
       }
     } else if (state & PG_STATE_FORCED_RECOVERY) {
       dout(20) << __func__ << " clear" << dendl;
       state_clear(PG_STATE_FORCED_RECOVERY);
       publish_stats_to_osd();
+      did = true;
     }
   }
   unlock();
+  return did;
 }
 
-void PG::set_force_backfill(bool b)
+bool PG::set_force_backfill(bool b)
 {
+  bool did = false;
   lock();
   if (!deleting) {
     if (b) {
@@ -2035,14 +2040,17 @@ void PG::set_force_backfill(bool b)
 	dout(10) << __func__ << " set" << dendl;
 	state_set(PG_STATE_FORCED_RECOVERY);
 	publish_stats_to_osd();
+	did = true;
       }
     } else if (state & PG_STATE_FORCED_RECOVERY) {
       dout(10) << __func__ << " clear" << dendl;
       state_clear(PG_STATE_FORCED_RECOVERY);
       publish_stats_to_osd();
+      did = true;
     }
   }
   unlock();
+  return did;
 }
 
 inline int PG::clamp_recovery_priority(int priority)
