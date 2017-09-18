@@ -429,8 +429,8 @@ public:
   bool is_forced_recovery_or_backfill() const {
     return get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
   }
-  void set_force_recovery(bool b);
-  void set_force_backfill(bool b);
+  bool set_force_recovery(bool b);
+  bool set_force_backfill(bool b);
 
   void queue_peering_event(CephPeeringEvtRef evt);
   void process_peering_event(RecoveryCtx *rctx);
