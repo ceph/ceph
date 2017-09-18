@@ -456,6 +456,7 @@ public:
   virtual void get_watchers(std::list<obj_watch_item_t> *ls) = 0;
 
   void dump_pgstate_history(Formatter *f);
+  void dump_missing(Formatter *f);
 
   void get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f);
   void with_heartbeat_peers(std::function<void(int)> f);
