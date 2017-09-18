@@ -7620,9 +7620,9 @@ bool OSD::advance_pg(
     set<spg_t> children;
     spg_t parent(pg->pg_id);
     if (parent.is_split(
-	lastmap->get_pg_num(pg->pool.id),
-	nextmap->get_pg_num(pg->pool.id),
-	&children)) {
+	  lastmap->get_pg_num(pg->pg_id.pool()),
+	  nextmap->get_pg_num(pg->pg_id.pool()),
+	  &children)) {
       service.mark_split_in_progress(pg->pg_id, children);
       split_pgs(
 	pg, children, new_pgs, lastmap, nextmap,
@@ -7887,7 +7887,7 @@ void OSD::split_pgs(
   PG::RecoveryCtx *rctx)
 {
   unsigned pg_num = nextmap->get_pg_num(
-    parent->pool.id);
+    parent->pg_id.pool());
   parent->update_snap_mapper_bits(
     parent->get_pgid().get_split_bits(pg_num)
     );
