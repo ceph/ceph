@@ -458,6 +458,7 @@ public:
   void dump_pgstate_history(Formatter *f);
 
   void get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f);
+  void with_heartbeat_peers(std::function<void(int)> f);
 
   virtual void shutdown() = 0;
 

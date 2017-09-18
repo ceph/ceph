@@ -4403,19 +4403,11 @@ void OSD::maybe_update_heartbeat_peers()
 	 i != pg_map.end();
 	 ++i) {
       PG *pg = i->second;
-      pg->heartbeat_peer_lock.Lock();
-      dout(20) << i->first << " heartbeat_peers " << pg->heartbeat_peers << dendl;
-      for (set<int>::iterator p = pg->heartbeat_peers.begin();
-	   p != pg->heartbeat_peers.end();
-	   ++p)
-	if (osdmap->is_up(*p))
-	  _add_heartbeat_peer(*p);
-      for (set<int>::iterator p = pg->probe_targets.begin();
-	   p != pg->probe_targets.end();
-	   ++p)
-	if (osdmap->is_up(*p))
-	  _add_heartbeat_peer(*p);
-      pg->heartbeat_peer_lock.Unlock();
+      pg->with_heartbeat_peers([&](int peer) {
+	  if (osdmap->is_up(peer)) {
+	    _add_heartbeat_peer(peer);
+	  }
+	});
     }
   }
 
