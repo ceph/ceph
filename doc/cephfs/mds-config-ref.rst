@@ -613,3 +613,17 @@
               
 :Type:  Boolean
 :Default:  ``false``
+
+
+``mds min caps per client``
+
+:Description: Set the minimum cache number of client
+:Type: Integer
+:Default: ``100``
+
+
+``mds max ratio caps per client``
+
+:Description: Set the maximum cache number ratio of client
+:Type: Float
+:Default: ``0.8``
