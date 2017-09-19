@@ -95,7 +95,7 @@ public:
   struct PageSetObject;
   struct Collection : public CollectionImpl {
     coll_t cid;
-    int bits;
+    int bits = 0;
     CephContext *cct;
     bool use_page_set;
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
