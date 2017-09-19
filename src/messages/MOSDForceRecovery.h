@@ -38,7 +38,7 @@ struct MOSDForceRecovery : public Message {
 
   uuid_d fsid;
   vector<pg_t> forced_pgs;
-  uint8_t options;
+  uint8_t options = 0;
 
   MOSDForceRecovery() : Message(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDForceRecovery(const uuid_d& f, char opts) :
