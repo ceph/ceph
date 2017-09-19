@@ -3248,7 +3248,7 @@ def systemd_start(
     osd_id,
 ):
     systemd_disable(path, osd_id)
-    if is_mounted(path):
+    if os.path.ismount(path):
         style = ['--runtime']
     else:
         style = []
