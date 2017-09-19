@@ -45,4 +45,13 @@ macro(build_rocksdb)
   set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/rocksdb/librocksdb.a")
   set(ROCKSDB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb/include)
   set(ROCKSDB_LIBRARIES rocksdb)
+  foreach(ver "MAJOR" "MINOR" "PATCH")
+    file(STRINGS "${ROCKSDB_INCLUDE_DIR}/rocksdb/version.h" ROCKSDB_VER_${ver}_LINE
+      REGEX "^#define[ \t]+ROCKSDB_${ver}[ \t]+[0-9]+$")
+    string(REGEX REPLACE "^#define[ \t]+ROCKSDB_${ver}[ \t]+([0-9]+)$"
+      "\\1" ROCKSDB_VERSION_${ver} "${ROCKSDB_VER_${ver}_LINE}")
+    unset(ROCKDB_VER_${ver}_LINE)
+  endforeach()
+  set(ROCKSDB_VERSION_STRING
+    "${ROCKSDB_VERSION_MAJOR}.${ROCKSDB_VERSION_MINOR}.${ROCKSDB_VERSION_PATCH}")
 endmacro()
