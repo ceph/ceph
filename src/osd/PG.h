@@ -1410,8 +1410,8 @@ public:
   void handle_scrub_reserve_release(OpRequestRef op);
 
   void reject_reservation();
-  void schedule_backfill_full_retry();
-  void schedule_recovery_full_retry();
+  void schedule_backfill_retry(float retry);
+  void schedule_recovery_retry(float retry);
 
   // -- recovery state --
 
@@ -1563,6 +1563,21 @@ public:
       *out << #T;						   \
     }								   \
   };
+  struct CancelBackfill : boost::statechart::event<CancelBackfill> {
+    float delay;
+    explicit CancelBackfill(float delay) : delay(delay) {}
+    void print(std::ostream *out) const {
+      *out << "CancelBackfill: delay " << delay;
+    }
+  };
+  struct CancelRecovery : boost::statechart::event<CancelRecovery> {
+    float delay;
+    explicit CancelRecovery(float delay) : delay(delay) {}
+    void print(std::ostream *out) const {
+      *out << "CancelRecovery: delay " << delay;
+    }
+  };
+
   TrivialEvent(Initialize)
   TrivialEvent(Load)
   TrivialEvent(GotInfo)
@@ -1573,13 +1588,11 @@ public:
   TrivialEvent(LocalBackfillReserved)
   TrivialEvent(RemoteBackfillReserved)
   TrivialEvent(RemoteReservationRejected)
-  TrivialEvent(CancelBackfill)
   TrivialEvent(RequestBackfill)
   TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
   TrivialEvent(BackfillTooFull)
   TrivialEvent(RecoveryTooFull)
-  TrivialEvent(CancelRecovery)
 
   TrivialEvent(MakePrimary)
   TrivialEvent(MakeStray)
