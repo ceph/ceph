@@ -2387,12 +2387,13 @@ void PGMap::get_health_checks(
   }
 
   // TOO_MANY_PGS
-  if (num_in && cct->_conf->mon_pg_warn_max_per_osd > 0) {
+  int64_t max_pg_per_osd = cct->_conf->get_val<int64_t>("mon_max_pg_per_osd");
+  if (num_in && max_pg_per_osd > 0) {
     int per = sum_pg_up / num_in;
-    if (per > cct->_conf->mon_pg_warn_max_per_osd) {
+    if (per > max_pg_per_osd) {
       ostringstream ss;
       ss << "too many PGs per OSD (" << per
-	 << " > max " << cct->_conf->mon_pg_warn_max_per_osd << ")";
+	 << " > max " << max_pg_per_osd << ")";
       checks->add("TOO_MANY_PGS", HEALTH_WARN, ss.str());
     }
   }
