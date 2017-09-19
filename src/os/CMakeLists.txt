@@ -30,6 +30,7 @@ if(HAVE_LIBAIO)
     bluestore/bluestore_types.cc
     bluestore/FreelistManager.cc
     bluestore/KernelDevice.cc
+    bluestore/LinearAllocator.cc
     bluestore/StupidAllocator.cc
     bluestore/BitMapAllocator.cc
     bluestore/BitAllocator.cc
