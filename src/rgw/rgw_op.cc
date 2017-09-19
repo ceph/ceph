@@ -607,7 +607,16 @@ rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
     i = m.find("REMOTE_ADDR");
   }
   if (i != m.end()) {
-    e.emplace("aws:SourceIp", i->second);
+    const string* ip = &(i->second);
+    string temp;
+    if (remote_addr_param == "HTTP_X_FORWARDED_FOR") {
+      const auto comma = ip->find(',');
+      if (comma != string::npos) {
+	temp.assign(*ip, 0, comma);
+	ip = &temp;
+      }
+    }
+    e.emplace("aws:SourceIp", *ip);
   }
 
   i = m.find("HTTP_USER_AGENT"); {
