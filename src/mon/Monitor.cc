@@ -1772,7 +1772,8 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
 	   << " upgrading" << dendl;
       exit(0);
     }
-    if (!osdmon()->osdmap.test_flag(CEPH_OSDMAP_PURGED_SNAPDIRS)) {
+    if (!osdmon()->osdmap.test_flag(CEPH_OSDMAP_PURGED_SNAPDIRS) ||
+	!osdmon()->osdmap.test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
       derr << __func__ << " existing cluster has not completed a full luminous"
 	   << " scrub to purge legacy snapdir objects; please scrub before"
 	   << " upgrading beyond luminous." << dendl;
@@ -1979,15 +1980,6 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
   logger->inc(l_mon_election_lose);
 
   finish_election();
-
-  if ((quorum_con_features & CEPH_FEATURE_MON_METADATA) &&
-      !HAVE_FEATURE(quorum_con_features, SERVER_LUMINOUS)) {
-    // for pre-luminous mons only
-    Metadata sys_info;
-    collect_metadata(&sys_info);
-    messenger->send_message(new MMonMetadata(sys_info),
-			    monmap->get_inst(get_leader()));
-  }
 }
 
 void Monitor::collect_metadata(Metadata *m)
@@ -3006,8 +2998,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     << "entity='" << session->entity_name << "' "
     << "cmd=" << m->cmd << ": dispatch";
 
-  if (mon_cmd->is_mgr() &&
-      osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+  if (mon_cmd->is_mgr()) {
     const auto& hdr = m->get_header();
     uint64_t size = hdr.front_len + hdr.middle_len + hdr.data_len;
     uint64_t max =

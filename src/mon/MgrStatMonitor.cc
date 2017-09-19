@@ -62,10 +62,6 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
 void MgrStatMonitor::update_logger()
 {
   dout(20) << __func__ << dendl;
-  if (mon->osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-    dout(20) << "yielding cluster perfcounter updates to pgmon" << dendl;
-    return;
-  }
 
   mon->cluster_logger->set(l_cluster_osd_bytes, digest.osd_sum.kb * 1024ull);
   mon->cluster_logger->set(l_cluster_osd_bytes_used,
