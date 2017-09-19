@@ -424,9 +424,6 @@ OPTION(filer_max_purge_ops, OPT_U32)
 // Max number of truncate at once in a single Filer::truncate call
 OPTION(filer_max_truncate_ops, OPT_U32)
 
-OPTION(journaler_write_head_interval, OPT_INT)
-OPTION(journaler_prefetch_periods, OPT_INT)   // * journal object size
-OPTION(journaler_prezero_periods, OPT_INT)     // * journal object size
 OPTION(mds_data, OPT_STR)
 OPTION(mds_max_file_size, OPT_U64) // Used when creating new CephFS. Change with 'ceph mds set max_file_size <size>' afterwards
 // max xattr kv pairs size for each dir/file
