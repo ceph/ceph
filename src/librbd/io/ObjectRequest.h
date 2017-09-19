@@ -294,7 +294,7 @@ protected:
   librados::ObjectWriteOperation m_write;
   uint64_t m_snap_seq;
   std::vector<librados::snap_t> m_snaps;
-  bool m_object_exist;
+  bool m_object_exist = false;
   bool m_guard = true;
 
   virtual void add_write_ops(librados::ObjectWriteOperation *wr,
