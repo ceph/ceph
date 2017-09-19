@@ -37,7 +37,7 @@ namespace image {
 template<>
 struct RefreshRequest<librbd::MockTestImageCtx> {
   static RefreshRequest *s_instance;
-  Context *on_finish;
+  Context *on_finish = nullptr;
 
   static RefreshRequest *create(librbd::MockTestImageCtx &image_ctx,
                                 bool acquire_lock_refresh,
