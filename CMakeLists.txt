@@ -531,7 +531,7 @@ endif()
 # Rocksdb
 option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
 if (WITH_SYSTEM_ROCKSDB)
-  find_package(rocksdb REQUIRED)
+  find_package(rocksdb 5.8 REQUIRED)
 endif()
 
 # Boost
