@@ -613,6 +613,12 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ip = iam_env.find("aws:SourceIp");
   ASSERT_NE(ip, iam_env.end());
   EXPECT_EQ(ip->second, "192.168.1.3");
+
+  rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.4, 4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348");
+  iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  ip = iam_env.find("aws:SourceIp");
+  ASSERT_NE(ip, iam_env.end());
+  EXPECT_EQ(ip->second, "192.168.1.4");
 }
 
 TEST_F(IPPolicyTest, ParseIPAddress) {
