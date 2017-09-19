@@ -189,20 +189,16 @@ class FsNewHandler : public FileSystemCommandHandler
       return r;
     }
     
-    // if we're running as luminous, we have to set the pool application metadata
-    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS ||
-	mon->osdmon()->pending_inc.new_require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      if (!mon->osdmon()->is_writeable()) {
-	// not allowed to write yet, so retry when we can
-	mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
-	return -EAGAIN;
-      }
-      mon->osdmon()->do_application_enable(data,
-					   pg_pool_t::APPLICATION_NAME_CEPHFS);
-      mon->osdmon()->do_application_enable(metadata,
-					   pg_pool_t::APPLICATION_NAME_CEPHFS);
-      mon->osdmon()->propose_pending();
+    if (!mon->osdmon()->is_writeable()) {
+      // not allowed to write yet, so retry when we can
+      mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
+      return -EAGAIN;
     }
+    mon->osdmon()->do_application_enable(data,
+					 pg_pool_t::APPLICATION_NAME_CEPHFS);
+    mon->osdmon()->do_application_enable(metadata,
+					 pg_pool_t::APPLICATION_NAME_CEPHFS);
+    mon->osdmon()->propose_pending();
 
     // All checks passed, go ahead and create.
     fsmap.create_filesystem(fs_name, metadata, data,
@@ -521,17 +517,13 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       return 0;
     }
 
-    // if we're running as luminous, we have to set the pool application metadata
-    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS ||
-	mon->osdmon()->pending_inc.new_require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      if (!mon->osdmon()->is_writeable()) {
-	// not allowed to write yet, so retry when we can
-	mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
-	return -EAGAIN;
-      }
-      mon->osdmon()->do_application_enable(poolid, pg_pool_t::APPLICATION_NAME_CEPHFS);
-      mon->osdmon()->propose_pending();
+    if (!mon->osdmon()->is_writeable()) {
+      // not allowed to write yet, so retry when we can
+      mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
+      return -EAGAIN;
     }
+    mon->osdmon()->do_application_enable(poolid, pg_pool_t::APPLICATION_NAME_CEPHFS);
+    mon->osdmon()->propose_pending();
 
     fsmap.modify_filesystem(
         fs->fscid,
