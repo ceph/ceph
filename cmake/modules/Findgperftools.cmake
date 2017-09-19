@@ -8,12 +8,15 @@
 # GPERFTOOLS_TCMALLOC_MINIMAL_LIBRARY - link it to use tcmalloc_minimal
 # GPERFTOOLS_PROFILER_LIBRARY - link it to use Profiler
 
-find_path(GPERFTOOLS_INCLUDE_DIR gperftools/profiler.h)
-find_path(Tcmalloc_INCLUDE_DIR gperftools/tcmalloc.h)
+find_path(GPERFTOOLS_INCLUDE_DIR gperftools/profiler.h
+  HINTS $ENV{GPERF_ROOT}/include)
+find_path(Tcmalloc_INCLUDE_DIR gperftools/tcmalloc.h
+  HINTS $ENV{GPERF_ROOT}/include)
 
 foreach(component tcmalloc tcmalloc_minimal profiler)
   string(TOUPPER ${component} COMPONENT)
-  find_library(GPERFTOOLS_${COMPONENT}_LIBRARY ${component})
+  find_library(GPERFTOOLS_${COMPONENT}_LIBRARY ${component}
+    HINTS $ENV{GPERF_ROOT}/lib)
   list(APPEND GPERFTOOLS_LIBRARIES GPERFTOOLS_${COMPONENT}_LIBRARY)
 endforeach()
 
