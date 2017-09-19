@@ -1414,6 +1414,8 @@ void OSDMap::_calc_up_osd_features()
     if (!is_up(osd))
       continue;
     const osd_xinfo_t &xi = get_xinfo(osd);
+    if (xi.features == 0)
+      continue;  // bogus xinfo, maybe #20751 or similar, skipping
     if (first) {
       cached_up_osd_features = xi.features;
       first = false;
