@@ -27,7 +27,7 @@ class MMgrConfigure : public Message
   static const int COMPAT_VERSION = 1;
 
 public:
-  uint32_t stats_period;
+  uint32_t stats_period = 0;
   
   // Default 0 means if unspecified will include all stats
   uint32_t stats_threshold = 0;
