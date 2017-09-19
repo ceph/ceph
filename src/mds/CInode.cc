@@ -408,7 +408,7 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   }
 
   if (projected_nodes.front().snapnode != projected_inode::UNDEF_SRNODE) {
-    pop_projected_snaprealm(projected_nodes.front().snapnode);
+    pop_projected_snaprealm(projected_nodes.front().snapnode, false);
     --num_projected_srnodes;
   }
 
@@ -486,11 +486,21 @@ void CInode::record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent)
   }
 }
 
-void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
+void CInode::early_pop_projected_snaprealm()
+{
+  assert(!projected_nodes.empty());
+  if (projected_nodes.front().snapnode != projected_inode::UNDEF_SRNODE) {
+    pop_projected_snaprealm(projected_nodes.front().snapnode, true);
+    projected_nodes.front().snapnode = projected_inode::UNDEF_SRNODE;
+    --num_projected_srnodes;
+  }
+}
+
+void CInode::pop_projected_snaprealm(sr_t *next_snaprealm, bool early)
 {
   if (next_snaprealm) {
-    dout(10) << __func__ << " " << next_snaprealm
-	     << " seq" << next_snaprealm->seq << dendl;
+    dout(10) << __func__ << (early ? " (early) " : " ")
+	     << next_snaprealm << " seq " << next_snaprealm->seq << dendl;
     bool invalidate_cached_snaps = false;
     if (!snaprealm) {
       open_snaprealm();
@@ -516,7 +526,7 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
     if (snaprealm->parent)
       dout(10) << " realm " << *snaprealm << " parent " << *snaprealm->parent << dendl;
   } else {
-    dout(10) << __func__ << " null" << dendl;
+    dout(10) << __func__ << (early ? " (early) null" : " null") << dendl;
     assert(snaprealm);
     snaprealm->merge_to(NULL);
   }
