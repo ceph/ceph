@@ -6400,9 +6400,10 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
 }
 
 boost::statechart::result
-PG::RecoveryState::Backfilling::react(const CancelBackfill &c)
+PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  ldout(pg->cct, 10) << "defer backfill, retry delay " << c.delay << dendl;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
   pg->state_set(PG_STATE_BACKFILL_WAIT);
@@ -6947,9 +6948,10 @@ PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
 }
 
 boost::statechart::result
-PG::RecoveryState::Recovering::react(const CancelRecovery &evt)
+PG::RecoveryState::Recovering::react(const DeferRecovery &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  ldout(pg->cct, 10) << "defer recovery, retry delay " << evt.delay << dendl;
   pg->state_clear(PG_STATE_RECOVERING);
   pg->state_set(PG_STATE_RECOVERY_WAIT);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);

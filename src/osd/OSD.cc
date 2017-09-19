@@ -9404,14 +9404,14 @@ void OSD::do_recovery(
 	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
 	    queued,
 	    queued,
-	    PG::CancelBackfill(cct->_conf->osd_recovery_retry_interval)));
+	    PG::DeferBackfill(cct->_conf->osd_recovery_retry_interval)));
 	  pg->queue_peering_event(evt);
 	  action = "in backfill";
         } else if (pg->state_test(PG_STATE_RECOVERING)) {
 	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
 	    queued,
 	    queued,
-	    PG::CancelRecovery(cct->_conf->osd_recovery_retry_interval)));
+	    PG::DeferRecovery(cct->_conf->osd_recovery_retry_interval)));
 	  pg->queue_peering_event(evt);
 	  action = "in recovery";
 	} else {
