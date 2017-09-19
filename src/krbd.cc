@@ -129,13 +129,15 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
   oss << " name=" << cct->_conf->name.get_id();
 
   KeyRing keyring;
-  r = keyring.from_ceph_context(cct);
-  if (r == -ENOENT && !(cct->_conf->keyfile.length() ||
-                        cct->_conf->key.length()))
-    r = 0;
-  if (r < 0) {
-    cerr << "rbd: failed to get secret" << std::endl;
-    return r;
+  if (cct->_conf->auth_client_required != "none") {
+    r = keyring.from_ceph_context(cct);
+    if (r == -ENOENT && !(cct->_conf->keyfile.length() ||
+                          cct->_conf->key.length()))
+      r = 0;
+    if (r < 0) {
+      cerr << "rbd: failed to get secret" << std::endl;
+      return r;
+    }
   }
 
   CryptoKey secret;
