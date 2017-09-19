@@ -355,11 +355,11 @@ vc.disconnect()
         :return:
         """
 
-        # Because the teuthology config template sets mon_pg_warn_max_per_osd to
+        # Because the teuthology config template sets mon_max_pg_per_osd to
         # 10000 (i.e. it just tries to ignore health warnings), reset it to something
         # sane before using volume_client, to avoid creating pools with absurdly large
         # numbers of PGs.
-        self.set_conf("global", "mon pg warn max per osd", "300")
+        self.set_conf("global", "mon max pg per osd", "300")
         for mon_daemon_state in self.ctx.daemons.iter_daemons_of_role('mon'):
             mon_daemon_state.restart()
 
@@ -368,7 +368,7 @@ vc.disconnect()
 
         # Calculate how many PGs we'll expect the new volume pool to have
         osd_map = json.loads(self.fs.mon_manager.raw_cluster_cmd('osd', 'dump', '--format=json-pretty'))
-        max_per_osd = int(self.fs.get_config('mon_pg_warn_max_per_osd'))
+        max_per_osd = int(self.fs.get_config('mon_max_pg_per_osd'))
         osd_count = len(osd_map['osds'])
         max_overall = osd_count * max_per_osd
 
