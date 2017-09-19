@@ -6404,9 +6404,9 @@ PG::RecoveryState::Backfilling::react(const CancelBackfill &)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
-  // XXX: Add a new pg state so user can see why backfill isn't proceeding
-  // Can't use PG_STATE_BACKFILL_WAIT since it means waiting for reservations
-  //pg->state_set(PG_STATE_BACKFILL_STALLED????);
+
+  pg->state_set(PG_STATE_BACKFILL_WAIT);
+  pg->state_clear(PG_STATE_BACKFILL);
 
   for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
        it != pg->backfill_targets.end();
@@ -6951,6 +6951,7 @@ PG::RecoveryState::Recovering::react(const CancelRecovery &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERING);
+  pg->state_set(PG_STATE_RECOVERY_WAIT);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   release_reservations(true);
   pg->schedule_recovery_full_retry();
