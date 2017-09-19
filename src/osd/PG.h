@@ -1558,18 +1558,18 @@ public:
       *out << #T;						   \
     }								   \
   };
-  struct CancelBackfill : boost::statechart::event<CancelBackfill> {
+  struct DeferBackfill : boost::statechart::event<DeferBackfill> {
     float delay;
-    explicit CancelBackfill(float delay) : delay(delay) {}
+    explicit DeferBackfill(float delay) : delay(delay) {}
     void print(std::ostream *out) const {
-      *out << "CancelBackfill: delay " << delay;
+      *out << "DeferBackfill: delay " << delay;
     }
   };
-  struct CancelRecovery : boost::statechart::event<CancelRecovery> {
+  struct DeferRecovery : boost::statechart::event<DeferRecovery> {
     float delay;
-    explicit CancelRecovery(float delay) : delay(delay) {}
+    explicit DeferRecovery(float delay) : delay(delay) {}
     void print(std::ostream *out) const {
-      *out << "CancelRecovery: delay " << delay;
+      *out << "DeferRecovery: delay " << delay;
     }
   };
 
@@ -1885,12 +1885,12 @@ public:
     struct Backfilling : boost::statechart::state< Backfilling, Active >, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::transition< Backfilled, Recovered >,
-	boost::statechart::custom_reaction< CancelBackfill >,
+	boost::statechart::custom_reaction< DeferBackfill >,
 	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       explicit Backfilling(my_context ctx);
       boost::statechart::result react(const RemoteReservationRejected& evt);
-      boost::statechart::result react(const CancelBackfill& evt);
+      boost::statechart::result react(const DeferBackfill& evt);
       void exit();
     };
 
@@ -1930,10 +1930,10 @@ public:
     struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
-	boost::statechart::custom_reaction< CancelRecovery >
+	boost::statechart::custom_reaction< DeferRecovery >
 	> reactions;
       explicit NotRecovering(my_context ctx);
-      boost::statechart::result react(const CancelRecovery& evt) {
+      boost::statechart::result react(const DeferRecovery& evt) {
 	/* no-op */
 	return discard_event();
       }
@@ -2006,14 +2006,14 @@ public:
     struct Recovering : boost::statechart::state< Recovering, Active >, NamedState {
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AllReplicasRecovered >,
-	boost::statechart::custom_reaction< CancelRecovery >,
+	boost::statechart::custom_reaction< DeferRecovery >,
 	boost::statechart::custom_reaction< RequestBackfill >
 	> reactions;
       explicit Recovering(my_context ctx);
       void exit();
       void release_reservations(bool cancel = false);
       boost::statechart::result react(const AllReplicasRecovered &evt);
-      boost::statechart::result react(const CancelRecovery& evt);
+      boost::statechart::result react(const DeferRecovery& evt);
       boost::statechart::result react(const RequestBackfill &evt);
     };
 
