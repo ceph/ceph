@@ -6364,7 +6364,10 @@ PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_conte
     new QueuePeeringEvt<LocalBackfillReserved>(
       pg, pg->get_osdmap()->get_epoch(),
       LocalBackfillReserved()),
-    pg->get_backfill_priority());
+    pg->get_backfill_priority(),
+    new QueuePeeringEvt<DeferBackfill>(
+      pg, pg->get_osdmap()->get_epoch(),
+      DeferBackfill(0.0)));
   pg->publish_stats_to_osd();
 }
 
@@ -6622,7 +6625,10 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
     new QueuePeeringEvt<LocalRecoveryReserved>(
       pg, pg->get_osdmap()->get_epoch(),
       LocalRecoveryReserved()),
-    pg->get_recovery_priority());
+    pg->get_recovery_priority(),
+    new QueuePeeringEvt<DeferRecovery>(
+      pg, pg->get_osdmap()->get_epoch(),
+      DeferRecovery(0.0)));
   pg->publish_stats_to_osd();
 }
 
