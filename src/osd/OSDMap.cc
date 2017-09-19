@@ -1923,17 +1923,28 @@ void OSDMap::_apply_upmap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
 
   auto q = pg_upmap_items.find(pg);
   if (q != pg_upmap_items.end()) {
-    for (auto& i : *raw) {
-      for (auto& r : q->second) {
-        if (r.first != i) {
-          continue;
-        }
-        if (!(r.second != CRUSH_ITEM_NONE &&
-              r.second < max_osd &&
-              osd_weight[r.second] == 0)) {
-          i = r.second;
-        }
-        break;
+    // NOTE: this approach does not allow a bidirectional swap,
+    // e.g., [[1,2],[2,1]] applied to [0,1,2] -> [0,2,1].
+    for (auto& r : q->second) {
+      // make sure the replacement value doesn't already appear
+      bool exists = false;
+      ssize_t pos = -1;
+      for (unsigned i = 0; i < raw->size(); ++i) {
+	int osd = (*raw)[i];
+	if (osd == r.second) {
+	  exists = true;
+	  break;
+	}
+	// ignore mapping if target is marked out (or invalid osd id)
+	if (osd == r.first &&
+	    pos < 0 &&
+	    !(r.second != CRUSH_ITEM_NONE && r.second < max_osd &&
+	      osd_weight[r.second] == 0)) {
+	  pos = i;
+	}
+      }
+      if (!exists && pos >= 0) {
+	(*raw)[pos] = r.second;
       }
     }
   }
