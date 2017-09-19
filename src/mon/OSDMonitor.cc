@@ -543,23 +543,6 @@ void OSDMonitor::on_active()
 void OSDMonitor::on_restart()
 {
   last_osd_report.clear();
-
-  if (mon->is_leader()) {
-    // fix ruleset != ruleid
-    if (osdmap.crush->has_legacy_rulesets() &&
-	!osdmap.crush->has_multirule_rulesets()) {
-      CrushWrapper newcrush;
-      _get_pending_crush(newcrush);
-      int r = newcrush.renumber_rules_by_ruleset();
-      if (r >= 0) {
-	dout(1) << __func__ << " crush map has ruleset != rule id; fixing" << dendl;
-	pending_inc.crush.clear();
-	newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-      } else {
-	dout(10) << __func__ << " unable to renumber rules by ruleset" << dendl;
-      }
-    }
-  }
 }
 
 void OSDMonitor::on_shutdown()
@@ -621,6 +604,40 @@ void OSDMonitor::create_pending()
       dout(1) << __func__ << " setting nearfull_ratio = "
 	      << pending_inc.new_nearfull_ratio << dendl;
     }
+  }
+
+  // Rewrite CRUSH rule IDs if they are using legacy "ruleset"
+  // structure.
+  if (osdmap.crush->has_legacy_rule_ids()) {
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    // First, for all pools, work out which rule they really used
+    // by resolving ruleset to rule.
+    for (const auto &i : osdmap.get_pools()) {
+      const auto pool_id = i.first;
+      const auto &pool = i.second;
+      int new_rule_id = newcrush.find_rule(pool.crush_rule,
+					   pool.type, pool.size);
+
+      dout(1) << __func__ << " rewriting pool "
+	      << osdmap.get_pool_name(pool_id) << " crush ruleset "
+	      << pool.crush_rule << " -> rule id " << new_rule_id << dendl;
+      if (pending_inc.new_pools.count(pool_id) == 0) {
+	pending_inc.new_pools[pool_id] = pool;
+      }
+      pending_inc.new_pools[pool_id].crush_rule = new_rule_id;
+    }
+
+    // Now, go ahead and renumber all the rules so that their
+    // rule_id field corresponds to their position in the array
+    auto old_to_new = newcrush.renumber_rules();
+    dout(1) << __func__ << " Rewrote " << old_to_new << " crush IDs:" << dendl;
+    for (const auto &i : old_to_new) {
+      dout(1) << __func__ << " " << i.first << " -> " << i.second << dendl;
+    }
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
   }
 }
 
@@ -7154,7 +7171,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    if (crush.has_legacy_rulesets()) {
+    if (crush.has_legacy_rule_ids()) {
       err = -EINVAL;
       ss << "crush maps with ruleset != ruleid are no longer allowed";
       goto reply;
@@ -7164,16 +7181,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    const auto& osdmap_pools = osdmap.get_pools();
-    for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
-      const int64_t pool_id = pit->first;
-      const pg_pool_t &pool = pit->second;
-      int ruleno = pool.get_crush_rule();
-      if (!crush.rule_exists(ruleno)) {
-	ss << " the crush rule no "<< ruleno << " for pool id " << pool_id << " is in use";
-	err = -EINVAL;
-	goto reply;
-      }
+    err = osdmap.validate_crush_rules(&crush, &ss);
+    if (err < 0) {
+      goto reply;
     }
 
     if (g_conf->mon_osd_crush_smoke_test) {
@@ -8365,7 +8375,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       // FIXME: this is ok in some situations, but let's not bother with that
       // complexity now.
       int ruleset = newcrush.get_rule_mask_ruleset(ruleno);
-      if (osdmap.crush_ruleset_in_use(ruleset)) {
+      if (osdmap.crush_rule_in_use(ruleset)) {
 	ss << "crush ruleset " << name << " " << ruleset << " is in use";
 	err = -EBUSY;
 	goto reply;

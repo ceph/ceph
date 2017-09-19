@@ -13,7 +13,7 @@
 
 #define dout_subsys ceph_subsys_crush
 
-bool CrushWrapper::has_legacy_rulesets() const
+bool CrushWrapper::has_legacy_rule_ids() const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
     crush_rule *r = crush->rules[i];
@@ -25,51 +25,17 @@ bool CrushWrapper::has_legacy_rulesets() const
   return false;
 }
 
-int CrushWrapper::renumber_rules_by_ruleset()
+std::map<int, int> CrushWrapper::renumber_rules()
 {
-  int max_ruleset = 0;
+  std::map<int, int> result;
   for (unsigned i=0; i<crush->max_rules; i++) {
     crush_rule *r = crush->rules[i];
-    if (r && r->mask.ruleset >= max_ruleset) {
-      max_ruleset = r->mask.ruleset + 1;
+    if (r && r->mask.ruleset != i) {
+      result[r->mask.ruleset] = i;
+      r->mask.ruleset = i;
     }
   }
-  struct crush_rule **newrules =
-    (crush_rule**)calloc(1, max_ruleset * sizeof(crush_rule*));
-  for (unsigned i=0; i<crush->max_rules; i++) {
-    crush_rule *r = crush->rules[i];
-    if (!r)
-      continue;
-    if (newrules[r->mask.ruleset]) {
-      // collision, we can't do it.
-      free(newrules);
-      return -EINVAL;
-    }
-    newrules[r->mask.ruleset] = r;
-  }
-
-  // success, swap!
-  free(crush->rules);
-  crush->rules = newrules;
-  crush->max_rules = max_ruleset;
-  return 0;
-}
-
-bool CrushWrapper::has_multirule_rulesets() const
-{
-  for (unsigned i=0; i<crush->max_rules; i++) {
-    crush_rule *r = crush->rules[i];
-    if (!r)
-      continue;
-    for (unsigned j=i+1; j<crush->max_rules; j++) {
-      crush_rule *s = crush->rules[j];
-      if (!s)
-	continue;
-      if (r->mask.ruleset == s->mask.ruleset)
-	return true;
-    }
-  }
-  return false;
+  return result;
 }
 
 bool CrushWrapper::has_non_straw2_buckets() const

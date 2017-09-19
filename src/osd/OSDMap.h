@@ -1337,7 +1337,9 @@ public:
     const string& root,
     ostream *ss);
 
-  bool crush_ruleset_in_use(int ruleset) const;
+  bool crush_rule_in_use(int rule_id) const;
+
+  int validate_crush_rules(CrushWrapper *crush, ostream *ss) const;
 
   void clear_temp() {
     pg_temp->clear();
