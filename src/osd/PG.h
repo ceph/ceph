@@ -1576,6 +1576,12 @@ public:
   TrivialEvent(RecoveryTooFull)
   TrivialEvent(CancelRecovery)
 
+  TrivialEvent(MakePrimary)
+  TrivialEvent(MakeStray)
+  TrivialEvent(NeedActingChange)
+  TrivialEvent(IsIncomplete)
+  TrivialEvent(IsDown)
+
   TrivialEvent(AllReplicasRecovered)
   TrivialEvent(DoRecovery)
   TrivialEvent(LocalRecoveryReserved)
@@ -1741,12 +1747,6 @@ public:
       }
     };
 
-    struct MakePrimary : boost::statechart::event< MakePrimary > {
-      MakePrimary() : boost::statechart::event< MakePrimary >() {}
-    };
-    struct MakeStray : boost::statechart::event< MakeStray > {
-      MakeStray() : boost::statechart::event< MakeStray >() {}
-    };
     struct Primary;
     struct Stray;
 
@@ -1762,17 +1762,8 @@ public:
 
     struct Peering;
     struct WaitActingChange;
-    struct NeedActingChange : boost::statechart::event< NeedActingChange > {
-      NeedActingChange() : boost::statechart::event< NeedActingChange >() {}
-    };
     struct Incomplete;
-    struct IsIncomplete : boost::statechart::event< IsIncomplete > {
-      IsIncomplete() : boost::statechart::event< IsIncomplete >() {}
-    };
     struct Down;
-    struct IsDown : boost::statechart::event< IsDown > {
-      IsDown() : boost::statechart::event< IsDown >() {}
-    };
 
     struct Primary : boost::statechart::state< Primary, Started, Peering >, NamedState {
       explicit Primary(my_context ctx);
