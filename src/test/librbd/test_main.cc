@@ -59,11 +59,16 @@ int main(int argc, char **argv)
 #endif // TEST_LIBRBD_INTERNALS
 
   int r = rados.conf_set("lockdep", "true");
+  int t = rados.conf_set("rbd_op_threads", "8");
+
   if (r < 0) {
     std::cerr << "failed to enable lockdep" << std::endl;
     return -r;
   }
-
+  if (t < 0) {
+    std::cerr << "failed to enable op threads" << std::endl;
+    return -t;
+  }
   int seed = getpid();
   std::cout << "seed " << seed << std::endl;
   srand(seed);
