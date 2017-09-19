@@ -20,6 +20,7 @@ tasks:
 - ceph:
     fs: xfs
     log-whitelist:
+    - \(OSDMAP_FLAGS\)
     - but it is still running
     conf:
       client.rest0:
