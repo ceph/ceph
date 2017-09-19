@@ -687,8 +687,7 @@ void FileStore::collect_metadata(map<string,string> *pm)
   (*pm)["filestore_f_type"] = ss.str();
 
   if (cct->_conf->filestore_collect_device_partition_information) {
-    rc = get_device_by_uuid(get_fsid(), "PARTUUID", partition_path,
-          dev_node);
+    rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
   } else {
     rc = -EINVAL;
   }
