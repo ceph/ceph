@@ -798,6 +798,7 @@ void RGWBucketEnt::dump(Formatter *f) const
   utime_t ut(creation_time);
   encode_json("mtime", ut, f); /* mtime / creation time discrepency needed for backward compatibility */
   encode_json("count", count, f);
+  encode_json("placement_rule", placement_rule, f);
 }
 
 void RGWUploadPartInfo::dump(Formatter *f) const
