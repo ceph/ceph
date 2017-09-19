@@ -1915,19 +1915,21 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
       std::string attr_name(RGW_ATTR_PREFIX);
       attr_name.append(name);
 
-      /* Check early whether we aren't going behind the limit on attribute
+      /* Check roughly whether we aren't going behind the limit on attribute
        * name. Passing here doesn't guarantee that an OSD will accept that
        * as ObjectStore::get_max_attr_name_length() can set the limit even
-       * lower. However, we're claiming "max_meta_name_length" in /info as
-       * being dependent on the "osd_max_attr_name_len".  */
-      if (attr_name.length() > cct->_conf->osd_max_attr_name_len) {
+       * lower than the "osd_max_attr_name_len" configurable.  */
+      const size_t max_attr_name_len = \
+        cct->_conf->get_val<size_t>("rgw_max_attr_name_len");
+      if (max_attr_name_len && attr_name.length() > max_attr_name_len) {
         return -ENAMETOOLONG;
       }
 
       /* Similar remarks apply to the check for value size. We're veryfing
        * it early at the RGW's side as it's being claimed in /info. */
-      if (cct->_conf->osd_max_attr_size &&
-          xattr.length() > cct->_conf->osd_max_attr_size) {
+      const size_t max_attr_size = \
+        cct->_conf->get_val<size_t>("rgw_max_attr_size");
+      if (max_attr_size && xattr.length() > max_attr_size) {
         return -EFBIG;
       }
 
