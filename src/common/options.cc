@@ -4186,6 +4186,18 @@ std::vector<Option> get_rgw_options() {
     .set_default(1_M)
     .set_description(""),
 
+    Option("rgw_max_attr_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("The maximum length of metadata value. 0 skips the check"),
+
+    Option("rgw_max_attr_name_len", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("The maximum length of metadata name. 0 skips the check"),
+
+    Option("rgw_max_attrs_num_in_req", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("The maximum number of metadata items that can be put via single request"),
+
     Option("rgw_override_bucket_index_max_shards", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description(""),
