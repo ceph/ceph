@@ -157,13 +157,18 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
             key.c_str(), (long long)update_entry.size, (long long)update_entry.count);
 
+    // Update bucket's placement rule info only when linking bucket, not on
+    // usage stats change. */
+    if (op.add) {
+      entry.placement_rule = update_entry.placement_rule;
+    }
+
     // sync entry stats when not an op.add, as when the case is op.add if its a
     // new entry we already have copied update_entry earlier, OTOH, for an existing entry
     // we end up clobbering the existing stats for the bucket
     if (!op.add){
       apply_entry_stats(update_entry, &entry);
     }
-
     entry.user_stats_sync = true;
 
     ret = write_entry(hctx, key, entry);

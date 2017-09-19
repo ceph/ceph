@@ -1844,15 +1844,32 @@ void RGWListBuckets::execute()
 			<< s->user->user_id << dendl;
       break;
     }
-    map<string, RGWBucketEnt>& m = buckets.get_buckets();
-    map<string, RGWBucketEnt>::iterator iter;
-    for (iter = m.begin(); iter != m.end(); ++iter) {
-      RGWBucketEnt& bucket = iter->second;
-      buckets_size += bucket.size;
-      buckets_size_rounded += bucket.size_rounded;
-      buckets_objcount += bucket.count;
+
+    /* We need to have stats for all our policies - even if a given policy
+     * isn't actually used in a given account. In such situation its usage
+     * stats would be simply full of zeros. */
+    for (const auto& policy : store->get_zonegroup().placement_targets) {
+      policies_stats.emplace(policy.second.name,
+                             decltype(policies_stats)::mapped_type());
     }
-    buckets_count += m.size();
+
+    std::map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
+    for (const auto& kv : m) {
+      const auto& bucket = kv.second;
+
+      global_stats.bytes_used += bucket.size;
+      global_stats.bytes_used_rounded += bucket.size_rounded;
+      global_stats.objects_count += bucket.count;
+
+      /* operator[] still can create a new entry for storage policy seen
+       * for first time. */
+      auto& policy_stats = policies_stats[bucket.placement_rule];
+      policy_stats.bytes_used += bucket.size;
+      policy_stats.bytes_used_rounded += bucket.size_rounded;
+      policy_stats.buckets_count++;
+      policy_stats.objects_count += bucket.count;
+    }
+    global_stats.buckets_count += m.size();
     total_count += m.size();
 
     done = (m.size() < read_count || (limit >= 0 && total_count >= (uint64_t)limit));
@@ -1970,17 +1987,31 @@ void RGWStatAccount::execute()
 			<< s->user->user_id << dendl;
       break;
     } else {
-      map<string, RGWBucketEnt>& m = buckets.get_buckets();
-      map<string, RGWBucketEnt>::iterator iter;
-      for (iter = m.begin(); iter != m.end(); ++iter) {
-        RGWBucketEnt& bucket = iter->second;
-        buckets_size += bucket.size;
-        buckets_size_rounded += bucket.size_rounded;
-        buckets_objcount += bucket.count;
-
-        marker = iter->first;
+      /* We need to have stats for all our policies - even if a given policy
+       * isn't actually used in a given account. In such situation its usage
+       * stats would be simply full of zeros. */
+      for (const auto& policy : store->get_zonegroup().placement_targets) {
+        policies_stats.emplace(policy.second.name,
+                               decltype(policies_stats)::mapped_type());
       }
-      buckets_count += m.size();
+
+      std::map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
+      for (const auto& kv : m) {
+        const auto& bucket = kv.second;
+
+        global_stats.bytes_used += bucket.size;
+        global_stats.bytes_used_rounded += bucket.size_rounded;
+        global_stats.objects_count += bucket.count;
+
+        /* operator[] still can create a new entry for storage policy seen
+         * for first time. */
+        auto& policy_stats = policies_stats[bucket.placement_rule];
+        policy_stats.bytes_used += bucket.size;
+        policy_stats.bytes_used_rounded += bucket.size_rounded;
+        policy_stats.buckets_count++;
+        policy_stats.objects_count += bucket.count;
+      }
+      global_stats.buckets_count += m.size();
 
     }
   } while (is_truncated);
@@ -2708,7 +2739,7 @@ void RGWCreateBucket::execute()
   }
 
   op_ret = rgw_link_bucket(store, s->user->user_id, s->bucket,
-			   info.creation_time, false);
+			   info.creation_time, info.placement_rule, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
     op_ret = rgw_unlink_bucket(store, s->user->user_id, s->bucket.tenant,
@@ -6172,8 +6203,8 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
     bucket = out_info.bucket;
   }
 
-  op_ret = rgw_link_bucket(store, s->user->user_id, bucket,
-                           out_info.creation_time, false);
+  op_ret = rgw_link_bucket(store, s->user->user_id,bucket, out_info.creation_time,
+                           out_info.placement_rule, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
     op_ret = rgw_unlink_bucket(store, s->user->user_id,
