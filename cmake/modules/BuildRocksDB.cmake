@@ -54,4 +54,15 @@ macro(build_rocksdb)
   endforeach()
   set(ROCKSDB_VERSION_STRING
     "${ROCKSDB_VERSION_MAJOR}.${ROCKSDB_VERSION_MINOR}.${ROCKSDB_VERSION_PATCH}")
+
+  if(ALLOCATOR MATCHES "tcmalloc(_minimal)?")
+    # see http://tracker.ceph.com/issues/21422
+    if(ROCKSDB_VERSION_STRING VERSION_GREATER 5.7 AND
+        TCMALLOC_VERSION_STRING VERSION_GREATER 2.5 AND
+        TCMALLOC_VERSION_STRING VERSION_LESS 2.6.2)
+      message(SEND_ERROR
+        "Incompatible tcmalloc v${TCMALLOC_VERSION_STRING} and rocksdb v${ROCKSDB_VERSION_STRING}, "
+        "please install gperf-tools 2.5 or > 2.6.2")
+    endif()
+  endif()
 endmacro()
