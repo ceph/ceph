@@ -1543,12 +1543,18 @@ std::vector<Option> get_global_options() {
     .set_default(15)
     .set_description("Interval in seconds between journal header updates (to help bound replay time)"),
 
-    Option("journaler_prefetch_periods", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    // * journal object size
+    Option("journaler_prefetch_periods", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
+    .set_min(2)			// we need at least 2 periods to make progress.
     .set_description("Number of striping periods to prefetch while reading MDS journal"),
 
-    Option("journaler_prezero_periods", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    // * journal object size
+    Option("journaler_prezero_periods", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    // we need to zero at least two periods, minimum, to ensure that we
+    // have a full empty object/period in front of us.
+    .set_min(2)
     .set_description("Number of striping periods to zero head of MDS journal write position"),
 
     Option("osd_check_max_object_name_len_on_startup", Option::TYPE_BOOL, Option::LEVEL_DEV)
