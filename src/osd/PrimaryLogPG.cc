@@ -7171,7 +7171,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
       interval_set<uint64_t> &newest_overlap = ctx->new_snapset.clone_overlap.rbegin()->second;
       ctx->modified_ranges.intersection_of(newest_overlap);
       // modified_ranges is still in use by the clone
-      add_interval_usage(ctx->modified_ranges, ctx->delta_stats);
+      ctx->delta_stats.num_bytes += ctx->modified_ranges.size();
       newest_overlap.subtract(ctx->modified_ranges);
     }
   }
@@ -7210,13 +7210,6 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
   }
   delta_stats.num_wr++;
   delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
-}
-
-void PrimaryLogPG::add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& delta_stats)
-{
-  for (interval_set<uint64_t>::const_iterator p = s.begin(); p != s.end(); ++p) {
-    delta_stats.num_bytes += p.get_len();
-  }
 }
 
 void PrimaryLogPG::complete_disconnect_watches(
