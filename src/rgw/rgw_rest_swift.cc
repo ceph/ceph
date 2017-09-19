@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/format.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
@@ -706,13 +707,41 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
   return get_swift_versioning_settings(s, swift_ver_location);
 }
 
+static inline int handle_metadata_errors(req_state* const s, const int op_ret)
+{
+  if (op_ret == -EFBIG) {
+    /* Handle the custom error message of exceeding maximum custom attribute
+     * (stored as xattr) size. */
+    const auto error_message = boost::str(
+      boost::format("Metadata value longer than %lld")
+        % s->cct->_conf->get_val<size_t>("rgw_max_attr_size"));
+    set_req_state_err(s, EINVAL, error_message);
+    return -EINVAL;
+  } else if (op_ret == -E2BIG) {
+    const auto error_message = boost::str(
+      boost::format("Too many metadata items; max %lld")
+        % s->cct->_conf->get_val<size_t>("rgw_max_attrs_num_in_req"));
+    set_req_state_err(s, EINVAL, error_message);
+    return -EINVAL;
+  }
+
+  return op_ret;
+}
+
 void RGWCreateBucket_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret)
-    op_ret = STATUS_CREATED;
-  else if (op_ret == -ERR_BUCKET_EXISTS)
-    op_ret = STATUS_ACCEPTED;
-  set_req_state_err(s, op_ret);
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_CREATED;
+    } else if (op_ret == -ERR_BUCKET_EXISTS) {
+      op_ret = STATUS_ACCEPTED;
+    }
+    set_req_state_err(s, op_ret);
+  }
+
   dump_errno(s);
   /* Propose ending HTTP header with 0 Content-Length header. */
   end_header(s, NULL, NULL, 0);
@@ -879,8 +908,14 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
 void RGWPutObj_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret) {
-    op_ret = STATUS_CREATED;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_CREATED;
+    }
+    set_req_state_err(s, op_ret);
   }
 
   if (! lo_etag.empty()) {
@@ -952,10 +987,16 @@ int RGWPutMetadataAccount_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadataAccount_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret) {
-    op_ret = STATUS_NO_CONTENT;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_NO_CONTENT;
+    }
+    set_req_state_err(s, op_ret);
   }
-  set_req_state_err(s, op_ret);
+
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -982,10 +1023,16 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadataBucket_ObjStore_SWIFT::send_response()
 {
-  if (!op_ret && (op_ret != -EINVAL)) {
-    op_ret = STATUS_NO_CONTENT;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret && (op_ret != -EINVAL)) {
+      op_ret = STATUS_NO_CONTENT;
+    }
+    set_req_state_err(s, op_ret);
   }
-  set_req_state_err(s, op_ret);
+
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1012,13 +1059,20 @@ int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret) {
-    op_ret = STATUS_ACCEPTED;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_ACCEPTED;
+    }
+    set_req_state_err(s, op_ret);
   }
-  set_req_state_err(s, op_ret);
+
   if (!s->is_err()) {
     dump_content_length(s, 0);
   }
+
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1720,7 +1774,25 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
 
   string ceph_version(CEPH_GIT_NICE_VER);
   formatter.dump_string("version", ceph_version);
-  formatter.dump_int("max_meta_name_length", 81);
+
+  const size_t max_attr_name_len = \
+    g_conf->get_val<size_t>("rgw_max_attr_name_len");
+  if (max_attr_name_len) {
+    const size_t meta_name_limit = \
+      max_attr_name_len - strlen(RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX);
+    formatter.dump_int("max_meta_name_length", meta_name_limit);
+  }
+
+  const size_t meta_value_limit = g_conf->get_val<size_t>("rgw_max_attr_size");
+  if (meta_value_limit) {
+    formatter.dump_int("max_meta_value_length", meta_value_limit);
+  }
+
+  const size_t meta_num_limit = \
+    g_conf->get_val<size_t>("rgw_max_attrs_num_in_req");
+  if (meta_num_limit) {
+    formatter.dump_int("max_meta_count", meta_num_limit);
+  }
 
   formatter.open_array_section("policies");
   RGWZoneGroup& zonegroup = store.get_zonegroup();
@@ -2651,11 +2723,22 @@ int RGWHandler_REST_SWIFT::postauth_init()
 
 int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
 {
-  int ret = RGWHandler_REST::validate_bucket_name(bucket);
-  if (ret < 0)
-    return ret;
+  const size_t len = bucket.size();
 
-  int len = bucket.size();
+  if (len > MAX_BUCKET_NAME_LEN) {
+    /* Bucket Name too long. Generate custom error message and bind it
+     * to an R-value reference. */
+    const auto msg = boost::str(
+      boost::format("Container name length of %lld longer than %lld")
+        % len % int(MAX_BUCKET_NAME_LEN));
+    set_req_state_err(s, ERR_INVALID_BUCKET_NAME, msg);
+    return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  const auto ret = RGWHandler_REST::validate_bucket_name(bucket);
+  if (ret < 0) {
+    return ret;
+  }
 
   if (len == 0)
     return 0;
@@ -2668,7 +2751,7 @@ int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
 
   const char *s = bucket.c_str();
 
-  for (int i = 0; i < len; ++i, ++s) {
+  for (size_t i = 0; i < len; ++i, ++s) {
     if (*(unsigned char *)s == 0xff)
       return -ERR_INVALID_BUCKET_NAME;
   }

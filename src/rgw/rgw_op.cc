@@ -1641,7 +1641,7 @@ void RGWGetObj::execute()
   if (torrent.get_flag())
   {
     torrent.init(s, store);
-    torrent.get_torrent_file(op_ret, read_op, total_len, bl, obj);
+    op_ret = torrent.get_torrent_file(read_op, total_len, bl, obj);
     if (op_ret < 0)
     {
       ldout(s->cct, 0) << "ERROR: failed to get_torrent_file ret= " << op_ret
@@ -2685,7 +2685,10 @@ void RGWCreateBucket::execute()
   if (need_metadata_upload()) {
     /* It's supposed that following functions WILL NOT change any special
      * attributes (like RGW_ATTR_ACL) if they are already present in attrs. */
-    rgw_get_request_metadata(s->cct, s->info, attrs, false);
+    op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+    if (op_ret < 0) {
+      return;
+    }
     prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
     populate_with_generic_attrs(s, attrs);
 
@@ -2778,7 +2781,10 @@ void RGWCreateBucket::execute()
 
       attrs.clear();
 
-      rgw_get_request_metadata(s->cct, s->info, attrs, false);
+      op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+      if (op_ret < 0) {
+        return;
+      }
       prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
       populate_with_generic_attrs(s, attrs);
       op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket_info.quota);
@@ -3577,7 +3583,10 @@ void RGWPutObj::execute()
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
   populate_with_generic_attrs(s, attrs);
-  rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  if (op_ret < 0) {
+    goto done;
+  }
   encode_delete_at_attr(delete_at, attrs);
   encode_obj_tags_attr(obj_tags.get(), attrs);
 
@@ -3891,7 +3900,10 @@ int RGWPutMetadataAccount::init_processing()
     attrs.emplace(RGW_ATTR_ACL, std::move(acl_bl));
   }
 
-  rgw_get_request_metadata(s->cct, s->info, attrs, false);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+  if (op_ret < 0) {
+    return op_ret;
+  }
   prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
 
@@ -3983,7 +3995,10 @@ void RGWPutMetadataBucket::execute()
     return;
   }
 
-  rgw_get_request_metadata(s->cct, s->info, attrs, false);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+  if (op_ret < 0) {
+    return;
+  }
 
   if (!placement_rule.empty() &&
       placement_rule != s->bucket_info.placement_rule) {
@@ -4070,7 +4085,11 @@ void RGWPutMetadataObject::execute()
     return;
   }
 
-  rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  if (op_ret < 0) {
+    return;
+  }
+
   /* check if obj exists, read orig attrs */
   op_ret = get_obj_attrs(store, s, obj, orig_attrs);
   if (op_ret < 0) {
@@ -4444,7 +4463,10 @@ int RGWCopyObj::init_common()
   dest_policy.encode(aclbl);
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-  rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  if (op_ret < 0) {
+    return op_ret;
+  }
   populate_with_generic_attrs(s, attrs);
 
   return 0;
@@ -5153,7 +5175,10 @@ void RGWInitMultipart::execute()
   if (op_ret != 0)
     return;
 
-  rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  if (op_ret < 0) {
+    return;
+  }
 
   do {
     char buf[33];
