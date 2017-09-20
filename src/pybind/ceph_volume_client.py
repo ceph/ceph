@@ -31,7 +31,6 @@ class RadosError(Exception):
 
 
 RADOS_TIMEOUT = 10
-SNAP_DIR = ".snap"
 
 log = logging.getLogger(__name__)
 
@@ -1296,7 +1295,7 @@ class CephFSVolumeClient(object):
 
     def _snapshot_path(self, dir_path, snapshot_name):
         return os.path.join(
-            dir_path, SNAP_DIR, snapshot_name
+            dir_path, self.rados.conf_get('client_snapdir'), snapshot_name
         )
 
     def _snapshot_create(self, dir_path, snapshot_name):
