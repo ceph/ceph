@@ -8,6 +8,7 @@ import time
 import datetime
 import re
 import errno
+import random
 
 from teuthology.exceptions import CommandFailedError
 from teuthology import misc
@@ -224,6 +225,17 @@ class MDSCluster(CephCluster):
                     cb(mds_id)
         else:
             cb(mds_id)
+
+    def get_config(self, key, service_type=None):
+        """
+        get_config specialization of service_type="mds"
+        """
+        if service_type != "mds":
+            return super(MDSCluster, self).get_config(key, service_type)
+
+        # Some tests stop MDS daemons, don't send commands to a dead one:
+        service_id = random.sample(filter(lambda i: self.mds_daemons[i].running(), self.mds_daemons), 1)[0]
+        return self.json_asok(['config', 'get', key], service_type, service_id)[key]
 
     def mds_stop(self, mds_id=None):
         """
