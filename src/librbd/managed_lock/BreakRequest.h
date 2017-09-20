@@ -78,7 +78,7 @@ private:
   bufferlist m_out_bl;
 
   std::list<obj_watch_t> m_watchers;
-  int m_watchers_ret_val;
+  int m_watchers_ret_val = 0;
 
   Locker m_refreshed_locker;
 
