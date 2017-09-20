@@ -82,7 +82,9 @@ def task(ctx, config):
     fix_rgw_config(rgw_node, dnsmasq_name)
     setup_user_bucket(rgw_node, dnsmasq_name, access_key, secret_key, bucket_name, testdir)
     if hadoop_ver.startswith('2.8'):
-        test_options = '-Dit.test=ITestS3A* -Dparallel-tests -Dscale -Dfs.s3a.scale.test.huge.filesize=128M verify'
+        # test all ITtests but skip AWS test using public bucket landsat-pds
+        # which is not available from within this test
+        test_options = '-Dit.test=ITestS3A* -Dit.test=\!ITestS3AAWSCredentialsProvider* -Dparallel-tests -Dscale -Dfs.s3a.scale.test.huge.filesize=128M verify'
     else:
         test_options = 'test -Dtest=S3a*,TestS3A*'
     try:
