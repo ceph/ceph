@@ -228,7 +228,7 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    attrs = ["!fails_on_rgw", "!lifecycle"]
+    attrs = ["!fails_on_rgw"]
     for client, client_config in config.iteritems():
         args = [
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
