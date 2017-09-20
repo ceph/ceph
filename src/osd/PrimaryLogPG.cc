@@ -6965,8 +6965,8 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 
       map<snapid_t, interval_set<uint64_t> >::iterator iter =
 	snapset.clone_overlap.lower_bound(snapid);
-      interval_set<uint64_t> overlaps = iter->second;
       assert(iter != snapset.clone_overlap.end());
+      interval_set<uint64_t> overlaps = iter->second;
       for ( ;
 	    iter != snapset.clone_overlap.end();
 	    ++iter)
