@@ -1646,7 +1646,6 @@ void PrimaryLogPG::do_request(
 	     << p->first << " not empty, queueing" << dendl;
     p->second.push_back(op);
     op->mark_delayed("waiting_for_map not empty");
-    osd->request_osdmap_update(op->min_epoch);
     return;
   }
   if (!have_same_or_newer_map(op->min_epoch)) {
@@ -1654,6 +1653,7 @@ void PrimaryLogPG::do_request(
 	     << ", queue on waiting_for_map " << op->get_source() << dendl;
     waiting_for_map[op->get_source()].push_back(op);
     op->mark_delayed("op must wait for map");
+    osd->request_osdmap_update(op->min_epoch);
     return;
   }
 
