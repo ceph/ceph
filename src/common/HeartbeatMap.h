@@ -21,6 +21,7 @@
 
 #include <pthread.h>
 
+#include "common/ceph_time.h"
 #include "RWLock.h"
 
 class CephContext;
@@ -79,12 +80,12 @@ class HeartbeatMap {
  private:
   CephContext *m_cct;
   RWLock m_rwlock;
-  time_t m_inject_unhealthy_until;
+  ceph::coarse_mono_clock::time_point m_inject_unhealthy_until;
   std::list<heartbeat_handle_d*> m_workers;
   std::atomic<unsigned> m_unhealthy_workers = { 0 };
   std::atomic<unsigned> m_total_workers = { 0 };
 
-  bool _check(const heartbeat_handle_d *h, const char *who, time_t now);
+  bool _check(const heartbeat_handle_d *h, const char *who, const ceph::coarse_mono_clock::time_point& now);
 };
 
 }
