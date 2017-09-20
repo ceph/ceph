@@ -975,7 +975,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	}
 	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL) &&
 	    full_pool_ids.empty()) {
-	  if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_NO_QUOTA)) {
+	  if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
 	    // set by EQUOTA, skipping
 	    continue;
 	  }
@@ -1010,7 +1010,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	  continue;
 	}
 	if (!tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL) ||
-	    tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_NO_QUOTA)) {
+	    tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
 	  // don't touch if currently is not full
 	  // or is running out of quota (and hence considered as full)
 	  continue;
@@ -1029,7 +1029,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	  // skip pools we have already considered as full above
 	  continue;
 	}
-	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_NO_QUOTA)) {
+	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
 	  // make sure FLAG_FULL is truly set, so we are safe not
 	  // to set a extra (redundant) FLAG_BACKFILLFULL flag
 	  assert(tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL));
@@ -1072,7 +1072,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	if (full_pool_ids.count(p) || backfillfull_pool_ids.count(p)) {
 	  continue;
 	}
-	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_NO_QUOTA)) {
+	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
 	  // make sure FLAG_FULL is truly set, so we are safe not
 	  // to set a extra (redundant) FLAG_NEARFULL flag
 	  assert(tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL));
@@ -4893,7 +4893,7 @@ bool OSDMonitor::update_pools_status()
       (pool.quota_max_bytes > 0 && (uint64_t)sum.num_bytes >= pool.quota_max_bytes) ||
       (pool.quota_max_objects > 0 && (uint64_t)sum.num_objects >= pool.quota_max_objects);
 
-    if (pool.has_flag(pg_pool_t::FLAG_FULL_NO_QUOTA)) {
+    if (pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
       if (pool_is_full)
         continue;
 
@@ -4902,7 +4902,7 @@ bool OSDMonitor::update_pools_status()
       // below we cancel FLAG_FULL too, we'll set it again in
       // OSDMonitor::encode_pending if it still fails the osd-full checking.
       clear_pool_flags(it->first,
-                       pg_pool_t::FLAG_FULL_NO_QUOTA | pg_pool_t::FLAG_FULL);
+                       pg_pool_t::FLAG_FULL_QUOTA | pg_pool_t::FLAG_FULL);
       ret = true;
     } else {
       if (!pool_is_full)
@@ -4920,11 +4920,11 @@ bool OSDMonitor::update_pools_status()
                          << " (reached quota's max_objects: "
                          << pool.quota_max_objects << ")";
       }
-      // set both FLAG_FULL_NO_QUOTA and FLAG_FULL
+      // set both FLAG_FULL_QUOTA and FLAG_FULL
       // note that below we try to cancel FLAG_BACKFILLFULL/NEARFULL too
       // since FLAG_FULL should always take precedence
       set_pool_flags(it->first,
-                     pg_pool_t::FLAG_FULL_NO_QUOTA | pg_pool_t::FLAG_FULL);
+                     pg_pool_t::FLAG_FULL_QUOTA | pg_pool_t::FLAG_FULL);
       clear_pool_flags(it->first,
                        pg_pool_t::FLAG_NEARFULL |
                        pg_pool_t::FLAG_BACKFILLFULL);
