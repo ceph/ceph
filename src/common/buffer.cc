@@ -1809,6 +1809,8 @@ using namespace ceph;
     _buffers.splice(_buffers.begin(), bl._buffers );
     bl._len = 0;
     bl.last_p = bl.begin();
+    // we modified _buffers
+    last_p = begin();
   }
 
   void buffer::list::claim_append_piecewise(list& bl)
