@@ -2125,6 +2125,34 @@ TEST(BufferList, claim_prepend) {
   EXPECT_EQ((unsigned)0, from.length());
 }
 
+TEST(BufferList, claim_prepend_misc) {
+  bufferlist src_buf;
+  bufferlist dest_buf;
+  
+  bufferlist b1;
+  b1.append("12345", 5);
+  bufferlist b2;
+  b2.append("123456", 6);
+  bufferlist b3;
+  b3.append("1234567", 7);
+
+  EXPECT_EQ(5u, b1.length());
+  EXPECT_EQ(6u, b2.length());
+  EXPECT_EQ(7u, b3.length());
+  src_buf.claim_append(b1);
+  src_buf.claim_append(b2);
+  EXPECT_EQ((unsigned)(5+6), src_buf.length());
+  src_buf.splice(0, 3);
+  EXPECT_EQ((unsigned)(5-3), src_buf.front().length());
+  EXPECT_EQ((unsigned)(11-3), src_buf.length());
+  src_buf.claim_prepend(b3);
+  EXPECT_EQ((unsigned)(8+7), src_buf.length());
+  EXPECT_EQ(0, b3.get_num_buffers());
+  EXPECT_EQ(0, b3.length());
+  src_buf.copy(0, src_buf.length(), dest_buf);
+  EXPECT_EQ(3u, dest_buf.get_num_buffers()); 
+}
+
 TEST(BufferList, claim_append_piecewise) {
   bufferlist bl, t, dst;
   auto a = bl.get_page_aligned_appender(4);
