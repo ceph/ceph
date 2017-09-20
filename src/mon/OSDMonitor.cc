@@ -6476,7 +6476,15 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     bloomp->set_fpp(f);
   } else if (var == "use_gmt_hitset") {
     if (val == "true" || (interr.empty() && n == 1)) {
-      if (!(osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT)) {
+      string force;
+      cmd_getval(g_ceph_context, cmdmap, "force", force);
+      if (!osdmap.get_num_up_osds() && force != "--yes-i-really-mean-it") {
+        ss << "Not advisable to continue since no OSDs are up. Pass "
+           << "--yes-i-really-mean-it if you really wish to continue.";
+        return -EPERM;
+      }
+      if (!(osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT)
+          && force != "--yes-i-really-mean-it") {
 	ss << "not all OSDs support GMT hit set.";
 	return -EINVAL;
       }
@@ -9027,6 +9035,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return prepare_unset_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
 
   } else if (prefix == "osd set") {
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     string key;
     cmd_getval(g_ceph_context, cmdmap, "key", key);
     if (key == "full")
@@ -9054,7 +9064,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     else if (key == "notieragent")
       return prepare_set_flag(op, CEPH_OSDMAP_NOTIERAGENT);
     else if (key == "sortbitwise") {
-      if (osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT) {
+      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+        ss << "Not advisable to continue since no OSDs are up. Pass "
+           << "--yes-i-really-mean-it if you really wish to continue.";
+        err = -EPERM;
+        goto reply;
+      }
+      if ((osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)
+          || sure == "--yes-i-really-mean-it") {
 	return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
       } else {
 	ss << "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature";
@@ -9062,7 +9079,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply;
       }
     } else if (key == "recovery_deletes") {
-      if (HAVE_FEATURE(osdmap.get_up_osd_features(), OSD_RECOVERY_DELETES)) {
+      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+        ss << "Not advisable to continue since no OSDs are up. Pass "
+           << "--yes-i-really-mean-it if you really wish to continue.";
+        err = -EPERM;
+        goto reply;
+      }
+      if (HAVE_FEATURE(osdmap.get_up_osd_features(), OSD_RECOVERY_DELETES)
+          || sure == "--yes-i-really-mean-it") {
 	return prepare_set_flag(op, CEPH_OSDMAP_RECOVERY_DELETES);
       } else {
 	ss << "not all up OSDs have OSD_RECOVERY_DELETES feature";
@@ -9070,6 +9094,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply;
       }
     } else if (key == "require_jewel_osds") {
+      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+        ss << "Not advisable to continue since no OSDs are up. Pass "
+           << "--yes-i-really-mean-it if you really wish to continue.";
+        err = -EPERM;
+        goto reply;
+      }
       if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
 	ss << "the sortbitwise flag must be set before require_jewel_osds";
 	err = -EPERM;
@@ -9078,13 +9108,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	ss << "require_osd_release is already >= jewel";
 	err = 0;
 	goto reply;
-      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL)) {
+      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL)
+                 || sure == "--yes-i-really-mean-it") {
 	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_JEWEL feature";
 	err = -EPERM;
       }
     } else if (key == "require_kraken_osds") {
+      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+        ss << "Not advisable to continue since no OSDs are up. Pass "
+           << "--yes-i-really-mean-it if you really wish to continue.";
+        err = -EPERM;
+        goto reply;
+      }
       if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
 	ss << "the sortbitwise flag must be set before require_kraken_osds";
 	err = -EPERM;
@@ -9093,7 +9130,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	ss << "require_osd_release is already >= kraken";
 	err = 0;
 	goto reply;
-      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN)) {
+      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN)
+                 || sure == "--yes-i-really-mean-it") {
 	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
 	// ensure JEWEL is also set
 	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
@@ -9142,6 +9180,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd require-osd-release") {
     string release;
     cmd_getval(g_ceph_context, cmdmap, "release", release);
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
       ss << "the sortbitwise flag must be set first";
       err = -EPERM;
