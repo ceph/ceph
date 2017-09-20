@@ -175,6 +175,17 @@ public:
     return utime_t(tt, 0);
   }
 
+  utime_t round_to_day() {
+    struct tm bdt;
+    time_t tt = sec();
+    localtime_r(&tt, &bdt);
+    bdt.tm_sec = 0;
+    bdt.tm_min = 0;
+    bdt.tm_hour = 0;
+    tt = mktime(&bdt);
+    return utime_t(tt, 0);
+  }
+
   // cast to double
   operator double() const {
     return (double)sec() + ((double)nsec() / 1000000000.0L);

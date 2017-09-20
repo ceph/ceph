@@ -402,7 +402,7 @@ class RGWLC {
 
   private:
   int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, const string& owner, const string& owner_display_name, bool remove_indeed = true);
-  bool obj_has_expired(double timediff, int days);
+  bool obj_has_expired(ceph::real_time mtime, int days);
   int handle_multipart_expiration(RGWRados::Bucket *target,
 				  const multimap<string, lc_op>& prefix_map);
 };
