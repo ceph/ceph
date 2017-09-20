@@ -19,6 +19,7 @@ overrides:
 roles:
 - - mon.a
 - - mon.b
+  - mgr.x
 - - mds.a
 - - osd.0
   - osd.1

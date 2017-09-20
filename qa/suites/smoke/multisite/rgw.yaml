@@ -9,6 +9,7 @@ roles:
 - - source.osd.6
   - source.osd.7
   - source.osd.8
+  - source.mgr.x
 - - source.client.0
 - - target.mon.a
 - - target.osd.0
@@ -20,6 +21,7 @@ roles:
 - - target.osd.6
   - target.osd.7
   - target.osd.8
+  - target.mgr.x
 - - target.client.1
 tasks:
 - install: null
@@ -71,4 +73,3 @@ tasks:
         zones:
         - z-1
         - z-2
-

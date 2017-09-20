@@ -12,6 +12,6 @@ overrides:
 roles:
 - [mon.a]
 - [mon.b]
-- [mon.c]
+- [mon.c, mgr.x]
 - [osd.0, osd.1, osd.2]
 - [osd.3, osd.4, osd.5, client.0]
