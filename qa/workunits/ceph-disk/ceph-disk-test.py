@@ -60,11 +60,12 @@ LOG = logging.getLogger('CephDisk')
 
 class CephDisk:
 
-    def __init__(self):
-        self.conf = configobj.ConfigObj('/etc/ceph/ceph.conf')
+    def __init__(self, cluster='ceph'):
+        self.cluster = cluster
+        self.conf = configobj.ConfigObj('/etc/ceph/' + self.cluster + '.conf')
 
     def save_conf(self):
-        self.conf.write(open('/etc/ceph/ceph.conf', 'wb'))
+        self.conf.write(open('/etc/ceph/' + self.cluster + '.conf', 'wb'))
 
     @staticmethod
     def helper(command):
@@ -456,6 +457,34 @@ class TestCephDisk(object):
         c.helper("pool_read_write")
         c.destroy_osd(osd_uuid)
 
+    def test_activate_mount_options(self):
+        c.conf['global']['mount_options'] = 'allocsize=8192'
+        c = CephDisk()
+        disk = c.unused_disks()[0]
+        osd_uuid = str(uuid.uuid1())
+        c.sh("ceph-disk --verbose zap " + disk)
+        c.sh("ceph-disk --verbose prepare --bluestore --osd-uuid " + osd_uuid +
+             " " + disk)
+        c.wait_for_osd_up(osd_uuid)
+        c.sh("mount | grep 8192")
+        device = json.loads(c.sh("ceph-disk list --format json " + disk))[0]
+        c.destroy_osd(osd_uuid)
+        c.sh("ceph-disk --verbose zap " + disk)
+        
+    def test_activate_mount_options_other_cluster(self):
+        c.conf['global']['mount_options'] = 'allocsize=8192'
+        c = CephDisk('other')
+        disk = c.unused_disks()[0]
+        osd_uuid = str(uuid.uuid1())
+        c.sh("ceph-disk --verbose zap " + disk)
+        c.sh("ceph-disk --cluster other --verbose prepare --bluestore --osd-uuid " + osd_uuid +
+             " " + disk)
+        c.wait_for_osd_up(osd_uuid)
+        c.sh("mount | grep 8192")
+        device = json.loads(c.sh("ceph-disk --cluster other list --format json " + disk))[0]
+        c.destroy_osd(osd_uuid)
+        c.sh("ceph-disk --verbose zap " + disk)
+        
     def test_activate_bluestore(self):
         c = CephDisk()
         disk = c.unused_disks()[0]
