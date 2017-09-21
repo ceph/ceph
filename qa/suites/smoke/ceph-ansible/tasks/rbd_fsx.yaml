@@ -1,0 +1,17 @@
+overrides:
+ ceph_ansible:
+   vars:
+      ceph_conf_overrides:
+          client:
+            rbd default data pool: datapool
+tasks:
+- ssh-keys:
+- ceph-ansible:
+- install.ship_utilities:
+- exec:
+    client.0:
+      - sudo ceph osd pool create datapool 4
+      - rbd pool init datapool
+- rbd_fsx:
+    clients: [client.0]
+    ops: 20000
