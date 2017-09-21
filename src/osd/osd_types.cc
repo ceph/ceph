@@ -827,8 +827,7 @@ std::string pg_state_string(int state)
     oss << "peering+";
   if (state & PG_STATE_REPAIR)
     oss << "repair+";
-  if ((state & PG_STATE_BACKFILL_WAIT) &&
-      !(state &PG_STATE_BACKFILL))
+  if (state & PG_STATE_BACKFILL_WAIT)
     oss << "backfill_wait+";
   if (state & PG_STATE_BACKFILL)
     oss << "backfilling+";
