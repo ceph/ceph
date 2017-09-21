@@ -3275,9 +3275,10 @@ int OSDMap::validate_crush_rules(CrushWrapper *newcrush,
       *ss << "pool " << i.first << " type does not match rule " << ruleno;
       return -EINVAL;
     }
-    if (pool.get_size() < (int)newcrush->get_rule_mask_min_size(ruleno) ||
-	pool.get_size() > (int)newcrush->get_rule_mask_max_size(ruleno)) {
-      *ss << "pool " << i.first << " size " << pool.get_size() << " does not"
+    int poolsize = pool.get_size();
+    if (poolsize < newcrush->get_rule_mask_min_size(ruleno) ||
+	poolsize > newcrush->get_rule_mask_max_size(ruleno)) {
+      *ss << "pool " << i.first << " size " << poolsize << " does not"
 	  << " fall within rule " << ruleno
 	  << " min_size " << newcrush->get_rule_mask_min_size(ruleno)
 	  << " and max_size " << newcrush->get_rule_mask_max_size(ruleno);
