@@ -76,14 +76,13 @@ tasks:
 - install.upgrade:
     mon.a:
     mon.b:
-- print: "**** done branch: -x install.upgrade on mon.a and mon.b"
+    client.1:
+- print: "**** done branch: -x install.upgrade on mon.a, mon.b, and client.1"
 - parallel:
    - workload_x
    - upgrade-sequence_x
 - print: "**** done parallel -x branch"
 # Run librados tests on the -x upgraded cluster
-- install.upgrade:
-    client.1:
 - workunit:
     branch: jewel
     clients:
