@@ -450,6 +450,26 @@ namespace crimson {
 	  HeapId    heap_id;
 	  Time      when_ready;
 	};
+
+	inline explicit NextReq() :
+	  type(NextReqType::none)
+	{ }
+
+	inline NextReq(HeapId _heap_id) :
+	  type(NextReqType::returning),
+	  heap_id(_heap_id)
+	{ }
+
+	inline NextReq(Time _when_ready) :
+	  type(NextReqType::future),
+	  when_ready(_when_ready)
+	{ }
+
+	// calls to this are clearer than calls to the default
+	// constructor
+	static inline NextReq none() {
+	  return NextReq();
+	}
       };
 
 
@@ -980,12 +1000,10 @@ namespace crimson {
 
       // data_mtx should be held when called
       NextReq do_next_request(Time now) {
-	NextReq result{};
-
-	// if reservation queue is empty, all are empty (i.e., no active clients)
+	// if reservation queue is empty, all are empty (i.e., no
+	// active clients)
 	if(resv_heap.empty()) {
-	  result.type = NextReqType::none;
-	  return result;
+	  return NextReq::none();
 	}
 
 	// try constraint (reservation) based scheduling
@@ -993,9 +1011,7 @@ namespace crimson {
 	auto& reserv = resv_heap.top();
 	if (reserv.has_request() &&
 	    reserv.next_request().tag.reservation <= now) {
-	  result.type = NextReqType::returning;
-	  result.heap_id = HeapId::reservation;
-	  return result;
+	  return NextReq(HeapId::reservation);
 	}
 
 	// no existing reservations before now, so try weight-based
@@ -1018,9 +1034,7 @@ namespace crimson {
 	if (readys.has_request() &&
 	    readys.next_request().tag.ready &&
 	    readys.next_request().tag.proportion < max_tag) {
-	  result.type = NextReqType::returning;
-	  result.heap_id = HeapId::ready;
-	  return result;
+	  return NextReq(HeapId::ready);
 	}
 
 	// if nothing is schedulable by reservation or
@@ -1030,14 +1044,10 @@ namespace crimson {
 	if (allow_limit_break) {
 	  if (readys.has_request() &&
 	      readys.next_request().tag.proportion < max_tag) {
-	    result.type = NextReqType::returning;
-	    result.heap_id = HeapId::ready;
-	    return result;
+	    return NextReq(HeapId::ready);
 	  } else if (reserv.has_request() &&
 		     reserv.next_request().tag.reservation < max_tag) {
-	    result.type = NextReqType::returning;
-	    result.heap_id = HeapId::reservation;
-	    return result;
+	    return NextReq(HeapId::reservation);
 	  }
 	}
 
@@ -1056,12 +1066,9 @@ namespace crimson {
 	  next_call = min_not_0_time(next_call, next.tag.limit);
 	}
 	if (next_call < TimeMax) {
-	  result.type = NextReqType::future;
-	  result.when_ready = next_call;
-	  return result;
+	  return NextReq(next_call);
 	} else {
-	  result.type = NextReqType::none;
-	  return result;
+	  return NextReq::none();
 	}
       } // do_next_request
 
