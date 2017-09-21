@@ -730,6 +730,7 @@ struct ObjectOperation {
     mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *out_reqids;
     uint64_t *out_truncate_seq;
     uint64_t *out_truncate_size;
+    interval_set<uint64_t> *out_extents;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
@@ -745,6 +746,7 @@ struct ObjectOperation {
 			      mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *oreqids,
 			      uint64_t *otseq,
 			      uint64_t *otsize,
+			      interval_set<uint64_t> *otextents,
 			      int *r)
       : cursor(c),
 	out_size(s), out_mtime(m),
@@ -754,6 +756,7 @@ struct ObjectOperation {
 	out_reqids(oreqids),
 	out_truncate_seq(otseq),
 	out_truncate_size(otsize),
+	out_extents(otextents),
 	prval(r) {}
     void finish(int r) override {
       // reqids are copied on ENOENT
@@ -796,6 +799,9 @@ struct ObjectOperation {
 	  *out_truncate_seq = copy_reply.truncate_seq;
 	if (out_truncate_size)
 	  *out_truncate_size = copy_reply.truncate_size;
+        if (out_extents) {
+          *out_extents = copy_reply.extents;
+        }
 	*cursor = copy_reply.cursor;
       } catch (buffer::error& e) {
 	if (prval)
@@ -820,6 +826,7 @@ struct ObjectOperation {
 		mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *out_reqids,
 		uint64_t *truncate_seq,
 		uint64_t *truncate_size,
+		interval_set<uint64_t> *extents,
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
@@ -833,7 +840,7 @@ struct ObjectOperation {
 				    out_omap_data, out_snaps, out_snap_seq,
 				    out_flags, out_data_digest,
 				    out_omap_digest, out_reqids, truncate_seq,
-				    truncate_size, prval);
+				    truncate_size, extents, prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
   }
