@@ -598,6 +598,8 @@ MESSAGE(MOSDPGRemove)
 MESSAGE(MOSDPGRecoveryDelete)
 #include "messages/MOSDPGRecoveryDeleteReply.h"
 MESSAGE(MOSDPGRecoveryDeleteReply)
+#include "messages/MOSDPGRestartPeering.h"
+MESSAGE(MOSDPGRestartPeering)
 #include "messages/MOSDPGScan.h"
 MESSAGE(MOSDPGScan)
 #include "messages/MOSDPGTemp.h"

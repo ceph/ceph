@@ -1935,6 +1935,15 @@ protected:
   // -- placement groups --
   RWLock pg_map_lock; // this lock orders *above* individual PG _locks
   ceph::unordered_map<spg_t, PG*> pg_map; // protected by pg_map lock
+  struct want_to_create_t {
+    int osd;
+    spg_t pgid;
+    epoch_t epoch;
+    want_to_create_t(int osd, const spg_t& pgid, epoch_t epoch)
+      : osd(osd), pgid(pgid), epoch(epoch) {}
+  };
+  std::vector<want_to_create_t> want_to_create_replica;
+  unsigned want_to_create_primary = 0;
 
   map<spg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
@@ -1985,7 +1994,9 @@ protected:
     const PastIntervals& pi,
     epoch_t epoch,
     PG::CephPeeringEvtRef evt);
-  
+  bool maybe_wait_for_max_pg(int primary, spg_t pgid, epoch_t epoch);
+  void resume_creating_pg();
+
   void load_pgs();
   void build_past_intervals_parallel();
 
@@ -2118,6 +2129,7 @@ protected:
   void handle_pg_log(OpRequestRef op);
   void handle_pg_info(OpRequestRef op);
   void handle_pg_trim(OpRequestRef op);
+  void handle_pg_restart_peering(OpRequestRef op);
 
   void handle_pg_backfill_reserve(OpRequestRef op);
   void handle_pg_recovery_reserve(OpRequestRef op);

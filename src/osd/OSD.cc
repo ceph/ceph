@@ -34,6 +34,7 @@
 
 #include "include/types.h"
 #include "include/compat.h"
+#include "include/scope_guard.h"
 
 #include "OSD.h"
 #include "OSDMap.h"
@@ -95,6 +96,7 @@
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
 #include "messages/MOSDPGCreated.h"
+#include "messages/MOSDPGRestartPeering.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 
@@ -4228,7 +4230,9 @@ int OSD::handle_pg_peering_evt(
     if (service.splitting(pgid)) {
       ceph_abort();
     }
-
+    if (maybe_wait_for_max_pg(acting_primary, pgid, epoch)) {
+      return -EAGAIN;
+    }
     // do we need to resurrect a deleting pg?
     spg_t resurrected;
     PGRef old_pg_state;
@@ -4369,6 +4373,60 @@ int OSD::handle_pg_peering_evt(
   }
 }
 
+bool OSD::maybe_wait_for_max_pg(int primary, spg_t pgid, epoch_t epoch)
+{
+  const auto max_pgs_per_osd =
+    (cct->_conf->get_val<int64_t>("mon_max_pg_per_osd") *
+     cct->_conf->get_val<double>("osd_max_pg_per_osd_hard_ratio"));
+  RWLock::RLocker l(pg_map_lock);
+  if (pg_map.size() < max_pgs_per_osd) {
+    return false;
+  }
+  if (primary == whoami) {
+    want_to_create_primary++;
+  } else {
+    want_to_create_replica.emplace_back(primary, pgid, epoch);
+  }
+  return true;
+}
+
+void OSD::resume_creating_pg()
+{
+  assert(pg_map_lock.is_locked());
+
+  const auto max_pgs_per_osd =
+    (cct->_conf->get_val<int64_t>("mon_max_pg_per_osd") *
+     cct->_conf->get_val<double>("osd_max_pg_per_osd_hard_ratio"));
+  unsigned spare_pgs = max_pgs_per_osd - pg_map.size();
+  assert(spare_pgs > 0);
+  if (want_to_create_primary > 0) {
+    if (monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0)) {
+      dout(4) << __func__ << ": resolicit pg creates from mon since "
+	      << last_pg_create_epoch << dendl;
+      monc->renew_subs();
+    }
+    if (spare_pgs <= want_to_create_primary) {
+      want_to_create_primary = 0;
+      return;
+    }
+    spare_pgs -= want_to_create_primary;
+    want_to_create_primary = 0;
+  }
+  while (!want_to_create_replica.empty()) {
+    auto want_to_create = want_to_create_replica.back();
+    auto con = service.get_con_osd_cluster(want_to_create.osd,
+					   want_to_create.epoch);
+    if (con) {
+      auto m = new MOSDPGRestartPeering(want_to_create.pgid,
+					want_to_create.epoch);
+      con->send_message(m);
+      spare_pgs--;
+    }
+    want_to_create_replica.pop_back();
+    if (!spare_pgs)
+      return;
+  }
+}
 
 void OSD::build_initial_pg_history(
   spg_t pgid,
@@ -6893,6 +6951,9 @@ void OSD::dispatch_op(OpRequestRef op)
   case MSG_OSD_PG_REMOVE:
     handle_pg_remove(op);
     break;
+  case MSG_OSD_PG_RESTART_PEERING:
+    handle_pg_restart_peering(op);
+    break;
   case MSG_OSD_PG_INFO:
     handle_pg_info(op);
     break;
@@ -6951,6 +7012,7 @@ void OSD::_dispatch(Message *m)
   case MSG_OSD_PG_QUERY:
   case MSG_OSD_PG_LOG:
   case MSG_OSD_PG_REMOVE:
+  case MSG_OSD_PG_RESTART_PEERING:
   case MSG_OSD_PG_INFO:
   case MSG_OSD_PG_TRIM:
   case MSG_OSD_BACKFILL_RESERVE:
@@ -8299,7 +8361,8 @@ void OSD::handle_pg_create(OpRequestRef op)
       service.send_pg_created(pgid.pgid);
     }
   }
-  last_pg_create_epoch = m->epoch;
+  if (want_to_create_primary == 0)
+    last_pg_create_epoch = m->epoch;
 
   maybe_update_heartbeat_peers();
 }
@@ -8533,6 +8596,39 @@ void OSD::handle_pg_notify(OpRequestRef op)
           op->get_req()->get_connection()->get_features())))
       );
   }
+}
+
+void OSD::handle_pg_restart_peering(OpRequestRef op)
+{
+  auto m = static_cast<const MOSDPGRestartPeering*>(op->get_req());
+  assert(m->get_type() == MSG_OSD_PG_RESTART_PEERING);
+  dout(7) << __func__ << " from " << m->get_source() << dendl;
+  if (!require_osd_peer(op->get_req()))
+    return;
+  if (!require_same_or_newer_map(op, m->get_epoch(), false))
+    return;
+  if (m->get_pgid().preferred() >= 0) {
+    dout(10) << __func__ << " ignoring localized pg " << m->get_pgid() << dendl;
+    return;
+  }
+
+  op->mark_started();
+  auto pg = _lookup_lock_pg(m->get_pgid());
+  if (!pg) {
+    dout(10) << __func__ << " don't have pg " << m->get_pgid() << dendl;
+    return;
+  }
+  auto unlock_pg = make_scope_guard([pg]() { pg->unlock(); });
+  if (m->get_epoch() < pg->info.history.same_interval_since) {
+    dout(10) << __func__ << " " << ": got obsolete " << *m
+	     << ", primary changed in " << pg->info.history.same_interval_since
+	     << dendl;
+    return;
+  }
+  assert(pg->is_primary());
+  auto restart_peering = std::make_shared<PG::CephPeeringEvt>(
+    m->get_epoch(), m->get_epoch(), PG::RestartPeering{});
+  pg->queue_peering_event(restart_peering);
 }
 
 void OSD::handle_pg_log(OpRequestRef op)
@@ -8978,6 +9074,8 @@ void OSD::_remove_pg(PG *pg)
   // remove from map
   pg_map.erase(pg->info.pgid);
   pg->put("PGMap"); // since we've taken it out of map
+
+  resume_creating_pg();
 }
 
 

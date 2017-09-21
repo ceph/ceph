@@ -1568,6 +1568,7 @@ public:
   TrivialEvent(LocalBackfillReserved)
   TrivialEvent(RemoteBackfillReserved)
   TrivialEvent(RemoteReservationRejected)
+  TrivialEvent(RestartPeering)
   TrivialEvent(CancelBackfill)
   TrivialEvent(RequestBackfill)
   TrivialEvent(RequestRecovery)
@@ -1842,7 +1843,8 @@ public:
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< Backfilled >,
-	boost::statechart::custom_reaction< AllReplicasActivated >
+	boost::statechart::custom_reaction< AllReplicasActivated >,
+	boost::statechart::custom_reaction< RestartPeering >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap&);
@@ -1850,6 +1852,7 @@ public:
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const MNotifyRec& notevt);
       boost::statechart::result react(const MLogRec& logevt);
+      boost::statechart::result react(const RestartPeering &restart_peering);
       boost::statechart::result react(const Backfilled&) {
 	return discard_event();
       }
