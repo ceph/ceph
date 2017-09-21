@@ -27,6 +27,7 @@
  */
 template <typename T>
 class AsyncReserver {
+  CephContext *cct;
   Finisher *f;
   unsigned max_allowed;
   unsigned min_priority;
@@ -55,10 +56,12 @@ class AsyncReserver {
   }
 public:
   AsyncReserver(
+    CephContext *cct,
     Finisher *f,
     unsigned max_allowed,
     unsigned min_priority = 0)
-    : f(f),
+    : cct(cct),
+      f(f),
       max_allowed(max_allowed),
       min_priority(min_priority),
       lock("AsyncReserver::lock") {}
