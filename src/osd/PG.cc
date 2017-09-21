@@ -235,13 +235,13 @@ void PGPool::update(OSDMapRef map)
   if ((map->get_epoch() != cached_epoch + 1) ||
       (pi->get_snap_epoch() == map->get_epoch())) {
     updated = true;
-    pi->build_removed_snaps(newly_removed_snaps);
-    interval_set<snapid_t> intersection;
-    intersection.intersection_of(newly_removed_snaps, cached_removed_snaps);
-    if (intersection == cached_removed_snaps) {
-        cached_removed_snaps.swap(newly_removed_snaps);
-        newly_removed_snaps = cached_removed_snaps;
-        newly_removed_snaps.subtract(intersection);
+    if (pi->build_removed_snaps_and_check_intersect(newly_removed_snaps, cached_removed_snaps)) {
+      // copy newly removed snaps, so we can calculate intersection of cached snaps
+      // and newly removed snaps by subtracting
+      interval_set<snapid_t> tmp;
+      tmp = newly_removed_snaps;
+      newly_removed_snaps.subtract(cached_removed_snaps);
+      cached_removed_snaps.swap(tmp);
     } else {
         lgeneric_subdout(cct, osd, 0) << __func__
           << " cached_removed_snaps shrank from " << cached_removed_snaps
