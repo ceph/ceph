@@ -1181,7 +1181,7 @@ bool DaemonServer::handle_command(MCommand *m)
 		  }
 		  break;
 		case OFR_BACKFILL:
-		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILL)) == 0) {
+		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILLING)) == 0) {
 		    ss << "pg " << pstr << " doesn't require backfilling; ";
 		    continue;
 		  } else  if (workpg.state & PG_STATE_FORCED_BACKFILL) {

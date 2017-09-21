@@ -993,7 +993,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_STALE        (1<<17) // our state for this pg is stale, unknown.
 #define PG_STATE_REMAPPED     (1<<18) // pg is explicitly remapped to different OSDs than CRUSH
 #define PG_STATE_DEEP_SCRUB   (1<<19) // deep scrub: check CRC32 on files
-#define PG_STATE_BACKFILL  (1<<20) // [active] backfilling pg content
+#define PG_STATE_BACKFILLING  (1<<20) // [active] backfilling pg content
 #define PG_STATE_BACKFILL_TOOFULL (1<<21) // backfill can't proceed: too full
 #define PG_STATE_RECOVERY_WAIT (1<<22) // waiting for recovery reservations
 #define PG_STATE_UNDERSIZED    (1<<23) // pg acting < pool size
