@@ -40,7 +40,10 @@ function run() {
 }
 
 function setup_osds() {
-    for id in $(seq 0 3) ; do
+    local count=$1
+    shift
+
+    for id in $(seq 0 $(expr $count - 1)) ; do
         run_osd $dir $id || return 1
     done
     wait_for_clean || return 1
@@ -52,10 +55,15 @@ function setup_osds() {
 
 function create_erasure_coded_pool() {
     local poolname=$1
+    shift
+    local k=$1
+    shift
+    local m=$1
+    shift
 
     ceph osd erasure-code-profile set myprofile \
         plugin=jerasure \
-        k=2 m=1 \
+        k=$k m=$m \
         ruleset-failure-domain=osd || return 1
     ceph osd pool create $poolname 1 1 erasure myprofile \
         || return 1
@@ -264,10 +272,10 @@ function rados_get_data_bad_size() {
 #
 function TEST_rados_get_subread_eio_shard_0() {
     local dir=$1
-    setup_osds || return 1
+    setup_osds 4 || return 1
 
     local poolname=pool-jerasure
-    create_erasure_coded_pool $poolname || return 1
+    create_erasure_coded_pool $poolname 2 1 || return 1
     # inject eio on primary OSD (0) and replica OSD (1)
     local shard_id=0
     rados_get_data eio $dir $shard_id || return 1
@@ -276,10 +284,10 @@ function TEST_rados_get_subread_eio_shard_0() {
 
 function TEST_rados_get_subread_eio_shard_1() {
     local dir=$1
-    setup_osds || return 1
+    setup_osds 4 || return 1
 
     local poolname=pool-jerasure
-    create_erasure_coded_pool $poolname || return 1
+    create_erasure_coded_pool $poolname 2 1 || return 1
     # inject eio into replicas OSD (1) and OSD (2)
     local shard_id=1
     rados_get_data eio $dir $shard_id || return 1
@@ -291,10 +299,10 @@ function TEST_rados_get_subread_eio_shard_1() {
 
 function TEST_rados_get_subread_missing() {
     local dir=$1
-    setup_osds || return 1
+    setup_osds 4 || return 1
 
     local poolname=pool-jerasure
-    create_erasure_coded_pool $poolname || return 1
+    create_erasure_coded_pool $poolname 2 1 || return 1
     # inject remove into replicas OSD (1) and OSD (2)
     local shard_id=1
     rados_get_data remove $dir $shard_id || return 1
@@ -311,10 +319,10 @@ function TEST_rados_get_subread_missing() {
 #
 function TEST_rados_get_bad_size_shard_0() {
     local dir=$1
-    setup_osds || return 1
+    setup_osds 4 || return 1
 
     local poolname=pool-jerasure
-    create_erasure_coded_pool $poolname || return 1
+    create_erasure_coded_pool $poolname 2 1 || return 1
     # Set incorrect size into primary OSD (0) and replica OSD (1)
     local shard_id=0
     rados_get_data_bad_size $dir $shard_id 10 || return 1
@@ -325,10 +333,10 @@ function TEST_rados_get_bad_size_shard_0() {
 
 function TEST_rados_get_bad_size_shard_1() {
     local dir=$1
-    setup_osds || return 1
+    setup_osds 4 || return 1
 
     local poolname=pool-jerasure
-    create_erasure_coded_pool $poolname || return 1
+    create_erasure_coded_pool $poolname 2 1 || return 1
     # Set incorrect size into replicas OSD (1) and OSD (2)
     local shard_id=1
     rados_get_data_bad_size $dir $shard_id 10 || return 1
@@ -341,10 +349,10 @@ function TEST_rados_get_with_subreadall_eio_shard_0() {
     local dir=$1
     local shard_id=0
 
-    setup_osds || return 1
+    setup_osds 4 || return 1
 
     local poolname=pool-jerasure
-    create_erasure_coded_pool $poolname || return 1
+    create_erasure_coded_pool $poolname 2 1 || return 1
     # inject eio on primary OSD (0)
     local shard_id=0
     rados_get_data_recovery eio $dir $shard_id || return 1
@@ -356,10 +364,10 @@ function TEST_rados_get_with_subreadall_eio_shard_1() {
     local dir=$1
     local shard_id=0
 
-    setup_osds || return 1
+    setup_osds 4 || return 1
 
     local poolname=pool-jerasure
-    create_erasure_coded_pool $poolname || return 1
+    create_erasure_coded_pool $poolname 2 1 || return 1
     # inject eio on replica OSD (1)
     local shard_id=1
     rados_get_data_recovery eio $dir $shard_id || return 1
