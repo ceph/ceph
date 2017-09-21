@@ -114,7 +114,7 @@ workload_jewel:
      - print: "**** done rgw workload_jewel"
      - s3tests:
          client.0:
-           force-branch: ceph-jewel
+           force-branch: ceph-jewel-10-2-7
            rgw_server: client.0
      - print: "**** done s3tests workload_jewel"
 upgrade-sequence_jewel:
