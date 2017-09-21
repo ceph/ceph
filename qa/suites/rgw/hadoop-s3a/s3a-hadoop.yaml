@@ -1,4 +1,8 @@
-machine_type: vps
+machine_type: ovh
+openstack:
+- volumes: # attached to each instance
+    count: 3 
+    size: 10 # GB
 overrides:
     ceph_ansible:
       vars:
@@ -7,7 +11,7 @@ overrides:
             osd default pool size: 2
             osd pool default pg num: 128
             osd pool default pgp num: 128
-            debug rgw: 20 
+            debug rgw: 20
             debug ms: 1
         ceph_test: true
         journal_collocation: true
