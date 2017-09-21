@@ -225,18 +225,6 @@ TEST(test_slab_containers, documentation_test) {
   EXPECT_EQ(3u,mempool::unittest_1::inuse_items());
 }
 
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
-
 
 /*
  * Local Variables:

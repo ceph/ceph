@@ -703,6 +703,13 @@ add_executable(unittest_mempool
 add_ceph_unittest(unittest_mempool)
 target_link_libraries(unittest_mempool global)
 
+# unittest_mempool
+add_executable(unittest_slab_containers
+  test_slab_containers.cc
+  )
+add_ceph_unittest(unittest_slab_containers ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_slab_containers)
+target_link_libraries(unittest_slab_containers global)
+
 # unittest_features
 add_executable(unittest_features
   test_features.cc
