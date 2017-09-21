@@ -4250,7 +4250,7 @@ void object_copy_cursor_t::generate_test_instances(list<object_copy_cursor_t*>& 
 
 void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(7, 5, bl);
+  ENCODE_START(8, 5, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
   ::encode(attrs, bl);
@@ -4266,12 +4266,13 @@ void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(reqids, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
+  ::encode(extents, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_copy_data_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START(7, bl);
+  DECODE_START(8, bl);
   if (struct_v < 5) {
     // old
     ::decode(size, bl);
@@ -4327,6 +4328,9 @@ void object_copy_data_t::decode(bufferlist::iterator& bl)
       ::decode(truncate_seq, bl);
       ::decode(truncate_size, bl);
     }
+    if (struct_v >= 8) {
+      ::decode(extents, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -4361,6 +4365,7 @@ void object_copy_data_t::generate_test_instances(list<object_copy_data_t*>& o)
   o.back()->omap_header.append("this is an omap header");
   o.back()->snaps.push_back(123);
   o.back()->reqids.push_back(make_pair(osd_reqid_t(), version_t()));
+  o.back()->extents.insert(0, 123);
 }
 
 void object_copy_data_t::dump(Formatter *f) const
@@ -4900,7 +4905,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(17, 8, bl);
+  ENCODE_START(18, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode((__u32)0, bl); // was category, no longer used
@@ -4934,13 +4939,14 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   if (has_manifest()) {
     ::encode(manifest, bl);
   }
+  ::encode(extents, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(17, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(18, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   ::decode(soid, bl);
   ::decode(myoloc, bl);
@@ -5028,6 +5034,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
       ::decode(manifest, bl);
     }
   }
+  if (struct_v >= 18) {
+    ::decode(extents, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5053,6 +5062,15 @@ void object_info_t::dump(Formatter *f) const
   f->dump_unsigned("expected_write_size", expected_write_size);
   f->dump_unsigned("alloc_hint_flags", alloc_hint_flags);
   f->dump_object("manifest", manifest);
+  f->open_array_section("extents");
+  for (interval_set<uint64_t>::const_iterator p = extents.begin();
+       p != extents.end(); ++p) {
+    f->open_object_section("extent");
+    f->dump_unsigned("offset", p.get_start());
+    f->dump_unsigned("length", p.get_len());
+    f->close_section();
+  }
+  f->close_section();
   f->open_object_section("watchers");
   for (map<pair<uint64_t, entity_name_t>,watch_info_t>::const_iterator p =
          watchers.begin(); p != watchers.end(); ++p) {
