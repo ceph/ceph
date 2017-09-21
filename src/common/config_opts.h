@@ -860,7 +860,7 @@ OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_INT, 128*1024*1024)  // default leveldb cache size
 OPTION(rocksdb_block_size, OPT_INT, 4*1024)  // default rocksdb block size
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
-OPTION(filestore_rocksdb_options, OPT_STR, "")
+OPTION(filestore_rocksdb_options, OPT_STR, "compaction_readahead_size=2097152")
 // rocksdb options that will be used in monstore
 OPTION(mon_rocksdb_options, OPT_STR, "write_buffer_size=33554432,compression=kNoCompression")
 
