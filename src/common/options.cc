@@ -3627,7 +3627,7 @@ std::vector<Option> get_global_options() {
 
     Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("compaction_readahead_size=2097152"),
 
     Option("filestore_omap_backend", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("rocksdb")
