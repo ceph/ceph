@@ -886,7 +886,7 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_REMAPPED;
   else if (state == "deep_scrub")
     type = PG_STATE_DEEP_SCRUB;
-  else if (state == "backfill")
+  else if (state == "backfilling")
     type = PG_STATE_BACKFILL;
   else if (state == "forced_backfill")
     type = PG_STATE_FORCED_BACKFILL;
