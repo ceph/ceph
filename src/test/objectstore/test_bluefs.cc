@@ -199,6 +199,7 @@ void write_single_file(BlueFS &fs, uint64_t rationed_bytes)
     rationed_bytes -= ALLOC_SIZE;
     while (1) {
       ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+      assert(h);
       bufferlist bl;
       char *buf = gen_buffer(ALLOC_SIZE);
       bufferptr bp = buffer::claim_char(ALLOC_SIZE, buf);
