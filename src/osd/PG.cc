@@ -7014,6 +7014,27 @@ boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& not
   return discard_event();
 }
 
+
+boost::statechart::result
+PG::RecoveryState::Active::react(const RestartPeering&)
+{
+  auto pg = context< RecoveryMachine >().pg;
+  ldout(pg->cct, 10) << get_state_name() << " restart_peering" << dendl;
+  auto osdmap = pg->get_osdmap();
+  vector<int> up, acting;
+  int up_primary, acting_primary;
+  osdmap->pg_to_up_acting_osds(
+    pg->info.pgid.pgid, &up, &up_primary, &acting, &acting_primary);
+  pg->start_peering_interval(
+    osdmap, up, up_primary,
+    acting, acting_primary,
+    context< RecoveryMachine >().get_cur_transaction());
+  pg->remove_down_peer_info(osdmap);
+  pg->check_past_interval_bounds();
+  post_event(ActMap{});
+  return transit<Reset>();
+}
+
 boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoevt)
 {
   PG *pg = context< RecoveryMachine >().pg;

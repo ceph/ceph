@@ -78,6 +78,7 @@ using namespace std;
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGTrim.h"
+#include "messages/MOSDPGRestartPeering.h"
 #include "messages/MOSDScrub.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepScrub.h"
@@ -507,6 +508,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_PG_TRIM:
     m = new MOSDPGTrim;
+    break;
+  case MSG_OSD_PG_RESTART_PEERING:
+    m = new MOSDPGRestartPeering;
     break;
 
   case MSG_OSD_SCRUB:
