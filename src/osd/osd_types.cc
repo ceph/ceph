@@ -829,7 +829,7 @@ std::string pg_state_string(int state)
     oss << "repair+";
   if (state & PG_STATE_BACKFILL_WAIT)
     oss << "backfill_wait+";
-  if (state & PG_STATE_BACKFILL)
+  if (state & PG_STATE_BACKFILLING)
     oss << "backfilling+";
   if (state & PG_STATE_FORCED_BACKFILL)
     oss << "forced_backfill+";
@@ -887,7 +887,7 @@ int pg_string_state(const std::string& state)
   else if (state == "deep_scrub")
     type = PG_STATE_DEEP_SCRUB;
   else if (state == "backfilling")
-    type = PG_STATE_BACKFILL;
+    type = PG_STATE_BACKFILLING;
   else if (state == "forced_backfill")
     type = PG_STATE_FORCED_BACKFILL;
   else if (state == "backfill_toofull")

@@ -3326,7 +3326,7 @@ void PGMap::get_health(
       note["incomplete"] += p->second;
     if (p->first & PG_STATE_BACKFILL_WAIT)
       note["backfill_wait"] += p->second;
-    if (p->first & PG_STATE_BACKFILL)
+    if (p->first & PG_STATE_BACKFILLING)
       note["backfilling"] += p->second;
     if (p->first & PG_STATE_BACKFILL_TOOFULL)
       note["backfill_toofull"] += p->second;
@@ -3431,7 +3431,7 @@ void PGMap::get_health(
 	                        PG_STATE_RECOVERY_TOOFULL |
 	                        PG_STATE_INCOMPLETE |
 	                        PG_STATE_BACKFILL_WAIT |
-	                        PG_STATE_BACKFILL |
+	                        PG_STATE_BACKFILLING |
 	                        PG_STATE_BACKFILL_TOOFULL)) &&
 	    stuck_pgs.count(p->first) == 0) {
 	  if (max > 0) {

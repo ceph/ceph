@@ -9315,7 +9315,7 @@ void OSDService::adjust_pg_priorities(const vector<PGRef>& pgs, int newflags)
       i->lock();
       int pgstate = i->get_state();
       if ( ((newstate == PG_STATE_FORCED_RECOVERY) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_RECOVERY_WAIT | PG_STATE_RECOVERING))) ||
-	    ((newstate == PG_STATE_FORCED_BACKFILL) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILL))) )
+	    ((newstate == PG_STATE_FORCED_BACKFILL) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILLING))) )
         i->_change_recovery_force_mode(newstate, false);
       i->unlock();
     }
@@ -9400,7 +9400,7 @@ void OSD::do_recovery(
       pg->discover_all_missing(*rctx.query_map);
       if (rctx.query_map->empty()) {
 	string action;
-        if (pg->state_test(PG_STATE_BACKFILL)) {
+        if (pg->state_test(PG_STATE_BACKFILLING)) {
 	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
 	    queued,
 	    queued,

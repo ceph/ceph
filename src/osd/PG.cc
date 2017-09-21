@@ -6395,7 +6395,7 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
   pg->queue_recovery();
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
-  pg->state_set(PG_STATE_BACKFILL);
+  pg->state_set(PG_STATE_BACKFILLING);
   pg->publish_stats_to_osd();
 }
 
@@ -6407,7 +6407,7 @@ PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
   pg->state_set(PG_STATE_BACKFILL_WAIT);
-  pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_BACKFILLING);
 
   for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
        it != pg->backfill_targets.end();
@@ -6467,7 +6467,7 @@ void PG::RecoveryState::Backfilling::exit()
   PG *pg = context< RecoveryMachine >().pg;
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
-  pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_BACKFILLING);
   pg->state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_backfilling_latency, dur);
