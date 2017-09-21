@@ -19,6 +19,8 @@
 
 int64_t unit_to_bytesize(string val, ostream *pss);
 
+std::string bytes2str(uint64_t count);
+
 struct ceph_data_stats
 {
   uint64_t byte_total;

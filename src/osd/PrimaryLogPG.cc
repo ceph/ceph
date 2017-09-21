@@ -1655,6 +1655,7 @@ void PrimaryLogPG::do_request(
 	     << ", queue on waiting_for_map " << op->get_source() << dendl;
     waiting_for_map[op->get_source()].push_back(op);
     op->mark_delayed("op must wait for map");
+    osd->request_osdmap_update(op->min_epoch);
     return;
   }
 

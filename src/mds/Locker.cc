@@ -130,28 +130,24 @@ void Locker::tick()
 
 void Locker::send_lock_message(SimpleLock *lock, int msg)
 {
-  for (compact_map<mds_rank_t,unsigned>::iterator it = lock->get_parent()->replicas_begin();
-       it != lock->get_parent()->replicas_end();
-       ++it) {
+  for (const auto &it : lock->get_parent()->get_replicas()) {
     if (mds->is_cluster_degraded() &&
-	mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN) 
+	mds->mdsmap->get_state(it.first) < MDSMap::STATE_REJOIN)
       continue;
     MLock *m = new MLock(lock, msg, mds->get_nodeid());
-    mds->send_message_mds(m, it->first);
+    mds->send_message_mds(m, it.first);
   }
 }
 
 void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data)
 {
-  for (compact_map<mds_rank_t,unsigned>::iterator it = lock->get_parent()->replicas_begin();
-       it != lock->get_parent()->replicas_end();
-       ++it) {
+  for (const auto &it : lock->get_parent()->get_replicas()) {
     if (mds->is_cluster_degraded() &&
-	mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN) 
+	mds->mdsmap->get_state(it.first) < MDSMap::STATE_REJOIN)
       continue;
     MLock *m = new MLock(lock, msg, mds->get_nodeid());
     m->set_data(data);
-    mds->send_message_mds(m, it->first);
+    mds->send_message_mds(m, it.first);
   }
 }
 

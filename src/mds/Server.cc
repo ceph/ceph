@@ -1082,10 +1082,16 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
  * to trim some caps, and consequently unpin some inodes in the MDCache so
  * that it can trim too.
  */
-void Server::recall_client_state(float ratio)
+void Server::recall_client_state(void)
 {
-  int max_caps_per_client = (int)(g_conf->mds_cache_size * .8);
-  int min_caps_per_client = 100;
+  /* try to recall at least 80% of all caps */
+  uint64_t max_caps_per_client = (Capability::count() * .8);
+  uint64_t min_caps_per_client = 100;
+  /* unless this ratio is smaller: */
+  /* ratio: determine the amount of caps to recall from each client. Use
+   * percentage full over the cache reservation. Cap the ratio at 80% of client
+   * caps. */
+  double ratio = 1.0-fmin(0.80, mdcache->cache_toofull_ratio());
 
   dout(10) << "recall_client_state " << ratio
 	   << ", caps per client " << min_caps_per_client << "-" << max_caps_per_client
@@ -1093,10 +1099,7 @@ void Server::recall_client_state(float ratio)
 
   set<Session*> sessions;
   mds->sessionmap.get_client_session_set(sessions);
-  for (set<Session*>::const_iterator p = sessions.begin();
-       p != sessions.end();
-       ++p) {
-    Session *session = *p;
+  for (auto &session : sessions) {
     if (!session->is_open() ||
 	!session->info.inst.name.is_client())
       continue;
@@ -1107,7 +1110,7 @@ void Server::recall_client_state(float ratio)
 	     << dendl;
 
     if (session->caps.size() > min_caps_per_client) {	
-      int newlim = MIN((int)(session->caps.size() * ratio), max_caps_per_client);
+      uint64_t newlim = MIN((session->caps.size() * ratio), max_caps_per_client);
       if (session->caps.size() > newlim) {
           MClientSession *m = new MClientSession(CEPH_SESSION_RECALL_STATE);
           m->head.max_caps = newlim;
@@ -3668,12 +3671,11 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   bufferlist dnbl;
   __u32 numfiles = 0;
   bool start = !offset_hash && offset_str.empty();
-  bool end = (dir->begin() == dir->end());
   // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
   dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
-  for (CDir::map_t::iterator it = start ? dir->begin() : dir->lower_bound(skip_key);
-       !end && numfiles < max;
-       end = (it == dir->end())) {
+  auto it = start ? dir->begin() : dir->lower_bound(skip_key);
+  bool end = (it == dir->end());
+  for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;
     ++it;
 
@@ -4068,10 +4070,9 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   if (mask & CEPH_SETATTR_MODE)
     pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
   else if ((mask & (CEPH_SETATTR_UID|CEPH_SETATTR_GID|CEPH_SETATTR_KILL_SGUID)) &&
-	    S_ISREG(pi->mode)) {
-    pi->mode &= ~S_ISUID;
-    if ((pi->mode & (S_ISGID|S_IXGRP)) == (S_ISGID|S_IXGRP))
-      pi->mode &= ~S_ISGID;
+	    S_ISREG(pi->mode) &&
+            (pi->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
+    pi->mode &= ~(S_ISUID|S_ISGID);
   }
 
   if (mask & CEPH_SETATTR_MTIME)

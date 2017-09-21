@@ -271,7 +271,6 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
 
-  lru.lru_set_max(cct->_conf->client_cache_size);
   lru.lru_set_midpoint(cct->_conf->client_cache_mid);
 
   // file handles
@@ -331,7 +330,6 @@ void Client::tear_down_cache()
   // *** FIXME ***
 
   // empty lru
-  lru.lru_set_max(0);
   trim_cache();
   assert(lru.lru_get_size() == 0);
 
@@ -600,12 +598,13 @@ void Client::shutdown()
 
 void Client::trim_cache(bool trim_kernel_dcache)
 {
-  ldout(cct, 20) << "trim_cache size " << lru.lru_get_size() << " max " << lru.lru_get_max() << dendl;
+  uint64_t max = cct->_conf->client_cache_size;
+  ldout(cct, 20) << "trim_cache size " << lru.lru_get_size() << " max " << max << dendl;
   unsigned last = 0;
   while (lru.lru_get_size() != last) {
     last = lru.lru_get_size();
 
-    if (lru.lru_get_size() <= lru.lru_get_max())  break;
+    if (!unmounting && lru.lru_get_size() <= max)  break;
 
     // trim!
     Dentry *dn = static_cast<Dentry*>(lru.lru_get_next_expire());
@@ -615,7 +614,7 @@ void Client::trim_cache(bool trim_kernel_dcache)
     trim_dentry(dn);
   }
 
-  if (trim_kernel_dcache && lru.lru_get_size() > lru.lru_get_max())
+  if (trim_kernel_dcache && lru.lru_get_size() > max)
     _invalidate_kernel_dcache();
 
   // hose root?
@@ -5913,7 +5912,6 @@ void Client::unmount()
   wait_sync_caps(last_flush_tid);
 
   // empty lru cache
-  lru.lru_set_max(0);
   trim_cache();
 
   while (lru.lru_get_size() > 0 ||
@@ -6698,11 +6696,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
       ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
-    } else if (kill_sguid && S_ISREG(in->mode)) {
+    } else if (kill_sguid && S_ISREG(in->mode) && (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
       /* Must squash the any setuid/setgid bits with an ownership change */
-      in->mode &= ~S_ISUID;
-      if ((in->mode & (S_ISGID|S_IXGRP)) == (S_ISGID|S_IXGRP))
-	in->mode &= ~S_ISGID;
+      in->mode &= ~(S_ISUID|S_ISGID);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
     }
 
@@ -6845,6 +6841,14 @@ int Client::_setattr(InodeRef &in, struct stat *attr, int mask,
 
   stat_to_statx(attr, &stx);
   mask &= ~CEPH_SETATTR_BTIME;
+
+  if ((mask & CEPH_SETATTR_UID) && attr->st_uid == static_cast<uid_t>(-1)) {
+    mask &= ~CEPH_SETATTR_UID;
+  }
+  if ((mask & CEPH_SETATTR_GID) && attr->st_gid == static_cast<uid_t>(-1)) {
+    mask &= ~CEPH_SETATTR_GID;
+  }
+
   return _setattrx(in, &stx, mask, perms);
 }
 
@@ -7196,10 +7200,7 @@ int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
   struct stat attr;
   attr.st_uid = new_uid;
   attr.st_gid = new_gid;
-  int mask = 0;
-  if (new_uid != static_cast<uid_t>(-1)) mask |= CEPH_SETATTR_UID;
-  if (new_gid != static_cast<gid_t>(-1)) mask |= CEPH_SETATTR_GID;
-  return _setattr(in, &attr, mask, perms);
+  return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID, perms);
 }
 
 int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
@@ -9015,8 +9016,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     return r;
 
   /* clear the setuid/setgid bits, if any */
-  if (unlikely((in->mode & S_ISUID) ||
-	       (in->mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
+  if (unlikely(in->mode & (S_ISUID|S_ISGID)) && size > 0) {
     struct ceph_statx stx = { 0 };
 
     put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
@@ -13013,6 +13013,12 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
     if (cur == root_ancestor)
       break;
 
+    // deleted inode
+    if (cur->nlink == 0) {
+      cur = root_ancestor;
+      break;
+    }
+
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPNAME);
     filepath path(cur->ino);
     req->set_filepath(path);
@@ -13342,9 +13348,7 @@ void Client::handle_conf_change(const struct md_config_t *conf,
 {
   Mutex::Locker lock(client_lock);
 
-  if (changed.count("client_cache_size") ||
-      changed.count("client_cache_mid")) {
-    lru.lru_set_max(cct->_conf->client_cache_size);
+  if (changed.count("client_cache_mid")) {
     lru.lru_set_midpoint(cct->_conf->client_cache_mid);
   }
   if (changed.count("client_acl_type")) {

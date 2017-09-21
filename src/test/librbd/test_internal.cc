@@ -718,7 +718,7 @@ TEST_F(TestInternal, DiscardCopyup)
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
-  REQUIRE(!cct->_conf->rbd_skip_partial_discard);
+  REQUIRE(!cct->_conf->get_val<bool>("rbd_skip_partial_discard"));
 
   m_image_name = get_temp_image_name();
   m_image_size = 1 << 14;

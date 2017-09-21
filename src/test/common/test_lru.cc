@@ -23,101 +23,126 @@
 class Item : public LRUObject {
 public:
   int id;
-  explicit Item(int v) : id(v) {}
+  Item() : id(0) {}
+  Item(int i) : id(i) {}
+  void set(int i) {id = i;}
 };
 
 
 TEST(lru, InsertTop) {
-  LRU lru = LRU(10);
+  LRU lru;
+  static const int n = 100;
+  Item items[n];
 
-  lru.lru_set_midpoint(.5); // 50% of 10 elements.
-  for (int i=0; i<100; i++) {
-    lru.lru_insert_top(new Item(i));
+  lru.lru_set_midpoint(.5); // 50% of elements.
+  for (int i=0; i<n; i++) {
+    items[i].set(i);
+    lru.lru_insert_top(&items[i]);
   }
-  ASSERT_EQ(5U, lru.lru_get_top());
-  ASSERT_EQ(95U, lru.lru_get_bot());
+  ASSERT_EQ(50U, lru.lru_get_top());
+  ASSERT_EQ(50U, lru.lru_get_bot());
   ASSERT_EQ(100U, lru.lru_get_size());
 
   ASSERT_EQ(0, (static_cast<Item*>(lru.lru_expire()))->id);
 }
 
 TEST(lru, InsertMid) {
-  LRU lru = LRU(10);
+  LRU lru;
+  static const int n = 102;
+  Item items[n];
 
-  for (int i=0; i<100; i++) {
-    lru.lru_insert_mid(new Item(i));
+  lru.lru_set_midpoint(.7); // 70% of elements.
+  for (int i=0; i<n; i++) {
+    items[i].set(i);
+    lru.lru_insert_mid(&items[i]);
   }
-  ASSERT_EQ(0U, lru.lru_get_top());
-  ASSERT_EQ(100U, lru.lru_get_bot());
-  ASSERT_EQ(100U, lru.lru_get_size());
+  ASSERT_EQ(71U, lru.lru_get_top());
+  ASSERT_EQ(31U, lru.lru_get_bot());
+  ASSERT_EQ(102U, lru.lru_get_size());
 
   ASSERT_EQ(0, (static_cast<Item*>(lru.lru_expire()))->id);
 }
 
 TEST(lru, InsertBot) {
-  LRU lru = LRU(10);
+  LRU lru;
+  static const int n = 100;
+  Item items[n];
 
-  for (int i=0; i<100; i++) {
-    lru.lru_insert_bot(new Item(i));
+  lru.lru_set_midpoint(.7); // 70% of elements.
+  for (int i=0; i<n; i++) {
+    items[i].set(i);
+    lru.lru_insert_bot(&items[i]);
   }
-  ASSERT_EQ(0U, lru.lru_get_top());
-  ASSERT_EQ(100U, lru.lru_get_bot());
+  ASSERT_EQ(70U, lru.lru_get_top());
+  ASSERT_EQ(30U, lru.lru_get_bot());
   ASSERT_EQ(100U, lru.lru_get_size());
 
   ASSERT_EQ(99, (static_cast<Item*>(lru.lru_expire()))->id);
 }
 
 TEST(lru, Adjust) {
-  LRU lru = LRU(10);
+  LRU lru;
+  static const int n = 100;
+  Item items[n];
 
-  lru.lru_set_midpoint(.6); // 60% of 10 elements.
-  for (int i=0; i<100; i++) {
-    lru.lru_touch(new Item(i));
+  lru.lru_set_midpoint(.6); // 60% of elements.
+  for (int i=0; i<n; i++) {
+    items[i].set(i);
+    lru.lru_insert_top(&items[i]);
+    if (i % 5 == 0)
+      items[i].lru_pin();
   }
-  ASSERT_EQ(6U, lru.lru_get_top());
-  ASSERT_EQ(94U, lru.lru_get_bot());
+  ASSERT_EQ(48U, lru.lru_get_top()); /* 60% of unpinned */
+  ASSERT_EQ(52U, lru.lru_get_bot());
   ASSERT_EQ(100U, lru.lru_get_size());
 
-  lru.lru_clear();
-
-  lru.lru_set_midpoint(1.2); // 120% of 10 elements.
-  for (int i=0; i<100; i++) {
-    lru.lru_touch(new Item(i));
-  }
-  ASSERT_EQ(12U, lru.lru_get_top());
-  ASSERT_EQ(88U, lru.lru_get_bot());
-  ASSERT_EQ(100U, lru.lru_get_size());
+  ASSERT_EQ(1, (static_cast<Item*>(lru.lru_expire()))->id);
+  ASSERT_EQ(1U, lru.lru_get_pintail());
+  ASSERT_EQ(47U, lru.lru_get_top()); /* 60% of unpinned */
+  ASSERT_EQ(51U, lru.lru_get_bot());
+  ASSERT_EQ(99U, lru.lru_get_size());
+  ASSERT_EQ(2, (static_cast<Item*>(lru.lru_expire()))->id);
+  ASSERT_EQ(1U, lru.lru_get_pintail());
+  ASSERT_EQ(46U, lru.lru_get_top()); /* 60% of unpinned */
+  ASSERT_EQ(51U, lru.lru_get_bot());
+  ASSERT_EQ(98U, lru.lru_get_size());
+  ASSERT_EQ(3, (static_cast<Item*>(lru.lru_expire()))->id);
+  ASSERT_EQ(4, (static_cast<Item*>(lru.lru_expire()))->id);
+  ASSERT_EQ(6, (static_cast<Item*>(lru.lru_expire()))->id);
+  ASSERT_EQ(2U, lru.lru_get_pintail());
+  ASSERT_EQ(45U, lru.lru_get_top()); /* 60% of unpinned */
+  ASSERT_EQ(48U, lru.lru_get_bot());
+  ASSERT_EQ(95U, lru.lru_get_size());
 }
 
 TEST(lru, Pinning) {
-  LRU lru = LRU();
+  LRU lru;
 
-  Item *ob0 = new Item(0);
-  Item *ob1 = new Item(1);
+  Item ob0(0), ob1(1);
 
   // test before ob1 are in a LRU
-  ob1->lru_pin();
-  ASSERT_FALSE(ob1->lru_is_expireable());
+  ob1.lru_pin();
+  ASSERT_FALSE(ob1.lru_is_expireable());
 
-  ob1->lru_unpin();
-  ASSERT_TRUE(ob1->lru_is_expireable());
+  ob1.lru_unpin();
+  ASSERT_TRUE(ob1.lru_is_expireable());
 
   // test when ob1 are in a LRU
-  lru.lru_touch(ob0);
-  lru.lru_touch(ob1);
+  lru.lru_insert_top(&ob0);
+  lru.lru_insert_top(&ob1);
 
-  ob1->lru_pin();
-  ob1->lru_pin(); // Verify that, one incr.
+  ob1.lru_pin();
+  ob1.lru_pin(); // Verify that, one incr.
   ASSERT_EQ(1U, lru.lru_get_num_pinned());
-  ASSERT_FALSE(ob1->lru_is_expireable());
+  ASSERT_FALSE(ob1.lru_is_expireable());
 
-  ob1->lru_unpin();
-  ob1->lru_unpin(); // Verify that, one decr.
+  ob1.lru_unpin();
+  ob1.lru_unpin(); // Verify that, one decr.
   ASSERT_EQ(0U, lru.lru_get_num_pinned());
-  ASSERT_TRUE(ob1->lru_is_expireable());
+  ASSERT_TRUE(ob1.lru_is_expireable());
 
   ASSERT_EQ(0, (static_cast<Item*>(lru.lru_expire()))->id);
-  ob0->lru_pin();
+  ob0.lru_pin();
   ASSERT_EQ(1, (static_cast<Item*>(lru.lru_expire()))->id);
 }
 

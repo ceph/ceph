@@ -356,6 +356,7 @@ Summary:	Ceph fuse-based client
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
+Requires:       fuse
 %description fuse
 FUSE based client for Ceph distributed network file system
 
@@ -1578,10 +1579,7 @@ fi
 %{_libdir}/librbd_tp.so.*
 %endif
 
-%post -n librbd1
-/sbin/ldconfig
-mkdir -p /usr/lib64/qemu/
-ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
+%post -n librbd1 -p /sbin/ldconfig
 
 %postun -n librbd1 -p /sbin/ldconfig
 

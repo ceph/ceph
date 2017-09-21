@@ -233,7 +233,7 @@ private:
     if (ret == -EINVAL) {
       // if shrinking an image, a pagecache writeback might reference
       // extents outside of the range of the new image extents
-      dout(5) << __func__ << ": masking IO out-of-bounds error" << dendl;
+      dout(0) << __func__ << ": masking IO out-of-bounds error" << dendl;
       ctx->data.clear();
       ret = 0;
     }
@@ -924,14 +924,26 @@ static int do_list_mapped_devices()
 
 static int parse_args(vector<const char*>& args, std::ostream *err_msg, Config *cfg)
 {
-  std::vector<const char*>::iterator i;
-  std::ostringstream err;
+  std::string conf_file_list;
+  std::string cluster;
+  CephInitParameters iparams = ceph_argparse_early_args(
+          args, CEPH_ENTITY_TYPE_CLIENT, &cluster, &conf_file_list);
 
   md_config_t config;
-  config.parse_config_files(nullptr, nullptr, 0);
+  config.name = iparams.name;
+  config.cluster = cluster;
+
+  if (!conf_file_list.empty()) {
+    config.parse_config_files(conf_file_list.c_str(), nullptr, 0);
+  } else {
+    config.parse_config_files(nullptr, nullptr, 0);
+  }
   config.parse_env();
   config.parse_argv(args);
-  cfg->poolname = config.rbd_default_pool;
+  cfg->poolname = config.get_val<std::string>("rbd_default_pool");
+
+  std::vector<const char*>::iterator i;
+  std::ostringstream err;
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
