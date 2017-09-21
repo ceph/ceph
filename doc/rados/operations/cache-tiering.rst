@@ -455,7 +455,7 @@ disable and remove it.
 
 .. _Create a Pool: ../pools#create-a-pool
 .. _Pools - Set Pool Values: ../pools#set-pool-values
-.. _Placing Different Pools on Different OSDs: ../crush-map/#placing-different-pools-on-different-osds
+.. _Placing Different Pools on Different OSDs: ../crush-map-edits/#placing-different-pools-on-different-osds
 .. _Bloom Filter: http://en.wikipedia.org/wiki/Bloom_filter
 .. _CRUSH Maps: ../crush-map
 .. _Absolute Sizing: #absolute-sizing
