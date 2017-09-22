@@ -152,6 +152,9 @@ void write_data(BlueFS &fs, uint64_t rationed_bytes)
       string file = "file.";
       file.append(to_string(j));
       ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+      if (!h) {
+         break;
+      }
       bufferlist bl;
       char *buf = gen_buffer(ALLOC_SIZE);
       bufferptr bp = buffer::claim_char(ALLOC_SIZE, buf);
@@ -367,6 +370,9 @@ TEST(BlueFS, test_simple_compaction_sync) {
           string file = "file.";
 	  file.append(to_string(j));
           ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+          if (!h) {
+             break;
+          }
           bufferlist bl;
           char *buf = gen_buffer(4096);
 	  bufferptr bp = buffer::claim_char(4096, buf);
@@ -419,6 +425,9 @@ TEST(BlueFS, test_simple_compaction_async) {
           string file = "file.";
 	  file.append(to_string(j));
           ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+          if (!h) {
+             break;
+	  }
           bufferlist bl;
           char *buf = gen_buffer(4096);
 	  bufferptr bp = buffer::claim_char(4096, buf);
