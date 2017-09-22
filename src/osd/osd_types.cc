@@ -4771,13 +4771,8 @@ uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
   uint64_t size = clone_size.find(clone)->second;
   assert(clone_overlap.count(clone));
   const interval_set<uint64_t> &overlap = clone_overlap.find(clone)->second;
-  for (interval_set<uint64_t>::const_iterator i = overlap.begin();
-       i != overlap.end();
-       ++i) {
-    assert(size >= i.get_len());
-    size -= i.get_len();
-  }
-  return size;
+  assert(size >= (uint64_t)overlap.size());
+  return size - overlap.size();
 }
 
 void SnapSet::filter(const pg_pool_t &pinfo)
