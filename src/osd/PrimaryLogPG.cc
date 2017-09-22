@@ -7281,7 +7281,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
     } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
       // they tried, they failed.
       dout(20) << __func__ << " full, replying to FULL_TRY op" << dendl;
-      return pool.info.has_flag(pg_pool_t::FLAG_FULL) ? -EDQUOT : -ENOSPC;
+      return pool.info.has_flag(pg_pool_t::FLAG_FULL_QUOTA) ? -EDQUOT : -ENOSPC;
     } else {
       // drop request
       dout(20) << __func__ << " full, dropping request (bad client)" << dendl;
