@@ -18,6 +18,6 @@ tasks:
       iterations: 1
       pool_profiles:
         replicated:
-          pg_size: 512
-          pgp_size: 512
+          pg_size: 256
+          pgp_size: 256
           replication: 'replicated'
