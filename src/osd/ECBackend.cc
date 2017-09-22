@@ -1203,7 +1203,6 @@ void ECBackend::handle_sub_read_reply(
       set<int> want_to_read, dummy_minimum;
       get_want_to_read_shards(&want_to_read);
       int err;
-      // TODO: Should we include non-acting nodes here when for_recovery is set?
       if ((err = ec_impl->minimum_to_decode(want_to_read, have, &dummy_minimum)) < 0) {
 	dout(20) << __func__ << " minimum_to_decode failed" << dendl;
         if (rop.in_progress.empty()) {
@@ -1485,19 +1484,12 @@ void ECBackend::call_write_ordered(std::function<void(void)> &&cb) {
   }
 }
 
-int ECBackend::get_min_avail_to_read_shards(
+void ECBackend::get_all_avail_shards(
   const hobject_t &hoid,
-  const set<int> &want,
-  bool for_recovery,
-  bool do_redundant_reads,
-  set<pg_shard_t> *to_read)
+  set<int> &have,
+  map<shard_id_t, pg_shard_t> &shards,
+  bool for_recovery)
 {
-  // Make sure we don't do redundant reads for recovery
-  assert(!for_recovery || !do_redundant_reads);
-
-  set<int> have;
-  map<shard_id_t, pg_shard_t> shards;
-
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_acting_shards().begin();
        i != get_parent()->get_acting_shards().end();
@@ -1548,6 +1540,22 @@ int ECBackend::get_min_avail_to_read_shards(
       }
     }
   }
+}
+
+int ECBackend::get_min_avail_to_read_shards(
+  const hobject_t &hoid,
+  const set<int> &want,
+  bool for_recovery,
+  bool do_redundant_reads,
+  set<pg_shard_t> *to_read)
+{
+  // Make sure we don't do redundant reads for recovery
+  assert(!for_recovery || !do_redundant_reads);
+
+  set<int> have;
+  map<shard_id_t, pg_shard_t> shards;
+
+  get_all_avail_shards(hoid, have, shards, for_recovery);
 
   set<int> need;
   int r = ec_impl->minimum_to_decode(want, have, &need);
@@ -1573,30 +1581,18 @@ int ECBackend::get_min_avail_to_read_shards(
 int ECBackend::get_remaining_shards(
   const hobject_t &hoid,
   const set<int> &avail,
-  set<pg_shard_t> *to_read)
+  set<pg_shard_t> *to_read,
+  bool for_recovery)
 {
-  set<int> need;
+  assert(to_read);
+
+  set<int> have;
   map<shard_id_t, pg_shard_t> shards;
 
-  for (set<pg_shard_t>::const_iterator i =
-	 get_parent()->get_acting_shards().begin();
-       i != get_parent()->get_acting_shards().end();
-       ++i) {
-    dout(10) << __func__ << ": checking acting " << *i << dendl;
-    const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
-    if (!missing.is_missing(hoid)) {
-      assert(!need.count(i->shard));
-      need.insert(i->shard);
-      assert(!shards.count(i->shard));
-      shards.insert(make_pair(i->shard, *i));
-    }
-  }
+  get_all_avail_shards(hoid, have, shards, for_recovery);
 
-  if (!to_read)
-    return 0;
-
-  for (set<int>::iterator i = need.begin();
-       i != need.end();
+  for (set<int>::iterator i = have.begin();
+       i != have.end();
        ++i) {
     assert(shards.count(shard_id_t(*i)));
     if (avail.find(*i) == avail.end())
@@ -2318,7 +2314,7 @@ int ECBackend::send_all_remaining_reads(
     already_read.insert(i->shard);
   dout(10) << __func__ << " have/error shards=" << already_read << dendl;
   set<pg_shard_t> shards;
-  int r = get_remaining_shards(hoid, already_read, &shards);
+  int r = get_remaining_shards(hoid, already_read, &shards, rop.for_recovery);
   if (r)
     return r;
   if (shards.empty())
