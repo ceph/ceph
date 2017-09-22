@@ -4684,10 +4684,10 @@ void OSDMap::check_health(health_check_map_t *checks) const
       const string& pool_name = get_pool_name(it.first);
       if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
 	stringstream ss;
-        if (pool.has_flag(pg_pool_t::FLAG_FULL_NO_QUOTA)) {
+        if (pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
           // may run out of space too,
           // but we want EQUOTA taking precedence
-          ss << "pool '" << pool_name << "' is full (no quota)";
+          ss << "pool '" << pool_name << "' is full (running out of quota)";
         } else {
           ss << "pool '" << pool_name << "' is full (no space)";
         }
