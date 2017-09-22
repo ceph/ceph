@@ -1032,8 +1032,22 @@ public:
       ++nref;
     }
     void put() {
-      if (--nref == 0)
-	delete this;
+      if (--nref == 0) {
+ 	delete this;
+ 	return;
+      }
+      if (nref == 1)
+        {
+          std::lock_guard<std::recursive_mutex> l(c->cache->lock);
+          if(nref == 1) {
+            if (c->onode_map.onode_map.count(this->oid)>0 )
+            {
+              c->cache->_rm_onode(this);
+              c->onode_map.remove(this->oid);
+            }
+          }
+        }
+
     }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
@@ -1055,6 +1069,7 @@ public:
 
     virtual void _add_onode(OnodeRef& o, int level) = 0;
     virtual void _rm_onode(OnodeRef& o) = 0;
+    virtual void _rm_onode(Onode* o) = 0;
     virtual void _touch_onode(OnodeRef& o) = 0;
 
     virtual void _add_buffer(Buffer *b, int level, Buffer *near) = 0;
@@ -1142,6 +1157,11 @@ public:
       auto q = onode_lru.iterator_to(*o);
       onode_lru.erase(q);
     }
+    void _rm_onode(Onode* o) override {
+          auto q = onode_lru.iterator_to(*o);
+          if (q != onode_lru.end())
+          onode_lru.erase(q);
+        }
     void _touch_onode(OnodeRef& o) override;
 
     uint64_t _get_buffer_bytes() override {
@@ -1244,9 +1264,18 @@ public:
 	onode_lru.push_back(*o);
     }
     void _rm_onode(OnodeRef& o) override {
+      if(o->lru_item.is_linked()) {
       auto q = onode_lru.iterator_to(*o);
       onode_lru.erase(q);
+      }
     }
+    void _rm_onode(Onode* o) override {
+
+        if(o->lru_item.is_linked()) {
+          auto q = onode_lru.iterator_to(*o);
+          onode_lru.erase(q);
+        }
+        }
     void _touch_onode(OnodeRef& o) override;
 
     uint64_t _get_buffer_bytes() override {
@@ -1298,8 +1327,9 @@ public:
     Cache *cache;
 
     /// forward lookups
+  public:
     mempool::bluestore_cache_other::unordered_map<ghobject_t,OnodeRef> onode_map;
-
+  private:
     friend class Collection; // for split_cache()
 
   public:

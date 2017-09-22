@@ -1520,7 +1520,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o
   }
   ldout(cache->cct, 30) << __func__ << " " << oid << " " << o << dendl;
   onode_map[oid] = o;
-  cache->_add_onode(o, 1);
+  //cache->_add_onode(o, 1);
   return o;
 }
 
@@ -1529,7 +1529,6 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
   ldout(cache->cct, 30) << __func__ << dendl;
   OnodeRef o;
   bool hit = false;
-
   {
     std::lock_guard<std::recursive_mutex> l(cache->lock);
     ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
@@ -1538,7 +1537,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
     } else {
       ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
 			    << dendl;
-      cache->_touch_onode(p->second);
+      //cache->_touch_onode(p->second);
       hit = true;
       o = p->second;
     }
@@ -1586,7 +1585,7 @@ void BlueStore::OnodeSpace::rename(
   if (pn != onode_map.end()) {
     ldout(cache->cct, 30) << __func__ << "  removing target " << pn->second
 			  << dendl;
-    cache->_rm_onode(pn->second);
+    //cache->_rm_onode(pn->second);
     onode_map.erase(pn);
   }
   OnodeRef o = po->second;
@@ -1594,11 +1593,11 @@ void BlueStore::OnodeSpace::rename(
   // install a non-existent onode at old location
   oldo.reset(new Onode(o->c, old_oid, o->key));
   po->second = oldo;
-  cache->_add_onode(po->second, 1);
+  //cache->_add_onode(po->second, 1);
 
   // add at new position and fix oid, key
   onode_map.insert(make_pair(new_oid, o));
-  cache->_touch_onode(o);
+  //cache->_touch_onode(o);
   o->oid = new_oid;
   o->key = new_okey;
 }
@@ -3187,6 +3186,13 @@ uint64_t BlueStore::Collection::make_blob_unshared(SharedBlob *sb)
   return sbid;
 }
 
+int getxxx(){
+  return atoi(getenv("N"));
+}
+
+int xxx=getxxx();
+
+
 BlueStore::OnodeRef BlueStore::Collection::get_onode(
   const ghobject_t& oid,
   bool create)
@@ -3201,7 +3207,6 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
       ceph_abort();
     }
   }
-
   OnodeRef o = onode_map.lookup(oid);
   if (o)
     return o;
@@ -3242,6 +3247,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     }
   }
   o.reset(on);
+  if (onode_map.onode_map.size()>=xxx) return o;
   return onode_map.add(oid, o);
 }
 
@@ -11555,8 +11561,8 @@ void BlueStore::_flush_cache()
     assert(i->empty());
   }
   for (auto& p : coll_map) {
-    assert(p.second->onode_map.empty());
-    assert(p.second->shared_blob_set.empty());
+    //assert(p.second->onode_map.empty());
+    //assert(p.second->shared_blob_set.empty());
   }
   coll_map.clear();
 }
