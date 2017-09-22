@@ -1483,6 +1483,10 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
 	if (ret >= 0) {
           ret = check_obj_tail_locator_underscore(bucket_info, obj, key, fix, f);
+          if (ret < 0) {
+              cerr << "ERROR: check_obj_tail_locator_underscore(): " << cpp_strerror(-ret) << std::endl;
+              return -ret;
+          }
 	}
       }
     }
