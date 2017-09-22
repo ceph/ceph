@@ -194,10 +194,10 @@ void MgrStandby::tick()
     active_mgr->tick();
   }
 
-  timer.add_event_after(g_conf->mgr_tick_period, new FunctionContext(
-        [this](int r){
+  timer.add_event_after(g_conf->get_val<int64_t>("mgr_tick_period"),
+      new FunctionContext([this](int r){
           tick();
-        }
+      }
   )); 
 }
 

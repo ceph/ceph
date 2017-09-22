@@ -46,21 +46,21 @@ DaemonServer::DaemonServer(MonClient *monc_,
 			   LogChannelRef audit_clog_)
     : Dispatcher(g_ceph_context),
       client_byte_throttler(new Throttle(g_ceph_context, "mgr_client_bytes",
-					 g_conf->mgr_client_bytes)),
+					 g_conf->get_val<uint64_t>("mgr_client_bytes"))),
       client_msg_throttler(new Throttle(g_ceph_context, "mgr_client_messages",
-					g_conf->mgr_client_messages)),
+					g_conf->get_val<uint64_t>("mgr_client_messages"))),
       osd_byte_throttler(new Throttle(g_ceph_context, "mgr_osd_bytes",
-				      g_conf->mgr_osd_bytes)),
+				      g_conf->get_val<uint64_t>("mgr_osd_bytes"))),
       osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messsages",
-				     g_conf->mgr_osd_messages)),
+				     g_conf->get_val<uint64_t>("mgr_osd_messages"))),
       mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
-				      g_conf->mgr_mds_bytes)),
+				      g_conf->get_val<uint64_t>("mgr_mds_bytes"))),
       mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messsages",
-				     g_conf->mgr_mds_messages)),
+				     g_conf->get_val<uint64_t>("mgr_mds_messages"))),
       mon_byte_throttler(new Throttle(g_ceph_context, "mgr_mon_bytes",
-				      g_conf->mgr_mon_bytes)),
+				      g_conf->get_val<uint64_t>("mgr_mon_bytes"))),
       mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messsages",
-				     g_conf->mgr_mon_messages)),
+				     g_conf->get_val<uint64_t>("mgr_mon_messages"))),
       msgr(nullptr),
       monc(monc_),
       finisher(finisher_),
@@ -73,7 +73,8 @@ DaemonServer::DaemonServer(MonClient *monc_,
                     g_conf->auth_supported.empty() ?
                       g_conf->auth_cluster_required :
                       g_conf->auth_supported),
-      lock("DaemonServer")
+      lock("DaemonServer"),
+      pgmap_ready(false)
 {
   g_conf->add_observer(this);
 }
@@ -253,8 +254,9 @@ bool DaemonServer::ms_handle_refused(Connection *con)
 
 bool DaemonServer::ms_dispatch(Message *m)
 {
-  Mutex::Locker l(lock);
-
+  // Note that we do *not* take ::lock here, in order to avoid
+  // serializing all message handling.  It's up to each handler
+  // to take whatever locks it needs.
   switch (m->get_type()) {
     case MSG_PGSTATS:
       cluster_state.ingest_pgstats(static_cast<MPGStats*>(m));
@@ -275,29 +277,36 @@ bool DaemonServer::ms_dispatch(Message *m)
 
 void DaemonServer::maybe_ready(int32_t osd_id)
 {
-  if (!pgmap_ready && reported_osds.find(osd_id) == reported_osds.end()) {
-    dout(4) << "initial report from osd " << osd_id << dendl;
-    reported_osds.insert(osd_id);
-    std::set<int32_t> up_osds;
+  if (pgmap_ready.load()) {
+    // Fast path: we don't need to take lock because pgmap_ready
+    // is already set
+  } else {
+    Mutex::Locker l(lock);
 
-    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-        osdmap.get_up_osds(up_osds);
-    });
+    if (reported_osds.find(osd_id) == reported_osds.end()) {
+      dout(4) << "initial report from osd " << osd_id << dendl;
+      reported_osds.insert(osd_id);
+      std::set<int32_t> up_osds;
 
-    std::set<int32_t> unreported_osds;
-    std::set_difference(up_osds.begin(), up_osds.end(),
-                        reported_osds.begin(), reported_osds.end(),
-                        std::inserter(unreported_osds, unreported_osds.begin()));
+      cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+          osdmap.get_up_osds(up_osds);
+      });
 
-    if (unreported_osds.size() == 0) {
-      dout(4) << "all osds have reported, sending PG state to mon" << dendl;
-      pgmap_ready = true;
-      reported_osds.clear();
-      // Avoid waiting for next tick
-      send_report();
-    } else {
-      dout(4) << "still waiting for " << unreported_osds.size() << " osds"
-                 " to report in before PGMap is ready" << dendl;
+      std::set<int32_t> unreported_osds;
+      std::set_difference(up_osds.begin(), up_osds.end(),
+                          reported_osds.begin(), reported_osds.end(),
+                          std::inserter(unreported_osds, unreported_osds.begin()));
+
+      if (unreported_osds.size() == 0) {
+        dout(4) << "all osds have reported, sending PG state to mon" << dendl;
+        pgmap_ready = true;
+        reported_osds.clear();
+        // Avoid waiting for next tick
+        send_report();
+      } else {
+        dout(4) << "still waiting for " << unreported_osds.size() << " osds"
+                   " to report in before PGMap is ready" << dendl;
+      }
     }
   }
 }
@@ -314,6 +323,8 @@ void DaemonServer::shutdown()
 
 bool DaemonServer::handle_open(MMgrOpen *m)
 {
+  Mutex::Locker l(lock);
+
   DaemonKey key;
   if (!m->service_name.empty()) {
     key.first = m->service_name;
@@ -333,7 +344,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
   if (daemon) {
     dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
     Mutex::Locker l(daemon->lock);
-    daemon_state.get(key)->perf_counters.clear();
+    daemon->perf_counters.clear();
   }
 
   if (m->service_daemon) {
@@ -400,6 +411,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
     return true;
   }
 
+  // Look up the DaemonState
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
     dout(20) << "updating existing DaemonState for " << key << dendl;
@@ -418,28 +430,31 @@ bool DaemonServer::handle_report(MMgrReport *m)
 
     return false;
   }
+
+  // Update the DaemonState
   assert(daemon != nullptr);
-  auto &daemon_counters = daemon->perf_counters;
   {
     Mutex::Locker l(daemon->lock);
+    auto &daemon_counters = daemon->perf_counters;
     daemon_counters.update(m);
+
+    if (daemon->service_daemon) {
+      utime_t now = ceph_clock_now();
+      if (m->daemon_status) {
+        daemon->service_status = *m->daemon_status;
+        daemon->service_status_stamp = now;
+      }
+      daemon->last_service_beacon = now;
+    } else if (m->daemon_status) {
+      derr << "got status from non-daemon " << key << dendl;
+    }
   }
+
   // if there are any schema updates, notify the python modules
   if (!m->declare_types.empty() || !m->undeclare_types.empty()) {
     ostringstream oss;
     oss << key.first << '.' << key.second;
     py_modules.notify_all("perf_schema_update", oss.str());
-  }
-
-  if (daemon->service_daemon) {
-    utime_t now = ceph_clock_now();
-    if (m->daemon_status) {
-      daemon->service_status = *m->daemon_status;
-      daemon->service_status_stamp = now;
-    }
-    daemon->last_service_beacon = now;
-  } else if (m->daemon_status) {
-    derr << "got status from non-daemon " << key << dendl;
   }
 
   m->put();
@@ -516,6 +531,7 @@ bool DaemonServer::_allowed_command(
 
 bool DaemonServer::handle_command(MCommand *m)
 {
+  Mutex::Locker l(lock);
   int r = 0;
   std::stringstream ss;
   std::string prefix;
@@ -1306,7 +1322,7 @@ bool DaemonServer::handle_command(MCommand *m)
 void DaemonServer::_prune_pending_service_map()
 {
   utime_t cutoff = ceph_clock_now();
-  cutoff -= g_conf->mgr_service_beacon_grace;
+  cutoff -= g_conf->get_val<double>("mgr_service_beacon_grace");
   auto p = pending_service_map.services.begin();
   while (p != pending_service_map.services.end()) {
     auto q = p->second.daemons.begin();
@@ -1346,7 +1362,7 @@ void DaemonServer::_prune_pending_service_map()
 void DaemonServer::send_report()
 {
   if (!pgmap_ready) {
-    if (ceph_clock_now() - started_at > g_conf->mgr_stats_period * 4.0) {
+    if (ceph_clock_now() - started_at > g_conf->get_val<int64_t>("mgr_stats_period") * 4.0) {
       pgmap_ready = true;
       reported_osds.clear();
       dout(1) << "Giving up on OSDs that haven't reported yet, sending "

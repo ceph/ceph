@@ -21,7 +21,9 @@
 
 struct Request {
   int value;
-  Request() = default;
+  Request() :
+    value(0)
+  {}
   Request(const Request& o) = default;
   Request(int value) :
     value(value)

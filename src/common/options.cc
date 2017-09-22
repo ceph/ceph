@@ -1145,9 +1145,10 @@ std::vector<Option> get_global_options() {
     .set_default(100ul << 20)
     .set_description(""),
 
-    Option("mon_mgr_proxy_client_bytes_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("mon_mgr_proxy_client_bytes_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.3)
-    .set_description(""),
+    .set_description("ratio of mon_client_bytes that can be consumed by "
+                     "proxied mgr commands before we error out to client"),
 
     Option("mon_log_max_summary", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
@@ -1499,23 +1500,23 @@ std::vector<Option> get_global_options() {
     .set_default(10)
     .set_description(""),
 
-    Option("objecter_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("objecter_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(5.0)
     .set_description(""),
 
     Option("objecter_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10.0)
-    .set_description(""),
+    .set_description("Seconds before in-flight op is considered 'laggy' and we query mon for the latest OSDMap"),
 
     Option("objecter_inflight_op_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100_M)
-    .set_description(""),
+    .set_description("Max in-flight data in bytes (both directions)"),
 
     Option("objecter_inflight_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1024)
-    .set_description(""),
+    .set_description("Max in-flight operations"),
 
-    Option("objecter_completion_locks_per_session", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("objecter_completion_locks_per_session", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(32)
     .set_description(""),
 
@@ -1523,7 +1524,7 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("objecter_retry_writes_after_first_reply", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("objecter_retry_writes_after_first_reply", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
@@ -1533,25 +1534,31 @@ std::vector<Option> get_global_options() {
 
     Option("filer_max_purge_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
-    .set_description(""),
+    .set_description("Max in-flight operations for purging a striped range (e.g., MDS journal)"),
 
     Option("filer_max_truncate_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128)
-    .set_description(""),
+    .set_description("Max in-flight operations for truncating/deleting a striped sequence (e.g., MDS journal)"),
 
     Option("journaler_write_head_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(15)
-    .set_description(""),
+    .set_description("Interval in seconds between journal header updates (to help bound replay time)"),
 
-    Option("journaler_prefetch_periods", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    // * journal object size
+    Option("journaler_prefetch_periods", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
-    .set_description(""),
+    .set_min(2)			// we need at least 2 periods to make progress.
+    .set_description("Number of striping periods to prefetch while reading MDS journal"),
 
-    Option("journaler_prezero_periods", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    // * journal object size
+    Option("journaler_prezero_periods", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    // we need to zero at least two periods, minimum, to ensure that we
+    // have a full empty object/period in front of us.
+    .set_min(2)
+    .set_description("Number of striping periods to zero head of MDS journal write position"),
 
-    Option("osd_check_max_object_name_len_on_startup", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("osd_check_max_object_name_len_on_startup", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_description(""),
 
@@ -3638,75 +3645,75 @@ std::vector<Option> get_global_options() {
     // ---------------------
     // filestore
 
-    Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("compaction_readahead_size=2097152")
     .set_description(""),
 
-    Option("filestore_omap_backend", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("filestore_omap_backend", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb")
     .set_description(""),
 
-    Option("filestore_omap_backend_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("filestore_omap_backend_path", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
     .set_description(""),
 
     Option("filestore_wbthrottle_enable", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Enabling throttling of operations to backing file system"),
 
     Option("filestore_wbthrottle_btrfs_bytes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(41943040)
-    .set_description(""),
+    .set_description("Start flushing (fsyncing) when this many bytes are written(btrfs)"),
 
     Option("filestore_wbthrottle_btrfs_bytes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(419430400)
-    .set_description(""),
+    .set_description("Block writes when this many bytes haven't been flushed (fsynced) (btrfs)"),
 
     Option("filestore_wbthrottle_btrfs_ios_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(500)
-    .set_description(""),
+    .set_description("Start flushing (fsyncing) when this many IOs are written (brtrfs)"),
 
     Option("filestore_wbthrottle_btrfs_ios_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5000)
-    .set_description(""),
+    .set_description("Block writes when this many IOs haven't been flushed (fsynced) (btrfs)"),
 
     Option("filestore_wbthrottle_btrfs_inodes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(500)
-    .set_description(""),
+    .set_description("Start flushing (fsyncing) when this many distinct inodes have been modified (btrfs)"),
 
     Option("filestore_wbthrottle_xfs_bytes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(41943040)
-    .set_description(""),
+    .set_description("Start flushing (fsyncing) when this many bytes are written(xfs)"),
 
     Option("filestore_wbthrottle_xfs_bytes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(419430400)
-    .set_description(""),
+    .set_description("Block writes when this many bytes haven't been flushed (fsynced) (xfs)"),
 
     Option("filestore_wbthrottle_xfs_ios_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(500)
-    .set_description(""),
+    .set_description("Start flushing (fsyncing) when this many IOs are written (xfs)"),
 
     Option("filestore_wbthrottle_xfs_ios_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5000)
-    .set_description(""),
+    .set_description("Block writes when this many IOs haven't been flushed (fsynced) (xfs)"),
 
     Option("filestore_wbthrottle_xfs_inodes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(500)
-    .set_description(""),
+    .set_description("Start flushing (fsyncing) when this many distinct inodes have been modified (xfs)"),
 
     Option("filestore_wbthrottle_btrfs_inodes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5000)
-    .set_description(""),
+    .set_description("Block writing when this many inodes have outstanding writes (btrfs)"),
 
     Option("filestore_wbthrottle_xfs_inodes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5000)
-    .set_description(""),
+    .set_description("Block writing when this many inodes have outstanding writes (xfs)"),
 
-    Option("filestore_odsync_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("filestore_odsync_write", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .set_description(""),
+    .set_description("Write with O_DSYNC"),
 
-    Option("filestore_index_retry_probability", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("filestore_index_retry_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
@@ -3722,227 +3729,227 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("filestore_omap_header_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("filestore_omap_header_cache_size", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(1024)
     .set_description(""),
 
-    Option("filestore_max_inline_xattr_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_inline_xattr_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
-    Option("filestore_max_inline_xattr_size_xfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_inline_xattr_size_xfs", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(65536)
     .set_description(""),
 
-    Option("filestore_max_inline_xattr_size_btrfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_inline_xattr_size_btrfs", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(2048)
     .set_description(""),
 
-    Option("filestore_max_inline_xattr_size_other", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_inline_xattr_size_other", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512)
     .set_description(""),
 
-    Option("filestore_max_inline_xattrs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_inline_xattrs", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
-    Option("filestore_max_inline_xattrs_xfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_inline_xattrs_xfs", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(10)
     .set_description(""),
 
-    Option("filestore_max_inline_xattrs_btrfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_inline_xattrs_btrfs", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(10)
     .set_description(""),
 
-    Option("filestore_max_inline_xattrs_other", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_inline_xattrs_other", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(2)
     .set_description(""),
 
-    Option("filestore_max_xattr_value_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_xattr_value_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
-    Option("filestore_max_xattr_value_size_xfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_xattr_value_size_xfs", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(64<<10)
     .set_description(""),
 
-    Option("filestore_max_xattr_value_size_btrfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_xattr_value_size_btrfs", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(64<<10)
     .set_description(""),
 
-    Option("filestore_max_xattr_value_size_other", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_xattr_value_size_other", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(1<<10)
     .set_description(""),
 
-    Option("filestore_sloppy_crc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("filestore_sloppy_crc", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
-    Option("filestore_sloppy_crc_block_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("filestore_sloppy_crc_block_size", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(65536)
     .set_description(""),
 
-    Option("filestore_max_alloc_hint_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_max_alloc_hint_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(1ULL << 20)
     .set_description(""),
 
     Option("filestore_max_sync_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Period between calls to syncfs(2) and journal trims (seconds)"),
 
-    Option("filestore_min_sync_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("filestore_min_sync_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.01)
-    .set_description(""),
+    .set_description("Minimum period between calls to syncfs(2)"),
 
-    Option("filestore_btrfs_snap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("filestore_btrfs_snap", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_description(""),
 
     Option("filestore_btrfs_clone_range", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Use btrfs clone_range ioctl to efficiently duplicate objects"),
 
-    Option("filestore_zfs_snap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("filestore_zfs_snap", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
-    Option("filestore_fsync_flushes_journal_data", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("filestore_fsync_flushes_journal_data", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
     Option("filestore_fiemap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Use fiemap ioctl(2) to determine which parts of objects are sparse"),
 
     Option("filestore_punch_hole", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Use fallocate(2) FALLOC_FL_PUNCH_HOLE to efficiently zero ranges of objects"),
 
     Option("filestore_seek_data_hole", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Use lseek(2) SEEK_HOLE and SEEK_DATA to determine which parts of objects are sparse"),
 
     Option("filestore_splice", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Use splice(2) to more efficiently copy data between files"),
 
     Option("filestore_fadvise", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Use posix_fadvise(2) to pass hints to file system"),
 
     Option("filestore_collect_device_partition_information", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Collect metadata about the backing file system on OSD startup"),
 
     Option("filestore_xfs_extsize", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Use XFS extsize ioctl(2) to hint allocator about expected write sizes"),
 
-    Option("filestore_journal_parallel", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("filestore_journal_parallel", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
-    Option("filestore_journal_writeahead", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("filestore_journal_writeahead", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
-    Option("filestore_journal_trailing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("filestore_journal_trailing", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
     Option("filestore_queue_max_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
-    .set_description(""),
+    .set_description("Max IO operations in flight"),
 
     Option("filestore_queue_max_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100 << 20)
-    .set_description(""),
+    .set_description("Max (written) bytes in flight"),
 
-    Option("filestore_caller_concurrency", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("filestore_caller_concurrency", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(10)
     .set_description(""),
 
     Option("filestore_expected_throughput_bytes", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(200 << 20)
-    .set_description(""),
+    .set_description("Expected throughput of backend device (aids throttling calculations)"),
 
     Option("filestore_expected_throughput_ops", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(200)
-    .set_description(""),
+    .set_description("Expected through of backend device in IOPS (aids throttling calculations)"),
 
-    Option("filestore_queue_max_delay_multiple", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("filestore_queue_max_delay_multiple", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
-    Option("filestore_queue_high_delay_multiple", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("filestore_queue_high_delay_multiple", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
-    Option("filestore_queue_low_threshhold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("filestore_queue_low_threshhold", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.3)
     .set_description(""),
 
-    Option("filestore_queue_high_threshhold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("filestore_queue_high_threshhold", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.9)
     .set_description(""),
 
     Option("filestore_op_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2)
-    .set_description(""),
+    .set_description("Threads used to apply changes to backing file system"),
 
     Option("filestore_op_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
-    .set_description(""),
+    .set_description("Seconds before a worker thread is considered stalled"),
 
     Option("filestore_op_thread_suicide_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(180)
-    .set_description(""),
+    .set_description("Seconds before a worker thread is considered dead"),
 
     Option("filestore_commit_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(600)
-    .set_description(""),
+    .set_description("Seconds before backing file system is considered hung"),
 
-    Option("filestore_fiemap_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("filestore_fiemap_threshold", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(4096)
     .set_description(""),
 
-    Option("filestore_merge_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("filestore_merge_threshold", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(10)
     .set_description(""),
 
-    Option("filestore_split_multiple", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("filestore_split_multiple", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(2)
     .set_description(""),
 
-    Option("filestore_split_rand_factor", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_split_rand_factor", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(20)
     .set_description(""),
 
-    Option("filestore_update_to", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("filestore_update_to", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(1000)
     .set_description(""),
 
-    Option("filestore_blackhole", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("filestore_blackhole", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
-    Option("filestore_fd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("filestore_fd_cache_size", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(128)
     .set_description(""),
 
-    Option("filestore_fd_cache_shards", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("filestore_fd_cache_shards", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(16)
     .set_description(""),
 
-    Option("filestore_ondisk_finisher_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("filestore_ondisk_finisher_threads", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(1)
     .set_description(""),
 
-    Option("filestore_apply_finisher_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("filestore_apply_finisher_threads", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(1)
     .set_description(""),
 
-    Option("filestore_dump_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("filestore_dump_file", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
     .set_description(""),
 
@@ -3954,7 +3961,7 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
-    Option("filestore_fail_eio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("filestore_fail_eio", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_description(""),
 
@@ -3962,63 +3969,63 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("journal_dio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("journal_dio", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_description(""),
 
-    Option("journal_aio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("journal_aio", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_description(""),
 
-    Option("journal_force_aio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("journal_force_aio", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
-    Option("journal_block_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("journal_block_size", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(4096)
     .set_description(""),
 
-    Option("journal_max_corrupt_search", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("journal_max_corrupt_search", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(10<<20)
     .set_description(""),
 
-    Option("journal_block_align", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("journal_block_align", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_description(""),
 
-    Option("journal_write_header_frequency", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("journal_write_header_frequency", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
     Option("journal_max_write_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10 << 20)
-    .set_description(""),
+    .set_description("Max bytes in flight to journal"),
 
     Option("journal_max_write_entries", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(100)
-    .set_description(""),
+    .set_description("Max IOs in flight to journal"),
 
-    Option("journal_throttle_low_threshhold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("journal_throttle_low_threshhold", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.6)
     .set_description(""),
 
-    Option("journal_throttle_high_threshhold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("journal_throttle_high_threshhold", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.9)
     .set_description(""),
 
-    Option("journal_throttle_high_multiple", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("journal_throttle_high_multiple", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
-    Option("journal_throttle_max_multiple", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("journal_throttle_max_multiple", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
-    Option("journal_align_min_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("journal_align_min_size", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(64 << 10)
     .set_description(""),
 
-    Option("journal_replay_from", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("journal_replay_from", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
@@ -4030,15 +4037,15 @@ std::vector<Option> get_global_options() {
   .set_min_max((int64_t)PerfCountersBuilder::PRIO_DEBUGONLY,
                (int64_t)PerfCountersBuilder::PRIO_CRITICAL),
 
-    Option("journal_zero_on_create", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("journal_zero_on_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
-    Option("journal_ignore_corruption", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("journal_ignore_corruption", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
-    Option("journal_discard", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("journal_discard", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
@@ -4064,79 +4071,110 @@ std::vector<Option> get_global_options() {
 
     Option("mgr_module_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR "/mgr")
-    .set_description(""),
+    .add_service("mgr")
+    .set_description("Filesystem path to manager modules."),
 
-    Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("restful status")
-    .set_description(""),
+    .add_service("mon")
+    .set_description("List of manager modules to enable when the cluster is "
+                     "first started")
+    .set_long_description("This list of module names is read by the monitor "
+        "when the cluster is first started after installation, to populate "
+        "the list of enabled manager modules.  Subsequent updates are done using "
+        "the 'mgr module [enable|disable]' commands.  List may be comma "
+        "or space separated."),
 
     Option("mgr_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/mgr/$cluster-$id")
-    .set_description(""),
+    .add_service("mgr")
+    .set_description("Filesystem path to the ceph-mgr data directory, used to "
+                     "contain keyring."),
 
     Option("mgr_tick_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2)
-    .set_description(""),
+    .add_service("mgr")
+    .set_description("Period in seconds of beacon messages to monitor"),
 
-    Option("mgr_stats_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mgr_stats_period", Option::TYPE_INT, Option::LEVEL_BASIC)
     .set_default(5)
-    .set_description(""),
+    .add_service("mgr")
+    .set_description("Period in seconds of OSD/MDS stats reports to manager")
+    .set_long_description("Use this setting to control the granularity of "
+                          "time series data collection from daemons.  Adjust "
+                          "upwards if the manager CPU load is too high, or "
+                          "if you simply do not require the most up to date "
+                          "performance counter data."),
 
-    Option("mgr_client_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_client_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128*1048576)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_client_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_client_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_osd_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_osd_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512*1048576)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_osd_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_osd_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(8192)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_mds_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_mds_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128*1048576)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_mds_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_mds_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_mon_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_mon_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128*1048576)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_mon_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_mon_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_connect_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("mgr_connect_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1.0)
-    .set_description(""),
+    .add_service("common"),
 
     Option("mgr_service_beacon_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(60.0)
-    .set_description(""),
+    .add_service("mgr")
+    .set_description("Period in seconds from last beacon to manager dropping "
+                     "state about a monitored service (RGW, rbd-mirror etc)"),
 
-    Option("mon_mgr_digest_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_mgr_digest_period", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)
-    .set_description(""),
+    .add_service("mon")
+    .set_description("Period in seconds between monitor-to-manager "
+                     "health/status updates"),
 
     Option("mon_mgr_beacon_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
+    .add_service("mon")
+    .set_description("Period in seconds from last beacon to monitor marking "
+                     "a manager daemon as failed"),
 
     Option("mon_mgr_inactive_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
-    .set_description(""),
+    .add_service("mon")
+    .set_description("Period in seconds after cluster creation during which "
+                     "cluster may have no active manager")
+    .set_long_description("This grace period enables the cluster to come "
+                          "up cleanly without raising spurious health check "
+                          "failures about managers that aren't online yet"),
 
     Option("mon_mgr_mkfs_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
-    .set_description(""),
+    .add_service("mon")
+    .set_description("Period in seconds that the cluster may have no active "
+                     "manager before this is reported as an ERR rather than "
+                     "a WARN"),
 
     Option("mutex_perf_counter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)

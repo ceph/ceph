@@ -835,60 +835,38 @@ int get_attrs(
 
   // This could have been handled in the caller if we didn't need to
   // support exports that didn't include object_info_t in object_begin.
-  if (hoid.generation == ghobject_t::NO_GEN) {
-    if (hoid.hobj.snap < CEPH_MAXSNAP) {
-      map<string,bufferlist>::iterator mi = as.data.find(OI_ATTR);
-      if (mi != as.data.end()) {
-	object_info_t oi(mi->second);
-
-	if (debug)
-	  cerr << "object_info " << oi << std::endl;
-
-	OSDriver::OSTransaction _t(driver.get_transaction(t));
-	set<snapid_t> oi_snaps(oi.legacy_snaps.begin(), oi.legacy_snaps.end());
-	if (!oi_snaps.empty()) {
+  if (hoid.generation == ghobject_t::NO_GEN &&
+      hoid.hobj.is_head()) {
+    map<string,bufferlist>::iterator mi = as.data.find(SS_ATTR);
+    if (mi != as.data.end()) {
+      SnapSet snapset;
+      auto p = mi->second.begin();
+      snapset.decode(p);
+      cout << "snapset " << snapset << std::endl;
+      for (auto& p : snapset.clone_snaps) {
+	ghobject_t clone = hoid;
+	clone.hobj.snap = p.first;
+	set<snapid_t> snaps(p.second.begin(), p.second.end());
+	if (!store->exists(coll, clone)) {
+	  // no clone, skip.  this is probably a cache pool.  this works
+	  // because we use a separate transaction per object and clones
+	  // come before head in the archive.
 	  if (debug)
-	    cerr << "\tsetting legacy snaps " << oi_snaps << std::endl;
-	  snap_mapper.add_oid(hoid.hobj, oi_snaps, &_t);
+	    cerr << "\tskipping missing " << clone << " (snaps "
+		 << snaps << ")" << std::endl;
+	  continue;
 	}
+	if (debug)
+	  cerr << "\tsetting " << clone.hobj << " snaps " << snaps
+	       << std::endl;
+	OSDriver::OSTransaction _t(driver.get_transaction(t));
+	assert(!snaps.empty());
+	snap_mapper.add_oid(clone.hobj, snaps, &_t);
       }
     } else {
-      if (hoid.hobj.is_head()) {
-	map<string,bufferlist>::iterator mi = as.data.find(SS_ATTR);
-	if (mi != as.data.end()) {
-	  SnapSet snapset;
-	  auto p = mi->second.begin();
-	  snapset.decode(p);
-	  cout << "snapset " << snapset << std::endl;
-	  if (!snapset.is_legacy()) {
-	    for (auto& p : snapset.clone_snaps) {
-	      ghobject_t clone = hoid;
-	      clone.hobj.snap = p.first;
-	      set<snapid_t> snaps(p.second.begin(), p.second.end());
-	      if (!store->exists(coll, clone)) {
-		// no clone, skip.  this is probably a cache pool.  this works
-		// because we use a separate transaction per object and clones
-		// come before head in the archive.
-		if (debug)
-		  cerr << "\tskipping missing " << clone << " (snaps "
-		       << snaps << ")" << std::endl;
-		continue;
-	      }
-	      if (debug)
-		cerr << "\tsetting " << clone.hobj << " snaps " << snaps
-		     << std::endl;
-	      OSDriver::OSTransaction _t(driver.get_transaction(t));
-	      assert(!snaps.empty());
-	      snap_mapper.add_oid(clone.hobj, snaps, &_t);
-	    }
-	  }
-	} else {
-	  cerr << "missing SS_ATTR on " << hoid << std::endl;
-	}
-      }
+      cerr << "missing SS_ATTR on " << hoid << std::endl;
     }
   }
-
   return 0;
 }
 
@@ -2086,14 +2064,6 @@ int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
   if (ret < 0)
     return ret;
 
-  // Use "head" to set head_exists incorrectly
-  if (arg == "corrupt" || arg == "head")
-    ss.head_exists = !ghobj.hobj.is_head();
-  else if (ss.head_exists != ghobj.hobj.is_head()) {
-    cerr << "Correcting head_exists, set to "
-         << (ghobj.hobj.is_head() ? "true" : "false") << std::endl;
-    ss.head_exists = ghobj.hobj.is_head();
-  }
   // Use "corrupt" to clear entire SnapSet
   // Use "seq" to just corrupt SnapSet.seq
   if (arg == "corrupt" || arg == "seq")
