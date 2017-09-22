@@ -1499,23 +1499,23 @@ std::vector<Option> get_global_options() {
     .set_default(10)
     .set_description(""),
 
-    Option("objecter_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("objecter_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(5.0)
     .set_description(""),
 
     Option("objecter_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10.0)
-    .set_description(""),
+    .set_description("Seconds before in-flight op is considered 'laggy' and we query mon for the latest OSDMap"),
 
     Option("objecter_inflight_op_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100_M)
-    .set_description(""),
+    .set_description("Max in-flight data in bytes (both directions)"),
 
     Option("objecter_inflight_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1024)
-    .set_description(""),
+    .set_description("Max in-flight operations"),
 
-    Option("objecter_completion_locks_per_session", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("objecter_completion_locks_per_session", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(32)
     .set_description(""),
 
@@ -1523,7 +1523,7 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("objecter_retry_writes_after_first_reply", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("objecter_retry_writes_after_first_reply", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
@@ -1533,25 +1533,25 @@ std::vector<Option> get_global_options() {
 
     Option("filer_max_purge_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
-    .set_description(""),
+    .set_description("Max in-flight operations for purging a striped range (e.g., MDS journal)"),
 
     Option("filer_max_truncate_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128)
-    .set_description(""),
+    .set_description("Max in-flight operations for truncating/deleting a striped sequence (e.g., MDS journal)"),
 
     Option("journaler_write_head_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(15)
-    .set_description(""),
+    .set_description("Interval in seconds between journal header updates (to help bound replay time)"),
 
     Option("journaler_prefetch_periods", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
-    .set_description(""),
+    .set_description("Number of striping periods to prefetch while reading MDS journal"),
 
     Option("journaler_prezero_periods", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Number of striping periods to zero head of MDS journal write position"),
 
-    Option("osd_check_max_object_name_len_on_startup", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("osd_check_max_object_name_len_on_startup", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_description(""),
 
