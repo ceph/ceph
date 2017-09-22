@@ -76,14 +76,13 @@ tasks:
 - install.upgrade:
     mon.a:
     mon.b:
-- print: "**** done branch: -x install.upgrade on mon.a and mon.b"
+    client.1:
+- print: "**** done branch: -x install.upgrade on mon.a, mon.b, and client.1"
 - parallel:
    - workload_x
    - upgrade-sequence_x
 - print: "**** done parallel -x branch"
 # Run librados tests on the -x upgraded cluster
-- install.upgrade:
-    client.1:
 - workunit:
     branch: jewel
     clients:
@@ -114,7 +113,7 @@ workload_jewel:
      - print: "**** done rgw workload_jewel"
      - s3tests:
          client.0:
-           force-branch: ceph-jewel
+           force-branch: ceph-jewel-10-2-7
            rgw_server: client.0
      - print: "**** done s3tests workload_jewel"
 upgrade-sequence_jewel:
