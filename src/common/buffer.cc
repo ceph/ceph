@@ -550,7 +550,7 @@ using namespace ceph;
       return 0;
     }
 
-    static void close_pipe(const int *fds) {
+    static void close_pipe(const int fds[2]) {
       if (fds[0] >= 0)
 	VOID_TEMP_FAILURE_RETRY(::close(fds[0]));
       if (fds[1] >= 0)
