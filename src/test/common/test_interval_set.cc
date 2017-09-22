@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 #include "include/interval_set.h"
 #include "include/btree_interval_set.h"
+#include "include/array_interval_set.hpp"
 
 using namespace ceph;
 
@@ -29,7 +30,9 @@ class IntervalSetTest : public ::testing::Test {
   typedef T ISet;
 };
 
-typedef ::testing::Types< interval_set<IntervalValueType> ,  btree_interval_set<IntervalValueType> > IntervalSetTypes;
+typedef ::testing::Types< interval_set<IntervalValueType>,
+                          btree_interval_set<IntervalValueType>,
+                          array_interval_set<IntervalValueType> > IntervalSetTypes;
 
 TYPED_TEST_CASE(IntervalSetTest, IntervalSetTypes);
 

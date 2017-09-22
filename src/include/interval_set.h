@@ -20,6 +20,7 @@
 #include <map>
 #include <ostream>
 
+#include "abs_interval_set.hpp"
 #include "encoding.h"
 
 #ifndef MIN
@@ -29,128 +30,15 @@
 # define MAX(a,b)  ((a)>=(b) ? (a):(b))
 #endif
 
-
 template<typename T>
-class interval_set {
+class interval_set: public abs_interval_set::interval_set<T> {
  public:
-
-  class const_iterator;
-
-  class iterator : public std::iterator <std::forward_iterator_tag, T>
-  {
-    public:
-        explicit iterator(typename std::map<T,T>::iterator iter)
-          : _iter(iter)
-        { }
-
-        // For the copy constructor and assignment operator, the compiler-generated functions, which
-        // perform simple bitwise copying, should be fine.
-
-        bool operator==(const iterator& rhs) const {
-          return (_iter == rhs._iter);
-        }
-
-        bool operator!=(const iterator& rhs) const {
-          return (_iter != rhs._iter);
-        }
-
-        // Dereference this iterator to get a pair.
-        std::pair < T, T > &operator*() {
-                return *_iter;
-        }
-
-        // Return the interval start.
-        T get_start() const {
-                return _iter->first;
-        }
-
-        // Return the interval length.
-        T get_len() const {
-                return _iter->second;
-        }
-
-        // Set the interval length.
-        void set_len(T len) {
-                _iter->second = len;
-        }
-
-        // Preincrement
-        iterator &operator++()
-        {
-                ++_iter;
-                return *this;
-        }
-
-        // Postincrement
-        iterator operator++(int)
-        {
-                iterator prev(_iter);
-                ++_iter;
-                return prev;
-        }
-
-    friend class interval_set<T>::const_iterator;
-
-    protected:
-        typename std::map<T,T>::iterator _iter;
-    friend class interval_set<T>;
-  };
-
-  class const_iterator : public std::iterator <std::forward_iterator_tag, T>
-  {
-    public:
-        explicit const_iterator(typename std::map<T,T>::const_iterator iter)
-          : _iter(iter)
-        { }
-
-        const_iterator(const iterator &i)
-	  : _iter(i._iter)
-        { }
-
-        // For the copy constructor and assignment operator, the compiler-generated functions, which
-        // perform simple bitwise copying, should be fine.
-
-        bool operator==(const const_iterator& rhs) const {
-          return (_iter == rhs._iter);
-        }
-
-        bool operator!=(const const_iterator& rhs) const {
-          return (_iter != rhs._iter);
-        }
-
-        // Dereference this iterator to get a pair.
-        std::pair < T, T > operator*() const {
-                return *_iter;
-        }
-
-        // Return the interval start.
-        T get_start() const {
-                return _iter->first;
-        }
-
-        // Return the interval length.
-        T get_len() const {
-                return _iter->second;
-        }
-
-        // Preincrement
-        const_iterator &operator++()
-        {
-                ++_iter;
-                return *this;
-        }
-
-        // Postincrement
-        const_iterator operator++(int)
-        {
-                const_iterator prev(_iter);
-                ++_iter;
-                return prev;
-        }
-
-    protected:
-        typename std::map<T,T>::const_iterator _iter;
-  };
+  using typename abs_interval_set::interval_set<T>::value_type;
+  using typename abs_interval_set::interval_set<T>::iterator;
+  using typename abs_interval_set::interval_set<T>::const_iterator;
+  using abs_interval_set::interval_set<T>::operator=;
+  using abs_interval_set::interval_set<T>::operator==;
+  using abs_interval_set::interval_set<T>::intersection_of;
 
   interval_set() : _size(0) {}
   interval_set(std::map<T,T>& other) {
@@ -190,8 +78,26 @@ class interval_set {
     return typename interval_set<T>::const_iterator(m.end());
   }
 
-  // helpers
- private:
+  /*
+   * Allows template methods to access the underlying
+   * iterator type, for maximum performance.
+   */
+  const std::map<T,T>& get_raw_data() const {
+    return m;
+  }
+
+ // base class calls protected helpers
+ friend class abs_interval_set::interval_set<T>;
+
+ // helpers
+ protected:
+  void insert(iterator &mi, const value_type &value) {
+    _size += value.second;
+    mi = m.insert(
+        *reinterpret_cast<const typename decltype(m)::iterator*>(
+        mi.get_impl()), value);
+  }
+
   typename std::map<T,T>::const_iterator find_inc(T start) const {
     typename std::map<T,T>::const_iterator p = m.lower_bound(start);  // p->first >= start
     if (p != m.begin() &&
@@ -202,7 +108,8 @@ class interval_set {
     }
     return p;
   }
-  
+
+ private:
   typename std::map<T,T>::iterator find_inc_m(T start) {
     typename std::map<T,T>::iterator p = m.lower_bound(start);
     if (p != m.begin() &&
@@ -455,6 +362,14 @@ class interval_set {
     }
   }
 
+  template <class ISet>
+  void swap(ISet &other) {
+    interval_set temp;
+    swap(temp);
+    *this = other;
+    other = temp;
+  }
+
   void swap(interval_set<T>& other) {
     m.swap(other.m);
     std::swap(_size, other._size);
@@ -463,7 +378,8 @@ class interval_set {
   void erase(iterator &i) {
     _size -= i.get_len();
     assert(_size >= 0);
-    m.erase(i._iter);
+    m.erase(*reinterpret_cast<const typename decltype(m)::iterator*>(
+        i.get_impl()));
   }
 
   void erase(T val) {
@@ -496,6 +412,15 @@ class interval_set {
     for (typename std::map<T,T>::const_iterator p = a.m.begin();
          p != a.m.end();
          p++)
+      erase(p->first, p->second);
+  }
+
+  template<class ISet>
+  void subtract(const ISet &a) {
+    const auto a_end = a.get_raw_data().end();
+    for (auto p = a.get_raw_data().begin();
+         p != a_end;
+         ++p)
       erase(p->first, p->second);
   }
 
@@ -568,22 +493,23 @@ class interval_set {
         pa++; 
     }
   }
-  void intersection_of(const interval_set& b) {
+
+  template <class ISet>
+  void intersection_of(const ISet &b) {
     interval_set a;
     swap(a);
     intersection_of(a, b);
   }
 
-  void union_of(const interval_set &a, const interval_set &b) {
+  template <class ISetA, class ISetB>
+  void union_of(const ISetA &a, const ISetB &b) {
     assert(&a != this);
     assert(&b != this);
-    clear();
     
     //cout << "union_of" << endl;
 
     // a
-    m = a.m;
-    _size = a._size;
+    *this = a;
 
     // - (a*b)
     interval_set ab;
@@ -594,7 +520,9 @@ class interval_set {
     insert(b);
     return;
   }
-  void union_of(const interval_set &b) {
+
+  template <class ISet>
+  void union_of(const ISet &b) {
     interval_set a;
     swap(a);    
     union_of(a, b);
