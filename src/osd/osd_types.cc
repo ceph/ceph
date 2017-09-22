@@ -4644,7 +4644,7 @@ void SnapSet::encode(bufferlist& bl) const
 {
   ENCODE_START(3, 2, bl);
   ::encode(seq, bl);
-  ::encode(head_exists, bl);
+  ::encode(true, bl);  // head_exists
   ::encode(snaps, bl);
   ::encode(clones, bl);
   ::encode(clone_overlap, bl);
@@ -4657,7 +4657,7 @@ void SnapSet::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(seq, bl);
-  ::decode(head_exists, bl);
+  bl.advance(1);  // skip legacy head_exists (always true)
   ::decode(snaps, bl);
   ::decode(clones, bl);
   ::decode(clone_overlap, bl);
@@ -4676,7 +4676,6 @@ void SnapSet::dump(Formatter *f) const
   f->open_object_section("snap_context");
   sc.dump(f);
   f->close_section();
-  f->dump_int("head_exists", head_exists);
   f->open_array_section("clones");
   for (vector<snapid_t>::const_iterator p = clones.begin(); p != clones.end(); ++p) {
     f->open_object_section("clone");
@@ -4700,12 +4699,10 @@ void SnapSet::generate_test_instances(list<SnapSet*>& o)
 {
   o.push_back(new SnapSet);
   o.push_back(new SnapSet);
-  o.back()->head_exists = true;
   o.back()->seq = 123;
   o.back()->snaps.push_back(123);
   o.back()->snaps.push_back(12);
   o.push_back(new SnapSet);
-  o.back()->head_exists = true;
   o.back()->seq = 123;
   o.back()->snaps.push_back(123);
   o.back()->snaps.push_back(12);
@@ -4717,18 +4714,8 @@ void SnapSet::generate_test_instances(list<SnapSet*>& o)
 
 ostream& operator<<(ostream& out, const SnapSet& cs)
 {
-  if (cs.is_legacy()) {
-    out << cs.seq << "=" << cs.snaps << ":"
-	<< cs.clones
-	<< (cs.head_exists ? "+head":"");
-    if (!cs.clone_snaps.empty()) {
-      out << "+stray_clone_snaps=" << cs.clone_snaps;
-    }
-    return out;
-  } else {
-    return out << cs.seq << "=" << cs.snaps << ":"
-	       << cs.clone_snaps;
-  }
+  return out << cs.seq << "=" << cs.snaps << ":"
+	     << cs.clone_snaps;
 }
 
 void SnapSet::from_snap_set(const librados::snap_set_t& ss, bool legacy)
@@ -4743,13 +4730,10 @@ void SnapSet::from_snap_set(const librados::snap_set_t& ss, bool legacy)
   seq = ss.seq;
   set<snapid_t> _snaps;
   set<snapid_t> _clones;
-  head_exists = false;
   for (vector<librados::clone_info_t>::const_iterator p = ss.clones.begin();
        p != ss.clones.end();
        ++p) {
-    if (p->cloneid == librados::SNAP_HEAD) {
-      head_exists = true;
-    } else {
+    if (p->cloneid != librados::SNAP_HEAD) {
       _clones.insert(p->cloneid);
       _snaps.insert(p->snaps.begin(), p->snaps.end());
       clone_size[p->cloneid] = p->size;
@@ -4971,7 +4955,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   if (soid.snap == CEPH_NOSNAP)
     ::encode(osd_reqid_t(), bl);  // used to be wrlock_by
   else
-    ::encode(legacy_snaps, bl);
+    ::encode((uint32_t)0, bl);    // was legacy_snaps
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
   ::encode(is_lost(), bl);
@@ -5016,6 +5000,7 @@ void object_info_t::decode(bufferlist::iterator& bl)
     osd_reqid_t wrlock_by;
     ::decode(wrlock_by, bl);
   } else {
+    vector<snapid_t> legacy_snaps;
     ::decode(legacy_snaps, bl);
   }
   ::decode(truncate_seq, bl);
@@ -5103,11 +5088,6 @@ void object_info_t::dump(Formatter *f) const
   f->dump_stream("local_mtime") << local_mtime;
   f->dump_unsigned("lost", (int)is_lost());
   f->dump_unsigned("flags", (int)flags);
-  f->open_array_section("legacy_snaps");
-  for (auto s : legacy_snaps) {
-    f->dump_unsigned("snap", s);
-  }
-  f->close_section();
   f->dump_unsigned("truncate_seq", truncate_seq);
   f->dump_unsigned("truncate_size", truncate_size);
   f->dump_unsigned("data_digest", data_digest);
@@ -5140,8 +5120,6 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
 {
   out << oi.soid << "(" << oi.version
       << " " << oi.last_reqid;
-  if (oi.soid.snap != CEPH_NOSNAP && !oi.legacy_snaps.empty())
-    out << " " << oi.legacy_snaps;
   if (oi.flags)
     out << " " << oi.get_flag_string();
   out << " s " << oi.size;

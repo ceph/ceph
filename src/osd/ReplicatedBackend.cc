@@ -1417,10 +1417,7 @@ void ReplicatedBackend::prepare_pull(
   ObcLockManager lock_manager;
 
   if (soid.is_snap()) {
-    assert(!get_parent()->get_local_missing().is_missing(
-	     soid.get_head()) ||
-	   !get_parent()->get_local_missing().is_missing(
-	     soid.get_snapdir()));
+    assert(!get_parent()->get_local_missing().is_missing(soid.get_head()));
     assert(headctx);
     // check snapset
     SnapSetContext *ssc = headctx->ssc;
@@ -1496,13 +1493,6 @@ int ReplicatedBackend::prep_push_to_replica(
     // we need the head (and current SnapSet) locally to do that.
     if (get_parent()->get_local_missing().is_missing(head)) {
       dout(15) << "push_to_replica missing head " << head << ", pushing raw clone" << dendl;
-      return prep_push(obc, soid, peer, pop, cache_dont_need);
-    }
-    hobject_t snapdir = head;
-    snapdir.snap = CEPH_SNAPDIR;
-    if (get_parent()->get_local_missing().is_missing(snapdir)) {
-      dout(15) << "push_to_replica missing snapdir " << snapdir
-	       << ", pushing raw clone" << dendl;
       return prep_push(obc, soid, peer, pop, cache_dont_need);
     }
 
