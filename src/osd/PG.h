@@ -1239,7 +1239,7 @@ public:
     int num_digest_updates_pending;
 
     // chunky scrub
-    hobject_t start, end;
+    hobject_t start, end;    // [start,end)
     eversion_t subset_last_update;
 
     // chunky scrub state

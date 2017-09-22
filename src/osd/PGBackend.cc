@@ -820,7 +820,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     }
 
     // We won't pick an auth copy if the snapset is missing or won't decode.
-    if (obj.is_head() || obj.is_snapdir()) {
+    assert(!obj.is_snapdir());
+    if (obj.is_head()) {
       k = i->second.attrs.find(SS_ATTR);
       if (k == i->second.attrs.end()) {
 	shard_info.set_ss_attr_missing();
