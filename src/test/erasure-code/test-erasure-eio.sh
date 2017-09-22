@@ -375,6 +375,34 @@ function TEST_rados_get_with_subreadall_eio_shard_1() {
     delete_pool $poolname
 }
 
+# Test recovery the first k copies aren't all available
+function TEST_ec_recovery_errors() {
+    local dir=$1
+    local objname=myobject
+
+    setup_osds 7 || return 1
+
+    local poolname=pool-jerasure
+    create_erasure_coded_pool $poolname 3 2 || return 1
+
+    rados_put $dir $poolname $objname || return 1
+    inject_eio ec data $poolname $objname $dir 0 || return 1
+
+    local -a initial_osds=($(get_osds $poolname $objname))
+    local last_osd=${initial_osds[-1]}
+    # Kill OSD
+    kill_daemons $dir TERM osd.${last_osd} >&2 < /dev/null || return 1
+    ceph osd down ${last_osd} || return 1
+    ceph osd out ${last_osd} || return 1
+
+    # Cluster should recover this object
+    wait_for_clean || return 1
+
+    #rados_get_data_recovery eio $dir $shard_id || return 1
+
+    delete_pool $poolname
+}
+
 main test-erasure-eio "$@"
 
 # Local Variables:
