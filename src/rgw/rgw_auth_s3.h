@@ -36,7 +36,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
   using keystone_cache_t = rgw::keystone::TokenCache;
   using EC2Engine = rgw::auth::keystone::EC2Engine;
 
-  EC2Engine keystone_engine;
+  boost::optional <EC2Engine> keystone_engine;
   LDAPEngine ldap_engine;
 
   aplptr_t create_apl_remote(CephContext* const cct,
@@ -56,16 +56,18 @@ public:
                        RGWRados* const store,
                        AWSEngine::VersionAbstractor* const ver_abstractor)
     : store(store),
-      keystone_engine(cct, ver_abstractor,
-                      static_cast<rgw::auth::RemoteApplier::Factory*>(this),
-                      keystone_config_t::get_instance(),
-                      keystone_cache_t::get_instance<keystone_config_t>()),
       ldap_engine(cct, store, *ver_abstractor,
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this)) {
 
     if (cct->_conf->rgw_s3_auth_use_keystone &&
         ! cct->_conf->rgw_keystone_url.empty()) {
-      add_engine(Control::SUFFICIENT, keystone_engine);
+
+      keystone_engine.emplace(cct, ver_abstractor,
+                              static_cast<rgw::auth::RemoteApplier::Factory*>(this),
+                              keystone_config_t::get_instance(),
+                              keystone_cache_t::get_instance<keystone_config_t>());
+      add_engine(Control::SUFFICIENT, *keystone_engine);
+
     }
 
     if (cct->_conf->rgw_s3_auth_use_ldap &&
