@@ -9067,7 +9067,7 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 	    op->get_req()->get_cost(),
 	    op->get_req()->get_priority(),
 	    op->get_req()->get_recv_stamp(),
-	    op->get_req()->get_source_inst(),
+	    op->get_req()->get_source().num(),
 	    get_osdmap()->get_epoch()));
 	scrubber.active_rep_scrub = OpRequestRef();
       }
@@ -10310,7 +10310,7 @@ void PrimaryLogPG::_applied_recovered_object_replica()
 	op->get_req()->get_cost(),
 	op->get_req()->get_priority(),
 	op->get_req()->get_recv_stamp(),
-	op->get_req()->get_source_inst(),
+	op->get_req()->get_source().num(),
 	get_osdmap()->get_epoch()));
     scrubber.active_rep_scrub.reset();
   }
