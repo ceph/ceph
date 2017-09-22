@@ -4770,7 +4770,7 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
       MetaSession *tsession = _get_or_open_mds_session(peer_mds);
       if (in->caps.count(peer_mds)) {
 	Cap *tcap = in->caps[peer_mds];
-	if (tcap->cap_id != m->peer.cap_id ||
+	if (tcap->cap_id == m->peer.cap_id &&
 	    ceph_seq_cmp(tcap->seq, m->peer.seq) < 0) {
 	  tcap->cap_id = m->peer.cap_id;
 	  tcap->seq = m->peer.seq - 1;
