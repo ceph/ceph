@@ -6,6 +6,7 @@ overrides:
     log-whitelist:
       - but it is still running
       - slow request
+      - evicting unresponsive client
 
 tasks:
   - cephfs_test_runner:
