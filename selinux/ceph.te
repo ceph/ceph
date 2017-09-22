@@ -106,7 +106,7 @@ files_manage_generic_locks(ceph_t)
 
 allow ceph_t sysfs_t:dir read;
 allow ceph_t sysfs_t:file { read getattr open };
-allow ceph_t sysfs_t:lnk_file read;
+allow ceph_t sysfs_t:lnk_file { read getattr };
 
 allow ceph_t random_device_t:chr_file getattr;
 allow ceph_t urandom_device_t:chr_file getattr;

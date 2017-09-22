@@ -111,7 +111,7 @@ void MgrClient::reconnect()
   if (last_connect_attempt != utime_t()) {
     utime_t now = ceph_clock_now();
     utime_t when = last_connect_attempt;
-    when += cct->_conf->mgr_connect_retry_interval;
+    when += cct->_conf->get_val<double>("mgr_connect_retry_interval");
     if (now < when) {
       if (!connect_retry_callback) {
 	connect_retry_callback = timer.add_event_at(

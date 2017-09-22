@@ -90,9 +90,7 @@ void Journaler::_set_layout(file_layout_t const *l)
 
   // prefetch intelligently.
   // (watch out, this is big if you use big objects or weird striping)
-  uint64_t periods = cct->_conf->journaler_prefetch_periods;
-  if (periods < 2)
-    periods = 2;  // we need at least 2 periods to make progress.
+  uint64_t periods = cct->_conf->get_val<uint64_t>("journaler_prefetch_periods");
   fetch_len = layout.get_period() * periods;
 }
 
@@ -740,7 +738,7 @@ void Journaler::_flush(C_OnFinisher *onsafe)
 
 bool Journaler::_write_head_needed()
 {
-  return last_wrote_head + seconds(cct->_conf->journaler_write_head_interval)
+  return last_wrote_head + seconds(cct->_conf->get_val<int64_t>("journaler_write_head_interval"))
       < ceph::real_clock::now();
 }
 
@@ -761,10 +759,7 @@ void Journaler::_issue_prezero()
 {
   assert(prezeroing_pos >= flush_pos);
 
-  // we need to zero at least two periods, minimum, to ensure that we
-  // have a full empty object/period in front of us.
-  uint64_t num_periods = MAX(2, cct->_conf->journaler_prezero_periods);
-
+  uint64_t num_periods = cct->_conf->get_val<uint64_t>("journaler_prezero_periods");
   /*
    * issue zero requests based on write_pos, even though the invariant
    * is that we zero ahead of flush_pos.
