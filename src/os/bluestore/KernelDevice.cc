@@ -276,6 +276,13 @@ int KernelDevice::flush()
     return 0;
   }
 
+  if (!cct->_conf->bluestore_allow_buffered_write) {
+    // all writes are direct write, so no need to call fdatasync.
+    dout(10) << __func__ << " no-op (buffered write is not allowd)"
+	     << dendl;
+    return 0;
+  }
+
   dout(10) << __func__ << " start" << dendl;
   if (cct->_conf->bdev_inject_crash) {
     ++injecting_crash;

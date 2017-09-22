@@ -1474,10 +1474,14 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   h->buffer_appender.flush();
 
   bool buffered;
-  if (h->file->fnode.ino == 1)
+  if (!cct->_conf->bluestore_allow_buffered_write) {
     buffered = false;
-  else
-    buffered = cct->_conf->bluefs_buffered_io;
+  } else {
+    if (h->file->fnode.ino == 1)
+      buffered = false;
+    else
+      buffered = cct->_conf->bluefs_buffered_io;
+  }
 
   if (offset + length <= h->pos)
     return 0;

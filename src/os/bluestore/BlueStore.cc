@@ -10177,14 +10177,19 @@ void BlueStore::_choose_write_options(
    uint32_t fadvise_flags,
    WriteContext *wctx)
 {
-  if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
-    dout(20) << __func__ << " will do buffered write" << dendl;
-    wctx->buffered = true;
-  } else if (cct->_conf->bluestore_default_buffered_write &&
-	     (fadvise_flags & (CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
-			       CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
-    dout(20) << __func__ << " defaulting to buffered write" << dendl;
-    wctx->buffered = true;
+  if (!cct->_conf->bluestore_allow_buffered_write) {
+      dout(20) << __func__ << " buffered write is not allowed" << dendl;
+      wctx->buffered = false;
+  } else {
+    if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
+      dout(20) << __func__ << " will do buffered write" << dendl;
+      wctx->buffered = true;
+    } else if (cct->_conf->bluestore_default_buffered_write &&
+	       (fadvise_flags & (CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+				 CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
+      dout(20) << __func__ << " defaulting to buffered write" << dendl;
+      wctx->buffered = true;
+    }
   }
 
   // apply basic csum block size
