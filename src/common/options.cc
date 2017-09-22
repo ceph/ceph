@@ -3539,6 +3539,11 @@ std::vector<Option> get_global_options() {
     .set_safe()
     .set_description("Cache writes by default (unless hinted NOCACHE or WONTNEED)"),
 
+    Option("bluestore_allow_buffered_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_safe()
+    .set_description("Allow bluestore and bluefs to do buffered write"),
+
     Option("bluestore_debug_misc", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
