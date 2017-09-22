@@ -4667,9 +4667,6 @@ struct object_info_t {
 
   void copy_user_bits(const object_info_t& other);
 
-  static ps_t legacy_object_locator_to_ps(const object_t &oid, 
-					  const object_locator_t &loc);
-
   bool test_flag(flag_t f) const {
     return (flags & f) == f;
   }
