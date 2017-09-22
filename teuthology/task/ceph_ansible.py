@@ -257,6 +257,8 @@ class CephAnsible(Task):
             host_vars['devices'] = get_scratch_devices(remote)[0:dev_needed]
         if 'monitor_interface' not in extra_vars:
             host_vars['monitor_interface'] = remote.interface
+        if 'radosgw_interface' not in extra_vars:
+            host_vars['radosgw_interface'] = remote.interface
         if 'public_network' not in extra_vars:
             host_vars['public_network'] = remote.cidr
         return host_vars
