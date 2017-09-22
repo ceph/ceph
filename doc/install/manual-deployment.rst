@@ -230,8 +230,8 @@ The procedure is as follows:
 	auth service required = cephx
 	auth client required = cephx
 	osd journal size = 1024
-	osd pool default size = 2
-	osd pool default min size = 1
+	osd pool default size = 3
+	osd pool default min size = 2
 	osd pool default pg num = 333
 	osd pool default pgp num = 333
 	osd crush chooseleaf type = 1
