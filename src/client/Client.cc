@@ -5561,7 +5561,8 @@ int Client::mds_command(
 {
   Mutex::Locker lock(client_lock);
 
-  assert(initialized);
+  if (!initialized)
+    return -ENOTCONN;
 
   int r;
   r = authenticate();
@@ -5824,7 +5825,8 @@ void Client::unmount()
 {
   Mutex::Locker lock(client_lock);
 
-  assert(mounted);  // caller is confused?
+  if (unmounting)
+    return;
 
   ldout(cct, 2) << "unmounting" << dendl;
   unmounting = true;
@@ -6301,6 +6303,9 @@ int Client::link(const char *relexisting, const char *relpath, const UserPerm& p
   tout(cct) << relexisting << std::endl;
   tout(cct) << relpath << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath existing(relexisting);
 
   InodeRef in, dir;
@@ -6340,6 +6345,9 @@ int Client::unlink(const char *relpath, const UserPerm& perm)
   tout(cct) << "unlink" << std::endl;
   tout(cct) << relpath << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   if (std::string(relpath) == "/")
     return -EISDIR;
 
@@ -6364,6 +6372,9 @@ int Client::rename(const char *relfrom, const char *relto, const UserPerm& perm)
   tout(cct) << "rename" << std::endl;
   tout(cct) << relfrom << std::endl;
   tout(cct) << relto << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   if (std::string(relfrom) == "/" || std::string(relto) == "/")
     return -EBUSY;
@@ -6406,6 +6417,9 @@ int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm)
   tout(cct) << mode << std::endl;
   ldout(cct, 10) << "mkdir: " << relpath << dendl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   if (std::string(relpath) == "/")
     return -EEXIST;
 
@@ -6431,6 +6445,9 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
   tout(cct) << "mkdirs" << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   //get through existing parts of path
   filepath path(relpath);
@@ -6484,6 +6501,9 @@ int Client::rmdir(const char *relpath, const UserPerm& perms)
   tout(cct) << "rmdir" << std::endl;
   tout(cct) << relpath << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   if (std::string(relpath) == "/")
     return -EBUSY;
 
@@ -6509,6 +6529,9 @@ int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
   tout(cct) << rdev << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   if (std::string(relpath) == "/")
     return -EEXIST;
@@ -6537,6 +6560,9 @@ int Client::symlink(const char *target, const char *relpath, const UserPerm& per
   tout(cct) << target << std::endl;
   tout(cct) << relpath << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   if (std::string(relpath) == "/")
     return -EEXIST;
 
@@ -6560,6 +6586,9 @@ int Client::readlink(const char *relpath, char *buf, loff_t size, const UserPerm
   Mutex::Locker lock(client_lock);
   tout(cct) << "readlink" << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   filepath path(relpath);
   InodeRef in;
@@ -6860,6 +6889,9 @@ int Client::setattr(const char *relpath, struct stat *attr, int mask,
   tout(cct) << relpath << std::endl;
   tout(cct) << mask  << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   int r = path_walk(path, &in, perms);
@@ -6876,6 +6908,9 @@ int Client::setattrx(const char *relpath, struct ceph_statx *stx, int mask,
   tout(cct) << relpath << std::endl;
   tout(cct) << mask  << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   int r = path_walk(path, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW));
@@ -6890,6 +6925,9 @@ int Client::fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms)
   tout(cct) << "fsetattr" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mask  << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -6908,6 +6946,9 @@ int Client::fsetattrx(int fd, struct ceph_statx *stx, int mask, const UserPerm& 
   tout(cct) << fd << std::endl;
   tout(cct) << mask  << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -6925,6 +6966,10 @@ int Client::stat(const char *relpath, struct stat *stbuf, const UserPerm& perms,
   Mutex::Locker lock(client_lock);
   tout(cct) << "stat" << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   int r = path_walk(path, &in, perms, true, mask);
@@ -6970,6 +7015,10 @@ int Client::statx(const char *relpath, struct ceph_statx *stx,
   Mutex::Locker lock(client_lock);
   tout(cct) << "statx" << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
 
@@ -6997,6 +7046,10 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
   Mutex::Locker lock(client_lock);
   tout(cct) << "lstat" << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   // don't follow symlinks
@@ -7139,6 +7192,10 @@ int Client::chmod(const char *relpath, mode_t mode, const UserPerm& perms)
   tout(cct) << "chmod" << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   int r = path_walk(path, &in, perms);
@@ -7155,6 +7212,10 @@ int Client::fchmod(int fd, mode_t mode, const UserPerm& perms)
   tout(cct) << "fchmod" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mode << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -7173,6 +7234,10 @@ int Client::lchmod(const char *relpath, mode_t mode, const UserPerm& perms)
   tout(cct) << "lchmod" << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   // don't follow symlinks
@@ -7192,6 +7257,10 @@ int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
   tout(cct) << relpath << std::endl;
   tout(cct) << new_uid << std::endl;
   tout(cct) << new_gid << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   int r = path_walk(path, &in, perms);
@@ -7210,6 +7279,10 @@ int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
   tout(cct) << fd << std::endl;
   tout(cct) << new_uid << std::endl;
   tout(cct) << new_gid << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -7234,6 +7307,10 @@ int Client::lchown(const char *relpath, uid_t new_uid, gid_t new_gid,
   tout(cct) << relpath << std::endl;
   tout(cct) << new_uid << std::endl;
   tout(cct) << new_gid << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   // don't follow symlinks
@@ -7257,6 +7334,10 @@ int Client::utime(const char *relpath, struct utimbuf *buf,
   tout(cct) << relpath << std::endl;
   tout(cct) << buf->modtime << std::endl;
   tout(cct) << buf->actime << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   int r = path_walk(path, &in, perms);
@@ -7278,6 +7359,10 @@ int Client::lutime(const char *relpath, struct utimbuf *buf,
   tout(cct) << relpath << std::endl;
   tout(cct) << buf->modtime << std::endl;
   tout(cct) << buf->actime << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   // don't follow symlinks
@@ -7299,6 +7384,10 @@ int Client::flock(int fd, int operation, uint64_t owner)
   tout(cct) << fd << std::endl;
   tout(cct) << operation << std::endl;
   tout(cct) << owner << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -7311,6 +7400,10 @@ int Client::opendir(const char *relpath, dir_result_t **dirpp, const UserPerm& p
   Mutex::Locker lock(client_lock);
   tout(cct) << "opendir" << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   int r = path_walk(path, &in, perms, true);
@@ -7365,8 +7458,11 @@ void Client::_closedir(dir_result_t *dirp)
 void Client::rewinddir(dir_result_t *dirp)
 {
   Mutex::Locker lock(client_lock);
-
   ldout(cct, 3) << "rewinddir(" << dirp << ")" << dendl;
+
+  if (unmounting)
+    return;
+
   dir_result_t *d = static_cast<dir_result_t*>(dirp);
   _readdir_drop_dirp_buffer(d);
   d->reset();
@@ -7384,6 +7480,9 @@ void Client::seekdir(dir_result_t *dirp, loff_t offset)
   Mutex::Locker lock(client_lock);
 
   ldout(cct, 3) << "seekdir(" << dirp << ", " << offset << ")" << dendl;
+
+  if (unmounting)
+    return;
 
   if (offset == dirp->offset)
     return;
@@ -7633,6 +7732,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
   int caps = statx_to_mask(flags, want);
 
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   dir_result_t *dirp = static_cast<dir_result_t*>(d);
 
@@ -8011,6 +8113,9 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms,
   tout(cct) << relpath << std::endl;
   tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *fh = NULL;
 
 #if defined(__linux__) && defined(O_PATH)
@@ -8095,6 +8200,9 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
   Mutex::Locker lock(client_lock);
   ldout(cct, 3) << "lookup_hash enter(" << ino << ", #" << dirino << "/" << name << ")" << dendl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPHASH);
   filepath path(ino);
   req->set_filepath(path);
@@ -8125,6 +8233,9 @@ int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
   Mutex::Locker lock(client_lock);
   ldout(cct, 3) << "lookup_ino enter(" << ino << ")" << dendl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPINO);
   filepath path(ino);
   req->set_filepath(path);
@@ -8152,6 +8263,9 @@ int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
 {
   Mutex::Locker lock(client_lock);
   ldout(cct, 3) << "lookup_parent enter(" << ino->ino << ")" << dendl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!ino->dn_set.empty()) {
     // if we exposed the parent here, we'd need to check permissions,
@@ -8197,6 +8311,9 @@ int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 
   Mutex::Locker lock(client_lock);
   ldout(cct, 3) << "lookup_name enter(" << ino->ino << ")" << dendl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPNAME);
   req->set_filepath2(filepath(parent->ino));
@@ -8383,6 +8500,9 @@ int Client::close(int fd)
   tout(cct) << "close" << std::endl;
   tout(cct) << fd << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *fh = get_filehandle(fd);
   if (!fh)
     return -EBADF;
@@ -8404,6 +8524,9 @@ loff_t Client::lseek(int fd, loff_t offset, int whence)
   tout(cct) << fd << std::endl;
   tout(cct) << offset << std::endl;
   tout(cct) << whence << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -8525,6 +8648,9 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
   tout(cct) << fd << std::endl;
   tout(cct) << size << std::endl;
   tout(cct) << offset << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -8869,6 +8995,9 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
   tout(cct) << size << std::endl;
   tout(cct) << offset << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *fh = get_filehandle(fd);
   if (!fh)
     return -EBADF;
@@ -8893,6 +9022,9 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
     Mutex::Locker lock(client_lock);
     tout(cct) << fd << std::endl;
     tout(cct) << offset << std::endl;
+
+    if (unmounting)
+     return -ENOTCONN;
 
     Fh *fh = get_filehandle(fd);
     if (!fh)
@@ -9201,6 +9333,9 @@ int Client::ftruncate(int fd, loff_t length, const UserPerm& perms)
   tout(cct) << fd << std::endl;
   tout(cct) << length << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -9219,6 +9354,9 @@ int Client::fsync(int fd, bool syncdataonly)
   tout(cct) << "fsync" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << syncdataonly << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -9323,6 +9461,9 @@ int Client::fstat(int fd, struct stat *stbuf, const UserPerm& perms, int mask)
   tout(cct) << "fstat mask " << hex << mask << dec << std::endl;
   tout(cct) << fd << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -9340,6 +9481,9 @@ int Client::fstatx(int fd, struct ceph_statx *stx, const UserPerm& perms,
   Mutex::Locker lock(client_lock);
   tout(cct) << "fstatx flags " << hex << flags << " want " << want << dec << std::endl;
   tout(cct) << fd << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -9369,6 +9513,10 @@ int Client::chdir(const char *relpath, std::string &new_cwd,
   Mutex::Locker lock(client_lock);
   tout(cct) << "chdir" << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   int r = path_walk(path, &in, perms);
@@ -9425,7 +9573,8 @@ void Client::_getcwd(string& dir, const UserPerm& perms)
 void Client::getcwd(string& dir, const UserPerm& perms)
 {
   Mutex::Locker l(client_lock);
-  _getcwd(dir, perms);
+  if (!unmounting)
+    _getcwd(dir, perms);
 }
 
 int Client::statfs(const char *path, struct statvfs *stbuf,
@@ -9433,6 +9582,9 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
 {
   Mutex::Locker l(client_lock);
   tout(cct) << "statfs" << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   ceph_statfs stats;
   C_SaferCond cond;
@@ -9929,6 +10081,10 @@ int Client::_sync_fs()
 int Client::sync_fs()
 {
   Mutex::Locker l(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   return _sync_fs();
 }
 
@@ -9979,6 +10135,10 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
 int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm)
 {
   Mutex::Locker l(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   int r = path_walk(path, &in, perm);
@@ -9992,9 +10152,14 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm)
   Inode *snapdir = open_snapdir(in.get());
   return _mkdir(snapdir, name, 0, perm);
 }
+
 int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms)
 {
   Mutex::Locker l(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   int r = path_walk(path, &in, perms);
@@ -10016,6 +10181,9 @@ int Client::get_caps_issued(int fd) {
 
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -10026,6 +10194,10 @@ int Client::get_caps_issued(int fd) {
 int Client::get_caps_issued(const char *path, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath p(path);
   InodeRef in;
   int r = path_walk(p, &in, perms, true);
@@ -10078,6 +10250,9 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   tout(cct) << "ll_lookup" << std::endl;
   tout(cct) << name << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   int r = 0;
   if (!cct->_conf->fuse_default_permissions) {
     r = may_lookup(parent, perms);
@@ -10116,6 +10291,9 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
   tout(cct) << "ll_lookupx" << std::endl;
   tout(cct) << name << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   int r = 0;
   if (!cct->_conf->fuse_default_permissions) {
     r = may_lookup(parent, perms);
@@ -10148,6 +10326,10 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
 		    unsigned int want, unsigned int flags, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath fp(name, 0);
   InodeRef in;
   int rc;
@@ -10227,6 +10409,10 @@ bool Client::ll_forget(Inode *in, int count)
   tout(cct) << ino.val << std::endl;
   tout(cct) << count << std::endl;
 
+  // Ignore forget if we're no longer mounted
+  if (unmounting)
+    return true;
+
   if (ino == 1) return true;  // ignore forget on root.
 
   bool last = false;
@@ -10258,6 +10444,10 @@ snapid_t Client::ll_get_snapid(Inode *in)
 Inode *Client::ll_get_inode(ino_t ino)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return NULL;
+
   vinodeno_t vino = _map_faked_ino(ino);
   unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
   if (p == inode_map.end())
@@ -10270,6 +10460,10 @@ Inode *Client::ll_get_inode(ino_t ino)
 Inode *Client::ll_get_inode(vinodeno_t vino)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return NULL;
+
   unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
   if (p == inode_map.end())
     return NULL;
@@ -10296,6 +10490,9 @@ int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   int res = _ll_getattr(in, CEPH_STAT_CAP_INODE_ALL, perms);
 
   if (res == 0)
@@ -10308,6 +10505,9 @@ int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
 			unsigned int flags, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   int res = 0;
   unsigned mask = statx_to_mask(flags, want);
@@ -10354,6 +10554,10 @@ int Client::ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
 			const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   InodeRef target(in);
   int res = _ll_setattrx(in, stx, mask, perms, &target);
   if (res == 0) {
@@ -10372,6 +10576,10 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask,
   stat_to_statx(attr, &stx);
 
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   InodeRef target(in);
   int res = _ll_setattrx(in, &stx, mask, perms, &target);
   if (res == 0) {
@@ -10391,6 +10599,10 @@ int Client::getxattr(const char *path, const char *name, void *value, size_t siz
 		     const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, true, CEPH_STAT_CAP_XATTR);
   if (r < 0)
@@ -10402,6 +10614,10 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
 		      const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, false, CEPH_STAT_CAP_XATTR);
   if (r < 0)
@@ -10413,6 +10629,10 @@ int Client::fgetxattr(int fd, const char *name, void *value, size_t size,
 		      const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -10423,6 +10643,10 @@ int Client::listxattr(const char *path, char *list, size_t size,
 		      const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, true, CEPH_STAT_CAP_XATTR);
   if (r < 0)
@@ -10434,6 +10658,10 @@ int Client::llistxattr(const char *path, char *list, size_t size,
 		       const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, false, CEPH_STAT_CAP_XATTR);
   if (r < 0)
@@ -10444,6 +10672,10 @@ int Client::llistxattr(const char *path, char *list, size_t size,
 int Client::flistxattr(int fd, char *list, size_t size, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -10454,6 +10686,10 @@ int Client::removexattr(const char *path, const char *name,
 			const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, true);
   if (r < 0)
@@ -10465,6 +10701,10 @@ int Client::lremovexattr(const char *path, const char *name,
 			 const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, false);
   if (r < 0)
@@ -10475,6 +10715,10 @@ int Client::lremovexattr(const char *path, const char *name,
 int Client::fremovexattr(int fd, const char *name, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -10487,6 +10731,10 @@ int Client::setxattr(const char *path, const char *name, const void *value,
   _setxattr_maybe_wait_for_osdmap(name, value, size);
 
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, true);
   if (r < 0)
@@ -10500,6 +10748,10 @@ int Client::lsetxattr(const char *path, const char *name, const void *value,
   _setxattr_maybe_wait_for_osdmap(name, value, size);
 
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, false);
   if (r < 0)
@@ -10513,6 +10765,10 @@ int Client::fsetxattr(int fd, const char *name, const void *value, size_t size,
   _setxattr_maybe_wait_for_osdmap(name, value, size);
 
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -10594,6 +10850,9 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_getxattr " << vino << " " << name << " size " << size << dendl;
@@ -10659,6 +10918,9 @@ int Client::ll_listxattr(Inode *in, char *names, size_t size,
 			 const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   vinodeno_t vino = _get_vino(in);
 
@@ -10842,6 +11104,9 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
 
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_setxattr " << vino << " " << name << " size " << size << dendl;
@@ -10902,6 +11167,9 @@ int Client::_removexattr(InodeRef &in, const char *name, const UserPerm& perms)
 int Client::ll_removexattr(Inode *in, const char *name, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   vinodeno_t vino = _get_vino(in);
 
@@ -11141,6 +11409,9 @@ int Client::ll_readlink(Inode *in, char *buf, size_t buflen, const UserPerm& per
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_readlink " << vino << dendl;
@@ -11218,6 +11489,9 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "ll_mknod " << vparent << " " << name << dendl;
@@ -11253,6 +11527,9 @@ int Client::ll_mknodx(Inode *parent, const char *name, mode_t mode,
 {
   unsigned caps = statx_to_mask(flags, want);
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   vinodeno_t vparent = _get_vino(parent);
 
@@ -11437,6 +11714,9 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "ll_mkdir " << vparent << " " << name << dendl;
@@ -11469,6 +11749,9 @@ int Client::ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
 		      const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   vinodeno_t vparent = _get_vino(parent);
 
@@ -11551,6 +11834,9 @@ int Client::ll_symlink(Inode *parent, const char *name, const char *value,
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "ll_symlink " << vparent << " " << name << " -> " << value
@@ -11584,6 +11870,9 @@ int Client::ll_symlinkx(Inode *parent, const char *name, const char *value,
 			unsigned flags, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   vinodeno_t vparent = _get_vino(parent);
 
@@ -11663,6 +11952,9 @@ int Client::ll_unlink(Inode *in, const char *name, const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_unlink " << vino << " " << name << dendl;
@@ -11729,6 +12021,9 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
 int Client::ll_rmdir(Inode *in, const char *name, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   vinodeno_t vino = _get_vino(in);
 
@@ -11845,6 +12140,9 @@ int Client::ll_rename(Inode *parent, const char *name, Inode *newparent,
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   vinodeno_t vparent = _get_vino(parent);
   vinodeno_t vnewparent = _get_vino(newparent);
 
@@ -11917,6 +12215,9 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   vinodeno_t vino = _get_vino(in);
   vinodeno_t vnewparent = _get_vino(newparent);
 
@@ -11955,6 +12256,7 @@ int Client::ll_num_osds(void)
 int Client::ll_osdaddr(int osd, uint32_t *addr)
 {
   Mutex::Locker lock(client_lock);
+
   entity_addr_t g;
   bool exists = objecter->with_osdmap([&](const OSDMap& o) {
       if (!o.exists(osd))
@@ -11968,6 +12270,7 @@ int Client::ll_osdaddr(int osd, uint32_t *addr)
   *addr = ntohl(nb_addr);
   return 0;
 }
+
 uint32_t Client::ll_stripe_unit(Inode *in)
 {
   Mutex::Locker lock(client_lock);
@@ -12003,6 +12306,7 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
 			      file_layout_t* layout)
 {
   Mutex::Locker lock(client_lock);
+
   inodeno_t ino = ll_get_inodeno(in);
   uint32_t object_size = layout->object_size;
   uint32_t su = layout->stripe_unit;
@@ -12044,6 +12348,9 @@ int Client::ll_opendir(Inode *in, int flags, dir_result_t** dirpp,
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_opendir " << vino << dendl;
@@ -12070,6 +12377,10 @@ int Client::ll_releasedir(dir_result_t *dirp)
   ldout(cct, 3) << "ll_releasedir " << dirp << dendl;
   tout(cct) << "ll_releasedir" << std::endl;
   tout(cct) << (unsigned long)dirp << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
   _closedir(dirp);
   return 0;
 }
@@ -12081,6 +12392,9 @@ int Client::ll_fsyncdir(dir_result_t *dirp)
   tout(cct) << "ll_fsyncdir" << std::endl;
   tout(cct) << (unsigned long)dirp << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   return _fsync(dirp->inode.get(), false);
 }
 
@@ -12089,6 +12403,9 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
   assert(!(flags & O_CREAT));
 
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   vinodeno_t vino = _get_vino(in);
 
@@ -12206,6 +12523,9 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
   Mutex::Locker lock(client_lock);
   InodeRef in;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   int r = _ll_create(parent, name, mode, flags, &in, CEPH_STAT_CAP_INODE_ALL,
 		      fhp, perms);
   if (r >= 0) {
@@ -12233,6 +12553,8 @@ int Client::ll_createx(Inode *parent, const char *name, mode_t mode,
   Mutex::Locker lock(client_lock);
   InodeRef in;
 
+  if (unmounting)
+    return -ENOTCONN;
 
   int r = _ll_create(parent, name, mode, oflags, &in, caps, fhp, perms);
   if (r >= 0) {
@@ -12259,6 +12581,9 @@ loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
   tout(cct) << offset << std::endl;
   tout(cct) << whence << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   return _lseek(fh, offset, whence);
 }
 
@@ -12271,6 +12596,9 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   return _read(fh, off, len, bl);
 }
 
@@ -12281,6 +12609,10 @@ int Client::ll_read_block(Inode *in, uint64_t blockid,
 			  file_layout_t* layout)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   vinodeno_t vino = ll_get_vino(in);
   object_t oid = file_object_t(vino.ino, blockid);
   C_SaferCond onfinish;
@@ -12320,7 +12652,7 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   Cond cond;
   bool done;
   int r = 0;
-  Context *onsafe;
+  Context *onsafe = nullptr;
 
   if (length == 0) {
     return -EINVAL;
@@ -12352,6 +12684,11 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
 
   /* lock just in time */
   client_lock.Lock();
+  if (unmounting) {
+    client_lock.Unlock();
+    delete onsafe;
+    return -ENOTCONN;
+  }
 
   objecter->write(oid,
 		  object_locator_t(layout->pool_id),
@@ -12414,6 +12751,9 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   int r = _write(fh, off, len, data, NULL, 0);
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
@@ -12427,6 +12767,9 @@ int Client::ll_flush(Fh *fh)
   tout(cct) << "ll_flush" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   return _flush(fh);
 }
 
@@ -12436,6 +12779,9 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
   ldout(cct, 3) << "ll_fsync " << fh << " " << fh->inode->ino << " " << dendl;
   tout(cct) << "ll_fsync" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   int r = _fsync(fh, syncdataonly);
   if (r) {
@@ -12598,6 +12944,9 @@ int Client::ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length)
   tout(cct) << "ll_fallocate " << mode << " " << offset << " " << length << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   return _fallocate(fh, mode, offset, length);
 }
 
@@ -12605,6 +12954,9 @@ int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "fallocate " << " " << fd << mode << " " << offset << " " << length << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   Fh *fh = get_filehandle(fd);
   if (!fh)
@@ -12624,6 +12976,9 @@ int Client::ll_release(Fh *fh)
   tout(cct) << "ll_release (fh)" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   if (ll_unclosed_fh_set.count(fh))
     ll_unclosed_fh_set.erase(fh);
   return _release_fh(fh);
@@ -12636,6 +12991,9 @@ int Client::ll_getlk(Fh *fh, struct flock *fl, uint64_t owner)
   ldout(cct, 3) << "ll_getlk (fh)" << fh << " " << fh->inode->ino << dendl;
   tout(cct) << "ll_getk (fh)" << (unsigned long)fh << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   return _getlk(fh, fl, owner);
 }
 
@@ -12646,6 +13004,9 @@ int Client::ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
   ldout(cct, 3) << "ll_setlk  (fh) " << fh << " " << fh->inode->ino << dendl;
   tout(cct) << "ll_setk (fh)" << (unsigned long)fh << std::endl;
 
+  if (unmounting)
+    return -ENOTCONN;
+
   return _setlk(fh, fl, owner, sleep);
 }
 
@@ -12655,6 +13016,9 @@ int Client::ll_flock(Fh *fh, int cmd, uint64_t owner)
 
   ldout(cct, 3) << "ll_flock  (fh) " << fh << " " << fh->inode->ino << dendl;
   tout(cct) << "ll_flock (fh)" << (unsigned long)fh << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
 
   return _flock(fh, cmd, owner);
 }
@@ -12693,6 +13057,9 @@ int Client::describe_layout(const char *relpath, file_layout_t *lp,
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   filepath path(relpath);
   InodeRef in;
   int r = path_walk(path, &in, perms);
@@ -12709,6 +13076,9 @@ int Client::fdescribe_layout(int fd, file_layout_t *lp)
 {
   Mutex::Locker lock(client_lock);
 
+  if (unmounting)
+    return -ENOTCONN;
+
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -12723,6 +13093,10 @@ int Client::fdescribe_layout(int fd, file_layout_t *lp)
 int64_t Client::get_default_pool_id()
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   /* first data pool is the default */ 
   return mdsmap->get_first_data_pool(); 
 }
@@ -12732,6 +13106,10 @@ int64_t Client::get_default_pool_id()
 int64_t Client::get_pool_id(const char *pool_name)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   return objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
 			       pool_name);
 }
@@ -12739,6 +13117,10 @@ int64_t Client::get_pool_id(const char *pool_name)
 string Client::get_pool_name(int64_t pool)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return string();
+
   return objecter->with_osdmap([pool](const OSDMap& o) {
       return o.have_pg_pool(pool) ? o.get_pool_name(pool) : string();
     });
@@ -12747,6 +13129,10 @@ string Client::get_pool_name(int64_t pool)
 int Client::get_pool_replication(int64_t pool)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   return objecter->with_osdmap([pool](const OSDMap& o) {
       return o.have_pg_pool(pool) ? o.get_pg_pool(pool)->get_size() : -ENOENT;
     });
@@ -12755,6 +13141,9 @@ int Client::get_pool_replication(int64_t pool)
 int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -12798,6 +13187,10 @@ int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& o
 int Client::get_osd_crush_location(int id, vector<pair<string, string> >& path)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   if (id < 0)
     return -EINVAL;
   return objecter->with_osdmap([&](const OSDMap& o) {
@@ -12809,6 +13202,9 @@ int Client::get_file_stripe_address(int fd, loff_t offset,
 				    vector<entity_addr_t>& address)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -12839,6 +13235,10 @@ int Client::get_file_stripe_address(int fd, loff_t offset,
 int Client::get_osd_addr(int osd, entity_addr_t& addr)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   return objecter->with_osdmap([&](const OSDMap& o) {
       if (!o.exists(osd))
 	return -ENOENT;
@@ -12852,6 +13252,9 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 			     loff_t length, loff_t offset)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -12872,6 +13275,10 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 int Client::get_local_osd()
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   objecter->with_osdmap([this](const OSDMap& o) {
       if (o.get_epoch() != local_osd_epoch) {
 	local_osd = o.find_osd_on_ip(messenger->get_myaddr());
