@@ -26,9 +26,6 @@ Inode::~Inode()
       << std::hex << ino << std::dec << dendl;
     assert(oset.objects.empty());
   }
-
-  delete fcntl_locks;
-  delete flock_locks;
 }
 
 ostream& operator<<(ostream &out, const Inode &in)

@@ -20,7 +20,7 @@
 
 Fh::Fh(InodeRef in, int flags, int cmode, const UserPerm &perms) :
     inode(in), _ref(1), pos(0), mds(0), mode(cmode), flags(flags), pos_locked(false),
-    actor_perms(perms), readahead(), fcntl_locks(NULL), flock_locks(NULL)
+    actor_perms(perms), readahead()
 {
   inode->add_fh(this);
 }
