@@ -95,7 +95,7 @@ private:
   void _prune_pending_service_map();
 
   utime_t started_at;
-  bool pgmap_ready = false;
+  std::atomic<bool> pgmap_ready;
   std::set<int32_t> reported_osds;
   void maybe_ready(int32_t osd_id);
 
