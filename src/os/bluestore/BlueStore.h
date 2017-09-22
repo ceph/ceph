@@ -457,6 +457,8 @@ public:
       std::lock_guard<std::mutex> l(lock);
       return sb_map.empty();
     }
+
+    void dump(CephContext *cct, int lvl);
   };
 
 //#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
@@ -1318,6 +1320,8 @@ public:
 		const mempool::bluestore_cache_other::string& new_okey);
     void clear();
     bool empty();
+
+    void dump(CephContext *cct, int lvl);
 
     /// return true if f true for any item
     bool map_any(std::function<bool(OnodeRef)> f);
