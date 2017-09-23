@@ -13,6 +13,8 @@
 
 #include "DaemonState.h"
 
+#include "MgrSession.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
@@ -123,14 +125,18 @@ void DaemonPerfCounters::update(MMgrReport *report)
 	   << types.size() << " types, got "
            << report->packed.length() << " bytes of data" << dendl;
 
+  // Retrieve session state
+  MgrSessionRef session(static_cast<MgrSession*>(
+        report->get_connection()->get_priv()));
+
   // Load any newly declared types
   for (const auto &t : report->declare_types) {
     types.insert(std::make_pair(t.path, t));
-    declared_types.insert(t.path);
+    session->declared_types.insert(t.path);
   }
   // Remove any old types
   for (const auto &t : report->undeclare_types) {
-    declared_types.erase(t);
+    session->declared_types.erase(t);
   }
 
   const auto now = ceph_clock_now();
@@ -138,7 +144,7 @@ void DaemonPerfCounters::update(MMgrReport *report)
   // Parse packed data according to declared set of types
   bufferlist::iterator p = report->packed.begin();
   DECODE_START(1, p);
-  for (const auto &t_path : declared_types) {
+  for (const auto &t_path : session->declared_types) {
     const auto &t = types.at(t_path);
     uint64_t val = 0;
     uint64_t avgcount = 0;
