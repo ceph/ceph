@@ -260,11 +260,12 @@ class Module(MgrModule):
         while self.run:
             self.log.debug('Waking up for new iteration')
 
-            # Sometimes fetching data fails, should be fixed by PR #16020
             try:
                 self.send()
             except Exception as exc:
-                self.log.error(exc)
+                # Shouldn't happen, but let's log it and retry next interval,
+                # rather than dying completely.
+                self.log.exception("Unexpected error during send():")
 
             interval = self.config['interval']
             self.log.debug('Sleeping for %d seconds', interval)
