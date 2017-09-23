@@ -74,18 +74,11 @@ class DaemonPerfCounters
 
   std::map<std::string, PerfCounterInstance> instances;
 
-  // FIXME: this state is really local to DaemonServer, it's part
-  // of the protocol rather than being part of what other classes
-  // mgiht want to read.  Maybe have a separate session object
-  // inside DaemonServer instead of stashing session-ish state here?
-  std::set<std::string> declared_types;
-
   void update(MMgrReport *report);
 
   void clear()
   {
     instances.clear();
-    declared_types.clear();
   }
 };
 
