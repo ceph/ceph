@@ -9824,13 +9824,9 @@ void PrimaryLogPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
     assert(obc->ssc);
 
     // subtract off clone overlap
-    if (obc->ssc->snapset.clone_overlap.count(oi.soid.snap)) {
-      interval_set<uint64_t>& o = obc->ssc->snapset.clone_overlap[oi.soid.snap];
-      for (interval_set<uint64_t>::const_iterator r = o.begin();
-	   r != o.end();
-	   ++r) {
-	stat.num_bytes -= r.get_len();
-      }	  
+    auto it = obc->ssc->snapset.clone_overlap.find(oi.soid.snap);
+    if (it != obc->ssc->snapset.clone_overlap.end()) {
+      stat.num_bytes -= it->second.size();
     }
   }
 
