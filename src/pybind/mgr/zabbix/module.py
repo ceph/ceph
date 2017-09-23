@@ -12,7 +12,10 @@ from mgr_module import MgrModule
 
 
 def avg(data):
-    return sum(data) / float(len(data))
+    if len(data):
+        return sum(data) / float(len(data))
+    else:
+        return 0
 
 
 class ZabbixSender(object):
