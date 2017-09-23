@@ -410,7 +410,7 @@ void Mgr::handle_osd_map()
    * reload the metadata.
    */
   objecter->with_osdmap([this, &names_exist](const OSDMap &osd_map) {
-    for (unsigned int osd_id = 0; osd_id < osd_map.get_max_osd(); ++osd_id) {
+    for (int osd_id = 0; osd_id < osd_map.get_max_osd(); ++osd_id) {
       if (!osd_map.exists(osd_id)) {
         continue;
       }
