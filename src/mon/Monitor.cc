@@ -2495,21 +2495,26 @@ health_status_t Monitor::get_health_status(
     *plain += "\n";
   }
 
+  const std::string old_fields_message = "'ceph health' JSON format has "
+    "changed in luminous. If you see this your monitoring system is "
+    "scraping the wrong fields. Disable this with 'mon health preluminous "
+    "compat warning = false'";
+
   if (f && (compat || compat_warn)) {
     health_status_t cr = compat_warn ? min(HEALTH_WARN, r) : r;
-    if (compat) {
-      f->open_array_section("summary");
-      if (compat_warn) {
-	f->open_object_section("item");
-	f->dump_stream("severity") << HEALTH_WARN;
-	f->dump_string("summary", "'ceph health' JSON format has changed in luminous; update your health monitoring scripts");
-	f->close_section();
-      }
-      for (auto& svc : paxos_service) {
-	svc->get_health_checks().dump_summary_compat(f);
-      }
+    f->open_array_section("summary");
+    if (compat_warn) {
+      f->open_object_section("item");
+      f->dump_stream("severity") << HEALTH_WARN;
+      f->dump_string("summary", old_fields_message);
       f->close_section();
     }
+    if (compat) {
+      for (auto& svc : paxos_service) {
+        svc->get_health_checks().dump_summary_compat(f);
+      }
+    }
+    f->close_section();
     f->dump_stream("overall_status") << cr;
   }
 
@@ -2517,7 +2522,7 @@ health_status_t Monitor::get_health_status(
     if (f && (compat || compat_warn)) {
       f->open_array_section("detail");
       if (compat_warn) {
-	f->dump_string("item", "'ceph health' JSON format has changed in luminous. If you see this your monitoring system is scraping the wrong fields. Disable this with 'mon health preluminous compat warning = false'");
+	f->dump_string("item", old_fields_message);
       }
     }
 
