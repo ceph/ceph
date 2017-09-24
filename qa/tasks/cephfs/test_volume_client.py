@@ -975,3 +975,42 @@ vc.disconnect()
             pool_name = pool_name,
             obj_name = obj_name,
         )))
+
+    def test_21501(self):
+        """
+        Reproducer for #21501 "ceph_volume_client: sets invalid caps for
+        existing IDs with no caps" (http://tracker.ceph.com/issues/21501)
+        """
+
+        vc_mount = self.mounts[1]
+        vc_mount.umount_wait()
+
+        # Configure vc_mount as the handle for driving volumeclient
+        self._configure_vc_auth(vc_mount, "manila")
+
+        # Create a volume
+        group_id = "grpid"
+        volume_id = "volid"
+        mount_path = self._volume_client_python(vc_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            create_result = vc.create_volume(vp, 1024*1024*10)
+            print create_result['mount_path']
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id
+        )))
+
+        # Create an auth ID with no caps
+        guest_id = '21501'
+        self.fs.mon_manager.raw_cluster_cmd_result(
+            'auth', 'get-or-create', 'client.{0}'.format(guest_id))
+
+        guest_mount = self.mounts[2]
+        guest_mount.umount_wait()
+
+        # Set auth caps for the auth ID using the volumeclient
+        self._configure_guest_auth(vc_mount, guest_mount, guest_id, mount_path)
+
+        # Mount the volume in the guest using the auth ID to assert that the
+        # auth caps are valid
+        guest_mount.mount(mount_path=mount_path)
