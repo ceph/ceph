@@ -4410,8 +4410,21 @@ int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
   if (op.checksum.offset == 0 && op.checksum.length == 0) {
     // zeroed offset+length implies checksum whole object
     op.checksum.length = oi.size;
-  } else if (op.checksum.offset + op.checksum.length > oi.size) {
-    return -EOVERFLOW;
+  } else if (op.checksum.offset >= oi.size) {
+    // read size was trimmed to zero, do nothing
+    // see PrimaryLogPG::do_read
+    return 0;
+  } else if (op.extent.offset + op.extent.length > oi.size) {
+    op.extent.length = oi.size - op.extent.offset;
+    if (op.checksum.chunk_size > 0 &&
+        op.checksum.length % op.checksum.chunk_size != 0) {
+      dout(10) << __func__ << ": length (trimmed to 0x"
+               << std::hex << op.checksum.length
+               << ") not aligned to chunk size 0x"
+               << op.checksum.chunk_size << std::dec
+               << dendl;
+      return -EINVAL;
+    }
   }
 
   Checksummer::CSumType csum_type;
