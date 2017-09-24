@@ -1066,6 +1066,9 @@ class CephFSVolumeClient(object):
                 # occurrence of wanted auth caps and no occurrence of
                 # conflicting auth caps.
 
+                if not orig:
+                    return want
+
                 cap_tokens = set(orig.split(","))
 
                 cap_tokens.discard(unwanted)
