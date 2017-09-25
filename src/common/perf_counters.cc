@@ -53,7 +53,7 @@ void PerfCountersCollection::add(class PerfCounters *l)
     path += ".";
     path += data.name;
 
-    by_path[path] = &data;
+    by_path[path] = {&data, l};
   }
 }
 
@@ -396,10 +396,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       } else {
         f->dump_string("nick", "");
       }
-      int p = std::max(std::min(d->prio + prio_adjust,
-                                (int)PerfCountersBuilder::PRIO_CRITICAL),
-                       0);
-      f->dump_int("priority", p);
+      f->dump_int("priority", get_adjusted_priority(d->prio));
       f->close_section();
     } else {
       if (d->type & PERFCOUNTER_LONGRUNAVG) {
