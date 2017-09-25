@@ -543,10 +543,6 @@ if(WITH_MGR)
 	list(APPEND BOOST_COMPONENTS python)
 endif()
 
-if(WITH_RADOSGW_BEAST_FRONTEND)
-	list(APPEND BOOST_COMPONENTS coroutine context)
-endif()
-
 set(Boost_USE_MULTITHREADED ON)
 # require minimally the bundled version
 if(WITH_SYSTEM_BOOST)
