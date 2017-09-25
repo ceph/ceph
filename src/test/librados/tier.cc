@@ -1357,12 +1357,12 @@ TEST_F(LibRadosTwoPoolsPP, ListSnap){
       0, NULL));
     completion->wait_for_safe();
     ASSERT_EQ(0, snap_ret);
-    ASSERT_LT(0, snap_set.clones.size());
+    ASSERT_LT(0u, snap_set.clones.size());
     for (vector<librados::clone_info_t>::const_iterator r = snap_set.clones.begin();
 	r != snap_set.clones.end();
 	++r) {
       if (r->cloneid != librados::SNAP_HEAD) {
-	ASSERT_LT(0, r->snaps.size());
+	ASSERT_LT(0u, r->snaps.size());
       }
     }
   }
