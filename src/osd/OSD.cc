@@ -9784,9 +9784,7 @@ void OSD::ShardedOpWQ::wake_pg_waiters(spg_t pgid)
     osd->service.release_reserved_pushes(pushes_to_free);
   }
   if (queued) {
-    sdata->sdata_lock.Lock();
-    sdata->sdata_cond.SignalOne();
-    sdata->sdata_lock.Unlock();
+    sdata->sdata_cond.SignalOne(true);
   }
 }
 
@@ -9868,14 +9866,10 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   // peek at spg_t
   sdata->sdata_op_ordering_lock.Lock();
   if (sdata->pqueue->empty()) {
-    sdata->sdata_lock.Lock();
     if (!sdata->stop_waiting) {
       dout(20) << __func__ << " empty q, waiting" << dendl;
       osd->cct->get_heartbeat_map()->clear_timeout(hb);
-      sdata->sdata_op_ordering_lock.Unlock();
-      sdata->sdata_cond.Wait(sdata->sdata_lock);
-      sdata->sdata_lock.Unlock();
-      sdata->sdata_op_ordering_lock.Lock();
+      sdata->sdata_cond.Wait(sdata->sdata_op_ordering_lock);
       if (sdata->pqueue->empty()) {
 	sdata->sdata_op_ordering_lock.Unlock();
 	return;
@@ -9884,7 +9878,6 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	  osd->cct->_conf->threadpool_default_timeout, 0);
     } else {
       dout(0) << __func__ << " need return immediately" << dendl;
-      sdata->sdata_lock.Unlock();
       sdata->sdata_op_ordering_lock.Unlock();
       return;
     }
@@ -10083,9 +10076,7 @@ void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
       item.get_owner(), priority, cost, std::move(item));
   sdata->sdata_op_ordering_lock.Unlock();
 
-  sdata->sdata_lock.Lock();
-  sdata->sdata_cond.SignalOne();
-  sdata->sdata_lock.Unlock();
+  sdata->sdata_cond.SignalOne(true);
 
 }
 
@@ -10112,9 +10103,7 @@ void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)
   }
   sdata->_enqueue_front(std::move(item), osd->op_prio_cutoff);
   sdata->sdata_op_ordering_lock.Unlock();
-  sdata->sdata_lock.Lock();
-  sdata->sdata_cond.SignalOne();
-  sdata->sdata_lock.Unlock();
+  sdata->sdata_cond.SignalOne(true);
 }
 
 namespace ceph { 
