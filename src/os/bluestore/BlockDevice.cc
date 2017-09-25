@@ -19,7 +19,7 @@
 
 #include "BlockDevice.h"
 
-#if defined(HAVE_LIBAIO)
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
 #include "KernelDevice.h"
 #endif
 
@@ -63,7 +63,7 @@ uint64_t IOContext::get_num_ios() const
   // a configurable (with different hdd and ssd defaults), and add
   // that to the bytes value.
   uint64_t ios = 0;
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   for (auto& p : pending_aios) {
     ios += p.iov.size();
   }
@@ -77,7 +77,7 @@ uint64_t IOContext::get_num_ios() const
 void IOContext::release_running_aios()
 {
   ceph_assert(!num_running);
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   // release aio contexts (including pinned buffers).
   running_aios.clear();
 #endif
@@ -120,7 +120,7 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
     return new PMEMDevice(cct, cb, cbpriv);
   }
 #endif
-#if defined(HAVE_LIBAIO)
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (type == "kernel") {
     return new KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
   }

@@ -29,7 +29,7 @@
 #include "acconfig.h"
 #include "common/ceph_mutex.h"
 
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
 #include "ceph_aio.h"
 #endif
 #include "include/ceph_assert.h"
@@ -70,7 +70,7 @@ public:
   std::atomic_int total_nseg = {0};
 #endif
 
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   std::list<aio_t> pending_aios;    ///< not yet submitted
   std::list<aio_t> running_aios;    ///< submitting or submitted
 #endif

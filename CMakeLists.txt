@@ -258,8 +258,13 @@ endif()
 
 option(WITH_BLUESTORE "Bluestore OSD backend" ON)
 if(WITH_BLUESTORE)
-  find_package(aio)
-  set(HAVE_LIBAIO ${AIO_FOUND})
+  if(LINUX)
+    find_package(aio)
+    set(HAVE_LIBAIO ${AIO_FOUND})
+  elseif(FREEBSD)
+    # POSIX AIO is integrated into FreeBSD kernel, and exposed by libc.
+    set(HAVE_POSIXAIO ON)
+  endif()
 endif()
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64|aarch64")
@@ -285,7 +290,7 @@ if(WITH_PMEM)
 endif()
 
 if(WITH_BLUESTORE)
-  if(NOT AIO_FOUND AND NOT WITH_SPDK AND NOT WITH_PMEM)
+  if(NOT AIO_FOUND AND NOT HAVE_POSIXAIO AND NOT WITH_SPDK AND NOT WITH_PMEM)
     message(SEND_ERROR "WITH_BLUESTORE is ON, "
       "but none of the bluestore backends is enabled. "
       "Please install libaio, or enable WITH_SPDK or WITH_PMEM (experimental)")
