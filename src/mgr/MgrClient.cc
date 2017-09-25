@@ -228,27 +228,43 @@ void MgrClient::send_report()
   pcc->with_counters([this, report](
         const PerfCountersCollection::CounterMap &by_path)
   {
+    // Helper for checking whether a counter should be included
     auto include_counter = [this](
-        const PerfCounters::perf_counter_data_any_d &ctr)
+        const PerfCounters::perf_counter_data_any_d &ctr,
+        const PerfCounters &perf_counters)
     {
-      return ctr.prio >= (int)stats_threshold;
+      return perf_counters.get_adjusted_priority(ctr.prio) >= (int)stats_threshold;
+    };
+
+    // Helper for cases where we want to forget a counter
+    auto undeclare = [report, this](const std::string &path)
+    {
+      report->undeclare_types.push_back(path);
+      ldout(cct,20) << " undeclare " << path << dendl;
+      session->declared.erase(path);
     };
 
     ENCODE_START(1, 1, report->packed);
+
+    // Find counters that no longer exist, and undeclare them
     for (auto p = session->declared.begin(); p != session->declared.end(); ) {
-      if (by_path.count(*p) == 0 || !include_counter(*(by_path.at(*p)))) {
-	report->undeclare_types.push_back(*p);
-	ldout(cct,20) << __func__ << " undeclare " << *p << dendl;
-	p = session->declared.erase(p);
-      } else {
-	++p;
+      const auto &path = *(p++);
+      if (by_path.count(path) == 0) {
+        undeclare(path);
       }
     }
+
     for (const auto &i : by_path) {
       auto& path = i.first;
-      auto& data = *(i.second);
+      auto& data = *(i.second.data);
+      auto& perf_counters = *(i.second.perf_counters);
 
-      if (!include_counter(data)) {
+      // Find counters that still exist, but are no longer permitted by
+      // stats_threshold
+      if (!include_counter(data, perf_counters)) {
+        if (session->declared.count(path)) {
+          undeclare(path);
+        }
         continue;
       }
 
@@ -263,7 +279,7 @@ void MgrClient::send_report()
 	  type.nick = data.nick;
 	}
 	type.type = data.type;
-        type.priority = data.prio;
+        type.priority = perf_counters.get_adjusted_priority(data.prio);
 	report->declare_types.push_back(std::move(type));
 	session->declared.insert(path);
       }
