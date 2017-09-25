@@ -11,6 +11,7 @@ overrides:
       - failing to respond to capability release
       - MDS cache is too large
       - \(MDS_CLIENT_OLDEST_TID\)
+      - \(MDS_CACHE_OVERSIZED\)
 
 tasks:
   - cephfs_test_runner:
