@@ -859,6 +859,14 @@ OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_INT, 128*1024*1024)  // default leveldb cache size
 OPTION(rocksdb_block_size, OPT_INT, 4*1024)  // default rocksdb block size
+OPTION(rocksdb_bloom_bits_per_key, OPT_INT, 20) // Number of bits per key for RocksDB's bloom filters
+OPTION(rocksdb_cache_index_and_filter_blocks, OPT_BOOL, true) // Whether to cache indices and filters in block cache
+OPTION(rocksdb_cache_index_and_filter_blocks_with_high_priority, OPT_BOOL, true) // Whether to cache indicies and filters in the block cache with high priority
+OPTION(rocksdb_pin_l0_filter_and_index_blocks_in_cache, OPT_BOOL, true) // Whether to pin Level 0 indices and bloom filters in the block cache
+OPTION(rocksdb_index_type, OPT_STR, "binary_search") // Type of index for SST files: binary_search, hash_search, two_level
+OPTION(rocksdb_partition_filters, OPT_BOOL, false) // (experimental) partition SST index/filters into smaller blocks
+OPTION(rocksdb_metadata_block_size, OPT_INT, 4*1024) // The block size for index partitions (0 = rocksdb default)
+
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used in monstore

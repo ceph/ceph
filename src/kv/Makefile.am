@@ -21,7 +21,7 @@ if FREEBSD
         NPROC = sysctl -n hw.ncpu
 endif
 rocksdb/librocksdb.a:
-	cd rocksdb && CC="${CC}" CXX="${CXX}" EXTRA_CXXFLAGS=-fPIC PORTABLE=1 $(MAKE) -j$(shell ${NPROC}) static_lib
+	cd rocksdb && CC="${CC}" CXX="${CXX}" EXTRA_CXXFLAGS=-fPIC USE_RTTI=1 PORTABLE=1 $(MAKE) -j$(shell ${NPROC}) static_lib
 libkv_a_CXXFLAGS += -I rocksdb/include -fPIC
 libkv_a_SOURCES += kv/RocksDBStore.cc
 libkv_a_LIBADD += rocksdb/librocksdb.a
