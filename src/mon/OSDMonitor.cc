@@ -268,6 +268,7 @@ void OSDMonitor::get_store_prefixes(std::set<string>& s) const
 {
   s.insert(service_name);
   s.insert(OSD_PG_CREATING_PREFIX);
+  s.insert(OSD_METADATA_PREFIX);
 }
 
 void OSDMonitor::update_from_paxos(bool *need_bootstrap)
