@@ -57,6 +57,7 @@ class RGWReshardWait;
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
 
+// only called by rgw_shard_id and rgw_bucket_shard_index
 static inline int rgw_shards_mod(unsigned hval, int max_shards)
 {
   if (max_shards <= RGW_SHARDS_PRIME_0) {
@@ -65,9 +66,19 @@ static inline int rgw_shards_mod(unsigned hval, int max_shards)
   return hval % RGW_SHARDS_PRIME_1 % max_shards;
 }
 
-static inline int rgw_shards_hash(const string& key, int max_shards)
+// used for logging and tagging
+static inline int rgw_shard_id(const string& key, int max_shards)
 {
-  return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()), max_shards);
+  return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()),
+			max_shards);
+}
+
+// used for bucket indices
+static inline uint32_t rgw_bucket_shard_index(const std::string& key,
+					      int num_shards) {
+  uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
+  uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
+  return rgw_shards_mod(sid2, num_shards);
 }
 
 static inline int rgw_shards_max()
