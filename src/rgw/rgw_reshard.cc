@@ -588,9 +588,8 @@ void RGWReshard::get_bucket_logshard_oid(const string& tenant, const string& buc
   uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
   uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
   sid = sid2 % MAX_RESHARD_LOGSHARDS_PRIME % num_logshards;
-  int logshard = sid % num_logshards;
 
-  get_logshard_oid(logshard, oid);
+  get_logshard_oid(int(sid), oid);
 }
 
 int RGWReshard::add(cls_rgw_reshard_entry& entry)
