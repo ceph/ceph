@@ -29,3 +29,9 @@
   make the number of PGs per OSD exceed the configured
   ``mon_max_pg_per_osd`` limit.  The option can be adjusted if it
   is really necessary to create a pool with more PGs.
+
+* There was a bug in the PG mapping behavior of the new *upmap*
+  feature. If you made use of this feature (e.g., via the `ceph osd
+  pg-upmap-items` command), we recommend that all mappings be removed (via
+  the `ceph osd rm-pg-upmap-items` command) before upgrading to this
+  point release.
