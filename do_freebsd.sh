@@ -1,14 +1,6 @@
 #!/bin/sh -xve
-NPROC=`sysctl -n hw.ncpu`
+export NPROC=`sysctl -n hw.ncpu`
 
-# we need bash first otherwise almost nothing will work
-if [ ! -L /bin/bash ]; then
-    echo install bash and link /bin/bash to /usr/local/bin/bash
-    echo Run:
-    echo     sudo pkg install bash
-    echo     ln -s /usr/local/bin/bash /bin/bash
-    exit 1
-fi
 if [ x"$1"x = x"--deps"x ]; then
     sudo ./install-deps.sh
 fi
