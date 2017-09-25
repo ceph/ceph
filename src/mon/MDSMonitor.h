@@ -34,14 +34,13 @@ class MMDSLoadTargets;
 class MMDSMap;
 class FileSystemCommandHandler;
 
-#define MDS_HEALTH_PREFIX "mds_health"
-
 class MDSMonitor : public PaxosService {
  public:
   MDSMonitor(Monitor *mn, Paxos *p, string service_name);
 
   // service methods
   void create_initial() override;
+  void get_store_prefixes(std::set<string>& s) override;
   void update_from_paxos(bool *need_bootstrap) override;
   void init() override;
   void create_pending() override; 
