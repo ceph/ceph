@@ -43,7 +43,7 @@ void RGWGC::finalize()
 
 int RGWGC::tag_index(const string& tag)
 {
-  return rgw_shards_hash(tag, max_objs);
+  return rgw_shard_id(tag, max_objs);
 }
 
 void RGWGC::add_chain(ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const string& tag)
