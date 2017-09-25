@@ -43,14 +43,14 @@ protected:
 TEST_F(XlistTest, capability) {
   ItemList list;
   ASSERT_TRUE(list.empty());
-  ASSERT_EQ(list.size(), 0);
+  ASSERT_EQ(0u, list.size());
 
   std::copy(refs.begin(), refs.end(), std::back_inserter(list));
   ASSERT_EQ((size_t)list.size(), refs.size());
 
   list.clear();
   ASSERT_TRUE(list.empty());
-  ASSERT_EQ(list.size(), 0);
+  ASSERT_EQ(0u, list.size());
 }
 
 TEST_F(XlistTest, traverse) {
