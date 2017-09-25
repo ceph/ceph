@@ -24,6 +24,9 @@
 #include "include/stringify.h"
 #include "common/blkdev.h"
 #include "common/errno.h"
+#if defined(__FreeBSD__)
+#include "bsm/audit_errno.h"
+#endif
 #include "common/debug.h"
 #include "common/align.h"
 
@@ -451,9 +454,14 @@ static bool is_expected_ioerr(const int r)
 {
   // https://lxr.missinglinkelectronics.com/linux+v4.15/block/blk-core.c#L135
   return (r == -EOPNOTSUPP || r == -ETIMEDOUT || r == -ENOSPC ||
-	  r == -ENOLINK || r == -EREMOTEIO || r == -EBADE ||
+	  r == -ENOLINK || r == -EREMOTEIO  || r == -EAGAIN || r == -EIO ||
 	  r == -ENODATA || r == -EILSEQ || r == -ENOMEM ||
-	  r == -EAGAIN || r == -EREMCHG || r == -EIO);
+#if defined(__linux__)
+	  r == -EREMCHG || r == -EBADE
+#elif defined(__FreeBSD__)
+	  r == - BSM_ERRNO_EREMCHG || r == -BSM_ERRNO_EBADE
+#endif
+	  );
 }
 
 void KernelDevice::_aio_thread()
@@ -729,6 +737,7 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered, int w
     derr << __func__ << " pwritev error: " << cpp_strerror(r) << dendl;
     return r;
   }
+#ifdef HAVE_SYNC_FILE_RANGE
   if (buffered) {
     // initiate IO (but do not wait)
     r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE);
@@ -738,6 +747,7 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered, int w
       return r;
     }
   }
+#endif
 
   io_since_flush.store(true);
 
