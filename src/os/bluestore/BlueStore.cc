@@ -4241,7 +4241,7 @@ int BlueStore::_open_fm(bool create)
         }
         assert(start + l + u <= end);
 
-	dout(20) << "  free 0x" << std::hex << start << "~" << l
+	dout(20) << __func__ << " free 0x" << std::hex << start << "~" << l
 		 << " use 0x" << u << std::dec << dendl;
 
         if (u == 0) {
@@ -5628,7 +5628,8 @@ int BlueStore::_fsck(bool deep, bool repair)
       if (g_conf->bluestore_debug_fsck_abort) {
 	goto out_scan;
       }
-      dout(30) << " key " << pretty_binary_string(it->key()) << dendl;
+      dout(30) << __func__ << " key "
+               << pretty_binary_string(it->key()) << dendl;
       if (is_extent_shard_key(it->key())) {
 	while (!expecting_shards.empty() &&
 	       expecting_shards.front() < it->key()) {
@@ -7119,7 +7120,7 @@ int BlueStore::_collection_list(
       temp = false;
       assert(k >= start_key && k < end_key);
     }
-    dout(20) << " start from " << pretty_binary_string(k)
+    dout(20) << __func__ << " start from " << pretty_binary_string(k)
       << " temp=" << (int)temp << dendl;
     it->lower_bound(k);
   }
@@ -7974,7 +7975,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
       extent_part = p.get_logical_offset() - onode_part - blob_part;
     }
 
-    dout(20) << "  onode " << o->oid << " is " << bl.length()
+    dout(20) << __func__  << " onode " << o->oid << " is " << bl.length()
 	     << " (" << onode_part << " bytes onode + "
 	     << blob_part << " bytes spanning blobs + "
 	     << extent_part << " bytes inline extents)"
@@ -8001,13 +8002,15 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
     auto sbid = sb->get_sbid();
     get_shared_blob_key(sbid, &key);
     if (sb->persistent->empty()) {
-      dout(20) << "  shared_blob 0x" << std::hex << sbid << std::dec
+      dout(20) << __func__ << " shared_blob 0x"
+               << std::hex << sbid << std::dec
 	       << " is empty" << dendl;
       t->rmkey(PREFIX_SHARED_BLOB, key);
     } else {
       bufferlist bl;
       ::encode(*(sb->persistent), bl);
-      dout(20) << "  shared_blob 0x" << std::hex << sbid << std::dec
+      dout(20) << __func__ << " shared_blob 0x"
+               << std::hex << sbid << std::dec
 	       << " is " << bl.length() << " " << *sb << dendl;
       t->set(PREFIX_SHARED_BLOB, key, bl);
     }
@@ -9387,7 +9390,7 @@ void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
 
 void BlueStore::_dump_transaction(Transaction *t, int log_level)
 {
-  dout(log_level) << " transaction dump:\n";
+  dout(log_level) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   f.open_object_section("transaction");
   t->dump(&f);
