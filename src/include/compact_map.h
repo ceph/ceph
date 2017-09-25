@@ -61,6 +61,9 @@ protected:
       --it;
       return *this;
     }
+    const std::pair<const Key,T>& operator*() {
+      return *it;
+    }
     const std::pair<const Key,T>* operator->() {
       return it.operator->();
     }
@@ -102,6 +105,9 @@ protected:
     iterator_base& operator--() {
       --it;
       return *this;
+    }
+    std::pair<const Key,T>& operator*() {
+      return *it;
     }
     std::pair<const Key,T>* operator->() {
       return it.operator->();

@@ -35,6 +35,7 @@ class RGWObjectExpirer;
 class RGWMetaSyncProcessorThread;
 class RGWDataSyncProcessorThread;
 class RGWSyncLogTrimThread;
+class RGWSyncTraceManager;
 class RGWRESTConn;
 struct RGWZoneGroup;
 struct RGWZoneParams;
@@ -874,6 +875,7 @@ struct RGWObjState {
   ceph::real_time mtime;
   uint64_t epoch;
   bufferlist obj_tag;
+  bufferlist tail_tag;
   string write_tag;
   bool fake_tag;
   RGWObjManifest manifest;
@@ -907,6 +909,9 @@ struct RGWObjState {
     epoch = rhs.epoch;
     if (rhs.obj_tag.length()) {
       obj_tag = rhs.obj_tag;
+    }
+    if (rhs.tail_tag.length()) {
+      tail_tag = rhs.tail_tag;
     }
     write_tag = rhs.write_tag;
     fake_tag = rhs.fake_tag;
@@ -2261,6 +2266,7 @@ class RGWRados
   RGWMetaNotifier *meta_notifier;
   RGWDataNotifier *data_notifier;
   RGWMetaSyncProcessorThread *meta_sync_processor_thread;
+  RGWSyncTraceManager *sync_tracer;
   map<string, RGWDataSyncProcessorThread *> data_sync_processor_threads;
 
   RGWSyncLogTrimThread *sync_log_trimmer{nullptr};
@@ -2508,6 +2514,9 @@ public:
   const RGWSyncModuleInstanceRef& get_sync_module() {
     return sync_module;
   }
+  RGWSyncTraceManager *get_sync_tracer() {
+    return sync_tracer;
+  }
 
   int get_required_alignment(const rgw_pool& pool, uint64_t *alignment);
   int get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size);
@@ -2560,6 +2569,7 @@ public:
   void finalize();
 
   int register_to_service_map(const string& daemon_type, const map<string, string>& meta);
+  int update_service_map(const std::map<std::string, std::string>& status);
 
   void schedule_context(Context *c);
 
@@ -2708,7 +2718,7 @@ public:
     void invalidate_state();
 
     int prepare_atomic_modification(librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                    const char *ifmatch, const char *ifnomatch, bool removal_op);
+                                    const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail);
     int complete_atomic_modification();
 
   public:
@@ -2804,17 +2814,19 @@ public:
         bool canceled;
         const string *user_data;
         rgw_zone_set *zones_trace;
+        bool modify_tail;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
-                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr), zones_trace(nullptr) {}
+                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr), zones_trace(nullptr),
+                 modify_tail(false) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
 
       int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs,
-                     bool assume_noent,
+                     bool modify_tail, bool assume_noent,
                      void *index_op);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs);
@@ -3993,4 +4005,65 @@ public:
                    RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
   void get_mp(RGWMPObj** _mp);
 }; /* RGWPutObjProcessor_Multipart */
+
+class RGWRadosThread {
+  class Worker : public Thread {
+    CephContext *cct;
+    RGWRadosThread *processor;
+    Mutex lock;
+    Cond cond;
+
+    void wait() {
+      Mutex::Locker l(lock);
+      cond.Wait(lock);
+    };
+
+    void wait_interval(const utime_t& wait_time) {
+      Mutex::Locker l(lock);
+      cond.WaitInterval(lock, wait_time);
+    }
+
+  public:
+    Worker(CephContext *_cct, RGWRadosThread *_p) : cct(_cct), processor(_p), lock("RGWRadosThread::Worker") {}
+    void *entry() override;
+    void signal() {
+      Mutex::Locker l(lock);
+      cond.Signal();
+    }
+  };
+
+  Worker *worker;
+
+protected:
+  CephContext *cct;
+  RGWRados *store;
+
+  std::atomic<bool> down_flag = { false };
+
+  string thread_name;
+
+  virtual uint64_t interval_msec() = 0;
+  virtual void stop_process() {}
+public:
+  RGWRadosThread(RGWRados *_store, const string& thread_name = "radosgw") 
+    : worker(NULL), cct(_store->ctx()), store(_store), thread_name(thread_name) {}
+  virtual ~RGWRadosThread() {
+    stop();
+  }
+
+  virtual int init() { return 0; }
+  virtual int process() = 0;
+
+  bool going_down() { return down_flag; }
+
+  void start();
+  void stop();
+
+  void signal() {
+    if (worker) {
+      worker->signal();
+    }
+  }
+};
+
 #endif

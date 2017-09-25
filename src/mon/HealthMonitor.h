@@ -18,31 +18,21 @@
 
 //forward declaration
 namespace ceph { class Formatter; }
-class HealthService;
 
 class HealthMonitor : public PaxosService
 {
-  map<int,HealthService*> services;
   version_t version = 0;
   map<int,health_check_map_t> quorum_checks;  // for each quorum member
   health_check_map_t leader_checks;           // leader only
 
 public:
   HealthMonitor(Monitor *m, Paxos *p, const string& service_name);
-  ~HealthMonitor() override {
-    assert(services.empty());
-  }
 
   /**
    * @defgroup HealthMonitor_Inherited_h Inherited abstract methods
    * @{
    */
   void init() override;
-
-  void get_health(
-    list<pair<health_status_t,string> >& summary,
-    list<pair<health_status_t,string> > *detail,
-    CephContext *cct) const override {}
 
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
@@ -56,7 +46,7 @@ public:
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;
   void encode_pending(MonitorDBStore::TransactionRef t) override;
-  version_t get_trim_to() override;
+  version_t get_trim_to() const override;
 
   void encode_full(MonitorDBStore::TransactionRef t) override { }
 

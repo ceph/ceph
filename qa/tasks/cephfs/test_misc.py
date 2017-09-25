@@ -124,9 +124,7 @@ class TestMisc(CephFSTestCase):
         self.assert_session_count(2, ls_data)
 
         self.mount_a.kill()
-        self.mount_a.kill()
-        self.mount_b.kill_cleanup()
-        self.mount_b.kill_cleanup()
+        self.mount_a.kill_cleanup()
 
         time.sleep(self.mds_session_autoclose * 1.5)
         ls_data = self.fs.mds_asok(['session', 'ls'])
@@ -147,5 +145,5 @@ class TestMisc(CephFSTestCase):
         fs_avail = output.split('\n')[1].split()[3]
         fs_avail = float(fs_avail) * 1024
 
-        ratio = (raw_avail / pool_size) / fs_avail
+        ratio = raw_avail / fs_avail
         assert 0.9 < ratio < 1.1

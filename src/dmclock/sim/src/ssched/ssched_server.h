@@ -10,6 +10,7 @@
 #include <memory>
 #include <mutex>
 #include <deque>
+#include <functional>
 
 #include "boost/variant.hpp"
 

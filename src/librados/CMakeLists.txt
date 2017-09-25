@@ -28,8 +28,11 @@ if(ENABLE_SHARED)
     # use COMPILE_FLAGS for the backward compatibility with cmake 2.8.11, should have been:
     #  CXX_VISIBILITY_PRESET hidden
     #  VISIBILITY_INLINES_HIDDEN ON
-    COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden"
-    LINK_FLAGS "-Wl,--exclude-libs,ALL")
+    COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
+  if(NOT APPLE)
+    set_property(TARGET librados APPEND_STRING PROPERTY
+      LINK_FLAGS " -Wl,--exclude-libs,ALL")
+  endif()
 else(ENABLE_SHARED)
   add_library(librados ALIAS rados_a)
 endif(ENABLE_SHARED)

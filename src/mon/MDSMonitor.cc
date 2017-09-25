@@ -21,7 +21,6 @@
 #include "Monitor.h"
 #include "MonitorDBStore.h"
 #include "OSDMonitor.h"
-#include "PGMonitor.h"
 
 #include "common/strtol.h"
 #include "common/perf_counters.h"
@@ -120,7 +119,6 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   check_subs();
-  update_logger();
 }
 
 void MDSMonitor::init()
@@ -234,11 +232,15 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       p.second.summary,
       boost::regex("%isorare%"),
       p.second.detail.size() > 1 ? "are" : "is");
+    p.second.summary = boost::regex_replace(
+      p.second.summary,
+      boost::regex("%hasorhave%"),
+      p.second.detail.size() > 1 ? "have" : "has");
   }
   encode_health(new_checks, t);
 }
 
-version_t MDSMonitor::get_trim_to()
+version_t MDSMonitor::get_trim_to() const
 {
   version_t floor = 0;
   if (g_conf->mon_mds_force_trim_to > 0 &&
@@ -254,26 +256,6 @@ version_t MDSMonitor::get_trim_to()
   if (last - get_first_committed() > max && floor < last - max)
     return last - max;
   return floor;
-}
-
-void MDSMonitor::update_logger()
-{
-  dout(10) << "update_logger" << dendl;
-
-  uint64_t up = 0;
-  uint64_t in = 0;
-  uint64_t failed = 0;
-  for (const auto &i : fsmap.filesystems) {
-    const MDSMap &mds_map = i.second->mds_map;
-
-    up += mds_map.get_num_up_mds();
-    in += mds_map.get_num_in_mds();
-    failed += mds_map.get_num_failed_mds();
-  }
-  mon->cluster_logger->set(l_cluster_num_mds_up, up);
-  mon->cluster_logger->set(l_cluster_num_mds_in, in);
-  mon->cluster_logger->set(l_cluster_num_mds_failed, failed);
-  mon->cluster_logger->set(l_cluster_mds_epoch, fsmap.get_epoch());
 }
 
 bool MDSMonitor::preprocess_query(MonOpRequestRef op)
@@ -321,7 +303,8 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
 
   // check privileges, ignore if fails
   MonSession *session = m->get_session();
-  assert(session);
+  if (!session)
+    goto ignore;
   if (!session->is_capable("mds", MON_CAP_X)) {
     dout(0) << "preprocess_beacon got MMDSBeacon from entity with insufficient privileges "
 	    << session->caps << dendl;
@@ -662,10 +645,11 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
     if (state == MDSMap::STATE_STOPPED) {
       const auto fscid = pending_fsmap.mds_roles.at(gid);
       auto fs = pending_fsmap.get_filesystem(fscid);
+
       mon->clog->info() << info.human_name() << " finished "
                         << "deactivating rank " << info.rank << " in filesystem "
                         << fs->mds_map.fs_name << " (now has "
-                        << fs->mds_map.get_num_in_mds() << " ranks)";
+                        << fs->mds_map.get_num_in_mds() - 1 << " ranks)";
 
       auto erased = pending_fsmap.stop(gid);
       erased.push_back(gid);
@@ -819,62 +803,9 @@ void MDSMonitor::_updated(MonOpRequestRef op)
 void MDSMonitor::on_active()
 {
   tick();
-  update_logger();
 
   if (mon->is_leader()) {
     mon->clog->debug() << "fsmap " << fsmap;
-  }
-}
-
-void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
-			    list<pair<health_status_t, string> > *detail,
-			    CephContext* cct) const
-{
-  fsmap.get_health(summary, detail);
-
-  // For each MDS GID...
-  const auto info_map = fsmap.get_mds_info();
-  for (const auto &i : info_map) {
-    const auto &gid = i.first;
-    const auto &info = i.second;
-
-    // Decode MDSHealth
-    bufferlist bl;
-    mon->store->get(MDS_HEALTH_PREFIX, stringify(gid), bl);
-    if (!bl.length()) {
-      derr << "Missing health data for MDS " << gid << dendl;
-      continue;
-    }
-    MDSHealth health;
-    bufferlist::iterator bl_i = bl.begin();
-    health.decode(bl_i);
-
-    for (const auto &metric : health.metrics) {
-      const int rank = info.rank;
-      std::ostringstream message;
-      message << "mds" << rank << ": " << metric.message;
-      summary.push_back(std::make_pair(metric.sev, message.str()));
-
-      if (detail) {
-        // There is no way for us to clealy associate detail entries with summary entries (#7192), so
-        // we duplicate the summary message in the detail string and tag the metadata on.
-        std::ostringstream detail_message;
-        detail_message << message.str();
-        if (metric.metadata.size()) {
-          detail_message << "(";
-          auto k = metric.metadata.begin();
-          while (k != metric.metadata.end()) {
-            detail_message << k->first << ": " << k->second;
-            if (boost::next(k) != metric.metadata.end()) {
-              detail_message << ", ";
-            }
-            ++k;
-          }
-          detail_message << ")";
-        }
-        detail->push_back(std::make_pair(metric.sev, detail_message.str()));
-      }
-    }
   }
 }
 
@@ -2012,7 +1943,7 @@ bool MDSMonitor::maybe_expand_cluster(std::shared_ptr<Filesystem> fs)
 
     mon->clog->info() << new_info.human_name() << " assigned to "
                          "filesystem " << fs->mds_map.fs_name << " as rank "
-                      << mds << " (now has " << fs->mds_map.get_num_in_mds()
+                      << mds << " (now has " << fs->mds_map.get_num_in_mds() + 1
                       << " ranks)";
     pending_fsmap.promote(newgid, fs, mds);
     do_propose = true;

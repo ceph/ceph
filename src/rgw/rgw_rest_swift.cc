@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/format.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
@@ -38,10 +39,15 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
   prefix = s->info.args.get("prefix");
   marker = s->info.args.get("marker");
   end_marker = s->info.args.get("end_marker");
+  wants_reversed = s->info.args.exists("reverse");
 
-  string limit_str = s->info.args.get("limit");
+  if (wants_reversed) {
+    std::swap(marker, end_marker);
+  }
+
+  std::string limit_str = s->info.args.get("limit");
   if (!limit_str.empty()) {
-    string err;
+    std::string err;
     long l = strict_strtol(limit_str.c_str(), 10, &err);
     if (!err.empty()) {
       return -EINVAL;
@@ -73,10 +79,8 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 }
 
 static void dump_account_metadata(struct req_state * const s,
-                                  const uint32_t buckets_count,
-                                  const uint64_t buckets_object_count,
-                                  const uint64_t buckets_size,
-                                  const uint64_t buckets_size_rounded,
+                                  const RGWUsageStats& global_stats,
+                                  const std::map<std::string, RGWUsageStats> policies_stats,
                                   /* const */map<string, bufferlist>& attrs,
                                   const RGWQuotaInfo& quota,
                                   const RGWAccessControlPolicy_SWIFTAcct &policy)
@@ -84,10 +88,24 @@ static void dump_account_metadata(struct req_state * const s,
   /* Adding X-Timestamp to keep align with Swift API */
   dump_header(s, "X-Timestamp", ceph_clock_now());
 
-  dump_header(s, "X-Account-Container-Count", buckets_count);
-  dump_header(s, "X-Account-Object-Count", buckets_object_count);
-  dump_header(s, "X-Account-Bytes-Used", buckets_size);
-  dump_header(s, "X-Account-Bytes-Used-Actual", buckets_size_rounded);
+  dump_header(s, "X-Account-Container-Count", global_stats.buckets_count);
+  dump_header(s, "X-Account-Object-Count", global_stats.objects_count);
+  dump_header(s, "X-Account-Bytes-Used", global_stats.bytes_used);
+  dump_header(s, "X-Account-Bytes-Used-Actual", global_stats.bytes_used_rounded);
+
+  for (const auto& kv : policies_stats) {
+    const auto& policy_name = camelcase_dash_http_attr(kv.first);
+    const auto& policy_stats = kv.second;
+
+    dump_header_infixed(s, "X-Account-Storage-Policy-", policy_name,
+                        "-Container-Count", policy_stats.buckets_count);
+    dump_header_infixed(s, "X-Account-Storage-Policy-", policy_name,
+                        "-Object-Count", policy_stats.objects_count);
+    dump_header_infixed(s, "X-Account-Storage-Policy-", policy_name,
+                        "-Bytes-Used", policy_stats.bytes_used);
+    dump_header_infixed(s, "X-Account-Storage-Policy-", policy_name,
+                        "-Bytes-Used-Actual", policy_stats.bytes_used_rounded);
+  }
 
   /* Dump TempURL-related stuff */
   if (s->perm_mask == RGW_PERM_FULL_CONTROL) {
@@ -150,10 +168,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
   if (! s->cct->_conf->rgw_swift_enforce_content_length) {
     /* Adding account stats in the header to keep align with Swift API */
     dump_account_metadata(s,
-            buckets_count,
-            buckets_objcount,
-            buckets_size,
-            buckets_size_rounded,
+            global_stats,
+            policies_stats,
             attrs,
             user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
@@ -167,6 +183,17 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             FormatterAttrs("name", s->user->display_name.c_str(), NULL));
 
     sent_data = true;
+  }
+}
+
+void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(RGWUserBuckets&& buckets)
+{
+  if (wants_reversed) {
+    /* Just store in the reversal buffer. Its content will be handled later,
+     * in send_response_end(). */
+    reverse_buffer.emplace(std::begin(reverse_buffer), std::move(buckets));
+  } else {
+    return send_response_data(buckets);
   }
 }
 
@@ -184,23 +211,61 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
   for (auto iter = m.lower_bound(prefix);
        iter != m.end() && boost::algorithm::starts_with(iter->first, prefix);
        ++iter) {
-    const RGWBucketEnt& obj = iter->second;
+    dump_bucket_entry(iter->second);
+  }
+}
 
-    s->formatter->open_object_section("container");
-    s->formatter->dump_string("name", obj.bucket.name);
-    if (need_stats) {
-      s->formatter->dump_int("count", obj.count);
-      s->formatter->dump_int("bytes", obj.size);
-    }
-    s->formatter->close_section();
-    if (! s->cct->_conf->rgw_swift_enforce_content_length) {
-      rgw_flush_formatter(s, s->formatter);
-    }
+void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& obj)
+{
+  s->formatter->open_object_section("container");
+  s->formatter->dump_string("name", obj.bucket.name);
+
+  if (need_stats) {
+    s->formatter->dump_int("count", obj.count);
+    s->formatter->dump_int("bytes", obj.size);
+  }
+
+  s->formatter->close_section();
+
+  if (! s->cct->_conf->rgw_swift_enforce_content_length) {
+    rgw_flush_formatter(s, s->formatter);
+  }
+}
+
+void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(RGWUserBuckets& buckets)
+{
+  if (! sent_data) {
+    return;
+  }
+
+  /* Take care of the prefix parameter of Swift API. There is no business
+   * in applying the filter earlier as we really need to go through all
+   * entries regardless of it (the headers like X-Account-Container-Count
+   * aren't affected by specifying prefix). */
+  std::map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
+
+  auto iter = m.rbegin();
+  for (/* initialized above */;
+       iter != m.rend() && !boost::algorithm::starts_with(iter->first, prefix);
+       ++iter) {
+    /* NOP */;
+  }
+
+  for (/* iter carried */;
+       iter != m.rend() && boost::algorithm::starts_with(iter->first, prefix);
+       ++iter) {
+    dump_bucket_entry(iter->second);
   }
 }
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_end()
 {
+  if (wants_reversed) {
+    for (auto& buckets : reverse_buffer) {
+      send_response_data_reversed(buckets);
+    }
+  }
+
   if (sent_data) {
     s->formatter->close_section();
   }
@@ -208,15 +273,13 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
   if (s->cct->_conf->rgw_swift_enforce_content_length) {
     /* Adding account stats in the header to keep align with Swift API */
     dump_account_metadata(s,
-            buckets_count,
-            buckets_objcount,
-            buckets_size,
-            buckets_size_rounded,
+            global_stats,
+            policies_stats,
             attrs,
             user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
-    end_header(s, NULL, NULL, s->formatter->get_len(), true);
+    end_header(s, nullptr, nullptr, s->formatter->get_len(), true);
   }
 
   if (sent_data || s->cct->_conf->rgw_swift_enforce_content_length) {
@@ -470,10 +533,8 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
     dump_account_metadata(s,
-            buckets_count,
-            buckets_objcount,
-            buckets_size,
-            buckets_size_rounded,
+            global_stats,
+            policies_stats,
             attrs,
             user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
@@ -646,13 +707,41 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
   return get_swift_versioning_settings(s, swift_ver_location);
 }
 
+static inline int handle_metadata_errors(req_state* const s, const int op_ret)
+{
+  if (op_ret == -EFBIG) {
+    /* Handle the custom error message of exceeding maximum custom attribute
+     * (stored as xattr) size. */
+    const auto error_message = boost::str(
+      boost::format("Metadata value longer than %lld")
+        % s->cct->_conf->get_val<size_t>("rgw_max_attr_size"));
+    set_req_state_err(s, EINVAL, error_message);
+    return -EINVAL;
+  } else if (op_ret == -E2BIG) {
+    const auto error_message = boost::str(
+      boost::format("Too many metadata items; max %lld")
+        % s->cct->_conf->get_val<size_t>("rgw_max_attrs_num_in_req"));
+    set_req_state_err(s, EINVAL, error_message);
+    return -EINVAL;
+  }
+
+  return op_ret;
+}
+
 void RGWCreateBucket_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret)
-    op_ret = STATUS_CREATED;
-  else if (op_ret == -ERR_BUCKET_EXISTS)
-    op_ret = STATUS_ACCEPTED;
-  set_req_state_err(s, op_ret);
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_CREATED;
+    } else if (op_ret == -ERR_BUCKET_EXISTS) {
+      op_ret = STATUS_ACCEPTED;
+    }
+    set_req_state_err(s, op_ret);
+  }
+
   dump_errno(s);
   /* Propose ending HTTP header with 0 Content-Length header. */
   end_header(s, NULL, NULL, 0);
@@ -819,8 +908,14 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
 void RGWPutObj_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret) {
-    op_ret = STATUS_CREATED;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_CREATED;
+    }
+    set_req_state_err(s, op_ret);
   }
 
   if (! lo_etag.empty()) {
@@ -892,10 +987,16 @@ int RGWPutMetadataAccount_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadataAccount_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret) {
-    op_ret = STATUS_NO_CONTENT;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_NO_CONTENT;
+    }
+    set_req_state_err(s, op_ret);
   }
-  set_req_state_err(s, op_ret);
+
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -922,10 +1023,16 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadataBucket_ObjStore_SWIFT::send_response()
 {
-  if (!op_ret && (op_ret != -EINVAL)) {
-    op_ret = STATUS_NO_CONTENT;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret && (op_ret != -EINVAL)) {
+      op_ret = STATUS_NO_CONTENT;
+    }
+    set_req_state_err(s, op_ret);
   }
-  set_req_state_err(s, op_ret);
+
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -952,13 +1059,20 @@ int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret) {
-    op_ret = STATUS_ACCEPTED;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_ACCEPTED;
+    }
+    set_req_state_err(s, op_ret);
   }
-  set_req_state_err(s, op_ret);
+
   if (!s->is_err()) {
     dump_content_length(s, 0);
   }
+
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1660,7 +1774,25 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
 
   string ceph_version(CEPH_GIT_NICE_VER);
   formatter.dump_string("version", ceph_version);
-  formatter.dump_int("max_meta_name_length", 81);
+
+  const size_t max_attr_name_len = \
+    g_conf->get_val<size_t>("rgw_max_attr_name_len");
+  if (max_attr_name_len) {
+    const size_t meta_name_limit = \
+      max_attr_name_len - strlen(RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX);
+    formatter.dump_int("max_meta_name_length", meta_name_limit);
+  }
+
+  const size_t meta_value_limit = g_conf->get_val<size_t>("rgw_max_attr_size");
+  if (meta_value_limit) {
+    formatter.dump_int("max_meta_value_length", meta_value_limit);
+  }
+
+  const size_t meta_num_limit = \
+    g_conf->get_val<size_t>("rgw_max_attrs_num_in_req");
+  if (meta_num_limit) {
+    formatter.dump_int("max_meta_count", meta_num_limit);
+  }
 
   formatter.open_array_section("policies");
   RGWZoneGroup& zonegroup = store.get_zonegroup();
@@ -2591,11 +2723,22 @@ int RGWHandler_REST_SWIFT::postauth_init()
 
 int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
 {
-  int ret = RGWHandler_REST::validate_bucket_name(bucket);
-  if (ret < 0)
-    return ret;
+  const size_t len = bucket.size();
 
-  int len = bucket.size();
+  if (len > MAX_BUCKET_NAME_LEN) {
+    /* Bucket Name too long. Generate custom error message and bind it
+     * to an R-value reference. */
+    const auto msg = boost::str(
+      boost::format("Container name length of %lld longer than %lld")
+        % len % int(MAX_BUCKET_NAME_LEN));
+    set_req_state_err(s, ERR_INVALID_BUCKET_NAME, msg);
+    return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  const auto ret = RGWHandler_REST::validate_bucket_name(bucket);
+  if (ret < 0) {
+    return ret;
+  }
 
   if (len == 0)
     return 0;
@@ -2608,7 +2751,7 @@ int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
 
   const char *s = bucket.c_str();
 
-  for (int i = 0; i < len; ++i, ++s) {
+  for (size_t i = 0; i < len; ++i, ++s) {
     if (*(unsigned char *)s == 0xff)
       return -ERR_INVALID_BUCKET_NAME;
   }

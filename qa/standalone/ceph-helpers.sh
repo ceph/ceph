@@ -19,7 +19,7 @@
 #
 TIMEOUT=300
 PG_NUM=4
-: ${CEPH_BUILD_VIRTUALENV:=/tmp}
+CEPH_BUILD_VIRTUALENV=${TMPDIR:-/tmp}
 
 if type xmlstarlet > /dev/null 2>&1; then
     XMLSTARLET=xmlstarlet
@@ -196,7 +196,7 @@ function teardown() {
 function __teardown_btrfs() {
     local btrfs_base_dir=$1
     local btrfs_root=$(df -P . | tail -1 | awk '{print $NF}')
-    local btrfs_dirs=$(cd $btrfs_base_dir; sudo btrfs subvolume list . -t | awk '/^[0-9]/ {print $4}' | grep "$btrfs_base_dir/$btrfs_dir")
+    local btrfs_dirs=$(cd $btrfs_base_dir; sudo btrfs subvolume list -t . | awk '/^[0-9]/ {print $4}' | grep "$btrfs_base_dir/$btrfs_dir")
     for subvolume in $btrfs_dirs; do
        sudo btrfs subvolume delete $btrfs_root/$subvolume
     done

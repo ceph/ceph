@@ -255,6 +255,16 @@ void BlueFS::dump_perf_counters(Formatter *f)
   f->close_section();
 }
 
+void BlueFS::dump_block_extents(ostream& out)
+{
+  for (unsigned i = 0; i < MAX_BDEV; ++i) {
+    if (!bdev[i]) {
+      continue;
+    }
+    out << i << " : size 0x" << std::hex << bdev[i]->get_size()
+	<< " : own 0x" << block_all[i] << std::dec << "\n";
+  }
+}
 
 void BlueFS::get_usage(vector<pair<uint64_t,uint64_t>> *usage)
 {
@@ -1187,6 +1197,11 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   assert(!new_log);
   assert(!new_log_writer);
 
+  // create a new log [writer] so that we know compaction is in progress
+  // (see _should_compact_log)
+  new_log = new File;
+  new_log->fnode.ino = 0;   // so that _flush_range won't try to log the fnode
+
   // 1. allocate new log space and jump to it.
   old_log_jump_to = log_file->fnode.get_allocated();
   uint64_t need = old_log_jump_to + cct->_conf->bluefs_max_log_runway;
@@ -1228,9 +1243,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   dout(10) << __func__ << " new_log_jump_to 0x" << std::hex << new_log_jump_to
 	   << std::dec << dendl;
 
-  // create a new log [writer]
-  new_log = new File;
-  new_log->fnode.ino = 0;   // so that _flush_range won't try to log the fnode
+  // allocate
   int r = _allocate(BlueFS::BDEV_DB, new_log_jump_to,
                     &new_log->fnode.extents);
   assert(r == 0);
@@ -1672,9 +1685,7 @@ void BlueFS::wait_for_aio(FileWriter *h)
       p->aio_wait();
     }
   }
-  utime_t end = ceph_clock_now();
-  utime_t dur = end - start;
-  dout(10) << __func__ << " " << h << " done in " << dur << dendl;
+  dout(10) << __func__ << " " << h << " done in " << (ceph_clock_now() - start) << dendl;
 }
 
 int BlueFS::_flush(FileWriter *h, bool force)
@@ -1894,9 +1905,7 @@ void BlueFS::sync_metadata()
 	alloc[i]->release(p.get_start(), p.get_len());
       }
     }
-    utime_t end = ceph_clock_now();
-    utime_t dur = end - start;
-    dout(10) << __func__ << " done in " << dur << dendl;
+    dout(10) << __func__ << " done in " << (ceph_clock_now() - start) << dendl;
   }
 
   if (_should_compact_log()) {

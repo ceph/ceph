@@ -48,7 +48,7 @@ class MDSMonitor : public PaxosService {
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   // we don't require full versions; don't encode any.
   void encode_full(MonitorDBStore::TransactionRef t) override { }
-  version_t get_trim_to() override;
+  version_t get_trim_to() const override;
 
   bool preprocess_query(MonOpRequestRef op) override;  // true if processed.
   bool prepare_update(MonOpRequestRef op) override;
@@ -76,7 +76,6 @@ class MDSMonitor : public PaxosService {
 
   // my helpers
   void print_map(FSMap &m, int dbl=7);
-  void update_logger();
 
   void _updated(MonOpRequestRef op);
 
@@ -87,9 +86,6 @@ class MDSMonitor : public PaxosService {
   bool preprocess_offload_targets(MonOpRequestRef op);
   bool prepare_offload_targets(MonOpRequestRef op);
 
-  void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail,
-		  CephContext *cct) const override;
   int fail_mds(std::ostream &ss, const std::string &arg,
       MDSMap::mds_info_t *failed_info);
 

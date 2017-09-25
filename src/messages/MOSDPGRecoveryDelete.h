@@ -12,7 +12,7 @@
 
 struct MOSDPGRecoveryDelete : public MOSDFastDispatchOp {
 
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
   pg_shard_t from;

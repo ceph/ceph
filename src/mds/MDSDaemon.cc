@@ -242,6 +242,11 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "dump metadata cache (optionally to a file)");
   assert(r == 0);
+  r = admin_socket->register_command("cache status",
+                                     "cache status",
+                                     asok_hook,
+                                     "show cache status");
+  assert(r == 0);
   r = admin_socket->register_command("dump tree",
 				     "dump tree "
 				     "name=root,type=CephString,req=true "
@@ -316,6 +321,7 @@ void MDSDaemon::clean_up_admin_socket()
   admin_socket->unregister_command("flush_path");
   admin_socket->unregister_command("export dir");
   admin_socket->unregister_command("dump cache");
+  admin_socket->unregister_command("cache status");
   admin_socket->unregister_command("dump tree");
   admin_socket->unregister_command("session evict");
   admin_socket->unregister_command("osdmap barrier");
@@ -1065,7 +1071,14 @@ void MDSDaemon::respawn()
    * unlinked.
    */
   char exe_path[PATH_MAX] = "";
-  if (readlink(PROCPREFIX "/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
+#ifdef PROCPREFIX
+  if (readlink(PROCPREFIX "/proc/self/exe", exe_path, PATH_MAX-1) != -1) {
+    dout(1) << "respawning with exe " << exe_path << dendl;
+    strcpy(exe_path, PROCPREFIX "/proc/self/exe");
+  } else {
+#else
+  {
+#endif
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
@@ -1074,9 +1087,6 @@ void MDSDaemon::respawn()
 
     /* Fall back to a best-effort: just running in our CWD */
     strncpy(exe_path, orig_argv[0], PATH_MAX-1);
-  } else {
-    dout(1) << "respawning with exe " << exe_path << dendl;
-    strcpy(exe_path, PROCPREFIX "/proc/self/exe");
   }
 
   dout(1) << " exe_path " << exe_path << dendl;

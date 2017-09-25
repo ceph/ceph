@@ -143,7 +143,6 @@ TYPE(ghobject_t)
 TYPE_FEATUREFUL(AuthMonitor::Incremental)
 
 #include "mon/PGMap.h"
-TYPE_FEATUREFUL(PGMap::Incremental)
 TYPE_FEATUREFUL_NONDETERMINISTIC(PGMap)
 TYPE_FEATUREFUL_NONDETERMINISTIC(PGMapDigest)
 
@@ -211,6 +210,7 @@ TYPE_FEATUREFUL(file_layout_t)
 
 #include "mds/CInode.h"
 TYPE_FEATUREFUL(InodeStore)
+TYPE_FEATUREFUL(InodeStoreBare)
 
 #include "mds/MDSMap.h"
 TYPE_FEATUREFUL(MDSMap)

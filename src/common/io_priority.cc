@@ -13,7 +13,7 @@
  */
 
 #include <unistd.h>
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) || defined(__APPLE__)
 #include <errno.h>
 #endif
 #ifdef __linux__

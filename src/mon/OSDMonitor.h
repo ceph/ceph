@@ -165,7 +165,7 @@ public:
   // svc
 public:  
   void create_initial() override;
-  void get_store_prefixes(std::set<string>& s) override;
+  void get_store_prefixes(std::set<string>& s) const override;
 
 private:
   void update_from_paxos(bool *need_bootstrap) override;
@@ -238,7 +238,7 @@ private:
   bool prepare_update(MonOpRequestRef op) override;
   bool should_propose(double &delay) override;
 
-  version_t get_trim_to() override;
+  version_t get_trim_to() const override;
 
   bool can_mark_down(int o);
   bool can_mark_up(int o);
@@ -346,6 +346,7 @@ private:
 				const string &erasure_code_profile,
 				unsigned *stripe_width,
 				ostream *ss);
+  int check_pg_num(int64_t pool, int pg_num, int size, ostream* ss);
   int prepare_new_pool(string& name, uint64_t auid,
 		       int crush_rule,
 		       const string &crush_rule_name,
@@ -357,7 +358,8 @@ private:
 		       ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 
-  void update_pool_flags(int64_t pool_id, uint64_t flags);
+  void set_pool_flags(int64_t pool_id, uint64_t flags);
+  void clear_pool_flags(int64_t pool_id, uint64_t flags);
   bool update_pools_status();
 
   bool prepare_set_flag(MonOpRequestRef op, int flag);
@@ -473,9 +475,6 @@ public:
 
   void tick() override;  // check state, take actions
 
-  void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail,
-		  CephContext *cct) const override;
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
   bool prepare_command_impl(MonOpRequestRef op, map<string,cmd_vartype>& cmdmap);

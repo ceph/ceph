@@ -165,7 +165,7 @@ void *WBThrottle::entry()
     logger->dec(l_wbthrottle_inodes_dirtied);
     logger->inc(l_wbthrottle_inodes_wb);
     lock.Unlock();
-#ifdef HAVE_FDATASYNC
+#if defined(HAVE_FDATASYNC)
     ::fdatasync(**wb.get<1>());
 #else
     ::fsync(**wb.get<1>());

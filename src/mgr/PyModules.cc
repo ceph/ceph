@@ -105,14 +105,16 @@ PyObject *PyModules::list_servers_python()
   dout(10) << " >" << dendl;
 
   PyFormatter f(false, true);
-  const auto &all = daemon_state.get_all_servers();
-  for (const auto &i : all) {
-    const auto &hostname = i.first;
+  daemon_state.with_daemons_by_server([this, &f]
+      (const std::map<std::string, DaemonStateCollection> &all) {
+    for (const auto &i : all) {
+      const auto &hostname = i.first;
 
-    f.open_object_section("server");
-    dump_server(hostname, i.second, &f);
-    f.close_section();
-  }
+      f.open_object_section("server");
+      dump_server(hostname, i.second, &f);
+      f.close_section();
+    }
+  });
 
   return f.get();
 }
@@ -254,7 +256,22 @@ PyObject *PyModules::get_python(const std::string &what)
         }
     );
     return f.get();
-
+  } else if (what == "pg_status") {
+    PyFormatter f;
+    cluster_state.with_pgmap(
+        [&f](const PGMap &pg_map) {
+	  pg_map.print_summary(&f, nullptr);
+        }
+    );
+    return f.get();
+  } else if (what == "pg_dump") {
+    PyFormatter f;
+        cluster_state.with_pgmap(
+        [&f](const PGMap &pg_map) {
+	  pg_map.dump(&f);
+        }
+    );
+    return f.get();
   } else if (what == "df") {
     PyFormatter f;
 
@@ -384,7 +401,7 @@ int PyModules::init()
 
   // Configure sys.path to include mgr_module_path
   std::string sys_path = std::string(Py_GetPath()) + ":" + get_site_packages()
-                         + ":" + g_conf->mgr_module_path;
+                         + ":" + g_conf->get_val<std::string>("mgr_module_path");
   dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
 
   // Drop the GIL and remember the main thread state (current
@@ -679,9 +696,8 @@ PyObject* PyModules::get_counter_python(
   f.open_array_section(path.c_str());
 
   auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
-
-  Mutex::Locker l2(metadata->lock);
   if (metadata) {
+    Mutex::Locker l2(metadata->lock);
     if (metadata->perf_counters.instances.count(path)) {
       auto counter_instance = metadata->perf_counters.instances.at(path);
       const auto &data = counter_instance.get_data();
@@ -717,34 +733,34 @@ PyObject* PyModules::get_perf_schema_python(
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  DaemonStateCollection states;
+  DaemonStateCollection daemons;
 
   if (svc_type == "") {
-    states = daemon_state.get_all();
+    daemons = std::move(daemon_state.get_all());
   } else if (svc_id.empty()) {
-    states = daemon_state.get_by_service(svc_type);
+    daemons = std::move(daemon_state.get_by_service(svc_type));
   } else {
     auto key = DaemonKey(svc_type, svc_id);
     // so that the below can be a loop in all cases
-    if (daemon_state.exists(key)) {
-      states[key] = daemon_state.get(key);
+    auto got = daemon_state.get(key);
+    if (got != nullptr) {
+      daemons[key] = got;
     }
   }
 
   PyFormatter f;
   f.open_object_section("perf_schema");
 
-  // FIXME: this is unsafe, I need to either be inside DaemonStateIndex's
-  // lock or put a lock on individual DaemonStates
-  if (!states.empty()) {
-    for (auto statepair : states) {
-      std::ostringstream daemon_name;
+  if (!daemons.empty()) {
+    for (auto statepair : daemons) {
       auto key = statepair.first;
       auto state = statepair.second;
-      Mutex::Locker l(state->lock);
+
+      std::ostringstream daemon_name;
       daemon_name << key.first << "." << key.second;
       f.open_object_section(daemon_name.str().c_str());
 
+      Mutex::Locker l(state->lock);
       for (auto typestr : state->perf_counters.declared_types) {
 	f.open_object_section(typestr.c_str());
 	auto type = state->perf_counters.types[typestr];
@@ -778,6 +794,29 @@ PyObject *PyModules::get_context()
   return capsule;
 }
 
+static void delete_osdmap(PyObject *object)
+{
+  OSDMap *osdmap = static_cast<OSDMap*>(PyCapsule_GetPointer(object, nullptr));
+  assert(osdmap);
+  dout(10) << __func__ << " " << osdmap << dendl;
+  delete osdmap;
+}
+
+PyObject *PyModules::get_osdmap()
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
+  // Construct a capsule containing an OSDMap.
+  OSDMap *newmap = new OSDMap;
+  cluster_state.with_osdmap([&](const OSDMap& o) {
+      newmap->deepish_copy_from(o);
+    });
+  dout(10) << __func__ << " " << newmap << dendl;
+  return PyCapsule_New(newmap, nullptr, &delete_osdmap);
+}
+
 static void _list_modules(
   const std::string path,
   std::set<std::string> *modules)
@@ -805,7 +844,7 @@ static void _list_modules(
 
 void PyModules::list_modules(std::set<std::string> *modules)
 {
-  _list_modules(g_conf->mgr_module_path, modules);
+  _list_modules(g_conf->get_val<std::string>("mgr_module_path"), modules);
 }
 
 void PyModules::set_health_checks(const std::string& handle,

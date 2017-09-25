@@ -43,7 +43,16 @@ class MgrMonitor: public PaxosService
    */
   bool promote_standby();
   void drop_active();
-  void drop_standby(uint64_t gid);
+
+  /**
+   * Remove this gid from the list of standbys.  By default,
+   * also remove metadata (i.e. forget the daemon entirely).
+   *
+   * Set `drop_meta` to false if you would like to keep
+   * the daemon's metadata, for example if you're dropping
+   * it as a standby before reinstating it as the active daemon.
+   */
+  void drop_standby(uint64_t gid, bool drop_meta=true);
 
   Context *digest_event = nullptr;
   void cancel_timer();
@@ -92,9 +101,6 @@ public:
   void on_active() override;
   void on_restart() override;
 
-  void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail,
-		  CephContext *cct) const override;
   void tick() override;
 
   void print_summary(Formatter *f, std::ostream *ss) const;

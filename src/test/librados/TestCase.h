@@ -118,7 +118,7 @@ protected:
   void TearDown() override;
   librados::Rados &cluster;
   librados::IoCtx ioctx;
-  uint64_t alignment;
+  uint64_t alignment = 0;
   bool cleanup;
 };
 
@@ -230,7 +230,7 @@ protected:
   librados::IoCtx ioctx;
   bool cleanup;
   std::string nspace;
-  uint64_t alignment;
+  uint64_t alignment = 0;
 };
 
 /**

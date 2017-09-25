@@ -2392,8 +2392,11 @@ void ECBackend::be_deep_scrub(
   if (stride % sinfo.get_chunk_size())
     stride += sinfo.get_chunk_size() - (stride % sinfo.get_chunk_size());
   uint64_t pos = 0;
+  bool skip_data_digest = store->has_builtin_csum() &&
+    g_conf->get_val<bool>("osd_skip_data_digest");
 
-  uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+  uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
+                           CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
   while (true) {
     bufferlist bl;
@@ -2412,7 +2415,9 @@ void ECBackend::be_deep_scrub(
       break;
     }
     pos += r;
-    h << bl;
+    if (!skip_data_digest) {
+      h << bl;
+    }
     if ((unsigned)r < stride)
       break;
   }
@@ -2439,7 +2444,8 @@ void ECBackend::be_deep_scrub(
 	return;
       }
 
-      if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
+      if (!skip_data_digest &&
+          hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
 	dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
 	o.ec_hash_mismatch = true;
 	return;

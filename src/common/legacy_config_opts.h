@@ -14,15 +14,11 @@
 
 /* note: no header guard */
 OPTION(host, OPT_STR) // "" means that ceph will use short hostname
-OPTION(fsid, OPT_UUID)
 OPTION(public_addr, OPT_ADDR)
 OPTION(public_bind_addr, OPT_ADDR)
 OPTION(cluster_addr, OPT_ADDR)
 OPTION(public_network, OPT_STR)
 OPTION(cluster_network, OPT_STR)
-OPTION(monmap, OPT_STR)
-OPTION(mon_host, OPT_STR)
-OPTION(mon_dns_srv_name, OPT_STR)
 OPTION(lockdep, OPT_BOOL)
 OPTION(lockdep_force_backtrace, OPT_BOOL) // always gather current backtrace at every lock
 OPTION(run_dir, OPT_STR)       // the "/var/run/ceph" dir, created on daemon startup
@@ -223,8 +219,6 @@ OPTION(mon_osd_min_in_ratio, OPT_DOUBLE)   // min osds required to be in to mark
 OPTION(mon_osd_warn_op_age, OPT_DOUBLE)     // max op age before we generate a warning (make it a power of 2)
 OPTION(mon_osd_err_op_age_ratio, OPT_DOUBLE)  // when to generate an error, as multiple of mon_osd_warn_op_age
 OPTION(mon_osd_max_split_count, OPT_INT) // largest number of PGs per "involved" OSD to let split create
-OPTION(mon_osd_allow_primary_temp, OPT_BOOL)  // allow primary_temp to be set in the osdmap
-OPTION(mon_osd_allow_primary_affinity, OPT_BOOL)  // allow primary_affinity to be set in the osdmap
 OPTION(mon_osd_prime_pg_temp, OPT_BOOL)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT)  // max time to spend priming
 OPTION(mon_osd_prime_pg_temp_max_estimate, OPT_FLOAT) // max estimate of pg total before we do all pgs in parallel
@@ -243,7 +237,6 @@ OPTION(mon_timecheck_skew_interval, OPT_FLOAT) // on leader, timecheck (clock dr
 OPTION(mon_pg_stuck_threshold, OPT_INT) // number of seconds after which pgs can be considered stuck inactive, unclean, etc (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_pg_min_inactive, OPT_U64) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
 OPTION(mon_pg_warn_min_per_osd, OPT_INT)  // min # pgs per (in) osd before we warn the admin
-OPTION(mon_pg_warn_max_per_osd, OPT_INT)  // max # pgs per (in) osd before we warn the admin
 OPTION(mon_pg_warn_max_object_skew, OPT_FLOAT) // max skew few average in objects per pg
 OPTION(mon_pg_warn_min_objects, OPT_INT)  // do not warn below this object #
 OPTION(mon_pg_warn_min_pool_objects, OPT_INT)  // do not warn on pools below this object #
@@ -270,7 +263,6 @@ OPTION(mon_max_mdsmap_epochs, OPT_INT)
 OPTION(mon_max_osd, OPT_INT)
 OPTION(mon_probe_timeout, OPT_DOUBLE)
 OPTION(mon_client_bytes, OPT_U64)  // client msg data allowed in memory (in bytes)
-OPTION(mon_mgr_proxy_client_bytes_ratio, OPT_FLOAT) // ratio of mon_client_bytes that can be consumed by proxied mgr commands before we error out to client
 OPTION(mon_log_max_summary, OPT_U64)
 OPTION(mon_daemon_bytes, OPT_U64)  // mds, osd message memory cap (in bytes)
 OPTION(mon_max_log_entries_per_event, OPT_INT)
@@ -312,7 +304,7 @@ OPTION(mon_debug_deprecated_as_obsolete, OPT_BOOL) // consider deprecated comman
 OPTION(mon_debug_dump_transactions, OPT_BOOL)
 OPTION(mon_debug_dump_json, OPT_BOOL)
 OPTION(mon_debug_dump_location, OPT_STR)
-OPTION(mon_debug_no_require_luminous, OPT_BOOL)
+OPTION(mon_debug_no_require_mimic, OPT_BOOL)
 OPTION(mon_debug_no_require_bluestore_for_ec_overwrites, OPT_BOOL)
 OPTION(mon_debug_no_initial_persistent_features, OPT_BOOL)
 OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE)      // seconds
@@ -431,15 +423,10 @@ OPTION(filer_max_purge_ops, OPT_U32)
 // Max number of truncate at once in a single Filer::truncate call
 OPTION(filer_max_truncate_ops, OPT_U32)
 
-OPTION(journaler_write_head_interval, OPT_INT)
-OPTION(journaler_prefetch_periods, OPT_INT)   // * journal object size
-OPTION(journaler_prezero_periods, OPT_INT)     // * journal object size
 OPTION(mds_data, OPT_STR)
 OPTION(mds_max_file_size, OPT_U64) // Used when creating new CephFS. Change with 'ceph mds set max_file_size <size>' afterwards
 // max xattr kv pairs size for each dir/file
 OPTION(mds_max_xattr_pairs_size, OPT_U32)
-OPTION(mds_cache_size, OPT_INT)
-OPTION(mds_cache_mid, OPT_FLOAT)
 OPTION(mds_max_file_recover, OPT_U32)
 OPTION(mds_dir_max_commit_size, OPT_INT) // MB
 OPTION(mds_dir_keys_per_op, OPT_INT)
@@ -459,7 +446,6 @@ OPTION(mds_recall_state_timeout, OPT_FLOAT)    // detect clients which aren't tr
 OPTION(mds_freeze_tree_timeout, OPT_FLOAT)    // detecting freeze tree deadlock
 OPTION(mds_session_autoclose, OPT_FLOAT) // autoclose idle session
 OPTION(mds_health_summarize_threshold, OPT_INT) // collapse N-client health metrics to a single 'many'
-OPTION(mds_health_cache_threshold, OPT_FLOAT) // warn on cache size if it exceeds mds_cache_size by this factor
 OPTION(mds_reconnect_timeout, OPT_FLOAT)  // seconds to wait for clients during mds restart
 	      //  make it (mds_session_timeout - mds_beacon_grace)
 OPTION(mds_tick_interval, OPT_FLOAT)
@@ -1535,6 +1521,9 @@ OPTION(rgw_sync_log_trim_interval, OPT_INT) // time in seconds between attempts 
 
 OPTION(rgw_sync_data_inject_err_probability, OPT_DOUBLE) // range [0, 1]
 OPTION(rgw_sync_meta_inject_err_probability, OPT_DOUBLE) // range [0, 1]
+OPTION(rgw_sync_trace_history_size, OPT_INT) // max number of complete sync trace entries to keep
+OPTION(rgw_sync_trace_per_node_log_size, OPT_INT) // how many log entries to keep per node
+OPTION(rgw_sync_trace_servicemap_update_interval, OPT_INT) // interval in seconds between sync trace servicemap update
 
 
 OPTION(rgw_period_push_interval, OPT_DOUBLE) // seconds to wait before retrying "period push"
@@ -1546,27 +1535,6 @@ OPTION(rgw_shard_warning_threshold, OPT_DOUBLE) // pct of safe max
 
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL) // whether swift object versioning feature is enabled
 
-OPTION(mgr_module_path, OPT_STR) // where to load python modules from
-OPTION(mgr_initial_modules, OPT_STR)  // Which modules to load
-OPTION(mgr_data, OPT_STR) // where to find keyring etc
-OPTION(mgr_tick_period, OPT_INT)  // How frequently to tick
-OPTION(mgr_stats_period, OPT_INT) // How frequently clients send stats
-OPTION(mgr_client_bytes, OPT_U64) // bytes from clients
-OPTION(mgr_client_messages, OPT_U64)      // messages from clients
-OPTION(mgr_osd_bytes, OPT_U64)   // bytes from osds
-OPTION(mgr_osd_messages, OPT_U64)       // messages from osds
-OPTION(mgr_mds_bytes, OPT_U64)   // bytes from mdss
-OPTION(mgr_mds_messages, OPT_U64)        // messages from mdss
-OPTION(mgr_mon_bytes, OPT_U64)   // bytes from mons
-OPTION(mgr_mon_messages, OPT_U64)        // messages from mons
-
-OPTION(mgr_connect_retry_interval, OPT_DOUBLE)
-OPTION(mgr_service_beacon_grace, OPT_DOUBLE)
-
-OPTION(mon_mgr_digest_period, OPT_INT)  // How frequently to send digests
-OPTION(mon_mgr_beacon_grace, OPT_INT)  // How long to wait to failover
-OPTION(mon_mgr_inactive_grace, OPT_INT) // How long before health WARN -> ERR
-OPTION(mon_mgr_mkfs_grace, OPT_INT) // How long before we complain about MGR_DOWN
 OPTION(rgw_crypt_require_ssl, OPT_BOOL) // requests including encryption key headers must be sent over ssl
 OPTION(rgw_crypt_default_encryption_key, OPT_STR) // base64 encoded key for encryption of rgw objects
 OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR) // extra keys that may be used for aws:kms

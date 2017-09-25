@@ -4,6 +4,7 @@
 #include "rgw_coroutine.h"
 #include "rgw_http_client.h"
 #include "rgw_meta_sync_status.h"
+#include "rgw_sync_trace.h"
 
 #include "include/stringify.h"
 #include "common/RWLock.h"
@@ -60,6 +61,7 @@ class RGWAsyncRadosProcessor;
 class RGWMetaSyncStatusManager;
 class RGWMetaSyncCR;
 class RGWRESTConn;
+class RGWSyncTraceManager;
 
 class RGWSyncErrorLogger {
   RGWRados *store;
@@ -162,18 +164,19 @@ public:
 };
 
 struct RGWMetaSyncEnv {
-  CephContext *cct;
-  RGWRados *store;
-  RGWRESTConn *conn;
-  RGWAsyncRadosProcessor *async_rados;
-  RGWHTTPManager *http_manager;
-  RGWSyncErrorLogger *error_logger;
+  CephContext *cct{nullptr};
+  RGWRados *store{nullptr};
+  RGWRESTConn *conn{nullptr};
+  RGWAsyncRadosProcessor *async_rados{nullptr};
+  RGWHTTPManager *http_manager{nullptr};
+  RGWSyncErrorLogger *error_logger{nullptr};
+  RGWSyncTraceManager *sync_tracer{nullptr};
 
-  RGWMetaSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL), error_logger(NULL) {}
+  RGWMetaSyncEnv() {}
 
   void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
-            RGWSyncErrorLogger *_error_logger);
+            RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer);
 
   string shard_obj_name(int shard_id);
   string status_oid();
@@ -186,9 +189,10 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
 
   RGWHTTPManager http_manager;
   RGWMetaSyncStatusManager *status_manager;
-  RGWSyncErrorLogger *error_logger;
+  RGWSyncErrorLogger *error_logger{nullptr};
+  RGWSyncTraceManager *sync_tracer{nullptr};
 
-  RGWMetaSyncCR *meta_sync_cr;
+  RGWMetaSyncCR *meta_sync_cr{nullptr};
 
   RGWSyncBackoff backoff;
 
@@ -199,13 +203,15 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
 
   std::atomic<bool> going_down = { false };
 
+  RGWSyncTraceNodeRef tn;
+
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
                    RGWMetaSyncStatusManager *_sm)
     : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
       store(_store), conn(NULL), async_rados(async_rados),
       http_manager(store->ctx(), completion_mgr),
-      status_manager(_sm), error_logger(NULL), meta_sync_cr(NULL) {}
+      status_manager(_sm) {}
 
   ~RGWRemoteMetaLog() override;
 
@@ -420,18 +426,13 @@ class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
 
   bool error_injection;
 
+  RGWSyncTraceNodeRef tn;
+
 public:
   RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
-		           const string& _raw_key, const string& _entry_marker,
+                           const string& _raw_key, const string& _entry_marker,
                            const RGWMDLogStatus& _op_status,
-                           RGWMetaSyncShardMarkerTrack *_marker_tracker) : RGWCoroutine(_sync_env->cct),
-                                                      sync_env(_sync_env),
-						      raw_key(_raw_key), entry_marker(_entry_marker),
-                                                      op_status(_op_status),
-                                                      pos(0), sync_status(0),
-                                                      marker_tracker(_marker_tracker), tries(0) {
-    error_injection = (sync_env->cct->_conf->rgw_sync_meta_inject_err_probability > 0);
-  }
+                           RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent);
 
   int operate() override;
 };

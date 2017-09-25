@@ -776,6 +776,10 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   assert(dir->is_auth());
   assert(dest != mds->get_nodeid());
    
+  if (!(mds->is_active() || mds->is_stopping())) {
+    dout(7) << "i'm not active, no exports for now" << dendl;
+    return;
+  }
   if (mds->mdcache->is_readonly()) {
     dout(7) << "read-only FS, no exports for now" << dendl;
     return;
@@ -1087,12 +1091,10 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   MExportDirPrep *prep = new MExportDirPrep(dir->dirfrag(), it->second.tid);
 
   // include list of bystanders
-  for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
-       p != dir->replicas_end();
-       ++p) {
-    if (p->first != it->second.peer) {
-      dout(10) << "bystander mds." << p->first << dendl;
-      prep->add_bystander(p->first);
+  for (const auto &p : dir->get_replicas()) {
+    if (p.first != it->second.peer) {
+      dout(10) << "bystander mds." << p.first << dendl;
+      prep->add_bystander(p.first);
     }
   }
 
@@ -1272,22 +1274,20 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
 	  it->second.warning_ack_waiting.count(MDS_RANK_NONE) > 0));
   assert(it->second.notify_ack_waiting.empty());
 
-  for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
-       p != dir->replicas_end();
-       ++p) {
-    if (p->first == it->second.peer) continue;
+  for (const auto &p : dir->get_replicas()) {
+    if (p.first == it->second.peer) continue;
     if (mds->is_cluster_degraded() &&
-	!mds->mdsmap->is_clientreplay_or_active_or_stopping(p->first))
+	!mds->mdsmap->is_clientreplay_or_active_or_stopping(p.first))
       continue;  // only if active
-    it->second.warning_ack_waiting.insert(p->first);
-    it->second.notify_ack_waiting.insert(p->first);  // we'll eventually get a notifyack, too!
+    it->second.warning_ack_waiting.insert(p.first);
+    it->second.notify_ack_waiting.insert(p.first);  // we'll eventually get a notifyack, too!
 
     MExportDirNotify *notify = new MExportDirNotify(dir->dirfrag(), it->second.tid, true,
 						    mds_authority_t(mds->get_nodeid(),CDIR_AUTH_UNKNOWN),
 						    mds_authority_t(mds->get_nodeid(),it->second.peer));
     for (set<CDir*>::iterator q = bounds.begin(); q != bounds.end(); ++q)
       notify->get_bounds().push_back((*q)->dirfrag());
-    mds->send_message_mds(notify, p->first);
+    mds->send_message_mds(notify, p.first);
     
   }
 
@@ -2011,7 +2011,7 @@ void Migrator::export_finish(CDir *dir)
   cache->show_subtrees();
   audit();
 
-  cache->trim(-1, num_dentries); // try trimming exported dentries
+  cache->trim(num_dentries); // try trimming exported dentries
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
@@ -2654,7 +2654,7 @@ void Migrator::import_reverse(CDir *dir)
   // log our failure
   mds->mdlog->start_submit_entry(new EImportFinish(dir, false));	// log failure
 
-  cache->trim(-1, num_dentries); // try trimming dentries
+  cache->trim(num_dentries); // try trimming dentries
 
   // notify bystanders; wait in aborting state
   import_notify_abort(dir, bounds);
@@ -3264,8 +3264,9 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   assert(in->is_auth());
 
   // FIXME
-  if (in->is_frozen())
+  if (!in->can_auth_pin())
     return;
+  in->auth_pin(this);
 
   C_M_LoggedImportCaps *finish = new C_M_LoggedImportCaps(
       this, in, mds_rank_t(ex->get_source().num()));
@@ -3306,4 +3307,5 @@ void Migrator::logged_import_caps(CInode *in,
   // clients will release caps from the exporter when they receive the cap import message.
   finish_import_inode_caps(in, from, false, peer_exports[in], imported_caps);
   mds->locker->eval(in, CEPH_CAP_LOCKS, true);
+  in->auth_unpin(this);
 }

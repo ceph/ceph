@@ -90,7 +90,7 @@ protected:
   version_t format_version;
 
 public:
-  const health_check_map_t& get_health_checks() {
+  const health_check_map_t& get_health_checks() const {
     return health_checks;
   }
 
@@ -152,12 +152,12 @@ public:
    *
    * @returns The service's name.
    */
-  string get_service_name() { return service_name; }
+  const string& get_service_name() const { return service_name; }
 
   /**
    * Get the store prefixes we utilize
    */
-  virtual void get_store_prefixes(set<string>& s) {
+  virtual void get_store_prefixes(set<string>& s) const {
     s.insert(service_name);
   }
   
@@ -425,16 +425,6 @@ public:
    */
   virtual void tick() {}
 
-  /**
-   * Get health information
-   *
-   * @param summary list of summary strings and associated severity
-   * @param detail optional list of detailed problem reports; may be NULL
-   */
-  virtual void get_health(list<pair<health_status_t,string> >& summary,
-			  list<pair<health_status_t,string> > *detail,
-			  CephContext *cct) const { }
-
   void encode_health(const health_check_map_t& next,
 		     MonitorDBStore::TransactionRef t) {
     bufferlist bl;
@@ -491,7 +481,7 @@ public:
    *
    * @returns true if we are proposing; false otherwise.
    */
-  bool is_proposing() {
+  bool is_proposing() const {
     return proposing;
   }
 
@@ -502,7 +492,7 @@ public:
    *
    * @returns true if in state ACTIVE; false otherwise.
    */
-  bool is_active() {
+  bool is_active() const {
     return
       !is_proposing() &&
       (paxos->is_active() || paxos->is_updating() || paxos->is_writing());
@@ -520,7 +510,7 @@ public:
    * @param ver The version we want to check if is readable
    * @returns true if it is readable; false otherwise
    */
-  bool is_readable(version_t ver = 0) {
+  bool is_readable(version_t ver = 0) const {
     if (ver > get_last_committed() ||
 	!paxos->is_readable(0) ||
 	get_last_committed() == 0)
@@ -539,7 +529,7 @@ public:
    *
    * @returns true if writeable; false otherwise
    */
-  bool is_writeable() {
+  bool is_writeable() const {
     return is_write_ready(); 
   }
 
@@ -549,7 +539,7 @@ public:
    *
    * @returns true if we are ready to be written to; false otherwise.
    */
-  bool is_write_ready() {
+  bool is_write_ready() const {
     return is_active() && have_pending;
   }
 
@@ -684,7 +674,7 @@ public:
    * @returns the version we should trim to; if we return zero, it should be
    *	      assumed that there's no version to trim to.
    */
-  virtual version_t get_trim_to() {
+  virtual version_t get_trim_to() const {
     return 0;
   }
 

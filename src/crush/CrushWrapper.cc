@@ -13,7 +13,7 @@
 
 #define dout_subsys ceph_subsys_crush
 
-bool CrushWrapper::has_legacy_rulesets() const
+bool CrushWrapper::has_legacy_rule_ids() const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
     crush_rule *r = crush->rules[i];
@@ -25,51 +25,17 @@ bool CrushWrapper::has_legacy_rulesets() const
   return false;
 }
 
-int CrushWrapper::renumber_rules_by_ruleset()
+std::map<int, int> CrushWrapper::renumber_rules()
 {
-  int max_ruleset = 0;
+  std::map<int, int> result;
   for (unsigned i=0; i<crush->max_rules; i++) {
     crush_rule *r = crush->rules[i];
-    if (r && r->mask.ruleset >= max_ruleset) {
-      max_ruleset = r->mask.ruleset + 1;
+    if (r && r->mask.ruleset != i) {
+      result[r->mask.ruleset] = i;
+      r->mask.ruleset = i;
     }
   }
-  struct crush_rule **newrules =
-    (crush_rule**)calloc(1, max_ruleset * sizeof(crush_rule*));
-  for (unsigned i=0; i<crush->max_rules; i++) {
-    crush_rule *r = crush->rules[i];
-    if (!r)
-      continue;
-    if (newrules[r->mask.ruleset]) {
-      // collision, we can't do it.
-      free(newrules);
-      return -EINVAL;
-    }
-    newrules[r->mask.ruleset] = r;
-  }
-
-  // success, swap!
-  free(crush->rules);
-  crush->rules = newrules;
-  crush->max_rules = max_ruleset;
-  return 0;
-}
-
-bool CrushWrapper::has_multirule_rulesets() const
-{
-  for (unsigned i=0; i<crush->max_rules; i++) {
-    crush_rule *r = crush->rules[i];
-    if (!r)
-      continue;
-    for (unsigned j=i+1; j<crush->max_rules; j++) {
-      crush_rule *s = crush->rules[j];
-      if (!s)
-	continue;
-      if (r->mask.ruleset == s->mask.ruleset)
-	return true;
-    }
-  }
-  return false;
+  return result;
 }
 
 bool CrushWrapper::has_non_straw2_buckets() const
@@ -318,7 +284,7 @@ int CrushWrapper::rename_rule(const string& srcname,
   return 0;
 }
 
-void CrushWrapper::find_takes(set<int>& roots) const
+void CrushWrapper::find_takes(set<int> *roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
     crush_rule *r = crush->rules[i];
@@ -326,19 +292,19 @@ void CrushWrapper::find_takes(set<int>& roots) const
       continue;
     for (unsigned j=0; j<r->len; j++) {
       if (r->steps[j].op == CRUSH_RULE_TAKE)
-	roots.insert(r->steps[j].arg1);
+	roots->insert(r->steps[j].arg1);
     }
   }
 }
 
-void CrushWrapper::find_roots(set<int>& roots) const
+void CrushWrapper::find_roots(set<int> *roots) const
 {
   for (int i = 0; i < crush->max_buckets; i++) {
     if (!crush->buckets[i])
       continue;
     crush_bucket *b = crush->buckets[i];
     if (!_search_item_exists(b->id))
-      roots.insert(b->id);
+      roots->insert(b->id);
   }
 }
 
@@ -1437,7 +1403,7 @@ int CrushWrapper::populate_classes(
   // finish constructing the containing buckets.
   map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> weights
   set<int> roots;
-  find_nonshadow_roots(roots);
+  find_nonshadow_roots(&roots);
   for (auto &r : roots) {
     if (r >= 0)
       continue;
@@ -1455,7 +1421,7 @@ int CrushWrapper::populate_classes(
 int CrushWrapper::trim_roots_with_class()
 {
   set<int> roots;
-  find_shadow_roots(roots);
+  find_shadow_roots(&roots);
   for (auto &r : roots) {
     if (r >= 0)
       continue;
@@ -1497,7 +1463,7 @@ int32_t CrushWrapper::_alloc_class_id() const {
 void CrushWrapper::reweight(CephContext *cct)
 {
   set<int> roots;
-  find_roots(roots);
+  find_roots(&roots);
   for (set<int>::iterator p = roots.begin(); p != roots.end(); ++p) {
     if (*p >= 0)
       continue;
@@ -1625,7 +1591,56 @@ int CrushWrapper::add_simple_rule(
 			    rule_type, -1, err);
 }
 
-int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)
+float CrushWrapper::_get_take_weight_osd_map(int root,
+					     map<int,float> *pmap) const
+{
+  float sum = 0.0;
+  list<int> q;
+  q.push_back(root);
+  //breadth first iterate the OSD tree
+  while (!q.empty()) {
+    int bno = q.front();
+    q.pop_front();
+    crush_bucket *b = crush->buckets[-1-bno];
+    assert(b);
+    for (unsigned j=0; j<b->size; ++j) {
+      int item_id = b->items[j];
+      if (item_id >= 0) { //it's an OSD
+	float w = crush_get_bucket_item_weight(b, j);
+	(*pmap)[item_id] = w;
+	sum += w;
+      } else { //not an OSD, expand the child later
+	q.push_back(item_id);
+      }
+    }
+  }
+  return sum;
+}
+
+void CrushWrapper::_normalize_weight_map(float sum,
+					 const map<int,float>& m,
+					 map<int,float> *pmap) const
+{
+  for (auto& p : m) {
+    map<int,float>::iterator q = pmap->find(p.first);
+    if (q == pmap->end()) {
+      (*pmap)[p.first] = p.second / sum;
+    } else {
+      q->second += p.second / sum;
+    }
+  }
+}
+
+int CrushWrapper::get_take_weight_osd_map(int root, map<int,float> *pmap) const
+{
+  map<int,float> m;
+  float sum = _get_take_weight_osd_map(root, &m);
+  _normalize_weight_map(sum, m, pmap);
+  return 0;
+}
+
+int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno,
+					  map<int,float> *pmap) const
 {
   if (ruleno >= crush->max_rules)
     return -ENOENT;
@@ -1648,35 +1663,10 @@ int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)
 	m[n] = 1.0;
 	sum = 1.0;
       } else {
-	list<int> q;
-	q.push_back(n);
-	//breadth first iterate the OSD tree
-	while (!q.empty()) {
-	  int bno = q.front();
-	  q.pop_front();
-	  crush_bucket *b = crush->buckets[-1-bno];
-	  assert(b);
-	  for (unsigned j=0; j<b->size; ++j) {
-	    int item_id = b->items[j];
-	    if (item_id >= 0) { //it's an OSD
-	      float w = crush_get_bucket_item_weight(b, j);
-	      m[item_id] = w;
-	      sum += w;
-	    } else { //not an OSD, expand the child later
-	      q.push_back(item_id);
-	    }
-	  }
-	}
+	sum += _get_take_weight_osd_map(n, &m);
       }
     }
-    for (map<int,float>::iterator p = m.begin(); p != m.end(); ++p) {
-      map<int,float>::iterator q = pmap->find(p->first);
-      if (q == pmap->end()) {
-	(*pmap)[p->first] = p->second / sum;
-      } else {
-	q->second += p->second / sum;
-      }
-    }
+    _normalize_weight_map(sum, m, pmap);
   }
 
   return 0;
@@ -2043,6 +2033,44 @@ int CrushWrapper::get_rules_by_class(const string &class_name, set<int> *rules)
           return res;
         }
         if (c != -1 && c == class_id) {
+          rules->insert(i);
+          break;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
+// return rules that might reference the given osd
+int CrushWrapper::get_rules_by_osd(int osd, set<int> *rules)
+{
+  assert(rules);
+  rules->clear();
+  if (osd < 0) {
+    return -EINVAL;
+  }
+  for (unsigned i = 0; i < crush->max_rules; ++i) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j = 0; j < r->len; ++j) {
+      if (r->steps[j].op == CRUSH_RULE_TAKE) {
+        int step_item = r->steps[j].arg1;
+        list<int> unordered;
+        int rc = _get_leaves(step_item, &unordered);
+        if (rc < 0) {
+          return rc; // propagate fatal errors!
+        }
+        bool match = false;
+        for (auto &o: unordered) {
+          assert(o >= 0);
+          if (o == osd) {
+            match = true;
+            break;
+          }
+        }
+        if (match) {
           rules->insert(i);
           break;
         }
@@ -2602,7 +2630,7 @@ namespace {
 
     void dump(Formatter *f) {
       set<int> roots;
-      crush->find_roots(roots);
+      crush->find_roots(&roots);
       for (set<int>::iterator root = roots.begin(); root != roots.end(); ++root) {
 	dump_item(Item(*root, 0, 0, crush->get_bucket_weightf(*root)), f);
       }

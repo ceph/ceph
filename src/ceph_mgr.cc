@@ -16,7 +16,10 @@
 
 #include <Python.h>
 
+#include <pthread.h>
+
 #include "include/types.h"
+#include "include/compat.h"
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
@@ -38,6 +41,8 @@ static void usage()
  */
 int main(int argc, const char **argv)
 {
+  ceph_pthread_setname(pthread_self(), "ceph-mgr");
+
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);

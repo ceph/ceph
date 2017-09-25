@@ -2,14 +2,8 @@
 Create a Ceph filesystem
 ========================
 
-.. tip::
-
-    The ``ceph fs new`` command was introduced in Ceph 0.84.  Prior to this release,
-    no manual steps are required to create a filesystem, and pools named ``data`` and
-    ``metadata`` exist by default.
-
-    The Ceph command line now includes commands for creating and removing filesystems,
-    but at present only one filesystem may exist at a time.
+Creating pools
+==============
 
 A Ceph filesystem requires at least two RADOS pools, one for data and one for metadata.
 When configuring these pools, you might consider:
@@ -28,6 +22,9 @@ might run the following commands:
 
     $ ceph osd pool create cephfs_data <pg_num>
     $ ceph osd pool create cephfs_metadata <pg_num>
+
+Creating a filesystem
+=====================
 
 Once the pools are created, you may enable the filesystem using the ``fs new`` command:
 
@@ -60,3 +57,17 @@ choose which to use when mounting.
 
 .. _Mount CephFS: ../../cephfs/kernel
 .. _Mount CephFS as FUSE: ../../cephfs/fuse
+
+Using Erasure Coded pools with CephFS
+=====================================
+
+You may use Erasure Coded pools as CephFS data pools as long as they have overwrites enabled, which is done as follows:
+
+.. code:: bash
+
+    ceph osd pool set my_ec_pool allow_ec_overwrites true
+    
+Note that EC overwrites are only supported when using OSDS with the BlueStore backend.
+
+You may not use Erasure Coded pools as CephFS metadata pools, because CephFS metadata is stored using RADOS *OMAP* data structures, which EC pools cannot store.
+

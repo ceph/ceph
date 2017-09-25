@@ -67,6 +67,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_EXPIRES	RGW_ATTR_PREFIX "expires"
 #define RGW_ATTR_DELETE_AT 	RGW_ATTR_PREFIX "delete_at"
 #define RGW_ATTR_ID_TAG    	RGW_ATTR_PREFIX "idtag"
+#define RGW_ATTR_TAIL_TAG    	RGW_ATTR_PREFIX "tail_tag"
 #define RGW_ATTR_SHADOW_OBJ    	RGW_ATTR_PREFIX "shadow_name"
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
@@ -774,11 +775,12 @@ struct RGWUserInfo
 WRITE_CLASS_ENCODER(RGWUserInfo)
 
 struct rgw_pool {
-  string name;
-  string ns;
+  std::string name;
+  std::string ns;
 
-  rgw_pool() {}
+  rgw_pool() = default;
   rgw_pool(const rgw_pool& _p) : name(_p.name), ns(_p.ns) {}
+  rgw_pool(rgw_pool&&) = default;
   rgw_pool(const string& _s) {
     from_str(_s);
   }
@@ -834,6 +836,8 @@ struct rgw_pool {
     DECODE_FINISH(bl);
   }
 
+  rgw_pool& operator=(const rgw_pool&) = default;
+
   bool operator==(const rgw_pool& p) const {
     return (compare(p) == 0);
   }
@@ -855,10 +859,20 @@ struct rgw_data_placement_target {
   rgw_pool data_extra_pool;
   rgw_pool index_pool;
 
-  rgw_data_placement_target() {}
+  rgw_data_placement_target() = default;
+  rgw_data_placement_target(const rgw_data_placement_target&) = default;
+  rgw_data_placement_target(rgw_data_placement_target&&) = default;
 
-  rgw_data_placement_target(const rgw_pool& _data_pool, const rgw_pool& _data_extra_pool, const rgw_pool& _index_pool) 
-         : data_pool(_data_pool), data_extra_pool(_data_extra_pool), index_pool(_index_pool) {}
+  rgw_data_placement_target(const rgw_pool& data_pool,
+                            const rgw_pool& data_extra_pool,
+                            const rgw_pool& index_pool)
+    : data_pool(data_pool),
+      data_extra_pool(data_extra_pool),
+      index_pool(index_pool) {
+  }
+
+  rgw_data_placement_target&
+  operator=(const rgw_data_placement_target&) = default;
 
   const rgw_pool& get_data_extra_pool() const {
     if (data_extra_pool.empty()) {
@@ -984,6 +998,8 @@ struct rgw_bucket {
     explicit_placement(b.explicit_placement.data_pool,
                        b.explicit_placement.data_extra_pool,
                        b.explicit_placement.index_pool) {}
+  rgw_bucket(const rgw_bucket&) = default;
+  rgw_bucket(rgw_bucket&&) = default;
 
   void convert(cls_user_bucket *b) const {
     b->name = name;
@@ -1068,6 +1084,8 @@ struct rgw_bucket {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket*>& o);
+
+  rgw_bucket& operator=(const rgw_bucket&) = default;
 
   bool operator<(const rgw_bucket& b) const {
     if (tenant == b.tenant) {
@@ -1866,18 +1884,31 @@ struct RGWBucketEnt {
   rgw_bucket bucket;
   size_t size;
   size_t size_rounded;
-  real_time creation_time;
+  ceph::real_time creation_time;
   uint64_t count;
 
-  RGWBucketEnt() : size(0), size_rounded(0), count(0) {}
+  /* The placement_rule is necessary to calculate per-storage-policy statics
+   * of the Swift API. Although the info available in RGWBucketInfo, we need
+   * to duplicate it here to not affect the performance of buckets listing. */
+  std::string placement_rule;
 
-  explicit RGWBucketEnt(const rgw_user& u, const cls_user_bucket_entry& e)
-    : bucket(u, e.bucket),
+  RGWBucketEnt()
+    : size(0),
+      size_rounded(0),
+      count(0) {
+  }
+  RGWBucketEnt(const RGWBucketEnt&) = default;
+  RGWBucketEnt(RGWBucketEnt&&) = default;
+  explicit RGWBucketEnt(const rgw_user& u, cls_user_bucket_entry&& e)
+    : bucket(u, std::move(e.bucket)),
       size(e.size),
       size_rounded(e.size_rounded),
       creation_time(e.creation_time),
-      count(e.count) {
+      count(e.count),
+      placement_rule(std::move(e.placement_rule)) {
   }
+
+  RGWBucketEnt& operator=(const RGWBucketEnt&) = default;
 
   void convert(cls_user_bucket_entry *b) const {
     bucket.convert(&b->bucket);
@@ -1888,7 +1919,7 @@ struct RGWBucketEnt {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 5, bl);
+    ENCODE_START(7, 5, bl);
     uint64_t s = size;
     __u32 mt = ceph::real_clock::to_time_t(creation_time);
     string empty_str;  // originally had the bucket name here, but we encode bucket later
@@ -1900,6 +1931,7 @@ struct RGWBucketEnt {
     s = size_rounded;
     ::encode(s, bl);
     ::encode(creation_time, bl);
+    ::encode(placement_rule, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -1923,6 +1955,8 @@ struct RGWBucketEnt {
     size_rounded = s;
     if (struct_v >= 6)
       ::decode(creation_time, bl);
+    if (struct_v >= 7)
+      ::decode(placement_rule, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

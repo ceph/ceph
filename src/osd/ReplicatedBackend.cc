@@ -703,8 +703,11 @@ void ReplicatedBackend::be_deep_scrub(
   bufferlist bl, hdrbl;
   int r;
   __u64 pos = 0;
+  bool skip_data_digest = store->has_builtin_csum() &&
+    g_conf->get_val<bool>("osd_skip_data_digest");
 
-  uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+  uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
+                           CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
   while (true) {
     handle.reset_tp_timeout();
@@ -718,7 +721,9 @@ void ReplicatedBackend::be_deep_scrub(
     if (r <= 0)
       break;
 
-    h << bl;
+    if (!skip_data_digest) {
+      h << bl;
+    }
     pos += bl.length();
     bl.clear();
   }
@@ -728,8 +733,10 @@ void ReplicatedBackend::be_deep_scrub(
     o.read_error = true;
     return;
   }
-  o.digest = h.digest();
-  o.digest_present = true;
+  if (!skip_data_digest) {
+    o.digest = h.digest();
+    o.digest_present = true;
+  }
 
   bl.clear();
   r = store->omap_get_header(
@@ -1410,10 +1417,7 @@ void ReplicatedBackend::prepare_pull(
   ObcLockManager lock_manager;
 
   if (soid.is_snap()) {
-    assert(!get_parent()->get_local_missing().is_missing(
-	     soid.get_head()) ||
-	   !get_parent()->get_local_missing().is_missing(
-	     soid.get_snapdir()));
+    assert(!get_parent()->get_local_missing().is_missing(soid.get_head()));
     assert(headctx);
     // check snapset
     SnapSetContext *ssc = headctx->ssc;
@@ -1489,13 +1493,6 @@ int ReplicatedBackend::prep_push_to_replica(
     // we need the head (and current SnapSet) locally to do that.
     if (get_parent()->get_local_missing().is_missing(head)) {
       dout(15) << "push_to_replica missing head " << head << ", pushing raw clone" << dendl;
-      return prep_push(obc, soid, peer, pop, cache_dont_need);
-    }
-    hobject_t snapdir = head;
-    snapdir.snap = CEPH_SNAPDIR;
-    if (get_parent()->get_local_missing().is_missing(snapdir)) {
-      dout(15) << "push_to_replica missing snapdir " << snapdir
-	       << ", pushing raw clone" << dendl;
       return prep_push(obc, soid, peer, pop, cache_dont_need);
     }
 

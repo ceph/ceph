@@ -116,6 +116,7 @@ enum {
   l_bluestore_blob_split,
   l_bluestore_extent_compress,
   l_bluestore_gc_merged,
+  l_bluestore_read_eio,
   l_bluestore_last
 };
 
@@ -456,6 +457,8 @@ public:
       std::lock_guard<std::mutex> l(lock);
       return sb_map.empty();
     }
+
+    void dump(CephContext *cct, int lvl);
   };
 
 //#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
@@ -1318,6 +1321,8 @@ public:
     void clear();
     bool empty();
 
+    void dump(CephContext *cct, int lvl);
+
     /// return true if f true for any item
     bool map_any(std::function<bool(OnodeRef)> f);
   };
@@ -1841,7 +1846,7 @@ private:
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
 
-  std::mutex deferred_lock, deferred_submit_lock;
+  std::mutex deferred_lock;
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
@@ -2144,7 +2149,13 @@ public:
     return 0;
   }
 
-  int fsck(bool deep) override;
+  int fsck(bool deep) override {
+    return _fsck(deep, false);
+  }
+  int repair(bool deep) override {
+    return _fsck(deep, true);
+  }
+  int _fsck(bool deep, bool repair);
 
   void set_cache_shards(unsigned num) override;
 
@@ -2392,7 +2403,10 @@ public:
     assert(db);
     db->compact();
   }
-  
+  bool has_builtin_csum() const override {
+    return true;
+  }
+
 private:
   bool _debug_data_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
@@ -2451,6 +2465,10 @@ private:
 
       bool mark_unused;
       bool new_blob; ///< whether new blob was created
+
+      bool compressed = false;
+      bufferlist compressed_bl;
+      size_t compressed_len = 0;
 
       write_item(
 	uint64_t logical_offs,

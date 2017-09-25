@@ -1436,7 +1436,7 @@ function test_mon_osd()
   expect_false ceph osd unset sortbitwise  # cannot be unset
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
-  ceph osd require-osd-release luminous
+  ceph osd require-osd-release mimic
   # can't lower (or use new command for anything but jewel)
   expect_false ceph osd require-osd-release jewel
   # these are no-ops but should succeed.
@@ -2177,9 +2177,6 @@ function test_mon_osd_misc()
 
   # expect error about unused argument foo
   ceph osd ls foo 2>$TMPFILE; check_response 'unused' $? 22 
-
-  # expect "not in range" for invalid full ratio
-  ceph pg set_full_ratio 95 2>$TMPFILE; check_response 'not in range' $? 22
 
   # expect "not in range" for invalid overload percentage
   ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response 'higher than 100' $? 22

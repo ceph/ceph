@@ -421,8 +421,7 @@ struct bluestore_blob_use_tracker_t {
     bluestore_blob_use_tracker_t* r);
 
   bool equal(
-    const bluestore_blob_use_tracker_t& other,
-    bool strict = true) const;
+    const bluestore_blob_use_tracker_t& other) const;
     
   void bound_encode(size_t& p) const {
     denc_varint(au_size, p);

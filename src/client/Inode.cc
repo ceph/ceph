@@ -26,9 +26,6 @@ Inode::~Inode()
       << std::hex << ino << std::dec << dendl;
     assert(oset.objects.empty());
   }
-
-  delete fcntl_locks;
-  delete flock_locks;
 }
 
 ostream& operator<<(ostream &out, const Inode &in)
@@ -142,9 +139,6 @@ void Inode::get_cap_ref(int cap)
 
 int Inode::put_cap_ref(int cap)
 {
-  // if cap is always a single bit (which it seems to be)
-  // all this logic is equivalent to:
-  // if (--cap_refs[c]) return false; else return true;
   int last = 0;
   int n = 0;
   while (cap) {

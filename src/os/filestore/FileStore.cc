@@ -38,10 +38,10 @@
 #include "common/xattr.h"
 #include "chain_xattr.h"
 
-#if defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/param.h>
 #include <sys/mount.h>
-#endif // DARWIN
+#endif
 
 
 #include <fstream>
@@ -687,8 +687,7 @@ void FileStore::collect_metadata(map<string,string> *pm)
   (*pm)["filestore_f_type"] = ss.str();
 
   if (cct->_conf->filestore_collect_device_partition_information) {
-    rc = get_device_by_uuid(get_fsid(), "PARTUUID", partition_path,
-          dev_node);
+    rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
   } else {
     rc = -EINVAL;
   }
@@ -3550,7 +3549,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
 
   if (cct->_conf->filestore_punch_hole) {
 #ifdef CEPH_HAVE_FALLOCATE
-# if !defined(DARWIN) && !defined(__FreeBSD__)
+# if !defined(__APPLE__) && !defined(__FreeBSD__)
 #    ifdef FALLOC_FL_KEEP_SIZE
     // first try to punch a hole.
     FDRef fd;
@@ -3609,7 +3608,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
   }
 
 #ifdef CEPH_HAVE_FALLOCATE
-# if !defined(DARWIN) && !defined(__FreeBSD__)
+# if !defined(__APPLE__) && !defined(__FreeBSD__)
 #    ifdef FALLOC_FL_KEEP_SIZE
  out:
 #    endif
@@ -5952,9 +5951,10 @@ uint64_t FileStore::estimate_objects_overhead(uint64_t num_objects)
   return res;
 }
 
-int FileStore::apply_layout_settings(const coll_t &cid)
+int FileStore::apply_layout_settings(const coll_t &cid, int target_level)
 {
-  dout(20) << __FUNC__ << ": " << cid << dendl;
+  dout(20) << __FUNC__ << ": " << cid << " target level: " 
+           << target_level << dendl;
   Index index;
   int r = get_index(cid, &index);
   if (r < 0) {
@@ -5963,7 +5963,7 @@ int FileStore::apply_layout_settings(const coll_t &cid)
     return r;
   }
 
-  return index->apply_layout_settings();
+  return index->apply_layout_settings(target_level);
 }
 
 

@@ -123,7 +123,8 @@ class MDCache {
   LRU lru;   // dentry lru for expiring items from cache
   LRU bottom_lru; // dentries that should be trimmed ASAP
  protected:
-  ceph::unordered_map<vinodeno_t,CInode*> inode_map;  // map of inodes by ino
+  ceph::unordered_map<inodeno_t,CInode*> inode_map;  // map of head inodes by ino
+  map<vinodeno_t, CInode*> snap_inode_map;  // map of snap inodes by ino
   CInode *root;                            // root inode
   CInode *myin;                            // .ceph/mds%d dir
 
@@ -146,6 +147,38 @@ class MDCache {
   bool exceeded_size_limit;
 
 public:
+  static uint64_t cache_limit_inodes(void) {
+    return g_conf->get_val<int64_t>("mds_cache_size");
+  }
+  static uint64_t cache_limit_memory(void) {
+    return g_conf->get_val<uint64_t>("mds_cache_memory_limit");
+  }
+  static double cache_reservation(void) {
+    return g_conf->get_val<double>("mds_cache_reservation");
+  }
+  static double cache_mid(void) {
+    return g_conf->get_val<double>("mds_cache_mid");
+  }
+  static double cache_health_threshold(void) {
+    return g_conf->get_val<double>("mds_health_cache_threshold");
+  }
+  double cache_toofull_ratio(void) const {
+    uint64_t inode_limit = cache_limit_inodes();
+    double inode_reserve = inode_limit*(1.0-cache_reservation());
+    double memory_reserve = cache_limit_memory()*(1.0-cache_reservation());
+    return fmax(0.0, fmax((cache_size()-memory_reserve)/memory_reserve, inode_limit == 0 ? 0.0 : (CInode::count()-inode_reserve)/inode_reserve));
+  }
+  bool cache_toofull(void) const {
+    return cache_toofull_ratio() > 0.0;
+  }
+  uint64_t cache_size(void) const {
+    return mempool::get_pool(mempool::mds_co::id).allocated_bytes();
+  }
+  bool cache_overfull(void) const {
+    uint64_t inode_limit = cache_limit_inodes();
+    return (inode_limit > 0 && CInode::count() > inode_limit*cache_health_threshold()) || (cache_size() > cache_limit_memory()*cache_health_threshold());
+  }
+
   void advance_stray() {
     stray_index = (stray_index+1)%NUM_STRAY;
   }
@@ -671,12 +704,12 @@ public:
   CInode *get_root() { return root; }
   CInode *get_myin() { return myin; }
 
-  // cache
-  void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
 
   // trimming
-  bool trim(int max=-1, int count=-1);   // trim cache
+  bool trim(uint64_t count=0);
+private:
+  void trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*>& expiremap);
   bool trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap);
   void trim_dirfrag(CDir *dir, CDir *con,
 		    map<mds_rank_t, MCacheExpire*>& expiremap);
@@ -684,6 +717,7 @@ public:
 		  map<mds_rank_t,class MCacheExpire*>& expiremap);
   void send_expire_messages(map<mds_rank_t, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
+public:
   bool trim_non_auth_subtree(CDir *directory);
   void standby_trim_segment(LogSegment *ls);
   void try_trim_non_auth_subtree(CDir *dir);
@@ -729,14 +763,24 @@ public:
 
   // inode_map
   bool have_inode(vinodeno_t vino) {
-    return inode_map.count(vino) ? true:false;
+    if (vino.snapid == CEPH_NOSNAP)
+      return inode_map.count(vino.ino) ? true : false;
+    else
+      return snap_inode_map.count(vino) ? true : false;
   }
   bool have_inode(inodeno_t ino, snapid_t snap=CEPH_NOSNAP) {
     return have_inode(vinodeno_t(ino, snap));
   }
   CInode* get_inode(vinodeno_t vino) {
-    if (have_inode(vino))
-      return inode_map[vino];
+    if (vino.snapid == CEPH_NOSNAP) {
+      auto p = inode_map.find(vino.ino);
+      if (p != inode_map.end())
+	return p->second;
+    } else {
+      auto p = snap_inode_map.find(vino);
+      if (p != snap_inode_map.end())
+	return p->second;
+    }
     return NULL;
   }
   CInode* get_inode(inodeno_t ino, snapid_t s=CEPH_NOSNAP) {
@@ -1135,6 +1179,8 @@ public:
   int dump_cache(Formatter *f);
   int dump_cache(const std::string& dump_root, int depth, Formatter *f);
 
+  int cache_status(Formatter *f);
+
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;
 
@@ -1146,7 +1192,7 @@ public:
   CInode *hack_pick_random_inode() {
     assert(!inode_map.empty());
     int n = rand() % inode_map.size();
-    ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+    auto p = inode_map.begin();
     while (n--) ++p;
     return p->second;
   }

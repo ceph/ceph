@@ -49,7 +49,7 @@ A single-device BlueStore OSD can be provisioned with::
 
 To specify a WAL device and/or DB device, ::
 
-  ceph-disk prepare --bluestore <device> --block.wal <wal-device> --block-db <db-device>
+  ceph-disk prepare --bluestore <device> --block.wal <wal-device> --block.db <db-device>
 
 Cache size
 ==========
@@ -294,3 +294,33 @@ set with::
 :Type: Unsigned Integer
 :Required: No
 :Default: 64K
+
+SPDK Usage
+==================
+
+If you want to use SPDK driver for NVME SSD, you need to specify NVMe serial
+number here with "spdk:" prefix for ``bluestore_block_path``.
+
+For example, users can find the serial number with::
+
+  $ lspci -vvv -d 8086:0953 | grep "Device Serial Number"
+
+and then set::
+
+  bluestore block path = spdk:...
+
+If you want to run multiple SPDK instances per node, you must specify the
+amount of dpdk memory size in MB each instance will use, to make sure each
+instance uses its own dpdk memory
+
+In most cases, we only need one device to serve as data, db, db wal purposes.
+We need to make sure configurations below to make sure all IOs issued under
+SPDK.::
+
+  bluestore_block_db_path = ""
+  bluestore_block_db_size = 0
+  bluestore_block_wal_path = ""
+  bluestore_block_wal_size = 0
+
+Otherwise, the current implementation will setup symbol file to kernel
+filesystem location and uses kernel driver to issue DB/WAL IO.

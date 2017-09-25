@@ -24,7 +24,7 @@
 #include <iostream>
 #include <include/assert.h>
 #include <common/errno.h>
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) || defined(__APPLE__)
 #include <sys/types.h>
 #include <signal.h>
 #endif

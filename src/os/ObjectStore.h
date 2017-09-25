@@ -27,11 +27,11 @@
 #include <vector>
 #include <map>
 
-#if defined(DARWIN) || defined(__FreeBSD__) || defined(__sun)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__sun)
 #include <sys/statvfs.h>
 #else
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
-#endif /* DARWIN */
+#endif
 
 #define OPS_PER_PTR 32
 
@@ -1534,6 +1534,9 @@ public:
   virtual int fsck(bool deep) {
     return -EOPNOTSUPP;
   }
+  virtual int repair(bool deep) {
+    return -EOPNOTSUPP;
+  }
 
   virtual void set_cache_shards(unsigned num) { }
 
@@ -1701,7 +1704,6 @@ public:
    * @param len number of bytes to be read
    * @param bl output bufferlist
    * @param op_flags is CEPH_OSD_OP_FLAG_*
-   * @param allow_eio if false, assert on -EIO operation failure
    * @returns number of bytes read on success, or negative error code on failure.
    */
    virtual int read(
@@ -2030,6 +2032,9 @@ public:
   virtual void inject_mdata_error(const ghobject_t &oid) {}
 
   virtual void compact() {}
+  virtual bool has_builtin_csum() const {
+    return false;
+  }
 };
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 WRITE_CLASS_ENCODER(ObjectStore::Transaction::TransactionData)

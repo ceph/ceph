@@ -239,17 +239,14 @@ class interval_set {
   void intersection_size_asym(const interval_set &s, const interval_set &l) {
     typename decltype(m)::const_iterator ps = s.m.begin(), pl;
     assert(ps != s.m.end());
-    T offset = ps->first, prev_offset;
+    T offset = ps->first;
     bool first = true;
     typename decltype(m)::iterator mi = m.begin();
 
     while (1) {
       if (first)
         first = false;
-      else
-        assert(offset > prev_offset);
       pl = l.find_inc(offset);
-      prev_offset = offset;
       if (pl == l.m.end())
         break;
       while (ps != s.m.end() && ps->first + ps->second <= pl->first)

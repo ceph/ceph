@@ -104,10 +104,14 @@ public:
  */
 class RGWUserBuckets
 {
-  map<string, RGWBucketEnt> buckets;
+  std::map<std::string, RGWBucketEnt> buckets;
 
 public:
-  RGWUserBuckets() {}
+  RGWUserBuckets() = default;
+  RGWUserBuckets(RGWUserBuckets&&) = default;
+
+  RGWUserBuckets& operator=(const RGWUserBuckets&) = default;
+
   void encode(bufferlist& bl) const {
     ::encode(buckets, bl);
   }
@@ -172,7 +176,12 @@ extern int rgw_read_user_buckets(RGWRados *store,
 				 bool* is_truncated,
                                  uint64_t default_amount = 1000);
 
-extern int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket, real_time creation_time, bool update_entrypoint = true);
+extern int rgw_link_bucket(RGWRados* store,
+                           const rgw_user& user_id,
+                           rgw_bucket& bucket,
+                           ceph::real_time creation_time,
+                           std::string placement_rule,
+                           bool update_entrypoint = true);
 extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
                              const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
 

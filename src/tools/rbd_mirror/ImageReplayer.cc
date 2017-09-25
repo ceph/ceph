@@ -74,76 +74,83 @@ struct ReplayHandler : public ::journal::ReplayHandler {
   }
 };
 
+template <typename I>
 class ImageReplayerAdminSocketCommand {
 public:
+  ImageReplayerAdminSocketCommand(const std::string &desc,
+                                  ImageReplayer<I> *replayer)
+    : desc(desc), replayer(replayer) {
+  }
   virtual ~ImageReplayerAdminSocketCommand() {}
   virtual bool call(Formatter *f, stringstream *ss) = 0;
+
+  std::string desc;
+  ImageReplayer<I> *replayer;
+  bool registered = false;
 };
 
 template <typename I>
-class StatusCommand : public ImageReplayerAdminSocketCommand {
+class StatusCommand : public ImageReplayerAdminSocketCommand<I> {
 public:
-  explicit StatusCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
-
-  bool call(Formatter *f, stringstream *ss) override {
-    replayer->print_status(f, ss);
-    return true;
+  explicit StatusCommand(const std::string &desc, ImageReplayer<I> *replayer)
+    : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-private:
-  ImageReplayer<I> *replayer;
-};
-
-template <typename I>
-class StartCommand : public ImageReplayerAdminSocketCommand {
-public:
-  explicit StartCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
-
   bool call(Formatter *f, stringstream *ss) override {
-    replayer->start(nullptr, true);
+    this->replayer->print_status(f, ss);
     return true;
   }
-
-private:
-  ImageReplayer<I> *replayer;
 };
 
 template <typename I>
-class StopCommand : public ImageReplayerAdminSocketCommand {
+class StartCommand : public ImageReplayerAdminSocketCommand<I> {
 public:
-  explicit StopCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
-
-  bool call(Formatter *f, stringstream *ss) override {
-    replayer->stop(nullptr, true);
-    return true;
+  explicit StartCommand(const std::string &desc, ImageReplayer<I> *replayer)
+    : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-private:
-  ImageReplayer<I> *replayer;
-};
-
-template <typename I>
-class RestartCommand : public ImageReplayerAdminSocketCommand {
-public:
-  explicit RestartCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
-
   bool call(Formatter *f, stringstream *ss) override {
-    replayer->restart();
+    this->replayer->start(nullptr, true);
     return true;
   }
-
-private:
-  ImageReplayer<I> *replayer;
 };
 
 template <typename I>
-class FlushCommand : public ImageReplayerAdminSocketCommand {
+class StopCommand : public ImageReplayerAdminSocketCommand<I> {
 public:
-  explicit FlushCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
+  explicit StopCommand(const std::string &desc, ImageReplayer<I> *replayer)
+    : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
+  }
+
+  bool call(Formatter *f, stringstream *ss) override {
+    this->replayer->stop(nullptr, true);
+    return true;
+  }
+};
+
+template <typename I>
+class RestartCommand : public ImageReplayerAdminSocketCommand<I> {
+public:
+  explicit RestartCommand(const std::string &desc, ImageReplayer<I> *replayer)
+    : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
+  }
+
+  bool call(Formatter *f, stringstream *ss) override {
+    this->replayer->restart();
+    return true;
+  }
+};
+
+template <typename I>
+class FlushCommand : public ImageReplayerAdminSocketCommand<I> {
+public:
+  explicit FlushCommand(const std::string &desc, ImageReplayer<I> *replayer)
+    : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
+  }
 
   bool call(Formatter *f, stringstream *ss) override {
     C_SaferCond cond;
-    replayer->flush(&cond);
+    this->replayer->flush(&cond);
     int r = cond.wait();
     if (r < 0) {
       *ss << "flush: " << cpp_strerror(r);
@@ -151,9 +158,6 @@ public:
     }
     return true;
   }
-
-private:
-  ImageReplayer<I> *replayer;
 };
 
 template <typename I>
@@ -161,72 +165,44 @@ class ImageReplayerAdminSocketHook : public AdminSocketHook {
 public:
   ImageReplayerAdminSocketHook(CephContext *cct, const std::string &name,
 			       ImageReplayer<I> *replayer)
-    : admin_socket(cct->get_admin_socket()), name(name), replayer(replayer),
-      lock("ImageReplayerAdminSocketHook::lock " +
-             replayer->get_global_image_id()) {
+    : admin_socket(cct->get_admin_socket()),
+      commands{{"rbd mirror flush " + name,
+                new FlushCommand<I>("flush rbd mirror " + name, replayer)},
+               {"rbd mirror restart " + name,
+                new RestartCommand<I>("restart rbd mirror " + name, replayer)},
+               {"rbd mirror start " + name,
+                new StartCommand<I>("start rbd mirror " + name, replayer)},
+               {"rbd mirror status " + name,
+                new StatusCommand<I>("get status for rbd mirror " + name, replayer)},
+               {"rbd mirror stop " + name,
+                new StopCommand<I>("stop rbd mirror " + name, replayer)}} {
   }
 
   int register_commands() {
-    std::string command;
-    int r;
-
-    command = "rbd mirror status " + name;
-    r = admin_socket->register_command(command, command, this,
-				       "get status for rbd mirror " + name);
-    if (r < 0) {
-      return r;
+    for (auto &it : commands) {
+      int r = admin_socket->register_command(it.first, it.first, this,
+                                             it.second->desc);
+      if (r < 0) {
+        return r;
+      }
+      it.second->registered = true;
     }
-    commands[command] = new StatusCommand<I>(replayer);
-
-    command = "rbd mirror start " + name;
-    r = admin_socket->register_command(command, command, this,
-				       "start rbd mirror " + name);
-    if (r < 0) {
-      return r;
-    }
-    commands[command] = new StartCommand<I>(replayer);
-
-    command = "rbd mirror stop " + name;
-    r = admin_socket->register_command(command, command, this,
-				       "stop rbd mirror " + name);
-    if (r < 0) {
-      return r;
-    }
-    commands[command] = new StopCommand<I>(replayer);
-
-    command = "rbd mirror restart " + name;
-    r = admin_socket->register_command(command, command, this,
-				       "restart rbd mirror " + name);
-    if (r < 0) {
-      return r;
-    }
-    commands[command] = new RestartCommand<I>(replayer);
-
-    command = "rbd mirror flush " + name;
-    r = admin_socket->register_command(command, command, this,
-				       "flush rbd mirror " + name);
-    if (r < 0) {
-      return r;
-    }
-    commands[command] = new FlushCommand<I>(replayer);
-
     return 0;
   }
 
   ~ImageReplayerAdminSocketHook() override {
-    Mutex::Locker locker(lock);
-    for (Commands::const_iterator i = commands.begin(); i != commands.end();
-	 ++i) {
-      (void)admin_socket->unregister_command(i->first);
-      delete i->second;
+    for (auto &it : commands) {
+      if (it.second->registered) {
+        admin_socket->unregister_command(it.first);
+      }
+      delete it.second;
     }
     commands.clear();
   }
 
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) override {
-    Mutex::Locker locker(lock);
-    Commands::const_iterator i = commands.find(command);
+    auto i = commands.find(command);
     assert(i != commands.end());
     Formatter *f = Formatter::create(format);
     stringstream ss;
@@ -237,12 +213,9 @@ public:
   }
 
 private:
-  typedef std::map<std::string, ImageReplayerAdminSocketCommand*> Commands;
+  typedef std::map<std::string, ImageReplayerAdminSocketCommand<I> *> Commands;
 
   AdminSocket *admin_socket;
-  std::string name;
-  ImageReplayer<I> *replayer;
-  Mutex lock;
   Commands commands;
 };
 
@@ -606,20 +579,7 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     return;
   }
 
-  {
-    Mutex::Locker locker(m_lock);
-    std::string name = m_local_ioctx.get_pool_name() + "/" +
-                       m_local_image_ctx->name;
-    if (m_name != name) {
-      m_name = name;
-      if (m_asok_hook) {
-	// Re-register asok commands using the new name.
-	delete m_asok_hook;
-	m_asok_hook = nullptr;
-      }
-    }
-    register_admin_socket_hook();
-  }
+  on_name_changed();
 
   update_mirror_image_status(false, boost::none);
   init_remote_journaler();
@@ -1275,6 +1235,8 @@ void ImageReplayer<I>::handle_process_entry_ready(int r) {
   dout(20) << dendl;
   assert(r == 0);
 
+  on_name_changed();
+
   // attempt to process the next event
   handle_replay_ready();
 }
@@ -1665,6 +1627,7 @@ template <typename I>
 void ImageReplayer<I>::handle_shut_down(int r) {
   reschedule_update_status_task(-1);
 
+  bool unregister_asok_hook = false;
   {
     Mutex::Locker locker(m_lock);
 
@@ -1696,15 +1659,19 @@ void ImageReplayer<I>::handle_shut_down(int r) {
       m_local_image_id = "";
       m_resync_requested = false;
       if (m_delete_requested) {
-        unregister_admin_socket_hook();
+        unregister_asok_hook = true;
         m_delete_requested = false;
       }
     } else if (m_last_r == -ENOENT &&
                m_local_image_id.empty() && m_remote_image.image_id.empty()) {
       dout(0) << "mirror image no longer exists" << dendl;
-      unregister_admin_socket_hook();
+      unregister_asok_hook = true;
       m_finished = true;
     }
+  }
+
+  if (unregister_asok_hook) {
+    unregister_admin_socket_hook();
   }
 
   dout(20) << "stop complete" << dendl;
@@ -1789,30 +1756,51 @@ void ImageReplayer<I>::resync_image(Context *on_finish) {
 
 template <typename I>
 void ImageReplayer<I>::register_admin_socket_hook() {
-  if (m_asok_hook != nullptr) {
-    return;
-  }
+  ImageReplayerAdminSocketHook<I> *asok_hook;
+  {
+    Mutex::Locker locker(m_lock);
+    if (m_asok_hook != nullptr) {
+      return;
+    }
 
-  dout(20) << "registered asok hook: " << m_name << dendl;
-  auto asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
-                                                       this);
-  int r = asok_hook->register_commands();
-  if (r < 0) {
+    dout(20) << "registered asok hook: " << m_name << dendl;
+    asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
+                                                    this);
+    int r = asok_hook->register_commands();
+    if (r == 0) {
+      m_asok_hook = asok_hook;
+      return;
+    }
     derr << "error registering admin socket commands" << dendl;
-    delete asok_hook;
-    asok_hook = nullptr;
-    return;
   }
-
-  m_asok_hook = asok_hook;
+  delete asok_hook;
 }
 
 template <typename I>
 void ImageReplayer<I>::unregister_admin_socket_hook() {
   dout(20) << dendl;
 
-  delete m_asok_hook;
-  m_asok_hook = nullptr;
+  AdminSocketHook *asok_hook = nullptr;
+  {
+    Mutex::Locker locker(m_lock);
+    std::swap(asok_hook, m_asok_hook);
+  }
+  delete asok_hook;
+}
+
+template <typename I>
+void ImageReplayer<I>::on_name_changed() {
+  {
+    Mutex::Locker locker(m_lock);
+    std::string name = m_local_ioctx.get_pool_name() + "/" +
+      m_local_image_ctx->name;
+    if (m_name == name) {
+      return;
+    }
+    m_name = name;
+  }
+  unregister_admin_socket_hook();
+  register_admin_socket_hook();
 }
 
 template <typename I>

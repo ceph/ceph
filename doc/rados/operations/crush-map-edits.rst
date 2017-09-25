@@ -611,7 +611,7 @@ below::
 
 You can then set a pool to use the SSD rule by::
 
-  ceph osd pool set <poolname> crush_ruleset 4
+  ceph osd pool set <poolname> crush_rule ssd
 
 Similarly, using the ``ssd-primary`` rule will cause each placement group in the
 pool to be placed with an SSD as the primary and platters as the replicas.

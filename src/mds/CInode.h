@@ -127,9 +127,23 @@ public:
 };
 WRITE_CLASS_ENCODER_FEATURES(InodeStore)
 
+// just for ceph-dencoder
+class InodeStoreBare : public InodeStore {
+public:
+  void encode(bufferlist &bl, uint64_t features) const {
+    InodeStore::encode_bare(bl, features);
+  }
+  void decode(bufferlist::iterator &bl) {
+    InodeStore::decode_bare(bl);
+  }
+  static void generate_test_instances(std::list<InodeStoreBare*>& ls);
+};
+WRITE_CLASS_ENCODER_FEATURES(InodeStoreBare)
+
 // cached inode wrapper
 class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CInode> {
  public:
+  MEMPOOL_CLASS_HELPERS();
   // -- pins --
   static const int PIN_DIRFRAG =         -1; 
   static const int PIN_CAPS =             2;  // client caps

@@ -593,6 +593,16 @@ set_image_meta()
     rbd --cluster ${cluster} -p ${pool} image-meta set ${image} $key $val
 }
 
+rename_image()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local new_name=$4
+
+    rbd --cluster=${cluster} -p ${pool} rename ${image} ${new_name}
+}
+
 remove_image()
 {
     local cluster=$1

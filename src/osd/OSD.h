@@ -841,7 +841,7 @@ private:
   map<pg_t, vector<int> > pg_temp_pending;
   void _sent_pg_temp();
 public:
-  void queue_want_pg_temp(pg_t pgid, vector<int>& want);
+  void queue_want_pg_temp(pg_t pgid, const vector<int>& want);
   void remove_want_pg_temp(pg_t pgid);
   void requeue_pg_temp();
   void send_pg_temp();
@@ -871,7 +871,7 @@ public:
 	cct->_conf->osd_scrub_cost,
 	scrub_queue_priority,
 	ceph_clock_now(),
-	entity_inst_t(),
+	0,
 	pg->get_osdmap()->get_epoch()));
   }
 
@@ -899,7 +899,7 @@ private:
 	cct->_conf->osd_recovery_cost,
 	cct->_conf->osd_recovery_priority,
 	ceph_clock_now(),
-	entity_inst_t(),
+	0,
 	p.first));
   }
 public:
@@ -935,16 +935,10 @@ public:
   }
   void clear_queued_recovery(PG *pg) {
     Mutex::Locker l(recovery_lock);
-    for (list<pair<epoch_t, PGRef> >::iterator i = awaiting_throttle.begin();
-	 i != awaiting_throttle.end();
-      ) {
-      if (i->second.get() == pg) {
-	awaiting_throttle.erase(i);
-	return;
-      } else {
-	++i;
-      }
-    }
+    awaiting_throttle.remove_if(
+      [pg](decltype(awaiting_throttle)::const_reference awaiting ) {
+	return awaiting.second.get() == pg;
+      });
   }
   // delayed pg activation
   void queue_for_recovery(PG *pg) {
@@ -1141,6 +1135,8 @@ public:
     return ret;
   }
 
+  void request_osdmap_update(epoch_t e);
+
   // -- stopping --
   Mutex is_stopping_lock;
   Cond is_stopping_cond;
@@ -1149,7 +1145,7 @@ public:
     PREPARING_TO_STOP,
     STOPPING };
   std::atomic_int state{NOT_STOPPING};
-  int get_state() {
+  int get_state() const {
     return state;
   }
   void set_state(int s) {
@@ -1451,6 +1447,9 @@ private:
   void osdmap_subscribe(version_t epoch, bool force_request);
   /** @} monc helpers */
 
+  Mutex osdmap_subscribe_lock;
+  epoch_t latest_subscribed_epoch{0};
+
   // -- heartbeat --
   /// information about a heartbeat peer
   struct HeartbeatInfo {
@@ -1632,7 +1631,7 @@ private:
       OSDMapRef waiting_for_pg_osdmap;
       struct pg_slot {
 	PGRef pg;                     ///< cached pg reference [optional]
-	list<PGQueueable> to_process; ///< order items for this slot
+	deque<PGQueueable> to_process; ///< order items for this slot
 	int num_running = 0;          ///< _process threads doing pg lookup/lock
 
 	/// true if pg does/did not exist. if so all new items go directly to
@@ -1650,7 +1649,7 @@ private:
       unordered_map<spg_t,pg_slot> pg_slots;
 
       /// priority queue
-      std::unique_ptr<OpQueue< pair<spg_t, PGQueueable>, entity_inst_t>> pqueue;
+      std::unique_ptr<OpQueue< pair<spg_t, PGQueueable>, uint64_t>> pqueue;
 
       void _enqueue_front(pair<spg_t, PGQueueable> item, unsigned cutoff) {
 	unsigned priority = item.second.get_priority();
@@ -1674,13 +1673,13 @@ private:
 				 false, cct) {
 	if (opqueue == io_queue::weightedpriority) {
 	  pqueue = std::unique_ptr
-	    <WeightedPriorityQueue<pair<spg_t,PGQueueable>,entity_inst_t>>(
-	      new WeightedPriorityQueue<pair<spg_t,PGQueueable>,entity_inst_t>(
+	    <WeightedPriorityQueue<pair<spg_t,PGQueueable>,uint64_t>>(
+	      new WeightedPriorityQueue<pair<spg_t,PGQueueable>,uint64_t>(
 		max_tok_per_prio, min_cost));
 	} else if (opqueue == io_queue::prioritized) {
 	  pqueue = std::unique_ptr
-	    <PrioritizedQueue<pair<spg_t,PGQueueable>,entity_inst_t>>(
-	      new PrioritizedQueue<pair<spg_t,PGQueueable>,entity_inst_t>(
+	    <PrioritizedQueue<pair<spg_t,PGQueueable>,uint64_t>>(
+	      new PrioritizedQueue<pair<spg_t,PGQueueable>,uint64_t>(
 		max_tok_per_prio, min_cost));
 	} else if (opqueue == io_queue::mclock_opclass) {
 	  pqueue = std::unique_ptr

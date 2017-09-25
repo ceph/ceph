@@ -118,11 +118,14 @@ rgw_http_errors rgw_http_s3_errors({
 rgw_http_errors rgw_http_swift_errors({
     { EACCES, {403, "AccessDenied" }},
     { EPERM, {401, "AccessDenied" }},
+    { ENAMETOOLONG, {400, "Metadata name too long" }},
     { ERR_USER_SUSPENDED, {401, "UserSuspended" }},
     { ERR_INVALID_UTF8, {412, "Invalid UTF8" }},
     { ERR_BAD_URL, {412, "Bad URL" }},
     { ERR_NOT_SLO_MANIFEST, {400, "Not an SLO manifest" }},
     { ERR_QUOTA_EXCEEDED, {413, "QuotaExceeded" }},
+    { ENOTEMPTY, {409, "There was a conflict when trying "
+                       "to complete your request." }},
     /* FIXME(rzarzynski): we need to find a way to apply Swift's error handling
      * procedures also for ERR_ZERO_IN_URL. This make a problem as the validation
      * is performed very early, even before setting the req_state::proto_flags. */
@@ -341,7 +344,17 @@ void set_req_state_err(struct req_state* s, int err_no, const string& err_msg)
 {
   if (s) {
     set_req_state_err(s, err_no);
-    s->err.message = err_msg;
+    if (s->prot_flags & RGW_REST_SWIFT && !err_msg.empty()) {
+      /* TODO(rzarzynski): there never ever should be a check like this one.
+       * It's here only for the sake of the patch's backportability. Further
+       * commits will move the logic to a per-RGWHandler replacement of
+       * the end_header() function. Alternativaly, we might consider making
+       * that just for the dump(). Please take a look on @cbodley's comments
+       * in PR #10690 (https://github.com/ceph/ceph/pull/10690). */
+      s->err.err_code = err_msg;
+    } else {
+      s->err.message = err_msg;
+    }
   }
 }
 

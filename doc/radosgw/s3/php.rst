@@ -119,8 +119,8 @@ This deletes the bucket called ``my-old-bucket`` and returns a
 	$Connection->delete_bucket('my-old-bucket');
 
 
-Forced Delte for Non-empty Buckets
-----------------------------------
+Forced Delete for Non-empty Buckets
+-----------------------------------
 
 This will delete the bucket even if it is not empty.
 

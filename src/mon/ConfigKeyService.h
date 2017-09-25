@@ -57,8 +57,6 @@ public:
    * @{
    */
   void init() override { }
-  void get_health(list<pair<health_status_t,string> >& summary,
-                  list<pair<health_status_t,string> > *detail) override { }
   bool service_dispatch(MonOpRequestRef op) override;
 
   void start_epoch() override { }
@@ -81,7 +79,7 @@ public:
   string get_name() const override {
     return "config_key";
   }
-  virtual void get_store_prefixes(set<string>& s);
+  void get_store_prefixes(set<string>& s) const;
   /**
    * @} // ConfigKeyService_Inherited_h
    */

@@ -795,10 +795,8 @@ public:
 
   explicit eversion_t(bufferlist& bl) : __pad(0) { decode(bl); }
 
-  static eversion_t max() {
-    eversion_t max;
-    max.version -= 1;
-    max.epoch -= 1;
+  static const eversion_t& max() {
+    static const eversion_t max(-1,-1);
     return max;
   }
 
@@ -1156,6 +1154,9 @@ struct pg_pool_t {
     FLAG_WRITE_FADVISE_DONTNEED = 1<<7, // write mode with LIBRADOS_OP_FLAG_FADVISE_DONTNEED
     FLAG_NOSCRUB = 1<<8, // block periodic scrub
     FLAG_NODEEP_SCRUB = 1<<9, // block periodic deep-scrub
+    FLAG_FULL_QUOTA = 1<<10, // pool is currently running out of quota, will set FLAG_FULL too
+    FLAG_NEARFULL = 1<<11, // pool is nearfull
+    FLAG_BACKFILLFULL = 1<<12, // pool is backfillfull
   };
 
   static const char *get_flag_name(int f) {
@@ -1170,6 +1171,9 @@ struct pg_pool_t {
     case FLAG_WRITE_FADVISE_DONTNEED: return "write_fadvise_dontneed";
     case FLAG_NOSCRUB: return "noscrub";
     case FLAG_NODEEP_SCRUB: return "nodeep-scrub";
+    case FLAG_FULL_QUOTA: return "full_quota";
+    case FLAG_NEARFULL: return "nearfull";
+    case FLAG_BACKFILLFULL: return "backfillfull";
     default: return "???";
     }
   }
@@ -1208,6 +1212,12 @@ struct pg_pool_t {
       return FLAG_NOSCRUB;
     if (name == "nodeep-scrub")
       return FLAG_NODEEP_SCRUB;
+    if (name == "full_quota")
+      return FLAG_FULL_QUOTA;
+    if (name == "nearfull")
+      return FLAG_NEARFULL;
+    if (name == "backfillfull")
+      return FLAG_BACKFILLFULL;
     return 0;
   }
 
@@ -4447,21 +4457,16 @@ inline ostream& operator<<(ostream& out, const OSDSuperblock& sb)
  */
 struct SnapSet {
   snapid_t seq;
-  bool head_exists;
   vector<snapid_t> snaps;    // descending
   vector<snapid_t> clones;   // ascending
   map<snapid_t, interval_set<uint64_t> > clone_overlap;  // overlap w/ next newest
   map<snapid_t, uint64_t> clone_size;
   map<snapid_t, vector<snapid_t>> clone_snaps; // descending
 
-  SnapSet() : seq(0), head_exists(false) {}
+  SnapSet() : seq(0) {}
   explicit SnapSet(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
     decode(p);
-  }
-
-  bool is_legacy() const {
-    return clone_snaps.size() < clones.size() || !head_exists;
   }
 
   /// populate SnapSet from a librados::snap_set_t
@@ -4646,9 +4651,6 @@ struct object_info_t {
     return get_flag_string(flags);
   }
 
-  /// [clone] descending. pre-luminous; moved to SnapSet
-  vector<snapid_t> legacy_snaps;
-
   uint64_t truncate_seq, truncate_size;
 
   map<pair<uint64_t, entity_name_t>, watch_info_t> watchers;
@@ -4719,8 +4721,8 @@ struct object_info_t {
     omap_digest = -1;
   }
   void new_object() {
-    set_data_digest(-1);
-    set_omap_digest(-1);
+    clear_data_digest();
+    clear_omap_digest();
   }
 
   void encode(bufferlist& bl, uint64_t features) const;

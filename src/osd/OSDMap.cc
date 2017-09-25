@@ -20,6 +20,7 @@
 #include "OSDMap.h"
 #include <algorithm>
 #include "common/config.h"
+#include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"
 #include "include/ceph_features.h"
@@ -30,8 +31,8 @@
 
 #include "crush/CrushTreeDumper.h"
 #include "common/Clock.h"
-#include "mon/PGStatService.h"
- 
+#include "mon/PGMap.h"
+
 #define dout_subsys ceph_subsys_osd
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMap, osdmap, osdmap);
@@ -1145,57 +1146,40 @@ int OSDMap::calc_num_osds()
   return num_osd;
 }
 
-void OSDMap::count_full_nearfull_osds(int *full, int *backfill, int *nearfull) const
+void OSDMap::get_full_pools(CephContext *cct,
+                            set<int64_t> *full,
+                            set<int64_t> *backfillfull,
+                            set<int64_t> *nearfull) const
 {
-  *full = 0;
-  *backfill = 0;
-  *nearfull = 0;
+  assert(full);
+  assert(backfillfull);
+  assert(nearfull);
+  full->clear();
+  backfillfull->clear();
+  nearfull->clear();
+
+  vector<int> full_osds;
+  vector<int> backfillfull_osds;
+  vector<int> nearfull_osds;
   for (int i = 0; i < max_osd; ++i) {
     if (exists(i) && is_up(i) && is_in(i)) {
       if (osd_state[i] & CEPH_OSD_FULL)
-	++(*full);
+        full_osds.push_back(i);
       else if (osd_state[i] & CEPH_OSD_BACKFILLFULL)
-	++(*backfill);
+	backfillfull_osds.push_back(i);
       else if (osd_state[i] & CEPH_OSD_NEARFULL)
-	++(*nearfull);
+	nearfull_osds.push_back(i);
     }
   }
-}
 
-static bool get_osd_utilization(
-  const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &osd_stat,
-  int id, int64_t* kb, int64_t* kb_used, int64_t* kb_avail)
-{
-  auto p = osd_stat.find(id);
-  if (p == osd_stat.end())
-    return false;
-  *kb = p->second.kb;
-  *kb_used = p->second.kb_used;
-  *kb_avail = p->second.kb_avail;
-  return *kb > 0;
-}
-
-void OSDMap::get_full_osd_util(
-  const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &osd_stat,
-  map<int, float> *full, map<int, float> *backfill, map<int, float> *nearfull) const
-{
-  full->clear();
-  backfill->clear();
-  nearfull->clear();
-  for (int i = 0; i < max_osd; ++i) {
-    if (exists(i) && is_up(i) && is_in(i)) {
-      int64_t kb, kb_used, kb_avail;
-      if (osd_state[i] & CEPH_OSD_FULL) {
-        if (get_osd_utilization(osd_stat, i, &kb, &kb_used, &kb_avail))
-	  full->emplace(i, (float)kb_used / (float)kb);
-      } else if (osd_state[i] & CEPH_OSD_BACKFILLFULL) {
-        if (get_osd_utilization(osd_stat, i, &kb, &kb_used, &kb_avail))
-	  backfill->emplace(i, (float)kb_used / (float)kb);
-      } else if (osd_state[i] & CEPH_OSD_NEARFULL) {
-        if (get_osd_utilization(osd_stat, i, &kb, &kb_used, &kb_avail))
-	  nearfull->emplace(i, (float)kb_used / (float)kb);
-      }
-    }
+  for (auto i: full_osds) {
+    get_pool_ids_by_osd(cct, i, full);
+  }
+  for (auto i: backfillfull_osds) {
+    get_pool_ids_by_osd(cct, i, backfillfull);
+  }
+  for (auto i: nearfull_osds) {
+    get_pool_ids_by_osd(cct, i, nearfull);
   }
 }
 
@@ -1939,17 +1923,28 @@ void OSDMap::_apply_upmap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
 
   auto q = pg_upmap_items.find(pg);
   if (q != pg_upmap_items.end()) {
-    for (auto& i : *raw) {
-      for (auto& r : q->second) {
-        if (r.first != i) {
-          continue;
-        }
-        if (!(r.second != CRUSH_ITEM_NONE &&
-              r.second < max_osd &&
-              osd_weight[r.second] == 0)) {
-          i = r.second;
-        }
-        break;
+    // NOTE: this approach does not allow a bidirectional swap,
+    // e.g., [[1,2],[2,1]] applied to [0,1,2] -> [0,2,1].
+    for (auto& r : q->second) {
+      // make sure the replacement value doesn't already appear
+      bool exists = false;
+      ssize_t pos = -1;
+      for (unsigned i = 0; i < raw->size(); ++i) {
+	int osd = (*raw)[i];
+	if (osd == r.second) {
+	  exists = true;
+	  break;
+	}
+	// ignore mapping if target is marked out (or invalid osd id)
+	if (osd == r.first &&
+	    pos < 0 &&
+	    !(r.second != CRUSH_ITEM_NONE && r.second < max_osd &&
+	      osd_weight[r.second] == 0)) {
+	  pos = i;
+	}
+      }
+      if (!exists && pos >= 0) {
+	(*raw)[pos] = r.second;
       }
     }
   }
@@ -3252,13 +3247,45 @@ void OSDMap::print_oneline_summary(ostream& out) const
     out << " nearfull";
 }
 
-bool OSDMap::crush_ruleset_in_use(int ruleset) const
+bool OSDMap::crush_rule_in_use(int rule_id) const
 {
   for (const auto &pool : pools) {
-    if (pool.second.crush_rule == ruleset)
+    if (pool.second.crush_rule == rule_id)
       return true;
   }
   return false;
+}
+
+int OSDMap::validate_crush_rules(CrushWrapper *newcrush,
+				 ostream *ss) const
+{
+  for (auto& i : pools) {
+    auto& pool = i.second;
+    int ruleno = pool.get_crush_rule();
+    if (!newcrush->rule_exists(ruleno)) {
+      *ss << "pool " << i.first << " references crush_rule " << ruleno
+	  << " but it is not present";
+      return -EINVAL;
+    }
+    if (newcrush->get_rule_mask_ruleset(ruleno) != ruleno) {
+      *ss << "rule " << ruleno << " mask ruleset does not match rule id";
+      return -EINVAL;
+    }
+    if (newcrush->get_rule_mask_type(ruleno) != (int)pool.get_type()) {
+      *ss << "pool " << i.first << " type does not match rule " << ruleno;
+      return -EINVAL;
+    }
+    int poolsize = pool.get_size();
+    if (poolsize < newcrush->get_rule_mask_min_size(ruleno) ||
+	poolsize > newcrush->get_rule_mask_max_size(ruleno)) {
+      *ss << "pool " << i.first << " size " << poolsize << " does not"
+	  << " fall within rule " << ruleno
+	  << " min_size " << newcrush->get_rule_mask_min_size(ruleno)
+	  << " and max_size " << newcrush->get_rule_mask_max_size(ruleno);
+      return -EINVAL;
+    }
+  }
+  return 0;
 }
 
 int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
@@ -3962,16 +3989,41 @@ int OSDMap::get_osds_by_bucket_name(const string &name, set<int> *osds) const
   return crush->get_leaves(name, osds);
 }
 
+// get pools whose crush rules might reference the given osd
+void OSDMap::get_pool_ids_by_osd(CephContext *cct,
+                                int osd,
+                                set<int64_t> *pool_ids) const
+{
+  assert(pool_ids);
+  set<int> raw_rules;
+  int r = crush->get_rules_by_osd(osd, &raw_rules);
+  if (r < 0) {
+    lderr(cct) << __func__ << " get_rules_by_osd failed: " << cpp_strerror(r)
+               << dendl;
+    assert(r >= 0);
+  }
+  set<int> rules;
+  for (auto &i: raw_rules) {
+    // exclude any dead rule
+    if (crush_rule_in_use(i)) {
+      rules.insert(i);
+    }
+  }
+  for (auto &r: rules) {
+    get_pool_ids_by_rule(r, pool_ids);
+  }
+}
+
 template <typename F>
 class OSDUtilizationDumper : public CrushTreeDumper::Dumper<F> {
 public:
   typedef CrushTreeDumper::Dumper<F> Parent;
 
   OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
-		       const PGStatService *pgs_, bool tree_) :
+		       const PGMap& pgmap_, bool tree_) :
     Parent(crush, osdmap_->get_pool_names()),
     osdmap(osdmap_),
-    pgs(pgs_),
+    pgmap(pgmap_),
     tree(tree_),
     average_util(average_utilization()),
     min_var(-1),
@@ -4003,7 +4055,7 @@ protected:
     if (average_util)
       var = util / average_util;
 
-    size_t num_pgs = qi.is_bucket() ? 0 : pgs->get_num_pg_by_osd(qi.id);
+    size_t num_pgs = qi.is_bucket() ? 0 : pgmap.get_num_pg_by_osd(qi.id);
 
     dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, num_pgs, f);
 
@@ -4050,7 +4102,7 @@ protected:
 
   bool get_osd_utilization(int id, int64_t* kb, int64_t* kb_used,
 			   int64_t* kb_avail) const {
-    const osd_stat_t *p = pgs->get_osd_stat(id);
+    const osd_stat_t *p = pgmap.get_osd_stat(id);
     if (!p) return false;
     *kb = p->kb;
     *kb_used = p->kb_used;
@@ -4088,7 +4140,7 @@ protected:
 
 protected:
   const OSDMap *osdmap;
-  const PGStatService *pgs;
+  const PGMap& pgmap;
   bool tree;
   double average_util;
   double min_var;
@@ -4103,8 +4155,8 @@ public:
   typedef OSDUtilizationDumper<TextTable> Parent;
 
   OSDUtilizationPlainDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-		     const PGStatService *pgs, bool tree) :
-    Parent(crush, osdmap, pgs, tree) {}
+			    const PGMap& pgmap, bool tree) :
+    Parent(crush, osdmap, pgmap, tree) {}
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
@@ -4127,9 +4179,9 @@ public:
     *tbl << ""
 	 << ""
 	 << "" << "TOTAL"
-	 << si_t(pgs->get_osd_sum().kb << 10)
-	 << si_t(pgs->get_osd_sum().kb_used << 10)
-	 << si_t(pgs->get_osd_sum().kb_avail << 10)
+	 << si_t(pgmap.get_osd_sum().kb << 10)
+	 << si_t(pgmap.get_osd_sum().kb_used << 10)
+	 << si_t(pgmap.get_osd_sum().kb_avail << 10)
 	 << lowprecision_t(average_util)
 	 << ""
 	 << TextTable::endrow;
@@ -4216,8 +4268,8 @@ public:
   typedef OSDUtilizationDumper<Formatter> Parent;
 
   OSDUtilizationFormatDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-			     const PGStatService *pgs, bool tree) :
-    Parent(crush, osdmap, pgs, tree) {}
+			     const PGMap& pgmap, bool tree) :
+    Parent(crush, osdmap, pgmap, tree) {}
 
   void dump(Formatter *f) {
     f->open_array_section("nodes");
@@ -4256,9 +4308,9 @@ protected:
 public:
   void summary(Formatter *f) {
     f->open_object_section("summary");
-    f->dump_int("total_kb", pgs->get_osd_sum().kb);
-    f->dump_int("total_kb_used", pgs->get_osd_sum().kb_used);
-    f->dump_int("total_kb_avail", pgs->get_osd_sum().kb_avail);
+    f->dump_int("total_kb", pgmap.get_osd_sum().kb);
+    f->dump_int("total_kb_used", pgmap.get_osd_sum().kb_used);
+    f->dump_int("total_kb_avail", pgmap.get_osd_sum().kb_avail);
     f->dump_float("average_utilization", average_util);
     f->dump_float("min_var", min_var);
     f->dump_float("max_var", max_var);
@@ -4268,7 +4320,7 @@ public:
 };
 
 void print_osd_utilization(const OSDMap& osdmap,
-			   const PGStatService *pgstat,
+			   const PGMap& pgmap,
 			   ostream& out,
 			   Formatter *f,
 			   bool tree)
@@ -4276,13 +4328,13 @@ void print_osd_utilization(const OSDMap& osdmap,
   const CrushWrapper *crush = osdmap.crush.get();
   if (f) {
     f->open_object_section("df");
-    OSDUtilizationFormatDumper d(crush, &osdmap, pgstat, tree);
+    OSDUtilizationFormatDumper d(crush, &osdmap, pgmap, tree);
     d.dump(f);
     d.summary(f);
     f->close_section();
     f->flush(out);
   } else {
-    OSDUtilizationPlainDumper d(crush, &osdmap, pgstat, tree);
+    OSDUtilizationPlainDumper d(crush, &osdmap, pgmap, tree);
     TextTable tbl;
     d.dump(&tbl);
     out << tbl << d.summary() << "\n";
@@ -4517,6 +4569,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
   {
     // warn about flags
     uint64_t warn_flags =
+      CEPH_OSDMAP_NEARFULL |
       CEPH_OSDMAP_FULL |
       CEPH_OSDMAP_PAUSERD |
       CEPH_OSDMAP_PAUSEWR |
@@ -4623,23 +4676,49 @@ void OSDMap::check_health(health_check_map_t *checks) const
   // OSD_UPGRADE_FINISHED
   // none of these (yet) since we don't run until luminous upgrade is done.
 
-  // POOL_FULL
+  // POOL_NEARFULL/BACKFILLFULL/FULL
   {
-    list<string> detail;
+    list<string> full_detail, backfillfull_detail, nearfull_detail;
     for (auto it : get_pools()) {
       const pg_pool_t &pool = it.second;
+      const string& pool_name = get_pool_name(it.first);
       if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
-	const string& pool_name = get_pool_name(it.first);
 	stringstream ss;
-	ss << "pool '" << pool_name << "' is full";
-	detail.push_back(ss.str());
+        if (pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
+          // may run out of space too,
+          // but we want EQUOTA taking precedence
+          ss << "pool '" << pool_name << "' is full (running out of quota)";
+        } else {
+          ss << "pool '" << pool_name << "' is full (no space)";
+        }
+	full_detail.push_back(ss.str());
+      } else if (pool.has_flag(pg_pool_t::FLAG_BACKFILLFULL)) {
+        stringstream ss;
+        ss << "pool '" << pool_name << "' is backfillfull";
+        backfillfull_detail.push_back(ss.str());
+      } else if (pool.has_flag(pg_pool_t::FLAG_NEARFULL)) {
+        stringstream ss;
+        ss << "pool '" << pool_name << "' is nearfull";
+        nearfull_detail.push_back(ss.str());
       }
     }
-    if (!detail.empty()) {
+    if (!full_detail.empty()) {
       ostringstream ss;
-      ss << detail.size() << " pool(s) full";
+      ss << full_detail.size() << " pool(s) full";
       auto& d = checks->add("POOL_FULL", HEALTH_WARN, ss.str());
-      d.detail.swap(detail);
+      d.detail.swap(full_detail);
+    }
+    if (!backfillfull_detail.empty()) {
+      ostringstream ss;
+      ss << backfillfull_detail.size() << " pool(s) backfillfull";
+      auto& d = checks->add("POOL_BACKFILLFULL", HEALTH_WARN, ss.str());
+      d.detail.swap(backfillfull_detail);
+    }
+    if (!nearfull_detail.empty()) {
+      ostringstream ss;
+      ss << nearfull_detail.size() << " pool(s) nearfull";
+      auto& d = checks->add("POOL_NEARFULL", HEALTH_WARN, ss.str());
+      d.detail.swap(nearfull_detail);
     }
   }
 }

@@ -24,10 +24,22 @@
 // And all compatibility stuff is standard mounted on this 
 #define PROCPREFIX "/compat/linux"
 
+#ifndef MSG_MORE
+#define MSG_MORE 0
+#endif
+
+#ifndef O_DSYNC
+#define O_DSYNC O_SYNC
+#endif
+
+/* And include the extra required include file */
+#include <pthread_np.h>
+
+#endif /* __FreeBSD__ */
+
+#if defined(__APPLE__) || defined(__FreeBSD__)
 /* Make sure that ENODATA is defined in the correct way */
-#ifndef ENODATA
-#define	ENODATA	ENOATTR
-#else
+#ifdef ENODATA
 #if (ENODATA == 9919)
 // #warning ENODATA already defined to be 9919, redefining to fix
 // Silencing this warning because it fires at all files where compat.h
@@ -41,18 +53,11 @@
 // at the location of usage and report a possible confict.
 // This is left up to a future improvement
 #elif (ENODATA != 87)
-#warning ENODATA already defined to a value different from 87 (ENOATRR), refining to fix
+// #warning ENODATA already defined to a value different from 87 (ENOATRR), refining to fix
 #endif
 #undef ENODATA
+#endif
 #define ENODATA ENOATTR
-#endif
-#ifndef MSG_MORE
-#define	MSG_MORE 0
-#endif
-
-#ifndef O_DSYNC
-#define O_DSYNC O_SYNC
-#endif
 
 // Fix clock accuracy
 #if !defined(CLOCK_MONOTONIC_COARSE)
@@ -70,12 +75,6 @@
 #endif
 #endif
 
-/* And include the extra required include file */
-#include <pthread_np.h>
-
-#endif /* !__FreeBSD__ */
-
-#if defined(__APPLE__) || defined(__FreeBSD__)
 /* get PATH_MAX */
 #include <limits.h>
 

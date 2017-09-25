@@ -675,7 +675,7 @@ Trimming requires that the placement groups are ``active + clean``.
               message from its sync provider before it gives up and bootstrap
               again.
 :Type: Double
-:Default: ``30.0``
+:Default: ``60.0``
 
 
 ``mon sync max retries``
@@ -1032,7 +1032,7 @@ Miscellaneous
               and log information.
 
 :Type: Double
-:Default: ``300`` 
+:Default: ``86400`` 
 
 
 ``mon stat smooth intervals``

@@ -120,14 +120,25 @@ public:
     set_tunables_default();
   }
 
-  /// true if any rule has a ruleset != the rule id
-  bool has_legacy_rulesets() const;
+  /**
+   * true if any rule has a rule id != its position in the array
+   *
+   * These indicate "ruleset" IDs that were created by older versions
+   * of Ceph.  They are cleaned up in renumber_rules so that eventually
+   * we can remove the code for handling them.
+   */
+  bool has_legacy_rule_ids() const;
 
-  /// fix rules whose ruleid != ruleset
-  int renumber_rules_by_ruleset();
-
-  /// true if any ruleset has more than 1 rule
-  bool has_multirule_rulesets() const;
+  /**
+   * fix rules whose ruleid != ruleset
+   *
+   * These rules were created in older versions of Ceph.  The concept
+   * of a ruleset no longer exists.
+   *
+   * Return a map of old ID -> new ID.  Caller must update OSDMap
+   * to use new IDs.
+   */
+  std::map<int, int> renumber_rules();
 
   /// true if any buckets that aren't straw2
   bool has_non_straw2_buckets() const;
@@ -574,25 +585,25 @@ public:
    *
    * Note that these may not be parentless roots.
    */
-  void find_takes(set<int>& roots) const;
+  void find_takes(set<int> *roots) const;
 
   /**
    * find tree roots
    *
    * These are parentless nodes in the map.
    */
-  void find_roots(set<int>& roots) const;
+  void find_roots(set<int> *roots) const;
 
 
   /**
    * find tree roots that contain shadow (device class) items only
    */
-  void find_shadow_roots(set<int>& roots) const {
+  void find_shadow_roots(set<int> *roots) const {
     set<int> all;
-    find_roots(all);
+    find_roots(&all);
     for (auto& p: all) {
       if (is_shadow_item(p)) {
-        roots.insert(p);
+        roots->insert(p);
       }
     }
   }
@@ -603,12 +614,12 @@ public:
    * These are parentless nodes in the map that are not shadow
    * items for device classes.
    */
-  void find_nonshadow_roots(set<int>& roots) const {
+  void find_nonshadow_roots(set<int> *roots) const {
     set<int> all;
-    find_roots(all);
+    find_roots(&all);
     for (auto& p: all) {
       if (!is_shadow_item(p)) {
-        roots.insert(p);
+        roots->insert(p);
       }
     }
   }
@@ -976,6 +987,17 @@ public:
       return true;
     return false;
   }
+  bool rule_has_take(unsigned ruleno, int take) const {
+    if (!crush) return false;
+    crush_rule *rule = get_rule(ruleno);
+    for (unsigned i = 0; i < rule->len; ++i) {
+      if (rule->steps[i].op == CRUSH_RULE_TAKE &&
+	  rule->steps[i].arg1 == take) {
+	return true;
+      }
+    }
+    return false;
+  }
   int get_rule_len(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return PTR_ERR(r);
@@ -1017,6 +1039,12 @@ public:
     return s->arg2;
   }
 
+private:
+  float _get_take_weight_osd_map(int root, map<int,float> *pmap) const;
+  void _normalize_weight_map(float sum, const map<int,float>& m,
+			     map<int,float> *pmap) const;
+
+public:
   /**
    * calculate a map of osds to weights for a given rule
    *
@@ -1027,7 +1055,19 @@ public:
    * @param pmap [out] map of osd to weight
    * @return 0 for success, or negative error code
    */
-  int get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap);
+  int get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap) const;
+
+  /**
+   * calculate a map of osds to weights for a given starting root
+   *
+   * Generate a map of which OSDs get how much relative weight for a
+   * given starting root
+   *
+   * @param root node
+   * @param pmap [out] map of osd to weight
+   * @return 0 for success, or negative error code
+   */
+  int get_take_weight_osd_map(int root, map<int,float> *pmap) const;
 
   /* modifiers */
 
@@ -1209,7 +1249,7 @@ public:
   void finalize() {
     assert(crush);
     crush_finalize(crush);
-    have_uniform_rules = !has_legacy_rulesets();
+    have_uniform_rules = !has_legacy_rule_ids();
   }
 
   int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
@@ -1224,6 +1264,7 @@ public:
   int populate_classes(
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
   int get_rules_by_class(const string &class_name, set<int> *rules);
+  int get_rules_by_osd(int osd, set<int> *rules);
   bool _class_is_dead(int class_id);
   void cleanup_dead_classes();
   int rebuild_roots_with_classes();
@@ -1261,14 +1302,15 @@ public:
 
   int find_rule(int ruleset, int type, int size) const {
     if (!crush) return -1;
-    if (!have_uniform_rules) {
-      return crush_find_rule(crush, ruleset, type, size);
-    } else {
-      if (ruleset < (int)crush->max_rules &&
-	  crush->rules[ruleset])
-	return ruleset;
-      return -1;
+    if (have_uniform_rules &&
+	ruleset < (int)crush->max_rules &&
+	crush->rules[ruleset] &&
+	crush->rules[ruleset]->mask.type == type &&
+	crush->rules[ruleset]->mask.min_size <= size &&
+	crush->rules[ruleset]->mask.max_size >= size) {
+      return ruleset;
     }
+    return crush_find_rule(crush, ruleset, type, size);
   }
 
   bool ruleset_exists(const int ruleset) const {
@@ -1284,7 +1326,7 @@ public:
   /**
    * Return the lowest numbered ruleset of type `type`
    *
-   * @returns a ruleset ID, or -1 if no matching rulesets found.
+   * @returns a ruleset ID, or -1 if no matching rules found.
    */
   int find_first_ruleset(int type) const {
     int result = -1;

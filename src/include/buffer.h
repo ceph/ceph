@@ -181,7 +181,7 @@ namespace buffer CEPH_BUFFER_API {
       const char *start; ///< starting pointer into bp->c_str()
       const char *pos;   ///< pointer into bp->c_str()
       const char *end_ptr;   ///< pointer to bp->end_c_str()
-      bool deep;         ///< if true, no not allow shallow ptr copies
+      bool deep;         ///< if true, do not allow shallow ptr copies
 
       iterator(const ptr *p, size_t offset, bool d)
 	: bp(p),

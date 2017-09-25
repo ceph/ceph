@@ -407,9 +407,13 @@ int Pipe::accept()
     ldout(msgr->cct,10) << "accept couldn't read peer_addr" << dendl;
     goto fail_unlocked;
   }
-  {
+  try {
     bufferlist::iterator ti = addrbl.begin();
     ::decode(peer_addr, ti);
+  } catch (const buffer::error& e) {
+    ldout(msgr->cct,2) << __func__ <<  " decode peer_addr failed: " << e.what()
+			<< dendl;
+    goto fail_unlocked;
   }
 
   ldout(msgr->cct,10) << "accept peer addr is " << peer_addr << dendl;
@@ -1056,7 +1060,7 @@ int Pipe::connect()
 
   // identify peer
   {
-#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
     bufferptr p(sizeof(ceph_entity_addr) * 2);
 #else
     int wirelen = sizeof(__u32) * 2 + sizeof(ceph_sockaddr_storage);

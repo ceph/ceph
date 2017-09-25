@@ -24,5 +24,6 @@ overrides:
     conf:
       osd:
         osd deep scrub update digest min age: 0
+        osd skip data digest: false
 tasks:
 - scrub_test:

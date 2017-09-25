@@ -2602,15 +2602,12 @@ void PG::_update_calc_stats()
 	 i != actingbackfill.end();
 	 ++i) {
       const pg_shard_t &p = *i;
-
       bool in_up = (upset.find(p) != upset.end());
-      bool in_acting = (actingset.find(p) != actingset.end());
-      assert(in_up || in_acting);
 
-      // in acting                  Compute total objects excluding num_missing
-      // in acting and not in up    Compute misplaced objects excluding num_missing
-      // in up and not in acting    Compute total objects already backfilled
-      if (in_acting) {
+      // recovery       Compute total objects excluding num_missing
+      //   - not in up  Compute misplaced objects excluding num_missing
+      // backfill       Compute total objects already backfilled
+      if (!is_backfill_targets(p)) {
         unsigned osd_missing;
         // primary handling
         if (p == pg_whoami) {
@@ -2628,8 +2625,6 @@ void PG::_update_calc_stats()
         if (!in_up && num_objects > osd_missing)
 	  misplaced += num_objects - osd_missing;
       } else {
-        assert(in_up && !in_acting);
-
         // If this peer has more objects then it should, ignore them
         backfilled += MIN(num_objects, peer_info[p].stats.stats.sum.num_objects);
       }
@@ -3834,7 +3829,8 @@ void PG::_scan_snaps(ScrubMap &smap)
     const hobject_t &hoid = i->first;
     ScrubMap::object &o = i->second;
 
-    if (hoid.is_head() || hoid.is_snapdir()) {
+    assert(!hoid.is_snapdir());
+    if (hoid.is_head()) {
       // parse the SnapSet
       bufferlist bl;
       if (o.attrs.find(SS_ATTR) == o.attrs.end()) {
@@ -3848,9 +3844,6 @@ void PG::_scan_snaps(ScrubMap &smap)
 	continue;
       }
       head = hoid.get_head();
-      // Make sure head_exists is correct for is_legacy() check
-      if (hoid.is_head())
-	snapset.head_exists = true;
       continue;
     }
     if (hoid.snap < CEPH_MAXSNAP) {
@@ -3861,28 +3854,13 @@ void PG::_scan_snaps(ScrubMap &smap)
 	continue;
       }
       set<snapid_t> obj_snaps;
-      if (!snapset.is_legacy()) {
-	auto p = snapset.clone_snaps.find(hoid.snap);
-	if (p == snapset.clone_snaps.end()) {
-	  derr << __func__ << " no clone_snaps for " << hoid << " in " << snapset
-	       << dendl;
-	  continue;
-	}
-	obj_snaps.insert(p->second.begin(), p->second.end());
-      } else {
-	bufferlist bl;
-	if (o.attrs.find(OI_ATTR) == o.attrs.end()) {
-	  continue;
-	}
-	bl.push_back(o.attrs[OI_ATTR]);
-	object_info_t oi;
-	try {
-	  oi.decode(bl);
-	} catch(...) {
-	  continue;
-	}
-	obj_snaps.insert(oi.legacy_snaps.begin(), oi.legacy_snaps.end());
+      auto p = snapset.clone_snaps.find(hoid.snap);
+      if (p == snapset.clone_snaps.end()) {
+	derr << __func__ << " no clone_snaps for " << hoid << " in " << snapset
+	     << dendl;
+	continue;
       }
+      obj_snaps.insert(p->second.begin(), p->second.end());
       set<snapid_t> cur_snaps;
       int r = snap_mapper.get_snaps(hoid, &cur_snaps);
       if (r != 0 && r != -ENOENT) {
@@ -4345,8 +4323,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           /* get the start and end of our scrub chunk
 	   *
 	   * Our scrub chunk has an important restriction we're going to need to
-	   * respect. We can't let head or snapdir be start or end.
-	   * Using a half-open interval means that if end == head|snapdir,
+	   * respect. We can't let head be start or end.
+	   * Using a half-open interval means that if end == head,
 	   * we'd scrub/lock head and the clone right next to head in different
 	   * chunks which would allow us to miss clones created between
 	   * scrubbing that chunk and scrubbing the chunk including head.
@@ -4372,8 +4350,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
 	  if (!objects.empty()) {
 	    hobject_t back = objects.back();
-	    while (candidate_end.has_snapset() &&
-		      candidate_end.get_head() == back.get_head()) {
+	    while (candidate_end.is_head() &&
+		   candidate_end == back.get_head()) {
 	      candidate_end = back;
 	      objects.pop_back();
 	      if (objects.empty()) {
@@ -4383,8 +4361,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	      }
 	      back = objects.back();
 	    }
-	    if (candidate_end.has_snapset()) {
-	      assert(candidate_end.get_head() != back.get_head());
+	    if (candidate_end.is_head()) {
+	      assert(candidate_end != back.get_head());
 	      candidate_end = candidate_end.get_object_boundary();
 	    }
 	  } else {
@@ -5768,10 +5746,8 @@ void PG::update_store_on_load()
     // legacy filestore didn't store collection bit width; fix.
     int bits = osd->store->collection_bits(coll);
     if (bits < 0) {
-      if (coll.is_meta())
-	bits = 0;
-      else
-	bits = info.pgid.get_split_bits(pool.info.get_pg_num());
+      assert(!coll.is_meta()); // otherwise OSD::load_pgs() did a bad thing
+      bits = info.pgid.get_split_bits(pool.info.get_pg_num());
       lderr(cct) << __func__ << " setting bit width to " << bits << dendl;
       ObjectStore::Transaction t;
       t.collection_set_bits(coll, bits);

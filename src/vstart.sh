@@ -105,8 +105,11 @@ hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
-memstore=0
-bluestore=1
+if [ `uname` = FreeBSD ]; then
+    objectstore="filestore"
+else
+    objectstore="bluestore"
+fi
 rgw_frontend="civetweb"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
@@ -287,13 +290,13 @@ case $1 in
 	    overwrite_conf=0
 	    ;;
     --memstore )
-	    memstore=1
+	    objectstore="memstore"
 	    ;;
     -b | --bluestore )
-	    bluestore=1
+	    objectstore="bluestore"
 	    ;;
     -f | --filestore )
-	    bluestore=0
+	    objectstore="filestore"
 	    ;;
     --hitset )
 	    hitset="$hitset $2 $3"
@@ -440,6 +443,7 @@ prepare_conf() {
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
+$extra_conf
 EOF
 	if [ "$lockdep" -eq 1 ] ; then
 		wconf <<EOF
@@ -468,7 +472,7 @@ EOF
         keyring = $keyring_fn
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
-
+$extra_conf
 [client.rgw]
 
 [mds]
@@ -516,11 +520,11 @@ $DAEMONOPTS
         bluestore block wal size = 1048576000
         bluestore block wal create = true
 $COSDDEBUG
-$COSDMEMSTORE
+        osd objectstore = $objectstore
 $COSDSHORT
 $extra_conf
 [mon]
-        mgr initial modules = restful status dashboard
+        mgr initial modules = restful status dashboard balancer
         mon pg warn min per osd = 3
         mon osd allow primary affinity = true
         mon reweight min pgs per osd = 4
@@ -531,8 +535,6 @@ $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
         mon cluster log file = $CEPH_OUT_DIR/cluster.mon.\$id.log
-[global]
-$extra_conf
 EOF
 }
 
@@ -688,24 +690,6 @@ EOF
 }
 
 start_mds() {
-    if [ $new -eq 1 ]; then
-        if [ "$CEPH_NUM_FS" -gt "0" ] ; then
-            if [ "$CEPH_NUM_FS" -gt "1" ] ; then
-                ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
-            fi
-
-            local fs=0
-            for name in a b c d e f g h i j k l m n o p
-            do
-                ceph_adm osd pool create "cephfs_data_${name}" 8
-                ceph_adm osd pool create "cephfs_metadata_${name}" 8
-                ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
-                fs=$(($fs + 1))
-                [ $fs -eq $CEPH_NUM_FS ] && break
-            done
-        fi
-    fi
-
     local mds=0
     for name in a b c d e f g h i j k l m n o p
     do
@@ -747,6 +731,25 @@ EOF
         #$CEPH_BIN/ceph-mds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
         #ceph_adm mds set max_mds 2
     done
+
+    if [ $new -eq 1 ]; then
+        if [ "$CEPH_NUM_FS" -gt "0" ] ; then
+            if [ "$CEPH_NUM_FS" -gt "1" ] ; then
+                ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
+            fi
+
+            local fs=0
+            for name in a b c d e f g h i j k l m n o p
+            do
+                ceph_adm osd pool create "cephfs_data_${name}" 8
+                ceph_adm osd pool create "cephfs_metadata_${name}" 8
+                ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
+                fs=$(($fs + 1))
+                [ $fs -eq $CEPH_NUM_FS ] && break
+            done
+        fi
+    fi
+
 }
 
 if [ "$debug" -eq 0 ]; then
@@ -801,15 +804,6 @@ if [ -n "$MON_ADDR" ]; then
 	CMON_ARGS=" -m "$MON_ADDR
 	COSD_ARGS=" -m "$MON_ADDR
 	CMDS_ARGS=" -m "$MON_ADDR
-fi
-
-if [ "$memstore" -eq 1 ]; then
-    COSDMEMSTORE='
-	osd objectstore = memstore'
-fi
-if [ "$bluestore" -eq 1 ]; then
-    COSDMEMSTORE='
-	osd objectstore = bluestore'
 fi
 
 if [ -z "$CEPH_PORT" ]; then

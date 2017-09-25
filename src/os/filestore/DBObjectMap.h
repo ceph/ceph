@@ -219,13 +219,17 @@ public:
     );
 
   /// Read initial state from backing store
+  int get_state();
+  /// Write current state settings to DB
+  void set_state();
+  /// Read initial state and upgrade or initialize state
   int init(bool upgrade = false);
 
   /// Upgrade store to current version
   int upgrade_to_v2();
 
   /// Consistency check, debug, there must be no parallel writes
-  int check(std::ostream &out, bool repair = false) override;
+  int check(std::ostream &out, bool repair = false, bool force = false) override;
 
   /// Ensure that all previous operations are durable
   int sync(const ghobject_t *oid=0, const SequencerPosition *spos=0) override;
@@ -261,30 +265,40 @@ public:
 
   /// persistent state for store @see generate_header
   struct State {
+    static const __u8 CUR_VERSION = 3;
     __u8 v;
     uint64_t seq;
-    State() : v(0), seq(1) {}
-    explicit State(uint64_t seq) : v(0), seq(seq) {}
+    // legacy is false when complete regions never used
+    bool legacy;
+    State() : v(0), seq(1), legacy(false) {}
+    explicit State(uint64_t seq) : v(0), seq(seq), legacy(false) {}
 
     void encode(bufferlist &bl) const {
-      ENCODE_START(2, 1, bl);
+      ENCODE_START(3, 1, bl);
       ::encode(v, bl);
       ::encode(seq, bl);
+      ::encode(legacy, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator &bl) {
-      DECODE_START(2, bl);
+      DECODE_START(3, bl);
       if (struct_v >= 2)
 	::decode(v, bl);
       else
 	v = 0;
       ::decode(seq, bl);
+      if (struct_v >= 3)
+	::decode(legacy, bl);
+      else
+	legacy = false;
       DECODE_FINISH(bl);
     }
 
     void dump(Formatter *f) const {
+      f->dump_unsigned("v", v);
       f->dump_unsigned("seq", seq);
+      f->dump_bool("legacy", legacy);
     }
 
     static void generate_test_instances(list<State*> &o) {

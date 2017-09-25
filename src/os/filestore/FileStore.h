@@ -645,6 +645,10 @@ public:
     object_map->compact();
   }
 
+  bool has_builtin_csum() const override {
+    return false;
+  }
+
   void debug_obj_on_delete(const ghobject_t &oid);
   bool debug_data_eio(const ghobject_t &oid);
   bool debug_mdata_eio(const ghobject_t &oid);
@@ -733,7 +737,7 @@ public:
   void dump_stop();
   void dump_transactions(vector<Transaction>& ls, uint64_t seq, OpSequencer *osr);
 
-  virtual int apply_layout_settings(const coll_t &cid);
+  virtual int apply_layout_settings(const coll_t &cid, int target_level);
 
 private:
   void _inject_failure();

@@ -1,9 +1,8 @@
 from __future__ import print_function
 import argparse
-import os
 from textwrap import dedent
 from ceph_volume import process, conf, decorators
-from ceph_volume.util import system
+from ceph_volume.util import system, disk
 from ceph_volume.systemd import systemctl
 from . import api
 
@@ -18,9 +17,11 @@ def activate_filestore(lvs):
     # blow up with a KeyError if this doesn't exist
     osd_fsid = osd_lv.tags['ceph.osd_fsid']
     if not osd_journal_lv:
-        osd_journal = osd_lv.tags.get('ceph.journal_device')
+        # must be a disk partition, by quering blkid by the uuid we are ensuring that the
+        # device path is always correct
+        osd_journal = disk.get_device_from_partuuid(osd_lv.tags['ceph.journal_uuid'])
     else:
-        osd_journal = osd_journal.lv_path
+        osd_journal = osd_lv.tags['ceph.journal_device']
 
     if not osd_journal:
         raise RuntimeError('unable to detect an lv or device journal for OSD %s' % osd_id)
@@ -31,11 +32,10 @@ def activate_filestore(lvs):
     if not system.is_mounted(source, destination=destination):
         process.run(['sudo', 'mount', '-v', source, destination])
 
-    # ensure that the symlink for the journal is there
-    if not os.path.exists(osd_journal):
-        source = osd_journal
-        destination = '/var/lib/ceph/osd/%s-%s/journal' % (conf.cluster, osd_id)
-        process.run(['sudo', 'ln', '-s', source, destination])
+    # always re-do the symlink regardless if it exists, so that the journal
+    # device path that may have changed can be mapped correctly every time
+    destination = '/var/lib/ceph/osd/%s-%s/journal' % (conf.cluster, osd_id)
+    process.run(['sudo', 'ln', '-snf', osd_journal, destination])
 
     # make sure that the journal has proper permissions
     system.chown(osd_journal)
@@ -63,7 +63,10 @@ class Activate(object):
     def activate(self, args):
         lvs = api.Volumes()
         # filter them down for the OSD ID and FSID we need to activate
-        lvs.filter(lv_tags={'ceph.osd_id': args.osd_id, 'ceph.osd_fsid': args.osd_fsid})
+        if args.osd_id and args.osd_fsid:
+            lvs.filter(lv_tags={'ceph.osd_id': args.osd_id, 'ceph.osd_fsid': args.osd_fsid})
+        elif args.osd_fsid and not args.osd_id:
+            lvs.filter(lv_tags={'ceph.osd_fsid': args.osd_fsid})
         if not lvs:
             raise RuntimeError('could not find osd.%s with fsid %s' % (args.osd_id, args.osd_fsid))
         activate_filestore(lvs)
