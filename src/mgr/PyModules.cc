@@ -771,7 +771,9 @@ PyObject* PyModules::get_perf_schema_python(
       f.open_object_section(daemon_name.str().c_str());
 
       Mutex::Locker l(state->lock);
-      for (auto typestr : state->perf_counters.declared_types) {
+      for (const auto &ctr_inst_iter : state->perf_counters.instances) {
+        const auto &typestr = ctr_inst_iter.first;
+
 	f.open_object_section(typestr.c_str());
 	auto type = state->perf_counters.types[typestr];
 	f.dump_string("description", type.description);
