@@ -3,6 +3,7 @@
 Balance PG distribution across OSDs.
 """
 
+import copy
 import errno
 import json
 import math
@@ -160,7 +161,8 @@ class Eval:
             r[t] = {
                 'avg': avg,
                 'stddev': stddev,
-                'score': sum_weight,
+                'sum_weight': sum_weight,
+                'score': score,
             }
         return r
 
@@ -577,11 +579,19 @@ class Module(MgrModule):
 
     def do_crush_compat(self, plan):
         self.log.info('do_crush_compat')
+        max_iterations = self.get_config('crush_compat_max_iterations', 25)
+        if max_iterations < 1:
+            return False
+        step = self.get_config('crush_compat_step', .2)
+        if step <= 0 or step >= 1.0:
+            return False
+
         osdmap = self.get_osdmap()
         crush = osdmap.get_crush()
 
         # get current compat weight-set weights
-        old_ws = self.get_compat_weight_set_weights()
+        orig_ws = self.get_compat_weight_set_weights()
+        orig_ws = { a: b for a, b in orig_ws.iteritems() if a >= 0 }
 
         ms = plan.initial
         pe = self.calc_eval(ms)
@@ -606,28 +616,56 @@ class Module(MgrModule):
         key = 'pgs'  # pgs objects or bytes
 
         # go
-        random.shuffle(roots)
-        for root in roots:
-            pools = pe.root_pools[root]
-            self.log.info('Balancing root %s (pools %s) by %s' %
-                          (root, pools, key))
-            target = pe.target_by_root[root]
-            actual = pe.actual_by_root[root][key]
-            queue = sorted(actual.keys(),
-                           key=lambda osd: -abs(target[osd] - actual[osd]))
-            self.log.debug('queue %s' % queue)
-            for osd in queue:
-                deviation = target[osd] - actual[osd]
-                if deviation == 0:
-                    break
-                self.log.debug('osd.%d deviation %f', osd, deviation)
-                weight = old_ws[osd]
-                calc_weight = target[osd] / actual[osd] * weight
-                new_weight = weight * .7 + calc_weight * .3
-                self.log.debug('Reweight osd.%d %f -> %f', osd, weight,
-                               new_weight)
-                plan.compat_ws[osd] = new_weight
-        return True
+        best_ws = copy.deepcopy(orig_ws)
+        cur_pe = pe
+        left = max_iterations
+        while left > 0:
+            # adjust
+            self.log.debug('best_ws %s' % best_ws)
+            next_ws = copy.deepcopy(best_ws)
+            random.shuffle(roots)
+            for root in roots:
+                pools = cur_pe.root_pools[root]
+                self.log.info('Balancing root %s (pools %s) by %s' %
+                              (root, pools, key))
+                target = cur_pe.target_by_root[root]
+                actual = cur_pe.actual_by_root[root][key]
+                queue = sorted(actual.keys(),
+                               key=lambda osd: -abs(target[osd] - actual[osd]))
+                for osd in queue:
+                    deviation = target[osd] - actual[osd]
+                    if deviation == 0:
+                        break
+                    self.log.debug('osd.%d deviation %f', osd, deviation)
+                    weight = best_ws[osd]
+                    calc_weight = target[osd] / actual[osd] * weight
+                    new_weight = weight * (1.0 - step) + calc_weight * step
+                    self.log.debug('Reweight osd.%d %f -> %f', osd, weight,
+                                   new_weight)
+                    next_ws[osd] = new_weight
+
+            # recalc
+            plan.compat_ws = copy.deepcopy(next_ws)
+            next_ms = plan.final_state()
+            next_pe = self.calc_eval(next_ms)
+            self.log.debug('Step result score %f -> %f', cur_pe.score,
+                           next_pe.score)
+            if next_pe.score > cur_pe.score * 1.01:
+                step /= 2.0
+                self.log.debug('Score got worse, trying smaller step %f' % step)
+            else:
+                cur_pe = next_pe
+                best_ws = next_ws
+            left -= 1
+
+        if cur_pe.score < pe.score:
+            self.log.info('Success, score %f -> %f', pe.score, cur_pe.score)
+            plan.compat_ws = best_ws
+            return True
+        else:
+            self.log.info('Failed to find further optimization, score %f',
+                          pe.score)
+            return False
 
     def compat_weight_set_reweight(self, osd, new_weight):
         self.log.debug('ceph osd crush weight-set reweight-compat')
