@@ -144,6 +144,9 @@ class CRUSHMap(object):
     def dump(self):
         return ceph_crushmap.dump(self._handle)
 
+    def get_item_weight(self, item):
+        return ceph_crushmap.get_item_weight(self._handle, item)
+
     def get_item_name(self, item):
         return ceph_crushmap.get_item_name(self._handle, item)
 
