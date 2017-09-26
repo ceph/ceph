@@ -1023,6 +1023,18 @@ int CrushWrapper::detach_bucket(CephContext *cct, int item)
   return bucket_weight;
 }
 
+bool CrushWrapper::is_parent_of(int child, int p) const
+{
+  int parent = 0;
+  while (!get_immediate_parent_id(child, &parent)) {
+    if (parent == p) {
+      return true;
+    }
+    child = parent;
+  }
+  return false;
+}
+
 int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
 {
   if (src >= 0 || dst >= 0)
@@ -1031,6 +1043,9 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
     return -EINVAL;
   crush_bucket *a = get_bucket(src);
   crush_bucket *b = get_bucket(dst);
+  if (is_parent_of(a->id, b->id) || is_parent_of(b->id, a->id)) {
+    return -EINVAL;
+  }
   unsigned aw = a->weight;
   unsigned bw = b->weight;
 

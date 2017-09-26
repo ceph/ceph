@@ -641,6 +641,7 @@ private:
    * @return true if present
    */
   bool _search_item_exists(int i) const;
+  bool is_parent_of(int child, int p) const;
 public:
 
   /**
