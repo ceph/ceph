@@ -235,20 +235,23 @@ void PGPool::update(OSDMapRef map)
   if ((map->get_epoch() != cached_epoch + 1) ||
       (pi->get_snap_epoch() == map->get_epoch())) {
     updated = true;
-    pi->build_removed_snaps(newly_removed_snaps);
-    interval_set<snapid_t> intersection;
-    intersection.intersection_of(newly_removed_snaps, cached_removed_snaps);
-    if (intersection == cached_removed_snaps) {
-        cached_removed_snaps.swap(newly_removed_snaps);
-        newly_removed_snaps = cached_removed_snaps;
-        newly_removed_snaps.subtract(intersection);
-    } else {
-        lgeneric_subdout(cct, osd, 0) << __func__
-          << " cached_removed_snaps shrank from " << cached_removed_snaps
-          << " to " << newly_removed_snaps << dendl;
-        cached_removed_snaps.swap(newly_removed_snaps);
-        newly_removed_snaps.clear();
-    }
+    if (pi->maybe_updated_removed_snaps(cached_removed_snaps)) {
+      pi->build_removed_snaps(newly_removed_snaps);
+      interval_set<snapid_t> intersection;
+      intersection.intersection_of(newly_removed_snaps, cached_removed_snaps);
+      if (intersection == cached_removed_snaps) {
+          cached_removed_snaps.swap(newly_removed_snaps);
+          newly_removed_snaps = cached_removed_snaps;
+          newly_removed_snaps.subtract(intersection);
+      } else {
+          lgeneric_subdout(cct, osd, 0) << __func__
+            << " cached_removed_snaps shrank from " << cached_removed_snaps
+            << " to " << newly_removed_snaps << dendl;
+          cached_removed_snaps.swap(newly_removed_snaps);
+          newly_removed_snaps.clear();
+      }
+    } else
+      newly_removed_snaps.clear();
     snapc = pi->get_snap_context();
   } else {
     /* 1) map->get_epoch() == cached_epoch + 1 &&
