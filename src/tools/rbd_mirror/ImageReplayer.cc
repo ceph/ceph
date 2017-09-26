@@ -785,7 +785,6 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
   image_replayer::BootstrapRequest<I> *bootstrap_request = nullptr;
   bool shut_down_replay = false;
   bool running = true;
-  bool canceled_task = false;
   {
     Mutex::Locker locker(m_lock);
 
@@ -808,14 +807,6 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
         std::swap(m_on_stop_finish, on_finish);
         m_stop_requested = true;
         m_manual_stop = manual;
-
-	Mutex::Locker timer_locker(m_threads->timer_lock);
-        if (m_delayed_preprocess_task != nullptr) {
-          canceled_task = m_threads->timer->cancel_event(
-            m_delayed_preprocess_task);
-          assert(canceled_task);
-          m_delayed_preprocess_task = nullptr;
-        }
       }
     }
   }
@@ -824,11 +815,6 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
   if (bootstrap_request != nullptr) {
     bootstrap_request->cancel();
     bootstrap_request->put();
-  }
-
-  if (canceled_task) {
-    m_event_replay_tracker.finish_op();
-    on_replay_interrupted();
   }
 
   if (!running) {
@@ -1554,6 +1540,22 @@ void ImageReplayer<I>::reschedule_update_status_task(int new_interval) {
 template <typename I>
 void ImageReplayer<I>::shut_down(int r) {
   dout(20) << "r=" << r << dendl;
+
+  bool canceled_delayed_preprocess_task = false;
+  {
+    Mutex::Locker timer_locker(m_threads->timer_lock);
+    if (m_delayed_preprocess_task != nullptr) {
+      canceled_delayed_preprocess_task = m_threads->timer->cancel_event(
+        m_delayed_preprocess_task);
+      assert(canceled_delayed_preprocess_task);
+      m_delayed_preprocess_task = nullptr;
+    }
+  }
+  if (canceled_delayed_preprocess_task) {
+    // wake up sleeping replay
+    m_event_replay_tracker.finish_op();
+  }
+
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_STOPPING);
