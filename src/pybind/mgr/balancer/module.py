@@ -80,6 +80,7 @@ class Plan:
 
 
 class Eval:
+    root_ids = {}        # root name -> id
     pool_name = {}       # pool id -> pool name
     pool_id = {}         # pool name -> id
     pool_roots = {}      # pool name -> root name
@@ -356,6 +357,7 @@ class Module(MgrModule):
         roots = []
         for rootid in rootids:
             root = ms.crush.get_item_name(rootid)
+            pe.root_ids[root] = rootid
             roots.append(root)
             ls = ms.osdmap.get_pools_by_take(rootid)
             pe.root_pools[root] = []
