@@ -197,10 +197,12 @@ class StoreTool
     }
 
     // open or create a leveldb store at @p other_path
-    KeyValueDB *other = KeyValueDB::create(g_ceph_context, other_type, other_path);
-    int err = other->create_and_open(std::cerr);
+    boost::scoped_ptr<KeyValueDB> other;
+    KeyValueDB *other_ptr = KeyValueDB::create(g_ceph_context, other_type, other_path);
+    int err = other_ptr->create_and_open(std::cerr);
     if (err < 0)
       return err;
+    other.reset(other_ptr);
 
     KeyValueDB::WholeSpaceIterator it = db->get_iterator();
     it->seek_to_first();
