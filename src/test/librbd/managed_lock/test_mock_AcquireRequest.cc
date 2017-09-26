@@ -52,8 +52,8 @@ struct BreakRequest<librbd::MockImageCtx> {
 
 template <>
 struct GetLockerRequest<librbd::MockImageCtx> {
-  Locker *locker;
-  Context *on_finish;
+  Locker *locker = nullptr;
+  Context *on_finish = nullptr;
 
   static GetLockerRequest *s_instance;
   static GetLockerRequest* create(librados::IoCtx& ioctx,
