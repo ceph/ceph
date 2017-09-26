@@ -189,7 +189,7 @@ class StoreTool
   }
 
   int copy_store_to(string type, const string &other_path,
-		    const int num_keys_per_tx) {
+		    const int num_keys_per_tx, const string &other_type) {
 
     if (num_keys_per_tx <= 0) {
       std::cerr << "must specify a number of keys/tx > 0" << std::endl;
@@ -197,7 +197,7 @@ class StoreTool
     }
 
     // open or create a leveldb store at @p other_path
-    KeyValueDB *other = KeyValueDB::create(g_ceph_context, type, other_path);
+    KeyValueDB *other = KeyValueDB::create(g_ceph_context, other_type, other_path);
     int err = other->create_and_open(std::cerr);
     if (err < 0)
       return err;
@@ -278,7 +278,7 @@ void usage(const char *pname)
     << "  set <prefix> <key> [ver <N>|in <file>]\n"
     << "  rm <prefix> <key>\n"
     << "  rm-prefix <prefix>\n"
-    << "  store-copy <path> [num-keys-per-tx]\n"
+    << "  store-copy <path> [num-keys-per-tx] [leveldb|rocksdb|...] \n"
     << "  store-crc <path>\n"
     << "  compact\n"
     << "  compact-prefix <prefix>\n"
@@ -499,8 +499,12 @@ int main(int argc, const char *argv[])
         return 1;
       }
     }
+    string other_store_type = argv[1];
+    if (argc > 6) {
+      other_store_type = argv[6];
+    }
 
-    int ret = st.copy_store_to(argv[1], argv[4], num_keys_per_tx);
+    int ret = st.copy_store_to(argv[1], argv[4], num_keys_per_tx, other_store_type);
     if (ret < 0) {
       std::cerr << "error copying store to path '" << argv[4]
                 << "': " << cpp_strerror(ret) << std::endl;
