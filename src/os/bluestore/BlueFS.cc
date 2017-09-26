@@ -1828,7 +1828,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   }
 
   uint64_t hint = 0;
-  if (!ev->empty()) {
+  if (!ev->empty() && ev->back().bdev == id) {
     hint = ev->back().end();
   }
 
