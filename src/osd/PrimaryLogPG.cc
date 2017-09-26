@@ -3727,7 +3727,7 @@ int PrimaryLogPG::trim_object(
     // save adjusted snaps for this object
     dout(10) << coid << " snaps " << old_snaps << " -> " << new_snaps << dendl;
     snapset.clone_snaps[coid.snap] =
-      std::move(vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend()));
+      vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend());
     // we still do a 'modify' event on this object just to trigger a
     // snapmapper.update ... :(
 
