@@ -286,6 +286,38 @@ class interval_set {
       }
     }
   }
+
+  bool subset_size_sym(const interval_set &b) const {
+    auto pa = m.cbegin(), pb = b.m.cbegin();
+    const auto a_end = m.cend(), b_end = b.m.cend();
+
+    while (pa != a_end && pb != b_end) {
+      while (pb->first + pb->second <= pa->first) {
+        ++pb;
+        if (pb == b_end)
+          return false;
+      }
+
+      if (*pa == *pb) {
+        do {
+          ++pa;
+          ++pb;
+        } while (pa != a_end && pb != b_end && *pa == *pb);
+        continue;
+      }
+
+      // interval begins before other
+      if (pa->first < pb->first)
+        return false;
+      // interval is longer than other
+      if (pa->first + pa->second > pb->first + pb->second)
+        return false;
+
+      ++pa;
+    }
+
+    return pa == a_end;
+  }
   
  public:
   bool operator==(const interval_set& other) const {
@@ -606,6 +638,21 @@ class interval_set {
   }
 
   bool subset_of(const interval_set &big) const {
+    if (!size())
+      return true;
+    if (size() > big.size())
+      return false;
+    if (range_end() > big.range_end())
+      return false;
+
+    /*
+     * Use the lower_bound algorithm for larger size ratios
+     * where it performs better, but not for smaller size
+     * ratios where sequential search performs better.
+     */
+    if (big.size() / size() < 10)
+      return subset_size_sym(big);
+
     for (typename std::map<T,T>::const_iterator i = m.begin();
          i != m.end();
          i++) 
