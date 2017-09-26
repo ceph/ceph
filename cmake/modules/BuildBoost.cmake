@@ -86,7 +86,7 @@ function(do_build_boost version)
     set(boost_version 1.63.0)
     set(boost_md5 1c837ecd990bb022d07e7aab32b09847)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
-    set(boost_url http://downloads.sourceforge.net/project/boost/boost/${boost_version}/boost_${boost_version_underscore}.tar.bz2)
+    set(boost_url https://download.ceph.com/qa/boost_${boost_version_underscore}.tar.bz2)
     set(source_dir
       URL ${boost_url}
       URL_MD5 ${boost_md5})
