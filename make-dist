@@ -27,7 +27,7 @@ download_boost() {
     boost_fname=boost_${boost_version_underscore}.tar.bz2
     echo "downloading boost_$boost_version..."
     wget --no-verbose -O $boost_fname \
-         https://downloads.sourceforge.net/project/boost/boost/$boost_version/$boost_fname
+         https://download.ceph.com/qa/$boost_fname
     if [ $? != 0 -o ! -e $boost_fname ]; then
         echo "Error: failed to download boost."
         exit 1
