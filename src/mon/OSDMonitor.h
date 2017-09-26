@@ -43,8 +43,6 @@ class MOSDMap;
 #include "erasure-code/ErasureCodeInterface.h"
 #include "mon/MonOpRequest.h"
 
-#define OSD_METADATA_PREFIX "osd_metadata"
-
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
   utime_t failed_since;     ///< when they think it failed

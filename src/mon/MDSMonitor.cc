@@ -48,6 +48,10 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, FSMap const& fsmap) {
 		<< ").mds e" << fsmap.get_epoch() << " ";
 }
 
+static const string MDS_METADATA_PREFIX("mds_metadata");
+static const string MDS_HEALTH_PREFIX("mds_health");
+
+
 /*
  * Specialized implementation of cmd_getval to allow us to parse
  * out strongly-typedef'd types
@@ -70,9 +74,6 @@ template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
   return cmd_getval(cct, cmdmap, k, (int64_t&)val);
 }
 
-static const string MDS_METADATA_PREFIX("mds_metadata");
-
-
 // my methods
 
 void MDSMonitor::print_map(FSMap &m, int dbl)
@@ -88,6 +89,12 @@ void MDSMonitor::create_initial()
   dout(10) << "create_initial" << dendl;
 }
 
+void MDSMonitor::get_store_prefixes(std::set<string>& s) const
+{
+  s.insert(service_name);
+  s.insert(MDS_METADATA_PREFIX);
+  s.insert(MDS_HEALTH_PREFIX);
+}
 
 void MDSMonitor::update_from_paxos(bool *need_bootstrap)
 {
