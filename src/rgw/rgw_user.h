@@ -464,8 +464,7 @@ struct RGWUserAdminOpState {
     int sub_buf_size = RAND_SUBUSER_LEN + 1;
     char sub_buf[RAND_SUBUSER_LEN + 1];
 
-    if (gen_rand_alphanumeric_upper(g_ceph_context, sub_buf, sub_buf_size) < 0)
-      return "";
+    gen_rand_alphanumeric_upper(g_ceph_context, sub_buf, sub_buf_size);
 
     rand_suffix = sub_buf;
     if (rand_suffix.empty())

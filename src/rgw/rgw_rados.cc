@@ -10773,11 +10773,8 @@ int RGWRados::olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWOb
   if (!has_tag) {
     /* obj tag */
     string obj_tag;
-    int ret = gen_rand_alphanumeric_lower(cct, &obj_tag, 32);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: gen_rand_alphanumeric_lower() returned ret=" << ret << dendl;
-      return ret;
-    }
+    gen_rand_alphanumeric_lower(cct, &obj_tag, 32);
+
     bufferlist bl;
     bl.append(obj_tag.c_str(), obj_tag.size());
     op.setxattr(RGW_ATTR_ID_TAG, bl);
@@ -10787,11 +10784,8 @@ int RGWRados::olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWOb
 
     /* olh tag */
     string olh_tag;
-    ret = gen_rand_alphanumeric_lower(cct, &olh_tag, 32);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: gen_rand_alphanumeric_lower() returned ret=" << ret << dendl;
-      return ret;
-    }
+    gen_rand_alphanumeric_lower(cct, &olh_tag, 32);
+
     bufferlist olh_bl;
     olh_bl.append(olh_tag.c_str(), olh_tag.size());
     op.setxattr(RGW_ATTR_OLH_ID_TAG, olh_bl);
@@ -10817,11 +10811,8 @@ int RGWRados::olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWOb
   *op_tag = buf;
 
   string s;
-  int ret = gen_rand_alphanumeric_lower(cct, &s, OLH_PENDING_TAG_LEN - op_tag->size());
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: gen_rand_alphanumeric_lower() returned ret=" << ret << dendl;
-    return ret;
-  }
+  gen_rand_alphanumeric_lower(cct, &s, OLH_PENDING_TAG_LEN - op_tag->size());
+
   op_tag->append(s);
 
   string attr_name = RGW_ATTR_OLH_PENDING_PREFIX;
@@ -10829,7 +10820,7 @@ int RGWRados::olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWOb
 
   op.setxattr(attr_name.c_str(), bl);
 
-  ret = obj_operate(bucket_info, olh_obj, &op);
+  int ret = obj_operate(bucket_info, olh_obj, &op);
   if (ret < 0) {
     return ret;
   }
