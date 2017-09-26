@@ -99,18 +99,18 @@ public network and ``{netmask}`` with the netmask for the public network. ::
    sudo iptables -A INPUT -i {iface} -p tcp -s {ip-address}/{netmask} --dport 6789 -j ACCEPT
 
 
-MDS IP Tables
--------------
+MDS and Manager IP Tables
+-------------------------
 
-A :term:`Ceph Metadata Server` listens on the first available port on the public
-network beginning at port 6800. Note that this behavior is not deterministic, so
-if you are running more than one OSD or MDS on the same host, or if you restart
-the daemons within a short window of time, the daemons will bind to higher
-ports. You should open the entire 6800-7300 range by default.  When you add the
-rule using the example below, make sure you replace ``{iface}`` with the public
-network interface (e.g., ``eth0``, ``eth1``, etc.), ``{ip-address}`` with the IP
-address of the public network and ``{netmask}`` with the netmask of the public
-network.
+A :term:`Ceph Metadata Server` or :term:`Ceph Manager` listens on the first 
+available port on the public network beginning at port 6800. Note that this 
+behavior is not deterministic, so if you are running more than one OSD or MDS
+on the same host, or if you restart the daemons within a short window of time,
+the daemons will bind to higher ports. You should open the entire 6800-7300
+range by default.  When you add the rule using the example below, make sure
+you replace ``{iface}`` with the public network interface (e.g., ``eth0``,
+``eth1``, etc.), ``{ip-address}`` with the IP address of the public network
+and ``{netmask}`` with the netmask of the public network.
 
 For example:: 
 
