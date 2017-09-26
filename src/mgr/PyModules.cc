@@ -746,9 +746,9 @@ PyObject* PyModules::get_perf_schema_python(
   DaemonStateCollection daemons;
 
   if (svc_type == "") {
-    daemons = std::move(daemon_state.get_all());
+    daemons = daemon_state.get_all();
   } else if (svc_id.empty()) {
-    daemons = std::move(daemon_state.get_by_service(svc_type));
+    daemons = daemon_state.get_by_service(svc_type);
   } else {
     auto key = DaemonKey(svc_type, svc_id);
     // so that the below can be a loop in all cases
