@@ -7,7 +7,7 @@
 
 #include "common/Formatter.h"
 #include <common/errno.h>
-#include "auth/Crypto.h"
+#include "include/random.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "rgw_common.h"
@@ -597,14 +597,11 @@ int RGWLC::process()
 {
   int max_secs = cct->_conf->rgw_lc_lock_max_time;
 
-  unsigned start;
-  int ret = get_random_bytes((char *)&start, sizeof(start));
-  if (ret < 0)
-    return ret;
+  const int start = ceph::util::generate_random_number(0, max_objs - 1);
 
   for (int i = 0; i < max_objs; i++) {
     int index = (i + start) % max_objs;
-    ret = process(index, max_secs);
+    int ret = process(index, max_secs);
     if (ret < 0)
       return ret;
   }

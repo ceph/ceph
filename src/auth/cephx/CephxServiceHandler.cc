@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <sstream>
 
+#include "include/random.h"
 #include "common/config.h"
 #include "common/debug.h"
 
@@ -30,9 +31,9 @@ int CephxServiceHandler::start_session(EntityName& name, bufferlist::iterator& i
 {
   entity_name = name;
 
-  get_random_bytes((char *)&server_challenge, sizeof(server_challenge));
-  if (!server_challenge)
-    server_challenge = 1;  // always non-zero.
+  uint64_t min = 1; // always non-zero
+  uint64_t max = std::numeric_limits<uint64_t>::max();
+  server_challenge = ceph::util::generate_random_number<uint64_t>(min, max);
   ldout(cct, 10) << "start_session server_challenge " << hex << server_challenge << dec << dendl;
 
   CephXServerChallenge ch;

@@ -14,7 +14,7 @@
 #include "common/ceph_crypto.h"
 #include "common/Clock.h"
 
-#include "auth/Crypto.h"
+#include "include/random.h"
 
 #include "rgw_client_io.h"
 #include "rgw_http_client.h"
@@ -455,11 +455,7 @@ static int build_token(const string& swift_user,
 static int encode_token(CephContext *cct, string& swift_user, string& key,
 			bufferlist& bl)
 {
-  uint64_t nonce;
-
-  int ret = get_random_bytes((char *)&nonce, sizeof(nonce));
-  if (ret < 0)
-    return ret;
+  const auto nonce = ceph::util::generate_random_number<uint64_t>();
 
   utime_t expiration = ceph_clock_now();
   expiration += cct->_conf->rgw_swift_token_expiration;

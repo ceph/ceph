@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "include/Context.h"
+#include "include/random.h"
 #include "common/errno.h"
 #include "AsyncMessenger.h"
 #include "AsyncConnection.h"
@@ -2025,21 +2026,16 @@ void AsyncConnection::discard_out_queue()
   out_q.clear();
 }
 
-int AsyncConnection::randomize_out_seq()
+void AsyncConnection::randomize_out_seq()
 {
   if (get_features() & CEPH_FEATURE_MSG_AUTH) {
-    // Set out_seq to a random value, so CRC won't be predictable.   Don't bother checking seq_error
-    // here.  We'll check it on the call.  PLR
-    uint64_t rand_seq;
-    int seq_error = get_random_bytes((char *)&rand_seq, sizeof(rand_seq));
-    rand_seq &= SEQ_MASK;
+    // Set out_seq to a random value, so CRC won't be predictable.
+    auto rand_seq = ceph::util::generate_random_number<uint64_t>(0, SEQ_MASK);
     lsubdout(async_msgr->cct, ms, 10) << __func__ << " randomize_out_seq " << rand_seq << dendl;
     out_seq = rand_seq;
-    return seq_error;
   } else {
     // previously, seq #'s always started at 0.
     out_seq = 0;
-    return 0;
   }
 }
 
@@ -2137,9 +2133,7 @@ void AsyncConnection::was_session_reset()
 
   dispatch_queue->queue_remote_reset(this);
 
-  if (randomize_out_seq()) {
-    ldout(async_msgr->cct, 15) << __func__ << " could not get random bytes to set seq number for session reset; set seq number to " << out_seq << dendl;
-  }
+  randomize_out_seq();
 
   in_seq = 0;
   connect_seq = 0;

@@ -60,7 +60,7 @@ using namespace librados;
 #include <atomic>
 #include <list>
 #include <map>
-#include "auth/Crypto.h" // get_random_bytes()
+#include "include/random.h"
 
 #include "rgw_log.h"
 
@@ -6002,24 +6002,13 @@ read_omap:
     }
   }
 
-  map<string, bufferlist>::iterator miter;
+  auto miter = m.begin();
   if (m.size() > 1) {
-    vector<string> v;
-    for (miter = m.begin(); miter != m.end(); ++miter) {
-      v.push_back(miter->first);
-    }
-
-    uint32_t r;
-    ret = get_random_bytes((char *)&r, sizeof(r));
-    if (ret < 0)
-      return ret;
-
-    int i = r % v.size();
-    pool_name = v[i];
-  } else {
-    miter = m.begin();
-    pool_name = miter->first;
+    // choose a pool at random
+    auto r = ceph::util::generate_random_number<size_t>(0, m.size() - 1);
+    std::advance(miter, r);
   }
+  pool_name = miter->first;
 
   rule_info->data_pool = pool_name;
   rule_info->data_extra_pool = pool_name;

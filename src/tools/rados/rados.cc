@@ -30,7 +30,7 @@ using namespace libradosstriper;
 #include "common/TextTable.h"
 #include "include/stringify.h"
 #include "mds/inode_backtrace.h"
-#include "auth/Crypto.h"
+#include "include/random.h"
 #include <iostream>
 #include <fstream>
 
@@ -53,6 +53,7 @@ using namespace libradosstriper;
 #include "RadosImport.h"
 
 using namespace librados;
+using ceph::util::generate_random_number;
 
 // two steps seem to be necessary to do this right
 #define STR(x) _STR(x)
@@ -514,22 +515,16 @@ public:
 
 static const char alphanum_table[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-int gen_rand_alphanumeric(char *dest, int size) /* size should be the required string size + 1 */
+void gen_rand_alphanumeric(char *dest, int size) /* size should be the required string size + 1 */
 {
-  int ret = get_random_bytes(dest, size);
-  if (ret < 0) {
-    cerr << "cannot get random bytes: " << cpp_strerror(ret) << std::endl;
-    return -1;
-  }
+  const int max = sizeof(alphanum_table) - 2;
 
   int i;
   for (i=0; i<size - 1; i++) {
-    int pos = (unsigned)dest[i];
-    dest[i] = alphanum_table[pos & 63];
+    int pos = generate_random_number(0, max);
+    dest[i] = alphanum_table[pos];
   }
   dest[i] = '\0';
-
-  return 0;
 }
 
 struct obj_info {
@@ -691,7 +686,7 @@ int LoadGen::bootstrap(const char *pool)
     gen_rand_alphanumeric(buf, 16);
     info.name = "obj-";
     info.name.append(buf);
-    info.len = get_random(min_obj_len, max_obj_len);
+    info.len = generate_random_number(min_obj_len, max_obj_len);
 
     // throttle...
     while (completions.size() > max_ops) {
@@ -753,14 +748,14 @@ void LoadGen::run_op(LoadGenOp *op)
 
 void LoadGen::gen_op(LoadGenOp *op)
 {
-  int i = get_random(0, objs.size() - 1);
+  int i = generate_random_number<int>(0, objs.size() - 1);
   obj_info& info = objs[i];
   op->oid = info.name;
 
-  size_t len = get_random(min_op_len, max_op_len);
+  size_t len = generate_random_number(min_op_len, max_op_len);
   if (len > info.len)
     len = info.len;
-  size_t off = get_random(0, info.len);
+  size_t off = generate_random_number<size_t>(0, info.len);
 
   if (off + len > info.len)
     off = info.len - len;
@@ -768,7 +763,7 @@ void LoadGen::gen_op(LoadGenOp *op)
   op->off = off;
   op->len = len;
 
-  i = get_random(1, 100);
+  i = generate_random_number(1, 100);
   if (i > read_percent)
     op->type = OP_WRITE;
   else
