@@ -61,6 +61,7 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   encode_json("content_type", content_type, f);
   encode_json("accounted_size", accounted_size, f);
   encode_json("user_data", user_data, f);
+  encode_json("accounted_entry", accounted_entry, f);
 }
 
 void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {

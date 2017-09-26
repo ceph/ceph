@@ -97,12 +97,13 @@ struct rgw_bucket_dir_entry_meta {
   string content_type;
   uint64_t accounted_size;
   string user_data;
+  bool accounted_entry;
 
   rgw_bucket_dir_entry_meta() :
-  category(0), size(0), accounted_size(0) { }
+  category(0), size(0), accounted_size(0), accounted_entry(true) { }
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(5, 3, bl);
+    ENCODE_START(6, 3, bl);
     ::encode(category, bl);
     ::encode(size, bl);
     ::encode(mtime, bl);
@@ -112,6 +113,7 @@ struct rgw_bucket_dir_entry_meta {
     ::encode(content_type, bl);
     ::encode(accounted_size, bl);
     ::encode(user_data, bl);
+    ::encode(accounted_entry, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -130,6 +132,8 @@ struct rgw_bucket_dir_entry_meta {
       accounted_size = size;
     if (struct_v >= 5)
       ::decode(user_data, bl);
+    if (struct_v >= 6)
+      ::decode(accounted_entry, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

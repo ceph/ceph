@@ -6896,8 +6896,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   bool orig_exists;
   uint64_t orig_size;
   
-  if (!reset_obj) {    //Multipart upload, it has immutable head. 
-    orig_exists = false;
+  if (!reset_obj) {    
+    //Multipart upload, we treat each part of the multipart as the same object
+    orig_exists = true;
     orig_size = 0;
   } else {
     orig_exists = state->exists;
@@ -6939,7 +6940,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   r = index_op->complete(poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type, &acl_bl,
-                        meta.category, meta.remove_objs, meta.user_data);
+                        meta.category, meta.remove_objs, meta.user_data, meta.accounted_entry);
   if (r < 0)
     goto done_cancel;
 
@@ -9974,7 +9975,8 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
                                             const string& content_type,
                                             bufferlist *acl_bl,
                                             RGWObjCategory category,
-                                            list<rgw_obj_index_key> *remove_objs, const string *user_data)
+                                            list<rgw_obj_index_key> *remove_objs, const string *user_data,
+                                            bool accounted_entry)
 {
   if (blind) {
     return 0;
@@ -9996,6 +9998,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
   ent.meta.etag = etag;
   if (user_data)
     ent.meta.user_data = *user_data;
+  ent.meta.accounted_entry = accounted_entry;
 
   ACLOwner owner;
   if (acl_bl && acl_bl->length()) {

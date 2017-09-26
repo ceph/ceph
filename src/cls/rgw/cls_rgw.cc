@@ -710,7 +710,9 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 static void unaccount_entry(struct rgw_bucket_dir_header& header, struct rgw_bucket_dir_entry& entry)
 {
   struct rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
-  stats.num_entries--;
+  if (ent.meta.accounted_entry) {
+    stats.num_entries--;
+  }
   stats.total_size -= entry.meta.accounted_size;
   stats.total_size_rounded -= cls_rgw_get_rounded_size(entry.meta.accounted_size);
   stats.actual_size -= entry.meta.size;
@@ -896,7 +898,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       entry.key = op.key;
       entry.exists = true;
       entry.tag = op.tag;
-      stats.num_entries++;
+      if (ent.meta.accounted_entry) {
+        stats.num_entries++;
+      }
       stats.total_size += meta.accounted_size;
       stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
       stats.actual_size += meta.size;
