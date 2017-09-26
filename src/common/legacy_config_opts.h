@@ -1370,7 +1370,6 @@ OPTION(rgw_cross_domain_policy, OPT_STR)
 OPTION(rgw_healthcheck_disabling_path, OPT_STR) // path that existence causes the healthcheck to respond 503
 OPTION(rgw_s3_auth_use_rados, OPT_BOOL)  // should we try to use the internal credentials for s3?
 OPTION(rgw_s3_auth_use_keystone, OPT_BOOL)  // should we try to use keystone for s3?
-OPTION(rgw_s3_auth_aws4_force_boto2_compat, OPT_BOOL) // force aws4 auth boto2 compatibility
 OPTION(rgw_barbican_url, OPT_STR)  // url for barbican server
 
 /* OpenLDAP-style LDAP parameter strings */
@@ -1449,8 +1448,6 @@ OPTION(rgw_ops_log_data_backlog, OPT_INT) // max data backlog for ops log
 OPTION(rgw_fcgi_socket_backlog, OPT_INT) // socket  backlog for fcgi
 OPTION(rgw_usage_log_flush_threshold, OPT_INT) // threshold to flush pending log data
 OPTION(rgw_usage_log_tick_interval, OPT_INT) // flush pending log data every X seconds
-OPTION(rgw_intent_log_object_name, OPT_STR)  // man date to see codes (a subset are supported)
-OPTION(rgw_intent_log_object_name_utc, OPT_BOOL)
 OPTION(rgw_init_timeout, OPT_INT) // time in seconds
 OPTION(rgw_mime_types_file, OPT_STR)
 OPTION(rgw_gc_max_objs, OPT_INT)
@@ -1508,7 +1505,6 @@ OPTION(rgw_olh_pending_timeout_sec, OPT_INT) // time until we retire a pending o
 OPTION(rgw_user_max_buckets, OPT_INT) // global option to set max buckets count for all user
 
 OPTION(rgw_objexp_gc_interval, OPT_U32) // maximum time between round of expired objects garbage collecting
-OPTION(rgw_objexp_time_step, OPT_U32) // number of seconds for rounding the timestamps
 OPTION(rgw_objexp_hints_num_shards, OPT_U32) // maximum number of parts in which the hint index is stored in
 OPTION(rgw_objexp_chunk_size, OPT_U32) // maximum number of entries in a single operation when processing objexp data
 
