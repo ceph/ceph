@@ -646,6 +646,18 @@ class Module(MgrModule):
                                    new_weight)
                     next_ws[osd] = new_weight
 
+                # normalize weights under this root
+                root_weight = crush.get_item_weight(pe.root_ids[root])
+                root_sum = sum(b for a,b in next_ws.iteritems()
+                               if a in target.keys())
+                if root_sum > 0 and root_weight > 0:
+                    factor = root_sum / root_weight
+                    self.log.debug('normalizing root %s %d, weight %f, ws sum %f, factor %f',
+                                   root, pe.root_ids[root], root_weight,
+                                   root_sum, factor)
+                    for osd in actual.keys():
+                        next_ws[osd] = next_ws[osd] / factor
+
             # recalc
             plan.compat_ws = copy.deepcopy(next_ws)
             next_ms = plan.final_state()
