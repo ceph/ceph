@@ -91,25 +91,25 @@ class Cond {
     int r = pthread_cond_broadcast(&_c);
     return r;
   }
-  int Signal() { 
+  int Signal(bool nolock = false) {
     // make sure signaler is holding the waiter's lock.
-    assert(waiter_mutex == NULL ||
+    assert(nolock || waiter_mutex == NULL ||
 	   waiter_mutex->is_locked());
 
     int r = pthread_cond_broadcast(&_c);
     return r;
   }
-  int SignalOne() { 
+  int SignalOne(bool nolock = false) {
     // make sure signaler is holding the waiter's lock.
-    assert(waiter_mutex == NULL ||
+    assert(nolock || waiter_mutex == NULL ||
 	   waiter_mutex->is_locked());
 
     int r = pthread_cond_signal(&_c);
     return r;
   }
-  int SignalAll() { 
+  int SignalAll(bool nolock = false) {
     // make sure signaler is holding the waiter's lock.
-    assert(waiter_mutex == NULL ||
+    assert(nolock || waiter_mutex == NULL ||
 	   waiter_mutex->is_locked());
 
     int r = pthread_cond_broadcast(&_c);
