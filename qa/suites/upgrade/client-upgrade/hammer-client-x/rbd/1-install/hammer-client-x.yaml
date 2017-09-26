@@ -9,3 +9,8 @@ tasks:
 - print: "**** done install.upgrade client.1"
 - ceph:
 - print: "**** done ceph"
+- exec:
+    mon.a:
+      - ceph osd set-require-min-compat-client hammer
+      - ceph osd crush tunables hammer
+- print: "**** done set cluster for clients compatibility"
