@@ -80,7 +80,8 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 #define dout_subsys ceph_subsys_mon
-#define OSD_PG_CREATING_PREFIX "osd_pg_creating"
+static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
+static const string OSD_METADATA_PREFIX("osd_metadata");
 
 namespace {
 
@@ -268,6 +269,7 @@ void OSDMonitor::get_store_prefixes(std::set<string>& s) const
 {
   s.insert(service_name);
   s.insert(OSD_PG_CREATING_PREFIX);
+  s.insert(OSD_METADATA_PREFIX);
 }
 
 void OSDMonitor::update_from_paxos(bool *need_bootstrap)
