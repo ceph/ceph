@@ -398,11 +398,30 @@ Commands
 :command:`trash restore` *image-id*  
   Restore an image from trash.
 
-Image and snap specs
-====================
+:command:`group create` *group-spec*
+  Create a consistency group.
+
+:command:`group list` [-p | --pool *pool-name*]
+  List rbd consistency groups.
+
+:command:`group remove` *group-spec*
+  Delete a consistency group.
+
+:command:`group image add` *group-spec* *image-spec*
+  Add an image to a consistency group.
+
+:command:`group image list` *group-spec*
+  List images in a consistency group.
+
+:command:`group image remove` *group-spec* *image-spec*
+  Remove an image from a consistency group.
+
+Image, snap and group specs
+===========================
 
 | *image-spec* is [*pool-name*]/*image-name*
 | *snap-spec*  is [*pool-name*]/*image-name*\ @\ *snap-name*
+| *group-spec* is [*pool-name*]/*group-name*
 
 The default for *pool-name* is "rbd".  If an image name contains a slash
 character ('/'), *pool-name* is required.
