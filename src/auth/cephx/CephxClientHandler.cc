@@ -19,6 +19,7 @@
 #include "CephxProtocol.h"
 
 #include "auth/KeyRing.h"
+#include "include/random.h"
 #include "common/config.h"
 #include "common/dout.h"
 
@@ -53,7 +54,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     }
 
     CephXAuthenticate req;
-    get_random_bytes((char *)&req.client_challenge, sizeof(req.client_challenge));
+    req.client_challenge = ceph::util::generate_random_number<uint64_t>();
     std::string error;
     cephx_calc_client_server_challenge(cct, secret, server_challenge,
 				       req.client_challenge, &req.key, error);
