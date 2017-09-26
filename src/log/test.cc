@@ -6,6 +6,11 @@
 #include "include/coredumpctl.h"
 #include "SubsystemMap.h"
 
+#include "global/global_init.h"
+#include "common/ceph_argparse.h"
+#include "global/global_context.h"
+#include "common/dout.h"
+
 using namespace ceph::logging;
 
 TEST(Log, Simple)
@@ -273,4 +278,79 @@ TEST(Log, TimeFormat)
     ASSERT_NE(c, nullptr);
     ASSERT_EQ(6u, std::strlen(c + 1));
   }
+}
+
+#define dout_subsys ceph_subsys_context
+
+template <int depth, int x> struct do_log
+{
+  void log(CephContext* cct);
+};
+
+template <int x> struct do_log<12, x>
+{
+  void log(CephContext* cct);
+};
+
+template<int depth, int x> void do_log<depth,x>::log(CephContext* cct)
+{
+  ldout(cct, 20) << "Log depth=" << depth << " x=" << x << dendl;
+  if (rand() % 2) {
+    do_log<depth+1, x*2> log;
+    log.log(cct);
+  } else {
+    do_log<depth+1, x*2+1> log;
+    log.log(cct);
+  }
+}
+
+std::string recursion(CephContext* cct)
+{
+  ldout(cct, 20) << "Preparing recursion string" << dendl;
+  return "here-recursion";
+}
+
+template<int x> void do_log<12, x>::log(CephContext* cct)
+{
+  if ((rand() % 16) == 0) {
+    ldout(cct, 20) << "End " << recursion(cct) << "x=" << x << dendl;
+  } else {
+    ldout(cct, 20) << "End x=" << x << dendl;
+  }
+}
+
+TEST(Log, Speed_gather)
+{
+  do_log<0,0> start;
+  g_ceph_context->_conf->subsys.set_gather_level(ceph_subsys_context, 30);
+  g_ceph_context->_conf->subsys.set_log_level(ceph_subsys_context, 0);
+  for (int i=0; i<100000;i++) {
+    ldout(g_ceph_context, 20) << "Iteration " << i << dendl;
+    start.log(g_ceph_context);
+  }
+}
+
+TEST(Log, Speed_nogather)
+{
+  do_log<0,0> start;
+  g_ceph_context->_conf->subsys.set_gather_level(ceph_subsys_context, 0);
+  g_ceph_context->_conf->subsys.set_log_level(ceph_subsys_context, 0);
+  for (int i=0; i<100000;i++) {
+    ldout(g_ceph_context, 20) << "Iteration " << i << dendl;
+    start.log(g_ceph_context);
+  }
+}
+
+
+int main(int argc, char **argv)
+{
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
