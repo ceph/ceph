@@ -35,6 +35,7 @@ void usage()
   cout << "   --test-map-pgs-dump-all [--pool <poolid>] map all pgs to osds" << std::endl;
   cout << "   --health                dump health checks" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
+  cout << "   --mark-out <osdid>      mark an osd as out (but do not persist)" << std::endl;
   cout << "   --with-default-pool     include default pool when creating map" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
   cout << "   --test-random           do random placements" << std::endl;
@@ -116,6 +117,7 @@ int main(int argc, const char **argv)
   int range_last = -1;
   int pool = -1;
   bool mark_up_in = false;
+  int marked_out = -1;
   bool clear_temp = false;
   bool test_map_pgs = false;
   bool test_map_pgs_dump = false;
@@ -175,6 +177,8 @@ int main(int argc, const char **argv)
       create_from_conf = true;
     } else if (ceph_argparse_flag(args, i, "--mark-up-in", (char*)NULL)) {
       mark_up_in = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--mark-out", (char*)NULL)) {
+      marked_out = std::stoi(val);
     } else if (ceph_argparse_flag(args, i, "--clear-temp", (char*)NULL)) {
       clear_temp = true;
     } else if (ceph_argparse_flag(args, i, "--test-map-pgs", (char*)NULL)) {
@@ -317,6 +321,15 @@ int main(int argc, const char **argv)
       osdmap.crush->adjust_item_weightf(g_ceph_context, i, 1.0);
     }
   }
+
+  if (marked_out >=0 && marked_out < osdmap.get_max_osd()) {
+    cout << "marking OSD@" << marked_out << " as out" << std::endl;
+    int id = marked_out;
+    osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
+    osdmap.set_weight(id, CEPH_OSD_OUT);
+    osdmap.crush->adjust_item_weightf(g_ceph_context, id, 1.0);
+  }
+
   if (clear_temp) {
     cout << "clearing pg/primary temp" << std::endl;
     osdmap.clear_temp();

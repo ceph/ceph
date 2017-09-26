@@ -3835,8 +3835,9 @@ int OSDMap::calc_pg_upmaps(
       tmp.crush->get_rule_weight_osd_map(ruleno, &pmap);
       ldout(cct,30) << __func__ << " pool " << i.first << " ruleno " << ruleno << dendl;
       for (auto p : pmap) {
-	osd_weight[p.first] += p.second;
-	osd_weight_total += p.second;
+	auto adjusted_weight = tmp.get_weightf(p.first) * p.second;
+	osd_weight[p.first] += adjusted_weight;
+	osd_weight_total += adjusted_weight;
       }
     }
     for (auto& i : osd_weight) {
