@@ -23,7 +23,7 @@ namespace io {
 template <>
 struct ImageRequest<librbd::MockTestImageCtx> {
   static ImageRequest* s_instance;
-  AioCompletion *aio_comp;
+  AioCompletion *aio_comp = nullptr;
 
   static ImageRequest* create_write_request(librbd::MockTestImageCtx &image_ctx,
                                             AioCompletion *aio_comp,
