@@ -2320,6 +2320,28 @@ class CephManager:
             time.sleep(3)
         self.log("active!")
 
+    def wait_till_pg_convergence(self, timeout=None):
+        start = time.time()
+        old_stats = None
+        while True:
+            # strictly speaking, no need to wait for mon. but due to the
+            # "ms inject socket failures" setting, the osdmap could be delayed,
+            # so mgr is likely to ignore the pg-stat messages with pgs serving
+            # newly created pools which is not yet known by mgr. so, to make sure
+            # the mgr is updated with the latest pg-stats, waiting for mon/mgr is
+            # necessary.
+            self.flush_all_pg_stats()
+            new_stats = dict((stat['pgid'], stat['state'])
+                             for stat in self.get_pg_stats())
+            if old_stats == new_stats:
+                return old_stats
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'failed to reach convergence before %d secs' % timeout
+            old_stats = new_stats
+            # longer than mgr_stats_period
+            time.sleep(5 + 1)
+
     def mark_out_osd(self, osd):
         """
         Wrapper to mark osd out.
