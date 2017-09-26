@@ -54,6 +54,13 @@ void MgrMonitor::create_initial()
 	   << dendl;
 }
 
+void MgrMonitor::get_store_prefixes(std::set<string>& s) const
+{
+  s.insert(service_name);
+  s.insert(command_descs_prefix);
+  s.insert(MGR_METADATA_PREFIX);
+}
+
 void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_last_committed();
