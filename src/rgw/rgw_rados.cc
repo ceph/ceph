@@ -6373,7 +6373,11 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   meta.canceled = false;
 
   /* update quota cache */
-  store->quota_handler->update_stats(meta.owner, bucket, (orig_exists ? 0 : 1), size, orig_size);
+  if (meta.completeMultipart) {
+	  store->quota_handler->update_stats(meta.owner, bucket, (orig_exists ? 0 : 1), 0, orig_size);
+  } else {
+	  store->quota_handler->update_stats(meta.owner, bucket, (orig_exists ? 0 : 1), size, orig_size);
+  }
 
   return 0;
 
