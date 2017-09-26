@@ -1640,6 +1640,11 @@ void RGWGetObj::execute()
   /* start gettorrent */
   if (torrent.get_flag())
   {
+    attr_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
+    if (attr_iter != attrs.end() && attr_iter->second.to_str() == "SSE-C-AES256") {
+      op_ret = -ERR_INVALID_REQUEST;
+      goto done_err;
+    }
     torrent.init(s, store);
     op_ret = torrent.get_torrent_file(read_op, total_len, bl, obj);
     if (op_ret < 0)
