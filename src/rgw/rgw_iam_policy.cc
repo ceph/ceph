@@ -792,6 +792,8 @@ static optional<Principal> parse_principal(CephContext* cct, TokenID t,
 bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
   auto k = pp->tokens.lookup(s, l);
   Policy& p = pp->policy;
+  bool is_action = false;
+  bool is_validaction = false;
   Statement* t = p.statements.empty() ? nullptr : &(p.statements.back());
 
   // Top level!
@@ -814,8 +816,10 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
     t->noprinc.emplace(Principal::wildcard());
   } else if ((w->id == TokenID::Action) ||
 	     (w->id == TokenID::NotAction)) {
+    is_action = true;
     for (auto& p : actpairs) {
       if (match_policy({s, l}, p.name, MATCH_POLICY_ACTION)) {
+        is_validaction = true;
 	(w->id == TokenID::Action ? t->action : t->notaction) |= p.bit;
       }
     }
@@ -855,6 +859,10 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
 
   if (!arraying) {
     pp->s.pop_back();
+  }
+
+  if (is_action && !is_validaction){
+    return false;
   }
 
   return true;
