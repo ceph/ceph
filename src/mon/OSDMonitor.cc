@@ -2643,6 +2643,10 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     goto ignore;
   }
 
+  if (m->forced) {
+    return false;
+  }
+
   for (auto p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
     dout(20) << " " << p->first
 	     << (osdmap.pg_temp->count(p->first) ? osdmap.pg_temp->get(p->first) : empty)
