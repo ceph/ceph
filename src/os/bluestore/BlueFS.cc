@@ -1846,14 +1846,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   }
 
   for (auto& p : extents) {
-    bluefs_extent_t e = bluefs_extent_t(id, p.offset, p.length);
-    if (!ev->empty() &&
-	ev->back().bdev == e.bdev &&
-	ev->back().end() == (uint64_t) e.offset) {
-      ev->back().length += e.length;
-    } else {
-      ev->push_back(e);
-    }
+    ev->push_back(bluefs_extent_t(id, p.offset, p.length));
   }
    
   return 0;
