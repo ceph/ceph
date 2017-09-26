@@ -121,10 +121,15 @@ PyObject *PyModules::list_servers_python()
 
 PyObject *PyModules::get_metadata_python(
   std::string const &handle,
-  const std::string &svc_name,
+  const std::string &svc_type,
   const std::string &svc_id)
 {
-  auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
+  auto metadata = daemon_state.get(DaemonKey(svc_type, svc_id));
+  if (metadata == nullptr) {
+    derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
+    Py_RETURN_NONE;
+  }
+
   Mutex::Locker l(metadata->lock);
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
@@ -137,10 +142,15 @@ PyObject *PyModules::get_metadata_python(
 
 PyObject *PyModules::get_daemon_status_python(
   std::string const &handle,
-  const std::string &svc_name,
+  const std::string &svc_type,
   const std::string &svc_id)
 {
-  auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
+  auto metadata = daemon_state.get(DaemonKey(svc_type, svc_id));
+  if (metadata == nullptr) {
+    derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
+    Py_RETURN_NONE;
+  }
+
   Mutex::Locker l(metadata->lock);
   PyFormatter f;
   for (const auto &i : metadata->service_status) {
