@@ -331,6 +331,22 @@ static PyObject *crush_get_item_name(PyObject *self, PyObject *args)
   return PyString_FromString(crush->get_item_name(item));
 }
 
+static PyObject *crush_get_item_weight(PyObject *self, PyObject *args)
+{
+  PyObject *obj;
+  int item;
+  if (!PyArg_ParseTuple(args, "Oi:get_item_weight",
+			&obj, &item)) {
+    return nullptr;
+  }
+  CrushWrapper *crush = static_cast<CrushWrapper*>(
+    PyCapsule_GetPointer(obj, nullptr));
+  if (!crush->item_exists(item)) {
+    Py_RETURN_NONE;
+  }
+  return PyFloat_FromDouble(crush->get_item_weightf(item));
+}
+
 static PyObject *crush_find_takes(PyObject *self, PyObject *obj)
 {
   CrushWrapper *crush = static_cast<CrushWrapper*>(
@@ -372,6 +388,7 @@ static PyObject *crush_get_take_weight_osd_map(PyObject *self, PyObject *args)
 PyMethodDef CRUSHMapMethods[] = {
   {"dump", crush_dump, METH_O, "Dump map"},
   {"get_item_name", crush_get_item_name, METH_VARARGS, "Get item name"},
+  {"get_item_weight", crush_get_item_weight, METH_VARARGS, "Get item weight"},
   {"find_takes", crush_find_takes, METH_O, "Find distinct TAKE roots"},
   {"get_take_weight_osd_map", crush_get_take_weight_osd_map, METH_VARARGS,
    "Get OSD weight map for a given TAKE root node"},
