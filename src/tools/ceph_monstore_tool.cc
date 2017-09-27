@@ -914,28 +914,35 @@ int main(int argc, char **argv) {
     if (readable) {
       stringstream ss;
       bufferlist out;
-      if (map_type == "monmap") {
-        MonMap monmap;
-        monmap.decode(bl);
-        monmap.print(ss);
-      } else if (map_type == "osdmap") {
-        OSDMap osdmap;
-        osdmap.decode(bl);
-        osdmap.print(ss);
-      } else if (map_type == "mdsmap") {
-        MDSMap mdsmap;
-        mdsmap.decode(bl);
-        mdsmap.print(ss);
-      } else if (map_type == "crushmap") {
-        CrushWrapper cw;
-        bufferlist::iterator it = bl.begin();
-        cw.decode(it);
-        CrushCompiler cc(cw, std::cerr, 0);
-        cc.decompile(ss);
-      } else {
-        std::cerr << "This type of readable map does not exist: " << map_type << std::endl
-                  << "You can only specify[osdmap|monmap|mdsmap|crushmap]" << std::endl;
+      try {
+        if (map_type == "monmap") {
+          MonMap monmap;
+          monmap.decode(bl);
+          monmap.print(ss);
+        } else if (map_type == "osdmap") {
+          OSDMap osdmap;
+          osdmap.decode(bl);
+          osdmap.print(ss);
+        } else if (map_type == "mdsmap") {
+          MDSMap mdsmap;
+          mdsmap.decode(bl);
+          mdsmap.print(ss);
+        } else if (map_type == "crushmap") {
+          CrushWrapper cw;
+          bufferlist::iterator it = bl.begin();
+          cw.decode(it);
+          CrushCompiler cc(cw, std::cerr, 0);
+          cc.decompile(ss);
+        } else {
+          std::cerr << "This type of readable map does not exist: " << map_type
+                    << std::endl << "You can only specify[osdmap|monmap|mdsmap"
+                    "|crushmap]" << std::endl;
+        }
+      } catch (const buffer::error &err) {
+        std::cerr << "Could not decode for human readable output (you may still"
+                     " use non-readable mode).  Detail: " << err << std::endl;
       }
+
       out.append(ss);
       out.write_fd(fd);
     } else {
