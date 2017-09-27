@@ -4,6 +4,16 @@
 #include <set>
 #include <string>
 
+enum blkdev_prop_t {
+  BLKDEV_PROP_DEV,
+  BLKDEV_PROP_DISCARD_GRANULARITY,
+  BLKDEV_PROP_MODEL,
+  BLKDEV_PROP_ROTATIONAL,
+  BLKDEV_PROP_SERIAL,
+  BLKDEV_PROP_VENDOR,
+  BLKDEV_PROP_NUMPROPS
+};
+
 /* for testing purposes */
 extern void set_block_device_sandbox_dir(const char *dir);
 
@@ -18,9 +28,9 @@ extern int get_device_by_fd(int fd, char* partition, char* device, size_t max);
 
 // from a device (e.g., "sdb")
 extern int64_t get_block_device_int_property(
-	const char *devname, const char *property);
+	const char *devname, blkdev_prop_t prop);
 extern int64_t get_block_device_string_property(
-	const char *devname, const char *property,
+	const char *devname, blkdev_prop_t prop,
 	char *val, size_t maxlen);
 extern bool block_device_support_discard(const char *devname);
 extern bool block_device_is_rotational(const char *devname);

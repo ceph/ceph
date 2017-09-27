@@ -36,6 +36,8 @@ int get_device_by_path(const char *path, char* partition, char* device,
 }
 
 
+#include "common/blkdev.h"
+
 #ifdef __linux__
 #include <libudev.h>
 #include <linux/fs.h>
@@ -51,7 +53,17 @@ int get_device_by_path(const char *path, char* partition, char* device,
 
 static const char *sandbox_dir = "";
 
-static std::string get_block_device_string_property_wrap(const std::string &devname, const std::string &property); 
+static std::string get_block_device_string_property_wrap(const std::string &devname,
+							 blkdev_prop_t property); 
+
+static const char *blkdev_props2strings[] = {
+  [BLKDEV_PROP_DEV]                 = "dev",
+  [BLKDEV_PROP_DISCARD_GRANULARITY] = "queue/discard_granularity",
+  [BLKDEV_PROP_MODEL]               = "device/model",
+  [BLKDEV_PROP_ROTATIONAL]          = "queue/rotational",
+  [BLKDEV_PROP_SERIAL]              = "device/serial",
+  [BLKDEV_PROP_VENDOR]              = "device/vendor",
+};
 
 void set_block_device_sandbox_dir(const char *dir)
 {
@@ -163,12 +175,16 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
  * return negative error on error
  */
 int64_t get_block_device_string_property(const char *devname,
-					 const char *property,
+					 blkdev_prop_t prop,
 					 char *val, size_t maxlen)
 {
   char filename[PATH_MAX];
+  const char *propstr;
+
+  assert(prop < BLKDEV_PROP_NUMPROPS);
+  propstr = blkdev_props2strings[prop];
   snprintf(filename, sizeof(filename),
-	   "%s/sys/block/%s/%s", sandbox_dir, devname, property);
+	   "%s/sys/block/%s/%s", sandbox_dir, devname, propstr);
 
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
@@ -195,10 +211,10 @@ int64_t get_block_device_string_property(const char *devname,
  * return the value (we assume it is positive)
  * return negative error on error
  */
-int64_t get_block_device_int_property(const char *devname, const char *property)
+int64_t get_block_device_int_property(const char *devname, blkdev_prop_t prop)
 {
   char buff[256] = {0};
-  int r = get_block_device_string_property(devname, property, buff, sizeof(buff));
+  int r = get_block_device_string_property(devname, prop, buff, sizeof(buff));
   if (r < 0)
     return r;
   // take only digits
@@ -217,7 +233,7 @@ int64_t get_block_device_int_property(const char *devname, const char *property)
 
 bool block_device_support_discard(const char *devname)
 {
-  return get_block_device_int_property(devname, "queue/discard_granularity") > 0;
+  return get_block_device_int_property(devname, BLKDEV_PROP_DISCARD_GRANULARITY) > 0;
 }
 
 int block_device_discard(int fd, int64_t offset, int64_t len)
@@ -228,22 +244,23 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
 
 bool block_device_is_rotational(const char *devname)
 {
-  return get_block_device_int_property(devname, "queue/rotational") > 0;
+  return get_block_device_int_property(devname, BLKDEV_PROP_ROTATIONAL) > 0;
 }
 
 int block_device_vendor(const char *devname, char *vendor, size_t max)
 {
-  return get_block_device_string_property(devname, "device/vendor", vendor, max);
+  return get_block_device_string_property(devname, BLKDEV_PROP_VENDOR, vendor, max);
 }
 
 int block_device_model(const char *devname, char *model, size_t max)
 {
-  return get_block_device_string_property(devname, "device/model", model, max);
+  return get_block_device_string_property(devname, BLKDEV_PROP_MODEL, model,
+                                          max);
 }
 
 int block_device_serial(const char *devname, char *serial, size_t max)
 {
-  return get_block_device_string_property(devname, "device/serial", serial, max);
+  return get_block_device_string_property(devname, BLKDEV_PROP_SERIAL, serial, max);
 }
 
 int get_device_by_fd(int fd, char *partition, char *device, size_t max)
@@ -427,8 +444,8 @@ std::string get_device_id(const std::string& devname)
   // returned nothing; trying to read from files.  note that the 'vendor'
   // file rarely contains the actual vendor; it's usually 'ATA'.
   std::string model, serial;
-  model = get_block_device_string_property_wrap(devname, "device/model");
-  serial = get_block_device_string_property_wrap(devname, "device/serial");
+  model = get_block_device_string_property_wrap(devname, BLKDEV_PROP_MODEL);
+  serial = get_block_device_string_property_wrap(devname, BLKDEV_PROP_MODEL);
 
   if (!model.size() || serial.size()) {
     return {};
@@ -440,11 +457,11 @@ std::string get_device_id(const std::string& devname)
 }
 
 std::string get_block_device_string_property_wrap(const std::string &devname,
-						  const std::string &property)
+						  blkdev_prop_t prop)
 {
   char buff[1024] = {0};
   std::string prop_val;
-  int ret = get_block_device_string_property(devname.c_str(), property.c_str(), buff, sizeof(buff));
+  int ret = get_block_device_string_property(devname.c_str(), prop, buff, sizeof(buff));
   if (ret < 0) {
     return {};
   }
