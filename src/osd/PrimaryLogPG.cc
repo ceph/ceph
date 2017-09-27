@@ -2041,6 +2041,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   if (write_ordered && is_degraded_or_backfilling_object(head)) {
     if (can_backoff && g_conf->osd_backoff_on_degraded) {
       add_backoff(session, head, head);
+      maybe_kick_recovery(head);
     } else {
       wait_for_degraded_object(head, op);
     }
