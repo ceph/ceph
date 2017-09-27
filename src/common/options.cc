@@ -6049,10 +6049,9 @@ static std::vector<Option> build_options()
   std::vector<Option> result = get_global_options();
 
   auto ingest = [&result](std::vector<Option>&& options, const char* svc) {
-    for (const auto &o_in : options) {
-      Option o(o_in);
+    for (auto &o : options) {
       o.add_service(svc);
-      result.push_back(o);
+      result.push_back(std::move(o));
     }
   };
 
