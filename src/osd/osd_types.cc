@@ -4529,40 +4529,6 @@ void pg_hit_set_history_t::generate_test_instances(list<pg_hit_set_history_t*>& 
   ls.back()->history.push_back(pg_hit_set_info_t());
 }
 
-// -- osd_peer_stat_t --
-
-void osd_peer_stat_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(stamp, bl);
-  ENCODE_FINISH(bl);
-}
-
-void osd_peer_stat_t::decode(bufferlist::iterator& bl)
-{
-  DECODE_START(1, bl);
-  ::decode(stamp, bl);
-  DECODE_FINISH(bl);
-}
-
-void osd_peer_stat_t::dump(Formatter *f) const
-{
-  f->dump_stream("stamp") << stamp;
-}
-
-void osd_peer_stat_t::generate_test_instances(list<osd_peer_stat_t*>& o)
-{
-  o.push_back(new osd_peer_stat_t);
-  o.push_back(new osd_peer_stat_t);
-  o.back()->stamp = utime_t(1, 2);
-}
-
-ostream& operator<<(ostream& out, const osd_peer_stat_t &stat)
-{
-  return out << "stat(" << stat.stamp << ")";
-}
-
-
 // -- OSDSuperblock --
 
 void OSDSuperblock::encode(bufferlist &bl) const
