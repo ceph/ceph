@@ -990,7 +990,6 @@ class Module(MgrModule):
                 for server in servers:
                     hostname = server['hostname']
                     services = server['services']
-                    first = True
                     for s in services:
                         if s["type"] == "osd":
                             osd_id = int(s["id"])
@@ -1002,18 +1001,18 @@ class Module(MgrModule):
                             summary = self._osd_summary(osd_id,
                                                         osd_map.osds_by_id[osd_id])
 
-                            if first:
-                                # A little helper for rendering
-                                summary['first'] = True
-                                first = False
                             result[hostname].append(summary)
+
+                    result[hostname].sort(key=lambda a: a['id'])
+                    if len(result[hostname]):
+                        result[hostname][0]['first'] = True
 
                 global_instance().log.warn("result.size {0} servers.size {1}".format(
                     len(result), len(servers)
                 ))
 
                 # Return list form for convenience of rendering
-                return result.items()
+                return sorted(result.items(), key=lambda a: a[0])
 
             @cherrypy.expose
             def index(self):
