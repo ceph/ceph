@@ -2147,8 +2147,8 @@ TEST(BufferList, claim_prepend_misc) {
   EXPECT_EQ((unsigned)(11-3), src_buf.length());
   src_buf.claim_prepend(b3);
   EXPECT_EQ((unsigned)(8+7), src_buf.length());
-  EXPECT_EQ(0, b3.get_num_buffers());
-  EXPECT_EQ(0, b3.length());
+  EXPECT_EQ(0u, b3.get_num_buffers());
+  EXPECT_EQ(0u, b3.length());
   src_buf.copy(0, src_buf.length(), dest_buf);
   EXPECT_EQ(3u, dest_buf.get_num_buffers()); 
 }
