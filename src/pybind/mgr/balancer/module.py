@@ -693,13 +693,15 @@ class Module(MgrModule):
                 self.log.debug('Step misplaced %f > max %f, reducing step to %f',
                                next_misplaced, max_misplaced, step)
             else:
-                if next_pe.score > cur_pe.score * 1.01:
+                if next_pe.score > cur_pe.score * 1.0001:
                     step /= 2.0
                     self.log.debug('Score got worse, trying smaller step %f',
                                    step)
                 else:
                     cur_pe = next_pe
                     best_ws = next_ws
+                    if cur_pe.score == 0:
+                        break
             left -= 1
 
         if cur_pe.score < pe.score:
