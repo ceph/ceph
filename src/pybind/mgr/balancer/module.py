@@ -749,46 +749,6 @@ class Module(MgrModule):
         self.log.debug('weight_set weights %s' % weight_set)
         return weight_set
 
-    def get_util(self, cost_mode, pools, osds):
-        if cost_mode == 'pg' or \
-           cost_mode == 'pg_bytes' or \
-           cost_mode == 'pg_objects':
-            util_map = {}
-            for osd in osds:
-                util_map[osd] = 0
-            dump = self.get('pg_dump')
-            #self.log.info('dump %s' % dump)
-            self.log.info('osds %s' % osds)
-            for pg in dump['pg_stats']:
-                inpool = False
-                for pool in pools:
-                    if pg['pgid'].startswith(str(pool) + '.'):
-                        inpool = True
-                        break
-                if not inpool:
-                    self.log.info('skipping %s' % pg['pgid'])
-                    continue
-                self.log.info('pg %s osds %s' % (pg['pgid'], pg['up']))
-                for osd in [int(a) for a in pg['up']]:
-                    if osd in osds:
-                        if cost_mode == 'pg':
-                            util_map[osd] += 1
-                        elif cost_mode == 'pg_bytes':
-                            util_map[osd] += pg['stat_sum']['num_bytes']
-                        elif cost_mode == 'pg_objects':
-                            util_map[osd] += pg['stat_sum']['num_objects']
-            return util_map
-        else:
-            raise RuntimeError('unsupported cost mode %s' % cost_mode)
-
-    def get_target(self, util_map):
-        total = 0
-        count = 0
-        for k, v in util_map.iteritems():
-            total += v;
-            count += 1
-        return total / count
-
     def do_crush(self):
         self.log.info('do_crush (not yet implemented)')
 
