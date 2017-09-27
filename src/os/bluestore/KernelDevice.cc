@@ -209,7 +209,7 @@ void KernelDevice::close()
   path.clear();
 }
 
-static string get_dev_property(const char *dev, const char *property)
+static string get_dev_property(const char *dev, blkdev_prop_t property)
 {
   char val[1024] = {0};
   get_block_device_string_property(dev, property, val, sizeof(val));
@@ -257,18 +257,18 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
       {
 	(*pm)[prefix + "partition_path"] = string(partition_path);
 	(*pm)[prefix + "dev_node"] = string(dev_node);
-	(*pm)[prefix + "model"] = get_dev_property(dev_node, "device/model");
-	(*pm)[prefix + "dev"] = get_dev_property(dev_node, "dev");
+	(*pm)[prefix + "model"] = get_dev_property(dev_node, BLKDEV_PROP_MODEL);
+	(*pm)[prefix + "dev"] = get_dev_property(dev_node, BLKDEV_PROP_DEV);
 
 	// nvme exposes a serial number
-	string serial = get_dev_property(dev_node, "device/serial");
+	string serial = get_dev_property(dev_node, BLKDEV_PROP_SERIAL);
 	if (serial.length()) {
 	  (*pm)[prefix + "serial"] = serial;
 	}
 
 	// nvme has a device/device/* structure; infer from that.  there
 	// is probably a better way?
-	string nvme_vendor = get_dev_property(dev_node, "device/device/vendor");
+	string nvme_vendor = get_dev_property(dev_node, BLKDEV_PROP_VENDOR);
 	if (nvme_vendor.length()) {
 	  (*pm)[prefix + "type"] = "nvme";
 	}
