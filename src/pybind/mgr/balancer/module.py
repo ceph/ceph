@@ -31,7 +31,13 @@ class MappingState:
         self.pg_stat = {
             i['pgid']: i['stat_sum'] for i in pg_dump.get('pg_stats', [])
         }
-
+        self.poolids = [p['pool'] for p in self.osdmap_dump.get('pools', [])]
+        self.pg_up = {}
+        self.pg_up_by_poolid = {}
+        for poolid in self.poolids:
+            self.pg_up_by_poolid[poolid] = osdmap.map_pool_pgs_up(poolid)
+            for a,b in self.pg_up_by_poolid[poolid].iteritems():
+                self.pg_up[a] = b
 
 class Plan:
     def __init__(self, name, ms):
@@ -388,7 +394,7 @@ class Module(MgrModule):
             pi = [p for p in ms.osdmap_dump.get('pools',[])
                   if p['pool_name'] == pool][0]
             poolid = pi['pool']
-            pm = ms.osdmap.map_pool_pgs_up(poolid)
+            pm = ms.pg_up_by_poolid[poolid]
             pgs = 0
             objects = 0
             bytes = 0
