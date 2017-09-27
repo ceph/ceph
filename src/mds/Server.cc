@@ -1092,7 +1092,7 @@ void Server::recall_client_state(void)
             << "<" << "min_caps_per_client " << min_caps_per_client << dendl;
     max_caps_per_client = min_caps_per_client + 1;
   }
-   
+
   /* unless this ratio is smaller: */
   /* ratio: determine the amount of caps to recall from each client. Use
    * percentage full over the cache reservation. Cap the ratio at 80% of client
