@@ -16,8 +16,6 @@
 #include "include/assert.h"
 #include "os/bluestore/bluestore_types.h"
 
-class FreelistManager;
-
 class Allocator {
 public:
   virtual ~Allocator() {}
