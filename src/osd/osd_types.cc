@@ -788,7 +788,7 @@ std::string pg_vector_string(const vector<int32_t> &a)
   return oss.str();
 }
 
-std::string pg_state_string(int state)
+std::string pg_state_string(uint64_t state)
 {
   ostringstream oss;
   if (state & PG_STATE_STALE)
@@ -853,9 +853,9 @@ std::string pg_state_string(int state)
   return ret;
 }
 
-int pg_string_state(const std::string& state)
+int64_t pg_string_state(const std::string& state)
 {
-  int type;
+  int64_t type;
   if (state == "active")
     type = PG_STATE_ACTIVE;
   else if (state == "clean")
@@ -2328,11 +2328,11 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(22, 22, bl);
+  ENCODE_START(23, 22, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
-  ::encode(state, bl);
+  ::encode((__u32)state, bl);   // for older peers
   ::encode(log_start, bl);
   ::encode(ondisk_log_start, bl);
   ::encode(created, bl);
@@ -2369,17 +2369,19 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(last_peered, bl);
   ::encode(last_became_peered, bl);
   ::encode(pin_stats_invalid, bl);
+  ::encode(state, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
   bool tmp;
-  DECODE_START(22, bl);
+  uint32_t old_state;
+  DECODE_START(23, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
   ::decode(reported_epoch, bl);
-  ::decode(state, bl);
+  ::decode(old_state, bl);
   ::decode(log_start, bl);
   ::decode(ondisk_log_start, bl);
   ::decode(created, bl);
@@ -2422,6 +2424,11 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   ::decode(last_became_peered, bl);
   ::decode(tmp, bl);
   pin_stats_invalid = tmp;
+  if (struct_v >= 23) {
+    ::decode(state, bl);
+  } else {
+    state = old_state;
+  }
   DECODE_FINISH(bl);
 }
 
