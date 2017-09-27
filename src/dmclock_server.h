@@ -296,11 +296,11 @@ namespace crimson {
 	// an idle client becoming unidle
 	double                prop_delta = 0.0;
 
-	c::IndIntruHeapData   reserv_heap_data = 0;
-	c::IndIntruHeapData   lim_heap_data = 0;
-	c::IndIntruHeapData   ready_heap_data = 0;
+	c::IndIntruHeapData   reserv_heap_data {};
+	c::IndIntruHeapData   lim_heap_data {};
+	c::IndIntruHeapData   ready_heap_data {};
 #if USE_PROP_HEAP
-	c::IndIntruHeapData   prop_heap_data = 0;
+	c::IndIntruHeapData   prop_heap_data {};
 #endif
 
       public:
