@@ -94,6 +94,12 @@
                 var width=4;
                 var unit = 0;
 
+                if (n == null) {
+                    // People shouldn't really be passing null, but let's
+                    // do something sensible instead of barfing.
+                    return "-";
+                }
+
                 while (Math.floor(n / (divisor**unit)).toString().length > width - 1) {
                     unit = unit + 1;
                 }
