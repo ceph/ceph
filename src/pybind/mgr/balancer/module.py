@@ -711,21 +711,6 @@ class Module(MgrModule):
                           pe.score)
             return False
 
-    def compat_weight_set_reweight(self, osd, new_weight):
-        self.log.debug('ceph osd crush weight-set reweight-compat')
-        result = CommandResult('')
-        self.send_command(result, 'mon', '', json.dumps({
-            'prefix': 'osd crush weight-set reweight-compat',
-            'format': 'json',
-            'item': 'osd.%d' % osd,
-            'weight': [new_weight],
-        }), '')
-        r, outb, outs = result.wait()
-        if r != 0:
-            self.log.error('Error setting compat weight-set osd.%d to %f' %
-            (osd, new_weight))
-            return
-
     def get_compat_weight_set_weights(self):
         # enable compat weight-set
         self.log.debug('ceph osd crush weight-set create-compat')
