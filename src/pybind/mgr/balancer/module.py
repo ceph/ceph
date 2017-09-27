@@ -148,7 +148,10 @@ class Eval:
 
             for k, v in count[t].iteritems():
                 # adjust/normalize by weight
-                adjusted = float(v) / target[k] / float(num)
+                if target[k]:
+                    adjusted = float(v) / target[k] / float(num)
+                else:
+                    adjusted = 0.0
 
                 # Overweighted devices and their weights are factors to calculate reweight_urgency.
                 # One 10% underfilled device with 5 2% overfilled devices, is arguably a better
@@ -367,6 +370,9 @@ class Module(MgrModule):
         self.log.debug('pools %s' % pools)
         self.log.debug('pool_rule %s' % pool_rule)
 
+        osd_weight = { a['osd']: a['weight']
+                       for a in ms.osdmap_dump.get('osds',[]) }
+
         # get expected distributions by root
         actual_by_root = {}
         rootids = ms.crush.find_takes()
@@ -380,7 +386,14 @@ class Module(MgrModule):
             for poolid in ls:
                 pe.pool_roots[pe.pool_name[poolid]].append(root)
                 pe.root_pools[root].append(pe.pool_name[poolid])
-            pe.target_by_root[root] = ms.crush.get_take_weight_osd_map(rootid)
+            weight_map = ms.crush.get_take_weight_osd_map(rootid)
+            adjusted_map = {
+                osd: cw * osd_weight.get(osd, 1.0)
+                for osd,cw in weight_map.iteritems()
+            }
+            sum_w = sum(adjusted_map.values()) or 1.0
+            pe.target_by_root[root] = { osd: w / sum_w
+                                        for osd,w in adjusted_map.iteritems() }
             actual_by_root[root] = {
                 'pgs': {},
                 'objects': {},
@@ -605,16 +618,25 @@ class Module(MgrModule):
             return False
         max_misplaced = float(self.get_config('max_misplaced',
                                               default_max_misplaced))
+        min_pg_per_osd = 2
 
-        osdmap = self.get_osdmap()
+        ms = plan.initial
+        osdmap = ms.osdmap
         crush = osdmap.get_crush()
+        pe = self.calc_eval(ms)
+        if pe.score == 0:
+            self.log.info('Distribution is already perfect')
+            return False
+
+        # get current osd reweights
+        orig_osd_weight = { a['osd']: a['weight']
+                            for a in ms.osdmap_dump.get('osds',[]) }
+        reweighted_osds = [ a for a,b in orig_osd_weight.iteritems()
+                            if b < 1.0 and b > 0.0 ]
 
         # get current compat weight-set weights
         orig_ws = self.get_compat_weight_set_weights()
         orig_ws = { a: b for a, b in orig_ws.iteritems() if a >= 0 }
-
-        ms = plan.initial
-        pe = self.calc_eval(ms)
 
         # Make sure roots don't overlap their devices.  If so, we
         # can't proceed.
@@ -646,6 +668,13 @@ class Module(MgrModule):
             random.shuffle(roots)
             for root in roots:
                 pools = cur_pe.root_pools[root]
+                pgs = len(cur_pe.target_by_root[root])
+                min_pgs = pgs * min_pg_per_osd
+                if cur_pe.total_by_root[root] < min_pgs:
+                    self.log.info('Skipping root %s (pools %s), total pgs %d '
+                                  '< minimum %d (%d per osd)',
+                                  root, pools, pgs, min_pgs, min_pg_per_osd)
+                    continue
                 self.log.info('Balancing root %s (pools %s) by %s' %
                               (root, pools, key))
                 target = cur_pe.target_by_root[root]
@@ -653,16 +682,23 @@ class Module(MgrModule):
                 queue = sorted(actual.keys(),
                                key=lambda osd: -abs(target[osd] - actual[osd]))
                 for osd in queue:
-                    deviation = target[osd] - actual[osd]
-                    if deviation == 0:
-                        break
-                    self.log.debug('osd.%d deviation %f', osd, deviation)
-                    weight = best_ws[osd]
-                    calc_weight = target[osd] / actual[osd] * weight
-                    new_weight = weight * (1.0 - step) + calc_weight * step
-                    self.log.debug('Reweight osd.%d %f -> %f', osd, weight,
-                                   new_weight)
-                    next_ws[osd] = new_weight
+                    if orig_osd_weight[osd] == 0:
+                        self.log.debug('skipping out osd.%d', osd)
+                    else:
+                        deviation = target[osd] - actual[osd]
+                        if deviation == 0:
+                            break
+                        self.log.debug('osd.%d deviation %f', osd, deviation)
+                        weight = best_ws[osd]
+                        if actual[osd] > 0:
+                            calc_weight = target[osd] / actual[osd] * weight
+                        else:
+                            # not enough to go on here... keep orig weight
+                            calc_weight = weight
+                        new_weight = weight * (1.0 - step) + calc_weight * step
+                        self.log.debug('Reweight osd.%d %f -> %f', osd, weight,
+                                       new_weight)
+                        next_ws[osd] = new_weight
 
                 # normalize weights under this root
                 root_weight = crush.get_item_weight(pe.root_ids[root])
@@ -670,7 +706,8 @@ class Module(MgrModule):
                                if a in target.keys())
                 if root_sum > 0 and root_weight > 0:
                     factor = root_sum / root_weight
-                    self.log.debug('normalizing root %s %d, weight %f, ws sum %f, factor %f',
+                    self.log.debug('normalizing root %s %d, weight %f, '
+                                   'ws sum %f, factor %f',
                                    root, pe.root_ids[root], root_weight,
                                    root_sum, factor)
                     for osd in actual.keys():
