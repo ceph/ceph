@@ -27,7 +27,11 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  ENCODE_START(1, 1, bl);
+  uint8_t v = 2;
+  if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    v = 1;
+  }
+  ENCODE_START(v, 1, bl);
   ::encode(num_pg, bl);
   ::encode(num_pg_active, bl);
   ::encode(num_pg_unknown, bl);
@@ -35,7 +39,16 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   ::encode(pg_pool_sum, bl, features);
   ::encode(pg_sum, bl, features);
   ::encode(osd_sum, bl);
-  ::encode(num_pg_by_state, bl);
+  if (v >= 2) {
+    ::encode(num_pg_by_state, bl);
+  } else {
+    uint32_t n = num_pg_by_state.size();
+    ::encode(n, bl);
+    for (auto p : num_pg_by_state) {
+      ::encode((uint32_t)p.first, bl);
+      ::encode(p.second, bl);
+    }
+  }
   ::encode(num_pg_by_osd, bl);
   ::encode(num_pg_by_pool, bl);
   ::encode(osd_last_seq, bl);
@@ -49,7 +62,7 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 
 void PGMapDigest::decode(bufferlist::iterator& p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   ::decode(num_pg, p);
   ::decode(num_pg_active, p);
   ::decode(num_pg_unknown, p);
@@ -57,7 +70,15 @@ void PGMapDigest::decode(bufferlist::iterator& p)
   ::decode(pg_pool_sum, p);
   ::decode(pg_sum, p);
   ::decode(osd_sum, p);
-  ::decode(num_pg_by_state, p);
+  if (struct_v >= 2) {
+    ::decode(num_pg_by_state, p);
+  } else {
+    map<int32_t, int32_t> nps;
+    ::decode(nps, p);
+    for (auto i : nps) {
+      num_pg_by_state[i.first] = i.second;
+    }
+  }
   ::decode(num_pg_by_osd, p);
   ::decode(num_pg_by_pool, p);
   ::decode(osd_last_seq, p);
@@ -2938,7 +2959,7 @@ int process_pg_map_command(
         state = -1;
         break;
       } else {
-        int filter = pg_string_state(state_str);
+        int64_t filter = pg_string_state(state_str);
         if (filter < 0) {
           *ss << "'" << state_str << "' is not a valid pg state,"
               << " available choices: " << pg_state_string(0xFFFFFFFF);

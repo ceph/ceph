@@ -974,41 +974,41 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 /*
  * pg states
  */
-#define PG_STATE_CREATING     (1<<0)  // creating
-#define PG_STATE_ACTIVE       (1<<1)  // i am active.  (primary: replicas too)
-#define PG_STATE_CLEAN        (1<<2)  // peers are complete, clean of stray replicas.
-#define PG_STATE_DOWN         (1<<4)  // a needed replica is down, PG offline
-//#define PG_STATE_REPLAY       (1<<5)  // crashed, waiting for replay
-//#define PG_STATE_STRAY      (1<<6)  // i must notify the primary i exist.
-//#define PG_STATE_SPLITTING    (1<<7)  // i am splitting
-#define PG_STATE_SCRUBBING    (1<<8)  // scrubbing
-//#define PG_STATE_SCRUBQ       (1<<9)  // queued for scrub
-#define PG_STATE_DEGRADED     (1<<10) // pg contains objects with reduced redundancy
-#define PG_STATE_INCONSISTENT (1<<11) // pg replicas are inconsistent (but shouldn't be)
-#define PG_STATE_PEERING      (1<<12) // pg is (re)peering
-#define PG_STATE_REPAIR       (1<<13) // pg should repair on next scrub
-#define PG_STATE_RECOVERING   (1<<14) // pg is recovering/migrating objects
-#define PG_STATE_BACKFILL_WAIT     (1<<15) // [active] reserving backfill
-#define PG_STATE_INCOMPLETE   (1<<16) // incomplete content, peering failed.
-#define PG_STATE_STALE        (1<<17) // our state for this pg is stale, unknown.
-#define PG_STATE_REMAPPED     (1<<18) // pg is explicitly remapped to different OSDs than CRUSH
-#define PG_STATE_DEEP_SCRUB   (1<<19) // deep scrub: check CRC32 on files
-#define PG_STATE_BACKFILLING  (1<<20) // [active] backfilling pg content
-#define PG_STATE_BACKFILL_TOOFULL (1<<21) // backfill can't proceed: too full
-#define PG_STATE_RECOVERY_WAIT (1<<22) // waiting for recovery reservations
-#define PG_STATE_UNDERSIZED    (1<<23) // pg acting < pool size
-#define PG_STATE_ACTIVATING   (1<<24) // pg is peered but not yet active
-#define PG_STATE_PEERED        (1<<25) // peered, cannot go active, can recover
-#define PG_STATE_SNAPTRIM      (1<<26) // trimming snaps
-#define PG_STATE_SNAPTRIM_WAIT (1<<27) // queued to trim snaps
-#define PG_STATE_RECOVERY_TOOFULL (1<<28) // recovery can't proceed: too full
-#define PG_STATE_SNAPTRIM_ERROR (1<<29) // error stopped trimming snaps
-#define PG_STATE_FORCED_RECOVERY (1<<30) // force recovery of this pg before any other
-#define PG_STATE_FORCED_BACKFILL (1<<31) // force backfill of this pg before any other
+#define PG_STATE_CREATING           (1ULL << 0)  // creating
+#define PG_STATE_ACTIVE             (1ULL << 1)  // i am active.  (primary: replicas too)
+#define PG_STATE_CLEAN              (1ULL << 2)  // peers are complete, clean of stray replicas.
+#define PG_STATE_DOWN               (1ULL << 4)  // a needed replica is down, PG offline
+//#define PG_STATE_REPLAY           (1ULL << 5)  // crashed, waiting for replay
+//#define PG_STATE_STRAY            (1ULL << 6)  // i must notify the primary i exist.
+//#define PG_STATE_SPLITTING        (1ULL << 7)  // i am splitting
+#define PG_STATE_SCRUBBING          (1ULL << 8)  // scrubbing
+//#define PG_STATE_SCRUBQ           (1ULL << 9)  // queued for scrub
+#define PG_STATE_DEGRADED           (1ULL << 10) // pg contains objects with reduced redundancy
+#define PG_STATE_INCONSISTENT       (1ULL << 11) // pg replicas are inconsistent (but shouldn't be)
+#define PG_STATE_PEERING            (1ULL << 12) // pg is (re)peering
+#define PG_STATE_REPAIR             (1ULL << 13) // pg should repair on next scrub
+#define PG_STATE_RECOVERING         (1ULL << 14) // pg is recovering/migrating objects
+#define PG_STATE_BACKFILL_WAIT      (1ULL << 15) // [active] reserving backfill
+#define PG_STATE_INCOMPLETE         (1ULL << 16) // incomplete content, peering failed.
+#define PG_STATE_STALE              (1ULL << 17) // our state for this pg is stale, unknown.
+#define PG_STATE_REMAPPED           (1ULL << 18) // pg is explicitly remapped to different OSDs than CRUSH
+#define PG_STATE_DEEP_SCRUB         (1ULL << 19) // deep scrub: check CRC32 on files
+#define PG_STATE_BACKFILLING        (1ULL << 20) // [active] backfilling pg content
+#define PG_STATE_BACKFILL_TOOFULL   (1ULL << 21) // backfill can't proceed: too full
+#define PG_STATE_RECOVERY_WAIT      (1ULL << 22) // waiting for recovery reservations
+#define PG_STATE_UNDERSIZED         (1ULL << 23) // pg acting < pool size
+#define PG_STATE_ACTIVATING         (1ULL << 24) // pg is peered but not yet active
+#define PG_STATE_PEERED             (1ULL << 25) // peered, cannot go active, can recover
+#define PG_STATE_SNAPTRIM           (1ULL << 26) // trimming snaps
+#define PG_STATE_SNAPTRIM_WAIT      (1ULL << 27) // queued to trim snaps
+#define PG_STATE_RECOVERY_TOOFULL   (1ULL << 28) // recovery can't proceed: too full
+#define PG_STATE_SNAPTRIM_ERROR     (1ULL << 29) // error stopped trimming snaps
+#define PG_STATE_FORCED_RECOVERY    (1ULL << 30) // force recovery of this pg before any other
+#define PG_STATE_FORCED_BACKFILL    (1ULL << 31) // force backfill of this pg before any other
 
-std::string pg_state_string(int state);
+std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const vector<int32_t> &a);
-int pg_string_state(const std::string& state);
+int64_t pg_string_state(const std::string& state);
 
 
 /*
@@ -1911,7 +1911,7 @@ struct pg_stat_t {
   eversion_t version;
   version_t reported_seq;  // sequence number
   epoch_t reported_epoch;  // epoch of this report
-  __u32 state;
+  uint64_t state;
   utime_t last_fresh;   // last reported
   utime_t last_change;  // new state != previous state
   utime_t last_active;  // state & PG_STATE_ACTIVE
