@@ -39,6 +39,16 @@ class MappingState:
             for a,b in self.pg_up_by_poolid[poolid].iteritems():
                 self.pg_up[a] = b
 
+    def calc_misplaced_from(self, other_ms):
+        num = len(other_ms.pg_up)
+        misplaced = 0
+        for pgid, before in other_ms.pg_up.iteritems():
+            if before != self.pg_up.get(pgid, []):
+                misplaced += 1
+        if num > 0:
+            return float(misplaced) / float(num)
+        return 0.0
+
 class Plan:
     def __init__(self, name, ms):
         self.mode = 'unknown'
@@ -593,6 +603,8 @@ class Module(MgrModule):
         step = self.get_config('crush_compat_step', .2)
         if step <= 0 or step >= 1.0:
             return False
+        max_misplaced = float(self.get_config('max_misplaced',
+                                              default_max_misplaced))
 
         osdmap = self.get_osdmap()
         crush = osdmap.get_crush()
@@ -668,14 +680,26 @@ class Module(MgrModule):
             plan.compat_ws = copy.deepcopy(next_ws)
             next_ms = plan.final_state()
             next_pe = self.calc_eval(next_ms)
-            self.log.debug('Step result score %f -> %f', cur_pe.score,
-                           next_pe.score)
-            if next_pe.score > cur_pe.score * 1.01:
+            next_misplaced = next_ms.calc_misplaced_from(ms)
+            self.log.debug('Step result score %f -> %f, misplacing %f',
+                           cur_pe.score, next_pe.score, next_misplaced)
+
+            if next_misplaced > max_misplaced:
+                if cur_pe.score < pe.score:
+                    self.log.debug('Step misplaced %f > max %f, stopping',
+                                   next_misplaced, max_misplaced)
+                    break
                 step /= 2.0
-                self.log.debug('Score got worse, trying smaller step %f' % step)
+                self.log.debug('Step misplaced %f > max %f, reducing step to %f',
+                               next_misplaced, max_misplaced, step)
             else:
-                cur_pe = next_pe
-                best_ws = next_ws
+                if next_pe.score > cur_pe.score * 1.01:
+                    step /= 2.0
+                    self.log.debug('Score got worse, trying smaller step %f',
+                                   step)
+                else:
+                    cur_pe = next_pe
+                    best_ws = next_ws
             left -= 1
 
         if cur_pe.score < pe.score:
