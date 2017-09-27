@@ -1,0 +1,51 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 20 # GB
+tasks:
+- install:
+- ceph:
+    conf:
+      osd:
+        osd recovery sleep: .1
+        osd min pg log entries: 100
+        osd max pg log entries: 1000
+    log-whitelist:
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(OBJECT_
+      - \(PG_
+      - overall HEALTH
+- exec:
+    osd.0:
+      - ceph osd pool create foo 128
+      - ceph osd pool application enable foo foo
+      - rados -p foo bench 30 write -b 4096 --no-cleanup
+      - ceph osd out 0
+      - sleep 5
+      - ceph osd set noup
+- ceph.restart:
+    daemons: [osd.1]
+    wait-for-up: false
+    wait-for-healthy: false
+- exec:
+    osd.0:
+      - rados -p foo bench 3 write -b 4096 --no-cleanup
+      - ceph osd unset noup
+      - sleep 10
+      - ceph tell osd.* config set osd_recovery_sleep 0
+      - ceph tell osd.* config set osd_recovery_max_active 20
+- ceph.healthy:
+- exec:
+    osd.0:
+      - egrep '(defer backfill|defer recovery)' /var/log/ceph/ceph-osd.*.log
