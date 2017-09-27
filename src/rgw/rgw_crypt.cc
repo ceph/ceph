@@ -1108,6 +1108,9 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         *block_crypt = std::move(aes);
       }
       actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
+
+      crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
+      crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = key_id.to_string();
       return 0;
     }
 
