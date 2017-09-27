@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include "include/uuid.h"
+#include "common/blkdev.h"
 
 #ifdef __linux__
 #include <linux/fs.h>
@@ -23,6 +24,15 @@
 #define UUID_LEN 36
 
 static const char *sandbox_dir = "";
+
+static const char *blkdev_props2strings[] = {
+  [BLKDEV_PROP_DEV]                 = "dev",
+  [BLKDEV_PROP_DISCARD_GRANULARITY] = "queue/discard_granularity",
+  [BLKDEV_PROP_MODEL]               = "device/model",
+  [BLKDEV_PROP_ROTATIONAL]          = "queue/rotational",
+  [BLKDEV_PROP_SERIAL]              = "device/serial",
+  [BLKDEV_PROP_VENDOR]              = "device/device/vendor",
+};
 
 void set_block_device_sandbox_dir(const char *dir)
 {
@@ -129,12 +139,16 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
  * return negative error on error
  */
 int64_t get_block_device_string_property(const char *devname,
-					 const char *property,
+					 blkdev_prop_t prop,
 					 char *val, size_t maxlen)
 {
   char filename[PATH_MAX];
+  const char *propstr;
+
+  assert(prop < BLKDEV_PROP_NUMPROPS);
+  propstr = blkdev_props2strings[prop];
   snprintf(filename, sizeof(filename),
-	   "%s/sys/block/%s/%s", sandbox_dir, devname, property);
+	   "%s/sys/block/%s/%s", sandbox_dir, devname, propstr);
 
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
@@ -161,10 +175,10 @@ int64_t get_block_device_string_property(const char *devname,
  * return the value (we assume it is positive)
  * return negative error on error
  */
-int64_t get_block_device_int_property(const char *devname, const char *property)
+int64_t get_block_device_int_property(const char *devname, blkdev_prop_t prop)
 {
   char buff[256] = {0};
-  int r = get_block_device_string_property(devname, property, buff, sizeof(buff));
+  int r = get_block_device_string_property(devname, prop, buff, sizeof(buff));
   if (r < 0)
     return r;
   // take only digits
@@ -183,7 +197,7 @@ int64_t get_block_device_int_property(const char *devname, const char *property)
 
 bool block_device_support_discard(const char *devname)
 {
-  return get_block_device_int_property(devname, "queue/discard_granularity") > 0;
+  return get_block_device_int_property(devname, BLKDEV_PROP_DISCARD_GRANULARITY) > 0;
 }
 
 int block_device_discard(int fd, int64_t offset, int64_t len)
@@ -194,12 +208,13 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
 
 bool block_device_is_rotational(const char *devname)
 {
-  return get_block_device_int_property(devname, "queue/rotational") > 0;
+  return get_block_device_int_property(devname, BLKDEV_PROP_ROTATIONAL) > 0;
 }
 
 int block_device_model(const char *devname, char *model, size_t max)
 {
-  return get_block_device_string_property(devname, "device/model", model, max);
+  return get_block_device_string_property(devname, BLKDEV_PROP_MODEL, model,
+                                          max);
 }
 
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
