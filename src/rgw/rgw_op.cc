@@ -2017,11 +2017,16 @@ void RGWStatAccount::execute()
 
 int RGWGetBucketVersioning::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+			    rgw::IAM::s3GetBucketVersioning,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
   }
-
-  return 0;
+  return -EACCES;
 }
 
 void RGWGetBucketVersioning::pre_exec()
@@ -2037,11 +2042,16 @@ void RGWGetBucketVersioning::execute()
 
 int RGWSetBucketVersioning::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+			    rgw::IAM::s3PutBucketVersioning,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
   }
-
-  return 0;
+  return -EACCES;
 }
 
 void RGWSetBucketVersioning::pre_exec()
