@@ -1085,8 +1085,8 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
 void Server::recall_client_state(void)
 {
   /* try to recall at least 80% of all caps */
-  uint64_t max_caps_per_client = (uint64_t)(Capability::count() * g_conf->get_val<float>("mds_max_ratio_caps_per_client"));
-  uint64_t min_caps_per_client = (uint64_t)g_conf->get_val<int>("mds_min_caps_per_client");
+  uint64_t max_caps_per_client = Capability::count() * g_conf->get_val<double>("mds_max_ratio_caps_per_client");
+  uint64_t min_caps_per_client = g_conf->get_val<uint64_t>("mds_min_caps_per_client");
   if (max_caps_per_client < min_caps_per_client) {
     dout(0) << "max_caps_per_client " << max_caps_per_client
             << "<" << "min_caps_per_client " << min_caps_per_client << dendl;
