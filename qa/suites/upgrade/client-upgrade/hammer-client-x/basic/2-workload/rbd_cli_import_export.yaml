@@ -3,6 +3,11 @@ tasks:
   - upgrade_workload
 - ceph: 
 - print: "**** done ceph"
+- exec:
+    mon.a:
+    - ceph osd set-require-min-compat-client hammer
+    - ceph osd crush tunables hammer
+- print: '**** done set cluster for clients compatibility'
 - workunit:
     branch: hammer
     clients:

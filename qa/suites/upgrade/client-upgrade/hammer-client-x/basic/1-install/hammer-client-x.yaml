@@ -9,3 +9,4 @@ upgrade_workload:
       exclude_packages: ['ceph-test-dbg']
       client.0:
   - print: "**** done install.upgrade client.0"
+
