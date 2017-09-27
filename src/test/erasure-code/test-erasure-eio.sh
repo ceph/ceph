@@ -126,13 +126,13 @@ function rados_put_get() {
         # recovery didn't crash the primary.
         #
         local -a initial_osds=($(get_osds $poolname $objname))
-        local last=$((${#initial_osds[@]} - 1))
+        local last_osd=${initial_osds[-1]}
         # Kill OSD
-        kill_daemons $dir TERM osd.${initial_osds[$last]} >&2 < /dev/null || return 1
-        ceph osd out ${initial_osds[$last]} || return 1
-        ! get_osds $poolname $objname | grep '\<'${initial_osds[$last]}'\>' || return 1
-        ceph osd in ${initial_osds[$last]} || return 1
-        run_osd $dir ${initial_osds[$last]} || return 1
+        kill_daemons $dir TERM osd.${last_osd} >&2 < /dev/null || return 1
+        ceph osd out ${last_osd} || return 1
+        ! get_osds $poolname $objname | grep '\<'${last_osd}'\>' || return 1
+        ceph osd in ${last_osd} || return 1
+        run_osd $dir ${last_osd} || return 1
         wait_for_clean || return 1
     fi
 
