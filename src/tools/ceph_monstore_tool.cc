@@ -28,7 +28,8 @@
 #include "mon/MonitorDBStore.h"
 #include "mon/Paxos.h"
 #include "mon/MonMap.h"
-#include "mds/MDSMap.h"
+#include "mds/FSMap.h"
+#include "mon/MgrMap.h"
 #include "osd/OSDMap.h"
 #include "crush/CrushCompiler.h"
 
@@ -201,6 +202,8 @@ void usage(const char *n, po::options_description &d)
   << "  get osdmap [-- options]         get osdmap (version VER if specified)\n"
   << "                                  (default: last committed)\n"
   << "  get mdsmap [-- options]         get mdsmap (version VER if specified)\n"
+  << "                                  (default: last committed)\n"
+  << "  get mgr [-- options]            get mgr map (version VER if specified)\n"
   << "                                  (default: last committed)\n"
   << "  get crushmap [-- options]       get crushmap (version VER if specified)\n"
   << "                                  (default: last committed)\n"
@@ -924,9 +927,16 @@ int main(int argc, char **argv) {
           osdmap.decode(bl);
           osdmap.print(ss);
         } else if (map_type == "mdsmap") {
-          MDSMap mdsmap;
-          mdsmap.decode(bl);
-          mdsmap.print(ss);
+          FSMap fs_map;
+          fs_map.decode(bl);
+          fs_map.print(ss);
+        } else if (map_type == "mgr") {
+          MgrMap mgr_map;
+          auto p = bl.begin();
+          mgr_map.decode(p);
+          JSONFormatter f;
+          f.dump_object("mgrmap", mgr_map);
+          f.flush(ss);
         } else if (map_type == "crushmap") {
           CrushWrapper cw;
           bufferlist::iterator it = bl.begin();
@@ -936,7 +946,7 @@ int main(int argc, char **argv) {
         } else {
           std::cerr << "This type of readable map does not exist: " << map_type
                     << std::endl << "You can only specify[osdmap|monmap|mdsmap"
-                    "|crushmap]" << std::endl;
+                    "|crushmap|mgr]" << std::endl;
         }
       } catch (const buffer::error &err) {
         std::cerr << "Could not decode for human readable output (you may still"
