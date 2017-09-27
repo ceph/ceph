@@ -1055,6 +1055,14 @@ void MDSRank::boot_start(BootStep step, int r)
         dout(2) << "boot_start " << step << ": opening mds log" << dendl;
         mdlog->open(gather.new_sub());
 
+	if (is_starting()) {
+	  dout(2) << "boot_start " << step << ": opening purge queue" << dendl;
+	  purge_queue.open(new C_IO_Wrapper(this, gather.new_sub()));
+	} else if (!standby_replaying) {
+	  dout(2) << "boot_start " << step << ": opening purge queue (async)" << dendl;
+	  purge_queue.open(NULL);
+	}
+
         if (mdsmap->get_tableserver() == whoami) {
           dout(2) << "boot_start " << step << ": opening snap table" << dendl;
           snapserver->set_rank(whoami);
@@ -1073,8 +1081,6 @@ void MDSRank::boot_start(BootStep step, int r)
 
         mdcache->open_mydir_inode(gather.new_sub());
 
-        purge_queue.open(new C_IO_Wrapper(this, gather.new_sub()));
-
         if (is_starting() ||
             whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
           mdcache->open_root_inode(gather.new_sub());
@@ -1087,8 +1093,17 @@ void MDSRank::boot_start(BootStep step, int r)
       break;
     case MDS_BOOT_PREPARE_LOG:
       if (is_any_replay()) {
-        dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
-        mdlog->replay(new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
+	dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
+	MDSGatherBuilder gather(g_ceph_context,
+	    new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
+
+	if (!standby_replaying && !purge_queue.is_recovered()) {
+	  dout(2) << "boot_start " << step << ": waiting for purge queue recovered" << dendl;
+	  purge_queue.wait_for_recovery(new C_IO_Wrapper(this, gather.new_sub()));
+	}
+
+	mdlog->replay(gather.new_sub());
+	gather.activate();
       } else {
         dout(2) << "boot_start " << step << ": positioning at end of old mds log" << dendl;
         mdlog->append();
@@ -1244,6 +1259,9 @@ void MDSRank::standby_replay_restart()
         new C_MDS_StandbyReplayRestartFinish(
           this,
 	  mdlog->get_journaler()->get_read_pos()));
+
+      dout(1) << " opening purge queue (async)" << dendl;
+      purge_queue.open(NULL);
     } else {
       dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch()
               << " (which blacklists prior instance)" << dendl;
