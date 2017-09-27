@@ -659,12 +659,14 @@ class Module(MgrModule):
 
         # go
         best_ws = copy.deepcopy(orig_ws)
+        best_ow = copy.deepcopy(orig_osd_weight)
         cur_pe = pe
         left = max_iterations
         while left > 0:
             # adjust
             self.log.debug('best_ws %s' % best_ws)
             next_ws = copy.deepcopy(best_ws)
+            next_ow = copy.deepcopy(best_ow)
             random.shuffle(roots)
             for root in roots:
                 pools = cur_pe.root_pools[root]
@@ -690,15 +692,22 @@ class Module(MgrModule):
                             break
                         self.log.debug('osd.%d deviation %f', osd, deviation)
                         weight = best_ws[osd]
+                        ow = orig_osd_weight[osd]
                         if actual[osd] > 0:
-                            calc_weight = target[osd] / actual[osd] * weight
+                            calc_weight = target[osd] / actual[osd] * weight * ow
                         else:
                             # not enough to go on here... keep orig weight
-                            calc_weight = weight
+                            calc_weight = weight / orig_osd_weight[osd]
                         new_weight = weight * (1.0 - step) + calc_weight * step
                         self.log.debug('Reweight osd.%d %f -> %f', osd, weight,
                                        new_weight)
                         next_ws[osd] = new_weight
+                        if ow < 1.0:
+                            new_ow = min(1.0, max(step + (1.0 - step) * ow,
+                                                  ow + .002))
+                            self.log.debug('Reweight osd.%d reweight %f -> %f',
+                                           osd, ow, new_ow)
+                            next_ow[osd] = new_ow
 
                 # normalize weights under this root
                 root_weight = crush.get_item_weight(pe.root_ids[root])
@@ -737,13 +746,23 @@ class Module(MgrModule):
                 else:
                     cur_pe = next_pe
                     best_ws = next_ws
+                    best_ow = next_ow
                     if cur_pe.score == 0:
                         break
             left -= 1
 
-        if cur_pe.score < pe.score:
+        # allow a small regression if we are phasing out osd weights
+        fudge = 0
+        if next_ow != orig_osd_weight:
+            fudge = .001
+
+        if cur_pe.score < pe.score + fudge:
             self.log.info('Success, score %f -> %f', pe.score, cur_pe.score)
             plan.compat_ws = best_ws
+            for osd, w in best_ow.iteritems():
+                if w != orig_osd_weight[osd]:
+                    self.log.debug('osd.%d reweight %f', osd, w)
+                    plan.osd_weights[osd] = w
             return True
         else:
             self.log.info('Failed to find further optimization, score %f',
@@ -837,7 +856,7 @@ class Module(MgrModule):
         # new_weight
         reweightn = {}
         for osd, weight in plan.osd_weights.iteritems():
-            reweightn[int(osd)] = float(weight) / float(0x10000)
+            reweightn[str(osd)] = str(int(weight * float(0x10000)))
         if len(reweightn):
             self.log.info('ceph osd reweightn %s', reweightn)
             result = CommandResult('foo')
