@@ -1372,11 +1372,15 @@ namespace librbd {
     }
 
     int mirror_mode_get_finish(bufferlist::iterator *it,
-			       cls::rbd::MirrorMode *mirror_mode) {
+			       cls::rbd::MirrorMode *mirror_mode,
+			       std::string *data_pool_name) {
       try {
 	uint32_t mirror_mode_decode;
 	::decode(mirror_mode_decode, *it);
 	*mirror_mode = static_cast<cls::rbd::MirrorMode>(mirror_mode_decode);
+	if (!it->end() && data_pool_name != nullptr) {
+	  ::decode(*data_pool_name, *it);
+	}
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -1385,7 +1389,8 @@ namespace librbd {
     }
 
     int mirror_mode_get(librados::IoCtx *ioctx,
-                        cls::rbd::MirrorMode *mirror_mode) {
+                        cls::rbd::MirrorMode *mirror_mode,
+			std::string *data_pool_name) {
       librados::ObjectReadOperation op;
       mirror_mode_get_start(&op);
 
@@ -1399,7 +1404,7 @@ namespace librbd {
       }
 
       bufferlist::iterator it = out_bl.begin();
-      r = mirror_mode_get_finish(&it, mirror_mode);
+      r = mirror_mode_get_finish(&it, mirror_mode, data_pool_name);
       if (r < 0) {
         return r;
       }
@@ -1407,9 +1412,11 @@ namespace librbd {
     }
 
     int mirror_mode_set(librados::IoCtx *ioctx,
-                        cls::rbd::MirrorMode mirror_mode) {
+                        cls::rbd::MirrorMode mirror_mode,
+			const std::string &data_pool_name) {
       bufferlist in_bl;
       ::encode(static_cast<uint32_t>(mirror_mode), in_bl);
+      ::encode(data_pool_name, in_bl);
 
       bufferlist out_bl;
       int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_mode_set", in_bl,

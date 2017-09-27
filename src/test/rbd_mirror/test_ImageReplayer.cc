@@ -149,7 +149,8 @@ public:
     m_replayer = new ImageReplayerT(
         m_threads.get(), m_image_deleter.get(), m_instance_watcher,
         rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
-        m_local_mirror_uuid, m_local_ioctx.get_id(), m_global_image_id);
+        m_local_mirror_uuid, m_local_ioctx.get_id(), m_local_data_pool_name,
+	m_global_image_id);
     m_replayer->add_peer("peer uuid", m_remote_ioctx);
   }
 
@@ -394,6 +395,7 @@ public:
   int64_t m_remote_pool_id;
   std::string m_remote_image_id;
   std::string m_global_image_id;
+  std::string m_local_data_pool_name;
   rbd::mirror::ImageReplayer<> *m_replayer;
   C_WatchCtx *m_watch_ctx;
   uint64_t m_watch_handle;

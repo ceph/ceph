@@ -1034,7 +1034,7 @@ Skip test on FreeBSD as it generates different output there.
     -p [ --pool ] arg    pool name
   
   rbd help mirror pool enable
-  usage: rbd mirror pool enable [--pool <pool>] 
+  usage: rbd mirror pool enable [--pool <pool>] [--data-pool <data-pool>] 
                                 <pool-name> <mode> 
   
   Enable RBD mirroring by default within a pool.
@@ -1045,6 +1045,7 @@ Skip test on FreeBSD as it generates different output there.
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --data-pool arg      data pool name
   
   rbd help mirror pool info
   usage: rbd mirror pool info [--pool <pool>] [--format <format>] 

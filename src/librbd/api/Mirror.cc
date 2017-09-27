@@ -146,7 +146,8 @@ int Mirror<I>::image_enable(I *ictx, bool relax_same_pool_parent_check) {
   }
 
   cls::rbd::MirrorMode mirror_mode;
-  r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
+  std::string data_pool_name;
+  r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode, &data_pool_name);
   if (r < 0) {
     lderr(cct) << "cannot enable mirroring: failed to retrieve mirror mode: "
                << cpp_strerror(r) << dendl;
@@ -211,7 +212,8 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
   }
 
   cls::rbd::MirrorMode mirror_mode;
-  r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
+  std::string data_pool_name;
+  r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode, &data_pool_name);
   if (r < 0) {
     lderr(cct) << "cannot disable mirroring: failed to retrieve pool "
       "mirroring mode: " << cpp_strerror(r) << dendl;
@@ -468,12 +470,13 @@ int Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status,
 
 template <typename I>
 int Mirror<I>::mode_get(librados::IoCtx& io_ctx,
-                        rbd_mirror_mode_t *mirror_mode) {
+                        rbd_mirror_mode_t *mirror_mode,
+			std::string *data_pool_name) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << dendl;
 
   cls::rbd::MirrorMode mirror_mode_internal;
-  int r = cls_client::mirror_mode_get(&io_ctx, &mirror_mode_internal);
+  int r = cls_client::mirror_mode_get(&io_ctx, &mirror_mode_internal, data_pool_name);
   if (r < 0) {
     lderr(cct) << "failed to retrieve mirror mode: " << cpp_strerror(r)
                << dendl;
@@ -497,7 +500,8 @@ int Mirror<I>::mode_get(librados::IoCtx& io_ctx,
 
 template <typename I>
 int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
-                        rbd_mirror_mode_t mirror_mode) {
+                        rbd_mirror_mode_t mirror_mode,
+			const std::string &data_pool_name) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << dendl;
 
@@ -529,7 +533,9 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
   }
 
   cls::rbd::MirrorMode current_mirror_mode;
-  r = cls_client::mirror_mode_get(&io_ctx, &current_mirror_mode);
+  std::string current_data_pool_name;
+  r = cls_client::mirror_mode_get(&io_ctx, &current_mirror_mode,
+				  &current_data_pool_name);
   if (r < 0) {
     lderr(cct) << "failed to retrieve mirror mode: " << cpp_strerror(r)
                << dendl;
@@ -550,7 +556,8 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
   }
 
   if (current_mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
-    r = cls_client::mirror_mode_set(&io_ctx, cls::rbd::MIRROR_MODE_IMAGE);
+    r = cls_client::mirror_mode_set(&io_ctx, cls::rbd::MIRROR_MODE_IMAGE,
+				    data_pool_name);
     if (r < 0) {
       lderr(cct) << "failed to set mirror mode to image: "
                  << cpp_strerror(r) << dendl;
@@ -656,7 +663,7 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
     }
   }
 
-  r = cls_client::mirror_mode_set(&io_ctx, next_mirror_mode);
+  r = cls_client::mirror_mode_set(&io_ctx, next_mirror_mode, data_pool_name);
   if (r < 0) {
     lderr(cct) << "failed to set mirror mode: " << cpp_strerror(r) << dendl;
     return r;

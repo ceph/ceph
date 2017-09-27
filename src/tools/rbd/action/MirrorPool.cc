@@ -683,9 +683,12 @@ void get_enable_arguments(po::options_description *positional,
   at::add_pool_options(positional, options);
   positional->add_options()
     ("mode", "mirror mode [image or pool]");
+  options->add_options()
+    ("data-pool", po::value<std::string>(), "data pool name");
 }
 
 int execute_enable_disable(const std::string &pool_name,
+			   const std::string &data_pool_name,
                            rbd_mirror_mode_t next_mirror_mode,
                            const std::string &mode) {
   librados::Rados rados;
@@ -723,7 +726,7 @@ int execute_enable_disable(const std::string &pool_name,
               << std::endl;
   }
 
-  r = rbd.mirror_mode_set(io_ctx, next_mirror_mode);
+  r = rbd.mirror_mode_set(io_ctx, next_mirror_mode, data_pool_name);
   if (r < 0) {
     return r;
   }
@@ -734,7 +737,7 @@ int execute_disable(const po::variables_map &vm) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
-  return execute_enable_disable(pool_name, RBD_MIRROR_MODE_DISABLED,
+  return execute_enable_disable(pool_name, "", RBD_MIRROR_MODE_DISABLED,
                                 "disabled");
 }
 
@@ -753,7 +756,12 @@ int execute_enable(const po::variables_map &vm) {
     return -EINVAL;
   }
 
-  return execute_enable_disable(pool_name, mirror_mode, mode);
+  std::string data_pool_name;
+  if (vm.count("data-pool")) {
+    data_pool_name = vm["data-pool"].as<std::string>();
+  }
+
+  return execute_enable_disable(pool_name, data_pool_name, mirror_mode, mode);
 }
 
 void get_info_arguments(po::options_description *positional,
@@ -786,7 +794,8 @@ int execute_info(const po::variables_map &vm) {
 
   librbd::RBD rbd;
   rbd_mirror_mode_t mirror_mode;
-  r = rbd.mirror_mode_get(io_ctx, &mirror_mode);
+  std::string data_pool_name;
+  r = rbd.mirror_mode_get(io_ctx, &mirror_mode, &data_pool_name);
   if (r < 0) {
     return r;
   }
@@ -816,8 +825,12 @@ int execute_info(const po::variables_map &vm) {
   if (formatter != nullptr) {
     formatter->open_object_section("mirror");
     formatter->dump_string("mode", mirror_mode_desc);
+    formatter->dump_string("data_pool_name", data_pool_name);
   } else {
     std::cout << "Mode: " << mirror_mode_desc << std::endl;
+    if (data_pool_name.length() != 0) {
+      std::cout << "Data pool: " << data_pool_name << std::endl;
+    }
   }
 
   if (mirror_mode != RBD_MIRROR_MODE_DISABLED) {

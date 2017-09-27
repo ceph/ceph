@@ -65,10 +65,11 @@ public:
     Threads<ImageCtxT> *threads, ImageDeleter<ImageCtxT>* image_deleter,
     InstanceWatcher<ImageCtxT> *instance_watcher,
     RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
+    const std::string &local_data_pool_name,
     const std::string &global_image_id) {
     return new ImageReplayer(threads, image_deleter, instance_watcher,
                              local, local_mirror_uuid, local_pool_id,
-                             global_image_id);
+			     local_data_pool_name, global_image_id);
   }
   void destroy() {
     delete this;
@@ -78,7 +79,8 @@ public:
                 ImageDeleter<ImageCtxT>* image_deleter,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
                 RadosRef local, const std::string &local_mirror_uuid,
-                int64_t local_pool_id, const std::string &global_image_id);
+                int64_t local_pool_id, const std::string &local_data_pool_name,
+		const std::string &global_image_id);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
@@ -285,6 +287,7 @@ private:
   RadosRef m_local;
   std::string m_local_mirror_uuid;
   int64_t m_local_pool_id;
+  std::string m_local_data_pool_name;
   std::string m_local_image_id;
   std::string m_global_image_id;
   std::string m_name;

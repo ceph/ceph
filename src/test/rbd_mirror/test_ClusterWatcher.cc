@@ -20,6 +20,7 @@
 
 using rbd::mirror::ClusterWatcher;
 using rbd::mirror::peer_t;
+using rbd::mirror::pool_config_t;
 using rbd::mirror::RadosRef;
 using std::map;
 using std::set;
@@ -78,25 +79,22 @@ public:
 
       std::string gen_uuid;
       ASSERT_EQ(0, librbd::api::Mirror<>::peer_add(ioctx,
-                                                   uuid != nullptr ? uuid :
+						   uuid != nullptr ? uuid :
                                                                      &gen_uuid,
-					           peer.cluster_name,
-					           peer.client_name));
-      m_pool_peers[pool_id].insert(peer);
+						   peer.cluster_name,
+						   peer.client_name));
+      m_pool_configs[pool_id] = pool_config_t{pool_name, "", {peer}};
     }
     if (name != nullptr) {
       *name = pool_name;
     }
   }
 
-  void delete_pool(const string &name, const peer_t &peer) {
+  void delete_pool(const string &name) {
     int64_t pool_id = m_cluster->pool_lookup(name.c_str());
     ASSERT_GE(pool_id, 0);
-    if (m_pool_peers.find(pool_id) != m_pool_peers.end()) {
-      m_pool_peers[pool_id].erase(peer);
-      if (m_pool_peers[pool_id].empty()) {
-	m_pool_peers.erase(pool_id);
-      }
+    if (m_pool_configs.find(pool_id) != m_pool_configs.end()) {
+      m_pool_configs.erase(pool_id);
     }
     m_pools.erase(name);
     ASSERT_EQ(0, m_cluster->pool_delete(name.c_str()));
@@ -138,10 +136,10 @@ public:
     m_cluster->pool_delete(cache_pool.c_str());
   }
 
-  void check_peers() {
+  void check_configs() {
     m_cluster_watcher->refresh_pools();
     Mutex::Locker l(m_lock);
-    ASSERT_EQ(m_pool_peers, m_cluster_watcher->get_pool_peers());
+    ASSERT_EQ(m_pool_configs, m_cluster_watcher->get_pool_configs());
   }
 
   RadosRef m_cluster;
@@ -150,64 +148,64 @@ public:
   unique_ptr<ClusterWatcher> m_cluster_watcher;
 
   set<string> m_pools;
-  ClusterWatcher::PoolPeers m_pool_peers;
+  ClusterWatcher::PoolConfigs m_pool_configs;
 };
 
 TEST_F(TestClusterWatcher, NoPools) {
-  check_peers();
+  check_configs();
 }
 
 TEST_F(TestClusterWatcher, NoMirroredPools) {
-  check_peers();
+  check_configs();
   create_pool(false, peer_t());
-  check_peers();
+  check_configs();
   create_pool(false, peer_t());
-  check_peers();
+  check_configs();
   create_pool(false, peer_t());
-  check_peers();
+  check_configs();
 }
 
 TEST_F(TestClusterWatcher, ReplicatedPools) {
   peer_t site1("", "site1", "mirror1");
   peer_t site2("", "site2", "mirror2");
   string first_pool, last_pool;
-  check_peers();
+  check_configs();
   create_pool(true, site1, &site1.uuid, &first_pool);
-  check_peers();
+  check_configs();
   create_pool(false, peer_t());
-  check_peers();
+  check_configs();
   create_pool(false, peer_t());
-  check_peers();
+  check_configs();
   create_pool(false, peer_t());
-  check_peers();
+  check_configs();
   create_pool(true, site2, &site2.uuid);
-  check_peers();
+  check_configs();
   create_pool(true, site2, &site2.uuid);
-  check_peers();
+  check_configs();
   create_pool(true, site2, &site2.uuid, &last_pool);
-  check_peers();
-  delete_pool(first_pool, site1);
-  check_peers();
-  delete_pool(last_pool, site2);
-  check_peers();
+  check_configs();
+  delete_pool(first_pool);
+  check_configs();
+  delete_pool(last_pool);
+  check_configs();
 }
 
 TEST_F(TestClusterWatcher, CachePools) {
   peer_t site1("", "site1", "mirror1");
   string base1, base2, cache1, cache2;
   create_pool(true, site1, &site1.uuid, &base1);
-  check_peers();
+  check_configs();
 
   create_cache_pool(base1, &cache1);
   BOOST_SCOPE_EXIT( base1, cache1, this_ ) {
     this_->remove_cache_pool(base1, cache1);
   } BOOST_SCOPE_EXIT_END;
-  check_peers();
+  check_configs();
 
   create_pool(false, peer_t(), nullptr, &base2);
   create_cache_pool(base2, &cache2);
   BOOST_SCOPE_EXIT( base2, cache2, this_ ) {
     this_->remove_cache_pool(base2, cache2);
   } BOOST_SCOPE_EXIT_END;
-  check_peers();
+  check_configs();
 }

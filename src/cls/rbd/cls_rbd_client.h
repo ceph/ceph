@@ -285,11 +285,14 @@ namespace librbd {
     int mirror_uuid_set(librados::IoCtx *ioctx, const std::string &uuid);
     void mirror_mode_get_start(librados::ObjectReadOperation *op);
     int mirror_mode_get_finish(bufferlist::iterator *it,
-			       cls::rbd::MirrorMode *mirror_mode);
+			       cls::rbd::MirrorMode *mirror_mode,
+			       std::string *data_pool_name = nullptr);
     int mirror_mode_get(librados::IoCtx *ioctx,
-                        cls::rbd::MirrorMode *mirror_mode);
+                        cls::rbd::MirrorMode *mirror_mode,
+			std::string *data_pool_name = nullptr);
     int mirror_mode_set(librados::IoCtx *ioctx,
-                        cls::rbd::MirrorMode mirror_mode);
+                        cls::rbd::MirrorMode mirror_mode,
+			const std::string &data_pool_name);
     int mirror_peer_list(librados::IoCtx *ioctx,
                          std::vector<cls::rbd::MirrorPeer> *peers);
     int mirror_peer_add(librados::IoCtx *ioctx, const std::string &uuid,

@@ -28,10 +28,12 @@ public:
                                     const std::string &local_image_name,
 				    const std::string &local_image_id,
                                     ImageCtxT *remote_image_ctx,
+				    const std::string &local_data_pool_name,
                                     Context *on_finish) {
     return new CreateImageRequest(local_io_ctx, work_queue, global_image_id,
                                   remote_mirror_uuid, local_image_name,
-                                  local_image_id, remote_image_ctx, on_finish);
+                                  local_image_id, remote_image_ctx,
+				  local_data_pool_name, on_finish);
   }
 
   CreateImageRequest(librados::IoCtx &local_io_ctx, ContextWQ *work_queue,
@@ -40,6 +42,7 @@ public:
                      const std::string &local_image_name,
 		     const std::string &local_image_id,
                      ImageCtxT *remote_image_ctx,
+		     const std::string &local_data_pool_name,
                      Context *on_finish);
 
   void send();
@@ -88,6 +91,7 @@ private:
   std::string m_local_image_name;
   std::string m_local_image_id;
   ImageCtxT *m_remote_image_ctx;
+  std::string m_local_data_pool_name;
   Context *m_on_finish;
 
   librados::IoCtx m_remote_parent_io_ctx;

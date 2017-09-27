@@ -31,9 +31,10 @@ public:
       ServiceDaemon<ImageCtxT>* service_daemon,
       ImageDeleter<ImageCtxT>* image_deleter,
       RadosRef local_rados, const std::string &local_mirror_uuid,
-      int64_t local_pool_id) {
+      int64_t local_pool_id, const std::string &local_data_pool_name) {
     return new InstanceReplayer(threads, service_daemon, image_deleter,
-                                local_rados, local_mirror_uuid, local_pool_id);
+                                local_rados, local_mirror_uuid, local_pool_id,
+				local_data_pool_name);
   }
   void destroy() {
     delete this;
@@ -43,7 +44,8 @@ public:
                    ServiceDaemon<ImageCtxT>* service_daemon,
 		   ImageDeleter<ImageCtxT>* image_deleter,
 		   RadosRef local_rados, const std::string &local_mirror_uuid,
-		   int64_t local_pool_id);
+		   int64_t local_pool_id,
+		   const std::string &local_data_pool_name);
   ~InstanceReplayer();
 
   int init();
@@ -90,6 +92,7 @@ private:
   RadosRef m_local_rados;
   std::string m_local_mirror_uuid;
   int64_t m_local_pool_id;
+  std::string m_local_data_pool_name;
 
   Mutex m_lock;
   AsyncOpTracker m_async_op_tracker;

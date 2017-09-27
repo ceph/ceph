@@ -260,7 +260,7 @@ void Mirror::run()
     m_local_cluster_watcher->refresh_pools();
     Mutex::Locker l(m_lock);
     if (!m_manual_stop) {
-      update_pool_replayers(m_local_cluster_watcher->get_pool_peers());
+      update_pool_replayers(m_local_cluster_watcher->get_pool_configs());
     }
     m_cond.WaitInterval(
       m_lock,
@@ -378,7 +378,7 @@ void Mirror::release_leader()
   }
 }
 
-void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
+void Mirror::update_pool_replayers(const PoolConfigs &pool_configs)
 {
   dout(20) << "enter" << dendl;
   assert(m_lock.is_locked());
@@ -386,9 +386,9 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
   // remove stale pool replayers before creating new pool replayers
   for (auto it = m_pool_replayers.begin(); it != m_pool_replayers.end();) {
     auto &peer = it->first.second;
-    auto pool_peer_it = pool_peers.find(it->first.first);
-    if (pool_peer_it == pool_peers.end() ||
-        pool_peer_it->second.find(peer) == pool_peer_it->second.end()) {
+    auto pool_config_it = pool_configs.find(it->first.first);
+    if (pool_config_it == pool_configs.end() ||
+        pool_config_it->second.peers.find(peer) == pool_config_it->second.peers.end()) {
       dout(20) << "removing pool replayer for " << peer << dendl;
       // TODO: make async
       it->second->shut_down();
@@ -398,8 +398,9 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
     }
   }
 
-  for (auto &kv : pool_peers) {
-    for (auto &peer : kv.second) {
+  for (auto &kv : pool_configs) {
+    auto &data_pool_name = kv.second.data_pool_name;
+    for (auto &peer : kv.second.peers) {
       PoolPeer pool_peer(kv.first, peer);
 
       auto pool_replayers_it = m_pool_replayers.find(pool_peer);
@@ -420,7 +421,7 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
         dout(20) << "starting pool replayer for " << peer << dendl;
         unique_ptr<PoolReplayer> pool_replayer(new PoolReplayer(
 	  m_threads, m_service_daemon.get(), m_image_deleter.get(), kv.first,
-          peer, m_args));
+	  data_pool_name, peer, m_args));
 
         // TODO: make async
         pool_replayer->init();

@@ -213,12 +213,15 @@ private:
 PoolReplayer::PoolReplayer(Threads<librbd::ImageCtx> *threads,
                            ServiceDaemon<librbd::ImageCtx>* service_daemon,
 			   ImageDeleter<>* image_deleter,
-			   int64_t local_pool_id, const peer_t &peer,
+			   int64_t local_pool_id,
+			   const std::string &local_data_pool_name,
+			   const peer_t &peer,
 			   const std::vector<const char*> &args) :
   m_threads(threads),
   m_service_daemon(service_daemon),
   m_image_deleter(image_deleter),
   m_local_pool_id(local_pool_id),
+  m_local_data_pool_name(local_data_pool_name),
   m_peer(peer),
   m_args(args),
   m_lock(stringify("rbd::mirror::PoolReplayer ") + stringify(peer)),
@@ -312,7 +315,7 @@ void PoolReplayer::init()
 
   m_instance_replayer.reset(InstanceReplayer<>::create(
     m_threads, m_service_daemon, m_image_deleter, m_local_rados,
-    local_mirror_uuid, m_local_pool_id));
+    local_mirror_uuid, m_local_pool_id, m_local_data_pool_name));
   m_instance_replayer->init();
   m_instance_replayer->add_peer(m_peer.uuid, m_remote_io_ctx);
 

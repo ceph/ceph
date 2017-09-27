@@ -181,6 +181,7 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
       ::journal::MockJournalerProxy *journaler,
       librbd::journal::MirrorPeerClientMeta *client_meta,
       Context *on_finish, bool *do_resync,
+      const std::string &local_data_pool_name,
       rbd::mirror::ProgressContext *progress_ctx = nullptr) {
     assert(s_instance != nullptr);
     s_instance->image_ctx = local_image_ctx;
@@ -563,7 +564,7 @@ public:
     m_image_replayer = new MockImageReplayer(
       &mock_threads, &mock_image_deleter, &m_instance_watcher,
       rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
-      "local_mirror_uuid", m_local_io_ctx.get_id(), "global image id");
+      "local_mirror_uuid", m_local_io_ctx.get_id(), "", "global image id");
     m_image_replayer->add_peer("peer_uuid", m_remote_io_ctx);
   }
 
