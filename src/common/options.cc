@@ -5782,7 +5782,7 @@ std::vector<Option> get_mds_options() {
     .set_default(1024)
     .set_description(""),
  
-    Option("mds_min_caps_per_client", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mds_min_caps_per_client", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
     .set_description("Set the minimum cache number of client"),
 
