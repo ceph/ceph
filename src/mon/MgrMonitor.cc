@@ -115,6 +115,16 @@ void MgrMonitor::create_pending()
 {
   pending_map = map;
   pending_map.epoch++;
+
+  if (map.get_epoch() == 1 &&
+      command_descs.empty() &&
+      pending_command_descs.empty()) {
+    // we've been through the initial map and we haven't populated the
+    // command_descs vector. This likely means we came from kraken, where
+    // we wouldn't populate the vector, nor would we write it to disk, on
+    // create_initial().
+    create_initial();
+  }
 }
 
 health_status_t MgrMonitor::should_warn_about_mgr_down()
