@@ -233,11 +233,25 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   if (r < 0)
     return -errno;
   if (S_ISBLK(st.st_mode)) {
-    char buffer[1024] = {0};
-    BlkDev blkdev(fd_buffered);
-
     (*pm)[prefix + "access_mode"] = "blk";
 
+    char buffer[1024] = {0};
+    BlkDev blkdev{fd_buffered};
+    if (r = blkdev.partition(buffer, sizeof(buffer)); r) {
+      (*pm)[prefix + "partition_path"] = "unknown";
+    } else {
+      (*pm)[prefix + "partition_path"] = buffer;
+    }
+    buffer[0] = '\0';
+    if (r = blkdev.partition(buffer, sizeof(buffer)); r) {
+      (*pm)[prefix + "dev_node"] = "unknown";
+    } else {
+      (*pm)[prefix + "dev_node"] = buffer;
+    }
+    if (!r) {
+      return 0;
+    }
+    buffer[0] = '\0';
     blkdev.model(buffer, sizeof(buffer));
     (*pm)[prefix + "model"] = buffer;
 

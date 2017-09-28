@@ -447,7 +447,7 @@ if(${WITH_CEPHFS})
     cephfs)
 endif(${WITH_CEPHFS})
 
-if(HAVE_BLKID)
+if(HAVE_BLKID OR FREEBSD)
   add_executable(ceph_test_get_blkdev_props
     test_get_blkdev_props.cc
     )
@@ -458,7 +458,7 @@ if(HAVE_BLKID)
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
     )
-endif(HAVE_BLKID)
+endif(HAVE_BLKID OR FREEBSD)
 
 # ceph_test_admin_socket_output
 

@@ -7,10 +7,17 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
+
+#ifdef __FreeBSD__
+#include <sys/param.h>
+#include <geom/geom_disk.h>
+#include <sys/disk.h>
+#include <fcntl.h>
+#endif
 
 #include <errno.h>
 #include <sys/ioctl.h>
@@ -63,14 +70,6 @@ int get_device_by_path(const char *path, char* partition, char* device,
 
 #endif
 
-static const char *blkdev_props2strings[] = {
-  [BLKDEV_PROP_DEV]                 = "dev",
-  [BLKDEV_PROP_DISCARD_GRANULARITY] = "queue/discard_granularity",
-  [BLKDEV_PROP_MODEL]               = "device/model",
-  [BLKDEV_PROP_ROTATIONAL]          = "queue/rotational",
-  [BLKDEV_PROP_SERIAL]              = "device/serial",
-  [BLKDEV_PROP_VENDOR]              = "device/vendor",
-};
 
 BlkDev::BlkDev(int f)
   : fd(f)
@@ -79,10 +78,6 @@ BlkDev::BlkDev(int f)
 BlkDev::BlkDev(const std::string& devname)
   : devname(devname)
 {}
-
-const char *BlkDev::sysfsdir() const {
-  return "/sys";
-}
 
 int BlkDev::get_devid(dev_t *id) const {
   struct stat st;
@@ -584,7 +579,6 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
 }
 
 #elif defined(__FreeBSD__)
-#include <sys/disk.h>
 
 const char *BlkDev::sysfsdir() const {
   assert(false);  // Should never be called on FreeBSD
@@ -613,6 +607,19 @@ int BlkDev::get_size(int64_t *psize) const
 
 bool BlkDev::support_discard() const
 {
+#ifdef FREEBSD_WITH_TRIM
+  // there is no point to claim support of discard, but
+  // unable to do so.
+  struct diocgattr_arg arg;
+
+  strlcpy(arg.name, "GEOM::candelete", sizeof(arg.name));
+  arg.len = sizeof(arg.value.i);
+  if (ioctl(fd, DIOCGATTR, &arg) == 0) {
+    return (arg.value.i != 0);
+  } else {
+    return false;
+  }
+#endif
   return false;
 }
 
@@ -642,17 +649,64 @@ bool BlkDev::is_nvme() const
 
 bool BlkDev::is_rotational() const
 {
-  return false;
+#if __FreeBSD_version >= 1200049
+  struct diocgattr_arg arg;
+
+  strlcpy(arg.name, "GEOM::rotation_rate", sizeof(arg.name));
+  arg.len = sizeof(arg.value.u16);
+
+  int ioctl_ret = ioctl(fd, DIOCGATTR, &arg);
+  bool ret;
+  if (ioctl_ret < 0 || arg.value.u16 == DISK_RR_UNKNOWN)
+    // DISK_RR_UNKNOWN usually indicates an old drive, which is usually spinny
+    ret = true;
+  else if (arg.value.u16 == DISK_RR_NON_ROTATING)
+    ret = false;
+  else if (arg.value.u16 >= DISK_RR_MIN && arg.value.u16 <= DISK_RR_MAX)
+    ret = true;
+  else
+    ret = true;     // Invalid value.  Probably spinny?
+
+  return ret;
+#else
+  return true;      // When in doubt, it's probably spinny
+#endif
 }
 
 int BlkDev::model(char *model, size_t max) const
 {
-  return false;
+  struct diocgattr_arg arg;
+
+  strlcpy(arg.name, "GEOM::descr", sizeof(arg.name));
+  arg.len = sizeof(arg.value.str);
+  if (ioctl(fd, DIOCGATTR, &arg) < 0) {
+    return -errno;
+  }
+
+  // The GEOM description is of the form "vendor product" for SCSI disks
+  // and "ATA device_model" for ATA disks.  Some vendors choose to put the
+  // vendor name in device_model, and some don't.  Strip the first bit.
+  char *p = arg.value.str;
+  if (p == NULL || *p == '\0') {
+    *model = '\0';
+  } else {
+    (void) strsep(&p, " ");
+    snprintf(model, max, "%s", p);
+  }
+
+  return 0;
 }
 
-int BlkDev::serial(char *serial, size_t max) const
+int BlkDev::serial(char *serial, size_t max)
 {
-  return -EOPNOTSUPP;
+  char ident[DISK_IDENT_SIZE];
+
+  if (ioctl(fd, DIOCGIDENT, ident) < 0)
+    return -errno;
+
+  snprintf(serial, max, "%s", ident);
+
+  return 0;
 }
 
 void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
