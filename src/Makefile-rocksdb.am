@@ -1,75 +1,77 @@
 EXTRA_DIST += \
-  rocksdb/appveyor.yml \
+  rocksdb/.clang-format \
+  rocksdb/AUTHORS \
+  rocksdb/CONTRIBUTING.md \
+  rocksdb/DUMP_FORMAT.md \
+  rocksdb/PATENTS \
+  rocksdb/ROCKSDB_LITE.md \
+  rocksdb/WINDOWS_PORT.md \
+  rocksdb/arcanist_util/__phutil_library_init__.php \
   rocksdb/arcanist_util/config/FacebookArcanistConfiguration.php \
+  rocksdb/arcanist_util/config/FacebookOldArcanistConfiguration.php \
+  rocksdb/arcanist_util/config/RocksDBCommonHelper.php \
   rocksdb/arcanist_util/cpp_linter/ArcanistCpplintLinter.php \
-  rocksdb/arcanist_util/cpp_linter/BaseDirectoryScopedFormatLinter.php \
-  rocksdb/arcanist_util/cpp_linter/cpplint.py \
   rocksdb/arcanist_util/cpp_linter/FacebookHowtoevenLinter.php \
   rocksdb/arcanist_util/cpp_linter/FbcodeClangFormatLinter.php \
   rocksdb/arcanist_util/cpp_linter/FbcodeCppLinter.php \
-  rocksdb/arcanist_util/lint_engine/FacebookFbcodeLintEngine.php \
+  rocksdb/arcanist_util/cpp_linter/BaseDirectoryScopedFormatLinter.php \
+  rocksdb/arcanist_util/cpp_linter/cpplint.py \
   rocksdb/arcanist_util/lint_engine/FacebookHowtoevenLintEngine.php \
-  rocksdb/arcanist_util/__phutil_library_init__.php \
-  rocksdb/arcanist_util/__phutil_library_map__.php \
+  rocksdb/arcanist_util/lint_engine/FacebookFbcodeLintEngine.php \
   rocksdb/arcanist_util/unit_engine/FacebookFbcodeUnitTestEngine.php \
-  rocksdb/.arcconfig \
-  rocksdb/AUTHORS \
+  rocksdb/arcanist_util/unit_engine/FacebookOldFbcodeUnitTestEngine.php \
+  rocksdb/arcanist_util/__phutil_library_map__.php \
   rocksdb/build_tools/amalgamate.py \
-  rocksdb/build_tools/build_detect_platform \
   rocksdb/build_tools/dockerbuild.sh \
-  rocksdb/build_tools/fbcode_config4.8.1.sh \
-  rocksdb/build_tools/fbcode_config.sh \
   rocksdb/build_tools/fb_compile_mongo.sh \
+  rocksdb/build_tools/build_detect_platform \
+  rocksdb/build_tools/cont_integration.sh \
+  rocksdb/build_tools/dependencies.sh \
+  rocksdb/build_tools/dependencies_4.8.1.sh \
+  rocksdb/build_tools/error_filter.py \
+  rocksdb/build_tools/fbcode_config.sh \
+  rocksdb/build_tools/fbcode_config4.8.1.sh \
   rocksdb/build_tools/format-diff.sh \
+  rocksdb/build_tools/gnu_parallel \
   rocksdb/build_tools/make_new_version.sh \
   rocksdb/build_tools/make_package.sh \
+  rocksdb/build_tools/precommit_checker.py \
   rocksdb/build_tools/regression_build_test.sh \
   rocksdb/build_tools/rocksdb-lego-determinator \
   rocksdb/build_tools/run_ci_db_test.ps1 \
+  rocksdb/build_tools/update_dependencies.sh \
   rocksdb/build_tools/version.sh \
-  rocksdb/.clang-format \
-  rocksdb/CMakeLists.txt \
-  rocksdb/CONTRIBUTING.md \
   rocksdb/coverage/coverage_test.sh \
   rocksdb/coverage/parse_gcov_output.py \
-  rocksdb/db/builder.cc \
-  rocksdb/db/builder.h \
-  rocksdb/db/c.cc \
-  rocksdb/db/column_family.cc \
   rocksdb/db/column_family.h \
   rocksdb/db/column_family_test.cc \
+  rocksdb/db/compact_files_test.cc \
   rocksdb/db/compacted_db_impl.cc \
   rocksdb/db/compacted_db_impl.h \
-  rocksdb/db/compact_files_test.cc \
   rocksdb/db/compaction.cc \
-  rocksdb/db/compaction.h \
+  rocksdb/db/compaction_iteration_stats.h \
   rocksdb/db/compaction_iterator.cc \
   rocksdb/db/compaction_iterator.h \
   rocksdb/db/compaction_iterator_test.cc \
-  rocksdb/db/compaction_job.cc \
   rocksdb/db/compaction_job.h \
   rocksdb/db/compaction_job_stats_test.cc \
   rocksdb/db/compaction_job_test.cc \
   rocksdb/db/compaction_picker.cc \
   rocksdb/db/compaction_picker.h \
   rocksdb/db/compaction_picker_test.cc \
-  rocksdb/db/comparator_db_test.cc \
+  rocksdb/db/compaction_picker_universal.h \
   rocksdb/db/convenience.cc \
   rocksdb/db/corruption_test.cc \
-  rocksdb/db/c_test.c \
   rocksdb/db/cuckoo_table_db_test.cc \
-  rocksdb/db/db_bench.cc \
+  rocksdb/db/db_basic_test.cc \
   rocksdb/db/db_compaction_filter_test.cc \
   rocksdb/db/db_compaction_test.cc \
   rocksdb/db/db_dynamic_level_test.cc \
   rocksdb/db/db_filesnapshot.cc \
-  rocksdb/db/dbformat.cc \
-  rocksdb/db/dbformat.h \
-  rocksdb/db/dbformat_test.cc \
-  rocksdb/db/db_impl.cc \
+  rocksdb/db/db_flush_test.cc \
+  rocksdb/db/db_impl.h \
   rocksdb/db/db_impl_debug.cc \
   rocksdb/db/db_impl_experimental.cc \
-  rocksdb/db/db_impl.h \
   rocksdb/db/db_impl_readonly.cc \
   rocksdb/db/db_impl_readonly.h \
   rocksdb/db/db_inplace_update_test.cc \
@@ -80,10 +82,14 @@ EXTRA_DIST += \
   rocksdb/db/db_table_properties_test.cc \
   rocksdb/db/db_tailing_iter_test.cc \
   rocksdb/db/db_test.cc \
+  rocksdb/db/db_test2.cc \
   rocksdb/db/db_test_util.cc \
   rocksdb/db/db_test_util.h \
   rocksdb/db/db_universal_compaction_test.cc \
   rocksdb/db/db_wal_test.cc \
+  rocksdb/db/dbformat.cc \
+  rocksdb/db/dbformat.h \
+  rocksdb/db/dbformat_test.cc \
   rocksdb/db/deletefile_test.cc \
   rocksdb/db/event_helpers.cc \
   rocksdb/db/event_helpers.h \
@@ -92,20 +98,21 @@ EXTRA_DIST += \
   rocksdb/db/file_indexer.cc \
   rocksdb/db/file_indexer.h \
   rocksdb/db/file_indexer_test.cc \
-  rocksdb/db/filename.cc \
-  rocksdb/db/filename.h \
+  rocksdb/db/builder.cc \
+  rocksdb/db/c_test.c \
+  rocksdb/db/compaction_picker_universal.cc \
   rocksdb/db/filename_test.cc \
   rocksdb/db/flush_job.cc \
   rocksdb/db/flush_job.h \
   rocksdb/db/flush_job_test.cc \
   rocksdb/db/flush_scheduler.cc \
   rocksdb/db/flush_scheduler.h \
-  rocksdb/db/forward_iterator_bench.cc \
   rocksdb/db/forward_iterator.cc \
   rocksdb/db/forward_iterator.h \
-  rocksdb/db/inlineskiplist.h \
-  rocksdb/db/inlineskiplist_test.cc \
-  rocksdb/db/internal_stats.cc \
+  rocksdb/db/forward_iterator_bench.cc \
+  rocksdb/db/builder.h \
+  rocksdb/db/column_family.cc \
+  rocksdb/db/comparator_db_test.cc \
   rocksdb/db/internal_stats.h \
   rocksdb/db/job_context.h \
   rocksdb/db/listener_test.cc \
@@ -118,15 +125,16 @@ EXTRA_DIST += \
   rocksdb/db/managed_iterator.cc \
   rocksdb/db/managed_iterator.h \
   rocksdb/db/manual_compaction_test.cc \
-  rocksdb/db/memtable_allocator.cc \
-  rocksdb/db/memtable_allocator.h \
   rocksdb/db/memtable.cc \
   rocksdb/db/memtable.h \
+  rocksdb/db/c.cc \
+  rocksdb/db/compaction.h \
+  rocksdb/db/db_block_cache_test.cc \
   rocksdb/db/memtable_list.cc \
   rocksdb/db/memtable_list.h \
   rocksdb/db/memtable_list_test.cc \
-  rocksdb/db/memtablerep_bench.cc \
   rocksdb/db/merge_context.h \
+  rocksdb/db/db_bloom_filter_test.cc \
   rocksdb/db/merge_helper.cc \
   rocksdb/db/merge_helper.h \
   rocksdb/db/merge_helper_test.cc \
@@ -137,9 +145,9 @@ EXTRA_DIST += \
   rocksdb/db/plain_table_db_test.cc \
   rocksdb/db/prefix_test.cc \
   rocksdb/db/repair.cc \
-  rocksdb/db/skiplist.h \
-  rocksdb/db/skiplist_test.cc \
-  rocksdb/db/slice.cc \
+  rocksdb/db/compaction_job.cc \
+  rocksdb/db/db_impl.cc \
+  rocksdb/db/internal_stats.cc \
   rocksdb/db/snapshot_impl.cc \
   rocksdb/db/snapshot_impl.h \
   rocksdb/db/table_cache.cc \
@@ -161,11 +169,10 @@ EXTRA_DIST += \
   rocksdb/db/wal_manager.cc \
   rocksdb/db/wal_manager.h \
   rocksdb/db/wal_manager_test.cc \
-  rocksdb/db/write_batch_base.cc \
   rocksdb/db/write_batch.cc \
+  rocksdb/db/write_batch_base.cc \
   rocksdb/db/write_batch_internal.h \
   rocksdb/db/write_batch_test.cc \
-  rocksdb/db/writebuffer.h \
   rocksdb/db/write_callback.h \
   rocksdb/db/write_callback_test.cc \
   rocksdb/db/write_controller.cc \
@@ -173,230 +180,303 @@ EXTRA_DIST += \
   rocksdb/db/write_controller_test.cc \
   rocksdb/db/write_thread.cc \
   rocksdb/db/write_thread.h \
-  rocksdb/doc/doc.css \
-  rocksdb/doc/index.html \
-  rocksdb/doc/log_format.txt \
-  rocksdb/doc/rockslogo.jpg \
-  rocksdb/doc/rockslogo.png \
-  rocksdb/DUMP_FORMAT.md \
+  rocksdb/db/db_range_del_test.cc \
+  rocksdb/db/repair_test.cc \
+  rocksdb/db/db_impl_compaction_flush.cc \
+  rocksdb/db/db_impl_files.cc \
+  rocksdb/db/db_impl_open.cc \
+  rocksdb/db/db_impl_write.cc \
+  rocksdb/db/db_info_dumper.cc \
+  rocksdb/db/db_info_dumper.h \
+  rocksdb/db/db_io_failure_test.cc \
+  rocksdb/db/db_iterator_test.cc \
+  rocksdb/db/db_memtable_test.cc \
+  rocksdb/db/db_merge_operator_test.cc \
+  rocksdb/db/db_options_test.cc \
+  rocksdb/db/db_properties_test.cc \
+  rocksdb/db/db_sst_test.cc \
+  rocksdb/db/db_statistics_test.cc \
+  rocksdb/db/external_sst_file_basic_test.cc \
+  rocksdb/db/external_sst_file_ingestion_job.cc \
+  rocksdb/db/external_sst_file_ingestion_job.h \
+  rocksdb/db/external_sst_file_test.cc \
+  rocksdb/db/pinned_iterators_manager.h \
+  rocksdb/db/range_del_aggregator.cc \
+  rocksdb/db/range_del_aggregator.h \
+  rocksdb/db/range_del_aggregator_test.cc \
+  rocksdb/examples/.gitignore \
+  rocksdb/examples/Makefile \
+  rocksdb/examples/README.md \
+  rocksdb/examples/c_simple_example.c \
   rocksdb/examples/column_families_example.cc \
   rocksdb/examples/compact_files_example.cc \
   rocksdb/examples/compaction_filter_example.cc \
-  rocksdb/examples/c_simple_example.c \
-  rocksdb/examples/.gitignore \
-  rocksdb/examples/Makefile \
   rocksdb/examples/optimistic_transaction_example.cc \
   rocksdb/examples/options_file_example.cc \
-  rocksdb/examples/README.md \
   rocksdb/examples/rocksdb_option_file_example.ini \
   rocksdb/examples/simple_example.cc \
   rocksdb/examples/transaction_example.cc \
-  rocksdb/.gitignore \
-  rocksdb/hdfs/env_hdfs.h \
-  rocksdb/hdfs/README \
   rocksdb/hdfs/setup.sh \
-  rocksdb/HISTORY.md \
-  rocksdb/include/rocksdb/cache.h \
-  rocksdb/include/rocksdb/c.h \
+  rocksdb/hdfs/README \
+  rocksdb/hdfs/env_hdfs.h \
   rocksdb/include/rocksdb/compaction_filter.h \
-  rocksdb/include/rocksdb/compaction_job_stats.h \
-  rocksdb/include/rocksdb/comparator.h \
-  rocksdb/include/rocksdb/convenience.h \
-  rocksdb/include/rocksdb/db_dump_tool.h \
-  rocksdb/include/rocksdb/db.h \
-  rocksdb/include/rocksdb/delete_scheduler.h \
-  rocksdb/include/rocksdb/env.h \
-  rocksdb/include/rocksdb/experimental.h \
   rocksdb/include/rocksdb/filter_policy.h \
-  rocksdb/include/rocksdb/flush_block_policy.h \
-  rocksdb/include/rocksdb/immutable_options.h \
-  rocksdb/include/rocksdb/iostats_context.h \
-  rocksdb/include/rocksdb/iterator.h \
-  rocksdb/include/rocksdb/ldb_tool.h \
-  rocksdb/include/rocksdb/listener.h \
-  rocksdb/include/rocksdb/memtablerep.h \
   rocksdb/include/rocksdb/merge_operator.h \
-  rocksdb/include/rocksdb/metadata.h \
-  rocksdb/include/rocksdb/options.h \
-  rocksdb/include/rocksdb/perf_context.h \
   rocksdb/include/rocksdb/perf_level.h \
-  rocksdb/include/rocksdb/rate_limiter.h \
   rocksdb/include/rocksdb/slice.h \
-  rocksdb/include/rocksdb/slice_transform.h \
-  rocksdb/include/rocksdb/snapshot.h \
   rocksdb/include/rocksdb/sst_dump_tool.h \
-  rocksdb/include/rocksdb/sst_file_writer.h \
   rocksdb/include/rocksdb/statistics.h \
-  rocksdb/include/rocksdb/status.h \
-  rocksdb/include/rocksdb/table.h \
   rocksdb/include/rocksdb/table_properties.h \
-  rocksdb/include/rocksdb/thread_status.h \
   rocksdb/include/rocksdb/transaction_log.h \
-  rocksdb/include/rocksdb/types.h \
-  rocksdb/include/rocksdb/universal_compaction.h \
-  rocksdb/include/rocksdb/utilities/backupable_db.h \
-  rocksdb/include/rocksdb/utilities/checkpoint.h \
-  rocksdb/include/rocksdb/utilities/convenience.h \
-  rocksdb/include/rocksdb/utilities/db_ttl.h \
-  rocksdb/include/rocksdb/utilities/document_db.h \
-  rocksdb/include/rocksdb/utilities/env_mirror.h \
-  rocksdb/include/rocksdb/utilities/flashcache.h \
-  rocksdb/include/rocksdb/utilities/geo_db.h \
-  rocksdb/include/rocksdb/utilities/info_log_finder.h \
-  rocksdb/include/rocksdb/utilities/json_document.h \
+  rocksdb/include/rocksdb/version.h \
+  rocksdb/include/rocksdb/utilities/utility_db.h \
+  rocksdb/include/rocksdb/utilities/ldb_cmd.h \
   rocksdb/include/rocksdb/utilities/leveldb_options.h \
+  rocksdb/include/rocksdb/utilities/lua/rocks_lua_compaction_filter.h \
+  rocksdb/include/rocksdb/utilities/lua/rocks_lua_custom_library.h \
+  rocksdb/include/rocksdb/utilities/lua/rocks_lua_util.h \
   rocksdb/include/rocksdb/utilities/memory_util.h \
+  rocksdb/include/rocksdb/utilities/object_registry.h \
   rocksdb/include/rocksdb/utilities/optimistic_transaction_db.h \
   rocksdb/include/rocksdb/utilities/options_util.h \
+  rocksdb/include/rocksdb/utilities/sim_cache.h \
   rocksdb/include/rocksdb/utilities/spatial_db.h \
   rocksdb/include/rocksdb/utilities/stackable_db.h \
   rocksdb/include/rocksdb/utilities/table_properties_collectors.h \
+  rocksdb/include/rocksdb/utilities/transaction.h \
   rocksdb/include/rocksdb/utilities/transaction_db.h \
   rocksdb/include/rocksdb/utilities/transaction_db_mutex.h \
-  rocksdb/include/rocksdb/utilities/transaction.h \
-  rocksdb/include/rocksdb/utilities/utility_db.h \
   rocksdb/include/rocksdb/utilities/write_batch_with_index.h \
-  rocksdb/include/rocksdb/version.h \
+  rocksdb/include/rocksdb/utilities/backupable_db.h \
+  rocksdb/include/rocksdb/utilities/checkpoint.h \
+  rocksdb/include/rocksdb/utilities/convenience.h \
+  rocksdb/include/rocksdb/utilities/date_tiered_db.h \
+  rocksdb/include/rocksdb/utilities/db_ttl.h \
+  rocksdb/include/rocksdb/utilities/document_db.h \
+  rocksdb/include/rocksdb/utilities/env_librados.h \
+  rocksdb/include/rocksdb/utilities/env_mirror.h \
+  rocksdb/include/rocksdb/utilities/geo_db.h \
+  rocksdb/include/rocksdb/utilities/info_log_finder.h \
+  rocksdb/include/rocksdb/utilities/json_document.h \
+  rocksdb/include/rocksdb/utilities/ldb_cmd_execute_result.h \
+  rocksdb/include/rocksdb/utilities/option_change_migration.h \
   rocksdb/include/rocksdb/wal_filter.h \
-  rocksdb/include/rocksdb/write_batch_base.h \
   rocksdb/include/rocksdb/write_batch.h \
-  rocksdb/INSTALL.md \
-  rocksdb/java/benchmark/src/main/java/org/rocksdb/benchmark/DbBenchmark.java \
-  rocksdb/java/crossbuild/build-linux-centos.sh \
-  rocksdb/java/crossbuild/build-linux.sh \
-  rocksdb/java/crossbuild/Vagrantfile \
+  rocksdb/include/rocksdb/write_batch_base.h \
+  rocksdb/include/rocksdb/advanced_options.h \
+  rocksdb/include/rocksdb/c.h \
+  rocksdb/include/rocksdb/cache.h \
+  rocksdb/include/rocksdb/cleanable.h \
+  rocksdb/include/rocksdb/compaction_job_stats.h \
+  rocksdb/include/rocksdb/convenience.h \
+  rocksdb/include/rocksdb/db.h \
+  rocksdb/include/rocksdb/db_bench_tool.h \
+  rocksdb/include/rocksdb/db_dump_tool.h \
+  rocksdb/include/rocksdb/experimental.h \
+  rocksdb/include/rocksdb/flush_block_policy.h \
+  rocksdb/include/rocksdb/iostats_context.h \
+  rocksdb/include/rocksdb/ldb_tool.h \
+  rocksdb/include/rocksdb/listener.h \
+  rocksdb/include/rocksdb/memtablerep.h \
+  rocksdb/include/rocksdb/metadata.h \
+  rocksdb/include/rocksdb/perf_context.h \
+  rocksdb/include/rocksdb/rate_limiter.h \
+  rocksdb/include/rocksdb/snapshot.h \
+  rocksdb/include/rocksdb/sst_file_manager.h \
+  rocksdb/include/rocksdb/status.h \
+  rocksdb/include/rocksdb/thread_status.h \
+  rocksdb/include/rocksdb/universal_compaction.h \
+  rocksdb/include/rocksdb/comparator.h \
+  rocksdb/include/rocksdb/env.h \
+  rocksdb/include/rocksdb/iterator.h \
+  rocksdb/include/rocksdb/options.h \
+  rocksdb/include/rocksdb/persistent_cache.h \
+  rocksdb/include/rocksdb/slice_transform.h \
+  rocksdb/include/rocksdb/sst_file_writer.h \
+  rocksdb/include/rocksdb/table.h \
+  rocksdb/include/rocksdb/threadpool.h \
+  rocksdb/include/rocksdb/types.h \
+  rocksdb/include/rocksdb/write_buffer_manager.h \
   rocksdb/java/HISTORY-JAVA.md \
-  rocksdb/java/jdb_bench.sh \
-  rocksdb/java/Makefile \
   rocksdb/java/RELEASE.md \
+  rocksdb/java/benchmark/src/main/java/org/rocksdb/benchmark/DbBenchmark.java \
+  rocksdb/java/crossbuild/Vagrantfile \
+  rocksdb/java/crossbuild/build-linux.sh \
+  rocksdb/java/crossbuild/build-linux-centos.sh \
+  rocksdb/java/jdb_bench.sh \
   rocksdb/java/rocksjni/backupablejni.cc \
   rocksdb/java/rocksjni/backupenginejni.cc \
   rocksdb/java/rocksjni/checkpoint.cc \
+  rocksdb/java/rocksjni/clock_cache.cc \
   rocksdb/java/rocksjni/columnfamilyhandle.cc \
   rocksdb/java/rocksjni/compaction_filter.cc \
+  rocksdb/java/rocksjni/compaction_options_fifo.cc \
+  rocksdb/java/rocksjni/compaction_options_universal.cc \
   rocksdb/java/rocksjni/comparator.cc \
   rocksdb/java/rocksjni/comparatorjnicallback.cc \
   rocksdb/java/rocksjni/comparatorjnicallback.h \
+  rocksdb/java/rocksjni/compression_options.cc \
   rocksdb/java/rocksjni/env.cc \
+  rocksdb/java/rocksjni/env_options.cc \
+  rocksdb/java/rocksjni/external_sst_file_info.cc \
   rocksdb/java/rocksjni/filter.cc \
   rocksdb/java/rocksjni/iterator.cc \
   rocksdb/java/rocksjni/loggerjnicallback.cc \
   rocksdb/java/rocksjni/loggerjnicallback.h \
+  rocksdb/java/rocksjni/lru_cache.cc \
   rocksdb/java/rocksjni/memtablejni.cc \
   rocksdb/java/rocksjni/merge_operator.cc \
   rocksdb/java/rocksjni/options.cc \
-  rocksdb/java/rocksjni.pom \
   rocksdb/java/rocksjni/portal.h \
   rocksdb/java/rocksjni/ratelimiterjni.cc \
   rocksdb/java/rocksjni/remove_emptyvalue_compactionfilterjni.cc \
   rocksdb/java/rocksjni/restorejni.cc \
+  rocksdb/java/rocksjni/rocksdb_exception_test.cc \
   rocksdb/java/rocksjni/rocksjni.cc \
   rocksdb/java/rocksjni/slice.cc \
   rocksdb/java/rocksjni/snapshot.cc \
+  rocksdb/java/rocksjni/sst_file_writerjni.cc \
   rocksdb/java/rocksjni/statistics.cc \
   rocksdb/java/rocksjni/table.cc \
   rocksdb/java/rocksjni/transaction_log.cc \
   rocksdb/java/rocksjni/ttl.cc \
   rocksdb/java/rocksjni/write_batch.cc \
-  rocksdb/java/rocksjni/writebatchhandlerjnicallback.cc \
-  rocksdb/java/rocksjni/writebatchhandlerjnicallback.h \
   rocksdb/java/rocksjni/write_batch_test.cc \
   rocksdb/java/rocksjni/write_batch_with_index.cc \
+  rocksdb/java/rocksjni/writebatchhandlerjnicallback.cc \
+  rocksdb/java/rocksjni/writebatchhandlerjnicallback.h \
   rocksdb/java/samples/src/main/java/RocksDBColumnFamilySample.java \
   rocksdb/java/samples/src/main/java/RocksDBSample.java \
-  rocksdb/java/src/main/java/org/rocksdb/AbstractCompactionFilter.java \
-  rocksdb/java/src/main/java/org/rocksdb/AbstractComparator.java \
-  rocksdb/java/src/main/java/org/rocksdb/AbstractRocksIterator.java \
-  rocksdb/java/src/main/java/org/rocksdb/AbstractSlice.java \
-  rocksdb/java/src/main/java/org/rocksdb/AbstractWriteBatch.java \
-  rocksdb/java/src/main/java/org/rocksdb/BackupableDB.java \
-  rocksdb/java/src/main/java/org/rocksdb/BackupableDBOptions.java \
-  rocksdb/java/src/main/java/org/rocksdb/BackupEngine.java \
-  rocksdb/java/src/main/java/org/rocksdb/BackupInfo.java \
-  rocksdb/java/src/main/java/org/rocksdb/BlockBasedTableConfig.java \
-  rocksdb/java/src/main/java/org/rocksdb/BloomFilter.java \
-  rocksdb/java/src/main/java/org/rocksdb/BuiltinComparator.java \
-  rocksdb/java/src/main/java/org/rocksdb/Checkpoint.java \
-  rocksdb/java/src/main/java/org/rocksdb/ChecksumType.java \
   rocksdb/java/src/main/java/org/rocksdb/ColumnFamilyDescriptor.java \
   rocksdb/java/src/main/java/org/rocksdb/ColumnFamilyHandle.java \
-  rocksdb/java/src/main/java/org/rocksdb/ColumnFamilyOptionsInterface.java \
   rocksdb/java/src/main/java/org/rocksdb/ColumnFamilyOptions.java \
+  rocksdb/java/src/main/java/org/rocksdb/ColumnFamilyOptionsInterface.java \
+  rocksdb/java/src/main/java/org/rocksdb/CompactionOptionsFIFO.java \
   rocksdb/java/src/main/java/org/rocksdb/CompactionStyle.java \
   rocksdb/java/src/main/java/org/rocksdb/Comparator.java \
   rocksdb/java/src/main/java/org/rocksdb/ComparatorOptions.java \
   rocksdb/java/src/main/java/org/rocksdb/CompressionType.java \
-  rocksdb/java/src/main/java/org/rocksdb/DBOptionsInterface.java \
   rocksdb/java/src/main/java/org/rocksdb/DBOptions.java \
+  rocksdb/java/src/main/java/org/rocksdb/DBOptionsInterface.java \
   rocksdb/java/src/main/java/org/rocksdb/DirectComparator.java \
   rocksdb/java/src/main/java/org/rocksdb/DirectSlice.java \
   rocksdb/java/src/main/java/org/rocksdb/EncodingType.java \
   rocksdb/java/src/main/java/org/rocksdb/Env.java \
-  rocksdb/java/src/main/java/org/rocksdb/Filter.java \
+  rocksdb/java/src/main/java/org/rocksdb/ExternalSstFileInfo.java \
   rocksdb/java/src/main/java/org/rocksdb/FlushOptions.java \
-  rocksdb/java/src/main/java/org/rocksdb/GenericRateLimiterConfig.java \
-  rocksdb/java/src/main/java/org/rocksdb/HashLinkedListMemTableConfig.java \
-  rocksdb/java/src/main/java/org/rocksdb/HashSkipListMemTableConfig.java \
   rocksdb/java/src/main/java/org/rocksdb/HistogramData.java \
   rocksdb/java/src/main/java/org/rocksdb/HistogramType.java \
   rocksdb/java/src/main/java/org/rocksdb/IndexType.java \
   rocksdb/java/src/main/java/org/rocksdb/InfoLogLevel.java \
+  rocksdb/java/src/main/java/org/rocksdb/LRUCache.java \
   rocksdb/java/src/main/java/org/rocksdb/Logger.java \
   rocksdb/java/src/main/java/org/rocksdb/MemTableConfig.java \
+  rocksdb/java/src/main/java/org/rocksdb/MutableColumnFamilyOptions.java \
+  rocksdb/java/src/main/java/org/rocksdb/AbstractRocksIterator.java \
+  rocksdb/java/src/main/java/org/rocksdb/BuiltinComparator.java \
+  rocksdb/java/src/main/java/org/rocksdb/CompressionOptions.java \
+  rocksdb/java/src/main/java/org/rocksdb/TtlDB.java \
+  rocksdb/java/src/main/java/org/rocksdb/HashLinkedListMemTableConfig.java \
+  rocksdb/java/src/main/java/org/rocksdb/HashSkipListMemTableConfig.java \
+  rocksdb/java/src/main/java/org/rocksdb/AbstractSlice.java \
+  rocksdb/java/src/main/java/org/rocksdb/AdvancedMutableColumnFamilyOptionsInterface.java \
+  rocksdb/java/src/main/java/org/rocksdb/Filter.java \
+  rocksdb/java/src/main/java/org/rocksdb/RocksIterator.java \
+  rocksdb/java/src/main/java/org/rocksdb/RocksIteratorInterface.java \
+  rocksdb/java/src/main/java/org/rocksdb/RocksMemEnv.java \
+  rocksdb/java/src/main/java/org/rocksdb/RocksObject.java \
+  rocksdb/java/src/main/java/org/rocksdb/Slice.java \
+  rocksdb/java/src/main/java/org/rocksdb/Snapshot.java \
+  rocksdb/java/src/main/java/org/rocksdb/StringAppendOperator.java \
+  rocksdb/java/src/main/java/org/rocksdb/TickerType.java \
+  rocksdb/java/src/main/java/org/rocksdb/WALRecoveryMode.java \
+  rocksdb/java/src/main/java/org/rocksdb/WriteBatch.java \
+  rocksdb/java/src/main/java/org/rocksdb/WriteBatchWithIndex.java \
+  rocksdb/java/src/main/java/org/rocksdb/AbstractCompactionFilter.java \
+  rocksdb/java/src/main/java/org/rocksdb/AccessHint.java \
+  rocksdb/java/src/main/java/org/rocksdb/Checkpoint.java \
+  rocksdb/java/src/main/java/org/rocksdb/DbPath.java \
+  rocksdb/java/src/main/java/org/rocksdb/MutableColumnFamilyOptionsInterface.java \
+  rocksdb/java/src/main/java/org/rocksdb/SkipListMemTableConfig.java \
+  rocksdb/java/src/main/java/org/rocksdb/WBWIRocksIterator.java \
+  rocksdb/java/src/main/java/org/rocksdb/WriteBatchInterface.java \
+  rocksdb/java/src/main/java/org/rocksdb/WriteOptions.java \
+  rocksdb/java/src/main/java/org/rocksdb/AbstractComparator.java \
+  rocksdb/java/src/main/java/org/rocksdb/AdvancedColumnFamilyOptionsInterface.java \
+  rocksdb/java/src/main/java/org/rocksdb/CompactionStopStyle.java \
+  rocksdb/java/src/main/java/org/rocksdb/SstFileWriter.java \
+  rocksdb/java/src/main/java/org/rocksdb/VectorMemTableConfig.java \
+  rocksdb/java/src/main/java/org/rocksdb/AbstractWriteBatch.java \
+  rocksdb/java/src/main/java/org/rocksdb/ChecksumType.java \
+  rocksdb/java/src/main/java/org/rocksdb/EnvOptions.java \
+  rocksdb/java/src/main/java/org/rocksdb/Statistics.java \
+  rocksdb/java/src/main/java/org/rocksdb/util/BytewiseComparator.java \
+  rocksdb/java/src/main/java/org/rocksdb/util/DirectBytewiseComparator.java \
+  rocksdb/java/src/main/java/org/rocksdb/util/Environment.java \
+  rocksdb/java/src/main/java/org/rocksdb/util/ReverseBytewiseComparator.java \
+  rocksdb/java/src/main/java/org/rocksdb/util/SizeUnit.java \
+  rocksdb/java/src/main/java/org/rocksdb/BackupEngine.java \
+  rocksdb/java/src/main/java/org/rocksdb/BackupInfo.java \
+  rocksdb/java/src/main/java/org/rocksdb/BackupableDB.java \
+  rocksdb/java/src/main/java/org/rocksdb/BackupableDBOptions.java \
+  rocksdb/java/src/main/java/org/rocksdb/BlockBasedTableConfig.java \
+  rocksdb/java/src/main/java/org/rocksdb/Cache.java \
+  rocksdb/java/src/main/java/org/rocksdb/CompactionOptionsUniversal.java \
+  rocksdb/java/src/main/java/org/rocksdb/Status.java \
+  rocksdb/java/src/main/java/org/rocksdb/AbstractImmutableNativeReference.java \
+  rocksdb/java/src/main/java/org/rocksdb/ClockCache.java \
+  rocksdb/java/src/main/java/org/rocksdb/Experimental.java \
   rocksdb/java/src/main/java/org/rocksdb/MergeOperator.java \
   rocksdb/java/src/main/java/org/rocksdb/NativeLibraryLoader.java \
   rocksdb/java/src/main/java/org/rocksdb/Options.java \
   rocksdb/java/src/main/java/org/rocksdb/PlainTableConfig.java \
-  rocksdb/java/src/main/java/org/rocksdb/RateLimiterConfig.java \
+  rocksdb/java/src/main/java/org/rocksdb/RateLimiter.java \
   rocksdb/java/src/main/java/org/rocksdb/ReadOptions.java \
   rocksdb/java/src/main/java/org/rocksdb/RemoveEmptyValueCompactionFilter.java \
   rocksdb/java/src/main/java/org/rocksdb/RestoreBackupableDB.java \
   rocksdb/java/src/main/java/org/rocksdb/RestoreOptions.java \
-  rocksdb/java/src/main/java/org/rocksdb/RocksDBException.java \
   rocksdb/java/src/main/java/org/rocksdb/RocksDB.java \
+  rocksdb/java/src/main/java/org/rocksdb/RocksDBException.java \
   rocksdb/java/src/main/java/org/rocksdb/RocksEnv.java \
-  rocksdb/java/src/main/java/org/rocksdb/RocksIteratorInterface.java \
-  rocksdb/java/src/main/java/org/rocksdb/RocksIterator.java \
-  rocksdb/java/src/main/java/org/rocksdb/RocksMemEnv.java \
-  rocksdb/java/src/main/java/org/rocksdb/RocksObject.java \
-  rocksdb/java/src/main/java/org/rocksdb/SkipListMemTableConfig.java \
-  rocksdb/java/src/main/java/org/rocksdb/Slice.java \
-  rocksdb/java/src/main/java/org/rocksdb/Snapshot.java \
-  rocksdb/java/src/main/java/org/rocksdb/StatisticsCollectorCallback.java \
+  rocksdb/java/src/main/java/org/rocksdb/RocksMutableObject.java \
   rocksdb/java/src/main/java/org/rocksdb/StatisticsCollector.java \
-  rocksdb/java/src/main/java/org/rocksdb/Statistics.java \
+  rocksdb/java/src/main/java/org/rocksdb/StatisticsCollectorCallback.java \
   rocksdb/java/src/main/java/org/rocksdb/StatsCollectorInput.java \
-  rocksdb/java/src/main/java/org/rocksdb/StringAppendOperator.java \
   rocksdb/java/src/main/java/org/rocksdb/TableFormatConfig.java \
-  rocksdb/java/src/main/java/org/rocksdb/TickerType.java \
   rocksdb/java/src/main/java/org/rocksdb/TransactionLogIterator.java \
-  rocksdb/java/src/main/java/org/rocksdb/TtlDB.java \
-  rocksdb/java/src/main/java/org/rocksdb/util/Environment.java \
-  rocksdb/java/src/main/java/org/rocksdb/util/SizeUnit.java \
-  rocksdb/java/src/main/java/org/rocksdb/VectorMemTableConfig.java \
-  rocksdb/java/src/main/java/org/rocksdb/WBWIRocksIterator.java \
-  rocksdb/java/src/main/java/org/rocksdb/WriteBatchInterface.java \
-  rocksdb/java/src/main/java/org/rocksdb/WriteBatch.java \
-  rocksdb/java/src/main/java/org/rocksdb/WriteBatchWithIndex.java \
-  rocksdb/java/src/main/java/org/rocksdb/WriteOptions.java \
+  rocksdb/java/src/main/java/org/rocksdb/AbstractNativeReference.java \
+  rocksdb/java/src/main/java/org/rocksdb/BloomFilter.java \
+  rocksdb/java/src/main/java/org/rocksdb/CompactionPriority.java \
+  rocksdb/java/src/main/java/org/rocksdb/ReadTier.java \
+  rocksdb/java/src/test/java/org/rocksdb/Types.java \
+  rocksdb/java/src/test/java/org/rocksdb/WriteBatchHandlerTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/WriteBatchTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/WriteBatchWithIndexTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/WriteOptionsTest.java \
   rocksdb/java/src/test/java/org/rocksdb/AbstractComparatorTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/BackupableDBOptionsTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/BackupableDBTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/BackupEngineTest.java \
   rocksdb/java/src/test/java/org/rocksdb/BlockBasedTableConfigTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/CheckPointTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/ClockCacheTest.java \
   rocksdb/java/src/test/java/org/rocksdb/ColumnFamilyOptionsTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/ColumnFamilyTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/CompactionOptionsUniversalTest.java \
   rocksdb/java/src/test/java/org/rocksdb/ComparatorOptionsTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/ComparatorTest.java \
   rocksdb/java/src/test/java/org/rocksdb/CompressionOptionsTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/DBOptionsTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/DirectComparatorTest.java \
   rocksdb/java/src/test/java/org/rocksdb/DirectSliceTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/FilterTest.java \
   rocksdb/java/src/test/java/org/rocksdb/FlushTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/MutableColumnFamilyOptionsTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/RocksEnvTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/SliceTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/SstFileWriterTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/WALRecoveryModeTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/CompactionStopStyleTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/DBOptionsTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/EnvOptionsTest.java \
   rocksdb/java/src/test/java/org/rocksdb/InfoLogLevelTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/KeyMayExistTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/RocksDBExceptionTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/TransactionLogIteratorTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/test/RocksJunitRunner.java \
+  rocksdb/java/src/test/java/org/rocksdb/util/BytewiseComparatorTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/util/EnvironmentTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/util/SizeUnitTest.java \
   rocksdb/java/src/test/java/org/rocksdb/LoggerTest.java \
   rocksdb/java/src/test/java/org/rocksdb/MemTableTest.java \
   rocksdb/java/src/test/java/org/rocksdb/MergeTest.java \
@@ -405,59 +485,75 @@ EXTRA_DIST += \
   rocksdb/java/src/test/java/org/rocksdb/OptionsTest.java \
   rocksdb/java/src/test/java/org/rocksdb/PlainTableConfigTest.java \
   rocksdb/java/src/test/java/org/rocksdb/PlatformRandomHelper.java \
-  rocksdb/java/src/test/java/org/rocksdb/ReadOnlyTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/RateLimiterTest.java \
   rocksdb/java/src/test/java/org/rocksdb/ReadOptionsTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/RocksDBTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/RocksEnvTest.java \
   rocksdb/java/src/test/java/org/rocksdb/RocksIteratorTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/RocksMemEnvTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/RocksMemoryResource.java \
-  rocksdb/java/src/test/java/org/rocksdb/SliceTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/SnapshotTest.java \
   rocksdb/java/src/test/java/org/rocksdb/StatisticsCollectorTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/WriteBatchThreadedTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/BackupEngineTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/BackupableDBOptionsTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/CheckPointTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/ColumnFamilyTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/CompactionOptionsFIFOTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/ComparatorTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/DirectComparatorTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/FilterTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/KeyMayExistTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/ReadOnlyTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/RocksDBTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/RocksMemEnvTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/SnapshotTest.java \
   rocksdb/java/src/test/java/org/rocksdb/StatsCallbackMock.java \
-  rocksdb/java/src/test/java/org/rocksdb/test/RocksJunitRunner.java \
-  rocksdb/java/src/test/java/org/rocksdb/TransactionLogIteratorTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/CompactionPriorityTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/CompressionTypesTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/ExternalSstFileInfoTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/LRUCacheTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/RocksMemoryResource.java \
   rocksdb/java/src/test/java/org/rocksdb/TtlDBTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/Types.java \
-  rocksdb/java/src/test/java/org/rocksdb/util/EnvironmentTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/util/SizeUnitTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/WriteBatchHandlerTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/WriteBatchTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/WriteBatchWithIndexTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/WriteOptionsTest.java \
-  rocksdb/LICENSE \
-  rocksdb/Makefile \
+  rocksdb/java/CMakeLists.txt \
+  rocksdb/java/Makefile \
+  rocksdb/java/rocksjni.pom \
   rocksdb/memtable/hash_cuckoo_rep.cc \
   rocksdb/memtable/hash_cuckoo_rep.h \
   rocksdb/memtable/hash_linklist_rep.cc \
   rocksdb/memtable/hash_linklist_rep.h \
   rocksdb/memtable/hash_skiplist_rep.cc \
   rocksdb/memtable/hash_skiplist_rep.h \
+  rocksdb/memtable/inlineskiplist.h \
+  rocksdb/memtable/inlineskiplist_test.cc \
+  rocksdb/memtable/memtable_allocator.cc \
+  rocksdb/memtable/memtable_allocator.h \
+  rocksdb/memtable/memtablerep_bench.cc \
+  rocksdb/memtable/skiplist.h \
+  rocksdb/memtable/skiplist_test.cc \
+  rocksdb/memtable/skiplistrep.cc \
   rocksdb/memtable/stl_wrappers.h \
-  rocksdb/PATENTS \
-  rocksdb/port/dirent.h \
-  rocksdb/port/likely.h \
-  rocksdb/port/port_example.h \
-  rocksdb/port/port.h \
-  rocksdb/port/port_posix.cc \
-  rocksdb/port/port_posix.h \
+  rocksdb/memtable/vectorrep.cc \
   rocksdb/port/README \
-  rocksdb/port/stack_trace.cc \
-  rocksdb/port/stack_trace.h \
-  rocksdb/port/sys_time.h \
-  rocksdb/port/util_logger.h \
+  rocksdb/port/win/env_default.cc \
   rocksdb/port/win/env_win.cc \
+  rocksdb/port/win/env_win.h \
+  rocksdb/port/win/io_win.cc \
+  rocksdb/port/win/io_win.h \
   rocksdb/port/win/port_win.cc \
   rocksdb/port/win/port_win.h \
   rocksdb/port/win/win_logger.cc \
   rocksdb/port/win/win_logger.h \
-  rocksdb/README.md \
-  rocksdb/ROCKSDB_LITE.md \
-  rocksdb/src.mk \
-  rocksdb/table/adaptive_table_factory.cc \
-  rocksdb/table/adaptive_table_factory.h \
-  rocksdb/table/block_based_filter_block.cc \
+  rocksdb/port/win/win_thread.cc \
+  rocksdb/port/win/win_thread.h \
+  rocksdb/port/win/xpress_win.cc \
+  rocksdb/port/win/xpress_win.h \
+  rocksdb/port/dirent.h \
+  rocksdb/port/likely.h \
+  rocksdb/port/port.h \
+  rocksdb/port/port_example.h \
+  rocksdb/port/port_posix.cc \
+  rocksdb/port/port_posix.h \
+  rocksdb/port/stack_trace.cc \
+  rocksdb/port/stack_trace.h \
+  rocksdb/port/sys_time.h \
+  rocksdb/port/util_logger.h \
+  rocksdb/port/xpress.h \
   rocksdb/table/block_based_filter_block.h \
   rocksdb/table/block_based_filter_block_test.cc \
   rocksdb/table/block_based_table_builder.cc \
@@ -468,13 +564,11 @@ EXTRA_DIST += \
   rocksdb/table/block_based_table_reader.h \
   rocksdb/table/block_builder.cc \
   rocksdb/table/block_builder.h \
-  rocksdb/table/block.cc \
-  rocksdb/table/block.h \
-  rocksdb/table/block_hash_index.cc \
-  rocksdb/table/block_hash_index.h \
-  rocksdb/table/block_hash_index_test.cc \
-  rocksdb/table/block_prefix_index.cc \
   rocksdb/table/block_prefix_index.h \
+  rocksdb/table/index_builder.cc \
+  rocksdb/table/merging_iterator.cc \
+  rocksdb/table/partitioned_filter_block_test.cc \
+  rocksdb/table/block_prefix_index.cc \
   rocksdb/table/block_test.cc \
   rocksdb/table/bloom_block.cc \
   rocksdb/table/bloom_block.h \
@@ -495,17 +589,19 @@ EXTRA_DIST += \
   rocksdb/table/full_filter_block_test.cc \
   rocksdb/table/get_context.cc \
   rocksdb/table/get_context.h \
+  rocksdb/table/index_builder.h \
   rocksdb/table/internal_iterator.h \
+  rocksdb/table/iter_heap.h \
   rocksdb/table/iterator.cc \
   rocksdb/table/iterator_wrapper.h \
-  rocksdb/table/iter_heap.h \
-  rocksdb/table/merger.cc \
-  rocksdb/table/merger.h \
+  rocksdb/table/merging_iterator.h \
+  rocksdb/table/block_based_filter_block.cc \
   rocksdb/table/merger_test.cc \
   rocksdb/table/meta_blocks.cc \
   rocksdb/table/meta_blocks.h \
   rocksdb/table/mock_table.cc \
   rocksdb/table/mock_table.h \
+  rocksdb/table/partitioned_filter_block.h \
   rocksdb/table/plain_table_builder.cc \
   rocksdb/table/plain_table_builder.h \
   rocksdb/table/plain_table_factory.cc \
@@ -521,149 +617,186 @@ EXTRA_DIST += \
   rocksdb/table/table_builder.h \
   rocksdb/table/table_properties.cc \
   rocksdb/table/table_properties_internal.h \
-  rocksdb/table/table_reader_bench.cc \
   rocksdb/table/table_reader.h \
+  rocksdb/table/table_reader_bench.cc \
   rocksdb/table/table_test.cc \
   rocksdb/table/two_level_iterator.cc \
   rocksdb/table/two_level_iterator.h \
+  rocksdb/table/adaptive_table_factory.cc \
+  rocksdb/table/adaptive_table_factory.h \
+  rocksdb/table/block.cc \
+  rocksdb/table/block.h \
+  rocksdb/table/cleanable_test.cc \
+  rocksdb/table/partitioned_filter_block.cc \
+  rocksdb/table/persistent_cache_helper.cc \
+  rocksdb/table/persistent_cache_helper.h \
+  rocksdb/table/persistent_cache_options.h \
+  rocksdb/table/sst_file_writer_collectors.h \
   rocksdb/third-party/fbson/COMMIT.md \
   rocksdb/third-party/fbson/FbsonDocument.h \
   rocksdb/third-party/fbson/FbsonJsonParser.h \
   rocksdb/third-party/fbson/FbsonStream.h \
   rocksdb/third-party/fbson/FbsonUtil.h \
   rocksdb/third-party/fbson/FbsonWriter.h \
-  rocksdb/third-party/flashcache/flashcache_ioctl.h \
   rocksdb/third-party/gtest-1.7.0/fused-src/gtest/CMakeLists.txt \
   rocksdb/third-party/gtest-1.7.0/fused-src/gtest/gtest-all.cc \
   rocksdb/third-party/gtest-1.7.0/fused-src/gtest/gtest.h \
-  rocksdb/thirdparty.inc \
-  rocksdb/tools/auto_sanity_test.sh \
-  rocksdb/tools/benchmark_leveldb.sh \
-  rocksdb/tools/benchmark.sh \
-  rocksdb/tools/check_format_compatible.sh \
-  rocksdb/tools/db_crashtest.py \
-  rocksdb/tools/dbench_monitor \
-  rocksdb/tools/db_repl_stress.cc \
-  rocksdb/tools/db_sanity_test.cc \
-  rocksdb/tools/db_stress.cc \
   rocksdb/tools/Dockerfile \
+  rocksdb/tools/benchmark_leveldb.sh \
+  rocksdb/tools/dbench_monitor \
   rocksdb/tools/dump/db_dump_tool.cc \
   rocksdb/tools/dump/rocksdb_dump.cc \
   rocksdb/tools/dump/rocksdb_undump.cc \
   rocksdb/tools/generate_random_db.sh \
+  rocksdb/tools/pflag \
+  rocksdb/tools/sample-dump.dmp \
+  rocksdb/tools/write_stress_runner.py \
+  rocksdb/tools/CMakeLists.txt \
+  rocksdb/tools/auto_sanity_test.sh \
+  rocksdb/tools/benchmark.sh \
+  rocksdb/tools/check_format_compatible.sh \
+  rocksdb/tools/db_bench.cc \
+  rocksdb/tools/db_bench_tool.cc \
+  rocksdb/tools/db_crashtest.py \
+  rocksdb/tools/db_repl_stress.cc \
+  rocksdb/tools/db_sanity_test.cc \
+  rocksdb/tools/db_stress.cc \
   rocksdb/tools/ldb.cc \
   rocksdb/tools/ldb_cmd.cc \
-  rocksdb/tools/ldb_cmd_execute_result.h \
-  rocksdb/tools/ldb_cmd.h \
+  rocksdb/tools/ldb_cmd_impl.h \
   rocksdb/tools/ldb_cmd_test.cc \
   rocksdb/tools/ldb_test.py \
   rocksdb/tools/ldb_tool.cc \
-  rocksdb/tools/pflag \
   rocksdb/tools/reduce_levels_test.cc \
+  rocksdb/tools/regression_test.sh \
   rocksdb/tools/rocksdb_dump_test.sh \
   rocksdb/tools/run_flash_bench.sh \
   rocksdb/tools/run_leveldb.sh \
-  rocksdb/tools/sample-dump.dmp \
   rocksdb/tools/sst_dump.cc \
   rocksdb/tools/sst_dump_test.cc \
   rocksdb/tools/sst_dump_tool.cc \
   rocksdb/tools/sst_dump_tool_imp.h \
   rocksdb/tools/verify_random_db.sh \
   rocksdb/tools/write_stress.cc \
-  rocksdb/tools/write_stress_runner.py \
-  rocksdb/.travis.yml \
-  rocksdb/USERS.md \
-  rocksdb/util/aligned_buffer.h \
-  rocksdb/util/allocator.h \
-  rocksdb/util/arena.cc \
-  rocksdb/util/arena.h \
-  rocksdb/util/arena_test.cc \
+  rocksdb/tools/db_bench_tool_test.cc \
+  rocksdb/util/event_logger.cc \
+  rocksdb/util/event_logger.h \
+  rocksdb/util/event_logger_test.cc \
+  rocksdb/util/file_reader_writer.cc \
+  rocksdb/util/file_reader_writer.h \
+  rocksdb/util/file_reader_writer_test.cc \
+  rocksdb/util/file_util.cc \
+  rocksdb/util/file_util.h \
+  rocksdb/util/filelock_test.cc \
+  rocksdb/util/filename.h \
+  rocksdb/util/filter_policy.cc \
+  rocksdb/util/hash.cc \
+  rocksdb/util/hash.h \
+  rocksdb/util/heap.h \
+  rocksdb/util/heap_test.cc \
+  rocksdb/util/kv_map.h \
+  rocksdb/util/log_buffer.cc \
+  rocksdb/util/log_buffer.h \
+  rocksdb/util/log_write_bench.cc \
+  rocksdb/util/logging.h \
+  rocksdb/util/memory_usage.h \
+  rocksdb/util/murmurhash.cc \
+  rocksdb/util/murmurhash.h \
+  rocksdb/util/mutexlock.h \
+  rocksdb/util/random.cc \
+  rocksdb/util/random.h \
+  rocksdb/util/rate_limiter.cc \
+  rocksdb/util/rate_limiter.h \
+  rocksdb/util/rate_limiter_test.cc \
+  rocksdb/util/slice.cc \
+  rocksdb/util/slice_transform_test.cc \
+  rocksdb/util/sst_file_manager_impl.cc \
+  rocksdb/util/sst_file_manager_impl.h \
+  rocksdb/util/status.cc \
+  rocksdb/util/status_message.cc \
+  rocksdb/util/stderr_logger.h \
+  rocksdb/util/stop_watch.h \
+  rocksdb/util/string_util.cc \
+  rocksdb/util/string_util.h \
+  rocksdb/util/threadpool_imp.cc \
+  rocksdb/util/transaction_test_util.cc \
   rocksdb/util/auto_roll_logger.cc \
-  rocksdb/util/auto_roll_logger.h \
   rocksdb/util/auto_roll_logger_test.cc \
-  rocksdb/util/autovector.h \
   rocksdb/util/autovector_test.cc \
   rocksdb/util/bloom.cc \
+  rocksdb/util/compression.h \
+  rocksdb/util/concurrent_arena.cc \
+  rocksdb/util/dynamic_bloom.cc \
+  rocksdb/util/dynamic_bloom_test.cc \
+  rocksdb/util/hash_map.h \
+  rocksdb/util/aligned_buffer.h \
+  rocksdb/util/allocator.h \
+  rocksdb/util/arena.h \
+  rocksdb/util/auto_roll_logger.h \
   rocksdb/util/bloom_test.cc \
+  rocksdb/util/filename.cc \
+  rocksdb/util/sync_point.cc \
+  rocksdb/util/sync_point.h \
+  rocksdb/util/testharness.cc \
+  rocksdb/util/testharness.h \
+  rocksdb/util/testutil.cc \
+  rocksdb/util/testutil.h \
+  rocksdb/util/thread_list_test.cc \
+  rocksdb/util/thread_local.cc \
+  rocksdb/util/thread_local.h \
+  rocksdb/util/thread_local_test.cc \
+  rocksdb/util/thread_operation.h \
+  rocksdb/util/threadpool_imp.h \
+  rocksdb/util/transaction_test_util.h \
+  rocksdb/util/build_version.cc.in \
   rocksdb/util/build_version.h \
-  rocksdb/util/cache_bench.cc \
-  rocksdb/util/cache.cc \
-  rocksdb/util/cache_test.cc \
   rocksdb/util/channel.h \
   rocksdb/util/coding.cc \
   rocksdb/util/coding.h \
   rocksdb/util/coding_test.cc \
   rocksdb/util/compaction_job_stats_impl.cc \
   rocksdb/util/comparator.cc \
-  rocksdb/util/compression.h \
+  rocksdb/util/concurrent_arena.h \
   rocksdb/util/crc32c.cc \
   rocksdb/util/crc32c.h \
   rocksdb/util/crc32c_test.cc \
-  rocksdb/util/db_info_dumper.cc \
-  rocksdb/util/db_info_dumper.h \
-  rocksdb/util/delete_scheduler_impl.cc \
-  rocksdb/util/delete_scheduler_impl.h \
+  rocksdb/util/delete_scheduler.cc \
+  rocksdb/util/delete_scheduler.h \
   rocksdb/util/delete_scheduler_test.cc \
-  rocksdb/util/dynamic_bloom.cc \
   rocksdb/util/dynamic_bloom.h \
-  rocksdb/util/dynamic_bloom_test.cc \
-  rocksdb/util/env.cc \
-  rocksdb/util/env_hdfs.cc \
-  rocksdb/util/env_posix.cc \
-  rocksdb/util/env_test.cc \
-  rocksdb/util/event_logger.cc \
-  rocksdb/util/event_logger.h \
-  rocksdb/util/event_logger_test.cc \
-  rocksdb/util/filelock_test.cc \
-  rocksdb/util/file_reader_writer.cc \
-  rocksdb/util/file_reader_writer.h \
-  rocksdb/util/file_reader_writer_test.cc \
-  rocksdb/util/file_util.cc \
-  rocksdb/util/file_util.h \
-  rocksdb/util/filter_policy.cc \
-  rocksdb/util/hash.cc \
-  rocksdb/util/hash.h \
-  rocksdb/util/heap.h \
-  rocksdb/util/heap_test.cc \
-  rocksdb/util/histogram.cc \
-  rocksdb/util/histogram.h \
-  rocksdb/util/histogram_test.cc \
-  rocksdb/util/instrumented_mutex.cc \
-  rocksdb/util/instrumented_mutex.h \
-  rocksdb/util/io_posix.cc \
-  rocksdb/util/io_posix.h \
-  rocksdb/util/iostats_context.cc \
-  rocksdb/util/iostats_context_imp.h \
+  rocksdb/util/fault_injection_test_env.h \
+  rocksdb/util/arena.cc \
+  rocksdb/util/arena_test.cc \
+  rocksdb/util/autovector.h \
+  rocksdb/util/fault_injection_test_env.cc \
+  rocksdb/util/xxhash.cc \
+  rocksdb/util/xxhash.h \
   rocksdb/utilities/backupable/backupable_db.cc \
   rocksdb/utilities/backupable/backupable_db_test.cc \
-  rocksdb/utilities/backupable/backupable_db_testutil.h \
-  rocksdb/utilities/checkpoint/checkpoint.cc \
+  rocksdb/utilities/checkpoint/checkpoint_impl.cc \
+  rocksdb/utilities/checkpoint/checkpoint_impl.h \
   rocksdb/utilities/checkpoint/checkpoint_test.cc \
   rocksdb/utilities/compaction_filters/remove_emptyvalue_compactionfilter.cc \
   rocksdb/utilities/compaction_filters/remove_emptyvalue_compactionfilter.h \
   rocksdb/utilities/convenience/info_log_finder.cc \
   rocksdb/utilities/document/document_db.cc \
   rocksdb/utilities/document/document_db_test.cc \
-  rocksdb/utilities/document/json_document_builder.cc \
   rocksdb/utilities/document/json_document.cc \
+  rocksdb/utilities/document/json_document_builder.cc \
   rocksdb/utilities/document/json_document_test.cc \
-  rocksdb/utilities/env_mirror.cc \
-  rocksdb/utilities/env_mirror_test.cc \
-  rocksdb/utilities/flashcache/flashcache.cc \
-  rocksdb/utilities/flashcache/flashcache.h \
   rocksdb/utilities/geodb/geodb_impl.cc \
   rocksdb/utilities/geodb/geodb_impl.h \
   rocksdb/utilities/geodb/geodb_test.cc \
   rocksdb/utilities/leveldb_options/leveldb_options.cc \
   rocksdb/utilities/memory/memory_test.cc \
   rocksdb/utilities/memory/memory_util.cc \
-  rocksdb/utilities/merge_operators.h \
-  rocksdb/utilities/merge_operators/put.cc \
-  rocksdb/utilities/merge_operators/string_append/stringappend2.cc \
-  rocksdb/utilities/merge_operators/string_append/stringappend2.h \
   rocksdb/utilities/merge_operators/string_append/stringappend.cc \
   rocksdb/utilities/merge_operators/string_append/stringappend.h \
   rocksdb/utilities/merge_operators/string_append/stringappend_test.cc \
+  rocksdb/utilities/merge_operators/string_append/stringappend2.cc \
+  rocksdb/utilities/merge_operators/string_append/stringappend2.h \
+  rocksdb/utilities/merge_operators/max.cc \
+  rocksdb/utilities/merge_operators/put.cc \
   rocksdb/utilities/merge_operators/uint64add.cc \
   rocksdb/utilities/options/options_util.cc \
   rocksdb/utilities/options/options_util_test.cc \
@@ -704,77 +837,138 @@ EXTRA_DIST += \
   rocksdb/utilities/write_batch_with_index/write_batch_with_index_internal.cc \
   rocksdb/utilities/write_batch_with_index/write_batch_with_index_internal.h \
   rocksdb/utilities/write_batch_with_index/write_batch_with_index_test.cc \
-  rocksdb/util/kv_map.h \
-  rocksdb/util/log_buffer.cc \
-  rocksdb/util/log_buffer.h \
-  rocksdb/util/logging.cc \
-  rocksdb/util/logging.h \
-  rocksdb/util/log_write_bench.cc \
-  rocksdb/util/memenv.cc \
-  rocksdb/util/memenv_test.cc \
-  rocksdb/util/mock_env.cc \
-  rocksdb/util/mock_env.h \
-  rocksdb/util/mock_env_test.cc \
-  rocksdb/util/murmurhash.cc \
-  rocksdb/util/murmurhash.h \
-  rocksdb/util/mutable_cf_options.cc \
-  rocksdb/util/mutable_cf_options.h \
-  rocksdb/util/mutexlock.h \
-  rocksdb/util/options_builder.cc \
-  rocksdb/util/options.cc \
-  rocksdb/util/options_helper.cc \
-  rocksdb/util/options_helper.h \
-  rocksdb/util/options_parser.cc \
-  rocksdb/util/options_parser.h \
-  rocksdb/util/options_sanity_check.cc \
-  rocksdb/util/options_sanity_check.h \
-  rocksdb/util/options_test.cc \
-  rocksdb/util/perf_context.cc \
-  rocksdb/util/perf_context_imp.h \
-  rocksdb/util/perf_level.cc \
-  rocksdb/util/perf_level_imp.h \
-  rocksdb/util/perf_step_timer.h \
-  rocksdb/util/posix_logger.h \
-  rocksdb/util/random.cc \
-  rocksdb/util/random.h \
-  rocksdb/util/rate_limiter.cc \
-  rocksdb/util/rate_limiter.h \
-  rocksdb/util/rate_limiter_test.cc \
-  rocksdb/util/skiplistrep.cc \
-  rocksdb/util/slice.cc \
-  rocksdb/util/slice_transform_test.cc \
-  rocksdb/util/statistics.cc \
-  rocksdb/util/statistics.h \
-  rocksdb/util/status.cc \
-  rocksdb/util/status_message.cc \
-  rocksdb/util/stop_watch.h \
-  rocksdb/util/string_util.cc \
-  rocksdb/util/string_util.h \
-  rocksdb/util/sync_point.cc \
-  rocksdb/util/sync_point.h \
-  rocksdb/util/testharness.cc \
-  rocksdb/util/testharness.h \
-  rocksdb/util/testutil.cc \
-  rocksdb/util/testutil.h \
-  rocksdb/util/thread_list_test.cc \
-  rocksdb/util/thread_local.cc \
-  rocksdb/util/thread_local.h \
-  rocksdb/util/thread_local_test.cc \
-  rocksdb/util/thread_operation.h \
-  rocksdb/util/thread_posix.cc \
-  rocksdb/util/thread_posix.h \
-  rocksdb/util/thread_status_impl.cc \
-  rocksdb/util/thread_status_updater.cc \
-  rocksdb/util/thread_status_updater_debug.cc \
-  rocksdb/util/thread_status_updater.h \
-  rocksdb/util/thread_status_util.cc \
-  rocksdb/util/thread_status_util_debug.cc \
-  rocksdb/util/thread_status_util.h \
-  rocksdb/util/vectorrep.cc \
-  rocksdb/util/xfunc.cc \
-  rocksdb/util/xfunc.h \
-  rocksdb/util/xxhash.cc \
-  rocksdb/util/xxhash.h \
+  rocksdb/utilities/blob_db/blob_db.cc \
+  rocksdb/utilities/blob_db/blob_db.h \
+  rocksdb/utilities/blob_db/blob_db_test.cc \
+  rocksdb/utilities/col_buf_decoder.cc \
+  rocksdb/utilities/col_buf_decoder.h \
+  rocksdb/utilities/col_buf_encoder.cc \
+  rocksdb/utilities/col_buf_encoder.h \
+  rocksdb/utilities/column_aware_encoding_exp.cc \
+  rocksdb/utilities/column_aware_encoding_test.cc \
+  rocksdb/utilities/column_aware_encoding_util.cc \
+  rocksdb/utilities/column_aware_encoding_util.h \
+  rocksdb/utilities/date_tiered/date_tiered_db_impl.cc \
+  rocksdb/utilities/date_tiered/date_tiered_db_impl.h \
+  rocksdb/utilities/date_tiered/date_tiered_test.cc \
+  rocksdb/utilities/env_librados.cc \
+  rocksdb/utilities/env_librados.md \
+  rocksdb/utilities/env_librados_test.cc \
+  rocksdb/utilities/env_mirror.cc \
+  rocksdb/utilities/env_mirror_test.cc \
+  rocksdb/utilities/env_timed.cc \
+  rocksdb/utilities/env_timed_test.cc \
+  rocksdb/utilities/lua/rocks_lua_compaction_filter.cc \
+  rocksdb/utilities/lua/rocks_lua_test.cc \
+  rocksdb/utilities/merge_operators.h \
+  rocksdb/utilities/object_registry_test.cc \
+  rocksdb/utilities/option_change_migration/option_change_migration.cc \
+  rocksdb/utilities/option_change_migration/option_change_migration_test.cc \
+  rocksdb/utilities/persistent_cache/block_cache_tier.cc \
+  rocksdb/utilities/persistent_cache/block_cache_tier.h \
+  rocksdb/utilities/persistent_cache/block_cache_tier_file.cc \
+  rocksdb/utilities/persistent_cache/block_cache_tier_file.h \
+  rocksdb/utilities/persistent_cache/block_cache_tier_file_buffer.h \
+  rocksdb/utilities/persistent_cache/block_cache_tier_metadata.cc \
+  rocksdb/utilities/persistent_cache/block_cache_tier_metadata.h \
+  rocksdb/utilities/persistent_cache/hash_table.h \
+  rocksdb/utilities/persistent_cache/hash_table_bench.cc \
+  rocksdb/utilities/persistent_cache/hash_table_evictable.h \
+  rocksdb/utilities/persistent_cache/hash_table_test.cc \
+  rocksdb/utilities/persistent_cache/lrulist.h \
+  rocksdb/utilities/persistent_cache/persistent_cache_bench.cc \
+  rocksdb/utilities/persistent_cache/persistent_cache_test.cc \
+  rocksdb/utilities/persistent_cache/persistent_cache_test.h \
+  rocksdb/utilities/persistent_cache/persistent_cache_tier.cc \
+  rocksdb/utilities/persistent_cache/persistent_cache_tier.h \
+  rocksdb/utilities/persistent_cache/persistent_cache_util.h \
+  rocksdb/utilities/persistent_cache/volatile_tier_impl.cc \
+  rocksdb/utilities/persistent_cache/volatile_tier_impl.h \
+  rocksdb/utilities/simulator_cache/sim_cache.cc \
+  rocksdb/utilities/simulator_cache/sim_cache_test.cc \
+  rocksdb/utilities/util_merge_operators_test.cc \
+  rocksdb/.deprecated_arcconfig \
+  rocksdb/.gitignore \
+  rocksdb/.travis.yml \
+  rocksdb/CMakeLists.txt \
+  rocksdb/DEFAULT_OPTIONS_HISTORY.md \
+  rocksdb/HISTORY.md \
+  rocksdb/INSTALL.md \
+  rocksdb/LANGUAGE-BINDINGS.md \
+  rocksdb/LICENSE \
+  rocksdb/Makefile \
+  rocksdb/README.md \
+  rocksdb/TARGETS \
+  rocksdb/USERS.md \
   rocksdb/Vagrantfile \
-  rocksdb/WINDOWS_PORT.md \
-  rocksdb/AUTHORS
+  rocksdb/appveyor.yml \
+  rocksdb/buckifier/buckify_rocksdb.py \
+  rocksdb/buckifier/rocks_test_runner.sh \
+  rocksdb/buckifier/targets_builder.py \
+  rocksdb/buckifier/targets_cfg.py \
+  rocksdb/buckifier/util.py \
+  rocksdb/cache/cache_bench.cc \
+  rocksdb/cache/cache_test.cc \
+  rocksdb/cache/clock_cache.cc \
+  rocksdb/cache/clock_cache.h \
+  rocksdb/cache/lru_cache.cc \
+  rocksdb/cache/lru_cache.h \
+  rocksdb/cache/lru_cache_test.cc \
+  rocksdb/cache/sharded_cache.cc \
+  rocksdb/cache/sharded_cache.h \
+  rocksdb/cmake/modules/FindJeMalloc.cmake \
+  rocksdb/cmake/modules/Findsnappy.cmake \
+  rocksdb/env/env.cc \
+  rocksdb/env/env_basic_test.cc \
+  rocksdb/env/env_chroot.cc \
+  rocksdb/env/env_chroot.h \
+  rocksdb/env/env_hdfs.cc \
+  rocksdb/env/env_posix.cc \
+  rocksdb/env/env_test.cc \
+  rocksdb/env/io_posix.cc \
+  rocksdb/env/io_posix.h \
+  rocksdb/env/memenv.cc \
+  rocksdb/env/mock_env.cc \
+  rocksdb/env/mock_env.h \
+  rocksdb/env/mock_env_test.cc \
+  rocksdb/env/posix_logger.h \
+  rocksdb/monitoring/histogram.cc \
+  rocksdb/monitoring/histogram.h \
+  rocksdb/monitoring/histogram_test.cc \
+  rocksdb/monitoring/histogram_windowing.cc \
+  rocksdb/monitoring/histogram_windowing.h \
+  rocksdb/monitoring/instrumented_mutex.cc \
+  rocksdb/monitoring/instrumented_mutex.h \
+  rocksdb/monitoring/iostats_context.cc \
+  rocksdb/monitoring/iostats_context_imp.h \
+  rocksdb/monitoring/iostats_context_test.cc \
+  rocksdb/monitoring/perf_context.cc \
+  rocksdb/monitoring/perf_context_imp.h \
+  rocksdb/monitoring/perf_level.cc \
+  rocksdb/monitoring/perf_level_imp.h \
+  rocksdb/monitoring/perf_step_timer.h \
+  rocksdb/monitoring/statistics.cc \
+  rocksdb/monitoring/statistics.h \
+  rocksdb/monitoring/statistics_test.cc \
+  rocksdb/monitoring/thread_status_impl.cc \
+  rocksdb/monitoring/thread_status_updater.cc \
+  rocksdb/monitoring/thread_status_updater.h \
+  rocksdb/monitoring/thread_status_updater_debug.cc \
+  rocksdb/monitoring/thread_status_util.cc \
+  rocksdb/monitoring/thread_status_util.h \
+  rocksdb/monitoring/thread_status_util_debug.cc \
+  rocksdb/options/cf_options.cc \
+  rocksdb/options/cf_options.h \
+  rocksdb/options/db_options.cc \
+  rocksdb/options/db_options.h \
+  rocksdb/options/options.cc \
+  rocksdb/options/options_helper.cc \
+  rocksdb/options/options_helper.h \
+  rocksdb/options/options_parser.cc \
+  rocksdb/options/options_parser.h \
+  rocksdb/options/options_sanity_check.cc \
+  rocksdb/options/options_sanity_check.h \
+  rocksdb/options/options_settable_test.cc \
+  rocksdb/options/options_test.cc \
+  rocksdb/src.mk \
+  rocksdb/thirdparty.inc
