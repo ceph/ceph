@@ -13,6 +13,8 @@ testlog "TEST: add image and test replay"
 start_mirror ${CLUSTER1}
 image=test
 create_image ${CLUSTER2} ${POOL} ${image}
+set_image_meta ${CLUSTER2} ${POOL} ${image} "key1" "value1"
+set_image_meta ${CLUSTER2} ${POOL} ${image} "key2" "value2"
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
@@ -21,6 +23,8 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'down+unknown'
 fi
 compare_images ${POOL} ${image}
+compare_image_meta ${CLUSTER1} ${POOL} ${image} "key1" "value1"
+compare_image_meta ${CLUSTER1} ${POOL} ${image} "key2" "value2"
 
 testlog "TEST: stop mirror, add image, start mirror and test replay"
 stop_mirror ${CLUSTER1}

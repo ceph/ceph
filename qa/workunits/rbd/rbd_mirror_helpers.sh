@@ -593,6 +593,17 @@ set_image_meta()
     rbd --cluster ${cluster} -p ${pool} image-meta set ${image} $key $val
 }
 
+compare_image_meta()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local key=$4
+    local value=$5
+
+    test `rbd --cluster ${cluster} -p ${pool} image-meta get ${image} ${key}` = "${value}"
+}
+
 rename_image()
 {
     local cluster=$1

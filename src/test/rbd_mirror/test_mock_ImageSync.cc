@@ -12,6 +12,7 @@
 #include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_sync/ImageCopyRequest.h"
+#include "tools/rbd_mirror/image_sync/MetadataCopyRequest.h"
 #include "tools/rbd_mirror/image_sync/SnapshotCopyRequest.h"
 #include "tools/rbd_mirror/image_sync/SyncPointCreateRequest.h"
 #include "tools/rbd_mirror/image_sync/SyncPointPruneRequest.h"
@@ -84,6 +85,27 @@ public:
   }
 
   MOCK_METHOD0(cancel, void());
+  MOCK_METHOD0(send, void());
+};
+
+template <>
+class MetadataCopyRequest<librbd::MockTestImageCtx> {
+public:
+  static MetadataCopyRequest* s_instance;
+  Context *on_finish;
+
+  static MetadataCopyRequest* create(librbd::MockTestImageCtx *local_image_ctx,
+                                     librbd::MockTestImageCtx *remote_image_ctx,
+                                     Context *on_finish) {
+    assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  MetadataCopyRequest() {
+    s_instance = this;
+  }
+
   MOCK_METHOD0(send, void());
 };
 
@@ -166,6 +188,7 @@ public:
 };
 
 ImageCopyRequest<librbd::MockTestImageCtx>* ImageCopyRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+MetadataCopyRequest<librbd::MockTestImageCtx>* MetadataCopyRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 SnapshotCopyRequest<librbd::MockTestImageCtx>* SnapshotCopyRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 SyncPointCreateRequest<librbd::MockTestImageCtx>* SyncPointCreateRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 SyncPointPruneRequest<librbd::MockTestImageCtx>* SyncPointPruneRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
@@ -185,6 +208,7 @@ public:
   typedef ImageSync<librbd::MockTestImageCtx> MockImageSync;
   typedef InstanceWatcher<librbd::MockTestImageCtx> MockInstanceWatcher;
   typedef image_sync::ImageCopyRequest<librbd::MockTestImageCtx> MockImageCopyRequest;
+  typedef image_sync::MetadataCopyRequest<librbd::MockTestImageCtx> MockMetadataCopyRequest;
   typedef image_sync::SnapshotCopyRequest<librbd::MockTestImageCtx> MockSnapshotCopyRequest;
   typedef image_sync::SyncPointCreateRequest<librbd::MockTestImageCtx> MockSyncPointCreateRequest;
   typedef image_sync::SyncPointPruneRequest<librbd::MockTestImageCtx> MockSyncPointPruneRequest;
@@ -251,6 +275,14 @@ public:
     EXPECT_CALL(mock_image_copy_request, send())
       .WillOnce(Invoke([this, &mock_image_copy_request, r]() {
           m_threads->work_queue->queue(mock_image_copy_request.on_finish, r);
+        }));
+  }
+
+  void expect_copy_metadata(MockMetadataCopyRequest &mock_metadata_copy_request,
+                            int r) {
+    EXPECT_CALL(mock_metadata_copy_request, send())
+      .WillOnce(Invoke([this, &mock_metadata_copy_request, r]() {
+          m_threads->work_queue->queue(mock_metadata_copy_request.on_finish, r);
         }));
   }
 
@@ -321,6 +353,7 @@ TEST_F(TestMockImageSync, SimpleSync) {
   MockSnapshotCopyRequest mock_snapshot_copy_request;
   MockSyncPointCreateRequest mock_sync_point_create_request;
   MockSyncPointPruneRequest mock_sync_point_prune_request;
+  MockMetadataCopyRequest mock_metadata_copy_request;
 
   librbd::MockExclusiveLock mock_exclusive_lock;
   mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
@@ -339,6 +372,7 @@ TEST_F(TestMockImageSync, SimpleSync) {
   expect_create_object_map(mock_local_image_ctx, mock_object_map);
   expect_open_object_map(mock_local_image_ctx, *mock_object_map);
   expect_prune_sync_point(mock_sync_point_prune_request, true, 0);
+  expect_copy_metadata(mock_metadata_copy_request, 0);
   expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   C_SaferCond ctx;
@@ -358,6 +392,7 @@ TEST_F(TestMockImageSync, RestartSync) {
   MockSnapshotCopyRequest mock_snapshot_copy_request;
   MockSyncPointCreateRequest mock_sync_point_create_request;
   MockSyncPointPruneRequest mock_sync_point_prune_request;
+  MockMetadataCopyRequest mock_metadata_copy_request;
 
   m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(), "snap1", boost::none},
                                {cls::rbd::UserSnapshotNamespace(), "snap2", "snap1", boost::none}};
@@ -381,6 +416,7 @@ TEST_F(TestMockImageSync, RestartSync) {
   expect_create_object_map(mock_local_image_ctx, mock_object_map);
   expect_open_object_map(mock_local_image_ctx, *mock_object_map);
   expect_prune_sync_point(mock_sync_point_prune_request, true, 0);
+  expect_copy_metadata(mock_metadata_copy_request, 0);
   expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   C_SaferCond ctx;
