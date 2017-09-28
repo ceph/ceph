@@ -3917,6 +3917,10 @@ public:
   void set_version_id(const string& vid) {
     version_id = vid;
   }
+
+  string get_version_id() const {
+    return version_id;
+  }
 }; /* RGWPutObjProcessor_Atomic */
 
 #define MP_META_SUFFIX ".meta"

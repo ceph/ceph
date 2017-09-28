@@ -1383,6 +1383,9 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_errno(s);
       dump_etag(s, etag);
       dump_content_length(s, 0);
+      if (!version_id.empty()) {
+        dump_header(s, "x-amz-version-id", version_id);
+      }
       for (auto &it : crypt_http_responses)
         dump_header(s, it.first, it.second);
     } else {

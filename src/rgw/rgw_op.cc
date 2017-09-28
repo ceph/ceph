@@ -3615,6 +3615,9 @@ void RGWPutObj::execute()
       goto done;
     }
   }
+  if (!multipart) {
+    version_id = (static_cast<RGWPutObjProcessor_Atomic *>(processor))->get_version_id();
+  }
 
 done:
   dispose_processor(processor);
