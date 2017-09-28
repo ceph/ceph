@@ -12,6 +12,7 @@
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/image_sync/ImageCopyRequest.h"
+#include "tools/rbd_mirror/image_sync/MetadataCopyRequest.h"
 #include "tools/rbd_mirror/image_sync/SnapshotCopyRequest.h"
 #include "tools/rbd_mirror/image_sync/SyncPointCreateRequest.h"
 #include "tools/rbd_mirror/image_sync/SyncPointPruneRequest.h"
@@ -381,6 +382,30 @@ void ImageSync<I>::handle_prune_sync_points(int r) {
 
   if (!m_client_meta->sync_points.empty()) {
     send_copy_image();
+    return;
+  }
+
+  send_copy_metadata();
+}
+
+template <typename I>
+void ImageSync<I>::send_copy_metadata() {
+  dout(20) << dendl;
+  update_progress("COPY_METADATA");
+
+  Context *ctx = create_context_callback<
+    ImageSync<I>, &ImageSync<I>::handle_copy_metadata>(this);
+  auto request = MetadataCopyRequest<I>::create(
+    m_local_image_ctx, m_remote_image_ctx, ctx);
+  request->send();
+}
+
+template <typename I>
+void ImageSync<I>::handle_copy_metadata(int r) {
+  dout(20) << ": r=" << r << dendl;
+  if (r < 0) {
+    derr << ": failed to copy metadata: " << cpp_strerror(r) << dendl;
+    finish(r);
     return;
   }
 

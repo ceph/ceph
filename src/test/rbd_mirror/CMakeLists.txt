@@ -30,6 +30,7 @@ add_executable(unittest_rbd_mirror
   image_replayer/test_mock_PrepareLocalImageRequest.cc
   image_replayer/test_mock_PrepareRemoteImageRequest.cc
   image_sync/test_mock_ImageCopyRequest.cc
+  image_sync/test_mock_MetadataCopyRequest.cc
   image_sync/test_mock_ObjectCopyRequest.cc
   image_sync/test_mock_SnapshotCopyRequest.cc
   image_sync/test_mock_SnapshotCreateRequest.cc
