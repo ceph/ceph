@@ -4,7 +4,7 @@
 #pragma once
 
 #include <string>
-#include <list>
+#include <vector>
 #include <boost/variant.hpp>
 #include "include/str_list.h"
 #include "msg/msg_types.h"
@@ -79,19 +79,19 @@ struct Option {
   // Additionally: "common" for settings that exist in any Ceph code.  Do
   // not use common for settings that are just shared some places: for those
   // places, list them.
-  std::list<const char*> services;
+  std::vector<const char*> services;
 
   // Topics like:
   // "service": a catchall for the boring stuff like log/asok paths.
   // "network"
   // "performance": a setting that may need adjustment depending on
   //                environment/workload to get best performance.
-  std::list<const char*> tags;
+  std::vector<const char*> tags;
 
-  std::list<const char*> see_also;
+  std::vector<const char*> see_also;
 
   value_t min, max;
-  std::list<std::string> enum_allowed;
+  std::vector<std::string> enum_allowed;
 
   bool safe;
 
@@ -233,7 +233,7 @@ struct Option {
     return *this;
   }
 
-  Option& set_enum_allowed(const std::list<std::string> allowed)
+  Option& set_enum_allowed(const std::vector<std::string> allowed)
   {
     enum_allowed = allowed;
     return *this;
