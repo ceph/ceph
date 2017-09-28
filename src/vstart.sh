@@ -783,6 +783,7 @@ else
         debug rocksdb = 10
         debug bdev = 20
         debug rgw = 20
+	debug reserver = 10
         debug objclass = 20'
     CMDSDEBUG='
         debug ms = 1

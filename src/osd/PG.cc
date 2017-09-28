@@ -3731,21 +3731,21 @@ void PG::reject_reservation()
     get_osdmap()->get_epoch());
 }
 
-void PG::schedule_backfill_full_retry()
+void PG::schedule_backfill_retry(float delay)
 {
   Mutex::Locker lock(osd->recovery_request_lock);
   osd->recovery_request_timer.add_event_after(
-    cct->_conf->osd_backfill_retry_interval,
+    delay,
     new QueuePeeringEvt<RequestBackfill>(
       this, get_osdmap()->get_epoch(),
       RequestBackfill()));
 }
 
-void PG::schedule_recovery_full_retry()
+void PG::schedule_recovery_retry(float delay)
 {
   Mutex::Locker lock(osd->recovery_request_lock);
   osd->recovery_request_timer.add_event_after(
-    cct->_conf->osd_recovery_retry_interval,
+    delay,
     new QueuePeeringEvt<DoRecovery>(
       this, get_osdmap()->get_epoch(),
       DoRecovery()));
@@ -6176,18 +6176,19 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
   pg->queue_recovery();
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
-  pg->state_set(PG_STATE_BACKFILL);
+  pg->state_set(PG_STATE_BACKFILLING);
   pg->publish_stats_to_osd();
 }
 
 boost::statechart::result
-PG::RecoveryState::Backfilling::react(const CancelBackfill &)
+PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  ldout(pg->cct, 10) << "defer backfill, retry delay " << c.delay << dendl;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
-  // XXX: Add a new pg state so user can see why backfill isn't proceeding
-  // Can't use PG_STATE_BACKFILL_WAIT since it means waiting for reservations
-  //pg->state_set(PG_STATE_BACKFILL_STALLED????);
+
+  pg->state_set(PG_STATE_BACKFILL_WAIT);
+  pg->state_clear(PG_STATE_BACKFILLING);
 
   for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
        it != pg->backfill_targets.end();
@@ -6207,7 +6208,7 @@ PG::RecoveryState::Backfilling::react(const CancelBackfill &)
 
   pg->waiting_on_backfill.clear();
 
-  pg->schedule_backfill_full_retry();
+  pg->schedule_backfill_retry(c.delay);
   return transit<NotBackfilling>();
 }
 
@@ -6237,7 +6238,7 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
   pg->waiting_on_backfill.clear();
   pg->finish_recovery_op(hobject_t::get_max());
 
-  pg->schedule_backfill_full_retry();
+  pg->schedule_backfill_retry(pg->cct->_conf->osd_recovery_retry_interval);
   return transit<NotBackfilling>();
 }
 
@@ -6247,7 +6248,7 @@ void PG::RecoveryState::Backfilling::exit()
   PG *pg = context< RecoveryMachine >().pg;
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
-  pg->state_clear(PG_STATE_BACKFILL);
+  pg->state_clear(PG_STATE_BACKFILLING);
   pg->state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_backfilling_latency, dur);
@@ -6331,7 +6332,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
   pg->publish_stats_to_osd();
 
-  pg->schedule_backfill_full_retry();
+  pg->schedule_backfill_retry(pg->cct->_conf->osd_recovery_retry_interval);
 
   return transit<NotBackfilling>();
 }
@@ -6349,7 +6350,10 @@ PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_conte
     new QueuePeeringEvt<LocalBackfillReserved>(
       pg, pg->get_osdmap()->get_epoch(),
       LocalBackfillReserved()),
-    pg->get_backfill_priority());
+    pg->get_backfill_priority(),
+    new QueuePeeringEvt<DeferBackfill>(
+      pg, pg->get_osdmap()->get_epoch(),
+      DeferBackfill(0.0)));
   pg->publish_stats_to_osd();
 }
 
@@ -6607,7 +6611,10 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
     new QueuePeeringEvt<LocalRecoveryReserved>(
       pg, pg->get_osdmap()->get_epoch(),
       LocalRecoveryReserved()),
-    pg->get_recovery_priority());
+    pg->get_recovery_priority(),
+    new QueuePeeringEvt<DeferRecovery>(
+      pg, pg->get_osdmap()->get_epoch(),
+      DeferRecovery(0.0)));
   pg->publish_stats_to_osd();
 }
 
@@ -6616,7 +6623,7 @@ PG::RecoveryState::WaitLocalRecoveryReserved::react(const RecoveryTooFull &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_set(PG_STATE_RECOVERY_TOOFULL);
-  pg->schedule_recovery_full_retry();
+  pg->schedule_recovery_retry(pg->cct->_conf->osd_recovery_retry_interval);
   return transit<NotRecovering>();
 }
 
@@ -6728,13 +6735,15 @@ PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
 }
 
 boost::statechart::result
-PG::RecoveryState::Recovering::react(const CancelRecovery &evt)
+PG::RecoveryState::Recovering::react(const DeferRecovery &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  ldout(pg->cct, 10) << "defer recovery, retry delay " << evt.delay << dendl;
   pg->state_clear(PG_STATE_RECOVERING);
+  pg->state_set(PG_STATE_RECOVERY_WAIT);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   release_reservations(true);
-  pg->schedule_recovery_full_retry();
+  pg->schedule_recovery_retry(evt.delay);
   return transit<NotRecovering>();
 }
 
