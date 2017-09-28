@@ -1,0 +1,14 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+- - client.1
+overrides:
+  ceph:
+    log-whitelist:
+    - failed to encode map
+    fs: xfs
