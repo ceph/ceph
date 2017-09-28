@@ -38,6 +38,7 @@ enum class IOCommand {
 };
 
 class SharedDriverData;
+class SharedDriverQueueData;
 
 class NVMEDevice : public BlockDevice {
   /**
@@ -49,9 +50,9 @@ class NVMEDevice : public BlockDevice {
   string name;
 
  public:
+  std::atomic_int queue_number = {0};
   SharedDriverData *get_driver() { return driver; }
 
- public:
   NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);
 
   bool supported_bdev_label() override { return false; }
