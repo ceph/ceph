@@ -5,10 +5,17 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
+
+#ifdef __FreeBSD__
+#include <sys/param.h>
+#include <geom/geom_disk.h>
+#include <sys/disk.h>
+#include <fcntl.h>
+#endif
 
 #include <errno.h>
 #include <sys/ioctl.h>
@@ -21,22 +28,10 @@
 #include <linux/fs.h>
 #include <linux/kdev_t.h>
 #include <blkid/blkid.h>
-
-static const char *blkdev_props2strings[] = {
-  [BLKDEV_PROP_DEV]                 = "dev",
-  [BLKDEV_PROP_DISCARD_GRANULARITY] = "queue/discard_granularity",
-  [BLKDEV_PROP_MODEL]               = "device/model",
-  [BLKDEV_PROP_ROTATIONAL]          = "queue/rotational",
-  [BLKDEV_PROP_SERIAL]              = "device/serial",
-  [BLKDEV_PROP_VENDOR]              = "device/device/vendor",
-};
+#endif
 
 BlkDev::BlkDev(int f) {
   fd = f;
-}
-
-const char *BlkDev::sysfsdir() {
-  return "/sys";
 }
 
 int BlkDev::get_devid(dev_t *id) {
@@ -50,6 +45,20 @@ int BlkDev::get_devid(dev_t *id) {
 
   *id = S_ISBLK(st.st_mode) ? st.st_rdev : st.st_dev;
   return 0;
+}
+
+#ifdef __linux__
+static const char *blkdev_props2strings[] = {
+  [BLKDEV_PROP_DEV]                 = "dev",
+  [BLKDEV_PROP_DISCARD_GRANULARITY] = "queue/discard_granularity",
+  [BLKDEV_PROP_MODEL]               = "device/model",
+  [BLKDEV_PROP_ROTATIONAL]          = "queue/rotational",
+  [BLKDEV_PROP_SERIAL]              = "device/serial",
+  [BLKDEV_PROP_VENDOR]              = "device/device/vendor",
+};
+
+const char *BlkDev::sysfsdir() {
+  return "/sys";
 }
 
 int BlkDev::get_block_device_size(int64_t *psize)
@@ -99,7 +108,7 @@ int64_t BlkDev::get_block_device_string_property( blkdev_prop_t prop,
     return -errno;
   }
 
-  int r = 0;
+  r = 0;
   if (fgets(val, maxlen - 1, fp)) {
     // truncate at newline
     char *p = val;
@@ -284,7 +293,6 @@ int BlkDev::block_device_wholedisk(char *device, size_t max)
   return -EOPNOTSUPP;
 }
 #elif defined(__FreeBSD__)
-#include <sys/disk.h>
 
 const char *BlkDev::sysfsdir() {
   assert(false);  // Should never be called on FreeBSD
@@ -311,34 +319,146 @@ int BlkDev::get_block_device_size(int64_t *psize)
   return ret;
 }
 
-bool block_device_support_discard(const char *devname)
+bool BlkDev::block_device_support_discard()
 {
-  return false;
+  struct diocgattr_arg arg;
+  int ret;
+
+  strlcpy(arg.name, "GEOM::candelete", sizeof(arg.name));
+  arg.len = sizeof(arg.value.i);
+  if (ioctl(fd, DIOCGATTR, &arg) == 0)
+    ret = (arg.value.i != 0);
+  else
+    ret = false;
+
+  return ret;
 }
 
-int block_device_discard(int fd, int64_t offset, int64_t len)
+int BlkDev::block_device_discard(int64_t offset, int64_t len)
 {
   return -EOPNOTSUPP;
 }
 
-bool block_device_is_nvme(const char *devname)
+bool BlkDev::block_device_is_nvme()
 {
-  return false;
+  // FreeBSD doesn't have a good way to tell if a device's underlying protocol
+  // is NVME, especially since multiple GEOM transforms may be involved.  So
+  // we'll just guess based on the device name.
+  struct fiodgname_arg arg;
+  const char *nda = "nda";        //CAM-based attachment
+  const char *nvd = "nvd";        //CAM-less attachment
+  char devname[PATH_MAX];
+
+  arg.buf = devname;
+  arg.len = sizeof(devname);
+  if (ioctl(fd, FIODGNAME, &arg) < 0)
+    return false; //When in doubt, it's probably not NVME
+
+  return (strncmp(nvd, devname, strlen(nvd)) == 0 ||
+          strncmp(nda, devname, strlen(nda)) == 0);
 }
 
-bool block_device_is_rotational(const char *devname)
+bool BlkDev::block_device_is_rotational()
 {
-  return false;
+#if __FreeBSD_version >= 1200049
+  struct diocgattr_arg arg;
+  int ioctl_ret;
+  bool ret;
+
+  strlcpy(arg.name, "GEOM::rotation_rate", sizeof(arg.name));
+  arg.len = sizeof(arg.value.u16);
+
+  ioctl_ret = ioctl(fd, DIOCGATTR, &arg);
+  if (ioctl_ret < 0 || arg.value.u16 == DISK_RR_UNKNOWN)
+    // DISK_RR_UNKNOWN usually indicates an old drive, which is usually spinny
+    ret = true;
+  else if (arg.value.u16 == DISK_RR_NON_ROTATING)
+    ret = false;
+  else if (arg.value.u16 >= DISK_RR_MIN && arg.value.u16 <= DISK_RR_MAX)
+    ret = true;
+  else
+    ret = true;     // Invalid value.  Probably spinny?
+
+  return ret;
+#else
+  return true;      // When in doubt, it's probably spinny
+#endif
 }
 
-int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
-	char* device)
+int BlkDev::block_device_model(char *model, size_t max)
 {
-  return -EOPNOTSUPP;
+  struct diocgattr_arg arg;
+  char *p;
+
+  strlcpy(arg.name, "GEOM::descr", sizeof(arg.name));
+  arg.len = sizeof(arg.value.str);
+  if (ioctl(fd, DIOCGATTR, &arg) < 0) {
+    return -errno;
+  }
+
+  // The GEOM description is of the form "vendor product" for SCSI disks
+  // and "ATA device_model" for ATA disks.  Some vendors choose to put the
+  // vendor name in device_model, and some don't.  Strip the first bit.
+  p = arg.value.str;
+  if (p == NULL || *p == '\0') {
+    *model = '\0';
+  } else {
+    (void) strsep(&p, " ");
+    snprintf(model, max, "%s", p);
+  }
+
+  return 0;
 }
-int get_device_by_fd(int fd, char *partition, char *device, size_t max)
+
+int BlkDev::block_device_serial(char *serial, size_t max)
 {
-  return -EOPNOTSUPP;
+  char ident[DISK_IDENT_SIZE];
+
+  if (ioctl(fd, DIOCGIDENT, ident) < 0)
+    return -errno;
+
+  snprintf(serial, max, "%s", ident);
+
+  return 0;
+}
+
+static int block_device_devname(int fd, char *devname, size_t max)
+{
+  struct fiodgname_arg arg;
+
+  arg.buf = devname;
+  arg.len = max;
+  if (ioctl(fd, FIODGNAME, &arg) < 0)
+    return -errno;
+  return 0;
+}
+
+int BlkDev::block_device_partition(char *partition, size_t max)
+{
+  char devname[PATH_MAX];
+
+  if (block_device_devname(fd, devname, sizeof(devname)) < 0)
+    return -errno;
+  snprintf(partition, max, "/dev/%s", devname);
+  return 0;
+}
+
+int BlkDev::block_device_wholedisk(char *wholedisk, size_t max)
+{
+  char devname[PATH_MAX];
+  size_t first_digit, next_nondigit;
+
+  if (block_device_devname(fd, devname, sizeof(devname)) < 0)
+    return -errno;
+
+  first_digit = strcspn(devname, "0123456789");
+  // first_digit now indexes the first digit or null character of devname
+  next_nondigit = strspn(&devname[first_digit], "0123456789");
+  next_nondigit += first_digit;
+  // next_nondigit now indexes the first alphabetic or null character after the
+  // unit number
+  strlcpy(wholedisk, devname, next_nondigit + 1);
+  return 0;
 }
 
 #else
