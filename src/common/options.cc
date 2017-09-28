@@ -3175,7 +3175,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluestore_spdk_coremask", Option::TYPE_STR, Option::LEVEL_DEV)
-    .set_default("0x3")
+    .set_default("0x1")
     .set_description(""),
 
     Option("bluestore_spdk_max_io_completion", Option::TYPE_UINT, Option::LEVEL_DEV)
