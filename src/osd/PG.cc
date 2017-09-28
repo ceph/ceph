@@ -3571,9 +3571,11 @@ void PG::reg_next_scrub()
     return;
 
   utime_t reg_stamp;
+  bool must = false;
   if (scrubber.must_scrub ||
       (info.stats.stats_invalid && cct->_conf->osd_scrub_invalid_stats)) {
     reg_stamp = ceph_clock_now();
+    must = true;
   } else {
     reg_stamp = info.history.last_scrub_stamp;
   }
@@ -3587,7 +3589,7 @@ void PG::reg_next_scrub()
 					       reg_stamp,
 					       scrub_min_interval,
 					       scrub_max_interval,
-					       scrubber.must_scrub);
+					       must);
 }
 
 void PG::unreg_next_scrub()
