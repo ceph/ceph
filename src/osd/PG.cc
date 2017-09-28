@@ -5613,6 +5613,7 @@ void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
   if (!have_same_or_newer_map(evt->get_epoch_sent())) {
     dout(10) << "deferring event " << evt->get_desc() << dendl;
     peering_waiters.push_back(evt);
+    osd->request_osdmap_update(evt->get_epoch_sent());
     return;
   }
   if (old_peering_evt(evt))
