@@ -526,6 +526,37 @@ TYPED_TEST(IntervalSetTest, subset_of) {
 
   iset1.insert( 24, 1);
   ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset2.insert( 24, 1);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset1.insert( 30, 5);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset2.insert( 30, 5);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset2.erase( 30, 1);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset1.erase( 30, 1);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset2.erase( 34, 1);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset1.erase( 34, 1);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset1.insert( 40, 5);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset2.insert( 39, 7);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset1.insert( 50, 5);
+  iset2.insert( 55, 2);
+  ASSERT_FALSE(iset1.subset_of(iset2));
 }
 
 TYPED_TEST(IntervalSetTest, span_of) {
