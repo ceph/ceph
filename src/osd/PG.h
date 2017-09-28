@@ -1405,8 +1405,8 @@ public:
   void handle_scrub_reserve_release(OpRequestRef op);
 
   void reject_reservation();
-  void schedule_backfill_full_retry();
-  void schedule_recovery_full_retry();
+  void schedule_backfill_retry(float retry);
+  void schedule_recovery_retry(float retry);
 
   // -- recovery state --
 
@@ -1558,6 +1558,21 @@ public:
       *out << #T;						   \
     }								   \
   };
+  struct DeferBackfill : boost::statechart::event<DeferBackfill> {
+    float delay;
+    explicit DeferBackfill(float delay) : delay(delay) {}
+    void print(std::ostream *out) const {
+      *out << "DeferBackfill: delay " << delay;
+    }
+  };
+  struct DeferRecovery : boost::statechart::event<DeferRecovery> {
+    float delay;
+    explicit DeferRecovery(float delay) : delay(delay) {}
+    void print(std::ostream *out) const {
+      *out << "DeferRecovery: delay " << delay;
+    }
+  };
+
   TrivialEvent(Initialize)
   TrivialEvent(Load)
   TrivialEvent(GotInfo)
@@ -1568,13 +1583,17 @@ public:
   TrivialEvent(LocalBackfillReserved)
   TrivialEvent(RemoteBackfillReserved)
   TrivialEvent(RemoteReservationRejected)
-  TrivialEvent(CancelBackfill)
   TrivialEvent(RequestBackfill)
   TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
   TrivialEvent(BackfillTooFull)
   TrivialEvent(RecoveryTooFull)
-  TrivialEvent(CancelRecovery)
+
+  TrivialEvent(MakePrimary)
+  TrivialEvent(MakeStray)
+  TrivialEvent(NeedActingChange)
+  TrivialEvent(IsIncomplete)
+  TrivialEvent(IsDown)
 
   TrivialEvent(AllReplicasRecovered)
   TrivialEvent(DoRecovery)
@@ -1741,12 +1760,6 @@ public:
       }
     };
 
-    struct MakePrimary : boost::statechart::event< MakePrimary > {
-      MakePrimary() : boost::statechart::event< MakePrimary >() {}
-    };
-    struct MakeStray : boost::statechart::event< MakeStray > {
-      MakeStray() : boost::statechart::event< MakeStray >() {}
-    };
     struct Primary;
     struct Stray;
 
@@ -1762,17 +1775,8 @@ public:
 
     struct Peering;
     struct WaitActingChange;
-    struct NeedActingChange : boost::statechart::event< NeedActingChange > {
-      NeedActingChange() : boost::statechart::event< NeedActingChange >() {}
-    };
     struct Incomplete;
-    struct IsIncomplete : boost::statechart::event< IsIncomplete > {
-      IsIncomplete() : boost::statechart::event< IsIncomplete >() {}
-    };
     struct Down;
-    struct IsDown : boost::statechart::event< IsDown > {
-      IsDown() : boost::statechart::event< IsDown >() {}
-    };
 
     struct Primary : boost::statechart::state< Primary, Started, Peering >, NamedState {
       explicit Primary(my_context ctx);
@@ -1842,7 +1846,9 @@ public:
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< Backfilled >,
-	boost::statechart::custom_reaction< AllReplicasActivated >
+	boost::statechart::custom_reaction< AllReplicasActivated >,
+	boost::statechart::custom_reaction< DeferRecovery >,
+	boost::statechart::custom_reaction< DeferBackfill >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap&);
@@ -1854,6 +1860,12 @@ public:
 	return discard_event();
       }
       boost::statechart::result react(const AllReplicasActivated&);
+      boost::statechart::result react(const DeferRecovery& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const DeferBackfill& evt) {
+	return discard_event();
+      }
     };
 
     struct Clean : boost::statechart::state< Clean, Active >, NamedState {
@@ -1881,12 +1893,12 @@ public:
     struct Backfilling : boost::statechart::state< Backfilling, Active >, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::transition< Backfilled, Recovered >,
-	boost::statechart::custom_reaction< CancelBackfill >,
+	boost::statechart::custom_reaction< DeferBackfill >,
 	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       explicit Backfilling(my_context ctx);
       boost::statechart::result react(const RemoteReservationRejected& evt);
-      boost::statechart::result react(const CancelBackfill& evt);
+      boost::statechart::result react(const DeferBackfill& evt);
       void exit();
     };
 
@@ -1926,10 +1938,10 @@ public:
     struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
-	boost::statechart::custom_reaction< CancelRecovery >
+	boost::statechart::custom_reaction< DeferRecovery >
 	> reactions;
       explicit NotRecovering(my_context ctx);
-      boost::statechart::result react(const CancelRecovery& evt) {
+      boost::statechart::result react(const DeferRecovery& evt) {
 	/* no-op */
 	return discard_event();
       }
@@ -1947,7 +1959,9 @@ public:
 	boost::statechart::custom_reaction< MQuery >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MLogRec >,
-	boost::statechart::custom_reaction< Activate >
+	boost::statechart::custom_reaction< Activate >,
+	boost::statechart::custom_reaction< DeferRecovery >,
+	boost::statechart::custom_reaction< DeferBackfill >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MInfoRec& infoevt);
@@ -1955,6 +1969,12 @@ public:
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MQuery&);
       boost::statechart::result react(const Activate&);
+      boost::statechart::result react(const DeferRecovery& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const DeferBackfill& evt) {
+	return discard_event();
+      }
     };
 
     struct RepRecovering : boost::statechart::state< RepRecovering, ReplicaActive >, NamedState {
@@ -2002,14 +2022,14 @@ public:
     struct Recovering : boost::statechart::state< Recovering, Active >, NamedState {
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AllReplicasRecovered >,
-	boost::statechart::custom_reaction< CancelRecovery >,
+	boost::statechart::custom_reaction< DeferRecovery >,
 	boost::statechart::custom_reaction< RequestBackfill >
 	> reactions;
       explicit Recovering(my_context ctx);
       void exit();
       void release_reservations(bool cancel = false);
       boost::statechart::result react(const AllReplicasRecovered &evt);
-      boost::statechart::result react(const CancelRecovery& evt);
+      boost::statechart::result react(const DeferRecovery& evt);
       boost::statechart::result react(const RequestBackfill &evt);
     };
 
