@@ -4901,8 +4901,6 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
       extents->push_back(e);
     }
-    gift = 0;
-
     ret = 1;
   }
 
