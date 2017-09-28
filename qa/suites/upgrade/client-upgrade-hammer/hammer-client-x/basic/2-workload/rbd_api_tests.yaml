@@ -1,0 +1,26 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd default features: 13
+tasks:
+- exec:
+    client.0:
+    - "cp $(which ceph_test_librbd_api) $TESTDIR/ceph_test_librbd_api"
+- sequential:
+  - upgrade_workload
+- ceph: 
+- print: "**** done ceph"
+- exec:
+    client.0:
+    - "cp --force $TESTDIR/ceph_test_librbd_api $(which ceph_test_librbd_api)"
+    - "rm -rf $TESTDIR/ceph_test_librbd_api"
+- print: "**** done reverting to hammer ceph_test_librbd_api"
+- workunit:
+    branch: hammer
+    clients:
+      client.0:
+      - rbd/test_librbd_api.sh
+    env:
+      RBD_FEATURES: "13"
+- print: "**** done rbd/test_librbd_api.sh"

@@ -1,0 +1,13 @@
+tasks:
+- sequential:
+  - upgrade_workload
+- ceph: 
+- print: "**** done ceph"
+- workunit:
+    branch: hammer
+    clients:
+      client.0:
+      - rbd/import_export.sh
+    env:
+      RBD_CREATE_ARGS: --image-feature layering,exclusive-lock,object-map
+- print: "**** done rbd/import_export.sh"
