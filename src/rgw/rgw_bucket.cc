@@ -2127,8 +2127,9 @@ public:
 
     /* link bucket */
     if (be.linked) {
+      RGWObjectCtx ctx(store);
       RGWBucketInfo bucket_info;
-      ret = store->get_bucket_info(obj_ctx, tenant_name, bucket_name,
+      ret = store->get_bucket_info(ctx, tenant_name, bucket_name,
                                    bucket_info, nullptr, nullptr);
       if (ret < 0) {
         return ret;
