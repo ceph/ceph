@@ -2075,11 +2075,13 @@ void RGWSetBucketVersioning::execute()
     }
   }
 
-  if (enable_versioning) {
+  if (versioning_status == VersioningEnabled) {
     s->bucket_info.flags |= BUCKET_VERSIONED;
     s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
-  } else {
+  } else if (versioning_status == VersioningSuspended) {
     s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
+  } else {
+    return;
   }
 
   op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
