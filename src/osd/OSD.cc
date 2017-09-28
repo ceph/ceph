@@ -5082,6 +5082,11 @@ void OSD::tick()
 
   do_waiters();
 
+  if (is_active()) {
+    if (!scrub_random_backoff()) {
+      sched_scrub();
+    }
+  }
   tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
 }
 
@@ -5119,9 +5124,6 @@ void OSD::tick_without_osd_lock()
   }
 
   if (is_active()) {
-    if (!scrub_random_backoff()) {
-      sched_scrub();
-    }
     service.promote_throttle_recalibrate();
     bool need_send_beacon = false;
     const auto now = ceph::coarse_mono_clock::now();
