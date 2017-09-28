@@ -2081,10 +2081,17 @@ void RGWSetBucketVersioning::execute()
 
 int RGWGetBucketWebsite::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+                           rgw::IAM::s3GetBucketWebsite,
+                           ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
+  }
 
-  return 0;
+  return -EACCES;
 }
 
 void RGWGetBucketWebsite::pre_exec()
@@ -2101,10 +2108,17 @@ void RGWGetBucketWebsite::execute()
 
 int RGWSetBucketWebsite::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+                           rgw::IAM::s3PutBucketWebsite,
+                           ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
+  }
 
-  return 0;
+  return -EACCES;
 }
 
 void RGWSetBucketWebsite::pre_exec()
