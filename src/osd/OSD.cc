@@ -9365,33 +9365,40 @@ void OSD::do_recovery(
    * queue_recovery_after_sleep.
    */
   float recovery_sleep = get_osd_recovery_sleep();
-  if (recovery_sleep > 0 && service.recovery_needs_sleep) {
-    PGRef pgref(pg);
-    auto recovery_requeue_callback = new FunctionContext([this, pgref, queued, reserved_pushes](int r) {
-      dout(20) << "do_recovery wake up at "
-               << ceph_clock_now()
-	       << ", re-queuing recovery" << dendl;
-      service.recovery_needs_sleep = false;
-      service.queue_recovery_after_sleep(pgref.get(), queued, reserved_pushes);
-    });
+  {
     Mutex::Locker l(service.recovery_sleep_lock);
+    if (recovery_sleep > 0 && service.recovery_needs_sleep) {
+      PGRef pgref(pg);
+      auto recovery_requeue_callback = new FunctionContext([this, pgref, queued, reserved_pushes](int r) {
+        dout(20) << "do_recovery wake up at "
+                 << ceph_clock_now()
+	         << ", re-queuing recovery" << dendl;
+	Mutex::Locker l(service.recovery_sleep_lock);
+        service.recovery_needs_sleep = false;
+        service.queue_recovery_after_sleep(pgref.get(), queued, reserved_pushes);
+      });
 
-    // This is true for the first recovery op and when the previous recovery op
-    // has been scheduled in the past. The next recovery op is scheduled after
-    // completing the sleep from now.
-    if (service.recovery_schedule_time < ceph_clock_now()) {
-      service.recovery_schedule_time = ceph_clock_now();
+      // This is true for the first recovery op and when the previous recovery op
+      // has been scheduled in the past. The next recovery op is scheduled after
+      // completing the sleep from now.
+      if (service.recovery_schedule_time < ceph_clock_now()) {
+        service.recovery_schedule_time = ceph_clock_now();
+      }
+      service.recovery_schedule_time += recovery_sleep;
+      service.recovery_sleep_timer.add_event_at(service.recovery_schedule_time,
+	                                        recovery_requeue_callback);
+      dout(20) << "Recovery event scheduled at "
+               << service.recovery_schedule_time << dendl;
+      return;
     }
-    service.recovery_schedule_time += recovery_sleep;
-    service.recovery_sleep_timer.add_event_at(service.recovery_schedule_time,
-	                                      recovery_requeue_callback);
-    dout(20) << "Recovery event scheduled at "
-             << service.recovery_schedule_time << dendl;
-    return;
   }
 
   {
-    service.recovery_needs_sleep = true;
+    {
+      Mutex::Locker l(service.recovery_sleep_lock);
+      service.recovery_needs_sleep = true;
+    }
+
     if (pg->pg_has_reset_since(queued)) {
       goto out;
     }
