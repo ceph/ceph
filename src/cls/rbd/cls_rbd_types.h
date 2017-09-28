@@ -256,7 +256,7 @@ struct GroupSnapshotNamespace {
 							group_id(_group_id),
 							snapshot_id(_snapshot_id) {}
 
-  int64_t group_pool;
+  int64_t group_pool = 0;
   string group_id;
   snapid_t snapshot_id;
 

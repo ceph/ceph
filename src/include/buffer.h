@@ -596,7 +596,6 @@ namespace buffer CEPH_BUFFER_API {
 
     class page_aligned_appender {
       bufferlist *pbl;
-      size_t offset;
       unsigned min_alloc;
       ptr buffer;
       char *pos, *end;
