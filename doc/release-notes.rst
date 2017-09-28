@@ -163,7 +163,8 @@ Major Changes from Kraken
   * Specifying user authorization capabilities for RBD clients has been
     simplified. The general syntax for using RBD capability profiles is
     "mon 'profile rbd' osd 'profile rbd[-read-only][ pool={pool-name}[, ...]]'".
-    For more details see "User Management" in the documentation.
+    For more details see :doc:`rados/operations/user-management`
+    in the documentation.
 
 - *CephFS*:
 
@@ -416,6 +417,12 @@ Upgrade from Jewel or Kraken
    but recommended.)::
 
      # ceph osd set noout
+
+#. Verify that all RBD client users have sufficient caps to blacklist
+   other client users. RBD client users with only ``"allow r"``
+   monitor caps should to be updated as follows::
+
+     # ceph auth caps client.<ID> mon 'allow r, allow command "osd blacklist"'
 
 #. Upgrade monitors by installing the new packages and restarting the
    monitor daemons.  Note that, unlike prior releases, the ceph-mon
