@@ -237,12 +237,10 @@ void PGPool::update(OSDMapRef map)
     updated = true;
     if (pi->maybe_updated_removed_snaps(cached_removed_snaps)) {
       pi->build_removed_snaps(newly_removed_snaps);
-      interval_set<snapid_t> intersection;
-      intersection.intersection_of(newly_removed_snaps, cached_removed_snaps);
-      if (intersection == cached_removed_snaps) {
-          cached_removed_snaps.swap(newly_removed_snaps);
-          newly_removed_snaps = cached_removed_snaps;
-          newly_removed_snaps.subtract(intersection);
+      if (cached_removed_snaps.subset_of(newly_removed_snaps)) {
+          interval_set<snapid_t> removed_snaps = newly_removed_snaps;
+          newly_removed_snaps.subtract(cached_removed_snaps);
+          cached_removed_snaps.swap(removed_snaps);
       } else {
           lgeneric_subdout(cct, osd, 0) << __func__
             << " cached_removed_snaps shrank from " << cached_removed_snaps
