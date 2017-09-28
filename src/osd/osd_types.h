@@ -4341,23 +4341,6 @@ WRITE_CLASS_ENCODER(pg_create_t)
 
 // -----------------------------------------
 
-struct osd_peer_stat_t {
-  utime_t stamp;
-
-  osd_peer_stat_t() { }
-
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<osd_peer_stat_t*>& o);
-};
-WRITE_CLASS_ENCODER(osd_peer_stat_t)
-
-ostream& operator<<(ostream& out, const osd_peer_stat_t &stat);
-
-
-// -----------------------------------------
-
 class ObjectExtent {
   /**
    * ObjectExtents are used for specifying IO behavior against RADOS
