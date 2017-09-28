@@ -128,13 +128,6 @@ void PMEMDevice::close()
   path.clear();
 }
 
-static string get_dev_property(const char *dev, blkdev_prop_t property)
-{
-  char val[1024] = {0};
-  get_block_device_string_property(dev, property, val, sizeof(val));
-  return val;
-}
-
 int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
 {
   (*pm)[prefix + "rotational"] = stringify((int)(bool)rotational);
@@ -164,21 +157,23 @@ int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) c
       break;
     default:
       {
+	char buffer[1024] = {0};
 	(*pm)[prefix + "partition_path"] = string(partition_path);
 	(*pm)[prefix + "dev_node"] = string(dev_node);
-	(*pm)[prefix + "model"] = get_dev_property(dev_node, BLKDEV_PROP_MODEL);
-	(*pm)[prefix + "dev"] = get_dev_property(dev_node, BLKDEV_PROP_DEV);
 
+	block_device_model(dev_node, buffer, sizeof(buffer));
+	(*pm)[prefix + "model"] = buffer;
+	
+	buffer[0] = '\0';
+	block_device_dev(dev_node, buffer, sizeof(buffer));
+	(*pm)[prefix + "dev"] = buffer;
+	
 	// nvme exposes a serial number
-	string serial = get_dev_property(dev_node, BLKDEV_PROP_SERIAL);
-	if (serial.length()) {
-	  (*pm)[prefix + "serial"] = serial;
-	}
+	buffer[0] = '\0';
+	block_device_serial(dev_node, buffer, sizeof(buffer));
+	(*pm)[prefix + "serial"] = buffer;
 
-	// nvme has a device/device/* structure; infer from that.  there
-	// is probably a better way?
-	string nvme_vendor = get_dev_property(dev_node, BLKDEV_PROP_VENDOR);
-	if (nvme_vendor.length()) {
+	if (block_device_nvme(dev_node)) {
 	  (*pm)[prefix + "type"] = "nvme";
 	}
       }
