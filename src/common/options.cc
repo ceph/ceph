@@ -160,12 +160,24 @@ std::vector<Option> get_global_options() {
     Option("public_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service({"mon", "mds", "osd", "mgr"})
     .add_tag("network")
-    .set_description(""),
+    .set_description("Network(s) from which to choose a public address to bind to"),
+
+    Option("public_network_interface", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .add_service({"mon", "mds", "osd", "mgr"})
+    .add_tag("network")
+    .set_description("Interface name(s) from which to choose an address from a public_network to bind to; public_network must also be specified.")
+    .add_see_also("public_network"),
 
     Option("cluster_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service("osd")
     .add_tag("network")
-    .set_description(""),
+    .set_description("Network(s) from which to choose a cluster address to bind to"),
+
+    Option("cluster_network_interface", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .add_service({"mon", "mds", "osd", "mgr"})
+    .add_tag("network")
+    .set_description("Interface name(s) from which to choose an address from a cluster_network to bind to; cluster_network must also be specified.")
+    .add_see_also("cluster_network"),
 
     Option("monmap", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("path to MonMap file")
