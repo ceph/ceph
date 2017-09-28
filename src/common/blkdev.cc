@@ -138,7 +138,7 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
  * return 0 on success
  * return negative error on error
  */
-int64_t get_block_device_string_property(const char *devname,
+static int64_t get_block_device_string_property(const char *devname,
 					 blkdev_prop_t prop,
 					 char *val, size_t maxlen)
 {
@@ -175,7 +175,7 @@ int64_t get_block_device_string_property(const char *devname,
  * return the value (we assume it is positive)
  * return negative error on error
  */
-int64_t get_block_device_int_property(const char *devname, blkdev_prop_t prop)
+static int64_t get_block_device_int_property(const char *devname, blkdev_prop_t prop)
 {
   char buff[256] = {0};
   int r = get_block_device_string_property(devname, prop, buff, sizeof(buff));
@@ -206,14 +206,34 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
   return ioctl(fd, BLKDISCARD, range);
 }
 
+bool block_device_is_nvme(const char *devname)
+{
+  char vendor[80];
+  // nvme has a device/device/vendor property; infer from that.  There is
+  // probably a better way?
+  int r = get_block_device_string_property(devname, BLKDEV_PROP_VENDOR, vendor, 80);
+  return (r > 0);
+}
+
 bool block_device_is_rotational(const char *devname)
 {
   return get_block_device_int_property(devname, BLKDEV_PROP_ROTATIONAL) > 0;
 }
 
+int block_device_dev(const char *devname, char *dev, size_t max)
+{
+  return get_block_device_string_property(devname, BLKDEV_PROP_DEV, dev, max);
+}
+
 int block_device_model(const char *devname, char *model, size_t max)
 {
   return get_block_device_string_property(devname, BLKDEV_PROP_MODEL, model,
+                                          max);
+}
+
+int block_device_serial(const char *devname, char *serial, size_t max)
+{
+  return get_block_device_string_property(devname, BLKDEV_PROP_SERIAL, serial,
                                           max);
 }
 
@@ -306,6 +326,11 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
   return -EOPNOTSUPP;
 }
 
+bool block_device_is_nvme(const char *devname)
+{
+  return false;
+}
+
 bool block_device_is_rotational(const char *devname)
 {
   return false;
@@ -337,6 +362,11 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
   return -EOPNOTSUPP;
 }
 
+bool block_device_is_nvme(const char *devname)
+{
+  return false;
+}
+
 bool block_device_is_rotational(const char *devname)
 {
   return false;
@@ -365,6 +395,11 @@ bool block_device_support_discard(const char *devname)
 int block_device_discard(int fd, int64_t offset, int64_t len)
 {
   return -EOPNOTSUPP;
+}
+
+bool block_device_is_nvme(const char *devname)
+{
+  return false;
 }
 
 bool block_device_is_rotational(const char *devname)

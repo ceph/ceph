@@ -27,13 +27,11 @@ extern int get_device_by_uuid(uuid_d dev_uuid, const char* label,
 			      char* partition, char* device);
 
 // from a device (e.g., "sdb")
-extern int64_t get_block_device_int_property(
-	const char *devname, blkdev_prop_t prop);
-extern int64_t get_block_device_string_property(
-	const char *devname, blkdev_prop_t prop,
-	char *val, size_t maxlen);
 extern bool block_device_support_discard(const char *devname);
+extern bool block_device_is_nvme(const char *devname);
 extern bool block_device_is_rotational(const char *devname);
+extern int block_device_dev(const char *devname, char *dev, size_t max);
 extern int block_device_model(const char *devname, char *model, size_t max);
+extern int block_device_serial(const char *devname, char *serial, size_t max);
 
 #endif
