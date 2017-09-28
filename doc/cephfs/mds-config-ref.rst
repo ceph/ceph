@@ -617,13 +617,13 @@
 
 ``mds min caps per client``
 
-:Description: Set the minimum cache number of client
+:Description: Set the minimum number of capabilities a client may hold.
 :Type: Integer
 :Default: ``100``
 
 
 ``mds max ratio caps per client``
 
-:Description: Set the maximum cache number ratio of client
+:Description: Set the maximum ratio of current caps that may be recalled during MDS cache pressure.
 :Type: Float
 :Default: ``0.8``
