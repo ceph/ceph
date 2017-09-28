@@ -5784,11 +5784,11 @@ std::vector<Option> get_mds_options() {
  
     Option("mds_min_caps_per_client", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
-    .set_description("Set the minimum cache number of client"),
+    .set_description("minimum number of capabilities a client may hold"),
 
     Option("mds_max_ratio_caps_per_client", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.8)
-    .set_description("Set the maximum cache number ratio of client"),
+    .set_description("maximum ratio of current caps that may be recalled during MDS cache pressure"),
   });
 }
 
