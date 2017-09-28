@@ -12781,6 +12781,8 @@ int RGWRados::cls_bucket_list(RGWBucketInfo& bucket_info, int shard_id, rgw_obj_
 
   map<string, bufferlist> updates;
   uint32_t count = 0;
+  utime_t now = ceph_clock_now();
+  int max_expire_secs = 600;
   while (count < num_entries && !candidates.empty()) {
     r = 0;
     // Select the next one
@@ -12790,9 +12792,11 @@ int RGWRados::cls_bucket_list(RGWBucketInfo& bucket_info, int shard_id, rgw_obj_
 
     bool force_check = force_check_filter &&
         force_check_filter(dirent.key.name);
-    if ((!dirent.exists && !dirent.is_delete_marker()) ||
+    utime_t from(dirent.meta.mtime);
+    utime_t tinv = now - from;
+    if (((!dirent.exists && !dirent.is_delete_marker()) ||
         !dirent.pending_map.empty() ||
-        force_check) {
+        force_check) && tinv.sec() >= max_expire_secs) {
       /* there are uncommitted ops. We need to check the current state,
        * and if the tags are old we need to do cleanup as well. */
       librados::IoCtx sub_ctx;

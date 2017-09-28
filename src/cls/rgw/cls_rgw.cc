@@ -675,6 +675,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
     entry.ver = rgw_bucket_entry_ver();
     entry.exists = false;
     entry.locator = op.locator;
+    entry.meta.mtime = real_clock::now();
   }
 
   // fill in proper state
