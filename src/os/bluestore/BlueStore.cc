@@ -10712,10 +10712,14 @@ int BlueStore::_setattr(TransContext *txc,
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << dendl;
   int r = 0;
-  if (val.is_partial())
-    o->onode.attrs[name.c_str()] = bufferptr(val.c_str(), val.length());
-  else
-    o->onode.attrs[name.c_str()] = val;
+  if (val.is_partial()) {
+    auto& b = o->onode.attrs[name.c_str()] = bufferptr(val.c_str(),
+						       val.length());
+    b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+  } else {
+    auto& b = o->onode.attrs[name.c_str()] = val;
+    b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+  }
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
@@ -10734,11 +10738,14 @@ int BlueStore::_setattrs(TransContext *txc,
   int r = 0;
   for (map<string,bufferptr>::const_iterator p = aset.begin();
        p != aset.end(); ++p) {
-    if (p->second.is_partial())
-      o->onode.attrs[p->first.c_str()] =
+    if (p->second.is_partial()) {
+      auto& b = o->onode.attrs[p->first.c_str()] =
 	bufferptr(p->second.c_str(), p->second.length());
-    else
-      o->onode.attrs[p->first.c_str()] = p->second;
+      b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    } else {
+      auto& b = o->onode.attrs[p->first.c_str()] = p->second;
+      b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    }
   }
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
