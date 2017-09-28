@@ -1087,7 +1087,7 @@ void Server::recall_client_state(void)
   uint64_t min_caps_per_client = g_conf->get_val<uint64_t>("mds_min_caps_per_client");
   if (max_caps_per_client < min_caps_per_client) {
     dout(0) << "max_caps_per_client " << max_caps_per_client
-            << "<" << "min_caps_per_client " << min_caps_per_client << dendl;
+            << " < min_caps_per_client " << min_caps_per_client << dendl;
     max_caps_per_client = min_caps_per_client + 1;
   }
 
