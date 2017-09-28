@@ -558,6 +558,7 @@ public:
       int len;
       denc_varint(len, p);
       csum_data = p.get_ptr(len);
+      csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
     }
     if (has_unused()) {
       denc(unused, p);
@@ -823,6 +824,7 @@ public:
     csum_chunk_order = order;
     csum_data = buffer::create(get_csum_value_size() * len / get_csum_chunk_size());
     csum_data.zero();
+    csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
   }
 
   /// calculate csum for the buffer at the given b_off
