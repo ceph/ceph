@@ -2019,11 +2019,16 @@ void RGWStatAccount::execute()
 
 int RGWGetBucketVersioning::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+			    rgw::IAM::s3GetBucketVersioning,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
   }
-
-  return 0;
+  return -EACCES;
 }
 
 void RGWGetBucketVersioning::pre_exec()
@@ -2039,11 +2044,16 @@ void RGWGetBucketVersioning::execute()
 
 int RGWSetBucketVersioning::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+			    rgw::IAM::s3PutBucketVersioning,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
   }
-
-  return 0;
+  return -EACCES;
 }
 
 void RGWSetBucketVersioning::pre_exec()
@@ -5113,6 +5123,12 @@ void RGWOptionsCORS::execute()
 
 int RGWGetRequestPayment::verify_permission()
 {
+  if (s->iam_policy &&
+      s->iam_policy->eval(s->env, *s->auth.identity,
+			  rgw::IAM::s3GetBucketRequestPayment,
+			  ARN(s->bucket)) != Effect::Allow) {
+      return -EACCES;
+  }
   return 0;
 }
 
@@ -5128,11 +5144,16 @@ void RGWGetRequestPayment::execute()
 
 int RGWSetRequestPayment::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+			    rgw::IAM::s3PutBucketRequestPayment,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
   }
-
-  return 0;
+  return -EACCES;
 }
 
 void RGWSetRequestPayment::pre_exec()
