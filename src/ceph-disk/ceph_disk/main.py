@@ -859,7 +859,7 @@ def get_partition_base_mpath(dev):
 
 def is_partition(dev):
     """
-    Check whether a given device path is a partition or a full disk.
+    Check whether a given device path is a partition
     """
     if is_mpath(dev):
         return is_partition_mpath(dev)
@@ -879,7 +879,7 @@ def is_partition(dev):
     if os.path.exists('/sys/dev/block/%d:%d/partition' % (major, minor)):
         return True
 
-    raise Error('not a disk or partition', dev)
+    raise Error('not a disk partition', dev)
 
 
 def is_mounted(dev):
