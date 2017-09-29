@@ -929,6 +929,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemote) {
 
   // register missing client in remote journal
   librbd::journal::MirrorPeerClientMeta mirror_peer_client_meta;
+  mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
   client_data.client_meta = mirror_peer_client_meta;
   expect_journaler_register_client(mock_journaler, client_data, 0);
 
@@ -1019,6 +1020,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemoteLocalDeleted) {
   // re-register the client
   expect_journaler_unregister_client(mock_journaler, 0);
   mirror_peer_client_meta = {};
+  mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
   client_data.client_meta = mirror_peer_client_meta;
   expect_journaler_register_client(mock_journaler, client_data, 0);
 

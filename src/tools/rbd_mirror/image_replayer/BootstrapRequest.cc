@@ -213,9 +213,11 @@ void BootstrapRequest<I>::register_client() {
 
   update_progress("REGISTER_CLIENT");
 
-  // record an place-holder record
-  librbd::journal::ClientData client_data{
-    librbd::journal::MirrorPeerClientMeta{m_local_image_id}};
+  librbd::journal::MirrorPeerClientMeta mirror_peer_client_meta{
+    m_local_image_id};
+  mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
+
+  librbd::journal::ClientData client_data{mirror_peer_client_meta};
   bufferlist client_data_bl;
   ::encode(client_data, client_data_bl);
 
@@ -239,6 +241,8 @@ void BootstrapRequest<I>::handle_register_client(int r) {
 
   m_client = {};
   *m_client_meta = librbd::journal::MirrorPeerClientMeta(m_local_image_id);
+  m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
+
   is_primary();
 }
 
@@ -498,10 +502,6 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
 
 template <typename I>
 void BootstrapRequest<I>::get_remote_tags() {
-  dout(20) << dendl;
-
-  update_progress("GET_REMOTE_TAGS");
-
   if (m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_SYNCING) {
     // optimization -- no need to compare remote tags if we just created
     // the image locally or sync was interrupted
@@ -510,6 +510,7 @@ void BootstrapRequest<I>::get_remote_tags() {
   }
 
   dout(20) << dendl;
+  update_progress("GET_REMOTE_TAGS");
 
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_remote_tags>(this);
