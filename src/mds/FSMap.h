@@ -132,6 +132,7 @@ public:
       standby_daemons(rhs.standby_daemons),
       standby_epochs(rhs.standby_epochs)
   {
+    filesystems.clear();
     for (const auto &i : rhs.filesystems) {
       const auto &fs = i.second;
       filesystems[fs->fscid] = std::make_shared<Filesystem>(*fs);
@@ -149,6 +150,7 @@ public:
     standby_daemons = rhs.standby_daemons;
     standby_epochs = rhs.standby_epochs;
 
+    filesystems.clear();
     for (const auto &i : rhs.filesystems) {
       const auto &fs = i.second;
       filesystems[fs->fscid] = std::make_shared<Filesystem>(*fs);
