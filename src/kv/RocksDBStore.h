@@ -450,8 +450,7 @@ err:
     return 0;
   }
 
-protected:
-  WholeSpaceIterator _get_iterator() override;
+  WholeSpaceIterator get_wholespace_iterator() override;
 };
 
 

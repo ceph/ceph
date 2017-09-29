@@ -1005,7 +1005,7 @@ string RocksDBStore::past_prefix(const string &prefix)
   return limit;
 }
 
-RocksDBStore::WholeSpaceIterator RocksDBStore::_get_iterator()
+RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator()
 {
   return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
         db->NewIterator(rocksdb::ReadOptions()));

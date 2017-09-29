@@ -316,12 +316,11 @@ private:
   };
 public:
 
-  WholeSpaceIterator get_iterator() {
-    return _get_iterator();
-  }
-
-  Iterator get_iterator(const std::string &prefix) {
-    return std::make_shared<PrefixIteratorImpl>(prefix, get_iterator());
+  virtual WholeSpaceIterator get_wholespace_iterator() = 0;
+  virtual Iterator get_iterator(const std::string &prefix) {
+    return std::make_shared<PrefixIteratorImpl>(
+      prefix,
+      get_wholespace_iterator());
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
@@ -388,8 +387,6 @@ protected:
   /// List of matching prefixes and merge operators
   std::vector<std::pair<std::string,
 			std::shared_ptr<MergeOperator> > > merge_ops;
-
-  virtual WholeSpaceIterator _get_iterator() = 0;
 };
 
 #endif

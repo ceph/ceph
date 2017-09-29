@@ -201,9 +201,7 @@ public:
     return 0;
   }
 
-protected:
-
-  WholeSpaceIterator _get_iterator() override {
+  WholeSpaceIterator get_wholespace_iterator() override {
     return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
       new MDBWholeSpaceIteratorImpl(&m_map, &m_lock, &iterator_seq_no, m_using_btree));
   }

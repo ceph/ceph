@@ -149,8 +149,7 @@ public:
   }
 
 
-protected:
-  WholeSpaceIterator _get_iterator() {
+  WholeSpaceIterator get_wholespace_iterator() {
     return std::make_shared<KineticWholeSpaceIteratorImpl>(kinetic_conn.get());
   }
 };
