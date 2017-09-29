@@ -31,6 +31,7 @@ tasks:
         - generic/405
         - generic/422
         - generic/448
+        - shared/298  # lockdep false positive
         randomize: true
     client.1:
         <<: *ref
