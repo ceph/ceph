@@ -228,7 +228,7 @@ public:
 
   void expect_apply_metadata(MockRefreshImageCtx &mock_image_ctx,
 			     int r) {
-    EXPECT_CALL(mock_image_ctx, apply_metadata(_))
+    EXPECT_CALL(mock_image_ctx, apply_metadata(_, false))
 		  .WillOnce(Return(r));
   }
 
