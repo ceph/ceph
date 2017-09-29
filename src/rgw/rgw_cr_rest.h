@@ -319,6 +319,7 @@ class RGWStreamRWHTTPResourceCRF {
 
   boost::asio::coroutine read_state;
   boost::asio::coroutine write_state;
+  boost::asio::coroutine drain_state;
 
 
 public:
@@ -335,6 +336,7 @@ public:
   int init();
   int read(bufferlist *data, uint64_t max, bool *need_retry); /* reentrant */
   int write(bufferlist& data); /* reentrant */
+  int drain_writes(bool *need_retry); /* reentrant */
 };
 
 class TestCR : public RGWCoroutine {
