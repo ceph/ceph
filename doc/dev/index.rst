@@ -152,10 +152,10 @@ Submitting patches
 ------------------
 
 The canonical instructions for submitting patches are contained in the
-`the file CONTRIBUTING.rst in the top-level directory of the source-code
-tree`_. There may be some overlap between this guide and that file.
+file `CONTRIBUTING.rst`_ in the top-level directory of the source-code
+tree. There may be some overlap between this guide and that file.
 
-.. _`the file CONTRIBUTING.rst in the top-level directory of the source-code tree`:
+.. _`CONTRIBUTING.rst`:
   https://github.com/ceph/ceph/blob/master/CONTRIBUTING.rst
 
 All newcomers are encouraged to read that file carefully.
