@@ -9037,7 +9037,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             if (osdmap.is_up(osd)) {
               msg << ", while it was still marked up";
             } else {
-              msg << ", after it was down for " << int(down_pending_out[osd].sec())
+              auto period = ceph_clock_now() - down_pending_out[osd];
+              msg << ", after it was down for " << int(period.sec())
                   << " seconds";
             }
 
