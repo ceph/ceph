@@ -79,10 +79,14 @@ if rbd help export | grep -q export-format; then
     dd if=/bin/dd of=${TMPDIR}/img bs=1k count=10 seek=100
     rbd import $RBD_CREATE_ARGS ${TMPDIR}/img testimg
     rbd snap create testimg@snap
+    rbd image-meta set testimg key1 value1
+    IMAGEMETA_BEFORE=`rbd image-meta list testimg`
     rbd export --export-format 2 testimg ${TMPDIR}/img_v2
     rbd import --export-format 2 ${TMPDIR}/img_v2 testimg_import
     rbd info testimg_import
     rbd info testimg_import@snap
+    IMAGEMETA_AFTER=`rbd image-meta list testimg_import`
+    [ "$IMAGEMETA_BEFORE" = "$IMAGEMETA_AFTER" ]
 
     # compare the contents between testimg and testimg_import
     rbd export testimg_import ${TMPDIR}/img_import
