@@ -55,8 +55,11 @@ namespace rocksdb{
   class WriteBatch;
   class Iterator;
   class Logger;
+  class ColumnFamilyHandle;
   struct Options;
   struct BlockBasedTableOptions;
+  struct DBOptions;
+  struct ColumnFamilyOptions;
 }
 
 extern rocksdb::Logger *create_rocksdb_ceph_logger();
@@ -79,7 +82,10 @@ class RocksDBStore : public KeyValueDB {
   bool set_cache_flag = false;
 
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
-  int do_open(ostream &out, bool create_if_missing);
+  int install_cf_mergeop(const string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
+  int create_db_dir();
+  int do_open(ostream &out, bool create_if_missing,
+	      const vector<ColumnFamily>* cfs = nullptr);
 
   // manage async compactions
   Mutex compact_queue_lock;
@@ -151,10 +157,19 @@ public:
   int open(ostream &out) override {
     return do_open(out, false);
   }
+  int open(ostream &out, const vector<ColumnFamily>& cfs) override {
+    return do_open(out, false, &cfs);
+  }
   /// Creates underlying db if missing and opens it
   int create_and_open(ostream &out) override;
+  int create_and_open(ostream &out,
+		      const vector<ColumnFamily>& cfs) override;
 
   void close() override;
+
+  rocksdb::ColumnFamilyHandle* get_column_family_handle(
+    const string &prefix,
+    bool &is_default_cf);
 
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(Formatter *f) override;
@@ -250,7 +265,6 @@ public:
 
   };
 
-
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     rocksdb::WriteBatch bat;
@@ -339,6 +353,28 @@ public:
     int status() override;
     size_t key_size() override;
     size_t value_size() override;
+  };
+
+  class RocksDBCFIteratorImpl :
+    public KeyValueDB::ColumnFamilyIteratorImpl{
+  protected:
+    rocksdb::Iterator *dbiter;
+  public:
+    explicit RocksDBCFIteratorImpl(rocksdb::Iterator *iter) :
+      dbiter(iter) { }
+    ~RocksDBCFIteratorImpl();
+
+    int seek_to_first();
+    int seek_to_last();
+    int upper_bound(const string &after);
+    int lower_bound(const string &to);
+    bool valid();
+    int next();
+    int prev();
+    string key();
+    bufferlist value();
+    bufferptr value_as_ptr();
+    int status();
   };
 
   /// Utility
@@ -447,6 +483,7 @@ err:
 
 protected:
   WholeSpaceIterator _get_iterator() override;
+  ColumnFamilyIterator _get_cf_iterator(const std::string& cf_name) override;
 };
 
 

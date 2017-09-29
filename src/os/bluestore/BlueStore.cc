@@ -11502,7 +11502,7 @@ void BlueStore::DBHistogram::dump(Formatter *f)
 //Itrerates through the db and collects the stats
 void BlueStore::generate_db_histogram(Formatter *f)
 {
-  //globals
+   //globals
   uint64_t num_onodes = 0;
   uint64_t num_shards = 0;
   uint64_t num_super = 0;
@@ -11532,41 +11532,42 @@ void BlueStore::generate_db_histogram(Formatter *f)
     total_key_size += key_size;
     total_value_size += value_size;
 
-    pair<string,string> key(iter->raw_key());
+     pair<string,string> key(iter->raw_key());
 
     if (key.first == PREFIX_SUPER) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_SUPER, key_size, value_size);
-	num_super++;
+       hist.update_hist_entry(hist.key_hist, PREFIX_SUPER, key_size, value_size);
+       num_super++;
     } else if (key.first == PREFIX_STAT) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_STAT, key_size, value_size);
-	num_stat++;
+       hist.update_hist_entry(hist.key_hist, PREFIX_STAT, key_size, value_size);
+       num_stat++;
     } else if (key.first == PREFIX_COLL) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_COLL, key_size, value_size);
-	num_coll++;
+       hist.update_hist_entry(hist.key_hist, PREFIX_COLL, key_size, value_size);
+       num_coll++;
     } else if (key.first == PREFIX_OBJ) {
       if (key.second.back() == ONODE_KEY_SUFFIX) {
-	hist.update_hist_entry(hist.key_hist, prefix_onode, key_size, value_size);
-	num_onodes++;
+       hist.update_hist_entry(hist.key_hist, prefix_onode, key_size, value_size);
+       num_onodes++;
       } else {
-	hist.update_hist_entry(hist.key_hist, prefix_onode_shard, key_size, value_size);
-	num_shards++;
+       hist.update_hist_entry(hist.key_hist, prefix_onode_shard, key_size, value_size);
+       num_shards++;
       }
     } else if (key.first == PREFIX_OMAP) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_OMAP, key_size, value_size);
-	num_omap++;
+       hist.update_hist_entry(hist.key_hist, PREFIX_OMAP, key_size, value_size);
+       num_omap++;
     } else if (key.first == PREFIX_DEFERRED) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_DEFERRED, key_size, value_size);
-	num_deferred++;
+       hist.update_hist_entry(hist.key_hist, PREFIX_DEFERRED, key_size, value_size);
+       num_deferred++;
     } else if (key.first == PREFIX_ALLOC || key.first == "b" ) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_ALLOC, key_size, value_size);
-	num_alloc++;
+       hist.update_hist_entry(hist.key_hist, PREFIX_ALLOC, key_size, value_size);
+       num_alloc++;
     } else if (key.first == PREFIX_SHARED_BLOB) {
-	hist.update_hist_entry(hist.key_hist, PREFIX_SHARED_BLOB, key_size, value_size);
-	num_shared_shards++;
+       hist.update_hist_entry(hist.key_hist, PREFIX_SHARED_BLOB, key_size, value_size);
+       num_shared_shards++;
     } else {
-	hist.update_hist_entry(hist.key_hist, prefix_other, key_size, value_size);
-	num_others++;
+       hist.update_hist_entry(hist.key_hist, prefix_other, key_size, value_size);
+       num_others++;
     }
+
     iter->next();
   }
 
@@ -11589,9 +11590,7 @@ void BlueStore::generate_db_histogram(Formatter *f)
   f->close_section();
 
   hist.dump(f);
-
   dout(20) << __func__ << " finished in " << duration << " seconds" << dendl;
-
 }
 
 void BlueStore::_flush_cache()
