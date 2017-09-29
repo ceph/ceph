@@ -467,9 +467,9 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
         total_copied += r;
         bytes -= r;
         if (current_chunk->full()){
-          current_chunk = tx_buffers[++chunk_idx];
-          if (chunk_idx == tx_buffers.size())
+          if (++chunk_idx == tx_buffers.size())
             return total_copied;
+          current_chunk = tx_buffers[chunk_idx];
         }
       }
       ++start;
