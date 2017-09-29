@@ -204,7 +204,7 @@ void SnapshotRemoveRequest<I>::send_release_snap_id() {
 
   librados::AioCompletion *rados_completion =
     this->create_callback_completion();
-  image_ctx.md_ctx.aio_selfmanaged_snap_remove(m_snap_id, rados_completion);
+  image_ctx.data_ctx.aio_selfmanaged_snap_remove(m_snap_id, rados_completion);
   rados_completion->release();
 }
 
