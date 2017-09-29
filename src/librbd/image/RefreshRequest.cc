@@ -345,7 +345,7 @@ Context *RefreshRequest<I>::handle_v2_get_metadata(int *result) {
     }
   }
 
-  m_image_ctx.apply_metadata(m_metadata);
+  m_image_ctx.apply_metadata(m_metadata, false);
 
   send_v2_get_flags();
   return nullptr;
