@@ -93,8 +93,9 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
     check_subs();
 
     if (version == 1
-	|| (map.get_available()
-	    && (!old_available || old_gid != map.get_active_gid()))) {
+        || command_descs.empty()
+        || (map.get_available()
+            && (!old_available || old_gid != map.get_active_gid()))) {
       dout(4) << "mkfs or daemon transitioned to available, loading commands"
 	      << dendl;
       bufferlist loaded_commands;
