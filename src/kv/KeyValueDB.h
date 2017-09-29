@@ -15,6 +15,7 @@
 #include "common/perf_counters.h"
 
 using std::string;
+using std::vector;
 /**
  * Defines virtual interface to be implemented by key value store
  *
@@ -22,11 +23,23 @@ using std::string;
  */
 class KeyValueDB {
 public:
+  /*
+   *  See RocksDB's definition of a column family(CF) and how to use it.
+   *  The interfaces of KeyValueDB is extended, when a column family is created.
+   *  Prefix will be the name of column family to use.
+   */
+  struct ColumnFamily {
+    string name;      //< name of this individual column family
+    string option;    //< configure option string for this CF
+    ColumnFamily(const string &name, const string &option)
+      : name(name), option(option) {}
+  };
+
   class TransactionImpl {
   public:
     /// Set Keys
     void set(
-      const std::string &prefix,                 ///< [in] Prefix for keys
+      const std::string &prefix,                      ///< [in] Prefix for keys, or CF name
       const std::map<std::string, bufferlist> &to_set ///< [in] keys/values to set
     ) {
       std::map<std::string, bufferlist>::const_iterator it;
@@ -36,8 +49,8 @@ public:
 
     /// Set Keys (via encoded bufferlist)
     void set(
-      const std::string &prefix,      ///< [in] prefix
-      bufferlist& to_set_bl     ///< [in] encoded key/values to set
+      const std::string &prefix,      ///< [in] prefix, or CF name
+      bufferlist& to_set_bl           ///< [in] encoded key/values to set
       ) {
       bufferlist::iterator p = to_set_bl.begin();
       uint32_t num;
@@ -53,9 +66,9 @@ public:
 
     /// Set Key
     virtual void set(
-      const std::string &prefix,   ///< [in] Prefix for the key
+      const std::string &prefix,      ///< [in] Prefix or CF for the key
       const std::string &k,	      ///< [in] Key to set
-      const bufferlist &bl    ///< [in] Value to set
+      const bufferlist &bl            ///< [in] Value to set
       ) = 0;
     virtual void set(
       const std::string &prefix,
@@ -67,8 +80,8 @@ public:
 
     /// Removes Keys (via encoded bufferlist)
     void rmkeys(
-      const std::string &prefix,   ///< [in] Prefix to search for
-      bufferlist &keys_bl ///< [in] Keys to remove
+      const std::string &prefix,     ///< [in] Prefix or CF to search for
+      bufferlist &keys_bl            ///< [in] Keys to remove
     ) {
       bufferlist::iterator p = keys_bl.begin();
       uint32_t num;
@@ -82,7 +95,7 @@ public:
 
     /// Removes Keys
     void rmkeys(
-      const std::string &prefix,   ///< [in] Prefix to search for
+      const std::string &prefix,        ///< [in] Prefix/CF to search for
       const std::set<std::string> &keys ///< [in] Keys to remove
     ) {
       std::set<std::string>::const_iterator it;
@@ -92,8 +105,8 @@ public:
 
     /// Remove Key
     virtual void rmkey(
-      const std::string &prefix,   ///< [in] Prefix to search for
-      const std::string &k	      ///< [in] Key to remove
+      const std::string &prefix,       ///< [in] Prefix/CF to search for
+      const std::string &k	       ///< [in] Key to remove
       ) = 0;
     virtual void rmkey(
       const std::string &prefix,   ///< [in] Prefix to search for
@@ -109,13 +122,13 @@ public:
     /// If a key is overwritten (by calling set multiple times), then the result
     /// of calling rm_single_key on this key is undefined.
     virtual void rm_single_key(
-      const std::string &prefix,   ///< [in] Prefix to search for
+      const std::string &prefix,      ///< [in] Prefix/CF to search for
       const std::string &k	      ///< [in] Key to remove
       ) { return rmkey(prefix, k);}
 
     /// Removes keys beginning with prefix
     virtual void rmkeys_by_prefix(
-      const std::string &prefix ///< [in] Prefix by which to remove keys
+      const std::string &prefix       ///< [in] Prefix/CF by which to remove keys
       ) = 0;
 
     virtual void rm_range_keys(
@@ -126,7 +139,7 @@ public:
 
     /// Merge value into key
     virtual void merge(
-      const std::string &prefix,   ///< [in] Prefix ==> MUST match some established merge operator
+      const std::string &prefix,   ///< [in] Prefix/CF ==> MUST match some established merge operator
       const std::string &key,      ///< [in] Key to be merged
       const bufferlist  &value     ///< [in] value to be merged into key
     ) { assert(0 == "Not implemented"); }
@@ -144,8 +157,16 @@ public:
   static int test_init(const std::string& type, const std::string& dir);
   virtual int init(string option_str="") = 0;
   virtual int open(std::ostream &out) = 0;
+  virtual int open(std::ostream &out, const vector<ColumnFamily>& cfs) {
+    assert(0 == "Not implemented");
+  }
   virtual int create_and_open(std::ostream &out) = 0;
   virtual void close() { }
+  // vector cfs contains column families to be created when db is created.
+  virtual int create_and_open(std::ostream &out,
+			      const vector<ColumnFamily>& cfs) {
+    assert(0 == "Not implemented");
+  }
 
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
@@ -155,13 +176,13 @@ public:
 
   /// Retrieve Keys
   virtual int get(
-    const std::string &prefix,        ///< [in] Prefix for key
-    const std::set<std::string> &key,      ///< [in] Key to retrieve
-    std::map<std::string, bufferlist> *out ///< [out] Key value retrieved
+    const std::string &prefix,               ///< [in] Prefix/CF for key
+    const std::set<std::string> &key,        ///< [in] Key to retrieve
+    std::map<std::string, bufferlist> *out   ///< [out] Key value retrieved
     ) = 0;
-  virtual int get(const std::string &prefix, ///< [in] prefix
+  virtual int get(const std::string &prefix, ///< [in] prefix or CF name
 		  const std::string &key,    ///< [in] key
-		  bufferlist *value) {  ///< [out] value
+		  bufferlist *value) {       ///< [out] value
     std::set<std::string> ks;
     ks.insert(key);
     std::map<std::string,bufferlist> om;
@@ -323,6 +344,14 @@ public:
       get_wholespace_iterator());
   }
 
+  void add_column_family(const std::string& cf_name, void *handle) {
+    cf_handles.insert(std::make_pair(cf_name, handle));
+  }
+
+  bool is_column_family(const std::string& prefix) {
+    return cf_handles.count(prefix);
+  }
+
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
   virtual int get_statfs(struct store_statfs_t *buf) {
     return -EOPNOTSUPP;
@@ -384,9 +413,12 @@ public:
     return nullptr;
   }
 protected:
-  /// List of matching prefixes and merge operators
+  /// List of matching prefixes/ColumnFamilies and merge operators
   std::vector<std::pair<std::string,
 			std::shared_ptr<MergeOperator> > > merge_ops;
+
+  /// column families in use, name->handle
+  std::unordered_map<std::string, void *> cf_handles;
 };
 
 #endif
