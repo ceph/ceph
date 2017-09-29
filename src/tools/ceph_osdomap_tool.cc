@@ -129,13 +129,13 @@ int main(int argc, char **argv) {
   std::cout << "legacy: " << (omap.state.legacy ? "true" : "false") << std::endl;
 
   if (cmd == "dump-raw-keys") {
-    KeyValueDB::WholeSpaceIterator i = store->get_iterator();
+    KeyValueDB::WholeSpaceIterator i = store->get_wholespace_iterator();
     for (i->seek_to_first(); i->valid(); i->next()) {
       std::cout << i->raw_key() << std::endl;
     }
     return 0;
   } else if (cmd == "dump-raw-key-vals") {
-    KeyValueDB::WholeSpaceIterator i = store->get_iterator();
+    KeyValueDB::WholeSpaceIterator i = store->get_wholespace_iterator();
     for (i->seek_to_first(); i->valid(); i->next()) {
       std::cout << i->raw_key() << std::endl;
       i->value().hexdump(std::cout);
