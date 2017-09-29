@@ -196,11 +196,26 @@ public:
     virtual ~SimplestIteratorImpl() {}
   };
 
-  class GenericIteratorImpl : public SimplestIteratorImpl {
+  class IteratorImpl : public SimplestIteratorImpl {
   public:
-    virtual ~GenericIteratorImpl() {}
+    virtual ~IteratorImpl() {}
+    virtual int seek_to_last() = 0;
+    virtual int prev(bool validate=true) = 0;
+    virtual std::pair<std::string, std::string> raw_key() = 0;
+    virtual bufferptr value_as_ptr() {
+      bufferlist bl = value();
+      if (bl.length() == 1) {
+        return *bl.buffers().begin();
+      } else if (bl.length() == 0) {
+        return bufferptr();
+      } else {
+	ceph_abort();
+      }
+    }
   };
+  typedef ceph::shared_ptr< IteratorImpl > Iterator;
 
+  // This is the low-level iterator implemented by the underlying KV store.
   class WholeSpaceIteratorImpl {
   public:
     virtual int seek_to_first() = 0;
@@ -235,18 +250,20 @@ public:
   };
   typedef ceph::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
 
-  class IteratorImpl : public GenericIteratorImpl {
+private:
+  // This class filters a WholeSpaceIterator by a prefix.
+  class PrefixIteratorImpl : public IteratorImpl {
     const std::string prefix;
     WholeSpaceIterator generic_iter;
   public:
-    IteratorImpl(const std::string &prefix, WholeSpaceIterator iter) :
+    PrefixIteratorImpl(const std::string &prefix, WholeSpaceIterator iter) :
       prefix(prefix), generic_iter(iter) { }
-    ~IteratorImpl() override { }
+    ~PrefixIteratorImpl() override { }
 
     int seek_to_first() override {
       return generic_iter->seek_to_first(prefix);
     }
-    int seek_to_last() {
+    int seek_to_last() override {
       return generic_iter->seek_to_last(prefix);
     }
     int upper_bound(const std::string &after) override {
@@ -272,7 +289,7 @@ public:
       }      
     }
     
-    int prev(bool validate=true) {
+    int prev(bool validate=true) override {
       if (validate) {
         if (valid())
           return generic_iter->prev();
@@ -284,28 +301,27 @@ public:
     std::string key() override {
       return generic_iter->key();
     }
-    std::pair<std::string, std::string> raw_key() {
+    std::pair<std::string, std::string> raw_key() override {
       return generic_iter->raw_key();
     }
     bufferlist value() override {
       return generic_iter->value();
     }
-    bufferptr value_as_ptr() {
+    bufferptr value_as_ptr() override {
       return generic_iter->value_as_ptr();
     }
     int status() override {
       return generic_iter->status();
     }
   };
-
-  typedef ceph::shared_ptr< IteratorImpl > Iterator;
+public:
 
   WholeSpaceIterator get_iterator() {
     return _get_iterator();
   }
 
   Iterator get_iterator(const std::string &prefix) {
-    return std::make_shared<IteratorImpl>(prefix, get_iterator());
+    return std::make_shared<PrefixIteratorImpl>(prefix, get_iterator());
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
