@@ -30,6 +30,7 @@
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/StandardPolicy.h"
+#include "librbd/cache/FileImageCache.h"
 
 #include "osdc/Striper.h"
 #include <boost/bind.hpp>
@@ -190,7 +191,7 @@ struct C_InvalidateCache : public Context {
       order(0), size(0), features(0),
       format_string(NULL),
       id(image_id), parent(NULL),
-      stripe_unit(0), stripe_count(0), flags(0),
+      stripe_unit(0), stripe_count(0), flags(0), ssd_cache_size(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0),
@@ -311,6 +312,10 @@ struct C_InvalidateCache : public Context {
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
       object_set->return_enoent = true;
       object_cacher->start();
+    }
+
+    if (persistent_cache_enabled) {
+      ssd_cache_size = cct->_conf->get_val<uint64_t>("rbd_persistent_cache_size");
     }
 
     readahead.set_trigger_requests(readahead_trigger_requests);
@@ -998,7 +1003,8 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_max_concurrent_object_sets", false)(
         "rbd_mirroring_resync_after_disconnect", false)(
         "rbd_mirroring_replay_delay", false)(
-        "rbd_skip_partial_discard", false);
+        "rbd_skip_partial_discard", false)(
+        "rbd_persistent_cache_enabled", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -1059,6 +1065,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(mirroring_replay_delay, int64_t);
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(blkin_trace_all, bool);
+    ASSIGN_OPTION(persistent_cache_enabled, bool);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

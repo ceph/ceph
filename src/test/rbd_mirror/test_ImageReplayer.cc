@@ -85,6 +85,7 @@ public:
   {
     EXPECT_EQ("", connect_cluster_pp(*m_local_cluster.get()));
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_cache", "false"));
+    EXPECT_EQ(0, m_local_cluster->conf_set("rbd_persistent_cache_enabled", "false"));
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirror_journal_poll_age", "1"));
 
     m_local_pool_name = get_temp_pool_name();
@@ -95,6 +96,7 @@ public:
 
     EXPECT_EQ("", connect_cluster_pp(m_remote_cluster));
     EXPECT_EQ(0, m_remote_cluster.conf_set("rbd_cache", "false"));
+    EXPECT_EQ(0, m_local_cluster->conf_set("rbd_persistent_cache_enabled", "false"));
 
     m_remote_pool_name = get_temp_pool_name();
     EXPECT_EQ(0, m_remote_cluster.pool_create(m_remote_pool_name.c_str()));

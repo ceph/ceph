@@ -19,6 +19,11 @@ namespace cache {
 struct ImageCache {
   typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
 
+  enum CacheMode {
+    CACHE_MODE_WRITEBACK,
+    CACHE_MODE_WRITETHROUGH
+  };
+
   virtual ~ImageCache() {
   }
 

@@ -304,6 +304,8 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, InvalidateCacheError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   REQUIRE(ictx->cache);
 
+  REQUIRE(ictx->cache);
+
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
   MockJournal mock_journal;

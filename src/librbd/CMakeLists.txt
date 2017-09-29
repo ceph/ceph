@@ -25,8 +25,15 @@ set(librbd_internal_srcs
   api/Group.cc
   api/Image.cc
   api/Mirror.cc
+  cache/BlockGuard.cc
   cache/ImageWriteback.cc
-  cache/PassthroughImageCache.cc
+  cache/FileImageCache.cc
+  cache/file/AioFile.cc
+  cache/file/ImageStore.cc
+  cache/file/JournalStore.cc
+  cache/file/MetaStore.cc
+  cache/file/StupidPolicy.cc
+  cache/file/Types.cc
   exclusive_lock/AutomaticPolicy.cc
   exclusive_lock/PreAcquireRequest.cc
   exclusive_lock/PostAcquireRequest.cc
@@ -114,7 +121,7 @@ endif()
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)
 
-target_link_libraries(librbd LINK_PRIVATE 
+target_link_libraries(librbd LINK_PRIVATE
   rbd_internal
   rbd_types
   journal
