@@ -8951,6 +8951,11 @@ int BlueStore::queue_transactions(
 	       << dendl;
       ++deferred_aggressive;
       deferred_try_submit();
+      {
+	// wake up any previously finished deferred events
+	std::lock_guard<std::mutex> l(kv_lock);
+	kv_cond.notify_one();
+      }
       throttle_deferred_bytes.get(txc->cost);
       --deferred_aggressive;
    }
