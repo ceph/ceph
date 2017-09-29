@@ -180,7 +180,10 @@ public:
     return get(prefix, string(key, keylen), value);
   }
 
-  class GenericIteratorImpl {
+  // This superclass is used both by kv iterators *and* by the ObjectMap
+  // omap iterator.  The class hiearchies are unfortunatley tied together
+  // by the legacy DBOjectMap implementation :(.
+  class SimplestIteratorImpl {
   public:
     virtual int seek_to_first() = 0;
     virtual int upper_bound(const std::string &after) = 0;
@@ -190,6 +193,11 @@ public:
     virtual std::string key() = 0;
     virtual bufferlist value() = 0;
     virtual int status() = 0;
+    virtual ~SimplestIteratorImpl() {}
+  };
+
+  class GenericIteratorImpl : public SimplestIteratorImpl {
+  public:
     virtual ~GenericIteratorImpl() {}
   };
 
