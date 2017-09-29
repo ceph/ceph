@@ -619,7 +619,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("ms_tcp_prefetch_max_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(4096)
+    .set_default(4_K)
     .set_description(""),
 
     Option("ms_initial_backoff", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -1277,7 +1277,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_config_key_max_entry_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(4096)
+    .set_default(4_K)
     .set_description(""),
 
     Option("mon_sync_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -1285,7 +1285,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_sync_max_payload_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1048576)
+    .set_default(1_M)
     .set_description(""),
 
     Option("mon_sync_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -1705,7 +1705,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_pool_erasure_code_stripe_unit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(4096)
+    .set_default(4_K)
     .set_description(""),
 
     Option("osd_pool_default_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -2319,11 +2319,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_command_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(10*60)
+    .set_default(10_min)
     .set_description(""),
 
     Option("osd_command_thread_suicide_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(15*60)
+    .set_default(15_min)
     .set_description(""),
 
     Option("osd_heartbeat_addr", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
@@ -2914,7 +2914,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("This is an experimental option for rocksdb that works in conjunction with two_level indices to avoid having to keep the entire filter/index in cache when cache_index_and_filter_blocks is true.  The idea is to keep a much smaller top-level index in heap/cache and then opportunistically cache the lower level indices.  See: https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters"),
 
     Option("rocksdb_metadata_block_size", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(4096)
+    .set_default(4_K)
     .set_description("The block size for index partitions. (0 = rocksdb default)"),
 
     Option("mon_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -3046,7 +3046,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("memstore_page_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(64 << 10)
+    .set_default(64_K)
     .set_description(""),
 
     Option("objectstore_blackhole", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -3089,7 +3089,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bdev_block_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(4096)
+    .set_default(4_K)
     .set_description(""),
 
     Option("bdev_debug_aio", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -3109,15 +3109,15 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluefs_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1048576)
+    .set_default(1_M)
     .set_description(""),
 
     Option("bluefs_max_prefetch", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1048576)
+    .set_default(1_M)
     .set_description(""),
 
     Option("bluefs_min_log_runway", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1048576)
+    .set_default(1_M)
     .set_description(""),
 
     Option("bluefs_max_log_runway", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -3129,11 +3129,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluefs_log_compact_min_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(16*1048576)
+    .set_default(16_M)
     .set_description(""),
 
     Option("bluefs_min_flush_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(524288)
+    .set_default(512_K)
     .set_description(""),
 
     Option("bluefs_compact_log_sync", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -3602,7 +3602,7 @@ std::vector<Option> get_global_options() {
     .set_description("simulate fragmentation"),
 
     Option("bluestore_debug_prefragment_max", Option::TYPE_INT, Option::LEVEL_DEV)
-    .set_default(1048576)
+    .set_default(1_M)
     .set_description(""),
 
     Option("bluestore_debug_inject_read_err", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -3951,8 +3951,8 @@ std::vector<Option> get_global_options() {
     .set_default(600)
     .set_description(""),
 
-    Option("filestore_fiemap_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(4096)
+    Option("filestore_fiemap_threshold", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(4_K)
     .set_description(""),
 
     Option("filestore_merge_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -4023,8 +4023,8 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("journal_block_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(4096)
+    Option("journal_block_size", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(4_K)
     .set_description(""),
 
     Option("journal_max_corrupt_search", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -4149,7 +4149,7 @@ std::vector<Option> get_global_options() {
                           "performance counter data."),
 
     Option("mgr_client_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(128*1048576)
+    .set_default(128_M)
     .add_service("mgr"),
 
     Option("mgr_client_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
@@ -4157,7 +4157,7 @@ std::vector<Option> get_global_options() {
     .add_service("mgr"),
 
     Option("mgr_osd_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(512*1048576)
+    .set_default(512_M)
     .add_service("mgr"),
 
     Option("mgr_osd_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
@@ -4165,7 +4165,7 @@ std::vector<Option> get_global_options() {
     .add_service("mgr"),
 
     Option("mgr_mds_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(128*1048576)
+    .set_default(128_M)
     .add_service("mgr"),
 
     Option("mgr_mds_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
@@ -4173,7 +4173,7 @@ std::vector<Option> get_global_options() {
     .add_service("mgr"),
 
     Option("mgr_mon_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(128*1048576)
+    .set_default(128_M)
     .add_service("mgr"),
 
     Option("mgr_mon_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
@@ -5983,7 +5983,7 @@ std::vector<Option> get_mds_client_options() {
     .set_description(""),
 
     Option("client_max_inline_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(4096)
+    .set_default(4_K)
     .set_description(""),
 
     Option("client_inject_release_failure", Option::TYPE_BOOL, Option::LEVEL_DEV)
