@@ -244,15 +244,18 @@ void RDMADispatcher::polling()
       perf_logger->set(l_msgr_rdma_inflight_tx_chunks, inflight);
       if (num_dead_queue_pair) {
         Mutex::Locker l(lock); // FIXME reuse dead qp because creating one qp costs 1 ms
-        while (!dead_queue_pairs.empty()) {
-          ldout(cct, 10) << __func__ << " finally delete qp=" << dead_queue_pairs.back() << dendl;
-          delete dead_queue_pairs.back();
+        for (auto idx = 0; idx < dead_queue_pairs.size(); idx++) {
+          // Bypass QPs that do not collect all Tx completions yet. 
+          if (dead_queue_pairs.at(idx)->get_tx_wc() != dead_queue_pairs.at(idx)->get_tx_wr())
+            continue;
+          ldout(cct, 10) << __func__ << " finally delete qp=" << dead_queue_pairs.at(idx) << dendl;
+          delete dead_queue_pairs.at(idx);
+          dead_queue_pairs.erase(dead_queue_pairs.begin() + idx);
           perf_logger->dec(l_msgr_rdma_active_queue_pair);
-          dead_queue_pairs.pop_back();
           --num_dead_queue_pair;
         }
       }
-      if (!num_qp_conn && done)
+      if (!num_qp_conn && done && dead_queue_pairs.empty())
         break;
 
       uint64_t now = Cycles::rdtsc();
@@ -333,6 +336,19 @@ RDMAConnectedSocketImpl* RDMADispatcher::get_conn_lockless(uint32_t qp)
   return it->second.second;
 }
 
+Infiniband::QueuePair* RDMADispatcher::get_qp(uint32_t qp)
+{
+  Mutex::Locker l(lock);
+  auto it = qp_conns.find(qp);
+  if (it == qp_conns.end()) {
+    for(auto dead_qp = dead_queue_pairs.begin(); dead_qp != dead_queue_pairs.end(); dead_qp++) {
+      if ((*dead_qp)->get_local_qp_number() == qp)
+        return *dead_qp;
+    }
+  }
+  return it->second.first;
+}
+
 void RDMADispatcher::erase_qpn_lockless(uint32_t qpn)
 {
   auto it = qp_conns.find(qpn);
@@ -356,6 +372,11 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
 
   for (int i = 0; i < n; ++i) {
     ibv_wc* response = &cqe[i];
+
+    QueuePair *qp = get_qp(response->qp_num);
+    if (qp)
+      qp->add_tx_wc(1);
+
     Chunk* chunk = reinterpret_cast<Chunk *>(response->wr_id);
     ldout(cct, 25) << __func__ << " QP: " << response->qp_num
                    << " len: " << response->byte_len << " , addr:" << chunk

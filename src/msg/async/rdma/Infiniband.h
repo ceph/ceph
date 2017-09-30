@@ -23,6 +23,7 @@
 
 #include <infiniband/verbs.h>
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -464,6 +465,10 @@ class Infiniband {
      * Return true if the queue pair is in an error state, false otherwise.
      */
     bool is_error() const;
+    void add_tx_wr(uint32_t amt) { tx_wr += amt; }
+    void add_tx_wc(uint32_t amt) { tx_wc += amt; }
+    uint32_t get_tx_wr() const { return tx_wr; }
+    uint32_t get_tx_wc() const { return tx_wc; }
     ibv_qp* get_qp() const { return qp; }
     Infiniband::CompletionQueue* get_tx_cq() const { return txcq; }
     Infiniband::CompletionQueue* get_rx_cq() const { return rxcq; }
@@ -486,6 +491,8 @@ class Infiniband {
     uint32_t     max_recv_wr;
     uint32_t     q_key;
     bool dead;
+    std::atomic<uint32_t> tx_wr;
+    std::atomic<uint32_t> tx_wc;
   };
 
  public:
