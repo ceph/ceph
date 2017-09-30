@@ -16,39 +16,37 @@
 #ifndef CEPH_CLIENT_H
 #define CEPH_CLIENT_H
 
-#include "include/types.h"
-
-// stl
-#include <string>
-#include <memory>
-#include <set>
-#include <map>
-#include <fstream>
-using std::set;
-using std::map;
-using std::fstream;
-
-#include "include/unordered_set.h"
-#include "include/unordered_map.h"
+#include "common/CommandTable.h"
+#include "common/Finisher.h"
+#include "common/Mutex.h"
+#include "common/Timer.h"
+#include "common/cmdparse.h"
+#include "common/compiler_extensions.h"
+#include "include/cephfs/ceph_statx.h"
 #include "include/filepath.h"
 #include "include/interval_set.h"
 #include "include/lru.h"
+#include "include/types.h"
+#include "include/unordered_map.h"
+#include "include/unordered_set.h"
 #include "mds/mdstypes.h"
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
-
-#include "common/Mutex.h"
-#include "common/Timer.h"
-#include "common/Finisher.h"
-#include "common/compiler_extensions.h"
-#include "common/cmdparse.h"
-#include "common/CommandTable.h"
-
 #include "osdc/ObjectCacher.h"
 
 #include "InodeRef.h"
+#include "MetaSession.h"
 #include "UserPerm.h"
-#include "include/cephfs/ceph_statx.h"
+
+#include <fstream>
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+
+using std::set;
+using std::map;
+using std::fstream;
 
 class FSMap;
 class FSMapUser;
@@ -123,7 +121,6 @@ struct SnapRealm;
 struct Fh;
 struct CapSnap;
 
-struct MetaSession;
 struct MetaRequest;
 class ceph_lock_state_t;
 
@@ -316,7 +313,7 @@ protected:
   epoch_t cap_epoch_barrier;
 
   // mds sessions
-  map<mds_rank_t, MetaSession*> mds_sessions;  // mds -> push seq
+  map<mds_rank_t, MetaSession> mds_sessions;  // mds -> push seq
   list<Cond*> waiting_for_mdsmap;
 
   // FSMap, for when using mds_command
