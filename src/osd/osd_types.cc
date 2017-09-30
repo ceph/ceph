@@ -1235,7 +1235,7 @@ void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* t
       to->insert(
         pg_shard_t(
           from[i],
-          ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+          is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
   }
 }
@@ -3446,7 +3446,7 @@ bool PastIntervals::check_new_interval(
       if (out)
 	*out << __func__ << " " << i << " : acting set is too small" << std::endl;
     }
-    past_intervals->past_intervals->add_interval(old_pg_pool.ec_pool(), i);
+    past_intervals->past_intervals->add_interval(old_pg_pool.is_erasure(), i);
     return true;
   } else {
     return false;

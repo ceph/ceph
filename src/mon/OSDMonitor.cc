@@ -10161,7 +10161,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOTEMPTY;
       goto reply;
     }
-    if (tp->ec_pool()) {
+    if (tp->is_erasure()) {
       ss << "tier pool '" << tierpoolstr
 	 << "' is an ec pool, which cannot be a tier";
       err = -ENOTSUP;
