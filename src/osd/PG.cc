@@ -5017,7 +5017,9 @@ void PG::scrub_compare_maps()
 
   // construct authoritative scrub map for type specific scrubbing
   scrubber.cleaned_meta_map.insert(scrubber.primary_scrubmap);
-  map<hobject_t, pair<uint32_t, uint32_t>> missing_digest;
+  map<hobject_t,
+      pair<boost::optional<uint32_t>,
+           boost::optional<uint32_t>>> missing_digest;
 
   map<pg_shard_t, ScrubMap *> maps;
   maps[pg_whoami] = &scrubber.primary_scrubmap;
