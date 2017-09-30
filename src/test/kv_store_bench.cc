@@ -363,7 +363,7 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
     if (ops_in_flight == max_ops_in_flight) {
       int err = op_avail.Wait(ops_in_flight_lock);
       if (err < 0) {
-	assert(false);
+	ceph_abort();
 	return err;
       }
       assert(ops_in_flight < max_ops_in_flight);

@@ -59,10 +59,10 @@ struct TestMockWatcherRewatchRequest : public TestMockFixture {
   struct WatchCtx : public librados::WatchCtx2 {
     void handle_notify(uint64_t, uint64_t, uint64_t,
                                ceph::bufferlist&) override {
-      assert(false);
+      ceph_abort();
     }
     void handle_error(uint64_t, int) override {
-      assert(false);
+      ceph_abort();
     }
   };
 
