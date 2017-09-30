@@ -231,7 +231,7 @@ void JournalPlayer::process_state(uint64_t object_number, int r) {
       break;
     default:
       lderr(m_cct) << "UNEXPECTED STATE (" << m_state << ")" << dendl;
-      assert(false);
+      ceph_abort();
       break;
     }
   }
@@ -714,7 +714,7 @@ void JournalPlayer::schedule_watch(bool immediate) {
     watch_interval = 0;
     break;
   default:
-    assert(false);
+    ceph_abort();
   }
 
   ldout(m_cct, 20) << __func__ << ": scheduling watch on "
