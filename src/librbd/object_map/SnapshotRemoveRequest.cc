@@ -104,7 +104,7 @@ bool SnapshotRemoveRequest::should_complete(int r) {
     finished = true;
     break;
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
   return finished;

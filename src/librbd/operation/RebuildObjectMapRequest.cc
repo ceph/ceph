@@ -75,7 +75,7 @@ bool RebuildObjectMapRequest<I>::should_complete(int r) {
     break;
 
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
 
