@@ -908,7 +908,8 @@ void PGBackend::be_compare_scrubmaps(
   map<hobject_t, set<pg_shard_t>> &missing,
   map<hobject_t, set<pg_shard_t>> &inconsistent,
   map<hobject_t, list<pg_shard_t>> &authoritative,
-  map<hobject_t, pair<uint32_t,uint32_t>> &missing_digest,
+  map<hobject_t, pair<boost::optional<uint32_t>,
+                      boost::optional<uint32_t>>> &missing_digest,
   int &shallow_errors, int &deep_errors,
   Scrub::Store *store,
   const spg_t& pgid,
@@ -1081,8 +1082,14 @@ void PGBackend::be_compare_scrubmaps(
 	if (update == FORCE ||
 	    age > cct->_conf->osd_deep_scrub_update_digest_min_age) {
 	  dout(20) << __func__ << " will update digest on " << *k << dendl;
-	  missing_digest[*k] = make_pair(auth_object.digest,
-					 auth_object.omap_digest);
+          boost::optional<uint32_t> data_digest, omap_digest;
+          if (auth_oi.is_data_digest()) {
+            data_digest = auth_object.digest;
+          }
+          if (auth_oi.is_omap_digest()) {
+            omap_digest = auth_object.omap_digest;
+          }
+	  missing_digest[*k] = make_pair(data_digest, omap_digest);
 	} else {
 	  dout(20) << __func__ << " missing digest but age " << age
 		   << " < " << cct->_conf->osd_deep_scrub_update_digest_min_age
