@@ -339,7 +339,7 @@ public:
 
 public:
   bool is_ec_pg() const {
-    return pool.info.ec_pool();
+    return pool.info.is_erasure();
   }
   // pg state
   pg_info_t info;               ///< current pg info
@@ -957,10 +957,10 @@ public:
     return actingbackfill.count(osd);
   }
   bool is_acting(pg_shard_t osd) const {
-    return has_shard(pool.info.ec_pool(), acting, osd);
+    return has_shard(pool.info.is_erasure(), acting, osd);
   }
   bool is_up(pg_shard_t osd) const {
-    return has_shard(pool.info.ec_pool(), up, osd);
+    return has_shard(pool.info.is_erasure(), up, osd);
   }
   static bool has_shard(bool ec, const vector<int>& v, pg_shard_t osd) {
     if (ec) {
@@ -2265,7 +2265,7 @@ public:
 	actingset.insert(
 	  pg_shard_t(
 	    acting[i],
-	    pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+	    pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
     upset.clear();
     up = newup;
@@ -2274,9 +2274,9 @@ public:
 	upset.insert(
 	  pg_shard_t(
 	    up[i],
-	    pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+	    pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
-    if (!pool.info.ec_pool()) {
+    if (!pool.info.is_erasure()) {
       up_primary = pg_shard_t(new_up_primary, shard_id_t::NO_SHARD);
       primary = pg_shard_t(new_acting_primary, shard_id_t::NO_SHARD);
       return;

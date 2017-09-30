@@ -924,7 +924,7 @@ PastIntervals::PriorSet PG::build_prior()
 
   const OSDMap &osdmap = *get_osdmap();
   PastIntervals::PriorSet prior = past_intervals.get_prior_set(
-    pool.info.ec_pool(),
+    pool.info.is_erasure(),
     info.history.last_epoch_started,
     get_pgbackend()->get_is_recoverable_predicate(),
     [&](epoch_t start, int osd, epoch_t *lost_at) {
@@ -1388,7 +1388,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   vector<int> want;
   pg_shard_t want_primary;
   stringstream ss;
-  if (!pool.info.ec_pool())
+  if (!pool.info.is_erasure())
     calc_replicated_acting(
       auth_log_shard,
       get_osdmap()->get_pg_size(info.pgid.pgid),
@@ -1425,7 +1425,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
       have.insert(
         pg_shard_t(
           want[i],
-          pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+          pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
   }
 
@@ -1433,7 +1433,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   // does not currently maintain rollbackability
   // Otherwise, we will go "peered", but not "active"
   if (num_want_acting < pool.info.min_size &&
-      (pool.info.ec_pool() ||
+      (pool.info.is_erasure() ||
        !cct->_conf->osd_allow_recovery_below_min_size)) {
     want_acting.clear();
     dout(10) << "choose_acting failed, below min size" << dendl;
@@ -1503,7 +1503,7 @@ void PG::build_might_have_unfound()
 
   might_have_unfound = past_intervals.get_might_have_unfound(
     pg_whoami,
-    pool.info.ec_pool());
+    pool.info.is_erasure());
 
   // include any (stray) peers
   for (map<pg_shard_t, pg_info_t>::iterator p = peer_info.begin();

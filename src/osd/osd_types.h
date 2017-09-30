@@ -1449,11 +1449,8 @@ public:
   void set_flag(uint64_t f) { flags |= f; }
   void unset_flag(uint64_t f) { flags &= ~f; }
 
-  bool ec_pool() const {
-    return type == TYPE_ERASURE;
-  }
   bool require_rollback() const {
-    return ec_pool();
+    return is_erasure();
   }
 
   /// true if incomplete clones may be present
