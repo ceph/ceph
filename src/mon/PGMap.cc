@@ -2270,7 +2270,7 @@ void PGMap::get_health_checks(
         sev = HEALTH_ERR;
         break;
       default:
-        assert(false);
+        ceph_abort();
     }
 
     if (i.first == DEGRADED) {
