@@ -453,7 +453,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       }
     } else {
       if (found != down_pending_out.end()) {
-        dout(10) << " removing osd." << o << " from down_pending_out map" << dendl;
+        dout(10) << " removing osd." << o << " from down_pending_out map"
+                 << dendl;
         down_pending_out.erase(found);
       }
     }
@@ -509,7 +510,8 @@ void OSDMonitor::update_msgr_features()
     uint64_t mask;
     uint64_t features = osdmap.get_features(*q, &mask);
     if ((mon->messenger->get_policy(*q).features_required & mask) != features) {
-      dout(0) << "crush map has features " << features << ", adjusting msgr requires" << dendl;
+      dout(0) << "crush map has features " << features
+              << ", adjusting msgr requires" << dendl;
       Messenger::Policy p = mon->messenger->get_policy(*q);
       p.features_required = (p.features_required & ~mask) | features;
       mon->messenger->set_policy(*q, p);
@@ -545,8 +547,8 @@ void OSDMonitor::on_shutdown()
 {
   dout(10) << __func__ << dendl;
   if (mapping_job) {
-    dout(10) << __func__ << " canceling previous mapping_job " << mapping_job.get()
-	     << dendl;
+    dout(10) << __func__ << " canceling previous mapping_job "
+             << mapping_job.get() << dendl;
     mapping_job->abort();
   }
 
@@ -915,7 +917,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   auto p = pending_inc.new_state.begin();
   while (p != pending_inc.new_state.end()) {
     if (p->second == 0) {
-      dout(10) << "new_state for osd." << p->first << " is 0, removing" << dendl;
+      dout(10) << "new_state for osd." << p->first << " is 0, removing"
+               << dendl;
       p = pending_inc.new_state.erase(p);
     } else {
       ++p;
@@ -1377,7 +1380,8 @@ void OSDMonitor::share_map_with_random_osd()
     return;
   }
 
-  dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
+  dout(10) << "committed, telling random " << s->inst << " all about it"
+           << dendl;
   // whatev, they'll request more if they need it
   MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());
   s->con->send_message(m);
@@ -1447,7 +1451,8 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   Message *m = op->get_req();
-  dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
+  dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst()
+           << dendl;
 
   switch (m->get_type()) {
     // READs
@@ -1490,7 +1495,8 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   Message *m = op->get_req();
-  dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
+  dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst()
+          << dendl;
 
   switch (m->get_type()) {
     // damp updates
@@ -1639,7 +1645,8 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
     if (!osdmap.exists(from) ||
 	osdmap.get_addr(from) != m->get_orig_source_inst().addr ||
 	(osdmap.is_down(from) && m->if_osd_failed())) {
-      dout(5) << "preprocess_failure from dead osd." << from << ", ignoring" << dendl;
+      dout(5) << "preprocess_failure from dead osd." << from << ", ignoring"
+              << dendl;
       send_incremental(op, m->get_epoch()+1);
       goto didit;
     }
@@ -1648,13 +1655,15 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
 
   // weird?
   if (osdmap.is_down(badboy)) {
-    dout(5) << "preprocess_failure dne(/dup?): " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
+    dout(5) << "preprocess_failure dne(/dup?): " << m->get_target()
+            << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(op, m->get_epoch()+1);
     goto didit;
   }
   if (osdmap.get_inst(badboy) != m->get_target()) {
-    dout(5) << "preprocess_failure wrong osd: report " << m->get_target() << " != map's " << osdmap.get_inst(badboy)
+    dout(5) << "preprocess_failure wrong osd: report " << m->get_target()
+            << " != map's " << osdmap.get_inst(badboy)
 	    << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(op, m->get_epoch()+1);
@@ -1664,14 +1673,16 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
   // already reported?
   if (osdmap.is_down(badboy) ||
       osdmap.get_up_from(badboy) > m->get_epoch()) {
-    dout(5) << "preprocess_failure dup/old: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
+    dout(5) << "preprocess_failure dup/old: " << m->get_target() << ", from "
+            << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(op, m->get_epoch()+1);
     goto didit;
   }
 
   if (!can_mark_down(badboy)) {
-    dout(5) << "preprocess_failure ignoring report of " << m->get_target() << " from " << m->get_orig_source_inst() << dendl;
+    dout(5) << "preprocess_failure ignoring report of " << m->get_target()
+            << " from " << m->get_orig_source_inst() << dendl;
     goto didit;
   }
 
@@ -2002,7 +2013,8 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 
     // add a report
     if (m->is_immediate()) {
-      mon->clog->debug() << m->get_target() << " reported immediately failed by "
+      mon->clog->debug() << m->get_target()
+            << " reported immediately failed by "
             << m->get_orig_source_inst();
       force_failure(target_osd, reporter);
       return true;
@@ -2126,7 +2138,8 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
        CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2) &&
       !(m->get_connection()->get_features() & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2)) {
-    dout(0) << __func__ << " osdmap requires erasure code plugins v2 but osd at "
+    dout(0) << __func__
+            << " osdmap requires erasure code plugins v2 but osd at "
             << m->get_orig_source_inst()
             << " doesn't announce support -- ignore" << dendl;
     goto ignore;
@@ -2135,7 +2148,8 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
        CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3) &&
       !(m->get_connection()->get_features() & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3)) {
-    dout(0) << __func__ << " osdmap requires erasure code plugins v3 but osd at "
+    dout(0) << __func__ 
+            << " osdmap requires erasure code plugins v3 but osd at "
             << m->get_orig_source_inst()
             << " doesn't announce support -- ignore" << dendl;
     goto ignore;
@@ -2175,7 +2189,8 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
       !(m->osd_features & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
-		      << " because 'sortbitwise' osdmap flag is set and OSD lacks the OSD_BITWISE_HOBJ_SORT feature";
+		      << " because 'sortbitwise' osdmap flag is set and"
+                      << " OSD lacks the OSD_BITWISE_HOBJ_SORT feature";
     goto ignore;
   }
 
@@ -2183,7 +2198,8 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
       !(m->osd_features & CEPH_FEATURE_OSD_RECOVERY_DELETES)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
-		      << " because 'recovery_deletes' osdmap flag is set and OSD lacks the OSD_RECOVERY_DELETES feature";
+		      << " because 'recovery_deletes' osdmap flag is set and"
+                      << " OSD lacks the OSD_RECOVERY_DELETES feature";
     goto ignore;
   }
 
@@ -2241,7 +2257,8 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   // noup?
   if (!can_mark_up(from)) {
-    dout(7) << "preprocess_boot ignoring boot from " << m->get_orig_source_inst() << dendl;
+    dout(7) << "preprocess_boot ignoring boot from "
+            << m->get_orig_source_inst() << dendl;
     send_latest(op, m->sb.current_epoch+1);
     return true;
   }
@@ -2257,7 +2274,8 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDBoot *m = static_cast<MOSDBoot*>(op->get_req());
-  dout(7) << __func__ << " from " << m->get_orig_source_inst() << " sb " << m->sb
+  dout(7) << __func__ << " from " << m->get_orig_source_inst()
+          << " sb " << m->sb
 	  << " cluster_addr " << m->cluster_addr
 	  << " hb_back_addr " << m->hb_back_addr
 	  << " hb_front_addr " << m->hb_front_addr
@@ -2527,20 +2545,23 @@ bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
   if (!session)
     goto ignore;
   if (!session->is_capable("osd", MON_CAP_X)) {
-    dout(0) << "attempt to send MOSDAlive from entity with insufficient privileges:"
+    dout(0) << "attempt to send MOSDAlive from entity with insufficient "
+            << "privileges:"
 	    << session->caps << dendl;
     goto ignore;
   }
 
   if (!osdmap.is_up(from) ||
       osdmap.get_inst(from) != m->get_orig_source_inst()) {
-    dout(7) << "preprocess_alive ignoring alive message from down " << m->get_orig_source_inst() << dendl;
+    dout(7) << "preprocess_alive ignoring alive message from down "
+            << m->get_orig_source_inst() << dendl;
     goto ignore;
   }
 
   if (osdmap.get_up_thru(from) >= m->want) {
     // yup.
-    dout(7) << "preprocess_alive want up_thru " << m->want << " dup from " << m->get_orig_source_inst() << dendl;
+    dout(7) << "preprocess_alive want up_thru " << m->want << " dup from "
+            << m->get_orig_source_inst() << dendl;
     _reply_map(op, m->version);
     return true;
   }
@@ -2640,7 +2661,8 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
 
   if (!osdmap.is_up(from) ||
       osdmap.get_inst(from) != m->get_orig_source_inst()) {
-    dout(7) << "ignoring pgtemp message from down " << m->get_orig_source_inst() << dendl;
+    dout(7) << "ignoring pgtemp message from down "
+            << m->get_orig_source_inst() << dendl;
     goto ignore;
   }
 
@@ -2699,7 +2721,8 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
   if (ignore_cnt == m->pg_temp.size())
     goto ignore;
 
-  dout(7) << "preprocess_pgtemp e" << m->map_epoch << " no changes from " << m->get_orig_source_inst() << dendl;
+  dout(7) << "preprocess_pgtemp e" << m->map_epoch << " no changes from "
+          << m->get_orig_source_inst() << dendl;
   _reply_map(op, m->map_epoch);
   return true;
 
@@ -2783,7 +2806,8 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
        q != m->snaps.end();
        ++q) {
     if (!osdmap.have_pg_pool(q->first)) {
-      dout(10) << " ignoring removed_snaps " << q->second << " on non-existent pool " << q->first << dendl;
+      dout(10) << " ignoring removed_snaps " << q->second
+               << " on non-existent pool " << q->first << dendl;
       continue;
     }
     const pg_pool_t *pi = osdmap.get_pg_pool(q->first);
@@ -2811,7 +2835,8 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
        ++p) {
 
     if (!osdmap.have_pg_pool(p->first)) {
-      dout(10) << " ignoring removed_snaps " << p->second << " on non-existent pool " << p->first << dendl;
+      dout(10) << " ignoring removed_snaps " << p->second
+               << " on non-existent pool " << p->first << dendl;
       continue;
     }
 
@@ -2827,7 +2852,8 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
 	dout(10) << " pool " << p->first << " removed_snaps added " << *q
 		 << " (now " << newpi->removed_snaps << ")" << dendl;
 	if (*q > newpi->get_snap_seq()) {
-	  dout(10) << " pool " << p->first << " snap_seq " << newpi->get_snap_seq() << " -> " << *q << dendl;
+	  dout(10) << " pool " << p->first << " snap_seq "
+                   << newpi->get_snap_seq() << " -> " << *q << dendl;
 	  newpi->set_snap_seq(*q);
 	}
 	newpi->set_snap_epoch(pending_inc.epoch);
@@ -2979,8 +3005,8 @@ void OSDMonitor::send_incremental(epoch_t first,
 	  << " to " << session->inst << dendl;
 
   if (first <= session->osd_epoch) {
-    dout(10) << __func__ << " " << session->inst << " should already have epoch "
-	     << session->osd_epoch << dendl;
+    dout(10) << __func__ << " " << session->inst
+             << " should already have epoch " << session->osd_epoch << dendl;
     first = session->osd_epoch + 1;
   }
 
@@ -3328,7 +3354,8 @@ void OSDMonitor::tick()
 	  double halflife = (double)g_conf->mon_osd_laggy_halflife;
 	  double decay_k = ::log(.5) / halflife;
 	  double decay = exp((double)down * decay_k);
-	  dout(20) << "osd." << o << " laggy halflife " << halflife << " decay_k " << decay_k
+	  dout(20) << "osd." << o << " laggy halflife " << halflife
+                   << " decay_k " << decay_k
 		   << " down for " << down << " decay " << decay << dendl;
 	  my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
 	  grace += my_grace;
@@ -3339,8 +3366,10 @@ void OSDMonitor::tick()
 	  int type = osdmap.crush->get_type_id(g_conf->mon_osd_down_out_subtree_limit);
 	  if (type > 0) {
 	    if (osdmap.containing_subtree_is_down(g_ceph_context, o, type, &down_cache)) {
-	      dout(10) << "tick entire containing " << g_conf->mon_osd_down_out_subtree_limit
-		       << " subtree for osd." << o << " is down; resetting timer" << dendl;
+	      dout(10) << "tick entire containing "
+                       << g_conf->mon_osd_down_out_subtree_limit
+		       << " subtree for osd." << o 
+                       << " is down; resetting timer" << dendl;
 	      // reset timer, too.
 	      down_pending_out[o] = now;
 	      continue;
@@ -3704,7 +3733,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->close_section();
       f->flush(rdata);
     } else {
-      ds << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
+      ds << "max_osd = " << osdmap.get_max_osd() << " in epoch "
+         << osdmap.get_epoch();
       rdata.append(ds);
     }
   } else if (prefix == "osd utilization") {
@@ -4471,7 +4501,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
                 if(key == pool_opts_t::CSUM_TYPE) {
                   int val;
                   p->opts.get(key, &val);
-  		  ss << i->first << ": " << Checksummer::get_csum_type_string(val) << "\n";
+  		  ss << i->first << ": "
+                     << Checksummer::get_csum_type_string(val) << "\n";
                 } else {
   		  ss << i->first << ": " << p->opts.get(key) << "\n";
                 }
@@ -6987,6 +7018,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   bool ret = false;
   stringstream ss;
   string rs;
+  std::string sure = "";
   bufferlist rdata;
   int err = 0;
 
@@ -7571,7 +7603,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
     ss << action << " item id " << osdid << " name '" << name << "' weight "
-      << weight << " at location " << loc << " to crush map";
+       << weight << " at location " << loc << " to crush map";
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						      get_last_committed() + 1));
@@ -7582,7 +7614,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       // osd crush create-or-move <OsdName> <initial_weight> <loc1> [<loc2> ...]
       if (!osdmap.exists(osdid)) {
 	err = -ENOENT;
-	ss << name << " does not exist.  create it before updating the crush map";
+	ss << name
+           << " does not exist.  create it before updating the crush map";
 	goto reply;
       }
 
@@ -7600,8 +7633,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       map<string,string> loc;
       CrushWrapper::parse_loc_map(argvec, &loc);
 
-      dout(0) << "create-or-move crush item name '" << name << "' initial_weight " << weight
-	      << " at location " << loc << dendl;
+      dout(0) << "create-or-move crush item name '" << name
+              << "' initial_weight " << weight << " at location " << loc
+              << dendl;
 
       CrushWrapper newcrush;
       _get_pending_crush(newcrush);
@@ -7615,8 +7649,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (err > 0) {
 	pending_inc.crush.clear();
 	newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-	ss << "create-or-move updating item name '" << name << "' weight " << weight
-	   << " at location " << loc << " to crush map";
+	ss << "create-or-move updating item name '" << name << "' weight "
+           << weight << " at location " << loc << " to crush map";
 	getline(ss, rs);
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
@@ -7635,7 +7669,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       map<string,string> loc;
       CrushWrapper::parse_loc_map(argvec, &loc);
 
-      dout(0) << "moving crush item name '" << name << "' to location " << loc << dendl;
+      dout(0) << "moving crush item name '" << name << "' to location " << loc
+              << dendl;
       CrushWrapper newcrush;
       _get_pending_crush(newcrush);
 
@@ -7653,7 +7688,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  err = newcrush.move_bucket(g_ceph_context, id, loc);
 	}
 	if (err >= 0) {
-	  ss << "moved item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	  ss << "moved item id " << id << " name '" << name << "' to location " 
+             << loc << " in crush map";
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
 	  getline(ss, rs);
@@ -7662,7 +7698,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  return true;
 	}
       } else {
-	ss << "no need to move item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	ss << "no need to move item id " << id << " name '" << name
+           << "' to location " << loc << " in crush map";
 	err = 0;
       }
     } while (false);
@@ -7688,13 +7725,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int sparent;
     if (newcrush.get_immediate_parent_id(sid, &sparent) == 0 &&
 	force != "--yes-i-really-mean-it") {
-      ss << "source item " << source << " is not an orphan bucket; pass --yes-i-really-mean-it to proceed anyway";
+      ss << "source item " << source << " is not an orphan bucket;"
+         << " pass --yes-i-really-mean-it to proceed anyway";
       err = -EPERM;
       goto reply;
     }
     if (newcrush.get_bucket_alg(sid) != newcrush.get_bucket_alg(did) &&
 	force != "--yes-i-really-mean-it") {
-      ss << "source bucket alg " << crush_alg_name(newcrush.get_bucket_alg(sid)) << " != "
+      ss << "source bucket alg "
+         << crush_alg_name(newcrush.get_bucket_alg(sid)) << " != "
 	 << "dest bucket alg " << crush_alg_name(newcrush.get_bucket_alg(did))
 	 << "; pass --yes-i-really-mean-it to proceed anyway";
       err = -EPERM;
@@ -7739,7 +7778,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    dout(5) << "linking crush item name '" << name << "' at location " << loc << dendl;
+    dout(5) << "linking crush item name '" << name << "' at location " << loc
+            << dendl;
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
 
@@ -7820,7 +7860,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	break;
       }
       if (err == 0) {
-	ss << "removed item id " << id << " name '" << name << "' from crush map";
+	ss << "removed item id " << id << " name '" << name
+           << "' from crush map";
 	getline(ss, rs);
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
@@ -7966,7 +8007,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t value = -1;
     if (!cmd_getval(g_ceph_context, cmdmap, "value", value)) {
       err = -EINVAL;
-      ss << "failed to parse integer value " << cmd_vartype_stringify(cmdmap["value"]);
+      ss << "failed to parse integer value "
+         << cmd_vartype_stringify(cmdmap["value"]);
       goto reply;
     }
 
@@ -8094,7 +8136,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (osdmap.has_erasure_code_profile(name)) {
 	pending_inc.old_erasure_code_profiles.push_back(name);
       } else {
-	dout(20) << "erasure code profile rm " << name << ": creation canceled" << dendl;
+	dout(20) << "erasure code profile rm " << name << ": creation canceled" 
+                 << dendl;
 	pending_inc.new_erasure_code_profiles.erase(name);
       }
 
@@ -8167,10 +8210,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	if (!force) {
 	  err = -EPERM;
 	  ss << "will not override erasure code profile " << name
-	     << " because the existing profile "
-	     << existing_profile_map
-	     << " is different from the proposed profile "
-	     << profile_map;
+	     << " because the existing profile " << existing_profile_map
+	     << " is different from the proposed profile " << profile_map;
 	  goto reply;
 	}
       }
@@ -8200,7 +8241,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (profile == "default") {
       if (!osdmap.has_erasure_code_profile(profile)) {
 	if (pending_inc.has_erasure_code_profile(profile)) {
-	  dout(20) << "erasure code profile " << profile << " already pending" << dendl;
+	  dout(20) << "erasure code profile " << profile << " already pending"
+                   << dendl;
 	  goto wait;
 	}
 
@@ -8213,8 +8255,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = normalize_profile(name, profile_map, true, &ss);
 	if (err)
 	  goto reply;
-	dout(20) << "erasure code profile set " << profile << "="
-		 << profile_map << dendl;
+	dout(20) << "erasure code profile set " << profile << "=" << profile_map
+                 << dendl;
 	pending_inc.set_erasure_code_profile(profile, profile_map);
 	goto wait;
       }
@@ -8339,8 +8381,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (newmax > g_conf->mon_max_osd) {
       err = -ERANGE;
-      ss << "cannot set max_osd to " << newmax << " which is > conf.mon_max_osd ("
-	 << g_conf->mon_max_osd << ")";
+      ss << "cannot set max_osd to " << newmax
+         << " which is > conf.mon_max_osd (" << g_conf->mon_max_osd << ")";
       goto reply;
     }
 
@@ -8354,8 +8396,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       for (int i = newmax; i < osdmap.get_max_osd(); i++) {
         if (osdmap.exists(i)) {
           err = -EBUSY;
-          ss << "cannot shrink max_osd to " << newmax
-             << " because osd." << i << " (and possibly others) still in use";
+          ss << "cannot shrink max_osd to " << newmax << " because osd."
+             << i << " (and possibly others) still in use";
           goto reply;
         }
       }
@@ -8411,7 +8453,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (sure != "--yes-i-really-mean-it") {
       FeatureMap m;
@@ -8463,7 +8504,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return prepare_unset_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
 
   } else if (prefix == "osd set") {
-    string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     string key;
     cmd_getval(g_ceph_context, cmdmap, "key", key);
@@ -8491,88 +8531,73 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return prepare_set_flag(op, CEPH_OSDMAP_NODEEP_SCRUB);
     else if (key == "notieragent")
       return prepare_set_flag(op, CEPH_OSDMAP_NOTIERAGENT);
-    else if (key == "sortbitwise") {
+    else if (key == "sortbitwise" ||
+             key == "recovery_deletes" ||
+             key == "require_jewel_osds" ||
+             key == "require_kraken_osds") {
       if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
         goto reply;
-      }
-      if ((osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)
+      } else if (key == "sortbitwise") {
+        if ((osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)
+          || sure == "--yes-i-really-mean-it")
+          return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
+        else {
+          ss << "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature";
+          err = -EPERM;
+          goto reply;
+        }
+      } else if (key == "recovery_deletes") {
+        if (HAVE_FEATURE(osdmap.get_up_osd_features(), OSD_RECOVERY_DELETES)
+          || sure == "--yes-i-really-mean-it")
+          return prepare_set_flag(op, CEPH_OSDMAP_RECOVERY_DELETES);
+        else {
+          ss << "not all up OSDs have OSD_RECOVERY_DELETES feature";
+          err = -EPERM;
+          goto reply;
+        }
+      } else if (key == "require_jewel_osds") {
+        if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+          ss << "the sortbitwise flag must be set before require_jewel_osds";
+          err = -EPERM;
+          goto reply;
+        } else if (osdmap.require_osd_release >= CEPH_RELEASE_JEWEL) {
+          ss << "require_osd_release is already >= jewel";
+          err = 0;
+          goto reply;
+        } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL)
+          || sure == "--yes-i-really-mean-it")
+          return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
+        else {
+          ss << "not all up OSDs have CEPH_FEATURE_SERVER_JEWEL feature";
+          err = -EPERM;
+        }
+      } else if (key == "require_kraken_osds") {
+        if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+          ss << "the sortbitwise flag must be set before require_kraken_osds";
+          err = -EPERM;
+          goto reply;
+        } else if (osdmap.require_osd_release >= CEPH_RELEASE_KRAKEN) {
+          ss << "require_osd_release is already >= kraken";
+          err = 0;
+          goto reply;
+        } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN)
           || sure == "--yes-i-really-mean-it") {
-	return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
+          bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
+          // ensure JEWEL is also set
+          pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
+          return r;
+        } else {
+          ss << "not all up OSDs have CEPH_FEATURE_SERVER_KRAKEN feature";
+          err = -EPERM;
+        }
       } else {
-	ss << "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature";
-	err = -EPERM;
-	goto reply;
+        ss << "unrecognized flag '" << key << "'";
+        err = -EINVAL;
       }
-    } else if (key == "recovery_deletes") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        err = -EPERM;
-        goto reply;
-      }
-      if (HAVE_FEATURE(osdmap.get_up_osd_features(), OSD_RECOVERY_DELETES)
-          || sure == "--yes-i-really-mean-it") {
-	return prepare_set_flag(op, CEPH_OSDMAP_RECOVERY_DELETES);
-      } else {
-	ss << "not all up OSDs have OSD_RECOVERY_DELETES feature";
-	err = -EPERM;
-	goto reply;
-      }
-    } else if (key == "require_jewel_osds") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        err = -EPERM;
-        goto reply;
-      }
-      if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-	ss << "the sortbitwise flag must be set before require_jewel_osds";
-	err = -EPERM;
-	goto reply;
-      } else if (osdmap.require_osd_release >= CEPH_RELEASE_JEWEL) {
-	ss << "require_osd_release is already >= jewel";
-	err = 0;
-	goto reply;
-      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL)
-                 || sure == "--yes-i-really-mean-it") {
-	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
-      } else {
-	ss << "not all up OSDs have CEPH_FEATURE_SERVER_JEWEL feature";
-	err = -EPERM;
-      }
-    } else if (key == "require_kraken_osds") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        err = -EPERM;
-        goto reply;
-      }
-      if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-	ss << "the sortbitwise flag must be set before require_kraken_osds";
-	err = -EPERM;
-	goto reply;
-      } else if (osdmap.require_osd_release >= CEPH_RELEASE_KRAKEN) {
-	ss << "require_osd_release is already >= kraken";
-	err = 0;
-	goto reply;
-      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN)
-                 || sure == "--yes-i-really-mean-it") {
-	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
-	// ensure JEWEL is also set
-	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
-	return r;
-      } else {
-	ss << "not all up OSDs have CEPH_FEATURE_SERVER_KRAKEN feature";
-	err = -EPERM;
-      }
-    } else {
-      ss << "unrecognized flag '" << key << "'";
-      err = -EINVAL;
     }
-
   } else if (prefix == "osd unset") {
     string key;
     cmd_getval(g_ceph_context, cmdmap, "key", key);
@@ -8608,7 +8633,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd require-osd-release") {
     string release;
     cmd_getval(g_ceph_context, cmdmap, "release", release);
-    string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
       ss << "the sortbitwise flag must be set first";
@@ -8761,7 +8785,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           if (err == -EBUSY) {
 	    if (any)
 	      ss << ", ";
-            ss << "osd." << osd << " is still up; must be down before removal. ";
+            ss << "osd." << osd
+               << " is still up; must be down before removal. ";
 	  } else {
             assert(err == 0);
 	    if (any) {
@@ -9451,7 +9476,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     if (osdmap.exists(id)) {
       pending_inc.new_primary_affinity[id] = ww;
-      ss << "set osd." << id << " primary-affinity to " << w << " (" << ios::hex << ww << ios::dec << ")";
+      ss << "set osd." << id << " primary-affinity to " << w << " ("
+         << ios::hex << ww << ios::dec << ")";
       getline(ss, rs);
       wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
                                                 get_last_committed() + 1));
@@ -9484,7 +9510,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if (osdmap.exists(id)) {
       pending_inc.new_weight[id] = ww;
-      ss << "reweighted osd." << id << " to " << w << " (" << std::hex << ww << std::dec << ")";
+      ss << "reweighted osd." << id << " to " << w << " (" << std::hex << ww
+         << std::dec << ")";
       getline(ss, rs);
       wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						get_last_committed() + 1));
@@ -9515,10 +9542,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    string sure;
-    if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) || sure != "--yes-i-really-mean-it") {
+    if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) ||
+        sure != "--yes-i-really-mean-it") {
       ss << "are you SURE?  this might mean real, permanent data loss.  pass "
-	    "--yes-i-really-mean-it if you really do.";
+         << "--yes-i-really-mean-it if you really do.";
       err = -EPERM;
       goto reply;
     } else if (!osdmap.exists(id)) {
@@ -9573,7 +9600,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       assert("osd purge" == prefix);
     }
 
-    string sure;
     if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) ||
         sure != "--yes-i-really-mean-it") {
       ss << "Are you SURE? This will mean real, permanent data loss, as well "
@@ -9786,7 +9812,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           }
         }
 
-	ss << "blacklisting " << addr << " until " << expires << " (" << d << " sec)";
+	ss << "blacklisting " << addr << " until " << expires << " (" << d
+           << " sec)";
 	getline(ss, rs);
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
@@ -9909,7 +9936,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (pool_id >= 0) {
       const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
       if (pool_type_str != p->get_type_name()) {
-	ss << "pool '" << poolstr << "' cannot change to type " << pool_type_str;
+	ss << "pool '" << poolstr << "' cannot change to type "
+           << pool_type_str;
  	err = -EINVAL;
       } else {
 	ss << "pool '" << poolstr << "' already exists";
@@ -9949,7 +9977,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (erasure_code_profile == "default") {
 	if (!osdmap.has_erasure_code_profile(erasure_code_profile)) {
 	  if (pending_inc.has_erasure_code_profile(erasure_code_profile)) {
-	    dout(20) << "erasure code profile " << erasure_code_profile << " already pending" << dendl;
+	    dout(20) << "erasure code profile " << erasure_code_profile
+                     << " already pending" << dendl;
 	    goto wait;
 	  }
 
@@ -9959,7 +9988,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 						      &ss);
 	  if (err)
 	    goto reply;
-	  dout(20) << "erasure code profile " << erasure_code_profile << " set" << dendl;
+	  dout(20) << "erasure code profile " << erasure_code_profile
+                   << " set" << dendl;
 	  pending_inc.set_erasure_code_profile(erasure_code_profile, profile_map);
 	  goto wait;
 	}
@@ -10053,9 +10083,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool force_no_fake = sure == "--yes-i-really-really-mean-it-not-faking";
     if (poolstr2 != poolstr ||
 	(sure != "--yes-i-really-really-mean-it" && !force_no_fake)) {
-      ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << poolstr
-	 << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
-	 << "followed by --yes-i-really-really-mean-it.";
+      ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " 
+         << poolstr
+	 << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, "
+         << "pass the pool name *twice*, followed by "
+         << "--yes-i-really-really-mean-it.";
       err = -EPERM;
       goto reply;
     }
@@ -10083,7 +10115,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         // in case it was not intentional; or to avoid a "wtf?" and a bug
         // report in case it was intentional, while expecting a failure.
         ss << "pool '" << srcpoolstr << "' does not exist; pool '"
-          << destpoolstr << "' does -- assuming successful rename";
+           << destpoolstr << "' does -- assuming successful rename";
         err = 0;
       } else {
         ss << "unrecognized pool '" << srcpoolstr << "'";
@@ -10101,8 +10133,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (ret == 0) {
       ss << "pool '" << srcpoolstr << "' renamed to '" << destpoolstr << "'";
     } else {
-      ss << "failed to rename pool '" << srcpoolstr << "' to '" << destpoolstr << "': "
-        << cpp_strerror(ret);
+      ss << "failed to rename pool '" << srcpoolstr << "' to '" << destpoolstr
+         << "': " << cpp_strerror(ret);
     }
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, ret, rs,
@@ -10157,7 +10189,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     const pool_stat_t *pstats = mon->mgrstatmon()->get_pool_stat(tierpool_id);
     if (pstats && pstats->stats.sum.num_objects != 0 &&
 	force_nonempty != "--force-nonempty") {
-      ss << "tier pool '" << tierpoolstr << "' is not empty; --force-nonempty to force";
+      ss << "tier pool '" << tierpoolstr 
+         << "' is not empty; --force-nonempty to force";
       err = -ENOTEMPTY;
       goto reply;
     }
@@ -10170,7 +10203,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if ((!tp->removed_snaps.empty() || !tp->snaps.empty()) &&
 	((force_nonempty != "--force-nonempty") ||
 	 (!g_conf->mon_debug_unsafe_allow_tier_with_nonempty_snaps))) {
-      ss << "tier pool '" << tierpoolstr << "' has snapshot state; it cannot be added as a tier without breaking the pool";
+      ss << "tier pool '" << tierpoolstr  << "' has snapshot state;"
+         << " it cannot be added as a tier without breaking the pool";
       err = -ENOTEMPTY;
       goto reply;
     }
@@ -10184,7 +10218,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     np->tiers.insert(tierpool_id);
     np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
     ntp->tier_of = pool_id;
-    ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
+    ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '"
+       << poolstr << "'";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
@@ -10216,7 +10251,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     if (p->tiers.count(tierpool_id) == 0) {
-      ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
+      ss << "pool '" << tierpoolstr 
+         << "' is now (or already was) not a tier of '" << poolstr << "'";
       err = 0;
       goto reply;
     }
@@ -10229,7 +10265,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     if (p->read_tier == tierpool_id) {
-      ss << "tier pool '" << tierpoolstr << "' is the overlay for '" << poolstr << "'; please remove-overlay first";
+      ss << "tier pool '" << tierpoolstr << "' is the overlay for '"
+         << poolstr << "'; please remove-overlay first";
       err = -EBUSY;
       goto reply;
     }
@@ -10244,7 +10281,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     np->tiers.erase(tierpool_id);
     ntp->clear_tier();
-    ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
+    ss << "pool '" << tierpoolstr
+       << "' is now (or already was) not a tier of '" << poolstr << "'";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
@@ -10275,13 +10313,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     const pg_pool_t *overlay_p = osdmap.get_pg_pool(overlaypool_id);
     assert(overlay_p);
     if (p->tiers.count(overlaypool_id) == 0) {
-      ss << "tier pool '" << overlaypoolstr << "' is not a tier of '" << poolstr << "'";
+      ss << "tier pool '" << overlaypoolstr << "' is not a tier of '"
+         << poolstr << "'";
       err = -EINVAL;
       goto reply;
     }
     if (p->read_tier == overlaypool_id) {
       err = 0;
-      ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
+      ss << "overlay for '" << poolstr << "' is now (or already was) '"
+         << overlaypoolstr << "'";
       goto reply;
     }
     if (p->has_read_tier()) {
@@ -10299,7 +10339,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     np->set_last_force_op_resend(pending_inc.epoch);
     pg_pool_t *noverlay_p = pending_inc.get_new_pool(overlaypool_id, overlay_p);
     noverlay_p->set_last_force_op_resend(pending_inc.epoch);
-    ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
+    ss << "overlay for '" << poolstr << "' is now (or already was) '"
+       << overlaypoolstr << "'";
     if (overlay_p->cache_mode == pg_pool_t::CACHEMODE_NONE)
       ss <<" (WARNING: overlay pool cache_mode is still NONE)";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
@@ -10376,7 +10417,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if ((mode != pg_pool_t::CACHEMODE_WRITEBACK &&
 	 mode != pg_pool_t::CACHEMODE_NONE &&
@@ -10426,9 +10466,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (p->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
         (mode != pg_pool_t::CACHEMODE_FORWARD &&
-	  mode != pg_pool_t::CACHEMODE_PROXY &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
-	  mode != pg_pool_t::CACHEMODE_READPROXY)) {
+	 mode != pg_pool_t::CACHEMODE_PROXY &&
+	 mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	 mode != pg_pool_t::CACHEMODE_READPROXY)) {
       ss << "unable to set cache-mode '" << pg_pool_t::get_cache_mode_name(mode)
          << "' on a '" << pg_pool_t::get_cache_mode_name(p->cache_mode)
          << "' pool; only '"
@@ -10445,27 +10485,27 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if ((p->cache_mode == pg_pool_t::CACHEMODE_READFORWARD &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
-	  mode != pg_pool_t::CACHEMODE_FORWARD &&
-	  mode != pg_pool_t::CACHEMODE_PROXY &&
-	  mode != pg_pool_t::CACHEMODE_READPROXY)) ||
+	 mode != pg_pool_t::CACHEMODE_FORWARD &&
+	 mode != pg_pool_t::CACHEMODE_PROXY &&
+	 mode != pg_pool_t::CACHEMODE_READPROXY)) ||
 
         (p->cache_mode == pg_pool_t::CACHEMODE_READPROXY &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
-	  mode != pg_pool_t::CACHEMODE_FORWARD &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
-	  mode != pg_pool_t::CACHEMODE_PROXY)) ||
+	 mode != pg_pool_t::CACHEMODE_FORWARD &&
+	 mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	 mode != pg_pool_t::CACHEMODE_PROXY)) ||
 
         (p->cache_mode == pg_pool_t::CACHEMODE_PROXY &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
-	  mode != pg_pool_t::CACHEMODE_FORWARD &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
-	  mode != pg_pool_t::CACHEMODE_READPROXY)) ||
+	 mode != pg_pool_t::CACHEMODE_FORWARD &&
+	 mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	 mode != pg_pool_t::CACHEMODE_READPROXY)) ||
 
         (p->cache_mode == pg_pool_t::CACHEMODE_FORWARD &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
-	  mode != pg_pool_t::CACHEMODE_PROXY &&
-	  mode != pg_pool_t::CACHEMODE_READPROXY))) {
+	 mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	 mode != pg_pool_t::CACHEMODE_PROXY &&
+	 mode != pg_pool_t::CACHEMODE_READPROXY))) {
 
       const pool_stat_t* pstats =
         mon->mgrstatmon()->get_pool_stat(pool_id);
@@ -10545,7 +10585,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string modestr = g_conf->osd_tier_default_cache_mode;
     pg_pool_t::cache_mode_t mode = pg_pool_t::get_cache_mode_from_str(modestr);
     if (mode < 0) {
-      ss << "osd tier cache default mode '" << modestr << "' is not a valid cache mode";
+      ss << "osd tier cache default mode '" << modestr
+         << "' is not a valid cache mode";
       err = -EINVAL;
       goto reply;
     }
@@ -10587,7 +10628,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ntp->hit_set_search_last_n = g_conf->osd_tier_default_cache_hit_set_search_last_n;
     ntp->hit_set_params = hsp;
     ntp->target_max_bytes = size;
-    ss << "pool '" << tierpoolstr << "' is now (or already was) a cache tier of '" << poolstr << "'";
+    ss << "pool '" << tierpoolstr
+       << "' is now (or already was) a cache tier of '" << poolstr << "'";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
@@ -10604,7 +10646,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string field;
     cmd_getval(g_ceph_context, cmdmap, "field", field);
     if (field != "max_objects" && field != "max_bytes") {
-      ss << "unrecognized field '" << field << "'; should be 'max_bytes' or 'max_objects'";
+      ss << "unrecognized field '" << field
+         << "'; should be 'max_bytes' or 'max_objects'";
       err = -EINVAL;
       goto reply;
     }
@@ -10711,7 +10754,8 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
     return preprocess_pool_op_create(op);
 
   if (!osdmap.get_pg_pool(m->pool)) {
-    dout(10) << "attempt to operate on non-existent pool id " << m->pool << dendl;
+    dout(10) << "attempt to operate on non-existent pool id "
+             << m->pool << dendl;
     _pool_op_reply(op, 0, osdmap.get_epoch());
     return true;
   }
@@ -10892,7 +10936,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
   case POOL_OP_CREATE_SNAP:
     if (!pp.snap_exists(m->name.c_str())) {
       pp.add_snap(m->name.c_str(), ceph_clock_now());
-      dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq " << pp.get_snap_epoch() << dendl;
+      dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq "               << pp.get_snap_epoch() << dendl;
       changed = true;
     }
     break;
@@ -10979,12 +11023,15 @@ int OSDMonitor::_check_remove_pool(int64_t pool_id, const pg_pool_t& pool,
   }
 
   if (!g_conf->mon_allow_pool_delete) {
-    *ss << "pool deletion is disabled; you must first set the mon_allow_pool_delete config option to true before you can destroy a pool";
+    *ss << "pool deletion is disabled; you must first set "
+        << "the mon_allow_pool_delete config option to true before "
+        << "you can destroy a pool";
     return -EPERM;
   }
 
   if (pool.has_flag(pg_pool_t::FLAG_NODELETE)) {
-    *ss << "pool deletion is disabled; you must unset nodelete flag for the pool first";
+    *ss << "pool deletion is disabled; you must unset "
+        << "nodelete flag for the pool first";
     return -EPERM;
   }
 
@@ -11019,14 +11066,14 @@ bool OSDMonitor::_check_become_tier(
     assert(tier_pool->tier_of == base_pool_id);
     *err = 0;
     *ss << "pool '" << tier_pool_name << "' is now (or already was) a tier of '"
-      << base_pool_name << "'";
+        << base_pool_name << "'";
     return false;
   }
 
   if (base_pool->is_tier()) {
     *ss << "pool '" << base_pool_name << "' is already a tier of '"
-      << osdmap.get_pool_name(base_pool->tier_of) << "', "
-      << "multiple tiers are not yet supported.";
+        << osdmap.get_pool_name(base_pool->tier_of) << "', "
+        << "multiple tiers are not yet supported.";
     *err = -EINVAL;
     return false;
   }
