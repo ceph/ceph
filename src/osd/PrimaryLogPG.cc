@@ -13604,6 +13604,7 @@ void PrimaryLogPG::_scrub_finish()
       info.stats.omap_stats_invalid = false;
       info.stats.hitset_stats_invalid = false;
       info.stats.hitset_bytes_stats_invalid = false;
+      info.stats.pin_stats_invalid = false;
       publish_stats_to_osd();
       share_pg_info();
     }
