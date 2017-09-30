@@ -108,6 +108,7 @@ class RDMADispatcher {
   }
   RDMAStack* get_stack() { return stack; }
   RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp);
+  QueuePair* get_qp(uint32_t qp);
   void erase_qpn_lockless(uint32_t qpn);
   void erase_qpn(uint32_t qpn);
   Infiniband::CompletionQueue* get_tx_cq() const { return tx_cq; }

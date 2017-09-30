@@ -166,7 +166,9 @@ Infiniband::QueuePair::QueuePair(
   max_send_wr(tx_queue_len),
   max_recv_wr(rx_queue_len),
   q_key(q_key),
-  dead(false)
+  dead(false),
+  tx_wr(0),
+  tx_wc(0)
 {
   initial_psn = lrand48() & 0xffffff;
   if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
