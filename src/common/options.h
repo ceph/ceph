@@ -91,7 +91,7 @@ struct Option {
   std::vector<const char*> see_also;
 
   value_t min, max;
-  std::vector<std::string> enum_allowed;
+  std::vector<const char*> enum_allowed;
 
   bool safe;
 
@@ -191,7 +191,7 @@ struct Option {
     tags.push_back(tag);
     return *this;
   }
-  Option& add_tag(std::initializer_list<const char*> ts) {
+  Option& add_tag(const std::initializer_list<const char*>& ts) {
     tags.insert(tags.end(), ts);
     return *this;
   }
@@ -199,7 +199,7 @@ struct Option {
     services.push_back(service);
     return *this;
   }
-  Option& add_service(std::initializer_list<const char*> ss) {
+  Option& add_service(const std::initializer_list<const char*>& ss) {
     services.insert(services.end(), ss);
     return *this;
   }
@@ -207,7 +207,7 @@ struct Option {
     see_also.push_back(t);
     return *this;
   }
-  Option& add_see_also(std::initializer_list<const char*> ts) {
+  Option& add_see_also(const std::initializer_list<const char*>& ts) {
     see_also.insert(see_also.end(), ts);
     return *this;
   }
@@ -233,9 +233,9 @@ struct Option {
     return *this;
   }
 
-  Option& set_enum_allowed(const std::vector<std::string> allowed)
+  Option& set_enum_allowed(const std::initializer_list<const char*>& allowed)
   {
-    enum_allowed = allowed;
+    enum_allowed.insert(enum_allowed.end(), allowed);
     return *this;
   }
 
