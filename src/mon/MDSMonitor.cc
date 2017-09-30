@@ -666,10 +666,11 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
     if (state == MDSMap::STATE_STOPPED) {
       const auto fscid = pending_fsmap.mds_roles.at(gid);
       auto fs = pending_fsmap.get_filesystem(fscid);
+
       mon->clog->info() << info.human_name() << " finished "
                         << "deactivating rank " << info.rank << " in filesystem "
                         << fs->mds_map.fs_name << " (now has "
-                        << fs->mds_map.get_num_in_mds() << " ranks)";
+                        << fs->mds_map.get_num_in_mds() - 1 << " ranks)";
 
       auto erased = pending_fsmap.stop(gid);
       erased.push_back(gid);
@@ -2016,7 +2017,7 @@ bool MDSMonitor::maybe_expand_cluster(std::shared_ptr<Filesystem> fs)
 
     mon->clog->info() << new_info.human_name() << " assigned to "
                          "filesystem " << fs->mds_map.fs_name << " as rank "
-                      << mds << " (now has " << fs->mds_map.get_num_in_mds()
+                      << mds << " (now has " << fs->mds_map.get_num_in_mds() + 1
                       << " ranks)";
     pending_fsmap.promote(newgid, fs, mds);
     do_propose = true;

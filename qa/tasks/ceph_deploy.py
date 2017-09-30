@@ -15,6 +15,7 @@ from teuthology.config import config as teuth_config
 from teuthology.task import install as install_fn
 from teuthology.orchestra import run
 from tasks.cephfs.filesystem import Filesystem
+from teuthology.misc import wait_until_healthy
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ def download_ceph_deploy(ctx, config):
     will use that instead. The `bootstrap` script is ran, with the argument
     obtained from `python_version`, if specified.
     """
-    ceph_admin = ctx.cluster.only(teuthology.get_first_mon(ctx, config))
+    # use mon.a for ceph_admin
+    (ceph_admin,) = ctx.cluster.only('mon.a').remotes.iterkeys()
 
     try:
         py_ver = str(config['python_version'])
@@ -41,8 +43,7 @@ def download_ceph_deploy(ctx, config):
             ))
 
         log.info("Installing Python")
-        for admin in ceph_admin.remotes:
-            system_type = teuthology.get_system_type(admin)
+        system_type = teuthology.get_system_type(ceph_admin)
 
         if system_type == 'rpm':
             package = 'python34' if py_ver == '3' else 'python'
@@ -145,7 +146,7 @@ def get_nodes_using_role(ctx, target_role):
 
     # Prepare a modified version of cluster.remotes with ceph-deploy-ized names
     modified_remotes = {}
-
+    ceph_deploy_mapped = dict()
     for _remote, roles_for_host in ctx.cluster.remotes.iteritems():
         modified_remotes[_remote] = []
         for svc_id in roles_for_host:
@@ -156,13 +157,16 @@ def get_nodes_using_role(ctx, target_role):
                     nodes_of_interest.append(fqdn)
                 else:
                     nodes_of_interest.append(nodename)
-
-                modified_remotes[_remote].append(
-                    "{0}.{1}".format(target_role, nodename))
+                mapped_role = "{0}.{1}".format(target_role, nodename)
+                modified_remotes[_remote].append(mapped_role)
+                # keep dict of mapped role for later use by tasks
+                # eg. mon.a => mon.node1
+                ceph_deploy_mapped[svc_id] = mapped_role
             else:
                 modified_remotes[_remote].append(svc_id)
 
     ctx.cluster.remotes = modified_remotes
+    ctx.cluster.mapped_role = ceph_deploy_mapped
 
     return nodes_of_interest
 
@@ -213,8 +217,8 @@ def build_ceph_cluster(ctx, config):
     # Expect to find ceph_admin on the first mon by ID, same place that the download task
     # puts it.  Remember this here, because subsequently IDs will change from those in
     # the test config to those that ceph-deploy invents.
-    (ceph_admin,) = ctx.cluster.only(
-        teuthology.get_first_mon(ctx, config)).remotes.iterkeys()
+
+    (ceph_admin,) = ctx.cluster.only('mon.a').remotes.iterkeys()
 
     def execute_ceph_deploy(cmd):
         """Remotely execute a ceph_deploy command"""
@@ -241,10 +245,16 @@ def build_ceph_cluster(ctx, config):
         mds_nodes = " ".join(mds_nodes)
         mon_node = get_nodes_using_role(ctx, 'mon')
         mon_nodes = " ".join(mon_node)
-        mgr_nodes = get_nodes_using_role(ctx, 'mgr')
-        mgr_nodes = " ".join(mgr_nodes)
+        # skip mgr based on config item
+        # this is needed when test uses latest code to install old ceph
+        # versions
+        skip_mgr = config.get('skip-mgr', False)
+        if not skip_mgr:
+            mgr_nodes = get_nodes_using_role(ctx, 'mgr')
+            mgr_nodes = " ".join(mgr_nodes)
         new_mon = './ceph-deploy new' + " " + mon_nodes
-        mgr_create = './ceph-deploy mgr create' + " " + mgr_nodes
+        if not skip_mgr:
+            mgr_create = './ceph-deploy mgr create' + " " + mgr_nodes
         mon_hostname = mon_nodes.split(' ')[0]
         mon_hostname = str(mon_hostname)
         gather_keys = './ceph-deploy gatherkeys' + " " + mon_hostname
@@ -307,7 +317,8 @@ def build_ceph_cluster(ctx, config):
 
         estatus_gather = execute_ceph_deploy(gather_keys)
 
-        execute_ceph_deploy(mgr_create)
+        if not skip_mgr:
+            execute_ceph_deploy(mgr_create)
 
         if mds_nodes:
             estatus_mds = execute_ceph_deploy(deploy_mds)
@@ -334,7 +345,7 @@ def build_ceph_cluster(ctx, config):
             # first check for filestore, default is bluestore with ceph-deploy
             if config.get('filestore') is not None:
                 osd_create_cmd += '--filestore '
-            else:
+            elif config.get('bluestore') is not None:
                 osd_create_cmd += '--bluestore '
             if config.get('dmcrypt') is not None:
                 osd_create_cmd += '--dmcrypt '
@@ -414,7 +425,7 @@ def build_ceph_cluster(ctx, config):
 
             if mds_nodes:
                 log.info('Configuring CephFS...')
-                ceph_fs = Filesystem(ctx, create=True)
+                Filesystem(ctx, create=True)
         elif not config.get('only_mon'):
             raise RuntimeError(
                 "The cluster is NOT operational due to insufficient OSDs")
@@ -524,7 +535,7 @@ def cli_test(ctx, config):
         """Either use git path or repo path """
         args = ['cd', conf_dir, run.Raw(';')]
         if path:
-            args.append('{path}/ceph-deploy/ceph-deploy'.format(path=path));
+            args.append('{path}/ceph-deploy/ceph-deploy'.format(path=path))
         else:
             args.append('ceph-deploy')
         args.append(run.Raw(cmd))
@@ -608,11 +619,11 @@ def cli_test(ctx, config):
     log.info("Waiting for cluster to become healthy")
     with contextutil.safe_while(sleep=10, tries=6,
                                 action='check health') as proceed:
-       while proceed():
-           r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
-           out = r.stdout.getvalue()
-           if (out.split(None,1)[0] == 'HEALTH_OK'):
-               break
+        while proceed():
+            r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
+            out = r.stdout.getvalue()
+            if (out.split(None, 1)[0] == 'HEALTH_OK'):
+                break
     rgw_install = 'install {branch} --rgw {node}'.format(
         branch=test_branch,
         node=nodename,
@@ -680,6 +691,108 @@ def single_node_test(ctx, config):
 
 
 @contextlib.contextmanager
+def upgrade(ctx, config):
+    """
+     Upgrade using ceph-deploy
+     eg:
+       ceph-deploy.upgrade:
+          # to upgrade to specific branch, use
+          branch:
+             stable: jewel
+           # to setup mgr node, use
+           setup-mgr-node: True
+           # to wait for cluster to be healthy after all upgrade, use
+           wait-for-healthy: True
+           role: (upgrades the below roles serially)
+              mon.a
+              mon.b
+              osd.0
+     """
+    roles = config.get('roles')
+    # get the roles that are mapped as per ceph-deploy
+    # roles are mapped for mon/mds eg: mon.a  => mon.host_short_name
+    mapped_role = ctx.cluster.mapped_role
+    if config.get('branch'):
+        branch = config.get('branch')
+        (var, val) = branch.items()[0]
+        ceph_branch = '--{var}={val}'.format(var=var, val=val)
+    else:
+        # default to master
+        ceph_branch = '--dev=master'
+    # get the node used for initial deployment which is mon.a
+    mon_a = mapped_role.get('mon.a')
+    (ceph_admin,) = ctx.cluster.only(mon_a).remotes.iterkeys()
+    testdir = teuthology.get_testdir(ctx)
+    cmd = './ceph-deploy install ' + ceph_branch
+    for role in roles:
+        # check if this role is mapped (mon or mds)
+        if mapped_role.get(role):
+            role = mapped_role.get(role)
+        remotes_and_roles = ctx.cluster.only(role).remotes
+        for remote, roles in remotes_and_roles.iteritems():
+            nodename = remote.shortname
+            cmd = cmd + ' ' + nodename
+            log.info("Upgrading ceph on  %s", nodename)
+            ceph_admin.run(
+                args=[
+                    'cd',
+                    '{tdir}/ceph-deploy'.format(tdir=testdir),
+                    run.Raw('&&'),
+                    run.Raw(cmd),
+                ],
+            )
+            # restart all ceph services, ideally upgrade should but it does not
+            remote.run(
+                args=[
+                    'sudo', 'systemctl', 'restart', 'ceph.target'
+                ]
+            )
+            ceph_admin.run(args=['sudo', 'ceph', '-s'])
+
+    # workaround for http://tracker.ceph.com/issues/20950
+    # write the correct mgr key to disk
+    if config.get('setup-mgr-node', None):
+        mons = ctx.cluster.only(teuthology.is_type('mon'))
+        for remote, roles in mons.remotes.iteritems():
+            remote.run(
+                args=[
+                    run.Raw('sudo ceph auth get client.bootstrap-mgr'),
+                    run.Raw('|'),
+                    run.Raw('sudo tee'),
+                    run.Raw('/var/lib/ceph/bootstrap-mgr/ceph.keyring')
+                ]
+            )
+
+    if config.get('setup-mgr-node', None):
+        mgr_nodes = get_nodes_using_role(ctx, 'mgr')
+        mgr_nodes = " ".join(mgr_nodes)
+        mgr_install = './ceph-deploy install --mgr ' + ceph_branch + " " + mgr_nodes
+        mgr_create = './ceph-deploy mgr create' + " " + mgr_nodes
+        # install mgr
+        ceph_admin.run(
+            args=[
+                'cd',
+                '{tdir}/ceph-deploy'.format(tdir=testdir),
+                run.Raw('&&'),
+                run.Raw(mgr_install),
+                ],
+            )
+        # create mgr
+        ceph_admin.run(
+            args=[
+                'cd',
+                '{tdir}/ceph-deploy'.format(tdir=testdir),
+                run.Raw('&&'),
+                run.Raw(mgr_create),
+                ],
+            )
+        ceph_admin.run(args=['sudo', 'ceph', '-s'])
+    if config.get('wait-for-healthy', None):
+        wait_until_healthy(ctx, ceph_admin, use_sudo=True)
+    yield
+
+
+@contextlib.contextmanager
 def task(ctx, config):
     """
     Set up and tear down a Ceph cluster.
@@ -694,12 +807,15 @@ def task(ctx, config):
              branch:
                 stable: bobtail
              mon_initial_members: 1
+             ceph-deploy-branch: my-ceph-deploy-branch
              only_mon: true
              keep_running: true
              # either choose bluestore or filestore, default is bluestore
              bluestore: True
              # or
              filestore: True
+             # skip install of mgr for old release using below flag
+             skip-mgr: True  ( default is False )
 
         tasks:
         - install:

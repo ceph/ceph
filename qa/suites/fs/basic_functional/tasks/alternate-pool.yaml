@@ -11,9 +11,10 @@ overrides:
       - was unreadable, recreating it now
       - Scrub error on inode
       - Metadata damage detected
-      - inconsistent rstat on inode
+      - MDS_FAILED
+      - MDS_DAMAGE
 
 tasks:
   - cephfs_test_runner:
       modules:
-        - tasks.cephfs.test_data_scan
+        - tasks.cephfs.test_recovery_pool

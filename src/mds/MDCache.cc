@@ -7629,16 +7629,16 @@ bool MDCache::shutdown_pass()
   assert(!migrator->is_exporting());
   assert(!migrator->is_importing());
 
-  if ((myin && myin->is_auth_pinned()) ||
-      (mydir && mydir->is_auth_pinned())) {
-    dout(7) << "still have auth pinned objects" << dendl;
-    return false;
-  }
-
   // flush what we can from the log
   mds->mdlog->trim(0);
   if (mds->mdlog->get_num_segments() > 1) {
     dout(7) << "still >1 segments, waiting for log to trim" << dendl;
+    return false;
+  }
+
+  if ((myin && myin->is_auth_pinned()) ||
+      (mydir && mydir->is_auth_pinned())) {
+    dout(7) << "still have auth pinned objects" << dendl;
     return false;
   }
 

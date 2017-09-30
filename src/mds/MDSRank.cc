@@ -1937,6 +1937,7 @@ bool MDSRankDispatcher::handle_asok_command(
 
     if (r != 0) {
       ss << "Failed to dump cache: " << cpp_strerror(r);
+      f->reset();
     }
   } else if (command == "cache status") {
     Mutex::Locker l(mds_lock);
@@ -1955,6 +1956,7 @@ bool MDSRankDispatcher::handle_asok_command(
       int r = mdcache->dump_cache(root, depth, f);
       if (r != 0) {
         ss << "Failed to dump tree: " << cpp_strerror(r);
+        f->reset();
       }
     }
   } else if (command == "force_readonly") {

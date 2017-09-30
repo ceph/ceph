@@ -5628,6 +5628,11 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
       const string key = i->substr(0, equal);
       equal++;
       const string value = i->substr(equal);
+      if (key.find("ruleset-") == 0) {
+	*ss << "property '" << key << "' is no longer supported; try "
+	    << "'crush-" << key.substr(8) << "' instead";
+	return -EINVAL;
+      }
       user_map[key] = value;
       (*erasure_code_profile_map)[key] = value;
     }
@@ -9032,7 +9037,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             if (osdmap.is_up(osd)) {
               msg << ", while it was still marked up";
             } else {
-              msg << ", after it was down for " << int(down_pending_out[osd].sec())
+              auto period = ceph_clock_now() - down_pending_out[osd];
+              msg << ", after it was down for " << int(period.sec())
                   << " seconds";
             }
 
