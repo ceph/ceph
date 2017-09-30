@@ -104,7 +104,7 @@ int extract_spec(const std::string &spec, std::string *pool_name,
     pattern = "^(?:([^/]+)/)?([^@]+)(?:@(.+))?$";
     break;
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
 
