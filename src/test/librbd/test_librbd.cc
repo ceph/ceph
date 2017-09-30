@@ -5988,6 +5988,6 @@ TEST_F(TestLibRBD, TestTrashMoveAndRestore) {
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
 			  const char *func) {
-    assert(false);
+    ceph_abort();
   }
 }
