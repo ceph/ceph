@@ -87,7 +87,6 @@ int PoolDump::dump(IoCtx *io_ctx)
 
       if (outdata.length() < op_size) {
         // No more data
-        r = 0;
         break;
       }
       offset += outdata.length();
@@ -151,7 +150,6 @@ int PoolDump::dump(IoCtx *io_ctx)
       }
       r = values.size();
     } while (r == MAX_READ);
-    r = 0;
 
     // Close object
     // =============
