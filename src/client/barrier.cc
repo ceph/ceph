@@ -184,7 +184,7 @@ void BarrierContext::complete(C_Block_Sync &cbs)
     }
     break;
     default:
-      assert(false);
+      ceph_abort();
       break;
     }
 
