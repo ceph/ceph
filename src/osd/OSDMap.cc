@@ -580,44 +580,61 @@ void OSDMap::Incremental::decode_classic(bufferlist::iterator &p)
   if (v == 4 || v == 5) {
     ::decode(n, p);
     new_pool_max = n;
-  } else if (v >= 6)
+
+    if (v == 5) {
+      new_pool_names.clear();
+      ::decode(n, p);
+      while (--n) {
+        ::decode(t, p);
+        ::decode(new_pool_names[t], p);
+      }
+    }
+  } else if (v >= 6) {
     ::decode(new_pool_max, p);
+    ::decode(new_pool_names, p);
+  }
+
   ::decode(new_flags, p);
   ::decode(fullmap, p);
   ::decode(crush, p);
-
   ::decode(new_max_osd, p);
+
   if (v < 6) {
-    new_pools.clear();
-    ::decode(n, p);
-    while (n--) {
-      ::decode(t, p);
-      ::decode(new_pools[t], p);
+    {
+      new_pools.clear();
+      ::decode(n, p);
+    }
+    {
+      old_pools.clear();
+      ::decode(n, p);
+    }
+    {
+      new_pg_temp.clear();
+      ::decode(n, p);
+    }
+    while (--n) {
+      {
+        ::decode(t, p);
+        ::decode(new_pools[t], p);
+      }
+      {
+        ::decode(t, p);
+        old_pools.insert(t);
+      }
+      {
+        old_pg_t opg;
+        ::decode_raw(opg, p);
+        ::decode(new_pg_temp[pg_t(opg)], p);
+      }
     }
   } else {
     ::decode(new_pools, p);
-  }
-  if (v == 5) {
-    new_pool_names.clear();
-    ::decode(n, p);
-    while (n--) {
-      ::decode(t, p);
-      ::decode(new_pool_names[t], p);
-    }
-  } else if (v >= 6) {
-    ::decode(new_pool_names, p);
-  }
-  if (v < 6) {
-    old_pools.clear();
-    ::decode(n, p);
-    while (n--) {
-      ::decode(t, p);
-      old_pools.insert(t);
-    }
-  } else {
     ::decode(old_pools, p);
+    ::decode(new_pg_temp, p);
   }
+
   ::decode(new_up_client, p);
+
   {
     map<int32_t,uint8_t> ns;
     ::decode(ns, p);
@@ -625,19 +642,8 @@ void OSDMap::Incremental::decode_classic(bufferlist::iterator &p)
       new_state[q.first] = q.second;
     }
   }
-  ::decode(new_weight, p);
 
-  if (v < 6) {
-    new_pg_temp.clear();
-    ::decode(n, p);
-    while (n--) {
-      old_pg_t opg;
-      ::decode_raw(opg, p);
-      ::decode(new_pg_temp[pg_t(opg)], p);
-    }
-  } else {
-    ::decode(new_pg_temp, p);
-  }
+  ::decode(new_weight, p);
 
   // decode short map, too.
   if (v == 5 && p.end())
