@@ -2001,11 +2001,13 @@ public:
 
     struct RepWaitRecoveryReserved : boost::statechart::state< RepWaitRecoveryReserved, ReplicaActive >, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::custom_reaction< RemoteRecoveryReserved >
+	boost::statechart::custom_reaction< RemoteRecoveryReserved >,
+	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       explicit RepWaitRecoveryReserved(my_context ctx);
       void exit();
       boost::statechart::result react(const RemoteRecoveryReserved &evt);
+      boost::statechart::result react(const RemoteReservationRejected &evt);
     };
 
     struct RepNotRecovering : boost::statechart::state< RepNotRecovering, ReplicaActive>, NamedState {
