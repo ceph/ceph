@@ -246,7 +246,7 @@ void RDMADispatcher::polling()
         Mutex::Locker l(lock); // FIXME reuse dead qp because creating one qp costs 1 ms
         for (auto &i : dead_queue_pairs) {
           // Bypass QPs that do not collect all Tx completions yet.
-          if (i->get_tx_wc() != i->get_tx_wr())
+          if (i->get_tx_wr())
             continue;
           ldout(cct, 10) << __func__ << " finally delete qp=" << i << dendl;
           delete i;
@@ -382,10 +382,9 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
                    << " len: " << response->byte_len << " , addr:" << chunk
                    << " " << get_stack()->get_infiniband().wc_status_to_string(response->status) << dendl;
 
-    // Update the Tx CQE counter.
     QueuePair *qp = get_qp(response->qp_num);
     if (qp)
-      qp->add_tx_wc(1);
+      qp->dec_tx_wr(1);
 
     if (response->status != IBV_WC_SUCCESS) {
       perf_logger->inc(l_msgr_rdma_tx_total_wc_errors);
