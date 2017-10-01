@@ -110,7 +110,7 @@ public:
   }
 
   void expect_release_snap_id(MockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
                                 selfmanaged_snap_remove(_))
                                   .WillOnce(DoDefault());
   }
