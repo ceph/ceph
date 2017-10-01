@@ -129,7 +129,7 @@ void SnapshotCreateRequest<I>::send_allocate_snap_id() {
   librados::AioCompletion *rados_completion = create_rados_callback<
     SnapshotCreateRequest<I>,
     &SnapshotCreateRequest<I>::handle_allocate_snap_id>(this);
-  image_ctx.md_ctx.aio_selfmanaged_snap_create(&m_snap_id, rados_completion);
+  image_ctx.data_ctx.aio_selfmanaged_snap_create(&m_snap_id, rados_completion);
   rados_completion->release();
 }
 
@@ -255,7 +255,7 @@ void SnapshotCreateRequest<I>::send_release_snap_id() {
   librados::AioCompletion *rados_completion = create_rados_callback<
     SnapshotCreateRequest<I>,
     &SnapshotCreateRequest<I>::handle_release_snap_id>(this);
-  image_ctx.md_ctx.aio_selfmanaged_snap_remove(m_snap_id, rados_completion);
+  image_ctx.data_ctx.aio_selfmanaged_snap_remove(m_snap_id, rados_completion);
   rados_completion->release();
 }
 
