@@ -2690,7 +2690,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     //        an existing pg_primary field to imply a change
     if (p->second.size() &&
 	(osdmap.pg_temp->count(p->first) == 0 ||
-	 !vectors_equal(osdmap.pg_temp->get(p->first), p->second) ||
+	 osdmap.pg_temp->get(p->first) != p->second ||
 	 osdmap.primary_temp->count(p->first)))
       return false;
   }
