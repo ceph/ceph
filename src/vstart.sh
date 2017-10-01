@@ -1006,14 +1006,21 @@ do_rgw()
         RGWDEBUG="--debug-rgw=20"
     fi
 
+    local CEPH_RGW_PORT_NUM="${CEPH_RGW_PORT}"
+    local CEPH_RGW_HTTPS="${CEPH_RGW_PORT: -1}"
+    if [[ "${CEPH_RGW_HTTPS}" = "s" ]]; then
+        CEPH_RGW_PORT_NUM="${CEPH_RGW_PORT::-1}"
+    else
+        CEPH_RGW_HTTPS=""
+    fi
     RGWSUDO=
-    [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
+    [ $CEPH_RGW_PORT_NUM -lt 1024 ] && RGWSUDO=sudo
     n=$(($CEPH_NUM_RGW - 1))
     i=0
     for rgw in j k l m n o p q r s t u v; do
-	echo start rgw on http://localhost:$((CEPH_RGW_PORT + i))
-	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=$((CEPH_RGW_PORT + i))"
-	i=$(($i + 1))
+        echo start rgw on http${CEPH_RGW_HTTPS}://localhost:$((CEPH_RGW_PORT_NUM + i))
+        run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=$((CEPH_RGW_PORT_NUM + i))${CEPH_RGW_HTTPS}"
+        i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
     done
 }
