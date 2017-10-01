@@ -2498,7 +2498,7 @@ int main(int argc, char **argv)
   desc.add_options()
     ("help", "produce help message")
     ("type", po::value<string>(&type),
-     "Arg is one of [bluestore, filestore (default), memstore]")
+     "Arg is one of [bluestore (default), filestore, memstore]")
     ("data-path", po::value<string>(&dpath),
      "path to object store, mandatory")
     ("journal-path", po::value<string>(&jpath),
@@ -2613,7 +2613,7 @@ int main(int argc, char **argv)
     ::close(fd);
   }
   if (!vm.count("type") && type == "") {
-    type = "filestore";
+    type = "bluestore";
   }
   if (!vm.count("data-path") &&
      !(op == "dump-journal" && type == "filestore")) {
