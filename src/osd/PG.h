@@ -2017,6 +2017,7 @@ public:
       typedef boost::mpl::list<
 	boost::statechart::custom_reaction< RequestBackfillPrio >,
         boost::statechart::transition< RequestRecovery, RepWaitRecoveryReserved >,
+	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,   // if primary is preempted or cancels
 	boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
 	> reactions;
       explicit RepNotRecovering(my_context ctx);
