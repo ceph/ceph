@@ -90,8 +90,11 @@ private:
    *    v                                 .
    * REFRESH_OBJECT_MAP (skip if object   .
    *    |                map disabled)    .
-   *    v
+   *    v                                 .
    * PRUNE_SYNC_POINTS                    . (image sync canceled)
+   *    |                                 .
+   *    v                                 .
+   * COPY_METADATA                        .
    *    |                                 .
    *    v                                 .
    * <finish> < . . . . . . . . . . . . . .
@@ -145,6 +148,9 @@ private:
 
   void send_prune_sync_points();
   void handle_prune_sync_points(int r);
+
+  void send_copy_metadata();
+  void handle_copy_metadata(int r);
 
   void update_progress(const std::string &description);
 };
