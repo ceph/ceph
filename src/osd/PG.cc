@@ -6678,6 +6678,15 @@ PG::RecoveryState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &
   return transit<RepRecovering>();
 }
 
+boost::statechart::result
+PG::RecoveryState::RepWaitRecoveryReserved::react(
+  const RemoteReservationRejected &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
+  return transit<RepNotRecovering>();
+}
+
 void PG::RecoveryState::RepWaitRecoveryReserved::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
