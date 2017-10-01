@@ -465,14 +465,8 @@ class Infiniband {
      * Return true if the queue pair is in an error state, false otherwise.
      */
     bool is_error() const;
-    /**
-     * Add Tx work request and completion counters.
-     */
     void add_tx_wr(uint32_t amt) { tx_wr += amt; }
     void add_tx_wc(uint32_t amt) { tx_wc += amt; }
-    /**
-     * Get Tx work request and completion counter values.
-     */
     uint32_t get_tx_wr() const { return tx_wr; }
     uint32_t get_tx_wc() const { return tx_wc; }
     ibv_qp* get_qp() const { return qp; }
@@ -497,8 +491,8 @@ class Infiniband {
     uint32_t     max_recv_wr;
     uint32_t     q_key;
     bool dead;
-    std::atomic<uint32_t> tx_wr; // atomic counter for successful Tx WQEs
-    std::atomic<uint32_t> tx_wc; // atomic counter for successful Tx CQEs
+    std::atomic<uint32_t> tx_wr = {0}; // counter for successful Tx WQEs
+    std::atomic<uint32_t> tx_wc = {0}; // counter for successful Tx CQEs
   };
 
  public:

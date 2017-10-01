@@ -244,13 +244,15 @@ void RDMADispatcher::polling()
       perf_logger->set(l_msgr_rdma_inflight_tx_chunks, inflight);
       if (num_dead_queue_pair) {
         Mutex::Locker l(lock); // FIXME reuse dead qp because creating one qp costs 1 ms
-        for (auto idx = 0; idx < dead_queue_pairs.size(); idx++) {
+        for (auto &i : dead_queue_pairs) {
           // Bypass QPs that do not collect all Tx completions yet.
-          if (dead_queue_pairs.at(idx)->get_tx_wc() != dead_queue_pairs.at(idx)->get_tx_wr())
+          if (i->get_tx_wc() != i->get_tx_wr())
             continue;
-          ldout(cct, 10) << __func__ << " finally delete qp=" << dead_queue_pairs.at(idx) << dendl;
-          delete dead_queue_pairs.at(idx);
-          dead_queue_pairs.erase(dead_queue_pairs.begin() + idx);
+          ldout(cct, 10) << __func__ << " finally delete qp=" << i << dendl;
+          delete i;
+          auto it = std::find(dead_queue_pairs.begin(), dead_queue_pairs.end(), i);
+          if (it != dead_queue_pairs.end())
+            dead_queue_pairs.erase(it);
           perf_logger->dec(l_msgr_rdma_active_queue_pair);
           --num_dead_queue_pair;
         }
@@ -341,15 +343,15 @@ Infiniband::QueuePair* RDMADispatcher::get_qp(uint32_t qp)
   Mutex::Locker l(lock);
   // Try to find the QP in qp_conns firstly.
   auto it = qp_conns.find(qp);
-  if (it == qp_conns.end()) {
-    // Try again in dead_queue_pairs.
-    for(auto dead_qp = dead_queue_pairs.begin(); dead_qp != dead_queue_pairs.end(); dead_qp++) {
-      if ((*dead_qp)->get_local_qp_number() == qp)
-        return *dead_qp;
-    }
-    return nullptr;
-  }
-  return it->second.first;
+  if (it != qp_conns.end())
+    return it->second.first;
+
+  // Try again in dead_queue_pairs.
+  for (auto &i: dead_queue_pairs)
+    if (i->get_local_qp_number() == qp)
+      return i;
+
+  return nullptr;
 }
 
 void RDMADispatcher::erase_qpn_lockless(uint32_t qpn)

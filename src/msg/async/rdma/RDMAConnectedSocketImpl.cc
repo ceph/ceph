@@ -577,7 +577,6 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
     worker->perf_logger->inc(l_msgr_rdma_tx_failed);
     return -errno;
   }
-  // Update the Tx WQE counter
   qp->add_tx_wr(num);
   worker->perf_logger->inc(l_msgr_rdma_tx_chunks, tx_buffers.size());
   ldout(cct, 20) << __func__ << " qp state is " << Infiniband::qp_state_string(qp->get_state()) << dendl;
@@ -599,7 +598,6 @@ void RDMAConnectedSocketImpl::fin() {
     worker->perf_logger->inc(l_msgr_rdma_tx_failed);
     return ;
   }
-  // Update the Tx WQE counter
   qp->add_tx_wr(1);
 }
 
