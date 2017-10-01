@@ -9856,20 +9856,10 @@ int BlueStore::_do_alloc_write(
   dout(20) << __func__ << " txc " << txc
 	   << " " << wctx->writes.size() << " blobs"
 	   << dendl;
-
-  uint64_t need = 0;
-  auto max_bsize = MAX(wctx->target_blob_size, min_alloc_size);
-  for (auto &wi : wctx->writes) {
-    need += wi.blob_length;
-  }
-  int r = alloc->reserve(need);
-  if (r < 0) {
-    derr << __func__ << " failed to reserve 0x" << std::hex << need << std::dec
-	 << dendl;
-    return r;
+  if (wctx->writes.empty()) {
+    return 0;
   }
 
-  uint64_t hint = 0;
   CompressorRef c;
   double crr = 0;
   if (wctx->compress) {
@@ -9894,7 +9884,7 @@ int BlueStore::_do_alloc_write(
       cct->_conf->bluestore_compression_required_ratio,
       [&]() {
         double val;
-        if(coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
+        if (coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
           return boost::optional<double>(val);
         }
         return boost::optional<double>();
@@ -9909,12 +9899,86 @@ int BlueStore::_do_alloc_write(
     csum,
     [&]() {
       int val;
-      if(coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
+      if (coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
         return  boost::optional<int>(val);
       }
       return boost::optional<int>();
     }
   );
+
+  // compress (as needed) and calc needed space
+  uint64_t need = 0;
+  auto max_bsize = MAX(wctx->target_blob_size, min_alloc_size);
+  for (auto& wi : wctx->writes) {
+    if (c && wi.blob_length > min_alloc_size) {
+      utime_t start = ceph_clock_now();
+
+      // compress
+      assert(wi.b_off == 0);
+      assert(wi.blob_length == wi.bl.length());
+
+      // FIXME: memory alignment here is bad
+      bufferlist t;
+      int r = c->compress(wi.bl, t);
+      assert(r == 0);
+
+      bluestore_compression_header_t chdr;
+      chdr.type = c->get_type();
+      chdr.length = t.length();
+      ::encode(chdr, wi.compressed_bl);
+      wi.compressed_bl.claim_append(t);
+
+      wi.compressed_len = wi.compressed_bl.length();
+      uint64_t newlen = P2ROUNDUP(wi.compressed_len, min_alloc_size);
+      uint64_t want_len_raw = wi.blob_length * crr;
+      uint64_t want_len = P2ROUNDUP(want_len_raw, min_alloc_size);
+      if (newlen <= want_len && newlen < wi.blob_length) {
+	// Cool. We compressed at least as much as we were hoping to.
+	// pad out to min_alloc_size
+	wi.compressed_bl.append_zero(newlen - wi.compressed_len);
+	logger->inc(l_bluestore_write_pad_bytes, newlen - wi.compressed_len);
+	dout(20) << __func__ << std::hex << "  compressed 0x" << wi.blob_length
+		 << " -> 0x" << wi.compressed_len << " => 0x" << newlen
+		 << " with " << c->get_type()
+		 << std::dec << dendl;
+	txc->statfs_delta.compressed() += wi.compressed_len;
+	txc->statfs_delta.compressed_original() += wi.blob_length;
+	txc->statfs_delta.compressed_allocated() += newlen;
+	logger->inc(l_bluestore_compress_success_count);
+	wi.compressed = true;
+	need += newlen;
+      } else {
+	dout(20) << __func__ << std::hex << "  0x" << wi.blob_length
+		 << " compressed to 0x" << wi.compressed_len << " -> 0x" << newlen
+		 << " with " << c->get_type()
+		 << ", which is more than required 0x" << want_len_raw
+		 << " -> 0x" << want_len
+		 << ", leaving uncompressed"
+		 << std::dec << dendl;
+	logger->inc(l_bluestore_compress_rejected_count);
+	need += wi.blob_length;
+      }
+      logger->tinc(l_bluestore_compress_lat,
+		   ceph_clock_now() - start);
+    } else {
+      need += wi.blob_length;
+    }
+  }
+  int r = alloc->reserve(need);
+  if (r < 0) {
+    derr << __func__ << " failed to reserve 0x" << std::hex << need << std::dec
+	 << dendl;
+    return r;
+  }
+  AllocExtentVector prealloc;
+  prealloc.reserve(2 * wctx->writes.size());;
+  int prealloc_left = 0;
+  prealloc_left = alloc->allocate(
+    need, min_alloc_size, need,
+    0, &prealloc);
+  assert(prealloc_left == (int64_t)need);
+  dout(20) << __func__ << " prealloc " << prealloc << dendl;
+  auto prealloc_pos = prealloc.begin();
 
   for (auto& wi : wctx->writes) {
     BlobRef b = wi.b;
@@ -9924,63 +9988,13 @@ int BlueStore::_do_alloc_write(
     uint64_t final_length = wi.blob_length;
     uint64_t csum_length = wi.blob_length;
     unsigned csum_order = block_size_order;
-    bufferlist compressed_bl;
-    bool compressed = false;
-    if(c && wi.blob_length > min_alloc_size) {
-
-      utime_t start = ceph_clock_now();
-
-      // compress
-      assert(b_off == 0);
-      assert(wi.blob_length == l->length());
-      bluestore_compression_header_t chdr;
-      chdr.type = c->get_type();
-      // FIXME: memory alignment here is bad
-      bufferlist t;
-
-      r = c->compress(*l, t);
-      assert(r == 0);
-
-      chdr.length = t.length();
-      ::encode(chdr, compressed_bl);
-      compressed_bl.claim_append(t);
-      uint64_t rawlen = compressed_bl.length();
-      uint64_t newlen = P2ROUNDUP(rawlen, min_alloc_size);
-      uint64_t want_len_raw = final_length * crr;
-      uint64_t want_len = P2ROUNDUP(want_len_raw, min_alloc_size);
-      if (newlen <= want_len && newlen < final_length) {
-        // Cool. We compressed at least as much as we were hoping to.
-        // pad out to min_alloc_size
-	compressed_bl.append_zero(newlen - rawlen);
-	logger->inc(l_bluestore_write_pad_bytes, newlen - rawlen);
-	dout(20) << __func__ << std::hex << "  compressed 0x" << wi.blob_length
-		 << " -> 0x" << rawlen << " => 0x" << newlen
-		 << " with " << c->get_type()
-		 << std::dec << dendl;
-	txc->statfs_delta.compressed() += rawlen;
-	txc->statfs_delta.compressed_original() += l->length();
-	txc->statfs_delta.compressed_allocated() += newlen;
-	l = &compressed_bl;
-	final_length = newlen;
-	csum_length = newlen;
-	csum_order = ctz(newlen);
-	dblob.set_compressed(wi.blob_length, rawlen);
-	compressed = true;
-        logger->inc(l_bluestore_compress_success_count);
-      } else {
-	dout(20) << __func__ << std::hex << "  0x" << l->length()
-		 << " compressed to 0x" << rawlen << " -> 0x" << newlen
-                 << " with " << c->get_type()
-                 << ", which is more than required 0x" << want_len_raw
-		 << " -> 0x" << want_len
-                 << ", leaving uncompressed"
-                 << std::dec << dendl;
-        logger->inc(l_bluestore_compress_rejected_count);
-      }
-      logger->tinc(l_bluestore_compress_lat,
-		   ceph_clock_now() - start);
-    }
-    if (!compressed && wi.new_blob) {
+    if (wi.compressed) {
+      final_length = wi.compressed_bl.length();
+      csum_length = final_length;
+      csum_order = ctz(csum_length);
+      l = &wi.compressed_bl;
+      dblob.set_compressed(wi.blob_length, wi.compressed_len);
+    } else if (wi.new_blob) {
       // initialize newly created blob only
       assert(dblob.is_mutable());
       if (l->length() != wi.blob_length) {
@@ -10015,17 +10029,27 @@ int BlueStore::_do_alloc_write(
     }
 
     AllocExtentVector extents;
-    extents.reserve(4);  // 4 should be (more than) enough for most allocations
-    int64_t got = alloc->allocate(final_length, min_alloc_size, 
-				  max_alloc_size.load(),
-                    		  hint, &extents);
-    assert(got == (int64_t)final_length);
-    need -= got;
-    txc->statfs_delta.allocated() += got;
+    int64_t left = final_length;
+    while (left > 0) {
+      assert(prealloc_left > 0);
+      if (prealloc_pos->length <= left) {
+	prealloc_left -= prealloc_pos->length;
+	left -= prealloc_pos->length;
+	txc->statfs_delta.allocated() += prealloc_pos->length;
+	extents.push_back(*prealloc_pos);
+	++prealloc_pos;
+      } else {
+	extents.emplace_back(prealloc_pos->offset, left);
+	prealloc_pos->offset += left;
+	prealloc_pos->length -= left;
+	prealloc_left -= left;
+	txc->statfs_delta.allocated() += left;
+	left = 0;
+	break;
+      }
+    }
     for (auto& p : extents) {
-      bluestore_pextent_t e = bluestore_pextent_t(p);
-      txc->allocated.insert(e.offset, e.length);
-      hint = p.end();
+      txc->allocated.insert(p.offset, p.length);
     }
     dblob.allocated(P2ALIGN(b_off, min_alloc_size), final_length, extents);
 
@@ -10079,9 +10103,8 @@ int BlueStore::_do_alloc_write(
       }
     }
   }
-  if (need > 0) {
-    alloc->unreserve(need);
-  }
+  assert(prealloc_pos == prealloc.end());
+  assert(prealloc_left == 0);
   return 0;
 }
 
