@@ -431,7 +431,40 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 
 };
 
+// the elements allocated by mempool is in the same memory space as the ones
+// allocated by the default allocator. so compare them in an efficient way:
+// libstdc++'s std::equal is specialized to use memcmp if T is integer or
+// pointer. this is good enough for our usecase. use
+// std::is_trivially_copyable<T> to expand the support to more types if
+// nececssary.
+template<typename T, mempool::pool_index_t pool_index>
+bool operator==(const std::vector<T, std::allocator<T>>& lhs,
+		const std::vector<T, mempool::pool_allocator<pool_index, T>>& rhs)
+{
+  return (lhs.size() == rhs.size() &&
+	  std::equal(lhs.begin(), lhs.end(), rhs.begin()));
+}
 
+template<typename T, mempool::pool_index_t pool_index>
+bool operator!=(const std::vector<T, std::allocator<T>>& lhs,
+		const std::vector<T, mempool::pool_allocator<pool_index, T>>& rhs)
+{
+  return !(lhs == rhs);
+}
+
+template<typename T, mempool::pool_index_t pool_index>
+bool operator==(const std::vector<T, mempool::pool_allocator<pool_index, T>>& lhs,
+		const std::vector<T, std::allocator<T>>& rhs)
+{
+  return rhs == lhs;
+}
+
+template<typename T, mempool::pool_index_t pool_index>
+bool operator!=(const std::vector<T, mempool::pool_allocator<pool_index, T>>& lhs,
+		const std::vector<T, std::allocator<T>>& rhs)
+{
+  return !(lhs == rhs);
+}
 
 // Use this for any type that is contained by a container (unless it
 // is a class you defined; see below).
