@@ -588,14 +588,25 @@ void OSDMap::Incremental::decode_classic(bufferlist::iterator &p)
 
   ::decode(new_max_osd, p);
   if (v < 6) {
-    new_pools.clear();
-    ::decode(n, p);
-    while (n--) {
-      ::decode(t, p);
-      ::decode(new_pools[t], p);
+    {
+      new_pools.clear();
+      ::decode(n, p);
+      while (n--) {
+        ::decode(t, p);
+        ::decode(new_pools[t], p);
+      }
+    }
+    {
+      old_pools.clear();
+      ::decode(n, p);
+      while (n--) {
+        ::decode(t, p);
+        old_pools.insert(t);
+      }
     }
   } else {
     ::decode(new_pools, p);
+    ::decode(old_pools, p);
   }
   if (v == 5) {
     new_pool_names.clear();
@@ -606,16 +617,6 @@ void OSDMap::Incremental::decode_classic(bufferlist::iterator &p)
     }
   } else if (v >= 6) {
     ::decode(new_pool_names, p);
-  }
-  if (v < 6) {
-    old_pools.clear();
-    ::decode(n, p);
-    while (n--) {
-      ::decode(t, p);
-      old_pools.insert(t);
-    }
-  } else {
-    ::decode(old_pools, p);
   }
   ::decode(new_up_client, p);
   {
