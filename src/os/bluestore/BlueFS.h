@@ -342,6 +342,8 @@ public:
   void get_usage(vector<pair<uint64_t,uint64_t>> *usage); // [<free,total> ...]
   void dump_perf_counters(Formatter *f);
 
+  void dump_block_extents(ostream& out);
+
   /// get current extents that we own for given block device
   int get_block_extents(unsigned id, interval_set<uint64_t> *extents);
 

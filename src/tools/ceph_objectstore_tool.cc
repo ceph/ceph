@@ -73,7 +73,7 @@ CompatSet get_test_compat_set() {
 const ssize_t max_read = 1024 * 1024;
 const int fd_none = INT_MIN;
 bool outistty;
-bool dry_run = false;
+bool dry_run;
 
 struct action_on_object_t {
   virtual ~action_on_object_t() {}
@@ -294,7 +294,7 @@ ghobject_t log_oid;
 ghobject_t biginfo_oid;
 
 int file_fd = fd_none;
-bool debug = false;
+bool debug;
 super_header sh;
 uint64_t testalign;
 
@@ -2534,16 +2534,16 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, use if tool can't find it")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete, and mandatory for apply-layout-settings if --pool is not specified")
+     "PG id, mandatory for info, log, remove, export, export-remove, rm-past-intervals, mark-complete, and mandatory for apply-layout-settings if --pool is not specified")
     ("pool", po::value<string>(&pool),
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, mkfs, fsck, fuse, dup, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+     "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
-     "path of file to export, import, get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap")
+     "path of file to export, export-remove, import, get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap")
     ("mon-store-path", po::value<string>(&mon_store_path),
      "path of monstore to update-mon-db")
     ("fsid", po::value<string>(&fsid),
@@ -2597,23 +2597,15 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if (!vm.count("debug")) {
-    debug = false;
-  } else {
-    debug = true;
-  }
+  debug = (vm.count("debug") > 0);
 
-  if (!vm.count("force")) {
-    force = false;
-  } else {
-    force = true;
-  }
+  force = (vm.count("force") > 0);
 
   if (vm.count("namespace"))
     nspace = argnspace;
 
-  if (vm.count("dry-run"))
-    dry_run = true;
+  dry_run = (vm.count("dry-run") > 0);
+
   osflagbits_t flags = 0;
   if (dry_run || vm.count("skip-journal-replay"))
     flags |= SKIP_JOURNAL_REPLAY;
@@ -2621,6 +2613,7 @@ int main(int argc, char **argv)
     flags |= SKIP_MOUNT_OMAP;
   if (op == "update-mon-db")
     flags |= SKIP_JOURNAL_REPLAY;
+
   head = (vm.count("head") > 0);
 
   vector<const char *> ceph_options;
@@ -2690,7 +2683,7 @@ int main(int argc, char **argv)
   outistty = isatty(STDOUT_FILENO);
 
   file_fd = fd_none;
-  if ((op == "export" || op == "get-osdmap" || op == "get-inc-osdmap") && !dry_run) {
+  if ((op == "export" || op == "export-remove" || op == "get-osdmap" || op == "get-inc-osdmap") && !dry_run) {
     if (!vm.count("file") || file == "-") {
       if (outistty) {
         cerr << "stdout is a tty and no --file filename specified" << std::endl;
@@ -2715,7 +2708,7 @@ int main(int argc, char **argv)
   ObjectStoreTool tool = ObjectStoreTool(file_fd, dry_run);
 
   if (vm.count("file") && file_fd == fd_none && !dry_run) {
-    cerr << "--file option only applies to import, export, "
+    cerr << "--file option only applies to import, export, export-remove, "
 	 << "get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap" << std::endl;
     return 1;
   }
@@ -2777,6 +2770,20 @@ int main(int argc, char **argv)
     return 1;
   }
 
+  //Verify that the journal-path really exists
+  if (type == "filestore") {
+    if (::stat(jpath.c_str(), &st) == -1) {
+      string err = string("journal-path: ") + jpath;
+      perror(err.c_str());
+      return 1;
+    }
+    if (S_ISDIR(st.st_mode)) {
+      cerr << "journal-path: " << jpath << ": "
+	   << cpp_strerror(EISDIR) << std::endl;
+      return 1;
+    }
+  }
+
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
     cerr << "Unable to create store of type " << type << std::endl;
@@ -2796,6 +2803,19 @@ int main(int argc, char **argv)
     cout << "fsck found no errors" << std::endl;
     return 0;
   }
+  if (op == "repair" || op == "repair-deep") {
+    int r = fs->repair(op == "repair-deep");
+    if (r < 0) {
+      cerr << "repair failed: " << cpp_strerror(r) << std::endl;
+      return 1;
+    }
+    if (r > 0) {
+      cerr << "repair found " << r << " errors" << std::endl;
+      return 1;
+    }
+    cout << "repair found no errors" << std::endl;
+    return 0;
+  }
   if (op == "mkfs") {
     if (fsid.length()) {
       uuid_d f;
@@ -2808,7 +2828,7 @@ int main(int argc, char **argv)
     }
     int r = fs->mkfs();
     if (r < 0) {
-      cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
+      cerr << "mkfs failed: " << cpp_strerror(r) << std::endl;
       return 1;
     }
     return 0;
@@ -3008,7 +3028,7 @@ int main(int argc, char **argv)
   // The ops which require --pgid option are checked here and
   // mentioned in the usage for --pgid.
   if ((op == "info" || op == "log" || op == "remove" || op == "export"
-      || op == "rm-past-intervals" || op == "mark-complete") &&
+      || op == "export-remove" || op == "rm-past-intervals" || op == "mark-complete") &&
       pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
@@ -3114,6 +3134,11 @@ int main(int argc, char **argv)
   biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
   if (op == "remove") {
+    if (!force && !dry_run) {
+      cerr << "Please use export-remove or you must use --force option" << std::endl;
+      ret = -EINVAL;
+      goto out;
+    }
     ret = initiate_new_remove_pg(fs, pgid, *osr);
     if (ret < 0) {
       cerr << "PG '" << pgid << "' not found" << std::endl;
@@ -3206,8 +3231,8 @@ int main(int argc, char **argv)
 
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
-  if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
-    cerr << "Must provide --op (info, log, remove, mkfs, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
+    cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
       "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)"
 	 << std::endl;
     usage(desc);
@@ -3481,10 +3506,17 @@ int main(int argc, char **argv)
     if (debug)
       cerr << "struct_v " << (int)struct_ver << std::endl;
 
-    if (op == "export") {
+    if (op == "export" || op == "export-remove") {
       ret = tool.do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock, past_intervals);
-      if (ret == 0)
+      if (ret == 0) {
         cerr << "Export successful" << std::endl;
+        if (op == "export-remove") {
+          ret = initiate_new_remove_pg(fs, pgid, *osr);
+          // Export succeeded, so pgid is there
+          assert(ret == 0);
+          cerr << "Remove successful" << std::endl;
+        }
+      }
     } else if (op == "info") {
       formatter->open_object_section("info");
       info.dump(formatter);

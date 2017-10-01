@@ -152,7 +152,7 @@ def cat_file(level, filename):
 def vstart(new, opt=""):
     print("vstarting....", end="")
     NEW = new and "-n" or "-N"
-    call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 {path}/src/vstart.sh --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
+    call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
     print("DONE")
 
 
@@ -388,14 +388,18 @@ CEPH_ROOT = os.environ.get('CEPH_ROOT')
 if not CEPH_BUILD_DIR:
     CEPH_BUILD_DIR=os.getcwd()
     os.putenv('CEPH_BUILD_DIR', CEPH_BUILD_DIR)
-    CEPH_BIN=CEPH_BUILD_DIR
+    CEPH_BIN=os.path.join(CEPH_BUILD_DIR, 'bin')
     os.putenv('CEPH_BIN', CEPH_BIN)
     CEPH_ROOT=os.path.dirname(CEPH_BUILD_DIR)
     os.putenv('CEPH_ROOT', CEPH_ROOT)
-    CEPH_LIB=os.path.join(CEPH_BIN, '.libs')
+    CEPH_LIB=os.path.join(CEPH_BUILD_DIR, 'lib')
     os.putenv('CEPH_LIB', CEPH_LIB)
 
-CEPH_DIR = CEPH_BUILD_DIR + "/cot_dir"
+try:
+    os.mkdir("td")
+except:
+    pass # ok if this is already there
+CEPH_DIR = os.path.join(CEPH_BUILD_DIR, os.path.join("td", "cot_dir"))
 CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
 def kill_daemons():
@@ -518,7 +522,7 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
         if linev[0] is '':
             linev.pop(0)
         print('linev %s' % linev)
-        weights.append(float(linev[1]))
+        weights.append(float(linev[2]))
 
     return weights
 
@@ -672,9 +676,10 @@ def main(argv):
     else:
         nullfd = DEVNULL
 
-    call("rm -fr {dir}; mkdir {dir}".format(dir=CEPH_DIR), shell=True)
+    call("rm -fr {dir}; mkdir -p {dir}".format(dir=CEPH_DIR), shell=True)
+    os.chdir(CEPH_DIR)
     os.environ["CEPH_DIR"] = CEPH_DIR
-    OSDDIR = os.path.join(CEPH_DIR, "dev")
+    OSDDIR = "dev"
     REP_POOL = "rep_pool"
     REP_NAME = "REPobject"
     EC_POOL = "ec_pool"
@@ -713,6 +718,7 @@ def main(argv):
     cmd = "{path}/ceph osd pool create {pool} {pg} {pg} replicated".format(pool=REP_POOL, pg=PG_COUNT, path=CEPH_BIN)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    time.sleep(2)
     REPID = get_pool_id(REP_POOL, nullfd)
 
     print("Created Replicated pool #{repid}".format(repid=REPID))
@@ -989,6 +995,12 @@ def main(argv):
     cmd = "{path}/ceph-objectstore-tool --journal-path BAD_JOURNAL_PATH --op dump-journal".format(path=CEPH_BIN)
     ERRORS += test_failure(cmd, "journal-path: BAD_JOURNAL_PATH: (2) No such file or directory")
 
+    cmd = (CFSD_PREFIX + "--journal-path BAD_JOURNAL_PATH --op list").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "journal-path: BAD_JOURNAL_PATH: No such file or directory")
+
+    cmd = (CFSD_PREFIX + "--journal-path /bin --op list").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "journal-path: /bin: (21) Is a directory")
+
     # On import can't use stdin from a terminal
     cmd = (CFSD_PREFIX + "--op import --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "stdin is a tty and no --file filename specified", tty=True)
@@ -1006,7 +1018,10 @@ def main(argv):
     cmd = "{path}/ceph-objectstore-tool --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG, path=CEPH_BIN)
     ERRORS += test_failure(cmd, "Must provide --data-path")
 
-    cmd = (CFSD_PREFIX + "--op remove").format(osd=ONEOSD)
+    cmd = (CFSD_PREFIX + "--op remove --pgid 2.0").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "Please use export-remove or you must use --force option")
+
+    cmd = (CFSD_PREFIX + "--force --op remove").format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "Must provide pgid")
 
     # Don't secify a --op nor object command
@@ -1015,7 +1030,7 @@ def main(argv):
 
     # Specify a bad --op command
     cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
-    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)")
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)")
 
     # Provide just the object param not a command
     cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)
@@ -1720,7 +1735,7 @@ def main(argv):
             if ret != 0:
                 logging.error("Removing --dry-run failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
                 RM_ERRORS += 1
-            cmd = (CFSD_PREFIX + "--op remove --pgid {pg}").format(pg=pg, osd=osd)
+            cmd = (CFSD_PREFIX + "--force --op remove --pgid {pg}").format(pg=pg, osd=osd)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=nullfd)
             if ret != 0:
@@ -1923,7 +1938,7 @@ def main(argv):
 
             which = 0
             for osd in get_osds(pg, OSDDIR):
-                cmd = (CFSD_PREFIX + "--op remove --pgid {pg}").format(pg=pg, osd=osd)
+                cmd = (CFSD_PREFIX + "--force --op remove --pgid {pg}").format(pg=pg, osd=osd)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
 
@@ -1961,6 +1976,17 @@ def main(argv):
     # vstart() starts 4 OSDs
     ERRORS += test_get_set_osdmap(CFSD_PREFIX, list(range(4)), ALLOSDS)
     ERRORS += test_get_set_inc_osdmap(CFSD_PREFIX, ALLOSDS[0])
+
+    kill_daemons()
+    CORES = [f for f in os.listdir(CEPH_DIR) if f.startswith("core.")]
+    if CORES:
+        CORE_DIR = os.path.join("/tmp", "cores.{pid}".format(pid=os.getpid()))
+        os.mkdir(CORE_DIR)
+        call("/bin/mv {ceph_dir}/core.* {core_dir}".format(ceph_dir=CEPH_DIR, core_dir=CORE_DIR), shell=True)
+        logging.error("Failure due to cores found")
+        logging.error("See {core_dir} for cores".format(core_dir=CORE_DIR))
+        ERRORS += len(CORES)
+
     if ERRORS == 0:
         print("TEST PASSED")
         return 0
@@ -1992,6 +2018,7 @@ if __name__ == "__main__":
         status = main(sys.argv[1:])
     finally:
         kill_daemons()
+        os.chdir(CEPH_BUILD_DIR)
         remove_btrfs_subvolumes(CEPH_DIR)
         call("/bin/rm -fr {dir}".format(dir=CEPH_DIR), shell=True)
     sys.exit(status)

@@ -174,15 +174,8 @@ def task(ctx, config):
               format(fpath=FSPATH, jpath=JPATH))
     pid = os.getpid()
     expfile = os.path.join(testdir, "exp.{pid}.out".format(pid=pid))
-    cmd = ((prefix + "--op export --pgid 2.0 --file {file}").
+    cmd = ((prefix + "--op export-remove --pgid 2.0 --file {file}").
            format(id=divergent, file=expfile))
-    proc = exp_remote.run(args=cmd, wait=True,
-                          check_status=False, stdout=StringIO())
-    assert proc.exitstatus == 0
-
-    # Remove the same pg that was exported
-    cmd = ((prefix + "--op remove --pgid 2.0").
-           format(id=divergent))
     proc = exp_remote.run(args=cmd, wait=True,
                           check_status=False, stdout=StringIO())
     assert proc.exitstatus == 0
@@ -194,7 +187,7 @@ def task(ctx, config):
     # manager.mark_out_osd(non_divergent[0])
 
     # An empty collection for pg 2.0 might need to be cleaned up
-    cmd = ((prefix + "--op remove --pgid 2.0").
+    cmd = ((prefix + "--force --op remove --pgid 2.0").
            format(id=non_divergent[0]))
     proc = exp_remote.run(args=cmd, wait=True,
                           check_status=False, stdout=StringIO())
