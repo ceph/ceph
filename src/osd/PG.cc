@@ -6485,11 +6485,13 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected: failure injection"
 		       << dendl;
+    pg->reject_reservation();
     post_event(RemoteReservationRejected());
   } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
       pg->osd->check_backfill_full(ss)) {
     ldout(pg->cct, 10) << "backfill reservation rejected: "
 		       << ss.str() << dendl;
+    pg->reject_reservation();
     post_event(RemoteReservationRejected());
   } else {
     pg->osd->remote_reserver.request_reservation(
@@ -6519,6 +6521,7 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
 		       << "failure injection" << dendl;
+    pg->reject_reservation();
     pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
     post_event(RemoteReservationRejected());
     return discard_event();
@@ -6526,6 +6529,7 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
 	     pg->osd->check_backfill_full(ss)) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
 		       << ss.str() << dendl;
+    pg->reject_reservation();
     pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
     post_event(RemoteReservationRejected());
     return discard_event();
@@ -6545,7 +6549,6 @@ boost::statechart::result
 PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteReservationRejected &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->reject_reservation();
   return transit<RepNotRecovering>();
 }
 
