@@ -184,6 +184,11 @@ public:
 
   void close() override;
 
+  PerfCounters *get_perf_counters() override
+  {
+    return logger;
+  }
+
   class LevelDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     leveldb::WriteBatch bat;
