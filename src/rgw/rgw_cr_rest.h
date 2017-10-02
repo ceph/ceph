@@ -365,6 +365,7 @@ class TestSpliceCR : public RGWCoroutine {
   RGWStreamRWHTTPResourceCRF *out_crf{nullptr};
   bufferlist bl;
   bool need_retry{false};
+  uint64_t total_read{0};
   int ret{0};
 public:
   TestSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
