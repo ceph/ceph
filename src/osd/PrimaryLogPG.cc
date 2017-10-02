@@ -984,7 +984,7 @@ int PrimaryLogPG::do_command(
     cmd_getval(cct, cmdmap, "mulcmd", mulcmd);
     int mode = -1;
     if (mulcmd == "revert") {
-      if (pool.info.ec_pool()) {
+      if (pool.info.is_erasure()) {
 	ss << "mode must be 'delete' for ec pool";
 	return -EINVAL;
       }
@@ -4774,7 +4774,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   }
 
   ++ctx->num_read;
-  if (pool.info.ec_pool()) {
+  if (pool.info.is_erasure()) {
     // translate sparse read to a normal one if not supported
     uint64_t offset = op.extent.offset;
     uint64_t length = op.extent.length;
@@ -10380,7 +10380,7 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
      *
      * This behavior is no longer necessary, but we preserve it so old
      * primaries can keep their repops in order */
-    if (pool.info.ec_pool()) {
+    if (pool.info.is_erasure()) {
       t.register_on_complete(complete);
     } else {
       t.register_on_commit(complete);

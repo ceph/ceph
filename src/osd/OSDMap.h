@@ -1129,14 +1129,14 @@ public:
   bool pg_is_ec(pg_t pg) const {
     auto i = pools.find(pg.pool());
     assert(i != pools.end());
-    return i->second.ec_pool();
+    return i->second.is_erasure();
   }
   bool get_primary_shard(const pg_t& pgid, spg_t *out) const {
     auto i = get_pools().find(pgid.pool());
     if (i == get_pools().end()) {
       return false;
     }
-    if (!i->second.ec_pool()) {
+    if (!i->second.is_erasure()) {
       *out = spg_t(pgid);
       return true;
     }
