@@ -78,8 +78,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 
   /*
    SIGPIPE suppression - for platforms without SO_NOSIGPIPE or MSG_NOSIGNAL
-    http://krokisplace.blogspot.in/2010/02/suppressing-sigpipe-in-library.html 
-    http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html 
+   https://github.com/kroki/XProbes/blob/1447f3d93b6dbf273919af15e59f35cca58fcc23/src/libxprobes.c#L160
   */
   static void suppress_sigpipe()
   {
