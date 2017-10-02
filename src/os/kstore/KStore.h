@@ -573,10 +573,6 @@ private:
   // --------------------------------------------------------
   // write ops
 
-  int _do_transaction(Transaction *t,
-		      TransContext *txc,
-		      ThreadPool::TPHandle *handle);
-
   int _write(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& o,
