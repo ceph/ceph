@@ -28,6 +28,7 @@ using std::string;
 
 typedef RadosTest LibRadosMisc;
 typedef RadosTestPP LibRadosMiscPP;
+typedef RadosTestECPP LibRadosMiscECPP;
 
 TEST(LibRadosMiscVersion, Version) {
   int major, minor, extra;
@@ -1355,4 +1356,25 @@ TEST_F(LibRadosMiscPP, Applications) {
   expected_meta = {{"key2", "value2"}};
   ASSERT_EQ(0, ioctx.application_metadata_list("app1", &meta));
   ASSERT_EQ(expected_meta, meta);
+}
+
+TEST_F(LibRadosMiscECPP, CompareExtentRange) {
+  bufferlist bl1;
+  bl1.append("ceph");
+  ObjectWriteOperation write;
+  write.write(0, bl1);
+  ASSERT_EQ(0, ioctx.operate("foo", &write));
+
+  bufferlist bl2;
+  bl2.append("ph");
+  bl2.append(std::string(2, '\0'));
+  ObjectReadOperation read1;
+  read1.cmpext(2, bl2, nullptr);
+  ASSERT_EQ(0, ioctx.operate("foo", &read1, nullptr));
+
+  bufferlist bl3;
+  bl3.append(std::string(4, '\0'));
+  ObjectReadOperation read2;
+  read2.cmpext(2097152, bl3, nullptr);
+  ASSERT_EQ(0, ioctx.operate("foo", &read2, nullptr));
 }
