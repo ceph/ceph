@@ -1178,10 +1178,6 @@ std::vector<Option> get_global_options() {
     .set_default(0.05)
     .set_description(""),
 
-    Option("mon_health_data_update_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60.0)
-    .set_description(""),
-
     Option("mon_health_to_clog", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
