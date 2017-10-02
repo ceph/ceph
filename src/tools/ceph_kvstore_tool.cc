@@ -36,7 +36,13 @@ using namespace std;
 
 class StoreTool
 {
-  boost::scoped_ptr<KeyValueDB> db;
+  boost::scoped_ptr<BlueStore> bluestore;
+
+  // TODO: make KeyValueDB enable_shared_from_this
+  // bluestore will hold *db* also, use unique_ptr/shared_ptr will
+  // double free. 
+  KeyValueDB* db;
+
   string store_path;
 
   public:
@@ -46,7 +52,7 @@ class StoreTool
 #ifdef HAVE_LIBAIO
       // note: we'll leak this!  the only user is ceph-kvstore-tool and
       // we don't care.
-      BlueStore *bluestore = new BlueStore(g_ceph_context, path);
+      bluestore.reset(new BlueStore(g_ceph_context, path));
       int r = bluestore->start_kv_only(&db_ptr);
       if (r < 0) {
 	exit(1);
@@ -64,7 +70,18 @@ class StoreTool
 	exit(1);
       }
     }
-    db.reset(db_ptr);
+    db = db_ptr;
+  }
+
+  ~StoreTool() {
+    if (bluestore) {
+      bluestore->umount();   
+    }
+    else {
+      if (db) {
+        delete db;
+      }
+    }
   }
 
   uint32_t traverse(const string &prefix,
