@@ -486,6 +486,7 @@ rocksdb::Status BlueRocksEnv::RenameFile(
   int r = fs->rename(old_dir, old_file, new_dir, new_file);
   if (r < 0)
     return err_to_status(r);
+  fs->flush_log();
   return rocksdb::Status::OK();
 }
 
