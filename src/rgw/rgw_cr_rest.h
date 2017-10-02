@@ -308,7 +308,27 @@ public:
 
 class RGWCRHTTPGetDataCB;
 
-class RGWStreamRWHTTPResourceCRF {
+class RGWStreamReadResourceCRF {
+protected:
+  boost::asio::coroutine read_state;
+
+public:
+  virtual int init() = 0;
+  virtual int read(bufferlist *data, uint64_t max, bool *need_retry) = 0; /* reentrant */
+};
+
+class RGWStreamWriteResourceCRF {
+protected:
+  boost::asio::coroutine write_state;
+  boost::asio::coroutine drain_state;
+
+public:
+  virtual int init() = 0;
+  virtual int write(bufferlist& data) = 0; /* reentrant */
+  virtual int drain_writes(bool *need_retry) = 0; /* reentrant */
+};
+
+class RGWStreamReadHTTPResourceCRF : public RGWStreamReadResourceCRF {
   RGWCoroutinesEnv *env;
   RGWCoroutine *caller;
   RGWHTTPManager *http_manager;
@@ -317,13 +337,9 @@ class RGWStreamRWHTTPResourceCRF {
 
   RGWCRHTTPGetDataCB *in_cb{nullptr};
 
-  boost::asio::coroutine read_state;
-  boost::asio::coroutine write_state;
-  boost::asio::coroutine drain_state;
-
 
 public:
-  RGWStreamRWHTTPResourceCRF(CephContext *_cct,
+  RGWStreamReadHTTPResourceCRF(CephContext *_cct,
                                RGWCoroutinesEnv *_env,
                                RGWCoroutine *_caller,
                                RGWHTTPManager *_http_manager,
@@ -331,28 +347,33 @@ public:
                                                                caller(_caller),
                                                                http_manager(_http_manager),
                                                                req(_req) {}
-  ~RGWStreamRWHTTPResourceCRF();
+  virtual ~RGWStreamReadHTTPResourceCRF();
 
   int init();
-  int read(bufferlist *data, uint64_t max, bool *need_retry); /* reentrant */
-  int write(bufferlist& data); /* reentrant */
-  int drain_writes(bool *need_retry); /* reentrant */
+  int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
 };
 
-class TestCR : public RGWCoroutine {
-  CephContext *cct;
+class RGWStreamWriteHTTPResourceCRF : public RGWStreamWriteResourceCRF {
+  RGWCoroutinesEnv *env;
+  RGWCoroutine *caller;
   RGWHTTPManager *http_manager;
-  string url;
-  RGWHTTPStreamRWRequest *req{nullptr};
-  RGWStreamRWHTTPResourceCRF *crf{nullptr};
-  bufferlist bl;
-  bool need_retry{false};
-  int ret{0};
-public:
-  TestCR(CephContext *_cct, RGWHTTPManager *_mgr, RGWHTTPStreamRWRequest *_req);
-  ~TestCR();
 
-  int operate();
+  RGWHTTPStreamRWRequest *req;
+
+public:
+  RGWStreamWriteHTTPResourceCRF(CephContext *_cct,
+                               RGWCoroutinesEnv *_env,
+                               RGWCoroutine *_caller,
+                               RGWHTTPManager *_http_manager,
+                               RGWHTTPStreamRWRequest *_req) : env(_env),
+                                                               caller(_caller),
+                                                               http_manager(_http_manager),
+                                                               req(_req) {}
+  virtual ~RGWStreamWriteHTTPResourceCRF() {}
+
+  int init();
+  int write(bufferlist& data); /* reentrant */
+  int drain_writes(bool *need_retry); /* reentrant */
 };
 
 class TestSpliceCR : public RGWCoroutine {
@@ -361,8 +382,8 @@ class TestSpliceCR : public RGWCoroutine {
   string url;
   RGWHTTPStreamRWRequest *in_req{nullptr};
   RGWHTTPStreamRWRequest *out_req{nullptr};
-  RGWStreamRWHTTPResourceCRF *in_crf{nullptr};
-  RGWStreamRWHTTPResourceCRF *out_crf{nullptr};
+  RGWStreamReadHTTPResourceCRF *in_crf{nullptr};
+  RGWStreamWriteHTTPResourceCRF *out_crf{nullptr};
   bufferlist bl;
   bool need_retry{false};
   uint64_t total_read{0};
