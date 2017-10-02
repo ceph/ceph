@@ -68,6 +68,11 @@ const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
 const string PREFIX_ALLOC_BITMAP = "b"; // (see BitmapFreelistManager)
 const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 
+const std::vector<KeyValueDB::ColumnFamily> cfs = {
+  KeyValueDB::ColumnFamily(PREFIX_OMAP, ""),
+  KeyValueDB::ColumnFamily(PREFIX_DEFERRED, ""),
+};
+
 // write a label in the first block.  always use this size.  note that
 // bluefs makes a matching assumption about the location of its
 // superblock (always the second block of the device).
@@ -4735,10 +4740,17 @@ int BlueStore::_open_db(bool create)
   if (kv_backend == "rocksdb")
     options = cct->_conf->bluestore_rocksdb_options;
   db->init(options);
-  if (create)
-    r = db->create_and_open(err);
-  else
-    r = db->open(err);
+  if (create) {
+    if (cct->_conf->get_val<bool>("bluestore_rocksdb_cf")) {
+      r = db->create_and_open(err, cfs);
+    } else {
+      r = db->create_and_open(err);
+    }
+  } else {
+    // we pass in cf list here, but it is only used if the db already has
+    // column families created.
+    r = db->open(err, cfs);
+  }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
     if (bluefs) {
