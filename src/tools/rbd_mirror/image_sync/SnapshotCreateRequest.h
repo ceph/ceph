@@ -74,7 +74,7 @@ private:
   ImageCtxT *m_local_image_ctx;
   std::string m_snap_name;
   cls::rbd::SnapshotNamespace m_snap_namespace;
-  uint64_t m_size;
+  uint64_t m_size = 0;
   librbd::ParentSpec m_parent_spec;
   uint64_t m_parent_overlap;
   Context *m_on_finish;
