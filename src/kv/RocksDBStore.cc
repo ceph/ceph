@@ -34,6 +34,12 @@ using std::string;
 #undef dout_prefix
 #define dout_prefix *_dout << "rocksdb: "
 
+static bufferlist to_bufferlist(rocksdb::Slice in) {
+  bufferlist bl;
+  bl.append(bufferptr(in.data(), in.size()));
+  return bl;
+}
+
 static rocksdb::SliceParts prepare_sliceparts(const bufferlist &bl,
 					      vector<rocksdb::Slice> *slices)
 {
