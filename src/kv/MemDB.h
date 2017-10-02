@@ -30,8 +30,8 @@ class MemDB : public KeyValueDB
 {
   typedef std::pair<std::pair<std::string, std::string>, bufferlist> ms_op_t;
   std::mutex m_lock;
-  uint64_t m_total_bytes;
-  uint64_t m_allocated_bytes;
+  uint64_t m_total_bytes = 0;
+  uint64_t m_allocated_bytes = 0;
 
   typedef std::map<std::string, bufferptr> mdb_map_t;
   typedef mdb_map_t::iterator mdb_iter_t;
