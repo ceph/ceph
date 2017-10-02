@@ -2550,10 +2550,6 @@ private:
     WriteContext *wctx,
     set<SharedBlob*> *maybe_unshared_blobs=0);
 
-  int _do_transaction(Transaction *t,
-		      TransContext *txc,
-		      ThreadPool::TPHandle *handle);
-
   int _write(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& o,
