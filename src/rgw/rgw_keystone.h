@@ -277,8 +277,11 @@ class TokenCache {
   ~TokenCache() {
     down_flag = true;
 
-    revocator.stop();
-    revocator.join();
+    // Only stop and join if revocator thread is started.
+    if (revocator.is_started()) {
+      revocator.stop();
+      revocator.join();
+    }
   }
 
 public:
