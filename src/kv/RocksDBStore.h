@@ -364,12 +364,6 @@ public:
 
   static int split_key(rocksdb::Slice in, string *prefix, string *key);
 
-  static bufferlist to_bufferlist(rocksdb::Slice in) {
-    bufferlist bl;
-    bl.append(bufferptr(in.data(), in.size()));
-    return bl;
-  }
-
   static string past_prefix(const string &prefix);
 
   class MergeOperatorRouter;
