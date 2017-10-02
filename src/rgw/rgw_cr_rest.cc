@@ -53,12 +53,12 @@ public:
 };
 
 
-RGWStreamRWHTTPResourceCRF::~RGWStreamRWHTTPResourceCRF()
+RGWStreamReadHTTPResourceCRF::~RGWStreamReadHTTPResourceCRF()
 {
   delete in_cb;
 }
 
-int RGWStreamRWHTTPResourceCRF::init()
+int RGWStreamReadHTTPResourceCRF::init()
 {
   env->stack->init_new_io(req);
 
@@ -74,7 +74,19 @@ int RGWStreamRWHTTPResourceCRF::init()
   return 0;
 }
 
-int RGWStreamRWHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool *io_pending)
+int RGWStreamWriteHTTPResourceCRF::init()
+{
+  env->stack->init_new_io(req);
+
+  int r = http_manager->add_request(req);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool *io_pending)
 {
     reenter(&read_state) {
     while (!req->is_done()) {
@@ -92,7 +104,7 @@ int RGWStreamRWHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool *i
   return 0;
 }
 
-int RGWStreamRWHTTPResourceCRF::write(bufferlist& data)
+int RGWStreamWriteHTTPResourceCRF::write(bufferlist& data)
 {
 #warning write need to throttle and block
   reenter(&write_state) {
@@ -103,7 +115,7 @@ int RGWStreamRWHTTPResourceCRF::write(bufferlist& data)
   return 0;
 }
 
-int RGWStreamRWHTTPResourceCRF::drain_writes(bool *need_retry)
+int RGWStreamWriteHTTPResourceCRF::drain_writes(bool *need_retry)
 {
   reenter(&drain_state) {
     *need_retry = true;
@@ -114,74 +126,6 @@ int RGWStreamRWHTTPResourceCRF::drain_writes(bool *need_retry)
       *need_retry = !req->is_done();
     }
     return req->get_req_retcode();
-  }
-  return 0;
-}
-
-TestCR::TestCR(CephContext *_cct, RGWHTTPManager *_mgr, RGWHTTPStreamRWRequest *_req) : RGWCoroutine(_cct), cct(_cct), http_manager(_mgr),
-                                                                                        req(_req) {}
-TestCR::~TestCR() {
-  delete crf;
-}
-
-int TestCR::operate() {
-  reenter(this) {
-    crf = new RGWStreamRWHTTPResourceCRF(cct, get_env(), this, http_manager, req);
-
-    {
-      int ret = crf->init();
-      if (ret < 0) {
-        return set_cr_error(ret);
-      }
-    }
-
-    do {
-
-      bl.clear();
-
-      do {
-        yield {
-          ret = crf->read(&bl, 4 * 1024 * 1024, &need_retry);
-          if (ret < 0)  {
-            return set_cr_error(ret);
-          }
-        }
-      } while (need_retry);
-
-      if (retcode < 0) {
-        return set_cr_error(ret);
-      }
-
-      dout(0) << "read " << bl.length() << " bytes" << dendl;
-
-      if (bl.length() == 0) {
-        break;
-      }
-
-      yield {
-        ret = crf->write(bl);
-        if (ret < 0)  {
-          return set_cr_error(ret);
-        }
-      }
-
-      if (retcode < 0) {
-        return set_cr_error(ret);
-      }
-
-      dout(0) << "wrote " << bl.length() << " bytes" << dendl;
-    } while (true);
-
-    do {
-      yield {
-        int ret = crf->drain_writes(&need_retry);
-        if (ret < 0) {
-          return set_cr_error(ret);
-        }
-      }
-    } while (need_retry);
-
-    return set_cr_done();
   }
   return 0;
 }
@@ -197,8 +141,8 @@ TestSpliceCR::~TestSpliceCR() {
 
 int TestSpliceCR::operate() {
   reenter(this) {
-    in_crf = new RGWStreamRWHTTPResourceCRF(cct, get_env(), this, http_manager, in_req);
-    out_crf = new RGWStreamRWHTTPResourceCRF(cct, get_env(), this, http_manager, out_req);
+    in_crf = new RGWStreamReadHTTPResourceCRF(cct, get_env(), this, http_manager, in_req);
+    out_crf = new RGWStreamWriteHTTPResourceCRF(cct, get_env(), this, http_manager, out_req);
 
     {
       int ret = in_crf->init();
@@ -244,7 +188,6 @@ int TestSpliceCR::operate() {
         if (ret < 0) {
           return set_cr_error(ret);
         }
-dout(0) << __FILE__ << ":" << __LINE__ << ": headers=" << in_req->get_out_headers() << dendl;
       }
 
       total_read += bl.length();
