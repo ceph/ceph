@@ -394,9 +394,11 @@ public:
   static string past_prefix(const string &prefix);
 
   class MergeOperatorRouter;
+  class MergeOperatorLinker;
   friend class MergeOperatorRouter;
-  int set_merge_operator(const std::string& prefix,
-				 std::shared_ptr<KeyValueDB::MergeOperator> mop) override;
+  int set_merge_operator(
+    const std::string& prefix,
+    std::shared_ptr<KeyValueDB::MergeOperator> mop) override;
   string assoc_name; ///< Name of associative operator
 
   uint64_t get_estimated_size(map<string,uint64_t> &extra) override {
