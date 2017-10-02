@@ -146,12 +146,18 @@ int64_t BitMapAllocator::allocate_dis(
 }
 
 void BitMapAllocator::release(
-  uint64_t offset, uint64_t length)
+  const interval_set<uint64_t>& release_set)
 {
-  dout(10) << __func__ << " 0x"
-           << std::hex << offset << "~" << length << std::dec
-           << dendl;
-  insert_free(offset, length);
+  for (interval_set<uint64_t>::const_iterator p = release_set.begin();
+       p != release_set.end();
+       ++p) {
+    const auto offset = p.get_start();
+    const auto length = p.get_len();
+    dout(10) << __func__ << " 0x"
+             << std::hex << offset << "~" << length << std::dec
+             << dendl;
+    insert_free(offset, length);
+  }
 }
 
 uint64_t BitMapAllocator::get_free()
