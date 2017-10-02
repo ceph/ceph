@@ -2387,7 +2387,9 @@ void PGMap::get_health_checks(
   }
 
   // TOO_MANY_PGS
-  int64_t max_pg_per_osd = cct->_conf->get_val<int64_t>("mon_max_pg_per_osd");
+  int64_t max_pg_per_osd =
+    cct->_conf->get_val<int64_t>("mon_pg_warn_max_per_osd");
+
   if (num_in && max_pg_per_osd > 0) {
     int per = sum_pg_up / num_in;
     if (per > max_pg_per_osd) {
