@@ -207,13 +207,6 @@ int TestSpliceCR::operate() {
       }
     }
 
-    {
-      int ret = out_crf->init();
-      if (ret < 0) {
-        return set_cr_error(ret);
-      }
-    }
-
     do {
 
       bl.clear();
@@ -227,7 +220,7 @@ int TestSpliceCR::operate() {
         }
 
         if (retcode < 0) {
-          ldout(20) << __func__ << ": in_crf->read() retcode=" << retcode << dendl;
+          ldout(cct, 20) << __func__ << ": in_crf->read() retcode=" << retcode << dendl;
           return set_cr_error(ret);
         }
       } while (need_retry);
@@ -238,6 +231,24 @@ int TestSpliceCR::operate() {
         break;
       }
 
+      if (total_read == 0) {
+#warning need to lock in_req->headers
+        for (auto h : in_req->get_out_headers()) {
+          if (h.first == "CONTENT_LENGTH") {
+            out_req->set_send_length(atoi(h.second.c_str()));
+          } else {
+            out_req->append_header(h.first, h.second);
+          }
+        }
+        int ret = out_crf->init();
+        if (ret < 0) {
+          return set_cr_error(ret);
+        }
+dout(0) << __FILE__ << ":" << __LINE__ << ": headers=" << in_req->get_out_headers() << dendl;
+      }
+
+      total_read += bl.length();
+
       yield {
         ret = out_crf->write(bl);
         if (ret < 0)  {
@@ -246,7 +257,7 @@ int TestSpliceCR::operate() {
       }
 
       if (retcode < 0) {
-        ldout(20) << __func__ << ": out_crf->write() retcode=" << retcode << dendl;
+        ldout(cct, 20) << __func__ << ": out_crf->write() retcode=" << retcode << dendl;
         return set_cr_error(ret);
       }
 
