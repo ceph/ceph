@@ -597,6 +597,15 @@ class Volume(object):
     def __repr__(self):
         return self.__str__()
 
+    def as_dict(self):
+        obj = {}
+        obj.update(self.lv_api)
+        obj['tags'] = self.tags
+        obj['name'] = self.name
+        obj['type'] = self.tags['ceph.type']
+        obj['path'] = self.lv_path
+        return obj
+
     def set_tags(self, tags):
         """
         :param tags: A dictionary of tag names and values, like::
