@@ -144,7 +144,7 @@ class RankEvicter(threading.Thread):
             time.sleep(self.POLL_PERIOD)
             self._ready_waited += self.POLL_PERIOD
 
-            self._mds_map = self._volume_client._rados_command("mds dump", {})
+            self._mds_map = self._volume_client.get_mds_map()
 
     def _evict(self):
         """
@@ -176,7 +176,7 @@ class RankEvicter(threading.Thread):
                 return True
             elif ret == errno.ETIMEDOUT:
                 # Oh no, the MDS went laggy (that's how libcephfs knows to emit this error)
-                self._mds_map = self._volume_client._rados_command("mds dump", {})
+                self._mds_map = self._volume_client.get_mds_map()
                 try:
                     self._wait_for_ready()
                 except self.GidGone:
@@ -378,6 +378,9 @@ class CephFSVolumeClient(object):
         auth_meta['dirty'] = False
         self._auth_metadata_set(auth_id, auth_meta)
 
+    def get_mds_map(self):
+        fs_map = self._rados_command("fs dump", {})
+        return fs_map['filesystems'][0]
 
     def evict(self, auth_id, timeout=30, volume_path=None):
         """
@@ -396,8 +399,7 @@ class CephFSVolumeClient(object):
 
         log.info("evict clients with {0}".format(', '.join(client_spec)))
 
-        mds_map = self._rados_command("mds dump", {})
-
+        mds_map = get_mds_map()
         up = {}
         for name, gid in mds_map['up'].items():
             # Quirk of the MDSMap JSON dump: keys in the up dict are like "mds_0"
@@ -633,9 +635,9 @@ class CephFSVolumeClient(object):
             pool_name = "{0}{1}".format(self.POOL_PREFIX, volume_path.volume_id)
             log.info("create_volume: {0}, create pool {1} as data_isolated =True.".format(volume_path, pool_name))
             pool_id = self._create_volume_pool(pool_name)
-            mds_map = self._rados_command("mds dump", {})
+            mds_map = self.get_mds_map()
             if pool_id not in mds_map['data_pools']:
-                self._rados_command("mds add_data_pool", {
+                self._rados_command("fs {} add_data_pool".format(mds_map['fs_name']), {
                     'pool': pool_name
                 })
             time.sleep(5) # time for MDSMap to be distributed
@@ -743,9 +745,9 @@ class CephFSVolumeClient(object):
             pool_name = "{0}{1}".format(self.POOL_PREFIX, volume_path.volume_id)
             osd_map = self._rados_command("osd dump", {})
             pool_id = self._get_pool_id(osd_map, pool_name)
-            mds_map = self._rados_command("mds dump", {})
+            mds_map = self.get_mds_map()
             if pool_id in mds_map['data_pools']:
-                self._rados_command("mds remove_data_pool", {
+                self._rados_command("fs {} remove_data_pool".format(mds_map['fs_name']), {
                     'pool': pool_name
                 })
             self._rados_command("osd pool delete",
