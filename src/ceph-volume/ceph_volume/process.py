@@ -115,10 +115,12 @@ def call(command, **kw):
                              it is forcefully set to True if a return code is non-zero
     """
     terminal_verbose = kw.pop('terminal_verbose', False)
+    show_command = kw.pop('show_command', False)
     command_msg = "Running command: %s" % ' '.join(command)
     stdin = kw.pop('stdin', None)
     logger.info(command_msg)
-    terminal.write(command_msg)
+    if show_command:
+        terminal.write(command_msg)
 
     process = subprocess.Popen(
         command,
