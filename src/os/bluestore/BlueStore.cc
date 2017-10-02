@@ -8196,16 +8196,17 @@ void BlueStore::_txc_finish(TransContext *txc)
 
 void BlueStore::_txc_release_alloc(TransContext *txc)
 {
-  // update allocator with full released set
+  interval_set<uint64_t> bulk_release_extents;
+  // it's expected we're called with lazy_release_lock already taken!
   if (!cct->_conf->bluestore_debug_no_reuse_blocks) {
     dout(10) << __func__ << " " << txc << " " << txc->released << dendl;
-    for (interval_set<uint64_t>::iterator p = txc->released.begin();
-	 p != txc->released.end();
-	 ++p) {
-      alloc->release(p.get_start(), p.get_len());
-    }
+    // interval_set seems to be too costly for inserting things in
+    // bstore_kv_final. We could serialize in simpler format and perform
+    // the merge separately, maybe even in a dedicated thread.
+    bulk_release_extents.insert(txc->released);
   }
 
+  alloc->release(bulk_release_extents);
   txc->allocated.clear();
   txc->released.clear();
 }
@@ -8562,14 +8563,9 @@ void BlueStore::_kv_sync_thread()
 	if (!bluefs_gift_extents.empty()) {
 	  _commit_bluefs_freespace(bluefs_gift_extents);
 	}
-	for (auto p = bluefs_extents_reclaiming.begin();
-	     p != bluefs_extents_reclaiming.end();
-	     ++p) {
-	  dout(20) << __func__ << " releasing old bluefs 0x" << std::hex
-		   << p.get_start() << "~" << p.get_len() << std::dec
-		   << dendl;
-	  alloc->release(p.get_start(), p.get_len());
-	}
+	dout(20) << __func__ << " releasing old bluefs 0x" << std::hex
+		 << bluefs_extents_reclaiming << std::dec << dendl;
+	alloc->release(bluefs_extents_reclaiming);
 	bluefs_extents_reclaiming.clear();
       }
 
