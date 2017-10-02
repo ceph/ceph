@@ -25,6 +25,7 @@ The *localpool* module understands the following options:
 * **pg_num** (default: `128`): number of PGs to create for each pool
 * **num_rep** (default: `3`): number of replicas for each pool.
   (Currently, pools are always replicated.)
+* **min_size** (default: none): value to set min_size to (unchanged from Ceph's default if this option is not set)
 * **prefix** (default: `by-$subtreetype-`): prefix for the pool name.
 
 These options are set via the config-key interface.  For example, to
