@@ -57,6 +57,8 @@ class RGWReshardWait;
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
 
+const string default_zonegroup_name = "default";
+
 static inline int rgw_shards_mod(unsigned hval, int max_shards)
 {
   if (max_shards <= RGW_SHARDS_PRIME_0) {

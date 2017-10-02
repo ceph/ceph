@@ -104,7 +104,6 @@ static string region_map_oid = "region_map";
 static string zonegroup_map_oid = "zonegroup_map";
 static string log_lock_name = "rgw_log_lock";
 static string default_realm_info_oid = "default.realm";
-const string default_zonegroup_name = "default";
 const string default_zone_name = "default";
 static string zonegroup_names_oid_prefix = "zonegroups_names.";
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;

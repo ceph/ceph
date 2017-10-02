@@ -3562,6 +3562,16 @@ int main(int argc, const char **argv)
       {
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store);
+	// handle the special case of default zonegroup
+	if (ret == -ENOENT && zonegroup_name.empty() && zonegroup_id.empty()) {
+	  // check to see there is no realm
+	  RGWRealm realm;
+	  int realm_ret = realm.init(g_ceph_context, store);
+	  if (realm_ret == -ENOENT) {
+	    zonegroup.set_name(default_zonegroup_name);
+	    ret = zonegroup.init(g_ceph_context, store);
+	  }
+	}
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
