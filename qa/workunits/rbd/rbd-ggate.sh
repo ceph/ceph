@@ -55,7 +55,7 @@ setup()
     TEMPDIR=`mktemp -d`
     DATA=${TEMPDIR}/data
     dd if=/dev/urandom of=${DATA} bs=1M count=${SIZE}
-    ceph osd pool create ${POOL} 64 64
+    ceph osd pool create ${POOL} 32
     rbd --dest-pool ${POOL} --no-progress import ${DATA} ${IMAGE}
 }
 
