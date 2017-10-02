@@ -709,9 +709,9 @@ void PrimaryLogPG::maybe_force_recovery()
     return;
 
   // find the oldest missing object
-  version_t min_version = 0;
+  version_t min_version = pg_log.get_log().head.version;
   hobject_t soid;
-  if (!pg_log.get_missing().get_items().empty()) {
+  if (!pg_log.get_missing().get_rmissing().empty()) {
     min_version = pg_log.get_missing().get_rmissing().begin()->first;
     soid = pg_log.get_missing().get_rmissing().begin()->second;
   }
@@ -722,10 +722,14 @@ void PrimaryLogPG::maybe_force_recovery()
     if (*it == get_primary()) continue;
     pg_shard_t peer = *it;
     if (peer_missing.count(peer) &&
-	!peer_missing[peer].get_items().empty() &&
-	min_version > peer_missing[peer].get_rmissing().begin()->first) {
-      min_version = peer_missing[peer].get_rmissing().begin()->first;
-      soid = peer_missing[peer].get_rmissing().begin()->second;
+	!peer_missing[peer].get_rmissing().empty()) {
+      const auto& min_obj = peer_missing[peer].get_rmissing().begin();
+      dout(20) << __func__ << " peer " << peer << " min_version " << min_obj->first
+               << " oid " << min_obj->second << dendl;
+      if (min_version > min_obj->first) {
+        min_version = min_obj->first;
+        soid = min_obj->second;
+      }
     }
   }
 
