@@ -5309,6 +5309,8 @@ int BlueStore::_mount(bool kv_only)
 {
   dout(1) << __func__ << " path " << path << dendl;
 
+  _kv_only = kv_only;
+
   {
     string type;
     int r = read_meta("type", &type);
@@ -5419,23 +5421,24 @@ int BlueStore::_mount(bool kv_only)
 
 int BlueStore::umount()
 {
-  assert(mounted);
+  assert(_kv_only || mounted);
   dout(1) << __func__ << dendl;
 
   _osr_drain_all();
   _osr_unregister_all();
 
-  mempool_thread.shutdown();
-
-  dout(20) << __func__ << " stopping kv thread" << dendl;
-  _kv_stop();
-  _reap_collections();
-  _flush_cache();
-  dout(20) << __func__ << " closing" << dendl;
-
   mounted = false;
-  _close_alloc();
-  _close_fm();
+  if (!_kv_only) {
+    mempool_thread.shutdown();
+    dout(20) << __func__ << " stopping kv thread" << dendl;
+    _kv_stop();
+    _reap_collections();
+    _flush_cache();
+    dout(20) << __func__ << " closing" << dendl;
+
+    _close_alloc();
+    _close_fm();
+  }
   _close_db();
   _close_bdev();
   _close_fsid();
