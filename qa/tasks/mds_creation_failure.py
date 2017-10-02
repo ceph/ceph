@@ -29,10 +29,9 @@ def task(ctx, config):
     )
 
     # Stop MDS
-    manager.raw_cluster_cmd('mds', 'set', "max_mds", "0")
-    mds = ctx.daemons.get_daemon('mds', mds_id)
-    mds.stop()
-    manager.raw_cluster_cmd('mds', 'fail', mds_id)
+    self.fs.set_max_mds(0)
+    self.fs.mds_stop(mds_id)
+    self.fs.mds_fail(mds_id)
 
     # Reset the filesystem so that next start will go into CREATING
     manager.raw_cluster_cmd('fs', 'rm', "default", "--yes-i-really-mean-it")

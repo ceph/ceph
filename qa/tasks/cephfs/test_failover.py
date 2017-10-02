@@ -277,7 +277,7 @@ class TestStandbyReplay(CephFSTestCase):
 
         # Shrink the cluster
         fs_a.set_max_mds(1)
-        fs_a.mon_manager.raw_cluster_cmd("mds", "stop", "{0}:1".format(fs_a.name))
+        fs_a.mon_manager.raw_cluster_cmd("mds", "deactivate", "{0}:1".format(fs_a.name))
         self.wait_until_equal(
             lambda: fs_a.get_active_names(), [mds_a],
             60
