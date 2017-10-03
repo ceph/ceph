@@ -810,23 +810,6 @@ osd_stat_t OSDService::set_osd_stat(const struct store_statfs_t &stbuf,
   }
 }
 
-void OSDService::update_osd_stat(vector<int>& hb_peers)
-{
-  // load osd stats first
-  struct store_statfs_t stbuf;
-  int r = osd->store->statfs(&stbuf);
-  if (r < 0) {
-    derr << "statfs() failed: " << cpp_strerror(r) << dendl;
-    return;
-  }
-
-  auto new_stat = set_osd_stat(stbuf, hb_peers, osd->num_pgs);
-  dout(20) << "update_osd_stat " << new_stat << dendl;
-  assert(new_stat.kb);
-  float ratio = ((float)new_stat.kb_used) / ((float)new_stat.kb);
-  check_full_status(ratio);
-}
-
 bool OSDService::check_osdmap_full(const set<pg_shard_t> &missing_on)
 {
   OSDMapRef osdmap = get_osdmap();
@@ -4706,13 +4689,24 @@ void OSD::heartbeat()
 
   dout(30) << "heartbeat checking stats" << dendl;
 
-  // refresh stats?
+  // refresh peer list and osd stats
   vector<int> hb_peers;
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
        p != heartbeat_peers.end();
        ++p)
     hb_peers.push_back(p->first);
-  service.update_osd_stat(hb_peers);
+
+  // refresh osd stats
+  struct store_statfs_t stbuf;
+  int r = store->statfs(&stbuf);
+  assert(r == 0);
+
+  auto new_stat = service.set_osd_stat(stbuf, hb_peers, get_num_pgs());
+  dout(20) << __func__ << new_stat << dendl;
+  assert(new_stat.kb);
+
+  float ratio = ((float)new_stat.kb_used) / ((float)new_stat.kb);
+  service.check_full_status(ratio);
 
   dout(5) << "heartbeat: " << service.get_osd_stat() << dendl;
 
