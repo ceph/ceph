@@ -880,7 +880,7 @@ request_resync_image()
     local cluster=$1
     local pool=$2
     local image=$3
-    local image_id_var_name=$1
+    local image_id_var_name=$4
 
     eval "${image_id_var_name}='$(get_image_id ${cluster} ${pool} ${image})'"
     eval 'test -n "$'${image_id_var_name}'"'
