@@ -417,6 +417,7 @@ int PyModules::init()
   // Drop the GIL and remember the main thread state (current
   // thread state becomes NULL)
   pMainThreadState = PyEval_SaveThread();
+  assert(pMainThreadState != nullptr);
 
   std::list<std::string> failed_modules;
 
