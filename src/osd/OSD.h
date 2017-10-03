@@ -881,9 +881,8 @@ public:
   osd_stat_t osd_stat;
   uint32_t seq = 0;
 
-  osd_stat_t set_osd_stat(const struct store_statfs_t &stbuf,
-                          vector<int>& hb_peers,
-			  int num_pgs);
+  void set_statfs(const struct store_statfs_t &stbuf);
+  osd_stat_t set_osd_stat(vector<int>& hb_peers, int num_pgs);
   osd_stat_t get_osd_stat() {
     Mutex::Locker l(stat_lock);
     ++seq;
