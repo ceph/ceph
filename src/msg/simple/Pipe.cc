@@ -2263,6 +2263,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
 int Pipe::do_sendmsg(struct msghdr *msg, unsigned len, bool more)
 {
+  MSGR_SIGPIPE_STOPPER;
   while (len > 0) {
     int r;
     r = ::sendmsg(sd, msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
@@ -2666,6 +2667,7 @@ int Pipe::tcp_write(const char *buf, unsigned len)
   //lgeneric_dout(cct, DBL) << "tcp_write writing " << len << dendl;
   assert(len > 0);
   while (len > 0) {
+    MSGR_SIGPIPE_STOPPER;
     int did = ::send( sd, buf, len, MSG_NOSIGNAL );
     if (did < 0) {
       //lgeneric_dout(cct, 1) << "tcp_write error did = " << did << " " << cpp_strerror(errno) << dendl;
