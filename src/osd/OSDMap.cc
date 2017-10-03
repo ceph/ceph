@@ -4540,9 +4540,11 @@ protected:
       return;
 
     float reweight = qi.is_bucket() ? -1 : osdmap->get_weightf(qi.id);
-    int64_t kb = 0, kb_used = 0, kb_avail = 0;
+    int64_t kb = 0, kb_used = 0, kb_used_data = 0, kb_used_omap = 0,
+      kb_used_meta = 0, kb_avail = 0;
     double util = 0;
-    if (get_bucket_utilization(qi.id, &kb, &kb_used, &kb_avail))
+    if (get_bucket_utilization(qi.id, &kb, &kb_used, &kb_used_data,
+			       &kb_used_omap, &kb_used_meta, &kb_avail))
       if (kb_used && kb)
         util = 100.0 * (double)kb_used / (double)kb;
 
@@ -4552,7 +4554,9 @@ protected:
 
     size_t num_pgs = qi.is_bucket() ? 0 : pgs->get_num_pg_by_osd(qi.id);
 
-    dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, num_pgs, f);
+    dump_item(qi, reweight, kb, kb_used,
+	      kb_used_data, kb_used_omap, kb_used_meta,
+	      kb_avail, util, var, num_pgs, f);
 
     if (!qi.is_bucket() && reweight > 0) {
       if (min_var < 0 || var < min_var)
@@ -4571,6 +4575,9 @@ protected:
 			 float &reweight,
 			 int64_t kb,
 			 int64_t kb_used,
+			 int64_t kb_used_data,
+			 int64_t kb_used_omap,
+			 int64_t kb_used_meta,
 			 int64_t kb_avail,
 			 double& util,
 			 double& var,
@@ -4586,8 +4593,10 @@ protected:
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (!osdmap->exists(i) || osdmap->get_weight(i) == 0)
 	continue;
-      int64_t kb_i, kb_used_i, kb_avail_i;
-      if (get_osd_utilization(i, &kb_i, &kb_used_i, &kb_avail_i)) {
+      int64_t kb_i, kb_used_i, kb_used_data_i, kb_used_omap_i, kb_used_meta_i,
+	kb_avail_i;
+      if (get_osd_utilization(i, &kb_i, &kb_used_i, &kb_used_data_i,
+			      &kb_used_omap_i, &kb_used_meta_i, &kb_avail_i)) {
 	kb += kb_i;
 	kb_used += kb_used_i;
       }
@@ -4596,38 +4605,60 @@ protected:
   }
 
   bool get_osd_utilization(int id, int64_t* kb, int64_t* kb_used,
+			   int64_t* kb_used_data,
+			   int64_t* kb_used_omap,
+			   int64_t* kb_used_meta,
 			   int64_t* kb_avail) const {
     const osd_stat_t *p = pgs->get_osd_stat(id);
     if (!p) return false;
     *kb = p->kb;
     *kb_used = p->kb_used;
+    *kb_used_data = p->kb_used_data;
+    *kb_used_omap = p->kb_used_omap;
+    *kb_used_meta = p->kb_used_meta;
     *kb_avail = p->kb_avail;
     return *kb > 0;
   }
 
   bool get_bucket_utilization(int id, int64_t* kb, int64_t* kb_used,
+			      int64_t* kb_used_data,
+			      int64_t* kb_used_omap,
+			      int64_t* kb_used_meta,
 			      int64_t* kb_avail) const {
     if (id >= 0) {
       if (osdmap->is_out(id)) {
         *kb = 0;
         *kb_used = 0;
+	*kb_used_data = 0;
+	*kb_used_omap = 0;
+	*kb_used_meta = 0;
         *kb_avail = 0;
         return true;
       }
-      return get_osd_utilization(id, kb, kb_used, kb_avail);
+      return get_osd_utilization(id, kb, kb_used, kb_used_data,
+				 kb_used_omap, kb_used_meta, kb_avail);
     }
 
     *kb = 0;
     *kb_used = 0;
+    *kb_used_data = 0;
+    *kb_used_omap = 0;
+    *kb_used_meta = 0;
     *kb_avail = 0;
 
     for (int k = osdmap->crush->get_bucket_size(id) - 1; k >= 0; k--) {
       int item = osdmap->crush->get_bucket_item(id, k);
-      int64_t kb_i = 0, kb_used_i = 0, kb_avail_i = 0;
-      if (!get_bucket_utilization(item, &kb_i, &kb_used_i, &kb_avail_i))
+      int64_t kb_i = 0, kb_used_i = 0, kb_used_data_i = 0,
+	kb_used_omap_i = 0, kb_used_meta_i = 0, kb_avail_i = 0;
+      if (!get_bucket_utilization(item, &kb_i, &kb_used_i,
+				  &kb_used_data_i, &kb_used_omap_i,
+				  &kb_used_meta_i, &kb_avail_i))
 	return false;
       *kb += kb_i;
       *kb_used += kb_used_i;
+      *kb_used_data += kb_used_data_i;
+      *kb_used_omap += kb_used_omap_i;
+      *kb_used_meta += kb_used_meta_i;
       *kb_avail += kb_avail_i;
     }
     return *kb > 0;
@@ -4660,6 +4691,9 @@ public:
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("USE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("DATA", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("OMAP", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("META", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("%USE", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("VAR", TextTable::LEFT, TextTable::RIGHT);
@@ -4676,6 +4710,9 @@ public:
 	 << "" << "TOTAL"
 	 << byte_u_t(pgs->get_osd_sum().kb << 10)
 	 << byte_u_t(pgs->get_osd_sum().kb_used << 10)
+	 << byte_u_t(pgs->get_osd_sum().kb_used_data << 10)
+	 << byte_u_t(pgs->get_osd_sum().kb_used_omap << 10)
+	 << byte_u_t(pgs->get_osd_sum().kb_used_meta << 10)
 	 << byte_u_t(pgs->get_osd_sum().kb_avail << 10)
 	 << lowprecision_t(average_util)
 	 << ""
@@ -4694,6 +4731,9 @@ protected:
 			 float &reweight,
 			 int64_t kb,
 			 int64_t kb_used,
+			 int64_t kb_used_data,
+			 int64_t kb_used_omap,
+			 int64_t kb_used_meta,
 			 int64_t kb_avail,
 			 double& util,
 			 double& var,
@@ -4708,6 +4748,9 @@ protected:
 	 << weightf_t(reweight)
 	 << byte_u_t(kb << 10)
 	 << byte_u_t(kb_used << 10)
+	 << byte_u_t(kb_used_data << 10)
+	 << byte_u_t(kb_used_omap << 10)
+	 << byte_u_t(kb_used_meta << 10)
 	 << byte_u_t(kb_avail << 10)
 	 << lowprecision_t(util)
 	 << lowprecision_t(var);
@@ -4779,19 +4822,25 @@ public:
 protected:
   using OSDUtilizationDumper<Formatter>::dump_item;
   void dump_item(const CrushTreeDumper::Item &qi,
-			 float &reweight,
-			 int64_t kb,
-			 int64_t kb_used,
-			 int64_t kb_avail,
-			 double& util,
-			 double& var,
-			 const size_t num_pgs,
-			 Formatter *f) override {
+		 float &reweight,
+		 int64_t kb,
+		 int64_t kb_used,
+		 int64_t kb_used_data,
+		 int64_t kb_used_omap,
+		 int64_t kb_used_meta,
+		 int64_t kb_avail,
+		 double& util,
+		 double& var,
+		 const size_t num_pgs,
+		 Formatter *f) override {
     f->open_object_section("item");
     CrushTreeDumper::dump_item_fields(crush, weight_set_names, qi, f);
     f->dump_float("reweight", reweight);
     f->dump_int("kb", kb);
     f->dump_int("kb_used", kb_used);
+    f->dump_int("kb_used_data", kb_used_data);
+    f->dump_int("kb_used_omap", kb_used_omap);
+    f->dump_int("kb_used_meta", kb_used_meta);
     f->dump_int("kb_avail", kb_avail);
     f->dump_float("utilization", util);
     f->dump_float("var", var);
@@ -4803,9 +4852,13 @@ protected:
 public:
   void summary(Formatter *f) {
     f->open_object_section("summary");
-    f->dump_int("total_kb", pgs->get_osd_sum().kb);
-    f->dump_int("total_kb_used", pgs->get_osd_sum().kb_used);
-    f->dump_int("total_kb_avail", pgs->get_osd_sum().kb_avail);
+    auto s = pgs->get_osd_sum();
+    f->dump_int("total_kb", s.kb);
+    f->dump_int("total_kb_used", s.kb_used);
+    f->dump_int("total_kb_used_data", s.kb_used_data);
+    f->dump_int("total_kb_used_omap", s.kb_used_omap);
+    f->dump_int("total_kb_used_meta", s.kb_used_meta);
+    f->dump_int("total_kb_avail", s.kb_avail);
     f->dump_float("average_utilization", average_util);
     f->dump_float("min_var", min_var);
     f->dump_float("max_var", max_var);
