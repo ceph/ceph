@@ -621,6 +621,12 @@ void FSMap::decode(bufferlist::iterator& p)
   DECODE_FINISH(p);
 }
 
+void FSMap::sanitize(std::function<bool(int64_t pool)> pool_exists)
+{
+  for (auto &fs : filesystems) {
+    fs.second->mds_map.sanitize(pool_exists);
+  }
+}
 
 void Filesystem::encode(bufferlist& bl, uint64_t features) const
 {
