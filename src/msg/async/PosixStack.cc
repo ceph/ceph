@@ -26,11 +26,12 @@
 
 #include "include/buffer.h"
 #include "include/str_list.h"
-#include "include/sock_compat.h"
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "common/dout.h"
 #include "common/simple_spin.h"
+#include "msg/Messenger.h"
+#include "include/sock_compat.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -78,6 +79,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   {
     size_t sent = 0;
     while (1) {
+      MSGR_SIGPIPE_STOPPER;
       ssize_t r;
       r = ::sendmsg(fd, &msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
       if (r < 0) {

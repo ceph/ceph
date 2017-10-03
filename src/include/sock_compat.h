@@ -19,7 +19,8 @@
 # ifdef SO_NOSIGPIPE
 #  define CEPH_USE_SO_NOSIGPIPE
 # else
-#  error "Cannot block SIGPIPE!"
+#  define CEPH_USE_SIGPIPE_BLOCKER
+#  warning "Using SIGPIPE blocking instead of suppression; this is not well-tested upstream!"
 # endif
 #endif
 
