@@ -11,6 +11,8 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <arpa/nameser_compat.h>
+
 #include "common/dns_resolve.h"
 #include "test/common/dns_messages.h"
 
