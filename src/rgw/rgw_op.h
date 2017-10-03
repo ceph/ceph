@@ -34,6 +34,8 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+#include "cls/lock/cls_lock_client.h"
+#include "cls/rgw/cls_rgw_client.h"
 
 #include "include/assert.h"
 
@@ -1149,6 +1151,27 @@ protected:
   char *data;
   int len;
 
+  struct MPSerializer {
+    librados::IoCtx ioctx;
+    rados::cls::lock::Lock lock;
+    librados::ObjectWriteOperation op;
+    std::string oid;
+    bool locked;
+
+    MPSerializer() : lock("RGWCompleteMultipart"), locked(false)
+      {}
+
+    int try_lock(const std::string& oid, utime_t dur);
+
+    int unlock() {
+      return lock.unlock(&ioctx, oid);
+    }
+
+    void clear_locked() {
+      locked = false;
+    }
+  } serializer;
+
 public:
   RGWCompleteMultipart() {
     data = NULL;
@@ -1161,6 +1184,7 @@ public:
   int verify_permission();
   void pre_exec();
   void execute();
+  void complete();
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;

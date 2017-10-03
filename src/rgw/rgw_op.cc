@@ -4238,9 +4238,7 @@ void RGWCompleteMultipart::execute()
 
   /*take a cls lock on meta_obj to prevent racing completions (or retries)
     from deleting the parts*/
-  librados::IoCtx ioctx;
-
-  op_ret = store->get_obj_ioctx(meta_obj, &ioctx);
+  op_ret = store->get_obj_ioctx(meta_obj, &serializer.ioctx);
   if (op_ret < 0) {
     ldout(s->cct, 0) << "ERROR: failed to open extra_dat_ctx, obj="
 		     << raw_oid
@@ -4248,16 +4246,11 @@ void RGWCompleteMultipart::execute()
     return;
   }
 
-  librados::ObjectWriteOperation op;
-  rados::cls::lock::Lock l("RGWCompleteMultipart");
-  int max_lock_secs_mp = s->cct->_conf->rgw_mp_lock_max_time;
-  utime_t time(max_lock_secs_mp, 0);
+  int max_lock_secs_mp =
+    s->cct->_conf->rgw_mp_lock_max_time;
+  utime_t dur(max_lock_secs_mp, 0);
 
-  op.assert_exists();
-  l.set_duration(time);
-  l.lock_exclusive(&op);
-
-  op_ret = ioctx.operate(raw_oid, &op);
+  op_ret = serializer.try_lock(raw_oid, dur);
   if (op_ret < 0) {
     dout(0) << "RGWCompleteMultipart::execute() failed to acquire lock "
 	    << dendl;
@@ -4378,13 +4371,41 @@ void RGWCompleteMultipart::execute()
   // remove the upload obj
   int r = store->delete_obj(*static_cast<RGWObjectCtx *>(s->obj_ctx),
 			    s->bucket_info, meta_obj, 0);
-  if (r < 0) {
-    ldout(store->ctx(), 0) << "WARNING: failed to remove object " << meta_obj << dendl;
-    r = l.unlock(&ioctx, meta_oid);
+  if (r >= 0)  {
+    /* serializer's exclusive lock is released */
+    serializer.clear_locked();
+  } else {
+      ldout(store->ctx(), 0) << "WARNING: failed to remove object "
+			     << meta_obj << dendl;
+  }
+}
+
+int RGWCompleteMultipart::MPSerializer::try_lock(
+  const std::string& _oid,
+  utime_t dur)
+{
+  oid = _oid;
+  op.assert_exists();
+  lock.set_duration(dur);
+  lock.lock_exclusive(&op);
+  int ret = ioctx.operate(oid, &op);
+  if (! ret) {
+    locked = true;
+  }
+  return ret;
+}
+
+void RGWCompleteMultipart::complete()
+{
+  /* release exclusive lock iff not already */
+  if (unlikely(serializer.locked)) {
+    int r = serializer.unlock();
     if (r < 0) {
-      ldout(store->ctx(), 0) << "WARNING: failed to unlock " << meta_oid << dendl;
+      ldout(store->ctx(), 0) << "WARNING: failed to unlock "
+			     << serializer.oid << dendl;
     }
   }
+  send_response();
 }
 
 int RGWAbortMultipart::verify_permission()
