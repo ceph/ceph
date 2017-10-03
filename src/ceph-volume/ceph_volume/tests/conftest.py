@@ -1,6 +1,7 @@
 import pytest
 from ceph_volume.devices.lvm import api
 
+
 class Capture(object):
 
     def __init__(self, *a, **kw):
@@ -10,6 +11,18 @@ class Capture(object):
 
     def __call__(self, *a, **kw):
         self.calls.append({'args': a, 'kwargs': kw})
+
+
+class Factory(object):
+
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
+
+
+@pytest.fixture
+def factory():
+    return Factory
 
 
 @pytest.fixture
