@@ -5,7 +5,7 @@ import logging
 from textwrap import dedent
 from ceph_volume import decorators
 from ceph_volume.util import disk
-from . import api
+from ceph_volume.api import lvm as api
 
 logger = logging.getLogger(__name__)
 
