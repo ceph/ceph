@@ -9,6 +9,7 @@ from mgr_module import PERFCOUNTER_HISTOGRAM
 
 try:
     from influxdb import InfluxDBClient
+    from influxdb.exceptions import InfluxDBClientError
 except ImportError:
     InfluxDBClient = None
 
@@ -112,13 +113,17 @@ class Module(MgrModule):
         password = self.get_config("password", default="")
 
         client = InfluxDBClient(host, port, username, password, database)
-        databases_avail = client.get_list_database()
-        if database not in databases_avail:
-            self.log.info("Creating database '{0}'".format(database))
-            client.create_database(database)
 
-        client.write_points(self.get_df_stats(), 'ms')
-        client.write_points(self.get_daemon_stats(), 'ms')
+        # using influx client get_list_database requires admin privs, instead we'll catch the not found exception and inform the user if db can't be created
+        try:
+            client.write_points(self.get_df_stats(), 'ms')
+            client.write_points(self.get_daemon_stats(), 'ms')
+        except InfluxDBClientError as e:
+            if e.code == 404:
+                self.log.info("Database '{0}' not found, trying to create (requires admin privs).  You can also create manually and grant write privs to user '{1}'".format(database,username))
+                client.create_database(database)
+            else:
+                raise
 
     def shutdown(self):
         self.log.info('Stopping influx module')
