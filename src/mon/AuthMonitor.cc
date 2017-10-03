@@ -1307,12 +1307,10 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
-    auto data_pools = fs->mds_map.get_data_pools();
-    for (auto p : data_pools) {
-      const string &pool_name = mon->osdmon()->osdmap.get_pool_name(p);
-      osd_cap_string += osd_cap_string.empty() ? "" : ", ";
-      osd_cap_string += "allow " + osd_cap_wanted + " pool=" + pool_name;
-    }
+    osd_cap_string += osd_cap_string.empty()? "" : ", ";
+    osd_cap_string += "allow " + osd_cap_wanted
+      + " tag " + pg_pool_t::APPLICATION_NAME_CEPHFS
+      + " data=" + filesystem;
 
     std::map<string, bufferlist> wanted_caps = {
       { "mon", _encode_cap("allow r") },
