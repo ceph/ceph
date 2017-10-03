@@ -42,6 +42,8 @@
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
 #include "rgw_tag.h"
+#include "cls/lock/cls_lock_client.h"
+#include "cls/rgw/cls_rgw_client.h"
 
 #include "include/assert.h"
 
@@ -1594,6 +1596,27 @@ protected:
   char *data;
   int len;
 
+  struct MPSerializer {
+    librados::IoCtx ioctx;
+    rados::cls::lock::Lock lock;
+    librados::ObjectWriteOperation op;
+    std::string oid;
+    bool locked;
+
+    MPSerializer() : lock("RGWCompleteMultipart"), locked(false)
+      {}
+
+    int try_lock(const std::string& oid, utime_t dur);
+
+    int unlock() {
+      return lock.unlock(&ioctx, oid);
+    }
+
+    void clear_locked() {
+      locked = false;
+    }
+  } serializer;
+
 public:
   RGWCompleteMultipart() {
     data = NULL;
@@ -1606,6 +1629,7 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
+  void complete() override;
 
   virtual int get_params() = 0;
   void send_response() override = 0;
