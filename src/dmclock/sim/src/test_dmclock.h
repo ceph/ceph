@@ -29,13 +29,14 @@ namespace crimson {
     };
 
     using DmcQueue = dmc::PushPriorityQueue<ClientId,sim::TestRequest>;
+    using DmcServiceTracker = dmc::ServiceTracker<ServerId,dmc::BorrowingTracker>;
 
     using DmcServer = sim::SimulatedServer<DmcQueue,
 					   dmc::ReqParams,
 					   dmc::PhaseType,
 					   DmcAccum>;
 
-    using DmcClient = sim::SimulatedClient<dmc::ServiceTracker<ServerId>,
+    using DmcClient = sim::SimulatedClient<DmcServiceTracker,
 					   dmc::ReqParams,
 					   dmc::PhaseType,
 					   DmcAccum>;
