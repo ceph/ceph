@@ -2450,12 +2450,20 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
   }
   result->clear();
 
-  rgw_obj marker_obj, prefix_obj;
-  marker_obj.set_instance(params.marker.instance);
-  marker_obj.set_ns(params.ns);
-  marker_obj.set_obj(params.marker.name);
+  rgw_bucket b;
+  rgw_obj marker_obj(b, params.marker);
+  rgw_obj end_marker_obj(b, params.end_marker);
+  rgw_obj prefix_obj;
+  rgw_obj_key cur_end_marker;
+  if (!params.ns.empty()) {
+    marker_obj.set_ns(params.ns);
+    end_marker_obj.set_ns(params.ns);
+    end_marker_obj.get_index_key(&cur_end_marker);
+  }
   rgw_obj_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
+
+  const bool cur_end_marker_valid = !params.end_marker.empty();
 
   prefix_obj.set_ns(params.ns);
   prefix_obj.set_obj(params.prefix);
@@ -2529,8 +2537,8 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
       }
 
       if (count < max) {
-        params.marker = obj;
-        next_marker = obj;
+        params.marker = key;
+        next_marker = key;
       }
 
       if (params.filter && !params.filter->filter(obj.name, key.name))
