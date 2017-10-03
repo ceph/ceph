@@ -343,6 +343,9 @@ void osd_stat_t::dump(Formatter *f) const
   f->dump_unsigned("num_pgs", num_pgs);
   f->dump_unsigned("kb", kb);
   f->dump_unsigned("kb_used", kb_used);
+  f->dump_unsigned("kb_used_data", kb_used_data);
+  f->dump_unsigned("kb_used_omap", kb_used_omap);
+  f->dump_unsigned("kb_used_meta", kb_used_meta);
   f->dump_unsigned("kb_avail", kb_avail);
   f->open_array_section("hb_peers");
   for (auto p : hb_peers)
@@ -360,7 +363,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(7, 2, bl);
+  ENCODE_START(8, 2, bl);
   encode(kb, bl);
   encode(kb_used, bl);
   encode(kb_avail, bl);
@@ -373,12 +376,15 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
   encode(up_from, bl);
   encode(seq, bl);
   encode(num_pgs, bl);
+  encode(kb_used_data, bl);
+  encode(kb_used_omap, bl);
+  encode(kb_used_meta, bl);
   ENCODE_FINISH(bl);
 }
 
 void osd_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -398,6 +404,15 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 7) {
     decode(num_pgs, bl);
   }
+  if (struct_v >= 8) {
+    decode(kb_used_data, bl);
+    decode(kb_used_omap, bl);
+    decode(kb_used_meta, bl);
+  } else {
+    kb_used_data = kb_used;
+    kb_used_omap = 0;
+    kb_used_meta = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -406,8 +421,11 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
   o.push_back(new osd_stat_t);
 
   o.push_back(new osd_stat_t);
-  o.back()->kb = 1;
-  o.back()->kb_used = 2;
+  o.back()->kb = 9;
+  o.back()->kb_used = 6;
+  o.back()->kb_used_data = 3;
+  o.back()->kb_used_omap = 2;
+  o.back()->kb_used_meta = 1;
   o.back()->kb_avail = 3;
   o.back()->hb_peers.push_back(7);
   o.back()->snap_trim_queue_len = 8;
@@ -5982,10 +6000,12 @@ bool store_statfs_t::operator==(const store_statfs_t& other) const
   return total == other.total
     && available == other.available
     && allocated == other.allocated
-    && stored == other.stored
-    && compressed == other.compressed
-    && compressed_allocated == other.compressed_allocated
-    && compressed_original == other.compressed_original;
+    && data_stored == other.data_stored
+    && data_compressed == other.data_compressed
+    && data_compressed_allocated == other.data_compressed_allocated
+    && data_compressed_original == other.data_compressed_original
+    && omap_allocated == other.omap_allocated
+    && internal_metadata == other.internal_metadata;
 }
 
 void store_statfs_t::dump(Formatter *f) const
@@ -5993,10 +6013,12 @@ void store_statfs_t::dump(Formatter *f) const
   f->dump_int("total", total);
   f->dump_int("available", available);
   f->dump_int("allocated", allocated);
-  f->dump_int("stored", stored);
-  f->dump_int("compressed", compressed);
-  f->dump_int("compressed_allocated", compressed_allocated);
-  f->dump_int("compressed_original", compressed_original);
+  f->dump_int("data_stored", data_stored);
+  f->dump_int("data_compressed", data_compressed);
+  f->dump_int("data_compressed_allocated", data_compressed_allocated);
+  f->dump_int("data_compressed_original", data_compressed_original);
+  f->dump_int("omap_allocated", omap_allocated);
+  f->dump_int("internal_metadata", internal_metadata);
 }
 
 ostream& operator<<(ostream& out, const store_statfs_t &s)
@@ -6004,11 +6026,13 @@ ostream& operator<<(ostream& out, const store_statfs_t &s)
   out << std::hex
       << "store_statfs(0x" << s.available
       << "/0x"  << s.total
-      << ", stored 0x" << s.stored
+      << ", data 0x" << s.data_stored
       << "/0x"  << s.allocated
-      << ", compress 0x" << s.compressed
-      << "/0x"  << s.compressed_allocated
-      << "/0x"  << s.compressed_original
+      << ", compress 0x" << s.data_compressed
+      << "/0x"  << s.data_compressed_allocated
+      << "/0x"  << s.data_compressed_original
+      << ", omap 0x" << s.omap_allocated
+      << ", meta 0x" << s.internal_metadata
       << std::dec
       << ")";
   return out;
