@@ -119,7 +119,7 @@ int NetHandler::set_socket_options(int sd, bool nodelay, int size)
   }
 
   // block ESIGPIPE
-#ifdef SO_NOSIGPIPE
+#ifdef CEPH_USE_SO_NOSIGPIPE
   int val = 1;
   r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
   if (r) {
