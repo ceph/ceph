@@ -448,10 +448,10 @@ if(${WITH_CEPHFS})
 endif(${WITH_CEPHFS})
 
 if(HAVE_BLKID)
-  add_executable(ceph_test_get_blkdev_size
-    test_get_blkdev_size.cc
+  add_executable(ceph_test_get_blkdev_props
+    test_get_blkdev_props.cc
     )
-  target_link_libraries(ceph_test_get_blkdev_size
+  target_link_libraries(ceph_test_get_blkdev_props
     ceph-common
     pthread
     ${EXTRALIBS}
