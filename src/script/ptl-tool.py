@@ -123,7 +123,7 @@ def build_branch(args):
             base_path = args.base_path + base
             base = filter(lambda r: r.path == base_path, G.refs)[0]
         except IndexError:
-            log.error("Branch base does not exist!")
+            log.error("Branch " + base + " does not exist!")
             sys.exit(1)
 
         # So we know that we're not on an old test branch, detach HEAD onto ref:
