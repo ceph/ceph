@@ -605,7 +605,7 @@ uint64_t ImageDiscardRequest<I>::append_journal_event(
                                                              this->m_skip_partial_discard));
     tid = image_ctx.journal->append_io_event(std::move(event_entry),
                                              requests, extent.first,
-                                             extent.second, synchronous);
+                                             extent.second, synchronous, 0);
   }
 
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -723,7 +723,7 @@ void ImageFlushRequest<I>::send_request() {
     // in-flight ops are flushed prior to closing the journal
     uint64_t journal_tid = image_ctx.journal->append_io_event(
       journal::EventEntry(journal::AioFlushEvent()),
-      ObjectRequests(), 0, 0, false);
+      ObjectRequests(), 0, 0, false, 0);
 
     aio_comp->set_request_count(1);
     aio_comp->associate_journal_event(journal_tid);
@@ -822,7 +822,7 @@ uint64_t ImageWriteSameRequest<I>::append_journal_event(
                                                                m_data_bl));
     tid = image_ctx.journal->append_io_event(std::move(event_entry),
                                              requests, extent.first,
-                                             extent.second, synchronous);
+                                             extent.second, synchronous, 0);
   }
 
   if (image_ctx.object_cacher == NULL) {
@@ -923,7 +923,7 @@ uint64_t ImageCompareAndWriteRequest<I>::append_journal_event(
                                                                    m_cmp_bl, m_bl));
   tid = image_ctx.journal->append_io_event(std::move(event_entry),
                                            requests, extent.first,
-                                           extent.second, synchronous);
+                                           extent.second, synchronous, -EILSEQ);
 
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->associate_journal_event(tid);
