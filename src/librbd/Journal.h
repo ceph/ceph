@@ -142,7 +142,7 @@ public:
   uint64_t append_io_event(journal::EventEntry &&event_entry,
                            const IOObjectRequests &requests,
                            uint64_t offset, size_t length,
-                           bool flush_entry);
+                           bool flush_entry, int filter_ret_val);
   void commit_io_event(uint64_t tid, int r);
   void commit_io_event_extent(uint64_t tid, uint64_t offset, uint64_t length,
                               int r);
@@ -193,6 +193,7 @@ private:
     IOObjectRequests aio_object_requests;
     Contexts on_safe_contexts;
     ExtentInterval pending_extents;
+    int filter_ret_val = 0;
     bool committed_io = false;
     bool safe = false;
     int ret_val = 0;
@@ -200,8 +201,9 @@ private:
     Event() {
     }
     Event(const Futures &_futures, const IOObjectRequests &_requests,
-          uint64_t offset, size_t length)
-      : futures(_futures), aio_object_requests(_requests) {
+          uint64_t offset, size_t length, int filter_ret_val)
+      : futures(_futures), aio_object_requests(_requests),
+        filter_ret_val(filter_ret_val) {
       if (length > 0) {
         pending_extents.insert(offset, length);
       }
@@ -334,7 +336,8 @@ private:
   uint64_t append_io_events(journal::EventType event_type,
                             const Bufferlists &bufferlists,
                             const IOObjectRequests &requests,
-                            uint64_t offset, size_t length, bool flush_entry);
+                            uint64_t offset, size_t length, bool flush_entry,
+                            int filter_ret_val);
   Future wait_event(Mutex &lock, uint64_t tid, Context *on_safe);
 
   void create_journaler();
