@@ -245,7 +245,7 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
       hint = conns.emplace_hint(
           hint, std::piecewise_construct,
           std::forward_as_tuple(zonegroup.get_id()),
-          std::forward_as_tuple(cct, store, zonegroup.get_id(), zonegroup.endpoints));
+          std::forward_as_tuple(cct, store, zonegroup.get_id(), zonegroup.endpoints, RGWAccessKey()));
     }
   }
 

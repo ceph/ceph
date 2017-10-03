@@ -8,6 +8,19 @@
 
 RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
                          const string& _remote_id,
+                         const list<string>& remote_endpoints)
+  : cct(_cct),
+    endpoints(remote_endpoints.begin(), remote_endpoints.end()),
+    remote_id(_remote_id)
+{
+  if (store) {
+    key = store->get_zone_params().system_key;
+    self_zone_group = store->get_zonegroup().get_id();
+  }
+}
+
+RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
+                         const string& _remote_id,
                          const list<string>& remote_endpoints,
                          RGWAccessKey _cred)
   : cct(_cct),
