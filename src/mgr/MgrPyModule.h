@@ -23,6 +23,7 @@
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
 #include "mon/health_check.h"
+#include "mgr/Gil.h"
 
 #include <vector>
 #include <string>
@@ -46,8 +47,8 @@ class MgrPyModule
 private:
   const std::string module_name;
   PyObject *pClassInstance;
-  PyThreadState *pMainThreadState;
-  PyThreadState *pMyThreadState = nullptr;
+  SafeThreadState pMainThreadState;
+  SafeThreadState pMyThreadState;
 
   health_check_map_t health_checks;
 
