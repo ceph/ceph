@@ -131,6 +131,19 @@ def get_api_pvs():
     return _output_parser(stdout, fields)
 
 
+def get_lv_from_argument(argument):
+    """
+    Helper proxy function that consumes a possible logical volume passed in from the CLI
+    in the form of `vg/lv`, but with some validation so that an argument that is a full
+    path to a device can be ignored
+    """
+    try:
+        vg_name, lv_name = argument.split('/')
+    except (ValueError, AttributeError):
+        return None
+    return get_lv(lv_name=lv_name, vg_name=vg_name)
+
+
 def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
     """
     Return a matching lv for the current system, requiring ``lv_name``,
@@ -583,6 +596,15 @@ class Volume(object):
 
     def __repr__(self):
         return self.__str__()
+
+    def as_dict(self):
+        obj = {}
+        obj.update(self.lv_api)
+        obj['tags'] = self.tags
+        obj['name'] = self.name
+        obj['type'] = self.tags['ceph.type']
+        obj['path'] = self.lv_path
+        return obj
 
     def set_tags(self, tags):
         """
