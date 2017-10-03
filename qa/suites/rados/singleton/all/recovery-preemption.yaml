@@ -43,8 +43,7 @@ tasks:
       - rados -p foo bench 3 write -b 4096 --no-cleanup
       - ceph osd unset noup
       - sleep 10
-      - ceph tell osd.* config set osd_recovery_sleep 0
-      - ceph tell osd.* config set osd_recovery_max_active 20
+      - for f in 0 1 2 3 ; do sudo ceph daemon osd.$f config set osd_recovery_sleep 0 ; sudo ceph daemon osd.$f config set osd_recovery_max_active 20 ; done
 - ceph.healthy:
 - exec:
     osd.0:
