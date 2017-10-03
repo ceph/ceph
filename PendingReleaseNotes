@@ -27,3 +27,14 @@
     limit (5% by default). Limits by inode count are still supported using
     mds_cache_size. Setting mds_cache_size to 0 (the default) disables the
     inode limit.
+
+* The maximum number of PGs per OSD before the monitor issues a
+  warning has been reduced from 300 to 200 PGs.  200 is still twice
+  the generally recommended target of 100 PGs per OSD.  This limit can
+  be adjusted via the ``mon_max_pg_per_osd`` option on the
+  monitors.  The older ``mon_pg_warn_max_per_osd`` option has been removed.
+
+* Creating pools or adjusting pg_num will now fail if the change would
+  make the number of PGs per OSD exceed the configured
+  ``mon_max_pg_per_osd`` limit.  The option can be adjusted if it
+  is really necessary to create a pool with more PGs.
