@@ -453,7 +453,7 @@ int CryptoKey::create(CephContext *cct, int t)
     return -EOPNOTSUPP;
   }
   bufferptr s;
-  int r = ch->create(nullptr, s); // fixme
+  int r = ch->create(cct->random(), s);
   delete ch;
   if (r < 0)
     return r;

@@ -16,6 +16,7 @@
 #define CEPH_CEPHCONTEXT_H
 
 #include <set>
+#include <memory>
 #include <mutex>
 #include <atomic>
 
@@ -37,6 +38,7 @@ struct md_config_t;
 class CephContextHook;
 class CephContextObs;
 class CryptoHandler;
+class CryptoRandom;
 
 namespace ceph {
   class PluginRegistry;
@@ -145,6 +147,8 @@ public:
    * get a crypto handler
    */
   CryptoHandler *get_crypto_handler(int type);
+
+  CryptoRandom* random() const { return _crypto_random.get(); }
 
   /// check if experimental feature is enable, and emit appropriate warnings
   bool check_experimental_feature_enabled(const std::string& feature);
@@ -265,6 +269,7 @@ private:
   // crypto
   CryptoHandler *_crypto_none;
   CryptoHandler *_crypto_aes;
+  std::unique_ptr<CryptoRandom> _crypto_random;
 
   // experimental
   CephContextObs *_cct_obs;
