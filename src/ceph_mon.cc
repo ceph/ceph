@@ -635,7 +635,9 @@ int main(int argc, const char **argv)
 	       << " does not match monmap file" << std::endl
 	       << "         continuing with monmap configuration" << dendl;
         }
-      }
+      } else
+          derr << "WARNING: invalid 'mon addr' config option" << std::endl
+               << "         continuing with monmap configuration" << dendl;
     }
   } else {
     dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
