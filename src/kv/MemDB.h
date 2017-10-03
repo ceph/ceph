@@ -195,7 +195,7 @@ public:
     buf->reset();
     buf->total = m_total_bytes;
     buf->allocated = m_allocated_bytes;
-    buf->stored = m_total_bytes;
+    buf->data_stored = m_total_bytes;
     return 0;
   }
 
