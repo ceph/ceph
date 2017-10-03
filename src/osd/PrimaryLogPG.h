@@ -1317,7 +1317,9 @@ protected:
     const hobject_t &begin, const hobject_t &end) override;
   void scrub_snapshot_metadata(
     ScrubMap &map,
-    const std::map<hobject_t, pair<uint32_t, uint32_t>> &missing_digest) override;
+    const std::map<hobject_t,
+                   pair<boost::optional<uint32_t>,
+                        boost::optional<uint32_t>>> &missing_digest) override;
   void _scrub_clear_state() override;
   void _scrub_finish() override;
   object_stat_collection_t scrub_cstat;
