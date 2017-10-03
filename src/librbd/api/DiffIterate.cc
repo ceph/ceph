@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "rabinkarphash.h"
 #include "librbd/api/DiffIterate.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -20,6 +21,8 @@
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::DiffIterate: "
+
+#define rolling_hash_window_size 1000
 
 namespace librbd {
 namespace api {
@@ -60,7 +63,7 @@ public:
                uint64_t offset, const std::vector<ObjectExtent> &object_extents)
     : m_cct(image_ctx.cct), m_head_ctx(head_ctx),
       m_diff_context(diff_context), m_oid(oid), m_offset(offset),
-      m_object_extents(object_extents), m_snap_ret(0) {
+      m_object_extents(object_extents), m_snap_ret(0), m_hash(rolling_hash_window_size, 64) {
   }
 
   void send() {
@@ -71,7 +74,7 @@ public:
     librados::ObjectReadOperation op;
     op.list_snaps(&m_snap_set, &m_snap_ret);
 
-    int r = m_head_ctx.aio_operate(m_oid, rados_completion, &op, NULL);
+    int r = m_head_ctx.aio_operate(m_oid, rados_completion, &op, &m_buffers);
     assert(r == 0);
     rados_completion->release();
   }
@@ -119,6 +122,8 @@ private:
   std::string m_oid;
   uint64_t m_offset;
   std::vector<ObjectExtent> m_object_extents;
+  ceph::bufferlist m_buffers;
+  KarpRabinHash<> m_hash;
 
   librados::snap_set_t m_snap_set;
   int m_snap_ret;
@@ -157,9 +162,13 @@ private:
                      << q->offset << "~" << q->length << " from "
                      << q->buffer_extents << dendl;
       uint64_t opos = q->offset;
-      for (vector<pair<uint64_t,uint64_t> >::iterator r =
-             q->buffer_extents.begin();
+      for (vector<pair<uint64_t,uint64_t> >::iterator r = q->buffer_extents.begin();
            r != q->buffer_extents.end(); ++r) {
+          for (uint64_t ei = 0; ei < q.get_len(); ++ei) {
+            m_hash.eat(m_buffers[q.get_start() + ei]));
+          }
+        }
+
         interval_set<uint64_t> overlap;  // object extents
         overlap.insert(opos, r->second);
         overlap.intersection_of(diff);
@@ -188,9 +197,15 @@ private:
       // report parent diff instead
       for (vector<ObjectExtent>::iterator q = m_object_extents.begin();
            q != m_object_extents.end(); ++q) {
-        for (vector<pair<uint64_t,uint64_t> >::iterator r =
-               q->buffer_extents.begin();
-             r != q->buffer_extents.end(); ++r) {
+      for (vector<pair<uint64_t,uint64_t> >::iterator r =
+             q->buffer_extents.begin(), bufferlist::const_iterator bi = m_buffers.begin();
+           r != q->buffer_extents.end(); ++r, ++bi) {
+          for (ptr::const_iterator pi = bi->begin(); pi != bi->end(); ++pi) {
+            for (uint64_t ei = 0; ei < q.get_len(); ++ei) {
+              m_hash.eat(static_cast<unsigned char>((*pi)[q.get_start() + ei]));
+            }
+          }
+
           interval_set<uint64_t> o;
           o.insert(m_offset + r->first, r->second);
           o.intersection_of(m_diff_context.parent_diff);
