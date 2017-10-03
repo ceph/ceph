@@ -26,35 +26,35 @@ add_executable(unittest_bloom_filter
   test_bloom_filter.cc
   )
 add_ceph_unittest(unittest_bloom_filter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bloom_filter)
-target_link_libraries(unittest_bloom_filter global ${BLKID_LIBRARIES}) 
+target_link_libraries(unittest_bloom_filter global)
 
 # unittest_histogram
 add_executable(unittest_histogram
   histogram.cc
   )
 add_ceph_unittest(unittest_histogram ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_histogram)
-target_link_libraries(unittest_histogram global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_histogram global)
 
 # unittest_prioritized_queue
 add_executable(unittest_prioritized_queue
   test_prioritized_queue.cc
   )
 add_ceph_unittest(unittest_prioritized_queue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_prioritized_queue)
-target_link_libraries(unittest_prioritized_queue global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_prioritized_queue global)
 
 # unittest_mclock_priority_queue
 add_executable(unittest_mclock_priority_queue
   test_mclock_priority_queue.cc
   )
 add_ceph_unittest(unittest_mclock_priority_queue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mclock_priority_queue)
-target_link_libraries(unittest_mclock_priority_queue global ${BLKID_LIBRARIES} dmclock)
+target_link_libraries(unittest_mclock_priority_queue global dmclock)
 
 # unittest_str_map
 add_executable(unittest_str_map
   test_str_map.cc
   )
 add_ceph_unittest(unittest_str_map ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_str_map)
-target_link_libraries(unittest_str_map ceph-common global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_str_map ceph-common global)
 
 # unittest_sharedptr_registry
 add_executable(unittest_sharedptr_registry
@@ -62,7 +62,7 @@ add_executable(unittest_sharedptr_registry
   $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_sharedptr_registry ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_sharedptr_registry)
-target_link_libraries(unittest_sharedptr_registry global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_sharedptr_registry global)
 
 # unittest_shared_cache
 add_executable(unittest_shared_cache
@@ -70,14 +70,14 @@ add_executable(unittest_shared_cache
   $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_shared_cache ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_shared_cache)
-target_link_libraries(unittest_shared_cache global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_shared_cache global)
 
 # unittest_sloppy_crc_map
 add_executable(unittest_sloppy_crc_map
   test_sloppy_crc_map.cc
   )
 add_ceph_unittest(unittest_sloppy_crc_map ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_sloppy_crc_map)
-target_link_libraries(unittest_sloppy_crc_map global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_sloppy_crc_map global)
 
 # unittest_time
 add_executable(unittest_time
@@ -85,7 +85,7 @@ add_executable(unittest_time
   ${CMAKE_SOURCE_DIR}/src/common/ceph_time.cc
   )
 add_ceph_unittest(unittest_time ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_time)
-target_link_libraries(unittest_time global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_time global)
 
 # unittest_util
 add_executable(unittest_util
@@ -93,14 +93,13 @@ add_executable(unittest_util
   ${CMAKE_SOURCE_DIR}/src/common/util.cc
   )
 add_ceph_unittest(unittest_util ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_util)
-target_link_libraries(unittest_util global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_util global)
 
 # unittest_random
 add_executable(unittest_random
   test_random.cc
   )
 add_ceph_unittest(unittest_random ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_random)
-target_link_libraries(unittest_random global ${BLKID_LIBRARIES})
 
 # unittest_throttle
 add_executable(unittest_throttle
@@ -214,35 +213,35 @@ add_executable(unittest_weighted_priority_queue
   test_weighted_priority_queue.cc
   )
 add_ceph_unittest(unittest_weighted_priority_queue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_weighted_priority_queue)
-target_link_libraries(unittest_weighted_priority_queue global ${BLKID_LIBRARIES}) 
+target_link_libraries(unittest_weighted_priority_queue global) 
 
 # unittest_mutex_debug
 add_executable(unittest_mutex_debug
   test_mutex_debug.cc
   )
 add_ceph_unittest(unittest_mutex_debug ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mutex_debug)
-target_link_libraries(unittest_mutex_debug global ${BLKID_LIBRARIES} ${EXTRALIBS})
+target_link_libraries(unittest_mutex_debug global ${EXTRALIBS})
 
 # unittest_mutex
 add_executable(unittest_mutex
   test_mutex.cc
   )
 add_ceph_unittest(unittest_mutex ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mutex)
-target_link_libraries(unittest_mutex global ${BLKID_LIBRARIES} ${EXTRALIBS})
+target_link_libraries(unittest_mutex global ${EXTRALIBS})
 
 # unittest_shunique_lock
 add_executable(unittest_shunique_lock
   test_shunique_lock.cc
   )
 add_ceph_unittest(unittest_shunique_lock ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_shunique_lock)
-target_link_libraries(unittest_shunique_lock global ${BLKID_LIBRARIES} ${EXTRALIBS})
+target_link_libraries(unittest_shunique_lock global ${EXTRALIBS})
 
 # unittest_perf_histogram
 add_executable(unittest_perf_histogram
   test_perf_histogram.cc
   )
 add_ceph_unittest(unittest_perf_histogram ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_perf_histogram)
-target_link_libraries(unittest_perf_histogram global ${BLKID_LIBRARIES} ${EXTRALIBS})
+target_link_libraries(unittest_perf_histogram global ${EXTRALIBS})
 
 # unittest_global_doublefree
 if(WITH_CEPHFS)
