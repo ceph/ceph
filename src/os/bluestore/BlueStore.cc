@@ -4350,10 +4350,10 @@ int BlueStore::_reload_logger()
   int r = statfs(&store_statfs);
   if (r >= 0) {
     logger->set(l_bluestore_allocated, store_statfs.allocated);
-    logger->set(l_bluestore_stored, store_statfs.stored);
-    logger->set(l_bluestore_compressed, store_statfs.compressed);
-    logger->set(l_bluestore_compressed_allocated, store_statfs.compressed_allocated);
-    logger->set(l_bluestore_compressed_original, store_statfs.compressed_original);
+    logger->set(l_bluestore_stored, store_statfs.data_stored);
+    logger->set(l_bluestore_compressed, store_statfs.data_compressed);
+    logger->set(l_bluestore_compressed_allocated, store_statfs.data_compressed_allocated);
+    logger->set(l_bluestore_compressed_original, store_statfs.data_compressed_original);
   }
   return r;
 }
@@ -5957,7 +5957,7 @@ int BlueStore::_fsck_check_extents(
       continue;
     expected_statfs.allocated += e.length;
     if (compressed) {
-      expected_statfs.compressed_allocated += e.length;
+      expected_statfs.data_compressed_allocated += e.length;
     }
     bool already = false;
     apply(
@@ -6329,7 +6329,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  ++errors;
 	}
 	pos = l.logical_offset + l.length;
-	expected_statfs.stored += l.length;
+	expected_statfs.data_stored += l.length;
 	assert(l.blob);
 	const bluestore_blob_t& blob = l.blob->get_blob();
 
@@ -6413,8 +6413,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  ++errors;
 	}
 	if (blob.is_compressed()) {
-	  expected_statfs.compressed += blob.get_compressed_payload_length();
-	  expected_statfs.compressed_original += 
+	  expected_statfs.data_compressed += blob.get_compressed_payload_length();
+	  expected_statfs.data_compressed_original +=
 	    i.first->get_referenced_bytes();
 	}
 	if (blob.is_shared()) {
@@ -6650,7 +6650,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    }
 	    expected_statfs.allocated += e->length;
 	    if (compressed) {
-	      expected_statfs.compressed_allocated += e->length;
+	      expected_statfs.data_compressed_allocated += e->length;
 	    }
 	    bufferlist bl;
 	    IOContext ioc(cct, NULL, true); // allow EIO
@@ -6688,7 +6688,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 		// NB: it's crucial to use compressed flag from sb_info_t
 		// as we originally used that value while accumulating 
 		// expected_statfs
-		expected_statfs.compressed_allocated -= r.second.length;
+		expected_statfs.data_compressed_allocated -= r.second.length;
 	      }
 	    }
 	    sbi.updated = sbi.passed = true;
@@ -6702,7 +6702,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    for (auto& p : pext_to_release) {
 	      expected_statfs.allocated -= p.length;
 	      if (compressed) {
-		expected_statfs.compressed_allocated -= p.length;
+		expected_statfs.data_compressed_allocated -= p.length;
 	      }
 	      to_release.union_insert(p.offset, p.length);
 	    }
@@ -7131,10 +7131,10 @@ int BlueStore::statfs(struct store_statfs_t *buf)
   {
     std::lock_guard<std::mutex> l(vstatfs_lock);
     buf->allocated = vstatfs.allocated();
-    buf->stored = vstatfs.stored();
-    buf->compressed = vstatfs.compressed();
-    buf->compressed_original = vstatfs.compressed_original();
-    buf->compressed_allocated = vstatfs.compressed_allocated();
+    buf->data_stored = vstatfs.stored();
+    buf->data_compressed = vstatfs.compressed();
+    buf->data_compressed_original = vstatfs.compressed_original();
+    buf->data_compressed_allocated = vstatfs.compressed_allocated();
   }
 
   dout(20) << __func__ << " " << *buf << dendl;
