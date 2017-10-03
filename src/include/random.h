@@ -133,14 +133,14 @@ void randomize_rng()
   detail::randomize_rng<EngineT>();
 }
 
-template <int min = 0,
-          int max = std::numeric_limits<int>::max(), 
-          typename DistributionT = std::uniform_int_distribution<int>,
+template <typename IntegerT = int,
+          typename DistributionT = std::uniform_int_distribution<IntegerT>,
           typename EngineT = std::default_random_engine>
-int generate_random_number()
+IntegerT generate_random_number()
 {
-  return detail::generate_random_number<int, DistributionT, EngineT>
-          (min, max);
+  using limits = std::numeric_limits<IntegerT>;
+  return detail::generate_random_number<IntegerT, DistributionT, EngineT>
+          (limits::min(), limits::max());
 }
 
 template <typename IntegerT>
