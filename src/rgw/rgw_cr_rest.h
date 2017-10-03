@@ -315,6 +315,8 @@ protected:
 public:
   virtual int init() = 0;
   virtual int read(bufferlist *data, uint64_t max, bool *need_retry) = 0; /* reentrant */
+  virtual bool has_attrs() = 0;
+  virtual void get_attrs(std::map<string, string> *attrs) = 0;
 };
 
 class RGWStreamWriteResourceCRF {
@@ -324,6 +326,7 @@ protected:
 
 public:
   virtual int init() = 0;
+  virtual void set_attrs(const std::map<string, string>& attrs) = 0;
   virtual int write(bufferlist& data) = 0; /* reentrant */
   virtual int drain_writes(bool *need_retry) = 0; /* reentrant */
 };
@@ -337,6 +340,7 @@ class RGWStreamReadHTTPResourceCRF : public RGWStreamReadResourceCRF {
 
   RGWCRHTTPGetDataCB *in_cb{nullptr};
 
+  bool got_attrs{false};
 
 public:
   RGWStreamReadHTTPResourceCRF(CephContext *_cct,
@@ -349,8 +353,10 @@ public:
                                                                req(_req) {}
   virtual ~RGWStreamReadHTTPResourceCRF();
 
-  int init();
+  int init() override;
   int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
+  bool has_attrs() override;
+  void get_attrs(std::map<string, string> *pattrs) override;
 };
 
 class RGWStreamWriteHTTPResourceCRF : public RGWStreamWriteResourceCRF {
@@ -371,28 +377,43 @@ public:
                                                                req(_req) {}
   virtual ~RGWStreamWriteHTTPResourceCRF() {}
 
-  int init();
-  int write(bufferlist& data); /* reentrant */
-  int drain_writes(bool *need_retry); /* reentrant */
+  int init() override;
+  void set_attrs(const std::map<string, string>& attrs) override;
+  int write(bufferlist& data) override; /* reentrant */
+  int drain_writes(bool *need_retry) override; /* reentrant */
+};
+
+class RGWStreamSpliceCR : public RGWCoroutine {
+  CephContext *cct;
+  RGWHTTPManager *http_manager;
+  string url;
+  RGWStreamReadHTTPResourceCRF *in_crf{nullptr};
+  RGWStreamWriteHTTPResourceCRF *out_crf{nullptr};
+  bufferlist bl;
+  bool need_retry{false};
+  bool sent_attrs{false};
+  uint64_t total_read{0};
+  int ret{0};
+public:
+  RGWStreamSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
+                    RGWStreamReadHTTPResourceCRF *_in_crf,
+                    RGWStreamWriteHTTPResourceCRF *_out_crf);
+  ~RGWStreamSpliceCR();
+
+  int operate();
 };
 
 class TestSpliceCR : public RGWCoroutine {
   CephContext *cct;
   RGWHTTPManager *http_manager;
-  string url;
   RGWHTTPStreamRWRequest *in_req{nullptr};
   RGWHTTPStreamRWRequest *out_req{nullptr};
   RGWStreamReadHTTPResourceCRF *in_crf{nullptr};
   RGWStreamWriteHTTPResourceCRF *out_crf{nullptr};
-  bufferlist bl;
-  bool need_retry{false};
-  uint64_t total_read{0};
-  int ret{0};
 public:
   TestSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
                RGWHTTPStreamRWRequest *_in_req,
                RGWHTTPStreamRWRequest *_out_req);
-  ~TestSpliceCR();
 
   int operate();
 };
