@@ -5902,6 +5902,8 @@ int BlueStore::_fsck(bool deep, bool repair)
   statfs(&actual_statfs);
   expected_statfs.total = actual_statfs.total;
   expected_statfs.available = actual_statfs.available;
+  expected_statfs.internal_metadata = actual_statfs.internal_metadata;
+  expected_statfs.omap_allocated = actual_statfs.omap_allocated;
 
   // walk PREFIX_OBJ
   dout(1) << __func__ << " walking object keyspace" << dendl;
@@ -6436,6 +6438,8 @@ int BlueStore::statfs(struct store_statfs_t *buf)
   buf->total = bdev->get_size();
   buf->available = alloc->get_free();
 
+  buf->omap_allocated = db->estimate_prefix_size(PREFIX_OMAP);
+
   if (bluefs) {
     // part of our shared device is "free" according to BlueFS, but we
     // can't touch bluestore_bluefs_min of it.
@@ -6445,6 +6449,11 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     if (shared_available > 0) {
       buf->available += shared_available;
     }
+
+    // call any non-omap bluefs space "internal metadata"
+    buf->internal_metadata =
+      std::max(bluefs->get_used(), (uint64_t)cct->_conf->bluestore_bluefs_min)
+      - buf->omap_allocated;
   }
 
   {
