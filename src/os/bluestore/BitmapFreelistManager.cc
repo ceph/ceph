@@ -105,7 +105,7 @@ int BitmapFreelistManager::create(uint64_t new_size, KeyValueDB::Transaction txn
   return 0;
 }
 
-int BitmapFreelistManager::init()
+int BitmapFreelistManager::init(uint64_t dev_size)
 {
   dout(1) << __func__ << dendl;
 
@@ -153,6 +153,49 @@ int BitmapFreelistManager::init()
 	   << " blocks_per_key 0x" << blocks_per_key
 	   << std::dec << dendl;
   _init_misc();
+
+  // check for http://tracker.ceph.com/issues/21089 inconsistency
+  {
+    uint64_t new_size = P2ALIGN(dev_size, bytes_per_block);
+    if (new_size != size) {
+      uint64_t bad_size = new_size & ~bytes_per_block;
+      if (size == bad_size) {
+	derr << __func__ << " size is 0x" << std::hex << size << " should be 0x"
+	     << new_size << " and appears to be due to #21089" << std::dec
+	     << dendl;
+
+	uint64_t new_blocks = new_size / bytes_per_block;
+	if (new_blocks / blocks_per_key * blocks_per_key != new_blocks) {
+	  new_blocks = (new_blocks / blocks_per_key + 1) *
+	    blocks_per_key;
+	}
+
+	KeyValueDB::Transaction t = kvdb->get_transaction();
+	{
+	  bufferlist sizebl;
+	  ::encode(new_size, sizebl);
+	  t->set(meta_prefix, "size", sizebl);
+	}
+	if (new_blocks != blocks) {
+	  derr << "blocks is 0x" << std::hex << blocks << " should be 0x"
+	       << new_blocks << std::dec << dendl;
+	  bufferlist bl;
+	  ::encode(new_blocks, bl);
+	  t->set(meta_prefix, "blocks", bl);
+	  _xor(new_size, new_blocks * bytes_per_block - new_size, t);
+	} else {
+	  derr << "blocks are ok" << dendl;
+	  _xor(bad_size, bytes_per_block, t);
+	}
+	int r = kvdb->submit_transaction_sync(t);
+	assert(r == 0);
+	size = new_size;
+	blocks = new_blocks;
+	derr << __func__ << " fixed inconsistency, size now 0x" << std::hex
+	     << size << " blocks 0x" << blocks << std::dec << dendl;
+      }
+    }
+  }
   return 0;
 }
 

@@ -26,7 +26,7 @@ public:
 
   virtual int create(uint64_t size, KeyValueDB::Transaction txn) = 0;
 
-  virtual int init() = 0;
+  virtual int init(uint64_t dev_size) = 0;
   virtual void shutdown() = 0;
 
   virtual void dump() = 0;
