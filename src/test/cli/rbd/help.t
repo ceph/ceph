@@ -123,7 +123,8 @@ Skip test on FreeBSD as it generates different output there.
   rbd help bench
   usage: rbd bench [--pool <pool>] [--image <image>] [--io-size <io-size>] 
                    [--io-threads <io-threads>] [--io-total <io-total>] 
-                   [--io-pattern <io-pattern>] --io-type <io-type> 
+                   [--io-pattern <io-pattern>] 
+                   [--rw-mix-read <rw-mix-read>] --io-type <io-type> 
                    <image-spec> 
   
   Simple benchmark.
@@ -139,7 +140,8 @@ Skip test on FreeBSD as it generates different output there.
     --io-threads arg     ios in flight [default: 16]
     --io-total arg       total size for IO (in B/K/M/G/T) [default: 1G]
     --io-pattern arg     IO pattern (rand or seq) [default: seq]
-    --io-type arg        IO type (read or write)
+    --rw-mix-read arg    read proportion in readwrite (<= 100) [default: 50]
+    --io-type arg        IO type (read , write, or readwrite(rw))
   
   rbd help children
   usage: rbd children [--pool <pool>] [--image <image>] [--snap <snap>] 
