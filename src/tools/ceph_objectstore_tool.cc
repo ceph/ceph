@@ -1109,10 +1109,6 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     cerr << "Zero same_interval_since " << ms.info.history.same_interval_since << std::endl;
   }
 
-  // Let osd recompute past_intervals and same_interval_since
-  ms.past_intervals.clear();
-  ms.info.history.same_interval_since =  0;
-
   if (debug)
     cerr << "Changing pg epoch " << ms.map_epoch << " to " << sb.current_epoch << std::endl;
 
