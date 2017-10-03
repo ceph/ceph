@@ -660,7 +660,7 @@ public:
     bufferlist::iterator p = bl.begin();
     decode(p);
   }
-
+  void sanitize(std::function<bool(int64_t pool)> pool_exists);
 
   void print(ostream& out) const;
   void print_summary(Formatter *f, ostream *out) const;
