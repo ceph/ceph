@@ -7,7 +7,7 @@ Timeline
 
 +----------------------+-------------+-----------+----------+---------------+-----------+----------+------------+------------+-------------+
 |                      | `Luminous`_ | `Kraken`_ | `Jewel`_ | `Infernalis`_ | `Hammer`_ | `Giant`_ | `Firefly`_ | `Emperor`_ | `Dumpling`_ |
-|                      |  LTS        | Stable    | LTS      | Stable        | LTS       | Stable   | LTS        | Stable     | LTS         |
+|                      |             | EOL       |          | EOL           | EOL       | EOL      | EOL        | EOL        | EOL         |
 +----------------------+-------------+-----------+----------+---------------+-----------+----------+------------+------------+-------------+
 | First release        | August      | January   | April    | November      | April     | October  | May        | November   | August      |
 |                      | 2017        | 2017      | 2016     | 2015          | 2015      | 2014     | 2014       | 2013       | 2013        |
