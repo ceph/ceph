@@ -106,6 +106,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        const hobject_t oid) = 0;
 
      virtual void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) = 0;
+     virtual void finish_degraded_object(const hobject_t& oid) = 0;
      virtual void primary_failed(const hobject_t &soid) = 0;
      virtual bool primary_error(const hobject_t& soid, eversion_t v) = 0;
      virtual void cancel_pull(const hobject_t &soid) = 0;
@@ -118,6 +119,11 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
       * Called when a read on the primary fails when pushing
       */
      virtual void on_primary_error(
+       const hobject_t &oid,
+       eversion_t v
+       ) = 0;
+
+     virtual void backfill_add_missing(
        const hobject_t &oid,
        eversion_t v
        ) = 0;
