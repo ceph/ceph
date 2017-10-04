@@ -308,7 +308,7 @@ PyObject *PyModules::get_python(const std::string &what)
     } else if (what == "mon_status") {
       json = cluster_state.get_mon_status();
     } else {
-      assert(false);
+      ceph_abort();
     }
     f.dump_string("json", json.to_str());
     return f.get();

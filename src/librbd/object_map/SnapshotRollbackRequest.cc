@@ -69,7 +69,7 @@ bool SnapshotRollbackRequest::should_complete(int r) {
     finished = Request::should_complete(r);
     break;
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
   return finished;

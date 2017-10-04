@@ -895,7 +895,7 @@ int KvFlatBtreeAsync::perform_ops(const string &debug_prefix,
 	  if (verbose) cout << client_name << " is suiciding!" << std::endl;
 	  return -ESUICIDE;
 	} else {
-	  assert(false);
+	  ceph_abort();
 	}
 	return err;
       }
@@ -924,7 +924,7 @@ int KvFlatBtreeAsync::perform_ops(const string &debug_prefix,
 		cerr << client_name << " is suiciding!" << std::endl;
 		return -ESUICIDE;
 	      } else {
-		assert(false);
+		ceph_abort();
 	      }
 	      return err;
 	    }

@@ -91,7 +91,7 @@ bool RenameRequest<I>::should_complete(int r) {
     send_remove_source_header();
     break;
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
   return false;

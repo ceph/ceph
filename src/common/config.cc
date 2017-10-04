@@ -87,7 +87,7 @@ md_config_t::md_config_t(bool is_daemon)
       // We may be instantiated pre-logging so send 
       std::cerr << "Duplicate config key in schema: '" << i.name << "'"
                 << std::endl;
-      assert(false);
+      ceph_abort();
     }
     schema.insert({i.name, i});
   }
@@ -131,7 +131,7 @@ md_config_t::md_config_t(bool is_daemon)
         // This is the compiled-in default that is failing its own option's
         // validation, so this is super-invalid and should never make it
         // past a pull request: crash out.
-        assert(false);
+        ceph_abort();
       }
     }
 
@@ -160,7 +160,7 @@ void md_config_t::validate_schema()
       if (schema.count(see_also_key) == 0) {
         std::cerr << "Non-existent see-also key '" << see_also_key
                   << "' on option '" << opt.name << "'" << std::endl;
-        assert(false);
+        ceph_abort();
       }
     }
   }
@@ -169,7 +169,7 @@ void md_config_t::validate_schema()
     if (schema.count(i.first) == 0) {
       std::cerr << "Schema is missing legacy field '" << i.first << "'"
                 << std::endl;
-      assert(false);
+      ceph_abort();
     }
   }
 }

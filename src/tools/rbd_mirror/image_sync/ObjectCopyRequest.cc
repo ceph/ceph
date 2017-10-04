@@ -278,7 +278,7 @@ void ObjectCopyRequest<I>::send_write_object() {
       op.remove();
       break;
     default:
-      assert(false);
+      ceph_abort();
     }
   }
 

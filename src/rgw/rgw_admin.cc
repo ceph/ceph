@@ -2471,7 +2471,7 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      assert(false);
+      ceph_abort();
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
       user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
@@ -2513,7 +2513,7 @@ int main(int argc, const char **argv)
       } else {
         cerr << "bad key type: " << key_type_str << std::endl;
         usage();
-	assert(false);
+	ceph_abort();
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
       job_id = val;
@@ -2628,7 +2628,7 @@ int main(int argc, const char **argv)
       if (bucket_id.empty()) {
         cerr << "bad bucket-id" << std::endl;
         usage();
-	assert(false);
+	ceph_abort();
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
@@ -2803,7 +2803,7 @@ int main(int argc, const char **argv)
 
   if (args.empty()) {
     usage();
-    assert(false);
+    ceph_abort();
   }
   else {
     const char *prev_cmd = NULL;
@@ -2814,7 +2814,7 @@ int main(int argc, const char **argv)
       if (opt_cmd < 0) {
 	cerr << "unrecognized arg " << *i << std::endl;
 	usage();
-	assert(false);
+	ceph_abort();
       }
       if (!need_more) {
 	++i;
@@ -2826,7 +2826,7 @@ int main(int argc, const char **argv)
 
     if (opt_cmd == OPT_NO_CMD) {
       usage();
-      assert(false);
+      ceph_abort();
     }
 
     /* some commands may have an optional extra param */
@@ -2884,7 +2884,7 @@ int main(int argc, const char **argv)
   else {
     cerr << "unrecognized format: " << format << std::endl;
     usage();
-    assert(false);
+    ceph_abort();
   }
 
   realm_name = g_conf->rgw_realm;
@@ -5002,7 +5002,7 @@ int main(int argc, const char **argv)
     if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
       cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
       usage();
-      assert(false);
+      ceph_abort();
     }
 
     string oid;
@@ -5101,7 +5101,7 @@ next:
     if (pool_name.empty()) {
       cerr << "need to specify pool to add!" << std::endl;
       usage();
-      assert(false);
+      ceph_abort();
     }
 
     int ret = store->add_bucket_placement(pool);
@@ -5113,7 +5113,7 @@ next:
     if (pool_name.empty()) {
       cerr << "need to specify pool to remove!" << std::endl;
       usage();
-      assert(false);
+      ceph_abort();
     }
 
     int ret = store->remove_bucket_placement(pool);

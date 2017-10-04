@@ -356,7 +356,7 @@ void MetadataRemoveEvent::dump(Formatter *f) const {
 }
 
 void UnknownEvent::encode(bufferlist& bl) const {
-  assert(false);
+  ceph_abort();
 }
 
 void UnknownEvent::decode(__u8 version, bufferlist::iterator& it) {
@@ -627,7 +627,7 @@ void CliClientMeta::dump(Formatter *f) const {
 }
 
 void UnknownClientMeta::encode(bufferlist& bl) const {
-  assert(false);
+  ceph_abort();
 }
 
 void UnknownClientMeta::decode(__u8 version, bufferlist::iterator& it) {
