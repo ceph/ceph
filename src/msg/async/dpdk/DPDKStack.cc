@@ -48,6 +48,7 @@
 
 #include "common/dout.h"
 #include "include/assert.h"
+#include "common/Cond.h"
 
 #define dout_subsys ceph_subsys_dpdk
 #undef dout_prefix
