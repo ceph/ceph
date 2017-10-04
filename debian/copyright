@@ -29,6 +29,11 @@ Files: src/include/ceph_hash.cc
 Copyright: None
 License: Public domain
 
+Files: src/include/timegm.h
+Copyright: Howard Hinnant
+           2010-2011 Vicente J. Botet Escriba
+License: Boost Software License, Version 1.0
+
 Files: src/common/bloom_filter.hpp
 Copyright: Copyright (C) 2000 Arash Partow
 License: Boost Software License, Version 1.0
