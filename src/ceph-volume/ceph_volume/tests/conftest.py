@@ -1,5 +1,5 @@
 import pytest
-from ceph_volume.devices.lvm import api
+from ceph_volume.api import lvm as lvm_api
 
 
 class Capture(object):
@@ -33,7 +33,7 @@ def capture():
 @pytest.fixture
 def volumes(monkeypatch):
     monkeypatch.setattr('ceph_volume.process.call', lambda x: ('', '', 0))
-    volumes = api.Volumes()
+    volumes = lvm_api.Volumes()
     volumes._purge()
     return volumes
 
@@ -41,7 +41,7 @@ def volumes(monkeypatch):
 @pytest.fixture
 def volume_groups(monkeypatch):
     monkeypatch.setattr('ceph_volume.process.call', lambda x: ('', '', 0))
-    vgs = api.VolumeGroups()
+    vgs = lvm_api.VolumeGroups()
     vgs._purge()
     return vgs
 
