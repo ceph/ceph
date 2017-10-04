@@ -5,15 +5,15 @@
 # This tool's purpose is to make it easier to merge PRs into Ceph.
 #
 # Because developers often have custom names for the ceph upstream remote
-# (https://github.com/ceph/ceph.git), You will probably want to set the
+# (https://github.com/ceph/ceph.git), You will probably want to export the
 # PTL_TOOL_BASE_PATH environment variable in your shell rc files before using
 # this script:
 #
-#     PTL_TOOL_BASE_PATH=refs/remotes/upstream/
+#     export PTL_TOOL_BASE_PATH=refs/remotes/<remotename>/
 #
 # and PTL_TOOL_BASE_REMOTE as the name of your Ceph upstream remote (default: "upstream"):
 #
-#     PTL_TOOL_BASE_REMOTE=origin
+#     export PTL_TOOL_BASE_REMOTE=<remotename>
 #
 #
 # ** Here are some basic exmples to get started: **
