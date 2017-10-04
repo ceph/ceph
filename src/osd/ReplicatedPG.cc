@@ -356,6 +356,15 @@ void ReplicatedPG::send_message_osd_cluster(
   osd->send_message_osd_cluster(m, con);
 }
 
+void ReplicatedPG::backfill_add_missing(
+  const hobject_t &oid,
+  eversion_t v)
+{
+  dout(0) << __func__ << ": oid " << oid << " version " << v << dendl;
+  backfills_in_flight.erase(oid);
+  missing_loc.add_missing(oid, v, eversion_t());
+}
+
 ConnectionRef ReplicatedPG::get_con_osd_cluster(
   int peer, epoch_t from_epoch)
 {

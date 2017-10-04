@@ -282,6 +282,7 @@ public:
     const object_stat_sum_t &stat_diff);
   void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) override;
   void cancel_pull(const hobject_t &soid);
+  void backfill_add_missing(const hobject_t &oid, eversion_t v) override;
 
   template <typename T>
   class BlessedGenContext : public GenContext<T> {

@@ -196,6 +196,7 @@ void ECBackend::_failed_push(const hobject_t &hoid,
   dout(10) << __func__ << ": canceling recovery op for obj " << hoid
 	   << dendl;
   assert(recovery_ops.count(hoid));
+  eversion_t v = recovery_ops[hoid].v;
   recovery_ops.erase(hoid);
 
   list<pg_shard_t> fl;
@@ -203,6 +204,8 @@ void ECBackend::_failed_push(const hobject_t &hoid,
     fl.push_back(i.first);
   }
   get_parent()->failed_push(fl, hoid);
+  get_parent()->backfill_add_missing(hoid, v);
+  get_parent()->finish_degraded_object(hoid);
 }
 
 struct OnRecoveryReadComplete :
