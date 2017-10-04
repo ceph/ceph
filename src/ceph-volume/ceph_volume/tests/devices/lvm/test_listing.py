@@ -1,5 +1,6 @@
 import pytest
 from ceph_volume.devices import lvm
+from ceph_volume.api import lvm as api
 
 
 class TestReadableTag(object):
@@ -71,7 +72,7 @@ class TestFullReport(object):
 
     def test_no_ceph_lvs(self, volumes, monkeypatch):
         # ceph lvs are detected by looking into its tags
-        osd = lvm.api.Volume(lv_name='volume1', lv_path='/dev/VolGroup/lv', lv_tags={})
+        osd = api.Volume(lv_name='volume1', lv_path='/dev/VolGroup/lv', lv_tags={})
         volumes.append(osd)
         monkeypatch.setattr(lvm.listing.api, 'Volumes', lambda: volumes)
         result = lvm.listing.List([]).full_report()
@@ -79,7 +80,7 @@ class TestFullReport(object):
 
     def test_ceph_data_lv_reported(self, volumes, monkeypatch):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
-        osd = lvm.api.Volume(
+        osd = api.Volume(
             lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', lv_tags=tags)
         volumes.append(osd)
         monkeypatch.setattr(lvm.listing.api, 'Volumes', lambda: volumes)
@@ -89,9 +90,9 @@ class TestFullReport(object):
     def test_ceph_journal_lv_reported(self, volumes, monkeypatch):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
         journal_tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=journal'
-        osd = lvm.api.Volume(
+        osd = api.Volume(
             lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', lv_tags=tags)
-        journal = lvm.api.Volume(
+        journal = api.Volume(
             lv_name='journal', lv_uuid='x', lv_path='/dev/VolGroup/journal', lv_tags=journal_tags)
         volumes.append(osd)
         volumes.append(journal)
@@ -102,7 +103,7 @@ class TestFullReport(object):
 
     def test_physical_disk_gets_reported(self, volumes, monkeypatch):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
-        osd = lvm.api.Volume(
+        osd = api.Volume(
             lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', lv_tags=tags)
         volumes.append(osd)
         monkeypatch.setattr(lvm.listing.api, 'Volumes', lambda: volumes)
@@ -117,7 +118,7 @@ class TestSingleReport(object):
 
     def test_not_a_ceph_lv(self, volumes, monkeypatch):
         # ceph lvs are detected by looking into its tags
-        lv = lvm.api.Volume(
+        lv = api.Volume(
             lv_name='lv', vg_name='VolGroup', lv_path='/dev/VolGroup/lv', lv_tags={})
         volumes.append(lv)
         monkeypatch.setattr(lvm.listing.api, 'Volumes', lambda: volumes)
@@ -127,7 +128,7 @@ class TestSingleReport(object):
     def test_report_a_ceph_lv(self, volumes, monkeypatch):
         # ceph lvs are detected by looking into its tags
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
-        lv = lvm.api.Volume(
+        lv = api.Volume(
             lv_name='lv', vg_name='VolGroup', lv_path='/dev/VolGroup/lv', lv_tags=tags)
         volumes.append(lv)
         monkeypatch.setattr(lvm.listing.api, 'Volumes', lambda: volumes)
@@ -139,7 +140,7 @@ class TestSingleReport(object):
     def test_report_a_ceph_journal_device(self, volumes, monkeypatch):
         # ceph lvs are detected by looking into its tags
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data,ceph.journal_device=/dev/sda1'
-        lv = lvm.api.Volume(
+        lv = api.Volume(
             lv_name='lv', vg_name='VolGroup', lv_path='/dev/VolGroup/lv', lv_tags=tags)
         volumes.append(lv)
         monkeypatch.setattr(lvm.listing.api, 'Volumes', lambda: volumes)
