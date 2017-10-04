@@ -6640,6 +6640,15 @@ PG::RecoveryState::RepNotRecovering::RepNotRecovering(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 }
 
+boost::statechart::result
+PG::RecoveryState::RepNotRecovering::react(const RejectRemoteReservation &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->reject_reservation();
+  post_event(RemoteReservationRejected());
+  return discard_event();
+}
+
 void PG::RecoveryState::RepNotRecovering::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -6713,14 +6722,12 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected: failure injection"
 		       << dendl;
-    pg->reject_reservation();
-    post_event(RemoteReservationRejected());
+    post_event(RejectRemoteReservation());
   } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
       pg->osd->check_backfill_full(ss)) {
     ldout(pg->cct, 10) << "backfill reservation rejected: "
 		       << ss.str() << dendl;
-    pg->reject_reservation();
-    post_event(RemoteReservationRejected());
+    post_event(RejectRemoteReservation());
   } else {
     pg->osd->remote_reserver.request_reservation(
       pg->info.pgid,
@@ -6749,15 +6756,13 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
 		       << "failure injection" << dendl;
-    pg->reject_reservation();
-    post_event(RemoteReservationRejected());
+    post_event(RejectRemoteReservation());
     return discard_event();
   } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
 	     pg->osd->check_backfill_full(ss)) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
 		       << ss.str() << dendl;
-    pg->reject_reservation();
-    post_event(RemoteReservationRejected());
+    post_event(RejectRemoteReservation());
     return discard_event();
   } else {
     pg->osd->send_message_osd_cluster(
@@ -6769,6 +6774,16 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
       pg->get_osdmap()->get_epoch());
     return transit<RepRecovering>();
   }
+}
+
+boost::statechart::result
+PG::RecoveryState::RepWaitBackfillReserved::react(
+  const RejectRemoteReservation &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->reject_reservation();
+  post_event(RemoteReservationRejected());
+  return discard_event();
 }
 
 boost::statechart::result
