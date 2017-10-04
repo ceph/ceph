@@ -684,7 +684,6 @@ void FileStore::collect_metadata(map<string,string> *pm)
 {
   char partition_path[PATH_MAX];
   char dev_node[PATH_MAX];
-  int rc = 0;
 
   (*pm)["filestore_backend"] = backend->get_name();
   ostringstream ss;
@@ -692,43 +691,36 @@ void FileStore::collect_metadata(map<string,string> *pm)
   (*pm)["filestore_f_type"] = ss.str();
 
   if (cct->_conf->filestore_collect_device_partition_information) {
-    rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
-  } else {
-    rc = -EINVAL;
-  }
-
-  switch (rc) {
-    case -EOPNOTSUPP:
-    case -EINVAL:
+    int rc = 0;
+    BlkDev blkdev(fsid_fd);
+    if (rc = blkdev.partition(partition_path, PATH_MAX); rc) {
       (*pm)["backend_filestore_partition_path"] = "unknown";
-      (*pm)["backend_filestore_dev_node"] = "unknown";
-      break;
-    case -ENODEV:
+    } else {
       (*pm)["backend_filestore_partition_path"] = string(partition_path);
+    }
+    if (rc = blkdev.wholedisk(dev_node, PATH_MAX); rc) {
       (*pm)["backend_filestore_dev_node"] = "unknown";
-      break;
-    default:
-      (*pm)["backend_filestore_partition_path"] = string(partition_path);
+    } else {
       (*pm)["backend_filestore_dev_node"] = string(dev_node);
-      if (vdo_fd >= 0) {
-	(*pm)["vdo"] = "true";
-	(*pm)["vdo_physical_size"] =
-	  stringify(4096 * get_vdo_stat(vdo_fd, "physical_blocks"));
-      }
+    }
+    if (rc == 0 && vdo_fd >= 0) {
+      (*pm)["vdo"] = "true";
+      (*pm)["vdo_physical_size"] =
+	stringify(4096 * get_vdo_stat(vdo_fd, "physical_blocks"));
+    }
   }
 }
 
 int FileStore::get_devices(set<string> *ls)
 {
-  char partition_path[PATH_MAX];
   char dev_node[PATH_MAX];
-  int rc = 0;
-  rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
-  if (rc == 0) {
-    ls->insert(dev_node);
-    if (strncmp(dev_node, "dm-", 3) == 0) {
-      get_dm_parents(dev_node, ls);
-    }
+  BlkDev blkdev(fsid_fd);
+  if (int rc = blkdev.wholedisk(dev_node, PATH_MAX); rc) {
+    return rc;
+  }
+  ls->insert(dev_node);
+  if (strncmp(dev_node, "dm-", 3) == 0) {
+    get_dm_parents(dev_node, ls);
   }
   return 0;
 }
@@ -1257,10 +1249,8 @@ int FileStore::_detect_fs()
 
   // vdo
   {
-    char partition_path[PATH_MAX];
     char dev_node[PATH_MAX];
-    int rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
-    if (rc == 0) {
+    if (int rc = BlkDev{fsid_fd}.wholedisk(dev_node, PATH_MAX); rc == 0) {
       vdo_fd = get_vdo_stats_handle(dev_node, &vdo_name);
       if (vdo_fd >= 0) {
 	dout(0) << __func__ << " VDO volume " << vdo_name << " for " << dev_node

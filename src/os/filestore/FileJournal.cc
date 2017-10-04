@@ -146,7 +146,8 @@ int FileJournal::_open(bool forwrite, bool create)
 int FileJournal::_open_block_device()
 {
   int64_t bdev_sz = 0;
-  int ret = get_block_device_size(fd, &bdev_sz);
+  BlkDev blkdev(fd);
+  int ret = blkdev.get_size(&bdev_sz);
   if (ret) {
     dout(0) << __func__ << ": failed to read block device size." << dendl;
     return -EIO;
@@ -167,7 +168,7 @@ int FileJournal::_open_block_device()
   block_size = cct->_conf->journal_block_size;
 
   if (cct->_conf->journal_discard) {
-    discard = block_device_support_discard(fn.c_str());
+    discard = blkdev.support_discard();
     dout(10) << fn << " support discard: " << (int)discard << dendl;
   }
 
@@ -1735,9 +1736,12 @@ void FileJournal::do_discard(int64_t offset, int64_t end)
     return;
   end = round_up_to(end - block_size, block_size);
   ceph_assert(end >= offset);
-  if (offset < end)
-    if (block_device_discard(fd, offset, end - offset) < 0)
-	dout(1) << __func__ << " ioctl(BLKDISCARD) error:" << cpp_strerror(errno) << dendl;
+  if (offset < end) {
+    BlkDev blkdev(fd);
+    if (blkdev.discard(offset, end - offset) < 0) {
+	dout(1) << __func__ << "ioctl(BLKDISCARD) error:" << cpp_strerror(errno) << dendl;
+    }
+  }
 }
 
 void FileJournal::committed_thru(uint64_t seq)

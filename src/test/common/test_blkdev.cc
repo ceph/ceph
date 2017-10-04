@@ -4,108 +4,90 @@
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <linux/kdev_t.h>
 
 #include "include/types.h"
 #include "common/blkdev.h"
 
 #include "gtest/gtest.h"
+#include "gmock/gmock.h"
 #include <iostream>
 
-  using namespace std;
+using namespace std;
+using namespace testing;
 
-TEST(blkdev, get_block_device_base) {
-  char buf[PATH_MAX*2];
-  char buf3[PATH_MAX*2];
+class MockBlkDev : public BlkDev {
+ public:
+  // pass 0 as fd, so it won't try to use the empty devname
+  MockBlkDev() : BlkDev(0) {};
+  virtual ~MockBlkDev() {}
 
-  ASSERT_EQ(-EINVAL, get_block_device_base("/etc/notindev", buf, 100));
+  MOCK_CONST_METHOD0(sysfsdir, const char*());
+  MOCK_CONST_METHOD2(wholedisk, int(char* device, size_t max));
+};
 
-  for (int i=0; i<2; ++i) {
-    string root;
-    if (i == 0) {
-      const char* env = getenv("CEPH_ROOT");
-      ASSERT_NE(env, nullptr) << "Environment Variable CEPH_ROOT not found!";
-      root = string(env) + "/src/test/common/test_blkdev_sys_block";
-    }
-    set_block_device_sandbox_dir(root.c_str());
 
-    // work backwards
-    sprintf(buf, "%s/sys/block", root.c_str());
-    DIR *dir = opendir(buf);
-    ASSERT_NE(dir, nullptr);
-    struct dirent *de = nullptr;
-    while ((de = ::readdir(dir))) {
-      if (de->d_name[0] == '.')
-	continue;
+class BlockDevTest : public ::testing::Test {
+public:
+  string *root;
 
-      char base[PATH_MAX];
-      sprintf(base, "/dev/%s", de->d_name);
-      printf("base %s (%s)\n", base, de->d_name);
-      for (char *p = base; *p; ++p)
-	if (*p == '!')
-	  *p = '/';
+protected:
+  virtual void SetUp() {
+    const char *sda_name = "sda";
+    const char *sdb_name = "sdb";
+    const char* env = getenv("CEPH_ROOT");
+    ASSERT_NE(env, nullptr) << "Environment Variable CEPH_ROOT not found!";
+    root = new string(env);
+    *root += "/src/test/common/test_blkdev_sys_block/sys";
 
-      ASSERT_EQ(-ERANGE, get_block_device_base(base, buf3, 1));
-      ASSERT_EQ(0, get_block_device_base(base, buf3, sizeof(buf3)));
-      printf("  got '%s' expected '%s'\n", buf3, de->d_name);
-      ASSERT_EQ(0, strcmp(de->d_name, buf3));
-      printf("  discard  supported = %d\n",
-	     (int)block_device_support_discard(base));
+    EXPECT_CALL(sda, sysfsdir())
+      .WillRepeatedly(Return(root->c_str()));
+    EXPECT_CALL(sda, wholedisk(NotNull(), Ge(0ul)))
+      .WillRepeatedly(
+        DoAll(
+          SetArrayArgument<0>(sda_name, sda_name + strlen(sda_name) + 1),
+          Return(0)));
 
-      char subdirfn[PATH_MAX];
-      sprintf(subdirfn, "%s/sys/block/%s", root.c_str(), de->d_name);
-      DIR *subdir = opendir(subdirfn);
-      ASSERT_TRUE(subdir);
-      struct dirent *de2 = nullptr;
-      while ((de2 = ::readdir(subdir))) {
-	if (de2->d_name[0] == '.')
-	  continue;
-	// partiions will be prefixed with the base name
-	if (strncmp(de2->d_name, de->d_name, strlen(de->d_name))) {
-	  //printf("skipping %s\n", de2->d_name);
-	  continue;
-	}
-	char part[PATH_MAX];
-	sprintf(part, "/dev/%s", de2->d_name);
-	for (char *p = part; *p; ++p)
-	  if (*p == '!')
-	    *p = '/';
-	printf(" part %s (%s %s)\n", part, de->d_name, de2->d_name);
-
-	ASSERT_EQ(0, get_block_device_base(part, buf3, sizeof(buf3)));
-	printf("  got '%s' expected '%s'\n", buf3, de->d_name);
-	ASSERT_EQ(0, strcmp(buf3, de->d_name));
-	printf("  discard  supported = %d\n",
-	       (int)block_device_support_discard(part));
-      }
-
-      closedir(subdir);
-    }
-    closedir(dir);
+    EXPECT_CALL(sdb, sysfsdir())
+      .WillRepeatedly(Return(root->c_str()));
+    EXPECT_CALL(sdb, wholedisk(NotNull(), Ge(0ul)))
+      .WillRepeatedly(
+        DoAll(
+          SetArrayArgument<0>(sdb_name, sdb_name + strlen(sdb_name) + 1),
+          Return(0)));
   }
-}
 
-TEST(blkdev, device_model)
+  virtual void TearDown() {
+    delete root;
+  }
+
+  MockBlkDev sda, sdb;
+};
+
+TEST_F(BlockDevTest, device_model)
 {
-  const char* env = getenv("CEPH_ROOT");
-  ASSERT_NE(env, nullptr) << "Environment Variable CEPH_ROOT not found!";
-  string root = string(env) + "/src/test/common/test_blkdev_sys_block";
-  set_block_device_sandbox_dir(root.c_str());
-
   char model[1000] = {0};
-  int rc = block_device_model("sda", model, sizeof(model));
+  int rc = sda.model(model, sizeof(model));
   ASSERT_EQ(0, rc);
-
-  printf("model '%s'\n", model);
-  ASSERT_EQ(strcmp(model, "myfancymodel"), 0);
+  ASSERT_STREQ(model, "myfancymodel");
 }
 
-TEST(blkdev, is_rotational)
+TEST_F(BlockDevTest, discard)
 {
-  const char* env = getenv("CEPH_ROOT");
-  ASSERT_NE(env, nullptr) << "Environment Variable CEPH_ROOT not found!";
-  string root = string(env) + "/src/test/common/test_blkdev_sys_block";
-  set_block_device_sandbox_dir(root.c_str());
+  EXPECT_TRUE(sda.support_discard());
+  EXPECT_TRUE(sdb.support_discard());
+}
 
-  ASSERT_FALSE(block_device_is_rotational("sda"));
-  ASSERT_TRUE(block_device_is_rotational("sdb"));
+TEST_F(BlockDevTest, is_nvme)
+{
+  // It would be nice to have a positive NVME test too, but I don't have any
+  // examples for the canned data.
+  EXPECT_FALSE(sda.is_nvme());
+  EXPECT_FALSE(sdb.is_nvme());
+}
+
+TEST_F(BlockDevTest, is_rotational)
+{
+  EXPECT_FALSE(sda.is_rotational());
+  EXPECT_TRUE(sdb.is_rotational());
 }

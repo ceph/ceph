@@ -868,7 +868,8 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 
     if (!size) {
       int64_t bdev_size = 0;
-      r = get_block_device_size(fd, &bdev_size);
+      BlkDev blkdev(fd);
+      r = blkdev.get_size(&bdev_size);
       if (r < 0) {
         std::cerr << "rbd: unable to get size of file/block device"
                   << std::endl;
