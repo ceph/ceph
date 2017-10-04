@@ -20,12 +20,6 @@
  *
  * For write delegations, we need whatever read delegations need plus the
  * caps to allow writing to the file (Fbwx).
- *
- * FIXME: Unfortunately, the MDS will begin recalling caps and then reply to
- * the open, before caps are returned by a client. This means that write
- * delegations are not currently being broken by conflicting opens. You have
- * to wait for an actual attempt at conflicting access. The workaround for now
- * is to have write delegations request AxXx.
  */
 int ceph_deleg_caps_for_type(unsigned type)
 {
