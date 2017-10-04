@@ -627,11 +627,17 @@ int main(int argc, const char **argv)
     std::string mon_addr_str;
     if (g_conf->get_val_from_conf_file(my_sections, "mon addr",
 				       mon_addr_str, true) == 0) {
-      if (conf_addr.parse(mon_addr_str.c_str()) && (ipaddr != conf_addr)) {
-	derr << "WARNING: 'mon addr' config option " << conf_addr
-	     << " does not match monmap file" << std::endl
-	     << "         continuing with monmap configuration" << dendl;
-      }
+      if (conf_addr.parse(mon_addr_str.c_str())) {
+        if (conf_addr.get_port() == 0)
+          conf_addr.set_port(CEPH_MON_PORT);
+        if (ipaddr != conf_addr) {
+	  derr << "WARNING: 'mon addr' config option " << conf_addr
+	       << " does not match monmap file" << std::endl
+	       << "         continuing with monmap configuration" << dendl;
+        }
+      } else
+          derr << "WARNING: invalid 'mon addr' config option" << std::endl
+               << "         continuing with monmap configuration" << dendl;
     }
   } else {
     dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
