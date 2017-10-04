@@ -54,6 +54,7 @@ class Module(MgrModule):
                         "format": "json",
                         "pool": pool_name,
                         'rule': pool_name,
+                        'erasure_code_profile': pool_name,
                         "pool_type": 'replicated',
                         'pg_num': str(pg_num),
                     }), "")
