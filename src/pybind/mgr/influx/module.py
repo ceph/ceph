@@ -83,7 +83,7 @@ class Module(MgrModule):
                 value = counter_info['value']
 
                 data.append({
-                    "measurement": "ceph_osd_stats",
+                    "measurement": "ceph_daemon_stats",
                     "tags": {
                         "ceph_daemon": daemon,
                         "type_instance": path,
