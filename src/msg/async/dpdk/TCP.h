@@ -383,7 +383,7 @@ class tcp {
       uint32_t key[16];
       isn_secret () {
         for (auto& k : key) {
-          k = ceph::util::generate_random_number<uint32_t>();
+          k = ceph::util::generate_random_number<uint32_t>(0, std::numeric_limits<uint32_t>::max());
         }
       }
     };
