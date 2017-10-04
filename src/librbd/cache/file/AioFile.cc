@@ -82,7 +82,7 @@ void AioFile<I>::open(Context *on_finish) {
             continue;
           }
 	  lderr(cct) << "error opening " << m_name << ": "
-		     << cpp_strerror(r) << dendl;
+		     << r << dendl;
           on_finish->complete(r);
           return;
         }
