@@ -6689,7 +6689,7 @@ PG::RecoveryState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &
 
 boost::statechart::result
 PG::RecoveryState::RepWaitRecoveryReserved::react(
-  const RemoteReservationRejected &evt)
+  const RemoteReservationCanceled &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
@@ -6787,7 +6787,17 @@ PG::RecoveryState::RepWaitBackfillReserved::react(
 }
 
 boost::statechart::result
-PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteReservationRejected &evt)
+PG::RecoveryState::RepWaitBackfillReserved::react(
+  const RemoteReservationRejected &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
+  return transit<RepNotRecovering>();
+}
+
+boost::statechart::result
+PG::RecoveryState::RepWaitBackfillReserved::react(
+  const RemoteReservationCanceled &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
