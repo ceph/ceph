@@ -4,6 +4,7 @@
 #include "librbd/cache/file/AioFile.h"
 #include "include/Context.h"
 #include "common/dout.h"
+#include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include <sys/types.h>
@@ -71,6 +72,7 @@ AioFile<I>::~AioFile() {
 template <typename I>
 void AioFile<I>::open(Context *on_finish) {
   m_work_queue.queue(new FunctionContext([this, on_finish](int r) {
+      CephContext *cct = m_image_ctx.cct;
       while (true) {
         m_fd = ::open(m_name.c_str(), O_CREAT | O_NOATIME | O_RDWR,
                       S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
@@ -79,6 +81,8 @@ void AioFile<I>::open(Context *on_finish) {
           if (r == -EINTR) {
             continue;
           }
+	  lderr(cct) << "error opening " << m_name << ": "
+		     << cpp_strerror(r) << dendl;
           on_finish->complete(r);
           return;
         }
@@ -205,6 +209,8 @@ int AioFile<I>::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl) {
       if (r == -EINTR) {
         continue;
       }
+      lderr(cct) << "error reading " << m_name << ": "
+		 << cpp_strerror(r) << dendl;
 
       return r;
     }
