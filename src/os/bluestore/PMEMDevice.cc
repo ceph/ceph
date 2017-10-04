@@ -84,7 +84,8 @@ int PMEMDevice::open(const string& p)
   }
   if (S_ISBLK(st.st_mode)) {
     int64_t s;
-    r = get_block_device_size(fd, &s);
+    BlkDev blkdev(fd);
+    r = get_block_device_size(&s);
     if (r < 0) {
       goto out_fail;
     }
@@ -153,42 +154,23 @@ int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) c
     return -errno;
   if (S_ISBLK(st.st_mode)) {
     (*pm)[prefix + "access_mode"] = "blk";
-    char partition_path[PATH_MAX];
-    char dev_node[PATH_MAX];
-    int rc = get_device_by_fd(fd, partition_path, dev_node, PATH_MAX);
-    switch (rc) {
-    case -EOPNOTSUPP:
-    case -EINVAL:
-      (*pm)[prefix + "partition_path"] = "unknown";
-      (*pm)[prefix + "dev_node"] = "unknown";
-      break;
-    case -ENODEV:
-      (*pm)[prefix + "partition_path"] = string(partition_path);
-      (*pm)[prefix + "dev_node"] = "unknown";
-      break;
-    default:
-      {
-	char buffer[1024] = {0};
-	(*pm)[prefix + "partition_path"] = string(partition_path);
-	(*pm)[prefix + "dev_node"] = string(dev_node);
+    char buffer[1024] = {0};
+    BlkDev blkdev(fd_buffered);
 
-	block_device_model(dev_node, buffer, sizeof(buffer));
-	(*pm)[prefix + "model"] = buffer;
-	
-	buffer[0] = '\0';
-	block_device_dev(dev_node, buffer, sizeof(buffer));
-	(*pm)[prefix + "dev"] = buffer;
-	
-	// nvme exposes a serial number
-	buffer[0] = '\0';
-	block_device_serial(dev_node, buffer, sizeof(buffer));
-	(*pm)[prefix + "serial"] = buffer;
+    blkdev.block_device_model(buffer, sizeof(buffer));
+    (*pm)[prefix + "model"] = buffer;
 
-	if (block_device_nvme(dev_node)) {
-	  (*pm)[prefix + "type"] = "nvme";
-	}
-      }
-    }
+    buffer[0] = '\0';
+    blkdev.block_device_dev(buffer, sizeof(buffer));
+    (*pm)[prefix + "dev"] = buffer;
+
+    // nvme exposes a serial number
+    buffer[0] = '\0';
+    blkdev.block_device_serial(buffer, sizeof(buffer));
+    (*pm)[prefix + "serial"] = buffer;
+
+    if (blkdev.block_device_nvme())
+      (*pm)[prefix + "type"] = "nvme";
   } else {
     (*pm)[prefix + "access_mode"] = "file";
     (*pm)[prefix + "path"] = path;

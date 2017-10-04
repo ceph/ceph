@@ -17,12 +17,10 @@ int main(int argc, char **argv)
 	bool discard_support;
 	bool nvme;
 	bool rotational;
-	char device[BUFSIZE];
-	char partition[BUFSIZE];
 	char dev[BUFSIZE];
 	char model[BUFSIZE];
 	char serial[BUFSIZE];
-	char device[BUFSIZE];
+	char wholedisk[BUFSIZE];
 	char partition[BUFSIZE];
 
 	if (argc != 2) {
@@ -36,29 +34,31 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	if ((ret = get_block_device_size(fd, &size)) < 0) {
+	BlkDev blkdev(fd);
+
+	if ((ret = blkdev.get_block_device_size(&size)) < 0) {
 		fprintf(stderr, "get_block_device_size: %s\n", strerror(-ret));
 		return -1;
 	}
 
-	if ((ret = get_device_by_fd(fd, partition, device, BUFSIZE)) < 0) {
-		fprintf(stderr, "get_device_by_fd: %s\n", strerror(-ret));
-		return -1;
-	}
+	discard_support = blkdev.block_device_support_discard();
 
-	discard_support = block_device_support_discard(device);
+	nvme = blkdev.block_device_is_nvme();
 
-	nvme = block_device_is_nvme(device);
+	rotational = blkdev.block_device_is_rotational();
 
-	rotational = block_device_is_rotational(device);
-
-	if ((ret = block_device_dev(device, dev, BUFSIZE)) < 0) {
+	if ((ret = blkdev.block_device_dev(dev, BUFSIZE)) < 0) {
 		fprintf(stderr, "block_device_dev: %s\n", strerror(-ret));
 		return -1;
 	}
 
-	if ((ret = blkdev.get_device_by_fd(partition, device, BUFSIZE)) < 0) {
-		fprintf(stderr, "get_device_by_fd: %s\n", strerror(-ret));
+	if ((ret = blkdev.block_device_partition(partition, BUFSIZE)) < 0) {
+		fprintf(stderr, "block_device_partition: %s\n", strerror(-ret));
+		return -1;
+	}
+
+	if ((ret = blkdev.block_device_wholedisk(wholedisk, BUFSIZE)) < 0) {
+		fprintf(stderr, "block_device_wholedisk: %s\n", strerror(-ret));
 		return -1;
 	}
 
@@ -70,7 +70,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	ret = block_device_serial(device, serial, BUFSIZE);
+	ret = blkdev.block_device_serial(serial, BUFSIZE);
 	if (ret == -ENOENT) {
 		snprintf(serial, BUFSIZE, "Unknown");
 	} else if (ret < 0) {
@@ -84,7 +84,7 @@ int main(int argc, char **argv)
 	fprintf(stdout, "NVME:\t\t%s\n", nvme ? "yes" : "no");
 	fprintf(stdout, "Rotational:\t%s\n", rotational ? "yes" : "no");
 	fprintf(stdout, "Dev:\t\t%s\n", dev);
-	fprintf(stdout, "Device:\t\t%s\n", device);
+	fprintf(stdout, "Whole disk:\t%s\n", wholedisk);
 	fprintf(stdout, "Partition:\t%s\n", partition);
 	fprintf(stdout, "Model:\t\t%s\n", model);
 	fprintf(stdout, "Serial:\t\t%s\n", serial);

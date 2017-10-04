@@ -11,27 +11,36 @@ enum blkdev_prop_t {
   BLKDEV_PROP_NUMPROPS
 };
 
-/* for testing purposes */
-extern void set_block_device_sandbox_dir(const char *dir);
+class BlkDev {
+public:
+  BlkDev(int fd);
 
-// from a path (e.g., "/dev/sdb")
-extern int get_block_device_base(const char *path, char *devname, size_t len);
+  /* GoogleMock requires a virtual destructor */
+  virtual ~BlkDev() {}
 
-// from an fd
-extern int block_device_discard(int fd, int64_t offset, int64_t len);
-extern int get_block_device_size(int fd, int64_t *psize);
-extern int get_device_by_fd(int fd, char* partition, char* device, size_t max);
+  // from an fd
+  int block_device_discard(int64_t offset, int64_t len);
+  int get_block_device_size(int64_t *psize);
+  int get_devid(dev_t *id);
+  int block_device_partition(char* partition, size_t max);
+  bool block_device_support_discard();
+  bool block_device_is_nvme();
+  bool block_device_is_rotational();
+  int block_device_dev(char *dev, size_t max);
+  int block_device_model(char *model, size_t max);
+  int block_device_serial(char *serial, size_t max);
 
-// from a uuid
-extern int get_device_by_uuid(uuid_d dev_uuid, const char* label,
-			      char* partition, char* device);
+  /* virtual for testing purposes */
+  virtual const char *sysfsdir();
+  virtual int block_device_wholedisk(char* device, size_t max);
 
-// from a device (e.g., "sdb")
-extern bool block_device_support_discard(const char *devname);
-extern bool block_device_is_nvme(const char *devname);
-extern bool block_device_is_rotational(const char *devname);
-extern int block_device_dev(const char *devname, char *dev, size_t max);
-extern int block_device_model(const char *devname, char *model, size_t max);
-extern int block_device_serial(const char *devname, char *serial, size_t max);
+protected:
+  int64_t get_block_device_int_property(blkdev_prop_t prop);
+  int64_t get_block_device_string_property( blkdev_prop_t prop, char *val,
+    size_t maxlen);
+
+private:
+  int fd;
+};
 
 #endif
