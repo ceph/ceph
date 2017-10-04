@@ -1,6 +1,6 @@
 import pytest
 from ceph_volume import process, exceptions
-from ceph_volume.devices.lvm import api
+from ceph_volume.api import lvm as api
 
 
 class TestParseTags(object):
