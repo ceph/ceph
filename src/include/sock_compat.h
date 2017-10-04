@@ -14,7 +14,6 @@
 /*
  * On BSD SO_NOSIGPIPE can be set via setsockopt to block SIGPIPE.
  */
-#undef MSG_NOSIGNAL
 #ifndef MSG_NOSIGNAL
 # define MSG_NOSIGNAL 0
 # ifdef SO_NOSIGPIPE
