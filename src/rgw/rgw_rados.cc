@@ -7704,7 +7704,8 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
   int ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                       prepend_meta, get_op, rgwx_stat,
-                      sync_manifest, skip_decrypt, &cb, &in_stream_req);
+                      sync_manifest, skip_decrypt,
+                      true, &cb, &in_stream_req);
   if (ret < 0) {
     return ret;
   }
@@ -7880,7 +7881,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                       prepend_meta, get_op, rgwx_stat,
-                      sync_manifest, skip_decrypt, &cb, &in_stream_req);
+                      sync_manifest, skip_decrypt,
+                      true,
+                      &cb, &in_stream_req);
   if (ret < 0) {
     goto set_err_state;
   }
@@ -8018,7 +8021,7 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
 
   RGWRESTStreamS3PutObj *out_stream_req;
 
-  int ret = rest_master_conn->put_obj_init(user_id, dest_obj, astate->size, src_attrs, &out_stream_req);
+  int ret = rest_master_conn->put_obj_init(user_id, dest_obj, astate->size, src_attrs, true, &out_stream_req);
   if (ret < 0) {
     return ret;
   }

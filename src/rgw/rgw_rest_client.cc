@@ -413,7 +413,7 @@ static void add_grants_headers(map<int, string>& grants, RGWEnv& env, map<string
   }
 }
 
-int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs)
+int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send)
 {
   string resource = obj.bucket.name + "/" + obj.get_oid();
   string new_url = url;
@@ -487,9 +487,11 @@ int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_
   method = new_info.method;
   url = new_url;
 
-  int r = RGWHTTP::send(this);
-  if (r < 0)
-    return r;
+  if (send) {
+    int r = RGWHTTP::send(this);
+    if (r < 0)
+      return r;
+  }
 
   return 0;
 }
@@ -607,15 +609,6 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
   if (send_data) {
     set_outbl(*send_data);
     send_data_hint = true;
-  }
-
-  // Not sure if this is the place to set a send_size, curl otherwise sets
-  // chunked option and doesn't send content length anymore
-  uint64_t send_size = (size_t)(outbl.length() - write_ofs);
-
-  if (send_size > 0){
-    ldout(cct,20) << "Setting content length as " << send_size << dendl;
-    set_send_length(send_size);
   }
 
   method = new_info.method;

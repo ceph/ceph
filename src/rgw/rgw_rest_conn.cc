@@ -113,7 +113,8 @@ int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv,
 }
 
 int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
-                              map<string, bufferlist>& attrs, RGWRESTStreamS3PutObj **req)
+                              map<string, bufferlist>& attrs, bool send,
+                              RGWRESTStreamS3PutObj **req)
 {
   string url;
   int ret = get_url(url);
@@ -123,7 +124,7 @@ int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_si
   param_vec_t params;
   populate_params(params, &uid, self_zone_group);
   RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params);
-  ret = wr->put_obj_init(key, obj, obj_size, attrs);
+  ret = wr->put_obj_init(key, obj, obj_size, attrs, send);
   if (ret < 0) {
     delete wr;
     return ret;
@@ -165,8 +166,8 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, bool get_op, bool rgwx_stat,
-                         bool sync_manifest, bool skip_decrypt, RGWGetDataCB *cb,
-                         RGWRESTStreamRWRequest **req)
+                         bool sync_manifest, bool skip_decrypt,
+                         bool send, RGWGetDataCB *cb, RGWRESTStreamRWRequest **req)
 {
   string url;
   int ret = get_url(url);
@@ -221,13 +222,18 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
     set_header(mod_pg_ver, extra_headers, "HTTP_DEST_PG_VER");
   }
 
+  if (!send) {
+    return 0;
+  }
+
   int r = (*req)->send_request(key, extra_headers, obj, nullptr);
   if (r < 0) {
     delete *req;
     *req = nullptr;
+    return r;
   }
   
-  return r;
+  return 0;
 }
 
 int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req, string& etag, real_time *mtime,

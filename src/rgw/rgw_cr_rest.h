@@ -387,8 +387,8 @@ class RGWStreamSpliceCR : public RGWCoroutine {
   CephContext *cct;
   RGWHTTPManager *http_manager;
   string url;
-  RGWStreamReadHTTPResourceCRF *in_crf{nullptr};
-  RGWStreamWriteHTTPResourceCRF *out_crf{nullptr};
+  std::shared_ptr<RGWStreamReadHTTPResourceCRF> in_crf;
+  std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
   bufferlist bl;
   bool need_retry{false};
   bool sent_attrs{false};
@@ -396,8 +396,8 @@ class RGWStreamSpliceCR : public RGWCoroutine {
   int ret{0};
 public:
   RGWStreamSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
-                    RGWStreamReadHTTPResourceCRF *_in_crf,
-                    RGWStreamWriteHTTPResourceCRF *_out_crf);
+                    std::shared_ptr<RGWStreamReadHTTPResourceCRF>& _in_crf,
+                    std::shared_ptr<RGWStreamWriteHTTPResourceCRF>& _out_crf);
   ~RGWStreamSpliceCR();
 
   int operate();
@@ -408,8 +408,8 @@ class TestSpliceCR : public RGWCoroutine {
   RGWHTTPManager *http_manager;
   RGWHTTPStreamRWRequest *in_req{nullptr};
   RGWHTTPStreamRWRequest *out_req{nullptr};
-  RGWStreamReadHTTPResourceCRF *in_crf{nullptr};
-  RGWStreamWriteHTTPResourceCRF *out_crf{nullptr};
+  std::shared_ptr<RGWStreamReadHTTPResourceCRF> in_crf;
+  std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
 public:
   TestSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
                RGWHTTPStreamRWRequest *_in_req,
