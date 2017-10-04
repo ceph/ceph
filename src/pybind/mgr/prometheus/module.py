@@ -361,7 +361,7 @@ class Module(MgrModule):
 
         cherrypy.config.update({
             'server.socket_host': server_addr,
-            'server.socket_port': server_port,
+            'server.socket_port': int(server_port),
             'engine.autoreload.on': False
         })
         cherrypy.tree.mount(Root(), "/")
