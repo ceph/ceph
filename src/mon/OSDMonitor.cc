@@ -6286,7 +6286,7 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
     ss << "removed application '" << app << "' key '" << key << "' on pool '"
        << pool_name << "'";
   } else {
-    assert(false);
+    ceph_abort();
   }
 
   p.last_change = pending_inc.epoch;

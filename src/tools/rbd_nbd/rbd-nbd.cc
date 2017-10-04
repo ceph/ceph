@@ -1033,7 +1033,7 @@ static int rbd_nbd(int argc, const char *argv[])
   r = parse_args(args, &err_msg, &cfg);
   if (r == HELP_INFO) {
     usage();
-    assert(false);
+    ceph_abort();
   } else if (r == VERSION_INFO) {
     std::cout << pretty_version_to_str() << std::endl;
     return 0;
@@ -1066,7 +1066,7 @@ static int rbd_nbd(int argc, const char *argv[])
       break;
     default:
       usage();
-      assert(false);
+      ceph_abort();
       break;
   }
 
