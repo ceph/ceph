@@ -140,6 +140,9 @@ bool entity_addr_t::parse(const char *s, const char **end)
     // parse a port, too!
     p++;
     int port = atoi(p);
+    if (port > MAX_PORT_NUMBER) {
+      return false;
+    }
     set_port(port);
     while (*p && *p >= '0' && *p <= '9')
       p++;
