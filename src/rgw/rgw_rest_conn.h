@@ -89,14 +89,14 @@ public:
 
   /* async request */
   int put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
-                   map<string, bufferlist>& attrs, RGWRESTStreamS3PutObj **req);
+                   map<string, bufferlist>& attrs, bool send, RGWRESTStreamS3PutObj **req);
   int complete_request(RGWRESTStreamS3PutObj *req, string& etag, ceph::real_time *mtime);
 
   int get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
-              bool skip_decrypt, RGWGetDataCB *cb, RGWRESTStreamRWRequest **req);
+              bool skip_decrypt, bool send, RGWGetDataCB *cb, RGWRESTStreamRWRequest **req);
   int complete_request(RGWRESTStreamRWRequest *req, string& etag, ceph::real_time *mtime, uint64_t *psize, map<string, string>& attrs);
 
   int get_resource(const string& resource,

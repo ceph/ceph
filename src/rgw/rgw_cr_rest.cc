@@ -154,8 +154,8 @@ int RGWStreamWriteHTTPResourceCRF::drain_writes(bool *need_retry)
 }
 
 RGWStreamSpliceCR::RGWStreamSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
-                           RGWStreamReadHTTPResourceCRF *_in_crf,
-                           RGWStreamWriteHTTPResourceCRF *_out_crf) : RGWCoroutine(_cct), cct(_cct), http_manager(_mgr),
+                           shared_ptr<RGWStreamReadHTTPResourceCRF>& _in_crf,
+                           shared_ptr<RGWStreamWriteHTTPResourceCRF>& _out_crf) : RGWCoroutine(_cct), cct(_cct), http_manager(_mgr),
                                                                in_crf(_in_crf), out_crf(_out_crf) {}
 RGWStreamSpliceCR::~RGWStreamSpliceCR() { }
 
@@ -246,8 +246,8 @@ TestSpliceCR::TestSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
                                                                in_req(_in_req), out_req(_out_req) {}
 int TestSpliceCR::operate() {
   reenter(this) {
-    in_crf = new RGWStreamReadHTTPResourceCRF(cct, get_env(), this, http_manager, in_req);
-    out_crf = new RGWStreamWriteHTTPResourceCRF(cct, get_env(), this, http_manager, out_req);
+    in_crf.reset(new RGWStreamReadHTTPResourceCRF(cct, get_env(), this, http_manager, in_req));
+    out_crf.reset(new RGWStreamWriteHTTPResourceCRF(cct, get_env(), this, http_manager, out_req));
 
     yield call(new RGWStreamSpliceCR(cct, http_manager, in_crf, out_crf));
 

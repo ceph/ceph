@@ -5,6 +5,7 @@
 #include "rgw_sync_module_aws.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rest.h"
+#include "rgw_acl.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -42,7 +43,13 @@ class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
   bufferlist res;
   unordered_map <string, bool> bucket_created;
   string bucket_name;
-  //std::unique_ptr<RGWRESTConn> rgw_conn;
+  std::shared_ptr<RGWStreamReadHTTPResourceCRF> in_crf;
+  std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
+  RGWRESTStreamRWRequest *in_req{nullptr};
+  RGWRESTStreamS3PutObj *out_req{nullptr};
+
+  string obj_path;
+  int ret{0};
 
 public:
   RGWAWSHandleRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
@@ -55,6 +62,7 @@ public:
   ~RGWAWSHandleRemoteObjCBCR(){
   }
 
+#if 0
   int operate () override {
 
     reenter(this) {
@@ -112,6 +120,52 @@ public:
 
 
       return set_cr_done();
+    }
+
+    return 0;
+  }
+#endif
+
+  int operate() override {
+
+    reenter(this) {
+
+      ldout(sync_env->cct, 0) << "AWS: download begin: z=" << sync_env->source_zone
+                              << " b=" << bucket_info.bucket << " k=" << key << " size=" << size
+                              << " mtime=" << mtime << " attrs=" << attrs
+                              << dendl;
+
+      obj_path = bucket_info.bucket.name + "/" + key.name;
+
+#warning FIXME conn
+      {
+        /* init input connection */
+        rgw_obj source_obj(bucket_info.bucket, key);
+        ret = sync_env->store->rest_master_conn->get_obj(rgw_user(),  nullptr, source_obj,
+                                                         nullptr /* mod_ptr */, nullptr /* unmod_ptr */, 0 /* mod_zone_id */, 0 /* mod_pg_ver */,
+                                                         false /* prepend_metadata */, true /* get_op */, true /*rgwx_stat */,
+                                                         false /* sync_manifest */, true /* skip_descrypt */, false /* send */,
+                                                         nullptr /* cb */, &in_req);
+        if (ret < 0) {
+          return set_cr_error(ret);
+        }
+
+        /* init output connection */
+        in_crf.reset(new RGWStreamReadHTTPResourceCRF(cct, get_env(), this, sync_env->http_manager, in_req));
+
+#warning fix target obj
+        map<string, bufferlist> attrs;
+        RGWAccessControlPolicy empty_policy;
+        ::encode(empty_policy, attrs[RGW_ATTR_ACL]);
+        ret = conf.conn->put_obj_init(rgw_user(), source_obj, 0 /* obj_size */,  attrs, false, &out_req);
+        if (ret < 0) {
+          return set_cr_error(ret);
+        }
+
+        out_crf.reset(new RGWStreamWriteHTTPResourceCRF(cct, get_env(), this, sync_env->http_manager, out_req));
+      }
+
+      yield call(new RGWStreamSpliceCR(cct, sync_env->http_manager, in_crf, out_crf));
     }
 
     return 0;
