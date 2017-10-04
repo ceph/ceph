@@ -1,5 +1,6 @@
 import pytest
-from ceph_volume.devices.lvm import activate, api
+from ceph_volume.devices.lvm import activate
+from ceph_volume.api import lvm as api
 
 
 class Args(object):

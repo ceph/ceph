@@ -4,7 +4,7 @@ from textwrap import dedent
 from ceph_volume import process, conf, decorators
 from ceph_volume.util import system, disk
 from ceph_volume.systemd import systemctl
-from . import api
+from ceph_volume.api import lvm as api
 
 
 def activate_filestore(lvs):
