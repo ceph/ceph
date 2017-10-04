@@ -1859,6 +1859,7 @@ private:
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
   std::condition_variable kv_cond;
+  bool _kv_only = false;
   bool kv_sync_started = false;
   bool kv_stop = false;
   bool kv_finalize_started = false;
