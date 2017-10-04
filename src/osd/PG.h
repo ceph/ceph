@@ -1582,6 +1582,7 @@ public:
   TrivialEvent(Backfilled)
   TrivialEvent(LocalBackfillReserved)
   TrivialEvent(RemoteBackfillReserved)
+  TrivialEvent(RejectRemoteReservation)
   TrivialEvent(RemoteReservationRejected)
   TrivialEvent(RequestBackfill)
   TrivialEvent(RequestRecovery)
@@ -1991,11 +1992,13 @@ public:
     struct RepWaitBackfillReserved : boost::statechart::state< RepWaitBackfillReserved, ReplicaActive >, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::custom_reaction< RemoteBackfillReserved >,
+	boost::statechart::custom_reaction< RejectRemoteReservation >,
 	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       explicit RepWaitBackfillReserved(my_context ctx);
       void exit();
       boost::statechart::result react(const RemoteBackfillReserved &evt);
+      boost::statechart::result react(const RejectRemoteReservation &evt);
       boost::statechart::result react(const RemoteReservationRejected &evt);
     };
 
@@ -2014,11 +2017,13 @@ public:
       typedef boost::mpl::list<
 	boost::statechart::custom_reaction< RequestBackfillPrio >,
         boost::statechart::transition< RequestRecovery, RepWaitRecoveryReserved >,
+	boost::statechart::custom_reaction< RejectRemoteReservation >,
 	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,   // if primary is preempted or cancels
 	boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
 	> reactions;
       explicit RepNotRecovering(my_context ctx);
       boost::statechart::result react(const RequestBackfillPrio &evt);
+      boost::statechart::result react(const RejectRemoteReservation &evt);
       void exit();
     };
 
