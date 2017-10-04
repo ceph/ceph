@@ -18,8 +18,8 @@
 #include "msg/Message.h"
 
 class MBackfillReserve : public Message {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 4;
 public:
   spg_t pgid;
   epoch_t query_epoch;
@@ -27,6 +27,7 @@ public:
     REQUEST = 0,
     GRANT = 1,
     REJECT = 2,
+    CANCEL = 3,
   };
   uint32_t type;
   uint32_t priority;
@@ -57,6 +58,9 @@ public:
     case REJECT:
       out << "REJECT ";
       break;
+    case CANCEL:
+      out << "CANCEL ";
+      break;
     }
     out << " pgid: " << pgid << ", query_epoch: " << query_epoch;
     if (type == REQUEST) out << ", prio: " << priority;
@@ -73,6 +77,18 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+      header.version = 3;
+      header.compat_version = 3;
+      ::encode(pgid.pgid, payload);
+      ::encode(query_epoch, payload);
+      ::encode(type == CANCEL ? REJECT : type, payload);
+      ::encode(priority, payload);
+      ::encode(pgid.shard, payload);
+      return;
+    }
+    header.version = HEAD_VERSION;
+    header.compat_version = COMPAT_VERSION;
     ::encode(pgid.pgid, payload);
     ::encode(query_epoch, payload);
     ::encode(type, payload);

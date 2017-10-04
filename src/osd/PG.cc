@@ -6199,7 +6199,7 @@ PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
     if (con) {
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
-	  MBackfillReserve::REJECT,
+	  MBackfillReserve::CANCEL,
 	  spg_t(pg->info.pgid.pgid, it->shard),
 	  pg->get_osdmap()->get_epoch()),
 	con.get());
@@ -6228,7 +6228,7 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
     if (con) {
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
-	  MBackfillReserve::REJECT,
+	  MBackfillReserve::CANCEL,
 	  spg_t(pg->info.pgid.pgid, it->shard),
 	  pg->get_osdmap()->get_epoch()),
 	con.get());
@@ -6308,7 +6308,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
-  // Send REJECT to all previously acquired reservations
+  // Send CANCEL to all previously acquired reservations
   set<pg_shard_t>::const_iterator it, begin, end, next;
   begin = context< Active >().remote_shards_to_reserve_backfill.begin();
   end = context< Active >().remote_shards_to_reserve_backfill.end();
@@ -6321,7 +6321,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
     if (con) {
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
-	MBackfillReserve::REJECT,
+	MBackfillReserve::CANCEL,
 	spg_t(pg->info.pgid.pgid, it->shard),
 	pg->get_osdmap()->get_epoch()),
       con.get());
