@@ -71,16 +71,16 @@ struct MockJournal {
   MOCK_METHOD5(append_write_event, uint64_t(uint64_t, size_t,
                                             const bufferlist &,
                                             const ObjectRequests &, bool));
-  MOCK_METHOD5(append_io_event_mock, uint64_t(const journal::EventEntry&,
+  MOCK_METHOD6(append_io_event_mock, uint64_t(const journal::EventEntry&,
                                               const ObjectRequests &,
-                                              uint64_t, size_t, bool));
+                                              uint64_t, size_t, bool, int));
   uint64_t append_io_event(journal::EventEntry &&event_entry,
                            const ObjectRequests &requests,
                            uint64_t offset, size_t length,
-                           bool flush_entry) {
+                           bool flush_entry, int filter_ret_val) {
     // googlemock doesn't support move semantics
     return append_io_event_mock(event_entry, requests, offset, length,
-                                flush_entry);
+                                flush_entry, filter_ret_val);
   }
 
   MOCK_METHOD3(append_op_event_mock, void(uint64_t, const journal::EventEntry&,
