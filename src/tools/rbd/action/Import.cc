@@ -580,7 +580,7 @@ static int do_import_header(int fd, int import_format, uint64_t &size, librbd::I
 
   while (r == 0) {
     __u8 tag;
-    uint64_t length;
+    uint64_t length = 0;
     r = read_tag(fd, RBD_EXPORT_IMAGE_END, image_format, &tag, &length);
     if (r < 0 || tag == RBD_EXPORT_IMAGE_END) {
       break;

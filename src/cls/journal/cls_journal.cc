@@ -404,7 +404,7 @@ int journal_get_splay_width(cls_method_context_t hctx, bufferlist *in,
  */
 int journal_get_pool_id(cls_method_context_t hctx, bufferlist *in,
                             bufferlist *out) {
-  int64_t pool_id;
+  int64_t pool_id = 0;
   int r = read_key(hctx, HEADER_KEY_POOL_ID, &pool_id);
   if (r < 0) {
     return r;
