@@ -705,7 +705,7 @@ class Module(MgrModule):
                         next_ws[osd] = new_weight
                         if ow < 1.0:
                             new_ow = min(1.0, max(step + (1.0 - step) * ow,
-                                                  ow + .002))
+                                                  ow + .005))
                             self.log.debug('Reweight osd.%d reweight %f -> %f',
                                            osd, ow, new_ow)
                             next_ow[osd] = new_ow
