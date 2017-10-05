@@ -660,27 +660,28 @@ class Module(MgrModule):
         # go
         best_ws = copy.deepcopy(orig_ws)
         best_ow = copy.deepcopy(orig_osd_weight)
-        cur_pe = pe
+        best_pe = pe
         left = max_iterations
+        bad_steps = 0
+        next_ws = copy.deepcopy(best_ws)
+        next_ow = copy.deepcopy(best_ow)
         while left > 0:
             # adjust
             self.log.debug('best_ws %s' % best_ws)
-            next_ws = copy.deepcopy(best_ws)
-            next_ow = copy.deepcopy(best_ow)
             random.shuffle(roots)
             for root in roots:
-                pools = cur_pe.root_pools[root]
-                pgs = len(cur_pe.target_by_root[root])
+                pools = best_pe.root_pools[root]
+                pgs = len(best_pe.target_by_root[root])
                 min_pgs = pgs * min_pg_per_osd
-                if cur_pe.total_by_root[root] < min_pgs:
+                if best_pe.total_by_root[root] < min_pgs:
                     self.log.info('Skipping root %s (pools %s), total pgs %d '
                                   '< minimum %d (%d per osd)',
                                   root, pools, pgs, min_pgs, min_pg_per_osd)
                     continue
                 self.log.info('Balancing root %s (pools %s) by %s' %
                               (root, pools, key))
-                target = cur_pe.target_by_root[root]
-                actual = cur_pe.actual_by_root[root][key]
+                target = best_pe.target_by_root[root]
+                actual = best_pe.actual_by_root[root][key]
                 queue = sorted(actual.keys(),
                                key=lambda osd: -abs(target[osd] - actual[osd]))
                 for osd in queue:
@@ -728,26 +729,34 @@ class Module(MgrModule):
             next_pe = self.calc_eval(next_ms)
             next_misplaced = next_ms.calc_misplaced_from(ms)
             self.log.debug('Step result score %f -> %f, misplacing %f',
-                           cur_pe.score, next_pe.score, next_misplaced)
+                           best_pe.score, next_pe.score, next_misplaced)
 
             if next_misplaced > max_misplaced:
-                if cur_pe.score < pe.score:
+                if best_pe.score < pe.score:
                     self.log.debug('Step misplaced %f > max %f, stopping',
                                    next_misplaced, max_misplaced)
                     break
                 step /= 2.0
+                next_ws = copy.deepcopy(best_ws)
+                next_ow = copy.deepcopy(best_ow)
                 self.log.debug('Step misplaced %f > max %f, reducing step to %f',
                                next_misplaced, max_misplaced, step)
             else:
-                if next_pe.score > cur_pe.score * 1.0001:
-                    step /= 2.0
-                    self.log.debug('Score got worse, trying smaller step %f',
-                                   step)
+                if next_pe.score > best_pe.score * 1.0001:
+                    if bad_steps < 5 and random.randint(0, 100) < 70:
+                        self.log.debug('Score got worse, taking another step')
+                    else:
+                        step /= 2.0
+                        next_ws = copy.deepcopy(best_ws)
+                        next_ow = copy.deepcopy(best_ow)
+                        self.log.debug('Score got worse, trying smaller step %f',
+                                       step)
                 else:
-                    cur_pe = next_pe
+                    bad_steps = 0
+                    best_pe = next_pe
                     best_ws = next_ws
                     best_ow = next_ow
-                    if cur_pe.score == 0:
+                    if best_pe.score == 0:
                         break
             left -= 1
 
@@ -756,8 +765,8 @@ class Module(MgrModule):
         if next_ow != orig_osd_weight:
             fudge = .001
 
-        if cur_pe.score < pe.score + fudge:
-            self.log.info('Success, score %f -> %f', pe.score, cur_pe.score)
+        if best_pe.score < pe.score + fudge:
+            self.log.info('Success, score %f -> %f', pe.score, best_pe.score)
             plan.compat_ws = best_ws
             for osd, w in best_ow.iteritems():
                 if w != orig_osd_weight[osd]:
