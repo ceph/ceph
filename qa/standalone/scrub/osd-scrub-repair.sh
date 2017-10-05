@@ -649,7 +649,7 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:ce3f1d6a:::ROBJ1:head(47'54 osd.0.0:53 dirty|omap|data_digest|omap_digest|extents s 7 uv 3 dd 2ddbf8f5 od f5fba2c6 alloc_hint [0 0 0])",
+      "selected_object_info": "3:ce3f1d6a:::ROBJ1:head(47'54 osd.0.0:53 dirty|omap|data_digest|extents s 7 uv 3 dd 2ddbf8f5 od f5fba2c6 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "size_mismatch_oi",
         "obj_size_oi_mismatch"
@@ -681,7 +681,7 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:bc819597:::ROBJ12:head(47'52 osd.0.0:51 dirty|omap|data_digest|omap_digest|extents s 7 uv 36 dd 2ddbf8f5 od 67f306a alloc_hint [0 0 0])",
+      "selected_object_info": "3:bc819597:::ROBJ12:head(47'52 osd.0.0:51 dirty|omap|data_digest|extents s 7 uv 36 dd 2ddbf8f5 od 67f306a alloc_hint [0 0 0])",
       "union_shard_errors": [
         "stat_error"
       ],
@@ -710,7 +710,7 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:d60617f9:::ROBJ13:head(47'55 osd.0.0:54 dirty|omap|data_digest|omap_digest|extents s 7 uv 39 dd 2ddbf8f5 od 6441854d alloc_hint [0 0 0])",
+      "selected_object_info": "3:d60617f9:::ROBJ13:head(47'55 osd.0.0:54 dirty|omap|data_digest|extents s 7 uv 39 dd 2ddbf8f5 od 6441854d alloc_hint [0 0 0])",
       "union_shard_errors": [
         "stat_error"
       ],
@@ -810,7 +810,7 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:30259878:::ROBJ15:head(47'46 osd.0.0:45 dirty|omap|data_digest|omap_digest|extents s 7 uv 45 dd 2ddbf8f5 od 2d2a4d6e alloc_hint [0 0 0])",
+      "selected_object_info": "3:30259878:::ROBJ15:head(47'46 osd.0.0:45 dirty|omap|data_digest|extents s 7 uv 45 dd 2ddbf8f5 od 2d2a4d6e alloc_hint [0 0 0])",
       "union_shard_errors": [
         "oi_attr_missing"
       ],
@@ -890,7 +890,7 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:f2a5b2a4:::ROBJ3:head(47'57 osd.0.0:56 dirty|omap|data_digest|omap_digest|extents s 7 uv 9 dd 2ddbf8f5 od b35dfd alloc_hint [0 0 0])",
+      "selected_object_info": "3:f2a5b2a4:::ROBJ3:head(47'57 osd.0.0:56 dirty|omap|data_digest|extents s 7 uv 9 dd 2ddbf8f5 od b35dfd alloc_hint [0 0 0])",
       "union_shard_errors": [
         "missing"
       ],
@@ -962,7 +962,7 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:86586531:::ROBJ8:head(82'62 client.4351.0:1 dirty|omap|data_digest|omap_digest|extents s 7 uv 66 dd 2ddbf8f5 od d6be81dc alloc_hint [0 0 0])",
+      "selected_object_info": "3:86586531:::ROBJ8:head(82'62 client.4351.0:1 dirty|omap|data_digest|extents s 7 uv 66 dd 2ddbf8f5 od d6be81dc alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
@@ -979,14 +979,14 @@ function TEST_corrupt_scrub_replicated() {
     {
       "shards": [
         {
-          "object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest|omap_digest|extents s 1 uv 67 dd 2b63260d od 2eecc539 alloc_hint [0 0 0])",
+          "object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest|extents s 1 uv 67 dd 2b63260d od 2eecc539 alloc_hint [0 0 0])",
           "size": 1,
           "errors": [],
           "osd": 0,
           "primary": false
         },
         {
-          "object_info": "3:ffdb2004:::ROBJ9:head(47'60 osd.0.0:59 dirty|omap|data_digest|omap_digest|extents s 7 uv 27 dd 2ddbf8f5 od 2eecc539 alloc_hint [0 0 0])",
+          "object_info": "3:ffdb2004:::ROBJ9:head(47'60 osd.0.0:59 dirty|omap|data_digest|extents s 7 uv 27 dd 2ddbf8f5 od 2eecc539 alloc_hint [0 0 0])",
           "size": 1,
           "errors": [
             "obj_size_oi_mismatch"
@@ -995,7 +995,7 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest|omap_digest|extents s 1 uv 67 dd 2b63260d od 2eecc539 alloc_hint [0 0 0])",
+      "selected_object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest|extents s 1 uv 67 dd 2b63260d od 2eecc539 alloc_hint [0 0 0])",
       "union_shard_errors": [
          "obj_size_oi_mismatch"
       ],
