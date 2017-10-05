@@ -8686,11 +8686,20 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 	m->query_epoch,
 	PG::RemoteBackfillReserved()));
   } else if (m->type == MBackfillReserve::REJECT) {
+    // NOTE: this is replica -> primary "i reject your request"
+    //      and also primary -> replica "cancel my previously-granted request"
+    //                                  (for older peers)
     evt = PG::CephPeeringEvtRef(
       new PG::CephPeeringEvt(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RemoteReservationRejected()));
+  } else if (m->type == MBackfillReserve::CANCEL) {
+    evt = PG::CephPeeringEvtRef(
+      new PG::CephPeeringEvt(
+	m->query_epoch,
+	m->query_epoch,
+	PG::RemoteReservationCanceled()));
   } else {
     ceph_abort();
   }

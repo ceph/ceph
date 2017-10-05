@@ -1584,7 +1584,9 @@ public:
   TrivialEvent(Backfilled)
   TrivialEvent(LocalBackfillReserved)
   TrivialEvent(RemoteBackfillReserved)
+  TrivialEvent(RejectRemoteReservation)
   TrivialEvent(RemoteReservationRejected)
+  TrivialEvent(RemoteReservationCanceled)
   TrivialEvent(RequestBackfill)
   TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
@@ -1982,7 +1984,9 @@ public:
     struct RepRecovering : boost::statechart::state< RepRecovering, ReplicaActive >, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::transition< RecoveryDone, RepNotRecovering >,
+	// for compat with old peers
 	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,
+	boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
 	boost::statechart::custom_reaction< BackfillTooFull >
 	> reactions;
       explicit RepRecovering(my_context ctx);
@@ -1993,31 +1997,48 @@ public:
     struct RepWaitBackfillReserved : boost::statechart::state< RepWaitBackfillReserved, ReplicaActive >, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::custom_reaction< RemoteBackfillReserved >,
-	boost::statechart::custom_reaction< RemoteReservationRejected >
+	boost::statechart::custom_reaction< RejectRemoteReservation >,
+	boost::statechart::custom_reaction< RemoteReservationRejected >,
+	boost::statechart::custom_reaction< RemoteReservationCanceled >
 	> reactions;
       explicit RepWaitBackfillReserved(my_context ctx);
       void exit();
       boost::statechart::result react(const RemoteBackfillReserved &evt);
+      boost::statechart::result react(const RejectRemoteReservation &evt);
       boost::statechart::result react(const RemoteReservationRejected &evt);
+      boost::statechart::result react(const RemoteReservationCanceled &evt);
     };
 
     struct RepWaitRecoveryReserved : boost::statechart::state< RepWaitRecoveryReserved, ReplicaActive >, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::custom_reaction< RemoteRecoveryReserved >
+	boost::statechart::custom_reaction< RemoteRecoveryReserved >,
+	// for compat with old peers
+	boost::statechart::custom_reaction< RemoteReservationRejected >,
+	boost::statechart::custom_reaction< RemoteReservationCanceled >
 	> reactions;
       explicit RepWaitRecoveryReserved(my_context ctx);
       void exit();
       boost::statechart::result react(const RemoteRecoveryReserved &evt);
+      boost::statechart::result react(const RemoteReservationRejected &evt) {
+	// for compat with old peers
+	post_event(RemoteReservationCanceled());
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteReservationCanceled &evt);
     };
 
     struct RepNotRecovering : boost::statechart::state< RepNotRecovering, ReplicaActive>, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::custom_reaction< RequestBackfillPrio >,
         boost::statechart::transition< RequestRecovery, RepWaitRecoveryReserved >,
+	boost::statechart::custom_reaction< RejectRemoteReservation >,
+	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,
+	boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
 	boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
 	> reactions;
       explicit RepNotRecovering(my_context ctx);
       boost::statechart::result react(const RequestBackfillPrio &evt);
+      boost::statechart::result react(const RejectRemoteReservation &evt);
       void exit();
     };
 
