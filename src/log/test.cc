@@ -229,3 +229,25 @@ TEST(Log, LargeLog)
   log.flush();
   log.stop();
 }
+
+// Make sure nothing bad happens when we switch
+
+TEST(Log, TimeSwitch)
+{
+  SubsystemMap subs;
+  subs.add(1, "foo", 20, 10);
+  Log log(&subs);
+  log.start();
+  log.set_log_file("/tmp/time_switch_log");
+  log.reopen_log_file();
+  int l = 10;
+  bool coarse = true;
+  for (auto i = 0U; i < 300; ++i) {
+    log.submit_entry(
+      log.create_entry(l, 1, "SQUID THEFT! PUNISHABLE BY DEATH!"));
+    if (i % 50)
+      log.set_coarse_timestamps(coarse = !coarse);
+  }
+  log.flush();
+  log.stop();
+}
