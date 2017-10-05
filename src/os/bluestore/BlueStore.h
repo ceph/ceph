@@ -2042,7 +2042,9 @@ private:
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
   void _deferred_queue(TransContext *txc);
+public:
   void deferred_try_submit();
+private:
   void _deferred_submit_unlock(OpSequencer *osr);
   void _deferred_aio_finish(OpSequencer *osr);
   int _deferred_replay();
