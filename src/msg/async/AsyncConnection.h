@@ -19,7 +19,6 @@
 
 #include <atomic>
 #include <pthread.h>
-#include <signal.h>
 #include <climits>
 #include <list>
 #include <mutex>
