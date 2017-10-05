@@ -96,7 +96,7 @@ install(TARGETS ceph_test_filestore_idempotent_sequence
 add_executable(unittest_chain_xattr
   chain_xattr.cc
   )
-add_ceph_unittest(unittest_chain_xattr ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_chain_xattr)
+add_ceph_unittest(unittest_chain_xattr)
 target_link_libraries(unittest_chain_xattr os global)
 
 # unittest_rocksdb_option
@@ -104,7 +104,7 @@ add_executable(unittest_rocksdb_option
   TestRocksdbOptionParse.cc
   $<TARGET_OBJECTS:unit-main>
   )
-add_ceph_unittest(unittest_rocksdb_option ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rocksdb_option)
+add_ceph_unittest(unittest_rocksdb_option)
 target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
 
 if(HAVE_LIBAIO)
@@ -113,40 +113,40 @@ if(HAVE_LIBAIO)
     BitAllocator_test.cc
     $<TARGET_OBJECTS:unit-main>
     )
-  add_ceph_unittest(unittest_bit_alloc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bit_alloc)
+  add_ceph_unittest(unittest_bit_alloc)
   target_link_libraries(unittest_bit_alloc os global)
 
   add_executable(unittest_alloc
     Allocator_test.cc
     $<TARGET_OBJECTS:unit-main>
     )
-  add_ceph_unittest(unittest_alloc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_alloc)
+  add_ceph_unittest(unittest_alloc)
   target_link_libraries(unittest_alloc os global)
 
   # unittest_bluefs
   add_executable(unittest_bluefs
     test_bluefs.cc
     )
-  add_ceph_unittest(unittest_bluefs ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bluefs)
+  add_ceph_unittest(unittest_bluefs)
   target_link_libraries(unittest_bluefs os global)
 
   # unittest_bluestore_types
   add_executable(unittest_bluestore_types
     test_bluestore_types.cc
     )
-  add_ceph_unittest(unittest_bluestore_types ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bluestore_types)
+  add_ceph_unittest(unittest_bluestore_types)
   target_link_libraries(unittest_bluestore_types os global)
 endif(HAVE_LIBAIO)
 
 # unittest_transaction
 add_executable(unittest_transaction
   test_transaction.cc)
-add_ceph_unittest(unittest_transaction ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_transaction)
+add_ceph_unittest(unittest_transaction)
 target_link_libraries(unittest_transaction os ceph-common ${XIO_LIBRARY})
 
 # unittest_memstore_clone
 add_executable(unittest_memstore_clone
   test_memstore_clone.cc
   $<TARGET_OBJECTS:store_test_fixture>)
-add_ceph_unittest(unittest_memstore_clone ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_memstore_clone)
+add_ceph_unittest(unittest_memstore_clone)
 target_link_libraries(unittest_memstore_clone os global)
