@@ -14,6 +14,7 @@
 
 // For ceph_timespec
 #include "ceph_time.h"
+#include "log/LogClock.h"
 #include "config.h"
 
 #if defined(__APPLE__)
@@ -80,6 +81,26 @@ namespace ceph {
       const struct ceph_timespec& ts) {
       return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
     }
+
+  }
+
+  namespace logging {
+    void log_clock::to_ceph_timespec(const time_point& t,
+				     struct ceph_timespec& ts) {
+      ts.tv_sec = to_time_t(t);
+      ts.tv_nsec = (t.time_since_epoch() %std::chrono::seconds(1)).count();
+    }
+    struct ceph_timespec log_clock::to_ceph_timespec(
+      const time_point& t) {
+      struct ceph_timespec ts;
+      to_ceph_timespec(t, ts);
+      return ts;
+    }
+    log_clock::time_point log_clock::from_ceph_timespec(
+      const struct ceph_timespec& ts) {
+      return time_point(std::chrono::seconds(ts.tv_sec) +
+			std::chrono::nanoseconds(ts.tv_nsec));
+    }
   }
 
   using std::chrono::duration_cast;
@@ -132,4 +153,6 @@ namespace ceph {
   operator<< <coarse_mono_clock>(std::ostream& m, const coarse_mono_time& t);
   template std::ostream&
   operator<< <coarse_real_clock>(std::ostream& m, const coarse_real_time& t);
+  template std::ostream&
+  operator<< <logging::log_clock>(std::ostream& m, const logging::log_time& t);
 }
