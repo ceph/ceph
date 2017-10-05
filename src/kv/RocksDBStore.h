@@ -81,6 +81,9 @@ class RocksDBStore : public KeyValueDB {
   uint64_t cache_size = 0;
   bool set_cache_flag = false;
 
+  bool must_close_default_cf = false;
+  rocksdb::ColumnFamilyHandle *default_cf = nullptr;
+
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
   int install_cf_mergeop(const string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
   int create_db_dir();
