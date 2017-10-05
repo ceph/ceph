@@ -13,6 +13,8 @@ Allocator *Allocator::create(CephContext* cct, string type,
 {
   if (type == "stupid") {
     return new StupidAllocator(cct);
+  } else if (type == "linear") {
+    return new LinearAllocator(cct);
   } else if (type == "bitmap") {
     return new BitMapAllocator(cct, size, block_size);
   }
