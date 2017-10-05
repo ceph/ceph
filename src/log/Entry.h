@@ -4,17 +4,17 @@
 #ifndef __CEPH_LOG_ENTRY_H
 #define __CEPH_LOG_ENTRY_H
 
-#include "include/utime.h"
 #include "common/PrebufferedStreambuf.h"
 #include <pthread.h>
 #include <string>
+#include "log/LogClock.h"
 
 
 namespace ceph {
 namespace logging {
 
 struct Entry {
-  utime_t m_stamp;
+  log_time m_stamp;
   pthread_t m_thread;
   short m_prio, m_subsys;
   Entry *m_next;
@@ -31,7 +31,7 @@ struct Entry {
       m_buf_len(sizeof(m_static_buf)),
       m_exp_len(NULL)
   {}
-  Entry(utime_t s, pthread_t t, short pr, short sub,
+  Entry(log_time s, pthread_t t, short pr, short sub,
   const char *msg = NULL)
       : m_stamp(s), m_thread(t), m_prio(pr), m_subsys(sub),
         m_next(NULL),
@@ -40,11 +40,11 @@ struct Entry {
         m_exp_len(NULL)
     {
       if (msg) {
-        ostream os(&m_streambuf);
+	std::ostream os(&m_streambuf);
         os << msg;
       }
     }
-  Entry(utime_t s, pthread_t t, short pr, short sub, char* buf, size_t buf_len, size_t* exp_len,
+  Entry(log_time s, pthread_t t, short pr, short sub, char* buf, size_t buf_len, size_t* exp_len,
 	const char *msg = NULL)
     : m_stamp(s), m_thread(t), m_prio(pr), m_subsys(sub),
       m_next(NULL),
@@ -53,7 +53,7 @@ struct Entry {
       m_exp_len(exp_len)
   {
     if (msg) {
-      ostream os(&m_streambuf);
+      std::ostream os(&m_streambuf);
       os << msg;
     }
   }
@@ -74,7 +74,7 @@ struct Entry {
   }
 
   void set_str(const std::string &s) {
-    ostream os(&m_streambuf);
+    std::ostream os(&m_streambuf);
     os << s;
   }
 
