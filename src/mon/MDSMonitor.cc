@@ -1816,11 +1816,11 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid, const MDSMap::mds_info_t& info
   // getting beacons through recently.
   utime_t latest_beacon;
   for (const auto & i : last_beacon) {
-    latest_beacon = MAX(i.second.stamp, latest_beacon);
+    latest_beacon = std::max(i.second.stamp, latest_beacon);
   }
   const bool may_replace = latest_beacon >
     (ceph_clock_now() -
-     MAX(g_conf->mds_beacon_interval, g_conf->mds_beacon_grace * 0.5));
+     std::max(g_conf->mds_beacon_interval, g_conf->mds_beacon_grace * 0.5));
 
   // are we in?
   // and is there a non-laggy standby that can take over for us?

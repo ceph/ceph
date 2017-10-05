@@ -200,7 +200,7 @@ int KeyServer::_rotate_secret(uint32_t service_id)
     } else {
       utime_t next_ttl = now;
       next_ttl += ttl;
-      ek.expiration = MAX(next_ttl, r.next().expiration);
+      ek.expiration = std::max(next_ttl, r.next().expiration);
     }
     ek.expiration += ttl;
     uint64_t secret_id = r.add(ek);

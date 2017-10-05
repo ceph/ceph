@@ -747,7 +747,7 @@ int Objecter::linger_check(LingerOp *info)
 
   ceph::coarse_mono_time stamp = info->watch_valid_thru;
   if (!info->watch_pending_async.empty())
-    stamp = MIN(info->watch_valid_thru, info->watch_pending_async.front());
+    stamp = std::min(info->watch_valid_thru, info->watch_pending_async.front());
   auto age = ceph::coarse_mono_clock::now() - stamp;
 
   ldout(cct, 10) << __func__ << " " << info->linger_id

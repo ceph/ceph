@@ -1745,7 +1745,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
 
   if (cur->last != CEPH_NOSNAP) {
     assert(cur->dirty_old_rstats.empty());
-    set<snapid_t>::const_iterator q = snaps.lower_bound(MAX(first, floor));
+    set<snapid_t>::const_iterator q = snaps.lower_bound(std::max(first, floor));
     if (q == snaps.end() || *q > cur->last)
       return;
   }
@@ -1759,7 +1759,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
       assert(cur->is_frozen_inode());
       update = false;
     }
-    _project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent,
+    _project_rstat_inode_to_frag(*curi, std::max(first, floor), cur->last, parent,
 				 linkunlink, update);
   }
 
@@ -1768,7 +1768,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
 	 p != cur->dirty_old_rstats.end();
 	 ++p) {
       old_inode_t& old = cur->old_inodes[*p];
-      snapid_t ofirst = MAX(old.first, floor);
+      snapid_t ofirst = std::max(old.first, floor);
       set<snapid_t>::const_iterator q = snaps.lower_bound(ofirst);
       if (q == snaps.end() || *q > *p)
 	continue;
@@ -1813,7 +1813,7 @@ void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snap
     fnode_t *pf = parent->get_projected_fnode();
     if (last == CEPH_NOSNAP) {
       if (g_conf->mds_snap_rstat)
-	first = MAX(ofirst, parent->first);
+	first = std::max(ofirst, parent->first);
       else
 	first = parent->first;
       prstat = &pf->rstat;
@@ -1915,7 +1915,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
     snapid_t first;
     if (last == pin->last) {
       pi = pin->get_projected_inode();
-      first = MAX(ofirst, pin->first);
+      first = std::max(ofirst, pin->first);
       if (first > pin->first) {
 	old_inode_t& old = pin->cow_old_inode(first-1, cow_head);
 	dout(20) << "   cloned old_inode rstat is " << old.inode.rstat << dendl;
