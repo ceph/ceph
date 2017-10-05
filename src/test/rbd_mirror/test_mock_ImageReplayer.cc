@@ -191,6 +191,7 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
       const std::string &local_mirror_uuid,
       const std::string &remote_mirror_uuid,
       ::journal::MockJournalerProxy *journaler,
+      cls::journal::ClientState *client_state,
       librbd::journal::MirrorPeerClientMeta *client_meta,
       Context *on_finish, bool *do_resync,
       rbd::mirror::ProgressContext *progress_ctx = nullptr) {
