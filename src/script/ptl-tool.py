@@ -109,6 +109,18 @@ def build_branch(args):
     branch = args.branch
     label = args.label
 
+    if label and label != '-':
+        #Check the label format
+        if re.search(r'\bwip-(.*?)-testing\b', label) is None:
+            log.error("Unknown Label '{lblname}'. Label Format: wip-<name>-testing".format(lblname=label))
+            sys.exit(1)
+
+        #Check if the Label exist in the repo
+        res = requests.get("https://api.github.com/repos/ceph/ceph/labels/{lblname}".format(lblname=label), auth=(USER, PASSWORD))
+        if res.status_code != 200:
+            log.error("Label '{lblname}' not found in the repo".format(lblname=label))
+            sys.exit(1)
+
     G = git.Repo(args.git)
 
     # First get the latest base branch and PRs from BASE_REMOTE
