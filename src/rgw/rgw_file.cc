@@ -1393,6 +1393,9 @@ namespace rgw {
 	goto done;
       }
     }
+
+    /* usage accounting */
+    RGWLIB_IO(get_state())->add_tx_bytes(len);
     bytes_written += len;
 
   done:

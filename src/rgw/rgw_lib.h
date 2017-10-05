@@ -56,12 +56,16 @@ namespace rgw {
   {
     RGWUserInfo user_info;
     RGWEnv env;
+    uint64_t rx_bytes;
+    uint64_t tx_bytes;
   public:
-    RGWLibIO() {
-      get_env().set("HTTP_HOST", "");
-    }
+    RGWLibIO() : rx_bytes(0), tx_bytes(0)
+      {
+	get_env().set("HTTP_HOST", "");
+      }
     RGWLibIO(const RGWUserInfo &_user_info)
-      : user_info(_user_info) {}
+      : user_info(_user_info), rx_bytes(0), tx_bytes(0)
+      {}
 
     void init_env(CephContext *cct) override {}
 
@@ -91,14 +95,24 @@ namespace rgw {
     }
 
     uint64_t get_bytes_sent() const override {
-      return 0;
+      return tx_bytes;
     }
 
     uint64_t get_bytes_received() const override {
-      return 0;
+      return rx_bytes;
     }
 
+    void add_tx_bytes(uint64_t sz) { tx_bytes += sz; }
+
+    void add_rx_bytes(uint64_t sz) { rx_bytes += sz; }
+
   }; /* RGWLibIO */
+
+  static inline RGWLibIO* RGWLIB_IO(struct req_state* s) {
+    auto ptr = dynamic_cast<RGWLibIO*>(s->cio);
+    assert(ptr != nullptr);
+    return ptr;
+  }
 
 /* XXX */
   class RGWRESTMgr_Lib : public RGWRESTMgr {

@@ -1865,6 +1865,10 @@ public:
       if (! read_resid)
 	break;
     }
+
+    /* usage accounting */
+    RGWLIB_IO(get_state())->add_rx_bytes(nread);
+
     return 0;
   }
 
