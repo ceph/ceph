@@ -440,10 +440,6 @@ void ImageReplayer<I>::handle_prepare_local_image(int r) {
   } else if (r < 0) {
     on_start_fail(r, "error preparing local image for replay");
     return;
-  } else if (m_local_image_tag_owner == librbd::Journal<>::LOCAL_MIRROR_UUID) {
-    dout(5) << "local image is primary" << dendl;
-    on_start_fail(0, "local image is primary");
-    return;
   }
 
   // local image doesn't exist or is non-primary
@@ -453,6 +449,11 @@ void ImageReplayer<I>::handle_prepare_local_image(int r) {
 template <typename I>
 void ImageReplayer<I>::prepare_remote_image() {
   dout(20) << dendl;
+  if (m_peers.empty()) {
+    // technically nothing to bootstrap, but it handles the status update
+    bootstrap();
+    return;
+  }
 
   // TODO need to support multiple remote images
   assert(!m_peers.empty());
@@ -461,8 +462,9 @@ void ImageReplayer<I>::prepare_remote_image() {
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_prepare_remote_image>(this);
   auto req = PrepareRemoteImageRequest<I>::create(
-    m_remote_image.io_ctx, m_global_image_id, &m_remote_image.mirror_uuid,
-    &m_remote_image.image_id, ctx);
+    m_threads, m_remote_image.io_ctx, m_global_image_id, m_local_mirror_uuid,
+    m_local_image_id, &m_remote_image.mirror_uuid, &m_remote_image.image_id,
+    &m_remote_journaler, &m_client_state, &m_client_meta, ctx);
   req->send();
 }
 
@@ -470,7 +472,11 @@ template <typename I>
 void ImageReplayer<I>::handle_prepare_remote_image(int r) {
   dout(20) << "r=" << r << dendl;
 
-  if (r == -ENOENT) {
+  assert(r < 0 ? m_remote_journaler == nullptr : m_remote_journaler != nullptr);
+  if (r < 0 && !m_local_image_id.empty() &&
+      m_local_image_tag_owner == librbd::Journal<>::LOCAL_MIRROR_UUID) {
+    // local image is primary -- fall-through
+  } else if (r == -ENOENT) {
     dout(20) << "remote image does not exist" << dendl;
 
     // TODO need to support multiple remote images
@@ -497,19 +503,16 @@ template <typename I>
 void ImageReplayer<I>::bootstrap() {
   dout(20) << dendl;
 
-  CephContext *cct = static_cast<CephContext *>(m_local->cct());
-  journal::Settings settings;
-  settings.commit_interval = cct->_conf->get_val<double>(
-    "rbd_mirror_journal_commit_age");
-  settings.max_fetch_bytes = cct->_conf->get_val<uint64_t>(
-    "rbd_mirror_journal_max_fetch_bytes");
-
-  m_remote_journaler = new Journaler(m_threads->work_queue,
-                                     m_threads->timer,
-                                     &m_threads->timer_lock,
-                                     m_remote_image.io_ctx,
-                                     m_remote_image.image_id,
-                                     m_local_mirror_uuid, settings);
+  if (!m_local_image_id.empty() &&
+      m_local_image_tag_owner == librbd::Journal<>::LOCAL_MIRROR_UUID) {
+    dout(5) << "local image is primary" << dendl;
+    on_start_fail(0, "local image is primary");
+    return;
+  } else if (m_peers.empty()) {
+    dout(5) << "no peer clusters" << dendl;
+    on_start_fail(-ENOENT, "no peer clusters");
+    return;
+  }
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
