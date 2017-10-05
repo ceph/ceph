@@ -252,11 +252,11 @@ def serialize_remote_roles(ctx, config):
 
 def check_ceph_data(ctx, config):
     """
-    Check for old /var/lib/ceph directories and detect staleness.
+    Check for old /var/lib/ceph subdirectories and detect staleness.
     """
-    log.info('Checking for old /var/lib/ceph...')
+    log.info('Checking for non-empty /var/lib/ceph...')
     processes = ctx.cluster.run(
-        args=['test', '!', '-e', '/var/lib/ceph'],
+        args='test -z $(ls -A /var/lib/ceph)',
         wait=False,
     )
     failed = False
