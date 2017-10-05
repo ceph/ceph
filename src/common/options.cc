@@ -389,6 +389,13 @@ std::vector<Option> get_global_options() {
     .set_description("port number for the remote graylog server")
     .add_see_also("log_graylog_host"),
 
+    Option("log_coarse_timestamps", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("timestamp log entries from coarse system clock "
+		     "to improve performance")
+    .add_service("common")
+    .add_tag("performance")
+    .add_tag("service"),
 
 
     // unmodified
