@@ -613,7 +613,7 @@ class Module(MgrModule):
         max_iterations = self.get_config('crush_compat_max_iterations', 25)
         if max_iterations < 1:
             return False
-        step = self.get_config('crush_compat_step', .2)
+        step = self.get_config('crush_compat_step', .5)
         if step <= 0 or step >= 1.0:
             return False
         max_misplaced = float(self.get_config('max_misplaced',
