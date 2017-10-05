@@ -47,9 +47,9 @@ class PrebufferedStreambuf
   typedef traits_ty::pos_type pos_type;
   typedef traits_ty::off_type off_type;
 
-public:
   PrebufferedStreambuf(): m_data(nullptr), os(this) {};
   ~PrebufferedStreambuf();
+public:
   static PrebufferedStreambuf* get_streambuf(prebuffered_data* data);
   std::ostream& get_ostream() {
     return os;
@@ -77,6 +77,7 @@ private:
   bool in_use() {
     return m_data != nullptr;
   }
+  friend class unique_PrebufferedStreambuf;
 };
 
 #endif
