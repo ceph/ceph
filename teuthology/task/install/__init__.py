@@ -93,7 +93,7 @@ def _purge_data(remote):
         '-maxdepth', '2',
         '-type', 'd',
         '-exec', 'umount', '{}', ';',
-        run.Raw('&&'),
+        run.Raw(';'),
         'sudo', 'umount', '/var/lib/ceph',
         run.Raw('||'),
         'true',
