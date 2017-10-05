@@ -222,12 +222,12 @@ void Log::submit_entry(Entry *e)
 }
 
 
-Entry *Log::create_entry(int level, int subsys)
+Entry *Log::create_entry(int level, int subsys, const char* msg)
 {
   if (true) {
     return new Entry(ceph_clock_now(),
 		     pthread_self(),
-		     level, subsys);
+		     level, subsys, msg);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
