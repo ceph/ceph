@@ -1311,7 +1311,8 @@ bool pg_pool_t::maybe_updated_removed_snaps(const interval_set<snapid_t>& cached
 }
 
 void pg_pool_t::purged_snap(const snapid_t& purged) {
-  deleting_snaps.erase(purged);
+  if (deleting_snaps.contains(purged, 1))
+    deleting_snaps.erase(purged);
 }
 
 const interval_set<snapid_t>& pg_pool_t::get_deleting_snaps() const {
