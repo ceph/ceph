@@ -410,6 +410,7 @@ get_daemon_status(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_log(BaseMgrModule *self, PyObject *args)
 {
+
   int level = 0;
   char *record = nullptr;
   if (!PyArg_ParseTuple(args, "is:log", &level, &record)) {
@@ -418,7 +419,7 @@ ceph_log(BaseMgrModule *self, PyObject *args)
 
   assert(self->this_module);
 
-  self->py_modules->log(self->this_module->get_name(), level, record);
+  self->this_module->log(level, record);
 
   Py_RETURN_NONE;
 }

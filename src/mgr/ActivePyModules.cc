@@ -35,8 +35,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-// constructor/destructor implementations cannot be in .h,
-// because ServeThread is still an "incomplete" type there
 
 ActivePyModules::ActivePyModules(PyModuleConfig const &config_,
           DaemonStateIndex &ds, ClusterState &cs,
@@ -534,16 +532,6 @@ std::map<std::string, std::string> ActivePyModules::get_services() const
   }
 
   return result;
-}
-
-void ActivePyModules::log(const std::string &module_name,
-    int level, const std::string &record)
-{
-#undef dout_prefix
-#define dout_prefix *_dout << "mgr[" << module_name << "] "
-  dout(level) << record << dendl;
-#undef dout_prefix
-#define dout_prefix *_dout << "mgr " << __func__ << " "
 }
 
 PyObject* ActivePyModules::get_counter_python(

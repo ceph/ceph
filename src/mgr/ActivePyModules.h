@@ -27,7 +27,6 @@
 #include "DaemonState.h"
 #include "ClusterState.h"
 
-class ServeThread;
 class health_check_map_t;
 
 typedef std::map<std::string, std::string> PyModuleConfig;
@@ -90,9 +89,6 @@ public:
   void get_health_checks(health_check_map_t *checks);
 
   void set_uri(const std::string& module_name, const std::string &uri);
-
-  void log(const std::string &module_name,
-           int level, const std::string &record);
 
   // Python command definitions, including callback
   std::vector<ModuleCommand> get_py_commands() const;
