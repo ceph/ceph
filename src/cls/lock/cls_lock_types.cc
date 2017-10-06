@@ -20,7 +20,7 @@ using namespace rados::cls::lock;
 
 static void generate_lock_id(locker_id_t& i, int n, const string& cookie)
 {
-  i.locker = entity_name_t(entity_name_t::CLIENT(n));
+  i.locker = entity_name_t::CLIENT(n);
   i.cookie = cookie;
 }
 
