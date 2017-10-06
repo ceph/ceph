@@ -101,8 +101,9 @@ static void namespace_breaker_func(struct ceph_mount_info *cmount, int cmd, cons
       ret = ceph_ll_rename(cmount, root, oldname, root, newname, perms);
       break;
     case DelegTestLink:
-      if (!file)
+      if (!file) {
 	ASSERT_EQ(ceph_ll_lookup(cmount, root, oldname, &file, &stx, 0, 0, perms), 0);
+      }
       ret = ceph_ll_link(cmount, file, root, newname, perms);
       break;
     case DelegTestUnlink:
