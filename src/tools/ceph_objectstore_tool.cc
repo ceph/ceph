@@ -1006,40 +1006,45 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
   spg_t old_pgid = ms.info.pgid;
   ms.info.pgid = pgid;
 
-#if DIAGNOSTIC
-  Formatter *formatter = new JSONFormatter(true);
-  cout << "export pgid " << old_pgid << std::endl;
-  cout << "struct_v " << (int)ms.struct_ver << std::endl;
-  cout << "map epoch " << ms.map_epoch << std::endl;
+  if (debug) {
+    cout << "export pgid " << old_pgid << std::endl;
+    cout << "struct_v " << (int)ms.struct_ver << std::endl;
+    cout << "map epoch " << ms.map_epoch << std::endl;
 
-  formatter->open_object_section("importing OSDMap");
-  ms.osdmap.dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
+#ifdef DIAGNOSTIC
+    Formatter *formatter = new JSONFormatter(true);
+    formatter->open_object_section("stuff");
 
-  cout << "osd current epoch " << sb.current_epoch << std::endl;
-  formatter->open_object_section("current OSDMap");
-  curmap.dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
+    formatter->open_object_section("importing OSDMap");
+    ms.osdmap.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
 
-  formatter->open_object_section("info");
-  ms.info.dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
+    cout << "osd current epoch " << sb.current_epoch << std::endl;
+    formatter->open_object_section("current OSDMap");
+    curmap.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
 
-  formatter->open_object_section("log");
-  ms.log.dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
+    formatter->open_object_section("info");
+    ms.info.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
 
-  formatter->flush(cout);
-  cout << std::endl;
+    formatter->open_object_section("log");
+    ms.log.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
+
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
 #endif
+  }
 
   if (ms.osdmap.get_epoch() != 0 && ms.map_epoch != ms.osdmap.get_epoch()) {
     cerr << "FATAL: Invalid OSDMap epoch in export data" << std::endl;
