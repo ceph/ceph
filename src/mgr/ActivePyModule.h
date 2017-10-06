@@ -25,6 +25,8 @@
 #include "mon/health_check.h"
 #include "mgr/Gil.h"
 
+#include "PyModuleRunner.h"
+
 #include <vector>
 #include <string>
 
@@ -43,32 +45,9 @@ public:
   ActivePyModule *handler;
 };
 
-class ServeThread : public Thread
-{
-  ActivePyModule *mod;
-
-public:
-  ServeThread(ActivePyModule *mod_)
-    : mod(mod_) {}
-
-  void *entry() override;
-};
-
-class ActivePyModule
+class ActivePyModule : public PyModuleRunner
 {
 private:
-  const std::string module_name;
-
-  // Passed in by whoever loaded our python module and looked up
-  // the symbols in it.
-  PyObject *pClass = nullptr;
-
-  // Passed in by whoever created our subinterpreter for us
-  SafeThreadState pMyThreadState = nullptr;
-
-  // Populated when we construct our instance of pClass in load()
-  PyObject *pClassInstance = nullptr;
-
   health_check_map_t health_checks;
 
   std::vector<ModuleCommand> commands;
@@ -79,27 +58,19 @@ private:
   std::string uri;
 
 public:
-  ActivePyModule(const std::string &module_name,
+  ActivePyModule(const std::string &module_name_,
       PyObject *pClass_,
-      PyThreadState *my_ts);
-  ~ActivePyModule();
-
-  ServeThread thread;
+      PyThreadState *my_ts_)
+    : PyModuleRunner(module_name_, pClass_, my_ts_)
+  {}
 
   int load(ActivePyModules *py_modules);
-  int serve();
-  void shutdown();
   void notify(const std::string &notify_type, const std::string &notify_id);
   void notify_clog(const LogEntry &le);
 
   const std::vector<ModuleCommand> &get_commands() const
   {
     return commands;
-  }
-
-  const std::string &get_name() const
-  {
-    return module_name;
   }
 
   int handle_command(
