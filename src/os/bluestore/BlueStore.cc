@@ -8217,20 +8217,11 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
 
-  // warning: we're calling onreadable_sync inside the sequencer lock
-  if (txc->onreadable_sync) {
-    txc->onreadable_sync->complete(0);
-    txc->onreadable_sync = NULL;
-  }
   unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
   if (txc->oncommit) {
     logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
     finishers[n]->queue(txc->oncommit);
     txc->oncommit = NULL;
-  }
-  if (txc->onreadable) {
-    finishers[n]->queue(txc->onreadable);
-    txc->onreadable = NULL;
   }
 
   if (!txc->oncommits.empty()) {
@@ -9036,8 +9027,6 @@ int BlueStore::queue_transactions(
 
   // prepare
   TransContext *txc = _txc_create(osr);
-  txc->onreadable = onreadable;
-  txc->onreadable_sync = onreadable_sync;
   txc->oncommit = ondisk;
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
@@ -9090,6 +9079,19 @@ int BlueStore::queue_transactions(
 
   // execute (start)
   _txc_state_proc(txc);
+
+  // we're immediately readable (unlike FileStore)
+  if (onreadable_sync) {
+    onreadable_sync->complete(0);
+  }
+  if (onreadable) {
+    // NOTE: these may complete out of order since some may be sync and some
+    // may be async.
+    if (!onreadable->sync_complete(0)) {
+      unsigned n = osr->parent->shard_hint.hash_to_shard(m_finisher_num);
+      finishers[n]->queue(onreadable);
+    }
+  }
 
   logger->tinc(l_bluestore_submit_lat, ceph_clock_now() - start);
   logger->tinc(l_bluestore_throttle_lat, tend - tstart);
