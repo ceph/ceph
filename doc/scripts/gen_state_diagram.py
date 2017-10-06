@@ -82,14 +82,22 @@ class StateMachineRenderer(object):
             )
 
     def read_input(self, input_lines):
+        previous_line = None
         for line in input_lines:
             self.get_state(line)
             self.get_event(line)
-            self.get_context(line)
+            # pass two lines at a time to get the context so that regexes can
+            # match on split signatures
+            self.get_context(line, previous_line)
+            previous_line = line
 
-    def get_context(self, line):
-        match = re.search(r"(\w+::)*::(?P<tag>\w+)::\w+\(const (?P<event>\w+)",
-                          line)
+    def get_context(self, line, previous_line):
+        match = re.search(r"(\w+::)*::(?P<tag>\w+)::\w+\(const (?P<event>\w+)", line)
+        if match is None and previous_line is not None:
+            # it is possible that we need to match on the previous line as well, so join
+            # them to make them one line and try and get this matching
+            joined_line = ' '.join([previous_line, line])
+            match = re.search(r"(\w+::)*::(?P<tag>\w+)::\w+\(\s*const (?P<event>\w+)", joined_line)
         if match is not None:
             self.context.append((match.group('tag'), self.context_depth, match.group('event')))
         if '{' in line:
