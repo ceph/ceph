@@ -6634,7 +6634,7 @@ int Client::_getattr(Inode *in, int mask, const UserPerm& perms, bool force)
 }
 
 int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
-			const UserPerm& perms, InodeRef *inp)
+			const UserPerm& perms)
 {
   int issued = in->caps_issued();
 
@@ -6819,7 +6819,7 @@ force_request:
 
   req->regetattr_mask = mask;
 
-  int res = make_request(req, perms, inp);
+  int res = make_request(req, perms);
   ldout(cct, 10) << "_setattr result=" << res << dendl;
   return res;
 }
@@ -6841,9 +6841,9 @@ void Client::stat_to_statx(struct stat *st, struct ceph_statx *stx)
 }
 
 int Client::__setattrx(Inode *in, struct ceph_statx *stx, int mask,
-		       const UserPerm& perms, InodeRef *inp)
+		       const UserPerm& perms)
 {
-  int ret = _do_setattr(in, stx, mask, perms, inp);
+  int ret = _do_setattr(in, stx, mask, perms);
   if (ret < 0)
    return ret;
   if (mask & CEPH_SETATTR_MODE)
@@ -10527,7 +10527,7 @@ int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
 }
 
 int Client::_ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
-			 const UserPerm& perms, InodeRef *inp)
+			 const UserPerm& perms)
 {
   vinodeno_t vino = _get_vino(in);
 
@@ -10552,7 +10552,7 @@ int Client::_ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
 
   mask &= ~(CEPH_SETATTR_MTIME_NOW | CEPH_SETATTR_ATIME_NOW);
 
-  return __setattrx(in, stx, mask, perms, inp);
+  return __setattrx(in, stx, mask, perms);
 }
 
 int Client::ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
@@ -10563,12 +10563,9 @@ int Client::ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
   if (unmounting)
     return -ENOTCONN;
 
-  InodeRef target(in);
-  int res = _ll_setattrx(in, stx, mask, perms, &target);
-  if (res == 0) {
-    assert(in == target.get());
+  int res = _ll_setattrx(in, stx, mask, perms);
+  if (res == 0)
     fill_statx(in, in->caps_issued(), stx);
-  }
 
   ldout(cct, 3) << "ll_setattrx " << _get_vino(in) << " = " << res << dendl;
   return res;
@@ -10585,12 +10582,9 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask,
   if (unmounting)
     return -ENOTCONN;
 
-  InodeRef target(in);
-  int res = _ll_setattrx(in, &stx, mask, perms, &target);
-  if (res == 0) {
-    assert(in == target.get());
+  int res = _ll_setattrx(in, &stx, mask, perms);
+  if (res == 0)
     fill_stat(in, attr);
-  }
 
   ldout(cct, 3) << "ll_setattr " << _get_vino(in) << " = " << res << dendl;
   return res;
@@ -11002,7 +10996,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
 	if (new_mode != in->mode) {
 	  struct ceph_statx stx;
 	  stx.stx_mode = new_mode;
-	  ret = _do_setattr(in, &stx, CEPH_SETATTR_MODE, perms, NULL);
+	  ret = _do_setattr(in, &stx, CEPH_SETATTR_MODE, perms);
 	  if (ret < 0)
 	    return ret;
 	}
