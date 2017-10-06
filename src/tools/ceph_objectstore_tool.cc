@@ -291,7 +291,6 @@ struct lookup_ghobject : public action_on_object_t {
 
 ghobject_t infos_oid = OSD::make_infos_oid();
 ghobject_t log_oid;
-ghobject_t biginfo_oid;
 
 int file_fd = fd_none;
 bool debug;
@@ -1275,7 +1274,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
 
   ghobject_t pgmeta_oid = pgid.make_pgmeta_oid();
   log_oid = OSD::make_pg_log_oid(pgid);
-  biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
   //Check for PG already present.
   coll_t coll(pgid);
@@ -3115,7 +3113,6 @@ int main(int argc, char **argv)
   }
 
   log_oid = OSD::make_pg_log_oid(pgid);
-  biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
   if (op == "remove") {
     if (!force && !dry_run) {
