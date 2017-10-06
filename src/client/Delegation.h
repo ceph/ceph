@@ -34,8 +34,6 @@ public:
   bool is_recalled() { return !recall_time.is_zero(); }
 
   void reinit(unsigned _type, ceph_deleg_cb_t _recall_cb, void *_priv);
-  void arm_timeout(SafeTimer *timer, Context *event, double timeout);
-  void disarm_timeout(SafeTimer *timer);
   void recall(bool skip_read);
 private:
   // Filehandle against which it was acquired
@@ -55,6 +53,9 @@ private:
 
   // timer for unreturned delegations
   Context			*timeout_event;
+
+  void arm_timeout();
+  void disarm_timeout();
 };
 
 #endif /* _CEPH_CLIENT_DELEGATION_H */

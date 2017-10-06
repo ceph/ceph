@@ -557,25 +557,6 @@ void Inode::set_async_err(int r)
   }
 }
 
-class C_C_Deleg_Timeout : public Context {
-  Delegation *deleg;
-public:
-  explicit C_C_Deleg_Timeout(Delegation *d) : deleg(d) {}
-  void finish(int r) override {
-    Inode *in = deleg->get_fh()->inode.get();
-    Client *client = in->client;
-
-    // Called back via Timer, which takes client_lock for us
-    assert(client->client_lock.is_locked_by_me());
-
-    lsubdout(client->cct, client, 0) << __func__ <<
-	  ": delegation return timeout for inode 0x" <<
-	  std::hex << in->ino << "forcibly unmounting client "<<
-	  client << std::dec << dendl;
-    client->_unmount();
-  }
-};
-
 bool Inode::has_recalled_deleg()
 {
   if (delegations.empty())
@@ -596,10 +577,7 @@ void Inode::recall_deleg(bool skip_read)
        d != delegations.end(); ++d) {
 
     Delegation& deleg = *d;
-    Context *timeout_event = new C_C_Deleg_Timeout(&deleg);
     deleg.recall(skip_read);
-    deleg.arm_timeout(&client->timer, timeout_event,
-		      client->get_deleg_timeout());
   }
 }
 
@@ -723,7 +701,6 @@ void Inode::unset_deleg(Fh *fh)
        d != delegations.end(); ++d) {
     Delegation& deleg = *d;
     if (deleg.get_fh() == fh) {
-      deleg.disarm_timeout(&client->timer);
       delegations.erase(d);
       client->signal_cond_list(waitfor_deleg);
       break;

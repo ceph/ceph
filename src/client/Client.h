@@ -507,7 +507,7 @@ protected:
   friend class C_Block_Sync; // Calls block map and protected helpers
   friend class C_Client_RequestInterrupt;
   friend class C_Client_Remount;
-  friend class C_C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
+  friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
   friend void intrusive_ptr_release(Inode *in);
 
   //int get_cache_size() { return lru.lru_get_size(); }

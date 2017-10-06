@@ -8,6 +8,25 @@
 #include "Fh.h"
 #include "Delegation.h"
 
+class C_Deleg_Timeout : public Context {
+  Delegation *deleg;
+public:
+  explicit C_Deleg_Timeout(Delegation *d) : deleg(d) {}
+  void finish(int r) override {
+    Inode *in = deleg->get_fh()->inode.get();
+    Client *client = in->client;
+
+    // Called back via Timer, which takes client_lock for us
+    assert(client->client_lock.is_locked_by_me());
+
+    lsubdout(client->cct, client, 0) << __func__ <<
+	  ": delegation return timeout for inode 0x" <<
+	  std::hex << in->ino << ". Forcibly unmounting client. "<<
+	  client << std::dec << dendl;
+    client->_unmount();
+  }
+};
+
 /**
  * ceph_deleg_caps_for_type - what caps are necessary for a delegation?
  * @type: delegation request type
@@ -57,6 +76,7 @@ Delegation::Delegation(Fh *_fh, unsigned _type, ceph_deleg_cb_t _cb, void *_priv
 
 Delegation::~Delegation()
 {
+  disarm_timeout();
   Inode *inode = fh->inode.get();
   inode->client->put_cap_ref(inode, ceph_deleg_caps_for_type(type));
 }
@@ -76,23 +96,25 @@ void Delegation::reinit(unsigned _type, ceph_deleg_cb_t _recall_cb, void *_priv)
   priv = _priv;
 }
 
-void Delegation::arm_timeout(SafeTimer *timer, Context *event, double timeout)
+void Delegation::arm_timeout()
 {
-  if (timeout_event) {
-    delete event;
-    return;
-  }
+  Client *client = fh->inode.get()->client;
 
-  timeout_event = event;
-  timer->add_event_after(timeout, event);
+  if (timeout_event)
+    return;
+
+  timeout_event = new C_Deleg_Timeout(this);
+  client->timer.add_event_after(client->get_deleg_timeout(), timeout_event);
 }
 
-void Delegation::disarm_timeout(SafeTimer *timer)
+void Delegation::disarm_timeout()
 {
+  Client *client = fh->inode.get()->client;
+
   if (!timeout_event)
     return;
 
-  timer->cancel_event(timeout_event);
+  client->timer.cancel_event(timeout_event);
   timeout_event = nullptr;
 }
 
@@ -105,5 +127,6 @@ void Delegation::recall(bool skip_read)
   if (!is_recalled()) {
     recall_cb(fh, priv);
     recall_time = ceph_clock_now();
+    arm_timeout();
   }
 }
