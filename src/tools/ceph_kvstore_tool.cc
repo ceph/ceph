@@ -87,7 +87,7 @@ class StoreTool
   uint32_t traverse(const string &prefix,
                     const bool do_crc,
                     ostream *out) {
-    KeyValueDB::WholeSpaceIterator iter = db->get_iterator();
+    KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
 
     if (prefix.empty())
       iter->seek_to_first();
@@ -128,7 +128,7 @@ class StoreTool
 
   bool exists(const string &prefix) {
     assert(!prefix.empty());
-    KeyValueDB::WholeSpaceIterator iter = db->get_iterator();
+    KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
     iter->seek_to_first(prefix);
     return (iter->valid() && (iter->raw_key().first == prefix));
   }
@@ -221,7 +221,7 @@ class StoreTool
       return err;
     other.reset(other_ptr);
 
-    KeyValueDB::WholeSpaceIterator it = db->get_iterator();
+    KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
     it->seek_to_first();
     uint64_t total_keys = 0;
     uint64_t total_size = 0;
