@@ -3290,8 +3290,7 @@ void PG::read_state(ObjectStore *store)
   pg_log.read_log_and_missing(
     store,
     coll,
-    info_struct_v < 8 ? coll_t::meta() : coll,
-    ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
+    pgmeta_oid,
     info,
     oss,
     cct->_conf->osd_ignore_stale_divergent_priors,

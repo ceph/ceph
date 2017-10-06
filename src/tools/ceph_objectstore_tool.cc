@@ -289,9 +289,6 @@ struct lookup_ghobject : public action_on_object_t {
   }
 };
 
-ghobject_t infos_oid = OSD::make_infos_oid();
-ghobject_t log_oid;
-
 int file_fd = fd_none;
 bool debug;
 bool force = false;
@@ -325,12 +322,12 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
   try {
     ostringstream oss;
     assert(struct_ver > 0);
-    PGLog::read_log_and_missing(fs, coll,
-		    struct_ver >= 8 ? coll : coll_t::meta(),
-		    struct_ver >= 8 ? pgid.make_pgmeta_oid() : log_oid,
-		    info, log, missing,
-		    oss,
-		    g_ceph_context->_conf->osd_ignore_stale_divergent_priors);
+    PGLog::read_log_and_missing(
+      fs, coll,
+      pgid.make_pgmeta_oid(),
+      info, log, missing,
+      oss,
+      g_ceph_context->_conf->osd_ignore_stale_divergent_priors);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }
@@ -1362,7 +1359,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   }
 
   ghobject_t pgmeta_oid = pgid.make_pgmeta_oid();
-  log_oid = OSD::make_pg_log_oid(pgid);
 
   //Check for PG already present.
   coll_t coll(pgid);
@@ -3200,8 +3196,6 @@ int main(int argc, char **argv)
     }
     goto out;
   }
-
-  log_oid = OSD::make_pg_log_oid(pgid);
 
   if (op == "remove") {
     if (!force && !dry_run) {
