@@ -1,7 +1,7 @@
 tasks:
 - exec:
     client.0:
-      - sudo ceph osd pool create datapool 4
+      - sudo ceph osd pool create datapool 128 128
       - rbd pool init datapool
 
 overrides:
