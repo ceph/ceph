@@ -1527,7 +1527,7 @@ void OSDMap::clean_temps(CephContext *cct,
     vector<int> raw_up;
     int primary;
     tmpmap.pg_to_raw_up(pg.first, &raw_up, &primary);
-    if (vectors_equal(raw_up, pg.second)) {
+    if (raw_up == pg.second) {
       ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
 		     << pg.second << " that matches raw_up mapping" << dendl;
       if (osdmap.pg_temp->count(pg.first))
@@ -3712,7 +3712,7 @@ int OSDMap::clean_pg_upmaps(
     vector<int> raw;
     int primary;
     pg_to_raw_osds(p.first, &raw, &primary);
-    if (vectors_equal(raw, p.second)) {
+    if (raw == p.second) {
       ldout(cct, 10) << " removing redundant pg_upmap " << p.first << " "
 		     << p.second << dendl;
       pending_inc->old_pg_upmap.insert(p.first);
