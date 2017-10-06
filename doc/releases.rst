@@ -7,7 +7,7 @@ Timeline
 
 +----------------------+-------------+-----------+----------+---------------+-----------+----------+------------+------------+-------------+
 |                      | `Luminous`_ | `Kraken`_ | `Jewel`_ | `Infernalis`_ | `Hammer`_ | `Giant`_ | `Firefly`_ | `Emperor`_ | `Dumpling`_ |
-|                      |  LTS        | Stable    | LTS      | Stable        | LTS       | Stable   | LTS        | Stable     | LTS         |
+|                      |             | EOL       |          | EOL           | EOL       | EOL      | EOL        | EOL        | EOL         |
 +----------------------+-------------+-----------+----------+---------------+-----------+----------+------------+------------+-------------+
 | First release        | August      | January   | April    | November      | April     | October  | May        | November   | August      |
 |                      | 2017        | 2017      | 2016     | 2015          | 2015      | 2014     | 2014       | 2013       | 2013        |
@@ -295,34 +295,70 @@ Timeline
 Understanding the release cycle
 -------------------------------
 
-The development release cycle is two to four weeks long.  Each cycle
-freezes the master development branch and applies `integration and
-upgrade tests <https://github.com/ceph/ceph-qa-suite>`_ for the
-duration of one cycle before it is released and the next release's
-code is frozen for testing.  Once released, there is no effort to
-backport fixes; developer focus in on the next development release
-which is usually only a few weeks away.
+There is a new stable release cycle every nine (9) months, starting
+after the Luminous release (12.2.0).  Each stable release series will
+receive a name (e.g., 'Mimic') and a major release number (e.g., 13
+for Mimic because 'M' is the 13th letter of the alphabet).
 
-There are three to four stable releases a year.  Each stable release
-will receive a name (e.g., 'Jewel') and bug fix backports at least
-until the next stable release is out.
+Releases are named after a species of cephalopod (usually the common
+name, since the latin names are harder to remember or pronounce).
 
-Every other stable releases is a LTS (Long Term Stable) and will
-receive updates until two LTS are published. For instance Dumpling is
-retired when Hammer is published, Firefly is retired when Jewel is
-published etc. The rationale is that backports to a LTS (Firefly for
-instance) are expected to happen until the next LTS is published
-(Jewel is the LTS following Hammer), to fix bugs and possibly
-backport important features. After the next LTS is published,
-backports are still expected to fix bugs with a focus on whatever can
-prevent upgrades to the next LTS (in our example, fixes to Dumpling
-were published after Firefly was released and until Hammer was
-published, primarily to ensure Dumpling cluster can smoothly migrate
-to Firefly).
+Version numbers have three components, *x.y.z*.  *x* identifies the release
+cycle (e.g., 13 for Mimic).  *y* identifies the release type:
 
-* Long Term Stable : until the next two LTS are published
-* Stable release : until the next stable release is published
-* Development / testing release : no backports
+* x.0.z - development releases (for early testers and the brave at heart)
+* x.1.z - release candidates (for test clusters, brave users)
+* x.2.z - stable/bugfix releases (for users)
+
+This versioning convention started with the 9.y.z Infernalis cycle.  Prior to
+that, versions looked with 0.y for development releases and 0.y.z for stable
+series.
+
+Development releases (x.0.z)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Each development release (x.0.z) freezes the master development branch
+and applies `integration and upgrade tests
+<https://github.com/ceph/ceph-qa-suite>`_ before it is released.  Once
+released, there is no effort to backport fixes; developer focus is on
+the next development release which is usually only a few weeks away.
+
+* Development release every 4 to 8 weeks
+* Intended for testing, not production deployments
+* Full integration testing
+* Upgrade testing from the last stable release(s)
+* Every effort is made to allow *offline* upgrades from previous
+  development releases (meaning you can stop all daemons, upgrade, and
+  restart).  No attempt is made to support online rolling upgrades
+  between development releases.  This facilitates deployment of
+  development releases on non-production test clusters without
+  repopulating them with data.
+
+Release candidates (x.1.z)
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+There is a feature release roughly six (6) weeks prior to the planned
+initial stable release, after which focus shifts to stabilization and
+bug fixes only.
+
+* Release candidate release every 1-2 weeks
+* Intended for final testing and validation of the upcoming stable release
+  
+Stable releases (x.2.z)
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Once the initial stable release is made (x.2.0), there are
+semi-regular bug-fix point releases with bug fixes and (occasionally)
+small feature backports.  Bug fixes are accumulated and included in
+the next point release.
+
+* Stable point release every 4 to 6 weeks
+* Intended for production deployments
+* Bug fix backports for two full release cycles.
+* Online, rolling upgrade support and testing from the last two (2)
+  stable release(s) (starting from Luminous).
+* Online, rolling upgrade support and testing from prior stable point
+  releases
 
 For each stable release:
 
@@ -338,33 +374,18 @@ For each stable release:
 * The `stable releases and backport team <http://tracker.ceph.com/projects/ceph-releases>`_
   publishes ``point releases`` including fixes that have been backported to the stable release.
 
-In the timeline, the life time of a LTS is calculated to be
-approximately 18 months after the month of the first release. For
-instance, Dumpling is published August 2013 and 18 months starting
-September 2013 is February 2015, therefore by March 2015 Dumpling
-should be retired. The lifetime of a release may vary because it
-depend on how quickly the stable releases are published. For instance
-although Dumpling theoritical retirement was March 2015, it was
-extended to May 2015.
+In the timeline, the life time of a stable release series is
+calculated to be approximately 18 months (i.e., two 9 month release
+cycles) after the month of the first release.  For example, Luminous
+(12.2.z) will reach end of life (EOL) shortly after Nautilus (14.2.0) is
+released.  The lifetime of a release may vary because it depends on how
+quickly the stable releases are published.
 
-Release numbers conventions
----------------------------
+The life time for Jewel and Kraken are slightly different.  Prior to
+Luminous, only every other stable release was an "LTS" release.
+Therefore,
 
-The first Ceph release back in Jan of 2008 was 0.1.  That made sense at
-the time.  The versioning scheme did not change until April 2015,
-when 0.94.1 (the first Hammer point release) was published.  To avoid reaching
-0.99 (and 0.100 or 1.00?) we have a new strategy.
-
-* x.0.z - development releases (for early testers and the brave at heart)
-* x.1.z - release candidates (for test clusters, brave users)
-* x.2.z - stable/bugfix releases (for users)
-
-``x`` will start at 9 for Infernalis (``I`` is the 9th letter), making
-our first development release of the 9th release cycle 9.0.0.
-Subsequent development releases will be 9.0.1, 9.0.2, etc.
-
-After a couple months we'll have a 9.1.0 (and maybe 9.1.1) release candidate.
-
-A few weeks after that we'll have the Infernalis release 9.2.0, followed
-by stable bug fix updates 9.2.1, 9.2.2, etc., and then begin work on the
-Jewel (10.y.z) release.
+* Upgrades are supported from Jewel -> Kraken -> Luminous and Jewel -> Luminous.
+* Upgrades beyond Luminous must stop at Luminous.
+* Jewel will be maintained until Mimic is released in the Spring of 2018.
+* Kraken is no longer maintained.
