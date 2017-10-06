@@ -1126,7 +1126,91 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
   if (debug)
     cerr << "Changing pg epoch " << ms.map_epoch << " to " << sb.current_epoch << std::endl;
 
-  ms.map_epoch = sb.current_epoch;
+  // advance map and fill in PastIntervals
+  if (ms.map_epoch < sb.current_epoch) {
+    if (debug)
+      cerr << "Advancing PG from " << ms.map_epoch << " to " << sb.current_epoch
+	   << std::endl;
+
+    OSDMap *startmap = new OSDMap;
+    startmap->deepish_copy_from(ms.osdmap);
+    OSDMapRef lastmap(startmap);
+
+    int up_primary, acting_primary;
+    vector<int> up, acting;
+    lastmap->pg_to_up_acting_osds(
+      ms.info.pgid.pgid, &up, &up_primary, &acting, &acting_primary);
+
+    while (ms.map_epoch < sb.current_epoch) {
+      ++ms.map_epoch;
+      if (ms.map_epoch < sb.oldest_map) {
+	// cheat!
+	ms.map_epoch = sb.oldest_map;
+      }
+
+      OSDMap *t = new OSDMap;
+      bufferlist nextmap_bl;
+      int ret = get_osdmap(store, ms.map_epoch, *t, nextmap_bl);
+      OSDMapRef nextmap(t);
+      if (ret < 0) {
+	cerr << "cannot load osdmap " << ms.map_epoch << std::endl;
+	return -EINVAL;
+      }
+      
+      int new_up_primary, new_acting_primary;
+      vector<int> new_up, new_acting;
+      nextmap->pg_to_up_acting_osds(
+	ms.info.pgid.pgid, &new_up, &new_up_primary, &new_acting,
+	&new_acting_primary);
+
+      // this is a bit imprecise, but sufficient?
+      struct min_size_predicate_t : public IsPGRecoverablePredicate {
+	const pg_pool_t *pi;
+	bool operator()(const set<pg_shard_t> &have) const {
+	  return have.size() >= pi->min_size;
+	}
+	min_size_predicate_t(const pg_pool_t *i) : pi(i) {}
+      } min_size_predicate(nextmap->get_pg_pool(ms.info.pgid.pgid.pool()));
+
+
+      bool new_interval = PastIntervals::check_new_interval(
+	acting_primary,
+	new_acting_primary,
+	acting, new_acting,
+	up_primary,
+	new_up_primary,
+	up, new_up,
+	ms.info.history.same_interval_since,
+	ms.info.history.last_epoch_clean,
+	nextmap,
+	lastmap,
+	ms.info.pgid.pgid,
+	&min_size_predicate,
+	&ms.past_intervals,
+	&cerr);
+      if (new_interval) {
+	ms.info.history.same_interval_since = nextmap->get_epoch();
+	if (up != new_up) {
+	  ms.info.history.same_up_since = nextmap->get_epoch();
+	}
+	if (acting_primary != new_acting_primary) {
+	  ms.info.history.same_primary_since = nextmap->get_epoch();
+	}
+	if (pgid.pgid.is_split(lastmap->get_pg_num(ms.info.pgid.pgid.pool()),
+			       nextmap->get_pg_num(ms.info.pgid.pgid.pool()),
+			       nullptr)) {
+	  ms.info.history.last_epoch_split = nextmap->get_epoch();
+	}
+	up = new_up;
+	acting = new_acting;
+	up_primary = new_up_primary;
+	acting_primary = new_acting_primary;
+      }
+      lastmap = nextmap;
+    }
+    if (debug)
+      cerr << "new PastIntervals " << ms.past_intervals << std::endl;
+  }
 
   return 0;
 }
