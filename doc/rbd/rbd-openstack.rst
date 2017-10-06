@@ -129,7 +129,7 @@ and Glance. Execute the following::
 
 If you run an OpenStack version before Mitaka, create the following ``client.cinder`` key::
 
-    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rwx pool=vms, allow rx pool=images'
+    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rwx pool=vms, allow rwx pool=images'
 
 Since Mitaka introduced the support of RBD snapshots while doing a snapshot of a Nova instance,
 we need to allow the ``client.cinder`` key write access to the ``images`` pool; therefore, create the following key::
