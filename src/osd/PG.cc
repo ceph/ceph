@@ -5318,8 +5318,6 @@ void PG::on_new_interval()
     upacting_features &= osdmap->get_xinfo(*p).features;
   }
 
-  assert(osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE));
-
   _on_new_interval();
 }
 
