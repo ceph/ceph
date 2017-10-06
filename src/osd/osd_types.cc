@@ -1310,6 +1310,14 @@ bool pg_pool_t::maybe_updated_removed_snaps(const interval_set<snapid_t>& cached
   return true;
 }
 
+void pg_pool_t::purged_snap(const snapid_t& purged) {
+  deleting_snaps.erase(purged);
+}
+
+const interval_set<snapid_t>& pg_pool_t::get_deleting_snaps() const {
+  return deleting_snaps;
+}
+
 snapid_t pg_pool_t::snap_exists(const char *s) const
 {
   for (map<snapid_t,pool_snap_info_t>::const_iterator p = snaps.begin();
@@ -1343,6 +1351,7 @@ void pg_pool_t::add_unmanaged_snap(uint64_t& snapid)
 void pg_pool_t::remove_snap(snapid_t s)
 {
   assert(snaps.count(s));
+  deleting_snaps.insert(s);
   snaps.erase(s);
   snap_seq = snap_seq + 1;
 }
@@ -1350,6 +1359,7 @@ void pg_pool_t::remove_snap(snapid_t s)
 void pg_pool_t::remove_unmanaged_snap(snapid_t s)
 {
   assert(is_unmanaged_snaps_mode());
+  deleting_snaps.insert(s);
   removed_snaps.insert(s);
   snap_seq = snap_seq + 1;
   removed_snaps.insert(get_snap_seq());
@@ -1536,7 +1546,10 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 26;
+  uint8_t v = 27;
+  if (!HAVE_FEATURE(features, OSD_DELETING_SNAPS)) {
+    v = 26;
+  }
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
@@ -1612,6 +1625,9 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   }
   if (v >= 26) {
     ::encode(application_metadata, bl);
+  }
+  if (v >= 27) {
+    ::encode(deleting_snaps, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -1767,6 +1783,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   }
   if (struct_v >= 26) {
     ::decode(application_metadata, bl);
+  }
+  if (struct_v >= 27) {
+    ::decode(deleting_snaps, bl);
+  } else {
+    build_removed_snaps(deleting_snaps);
   }
   DECODE_FINISH(bl);
   calc_pg_masks();

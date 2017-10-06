@@ -1288,6 +1288,7 @@ struct pg_pool_t {
   __u8 object_hash;         ///< hash mapping object name to ps
 private:
   __u32 pg_num, pgp_num;    ///< number of pgs
+  interval_set<snapid_t> deleting_snaps; ///< removed snaps to be been purged
 
 
 public:
@@ -1570,6 +1571,8 @@ public:
    */
   void build_removed_snaps(interval_set<snapid_t>& rs) const;
   bool maybe_updated_removed_snaps(const interval_set<snapid_t>& cached) const;
+  void purged_snap(const snapid_t& purged);
+  const interval_set<snapid_t>& get_deleting_snaps() const;
   snapid_t snap_exists(const char *s) const;
   void add_snap(const char *n, utime_t stamp);
   void add_unmanaged_snap(uint64_t& snapid);
