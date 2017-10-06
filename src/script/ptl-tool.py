@@ -231,16 +231,8 @@ def build_branch(args):
     if branch == 'HEAD':
         log.info("Leaving HEAD detached; no branch anchors your commits")
     else:
-        # Delete test branch if it already existed
-        try:
-            getattr(G.branches, branch).delete(
-                    G, getattr(G.branches, branch), force=True)
-            log.info("Deleted old test branch %s" % branch)
-        except AttributeError:
-            pass
-
-        G.create_head(branch)
-        log.info("Created branch {branch}".format(branch=branch))
+        G.head.reference = G.create_head(branch, force=True)
+        log.info("Checked out new branch {branch}".format(branch=branch))
 
         # tag it for future reference.
         for i in range(0, 100):
