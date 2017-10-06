@@ -208,6 +208,9 @@ inline ZTracer::Trace create_trace(const I &image_ctx, const char *trace_name,
   return ZTracer::Trace();
 }
 
+bool is_metadata_config_override(const std::string& metadata_key,
+                                 std::string* config_key);
+
 } // namespace util
 
 } // namespace librbd
