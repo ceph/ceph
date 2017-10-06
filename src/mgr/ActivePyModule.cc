@@ -51,60 +51,9 @@ std::string handle_pyerror()
     return extract<std::string>(formatted);
 }
 
-
-void *ServeThread::entry()
-{
-  // No need to acquire the GIL here; the module does it.
-  dout(4) << "Entering thread for " << mod->get_name() << dendl;
-  mod->serve();
-  return nullptr;
-}
-
-ActivePyModule::ActivePyModule(const std::string &module_name_,
-                               PyObject *pClass_,
-                               PyThreadState *my_ts_)
-  : module_name(module_name_),
-    pClass(pClass_),
-    pMyThreadState(my_ts_),
-    thread(this)
-{
-}
-
-ActivePyModule::~ActivePyModule()
-{
-  if (pMyThreadState.ts != nullptr) {
-    Gil gil(pMyThreadState);
-
-    Py_XDECREF(pClassInstance);
-
-    //
-    // Ideally, now, we'd be able to do this:
-    //
-    //    Py_EndInterpreter(pMyThreadState);
-    //    PyThreadState_Swap(pMainThreadState);
-    //
-    // Unfortunately, if the module has any other *python* threads active
-    // at this point, Py_EndInterpreter() will abort with:
-    //
-    //    Fatal Python error: Py_EndInterpreter: not the last thread
-    //
-    // This can happen when using CherryPy in a module, becuase CherryPy
-    // runs an extra thread as a timeout monitor, which spends most of its
-    // life inside a time.sleep(60).  Unless you are very, very lucky with
-    // the timing calling this destructor, that thread will still be stuck
-    // in a sleep, and Py_EndInterpreter() will abort.
-    //
-    // This could of course also happen with a poorly written module which
-    // made no attempt to clean up any additional threads it created.
-    //
-    // The safest thing to do is just not call Py_EndInterpreter(), and
-    // let Py_Finalize() kill everything after all modules are shut down.
-    //
-  }
-}
-
 int ActivePyModule::load(ActivePyModules *py_modules)
 {
+  assert(py_modules);
   Gil gil(pMyThreadState);
 
   // We tell the module how we name it, so that it can be consistent
@@ -127,46 +76,6 @@ int ActivePyModule::load(ActivePyModules *py_modules)
   }
 
   return load_commands();
-}
-
-int ActivePyModule::serve()
-{
-  assert(pClassInstance != nullptr);
-
-  // This method is called from a separate OS thread (i.e. a thread not
-  // created by Python), so tell Gil to wrap this in a new thread state.
-  Gil gil(pMyThreadState, true);
-
-  auto pValue = PyObject_CallMethod(pClassInstance,
-      const_cast<char*>("serve"), nullptr);
-
-  int r = 0;
-  if (pValue != NULL) {
-    Py_DECREF(pValue);
-  } else {
-    derr << module_name << ".serve:" << dendl;
-    derr << handle_pyerror() << dendl;
-    return -EINVAL;
-  }
-
-  return r;
-}
-
-void ActivePyModule::shutdown()
-{
-  assert(pClassInstance != nullptr);
-
-  Gil gil(pMyThreadState);
-
-  auto pValue = PyObject_CallMethod(pClassInstance,
-      const_cast<char*>("shutdown"), nullptr);
-
-  if (pValue != NULL) {
-    Py_DECREF(pValue);
-  } else {
-    derr << "Failed to invoke shutdown() on " << module_name << dendl;
-    derr << handle_pyerror() << dendl;
-  }
 }
 
 void ActivePyModule::notify(const std::string &notify_type, const std::string &notify_id)

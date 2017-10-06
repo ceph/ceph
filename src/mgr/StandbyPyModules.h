@@ -23,6 +23,7 @@
 
 #include "mon/MonClient.h"
 #include "mon/MgrMap.h"
+#include "mgr/PyModuleRunner.h"
 
 typedef std::map<std::string, std::string> PyModuleConfig;
 
@@ -78,59 +79,6 @@ public:
   }
 };
 
-/**
- * Implement the pattern of calling serve() on a module in a thread,
- * until shutdown() is called.
- */
-class PyModuleRunner
-{
-protected:
-  const std::string module_name;
-
-  // Passed in by whoever loaded our python module and looked up
-  // the symbols in it.
-  PyObject *pClass = nullptr;
-
-  // Passed in by whoever created our subinterpreter for us
-  PyThreadState *pMyThreadState = nullptr;
-
-  // Populated when we construct our instance of pClass in load()
-  PyObject *pClassInstance = nullptr;
-
-  class PyModuleRunnerThread : public Thread
-  {
-    PyModuleRunner *mod;
-
-  public:
-    PyModuleRunnerThread(PyModuleRunner *mod_)
-      : mod(mod_) {}
-
-    void *entry() override;
-  };
-
-public:
-  int serve();
-  void shutdown();
-  void log(int level, const std::string &record);
-
-  PyModuleRunner(
-      const std::string &module_name_,
-      PyObject *pClass_,
-      PyThreadState *pMyThreadState_)
-    : 
-      module_name(module_name_),
-      pClass(pClass_), pMyThreadState(pMyThreadState_),
-      thread(this)
-  {
-    assert(pClass != nullptr);
-    assert(pMyThreadState != nullptr);
-    assert(!module_name.empty());
-  }
-
-  PyModuleRunnerThread thread;
-
-  std::string const &get_name() { return module_name; }
-};
 
 class StandbyPyModule : public PyModuleRunner
 {
@@ -148,8 +96,6 @@ class StandbyPyModule : public PyModuleRunner
       state(state_)
   {
   }
-
-  ~StandbyPyModule();
 
   bool get_config(const std::string &key, std::string *value) const;
   std::string get_active_uri() const;

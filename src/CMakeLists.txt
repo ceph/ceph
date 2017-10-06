@@ -715,6 +715,7 @@ if (WITH_MGR)
       mgr/ActivePyModules.cc
       mgr/StandbyPyModules.cc
       mgr/PyModuleRegistry.cc
+      mgr/PyModuleRunner.cc
       mgr/PyFormatter.cc
       mgr/PyOSDMap.cc
       mgr/BaseMgrModule.cc
