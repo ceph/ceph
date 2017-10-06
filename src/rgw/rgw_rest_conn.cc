@@ -29,7 +29,6 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
     remote_id(_remote_id)
 {
   if (store) {
-    key = store->get_zone_params().system_key;
     self_zone_group = store->get_zonegroup().get_id();
   }
 }
