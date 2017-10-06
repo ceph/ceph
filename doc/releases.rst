@@ -318,7 +318,7 @@ Development releases (x.0.z)
 
 Each development release (x.0.z) freezes the master development branch
 and applies `integration and upgrade tests
-<https://github.com/ceph/ceph-qa-suite>`_ before it is released.  Once
+<https://github.com/ceph/ceph/tree/master/qa/suites/>`_ before it is released.  Once
 released, there is no effort to backport fixes; developer focus is on
 the next development release which is usually only a few weeks away.
 
@@ -362,7 +362,7 @@ the next point release.
 For each stable release:
 
 * `Integration and upgrade tests
-  <https://github.com/ceph/ceph-qa-suite>`_ are run on a regular basis
+  <https://github.com/ceph/ceph/tree/master/qa/suites/>`_ are run on a regular basis
   and `their results <http://pulpito.ceph.com/>`_ analyzed by Ceph
   developers.
 * `Issues <http://tracker.ceph.com/projects/ceph/issues?query_id=27>`_
@@ -370,7 +370,7 @@ For each stable release:
 * When an issue found in the stable release is `reported
   <http://tracker.ceph.com/projects/ceph/issues/new>`_, it is
   triaged by Ceph developers.
-* The `stable releases and backport team <http://tracker.ceph.com/projects/ceph-releases>`_
+* The `stable releases and backport team <http://tracker.ceph.com/projects/ceph-releases/wiki>`_
   publishes ``point releases`` including fixes that have been backported to the stable release.
 
 In the timeline above, the life time of a stable release series is
