@@ -160,7 +160,7 @@ public:
   // No metavariables will be returned (they will have already been expanded)
   int get_val(const std::string &key, char **buf, int len) const;
   int _get_val(const std::string &key, char **buf, int len) const;
-  Option::value_t get_val_generic(const std::string &key) const;
+  const Option::value_t& get_val_generic(const std::string &key) const;
   template<typename T> const T& get_val(const std::string &key) const;
   template<typename T> const T& _get_val(const std::string &key) const;
 
@@ -200,7 +200,7 @@ private:
   void validate_default_settings();
 
   int _get_val(const std::string &key, std::string *value) const;
-  Option::value_t _get_val_generic(const std::string &key) const;
+  const Option::value_t& _get_val_generic(const std::string &key) const;
   void _show_config(std::ostream *out, Formatter *f);
 
   void _get_my_sections(std::vector <std::string> &sections) const;
