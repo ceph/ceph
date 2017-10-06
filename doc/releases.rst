@@ -21,7 +21,6 @@ Timeline
 
 +----------------+-------------+-------------+-----------+-----------+---------------+-----------+------------+------------+------------+-------------+
 |                | Development | `Luminous`_ | `Kraken`_ | `Jewel`_  | `Infernalis`_ | `Hammer`_ | `Giant`_   | `Firefly`_ | `Emperor`_ | `Dumpling`_ |
-|                | Testing     | LTS         | Stable    | LTS       | Stable        | Stable    | LTS        | LTS        | Stable     | LTS         |
 +----------------+-------------+-------------+-----------+-----------+---------------+-----------+------------+------------+------------+-------------+
 | September 2017 |             | `12.2.1`_   |           |           |               |           |            |            |            |             |
 +----------------+-------------+-------------+-----------+-----------+---------------+-----------+------------+------------+------------+-------------+
@@ -374,7 +373,7 @@ For each stable release:
 * The `stable releases and backport team <http://tracker.ceph.com/projects/ceph-releases>`_
   publishes ``point releases`` including fixes that have been backported to the stable release.
 
-In the timeline, the life time of a stable release series is
+In the timeline above, the life time of a stable release series is
 calculated to be approximately 18 months (i.e., two 9 month release
 cycles) after the month of the first release.  For example, Luminous
 (12.2.z) will reach end of life (EOL) shortly after Nautilus (14.2.0) is
@@ -386,6 +385,6 @@ Luminous, only every other stable release was an "LTS" release.
 Therefore,
 
 * Upgrades are supported from Jewel -> Kraken -> Luminous and Jewel -> Luminous.
-* Upgrades beyond Luminous must stop at Luminous.
-* Jewel will be maintained until Mimic is released in the Spring of 2018.
+* Upgrades from Jewel or Kraken must upgrade to Luminous first before proceeding further (e.g., Kraken -> Luminous -> Mimic but not Kraken -> Mimic).
+* Jewel will be maintained until Mimic is released in the spring of 2018.
 * Kraken is no longer maintained.
