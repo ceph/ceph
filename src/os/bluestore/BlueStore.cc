@@ -8720,6 +8720,14 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
   bdev->aio_submit(&b->ioc);
 }
 
+struct C_DeferredTrySubmit : public Context {
+  BlueStore *store;
+  C_DeferredTrySubmit(BlueStore *s) : store(s) {}
+  void finish(int r) {
+    store->deferred_try_submit();
+  }
+};
+
 void BlueStore::_deferred_aio_finish(OpSequencer *osr)
 {
   dout(10) << __func__ << " osr " << osr << dendl;
@@ -8736,9 +8744,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
       deferred_queue.erase(q);
     } else if (deferred_aggressive) {
       dout(20) << __func__ << " queuing async deferred_try_submit" << dendl;
-      deferred_finisher.queue(new FunctionContext([&](int) {
-	    deferred_try_submit();
-	  }));
+      deferred_finisher.queue(new C_DeferredTrySubmit(this));
     } else {
       dout(20) << __func__ << " leaving queued, more pending" << dendl;
     }
@@ -8878,6 +8884,11 @@ int BlueStore::queue_transactions(
 	       << dendl;
       ++deferred_aggressive;
       deferred_try_submit();
+      {
+	// wake up any previously finished deferred events
+	std::lock_guard<std::mutex> l(kv_lock);
+	kv_cond.notify_one();
+      }
       throttle_deferred_bytes.get(txc->cost);
       --deferred_aggressive;
    }
