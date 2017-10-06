@@ -295,6 +295,7 @@ ghobject_t biginfo_oid;
 
 int file_fd = fd_none;
 bool debug;
+bool force = false;
 super_header sh;
 uint64_t testalign;
 
@@ -468,7 +469,7 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
 	     divergent_priors_t &divergent,
 	     pg_missing_t &missing)
 {
-  cout << __func__ << " info " << info << std::endl;
+  cout << __func__ << " epoch " << epoch << " info " << info << std::endl;
   int ret = write_info(t, epoch, info, past_intervals);
   if (ret)
     return ret;
@@ -1071,6 +1072,15 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     } else {
       cerr << "WARNING: No OSDMap in old export,"
            " some objects may be ignored due to a split" << std::endl;
+    }
+  }
+  if (ms.osdmap.get_epoch() < sb.oldest_map) {
+    cerr << "PG export's map " << ms.osdmap.get_epoch()
+	 << " is older than OSD's oldest_map " << sb.oldest_map << std::endl;
+    if (!force) {
+      cerr << " pass --force to proceed anyway (with incomplete PastIntervals)"
+	   << std::endl;
+      return -EINVAL;
     }
   }
 
@@ -2486,7 +2496,6 @@ int main(int argc, char **argv)
   unsigned epoch = 0;
   ghobject_t ghobj;
   bool human_readable;
-  bool force;
   Formatter *formatter;
   bool head;
 
