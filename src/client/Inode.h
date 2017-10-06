@@ -298,19 +298,14 @@ struct Inode {
   void set_async_err(int r);
   void dump(Formatter *f) const;
 
-  bool has_recalled_deleg();
+  void break_all_delegs() { break_deleg(false); };
+
   void recall_deleg(bool skip_read);
-  void break_deleg(bool skip_read);
-
-  void break_all_delegs()
-  {
-    break_deleg(false);
-  };
-
-  bool delegations_broken(bool skip_read);
+  bool has_recalled_deleg();
   int set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv);
   void unset_deleg(Fh *fh);
 
+private:
   // how many opens for write on this Inode?
   long open_count_for_write()
   {
@@ -325,6 +320,10 @@ struct Inode {
 				  [] (int value, const std::map<int, int>::value_type& p)
                    { return value + p.second; });
   };
+
+  void break_deleg(bool skip_read);
+  bool delegations_broken(bool skip_read);
+
 };
 
 ostream& operator<<(ostream &out, const Inode &in);
