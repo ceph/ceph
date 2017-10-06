@@ -63,10 +63,10 @@ Delegation::~Delegation()
 
 void Delegation::reinit(unsigned _type, ceph_deleg_cb_t _recall_cb, void *_priv)
 {
-  Inode *inode = fh->inode.get();
-
   /* update cap refs -- note that we do a get first to avoid any going to 0 */
   if (type != _type) {
+    Inode *inode = fh->inode.get();
+
     inode->client->get_cap_ref(inode, ceph_deleg_caps_for_type(_type));
     inode->client->put_cap_ref(inode, ceph_deleg_caps_for_type(type));
     type = _type;

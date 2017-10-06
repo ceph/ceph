@@ -581,6 +581,7 @@ bool Inode::has_recalled_deleg()
   if (delegations.empty())
     return false;
 
+  // Either all delegations are recalled or none are. Just check the first.
   Delegation& deleg = delegations.front();
   return deleg.is_recalled();
 }

@@ -311,14 +311,14 @@ struct Inode {
   int set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv);
   void unset_deleg(Fh *fh);
 
-  // does anything have this Inode open for write?
+  // how many opens for write on this Inode?
   long open_count_for_write()
   {
     return (long)(open_by_mode[CEPH_FILE_MODE_RDWR] +
 		  open_by_mode[CEPH_FILE_MODE_WR]);
   };
 
-  // how many opens currently vs. this inode
+  // how many opens of any sort on this inode?
   long open_count()
   {
     return (long) std::accumulate(open_by_mode.begin(), open_by_mode.end(), 0,
