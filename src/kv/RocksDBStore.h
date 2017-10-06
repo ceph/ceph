@@ -55,8 +55,11 @@ namespace rocksdb{
   class WriteBatch;
   class Iterator;
   class Logger;
+  class ColumnFamilyHandle;
   struct Options;
   struct BlockBasedTableOptions;
+  struct DBOptions;
+  struct ColumnFamilyOptions;
 }
 
 extern rocksdb::Logger *create_rocksdb_ceph_logger();
@@ -78,8 +81,14 @@ class RocksDBStore : public KeyValueDB {
   uint64_t cache_size = 0;
   bool set_cache_flag = false;
 
+  bool must_close_default_cf = false;
+  rocksdb::ColumnFamilyHandle *default_cf = nullptr;
+
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
-  int do_open(ostream &out, bool create_if_missing);
+  int install_cf_mergeop(const string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
+  int create_db_dir();
+  int do_open(ostream &out, bool create_if_missing,
+	      const vector<ColumnFamily>* cfs = nullptr);
 
   // manage async compactions
   Mutex compact_queue_lock;
@@ -151,10 +160,23 @@ public:
   int open(ostream &out) override {
     return do_open(out, false);
   }
+  int open(ostream &out, const vector<ColumnFamily>& cfs) override {
+    return do_open(out, false, &cfs);
+  }
   /// Creates underlying db if missing and opens it
   int create_and_open(ostream &out) override;
+  int create_and_open(ostream &out,
+		      const vector<ColumnFamily>& cfs) override;
 
   void close() override;
+
+  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& cf_name) {
+    auto iter = cf_handles.find(cf_name);
+    if (iter == cf_handles.end())
+      return nullptr;
+    else
+      return static_cast<rocksdb::ColumnFamilyHandle*>(iter->second);
+  }
 
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(Formatter *f) override;
@@ -255,13 +277,19 @@ public:
 
   };
 
-
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     rocksdb::WriteBatch bat;
     RocksDBStore *db;
 
     explicit RocksDBTransactionImpl(RocksDBStore *_db);
+  private:
+    void put_bat(
+      rocksdb::WriteBatch& bat,
+      rocksdb::ColumnFamilyHandle *cf,
+      const string &k,
+      const bufferlist &to_set_bl);
+  public:
     void set(
       const string &prefix,
       const string &k,
@@ -346,6 +374,8 @@ public:
     size_t value_size() override;
   };
 
+  Iterator get_iterator(const std::string& prefix) override;
+
   /// Utility
   static string combine_strings(const string &prefix, const string &value) {
     string out = prefix;
@@ -364,18 +394,14 @@ public:
 
   static int split_key(rocksdb::Slice in, string *prefix, string *key);
 
-  static bufferlist to_bufferlist(rocksdb::Slice in) {
-    bufferlist bl;
-    bl.append(bufferptr(in.data(), in.size()));
-    return bl;
-  }
-
   static string past_prefix(const string &prefix);
 
   class MergeOperatorRouter;
+  class MergeOperatorLinker;
   friend class MergeOperatorRouter;
-  int set_merge_operator(const std::string& prefix,
-				 std::shared_ptr<KeyValueDB::MergeOperator> mop) override;
+  int set_merge_operator(
+    const std::string& prefix,
+    std::shared_ptr<KeyValueDB::MergeOperator> mop) override;
   string assoc_name; ///< Name of associative operator
 
   uint64_t get_estimated_size(map<string,uint64_t> &extra) override {
@@ -450,8 +476,7 @@ err:
     return 0;
   }
 
-protected:
-  WholeSpaceIterator _get_iterator() override;
+  WholeSpaceIterator get_wholespace_iterator() override;
 };
 
 

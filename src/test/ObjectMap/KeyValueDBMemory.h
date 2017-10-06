@@ -184,6 +184,6 @@ private:
 
   friend class WholeSpaceMemIterator;
 
-protected:
-  WholeSpaceIterator _get_iterator() override;
+public:
+  WholeSpaceIterator get_wholespace_iterator() override;
 };
