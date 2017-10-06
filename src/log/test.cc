@@ -251,3 +251,26 @@ TEST(Log, TimeSwitch)
   log.flush();
   log.stop();
 }
+
+TEST(Log, TimeFormat)
+{
+  static constexpr auto buflen = 128u;
+  char buf[buflen];
+  ceph::logging::log_clock clock;
+  {
+    clock.coarsen();
+    auto t = clock.now();
+    ceph::logging::append_time(t, buf, buflen);
+    auto c = std::strrchr(buf, '.');
+    ASSERT_NE(c, nullptr);
+    ASSERT_EQ(strlen(c + 1), 3);
+  }
+  {
+    clock.refine();
+    auto t = clock.now();
+    ceph::logging::append_time(t, buf, buflen);
+    auto c = std::strrchr(buf, '.');
+    ASSERT_NE(c, nullptr);
+    ASSERT_EQ(std::strlen(c + 1), 6);
+  }
+}
