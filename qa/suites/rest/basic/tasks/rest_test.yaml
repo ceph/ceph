@@ -21,6 +21,7 @@ tasks:
     fs: xfs
     log-whitelist:
     - \(OSDMAP_FLAGS\)
+    - \(OSD_DOWN\)
     - but it is still running
     conf:
       client.rest0:
