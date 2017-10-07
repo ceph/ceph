@@ -33,7 +33,8 @@ SnapshotProtectRequest<I>::SnapshotProtectRequest(I &image_ctx,
                                                   Context *on_finish,
 						  const cls::rbd::SnapshotNamespace &snap_namespace,
 						  const std::string &snap_name)
-  : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace), m_snap_name(snap_name) {
+  : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
+    m_snap_name(snap_name), m_state(STATE_PROTECT_SNAP) {
 }
 
 template <typename I>
@@ -64,8 +65,6 @@ void SnapshotProtectRequest<I>::send_protect_snap() {
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
-
-  m_state = STATE_PROTECT_SNAP;
 
   int r = verify_and_send_protect_snap();
   if (r < 0) {
