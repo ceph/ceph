@@ -92,7 +92,7 @@ template <>
 class MetadataCopyRequest<librbd::MockTestImageCtx> {
 public:
   static MetadataCopyRequest* s_instance;
-  Context *on_finish;
+  Context *on_finish{nullptr};
 
   static MetadataCopyRequest* create(librbd::MockTestImageCtx *local_image_ctx,
                                      librbd::MockTestImageCtx *remote_image_ctx,
