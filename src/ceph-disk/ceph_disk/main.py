@@ -1713,6 +1713,7 @@ class DevicePartition(object):
         return self.ptype_map[name]['ready']
 
     @staticmethod
+    @retry(OSError)
     def factory(path, dev, args):
         dmcrypt_type = CryptHelpers.get_dmcrypt_type(args)
         if ((path is not None and is_mpath(path)) or
