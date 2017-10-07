@@ -155,7 +155,8 @@ SnapshotUnprotectRequest<I>::SnapshotUnprotectRequest(I &image_ctx,
                                                       const cls::rbd::SnapshotNamespace &snap_namespace,
 						      const std::string &snap_name)
   : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
-    m_snap_name(snap_name), m_ret_val(0), m_snap_id(CEPH_NOSNAP) {
+    m_snap_name(snap_name), m_state(STATE_UNPROTECT_SNAP_START),
+    m_ret_val(0), m_snap_id(CEPH_NOSNAP) {
 }
 
 template <typename I>
@@ -228,8 +229,6 @@ void SnapshotUnprotectRequest<I>::send_unprotect_snap_start() {
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
-
-  m_state = STATE_UNPROTECT_SNAP_START;
 
   int r = verify_and_send_unprotect_snap_start();
   if (r < 0) {
