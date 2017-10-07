@@ -32,6 +32,7 @@ if(WITH_BLUESTORE)
     bluestore/StupidAllocator.cc
     bluestore/BitMapAllocator.cc
     bluestore/BitAllocator.cc
+    bluestore/avl.c
   )
 endif(WITH_BLUESTORE)
 
