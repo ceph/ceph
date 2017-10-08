@@ -67,6 +67,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
    * Allocate extent and make sure all comes in single extent.
    */   
   {
+    init_alloc(blocks, block_size);
     alloc->init_add_free(0, block_size * 4);
     EXPECT_EQ(alloc->reserve(block_size * 4), 0);
     AllocExtentVector extents;
@@ -81,6 +82,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
    * Allocate extent and make sure we get two different extents.
    */
   {
+    init_alloc(blocks, block_size);
     alloc->init_add_free(0, block_size * 2);
     alloc->init_add_free(3 * block_size, block_size * 2);
     EXPECT_EQ(alloc->reserve(block_size * 4), 0);
@@ -101,13 +103,12 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
   int64_t block_size = 1024;
   int64_t blocks = BitMapZone::get_total_blocks() * 2 * block_size;
 
-  init_alloc(blocks, block_size);
-
   /*
    * Make sure we get all extents different when
    * min_alloc_size == max_alloc_size
    */
   {
+    init_alloc(blocks, block_size);
     alloc->init_add_free(0, block_size * 4);
     EXPECT_EQ(alloc->reserve(block_size * 4), 0);
     AllocExtentVector extents;
@@ -126,6 +127,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
    * when max alloc size > min_alloc size
    */
   {
+    init_alloc(blocks, block_size);
     alloc->init_add_free(0, block_size * 4);
     EXPECT_EQ(alloc->reserve(block_size * 4), 0);
     AllocExtentVector extents;
@@ -142,6 +144,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
    * Make sure allocations are of min_alloc_size when min_alloc_size > block_size.
    */
   {
+    init_alloc(blocks, block_size);
     alloc->init_add_free(0, block_size * 1024);
     EXPECT_EQ(alloc->reserve(block_size * 1024), 0);
     AllocExtentVector extents;
@@ -159,6 +162,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
    * Allocate and free.
    */
   {
+    init_alloc(blocks, block_size);
     alloc->init_add_free(0, block_size * 16);
     EXPECT_EQ(alloc->reserve(block_size * 16), 0);
     AllocExtentVector extents;
@@ -178,8 +182,8 @@ TEST_P(AllocTest, test_alloc_failure)
   int64_t block_size = 1024;
   int64_t blocks = BitMapZone::get_total_blocks() * block_size;
 
-  init_alloc(blocks, block_size);
   {
+    init_alloc(blocks, block_size);
     alloc->init_add_free(0, block_size * 256);
     alloc->init_add_free(block_size * 512, block_size * 256);
 
@@ -189,9 +193,12 @@ TEST_P(AllocTest, test_alloc_failure)
 	      alloc->allocate(512 * (uint64_t)block_size,
 			      (uint64_t) block_size * 256,
 			      block_size * 256, (int64_t) 0, &extents));
+  }
+  {
+    init_alloc(blocks, block_size);
     alloc->init_add_free(0, block_size * 256);
     alloc->init_add_free(block_size * 512, block_size * 256);
-    extents.clear();
+    AllocExtentVector extents;
     EXPECT_EQ(alloc->reserve(block_size * 512), 0);
     EXPECT_EQ(-ENOSPC,
 	      alloc->allocate(512 * (uint64_t)block_size,
@@ -218,7 +225,7 @@ TEST_P(AllocTest, test_alloc_big)
 
 TEST_P(AllocTest, test_alloc_hint_bmap)
 {
-  if (GetParam() == std::string("stupid")) {
+  if (GetParam() != std::string("bitmap")) {
     return;
   }
   int64_t blocks = BitMapArea::get_level_factor(g_ceph_context, 2) * 4;
@@ -294,7 +301,7 @@ TEST_P(AllocTest, test_alloc_non_aligned_len)
 INSTANTIATE_TEST_CASE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap"));
+  ::testing::Values("stupid", "bitmap", "avl"));
 
 #else
 
