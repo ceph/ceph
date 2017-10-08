@@ -161,8 +161,8 @@ public:
   int get_val(const std::string &key, char **buf, int len) const;
   int _get_val(const std::string &key, char **buf, int len) const;
   Option::value_t get_val_generic(const std::string &key) const;
-  template<typename T> T get_val(const std::string &key) const;
-  template<typename T> T _get_val(const std::string &key) const;
+  template<typename T> const T& get_val(const std::string &key) const;
+  template<typename T> const T& _get_val(const std::string &key) const;
 
   void get_all_keys(std::vector<std::string> *keys) const;
 
@@ -320,29 +320,13 @@ public:
 };
 
 template<typename T>
-struct get_typed_value_visitor : public boost::static_visitor<T> {
-  template<typename U,
-    typename boost::enable_if<boost::is_same<T, U>, int>::type = 0>
-      T operator()(U & val) {
-	return std::move(val);
-      }
-  template<typename U,
-    typename boost::enable_if_c<!boost::is_same<T, U>::value, int>::type = 0>
-      T operator()(U &val) {
-	assert("wrong type or option does not exist" == nullptr);
-      }
-};
-
-template<typename T> T md_config_t::get_val(const std::string &key) const {
-  Option::value_t generic_val = this->get_val_generic(key);
-  get_typed_value_visitor<T> gtv;
-  return boost::apply_visitor(gtv, generic_val);
+const T& md_config_t::get_val(const std::string &key) const {
+  return boost::get<T>(this->get_val_generic(key));
 }
 
-template<typename T> T md_config_t::_get_val(const std::string &key) const {
-  Option::value_t generic_val = this->_get_val_generic(key);
-  get_typed_value_visitor<T> gtv;
-  return boost::apply_visitor(gtv, generic_val);
+template<typename T>
+const T& md_config_t::_get_val(const std::string &key) const {
+  return boost::get<T>(this->_get_val_generic(key));
 }
 
 inline std::ostream& operator<<(std::ostream& o, const boost::blank& ) {
