@@ -1778,7 +1778,8 @@ bool OSDMonitor::can_mark_down(int i)
     dout(5) << __func__ << " no osds" << dendl;
     return false;
   }
-  int up = osdmap.get_num_up_osds() - pending_inc.get_net_marked_down(&osdmap);
+  unsigned up =
+    osdmap.get_num_up_osds() - pending_inc.get_net_marked_down(&osdmap);
   float up_ratio = (float)up / (float)num_osds;
   if (up_ratio < g_conf->mon_osd_min_up_ratio) {
     dout(2) << __func__ << " current up_ratio " << up_ratio << " < min "
@@ -3097,7 +3098,7 @@ void OSDMonitor::check_osdmap_sub(Subscription *sub)
 
 void OSDMonitor::check_pg_creates_subs()
 {
-  if (!osdmap.get_num_up_osds()) {
+  if (osdmap.get_num_up_osds() == 0) {
     return;
   }
   assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);
@@ -5914,7 +5915,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (val == "true" || (interr.empty() && n == 1)) {
       string force;
       cmd_getval(g_ceph_context, cmdmap, "force", force);
-      if (!osdmap.get_num_up_osds() && force != "--yes-i-really-mean-it") {
+      if (osdmap.get_num_up_osds() == 0 && force != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         return -EPERM;
@@ -8492,7 +8493,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     else if (key == "notieragent")
       return prepare_set_flag(op, CEPH_OSDMAP_NOTIERAGENT);
     else if (key == "sortbitwise") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (osdmap.get_num_up_osds() == 0 && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
@@ -8507,7 +8508,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply;
       }
     } else if (key == "recovery_deletes") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (osdmap.get_num_up_osds() == 0 && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
@@ -8522,7 +8523,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply;
       }
     } else if (key == "require_jewel_osds") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (osdmap.get_num_up_osds() == 0 && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
@@ -8544,7 +8545,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -EPERM;
       }
     } else if (key == "require_kraken_osds") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (osdmap.get_num_up_osds() == 0 && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
@@ -8633,7 +8634,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
     if (rel == CEPH_RELEASE_MIMIC) {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (osdmap.get_num_up_osds() == 0 && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
