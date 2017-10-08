@@ -332,7 +332,7 @@ TEST_P(AllocTest, test_alloc_bench_10_300)
 INSTANTIATE_TEST_CASE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap"));
+  ::testing::Values("stupid", "bitmap", "avl"));
 
 #else
 
