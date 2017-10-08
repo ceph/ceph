@@ -8971,7 +8971,9 @@ void BlueStore::_kv_sync_thread()
 		 << " force_flush=" << (int)force_flush
 		 << ", flushing, deferred done->stable" << dendl;
 	// flush/barrier on block device
+#if 1
 	bdev->flush();
+#endif
 
 	// if we flush then deferred done are now deferred stable
 	deferred_stable.insert(deferred_stable.end(), deferred_done.begin(),
@@ -9301,7 +9303,9 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
 	if (!g_conf->bluestore_debug_omit_block_device_write) {
 	  logger->inc(l_bluestore_deferred_write_ops);
 	  logger->inc(l_bluestore_deferred_write_bytes, bl.length());
+#if 1
 	  int r = bdev->aio_write(start, bl, &b->ioc, false);
+#endif
 	  assert(r == 0);
 	}
       }
@@ -9528,7 +9532,9 @@ int BlueStore::queue_transactions(
 void BlueStore::_txc_aio_submit(TransContext *txc)
 {
   dout(10) << __func__ << " txc " << txc << dendl;
+#if 1
   bdev->aio_submit(&txc->ioc);
+#endif
 }
 
 void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
