@@ -3994,6 +3994,16 @@ int main(int argc, const char **argv)
       {
 	RGWZoneParams zone(zone_id, zone_name);
 	int ret = zone.init(g_ceph_context, store);
+	// handle the special case of the default zone
+	if (ret == -ENOENT && zone_name.empty() && zone_id.empty()) {
+	  // check to see there is no realm
+	  RGWRealm realm;
+	  int realm_ret = realm.init(g_ceph_context, store);
+	  if (realm_ret == -ENOENT) {
+	    zone.set_name(default_zone_name);
+	    ret = zone.init(g_ceph_context, store);
+	  }
+	}
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
