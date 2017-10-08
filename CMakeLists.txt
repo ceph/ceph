@@ -581,6 +581,9 @@ if (WITH_SYSTEM_ROCKSDB)
   find_package(rocksdb 5.8 REQUIRED)
 endif()
 
+option(WITH_SEASTAR "Build seastar components")
+set(HAVE_SEASTAR ${WITH_SEASTAR})
+
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
@@ -595,6 +598,7 @@ endif()
 if(WITH_BOOST_CONTEXT)
   list(APPEND BOOST_COMPONENTS context coroutine)
 endif()
+list(APPEND BOOST_COMPONENTS test timer)
 
 set(Boost_USE_MULTITHREADED ON)
 # require minimally the bundled version
