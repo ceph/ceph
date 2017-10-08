@@ -975,6 +975,9 @@ OPTION(bluestore_block_db_create, OPT_BOOL)
 OPTION(bluestore_block_wal_path, OPT_STR)
 OPTION(bluestore_block_wal_size, OPT_U64) // rocksdb wal
 OPTION(bluestore_block_wal_create, OPT_BOOL)
+OPTION(bluestore_block_fast_path, OPT_STR)
+OPTION(bluestore_block_fast_size, OPT_U64) // fast tier
+OPTION(bluestore_block_fast_create, OPT_BOOL)
 OPTION(bluestore_block_preallocate_file, OPT_BOOL) //whether preallocate space if block/db_path/wal_path is file rather that block device.
 OPTION(bluestore_csum_type, OPT_STR) // none|xxhash32|xxhash64|crc32c|crc32c_16|crc32c_8
 OPTION(bluestore_min_alloc_size, OPT_U32)

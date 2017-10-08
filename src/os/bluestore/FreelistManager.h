@@ -20,7 +20,8 @@ public:
     CephContext* cct,
     string type,
     KeyValueDB *db,
-    string prefix);
+    string prefix_alloc,
+    string prefix_alloc_bitmap);
 
   static void setup_merge_operators(KeyValueDB *db);
 

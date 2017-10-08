@@ -3548,6 +3548,22 @@ std::vector<Option> get_global_options() {
     .add_see_also("bluestore_block_wal_path")
     .add_see_also("bluestore_block_wal_size"),
 
+    Option("bluestore_block_fast_path", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("")
+    .add_tag("mkfs")
+    .set_description("Path to fast block device/file"),
+
+    Option("bluestore_block_fast_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(1_G)
+    .add_tag("mkfs")
+    .set_description("Size of file to create for backing bluestore fast tier"),
+
+    Option("bluestore_block_fast_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .add_tag("mkfs")
+    .set_description("Create bluestore_block_fast_path if it doesn't exist")
+    .add_see_also("bluestore_block_fast_path").add_see_also("bluestore_block_fast_size"),
+
     Option("bluestore_block_preallocate_file", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .add_tag("mkfs")
