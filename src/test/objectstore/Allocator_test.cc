@@ -66,6 +66,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
    * Allocate extent and make sure all comes in single extent.
    */   
   {
+    init_alloc(capacity, block_size);
     alloc->init_add_free(0, block_size * 4);
     PExtentVector extents;
     EXPECT_EQ(4*block_size,
@@ -79,6 +80,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
    * Allocate extent and make sure we get two different extents.
    */
   {
+    init_alloc(capacity, block_size);
     alloc->init_add_free(0, block_size * 2);
     alloc->init_add_free(3 * block_size, block_size * 2);
     PExtentVector extents;
@@ -105,6 +107,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
    * min_alloc_size == max_alloc_size
    */
   {
+    init_alloc(capacity, block_size);
     alloc->init_add_free(0, block_size * 4);
     PExtentVector extents;
     EXPECT_EQ(4*block_size,
@@ -122,6 +125,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
    * when max alloc size > min_alloc size
    */
   {
+    init_alloc(capacity, block_size);
     alloc->init_add_free(0, block_size * 4);
     PExtentVector extents;
     EXPECT_EQ(4*block_size,
@@ -137,6 +141,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
    * Make sure allocations are of min_alloc_size when min_alloc_size > block_size.
    */
   {
+    init_alloc(capacity, block_size);
     alloc->init_add_free(0, block_size * 1024);
     PExtentVector extents;
     EXPECT_EQ(1024 * block_size,
@@ -153,6 +158,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
    * Allocate and free.
    */
   {
+    init_alloc(capacity, block_size);
     alloc->init_add_free(0, block_size * 16);
     PExtentVector extents;
     EXPECT_EQ(16 * block_size,
@@ -171,8 +177,8 @@ TEST_P(AllocTest, test_alloc_failure)
   int64_t block_size = 1024;
   int64_t capacity = 4 * 1024 * block_size;
 
-  init_alloc(capacity, block_size);
   {
+    init_alloc(capacity, block_size);
     alloc->init_add_free(0, block_size * 256);
     alloc->init_add_free(block_size * 512, block_size * 256);
 
@@ -259,6 +265,11 @@ TEST_P(AllocTest, test_alloc_fragmentation)
     }
   }
   EXPECT_EQ(-ENOSPC, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
+
+  if (GetParam() == string("avl")) {
+    // AVL allocator uses a different allocating strategy
+    GTEST_SKIP() << "skipping for AVL allocator";
+  }
 
   for (size_t i = 0; i < allocated.size(); i += 2)
   {
@@ -438,4 +449,4 @@ TEST_P(AllocTest, test_alloc_big3)
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap"));
+  ::testing::Values("stupid", "bitmap", "avl"));
