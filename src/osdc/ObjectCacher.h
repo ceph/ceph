@@ -461,6 +461,8 @@ class ObjectCacher {
   loff_t stat_error;
   loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
 
+  size_t stat_nr_dirty_waiters;
+
   void verify_stats() const;
 
   void bh_stat_add(BufferHead *bh);
@@ -468,9 +470,10 @@ class ObjectCacher {
   loff_t get_stat_tx() const { return stat_tx; }
   loff_t get_stat_rx() const { return stat_rx; }
   loff_t get_stat_dirty() const { return stat_dirty; }
-  loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
   loff_t get_stat_clean() const { return stat_clean; }
   loff_t get_stat_zero() const { return stat_zero; }
+  loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
+  size_t get_stat_nr_dirty_waiters() const { return stat_nr_dirty_waiters; }
 
   void touch_bh(BufferHead *bh) {
     if (bh->is_dirty())
