@@ -68,6 +68,8 @@ const char *parse_good[] = {
   "allow pool foo namespace=nfoo rwx ; allow pool bar namespace=nbar r",
   "allow pool foo namespace nfoo rwx ;allow pool bar namespace nbar r",
   "allow pool foo namespace=nfoo rwx; allow pool bar namespace nbar object_prefix rbd r",
+  "allow rwx namespace=nfoo tag cephfs data=cephfs_a",
+  "allow rwx namespace foo tag cephfs data =cephfs_a",
   "allow pool foo namespace=nfoo* rwx",
   "allow pool foo namespace=\"\" rwx; allow pool bar namespace='' object_prefix rbd r",
   "allow pool foo namespace \"\" rwx; allow pool bar namespace '' object_prefix rbd r",
@@ -827,6 +829,36 @@ TEST(OSDCap, PoolTagWildKV)
   ASSERT_TRUE(cap.is_capable("foo", "", 0, {{"application", {{"foo", "bar"}, {"key2", "value"}}}, {"app2", {{"foo", "bar"}}}}, "foo", true, true, {}));
 }
 
+TEST(OSDCap, NSPool)
+{
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow rwx namespace ns tag application key=value", NULL));
+
+  ASSERT_TRUE(cap.is_capable("foo", "ns", 0, {{"application", {{"key", "value"}}}}, "foo", true, true, {}));
+
+  ASSERT_FALSE(cap.is_capable("foo", "", 0, {{"application", {{"key", "value"}}}}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("foo", "ns", 0, {}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("foo", "ns2", 0, {{"application", {{"key", "value"}}}}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("foo", "ns", 0, {{"application", {{"key", "value2"}}}}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("foo", "ns", 0, {{"application", {{"key2", "value"}}}}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("foo", "", 0, {}, "foo", true, true, {}));
+}
+
+TEST(OSDCap, NSPoolGlob)
+{
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow rwx namespace ns* tag application key=value", NULL));
+
+  ASSERT_TRUE(cap.is_capable("foo", "ns", 0, {{"application", {{"key", "value"}}}}, "foo", true, true, {}));
+
+  ASSERT_TRUE(cap.is_capable("foo", "ns2", 0, {{"application", {{"key", "value"}}}}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("foo", "", 0, {{"application", {{"key", "value"}}}}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("foo", "ns", 0, {}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("foo", "ns", 0, {{"application", {{"key", "value2"}}}}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("foo", "ns", 0, {{"application", {{"key2", "value"}}}}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("foo", "", 0, {}, "foo", true, true, {}));
+}
+
 TEST(OSDCap, OutputParsed)
 {
   struct CapsTest {
@@ -875,7 +907,9 @@ TEST(OSDCap, OutputParsed)
     {"allow class-read object_prefix rbd_children, allow pool libvirt-pool-test rwx",
      "osdcap[grant(object_prefix rbd_children  class-read),grant(pool libvirt-pool-test rwx)]"},
     {"allow rwx tag application key=value",
-     "osdcap[grant(app application key key val value rwx)]"}
+     "osdcap[grant(app application key key val value rwx)]"},
+    {"allow rwx namespace ns* tag application key=value",
+     "osdcap[grant(namespace ns* app application key key val value rwx)]"}
   };
 
   size_t num_tests = sizeof(test_values) / sizeof(*test_values);
