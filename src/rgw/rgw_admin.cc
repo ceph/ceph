@@ -193,7 +193,8 @@ void usage()
   cout << "  role-policy get            get the specified inline policy document embedded with the given role\n";
   cout << "  role-policy delete         delete policy attached to a role\n";
   cout << "  reshard add                schedule a resharding of a bucket\n";
-  cout << "  reshard list               list all bucket resharding or scheduled to be reshared\n";
+  cout << "  reshard list               list all bucket resharding or scheduled to be resharded\n";
+  cout << "  reshard status             read bucket resharding status\n";
   cout << "  reshard process            process of scheduled reshard jobs\n";
   cout << "  reshard cancel             cancel resharding a bucket\n";
   cout << "options:\n";
