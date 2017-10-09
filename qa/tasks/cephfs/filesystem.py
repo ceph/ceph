@@ -374,10 +374,12 @@ class Filesystem(MDSCluster):
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
     """
-    def __init__(self, ctx, fscid=None, name=None, create=False):
+    def __init__(self, ctx, fscid=None, name=None, create=False,
+                 ec_profile=None):
         super(Filesystem, self).__init__(ctx)
 
         self.name = name
+        self.ec_profile = ec_profile
         self.id = None
         self.metadata_pool_name = None
         self.metadata_overlay = False
@@ -473,8 +475,22 @@ class Filesystem(MDSCluster):
                                              self.name, self.metadata_pool_name, data_pool_name,
                                              '--allow-dangerous-metadata-overlay')
         else:
-            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                             data_pool_name, pgs_per_fs_pool.__str__())
+            if self.ec_profile:
+                log.info("EC profile is %s", self.ec_profile)
+                cmd = ['osd', 'erasure-code-profile', 'set', data_pool_name]
+                cmd.extend(self.ec_profile)
+                self.mon_manager.raw_cluster_cmd(*cmd)
+                self.mon_manager.raw_cluster_cmd(
+                    'osd', 'pool', 'create',
+                    data_pool_name, pgs_per_fs_pool.__str__(), 'erasure',
+                    data_pool_name)
+                self.mon_manager.raw_cluster_cmd(
+                    'osd', 'pool', 'set',
+                    data_pool_name, 'allow_ec_overwrites', 'true')
+            else:
+                self.mon_manager.raw_cluster_cmd(
+                    'osd', 'pool', 'create',
+                    data_pool_name, pgs_per_fs_pool.__str__())
             self.mon_manager.raw_cluster_cmd('fs', 'new',
                                              self.name, self.metadata_pool_name, data_pool_name)
         self.check_pool_application(self.metadata_pool_name)
