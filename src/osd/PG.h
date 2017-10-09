@@ -832,7 +832,7 @@ protected:
 
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
-  unsigned    state;   // PG_STATE_*
+  uint64_t    state;   // PG_STATE_*
 
   bool send_notify;    ///< true if we are non-primary and should notify the primary
 
@@ -2538,9 +2538,9 @@ protected:
     role = r;
   }
 
-  bool state_test(int m) const { return (state & m) != 0; }
-  void state_set(int m) { state |= m; }
-  void state_clear(int m) { state &= ~m; }
+  bool state_test(uint64_t m) const { return (state & m) != 0; }
+  void state_set(uint64_t m) { state |= m; }
+  void state_clear(uint64_t m) { state &= ~m; }
 
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }

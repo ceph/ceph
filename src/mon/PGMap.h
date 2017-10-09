@@ -52,7 +52,7 @@ public:
   mempool::pgmap::map<int64_t,int64_t> num_pg_by_pool;
   pool_stat_t pg_sum;
   osd_stat_t osd_sum;
-  mempool::pgmap::unordered_map<int32_t,int32_t> num_pg_by_state;
+  mempool::pgmap::unordered_map<uint64_t,int32_t> num_pg_by_state;
   struct pg_count {
     int32_t acting = 0;
     int32_t up = 0;
