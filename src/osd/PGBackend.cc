@@ -1047,8 +1047,9 @@ void PGBackend::be_compare_scrubmaps(
       }
       if (auth_object.digest_present && auth_object.omap_digest_present &&
 	  cct->_conf->osd_debug_scrub_chance_rewrite_digest &&
-	  (static_cast<unsigned>(ceph::util::generate_random_number(100) >
-	   cct->_conf->osd_debug_scrub_chance_rewrite_digest))) {
+	  (ceph::util::generate_random_number<
+		decltype(cct->_conf->osd_debug_scrub_chance_rewrite_digest)>(100) >
+	   cct->_conf->osd_debug_scrub_chance_rewrite_digest)) {
 	dout(20) << __func__ << " randomly updating digest on " << *k << dendl;
 	update = MAYBE;
       }

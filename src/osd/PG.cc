@@ -2850,7 +2850,7 @@ void PG::_update_blocked_by()
   for (set<int>::iterator p = blocked_by.begin();
        p != blocked_by.end() && keep > 0;
        ++p) {
-    if (skip > 0 && ceph::util::generate_random_number(skip + keep) < skip) {
+    if (skip > 0 && ceph::util::generate_random_number<unsigned>(skip + keep) < skip) {
       --skip;
     } else {
       info.stats.blocked_by[pos++] = *p;
