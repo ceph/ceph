@@ -1126,31 +1126,48 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
   }
 
-  // tell me about it
-  for (auto i = pending_inc.new_state.begin();
-       i != pending_inc.new_state.end();
-       ++i) {
-    int s = i->second ? i->second : CEPH_OSD_UP;
-    if (s & CEPH_OSD_UP)
-      dout(2) << " osd." << i->first << " DOWN" << dendl;
-    if (s & CEPH_OSD_EXISTS)
-      dout(2) << " osd." << i->first << " DNE" << dendl;
-  }
-  for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up_client.begin();
-       i != pending_inc.new_up_client.end();
-       ++i) {
-    //FIXME: insert cluster addresses too
-    dout(2) << " osd." << i->first << " UP " << i->second << dendl;
-  }
-  for (map<int32_t,uint32_t>::iterator i = pending_inc.new_weight.begin();
-       i != pending_inc.new_weight.end();
-       ++i) {
-    if (i->second == CEPH_OSD_OUT) {
-      dout(2) << " osd." << i->first << " OUT" << dendl;
-    } else if (i->second == CEPH_OSD_IN) {
-      dout(2) << " osd." << i->first << " IN" << dendl;
-    } else {
-      dout(2) << " osd." << i->first << " WEIGHT " << hex << i->second << dec << dendl;
+  {
+    OSDMap tmp;
+    // tell me about it
+    for (auto i = pending_inc.new_state.begin();
+      i != pending_inc.new_state.end(); ++i) {
+      int s = i->second ? i->second : CEPH_OSD_UP;
+      int32_t osd = i->first;
+      const entity_addr_t cluster = tmp.get_cluster_addr(osd);
+
+      if (s & CEPH_OSD_UP)
+        dout(2) << "cluster " << cluster << " "
+                << "osd." << osd << " DOWN" << dendl;
+      if (s & CEPH_OSD_EXISTS)
+        dout(2) << "cluster " << cluster << " "
+                << "osd." << osd << " DNE" << dendl;
+    }
+
+    for (std::map<int32_t, entity_addr_t>::iterator i =
+      pending_inc.new_up_client.begin();
+      i != pending_inc.new_up_client.end(); ++i) {
+      int32_t osd = i->first;
+      const entity_addr_t cluster = tmp.get_cluster_addr(osd);
+
+      dout(2) << "cluster " << cluster << " "
+              << "osd." << osd << " UP" << i->second << dendl;
+    }
+
+    for (std::map<int32_t, uint32_t>::iterator i =
+      pending_inc.new_weight.begin(); i != pending_inc.new_weight.end(); ++i) {
+      int32_t osd = i->first;
+      const entity_addr_t cluster = tmp.get_cluster_addr(osd);
+
+      if (i->second == CEPH_OSD_OUT)
+        dout(2) << "cluster " << cluster << " "
+                << "osd." << osd << " OUT" << dendl;
+      else if (i->second == CEPH_OSD_IN)
+        dout(2) << "cluster " << cluster << " "
+                << "osd." << osd << " IN" << dendl;
+      else
+        dout(2) << "cluster " << cluster << " "
+                << "osd." << osd << " "
+                << "WEIGHT" << std::hex << i->second << std::dec << dendl;
     }
   }
 
