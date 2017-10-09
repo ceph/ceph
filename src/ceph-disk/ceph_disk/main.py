@@ -24,6 +24,7 @@ import argparse
 import base64
 import errno
 import fcntl
+import functools
 import json
 import logging
 import os
@@ -661,6 +662,21 @@ def get_partition_mpath(dev, pnum):
         return None
 
 
+def retry(on_error=Exception, max_tries=10, wait=0.2, backoff=0):
+    def wrapper(func):
+        @functools.wraps(func)
+        def repeat(*args, **kwargs):
+            for tries in range(max_tries - 1):
+                try:
+                    return func(*args, **kwargs)
+                except on_error:
+                    time.sleep(wait + backoff * tries)
+            return func(*args, **kwargs)
+        return repeat
+    return wrapper
+
+
+@retry(Error)
 def get_partition_dev(dev, pnum):
     """
     get the device name for a partition
@@ -672,36 +688,25 @@ def get_partition_dev(dev, pnum):
        sda 1 -> sda1
        cciss/c0d1 1 -> cciss!c0d1p1
     """
-    max_retry = 10
-    for retry in range(0, max_retry + 1):
-        partname = None
-        error_msg = ""
-        if is_mpath(dev):
-            partname = get_partition_mpath(dev, pnum)
-        else:
-            name = get_dev_name(os.path.realpath(dev))
-            sys_entry = os.path.join('/sys/block', name)
-            error_msg = " in %s" % sys_entry
-            for f in os.listdir(sys_entry):
-                if f.startswith(name) and f.endswith(str(pnum)):
-                    # we want the shortest name that starts with the base name
-                    # and ends with the partition number
-                    if not partname or len(f) < len(partname):
-                        partname = f
-        if partname:
-            if retry:
-                LOG.info('Found partition %d for %s after %d tries' %
-                         (pnum, dev, retry))
-            return get_dev_path(partname)
-        else:
-            if retry < max_retry:
-                LOG.info('Try %d/%d : partition %d for %s does not exist%s' %
-                         (retry + 1, max_retry, pnum, dev, error_msg))
-                time.sleep(.2)
-                continue
-            else:
-                raise Error('partition %d for %s does not appear to exist%s' %
-                            (pnum, dev, error_msg))
+    partname = None
+    error_msg = ""
+    if is_mpath(dev):
+        partname = get_partition_mpath(dev, pnum)
+    else:
+        name = get_dev_name(os.path.realpath(dev))
+        sys_entry = os.path.join('/sys/block', name)
+        error_msg = " in %s" % sys_entry
+        for f in os.listdir(sys_entry):
+            if f.startswith(name) and f.endswith(str(pnum)):
+                # we want the shortest name that starts with the base name
+                # and ends with the partition number
+                if not partname or len(f) < len(partname):
+                    partname = f
+    if partname:
+        return get_dev_path(partname)
+    else:
+        raise Error('partition %d for %s does not appear to exist%s' %
+                    (pnum, dev, error_msg))
 
 
 def list_all_partitions():
@@ -1298,22 +1303,14 @@ def _dmcrypt_map(
         raise Error('unable to map device', rawdev, e)
 
 
-def dmcrypt_unmap(
-    _uuid
-):
+@retry(Error, max_tries=10, wait=0.5, backoff=1.0)
+def dmcrypt_unmap(_uuid):
     if not os.path.exists('/dev/mapper/' + _uuid):
         return
-    retries = 0
-    while True:
-        try:
-            command_check_call(['cryptsetup', 'remove', _uuid])
-            break
-        except subprocess.CalledProcessError as e:
-            if retries == 10:
-                raise Error('unable to unmap device', _uuid, e)
-            else:
-                time.sleep(0.5 + retries * 1.0)
-                retries += 1
+    try:
+        command_check_call(['cryptsetup', 'remove', _uuid])
+    except subprocess.CalledProcessError as e:
+        raise Error('unable to unmap device', _uuid, e)
 
 
 def mount(
@@ -1375,32 +1372,24 @@ def mount(
     return path
 
 
+@retry(UnmountError, max_tries=3, wait=0.5, backoff=1.0)
 def unmount(
     path,
 ):
     """
     Unmount and removes the given mount point.
     """
-    retries = 0
-    while True:
-        try:
-            LOG.debug('Unmounting %s', path)
-            command_check_call(
-                [
-                    '/bin/umount',
-                    '--',
-                    path,
-                ],
-            )
-            break
-        except subprocess.CalledProcessError as e:
-            # on failure, retry 3 times with incremental backoff
-            if retries == 3:
-                raise UnmountError(e)
-            else:
-                time.sleep(0.5 + retries * 1.0)
-                retries += 1
-
+    try:
+        LOG.debug('Unmounting %s', path)
+        command_check_call(
+            [
+                '/bin/umount',
+                '--',
+                path,
+            ],
+        )
+    except subprocess.CalledProcessError as e:
+        raise UnmountError(e)
     os.rmdir(path)
 
 
@@ -1724,6 +1713,7 @@ class DevicePartition(object):
         return self.ptype_map[name]['ready']
 
     @staticmethod
+    @retry(OSError)
     def factory(path, dev, args):
         dmcrypt_type = CryptHelpers.get_dmcrypt_type(args)
         if ((path is not None and is_mpath(path)) or
