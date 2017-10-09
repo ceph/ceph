@@ -2380,17 +2380,18 @@ protected:
   bool should_send_notify() const { return send_notify; }
 
   int get_state() const { return state; }
-  bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
-  bool       is_activating() const { return state_test(PG_STATE_ACTIVATING); }
-  bool       is_peering() const { return state_test(PG_STATE_PEERING); }
-  bool       is_down() const { return state_test(PG_STATE_DOWN); }
-  bool       is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
-  bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
-  bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
-  bool       is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
-
-  bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
-  bool       is_peered() const {
+  bool is_active() const { return state_test(PG_STATE_ACTIVE); }
+  bool is_activating() const { return state_test(PG_STATE_ACTIVATING); }
+  bool is_peering() const { return state_test(PG_STATE_PEERING); }
+  bool is_down() const { return state_test(PG_STATE_DOWN); }
+  bool is_recovery_unfound() const { return state_test(PG_STATE_RECOVERY_UNFOUND); }
+  bool is_backfill_unfound() const { return state_test(PG_STATE_BACKFILL_UNFOUND); }
+  bool is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
+  bool is_clean() const { return state_test(PG_STATE_CLEAN); }
+  bool is_degraded() const { return state_test(PG_STATE_DEGRADED); }
+  bool is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
+  bool is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
+  bool is_peered() const {
     return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
   }
 
@@ -2573,6 +2574,9 @@ public:
   void handle_create(RecoveryCtx *rctx);
   void handle_loaded(RecoveryCtx *rctx);
   void handle_query_state(Formatter *f);
+
+  // more work after the above, but with a RecoveryCtx
+  void find_unfound(epoch_t queued, RecoveryCtx *rctx);
 
   virtual void on_removal(ObjectStore::Transaction *t) = 0;
 

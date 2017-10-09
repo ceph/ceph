@@ -2662,6 +2662,8 @@ void PGMap::get_health_checks(
     { PG_STATE_INCOMPLETE,       {UNAVAILABLE, {}} },
     { PG_STATE_REPAIR,           {DAMAGED,     {}} },
     { PG_STATE_SNAPTRIM_ERROR,   {DAMAGED,     {}} },
+    { PG_STATE_RECOVERY_UNFOUND, {DAMAGED,     {}} },
+    { PG_STATE_BACKFILL_UNFOUND, {DAMAGED,     {}} },
     { PG_STATE_BACKFILL_TOOFULL, {DEGRADED_FULL, {}} },
     { PG_STATE_RECOVERY_TOOFULL, {DEGRADED_FULL, {}} },
     { PG_STATE_DEGRADED,         {DEGRADED,    {}} },
