@@ -838,6 +838,10 @@ protected:
     eversion_t v;
     C_UpdateLastRollbackInfoTrimmedToApplied(PG *pg, epoch_t e, eversion_t v)
       : pg(pg), e(e), v(v) {}
+    bool sync_finish(int r) override {
+      pg->last_rollback_info_trimmed_to_applied = v;
+      return true;
+    }
     void finish(int) override {
       pg->lock();
       if (!pg->pg_has_reset_since(e)) {
