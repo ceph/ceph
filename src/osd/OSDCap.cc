@@ -16,6 +16,7 @@
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/phoenix_operator.hpp>
 #include <boost/spirit/include/phoenix.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 #include "OSDCap.h"
 #include "common/config.h"
@@ -109,6 +110,11 @@ bool OSDCapPoolNamespace::is_match(const std::string& pn,
     }
   }
   if (nspace) {
+    if ((*nspace)[nspace->length() - 1] == '*' &&
+	boost::starts_with(ns, nspace->substr(0, nspace->length() - 1))) {
+      return true;
+    }
+
     if (*nspace != ns) {
       return false;
     }
@@ -388,7 +394,9 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
     spaces = +ascii::space;
 
     pool_name %= -(spaces >> lit("pool") >> (lit('=') | spaces) >> str);
-    nspace %= (spaces >> lit("namespace") >> (lit('=') | spaces) >> estr);
+    nspace %= (spaces >> lit("namespace")
+	       >> (lit('=') | spaces)
+	       >> estr >> -char_('*'));
 
     // match := [pool[=]<poolname> [namespace[=]<namespace>] | auid <123>] [object_prefix <prefix>]
     auid %= (spaces >> lit("auid") >> spaces >> int_);
