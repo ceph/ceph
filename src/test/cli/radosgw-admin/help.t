@@ -137,7 +137,8 @@
     role-policy get            get the specified inline policy document embedded with the given role
     role-policy delete         delete policy attached to a role
     reshard add                schedule a resharding of a bucket
-    reshard list               list all bucket resharding or scheduled to be reshared
+    reshard list               list all bucket resharding or scheduled to be resharded
+    reshard status             read bucket resharding status
     reshard process            process of scheduled reshard jobs
     reshard cancel             cancel resharding a bucket
   options:
