@@ -200,7 +200,7 @@ private:
   void validate_default_settings();
 
   int _get_val(const std::string &key, std::string *value) const;
-  Option::value_t _get_val(const std::string &key) const;
+  Option::value_t _get_val_generic(const std::string &key) const;
   void _show_config(std::ostream *out, Formatter *f);
 
   void _get_my_sections(std::vector <std::string> &sections) const;
@@ -340,7 +340,7 @@ template<typename T> T md_config_t::get_val(const std::string &key) const {
 }
 
 template<typename T> T md_config_t::_get_val(const std::string &key) const {
-  Option::value_t generic_val = this->_get_val(key);
+  Option::value_t generic_val = this->_get_val_generic(key);
   get_typed_value_visitor<T> gtv;
   return boost::apply_visitor(gtv, generic_val);
 }
