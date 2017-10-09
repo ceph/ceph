@@ -162,6 +162,7 @@ public:
   int _get_val(const std::string &key, char **buf, int len) const;
   Option::value_t get_val_generic(const std::string &key) const;
   template<typename T> T get_val(const std::string &key) const;
+  template<typename T> T _get_val(const std::string &key) const;
 
   void get_all_keys(std::vector<std::string> *keys) const;
 
@@ -334,6 +335,12 @@ struct get_typed_value_visitor : public boost::static_visitor<T> {
 
 template<typename T> T md_config_t::get_val(const std::string &key) const {
   Option::value_t generic_val = this->get_val_generic(key);
+  get_typed_value_visitor<T> gtv;
+  return boost::apply_visitor(gtv, generic_val);
+}
+
+template<typename T> T md_config_t::_get_val(const std::string &key) const {
+  Option::value_t generic_val = this->_get_val(key);
   get_typed_value_visitor<T> gtv;
   return boost::apply_visitor(gtv, generic_val);
 }
