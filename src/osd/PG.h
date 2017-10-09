@@ -410,9 +410,15 @@ public:
       return i->second.is_delete();
     }
     bool is_unfound(const hobject_t &hoid) const {
-      return needs_recovery(hoid) && !is_deleted(hoid) && (
-	!missing_loc.count(hoid) ||
-	!(*is_recoverable)(missing_loc.find(hoid)->second));
+      auto it = needs_recovery_map.find(hoid);
+      if (it == needs_recovery_map.end()) {
+        return false;
+      }
+      if (it->second.is_delete()) {
+        return false;
+      }
+      auto mit = missing_loc.find(hoid);
+      return mit == missing_loc.end() || !(*is_recoverable)(mit->second);
     }
     bool readable_with_acting(
       const hobject_t &hoid,
@@ -423,7 +429,10 @@ public:
 	     needs_recovery_map.begin();
 	   i != needs_recovery_map.end();
 	   ++i) {
-	if (is_unfound(i->first))
+	if (i->second.is_delete())
+	  continue;
+	auto mi = missing_loc.find(i->first);
+	if (mi == missing_loc.end() || !(*is_recoverable)(mi->second))
 	  ++ret;
       }
       return ret;
@@ -434,7 +443,10 @@ public:
 	     needs_recovery_map.begin();
 	   i != needs_recovery_map.end();
 	   ++i) {
-	if (is_unfound(i->first))
+        if (i->second.is_delete())
+          continue;
+        auto mi = missing_loc.find(i->first);
+        if (mi == missing_loc.end() || !(*is_recoverable)(mi->second))
 	  return true;
       }
       return false;
@@ -473,8 +485,9 @@ public:
       needs_recovery_map[hoid] = pg_missing_item(need, have);
     }
     void revise_need(const hobject_t &hoid, eversion_t need) {
-      assert(needs_recovery(hoid));
-      needs_recovery_map[hoid].need = need;
+      auto it = needs_recovery_map.find(hoid);
+      assert(it != needs_recovery_map.end());
+      it->second.need = need;
     }
 
     /// Adds info about a possible recovery source
@@ -550,8 +563,8 @@ public:
     }
 
     const set<pg_shard_t> &get_locations(const hobject_t &hoid) const {
-      return missing_loc.count(hoid) ?
-	missing_loc.find(hoid)->second : empty_set;
+      auto it = missing_loc.find(hoid);
+      return it == missing_loc.end() ? empty_set : it->second;
     }
     const map<hobject_t, set<pg_shard_t>> &get_missing_locs() const {
       return missing_loc;
