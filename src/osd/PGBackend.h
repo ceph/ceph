@@ -577,6 +577,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      inconsistent_obj_wrapper &object_error);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
+     const set<hobject_t> &master_set,
      bool repair,
      map<hobject_t, set<pg_shard_t>> &missing,
      map<hobject_t, set<pg_shard_t>> &inconsistent,

@@ -4844,6 +4844,30 @@ void PG::scrub_compare_maps()
   scrubber.cleaned_meta_map.insert(scrubber.primary_scrubmap);
   map<hobject_t, pair<uint32_t, uint32_t>> missing_digest;
 
+  map<pg_shard_t, ScrubMap *> maps;
+  maps[pg_whoami] = &scrubber.primary_scrubmap;
+
+  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+       i != actingbackfill.end();
+       ++i) {
+    if (*i == pg_whoami) continue;
+    dout(2) << __func__ << " replica " << *i << " has "
+            << scrubber.received_maps[*i].objects.size()
+            << " items" << dendl;
+    maps[*i] = &scrubber.received_maps[*i];
+  }
+
+  map<hobject_t,ScrubMap::object>::const_iterator i;
+  map<pg_shard_t, ScrubMap *>::const_iterator j;
+  set<hobject_t> master_set;
+
+  // Construct master set
+  for (j = maps.begin(); j != maps.end(); ++j) {
+    for (i = j->second->objects.begin(); i != j->second->objects.end(); ++i) {
+      master_set.insert(i->first);
+    }
+  }
+
   if (acting.size() > 1) {
     dout(10) << __func__ << "  comparing replica scrub maps" << dendl;
 
@@ -4851,24 +4875,13 @@ void PG::scrub_compare_maps()
 
     // Map from object with errors to good peer
     map<hobject_t, list<pg_shard_t>> authoritative;
-    map<pg_shard_t, ScrubMap *> maps;
 
     dout(2) << __func__ << "   osd." << acting[0] << " has "
 	    << scrubber.primary_scrubmap.objects.size() << " items" << dendl;
-    maps[pg_whoami] = &scrubber.primary_scrubmap;
-
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
-	 ++i) {
-      if (*i == pg_whoami) continue;
-      dout(2) << __func__ << " replica " << *i << " has "
-	      << scrubber.received_maps[*i].objects.size()
-	      << " items" << dendl;
-      maps[*i] = &scrubber.received_maps[*i];
-    }
 
     get_pgbackend()->be_compare_scrubmaps(
       maps,
+      master_set,
       state_test(PG_STATE_REPAIR),
       scrubber.missing,
       scrubber.inconsistent,

@@ -903,6 +903,7 @@ out:
 
 void PGBackend::be_compare_scrubmaps(
   const map<pg_shard_t,ScrubMap*> &maps,
+  const set<hobject_t> &master_set,
   bool repair,
   map<hobject_t, set<pg_shard_t>> &missing,
   map<hobject_t, set<pg_shard_t>> &inconsistent,
@@ -914,17 +915,7 @@ void PGBackend::be_compare_scrubmaps(
   const vector<int> &acting,
   ostream &errorstream)
 {
-  map<hobject_t,ScrubMap::object>::const_iterator i;
-  map<pg_shard_t, ScrubMap *>::const_iterator j;
-  set<hobject_t> master_set;
   utime_t now = ceph_clock_now();
-
-  // Construct master set
-  for (j = maps.begin(); j != maps.end(); ++j) {
-    for (i = j->second->objects.begin(); i != j->second->objects.end(); ++i) {
-      master_set.insert(i->first);
-    }
-  }
 
   // Check maps against master set and each other
   for (set<hobject_t>::const_iterator k = master_set.begin();
@@ -958,7 +949,7 @@ void PGBackend::be_compare_scrubmaps(
     set<pg_shard_t> cur_missing;
     set<pg_shard_t> cur_inconsistent;
 
-    for (j = maps.begin(); j != maps.end(); ++j) {
+    for (auto  j = maps.cbegin(); j != maps.cend(); ++j) {
       if (j == auth)
 	shard_map[auth->first].selected_oi = true;
       if (j->second->objects.count(*k)) {
