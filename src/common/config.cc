@@ -726,8 +726,16 @@ void md_config_t::_apply_changes(std::ostream *oss)
 void md_config_t::call_all_observers()
 {
   std::map<md_config_obs_t*,std::set<std::string> > obs;
+  // Have the scope of the lock extend to the scope of
+  // handle_conf_change since that function expects to be called with
+  // the lock held. (And the comment in config.h says that is the
+  // expected behavior.)
+  //
+  // An alternative might be to pass a std::unique_lock to
+  // handle_conf_change and have a version of get_var that can take it
+  // by reference and lock as appropriate.
+  Mutex::Locker l(lock);
   {
-    Mutex::Locker l(lock);
 
     expand_all_meta();
 
