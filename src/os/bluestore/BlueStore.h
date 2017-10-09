@@ -1552,7 +1552,6 @@ public:
     set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
     KeyValueDB::Transaction t; ///< then we will commit this
-    Context *oncommit = nullptr;         ///< signal on commit
     list<Context*> oncommits;  ///< more commit completions
     list<CollectionRef> removed_collections; ///< colls we removed
 
