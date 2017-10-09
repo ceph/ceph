@@ -1686,9 +1686,10 @@ class RGWDataSyncControlCR : public RGWBackoffControlCR
 
   RGWSyncTraceNodeRef tn;
 
+  static constexpr bool exit_on_error = false; // retry on all errors
 public:
   RGWDataSyncControlCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards,
-                       RGWSyncTraceNodeRef& _tn_parent) : RGWBackoffControlCR(_sync_env->cct, true),
+                       RGWSyncTraceNodeRef& _tn_parent) : RGWBackoffControlCR(_sync_env->cct, exit_on_error),
                                                           sync_env(_sync_env), num_shards(_num_shards) {
     tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
                                          sync_env->sync_tracer, 
