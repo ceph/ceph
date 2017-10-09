@@ -721,7 +721,7 @@ void PrimaryLogPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef o
 
 void PrimaryLogPG::maybe_force_recovery()
 {
-  // no force if not in degraded/recovery/backfill stats
+  // no force if not in degraded/recovery/backfill states
   if (!is_degraded() &&
       !state_test(PG_STATE_RECOVERING |
                   PG_STATE_RECOVERY_WAIT |
@@ -2349,6 +2349,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   // force recovery of the oldest missing object if too many logs
   maybe_force_recovery();
 }
+
 PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
   OpRequestRef op,
   bool write_ordered,
@@ -10818,7 +10819,23 @@ void PrimaryLogPG::mark_all_unfound_lost(
 	  release_backoffs(p.first);
 	}
 	requeue_object_waiters(waiting_for_unreadable_object);
-	queue_recovery();
+	if (is_recovery_unfound()) {
+	  queue_peering_event(
+	    CephPeeringEvtRef(
+	      std::make_shared<CephPeeringEvt>(
+	      get_osdmap()->get_epoch(),
+	      get_osdmap()->get_epoch(),
+	      DoRecovery())));
+	} else if (is_backfill_unfound()) {
+	  queue_peering_event(
+	    CephPeeringEvtRef(
+	      std::make_shared<CephPeeringEvt>(
+	      get_osdmap()->get_epoch(),
+	      get_osdmap()->get_epoch(),
+	      RequestBackfill())));
+	} else {
+	  queue_recovery();
+	}
 
 	stringstream ss;
 	ss << "pg has " << num_unfound
