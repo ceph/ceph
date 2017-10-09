@@ -703,9 +703,6 @@ public:
 
   int operate() {
     reenter(this) {
-      entries_index = new RGWShardedOmapCRManager(sync_env->async_rados, store, this, num_shards,
-						  store->get_zone_params().log_pool,
-                                                  oid_prefix);
       yield {
         string entrypoint = string("/admin/metadata/bucket.instance");
         /* FIXME: need a better scaling solution here, requires streaming output */
@@ -716,6 +713,10 @@ public:
         ldout(sync_env->cct, 0) << "ERROR: failed to fetch metadata for section bucket.index" << dendl;
         return set_state(RGWCoroutine_Error);
       }
+      entries_index = new RGWShardedOmapCRManager(sync_env->async_rados, store, this, num_shards,
+						  store->get_zone_params().log_pool,
+                                                  oid_prefix);
+      yield; // yield so OmapAppendCRs can start
       for (iter = result.begin(); iter != result.end(); ++iter) {
         ldout(sync_env->cct, 20) << "list metadata: section=bucket.index key=" << *iter << dendl;
 
