@@ -1482,8 +1482,9 @@ class RGWDataSyncControlCR : public RGWBackoffControlCR
   RGWDataSyncEnv *sync_env;
   uint32_t num_shards;
 
+  static constexpr bool exit_on_error = false; // retry on all errors
 public:
-  RGWDataSyncControlCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards) : RGWBackoffControlCR(_sync_env->cct, true),
+  RGWDataSyncControlCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards) : RGWBackoffControlCR(_sync_env->cct, exit_on_error),
                                                       sync_env(_sync_env), num_shards(_num_shards) {
   }
 
