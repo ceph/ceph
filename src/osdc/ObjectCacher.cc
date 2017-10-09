@@ -12,6 +12,7 @@
 #include "include/assert.h"
 
 #define MAX_FLUSH_UNDER_LOCK 20  ///< max bh's we start writeback on
+#define BUFFER_MEMORY_WEIGHT 12   // memory usage of BufferHead, count in (1<<n)
 
 using std::chrono::seconds;
 				 /// while holding the lock
@@ -625,7 +626,8 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name,
     flush_set_callback_arg(flush_callback_arg),
     last_read_tid(0), flusher_stop(false), flusher_thread(this),finisher(cct),
     stat_clean(0), stat_zero(0), stat_dirty(0), stat_rx(0), stat_tx(0),
-    stat_missing(0), stat_error(0), stat_dirty_waiting(0), reads_outstanding(0)
+    stat_missing(0), stat_error(0), stat_dirty_waiting(0),
+    stat_nr_dirty_waiters(0), reads_outstanding(0)
 {
   perf_start();
   finisher.start();
@@ -1255,7 +1257,11 @@ void ObjectCacher::trim()
 		 << get_stat_clean() << ", objects: max " << max_objects
 		 << " current " << ob_lru.lru_get_size() << dendl;
 
-  while (get_stat_clean() > 0 && (uint64_t) get_stat_clean() > max_size) {
+  uint64_t max_clean_bh = max_size >> BUFFER_MEMORY_WEIGHT;
+  uint64_t nr_clean_bh = bh_lru_rest.lru_get_size() - bh_lru_rest.lru_get_num_pinned();
+  while (get_stat_clean() > 0 &&
+	 ((uint64_t)get_stat_clean() > max_size ||
+	  nr_clean_bh > max_clean_bh)) {
     BufferHead *bh = static_cast<BufferHead*>(bh_lru_rest.lru_expire());
     if (!bh)
       break;
@@ -1266,6 +1272,8 @@ void ObjectCacher::trim()
     Object *ob = bh->ob;
     bh_remove(ob, bh);
     delete bh;
+
+    --nr_clean_bh;
 
     if (ob->complete) {
       ldout(cct, 10) << "trim clearing complete on " << *ob << dendl;
@@ -1782,9 +1790,14 @@ void ObjectCacher::maybe_wait_for_writeback(uint64_t len,
   //  - do not wait for bytes other waiters are waiting on.  this means that
   //    threads do not wait for each other.  this effectively allows the cache
   //    size to balloon proportional to the data that is in flight.
+
+  uint64_t max_dirty_bh = max_dirty >> BUFFER_MEMORY_WEIGHT;
   while (get_stat_dirty() + get_stat_tx() > 0 &&
-	 (uint64_t) (get_stat_dirty() + get_stat_tx()) >=
-	 max_dirty + get_stat_dirty_waiting()) {
+	 (((uint64_t)(get_stat_dirty() + get_stat_tx()) >=
+	  max_dirty + get_stat_dirty_waiting()) ||
+	 (dirty_or_tx_bh.size() >=
+	  max_dirty_bh + get_stat_nr_dirty_waiters()))) {
+
     if (blocked == 0) {
       trace->event("start wait for writeback");
     }
@@ -1794,8 +1807,10 @@ void ObjectCacher::maybe_wait_for_writeback(uint64_t len,
 		   << get_stat_dirty_waiting() << dendl;
     flusher_cond.Signal();
     stat_dirty_waiting += len;
+    ++stat_nr_dirty_waiters;
     stat_cond.Wait(lock);
     stat_dirty_waiting -= len;
+    --stat_nr_dirty_waiters;
     ++blocked;
     ldout(cct, 10) << __func__ << " woke up" << dendl;
   }
