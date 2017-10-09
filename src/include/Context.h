@@ -242,6 +242,21 @@ public:
   void take(std::list<ContextType*>& ls) {
     contexts.splice(contexts.end(), ls);
   }
+  bool sync_complete(int r) override {
+    auto p = contexts.begin();
+    while (p != contexts.end()) {
+      if ((*p)->sync_complete(r)) {
+	p = contexts.erase(p);
+      } else {
+	++p;
+      }
+    }
+    if (contexts.empty()) {
+      delete this;
+      return true;
+    }
+    return false;
+  }
   void complete(int r) override {
     // Neuter any ContextInstanceType custom complete(), because although
     // I want to look like it, I don't actually want to run its code.
