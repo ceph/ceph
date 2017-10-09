@@ -2483,7 +2483,6 @@ private:
   struct WriteContext {
     bool buffered = false;          ///< buffered write
     bool compress = false;          ///< compressed write
-    bool fast = false;
     uint64_t target_blob_size = 0;  ///< target (max) blob size
     unsigned csum_order = 0;        ///< target checksum chunk order
 

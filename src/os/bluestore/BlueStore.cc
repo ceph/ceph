@@ -10851,10 +10851,6 @@ void BlueStore::_choose_write_options(
     }
   );
 
-  if (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_FAST_TIER) {
-    wctx->fast = true;
-  }
-
   wctx->compress = (cm != Compressor::COMP_NONE) &&
     ((cm == Compressor::COMP_FORCE) ||
      (cm == Compressor::COMP_AGGRESSIVE &&
