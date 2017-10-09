@@ -209,7 +209,8 @@ class Downburst(object):
         if os_type in ('ubuntu', 'fedora'):
             user_info['packages'].append('python')
         user_fd = tempfile.NamedTemporaryFile(delete=False)
-        yaml.safe_dump(user_info, user_fd)
+        user_str = "#cloud-config\n" + yaml.safe_dump(user_info)
+        user_fd.write(user_str)
         self.user_path = user_fd.name
         return True
 
