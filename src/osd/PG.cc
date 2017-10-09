@@ -277,8 +277,13 @@ void PGPool::update(OSDMapRef map)
 
 PG::PG(OSDService *o, OSDMapRef curmap,
        const PGPool &_pool, spg_t p) :
+  pg_id(p),
+  coll(p),
+  osr(o->osr_registry.lookup_or_create(p, (stringify(p)))),
   osd(o),
   cct(o->cct),
+  osdmap_ref(curmap),
+  pool(_pool),
   osdriver(osd->store, coll_t(), OSD::make_snapmapper_oid()),
   snap_mapper(
     cct,
@@ -287,17 +292,12 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     p.get_split_bits(curmap->get_pg_num(_pool.id)),
     _pool.id,
     p.shard),
-  osdmap_ref(curmap), last_persisted_osdmap_ref(curmap), pool(_pool),
-  _lock("PG::_lock"),
-  #ifdef PG_DEBUG_REFS
-  _ref_id_lock("PG::_ref_id_lock"), _ref_id(0),
-  #endif
+  last_persisted_osdmap_ref(curmap),
   deleting(false),
   trace_endpoint("0.0.0.0", 0, "PG"),
   dirty_info(false), dirty_big_info(false),
   info(p),
   info_struct_v(0),
-  coll(p),
   pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
@@ -317,13 +317,11 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   flushes_in_progress(0),
   pg_stats_publish_lock("PG::pg_stats_publish_lock"),
   pg_stats_publish_valid(false),
-  osr(osd->osr_registry.lookup_or_create(p, (stringify(p)))),
   finish_sync_event(NULL),
   backoff_lock("PG::backoff_lock"),
   scrub_after_recovery(false),
   active_pushes(0),
   recovery_state(this),
-  pg_id(p),
   peer_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   acting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   upacting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
@@ -346,13 +344,6 @@ PG::~PG()
 #ifdef PG_DEBUG_REFS
   osd->remove_pgid(info.pgid, this);
 #endif
-}
-
-void PG::lock_suspend_timeout(ThreadPool::TPHandle &handle)
-{
-  handle.suspend_tp_timeout();
-  lock();
-  handle.reset_tp_timeout();
 }
 
 void PG::lock(bool no_lockdep) const
@@ -1514,17 +1505,6 @@ void PG::build_might_have_unfound()
   dout(15) << __func__ << ": built " << might_have_unfound << dendl;
 }
 
-struct C_PG_ActivateCommitted : public Context {
-  PGRef pg;
-  epoch_t epoch;
-  epoch_t activation_epoch;
-  C_PG_ActivateCommitted(PG *p, epoch_t e, epoch_t ae)
-    : pg(p), epoch(e), activation_epoch(ae) {}
-  void finish(int r) override {
-    pg->_activate_committed(epoch, activation_epoch);
-  }
-};
-
 void PG::activate(ObjectStore::Transaction& t,
 		  epoch_t activation_epoch,
 		  list<Context*>& tfin,
@@ -2006,14 +1986,6 @@ unsigned PG::get_scrub_priority()
   return pool_scrub_priority > 0 ? pool_scrub_priority : cct->_conf->osd_scrub_priority;
 }
 
-struct C_PG_FinishRecovery : public Context {
-  PGRef pg;
-  explicit C_PG_FinishRecovery(PG *p) : pg(p) {}
-  void finish(int r) override {
-    pg->_finish_recovery(this);
-  }
-};
-
 void PG::mark_clean()
 {
   if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid)) {
@@ -2029,17 +2001,56 @@ void PG::mark_clean()
   kick_snap_trim();
 }
 
-void PG::_change_recovery_force_mode(int new_mode, bool clear)
+bool PG::set_force_recovery(bool b)
 {
+  bool did = false;
+  lock();
   if (!deleting) {
-    // we can't and shouldn't do anything if the PG is being deleted locally
-    if (clear) {
-      state_clear(new_mode);
-    } else {
-      state_set(new_mode);
+    if (b) {
+      if (!(state & PG_STATE_FORCED_RECOVERY) &&
+	  (state & (PG_STATE_DEGRADED |
+		    PG_STATE_RECOVERY_WAIT |
+		    PG_STATE_RECOVERING))) {
+	dout(20) << __func__ << " set" << dendl;
+	state_set(PG_STATE_FORCED_RECOVERY);
+	publish_stats_to_osd();
+	did = true;
+      }
+    } else if (state & PG_STATE_FORCED_RECOVERY) {
+      dout(20) << __func__ << " clear" << dendl;
+      state_clear(PG_STATE_FORCED_RECOVERY);
+      publish_stats_to_osd();
+      did = true;
     }
-    publish_stats_to_osd();
   }
+  unlock();
+  return did;
+}
+
+bool PG::set_force_backfill(bool b)
+{
+  bool did = false;
+  lock();
+  if (!deleting) {
+    if (b) {
+      if (!(state & PG_STATE_FORCED_RECOVERY) &&
+	  (state & (PG_STATE_DEGRADED |
+		    PG_STATE_BACKFILL_WAIT |
+		    PG_STATE_BACKFILLING))) {
+	dout(10) << __func__ << " set" << dendl;
+	state_set(PG_STATE_FORCED_RECOVERY);
+	publish_stats_to_osd();
+	did = true;
+      }
+    } else if (state & PG_STATE_FORCED_RECOVERY) {
+      dout(10) << __func__ << " clear" << dendl;
+      state_clear(PG_STATE_FORCED_RECOVERY);
+      publish_stats_to_osd();
+      did = true;
+    }
+  }
+  unlock();
+  return did;
 }
 
 inline int PG::clamp_recovery_priority(int priority)
@@ -2268,6 +2279,18 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   child->dirty_big_info = true;
   dirty_info = true;
   dirty_big_info = true;
+}
+
+void PG::start_split_stats(const set<spg_t>& childpgs, vector<object_stat_sum_t> *out)
+{
+  out->resize(childpgs.size() + 1);
+  info.stats.stats.sum.split(*out);
+}
+
+void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t)
+{
+  info.stats.stats.sum = stats;
+  write_if_dirty(*t);
 }
 
 void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
@@ -2816,6 +2839,8 @@ void PG::init(
 
 void PG::upgrade(ObjectStore *store)
 {
+  dout(0) << __func__ << " " << info_struct_v << " -> " << latest_struct_v
+	  << dendl;
   assert(info_struct_v <= 10);
   ObjectStore::Transaction t;
 
@@ -2825,9 +2850,9 @@ void PG::upgrade(ObjectStore *store)
   assert(info_struct_v == 10);
 
   // update infover_key
-  if (info_struct_v < cur_struct_v) {
+  if (info_struct_v < latest_struct_v) {
     map<string,bufferlist> v;
-    __u8 ver = cur_struct_v;
+    __u8 ver = latest_struct_v;
     ::encode(ver, v[infover_key]);
     t.omap_setkeys(coll, pgmeta_oid, v);
   }
@@ -2944,7 +2969,7 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   t.touch(coll, pgmeta_oid);
   map<string,bufferlist> values;
-  __u8 struct_v = cur_struct_v;
+  __u8 struct_v = latest_struct_v;
   ::encode(struct_v, values[infover_key]);
   t.omap_setkeys(coll, pgmeta_oid, values);
 }
@@ -2994,19 +3019,15 @@ bool PG::_has_removal_flag(ObjectStore *store,
 
 int PG::peek_map_epoch(ObjectStore *store,
 		       spg_t pgid,
-		       epoch_t *pepoch,
-		       bufferlist *bl)
+		       epoch_t *pepoch)
 {
   coll_t coll(pgid);
   ghobject_t legacy_infos_oid(OSD::make_infos_oid());
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   epoch_t cur_epoch = 0;
 
-  assert(bl);
-  {
-    // validate collection name
-    assert(coll.is_pg());
-  }
+  // validate collection name
+  assert(coll.is_pg());
 
   // try for v8
   set<string> keys;
@@ -3072,6 +3093,31 @@ void PG::trim_log()
     // trim primary as well
     pg_log.trim(pg_trim_to, info);
     dirty_info = true;
+  }
+}
+
+void PG::handle_pg_trim(epoch_t epoch, int from, shard_id_t shard, eversion_t trim_to)
+{
+  if (epoch < info.history.same_interval_since) {
+    dout(10) << " got old trim to " << trim_to << ", ignoring" << dendl;
+    return;
+  }
+
+  if (is_primary()) {
+    // peer is informing us of their last_complete_ondisk
+    dout(10) << " replica osd." << from << " lcod " << trim_to << dendl;
+    peer_last_complete_ondisk[pg_shard_t(from, shard)] = trim_to;
+
+    // trim log when the pg is recovered
+    calc_min_last_complete_ondisk();
+  } else {
+    // primary is instructing us to trim
+    ObjectStore::Transaction t;
+    pg_log.trim(trim_to, info);
+    dirty_info = true;
+    write_if_dirty(t);
+    int tr = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+    assert(tr == 0);
   }
 }
 
@@ -3190,7 +3236,7 @@ std::string PG::get_corrupt_pg_log_name() const
 }
 
 int PG::read_info(
-  ObjectStore *store, spg_t pgid, const coll_t &coll, bufferlist &bl,
+  ObjectStore *store, spg_t pgid, const coll_t &coll,
   pg_info_t &info, PastIntervals &past_intervals,
   __u8 &struct_v)
 {
@@ -3226,11 +3272,17 @@ int PG::read_info(
   return 0;
 }
 
-void PG::read_state(ObjectStore *store, bufferlist &bl)
+void PG::read_state(ObjectStore *store)
 {
-  int r = read_info(store, pg_id, coll, bl, info, past_intervals,
+  int r = read_info(store, pg_id, coll, info, past_intervals,
 		    info_struct_v);
   assert(r >= 0);
+
+  if (info_struct_v < compat_struct_v) {
+    derr << "PG needs upgrade, but on-disk data is too old; upgrade to"
+	 << " an older version first." << dendl;
+    assert(0 == "PG too old to upgrade");
+  }
 
   last_written_info = info;
 
@@ -3238,8 +3290,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   pg_log.read_log_and_missing(
     store,
     coll,
-    info_struct_v < 8 ? coll_t::meta() : coll,
-    ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
+    pgmeta_oid,
     info,
     oss,
     cct->_conf->osd_ignore_stale_divergent_priors,
@@ -3249,6 +3300,34 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
 
   // log any weirdness
   log_weirdness();
+
+  if (info_struct_v < latest_struct_v) {
+    upgrade(store);
+  }
+
+  // initialize current mapping
+  {
+    int primary, up_primary;
+    vector<int> acting, up;
+    get_osdmap()->pg_to_up_acting_osds(
+      pg_id.pgid, &up, &up_primary, &acting, &primary);
+    init_primary_up_acting(
+      up,
+      acting,
+      up_primary,
+      primary);
+    int rr = OSDMap::calc_pg_role(osd->whoami, acting);
+    if (pool.info.is_replicated() || rr == pg_whoami.shard)
+      set_role(rr);
+    else
+      set_role(-1);
+  }
+
+  PG::RecoveryCtx rctx(0, 0, 0, 0, 0, new ObjectStore::Transaction);
+  handle_loaded(&rctx);
+  write_if_dirty(*rctx.transaction);
+  store->apply_transaction(osr.get(), std::move(*rctx.transaction));
+  delete rctx.transaction;
 }
 
 void PG::log_weirdness()
@@ -5607,9 +5686,13 @@ void PG::take_waiters()
 		       peering_waiters.begin(), peering_waiters.end());
 }
 
-void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
+void PG::process_peering_event(RecoveryCtx *rctx)
 {
-  dout(10) << "handle_peering_event: " << evt->get_desc() << dendl;
+  assert(!peering_queue.empty());
+  CephPeeringEvtRef evt = peering_queue.front();
+  peering_queue.pop_front();
+
+  dout(10) << __func__ << ": " << evt->get_desc() << dendl;
   if (!have_same_or_newer_map(evt->get_epoch_sent())) {
     dout(10) << "deferring event " << evt->get_desc() << dendl;
     peering_waiters.push_back(evt);
@@ -5618,6 +5701,7 @@ void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
   if (old_peering_evt(evt))
     return;
   recovery_state.handle_event(evt, rctx);
+  write_if_dirty(*rctx->transaction);
 }
 
 void PG::queue_peering_event(CephPeeringEvtRef evt)
@@ -5653,6 +5737,43 @@ void PG::queue_query(epoch_t msg_epoch,
   queue_peering_event(
     CephPeeringEvtRef(std::make_shared<CephPeeringEvt>(msg_epoch, query_epoch,
 					 MQuery(from, q, query_epoch))));
+}
+
+void PG::find_unfound(epoch_t queued, RecoveryCtx *rctx)
+{
+  /*
+    * if we couldn't start any recovery ops and things are still
+    * unfound, see if we can discover more missing object locations.
+    * It may be that our initial locations were bad and we errored
+    * out while trying to pull.
+    */
+  discover_all_missing(*rctx->query_map);
+  if (rctx->query_map->empty()) {
+    string action;
+    if (state_test(PG_STATE_BACKFILLING)) {
+      auto evt = PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  queued,
+	  queued,
+	  PG::DeferBackfill(cct->_conf->osd_recovery_retry_interval)));
+      queue_peering_event(evt);
+      action = "in backfill";
+    } else if (state_test(PG_STATE_RECOVERING)) {
+      auto evt = PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  queued,
+	  queued,
+	  PG::DeferRecovery(cct->_conf->osd_recovery_retry_interval)));
+      queue_peering_event(evt);
+      action = "in recovery";
+    } else {
+      action = "already out of recovery/backfill";
+    }
+    dout(10) << __func__ << ": no luck, giving up on this pg for now (" << action << ")" << dendl;
+  } else {
+    dout(10) << __func__ << ": no luck, giving up on this pg for now (queue_recovery)" << dendl;
+    queue_recovery();
+  }
 }
 
 void PG::handle_advance_map(
@@ -5708,7 +5829,10 @@ void PG::handle_activate_map(RecoveryCtx *rctx)
 	     << last_persisted_osdmap_ref->get_epoch()
 	     << " while current is " << osdmap_ref->get_epoch() << dendl;
   }
-  if (osdmap_ref->check_new_blacklist_entries()) check_blacklisted_watchers();
+  if (osdmap_ref->check_new_blacklist_entries()) {
+    check_blacklisted_watchers();
+  }
+  write_if_dirty(*rctx->transaction);
 }
 
 void PG::handle_loaded(RecoveryCtx *rctx)
@@ -5716,6 +5840,7 @@ void PG::handle_loaded(RecoveryCtx *rctx)
   dout(10) << "handle_loaded" << dendl;
   Load evt;
   recovery_state.handle_event(evt, rctx);
+  write_if_dirty(*rctx->transaction);
 }
 
 void PG::handle_create(RecoveryCtx *rctx)
@@ -5726,6 +5851,7 @@ void PG::handle_create(RecoveryCtx *rctx)
   recovery_state.handle_event(evt, rctx);
   ActMap evt2;
   recovery_state.handle_event(evt2, rctx);
+  write_if_dirty(*rctx->transaction);
 }
 
 void PG::handle_query_state(Formatter *f)
@@ -5788,8 +5914,8 @@ boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
 
   // do we tell someone we're here?
   pg->send_notify = (!pg->is_primary());
-  pg->update_store_with_options();
 
+  pg->update_store_with_options();
   pg->update_store_on_load();
 
   return transit< Reset >();
@@ -8130,10 +8256,58 @@ ostream& operator<<(ostream& out, const PG::BackfillInterval& bi)
   return out;
 }
 
-void intrusive_ptr_add_ref(PG *pg) { pg->get("intptr"); }
-void intrusive_ptr_release(PG *pg) { pg->put("intptr"); }
+void PG::dump_pgstate_history(Formatter *f)
+{
+  lock();
+  pgstate_history.dump(f);
+  unlock();
+}
 
-#ifdef PG_DEBUG_REFS
-  uint64_t get_with_id(PG *pg) { return pg->get_with_id(); }
-  void put_with_id(PG *pg, uint64_t id) { return pg->put_with_id(id); }
-#endif
+void PG::dump_missing(Formatter *f)
+{
+  for (auto& i : pg_log.get_missing().get_items()) {
+    f->open_object_section("object");
+    f->dump_object("oid", i.first);
+    f->dump_object("missing_info", i.second);
+    if (missing_loc.needs_recovery(i.first)) {
+      f->dump_bool("unfound", missing_loc.is_unfound(i.first));
+      f->open_array_section("locations");
+      for (auto l : missing_loc.get_locations(i.first)) {
+	f->dump_object("shard", l);
+      }
+      f->close_section();
+    }
+    f->close_section();
+  }
+}
+
+void PG::get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f)
+{
+  pg_stats_publish_lock.Lock();
+  if (pg_stats_publish_valid) {
+    f(pg_stats_publish, pg_stats_publish.get_effective_last_epoch_clean());
+  }
+  pg_stats_publish_lock.Unlock();
+}
+
+void PG::with_heartbeat_peers(std::function<void(int)> f)
+{
+  heartbeat_peer_lock.Lock();
+  for (auto p : heartbeat_peers) {
+    f(p);
+  }
+  for (auto p : probe_targets) {
+    f(p);
+  }
+  heartbeat_peer_lock.Unlock();
+}
+
+void PG::pg_remove_object(const ghobject_t& oid, ObjectStore::Transaction *t)
+{
+  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
+  int r = snap_mapper.remove_oid(oid.hobj, &_t);
+  if (r != 0 && r != -ENOENT) {
+    ceph_abort();
+  }
+  t->remove(coll, oid);
+}

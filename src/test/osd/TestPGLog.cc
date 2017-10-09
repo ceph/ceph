@@ -2495,7 +2495,7 @@ public:
     auto orig_dups = log.dups;
     clear();
     ostringstream err;
-    read_log_and_missing(store.get(), test_coll, test_coll, log_oid,
+    read_log_and_missing(store.get(), test_coll, log_oid,
 			 pg_info_t(), err, false);
     ASSERT_EQ(orig_dups.size(), log.dups.size());
     ASSERT_EQ(orig_dups, log.dups);

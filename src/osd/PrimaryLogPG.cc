@@ -9452,13 +9452,15 @@ void PrimaryLogPG::cancel_log_updates()
 
 // -------------------------------------------------------
 
-void PrimaryLogPG::get_watchers(list<obj_watch_item_t> &pg_watchers)
+void PrimaryLogPG::get_watchers(list<obj_watch_item_t> *ls)
 {
+  lock();
   pair<hobject_t, ObjectContextRef> i;
   while (object_contexts.get_next(i.first, &i)) {
     ObjectContextRef obc(i.second);
-    get_obc_watchers(obc, pg_watchers);
+    get_obc_watchers(obc, *ls);
   }
+  unlock();
 }
 
 void PrimaryLogPG::get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t> &pg_watchers)
@@ -10696,9 +10698,17 @@ void PrimaryLogPG::clear_async_reads()
   }
 }
 
+void PrimaryLogPG::shutdown()
+{
+  lock();
+  on_shutdown();
+  unlock();
+  osr->flush();
+}
+
 void PrimaryLogPG::on_shutdown()
 {
-  dout(10) << "on_shutdown" << dendl;
+  dout(10) << __func__ << dendl;
 
   // remove from queues
   osd->peering_wq.dequeue(this);
@@ -11073,13 +11083,18 @@ bool PrimaryLogPG::start_recovery_ops(
   started = 0;
   bool work_in_progress = false;
   assert(is_primary());
+  assert(is_peered());
+  assert(!is_deleting());
+
+  assert(recovery_queued);
+  recovery_queued = false;
 
   if (!state_test(PG_STATE_RECOVERING) &&
       !state_test(PG_STATE_BACKFILLING)) {
     /* TODO: I think this case is broken and will make do_recovery()
      * unhappy since we're returning false */
     dout(10) << "recovery raced and were queued twice, ignoring!" << dendl;
-    return false;
+    return have_unfound();
   }
 
   const auto &missing = pg_log.get_missing();
@@ -11144,7 +11159,7 @@ bool PrimaryLogPG::start_recovery_ops(
 
   if (!recovering.empty() ||
       work_in_progress || recovery_ops_active > 0 || deferred_backfill)
-    return work_in_progress;
+    return !work_in_progress && have_unfound();
 
   assert(recovering.empty());
   assert(recovery_ops_active == 0);
@@ -11158,14 +11173,14 @@ bool PrimaryLogPG::start_recovery_ops(
   int unfound = get_num_unfound();
   if (unfound) {
     dout(10) << " still have " << unfound << " unfound" << dendl;
-    return work_in_progress;
+    return true;
   }
 
   if (missing.num_missing() > 0) {
     // this shouldn't happen!
     osd->clog->error() << info.pgid << " Unexpected Error: recovery ending with "
 		       << missing.num_missing() << ": " << missing.get_items();
-    return work_in_progress;
+    return false;
   }
 
   if (needs_recovery()) {
@@ -11173,7 +11188,7 @@ bool PrimaryLogPG::start_recovery_ops(
     // We already checked num_missing() so we must have missing replicas
     osd->clog->error() << info.pgid 
                        << " Unexpected Error: recovery ending with missing replicas";
-    return work_in_progress;
+    return false;
   }
 
   if (state_test(PG_STATE_RECOVERING)) {
