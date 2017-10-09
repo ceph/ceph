@@ -254,42 +254,79 @@ int PyModule::load(PyThreadState *pMainThreadState)
   // Environment is all good, import the external module
   {
     Gil gil(pMyThreadState);
-
-    // Load the module
-    PyObject *pName = PyString_FromString(module_name.c_str());
-    auto pModule = PyImport_Import(pName);
-    Py_DECREF(pName);
-    if (pModule == nullptr) {
-      derr << "Module not found: '" << module_name << "'" << dendl;
-      derr << handle_pyerror() << dendl;
-      return -ENOENT;
-    }
-
-    // Find the class
-    // TODO: let them call it what they want instead of just 'Module'
-    pClass = PyObject_GetAttrString(pModule, (const char*)"Module");
-    if (pClass == nullptr) {
+    int r;
+    r = load_subclass_of("MgrModule", &pClass);
+    if (r) {
       derr << "Class not found in module '" << module_name << "'" << dendl;
-      derr << handle_pyerror() << dendl;
-      return -EINVAL;
+      return r;
     }
-
-    pStandbyClass = PyObject_GetAttrString(pModule,
-                                           (const char*)"StandbyModule");
-    if (pStandbyClass) {
+    r = load_subclass_of("MgrStandbyModule", &pStandbyClass);
+    if (!r) {
       dout(4) << "Standby mode available in module '" << module_name
               << "'" << dendl;
     } else {
       dout(4) << "Standby mode not provided by module '" << module_name
               << "'" << dendl;
-      PyErr_Clear();
     }
-
-    Py_DECREF(pModule);
   }
-
   return 0;
 } 
+
+int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
+{
+  // load the base class
+  PyObject *mgr_module = PyImport_ImportModule("mgr_module");
+  if (!mgr_module) {
+    derr << "Module not found: 'mgr_module'" << dendl;
+    derr << handle_pyerror() << dendl;
+    return -EINVAL;
+  }
+  auto mgr_module_type = PyObject_GetAttrString(mgr_module, base_class);
+  Py_DECREF(mgr_module);
+  if (!mgr_module_type) {
+    derr << "Unable to import MgrModule from mgr_module" << dendl;
+    derr << handle_pyerror() << dendl;
+    return -EINVAL;
+  }
+
+  // find the sub class
+  PyObject *plugin_module = PyImport_ImportModule(module_name.c_str());
+  if (!plugin_module) {
+    derr << "Module not found: '" << module_name << "'" << dendl;
+    derr << handle_pyerror() << dendl;
+    return -ENOENT;
+  }
+  auto locals = PyModule_GetDict(plugin_module);
+  Py_DECREF(plugin_module);
+  PyObject *key, *value;
+  Py_ssize_t pos = 0;
+  *py_class = nullptr;
+  while (PyDict_Next(locals, &pos, &key, &value)) {
+    if (!PyType_Check(value)) {
+      continue;
+    }
+    if (!PyObject_IsSubclass(value, mgr_module_type)) {
+      continue;
+    }
+    if (PyObject_RichCompareBool(value, mgr_module_type, Py_EQ)) {
+      continue;
+    }
+    auto class_name = PyString_AsString(key);
+    if (*py_class) {
+      derr << __func__ << ": ignoring '"
+	   << module_name << "." << class_name << "'"
+	   << ": only one '" << base_class
+	   << "' class is loaded from each plugin" << dendl;
+      continue;
+    }
+    *py_class = value;
+    dout(4) << __func__ << ": found class: '"
+	    << module_name << "." << class_name << "'" << dendl;
+  }
+  Py_DECREF(mgr_module_type);
+
+  return *py_class ? 0 : -EINVAL;
+}
 
 PyModule::~PyModule()
 {

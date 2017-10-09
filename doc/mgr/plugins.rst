@@ -6,7 +6,7 @@ Creating a plugin
 -----------------
 
 In pybind/mgr/, create a python module.  Within your module, create a class
-named ``Module`` that inherits from ``MgrModule``.
+that inherits from ``MgrModule``.
 
 The most important methods to override are:
 
@@ -33,7 +33,7 @@ or older versions of Ceph.
 Logging
 -------
 
-MgrModule instances have a ``log`` property which is a logger instance that
+``MgrModule`` instances have a ``log`` property which is a logger instance that
 sends log messages into the Ceph logging layer where they will be recorded
 in the mgr daemon's log file.
 
@@ -169,7 +169,7 @@ serve HTTP redirect responses from the standby managers so that
 the user can point his browser at any of the manager daemons without
 having to worry about which one is active.
 
-Standby manager daemons look for a class called ``StandbyModule``
+Standby manager daemons look for a subclass of ``StandbyModule``
 in each module.  If the class is not found then the module is not
 used at all on standby daemons.  If the class is found, then
 its ``serve`` method is called.  Implementations of ``StandbyModule``
