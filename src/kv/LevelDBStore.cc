@@ -61,6 +61,20 @@ int LevelDBStore::init(string option_str)
   return 0;
 }
 
+int LevelDBStore::open(ostream &out, const vector<ColumnFamily>& cfs)  {
+  if (!cfs.empty()) {
+    assert(0 == "Not implemented");
+  }
+  return do_open(out, false);
+}
+
+int LevelDBStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
+  if (!cfs.empty()) {
+    assert(0 == "Not implemented");
+  }
+  return do_open(out, true);
+}
+
 int LevelDBStore::do_open(ostream &out, bool create_if_missing)
 {
   leveldb::Options ldoptions;

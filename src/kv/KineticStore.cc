@@ -45,6 +45,22 @@ int KineticStore::_test_init(CephContext *c)
   return status.ok() ? 0 : -EIO;
 }
 
+int KineticStore::open(ostream &out, const vector<ColumnFamily>& cfs)
+{
+  if (!cfs.empty()) {
+    assert(0 == "Not implemented");
+  }
+  return do_open(out, false);
+}
+
+int KineticStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs)
+{
+  if (!cfs.empty()) {
+    assert(0 == "Not implemented");
+  }
+  return do_open(out, true);
+}
+
 int KineticStore::do_open(ostream &out, bool create_if_missing)
 {
   kinetic::KineticConnectionFactory conn_factory =
