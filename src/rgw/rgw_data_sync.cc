@@ -760,9 +760,9 @@ public:
         call(new RGWReadRESTResourceCR<list<string> >(store->ctx(), sync_env->conn, sync_env->http_manager,
                                                       entrypoint, NULL, &result));
       }
-      if (get_ret_status() < 0) {
+      if (retcode < 0) {
         ldout(sync_env->cct, 0) << "ERROR: failed to fetch metadata for section bucket.index" << dendl;
-        return set_state(RGWCoroutine_Error);
+        return set_cr_error(retcode);
       }
       entries_index = new RGWShardedOmapCRManager(sync_env->async_rados, store, this, num_shards,
 						  store->get_zone_params().log_pool,
