@@ -435,11 +435,6 @@ prepare_conf() {
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
-        rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
-        ; needed for s3tests
-        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
-        rgw crypt require ssl = false
-        rgw lc debug interval = 10
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
@@ -474,6 +469,11 @@ EOF
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
 $extra_conf
 [client.rgw]
+        rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
+        ; needed for s3tests
+        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl = false
+        rgw lc debug interval = 10
 
 [mds]
 $DAEMONOPTS
@@ -782,8 +782,7 @@ else
         debug bluefs = 20
         debug rocksdb = 10
         debug bdev = 20
-        debug rgw = 20
-	debug reserver = 10
+        debug reserver = 10
         debug objclass = 20'
     CMDSDEBUG='
         debug ms = 1
