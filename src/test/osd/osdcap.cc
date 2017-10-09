@@ -68,6 +68,7 @@ const char *parse_good[] = {
   "allow pool foo namespace=nfoo rwx ; allow pool bar namespace=nbar r",
   "allow pool foo namespace nfoo rwx ;allow pool bar namespace nbar r",
   "allow pool foo namespace=nfoo rwx; allow pool bar namespace nbar object_prefix rbd r",
+  "allow pool foo namespace=nfoo* rwx",
   "allow pool foo namespace=\"\" rwx; allow pool bar namespace='' object_prefix rbd r",
   "allow pool foo namespace \"\" rwx; allow pool bar namespace '' object_prefix rbd r",
   "profile abc, profile abc pool=bar, profile abc pool=bar namespace=foo",
@@ -108,6 +109,7 @@ const char *parse_bad[] = {
   "allow rwx namespace",
   "allow namespace",
   "allow namespace=foo",
+  "allow namespace=f*oo",
   "allow rwx auid 123 namespace asdf",
   "allow wwx pool ''",
   "allow rwx tag application key value",
@@ -276,6 +278,26 @@ TEST(OSDCap, ObjectPoolAndPrefix) {
   ASSERT_FALSE(cap.is_capable("baz", "", 0, {}, "foo", true, true, {{"cls", true, true, true}}));
   ASSERT_FALSE(cap.is_capable("baz", "", 0, {}, "food", true, true, {{"cls", true, true, true}}));
   ASSERT_FALSE(cap.is_capable("baz", "", 0, {}, "fo", true, true, {{"cls", true, true, true}}));
+}
+
+TEST(OSDCap, Namespace) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow rw namespace=nfoo"));
+
+  ASSERT_TRUE(cap.is_capable("bar", "nfoo", 0, {}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("bar", "nfoobar", 0, {}, "foo", true, true, {}));
+}
+
+TEST(OSDCap, NamespaceGlob) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow rw namespace=nfoo*"));
+
+  ASSERT_TRUE(cap.is_capable("bar", "nfoo", 0, {}, "foo", true, true, {}));
+  ASSERT_TRUE(cap.is_capable("bar", "nfoobar", 0, {}, "foo", true, true, {}));
+
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("bar", "nfo", 0, {}, "foo", true, true, {}));
 }
 
 TEST(OSDCap, BasicR) {

@@ -248,6 +248,11 @@ namespace to the object name with out the computational overhead of a separate
 pool. Rather than creating a separate pool for a user or set of users, you may
 use a namespace. **Note:** Only available using ``librados`` at this time.
 
+Access may be restricted to specific RADOS namespaces using the ``namespace``
+capability. Limited globbing of namespaces is supported; if the last character
+of the specified namespace is ``*``, then access is granted to any namespace
+starting with the provided argument.
+
 
 Managing Users
 ==============
