@@ -5775,7 +5775,7 @@ void PG::find_unfound(epoch_t queued, RecoveryCtx *rctx)
 	new PG::CephPeeringEvt(
 	  queued,
 	  queued,
-	  PG::DeferBackfill(cct->_conf->osd_recovery_retry_interval)));
+	  PG::UnfoundBackfill()));
       queue_peering_event(evt);
       action = "in backfill";
     } else if (state_test(PG_STATE_RECOVERING)) {
@@ -5783,7 +5783,7 @@ void PG::find_unfound(epoch_t queued, RecoveryCtx *rctx)
 	new PG::CephPeeringEvt(
 	  queued,
 	  queued,
-	  PG::DeferRecovery(cct->_conf->osd_recovery_retry_interval)));
+	  PG::UnfoundRecovery()));
       queue_peering_event(evt);
       action = "in recovery";
     } else {
@@ -6359,6 +6359,36 @@ PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
 }
 
 boost::statechart::result
+PG::RecoveryState::Backfilling::react(const UnfoundBackfill &c)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  ldout(pg->cct, 10) << "backfill has unfound, can't continue" << dendl;
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+
+  pg->state_clear(PG_STATE_BACKFILLING);
+
+  for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
+       it != pg->backfill_targets.end();
+       ++it) {
+    assert(*it != pg->pg_whoami);
+    ConnectionRef con = pg->osd->get_con_osd_cluster(
+      it->osd, pg->get_osdmap()->get_epoch());
+    if (con) {
+      pg->osd->send_message_osd_cluster(
+        new MBackfillReserve(
+	  MBackfillReserve::CANCEL,
+	  spg_t(pg->info.pgid.pgid, it->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
+    }
+  }
+
+  pg->waiting_on_backfill.clear();
+
+  return transit<NotBackfilling>();
+}
+
+boost::statechart::result
 PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
 {
   PG *pg = context< RecoveryMachine >().pg;
@@ -6537,6 +6567,7 @@ void PG::RecoveryState::NotBackfilling::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_notbackfilling_latency, dur);
 }
@@ -6555,6 +6586,7 @@ void PG::RecoveryState::NotRecovering::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_notrecovering_latency, dur);
 }
@@ -6926,6 +6958,17 @@ PG::RecoveryState::Recovering::react(const DeferRecovery &evt)
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   release_reservations(true);
   pg->schedule_recovery_retry(evt.delay);
+  return transit<NotRecovering>();
+}
+
+boost::statechart::result
+PG::RecoveryState::Recovering::react(const UnfoundRecovery &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  ldout(pg->cct, 10) << "recovery has unfound, can't continue" << dendl;
+  pg->state_clear(PG_STATE_RECOVERING);
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  release_reservations(true);
   return transit<NotRecovering>();
 }
 
