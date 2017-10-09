@@ -477,12 +477,18 @@ class Module(MgrModule):
         class Root(EndPoint):
             @cherrypy.expose
             def filesystem(self, fs_id):
+                try:
+                    fs_id = int(fs_id)
+                except ValueError:
+                    raise cherrypy.HTTPError(400,
+                        "Invalid filesystem id {0}".format(fs_id))
+
                 template = env.get_template("filesystem.html")
 
                 toplevel_data = self._toplevel_data()
 
                 content_data = {
-                    "fs_status": global_instance().fs_status(int(fs_id))
+                    "fs_status": global_instance().fs_status(fs_id)
                 }
 
                 return template.render(
@@ -496,7 +502,13 @@ class Module(MgrModule):
             @cherrypy.expose
             @cherrypy.tools.json_out()
             def filesystem_data(self, fs_id):
-                return global_instance().fs_status(int(fs_id))
+                try:
+                    fs_id = int(fs_id)
+                except ValueError:
+                    raise cherrypy.HTTPError(400,
+                        "Invalid filesystem id {0}".format(fs_id))
+
+                return global_instance().fs_status(fs_id)
 
             def _clients(self, fs_id):
                 cephfs_clients = global_instance().cephfs_clients.get(fs_id, None)
@@ -504,7 +516,14 @@ class Module(MgrModule):
                     cephfs_clients = CephFSClients(global_instance(), fs_id)
                     global_instance().cephfs_clients[fs_id] = cephfs_clients
 
-                status, clients = cephfs_clients.get()
+                try:
+                    status, clients = cephfs_clients.get()
+                except AttributeError:
+                    raise cherrypy.HTTPError(404,
+                        "No filesystem with id {0}".format(fs_id))
+                if clients is None:
+                    raise cherrypy.HTTPError(404,
+                        "No filesystem with id {0}".format(fs_id))
                 #TODO do something sensible with status
 
                 # Decorate the metadata with some fields that will be
@@ -565,7 +584,13 @@ class Module(MgrModule):
             @cherrypy.expose
             @cherrypy.tools.json_out()
             def clients_data(self, fs_id):
-                return self._clients(int(fs_id))
+                try:
+                    fs_id = int(fs_id)
+                except ValueError:
+                    raise cherrypy.HTTPError(400,
+                        "Invalid filesystem id {0}".format(fs_id))
+
+                return self._clients(fs_id)
 
             def _rbd_pool(self, pool_name):
                 rbd_ls = global_instance().rbd_ls.get(pool_name, None)
@@ -800,8 +825,14 @@ class Module(MgrModule):
                     "mds.subtrees"
                 ]
 
+                try:
+                    fs_id = int(fs_id)
+                except ValueError:
+                    raise cherrypy.HTTPError(400,
+                        "Invalid filesystem id {0}".format(fs_id))
+
                 result = {}
-                mds_names = self._get_mds_names(int(fs_id))
+                mds_names = self._get_mds_names(fs_id)
 
                 for mds_name in mds_names:
                     result[mds_name] = {}
@@ -871,8 +902,6 @@ class Module(MgrModule):
 
         class OSDEndpoint(EndPoint):
             def _osd(self, osd_id):
-                osd_id = int(osd_id)
-
                 osd_map = global_instance().get("osd_map")
 
                 osd = None
@@ -880,8 +909,10 @@ class Module(MgrModule):
                     if o['osd'] == osd_id:
                         osd = o
                         break
+                if osd is None:
+                    raise cherrypy.HTTPError(404,
+                        "No OSD with id {0}".format(osd_id))
 
-                assert osd is not None  # TODO 400
 
                 osd_spec = "{0}".format(osd_id)
 
@@ -895,8 +926,11 @@ class Module(MgrModule):
                            }),
                        "")
                 r, outb, outs = result.wait()
-                assert r == 0
-                histogram = json.loads(outb)
+                if r != 0:
+                    histogram = None
+                    global_instance().log.error("Failed to load histogram for OSD {}".format(osd_id))
+                else:
+                    histogram = json.loads(outb)
 
                 return {
                     "osd": osd,
@@ -914,12 +948,18 @@ class Module(MgrModule):
                     ceph_version=global_instance().version,
                     path_info='/osd' + cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
-                    content_data=json.dumps(self._osd(osd_id), indent=2)
+                    content_data=json.dumps(self.perf_data(osd_id), indent=2)
                 )
 
             @cherrypy.expose
             @cherrypy.tools.json_out()
             def perf_data(self, osd_id):
+                try:
+                    osd_id = int(osd_id)
+                except ValueError:
+                    raise cherrypy.HTTPError(400,
+                        "Invalid OSD id {0}".format(osd_id))
+
                 return self._osd(osd_id)
 
             @cherrypy.expose
