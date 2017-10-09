@@ -811,6 +811,10 @@ std::string pg_state_string(int state)
     oss << "forced_recovery+";
   if (state & PG_STATE_DOWN)
     oss << "down+";
+  if (state & PG_STATE_RECOVERY_UNFOUND)
+    oss << "recovery_unfound+";
+  if (state & PG_STATE_BACKFILL_UNFOUND)
+    oss << "backfill_unfound+";
   if (state & PG_STATE_UNDERSIZED)
     oss << "undersized+";
   if (state & PG_STATE_DEGRADED)
@@ -862,6 +866,10 @@ boost::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_CLEAN;
   else if (state == "down")
     type = PG_STATE_DOWN;
+  else if (state == "recovery_unfound")
+    type = PG_STATE_RECOVERY_UNFOUND;
+  else if (state == "backfill_unfound")
+    type = PG_STATE_BACKFILL_UNFOUND;
   else if (state == "scrubbing")
     type = PG_STATE_SCRUBBING;
   else if (state == "degraded")

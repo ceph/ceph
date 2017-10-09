@@ -6440,6 +6440,7 @@ PG::RecoveryState::Backfilling::react(const UnfoundBackfill &c)
   ldout(pg->cct, 10) << "backfill has unfound, can't continue" << dendl;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
+  pg->state_set(PG_STATE_BACKFILL_UNFOUND);
   pg->state_clear(PG_STATE_BACKFILLING);
 
   for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
@@ -6644,7 +6645,7 @@ void PG::RecoveryState::NotBackfilling::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
-  pg->state_clear(PG_STATE_UNFOUND);
+  pg->state_clear(PG_STATE_BACKFILL_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_notbackfilling_latency, dur);
 }
@@ -6663,7 +6664,7 @@ void PG::RecoveryState::NotRecovering::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
-  pg->state_clear(PG_STATE_UNFOUND);
+  pg->state_clear(PG_STATE_RECOVERY_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_notrecovering_latency, dur);
 }
@@ -7045,6 +7046,7 @@ PG::RecoveryState::Recovering::react(const UnfoundRecovery &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 10) << "recovery has unfound, can't continue" << dendl;
+  pg->state_set(PG_STATE_RECOVERY_UNFOUND);
   pg->state_clear(PG_STATE_RECOVERING);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   release_reservations(true);

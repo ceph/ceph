@@ -2384,6 +2384,8 @@ protected:
   bool       is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool       is_peering() const { return state_test(PG_STATE_PEERING); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
+  bool       is_recovery_unfound() const { return state_test(PG_STATE_RECOVERY_UNFOUND); }
+  bool       is_backfill_unfound() const { return state_test(PG_STATE_BACKFILL_UNFOUND); }
   bool       is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
