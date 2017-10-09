@@ -2107,6 +2107,39 @@ TEST_P(StoreTest, SmallSequentialUnaligned) {
   }
 }
 
+TEST_P(StoreTest, SmallSequentialAligned) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl;
+  int len = 4096;
+  bufferptr bp(len);
+  bp.zero();
+  bl.append(bp);
+  for (int i=0; i<1024; ++i) {
+    ObjectStore::Transaction t;
+    t.write(cid, a, i*len, len, bl, 0);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, ManyBigWrite) {
   ObjectStore::Sequencer osr("test");
   int r;

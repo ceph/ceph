@@ -7693,6 +7693,9 @@ int BlueStore::_open_super_meta()
   _set_compression();
   _set_blob_size();
 
+  sync_submit_transaction = cct->_conf->get_val<bool>("bluestore_sync_submit_transaction");
+  sync_commit_transaction = cct->_conf->get_val<bool>("bluestore_sync_commit_transaction");
+
   return 0;
 }
 
@@ -7830,6 +7833,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       if (txc->ioc.has_pending_aios()) {
 	txc->state = TransContext::STATE_AIO_WAIT;
 	txc->had_ios = true;
+	txc->in_queue_context = false;
 	_txc_aio_submit(txc);
 	return;
       }
@@ -7841,13 +7845,17 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       return;
 
     case TransContext::STATE_IO_DONE:
-      //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
+      // NOTE: we are holding osr qlock; see _txc_finish_io.  Note
+      // that that means that any subsequent state is also holding
+      // qlock if in_queue_context is true.
+      // assert(txc->osr->qlock.is_locked());
       if (txc->had_ios) {
 	++txc->osr->txc_with_unstable_io;
       }
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
-      if (cct->_conf->bluestore_sync_submit_transaction) {
+      if (sync_submit_transaction ||
+	  sync_commit_transaction) {
 	if (txc->last_nid >= nid_max ||
 	    txc->last_blobid >= blobid_max) {
 	  dout(20) << __func__
@@ -7870,11 +7878,25 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 		   << dendl;
 	} else {
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
-	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
+	  if (sync_commit_transaction &&
+	      txc->osr->txc_with_unsubmitted_completions.load() == 1) {
+	    dout(20) << __func__ << " sync commit transaction " << txc << dendl;
+	    int r = db->submit_transaction_sync(txc->t);
+	    assert(r == 0);
+	    _txc_applied_kv(txc);
+	    // this matches the put() in kv_sync_thread
+	    throttle_bytes.put(txc->cost);
+	    _txc_state_proc(txc);
+	    return;
+	  }
+	  dout(20) << __func__ << " sync submit transaction " << txc << dendl;
+	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 :
+	    db->submit_transaction(txc->t);
 	  assert(r == 0);
 	  _txc_applied_kv(txc);
 	}
       }
+      txc->in_queue_context = false;
       {
 	std::lock_guard<std::mutex> l(kv_lock);
 	kv_queue.push_back(txc);
@@ -7888,6 +7910,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	kv_throttle_costs += txc->cost;
       }
       return;
+
     case TransContext::STATE_KV_SUBMITTED:
       txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
       txc->state = TransContext::STATE_KV_DONE;
@@ -7898,6 +7921,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_kv_done_lat);
       if (txc->deferred_txn) {
 	txc->state = TransContext::STATE_DEFERRED_QUEUED;
+	txc->in_queue_context = false;
 	_deferred_queue(txc);
 	return;
       }
@@ -7945,6 +7969,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
     if (p->state < TransContext::STATE_IO_DONE) {
       dout(20) << __func__ << " " << txc << " blocked by " << &*p << " "
 	       << p->get_state_name() << dendl;
+      txc->in_queue_context = false;
       return;
     }
     if (p->state > TransContext::STATE_IO_DONE) {
@@ -8133,19 +8158,46 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
     txc->onreadable_sync = NULL;
   }
   unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
+  bool queued = false;
   if (txc->oncommit) {
     logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
-    finishers[n]->queue(txc->oncommit);
+    if (!txc->in_queue_context ||
+	txc->osr->txc_completions_queued.load() ||
+	!txc->oncommit->sync_complete(0)) {
+      finishers[n]->queue(txc->oncommit);
+      queued = true;
+    }
     txc->oncommit = NULL;
   }
   if (txc->onreadable) {
-    finishers[n]->queue(txc->onreadable);
+    if (!txc->in_queue_context ||
+	txc->osr->txc_completions_queued.load() ||
+	!txc->onreadable->sync_complete(0)) {
+      finishers[n]->queue(txc->onreadable);
+      queued = true;
+    }
     txc->onreadable = NULL;
   }
-
-  if (!txc->oncommits.empty()) {
-    finishers[n]->queue(txc->oncommits);
+  while (!txc->oncommits.empty()) {
+    auto f = txc->oncommits.front();
+    if (!txc->in_queue_context ||
+	txc->osr->txc_completions_queued.load() ||
+	!f->sync_complete(0)) {
+      finishers[n]->queue(f);
+      queued = true;
+    }
+    txc->oncommits.pop_front();
   }
+  if (queued && sync_commit_transaction) {
+    // ensure that if we have something queued for this sequencer we
+    // will know about it, and avoid doing a synchronous completion
+    // until the async completions have drained.  This is only necessary
+    // if we have sync_commit_transactions==true and thus may up here
+    // with in_queue_context==true.
+    ++txc->osr->txc_completions_queued;
+    finishers[n]->queue(&txc->osr->completion_finished_context);
+  }
+  --txc->osr->txc_with_unsubmitted_completions;
 }
 
 void BlueStore::_txc_finish(TransContext *txc)
@@ -8164,42 +8216,44 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   OpSequencerRef osr = txc->osr;
-  bool empty = false;
-  bool submit_deferred = false;
-  OpSequencer::q_list_t releasing_txc;
-  {
-    std::lock_guard<std::mutex> l(osr->qlock);
-    txc->state = TransContext::STATE_DONE;
-    bool notify = false;
-    while (!osr->q.empty()) {
-      TransContext *txc = &osr->q.front();
-      dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
-	       << dendl;
-      if (txc->state != TransContext::STATE_DONE) {
-	if (txc->state == TransContext::STATE_PREPARE &&
-	  deferred_aggressive) {
-	  // for _osr_drain_preceding()
-          notify = true;
-	}
-	if (txc->state == TransContext::STATE_DEFERRED_QUEUED &&
-	    osr->q.size() > g_conf->bluestore_max_deferred_txc) {
-	  submit_deferred = true;
-	}
-        break;
-      }
-
-      osr->q.pop_front();
-      releasing_txc.push_back(*txc);
-      notify = true;
-    }
-    if (notify) {
-      osr->qcond.notify_all();
-    }
-    if (osr->q.empty()) {
-      dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
-      empty = true;
-    }
+  std::unique_lock<std::mutex> l(osr->qlock, std::defer_lock);
+  bool must_lock_q = !txc->in_queue_context;
+  if (must_lock_q) {
+    l.lock();
   }
+
+  txc->state = TransContext::STATE_DONE;
+
+  OpSequencer::q_list_t releasing_txc;
+  bool submit_deferred = false;
+  bool empty = true;
+  bool notify = false;
+  while (!osr->q.empty()) {
+    TransContext *txc = &osr->q.front();
+    dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
+	     << dendl;
+    if (txc->state != TransContext::STATE_DONE) {
+      if (txc->state == TransContext::STATE_PREPARE &&
+	  deferred_aggressive) {
+	// for _osr_drain_preceding()
+	notify = true;
+      }
+      if (txc->state == TransContext::STATE_DEFERRED_QUEUED &&
+	  osr->q.size() > g_conf->bluestore_max_deferred_txc) {
+	submit_deferred = true;
+      }
+      empty = false;
+      break;
+    }
+
+    osr->q.pop_front();
+    releasing_txc.push_back(*txc);
+    notify = true;
+  }
+  if (notify) {
+    osr->qcond.notify_all();
+  }
+
   while (!releasing_txc.empty()) {
     // release to allocator only after all preceding txc's have also
     // finished any deferred writes that potentially land in these
@@ -8211,12 +8265,15 @@ void BlueStore::_txc_finish(TransContext *txc)
     delete txc;
   }
 
+  if (must_lock_q) {
+    l.unlock();
+  }
+
   if (submit_deferred) {
     // we're pinning memory; flush!  we could be more fine-grained here but
     // i'm not sure it's worth the bother.
     deferred_try_submit();
   }
-
   if (empty && osr->zombie) {
     dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
     osr->_unregister();
@@ -8517,6 +8574,7 @@ void BlueStore::_kv_sync_thread()
 	  assert(txc->state == TransContext::STATE_KV_SUBMITTED);
 	  txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	}
+	assert(!txc->in_queue_context);
 	if (txc->had_ios) {
 	  --txc->osr->txc_with_unstable_io;
 	}
@@ -8660,6 +8718,7 @@ void BlueStore::_kv_finalize_thread()
       while (!kv_committed.empty()) {
 	TransContext *txc = kv_committed.front();
 	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+	assert(!txc->in_queue_context);
 	_txc_state_proc(txc);
 	kv_committed.pop_front();
       }
@@ -8668,6 +8727,7 @@ void BlueStore::_kv_finalize_thread()
 	auto p = b->txcs.begin();
 	while (p != b->txcs.end()) {
 	  TransContext *txc = &*p;
+	  assert(!txc->in_queue_context);
 	  p = b->txcs.erase(p); // unlink here because
 	  _txc_state_proc(txc); // this may destroy txc
 	}
@@ -8944,6 +9004,7 @@ int BlueStore::queue_transactions(
 
   // prepare
   TransContext *txc = _txc_create(osr);
+  ++txc->osr->txc_with_unsubmitted_completions;
   txc->onreadable = onreadable;
   txc->onreadable_sync = onreadable_sync;
   txc->oncommit = ondisk;

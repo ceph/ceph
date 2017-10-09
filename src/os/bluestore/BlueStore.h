@@ -1538,6 +1538,8 @@ public:
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
+    bool in_queue_context = true;  ///< true if we are still in queue context
+
     uint64_t bytes = 0, cost = 0;
 
     set<OnodeRef> onodes;     ///< these need to be updated/written
@@ -1662,6 +1664,8 @@ public:
 
     std::atomic_int txc_with_unstable_io = {0};  ///< num txcs with unstable io
 
+    std::atomic_int txc_with_unsubmitted_completions = {0};
+
     std::atomic_int kv_committing_serially = {0};
 
     std::atomic_int kv_submitted_waiters = {0};
@@ -1669,9 +1673,24 @@ public:
     std::atomic_bool registered = {true}; ///< registered in BlueStore's osr_set
     std::atomic_bool zombie = {false};    ///< owning Sequencer has gone away
 
+    /// txcs with completions in finisher
+    std::atomic_int txc_completions_queued = {0};
+
+    struct CompletionFlushed : public Context {
+      OpSequencer *osr;
+      CompletionFlushed(OpSequencer *o) : osr(o) {}
+      void finish(int r) {
+	ceph_abort();
+      }
+      void complete(int r) {
+	--osr->txc_completions_queued;
+      }
+    } completion_finished_context;
+
     OpSequencer(CephContext* cct, BlueStore *store)
       : Sequencer_impl(cct),
-	parent(NULL), store(store) {
+	parent(NULL), store(store),
+	completion_finished_context(this) {
       store->register_osr(this);
     }
     ~OpSequencer() override {
@@ -1855,6 +1874,9 @@ private:
 
   int m_finisher_num = 1;
   vector<Finisher*> finishers;
+
+  bool sync_submit_transaction = false;
+  bool sync_commit_transaction = false;
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;

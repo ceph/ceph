@@ -3502,6 +3502,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Try to submit metadata transaction to rocksdb in queuing thread context"),
 
+    Option("bluestore_sync_commit_transaction", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Try to synchronously commit metadata transaction to rocksdb in queuing thread context"),
+
     Option("bluestore_throttle_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64_M)
     .set_safe()

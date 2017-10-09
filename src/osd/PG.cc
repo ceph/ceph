@@ -1521,7 +1521,13 @@ struct C_PG_ActivateCommitted : public Context {
   C_PG_ActivateCommitted(PG *p, epoch_t e, epoch_t ae)
     : pg(p), epoch(e), activation_epoch(ae) {}
   void finish(int r) override {
+    pg->lock();
+    sync_finish(r);
+    pg->unlock();
+  }
+  bool sync_finish(int r) override {
     pg->_activate_committed(epoch, activation_epoch);
+    return true;
   }
 };
 
@@ -1882,7 +1888,6 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
 
 void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
 {
-  lock();
   if (pg_has_reset_since(epoch)) {
     dout(10) << "_activate_committed " << epoch
 	     << ", that was an old interval" << dendl;
@@ -1923,8 +1928,6 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
   }
 
   assert(!dirty_info);
-
-  unlock();
 }
 
 /*
@@ -2010,7 +2013,13 @@ struct C_PG_FinishRecovery : public Context {
   PGRef pg;
   explicit C_PG_FinishRecovery(PG *p) : pg(p) {}
   void finish(int r) override {
+    pg->lock();
+    sync_finish(r);
+    pg->unlock();
+  }
+  bool sync_finish(int r) override {
     pg->_finish_recovery(this);
+    return true;
   }
 };
 
@@ -2119,9 +2128,7 @@ void PG::finish_recovery(list<Context*>& tfin)
 
 void PG::_finish_recovery(Context *c)
 {
-  lock();
   if (deleting) {
-    unlock();
     return;
   }
   if (c == finish_sync_event) {
@@ -2140,7 +2147,6 @@ void PG::_finish_recovery(Context *c)
   } else {
     dout(10) << "_finish_recovery -- stale" << dendl;
   }
-  unlock();
 }
 
 void PG::start_recovery_op(const hobject_t& soid)
