@@ -195,6 +195,7 @@ void usage()
   cout << "  reshard add                schedule a resharding of a bucket\n";
   cout << "  reshard list               list all bucket resharding or scheduled to be reshared\n";
   cout << "  reshard process            process of scheduled reshard jobs\n";
+  cout << "  reshard status             resharding status of a bucket\n";
   cout << "  reshard cancel             cancel resharding a bucket\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
