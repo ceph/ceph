@@ -369,6 +369,13 @@ if(WITH_DPDK)
   endif()
 endif()
 
+option(WITH_LIBRADOSSTRIPER "Build with libradosstriper support." ON)
+if(WITH_LIBRADOSSTRIPER)
+  message(STATUS "Enabling libradosstriper in \"rados\" tool.")
+else()
+  message(STATUS "Disabling libradosstriper support in \"rados\" tool.")
+endif()
+
 option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
 if(WITH_BLKIN)
   set(BLKIN_LIBRARIES blkin ${LTTNGUST_LIBRARIES} lttng-ust-fork)
@@ -638,3 +645,5 @@ add_tags(ctags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
   EXCLUDES "*.js" "*.css")
 add_custom_target(tags DEPENDS ctags)
+
+
