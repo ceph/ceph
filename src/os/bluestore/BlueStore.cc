@@ -8216,17 +8216,9 @@ void BlueStore::_txc_applied_kv(TransContext *txc)
 void BlueStore::_txc_committed_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
-
   unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
-  if (txc->oncommit) {
-    logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
-    finishers[n]->queue(txc->oncommit);
-    txc->oncommit = NULL;
-  }
-
-  if (!txc->oncommits.empty()) {
-    finishers[n]->queue(txc->oncommits);
-  }
+  logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
+  finishers[n]->queue(txc->oncommits);
 }
 
 void BlueStore::_txc_finish(TransContext *txc)
@@ -8997,18 +8989,18 @@ int BlueStore::queue_transactions(
     ThreadPool::TPHandle *handle)
 {
   FUNCTRACE(cct);
-  Context *onreadable;
-  Context *ondisk;
-  Context *onreadable_sync;
+  list<Context *> on_applied, on_commit, on_applied_sync;
   ObjectStore::Transaction::collect_contexts(
-    tls, &onreadable, &ondisk, &onreadable_sync);
+    tls, &on_applied, &on_commit, &on_applied_sync);
 
   if (cct->_conf->objectstore_blackhole) {
     dout(0) << __func__ << " objectstore_blackhole = TRUE, dropping transaction"
 	    << dendl;
-    delete ondisk;
-    delete onreadable;
-    delete onreadable_sync;
+    for (auto& l : { on_applied, on_commit, on_applied_sync }) {
+      for (auto c : l) {
+	delete c;
+      }
+    }
     return 0;
   }
   utime_t start = ceph_clock_now();
@@ -9027,7 +9019,7 @@ int BlueStore::queue_transactions(
 
   // prepare
   TransContext *txc = _txc_create(osr);
-  txc->oncommit = ondisk;
+  txc->oncommits.swap(on_commit);
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
     (*p).set_osr(osr);
@@ -9081,15 +9073,15 @@ int BlueStore::queue_transactions(
   _txc_state_proc(txc);
 
   // we're immediately readable (unlike FileStore)
-  if (onreadable_sync) {
-    onreadable_sync->complete(0);
+  for (auto c : on_applied_sync) {
+    c->complete(0);
   }
-  if (onreadable) {
+  unsigned n = osr->parent->shard_hint.hash_to_shard(m_finisher_num);
+  for (auto c : on_applied) {
     // NOTE: these may complete out of order since some may be sync and some
     // may be async.
-    if (!onreadable->sync_complete(0)) {
-      unsigned n = osr->parent->shard_hint.hash_to_shard(m_finisher_num);
-      finishers[n]->queue(onreadable);
+    if (!c->sync_complete(0)) {
+      finishers[n]->queue(c);
     }
   }
 
