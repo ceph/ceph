@@ -99,6 +99,8 @@ public:
       }
     };
 
+    using KeyValueDB::TransactionImpl::rmkey;
+    using KeyValueDB::TransactionImpl::set;
     void rmkey(const string &prefix, const string &key) override {
       on_commit.push_back(new RmKeysOp(db, std::make_pair(prefix, key)));
     }
