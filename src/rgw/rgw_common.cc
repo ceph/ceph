@@ -1843,7 +1843,16 @@ std::string rgw_bucket::get_key(char tenant_delim, char id_delim) const
     key.append(tenant);
     key.append(1, tenant_delim);
   }
-  key.append(name);
+
+  // A more cleaner solution would've been to not have introduced colons when
+  // empty tenant names were encountered in rgw_bucket_instance_key_to_oid
+  // but such a change would no longer be backwards compatible
+  if (name[0] == '/'){
+    key.append(1, tenant_delim);
+    key.append(name.substr(1));
+  } else {
+    key.append(name);
+  }
   if (!bucket_id.empty() && id_delim) {
     key.append(1, id_delim);
     key.append(bucket_id);

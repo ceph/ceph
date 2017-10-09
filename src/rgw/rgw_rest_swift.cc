@@ -2880,12 +2880,27 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state* const s,
     }
   }
 
+
+  const auto slashes_at_front = req.find_first_not_of("/");
+  if (slashes_at_front != string::npos && slashes_at_front > 0) {
+    req = req.substr(slashes_at_front);
+  }
+
   next_tok(req, first, '/');
+
+  // default case would be we have to prepend a single '/' for the one we popped
+  // for misconfigured clients that bring more slashes at the front, add these
+  // back
+  if (slashes_at_front != string::npos && slashes_at_front > 0) {
+    std::string prefix_slashes (slashes_at_front, '/');
+    first = prefix_slashes + first;
+  }
 
   dout(10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;
   if (first.size() == 0)
     return 0;
 
+  // now reset back to the request url
   s->info.effective_uri = "/" + first;
 
   // Save bucket to tide us over until token is parsed.
