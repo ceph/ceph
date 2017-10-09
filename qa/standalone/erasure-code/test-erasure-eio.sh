@@ -323,8 +323,8 @@ function TEST_rados_get_with_subreadall_eio_shard_1() {
     delete_pool $poolname
 }
 
-# Test backfill with errors present
-function TEST_ec_backfill_errors() {
+# Test backfill with unfound object
+function TEST_ec_backfill_unfound() {
     local dir=$1
     local objname=myobject
     local lastobj=300
@@ -364,13 +364,14 @@ function TEST_ec_backfill_errors() {
 
     sleep 15
 
-    while(true); do
+    for tmp in $(seq 1 100); do
       state=$(get_state 2.0)
-      echo $state | grep -v backfilling
+      echo $state | grep backfill_unfound
       if [ "$?" = "0" ]; then
         break
       fi
-      echo -n "$state "
+      echo $state
+      sleep 1
     done
 
     ceph pg dump pgs
@@ -400,8 +401,8 @@ function TEST_ec_backfill_errors() {
     delete_pool $poolname
 }
 
-# Test recovery with errors present
-function TEST_ec_recovery_errors() {
+# Test recovery with unfound object
+function TEST_ec_recovery_unfound() {
     local dir=$1
     local objname=myobject
     local lastobj=100
@@ -439,13 +440,14 @@ function TEST_ec_recovery_errors() {
 
     sleep 15
 
-    while(true); do
+    for tmp in $(seq 1 100); do
       state=$(get_state 2.0)
-      echo $state | grep -v recovering
+      echo $state | grep recovery_unfound
       if [ "$?" = "0" ]; then
         break
       fi
-      echo -n "$state "
+      echo "$state "
+      sleep 1
     done
 
     ceph pg dump pgs
