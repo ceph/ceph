@@ -31,7 +31,7 @@ class PyModule
 private:
   const std::string module_name;
   std::string get_site_packages();
-
+  int load_subclass_of(const char* class_name, PyObject** py_class);
 public:
   SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
