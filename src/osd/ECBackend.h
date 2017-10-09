@@ -667,7 +667,6 @@ public:
     uint64_t old_size,
     ObjectStore::Transaction *t) override;
 
-  bool scrub_supported() override { return true; }
   bool auto_repair_supported() const override { return true; }
 
   void be_deep_scrub(

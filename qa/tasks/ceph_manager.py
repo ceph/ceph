@@ -160,7 +160,6 @@ class Thrasher:
             not self.cmd_exists_on_osds("ceph-objectstore-tool") or
             self.config.get('disable_objectstore_tool_tests', False)):
             self.ceph_objectstore_tool = False
-            self.test_rm_past_intervals = False
             if self.config.get('powercycle'):
                 self.log("Unable to test ceph-objectstore-tool, "
                          "powercycle testing")
@@ -170,8 +169,6 @@ class Thrasher:
         else:
             self.ceph_objectstore_tool = \
                 self.config.get('ceph_objectstore_tool', True)
-            self.test_rm_past_intervals = \
-                self.config.get('test_rm_past_intervals', True)
         # spawn do_thrash
         self.thread = gevent.spawn(self.do_thrash)
         if self.sighup_delay:
@@ -366,50 +363,6 @@ class Thrasher:
                     raise Exception("ceph-objectstore-tool apply-layout-settings"
                                     " failed with {status}".format(status=proc.exitstatus))
 
-    def rm_past_intervals(self, osd=None):
-        """
-        :param osd: Osd to find pg to remove past intervals
-        """
-        if self.test_rm_past_intervals:
-            if osd is None:
-                osd = random.choice(self.dead_osds)
-            self.log("Use ceph_objectstore_tool to remove past intervals")
-            remote = self.ceph_manager.find_remote('osd', osd)
-            FSPATH = self.ceph_manager.get_filepath()
-            JPATH = os.path.join(FSPATH, "journal")
-            if ('keyvaluestore_backend' in
-                    self.ceph_manager.ctx.ceph[self.cluster].conf['osd']):
-                prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
-                          "--data-path {fpath} --journal-path {jpath} "
-                          "--type keyvaluestore "
-                          "--log-file="
-                          "/var/log/ceph/objectstore_tool.\\$pid.log ".
-                          format(fpath=FSPATH, jpath=JPATH))
-            else:
-                prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
-                          "--data-path {fpath} --journal-path {jpath} "
-                          "--log-file="
-                          "/var/log/ceph/objectstore_tool.\\$pid.log ".
-                          format(fpath=FSPATH, jpath=JPATH))
-            cmd = (prefix + "--op list-pgs").format(id=osd)
-            proc = remote.run(args=cmd, wait=True,
-                              check_status=False, stdout=StringIO())
-            if proc.exitstatus:
-                raise Exception("ceph_objectstore_tool: "
-                                "exp list-pgs failure with status {ret}".
-                                format(ret=proc.exitstatus))
-            pgs = proc.stdout.getvalue().split('\n')[:-1]
-            if len(pgs) == 0:
-                self.log("No PGs found for osd.{osd}".format(osd=osd))
-                return
-            pg = random.choice(pgs)
-            cmd = (prefix + "--op rm-past-intervals --pgid {pg}").\
-                format(id=osd, pg=pg)
-            proc = remote.run(args=cmd)
-            if proc.exitstatus:
-                raise Exception("ceph_objectstore_tool: "
-                                "rm-past-intervals failure with status {ret}".
-                                format(ret=proc.exitstatus))
 
     def blackhole_kill_osd(self, osd=None):
         """
@@ -852,8 +805,6 @@ class Thrasher:
             actions.append((self.out_osd, 1.0,))
         if len(self.live_osds) > minlive and chance_down > 0:
             actions.append((self.kill_osd, chance_down,))
-        if len(self.dead_osds) > 1:
-            actions.append((self.rm_past_intervals, 1.0,))
         if len(self.out_osds) > minout:
             actions.append((self.in_osd, 1.7,))
         if len(self.dead_osds) > mindead:

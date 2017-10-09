@@ -216,6 +216,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        pg_shard_t peer,
        const hobject_t &hoid) = 0;
 
+     virtual bool pg_is_undersized() const = 0;
+
      virtual void log_operation(
        const vector<pg_log_entry_t> &logv,
        const boost::optional<pg_hit_set_history_t> &hset_history,
@@ -550,7 +552,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
 
-   virtual bool scrub_supported() = 0;
    virtual bool auto_repair_supported() const = 0;
    void be_scan_list(
      ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
