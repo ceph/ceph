@@ -541,7 +541,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
 
   memset(iswr, 0, sizeof(iswr));
   memset(isge, 0, sizeof(isge));
-  current_buffer = tx_buffers.begin();
+ 
   while (current_buffer != tx_buffers.end()) {
     isge[current_sge].addr = reinterpret_cast<uint64_t>((*current_buffer)->buffer);
     isge[current_sge].length = (*current_buffer)->get_offset();
