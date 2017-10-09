@@ -2675,6 +2675,9 @@ void Client::handle_mds_map(MMDSMap* m)
     }
   }
 
+  utime_t session_timeout = mdsmap->get_session_timeout();
+  if ((session_timeout - 1.0) <= deleg_timeout)
+    deleg_timeout = session_timeout - 1.0;
   // kick any waiting threads
   signal_cond_list(waiting_for_mdsmap);
 
@@ -13849,7 +13852,11 @@ void Client::handle_conf_change(const struct md_config_t *conf,
       acl_type = POSIX_ACL;
   }
   if (changed.count("client_deleg_timeout")) {
+    utime_t session_timeout = mdsmap->get_session_timeout();
+
     deleg_timeout = cct->_conf->get_val<double>("client_deleg_timeout");
+    if (session_timeout && ((session_timeout - 1.0) <= deleg_timeout))
+      deleg_timeout = session_timeout - 1.0;
   }
   if (changed.count("client_deleg_break_on_open")) {
     deleg_break_on_open = cct->_conf->get_val<bool>("client_deleg_break_on_open");
