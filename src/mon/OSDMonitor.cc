@@ -880,8 +880,9 @@ void OSDMonitor::prime_pg_temp(
  */
 void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
-  dout(10) << "encode_pending e " << pending_inc.epoch
-	   << dendl;
+  OSDMap osdmap;
+
+  dout(10) << __func__ << " e " << pending_inc.epoch << dendl;
 
   // finalize up pending_inc
   pending_inc.modified = ceph_clock_now();
@@ -892,13 +893,13 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (mapping_job) {
     if (!mapping_job->is_done()) {
       dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
-	      << mapping_job.get() << " did not complete, "
-	      << mapping_job->shards << " left" << dendl;
+              << mapping_job.get() << " did not complete, "
+              << mapping_job->shards << " left" << dendl;
       mapping_job->abort();
     } else if (mapping.get_epoch() < osdmap.get_epoch()) {
       dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
-	      << mapping_job.get() << " is prior epoch "
-	      << mapping.get_epoch() << dendl;
+              << mapping_job.get() << " is prior epoch "
+              << mapping.get_epoch() << dendl;
     } else {
       if (g_conf->mon_osd_prime_pg_temp) {
 	maybe_prime_pg_temp();
@@ -906,7 +907,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     } 
   } else if (g_conf->mon_osd_prime_pg_temp) {
     dout(1) << __func__ << " skipping prime_pg_temp; mapping job did not start"
-	    << dendl;
+            << dendl;
   }
   mapping_job.reset();
 
@@ -915,7 +916,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   auto p = pending_inc.new_state.begin();
   while (p != pending_inc.new_state.end()) {
     if (p->second == 0) {
-      dout(10) << "new_state for osd." << p->first << " is 0, removing" << dendl;
+      dout(10) << "new_state for osd." << p->first << " is 0, removing"
+               << dendl;
       p = pending_inc.new_state.erase(p);
     } else {
       ++p;
@@ -924,283 +926,286 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   bufferlist bl;
 
+  osdmap.deepish_copy_from(osdmap);
+  osdmap.apply_incremental(pending_inc);
+
+  // remove any legacy osdmap nearfull/full flags
   {
-    OSDMap tmp;
-    tmp.deepish_copy_from(osdmap);
-    tmp.apply_incremental(pending_inc);
+    if (osdmap.test_flag(CEPH_OSDMAP_FULL | CEPH_OSDMAP_NEARFULL)) {
+      dout(10) << __func__ << " clearing legacy osdmap nearfull/full flag"
+               << dendl;
+      remove_flag(CEPH_OSDMAP_NEARFULL);
+      remove_flag(CEPH_OSDMAP_FULL);
+    }
+  }
+  // collect which pools are currently affected by the near/backfill/full
+  // osd(s), and set per-pool near/backfill/full flag instead
+  std::set<int64_t> full_pool_ids;
+  std::set<int64_t> backfillfull_pool_ids;
+  std::set<int64_t> nearfull_pool_ids;
+  osdmap.get_full_pools(g_ceph_context, &full_pool_ids,
+                        &backfillfull_pool_ids, &nearfull_pool_ids);
+  if (full_pool_ids.empty() ||
+      backfillfull_pool_ids.empty() ||
+      nearfull_pool_ids.empty()) {
+    // normal case - no nearfull, backfillfull or full osds try cancel any 
+    // improper nearfull/backfillfull/full pool flags first
+    for (auto &pool : osdmap.get_pools()) {
+      auto p = pool.first;
+      if (osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_NEARFULL) &&
+          nearfull_pool_ids.empty()) {
+        dout(10) << __func__ << " clearing pool '" << osdmap.pool_name[p]
+                 << "'s nearfull flag" << dendl;
+        if (pending_inc.new_pools.count(p) == 0) {
+	  // load original pool info first!
+	  pending_inc.new_pools[p] = pool.second;
+	}
+	pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_NEARFULL;
+      }
+      if (osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_BACKFILLFULL) &&
+          backfillfull_pool_ids.empty()) {
+        dout(10) << __func__ << " clearing pool '" << osdmap.pool_name[p]
+                 << "'s backfillfull flag" << dendl;
+        if (pending_inc.new_pools.count(p) == 0) {
+          pending_inc.new_pools[p] = pool.second;
+        }
+        pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_BACKFILLFULL;
+      }
+      if (osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL) &&
+          full_pool_ids.empty()) {
+        if (osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
+          // set by EQUOTA, skipping
+          continue;
+        }
+        dout(10) << __func__ << " clearing pool '" << osdmap.pool_name[p]
+                 << "'s full flag" << dendl;
+        if (pending_inc.new_pools.count(p) == 0) {
+          pending_inc.new_pools[p] = pool.second;
+        }
+        pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_FULL;
+      }
+    }
+  }
+  if (!full_pool_ids.empty()) {
+    dout(10) << __func__ << " marking pool(s) " << full_pool_ids
+             << " as full" << dendl;
+    for (auto &p : full_pool_ids) {
+      if (osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL)) {
+        continue;
+      }
+      if (pending_inc.new_pools.count(p) == 0) {
+        pending_inc.new_pools[p] = osdmap.pools[p];
+      }
+      pending_inc.new_pools[p].flags |= pg_pool_t::FLAG_FULL;
+      pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_BACKFILLFULL;
+      pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_NEARFULL;
+    }
+    // cancel FLAG_FULL for pools which are no longer full too
+    for (auto &pool : osdmap.get_pools()) {
+      auto p = pool.first;
+      if (full_pool_ids.count(p)) {
+        // skip pools we have just marked as full above
+        continue;
+      }
+      if (!osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL) ||
+          osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
+        // don't touch if currently is not full or is running out of quota
+        // (and hence considered as full)
+        continue;
+      }
+      dout(10) << __func__ << " clearing pool '" << osdmap.pool_name[p]
+               << "'s full flag" << dendl;
+      if (pending_inc.new_pools.count(p) == 0) {
+        pending_inc.new_pools[p] = pool.second;
+      }
+      pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_FULL;
+    }
+  }
+  if (!backfillfull_pool_ids.empty()) {
+    for (auto &p : backfillfull_pool_ids) {
+      if (full_pool_ids.count(p)) {
+        // skip pools we have already considered as full above
+        continue;
+      }
+      if (osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
+        // make sure FLAG_FULL is truly set, so we are safe not
+        // to set a extra (redundant) FLAG_BACKFILLFULL flag
+        assert(osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL));
+        continue;
+      }
+      if (osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_BACKFILLFULL)) {
+        // don't bother if pool is already marked as backfillfull
+        continue;
+      }
+      dout(10) << __func__ << " marking pool '" << osdmap.pool_name[p]
+               << "'s as backfillfull" << dendl;
+      if (pending_inc.new_pools.count(p) == 0) {
+        pending_inc.new_pools[p] = osdmap.pools[p];
+      }
+      pending_inc.new_pools[p].flags |= pg_pool_t::FLAG_BACKFILLFULL;
+      pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_NEARFULL;
+    }
+    // cancel FLAG_BACKFILLFULL for pools which are no longer backfillfull too
+    for (auto &pool : osdmap.get_pools()) {
+      auto p = pool.first;
+      if (full_pool_ids.count(p) || backfillfull_pool_ids.count(p)) {
+        // skip pools we have just marked as backfillfull/full above
+        continue;
+      }
+      if (!osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_BACKFILLFULL)) {
+        // and don't touch if currently is not backfillfull
+        continue;
+      }
+      dout(10) << __func__ << " clearing pool '" << osdmap.pool_name[p]
+               << "'s backfillfull flag" << dendl;
+      if (pending_inc.new_pools.count(p) == 0) {
+        pending_inc.new_pools[p] = pool.second;
+      }
+      pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_BACKFILLFULL;
+    }
+  }
+  if (!nearfull_pool_ids.empty()) {
+    for (auto &p : nearfull_pool_ids) {
+      if (full_pool_ids.count(p) || backfillfull_pool_ids.count(p)) {
+        continue;
+      }
+      if (osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
+        // make sure FLAG_FULL is truly set, so we are safe not to set a 
+        // extra (redundant) FLAG_NEARFULL flag
+        assert(osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL));
+        continue;
+      }
+      if (osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_NEARFULL)) {
+        // don't bother if pool is already marked as nearfull
+        continue;
+      }
+      dout(10) << __func__ << " marking pool '" << osdmap.pool_name[p]
+               << "'s as nearfull" << dendl;
+      if (pending_inc.new_pools.count(p) == 0) {
+        pending_inc.new_pools[p] = osdmap.pools[p];
+      }
+      pending_inc.new_pools[p].flags |= pg_pool_t::FLAG_NEARFULL;
+    }
+    // cancel FLAG_NEARFULL for pools which are no longer nearfull too
+    for (auto &pool : osdmap.get_pools()) {
+      auto p = pool.first;
+      if (full_pool_ids.count(p) ||
+          backfillfull_pool_ids.count(p) ||
+          nearfull_pool_ids.count(p)) {
+        // skip pools we have just marked as nearfull/backfillfull/full above
+        continue;
+      }
+      if (!osdmap.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_NEARFULL)) {
+        // and don't touch if currently is not nearfull
+        continue;
+      }
+      dout(10) << __func__ << " clearing pool '" << osdmap.pool_name[p]
+               << "'s nearfull flag" << dendl;
+      if (pending_inc.new_pools.count(p) == 0) {
+        pending_inc.new_pools[p] = pool.second;
+      }
+      pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_NEARFULL;
+    }
+  }
 
-    // remove any legacy osdmap nearfull/full flags
-    {
-      if (tmp.test_flag(CEPH_OSDMAP_FULL | CEPH_OSDMAP_NEARFULL)) {
-	dout(10) << __func__ << " clearing legacy osdmap nearfull/full flag"
-		 << dendl;
-	remove_flag(CEPH_OSDMAP_NEARFULL);
-	remove_flag(CEPH_OSDMAP_FULL);
-      }
-    }
-    // collect which pools are currently affected by
-    // the near/backfill/full osd(s),
-    // and set per-pool near/backfill/full flag instead
-    set<int64_t> full_pool_ids;
-    set<int64_t> backfillfull_pool_ids;
-    set<int64_t> nearfull_pool_ids;
-    tmp.get_full_pools(g_ceph_context,
-		       &full_pool_ids,
-		       &backfillfull_pool_ids,
-                         &nearfull_pool_ids);
-    if (full_pool_ids.empty() ||
-	backfillfull_pool_ids.empty() ||
-	nearfull_pool_ids.empty()) {
-      // normal case - no nearfull, backfillfull or full osds
-        // try cancel any improper nearfull/backfillfull/full pool
-        // flags first
-      for (auto &pool: tmp.get_pools()) {
-	auto p = pool.first;
-	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_NEARFULL) &&
-	    nearfull_pool_ids.empty()) {
-	  dout(10) << __func__ << " clearing pool '" << tmp.pool_name[p]
-		   << "'s nearfull flag" << dendl;
-	  if (pending_inc.new_pools.count(p) == 0) {
-	    // load original pool info first!
-	    pending_inc.new_pools[p] = pool.second;
-	  }
-	  pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_NEARFULL;
-	}
-	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_BACKFILLFULL) &&
-	    backfillfull_pool_ids.empty()) {
-	  dout(10) << __func__ << " clearing pool '" << tmp.pool_name[p]
-		   << "'s backfillfull flag" << dendl;
-	  if (pending_inc.new_pools.count(p) == 0) {
-	    pending_inc.new_pools[p] = pool.second;
-	  }
-	  pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_BACKFILLFULL;
-	}
-	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL) &&
-	    full_pool_ids.empty()) {
-	  if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
-	    // set by EQUOTA, skipping
-	    continue;
-	  }
-	  dout(10) << __func__ << " clearing pool '" << tmp.pool_name[p]
-		   << "'s full flag" << dendl;
-	  if (pending_inc.new_pools.count(p) == 0) {
-	    pending_inc.new_pools[p] = pool.second;
-	  }
-	  pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_FULL;
-	}
-      }
-    }
-    if (!full_pool_ids.empty()) {
-      dout(10) << __func__ << " marking pool(s) " << full_pool_ids
-	       << " as full" << dendl;
-      for (auto &p: full_pool_ids) {
-	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL)) {
-	  continue;
-	}
-	if (pending_inc.new_pools.count(p) == 0) {
-	  pending_inc.new_pools[p] = tmp.pools[p];
-	}
-	pending_inc.new_pools[p].flags |= pg_pool_t::FLAG_FULL;
-	pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_BACKFILLFULL;
-	pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_NEARFULL;
-      }
-      // cancel FLAG_FULL for pools which are no longer full too
-      for (auto &pool: tmp.get_pools()) {
-	auto p = pool.first;
-	if (full_pool_ids.count(p)) {
-	  // skip pools we have just marked as full above
-	  continue;
-	}
-	if (!tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL) ||
-	    tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
-	  // don't touch if currently is not full
-	  // or is running out of quota (and hence considered as full)
-	  continue;
-	}
-	dout(10) << __func__ << " clearing pool '" << tmp.pool_name[p]
-		 << "'s full flag" << dendl;
-	if (pending_inc.new_pools.count(p) == 0) {
-	  pending_inc.new_pools[p] = pool.second;
-	}
-	pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_FULL;
-      }
-    }
-    if (!backfillfull_pool_ids.empty()) {
-      for (auto &p: backfillfull_pool_ids) {
-	if (full_pool_ids.count(p)) {
-	  // skip pools we have already considered as full above
-	  continue;
-	}
-	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
-	  // make sure FLAG_FULL is truly set, so we are safe not
-	  // to set a extra (redundant) FLAG_BACKFILLFULL flag
-	  assert(tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL));
-	  continue;
-	}
-	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_BACKFILLFULL)) {
-	  // don't bother if pool is already marked as backfillfull
-	  continue;
-	}
-	dout(10) << __func__ << " marking pool '" << tmp.pool_name[p]
-		 << "'s as backfillfull" << dendl;
-	if (pending_inc.new_pools.count(p) == 0) {
-	  pending_inc.new_pools[p] = tmp.pools[p];
-	}
-	pending_inc.new_pools[p].flags |= pg_pool_t::FLAG_BACKFILLFULL;
-	pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_NEARFULL;
-      }
-      // cancel FLAG_BACKFILLFULL for pools
-      // which are no longer backfillfull too
-      for (auto &pool: tmp.get_pools()) {
-	auto p = pool.first;
-	if (full_pool_ids.count(p) || backfillfull_pool_ids.count(p)) {
-	  // skip pools we have just marked as backfillfull/full above
-	  continue;
-	}
-	if (!tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_BACKFILLFULL)) {
-	  // and don't touch if currently is not backfillfull
-	  continue;
-	}
-	dout(10) << __func__ << " clearing pool '" << tmp.pool_name[p]
-		 << "'s backfillfull flag" << dendl;
-	if (pending_inc.new_pools.count(p) == 0) {
-	  pending_inc.new_pools[p] = pool.second;
-	}
-	pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_BACKFILLFULL;
-      }
-    }
-    if (!nearfull_pool_ids.empty()) {
-      for (auto &p: nearfull_pool_ids) {
-	if (full_pool_ids.count(p) || backfillfull_pool_ids.count(p)) {
-	  continue;
-	}
-	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
-	  // make sure FLAG_FULL is truly set, so we are safe not
-	  // to set a extra (redundant) FLAG_NEARFULL flag
-	  assert(tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL));
-	  continue;
-	}
-	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_NEARFULL)) {
-	  // don't bother if pool is already marked as nearfull
-	  continue;
-	}
-	dout(10) << __func__ << " marking pool '" << tmp.pool_name[p]
-		 << "'s as nearfull" << dendl;
-	if (pending_inc.new_pools.count(p) == 0) {
-	  pending_inc.new_pools[p] = tmp.pools[p];
-	}
-	pending_inc.new_pools[p].flags |= pg_pool_t::FLAG_NEARFULL;
-      }
-      // cancel FLAG_NEARFULL for pools
-      // which are no longer nearfull too
-      for (auto &pool: tmp.get_pools()) {
-	auto p = pool.first;
-	if (full_pool_ids.count(p) ||
-	    backfillfull_pool_ids.count(p) ||
-	    nearfull_pool_ids.count(p)) {
-	  // skip pools we have just marked as
-	  // nearfull/backfillfull/full above
-	  continue;
-	}
-	if (!tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_NEARFULL)) {
-	  // and don't touch if currently is not nearfull
-	  continue;
-	}
-	dout(10) << __func__ << " clearing pool '" << tmp.pool_name[p]
-		 << "'s nearfull flag" << dendl;
-	if (pending_inc.new_pools.count(p) == 0) {
-	  pending_inc.new_pools[p] = pool.second;
-	}
-	pending_inc.new_pools[p].flags &= ~pg_pool_t::FLAG_NEARFULL;
-      }
-    }
-
-    // min_compat_client?
-    if (tmp.require_min_compat_client == 0) {
-      auto mv = tmp.get_min_compat_client();
-      dout(1) << __func__ << " setting require_min_compat_client to currently "
-	      << "required " << ceph_release_name(mv) << dendl;
-      mon->clog->info() << "setting require_min_compat_client to currently "
-			<< "required " << ceph_release_name(mv);
-      pending_inc.new_require_min_compat_client = mv;
-    }
+  // min_compat_client?
+  if (osdmap.require_min_compat_client == 0) {
+    auto mv = osdmap.get_min_compat_client();
+    dout(1) << __func__ << " setting require_min_compat_client to currently "
+            << "required " << ceph_release_name(mv) << dendl;
+    mon->clog->info() << "setting require_min_compat_client to currently "
+                      << "required " << ceph_release_name(mv);
+    pending_inc.new_require_min_compat_client = mv;
   }
 
   // tell me about it
   for (auto i = pending_inc.new_state.begin();
-       i != pending_inc.new_state.end();
-       ++i) {
+    i != pending_inc.new_state.end(); ++i) {
     int s = i->second ? i->second : CEPH_OSD_UP;
-    if (s & CEPH_OSD_UP)
-      dout(2) << " osd." << i->first << " DOWN" << dendl;
+    int32_t osd = i->first;
+    const entity_addr_t cluster_addr = osdmap.get_cluster_addr(osd);
+    if (s & CEPH_OSD_UP) 
+      dout(2) << __func__
+              << "osd." << osd << " "
+              << "cluster addr " << cluster_addr << " DOWN" << dendl;
     if (s & CEPH_OSD_EXISTS)
-      dout(2) << " osd." << i->first << " DNE" << dendl;
+      dout(2) << __func__
+              << "osd." << osd << " "
+              << "cluster addr " << cluster_addr << " DNE" << dendl;
   }
-  for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up_client.begin();
-       i != pending_inc.new_up_client.end();
-       ++i) {
-    //FIXME: insert cluster addresses too
-    dout(2) << " osd." << i->first << " UP " << i->second << dendl;
+  for (std::map<int32_t, entity_addr_t>::iterator i =
+    pending_inc.new_up_client.begin();
+    i != pending_inc.new_up_client.end(); ++i) {
+    int32_t osd = i->first;
+    const entity_addr_t cluster_addr = osdmap.get_cluster_addr(osd);
+    dout(2) << __func__
+            << "osd." << osd << " "
+            << "cluster addr " << cluster_addr << " UP " << i->second
+            << dendl;
   }
-  for (map<int32_t,uint32_t>::iterator i = pending_inc.new_weight.begin();
-       i != pending_inc.new_weight.end();
-       ++i) {
-    if (i->second == CEPH_OSD_OUT) {
-      dout(2) << " osd." << i->first << " OUT" << dendl;
-    } else if (i->second == CEPH_OSD_IN) {
-      dout(2) << " osd." << i->first << " IN" << dendl;
-    } else {
-      dout(2) << " osd." << i->first << " WEIGHT " << hex << i->second << dec << dendl;
-    }
+  for (std::map<int32_t, uint32_t>::iterator i =
+    pending_inc.new_weight.begin(); i != pending_inc.new_weight.end(); ++i) {
+    int32_t osd = i->first;
+    const entity_addr_t cluster_addr = osdmap.get_cluster_addr(osd);
+    if (i->second == CEPH_OSD_OUT)
+      dout(2) << __func__
+              << "osd." << osd << " "
+              << "cluster  addr " << cluster_addr << " OUT" << dendl;
+    else if (i->second == CEPH_OSD_IN)
+      dout(2) << __func__
+              << "osd." << osd << " "
+              << "cluster addr " << cluster_addr << " IN" << dendl;
+    else
+      dout(2) << __func__
+              << "osd." << osd << " "
+              << "cluster addr " << cluster_addr << " "
+              << "WEIGHT " << std::hex << i->second << std::dec << dendl;
   }
 
   // features for osdmap and its incremental
   uint64_t features = mon->get_quorum_con_features();
 
   // encode full map and determine its crc
-  OSDMap tmp;
-  {
-    tmp.deepish_copy_from(osdmap);
-    tmp.apply_incremental(pending_inc);
+  osdmap.deepish_copy_from(osdmap);
+  osdmap.apply_incremental(pending_inc);
 
-    // determine appropriate features
-    if (tmp.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      dout(10) << __func__ << " encoding without feature SERVER_LUMINOUS"
-	       << dendl;
-      features &= ~CEPH_FEATURE_SERVER_LUMINOUS;
-    }
-    if (tmp.require_osd_release < CEPH_RELEASE_KRAKEN) {
-      dout(10) << __func__ << " encoding without feature SERVER_KRAKEN | "
-	       << "MSG_ADDR2" << dendl;
-      features &= ~(CEPH_FEATURE_SERVER_KRAKEN |
-		    CEPH_FEATURE_MSG_ADDR2);
-    }
-    if (tmp.require_osd_release < CEPH_RELEASE_JEWEL) {
-      dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
-      features &= ~CEPH_FEATURE_SERVER_JEWEL;
-    }
-    if (tmp.require_osd_release < CEPH_RELEASE_MIMIC) {
-      dout(10) << __func__ << " encoding without feature SERVER_MIMIC" << dendl;
-      features &= ~(CEPH_FEATURE_SERVER_MIMIC);
-    }
-    dout(10) << __func__ << " encoding full map with " << features << dendl;
+  // determine appropriate features
+  if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+    dout(10) << __func__ << " encoding without feature SERVER_LUMINOUS"
+             << dendl;
+    features &= ~CEPH_FEATURE_SERVER_LUMINOUS;
+  }
+  if (osdmap.require_osd_release < CEPH_RELEASE_KRAKEN) {
+    dout(10) << __func__ << " encoding without feature SERVER_KRAKEN | "
+             << "MSG_ADDR2" << dendl;
+    features &= ~(CEPH_FEATURE_SERVER_KRAKEN |
+                  CEPH_FEATURE_MSG_ADDR2);
+  }
+  if (osdmap.require_osd_release < CEPH_RELEASE_JEWEL) {
+    dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
+    features &= ~CEPH_FEATURE_SERVER_JEWEL;
+  }
+  if (osdmap.require_osd_release < CEPH_RELEASE_MIMIC) {
+    dout(10) << __func__ << " encoding without feature SERVER_MIMIC" << dendl;
+    features &= ~(CEPH_FEATURE_SERVER_MIMIC);
+  }
+  dout(10) << __func__ << " encoding full map with " << features << dendl;
 
-    bufferlist fullbl;
-    ::encode(tmp, fullbl, features | CEPH_FEATURE_RESERVED);
-    pending_inc.full_crc = tmp.get_crc();
+  bufferlist fullbl;
+  ::encode(osdmap, fullbl, features | CEPH_FEATURE_RESERVED);
+  pending_inc.full_crc = osdmap.get_crc();
 
     // include full map in the txn.  note that old monitors will
     // overwrite this.  new ones will now skip the local full map
     // encode and reload from this.
-    put_version_full(t, pending_inc.epoch, fullbl);
-  }
+  put_version_full(t, pending_inc.epoch, fullbl);
 
   // encode
   assert(get_last_committed() + 1 == pending_inc.epoch);
   ::encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
 
-  dout(20) << " full_crc " << tmp.get_crc()
-	   << " inc_crc " << pending_inc.inc_crc << dendl;
+  dout(20) << " full_crc " << osdmap.get_crc()
+           << " inc_crc " << pending_inc.inc_crc << dendl;
 
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
@@ -1226,7 +1231,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // health
   health_check_map_t next;
-  tmp.check_health(&next);
+  osdmap.check_health(&next);
   encode_health(next, t);
 }
 
