@@ -32,7 +32,7 @@ class TestModuleSelftest(MgrTestCase):
         self._selftest_plugin("zabbix")
 
     def test_prometheus(self):
-        self._selftest_plugin("influx")
+        self._selftest_plugin("prometheus")
 
     def test_influx(self):
-        self._selftest_plugin("prometheus")
+        self._selftest_plugin("influx")
