@@ -82,9 +82,13 @@ ostream& operator<<(ostream& out, const OSDCapMatch& m)
 {
   if (m.auid != -1LL) {
     out << "auid " << m.auid << " ";
-  } else if (!m.pool_namespace.pool_name.empty() || m.pool_namespace.nspace) {
+  }
+
+  if (!m.pool_namespace.pool_name.empty() || m.pool_namespace.nspace) {
     out << m.pool_namespace;
-  } else if (!m.pool_tag.application.empty()) {
+  }
+
+  if (!m.pool_tag.application.empty()) {
     out << m.pool_tag;
   }
 
@@ -351,8 +355,9 @@ bool OSDCap::is_capable(const string& pool_name, const string& ns,
 {
   std::vector<bool> class_allowed(classes.size(), false);
   for (auto &grant : grants) {
-    if (grant.is_capable(pool_name, ns, pool_auid, application_metadata, object, op_may_read,
-                         op_may_write, classes, &class_allowed)) {
+    if (grant.is_capable(pool_name, ns, pool_auid, application_metadata,
+			 object, op_may_read, op_may_write, classes,
+			 &class_allowed)) {
       return true;
     }
   }
@@ -408,9 +413,11 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 
     match = (
       pooltag                                 [_val = phoenix::construct<OSDCapMatch>(_1)] |
+      (nspace >> pooltag)                     [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
       (auid >> object_prefix)                 [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
       (pool_name >> nspace >> object_prefix)  [_val = phoenix::construct<OSDCapMatch>(_1, _2, _3)] |
-      (pool_name >> object_prefix)            [_val = phoenix::construct<OSDCapMatch>(_1, _2)]);
+      (pool_name >> object_prefix)            [_val = phoenix::construct<OSDCapMatch>(_1, _2)]
+    );
 
     // rwxa := * | [r][w][x] [class-read] [class-write]
     rwxa =
@@ -487,4 +494,3 @@ bool OSDCap::parse(const string& str, ostream *err)
 
   return false; 
 }
-
