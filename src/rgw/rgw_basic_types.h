@@ -160,12 +160,10 @@ public:
   }
 
   const std::string& get_tenant() const {
-    ceph_assert(t != Wildcard);
     return u.tenant;
   }
 
   const std::string& get_id() const {
-    ceph_assert(t != Wildcard && t != Tenant);
     return u.id;
   }
 
