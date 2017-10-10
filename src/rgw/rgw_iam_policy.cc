@@ -221,7 +221,9 @@ optional<ARN> ARN::parse(const string& s, bool wildcards) {
   if ((s == "*") && wildcards) {
     return ARN(Partition::wildcard, Service::wildcard, "*", "*", "*");
   } else if (regex_match(s, match, wildcards ? rx_wild : rx_no_wild)) {
-    ceph_assert(match.size() == 6);
+    if (match.size() != 6) {
+      return boost::none;
+    }
 
     ARN a;
     {
@@ -771,7 +773,9 @@ static optional<Principal> parse_principal(CephContext* cct, TokenID t,
 			  ECMAScript | optimize);
     smatch match;
     if (regex_match(a->resource, match, rx)) {
-      ceph_assert(match.size() == 3);
+      if (match.size() != 3) {
+	return boost::none;
+      }
 
       if (match[1] == "user") {
 	return Principal::user(std::move(a->account),
@@ -839,7 +843,9 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
     // Principals
 
   } else if (w->kind == TokenKind::princ_type) {
-    ceph_assert(pp->s.size() > 1);
+    if (pp->s.size() <= 1) {
+      return false;
+    }
     auto& pri = pp->s[pp->s.size() - 2].w->id == TokenID::Principal ?
       t->princ : t->noprinc;
 
