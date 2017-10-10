@@ -336,27 +336,33 @@ class RGWStreamReadHTTPResourceCRF : public RGWStreamReadResourceCRF {
   RGWCoroutine *caller;
   RGWHTTPManager *http_manager;
 
-  RGWHTTPStreamRWRequest *req;
+  RGWHTTPStreamRWRequest *req{nullptr};
 
   RGWCRHTTPGetDataCB *in_cb{nullptr};
 
+  bufferlist extra_data;
+
   bool got_attrs{false};
+  bool got_extra_data{false};
 
 public:
   RGWStreamReadHTTPResourceCRF(CephContext *_cct,
                                RGWCoroutinesEnv *_env,
                                RGWCoroutine *_caller,
-                               RGWHTTPManager *_http_manager,
-                               RGWHTTPStreamRWRequest *_req) : env(_env),
+                               RGWHTTPManager *_http_manager) : env(_env),
                                                                caller(_caller),
-                                                               http_manager(_http_manager),
-                                                               req(_req) {}
+                                                               http_manager(_http_manager) {}
   virtual ~RGWStreamReadHTTPResourceCRF();
 
   int init() override;
   int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
   bool has_attrs() override;
   void get_attrs(std::map<string, string> *pattrs) override;
+  virtual bool need_extra_data() { return false; }
+
+  void set_req(RGWHTTPStreamRWRequest *r) {
+    req = r;
+  }
 };
 
 class RGWStreamWriteHTTPResourceCRF : public RGWStreamWriteResourceCRF {
@@ -365,23 +371,25 @@ protected:
   RGWCoroutine *caller;
   RGWHTTPManager *http_manager;
 
-  RGWHTTPStreamRWRequest *req;
+  RGWHTTPStreamRWRequest *req{nullptr};
 
 public:
   RGWStreamWriteHTTPResourceCRF(CephContext *_cct,
                                RGWCoroutinesEnv *_env,
                                RGWCoroutine *_caller,
-                               RGWHTTPManager *_http_manager,
-                               RGWHTTPStreamRWRequest *_req) : env(_env),
+                               RGWHTTPManager *_http_manager) : env(_env),
                                                                caller(_caller),
-                                                               http_manager(_http_manager),
-                                                               req(_req) {}
+                                                               http_manager(_http_manager) {}
   virtual ~RGWStreamWriteHTTPResourceCRF() {}
 
   int init() override;
   void send_ready(const std::map<string, string>& attrs) override;
   int write(bufferlist& data) override; /* reentrant */
   int drain_writes(bool *need_retry) override; /* reentrant */
+
+  void set_req(RGWHTTPStreamRWRequest *r) {
+    req = r;
+  }
 };
 
 class RGWStreamSpliceCR : public RGWCoroutine {
