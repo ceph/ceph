@@ -1,6 +1,5 @@
 include(GetGitRevisionDescription)
 
-enable_language(C ASM)
 include(GNUInstallDirs)
 # for erasure and compressor plugins
 set(CMAKE_INSTALL_PKGLIBDIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME})
