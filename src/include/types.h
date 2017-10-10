@@ -439,9 +439,9 @@ struct weightf_t {
 
 inline ostream& operator<<(ostream& out, const weightf_t& w)
 {
-  if (w.v < -0.01) {
+  if (w.v < -0.01F) {
     return out << "-";
-  } else if (w.v < 0.000001) {
+  } else if (w.v < 0.000001F) {
     return out << "0";
   } else {
     std::streamsize p = out.precision();

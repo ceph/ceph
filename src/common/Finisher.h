@@ -62,7 +62,7 @@ class Finisher {
   struct FinisherThread : public Thread {
     Finisher *fin;    
     explicit FinisherThread(Finisher *f) : fin(f) {}
-    void* entry() override { return (void*)fin->finisher_thread_entry(); }
+    void* entry() override { return fin->finisher_thread_entry(); }
   } finisher_thread;
 
  public:

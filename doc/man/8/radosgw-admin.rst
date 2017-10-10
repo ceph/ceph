@@ -220,6 +220,20 @@ which are as follows:
 :command:`orphans finish`
   Clean up search for leaked rados objects
 
+:command:`reshard add`
+  Schedule a resharding of a bucket
+
+:command:`reshard list`
+  List all bucket resharding or scheduled to be resharded
+
+:command:`reshard process`
+  Process of scheduled reshard jobs
+
+:command:`reshard status`
+  Resharding status of a bucket
+
+:command:`reshard cancel`
+  Cancel resharding a bucket
 
 Options
 =======
