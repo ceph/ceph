@@ -48,6 +48,14 @@ def common_parser(prog, description):
         '--osd-fsid',
         help='Reuse an existing OSD fsid',
     )
+    parser.add_argument(
+        '--block.db',
+        help='Path to bluestore block.db logical volume or device',
+    )
+    parser.add_argument(
+        '--block.wal',
+        help='Path to bluestore block.wal logical volume or device',
+    )
     # Do not parse args, so that consumers can do something before the args get
     # parsed triggering argparse behavior
     return parser
