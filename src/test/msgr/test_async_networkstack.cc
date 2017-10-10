@@ -83,7 +83,7 @@ class NetworkWorkerTest : public ::testing::TestWithParam<const char*> {
     std::atomic_bool done;
    public:
     C_dispatch(Worker *w, func &&_f): worker(w), f(std::move(_f)), done(false) {}
-    void do_request(int id) override {
+    void do_request(uint64_t id) override {
       f(worker);
       done = true;
     }
@@ -120,7 +120,7 @@ class C_poll : public EventCallback {
 
  public:
   C_poll(EventCenter *c): center(c), woken(false) {}
-  void do_request(int r) override {
+  void do_request(uint64_t r) override {
     woken = true;
   }
   bool poll(int milliseconds) {
@@ -626,7 +626,7 @@ class StressFactory {
     T *ctxt;
    public:
     C_delete(T *c): ctxt(c) {}
-    void do_request(int id) override {
+    void do_request(uint64_t id) override {
       delete ctxt;
       delete this;
     }
@@ -651,7 +651,7 @@ class StressFactory {
       Client *c;
      public:
       Client_read_handle(Client *_c): c(_c) {}
-      void do_request(int id) override {
+      void do_request(uint64_t id) override {
         c->do_read_request();
       }
     } read_ctxt;
@@ -660,7 +660,7 @@ class StressFactory {
       Client *c;
      public:
       Client_write_handle(Client *_c): c(_c) {}
-      void do_request(int id) override {
+      void do_request(uint64_t id) override {
         c->do_write_request();
       }
     } write_ctxt;
@@ -790,7 +790,7 @@ class StressFactory {
       Server *s;
      public:
       Server_read_handle(Server *_s): s(_s) {}
-      void do_request(int id) override {
+      void do_request(uint64_t id) override {
         s->do_read_request();
       }
     } read_ctxt;
@@ -799,7 +799,7 @@ class StressFactory {
       Server *s;
      public:
       Server_write_handle(Server *_s): s(_s) {}
-      void do_request(int id) override {
+      void do_request(uint64_t id) override {
         s->do_write_request();
       }
     } write_ctxt;
@@ -903,7 +903,7 @@ class StressFactory {
    public:
     C_accept(StressFactory *f, ServerSocket s, ThreadData *data, Worker *w)
         : factory(f), bind_socket(std::move(s)), t_data(data), worker(w) {}
-    void do_request(int id) override {
+    void do_request(uint64_t id) override {
       while (true) {
         entity_addr_t cli_addr;
         ConnectedSocket srv_socket;

@@ -54,7 +54,7 @@ class EventCenter;
 class EventCallback {
 
  public:
-  virtual void do_request(int fd_or_id) = 0;
+  virtual void do_request(uint64_t fd_or_id) = 0;
   virtual ~EventCallback() {}       // we want a virtual destructor!!!
 };
 
@@ -223,7 +223,7 @@ class EventCenter {
    public:
     C_submit_event(func &&_f, bool nw)
       : f(std::move(_f)), nonwait(nw) {}
-    void do_request(int id) override {
+    void do_request(uint64_t id) override {
       f();
       lock.lock();
       cond.notify_all();

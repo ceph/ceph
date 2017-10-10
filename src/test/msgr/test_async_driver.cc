@@ -254,7 +254,7 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
 class FakeEvent : public EventCallback {
 
  public:
-  void do_request(int fd_or_id) override {}
+  void do_request(uint64_t fd_or_id) override {}
 };
 
 TEST(EventCenterTest, FileEventExpansion) {
@@ -302,7 +302,7 @@ class CountEvent: public EventCallback {
 
  public:
   CountEvent(std::atomic<unsigned> *atomic, Mutex *l, Cond *c): count(atomic), lock(l), cond(c) {}
-  void do_request(int id) override {
+  void do_request(uint64_t id) override {
     lock->Lock();
     (*count)--;
     cond->Signal();

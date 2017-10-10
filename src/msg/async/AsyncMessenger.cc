@@ -50,7 +50,7 @@ class Processor::C_processor_accept : public EventCallback {
 
  public:
   explicit C_processor_accept(Processor *p): pro(p) {}
-  void do_request(int id) override {
+  void do_request(uint64_t id) override {
     pro->accept();
   }
 };
@@ -232,7 +232,7 @@ class C_handle_reap : public EventCallback {
 
   public:
   explicit C_handle_reap(AsyncMessenger *m): msgr(m) {}
-  void do_request(int id) override {
+  void do_request(uint64_t id) override {
     // judge whether is a time event
     msgr->reap_dead();
   }

@@ -161,7 +161,7 @@ class arp_for : public arp_for_protocol {
    public:
     C_handle_arp_timeout(arp_for *a, l3addr addr, bool first):
         arp(a), paddr(addr), first_request(first) {}
-    void do_request(int r) {
+    void do_request(uint64_t r) {
       arp->send_query(paddr);
       auto &res = arp->_in_progress[paddr];
 

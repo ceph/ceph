@@ -52,7 +52,7 @@ class C_time_wakeup : public EventCallback {
 
  public:
   explicit C_time_wakeup(AsyncConnectionRef c): conn(c) {}
-  void do_request(int fd_or_id) override {
+  void do_request(uint64_t fd_or_id) override {
     conn->wakeup_from(fd_or_id);
   }
 };
@@ -62,7 +62,7 @@ class C_handle_read : public EventCallback {
 
  public:
   explicit C_handle_read(AsyncConnectionRef c): conn(c) {}
-  void do_request(int fd_or_id) override {
+  void do_request(uint64_t fd_or_id) override {
     conn->process();
   }
 };
@@ -72,7 +72,7 @@ class C_handle_write : public EventCallback {
 
  public:
   explicit C_handle_write(AsyncConnectionRef c): conn(c) {}
-  void do_request(int fd) override {
+  void do_request(uint64_t fd) override {
     conn->handle_write();
   }
 };
@@ -81,7 +81,7 @@ class C_clean_handler : public EventCallback {
   AsyncConnectionRef conn;
  public:
   explicit C_clean_handler(AsyncConnectionRef c): conn(c) {}
-  void do_request(int id) override {
+  void do_request(uint64_t id) override {
     conn->cleanup();
     delete this;
   }
@@ -92,7 +92,7 @@ class C_tick_wakeup : public EventCallback {
 
  public:
   explicit C_tick_wakeup(AsyncConnectionRef c): conn(c) {}
-  void do_request(int fd_or_id) override {
+  void do_request(uint64_t fd_or_id) override {
     conn->tick(fd_or_id);
   }
 };
@@ -2351,7 +2351,7 @@ void AsyncConnection::handle_ack(uint64_t seq)
   }
 }
 
-void AsyncConnection::DelayedDelivery::do_request(int id)
+void AsyncConnection::DelayedDelivery::do_request(uint64_t id)
 {
   Message *m = nullptr;
   {

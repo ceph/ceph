@@ -488,7 +488,7 @@ class CountEvent: public EventCallback {
 
  public:
   explicit CountEvent(std::atomic<int64_t> *atomic): count(atomic) {}
-  void do_request(int id) override {
+  void do_request(uint64_t id) override {
     (*count)--;
   }
 };

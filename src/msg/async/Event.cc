@@ -41,7 +41,7 @@ class C_handle_notify : public EventCallback {
 
  public:
   C_handle_notify(EventCenter *c, CephContext *cc): center(c), cct(cc) {}
-  void do_request(int fd_or_id) override {
+  void do_request(uint64_t fd_or_id) override {
     char c[256];
     int r = 0;
     do {
