@@ -134,11 +134,17 @@ public:
 
 class RGWRESTStreamS3PutObj : public RGWRESTStreamRWRequest {
   RGWGetDataCB *out_cb;
+  RGWEnv new_env;
+  req_info new_info;
 public:
   RGWRESTStreamS3PutObj(CephContext *_cct, const string& _method, const string& _url, param_vec_t *_headers,
 		param_vec_t *_params) : RGWRESTStreamRWRequest(_cct, _method, _url, nullptr, _headers, _params),
-                out_cb(NULL) {}
+                out_cb(NULL), new_info(cct, &new_env) {}
   ~RGWRESTStreamS3PutObj() override;
+
+  void send_init(rgw_obj& obj);
+  int send_ready(RGWAccessKey& key, map<string, bufferlist>& attrs, bool send);
+
   int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send);
 
   RGWGetDataCB *get_out_cb() { return out_cb; }

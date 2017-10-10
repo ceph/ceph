@@ -413,7 +413,7 @@ static void add_grants_headers(map<int, string>& grants, RGWEnv& env, map<string
   }
 }
 
-int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send)
+void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
 {
   string resource = obj.bucket.name + "/" + obj.get_oid();
   string new_url = url;
@@ -423,9 +423,6 @@ int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_
   string date_str;
   get_new_date_str(date_str);
 
-  RGWEnv new_env;
-  req_info new_info(cct, &new_env);
-  
   string params_str;
   map<string, string>& args = new_info.args.get_params();
   get_params_str(args, params_str);
@@ -440,6 +437,12 @@ int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_
   new_info.script_uri.append(resource);
   new_info.request_uri = new_info.script_uri;
 
+  method = new_info.method;
+  url = new_url;
+}
+
+int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, map<string, bufferlist>& attrs, bool send)
+{
   /* merge send headers */
   for (auto& attr: attrs) {
     bufferlist& bl = attr.second;
@@ -482,11 +485,6 @@ int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_
 
   out_cb = new RGWRESTStreamOutCB(this);
 
-  set_send_length(obj_size);
-
-  method = new_info.method;
-  url = new_url;
-
   if (send) {
     int r = RGWHTTP::send(this);
     if (r < 0)
@@ -494,6 +492,12 @@ int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_
   }
 
   return 0;
+}
+
+int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send)
+{
+  send_init(obj);
+  return send_ready(key, attrs, send);
 }
 
 void set_str_from_headers(map<string, string>& out_headers, const string& header_name, string& str)
@@ -698,12 +702,14 @@ int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val)
 
 int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len)
 {
-  bufferptr bp((const char *)ptr, len);
-  bufferlist bl;
-  bl.append(bp);
-  int ret = cb->handle_data(bl, ofs, len);
-  if (ret < 0)
-    return ret;
+  if (cb) {
+    bufferptr bp((const char *)ptr, len);
+    bufferlist bl;
+    bl.append(bp);
+    int ret = cb->handle_data(bl, ofs, len);
+    if (ret < 0)
+      return ret;
+  }
   ofs += len;
   return len;
 }

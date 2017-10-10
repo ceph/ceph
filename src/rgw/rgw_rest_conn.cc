@@ -112,9 +112,31 @@ int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv,
   return req.forward_request(key, info, max_response, inbl, outbl);
 }
 
-int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
-                              map<string, bufferlist>& attrs, bool send,
-                              RGWRESTStreamS3PutObj **req)
+class StreamObjData : public RGWGetDataCB {
+  rgw_obj obj;
+public:
+    explicit StreamObjData(rgw_obj& _obj) : obj(_obj) {}
+};
+
+int RGWRESTConn::put_obj_send_init(rgw_obj& obj, RGWRESTStreamS3PutObj **req)
+{
+  string url;
+  int ret = get_url(url);
+  if (ret < 0)
+    return ret;
+
+  rgw_user uid;
+  param_vec_t params;
+  populate_params(params, &uid, self_zone_group);
+  RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params);
+  wr->send_init(obj);
+  *req = wr;
+  return 0;
+}
+
+int RGWRESTConn::put_obj_async(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
+                               map<string, bufferlist>& attrs, bool send,
+                               RGWRESTStreamS3PutObj **req)
 {
   string url;
   int ret = get_url(url);

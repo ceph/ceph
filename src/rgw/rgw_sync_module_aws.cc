@@ -37,6 +37,34 @@ struct AWSConfig {
   std::unique_ptr<RGWRESTConn> conn;
 };
 
+class RGWAWSStreamPutCRF : public RGWStreamWriteHTTPResourceCRF
+{
+  RGWAccessKey access_key;
+public:
+  RGWAWSStreamPutCRF(CephContext *_cct,
+                               RGWCoroutinesEnv *_env,
+                               RGWCoroutine *_caller,
+                               RGWHTTPManager *_http_manager,
+                               RGWAccessKey& _key,
+                               RGWRESTStreamS3PutObj *_req) : RGWStreamWriteHTTPResourceCRF(_cct, _env, _caller, _http_manager, _req), access_key(_key) {}
+
+  void send_ready(const std::map<string, string>& attrs) override {
+    RGWRESTStreamS3PutObj *r = (RGWRESTStreamS3PutObj *)req;
+
+    map<string, bufferlist> new_attrs;
+
+    for (auto attr : attrs) {
+      const string& val = attr.second;
+      new_attrs[attr.first].append(bufferptr(val.c_str(), val.size() - 1));
+    }
+
+    RGWAccessControlPolicy policy;
+    ::encode(policy, new_attrs[RGW_ATTR_ACL]);
+
+    r->send_ready(access_key, new_attrs, false);
+  }
+};
+
 // maybe use Fetch Remote Obj instead?
 class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
   const AWSConfig& conf;
@@ -157,15 +185,17 @@ public:
         map<string, bufferlist> attrs;
         RGWAccessControlPolicy empty_policy;
         ::encode(empty_policy, attrs[RGW_ATTR_ACL]);
-        ret = conf.conn->put_obj_init(rgw_user(), source_obj, 0 /* obj_size */,  attrs, false, &out_req);
-        if (ret < 0) {
-          return set_cr_error(ret);
-        }
+        conf.conn->put_obj_send_init(source_obj, &out_req);
 
-        out_crf.reset(new RGWStreamWriteHTTPResourceCRF(cct, get_env(), this, sync_env->http_manager, out_req));
+        out_crf.reset(new RGWAWSStreamPutCRF(cct, get_env(), this, sync_env->http_manager, conf.conn->get_key(), out_req));
       }
 
       yield call(new RGWStreamSpliceCR(cct, sync_env->http_manager, in_crf, out_crf));
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
+
+      return set_cr_done();
     }
 
     return 0;
