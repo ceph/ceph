@@ -235,7 +235,7 @@ class tcp {
 
    public:
     C_handle_delayed_ack(tcb *t): tc(t) { }
-    void do_request(int r) {
+    void do_request(uint64_t r) {
       tc->_nr_full_seg_received = 0;
       tc->output();
     }
@@ -246,7 +246,7 @@ class tcp {
 
    public:
     C_handle_retransmit(tcb *t): tc(t) { }
-    void do_request(int r) {
+    void do_request(uint64_t r) {
       tc->retransmit();
     }
   };
@@ -256,7 +256,7 @@ class tcp {
 
    public:
     C_handle_persist(tcb *t): tc(t) { }
-    void do_request(int r) {
+    void do_request(uint64_t r) {
       tc->persist();
     }
   };
@@ -266,7 +266,7 @@ class tcp {
 
    public:
     C_all_data_acked(tcb *t): tc(t) {}
-    void do_request(int fd_or_id) {
+    void do_request(uint64_t fd_or_id) {
       tc->close_final_cleanup();
     }
   };
@@ -275,7 +275,7 @@ class tcp {
     lw_shared_ptr<tcb> tc;
    public:
     C_actual_remove_tcb(tcb *t): tc(t->shared_from_this()) {}
-    void do_request(int r) {
+    void do_request(uint64_t r) {
       delete this;
     }
   };

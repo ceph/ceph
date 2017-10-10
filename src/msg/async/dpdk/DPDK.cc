@@ -601,7 +601,7 @@ class C_handle_dev_stats : public EventCallback {
   DPDKQueuePair *_qp;
  public:
   C_handle_dev_stats(DPDKQueuePair *qp): _qp(qp) { }
-  void do_request(int id) {
+  void do_request(uint64_t id) {
     _qp->handle_stats();
   }
 };

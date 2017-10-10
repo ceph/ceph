@@ -81,7 +81,7 @@ class RDMADispatcher {
     RDMADispatcher *dispatcher;
    public:
     C_handle_cq_async(RDMADispatcher *w): dispatcher(w) {}
-    void do_request(int fd) {
+    void do_request(uint64_t fd) {
       // worker->handle_tx_event();
       dispatcher->handle_async_event();
     }
@@ -139,7 +139,7 @@ class RDMAWorker : public Worker {
     RDMAWorker *worker;
     public:
     C_handle_cq_tx(RDMAWorker *w): worker(w) {}
-    void do_request(int fd) {
+    void do_request(uint64_t fd) {
       worker->handle_pending_message();
     }
   };
@@ -227,7 +227,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
     bool active;
    public:
     C_handle_connection(RDMAConnectedSocketImpl *w): csi(w), active(true) {}
-    void do_request(int fd) {
+    void do_request(uint64_t fd) {
       if (active)
         csi->handle_connection();
     }
