@@ -11,20 +11,25 @@
  * Foundation.  See file COPYING.
  *
  */
+
+#include <cerrno>
+#include <iostream>
+#include <cstdlib>
+#include <sstream>
+#include <cstdint>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include "common/ConfUtils.h"
 #include "common/config.h"
 #include "common/errno.h"
-#include "gtest/gtest.h"
-#include "include/buffer.h"
 
-#include <errno.h>
-#include <iostream>
-#include <stdlib.h>
-#include <sstream>
-#include <stdint.h>
-#include <sys/stat.h>
-#include <sys/types.h>
+#include "gtest/gtest.h"
+
+#include "include/util.h"
+#include "include/buffer.h"
 #include "include/memory.h"
+#include "include/random.h"
 
 using ceph::bufferlist;
 using std::cerr;
@@ -44,9 +49,9 @@ static std::string get_temp_dir()
     const char *tmpdir = getenv("TMPDIR");
     if (!tmpdir)
       tmpdir = "/tmp";
-    srand(time(NULL));
+    ceph::util::randomize_rng();
     ostringstream oss;
-    oss << tmpdir << "/confutils_test_dir." << rand() << "." << getpid();
+    oss << tmpdir << "/confutils_test_dir." << ceph::util::generate_random_number() << "." << getpid();
     umask(022);
     int res = mkdir(oss.str().c_str(), 01777);
     if (res) {

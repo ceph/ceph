@@ -1,10 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-#include "include/interval_set.h"
-#include "include/buffer.h"
-#include <list>
+
 #include <map>
 #include <set>
+#include <list>
 #include <iostream>
+
+#include "include/util.h"
+#include "include/buffer.h"
+#include "include/random.h"
+#include "include/interval_set.h"
 
 #include "Object.h"
 
@@ -45,7 +49,7 @@ void AppendGenerator::get_ranges_map(
   uint64_t limit = off + get_append_size(cont);
   while (pos < limit) {
     uint64_t segment_length = round_up(
-      rand() % (max_append_size - min_append_size),
+      ceph::util::generate_random_number(max_append_size - min_append_size),
       alignment) + min_append_size;
     assert(segment_length >= min_append_size);
     if (segment_length + pos > limit) {
@@ -65,7 +69,7 @@ void VarLenGenerator::get_ranges_map(
   uint64_t limit = get_length(cont);
   bool include = false;
   while (pos < limit) {
-    uint64_t segment_length = (rand() % (max_stride_size - min_stride_size)) + min_stride_size;
+    uint64_t segment_length = (ceph::util::generate_random_number(max_stride_size - min_stride_size)) + min_stride_size;
     assert(segment_length < max_stride_size);
     assert(segment_length >= min_stride_size);
     if (segment_length + pos > limit) {

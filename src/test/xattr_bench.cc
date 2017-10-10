@@ -12,24 +12,31 @@
  *
  */
 
-#include <stdio.h>
-#include <time.h>
-#include <string.h>
+#include <ctime>
+#include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <sstream>
-#include "os/filestore/FileStore.h"
-#include "include/Context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
+
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
-#include <gtest/gtest.h>
 
+#include "global/global_init.h"
+
+#include "include/util.h"
+#include "include/random.h"
+#include "include/Context.h"
 #include "include/unordered_map.h"
+
+#include "common/Mutex.h"
+#include "common/Cond.h"
+#include "common/ceph_argparse.h"
+
+#include "os/filestore/FileStore.h"
+
+#include <gtest/gtest.h>
 
 void usage(const string &name) {
   std::cerr << "Usage: " << name << " [xattr|omap] store_path store_journal"
@@ -43,7 +50,7 @@ typename T::iterator rand_choose(T &cont) {
   if (cont.size() == 0) {
     return cont.end();
   }
-  int index = rand() % cont.size();
+  int index = ceph::util::generate_random_number(cont.size());
   typename T::iterator retval = cont.begin();
 
   for (; index > 0; --index) ++retval;

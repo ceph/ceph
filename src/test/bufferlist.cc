@@ -19,23 +19,28 @@
  *
  */
 
-#include "include/memory.h"
-#include <limits.h>
-#include <errno.h>
-#include <sys/uio.h>
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 
-#include "include/buffer.h"
+#include <fcntl.h>
+#include <sys/uio.h>
+#include <sys/stat.h>
+
+#include "include/util.h"
 #include "include/utime.h"
-#include "include/coredumpctl.h"
+#include "include/memory.h"
+#include "include/buffer.h"
+#include "include/random.h"
 #include "include/encoding.h"
+#include "include/coredumpctl.h"
+
 #include "common/environment.h"
 #include "common/Clock.h"
 #include "common/safe_io.h"
 
 #include "gtest/gtest.h"
-#include "stdlib.h"
-#include "fcntl.h"
-#include "sys/stat.h"
+
 #include "include/crc32c.h"
 #include "common/sctp_crc32.h"
 
@@ -2633,11 +2638,11 @@ TEST(BufferList, crc32c_append) {
   for (int j = 0; j < 200; ++j) {
     bufferlist bl;
     for (int i = 0; i < 200; ++i) {
-      char x = rand();
+      char x = ceph::util::generate_random_number();
       bl.append(x);
       bl1.append(x);
     }
-    bl.crc32c(rand()); // mess with the cached bufferptr crc values
+    bl.crc32c(ceph::util::generate_random_number()); // mess with the cached bufferptr crc values
     bl2.append(bl);
   }
   ASSERT_EQ(bl1.crc32c(0), bl2.crc32c(0));

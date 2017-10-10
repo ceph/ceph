@@ -8,16 +8,18 @@
  * LGPL2.1 (see COPYING-LGPL2.1) or later
  */
 
+#include <set>
 #include <iostream>
 #include <memory>
+
 #include <gtest/gtest.h>
 
+#include "include/util.h"
+#include "include/random.h"
 #include "include/stringify.h"
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
-
-#include <set>
 
 std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
                               int num_host, int num_osd)
@@ -564,7 +566,7 @@ TEST(CRUSH, straw2_reweight) {
   EXPECT_EQ(0, rule0);
 
   int changed = 1;
-  weights[changed] = weights[changed] / 10 * (rand() % 10);
+  weights[changed] = weights[changed] / 10 * ceph::util::generate_random_number(10);
 
   string root_name1("root1");
   int root1;
@@ -602,7 +604,6 @@ TEST(CRUSH, straw2_reweight) {
     ASSERT_EQ(1u, out1.size());
 
     sum[out1[0]]++;
-    //sum[rand()%n]++;
 
     if (out1[0] == changed) {
       ASSERT_EQ(changed, out0[0]);

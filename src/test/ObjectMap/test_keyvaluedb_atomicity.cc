@@ -1,16 +1,26 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include <pthread.h>
-#include "include/buffer.h"
-#include "kv/KeyValueDB.h"
-#include <sys/types.h>
-#include <dirent.h>
+
 #include <string>
 #include <vector>
-#include "include/memory.h"
-#include <boost/scoped_ptr.hpp>
 #include <iostream>
 #include <sstream>
+
+#include <sys/types.h>
+
+#include <dirent.h>
+#include <pthread.h>
+
+#include <boost/scoped_ptr.hpp>
+
+#include "include/util.h"
+#include "include/random.h"
+#include "include/memory.h"
+#include "include/buffer.h"
+
+#include "kv/KeyValueDB.h"
+
 #include "stdlib.h"
+
 #include "global/global_context.h"
 
 using namespace std;
@@ -61,7 +71,7 @@ void *write(void *_db) {
     if (!(i % 10)) {
       std::cout << "Iteration: " << i << std::endl;
     }
-    int key_num = rand();
+    int key_num = ceph::util::generate_random_number();
     stringstream key;
     key << key_num << std::endl;
     map<string, bufferlist> to_set;

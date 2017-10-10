@@ -1,26 +1,30 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <cerrno>
+#include <string>
+#include <vector>
+
+#include "include/types.h"
+#include "include/encoding.h"
+#include "include/random.h"
+#include "include/rbd_types.h"
+#include "include/stringify.h"
+#include "include/rados/librados.h"
+#include "include/rbd/object_map_types.h"
+
+#include "common/Clock.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/snap_types.h"
-#include "common/Clock.h"
-#include "include/encoding.h"
-#include "include/types.h"
-#include "include/rados/librados.h"
-#include "include/rbd/object_map_types.h"
-#include "include/rbd_types.h"
-#include "include/stringify.h"
+
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 
 #include "gtest/gtest.h"
-#include "test/librados/test.h"
 
-#include <errno.h>
-#include <string>
-#include <vector>
+#include "test/librados/test.h"
 
 using namespace std;
 using namespace librbd::cls_client;
@@ -60,8 +64,12 @@ static int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
 static char *random_buf(size_t len)
 {
   char *b = new char[len];
-  for (size_t i = 0; i < len; i++)
-    b[i] = (rand() % (128 - 32)) + 32;
+
+  std::transform(b, len + b, b, [](char) {
+      constexpr auto n = std::numeric_limits<char>::max();
+      return static_cast<char>(ceph::util::generate_random_number(n));
+  });
+
   return b;
 }
 

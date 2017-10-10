@@ -1,26 +1,34 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include "gtest/gtest.h"
 
-#include "mds/mdstypes.h"
+#include <map>
+#include <regex>
+#include <string>
+#include <cerrno>
+#include <sstream>
+
+#include <boost/regex.hpp>
+
 #include "include/err.h"
+#include "include/util.h"
+#include "include/random.h"
 #include "include/buffer.h"
 #include "include/rbd_types.h"
 #include "include/rados.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
+
 #include "common/Checksummer.h"
+
 #include "global/global_context.h"
+
+#include "mds/mdstypes.h"
+
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
-#include "gtest/gtest.h"
 
-#include <errno.h>
-#include <map>
-#include <sstream>
-#include <string>
-#include <regex>
+#include "gtest/gtest.h"
 
 using namespace librados;
 using std::map;
@@ -108,7 +116,7 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
   ASSERT_EQ(0, rados_connect(cluster_b));
 
   char poolname[80];
-  snprintf(poolname, sizeof(poolname), "poolrace.%d", rand());
+  snprintf(poolname, sizeof(poolname), "poolrace.%d", ceph::util::generate_random_number());
   rados_pool_create(cluster_a, poolname);
   rados_ioctx_t a, b;
   rados_ioctx_create(cluster_a, poolname, &a);
@@ -117,7 +125,7 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
   rados_ioctx_create2(cluster_b, poolid+1, &b);
 
   char pool2name[80];
-  snprintf(pool2name, sizeof(pool2name), "poolrace2.%d", rand());
+  snprintf(pool2name, sizeof(pool2name), "poolrace2.%d", ceph::util::generate_random_number());
   rados_pool_create(cluster_a, pool2name);
 
   list<rados_completion_t> cls;

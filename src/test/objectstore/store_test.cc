@@ -12,35 +12,46 @@
  *
  */
 
-#include <glob.h>
-#include <stdio.h>
-#include <string.h>
+#include <ctime>
+#include <cstdio>
+#include <cstring>
 #include <iostream>
-#include <time.h>
-#include <sys/mount.h>
+
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
-#include <gtest/gtest.h>
+
+#include <sys/mount.h>
+
+#include <glob.h>
+
+#include "global/global_init.h"
 
 #include "os/ObjectStore.h"
 #include "os/filestore/FileStore.h"
 #if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
 #endif
+
+#include "include/util.h"
+#include "include/random.h"
 #include "include/Context.h"
+#include "include/stringify.h"
+#include "include/coredumpctl.h"
+#include "include/unordered_map.h"
+
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
-#include "include/stringify.h"
-#include "include/coredumpctl.h"
 
-#include "include/unordered_map.h"
 #include "store_test_fixture.h"
 
+// Clobber other assert() to use our own:
+#include "include/assert.h"
+
+#include <gtest/gtest.h>
 
 typedef boost::mt11213b gen_type;
 
@@ -91,7 +102,7 @@ int queue_transaction(
   T &store,
   ObjectStore::CollectionHandle ch,
   ObjectStore::Transaction &&t) {
-  if (rand() % 2) {
+  if (ceph::util::generate_random_number(2)) {
     ObjectStore::Transaction t2;
     t2.append(t);
     return store->queue_transaction(ch, std::move(t2));
@@ -1835,7 +1846,7 @@ TEST_P(StoreTest, ManySmallWrite) {
   }
   for (int i=0; i<100; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, b, (rand() % 1024)*4096, 4096, bl, 0);
+    t.write(cid, b, ceph::util::generate_random_number(1024 - 1)*4096, 4096, bl, 0);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -2173,21 +2184,21 @@ TEST_P(StoreTest, ManyBigWrite) {
   // aligned
   for (int i=0; i<10; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, b, (rand() % 256)*4*1048576, 4*1048576, bl, 0);
+    t.write(cid, b, ceph::util::generate_random_number(256 - 1)*4*1048576, 4*1048576, bl, 0);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
   // unaligned
   for (int i=0; i<10; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, b, (rand() % (256*4096))*1024, 4*1048576, bl, 0);
+    t.write(cid, b, ceph::util::generate_random_number((256*4096) - 1)*1024, 4*1048576, bl, 0);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
   // do some zeros
   for (int i=0; i<10; ++i) {
     ObjectStore::Transaction t;
-    t.zero(cid, b, (rand() % (256*4096))*1024, 16*1048576);
+    t.zero(cid, b, ceph::util::generate_random_number((256*4096) - 1)*1024, 16*1048576);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -2636,7 +2647,7 @@ TEST_P(StoreTest, MultipoolListTest) {
       string name("object_");
       name += stringify(i);
       ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)));
-      if (rand() & 1)
+      if (ceph::util::generate_random_number() & 1)
 	hoid.hobj.pool = -2 - poolid;
       else
 	hoid.hobj.pool = poolid;
@@ -3414,7 +3425,7 @@ public:
     ++seq;
     return ghobject_t(
       hobject_t(
-	name, string(), rand() & 2 ? CEPH_NOSNAP : rand(),
+	name, string(), ceph::util::generate_random_number() & 2 ? CEPH_NOSNAP : ceph::util::generate_random_number(),
 	(((seq / 1024) % 2) * 0xF00 ) +
 	(seq & 0xFF),
 	poolid, ""));
@@ -3547,7 +3558,7 @@ public:
     bufferptr bp(size);
     for (unsigned int i = 0; i < size - 1; i++) {
       // severely limit entropy so we can compress...
-      bp[i] = alphanum[rand() % 10]; //(sizeof(alphanum) - 1)];
+      bp[i] = alphanum[ceph::util::generate_random_number(10)]; //(sizeof(alphanum) - 1)];
     }
     bp[size - 1] = '\0';
 

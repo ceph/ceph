@@ -30,6 +30,7 @@
 #include "msg/Connection.h"
 #include "messages/MPing.h"
 #include "messages/MCommand.h"
+#include "include/random.h"
 
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
@@ -1185,7 +1186,7 @@ TEST_P(MessengerTest, SyntheticStressTest) {
     } else if (val > 10) {
       test_msg.send_message();
     } else {
-      usleep(rand() % 1000 + 500);
+      usleep(ceph::util::generate_random_number(1000) + 500);
     }
   }
   test_msg.wait_for_done();
@@ -1214,7 +1215,7 @@ TEST_P(MessengerTest, SyntheticStressTest1) {
     } else if (val > 10) {
       test_msg.send_message();
     } else {
-      usleep(rand() % 1000 + 500);
+      usleep(ceph::util::generate_random_number(1000) + 500);
     }
   }
   test_msg.wait_for_done();
@@ -1248,7 +1249,7 @@ TEST_P(MessengerTest, SyntheticInjectTest) {
     } else if (val > 10) {
       test_msg.send_message();
     } else {
-      usleep(rand() % 500 + 100);
+      usleep(ceph::util::generate_random_number(500) + 100);
     }
   }
   test_msg.wait_for_done();
@@ -1283,7 +1284,7 @@ TEST_P(MessengerTest, SyntheticInjectTest2) {
     } else if (val > 10) {
       test_msg.send_message();
     } else {
-      usleep(rand() % 500 + 100);
+      usleep(ceph::util::generate_random_number(500) + 100);
     }
   }
   test_msg.wait_for_done();
@@ -1316,7 +1317,7 @@ TEST_P(MessengerTest, SyntheticInjectTest3) {
     } else if (val > 10) {
       test_msg.send_message();
     } else {
-      usleep(rand() % 500 + 100);
+      usleep(ceph::util::generate_random_number(500) + 100);
     }
   }
   test_msg.wait_for_done();
@@ -1353,7 +1354,7 @@ TEST_P(MessengerTest, SyntheticInjectTest4) {
     } else if (val > 10) {
       test_msg.send_message();
     } else {
-      usleep(rand() % 500 + 100);
+      usleep(ceph::util::generate_random_number(500) + 100);
     }
   }
   test_msg.wait_for_done();
@@ -1403,7 +1404,7 @@ class MarkdownDispatcher : public Dispatcher {
     }
 
     last_mark = true;
-    usleep(rand() % 500);
+    usleep(ceph::util::generate_random_number(500));
     for (set<ConnectionRef>::iterator it = conns.begin(); it != conns.end(); ++it) {
       if ((*it) != m->get_connection().get()) {
         (*it)->mark_down();
@@ -1420,7 +1421,7 @@ class MarkdownDispatcher : public Dispatcher {
     lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Mutex::Locker l(lock);
     conns.erase(con);
-    usleep(rand() % 500);
+    usleep(ceph::util::generate_random_number(500));
     return true;
   }
   void ms_handle_remote_reset(Connection *con) override {

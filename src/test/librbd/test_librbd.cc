@@ -43,6 +43,8 @@
 #include "test/librados/test.h"
 #include "test/librbd/test_support.h"
 #include "common/event_socket.h"
+
+#include "include/random.h"
 #include "include/interval_set.h"
 #include "include/stringify.h"
 
@@ -65,6 +67,11 @@ using std::chrono::seconds;
   } while(0)
 
 void register_test_librbd() {
+}
+
+char random_char()
+{
+ return ceph::util::generate_random_number(126 - 33) + static_cast<char>(33);
 }
 
 static int get_features(bool *old_format, uint64_t *features)
@@ -1893,7 +1900,7 @@ TEST_F(TestLibRBD, TestIO)
   uint64_t mismatch_offset;
 
   for (i = 0; i < TEST_IO_SIZE; ++i) {
-    test_data[i] = (char) (rand() % (126 - 33) + 33);
+    test_data[i] = random_char();
   }
   test_data[TEST_IO_SIZE] = '\0';
   memset(zero_data, 0, sizeof(zero_data));
@@ -2014,7 +2021,7 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
   uint64_t mismatch_offset;
 
   for (i = 0; i < TEST_IO_SIZE; ++i) {
-    test_data[i] = (char) (rand() % (126 - 33) + 33);
+    test_data[i] = random_char();
   }
   test_data[TEST_IO_SIZE] = '\0';
   memset(zero_data, 0, sizeof(zero_data));
@@ -2176,7 +2183,7 @@ TEST_F(TestLibRBD, TestDataPoolIO)
   int i;
 
   for (i = 0; i < TEST_IO_SIZE; ++i) {
-    test_data[i] = (char) (rand() % (126 - 33) + 33);
+    test_data[i] = random_char();
   }
   test_data[TEST_IO_SIZE] = '\0';
   memset(zero_data, 0, sizeof(zero_data));
@@ -2589,7 +2596,7 @@ TEST_F(TestLibRBD, TestIOPP)
     uint64_t mismatch_offset;
 
     for (i = 0; i < TEST_IO_SIZE; ++i) {
-      test_data[i] = (char) (rand() % (126 - 33) + 33);
+      test_data[i] = random_char();
     }
     test_data[TEST_IO_SIZE] = '\0';
     memset(zero_data, 0, sizeof(zero_data));
@@ -2678,7 +2685,7 @@ TEST_F(TestLibRBD, TestIOPPWithIOHint)
     int i;
 
     for (i = 0; i < TEST_IO_SIZE; ++i) {
-      test_data[i] = (char) (rand() % (126 - 33) + 33);
+      test_data[i] = random_char();
     }
     memset(zero_data, 0, sizeof(zero_data));
 
@@ -3107,6 +3114,152 @@ TEST_F(TestLibRBD, TestClone2)
   ASSERT_EQ(0, rbd_close(child));
   ASSERT_EQ(0, rbd_close(parent));
   rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestCoR)
+{
+  std::string config_value;
+  ASSERT_EQ(0, _rados.conf_get("rbd_clone_copy_on_read", config_value));
+  if (config_value == "false") {
+    std::cout << "SKIPPING due to disabled rbd_copy_on_read" << std::endl;
+    return;
+  }
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  int features = RBD_FEATURE_LAYERING;
+  rbd_image_t parent, child;
+  int order = 12; // smallest object size is 4K
+  const uint64_t image_size = 4<<20;
+  const int object_size = 1<<12;
+  const int object_num = image_size / object_size;
+  map<uint64_t, uint64_t> write_tracker;
+  set<string> obj_checker;
+  rbd_image_info_t p_info, c_info;
+  rados_list_ctx_t list_ctx;
+  const char *entry;
+
+  // make a parent to clone from
+  ASSERT_EQ(0, create_image_full(ioctx, "parent", image_size, &order, false, features));
+  ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, NULL));
+  printf("made parent image \"parent\": %ldK (%d * %dK)\n",
+         (unsigned long)image_size, object_num, object_size/1024);
+
+  // write something into parent
+  char test_data[TEST_IO_SIZE + 1];
+  char zero_data[TEST_IO_SIZE + 1];
+  int i;
+  int count = 0;
+
+  for (i = 0; i < TEST_IO_SIZE; ++i) 
+    test_data[i] = random_char();
+  test_data[TEST_IO_SIZE] = '\0';
+  memset(zero_data, 0, sizeof(zero_data));
+
+  // generate a random map which covers every objects with random offset
+  while (count < 100) {
+    uint64_t ono = ceph::util::generate_random_number(object_num);
+    if (write_tracker.find(ono) == write_tracker.end()) {
+      uint64_t offset = ceph::util::generate_random_number(object_size - TEST_IO_SIZE);
+      write_tracker.insert(pair<uint64_t, uint64_t>(ono, offset));
+      count++;
+    }
+  }
+
+  printf("generated random write map:\n");
+  for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
+       itr != write_tracker.end(); ++itr)
+    printf("\t [%-8ld, %-8ld]\n",
+	   (unsigned long)itr->first, (unsigned long)itr->second);
+
+  printf("write data based on random map\n");
+  for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
+       itr != write_tracker.end(); ++itr) {
+    printf("\twrite object-%-4ld\t", (unsigned long)itr->first);
+    ASSERT_PASSED(write_test_data, parent, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+  }
+
+  for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
+         itr != write_tracker.end(); ++itr) {
+    printf("\tread object-%-4ld\t", (unsigned long)itr->first);
+    ASSERT_PASSED(read_test_data, parent, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+  }
+
+  // find out what objects the parent image has generated
+  ASSERT_EQ(0, rbd_stat(parent, &p_info, sizeof(p_info)));
+
+  int64_t data_pool_id = rbd_get_data_pool_id(parent);
+  rados_ioctx_t d_ioctx;
+  rados_ioctx_create2(_cluster, data_pool_id, &d_ioctx);
+
+  ASSERT_EQ(0, rados_nobjects_list_open(d_ioctx, &list_ctx));
+  while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
+    if (strstr(entry, p_info.block_name_prefix)) {
+      const char *block_name_suffix = entry + strlen(p_info.block_name_prefix) + 1;
+      obj_checker.insert(block_name_suffix);
+    }
+  }
+  rados_nobjects_list_close(list_ctx);
+  ASSERT_EQ(obj_checker.size(), write_tracker.size());
+
+  // create a snapshot, reopen as the parent we're interested in and protect it
+  ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_close(parent));
+  ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
+  ASSERT_PASSED(validate_object_map, parent);
+  ASSERT_EQ(0, rbd_close(parent));
+  printf("made snapshot \"parent@parent_snap\" and protect it\n");
+
+  // create a copy-on-read clone and open it
+  ASSERT_EQ(0, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child",
+	    features, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, "child", &child, NULL));
+  printf("made and opened clone \"child\"\n");
+
+  printf("read from \"child\"\n");
+  {
+    map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
+    printf("\tread object-%-4ld\t", (unsigned long)itr->first);
+    ASSERT_PASSED(read_test_data, child, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+  }
+
+  for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
+       itr != write_tracker.end(); ++itr) {
+    printf("\tread object-%-4ld\t", (unsigned long)itr->first);
+    ASSERT_PASSED(read_test_data, child, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+  }
+
+  printf("read again reversely\n");
+  for (map<uint64_t, uint64_t>::iterator itr = --write_tracker.end();
+     itr != write_tracker.begin(); --itr) {
+    printf("\tread object-%-4ld\t", (unsigned long)itr->first);
+    ASSERT_PASSED(read_test_data, child, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+  }
+
+  // close child to flush all copy-on-read
+  ASSERT_EQ(0, rbd_close(child));
+
+  printf("check whether child image has the same set of objects as parent\n");
+  ASSERT_EQ(0, rbd_open(ioctx, "child", &child, NULL));
+  ASSERT_EQ(0, rbd_stat(child, &c_info, sizeof(c_info)));
+  ASSERT_EQ(0, rados_nobjects_list_open(d_ioctx, &list_ctx));
+  while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
+    if (strstr(entry, c_info.block_name_prefix)) {
+      const char *block_name_suffix = entry + strlen(c_info.block_name_prefix) + 1;
+      set<string>::iterator it = obj_checker.find(block_name_suffix);
+      ASSERT_TRUE(it != obj_checker.end());
+      obj_checker.erase(it);
+    }
+  }
+  rados_nobjects_list_close(list_ctx);
+  ASSERT_TRUE(obj_checker.empty());
+  ASSERT_PASSED(validate_object_map, child);
+  ASSERT_EQ(0, rbd_close(child));
+
+  rados_ioctx_destroy(ioctx);
+  rados_ioctx_destroy(d_ioctx);
 }
 
 static void test_list_children(rbd_image_t image, ssize_t num_expected, ...)
@@ -3638,13 +3791,13 @@ TEST_F(TestLibRBD, FlushAio)
   char test_data[TEST_IO_SIZE + 1];
   size_t i;
   for (i = 0; i < TEST_IO_SIZE; ++i) {
-    test_data[i] = (char) (rand() % (126 - 33) + 33);
+    test_data[i] = random_char();
   }
 
   rbd_completion_t write_comps[num_aios];
   for (i = 0; i < num_aios; ++i) {
     ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &write_comps[i]));
-    uint64_t offset = rand() % (size - TEST_IO_SIZE);
+    uint64_t offset = ceph::util::generate_random_number(size - TEST_IO_SIZE);
     ASSERT_EQ(0, rbd_aio_write(image, offset, TEST_IO_SIZE, test_data,
 			       write_comps[i]));
   }
@@ -3686,7 +3839,7 @@ TEST_F(TestLibRBD, FlushAioPP)
     char test_data[TEST_IO_SIZE + 1];
     size_t i;
     for (i = 0; i < TEST_IO_SIZE; ++i) {
-      test_data[i] = (char) (rand() % (126 - 33) + 33);
+      test_data[i] = random_char();
     }
     test_data[TEST_IO_SIZE] = '\0';
 
@@ -3695,7 +3848,7 @@ TEST_F(TestLibRBD, FlushAioPP)
     for (i = 0; i < num_aios; ++i) {
       bls[i].append(test_data, strlen(test_data));
       write_comps[i] = new librbd::RBD::AioCompletion(NULL, NULL);
-      uint64_t offset = rand() % (size - TEST_IO_SIZE);
+      uint64_t offset = ceph::util::generate_random_number(size - TEST_IO_SIZE);
       ASSERT_EQ(0, image.aio_write(offset, TEST_IO_SIZE, bls[i],
 				   write_comps[i]));
     }
@@ -3741,9 +3894,9 @@ void scribble(librbd::Image& image, int n, int max, bool skip_discard,
   interval_set<uint64_t> exists_at_start = *exists;
 
   for (int i=0; i<n; i++) {
-    uint64_t off = rand() % (size - max + 1);
-    uint64_t len = 1 + rand() % max;
-    if (!skip_discard && rand() % 4 == 0) {
+    uint64_t off = ceph::util::generate_random_number(size - max + 1);
+    uint64_t len = 1 + ceph::util::generate_random_number(max);
+    if (!skip_discard && ceph::util::generate_random_number(4) == 0) {
       ASSERT_EQ((int)len, image.discard(off, len));
       interval_set<uint64_t> w;
       w.insert(off, len);
@@ -4356,14 +4509,14 @@ TEST_F(TestLibRBD, TestPendingAio)
 
   char test_data[TEST_IO_SIZE];
   for (size_t i = 0; i < TEST_IO_SIZE; ++i) {
-    test_data[i] = (char) (rand() % (126 - 33) + 33);
+    test_data[i] = random_char();
   }
 
   size_t num_aios = 256;
   rbd_completion_t comps[num_aios];
   for (size_t i = 0; i < num_aios; ++i) {
     ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &comps[i]));
-    uint64_t offset = rand() % (size - TEST_IO_SIZE);
+    uint64_t offset = ceph::util::generate_random_number(size - TEST_IO_SIZE);
     ASSERT_EQ(0, rbd_aio_write(image, offset, TEST_IO_SIZE, test_data,
                                comps[i]));
   }
@@ -4375,7 +4528,7 @@ TEST_F(TestLibRBD, TestPendingAio)
 
   for (size_t i = 0; i < num_aios; ++i) {
     ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &comps[i]));
-    uint64_t offset = rand() % (size - TEST_IO_SIZE);
+    uint64_t offset = ceph::util::generate_random_number(size - TEST_IO_SIZE);
     ASSERT_LE(0, rbd_aio_read(image, offset, TEST_IO_SIZE, test_data,
                               comps[i]));
   }
@@ -4434,6 +4587,138 @@ TEST_F(TestLibRBD, Flatten)
   ASSERT_TRUE(bl.contents_equal(read_bl));
 
   ASSERT_PASSED(validate_object_map, clone_image);
+}
+
+TEST_F(TestLibRBD, FlattenNoEmptyObjects)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  librbd::RBD rbd;
+  std::string parent_name = get_temp_image_name();
+  uint64_t size = 4 << 20;
+  int order = 12; // smallest object size is 4K
+
+  bool old_format;
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
+
+  // make a parent to clone from
+  ASSERT_EQ(0, create_image_full(ioctx, parent_name.c_str(), size, &order,
+                                 false, features));
+
+  rbd_image_t parent;
+  const int object_size = 1 << order;
+  const int object_num = size / object_size;
+  ASSERT_EQ(0, rbd_open(ioctx, parent_name.c_str(), &parent, NULL));
+  printf("made parent image \"%s\": %ldK (%d * %dK)\n", parent_name.c_str(),
+         (unsigned long)size, object_num, object_size/1024);
+
+  // write something into parent
+  char test_data[TEST_IO_SIZE + 1];
+  char zero_data[TEST_IO_SIZE + 1];
+  int i;
+  for (i = 0; i < TEST_IO_SIZE; ++i)
+    test_data[i] = random_char();
+  test_data[TEST_IO_SIZE] = '\0';
+  memset(zero_data, 0, sizeof(zero_data));
+
+  // generate a random map which covers every objects with random
+  // offset
+  int count = 0;
+  map<uint64_t, uint64_t> write_tracker;
+  while (count < 10) {
+    uint64_t ono = ceph::util::generate_random_number(object_num);
+    if (write_tracker.find(ono) == write_tracker.end()) {
+      uint64_t offset = ceph::util::generate_random_number(object_size - TEST_IO_SIZE);
+      write_tracker.insert(pair<uint64_t, uint64_t>(ono, offset));
+      count++;
+    }
+  }
+
+  printf("generated random write map:\n");
+  for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
+       itr != write_tracker.end(); ++itr)
+    printf("\t [%-8ld, %-8ld]\n",
+	   (unsigned long)itr->first, (unsigned long)itr->second);
+
+  printf("write data based on random map\n");
+  for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
+       itr != write_tracker.end(); ++itr) {
+    printf("\twrite object-%-4ld\t", (unsigned long)itr->first);
+    ASSERT_PASSED(write_test_data, parent, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+  }
+
+  for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
+         itr != write_tracker.end(); ++itr) {
+    printf("\tread object-%-4ld\t", (unsigned long)itr->first);
+    ASSERT_PASSED(read_test_data, parent, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+  }
+
+  // find out what objects the parent image has generated
+  rbd_image_info_t p_info;
+  ASSERT_EQ(0, rbd_stat(parent, &p_info, sizeof(p_info)));
+
+  int64_t data_pool_id = rbd_get_data_pool_id(parent);
+  rados_ioctx_t d_ioctx;
+  rados_ioctx_create2(_cluster, data_pool_id, &d_ioctx);
+
+  const char *entry;
+  set<string> obj_checker;
+  rados_list_ctx_t list_ctx;
+  ASSERT_EQ(0, rados_nobjects_list_open(d_ioctx, &list_ctx));
+  while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
+    if (strstr(entry, p_info.block_name_prefix)) {
+      const char *block_name_suffix = entry + strlen(p_info.block_name_prefix) + 1;
+      obj_checker.insert(block_name_suffix);
+    }
+  }
+  rados_nobjects_list_close(list_ctx);
+  ASSERT_EQ(obj_checker.size(), write_tracker.size());
+
+  // create a snapshot, reopen as the parent we're interested in and protect it
+  ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_close(parent));
+  ASSERT_EQ(0, rbd_open(ioctx, parent_name.c_str(), &parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
+  ASSERT_PASSED(validate_object_map, parent);
+  ASSERT_EQ(0, rbd_close(parent));
+  printf("made snapshot and protected: \"%s@parent_snap\"\n", parent_name.c_str());
+
+  std::string child_name = get_temp_image_name();
+  // create a copy-on-read clone and open it
+  ASSERT_EQ(0, rbd_clone(ioctx, parent_name.c_str(), "parent_snap", ioctx,
+                         child_name.c_str(), features, &order));
+
+  rbd_image_t child;
+  ASSERT_EQ(0, rbd_open(ioctx, child_name.c_str(), &child, NULL));
+  printf("made and opened clone \"%s\"\n", child_name.c_str());
+
+  printf("flattening clone: \"%s\"\n", child_name.c_str());
+  ASSERT_EQ(0, rbd_flatten(child));
+
+  printf("check whether child image has the same set of objects as parent\n");
+  rbd_image_info_t c_info;
+  ASSERT_EQ(0, rbd_stat(child, &c_info, sizeof(c_info)));
+  ASSERT_EQ(0, rados_nobjects_list_open(d_ioctx, &list_ctx));
+  while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
+    if (strstr(entry, c_info.block_name_prefix)) {
+      const char *block_name_suffix = entry + strlen(c_info.block_name_prefix) + 1;
+      set<string>::iterator it = obj_checker.find(block_name_suffix);
+      ASSERT_TRUE(it != obj_checker.end());
+      obj_checker.erase(it);
+    }
+  }
+  rados_nobjects_list_close(list_ctx);
+  ASSERT_TRUE(obj_checker.empty());
+  ASSERT_PASSED(validate_object_map, child);
+  ASSERT_EQ(0, rbd_close(child));
+
+  rados_ioctx_destroy(ioctx);
+  rados_ioctx_destroy(d_ioctx);
 }
 
 TEST_F(TestLibRBD, SnapshotLimit)
@@ -5992,7 +6277,7 @@ TEST_F(TestLibRBD, ImagePollIO)
   int i;
 
   for (i = 0; i < TEST_IO_SIZE; ++i)
-    test_data[i] = (char) (rand() % (126 - 33) + 33);
+    test_data[i] = random_char();
   test_data[TEST_IO_SIZE] = '\0';
   memset(zero_data, 0, sizeof(zero_data));
 
@@ -6271,7 +6556,7 @@ TEST_F(TestLibRBD, ExclusiveLock)
 	  lock_guard<mutex> locker(lock);
 	  owner_id = m_id;
 	}
-	usleep(rand() % 50000);
+	usleep(ceph::util::generate_random_number(50000));
       }
 
       lock_guard<mutex> locker(lock);

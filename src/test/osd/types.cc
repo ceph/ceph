@@ -15,16 +15,26 @@
  *
  */
 
+#include <sstream>
+
+#include "include/util.h"
 #include "include/types.h"
+#include "include/random.h"
+#include "include/stringify.h"
+
+#include "include/coredumpctl.h"
+#include "include/stringify.h"
+
+#include "common/Thread.h"
+
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
-#include "gtest/gtest.h"
-#include "include/coredumpctl.h"
+
 #include "common/Thread.h"
-#include "include/stringify.h"
+
 #include "osd/ReplicatedBackend.h"
 
-#include <sstream>
+#include "gtest/gtest.h"
 
 TEST(hobject, prefixes0)
 {
@@ -1065,13 +1075,12 @@ TEST(pg_pool_t_test, get_pg_num_divisor) {
 }
 
 TEST(pg_pool_t_test, get_random_pg_position) {
-  srand(getpid());
   for (int i = 0; i < 100; ++i) {
     pg_pool_t p;
-    p.set_pg_num(1 + (rand() % 1000));
+    p.set_pg_num(1 + ceph::util::generate_random_number(1000));
     p.set_pgp_num(p.get_pg_num());
-    pg_t pgid(rand() % p.get_pg_num(), 1);
-    uint32_t h = p.get_random_pg_position(pgid, rand());
+    pg_t pgid(ceph::util::generate_random_number(p.get_pg_num()), 1);
+    uint32_t h = p.get_random_pg_position(pgid, ceph::util::generate_random_number());
     uint32_t ps = p.raw_hash_to_pg(h);
     cout << p.get_pg_num() << " " << pgid << ": "
 	 << h << " -> " << pg_t(ps, 1) << std::endl;

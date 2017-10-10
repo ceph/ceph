@@ -1,20 +1,30 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include "include/memory.h"
+
 #include <map>
 #include <set>
+
 #include <boost/scoped_ptr.hpp>
 
+#include <dirent.h>
+#include <sys/types.h>
+
+#include "include/random.h"
 #include "include/buffer.h"
+#include "include/memory.h"
+
 #include "test/ObjectMap/KeyValueDBMemory.h"
+
 #include "kv/KeyValueDB.h"
+
 #include "os/filestore/DBObjectMap.h"
 #include "os/filestore/HashIndex.h"
-#include <sys/types.h>
+
 #include "global/global_init.h"
+
 #include "common/ceph_argparse.h"
-#include <dirent.h>
 
 #include "gtest/gtest.h"
+
 #include "stdlib.h"
 
 using namespace std;
@@ -24,7 +34,7 @@ typename T::iterator rand_choose(T &cont) {
   if (cont.size() == 0) {
     return cont.end();
   }
-  int index = rand() % cont.size();
+  int index = ceph::util::generate_random_number(cont.size());
   typename T::iterator retval = cont.begin();
 
   for (; index > 0; --index) ++retval;
@@ -983,7 +993,7 @@ TEST_F(ObjectMapTest, OddEvenOldClone) {
 TEST_F(ObjectMapTest, RandomTest) {
   tester.def_init();
   for (unsigned i = 0; i < 5000; ++i) {
-    unsigned val = rand();
+    unsigned val = ceph::util::generate_random_number();
     val <<= 8;
     val %= 100;
     if (!(i%100))

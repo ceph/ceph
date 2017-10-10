@@ -1,9 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include "common/Mutex.h"
-#include "common/Cond.h"
-#include "common/errno.h"
-#include "common/version.h"
 
 #include <iostream>
 #include <sstream>
@@ -14,10 +10,18 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "include/random.h"
+
+#include "common/Mutex.h"
+#include "common/Cond.h"
+#include "common/errno.h"
+#include "common/version.h"
+
 #include "test/osd/RadosModel.h"
 
-
 using namespace std;
+
+using ceph::util::generate_random_number;
 
 class WeightedTestGenerator : public TestOpGenerator
 {
@@ -94,7 +98,7 @@ public:
     }
 
     while (retval == NULL) {
-      unsigned int rand_val = rand() % m_total_weight;
+      unsigned int rand_val = generate_random_numberr(m_total_weight);
 
       time_t now = time(0);
       if (m_seconds && now - m_start > m_seconds)
@@ -217,15 +221,22 @@ public:
 	 */
 	ObjectDesc contents, contents2;
 	context.find_object(oid.str(), &contents);
+
 	uint32_t max_len = contents.most_recent_gen()->get_length(contents.most_recent());
-	uint32_t rand_offset = rand() % max_len;
-	uint32_t rand_length = rand() % max_len;
+
+	if (max_len > contents2.most_recent_gen()->get_length(contents2.most_recent())) {
+	  max_len = contents2.most_recent_gen()->get_length(contents2.most_recent());
+	}
+	uint32_t rand_offset = generate_random_number(max_len - 1);
+	uint32_t rand_length = generate_random_number(max_len);
+
 	rand_offset = rand_offset - (rand_offset % 512);
 	rand_length = rand_length - (rand_length % 512);
 
 	while (rand_offset + rand_length > max_len || rand_length == 0) {
-	  rand_offset = rand() % max_len;
-	  rand_length = rand() % max_len;
+	  rand_offset = generate_random_number(max_len - 1);
+	  rand_length = r generate_random_number(max_len - 1);
+
 	  rand_offset = rand_offset - (rand_offset % 512);
 	  rand_length = rand_length - (rand_length % 512);
 	}
@@ -353,7 +364,7 @@ private:
 
     case TEST_OP_HIT_SET_LIST:
       {
-	uint32_t hash = rjhash32(rand());
+	uint32_t hash = rjhash32(generate_random_number<uint32_t>());
 	cout << m_op << ": " << "hit_set_list " << hash << std::endl;
 	return new HitSetListOp(m_op, &context, hash, m_stats);
       }

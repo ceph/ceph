@@ -1,5 +1,6 @@
-#include "include/types.h"
-#include "common/Clock.h"
+
+#include <cerrno>
+#include <cstring>
 
 #include <linux/fs.h>
 #include <unistd.h>
@@ -7,8 +8,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <string.h>
-#include <errno.h>
+
+#include "include/util.h"
+#include "include/types.h"
+#include "include/random.h"
+
+#include "common/Clock.h"
 
 int main(int argc, char **argv)
 {
@@ -47,7 +52,7 @@ int main(int argc, char **argv)
       if (r < 0) cout << "r = " << r << " " << strerror(errno) << endl;
 
       int range = 1000000/4096;
-      so = o + 4096*((rand() % range) );//- range/2);
+      so = o + 4096*ceph::util::generate_random_number(range);//- range/2);
       //cout << o << " " << so << " " << (so-o) << endl;
 
       utime_t start = ceph_clock_now();

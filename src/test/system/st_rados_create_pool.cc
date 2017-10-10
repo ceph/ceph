@@ -12,19 +12,26 @@
 *
 */
 
+#include <cerrno>
+#include <cstdio>
+#include <string>
+#include <cstdlib>
+#include <cstdarg>
+#include <cstring>
+#include <sstream>
+
+#include <unistd.h>
+
 #include "cross_process_sem.h"
+
+#include "include/util.h"
+#include "include/random.h"
 #include "include/rados/librados.h"
+
 #include "st_rados_create_pool.h"
+
 #include "systest_runnable.h"
 #include "systest_settings.h"
-
-#include <errno.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sstream>
-#include <string>
 
 using std::ostringstream;
 
@@ -32,7 +39,7 @@ std::string StRadosCreatePool::
 get_random_buf(int sz)
 {
   ostringstream oss;
-  int size = rand() % sz; // yep, it's not very random
+  int size = ceph::util::generate_random_number(sz);
   for (int i = 0; i < size; ++i) {
     oss << ".";
   }

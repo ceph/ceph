@@ -17,11 +17,15 @@
 
 #include "OpQueue.h"
 
+#include "include/random.h"
+
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/rbtree.hpp>
 #include <boost/intrusive/avl_set.hpp>
 
 namespace bi = boost::intrusive;
+
+using ceph::util::generate_random_number;
 
 template <typename T, typename S>
 class MapKey
@@ -227,7 +231,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  if (queues.size() > 1) {
 	    while (true) {
 	      // Pick a new priority out of the total priority.
-	      unsigned prio = rand() % total_prio + 1;
+	      unsigned prio = generate_random_number() % total_prio + 1;
 	      unsigned tp = total_prio - i->key;
 	      // Find the priority coresponding to the picked number.
 	      // Subtract high priorities to low priorities until the picked number
@@ -242,7 +246,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	      // The next op's cost is multiplied by .9 and subtracted from the
 	      // max cost seen. Ops with lower costs will have a larger value
 	      // and allow them to be selected easier than ops with high costs.
-	      if (max_cost == 0 || rand() % max_cost <=
+	      if (max_cost == 0 || generate_random_number() % max_cost <=
 		  (max_cost - ((i->get_cost() * 9) / 10))) {
 		break;
 	      }
@@ -287,7 +291,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       strict(),
       normal()
       {
-	std::srand(time(0));
+		ceph::util::randomize_rng();
       }
     unsigned length() const final {
       return strict.size + normal.size;

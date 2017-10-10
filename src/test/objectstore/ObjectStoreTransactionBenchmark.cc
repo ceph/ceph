@@ -21,6 +21,8 @@
 
 using namespace std;
 
+#include "include/random.h"
+
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "common/Cycles.h"
@@ -153,7 +155,9 @@ class PerfCase {
 
   ghobject_t create_object() {
     bufferlist bl = generate_random(100, 1);
-    return ghobject_t(hobject_t(string("obj_")+string(bl.c_str()), string(), rand() & 2 ? CEPH_NOSNAP : rand(), rand() & 0xFF, 0, ""));
+    return ghobject_t(hobject_t(string("obj_")+string(bl.c_str()), string(), 
+                      ceph::util::generate_random_number() & 2 ? CEPH_NOSNAP : ceph::util::generate_random_number(), 
+                      ceph::util::generate_random_number() & 0xFF, 0, ""));
   }
 
 
@@ -166,7 +170,7 @@ class PerfCase {
     for (int i = 0; i < frag; i++ ) {
       bufferptr bp(per_frag);
       for (unsigned int j = 0; j < len; j++) {
-        bp[j] = alphanum[rand() % (sizeof(alphanum) - 1)];
+        bp[j] = alphanum[ceph::util::generate_random_number(sizeof(alphanum) - 1)];
       }
       bl.append(bp);
     }

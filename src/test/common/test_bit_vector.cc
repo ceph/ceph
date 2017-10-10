@@ -9,9 +9,13 @@
  */
 
 #include <gtest/gtest.h>
+
 #include <cmath>
-#include "common/bit_vector.hpp"
 #include <boost/assign/list_of.hpp>
+
+#include "include/random.h"
+
+#include "common/bit_vector.hpp"
 
 using namespace ceph;
 
@@ -73,8 +77,9 @@ TYPED_TEST(BitVectorTest, get_set) {
   bit_vector.resize(size);
   ref.resize(size);
   for (size_t i = 0; i < size; ++i) {
-    uint64_t v = rand() % radix;
-    ref[i] = v;
+    // Note that mod is important here on account of bit-binning:
+    uint64_t v = ceph::util::generate_random_number(RAND_MAX) % radix;	
+    ref[i] = v;	
     bit_vector[i] = v;
   }
 

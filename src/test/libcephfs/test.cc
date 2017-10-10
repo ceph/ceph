@@ -12,27 +12,30 @@
  *
  */
 
-#include "gtest/gtest.h"
-#include "include/cephfs/libcephfs.h"
-#include "include/stat.h"
-#include <errno.h>
+
+#include <map>
+#include <vector>
+#include <cerrno>
+#include <thread>
+#include <climits>
+
 #include <fcntl.h>
 #include <unistd.h>
+#include <dirent.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <dirent.h>
 #include <sys/xattr.h>
 #include <sys/uio.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 
-#ifdef __linux__
-#include <limits.h>
-#endif
+#include "include/util.h"
+#include "include/stat.h"
+#include "include/random.h"
+#include "include/cephfs/libcephfs.h"
 
-#include <map>
-#include <vector>
-#include <thread>
+#include "gtest/gtest.h"
 
 TEST(LibCephFS, OpenEmptyComponent) {
 
@@ -285,7 +288,7 @@ TEST(LibCephFS, DirLs) {
 
   // insert files into directory and test open
   char bazstr[256];
-  int i = 0, r = rand() % 4096;
+  int i = 0, r = ceph::util::generate_random_number(4096);
   if (getenv("LIBCEPHFS_RAND")) {
     r = atoi(getenv("LIBCEPHFS_RAND"));
   }

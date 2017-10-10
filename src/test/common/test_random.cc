@@ -86,6 +86,25 @@ TEST(util, test_random)
        ASSERT_NE(a, b);
      }
   }
+
+  // Check that the nullary version accepts different numeric types:
+  {
+	long def = ceph::util::generate_random_number();
+	long l = ceph::util::generate_random_number<long>();
+	int64_t i = ceph::util::generate_random_number<int64_t>();
+	double d = ceph::util::generate_random_number<double>();
+
+	swallow_values(def, l, i, d);
+  }
+
+  // (optimistically) Check that the nullary and unary versions never return < 0:
+  {
+	for(long i = 0; 1000000 != i; i++) {
+	 ASSERT_LE(0, ceph::util::generate_random_number());
+	 ASSERT_LE(0, ceph::util::generate_random_number(1));
+	 ASSERT_LE(0, ceph::util::generate_random_number<float>(1.0));
+	}
+  }
  
   {
   auto a = ceph::util::generate_random_number(1, std::numeric_limits<int>::max());
@@ -100,11 +119,16 @@ TEST(util, test_random)
   }
  
   for (auto n = 100000; n; --n) {
-     constexpr int min = 0, max = 6;
-     int a = ceph::util::generate_random_number(min, max);
+     int a = ceph::util::generate_random_number(0, 6);
      ASSERT_GT(a, -1);
      ASSERT_LT(a, 7);
    }
+
+  // Check bounding on zero (checking appropriate value for zero compiles and works):
+  for (auto n = 10; n; --n) {
+	ASSERT_EQ(0, ceph::util::generate_random_number<int>(0, 0));
+	ASSERT_EQ(0, ceph::util::generate_random_number<float>(0, 0));
+  }
  
   // Multiple types (integral):
   {

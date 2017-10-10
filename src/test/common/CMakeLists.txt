@@ -203,6 +203,7 @@ target_link_libraries(unittest_interval_set ceph-common)
 add_executable(unittest_weighted_priority_queue
   test_weighted_priority_queue.cc
   )
+target_link_libraries(unittest_weighted_priority_queue ceph-common)
 add_ceph_unittest(unittest_weighted_priority_queue)
 
 # unittest_mutex_debug

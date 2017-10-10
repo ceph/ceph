@@ -11,7 +11,7 @@
 #include "include/rados/librados.hpp"
 #include "test/omap_bench.h"
 #include "common/ceph_argparse.h"
-
+#include "include/random.h"
 
 #include <string>
 #include <climits>
@@ -59,7 +59,7 @@ KvStoreBench::~KvStoreBench()
 int KvStoreBench::setup(int argc, const char** argv) {
   vector<const char*> args;
   argv_to_vec(argc,argv,args);
-  srand(time(NULL));
+  ceph::util::randomize_rng();
 
   stringstream help;
   help
@@ -145,7 +145,7 @@ int KvStoreBench::setup(int argc, const char** argv) {
       } else if (strcmp(args[i], "--name") == 0) {
 	client_name = args[i+1];
       } else if (strcmp(args[i], "-r") == 0) {
-	srand(atoi(args[i+1]));
+	this->rng.seed(atoi(args[i+1]));
       }
     } else if (strcmp(args[i], "--verbosity-on") == 0) {
       verbose = true;
@@ -218,7 +218,7 @@ string KvStoreBench::random_string(int len) {
       "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
       "abcdefghijklmnopqrstuvwxyz";
   for (int i = 0; i < len; ++i) {
-    ret.push_back(alphanum[rand() % (alphanum.size() - 1)]);
+    ret.push_back(alphanum[rng(alphanum.size() - 1)]);
   }
 
   return ret;
@@ -372,7 +372,7 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
 	<< ops << std::endl;
     timed_args * cb_args = new timed_args(this);
     pair<string, bufferlist> kv;
-    int random = (rand() % 100);
+    int random = rng(100);
     cb_args->op = probs.lower_bound(random)->second;
     switch (cb_args->op) {
     case 'i':
@@ -452,7 +452,7 @@ int KvStoreBench::test_teuthology_sync(next_gen_t distr,
     cout << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t" << i + 1 << " / "
 	<< ops << std::endl;
     pair<string, bufferlist> kv;
-    int random = (rand() % 100);
+    int random = rng(100);
     d.first = probs.lower_bound(random)->second;
     switch (d.first) {
     case 'i':

@@ -765,8 +765,8 @@ void AsyncConnection::process()
           logger->tinc(l_msgr_running_recv_time, fast_dispatch_time - recv_start_time);
           if (delay_state) {
             double delay_period = 0;
-            if (rand() % 10000 < async_msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
-              delay_period = async_msgr->cct->_conf->ms_inject_delay_max * (double)(rand() % 10000) / 10000.0;
+            if (ceph::util::generate_random_number(10000) < async_msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
+              delay_period = async_msgr->cct->_conf->ms_inject_delay_max * ceph::util::generate_random_number(10000.0) / 10000.0;
               ldout(async_msgr->cct, 1) << "queue_received will delay after " << (ceph_clock_now() + delay_period)
 					<< " on " << message << " " << *message << dendl;
             }

@@ -29,7 +29,11 @@
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "common/Clock.h"
+
+#include "include/util.h"
 #include "include/utime.h"
+#include "include/random.h"
+
 #include "erasure-code/ErasureCodePlugin.h"
 #include "erasure-code/ErasureCode.h"
 #include "ceph_erasure_code_benchmark.h"
@@ -311,7 +315,7 @@ int ErasureCodeBench::decode()
       for (int j = 0; j < erasures; j++) {
 	int erasure;
 	do {
-	  erasure = rand() % ( k + m );
+	  erasure = ceph::util::generate_random_number(k + m);
 	} while(chunks.count(erasure) == 0);
 	chunks.erase(erasure);
       }

@@ -11,21 +11,27 @@
  * Foundation.  See file COPYING.
  */
 
+#include <cmath>
+#include <string>
+#include <cassert>
+#include <climits>
+#include <iostream>
+
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
+
 #include "common/ceph_context.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
-#include "include/utime.h"
-#include "global/global_context.h"
 #include "common/ceph_argparse.h"
-#include "test/omap_bench.h"
 
-#include <string>
-#include <iostream>
-#include <cassert>
-#include <climits>
-#include <cmath>
+#include "include/util.h"
+#include "include/utime.h"
+#include "include/random.h"
+
+#include "global/global_context.h"
+
+#include "test/omap_bench.h"
 
 using namespace std;
 using ceph::bufferlist;
@@ -212,7 +218,7 @@ string OmapBench::random_string(int len) {
       "abcdefghijklmnopqrstuvwxyz";
 
   for (int i = 0; i < len; ++i) {
-    ret.push_back(alphanum[rand() % (alphanum.size() - 1)]);
+    ret.push_back(alphanum[ceph::util::generate_random_number(alphanum.size() - 1)]);
   }
 
   return ret;
@@ -333,9 +339,9 @@ int OmapBench::generate_non_uniform_omap(const int omap_entries,
     std::map<std::string,bufferlist> * out_omap) {
   bufferlist bl;
 
-  int num_entries = rand() % omap_entries + 1;
-  int key_len = rand() % key_size +1;
-  int val_len = rand() % value_size +1;
+  int num_entries = ceph::util::generate_random_number(omap_entries) + 1;
+  int key_len = ceph::util::generate_random_number(key_size) + 1;
+  int val_len = ceph::util::generate_random_number(value_size) + 1;
 
   //setup omap
   for (int i = 0; i < num_entries; i++) {

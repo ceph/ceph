@@ -1,19 +1,20 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <cstring>
 #include <iostream>
-#include <string.h>
 
 #include "include/types.h"
 #include "include/crc32c.h"
 #include "include/utime.h"
+
 #include "common/Clock.h"
-
-#include "gtest/gtest.h"
-
+#include "common/backport_std.h"
 #include "common/sctp_crc32.h"
 #include "common/crc32c_intel_baseline.h"
 #include "common/crc32c_aarch64.h"
+
+#include "gtest/gtest.h"
 
 TEST(Crc32c, Small) {
   const char *a = "foo bar baz";
@@ -293,7 +294,7 @@ double estimate_clock_resolution()
   double v = *(head++);
   double range=0;
   while (head != tail) {
-    range = max(range, *head - v);
+    range = std::max(range, *head - v);
     v = *head;
     head++;
   }

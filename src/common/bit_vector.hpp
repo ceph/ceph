@@ -503,7 +503,8 @@ void BitVector<_b>::generate_test_instances(std::list<BitVector *> &o) {
 
   b->resize(size);
   for (uint64_t i = 0; i < size; ++i) {
-    (*b)[i] = rand() % radix;
+    // mod appears to be required here:
+    (*b)[i] = ceph::util::generate_random_number<uint64_t>() % radix;
   }
   o.push_back(b);
 }

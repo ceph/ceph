@@ -1,14 +1,17 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-#include "include/interval_set.h"
-#include "include/buffer.h"
-#include "include/encoding.h"
+
+#ifndef OBJECT_H
+#define OBJECT_H
+
 #include <list>
 #include <map>
 #include <set>
 #include <random>
 
-#ifndef OBJECT_H
-#define OBJECT_H
+#include "include/interval_set.h"
+#include "include/buffer.h"
+#include "include/encoding.h"
+#include "include/random.h"
 
 class ContDesc {
 public:
@@ -171,7 +174,7 @@ public:
     char current;
     iterator_impl(const ContDesc &cont, RandGenerator *cont_gen) : 
       pos(0), cont(cont), rand(cont.seqnum), cont_gen(cont_gen) {
-      current = rand();
+      current = ceph::util::generate_random_number();
     }
 
     ContDesc get_cont() const override { return cont; }
@@ -179,7 +182,7 @@ public:
 
     iterator_impl &operator++() override {
       pos++;
-      current = rand();
+      current = ceph::util::generate_random_number();
       return *this;
     }
 
@@ -236,7 +239,7 @@ public:
     RandWrap rand(in.seqnum);
     if (max_length == 0)
       return 0;
-    return (rand() % (max_length/2)) + ((max_length - 1)/2) + 1;
+    return (ceph::util::generate_random_number(max_length/2)) + ((max_length - 1)/2) + 1;
   }
 };
 
@@ -254,9 +257,9 @@ public:
     RandWrap rand(in.seqnum);
     // make some attrs big
     if (in.seqnum & 3)
-      return (rand() % max_len);
+      return ceph::util::generate_random_number(max_len);
     else
-      return (rand() % big_max_len);
+      return ceph::util::generate_random_number(big_max_len);
   }
   bufferlist gen_bl(const ContDesc &in) {
     bufferlist bl;
@@ -297,7 +300,7 @@ public:
   }
   uint64_t get_append_size(const ContDesc &in) {
     RandWrap rand(in.seqnum);
-    return round_up(rand() % max_append_total, alignment);
+    return round_up(ceph::util::generate_random_number(max_append_total), alignment);
   }
   uint64_t get_length(const ContDesc &in) override {
     return off + get_append_size(in);

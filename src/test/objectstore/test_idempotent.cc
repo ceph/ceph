@@ -14,15 +14,24 @@
 
 #include <iostream>
 #include <sstream>
+
 #include <boost/scoped_ptr.hpp>
-#include "os/filestore/FileStore.h"
+
 #include "global/global_init.h"
+
+#include "include/random.h"
+
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
+
 #include "test/common/ObjectContents.h"
+
 #include "FileStoreTracker.h"
+
 #include "kv/KeyValueDB.h"
+
 #include "os/ObjectStore.h"
+#include "os/filestore/FileStore.h"
 
 void usage(const string &name) {
   std::cerr << "Usage: " << name << " [new|continue] store_path store_journal db_path"
@@ -34,7 +43,7 @@ typename T::iterator rand_choose(T &cont) {
   if (cont.size() == 0) {
     return cont.end();
   }
-  int index = rand() % cont.size();
+  int index = ceph::util::generate_random_number(cont.size());
   typename T::iterator retval = cont.begin();
 
   for (; index > 0; --index) ++retval;
@@ -98,7 +107,7 @@ int main(int argc, char **argv) {
   while (1) {
     FileStoreTracker::Transaction t;
     for (unsigned j = 0; j < 100; ++j) {
-      int val = rand() % 100;
+      int val = ceph::util::generate_random_number(100);
       if (val < 30) {
 	t.write(coll, *rand_choose(objects));
       } else if (val < 60) {
