@@ -1159,7 +1159,7 @@ public:
   void get_pool_ids_by_rule(int rule_id, set<int64_t> *pool_ids) const {
     assert(pool_ids);
     for (auto &p: pools) {
-      if ((int)p.second.get_crush_rule() == rule_id) {
+      if (p.second.get_crush_rule() == rule_id) {
         pool_ids->insert(p.first);
       }
     }
