@@ -43,6 +43,7 @@
 #
 #
 # Merging PR #12345678 into luminous leaving a detached HEAD (i.e. do not update your repo's master branch) and do not label:
+#
 # $ env PTL_TOOL_BASE_PATH=refs/remotes/upstream/ src/script/ptl-tool.py --base luminous --branch HEAD --merge-branch-name luminous --label - 12345678
 # Detaching HEAD onto base: luminous
 # Merging PR #12345678
@@ -50,6 +51,16 @@
 #
 # Now push to luminous:
 # $ git push upstream HEAD:luminous
+#
+#
+# Fetching PRs by label:
+#
+# $ src/script/ptl-tool.py --base master --branch HEAD --merge-branch-name master --label - --pr-label wip-pdonnell-testing
+# Detaching HEAD onto base: master
+# Adding labeled PR #18192 to PR list
+# Will merge PRs: [18192]
+# Merging PR #18192
+# Leaving HEAD detached; no branch anchors your commit
 
 
 # TODO
@@ -127,6 +138,27 @@ def build_branch(args):
     remote = getattr(G.remotes, BASE_REMOTE)
     remote.fetch()
 
+    prs = args.prs
+    if args.pr_label is not None:
+        if args.pr_label == '' or args.pr_label.isspace():
+            log.error("--pr-label must have a non-space value")
+            sys.exit(1)
+        payload = {'labels': args.pr_label, 'sort': 'created', 'direction': 'desc'}
+        labeled_prs = requests.get("https://api.github.com/repos/ceph/ceph/issues", auth=(USER, PASSWORD), params=payload)
+        if labeled_prs.status_code != 200:
+            log.error("Failed to load labeled PRs: {}".format(labeled_prs))
+            sys.exit(1)
+        labeled_prs = labeled_prs.json()
+        if len(labeled_prs) == 0:
+            log.error("Search for PRs matching label '{}' returned no results!".format(args.pr_label))
+            sys.exit(1)
+        for pr in labeled_prs:
+            if pr['pull_request']:
+                n = pr['number']
+                log.info("Adding labeled PR #{} to PR list".format(n))
+                prs.append(n)
+    log.info("Will merge PRs: {}".format(prs))
+
     if base == 'HEAD':
         log.info("Branch base is HEAD; not checking out!")
     else:
@@ -141,9 +173,10 @@ def build_branch(args):
         # So we know that we're not on an old test branch, detach HEAD onto ref:
         base.checkout()
 
-    for pr in args.prs:
-        log.info("Merging PR #{pr}".format(pr=pr))
+    for pr in prs:
         pr = int(pr)
+        log.info("Merging PR #{pr}".format(pr=pr))
+
         remote_ref = "refs/pull/{pr}/head".format(pr=pr)
         fi = remote.fetch(remote_ref)
         if len(fi) != 1:
@@ -267,7 +300,8 @@ def main():
     parser.add_argument('--base-path', dest='base_path', action='store', default=BASE_PATH, help='base for branch')
     parser.add_argument('--git-dir', dest='git', action='store', default=GITDIR, help='git directory')
     parser.add_argument('--label', dest='label', action='store', default=default_label, help='label PRs for testing')
-    parser.add_argument('prs', metavar="PR", type=int, nargs='+', help='Pull Requests to merge')
+    parser.add_argument('--pr-label', dest='pr_label', action='store', help='label PRs for testing')
+    parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
     args = parser.parse_args(argv)
     if getattr(args, 'merge_branch_name') is None:
         setattr(args, 'merge_branch_name', args.branch)
