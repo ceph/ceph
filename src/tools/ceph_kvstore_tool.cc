@@ -334,6 +334,15 @@ int main(int argc, const char *argv[])
   string path(args[1]);
   string cmd(args[2]);
 
+  if (type != "leveldb" &&
+      type != "rocksdb" &&
+      type != "bluestore-kv")  {
+
+    std::cerr << "Unrecognized type: " << args[0] << std::endl;
+    usage(argv[0]);
+    return 1;
+  }
+
   bool need_open_db = (cmd != "repair");
   StoreTool st(type, path, need_open_db);
 
