@@ -331,6 +331,8 @@ private:
   bool m_update_status_requested = false;
   Context *m_on_update_status_finish = nullptr;
 
+  cls::journal::ClientState m_client_state =
+    cls::journal::CLIENT_STATE_DISCONNECTED;
   librbd::journal::MirrorPeerClientMeta m_client_meta;
 
   ReplayEntry m_replay_entry;
