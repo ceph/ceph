@@ -162,7 +162,6 @@ public:
   int _get_val(const std::string &key, char **buf, int len) const;
   const Option::value_t& get_val_generic(const std::string &key) const;
   template<typename T> const T& get_val(const std::string &key) const;
-  template<typename T> const T& _get_val(const std::string &key) const;
 
   void get_all_keys(std::vector<std::string> *keys) const;
 
@@ -322,11 +321,6 @@ public:
 template<typename T>
 const T& md_config_t::get_val(const std::string &key) const {
   return boost::get<T>(this->get_val_generic(key));
-}
-
-template<typename T>
-const T& md_config_t::_get_val(const std::string &key) const {
-  return boost::get<T>(this->_get_val_generic(key));
 }
 
 inline std::ostream& operator<<(std::ostream& o, const boost::blank& ) {
