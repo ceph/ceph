@@ -8021,7 +8021,7 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
 
   RGWRESTStreamS3PutObj *out_stream_req;
 
-  int ret = rest_master_conn->put_obj_init(user_id, dest_obj, astate->size, src_attrs, true, &out_stream_req);
+  int ret = rest_master_conn->put_obj_async(user_id, dest_obj, astate->size, src_attrs, true, &out_stream_req);
   if (ret < 0) {
     return ret;
   }

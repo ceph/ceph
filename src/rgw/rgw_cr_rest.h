@@ -326,7 +326,7 @@ protected:
 
 public:
   virtual int init() = 0;
-  virtual void set_attrs(const std::map<string, string>& attrs) = 0;
+  virtual void send_ready(const std::map<string, string>& attrs) = 0;
   virtual int write(bufferlist& data) = 0; /* reentrant */
   virtual int drain_writes(bool *need_retry) = 0; /* reentrant */
 };
@@ -360,6 +360,7 @@ public:
 };
 
 class RGWStreamWriteHTTPResourceCRF : public RGWStreamWriteResourceCRF {
+protected:
   RGWCoroutinesEnv *env;
   RGWCoroutine *caller;
   RGWHTTPManager *http_manager;
@@ -378,7 +379,7 @@ public:
   virtual ~RGWStreamWriteHTTPResourceCRF() {}
 
   int init() override;
-  void set_attrs(const std::map<string, string>& attrs) override;
+  void send_ready(const std::map<string, string>& attrs) override;
   int write(bufferlist& data) override; /* reentrant */
   int drain_writes(bool *need_retry) override; /* reentrant */
 };

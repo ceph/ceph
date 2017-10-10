@@ -116,7 +116,7 @@ int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool 
   return 0;
 }
 
-void RGWStreamWriteHTTPResourceCRF::set_attrs(const map<string, string>& attrs)
+void RGWStreamWriteHTTPResourceCRF::send_ready(const map<string, string>& attrs)
 {
   for (auto h : attrs) {
     if (h.first == "CONTENT_LENGTH") {
@@ -201,7 +201,7 @@ int RGWStreamSpliceCR::operate() {
       if (!sent_attrs) {
         map<string, string> attrs;
         in_crf->get_attrs(&attrs);
-        out_crf->set_attrs(attrs);
+        out_crf->send_ready(attrs);
         int ret = out_crf->init();
         if (ret < 0) {
           return set_cr_error(ret);
