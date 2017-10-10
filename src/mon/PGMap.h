@@ -436,7 +436,7 @@ public:
   void dump_osd_blocked_by_stats(Formatter *f) const;
   void print_osd_blocked_by_stats(std::ostream *ss) const;
 
-  void get_filtered_pg_stats(uint32_t state, int64_t poolid, int64_t osdid,
+  void get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
                              bool primary, set<pg_t>& pgs) const;
 
   void get_health_checks(
