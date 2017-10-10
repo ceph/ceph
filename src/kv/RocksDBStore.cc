@@ -309,21 +309,17 @@ int RocksDBStore::install_cf_mergeop(
   return 0;
 }
 
-int RocksDBStore::create_and_open(ostream &out)
-{
-  int r = create_db_dir();
-  if (r < 0)
-    return r;
-  return do_open(out, true);
-}
-
 int RocksDBStore::create_and_open(ostream &out,
 				  const vector<ColumnFamily>& cfs)
 {
   int r = create_db_dir();
   if (r < 0)
     return r;
-  return do_open(out, true, &cfs);
+  if (cfs.empty()) {
+    return do_open(out, true, nullptr);
+  } else {
+    return do_open(out, true, &cfs);
+  }
 }
 
 int RocksDBStore::do_open(ostream &out, bool create_if_missing,

@@ -156,17 +156,11 @@ public:
   /// test whether we can successfully initialize; may have side effects (e.g., create)
   static int test_init(const std::string& type, const std::string& dir);
   virtual int init(string option_str="") = 0;
-  virtual int open(std::ostream &out) = 0;
-  virtual int open(std::ostream &out, const vector<ColumnFamily>& cfs) {
-    assert(0 == "Not implemented");
-  }
-  virtual int create_and_open(std::ostream &out) = 0;
-  virtual void close() { }
+  virtual int open(std::ostream &out, const vector<ColumnFamily>& cfs = {}) = 0;
   // vector cfs contains column families to be created when db is created.
   virtual int create_and_open(std::ostream &out,
-			      const vector<ColumnFamily>& cfs) {
-    assert(0 == "Not implemented");
-  }
+			      const vector<ColumnFamily>& cfs = {}) = 0;
+  virtual void close() { }
 
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;

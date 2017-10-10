@@ -167,6 +167,20 @@ int MemDB::do_open(ostream &out, bool create)
   return _init(create);
 }
 
+int MemDB::open(ostream &out, const vector<ColumnFamily>& cfs) {
+  if (!cfs.empty()) {
+    assert(0 == "Not implemented");
+  }
+  return do_open(out, false);
+}
+
+int MemDB::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
+  if (!cfs.empty()) {
+    assert(0 == "Not implemented");
+  }
+  return do_open(out, true);
+}
+
 MemDB::~MemDB()
 {
   close();
