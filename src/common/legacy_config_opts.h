@@ -684,6 +684,8 @@ OPTION(osd_op_num_shards_ssd, OPT_INT)
 // also works to ienforce fairness between clients. "debug_random"
 // chooses among all four with equal probability.
 OPTION(osd_op_queue, OPT_STR)
+OPTION(osd_ex_op_queue, OPT_STR)
+OPTION(osd_use_ex_op_queue, OPT_BOOL)
 
 OPTION(osd_op_queue_cut_off, OPT_STR) // Min priority to go to strict queue. (low, high)
 

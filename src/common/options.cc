@@ -1948,12 +1948,25 @@ std::vector<Option> get_global_options() {
     .set_long_description("which operation queue algorithm to use; mclock_opclass and mclock_client are currently experimental")
     .add_see_also("osd_op_queue_cut_off"),
 
+    Option("osd_ex_op_queue", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("wpq")
+    .set_enum_allowed( { "wpq", "prioritized", "mclock_opclass", "mclock_client", "debug_random" } )
+    .set_description("which external operation queue algorithm to use")
+    .set_long_description("which external operation queue algorithm to use; mclock_opclass and mclock_client are currently experimental")
+    .add_see_also("osd_use_ex_op_queue")
+    .add_see_also("osd_op_queue_cut_off"),
+
+    Option("osd_use_ex_op_queue", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
     Option("osd_op_queue_cut_off", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("low")
     .set_enum_allowed( { "low", "high", "debug_random" } )
     .set_description("the threshold between high priority ops and low priority ops")
     .set_long_description("the threshold between high priority ops that use strict priority ordering and low priority ops that use a fairness algorithm that may or may not incorporate priority")
-    .add_see_also("osd_op_queue"),
+    .add_see_also("osd_op_queue")
+    .add_see_also("osd_ex_op_queue"),
 
     Option("osd_op_queue_mclock_client_op_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1000.0)

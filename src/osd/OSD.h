@@ -1370,6 +1370,7 @@ private:
 
   ThreadPool peering_tp;
   ShardedThreadPool osd_op_tp;
+  ThreadPool osd_exop_tp;
   ThreadPool disk_tp;
   ThreadPool command_tp;
 
@@ -1595,6 +1596,8 @@ private:
   friend std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q);
 
   const io_queue op_queue;
+  const io_queue ex_op_queue;
+  const bool used_ex_op_queue;
   const unsigned int op_prio_cutoff;
 
   /*
@@ -1811,6 +1814,52 @@ private:
   void dequeue_op(
     PGRef pg, OpRequestRef op,
     ThreadPool::TPHandle &handle);
+
+  // -- external op queue --
+  struct ExternalOpWQ :
+    public ThreadPool::WorkQueueVal<pair<spg_t,PGQueueable>>
+  {
+    OSD *osd;
+    ShardedOpWQ &op_shardedwq;
+
+    /// external priority queue
+    std::unique_ptr<OpQueue< pair<spg_t, PGQueueable>, uint64_t>> pqueue;
+    ExternalOpWQ(OSD *o, ShardedOpWQ &op_wq, time_t ti, time_t si,
+	         ThreadPool *tp)
+      : ThreadPool::WorkQueueVal<pair<spg_t,PGQueueable>>(
+	"OSD::ExternalOpWQ", ti, si, tp), osd(o), op_shardedwq(op_wq) {
+	if (osd->ex_op_queue == io_queue::weightedpriority) {
+	  pqueue = std::unique_ptr
+	    <WeightedPriorityQueue<pair<spg_t,PGQueueable>,uint64_t>>(
+	      new WeightedPriorityQueue<pair<spg_t,PGQueueable>,uint64_t>(
+		osd->cct->_conf->osd_op_pq_max_tokens_per_priority,
+		  osd->cct->_conf->osd_op_pq_min_cost));
+	} else if (osd->ex_op_queue == io_queue::prioritized) {
+	  pqueue = std::unique_ptr
+	    <PrioritizedQueue<pair<spg_t,PGQueueable>,uint64_t>>(
+	      new PrioritizedQueue<pair<spg_t,PGQueueable>,uint64_t>(
+		osd->cct->_conf->osd_op_pq_max_tokens_per_priority,
+		  osd->cct->_conf->osd_op_pq_min_cost));
+	} else if (osd->ex_op_queue == io_queue::mclock_opclass) {
+	  pqueue = std::unique_ptr
+	    <ceph::mClockOpClassQueue>(new ceph::mClockOpClassQueue(osd->cct));
+	} else if (osd->ex_op_queue == io_queue::mclock_client) {
+	  pqueue = std::unique_ptr
+	    <ceph::mClockClientQueue>(new ceph::mClockClientQueue(osd->cct));
+	}
+    }
+
+    bool _empty() override {
+      return pqueue->empty();
+    }
+    void _enqueue(pair<spg_t,PGQueueable> item) override;
+    void _enqueue_front(pair<spg_t,PGQueueable> item) override;
+    pair<spg_t,PGQueueable> _dequeue() override {
+      pair<spg_t, PGQueueable> item = pqueue->dequeue();
+      return item;
+    }
+    void _process(pair<spg_t,PGQueueable> item, ThreadPool::TPHandle &) override; 
+  } external_op_wq;
 
   // -- peering queue --
   struct PeeringWQ : public ThreadPool::BatchWorkQueue<PG> {
@@ -2288,6 +2337,27 @@ private:
     } else if (cct->_conf->osd_op_queue == "mclock_opclass") {
       return io_queue::mclock_opclass;
     } else if (cct->_conf->osd_op_queue == "mclock_client") {
+      return io_queue::mclock_client;
+    } else {
+      // default / catch-all is 'wpq'
+      return io_queue::weightedpriority;
+    }
+  }
+
+  io_queue get_ex_io_queue() const {
+    if (cct->_conf->osd_ex_op_queue == "debug_random") {
+      static io_queue index_lookup[] = { io_queue::prioritized,
+					 io_queue::weightedpriority,
+					 io_queue::mclock_opclass,
+					 io_queue::mclock_client };
+      srand(time(NULL));
+      unsigned which = rand() % (sizeof(index_lookup) / sizeof(index_lookup[0]));
+      return index_lookup[which];
+    } else if (cct->_conf->osd_ex_op_queue == "prioritized") {
+      return io_queue::prioritized;
+    } else if (cct->_conf->osd_ex_op_queue == "mclock_opclass") {
+      return io_queue::mclock_opclass;
+    } else if (cct->_conf->osd_ex_op_queue == "mclock_client") {
       return io_queue::mclock_client;
     } else {
       // default / catch-all is 'wpq'

@@ -1919,6 +1919,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
 	     "osd_peering_tp_threads"),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
 	    get_num_op_threads()),
+  osd_exop_tp(cct, "OSD::osd_exop_tp", "tp_osd_exop", 1),
   disk_tp(cct, "OSD::disk_tp", "tp_osd_disk", cct->_conf->osd_disk_threads, "osd_disk_threads"),
   command_tp(cct, "OSD::command_tp", "tp_osd_cmd",  1),
   session_waiting_lock("OSD::session_waiting_lock"),
@@ -1937,6 +1938,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
                   cct->_conf->osd_num_op_tracker_shard),
   test_ops_hook(NULL),
   op_queue(get_io_queue()),
+  ex_op_queue(get_ex_io_queue()),
+  used_ex_op_queue(cct->_conf->osd_use_ex_op_queue),
   op_prio_cutoff(get_io_prio_cut()),
   op_shardedwq(
     get_num_op_shards(),
@@ -1944,6 +1947,12 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     cct->_conf->osd_op_thread_timeout,
     cct->_conf->osd_op_thread_suicide_timeout,
     &osd_op_tp),
+  external_op_wq(
+    this,
+    op_shardedwq,
+    cct->_conf->osd_op_thread_timeout,
+    cct->_conf->osd_op_thread_suicide_timeout,
+    &osd_exop_tp),
   peering_wq(
     this,
     cct->_conf->osd_op_thread_timeout,
@@ -2598,6 +2607,7 @@ int OSD::init()
 
   peering_tp.start();
   osd_op_tp.start();
+  osd_exop_tp.start();
   disk_tp.start();
   command_tp.start();
 
@@ -3325,6 +3335,10 @@ int OSD::shutdown()
   osd_op_tp.drain();
   osd_op_tp.stop();
   dout(10) << "op sharded tp stopped" << dendl;
+
+  osd_exop_tp.drain();
+  osd_exop_tp.stop();
+  dout(10) << "external op tp stopped" << dendl;
 
   command_tp.drain();
   command_tp.stop();
@@ -8898,18 +8912,22 @@ bool OSD::op_is_discardable(const MOSDOp *op)
 
 void OSD::enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch)
 {
-  utime_t latency = ceph_clock_now() - op->get_req()->get_recv_stamp();
-  dout(15) << "enqueue_op " << op << " prio " << op->get_req()->get_priority()
-	   << " cost " << op->get_req()->get_cost()
-	   << " latency " << latency
-	   << " epoch " << epoch
-	   << " " << *(op->get_req()) << dendl;
-  op->osd_trace.event("enqueue op");
-  op->osd_trace.keyval("priority", op->get_req()->get_priority());
-  op->osd_trace.keyval("cost", op->get_req()->get_cost());
-  op->mark_queued_for_pg();
-  logger->tinc(l_osd_op_before_queue_op_lat, latency);
-  op_shardedwq.queue(make_pair(pg, PGQueueable(op, epoch)));
+  if (!used_ex_op_queue) {
+    utime_t latency = ceph_clock_now() - op->get_req()->get_recv_stamp();
+    dout(15) << "enqueue_op " << op << " prio " << op->get_req()->get_priority()
+	     << " cost " << op->get_req()->get_cost()
+	     << " latency " << latency
+	     << " epoch " << epoch
+	     << " " << *(op->get_req()) << dendl;
+    op->osd_trace.event("enqueue op");
+    op->osd_trace.keyval("priority", op->get_req()->get_priority());
+    op->osd_trace.keyval("cost", op->get_req()->get_cost());
+    op->mark_queued_for_pg();
+    logger->tinc(l_osd_op_before_queue_op_lat, latency);
+    op_shardedwq.queue(make_pair(pg, PGQueueable(op, epoch)));
+  } else {
+    external_op_wq.queue(make_pair(pg, PGQueueable(op, epoch)));
+  }
 }
 
 
@@ -9435,6 +9453,58 @@ void OSD::PeeringWQ::_dequeue(list<PG*> *out) {
 
 #undef dout_context
 #define dout_context osd->cct
+#undef dout_prefix
+#define dout_prefix *_dout << "osd." << osd->whoami << " ex_op_wq "
+
+void OSD::ExternalOpWQ::_enqueue(pair<spg_t,PGQueueable> item) {
+  unsigned priority = item.second.get_priority();
+  unsigned cost = item.second.get_cost();
+
+  dout(20) << __func__ << " " << item.first << " " << item.second << dendl;
+  if (priority >= osd->op_prio_cutoff)
+    pqueue->enqueue_strict(
+      item.second.get_owner(), priority, item);
+  else
+    pqueue->enqueue(
+      item.second.get_owner(),
+      priority, cost, item);
+}
+
+void OSD::ExternalOpWQ::_enqueue_front(pair<spg_t,PGQueueable> item) {
+  unsigned priority = item.second.get_priority();
+  unsigned cost = item.second.get_cost();
+
+  dout(20) << __func__ << " " << item.first << " " << item.second << dendl;
+  if (priority >= osd->op_prio_cutoff)
+    pqueue->enqueue_strict_front(
+      item.second.get_owner(),
+      priority, item);
+  else
+    pqueue->enqueue_front(
+      item.second.get_owner(),
+      priority, cost, item);
+}
+
+void OSD::ExternalOpWQ::_process(pair<spg_t,PGQueueable> item, ThreadPool::TPHandle &) {
+  if (boost::optional<OpRequestRef> _op = item.second.maybe_get_op()) {
+    epoch_t epoch = item.second.get_map_epoch();
+    utime_t latency = ceph_clock_now() - (*_op)->get_req()->get_recv_stamp();
+    dout(15) << "enqueue_op " << (*_op) << " prio " << (*_op)->get_req()->get_priority()
+	     << " cost " << (*_op)->get_req()->get_cost()
+	     << " latency " << latency
+	     << " epoch " << epoch
+	     << " " << *((*_op)->get_req()) << dendl;
+    (*_op)->osd_trace.event("enqueue op");
+    (*_op)->osd_trace.keyval("priority", (*_op)->get_req()->get_priority());
+    (*_op)->osd_trace.keyval("cost", (*_op)->get_req()->get_cost());
+    (*_op)->mark_queued_for_pg();
+    osd->logger->tinc(l_osd_op_before_queue_op_lat, latency);
+    op_shardedwq.queue(make_pair(item.first, item.second));
+  } else {
+    ceph_abort();
+  }
+}
+
 #undef dout_prefix
 #define dout_prefix *_dout << "osd." << osd->whoami << " op_wq "
 
