@@ -36,51 +36,52 @@ using namespace std;
 
 class StoreTool
 {
-  boost::scoped_ptr<BlueStore> bluestore;
-
-  // TODO: make KeyValueDB enable_shared_from_this
-  // bluestore will hold *db* also, use unique_ptr/shared_ptr will
-  // double free. 
-  KeyValueDB* db;
+#ifdef HAVE_LIBAIO
+  struct Deleter {
+    BlueStore *bluestore;
+    Deleter(BlueStore *store = nullptr)
+    : bluestore(store)
+    {}
+    void operator()(KeyValueDB *db) {
+      if (bluestore) {
+	bluestore->umount();
+	delete bluestore;
+      } else {
+	delete db;
+      }
+    }
+  };
+  std::unique_ptr<KeyValueDB, Deleter> db;
+#else
+  std::unique_ptr<KeyValueDB> db;
+#endif
 
   string store_path;
 
   public:
   StoreTool(string type, const string &path) : store_path(path) {
-    KeyValueDB *db_ptr;
     if (type == "bluestore-kv") {
 #ifdef HAVE_LIBAIO
-      // note: we'll leak this!  the only user is ceph-kvstore-tool and
-      // we don't care.
-      bluestore.reset(new BlueStore(g_ceph_context, path));
+      auto bluestore = new BlueStore(g_ceph_context, path);
+      KeyValueDB *db_ptr;
       int r = bluestore->start_kv_only(&db_ptr);
       if (r < 0) {
 	exit(1);
       }
+      db = decltype(db){db_ptr, Deleter(bluestore)};
 #else
       cerr << "bluestore not compiled in" << std::endl;
       exit(1);
 #endif
     } else {
-      db_ptr = KeyValueDB::create(g_ceph_context, type, path);
+      auto db_ptr = KeyValueDB::create(g_ceph_context, type, path);
       int r = db_ptr->open(std::cerr);
       if (r < 0) {
 	cerr << "failed to open type " << type << " path " << path << ": "
 	     << cpp_strerror(r) << std::endl;
 	exit(1);
       }
-    }
-    db = db_ptr;
-  }
-
-  ~StoreTool() {
-    if (bluestore) {
-      bluestore->umount();   
-    }
-    else {
-      if (db) {
-        delete db;
-      }
+      db.reset(db_ptr);
     }
   }
 
