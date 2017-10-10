@@ -169,7 +169,7 @@ class Module(MgrModule):
     def _setup_static_metrics(self):
         metrics = {}
         metrics['health_status'] = Metric(
-            'undef',
+            'untyped',
             'health_status',
             'Cluster health status'
         )
@@ -179,13 +179,13 @@ class Module(MgrModule):
             'Monitors in quorum'
         )
         metrics['osd_metadata'] = Metric(
-            'undef',
+            'untyped',
             'osd_metadata',
             'OSD Metadata',
             OSD_METADATA
         )
         metrics['pool_metadata'] = Metric(
-            'undef',
+            'untyped',
             'pool_metadata',
             'POOL Metadata',
             POOL_METADATA
