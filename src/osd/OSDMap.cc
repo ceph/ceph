@@ -3364,7 +3364,7 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
 	pools[pool].set_flag(pg_pool_t::FLAG_NOPGCHANGE);
       if (cct->_conf->osd_pool_default_flag_nosizechange)
 	pools[pool].set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
-      pools[pool].size = cct->_conf->osd_pool_default_size;
+      pools[pool].size = cct->_conf->get_val<uint64_t>("osd_pool_default_size");
       pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
       pools[pool].crush_rule = default_replicated_rule;
       pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
@@ -3397,7 +3397,7 @@ int OSDMap::get_erasure_code_profile_default(CephContext *cct,
 					     map<string,string> &profile_map,
 					     ostream *ss)
 {
-  int r = get_json_str_map(cct->_conf->osd_pool_default_erasure_code_profile,
+  int r = get_json_str_map(cct->_conf->get_val<string>("osd_pool_default_erasure_code_profile"),
 		      *ss,
 		      &profile_map);
   return r;

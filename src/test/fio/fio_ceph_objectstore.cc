@@ -207,7 +207,7 @@ Job::Job(Engine* engine, const thread_data* td)
   const uint64_t pool = Collection::MIN_POOL_ID + td->thread_number;
 
   // create a collection for each object, up to osd_pool_default_pg_num
-  uint32_t count = g_conf->osd_pool_default_pg_num;
+  uint32_t count = get_val<uint64_t>("osd_pool_default_pg_num");
   if (count > td->o.nr_files)
     count = td->o.nr_files;
 
