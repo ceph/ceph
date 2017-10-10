@@ -244,17 +244,20 @@ void RDMADispatcher::polling()
       perf_logger->set(l_msgr_rdma_inflight_tx_chunks, inflight);
       if (num_dead_queue_pair) {
         Mutex::Locker l(lock); // FIXME reuse dead qp because creating one qp costs 1 ms
-        for (auto &i : dead_queue_pairs) {
+        auto it = dead_queue_pairs.begin();
+        while (it != dead_queue_pairs.end()) {
+          auto i = *it;
           // Bypass QPs that do not collect all Tx completions yet.
-          if (i->get_tx_wr())
-            continue;
-          ldout(cct, 10) << __func__ << " finally delete qp=" << i << dendl;
-          delete i;
-          auto it = std::find(dead_queue_pairs.begin(), dead_queue_pairs.end(), i);
-          if (it != dead_queue_pairs.end())
-            dead_queue_pairs.erase(it);
-          perf_logger->dec(l_msgr_rdma_active_queue_pair);
-          --num_dead_queue_pair;
+          if (i->get_tx_wr()) {
+            ldout(cct, 20) << __func__ << " bypass qp=" << i << " tx_wr=" << i->get_tx_wr() << dendl;
+            ++it;
+          } else {
+            ldout(cct, 10) << __func__ << " finally delete qp=" << i << dendl;
+            delete i;
+            it = dead_queue_pairs.erase(it);
+            perf_logger->dec(l_msgr_rdma_active_queue_pair);
+            --num_dead_queue_pair;
+          }
         }
       }
       if (!num_qp_conn && done && dead_queue_pairs.empty())
