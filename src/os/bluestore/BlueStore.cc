@@ -10747,6 +10747,7 @@ int BlueStore::_do_remove(
   txc->removed(o);
   o->extent_map.clear();
   o->onode = bluestore_onode_t();
+  txc->note_modified_object(o);
   _debug_obj_on_delete(o->oid);
 
   if (!is_gen || maybe_unshared_blobs.empty()) {
