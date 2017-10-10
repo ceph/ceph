@@ -1661,6 +1661,8 @@ public:
     Sequencer *parent;
     BlueStore *store;
 
+    spg_t shard_hint;
+
     uint64_t last_seq = 0;
 
     std::atomic_int txc_with_unstable_io = {0};  ///< num txcs with unstable io
