@@ -1580,6 +1580,11 @@ public:
     return -EOPNOTSUPP;
   }
 
+  /// true if a txn is readable immediately after it is queued.
+  virtual bool is_sync_onreadable() const {
+    return true;
+  }
+
   /**
    * is_rotational
    *
