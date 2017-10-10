@@ -1884,7 +1884,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   }
 
   set<string> reporters_by_subtree;
-  string reporter_subtree_level = g_conf->mon_osd_reporter_subtree_level;
+  auto reporter_subtree_level = g_conf->get_val<string>("mon_osd_reporter_subtree_level");
   utime_t orig_grace(g_conf->osd_heartbeat_grace, 0);
   utime_t max_failed_since = fi.get_failed_since();
   utime_t failed_for = now - max_failed_since;
@@ -1944,7 +1944,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	   << dendl;
 
   if (failed_for >= grace &&
-      (int)reporters_by_subtree.size() >= g_conf->mon_osd_min_down_reporters) {
+      reporters_by_subtree.size() >= g_conf->get_val<uint64_t>("mon_osd_min_down_reporters")) {
     dout(1) << " we have enough reporters to mark osd." << target_osd
 	    << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
@@ -5222,7 +5222,7 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 					   map<string,string> *erasure_code_profile_map,
 					   ostream *ss)
 {
-  int r = get_json_str_map(g_conf->osd_pool_default_erasure_code_profile,
+  int r = get_json_str_map(g_conf->get_val<string>("osd_pool_default_erasure_code_profile"),
 		           *ss,
 		           erasure_code_profile_map);
   if (r)
@@ -5265,8 +5265,8 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
   int err = 0;
   switch (pool_type) {
   case pg_pool_t::TYPE_REPLICATED:
-    *size = g_conf->osd_pool_default_size;
-    *min_size = g_conf->get_osd_pool_default_min_size();
+    *size = g_conf->get_val<uint64_t>("osd_pool_default_size");
+    *min_size = g_conf->get_val<uint64_t>("osd_pool_default_min_size");
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
@@ -5473,9 +5473,9 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   if (name.length() == 0)
     return -EINVAL;
   if (pg_num == 0)
-    pg_num = g_conf->osd_pool_default_pg_num;
+    pg_num = g_conf->get_val<uint64_t>("osd_pool_default_pg_num");
   if (pgp_num == 0)
-    pgp_num = g_conf->osd_pool_default_pgp_num;
+    pgp_num = g_conf->get_val<uint64_t>("osd_pool_default_pgp_num");
   if (pg_num > (unsigned)g_conf->mon_max_pool_pg_num) {
     *ss << "'pg_num' must be greater than 0 and less than or equal to "
         << g_conf->mon_max_pool_pg_num
@@ -9900,7 +9900,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pool_type_str;
     cmd_getval(cct, cmdmap, "pool_type", pool_type_str);
     if (pool_type_str.empty())
-      pool_type_str = g_conf->osd_pool_default_type;
+      pool_type_str = g_conf->get_val<string>("osd_pool_default_type");
 
     string poolstr;
     cmd_getval(cct, cmdmap, "pool", poolstr);

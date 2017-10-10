@@ -1287,13 +1287,17 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
-    Option("mon_osd_min_down_reporters", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_osd_min_down_reporters", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(2)
-    .set_description(""),
+    .add_service("mon")
+    .set_description("number of OSDs from different subtrees who need to report a down OSD for it to count")
+    .add_see_also("mon_osd_reporter_subtree_level"),
 
     Option("mon_osd_reporter_subtree_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("host")
-    .set_description(""),
+    .add_service("mon")
+    .set_safe()
+    .set_description("in which level of parent bucket the reporters are counted"),
 
     Option("mon_osd_force_trim_to", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -1705,29 +1709,37 @@ std::vector<Option> get_global_options() {
     .set_default(4_K)
     .set_description(""),
 
-    Option("osd_pool_default_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_pool_default_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
-    .set_description(""),
+    .set_description("the number of copies of an object")
+    .add_service("mon"),
 
-    Option("osd_pool_default_min_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_pool_default_min_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("the minimal number of copies allowed to write to a degraded pool")
+    .set_long_description("0 means no specific default; ceph will use size-size/2")
+    .add_see_also("osd_pool_default_size")
+    .add_service("mon"),
 
-    Option("osd_pool_default_pg_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_pool_default_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(8)
-    .set_description(""),
+    .set_description("number of PGs for new pools. Configure in global or mon section of ceph.conf")
+    .add_service("mon"),
 
-    Option("osd_pool_default_pgp_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_pool_default_pgp_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(8)
-    .set_description(""),
+    .set_description("number of PGs for placement purposes. Should be equal to pg_num")
+    .add_see_also("osd_pool_default_pg_num")
+    .add_service("mon"),
 
     Option("osd_pool_default_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("replicated")
+    .set_enum_allowed({"replicated", "erasure"})
     .set_description(""),
 
     Option("osd_pool_default_erasure_code_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("plugin=jerasure technique=reed_sol_van k=2 m=1")
-    .set_description(""),
+    .set_description("default properties of osd pool create"),
 
     Option("osd_erasure_code_plugins", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("jerasure lrc"

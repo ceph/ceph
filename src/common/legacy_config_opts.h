@@ -290,8 +290,6 @@ OPTION(mon_sync_timeout, OPT_DOUBLE)
 OPTION(mon_sync_max_payload_size, OPT_U32) // max size for a sync chunk payload (say)
 OPTION(mon_sync_debug, OPT_BOOL) // enable sync-specific debug
 OPTION(mon_inject_sync_get_chunk_delay, OPT_DOUBLE)  // inject N second delay on each get_chunk request
-OPTION(mon_osd_min_down_reporters, OPT_INT)   // number of OSDs from different subtrees who need to report a down OSD for it to count
-OPTION(mon_osd_reporter_subtree_level , OPT_STR)   // in which level of parent bucket the reporters are counted
 OPTION(mon_osd_force_trim_to, OPT_INT)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous)
 OPTION(mon_mds_force_trim_to, OPT_INT)   // force mon to trim mdsmaps to this point (dangerous)
 OPTION(mon_mds_skip_sanity, OPT_BOOL)  // skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
@@ -607,14 +605,7 @@ OPTION(osd_pool_use_gmt_hitset, OPT_BOOL) // try to use gmt for hitset archive n
 OPTION(osd_crush_update_on_start, OPT_BOOL)
 OPTION(osd_class_update_on_start, OPT_BOOL) // automatically set device class on start
 OPTION(osd_crush_initial_weight, OPT_DOUBLE) // if >=0, the initial weight is for newly added osds.
-OPTION(osd_pool_default_crush_rule, OPT_INT)
 OPTION(osd_pool_erasure_code_stripe_unit, OPT_U32) // in bytes
-OPTION(osd_pool_default_size, OPT_INT)
-OPTION(osd_pool_default_min_size, OPT_INT)  // 0 means no specific default; ceph will use size-size/2
-OPTION(osd_pool_default_pg_num, OPT_INT) // number of PGs for new pools. Configure in global or mon section of ceph.conf
-OPTION(osd_pool_default_pgp_num, OPT_INT) // number of PGs for placement purposes. Should be equal to pg_num
-OPTION(osd_pool_default_type, OPT_STR)
-OPTION(osd_pool_default_erasure_code_profile, OPT_STR) // default properties of osd pool create
 OPTION(osd_erasure_code_plugins, OPT_STR) // list of erasure code plugins
 
 // Allows the "peered" state for recovery and backfill below min_size
