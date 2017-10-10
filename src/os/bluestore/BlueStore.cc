@@ -24,6 +24,7 @@
 #include "include/compat.h"
 #include "include/intarith.h"
 #include "include/stringify.h"
+#include "include/str_map.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "Allocator.h"
@@ -68,12 +69,6 @@ const string PREFIX_DEFERRED = "L";  // id -> deferred_transaction_t
 const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
 const string PREFIX_ALLOC_BITMAP = "b"; // (see BitmapFreelistManager)
 const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
-
-const std::vector<KeyValueDB::ColumnFamily> cfs = {
-  KeyValueDB::ColumnFamily(PREFIX_OMAP, ""),
-  KeyValueDB::ColumnFamily(PREFIX_PGMETA_OMAP, ""),
-  KeyValueDB::ColumnFamily(PREFIX_DEFERRED, ""),
-};
 
 // write a label in the first block.  always use this size.  note that
 // bluefs makes a matching assumption about the location of its
@@ -4492,6 +4487,8 @@ int BlueStore::_open_db(bool create)
   ceph::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
 
   string kv_backend;
+  std::vector<KeyValueDB::ColumnFamily> cfs;
+
   if (create) {
     kv_backend = cct->_conf->bluestore_kvbackend;
   } else {
@@ -4739,8 +4736,18 @@ int BlueStore::_open_db(bool create)
 
   db->set_cache_size(cache_size * cache_kv_ratio);
 
-  if (kv_backend == "rocksdb")
+  if (kv_backend == "rocksdb") {
     options = cct->_conf->bluestore_rocksdb_options;
+
+    map<string,string> cf_map;
+    get_str_map(cct->_conf->get_val<string>("bluestore_rocksdb_cfs"), &cf_map,
+		" \t");
+    for (auto& i : cf_map) {
+      dout(10) << "column family " << i.first << ": " << i.second << dendl;
+      cfs.push_back(KeyValueDB::ColumnFamily(i.first, i.second));
+    }
+  }
+
   db->init(options);
   if (create) {
     if (cct->_conf->get_val<bool>("bluestore_rocksdb_cf")) {
