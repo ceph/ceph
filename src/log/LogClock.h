@@ -108,9 +108,9 @@ public:
   static timeval to_timeval(time_point t) {
     auto rep = t.time_since_epoch().count();
     timespan ts(rep.count);
-    return { std::chrono::duration_cast<std::chrono::seconds>(ts).count(),
-	     std::chrono::duration_cast<std::chrono::microseconds>(
-	       ts % std::chrono::seconds(1)).count() };
+    return { static_cast<time_t>(std::chrono::duration_cast<std::chrono::seconds>(ts).count()),
+             static_cast<suseconds_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+               ts % std::chrono::seconds(1)).count()) };
   }
 private:
   static time_point coarse_now() {
@@ -136,11 +136,13 @@ inline int append_time(const log_time& t, char *out, int outlen) {
   if (coarse) {
     r = std::snprintf(out, outlen, "%04d-%02d-%02d %02d:%02d:%02d.%03ld",
 		      bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
-		      bdt.tm_hour, bdt.tm_min, bdt.tm_sec, tv.tv_usec / 1000);
+		      bdt.tm_hour, bdt.tm_min, bdt.tm_sec,
+		      static_cast<long>(tv.tv_usec / 1000));
   } else {
     r = std::snprintf(out, outlen, "%04d-%02d-%02d %02d:%02d:%02d.%06ld",
 		      bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
-		      bdt.tm_hour, bdt.tm_min, bdt.tm_sec, tv.tv_usec);
+		      bdt.tm_hour, bdt.tm_min, bdt.tm_sec,
+		      static_cast<long>(tv.tv_usec));
   }
   // Since our caller just adds the return value to something without
   // checking it…
