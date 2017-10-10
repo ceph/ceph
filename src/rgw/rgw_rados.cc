@@ -10804,6 +10804,8 @@ int RGWRados::olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWOb
     op.create(true);
   } else {
     op.assert_exists();
+    struct timespec mtime_ts = real_clock::to_timespec(state.mtime);
+    op.mtime2(&mtime_ts);
   }
 
   /*
@@ -11140,6 +11142,9 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const RGW
 
   op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, olh_tag);
   op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_GT, last_ver);
+
+  struct timespec mtime_ts = real_clock::to_timespec(state.mtime);
+  op.mtime2(&mtime_ts);
 
   bool need_to_link = false;
   cls_rgw_obj_key key;
