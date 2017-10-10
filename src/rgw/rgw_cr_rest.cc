@@ -16,12 +16,23 @@ class RGWCRHTTPGetDataCB : public RGWGetDataCB {
   RGWCoroutine *cr;
   int64_t io_id;
   bufferlist data;
+  bufferlist extra_data;
 public:
   RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, int64_t _io_id) : lock("RGWCRHTTPGetDataCB"), env(_env), cr(_cr), io_id(_io_id) {}
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
     {
       Mutex::Locker l(lock);
+
+      if (!has_all_extra_data()) {
+        off_t max = extra_data_len - extra_data.length();
+        if (max > bl_len) {
+          max = bl_len;
+        }
+        bl.splice(0, max, &extra_data);
+        bl_len -= max;
+      }
+
       if (bl_len == bl.length()) {
         data.claim_append(bl);
       } else {
@@ -47,8 +58,16 @@ public:
     data.splice(0, max, dest);
   }
 
+  bufferlist& get_extra_data() {
+    return extra_data;
+  }
+
   bool has_data() {
     return (data.length() > 0);
+  }
+
+  bool has_all_extra_data() {
+    return (extra_data.length() == extra_data_len);
   }
 };
 
@@ -106,6 +125,13 @@ int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool 
         yield caller->io_block(0, req->get_io_id());
       }
       got_attrs = true;
+      if (need_extra_data() && !got_extra_data) {
+        if (!in_cb->has_all_extra_data()) {
+          continue;
+        }
+        extra_data.claim_append(in_cb->get_extra_data());
+        got_extra_data = true;
+      }
       *io_pending = false;
       in_cb->claim_data(out, max_size);
       if (!req->is_done()) {
@@ -243,12 +269,15 @@ int RGWStreamSpliceCR::operate() {
 TestSpliceCR::TestSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
                            RGWHTTPStreamRWRequest *_in_req,
                            RGWHTTPStreamRWRequest *_out_req) : RGWCoroutine(_cct), cct(_cct), http_manager(_mgr),
-                                                               in_req(_in_req), out_req(_out_req) {}
+                                                               in_req(_in_req), out_req(_out_req) {
+    in_crf.reset(new RGWStreamReadHTTPResourceCRF(cct, get_env(), this, http_manager));
+    in_crf->set_req(in_req);
+    out_crf.reset(new RGWStreamWriteHTTPResourceCRF(cct, get_env(), this, http_manager));
+    out_crf->set_req(out_req);
+}
+
 int TestSpliceCR::operate() {
   reenter(this) {
-    in_crf.reset(new RGWStreamReadHTTPResourceCRF(cct, get_env(), this, http_manager, in_req));
-    out_crf.reset(new RGWStreamWriteHTTPResourceCRF(cct, get_env(), this, http_manager, out_req));
-
     yield call(new RGWStreamSpliceCR(cct, http_manager, in_crf, out_crf));
 
     if (retcode < 0) {
