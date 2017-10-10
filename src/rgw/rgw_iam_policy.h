@@ -29,8 +29,6 @@
 #include "rgw_iam_policy_keywords.h"
 #include "rgw_string.h"
 
-#include "include/assert.h" // razzin' frazzin' ...grrr.
-
 class RGWRados;
 namespace rgw {
 namespace auth {
@@ -254,7 +252,6 @@ string to_string(const MaskedIP& m);
 inline bool operator ==(const MaskedIP& l, const MaskedIP& r) {
   auto shift = std::max((l.v6 ? 128 : 32) - l.prefix,
 			(r.v6 ? 128 : 32) - r.prefix);
-  ceph_assert(shift > 0);
   return (l.addr >> shift) == (r.addr >> shift);
 }
 
