@@ -70,7 +70,7 @@ class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
   const AWSConfig& conf;
   bufferlist res;
   unordered_map <string, bool> bucket_created;
-  string bucket_name;
+  string target_bucket_name;
   std::shared_ptr<RGWStreamReadHTTPResourceCRF> in_crf;
   std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
   RGWRESTStreamRWRequest *in_req{nullptr};
@@ -165,6 +165,22 @@ public:
 
       obj_path = bucket_info.bucket.name + "/" + key.name;
 
+      target_bucket_name = aws_bucket_name(bucket_info);
+      if (bucket_created.find(target_bucket_name) == bucket_created.end()){
+        yield {
+          ldout(sync_env->cct,0) << "AWS: creating bucket" << target_bucket_name << dendl;
+          bufferlist bl;
+          call(new RGWPutRawRESTResourceCR <int> (sync_env->cct, conf.conn.get(),
+                                                  sync_env->http_manager,
+                                                  target_bucket_name, nullptr, bl, nullptr));
+        }
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        bucket_created[target_bucket_name] = true;
+      }
+
 #warning FIXME conn
       {
         /* init input connection */
@@ -179,13 +195,16 @@ public:
         }
 
         /* init output connection */
+        rgw_bucket target_bucket;
+        target_bucket.name = target_bucket_name; /* this is only possible because we only use bucket name for
+                                                    uri resolution */
+        rgw_obj target_obj(target_bucket, aws_object_name(bucket_info, key));
         in_crf.reset(new RGWStreamReadHTTPResourceCRF(cct, get_env(), this, sync_env->http_manager, in_req));
 
-#warning fix target obj
         map<string, bufferlist> attrs;
         RGWAccessControlPolicy empty_policy;
         ::encode(empty_policy, attrs[RGW_ATTR_ACL]);
-        conf.conn->put_obj_send_init(source_obj, &out_req);
+        conf.conn->put_obj_send_init(target_obj, &out_req);
 
         out_crf.reset(new RGWAWSStreamPutCRF(cct, get_env(), this, sync_env->http_manager, conf.conn->get_key(), out_req));
       }
