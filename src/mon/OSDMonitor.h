@@ -26,6 +26,7 @@
 using namespace std;
 
 #include "include/types.h"
+#include "include/encoding.h"
 #include "common/simple_cache.hpp"
 #include "msg/Messenger.h"
 
@@ -129,6 +130,76 @@ public:
 };
 
 
+struct osdmap_manifest_t {
+  // all the maps we have pinned -- i.e., won't be removed unless
+  // they are inside a trim interval.
+  set<version_t> pinned;
+
+  osdmap_manifest_t() {}
+
+  version_t get_last_pinned() const
+  {
+    set<version_t>::const_reverse_iterator it = pinned.crbegin();
+    if (it == pinned.crend()) {
+      return 0;
+    }
+    return *it;
+  }
+
+  version_t get_first_pinned() const
+  {
+    set<version_t>::const_iterator it = pinned.cbegin();
+    if (it == pinned.cend()) {
+      return 0;
+    }
+    return *it;
+  }
+
+  bool is_pinned(version_t v) const
+  {
+    return pinned.find(v) != pinned.end();
+  }
+
+  void pin(version_t v)
+  {
+    pinned.insert(v);
+  }
+
+  version_t get_lower_closest_pinned(version_t v) const {
+    set<version_t>::const_iterator p = pinned.lower_bound(v);
+    if (p == pinned.cend()) {
+      return 0;
+    } else if (*p > v) {
+      if (p == pinned.cbegin()) {
+        return 0;
+      }
+      --p;
+    }
+    return *p;
+  }
+
+  void encode(bufferlist& bl) const
+  {
+    ENCODE_START(1, 1, bl);
+    encode(pinned, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl)
+  {
+    DECODE_START(1, bl);
+    decode(pinned, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void decode(bufferlist& bl) {
+    bufferlist::iterator p = bl.begin();
+    decode(p);
+  }
+
+};
+WRITE_CLASS_ENCODER(osdmap_manifest_t);
+
 class OSDMonitor : public PaxosService {
   CephContext *cct;
 
@@ -152,6 +223,9 @@ public:
   osdmap_cache_t inc_osd_cache;
   osdmap_cache_t full_osd_cache;
 
+  bool has_osdmap_manifest;
+  osdmap_manifest_t osdmap_manifest;
+
   bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
   void force_failure(int target_osd, int by);
@@ -167,7 +241,7 @@ public:
   };
 
   // svc
-public:  
+public:
   void create_initial() override;
   void get_store_prefixes(std::set<string>& s) override;
 
@@ -178,6 +252,19 @@ private:
   void on_active() override;
   void on_restart() override;
   void on_shutdown() override;
+
+  /* osdmap full map prune */
+  void load_osdmap_manifest();
+  bool should_prune() const;
+  void _prune_update_trimmed(
+      MonitorDBStore::TransactionRef tx,
+      version_t first);
+  void prune_init();
+  bool _prune_sanitize_options() const;
+  bool is_prune_enabled() const;
+  bool is_prune_supported() const;
+  bool do_prune(MonitorDBStore::TransactionRef tx);
+
   /**
    * we haven't delegated full version stashing to paxosservice for some time
    * now, making this function useless in current context.
@@ -548,6 +635,8 @@ public:
 
   int get_version_full(version_t ver, uint64_t feature, bufferlist& bl);
   int get_version_full(version_t ver, bufferlist& bl) override;
+  int get_inc(version_t ver, OSDMap::Incremental& inc);
+  int get_full_from_pinned_map(version_t ver, bufferlist& bl);
 
   epoch_t blacklist(const entity_addr_t& a, utime_t until);
 
