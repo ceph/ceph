@@ -493,6 +493,7 @@ namespace ceph {
       constexpr mon_feature_t FEATURE_KRAKEN(     (1ULL << 0));
       constexpr mon_feature_t FEATURE_LUMINOUS(   (1ULL << 1));
       constexpr mon_feature_t FEATURE_MIMIC(      (1ULL << 2));
+      constexpr mon_feature_t FEATURE_OSDMAP_PRUNE (1ULL << 3);
 
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
@@ -507,6 +508,7 @@ namespace ceph {
 	  FEATURE_KRAKEN |
 	  FEATURE_LUMINOUS |
 	  FEATURE_MIMIC |
+          FEATURE_OSDMAP_PRUNE |
 	  FEATURE_NONE
 	  );
       }
@@ -525,8 +527,16 @@ namespace ceph {
 	  FEATURE_KRAKEN |
 	  FEATURE_LUMINOUS |
 	  FEATURE_MIMIC |
+	  FEATURE_OSDMAP_PRUNE |
 	  FEATURE_NONE
 	  );
+      }
+
+      constexpr mon_feature_t get_optional() {
+        return (
+          FEATURE_OSDMAP_PRUNE |
+          FEATURE_NONE
+          );
       }
 
       static inline mon_feature_t get_feature_by_name(std::string n);
@@ -543,6 +553,8 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "luminous";
   } else if (f == FEATURE_MIMIC) {
     return "mimic";
+  } else if (f == FEATURE_OSDMAP_PRUNE) {
+    return "osdmap-prune";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -557,6 +569,8 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(std::string n) {
     return FEATURE_LUMINOUS;
   } else if (n == "mimic") {
     return FEATURE_MIMIC;
+  } else if (n == "osdmap-prune") {
+    return FEATURE_OSDMAP_PRUNE;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }
