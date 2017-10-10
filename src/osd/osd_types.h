@@ -1008,7 +1008,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 
 std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const vector<int32_t> &a);
-int64_t pg_string_state(const std::string& state);
+boost::optional<uint64_t> pg_string_state(const std::string& state);
 
 
 /*
