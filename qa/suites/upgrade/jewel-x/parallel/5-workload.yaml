@@ -1,0 +1,11 @@
+meta:
+- desc: |
+   run basic import/export cli tests for rbd on not upgrated client.4
+   (covers issue http://tracker.ceph.com/issues/21660)
+tasks:
+  - workunit:
+      branch: jewel
+      clients:
+        client.4:
+          - rbd/import_export.sh
+  - print: "**** done rbd/import_export.sh 5-workload"

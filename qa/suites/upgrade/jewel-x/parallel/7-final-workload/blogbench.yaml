@@ -10,4 +10,4 @@ tasks:
       clients:
          client.3:
           - suites/blogbench.sh
-  - print: "**** done suites/blogbench.sh 5-final-workload"
+  - print: "**** done suites/blogbench.sh 7-final-workload"

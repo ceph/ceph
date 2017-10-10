@@ -15,4 +15,4 @@ tasks:
       clients:
         client.1:
           - rados/test-upgrade-v11.0.0.sh
-  - print: "**** done rados/test-upgrade-v11.0.0.sh 4-final-workload"
+  - print: "**** done rados/test-upgrade-v11.0.0.sh 7-final-workload"
