@@ -952,7 +952,8 @@ struct bluestore_onode_t {
   uint8_t flags = 0;
 
   enum {
-    FLAG_OMAP = 1,
+    FLAG_OMAP = 1,       ///< object may have omap data
+    FLAG_PGMETA_OMAP = 2,  ///< omap data is in meta omap prefix
   };
 
   string get_flags_string() const {
@@ -977,6 +978,9 @@ struct bluestore_onode_t {
 
   bool has_omap() const {
     return has_flag(FLAG_OMAP);
+  }
+  bool is_pgmeta_omap() const {
+    return has_flag(FLAG_PGMETA_OMAP);
   }
 
   void set_omap_flag() {
