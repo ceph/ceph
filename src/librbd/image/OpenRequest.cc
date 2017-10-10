@@ -7,7 +7,8 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
-#include "librbd/cache/FileImageCache.h"
+//#include "librbd/cache/FileImageCache.h"
+#include "librbd/cache/ReplicatedWriteLog.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
@@ -578,7 +579,8 @@ Context *OpenRequest<I>::send_init_image_cache(int *result) {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   // TODO: hard-coded FileImageCache for prototype
-  m_image_ctx->image_cache = new cache::FileImageCache<ImageCtx>(*m_image_ctx);
+  m_image_ctx->image_cache = new cache::ReplicatedWriteLog<ImageCtx>(*m_image_ctx);
+  //m_image_ctx->image_cache = new cache::FileImageCache<ImageCtx>(*m_image_ctx);
   Context *ctx = create_context_callback<
     OpenRequest<I>, &OpenRequest<I>::handle_init_image_cache>(this);
   m_image_ctx->image_cache->init(ctx);
