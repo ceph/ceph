@@ -1715,7 +1715,7 @@ void OSDService::queue_for_snap_trim(PG *pg)
   enqueue_back(
     OpQueueItem(
       unique_ptr<OpQueueItem::OpQueueable>(
-	new PGSnapTrim(pg->pg_id, pg->get_osdmap()->get_epoch())),
+	new PGSnapTrim(pg->get_pgid(), pg->get_osdmap()->get_epoch())),
       cct->_conf->osd_snap_trim_cost,
       cct->_conf->osd_snap_trim_priority,
       ceph_clock_now(),
@@ -1752,7 +1752,7 @@ void OSDService::queue_for_scrub(PG *pg, bool with_high_priority)
   const auto epoch = pg->get_osdmap()->get_epoch();
   enqueue_back(
     OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(new PGScrub(pg->info.pgid, epoch)),
+      unique_ptr<OpQueueItem::OpQueueable>(new PGScrub(pg->get_pgid(), epoch)),
       cct->_conf->osd_snap_trim_cost,
       scrub_queue_priority,
       ceph_clock_now(),
@@ -1797,7 +1797,7 @@ void OSDService::_queue_for_recovery(
     OpQueueItem(
       unique_ptr<OpQueueItem::OpQueueable>(
 	new PGRecovery(
-	  p.second->info.pgid, p.first, reserved_pushes)),
+	  p.second->get_pgid(), p.first, reserved_pushes)),
       cct->_conf->osd_recovery_cost,
       cct->_conf->osd_recovery_priority,
       ceph_clock_now(),
@@ -9745,7 +9745,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     return;
   }
   if (pg && !slot.pg && !pg->is_deleting()) {
-    dout(20) << __func__ << " " << item.first << " set pg to " << pg << dendl;
+    dout(20) << __func__ << " " << token << " set pg to " << pg << dendl;
     slot.pg = pg;
   }
   dout(30) << __func__ << " " << token
