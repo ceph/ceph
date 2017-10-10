@@ -880,8 +880,7 @@ void OSDMonitor::prime_pg_temp(
  */
 void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
-  dout(10) << "encode_pending e " << pending_inc.epoch
-	   << dendl;
+  dout(10) << __func__ << " e " << pending_inc.epoch << dendl;
 
   // finalize up pending_inc
   pending_inc.modified = ceph_clock_now();
@@ -915,7 +914,9 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   auto p = pending_inc.new_state.begin();
   while (p != pending_inc.new_state.end()) {
     if (p->second == 0) {
-      dout(10) << "new_state for osd." << p->first << " is 0, removing" << dendl;
+      dout(10) << __func__ << " "
+               << "new_state for osd." << p->first << " is 0, removing"
+               << dendl;
       p = pending_inc.new_state.erase(p);
     } else {
       ++p;
@@ -941,9 +942,9 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     // collect which pools are currently affected by
     // the near/backfill/full osd(s),
     // and set per-pool near/backfill/full flag instead
-    set<int64_t> full_pool_ids;
-    set<int64_t> backfillfull_pool_ids;
-    set<int64_t> nearfull_pool_ids;
+    std::set<int64_t> full_pool_ids;
+    std::set<int64_t> backfillfull_pool_ids;
+    std::set<int64_t> nearfull_pool_ids;
     tmp.get_full_pools(cct,
 		       &full_pool_ids,
 		       &backfillfull_pool_ids,
@@ -1128,30 +1129,40 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // tell me about it
   for (auto i = pending_inc.new_state.begin();
-       i != pending_inc.new_state.end();
-       ++i) {
-    int s = i->second ? i->second : CEPH_OSD_UP;
+       i != pending_inc.new_state.end(); ++i) {
+    int32_t s = i->second ? i->second : CEPH_OSD_UP;
+    int osd = i->first;
     if (s & CEPH_OSD_UP)
-      dout(2) << " osd." << i->first << " DOWN" << dendl;
+      dout(2) << __func__ << " "
+              << "osd." << osd << " DOWN" << dendl;
     if (s & CEPH_OSD_EXISTS)
-      dout(2) << " osd." << i->first << " DNE" << dendl;
+      dout(2) << __func__ << " "
+              << "osd." << osd << " DNE" << dendl;
   }
-  for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up_client.begin();
-       i != pending_inc.new_up_client.end();
-       ++i) {
-    //FIXME: insert cluster addresses too
-    dout(2) << " osd." << i->first << " UP " << i->second << dendl;
+  for (std::map<int32_t, entity_addr_t>::iterator i =
+       pending_inc.new_up_client.begin();
+       i != pending_inc.new_up_client.end(); ++i) {
+    int32_t osd = i->first;
+    const entity_addr_t cluster_addr = osdmap.get_cluster_addr(osd);
+    dout(2) << __func__ << " "
+            << "osd." << osd << " "
+            << "cluster addr " << cluster_addr << " UP " << i->second
+            << dendl;
   }
-  for (map<int32_t,uint32_t>::iterator i = pending_inc.new_weight.begin();
-       i != pending_inc.new_weight.end();
-       ++i) {
-    if (i->second == CEPH_OSD_OUT) {
-      dout(2) << " osd." << i->first << " OUT" << dendl;
-    } else if (i->second == CEPH_OSD_IN) {
-      dout(2) << " osd." << i->first << " IN" << dendl;
-    } else {
-      dout(2) << " osd." << i->first << " WEIGHT " << hex << i->second << dec << dendl;
-    }
+  for (std::map<int32_t, uint32_t>::iterator i =
+       pending_inc.new_weight.begin();
+       i != pending_inc.new_weight.end(); ++i) {
+    int32_t osd = i->first;
+    if (i->second == CEPH_OSD_OUT)
+      dout(2) << __func__ << " "
+              << "osd." << osd << " OUT" << dendl;
+    else if (i->second == CEPH_OSD_IN)
+      dout(2) << __func__ << " "
+              << "osd." << osd << " IN" << dendl;
+    else
+      dout(2) << __func__ << " "
+              << "osd." << osd << " "
+              << "WEIGHT " << std::hex << i->second << std::dec << dendl;
   }
 
   // features for osdmap and its incremental
@@ -1199,8 +1210,9 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   assert(get_last_committed() + 1 == pending_inc.epoch);
   ::encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
 
-  dout(20) << " full_crc " << tmp.get_crc()
-	   << " inc_crc " << pending_inc.inc_crc << dendl;
+  dout(20) << __func__ << " "
+           << "full_crc " << tmp.get_crc() << " "
+           << "inc_crc" << pending_inc.inc_crc << dendl;
 
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
