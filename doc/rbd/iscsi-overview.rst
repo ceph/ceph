@@ -46,5 +46,5 @@ Network (SAN).
 
   Requirements <iscsi-requirements>
   Configuring the iSCSI Target <iscsi-targets>
-  Configuring the iSCSI Initiator <iscsi-initiators>
+  Configuring the iSCSI Initiators <iscsi-initiators>
   Monitoring the iSCSI Gateways <iscsi-monitoring>
