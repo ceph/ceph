@@ -2150,6 +2150,10 @@ public:
     return 0;
   }
 
+  int write_meta(const std::string& key, const std::string& value) override;
+  int read_meta(const std::string& key, std::string *value) override;
+
+
   int fsck(bool deep) override {
     return _fsck(deep, false);
   }
