@@ -515,8 +515,10 @@ $DAEMONOPTS
         osd copyfrom max chunk = 524288
         bluestore fsck on mount = true
         bluestore block create = true
+	bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
         bluestore block db size = 67108864
         bluestore block db create = true
+	bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
         bluestore block wal create = true
 $COSDDEBUG
