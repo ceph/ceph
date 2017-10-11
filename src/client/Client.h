@@ -789,16 +789,16 @@ private:
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 	     const UserPerm& perms, InodeRef *inp = 0);
   int _do_setattr(Inode *in, struct ceph_statx *stx, int mask,
-		  const UserPerm& perms, InodeRef *inp);
+		  const UserPerm& perms);
   void stat_to_statx(struct stat *st, struct ceph_statx *stx);
   int __setattrx(Inode *in, struct ceph_statx *stx, int mask,
-		 const UserPerm& perms, InodeRef *inp = 0);
+		 const UserPerm& perms);
   int _setattrx(InodeRef &in, struct ceph_statx *stx, int mask,
 		const UserPerm& perms);
   int _setattr(InodeRef &in, struct stat *attr, int mask,
 	       const UserPerm& perms);
   int _ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
-		   const UserPerm& perms, InodeRef *inp = 0);
+		   const UserPerm& perms);
   int _getattr(Inode *in, int mask, const UserPerm& perms, bool force=false);
   int _getattr(InodeRef &in, int mask, const UserPerm& perms, bool force=false) {
     return _getattr(in.get(), mask, perms, force);
