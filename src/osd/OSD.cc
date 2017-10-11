@@ -9488,13 +9488,13 @@ void OSD::ShardedOpWQ::wake_pg_waiters(spg_t pgid)
       dout(20) << __func__ << " " << pgid
 	       << " to_process " << p->second.to_process
 	       << " waiting_for_pg=" << (int)p->second.waiting_for_pg << dendl;
+      for (auto& q : p->second.to_process) {
+	pushes_to_free += q.get_reserved_pushes();
+      }
       for (auto i = p->second.to_process.rbegin();
 	   i != p->second.to_process.rend();
 	   ++i) {
 	sdata->_enqueue_front(std::move(*i), osd->op_prio_cutoff);
-      }
-      for (auto& q : p->second.to_process) {
-	pushes_to_free += q.get_reserved_pushes();
       }
       p->second.to_process.clear();
       p->second.waiting_for_pg = false;
