@@ -97,7 +97,12 @@
 
 ``mds blacklist interval``
 
-:Description: The blacklist duration for failed MDSs in the OSD map.
+:Description: The blacklist duration for failed MDSs in the OSD map. Note,
+              this controls how long failed MDS daemons will stay in the
+              OSDMap blacklist. It has no effect on how long something is
+              blacklisted when the administrator blacklists it manually. For
+              example, ``ceph osd blacklist add`` will still use the default
+              blacklist time.)
 :Type:  Float
 :Default: ``24.0*60.0``
 
@@ -613,3 +618,17 @@
               
 :Type:  Boolean
 :Default:  ``false``
+
+
+``mds min caps per client``
+
+:Description: Set the minimum number of capabilities a client may hold.
+:Type: Integer
+:Default: ``100``
+
+
+``mds max ratio caps per client``
+
+:Description: Set the maximum ratio of current caps that may be recalled during MDS cache pressure.
+:Type: Float
+:Default: ``0.8``

@@ -263,7 +263,6 @@ OPTION(mon_max_mdsmap_epochs, OPT_INT)
 OPTION(mon_max_osd, OPT_INT)
 OPTION(mon_probe_timeout, OPT_DOUBLE)
 OPTION(mon_client_bytes, OPT_U64)  // client msg data allowed in memory (in bytes)
-OPTION(mon_mgr_proxy_client_bytes_ratio, OPT_FLOAT) // ratio of mon_client_bytes that can be consumed by proxied mgr commands before we error out to client
 OPTION(mon_log_max_summary, OPT_U64)
 OPTION(mon_daemon_bytes, OPT_U64)  // mds, osd message memory cap (in bytes)
 OPTION(mon_max_log_entries_per_event, OPT_INT)
@@ -271,7 +270,6 @@ OPTION(mon_reweight_min_pgs_per_osd, OPT_U64)   // min pgs per osd for reweight-
 OPTION(mon_reweight_min_bytes_per_osd, OPT_U64)   // min bytes per osd for reweight-by-utilization command
 OPTION(mon_reweight_max_osds, OPT_INT)   // max osds to change per reweight-by-* command
 OPTION(mon_reweight_max_change, OPT_DOUBLE)
-OPTION(mon_health_data_update_interval, OPT_FLOAT)
 OPTION(mon_health_to_clog, OPT_BOOL)
 OPTION(mon_health_to_clog_interval, OPT_INT)
 OPTION(mon_health_to_clog_tick_interval, OPT_DOUBLE)
@@ -424,9 +422,6 @@ OPTION(filer_max_purge_ops, OPT_U32)
 // Max number of truncate at once in a single Filer::truncate call
 OPTION(filer_max_truncate_ops, OPT_U32)
 
-OPTION(journaler_write_head_interval, OPT_INT)
-OPTION(journaler_prefetch_periods, OPT_INT)   // * journal object size
-OPTION(journaler_prezero_periods, OPT_INT)     // * journal object size
 OPTION(mds_data, OPT_STR)
 OPTION(mds_max_file_size, OPT_U64) // Used when creating new CephFS. Change with 'ceph mds set max_file_size <size>' afterwards
 // max xattr kv pairs size for each dir/file
@@ -1539,27 +1534,6 @@ OPTION(rgw_shard_warning_threshold, OPT_DOUBLE) // pct of safe max
 
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL) // whether swift object versioning feature is enabled
 
-OPTION(mgr_module_path, OPT_STR) // where to load python modules from
-OPTION(mgr_initial_modules, OPT_STR)  // Which modules to load
-OPTION(mgr_data, OPT_STR) // where to find keyring etc
-OPTION(mgr_tick_period, OPT_INT)  // How frequently to tick
-OPTION(mgr_stats_period, OPT_INT) // How frequently clients send stats
-OPTION(mgr_client_bytes, OPT_U64) // bytes from clients
-OPTION(mgr_client_messages, OPT_U64)      // messages from clients
-OPTION(mgr_osd_bytes, OPT_U64)   // bytes from osds
-OPTION(mgr_osd_messages, OPT_U64)       // messages from osds
-OPTION(mgr_mds_bytes, OPT_U64)   // bytes from mdss
-OPTION(mgr_mds_messages, OPT_U64)        // messages from mdss
-OPTION(mgr_mon_bytes, OPT_U64)   // bytes from mons
-OPTION(mgr_mon_messages, OPT_U64)        // messages from mons
-
-OPTION(mgr_connect_retry_interval, OPT_DOUBLE)
-OPTION(mgr_service_beacon_grace, OPT_DOUBLE)
-
-OPTION(mon_mgr_digest_period, OPT_INT)  // How frequently to send digests
-OPTION(mon_mgr_beacon_grace, OPT_INT)  // How long to wait to failover
-OPTION(mon_mgr_inactive_grace, OPT_INT) // How long before health WARN -> ERR
-OPTION(mon_mgr_mkfs_grace, OPT_INT) // How long before we complain about MGR_DOWN
 OPTION(rgw_crypt_require_ssl, OPT_BOOL) // requests including encryption key headers must be sent over ssl
 OPTION(rgw_crypt_default_encryption_key, OPT_STR) // base64 encoded key for encryption of rgw objects
 OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR) // extra keys that may be used for aws:kms

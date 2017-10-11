@@ -87,7 +87,7 @@ md_config_t::md_config_t(bool is_daemon)
       // We may be instantiated pre-logging so send 
       std::cerr << "Duplicate config key in schema: '" << i.name << "'"
                 << std::endl;
-      assert(false);
+      ceph_abort();
     }
     schema.insert({i.name, i});
   }
@@ -131,7 +131,7 @@ md_config_t::md_config_t(bool is_daemon)
         // This is the compiled-in default that is failing its own option's
         // validation, so this is super-invalid and should never make it
         // past a pull request: crash out.
-        assert(false);
+        ceph_abort();
       }
     }
 
@@ -160,7 +160,7 @@ void md_config_t::validate_schema()
       if (schema.count(see_also_key) == 0) {
         std::cerr << "Non-existent see-also key '" << see_also_key
                   << "' on option '" << opt.name << "'" << std::endl;
-        assert(false);
+        ceph_abort();
       }
     }
   }
@@ -169,7 +169,7 @@ void md_config_t::validate_schema()
     if (schema.count(i.first) == 0) {
       std::cerr << "Schema is missing legacy field '" << i.first << "'"
                 << std::endl;
-      assert(false);
+      ceph_abort();
     }
   }
 }
@@ -726,8 +726,16 @@ void md_config_t::_apply_changes(std::ostream *oss)
 void md_config_t::call_all_observers()
 {
   std::map<md_config_obs_t*,std::set<std::string> > obs;
+  // Have the scope of the lock extend to the scope of
+  // handle_conf_change since that function expects to be called with
+  // the lock held. (And the comment in config.h says that is the
+  // expected behavior.)
+  //
+  // An alternative might be to pass a std::unique_lock to
+  // handle_conf_change and have a version of get_var that can take it
+  // by reference and lock as appropriate.
+  Mutex::Locker l(lock);
   {
-    Mutex::Locker l(lock);
 
     expand_all_meta();
 
@@ -863,18 +871,21 @@ int md_config_t::get_val(const std::string &key, char **buf, int len) const
   return _get_val(key, buf,len);
 }
 
-Option::value_t md_config_t::get_val_generic(const std::string &key) const
+const Option::value_t&
+md_config_t::get_val_generic(const std::string &key) const
 {
   Mutex::Locker l(lock);
-  return _get_val(key);
+  return _get_val_generic(key);
 }
 
-Option::value_t md_config_t::_get_val(const std::string &key) const
+const Option::value_t&
+md_config_t::_get_val_generic(const std::string &key) const
 {
   assert(lock.is_locked());
 
+  static const Option::value_t empty{boost::blank()};
   if (key.empty()) {
-    return Option::value_t(boost::blank());
+    return empty;
   }
 
   // In key names, leading and trailing whitespace are not significant.
@@ -886,7 +897,7 @@ Option::value_t md_config_t::_get_val(const std::string &key) const
     // entries in ::values
     return values.at(k);
   } else {
-    return Option::value_t(boost::blank());
+    return empty;
   }
 }
 
@@ -894,12 +905,12 @@ int md_config_t::_get_val(const std::string &key, std::string *value) const {
   assert(lock.is_locked());
 
   std::string normalized_key(ConfFile::normalize_key_name(key));
-  Option::value_t config_value = _get_val(normalized_key.c_str());
+  auto& config_value = _get_val_generic(normalized_key.c_str());
   if (!boost::get<boost::blank>(&config_value)) {
     ostringstream oss;
-    if (bool *flag = boost::get<bool>(&config_value)) {
+    if (auto *flag = boost::get<bool>(&config_value)) {
       oss << (*flag ? "true" : "false");
-    } else if (double *dp = boost::get<double>(&config_value)) {
+    } else if (auto *dp = boost::get<double>(&config_value)) {
       oss << std::fixed << *dp;
     } else {
       oss << config_value;

@@ -27,8 +27,10 @@ sensible.
 
     Installation and Configuration <administrator>
     Dashboard plugin <dashboard>
+    Local pool plugin <localpool>
     RESTful plugin <restful>
     Zabbix plugin <zabbix>
     Prometheus plugin <prometheus>
     Writing plugins <plugins>
+    Influx plugin <influx>
 

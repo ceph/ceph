@@ -160,8 +160,9 @@ public:
   // No metavariables will be returned (they will have already been expanded)
   int get_val(const std::string &key, char **buf, int len) const;
   int _get_val(const std::string &key, char **buf, int len) const;
-  Option::value_t get_val_generic(const std::string &key) const;
-  template<typename T> T get_val(const std::string &key) const;
+  const Option::value_t& get_val_generic(const std::string &key) const;
+  template<typename T> const T& get_val(const std::string &key) const;
+  template<typename T> const T& _get_val(const std::string &key) const;
 
   void get_all_keys(std::vector<std::string> *keys) const;
 
@@ -199,7 +200,7 @@ private:
   void validate_default_settings();
 
   int _get_val(const std::string &key, std::string *value) const;
-  Option::value_t _get_val(const std::string &key) const;
+  const Option::value_t& _get_val_generic(const std::string &key) const;
   void _show_config(std::ostream *out, Formatter *f);
 
   void _get_my_sections(std::vector <std::string> &sections) const;
@@ -319,23 +320,13 @@ public:
 };
 
 template<typename T>
-struct get_typed_value_visitor : public boost::static_visitor<T> {
-  template<typename U,
-    typename boost::enable_if<boost::is_same<T, U>, int>::type = 0>
-      T operator()(U & val) {
-	return std::move(val);
-      }
-  template<typename U,
-    typename boost::enable_if_c<!boost::is_same<T, U>::value, int>::type = 0>
-      T operator()(U &val) {
-	assert("wrong type or option does not exist" == nullptr);
-      }
-};
+const T& md_config_t::get_val(const std::string &key) const {
+  return boost::get<T>(this->get_val_generic(key));
+}
 
-template<typename T> T md_config_t::get_val(const std::string &key) const {
-  Option::value_t generic_val = this->get_val_generic(key);
-  get_typed_value_visitor<T> gtv;
-  return boost::apply_visitor(gtv, generic_val);
+template<typename T>
+const T& md_config_t::_get_val(const std::string &key) const {
+  return boost::get<T>(this->_get_val_generic(key));
 }
 
 inline std::ostream& operator<<(std::ostream& o, const boost::blank& ) {

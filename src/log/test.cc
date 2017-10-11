@@ -29,11 +29,7 @@ TEST(Log, Simple)
     int sys = i % 4;
     int l = 5 + (i%4);
     if (subs.should_gather(sys, l)) {
-      Entry *e = new Entry(ceph_clock_now(),
-			   pthread_self(),
-			   l,
-			   sys,
-			   "hello world");
+      Entry *e = log.create_entry(l, sys, "hello world");
       log.submit_entry(e);
     }
   }
@@ -58,7 +54,7 @@ TEST(Log, ManyNoGather)
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l))
-      log.submit_entry(new Entry(ceph_clock_now(), pthread_self(), l, 1));
+      log.submit_entry(log.create_entry(l, 1));
   }
   log.flush();
   log.stop();
@@ -76,8 +72,8 @@ TEST(Log, ManyGatherLog)
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l))
-      log.submit_entry(new Entry(ceph_clock_now(), pthread_self(), l, 1,
-				 "this is a long string asdf asdf asdf asdf asdf asdf asd fasd fasdf "));
+      log.submit_entry(log.create_entry(l, 1,
+					"this is a long string asdf asdf asdf asdf asdf asdf asd fasd fasdf "));
   }
   log.flush();
   log.stop();
@@ -94,7 +90,7 @@ TEST(Log, ManyGatherLogStringAssign)
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l)) {
-      Entry *e = new Entry(ceph_clock_now(), pthread_self(), l, 1);
+      Entry *e = log.create_entry(l, 1);
       ostringstream oss;
       oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
       e->set_str(oss.str());
@@ -115,7 +111,7 @@ TEST(Log, ManyGatherLogStringAssignWithReserve)
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l)) {
-      Entry *e = new Entry(ceph_clock_now(), pthread_self(), l, 1);
+      Entry *e = log.create_entry(l, 1);
       ostringstream oss;
       oss.str().reserve(80);
       oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
@@ -138,7 +134,7 @@ TEST(Log, ManyGatherLogPrebuf)
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l)) {
-      Entry *e = new Entry(ceph_clock_now(), pthread_self(), l, 1);
+      Entry *e = log.create_entry(l, 1);
       PrebufferedStreambuf psb(e->m_static_buf, sizeof(e->m_static_buf));
       ostream oss(&psb);
       oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
@@ -161,7 +157,7 @@ TEST(Log, ManyGatherLogPrebufOverflow)
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l)) {
-      Entry *e = new Entry(ceph_clock_now(), pthread_self(), l, 1);
+      Entry *e = log.create_entry(l, 1);
       PrebufferedStreambuf psb(e->m_static_buf, sizeof(e->m_static_buf));
       ostream oss(&psb);
       oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd"
@@ -185,7 +181,7 @@ TEST(Log, ManyGather)
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l))
-      log.submit_entry(new Entry(ceph_clock_now(), pthread_self(), l, 1));
+      log.submit_entry(log.create_entry(l, 1));
   }
   log.flush();
   log.stop();
@@ -201,7 +197,7 @@ void do_segv()
   log.reopen_log_file();
 
   log.inject_segv();
-  Entry *e = new Entry(ceph_clock_now(), pthread_self(), 10, 1);
+  Entry *e = log.create_entry(10, 1);
   {
     PrCtl unset_dumpable;
     log.submit_entry(e);  // this should segv
@@ -225,11 +221,56 @@ TEST(Log, LargeLog)
   log.set_log_file("/tmp/big");
   log.reopen_log_file();
   int l = 10;
-  Entry *e = new Entry(ceph_clock_now(), pthread_self(), l, 1);
+  Entry *e = log.create_entry(l, 1);
 
   std::string msg(10000000, 0);
   e->set_str(msg);
   log.submit_entry(e);
   log.flush();
   log.stop();
+}
+
+// Make sure nothing bad happens when we switch
+
+TEST(Log, TimeSwitch)
+{
+  SubsystemMap subs;
+  subs.add(1, "foo", 20, 10);
+  Log log(&subs);
+  log.start();
+  log.set_log_file("/tmp/time_switch_log");
+  log.reopen_log_file();
+  int l = 10;
+  bool coarse = true;
+  for (auto i = 0U; i < 300; ++i) {
+    log.submit_entry(
+      log.create_entry(l, 1, "SQUID THEFT! PUNISHABLE BY DEATH!"));
+    if (i % 50)
+      log.set_coarse_timestamps(coarse = !coarse);
+  }
+  log.flush();
+  log.stop();
+}
+
+TEST(Log, TimeFormat)
+{
+  static constexpr auto buflen = 128u;
+  char buf[buflen];
+  ceph::logging::log_clock clock;
+  {
+    clock.coarsen();
+    auto t = clock.now();
+    ceph::logging::append_time(t, buf, buflen);
+    auto c = std::strrchr(buf, '.');
+    ASSERT_NE(c, nullptr);
+    ASSERT_EQ(strlen(c + 1), 3);
+  }
+  {
+    clock.refine();
+    auto t = clock.now();
+    ceph::logging::append_time(t, buf, buflen);
+    auto c = std::strrchr(buf, '.');
+    ASSERT_NE(c, nullptr);
+    ASSERT_EQ(std::strlen(c + 1), 6);
+  }
 }

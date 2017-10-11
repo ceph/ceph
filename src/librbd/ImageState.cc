@@ -533,7 +533,7 @@ void ImageState<I>::execute_next_action_unlock() {
     send_prepare_lock_unlock();
     return;
   }
-  assert(false);
+  ceph_abort();
 }
 
 template <typename I>

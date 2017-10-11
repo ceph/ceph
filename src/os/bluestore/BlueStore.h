@@ -116,6 +116,7 @@ enum {
   l_bluestore_blob_split,
   l_bluestore_extent_compress,
   l_bluestore_gc_merged,
+  l_bluestore_read_eio,
   l_bluestore_last
 };
 
@@ -456,6 +457,8 @@ public:
       std::lock_guard<std::mutex> l(lock);
       return sb_map.empty();
     }
+
+    void dump(CephContext *cct, int lvl);
   };
 
 //#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
@@ -1318,6 +1321,8 @@ public:
     void clear();
     bool empty();
 
+    void dump(CephContext *cct, int lvl);
+
     /// return true if f true for any item
     bool map_any(std::function<bool(OnodeRef)> f);
   };
@@ -1854,6 +1859,7 @@ private:
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
   std::condition_variable kv_cond;
+  bool _kv_only = false;
   bool kv_sync_started = false;
   bool kv_stop = false;
   bool kv_finalize_started = false;
@@ -2036,7 +2042,9 @@ private:
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
   void _deferred_queue(TransContext *txc);
+public:
   void deferred_try_submit();
+private:
   void _deferred_submit_unlock(OpSequencer *osr);
   void _deferred_aio_finish(OpSequencer *osr);
   int _deferred_replay();
@@ -2548,10 +2556,6 @@ private:
     OnodeRef o,
     WriteContext *wctx,
     set<SharedBlob*> *maybe_unshared_blobs=0);
-
-  int _do_transaction(Transaction *t,
-		      TransContext *txc,
-		      ThreadPool::TPHandle *handle);
 
   int _write(TransContext *txc,
 	     CollectionRef& c,

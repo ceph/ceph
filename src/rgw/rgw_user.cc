@@ -2363,6 +2363,13 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
   if (ret < 0)
     return ret;
 
+  if (op_state.sync_stats) {
+    ret = rgw_user_sync_all_stats(store, info.user_id);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
   RGWStorageStats stats;
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {

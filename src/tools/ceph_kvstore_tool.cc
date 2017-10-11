@@ -36,7 +36,13 @@ using namespace std;
 
 class StoreTool
 {
-  boost::scoped_ptr<KeyValueDB> db;
+  boost::scoped_ptr<BlueStore> bluestore;
+
+  // TODO: make KeyValueDB enable_shared_from_this
+  // bluestore will hold *db* also, use unique_ptr/shared_ptr will
+  // double free. 
+  KeyValueDB* db;
+
   string store_path;
 
   public:
@@ -46,7 +52,7 @@ class StoreTool
 #ifdef HAVE_LIBAIO
       // note: we'll leak this!  the only user is ceph-kvstore-tool and
       // we don't care.
-      BlueStore *bluestore = new BlueStore(g_ceph_context, path);
+      bluestore.reset(new BlueStore(g_ceph_context, path));
       int r = bluestore->start_kv_only(&db_ptr);
       if (r < 0) {
 	exit(1);
@@ -64,13 +70,24 @@ class StoreTool
 	exit(1);
       }
     }
-    db.reset(db_ptr);
+    db = db_ptr;
+  }
+
+  ~StoreTool() {
+    if (bluestore) {
+      bluestore->umount();   
+    }
+    else {
+      if (db) {
+        delete db;
+      }
+    }
   }
 
   uint32_t traverse(const string &prefix,
                     const bool do_crc,
                     ostream *out) {
-    KeyValueDB::WholeSpaceIterator iter = db->get_iterator();
+    KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
 
     if (prefix.empty())
       iter->seek_to_first();
@@ -111,7 +128,7 @@ class StoreTool
 
   bool exists(const string &prefix) {
     assert(!prefix.empty());
-    KeyValueDB::WholeSpaceIterator iter = db->get_iterator();
+    KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
     iter->seek_to_first(prefix);
     return (iter->valid() && (iter->raw_key().first == prefix));
   }
@@ -189,7 +206,7 @@ class StoreTool
   }
 
   int copy_store_to(string type, const string &other_path,
-		    const int num_keys_per_tx) {
+		    const int num_keys_per_tx, const string &other_type) {
 
     if (num_keys_per_tx <= 0) {
       std::cerr << "must specify a number of keys/tx > 0" << std::endl;
@@ -197,12 +214,14 @@ class StoreTool
     }
 
     // open or create a leveldb store at @p other_path
-    KeyValueDB *other = KeyValueDB::create(g_ceph_context, type, other_path);
-    int err = other->create_and_open(std::cerr);
+    boost::scoped_ptr<KeyValueDB> other;
+    KeyValueDB *other_ptr = KeyValueDB::create(g_ceph_context, other_type, other_path);
+    int err = other_ptr->create_and_open(std::cerr);
     if (err < 0)
       return err;
+    other.reset(other_ptr);
 
-    KeyValueDB::WholeSpaceIterator it = db->get_iterator();
+    KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
     it->seek_to_first();
     uint64_t total_keys = 0;
     uint64_t total_size = 0;
@@ -278,7 +297,7 @@ void usage(const char *pname)
     << "  set <prefix> <key> [ver <N>|in <file>]\n"
     << "  rm <prefix> <key>\n"
     << "  rm-prefix <prefix>\n"
-    << "  store-copy <path> [num-keys-per-tx]\n"
+    << "  store-copy <path> [num-keys-per-tx] [leveldb|rocksdb|...] \n"
     << "  store-crc <path>\n"
     << "  compact\n"
     << "  compact-prefix <prefix>\n"
@@ -499,8 +518,12 @@ int main(int argc, const char *argv[])
         return 1;
       }
     }
+    string other_store_type = argv[1];
+    if (argc > 6) {
+      other_store_type = argv[6];
+    }
 
-    int ret = st.copy_store_to(argv[1], argv[4], num_keys_per_tx);
+    int ret = st.copy_store_to(argv[1], argv[4], num_keys_per_tx, other_store_type);
     if (ret < 0) {
       std::cerr << "error copying store to path '" << argv[4]
                 << "': " << cpp_strerror(ret) << std::endl;

@@ -362,20 +362,20 @@ int update_pgmap_pg(ObjectStore& fs, MonitorDBStore& ms)
     spg_t pgid;
     if (!coll.is_pg(&pgid))
       continue;
-    bufferlist bl;
     pg_info_t info(pgid);
     PastIntervals past_intervals;
     __u8 struct_v;
-    r = PG::read_info(&fs, pgid, coll, bl, info, past_intervals, struct_v);
+    r = PG::read_info(&fs, pgid, coll, info, past_intervals, struct_v);
     if (r < 0) {
       cerr << "failed to read_info: " << cpp_strerror(r) << std::endl;
       return r;
     }
-    if (struct_v < PG::cur_struct_v) {
+    if (struct_v < PG::get_latest_struct_v()) {
       cerr << "incompatible pg_info: v" << struct_v << std::endl;
       return -EINVAL;
     }
     version_t latest_epoch = 0;
+    bufferlist bl;
     r = ms.get(prefix, stringify(pgid.pgid), bl);
     if (r >= 0) {
       pg_stat_t pg_stat;

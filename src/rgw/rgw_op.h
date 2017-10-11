@@ -764,12 +764,18 @@ public:
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
+enum BucketVersionStatus {
+  VersioningNotChanged = 0,
+  VersioningEnabled = 1,
+  VersioningSuspended =2,
+};
+
 class RGWSetBucketVersioning : public RGWOp {
 protected:
-  bool enable_versioning;
+  int versioning_status;
   bufferlist in_data;
 public:
-  RGWSetBucketVersioning() : enable_versioning(false) {}
+  RGWSetBucketVersioning() : versioning_status(VersioningNotChanged) {}
 
   int verify_permission() override;
   void pre_exec() override;

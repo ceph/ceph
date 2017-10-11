@@ -29,8 +29,7 @@ BlueFS::BlueFS(CephContext* cct)
   : cct(cct),
     bdev(MAX_BDEV),
     ioc(MAX_BDEV),
-    block_all(MAX_BDEV),
-    block_total(MAX_BDEV, 0)
+    block_all(MAX_BDEV)
 {
 }
 
@@ -113,19 +112,19 @@ void BlueFS::_update_logger_stats()
   logger->set(l_bluefs_log_bytes, log_writer->file->fnode.size);
 
   if (alloc[BDEV_WAL]) {
-    logger->set(l_bluefs_wal_total_bytes, block_total[BDEV_WAL]);
+    logger->set(l_bluefs_wal_total_bytes, block_all[BDEV_WAL].size());
     logger->set(l_bluefs_wal_used_bytes,
-		block_total[BDEV_WAL] - alloc[BDEV_WAL]->get_free());
+		block_all[BDEV_WAL].size() - alloc[BDEV_WAL]->get_free());
   }
   if (alloc[BDEV_DB]) {
-    logger->set(l_bluefs_db_total_bytes, block_total[BDEV_DB]);
+    logger->set(l_bluefs_db_total_bytes, block_all[BDEV_DB].size());
     logger->set(l_bluefs_db_used_bytes,
-		block_total[BDEV_DB] - alloc[BDEV_DB]->get_free());
+		block_all[BDEV_DB].size() - alloc[BDEV_DB]->get_free());
   }
   if (alloc[BDEV_SLOW]) {
-    logger->set(l_bluefs_slow_total_bytes, block_total[BDEV_SLOW]);
+    logger->set(l_bluefs_slow_total_bytes, block_all[BDEV_SLOW].size());
     logger->set(l_bluefs_slow_used_bytes,
-		block_total[BDEV_SLOW] - alloc[BDEV_SLOW]->get_free());
+		block_all[BDEV_SLOW].size() - alloc[BDEV_SLOW]->get_free());
   }
 }
 
@@ -171,7 +170,6 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
   assert(bdev[id]);
   assert(bdev[id]->get_size() >= offset + length);
   block_all[id].insert(offset, length);
-  block_total[id] += length;
 
   if (id < alloc.size() && alloc[id]) {
     log_t.op_alloc_add(id, offset, length);
@@ -209,7 +207,6 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
 
   for (auto& p : *extents) {
     block_all[id].erase(p.offset, p.length);
-    block_total[id] -= p.length;
     log_t.op_alloc_rm(id, p.offset, p.length);
   }
 
@@ -238,7 +235,7 @@ uint64_t BlueFS::get_total(unsigned id)
 {
   std::lock_guard<std::mutex> l(lock);
   assert(id < block_all.size());
-  return block_total[id];
+  return block_all[id].size();
 }
 
 uint64_t BlueFS::get_free(unsigned id)
@@ -276,9 +273,9 @@ void BlueFS::get_usage(vector<pair<uint64_t,uint64_t>> *usage)
       continue;
     }
     (*usage)[id].first = alloc[id]->get_free();
-    (*usage)[id].second = block_total[id];
+    (*usage)[id].second = block_all[id].size();
     uint64_t used =
-      (block_total[id] - (*usage)[id].first) * 100 / block_total[id];
+      (block_all[id].size() - (*usage)[id].first) * 100 / block_all[id].size();
     dout(10) << __func__ << " bdev " << id
 	     << " free " << (*usage)[id].first
 	     << " (" << pretty_si_t((*usage)[id].first) << "B)"
@@ -352,7 +349,6 @@ int BlueFS::mkfs(uuid_d osd_uuid)
   _close_writer(log_writer);
   log_writer = NULL;
   block_all.clear();
-  block_total.clear();
   _stop_alloc();
   _shutdown_logger();
 
@@ -404,8 +400,6 @@ int BlueFS::mount()
 
   block_all.clear();
   block_all.resize(MAX_BDEV);
-  block_total.clear();
-  block_total.resize(MAX_BDEV, 0);
   _init_alloc();
 
   r = _replay(false);
@@ -679,7 +673,6 @@ int BlueFS::_replay(bool noop)
                    << dendl;
 	  if (!noop) {
 	    block_all[id].insert(offset, length);
-	    block_total[id] += length;
 	    alloc[id]->init_add_free(offset, length);
 	  }
 	}
@@ -698,7 +691,6 @@ int BlueFS::_replay(bool noop)
                    << dendl;
 	  if (!noop) {
 	    block_all[id].erase(offset, length);
-	    block_total[id] -= length;
 	    alloc[id]->init_rm_free(offset, length);
 	  }
 	}
@@ -1365,6 +1357,9 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
     return 0;
   }
 
+  vector<interval_set<uint64_t>> to_release(pending_release.size());
+  to_release.swap(pending_release);
+
   uint64_t seq = log_t.seq = ++log_seq;
   assert(want_seq == 0 || want_seq <= seq);
   log_t.uuid = super.uuid;
@@ -1458,6 +1453,14 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
              << " already >= out seq " << seq
              << ", we lost a race against another log flush, done" << dendl;
   }
+
+  for (unsigned i = 0; i < to_release.size(); ++i) {
+    if (!to_release[i].empty()) {
+      /* OK, now we have the guarantee alloc[i] won't be null. */
+      alloc[i]->release(to_release[i]);
+    }
+  }
+
   _update_logger_stats();
 
   return 0;
@@ -1506,6 +1509,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       derr << __func__ << " allocated: 0x" << std::hex << allocated
            << " offset: 0x" << offset << " length: 0x" << length << std::dec
            << dendl;
+      assert(0 == "bluefs enospc");
       return r;
     }
     h->file->fnode.recalc_allocated();
@@ -1836,7 +1840,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   }
 
   uint64_t hint = 0;
-  if (!ev->empty()) {
+  if (!ev->empty() && ev->back().bdev == id) {
     hint = ev->back().end();
   }
 
@@ -1854,14 +1858,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   }
 
   for (auto& p : extents) {
-    bluefs_extent_t e = bluefs_extent_t(id, p.offset, p.length);
-    if (!ev->empty() &&
-	ev->back().bdev == e.bdev &&
-	ev->back().end() == (uint64_t) e.offset) {
-      ev->back().length += e.length;
-    } else {
-      ev->push_back(e);
-    }
+    ev->push_back(bluefs_extent_t(id, p.offset, p.length));
   }
    
   return 0;
@@ -1896,15 +1893,8 @@ void BlueFS::sync_metadata()
   } else {
     dout(10) << __func__ << dendl;
     utime_t start = ceph_clock_now();
-    vector<interval_set<uint64_t>> to_release(pending_release.size());
-    to_release.swap(pending_release);
     flush_bdev(); // FIXME?
     _flush_and_sync_log(l);
-    for (unsigned i = 0; i < to_release.size(); ++i) {
-      for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
-	alloc[i]->release(p.get_start(), p.get_len());
-      }
-    }
     dout(10) << __func__ << " done in " << (ceph_clock_now() - start) << dendl;
   }
 
@@ -2216,7 +2206,7 @@ int BlueFS::lock_file(const string& dirname, const string& filename,
     file = q->second.get();
     if (file->locked) {
       dout(10) << __func__ << " already locked" << dendl;
-      return -EBUSY;
+      return -ENOLCK;
     }
   }
   file->locked = true;

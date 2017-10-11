@@ -32,6 +32,7 @@ void RGWOp_User_Info::execute()
 
   std::string uid_str;
   bool fetch_stats;
+  bool sync_stats;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
 
@@ -47,8 +48,11 @@ void RGWOp_User_Info::execute()
 
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
 
+  RESTArgs::get_bool(s, "sync", false, &sync_stats);
+
   op_state.set_user_id(uid);
   op_state.set_fetch_stats(fetch_stats);
+  op_state.set_sync_stats(sync_stats);
 
   http_ret = RGWUserAdminOp_User::info(store, op_state, flusher);
 }

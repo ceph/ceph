@@ -5,6 +5,7 @@ from . import activate
 from . import prepare
 from . import create
 from . import trigger
+from . import listing
 
 
 class LVM(object):
@@ -22,6 +23,7 @@ class LVM(object):
         'prepare': prepare.Prepare,
         'create': create.Create,
         'trigger': trigger.Trigger,
+        'list': listing.List,
     }
 
     def __init__(self, argv):

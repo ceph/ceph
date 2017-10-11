@@ -158,8 +158,7 @@ void MgrStandby::send_beacon()
   bool available = active_mgr != nullptr && active_mgr->is_initialized();
 
   auto addr = available ? active_mgr->get_server_addr() : entity_addr_t();
-  dout(10) << "sending beacon as gid " << monc.get_global_id()
-	   << " modules " << modules << dendl;
+  dout(10) << "sending beacon as gid " << monc.get_global_id() << dendl;
 
   map<string,string> metadata;
   metadata["addr"] = monc.get_my_addr().ip_only_to_str();
@@ -194,10 +193,10 @@ void MgrStandby::tick()
     active_mgr->tick();
   }
 
-  timer.add_event_after(g_conf->mgr_tick_period, new FunctionContext(
-        [this](int r){
+  timer.add_event_after(g_conf->get_val<int64_t>("mgr_tick_period"),
+      new FunctionContext([this](int r){
           tick();
-        }
+      }
   )); 
 }
 

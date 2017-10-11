@@ -1,6 +1,6 @@
 #
 # More information at
-#  https://wiki.ceph.com/Community/Ceph_contributors_list_maintenance_guide
+#  http://tracker.ceph.com/projects/ceph/wiki/Ceph_contributors_list_maintenance_guide
 #
 # See .githubmap for GitHub username contributors
 # See .mailmap for name and mail normalization.
@@ -98,6 +98,7 @@ Debian GNU/Linux <contact@debian.org> Thorsten Glaser <tg@mirbsd.de>
 Deutsche Telekom <contact@telekom.de> Daniel Gollub <d.gollub@telekom.de>
 Deutsche Telekom <contact@telekom.de> Danny Al-Gaaf <danny.al-gaaf@bisect.de>
 Deutsche Telekom <contact@telekom.de> Thomas Bechtold <t.bechtold@telekom.de>
+DiDi <contact@didichuxing.com> Li Wang <laurence.liwang@gmail.com>
 DigitalOcean <contact@digitalocean.com> Vaibhav Bhembre <vaibhav@digitalocean.com>
 Digiware <contact@digiware.nl> Willem Jan Withagen <wjw@digiware.nl>
 DreamHost <contact@dreamhost.com> Andrew Farmer <andrewf@hq.newdream.net>
@@ -298,7 +299,6 @@ Johannes Gutenberg-Universität Mainz <contact@uni-mainz.de> Marcel Lauhoff <lau
 Karlsruhe Institute of Technology <ceph@lists.kit.edu> Daniel J. Hofmann <daniel@trvx.org>
 Keeper Technology <contact@keepertech.com> Wyllys Ingersoll <wyllys.ingersoll@keepertech.com>
 Kylin Cloud <contact@kylin-cloud.com> Jie Wang <jie.wang@kylin-cloud.com>
-Kylin Cloud <contact@kylin-cloud.com> Li Wang <li.wang@kylin-cloud.com>
 Kylin Cloud <contact@kylin-cloud.com> MingXin Liu <mingxin.liu@kylin-cloud.com>
 Kylin Cloud <contact@kylin-cloud.com> Xianxia Xiao <xianxia.xiao@kylin-cloud.com>
 Kylin Cloud <contact@kylin-cloud.com> Yunchuan Wen <yunchuan.wen@kylin-cloud.com>
@@ -658,6 +658,7 @@ Unaffiliated <no@organization.net> Michael Nelson <mikenel@tnld.net>
 Unaffiliated <no@organization.net> Michael Riederer <michael@riederer.org>
 Unaffiliated <no@organization.net> Michael Sevilla <mikesevilla3@gmail.com>
 Unaffiliated <no@organization.net> Michal Jarzabek <stiopa@gmail.com>
+Unaffiliated <no@organization.net> Mykola Golub <to.my.trociny@gmail.com>
 Unaffiliated <no@organization.net> Neha Ummareddy <nehaummareddy@gmail.com>
 Unaffiliated <no@organization.net> Nick Fisk <nick@fisk.me.uk>
 Unaffiliated <no@organization.net> Nicolas Yong <nicolas.yong93@gmail.com>

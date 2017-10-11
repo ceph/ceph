@@ -2019,11 +2019,16 @@ void RGWStatAccount::execute()
 
 int RGWGetBucketVersioning::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+			    rgw::IAM::s3GetBucketVersioning,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
   }
-
-  return 0;
+  return -EACCES;
 }
 
 void RGWGetBucketVersioning::pre_exec()
@@ -2039,11 +2044,16 @@ void RGWGetBucketVersioning::execute()
 
 int RGWSetBucketVersioning::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+			    rgw::IAM::s3PutBucketVersioning,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
   }
-
-  return 0;
+  return -EACCES;
 }
 
 void RGWSetBucketVersioning::pre_exec()
@@ -2065,11 +2075,13 @@ void RGWSetBucketVersioning::execute()
     }
   }
 
-  if (enable_versioning) {
+  if (versioning_status == VersioningEnabled) {
     s->bucket_info.flags |= BUCKET_VERSIONED;
     s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
-  } else {
+  } else if (versioning_status == VersioningSuspended) {
     s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
+  } else {
+    return;
   }
 
   op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
@@ -2083,10 +2095,17 @@ void RGWSetBucketVersioning::execute()
 
 int RGWGetBucketWebsite::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+                           rgw::IAM::s3GetBucketWebsite,
+                           ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
+  }
 
-  return 0;
+  return -EACCES;
 }
 
 void RGWGetBucketWebsite::pre_exec()
@@ -2103,10 +2122,17 @@ void RGWGetBucketWebsite::execute()
 
 int RGWSetBucketWebsite::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+                           rgw::IAM::s3PutBucketWebsite,
+                           ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
+  }
 
-  return 0;
+  return -EACCES;
 }
 
 void RGWSetBucketWebsite::pre_exec()
@@ -2304,11 +2330,16 @@ int RGWGetBucketLogging::verify_permission()
 
 int RGWGetBucketLocation::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+			    rgw::IAM::s3GetBucketLocation,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
   }
-
-  return 0;
+  return -EACCES;
 }
 
 int RGWCreateBucket::verify_permission()
@@ -4936,11 +4967,16 @@ void RGWDeleteLC::execute()
 
 int RGWGetCORS::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+			    rgw::IAM::s3PutBucketCORS,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
   }
-
-  return 0;
+  return -EACCES;
 }
 
 void RGWGetCORS::execute()
@@ -4958,11 +4994,16 @@ void RGWGetCORS::execute()
 
 int RGWPutCORS::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+			    rgw::IAM::s3PutBucketCORS,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
   }
-
-  return 0;
+  return -EACCES;
 }
 
 void RGWPutCORS::execute()
@@ -5085,6 +5126,12 @@ void RGWOptionsCORS::execute()
 
 int RGWGetRequestPayment::verify_permission()
 {
+  if (s->iam_policy &&
+      s->iam_policy->eval(s->env, *s->auth.identity,
+			  rgw::IAM::s3GetBucketRequestPayment,
+			  ARN(s->bucket)) != Effect::Allow) {
+      return -EACCES;
+  }
   return 0;
 }
 
@@ -5100,11 +5147,16 @@ void RGWGetRequestPayment::execute()
 
 int RGWSetRequestPayment::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity,
+			    rgw::IAM::s3PutBucketRequestPayment,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
   }
-
-  return 0;
+  return -EACCES;
 }
 
 void RGWSetRequestPayment::pre_exec()
@@ -5523,6 +5575,7 @@ void RGWCompleteMultipart::execute()
   obj_op.meta.owner = s->owner.get_id();
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.modify_tail = true;
+  obj_op.meta.completeMultipart = true;
   op_ret = obj_op.write_meta(ofs, accounted_size, attrs);
   if (op_ret < 0)
     return;

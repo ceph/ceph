@@ -61,8 +61,10 @@ macro(build_rocksdb)
         TCMALLOC_VERSION_STRING VERSION_GREATER 2.5 AND
         TCMALLOC_VERSION_STRING VERSION_LESS 2.6.2)
       message(SEND_ERROR
-        "Incompatible tcmalloc v${TCMALLOC_VERSION_STRING} and rocksdb v${ROCKSDB_VERSION_STRING}, "
-        "please install gperf-tools 2.5 or > 2.6.2")
+        "Incompatible tcmalloc v${TCMALLOC_VERSION_STRING} and rocksdb "
+        "v${ROCKSDB_VERSION_STRING}, please install gperf-tools 2.5 (not 2.5.93) "
+        "or >= 2.6.2, or switch to another allocator using "
+        "'cmake -DALLOCATOR=libc'.")
     endif()
   endif()
 endmacro()

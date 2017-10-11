@@ -271,7 +271,7 @@ bool CopyupRequest::should_complete(int r)
 
   default:
     lderr(cct) << "invalid state: " << m_state << dendl;
-    assert(false);
+    ceph_abort();
     break;
   }
   return (r < 0);

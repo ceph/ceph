@@ -208,6 +208,7 @@ public:
       "err_to_graylog",
       "log_graylog_host",
       "log_graylog_port",
+      "log_coarse_timestamps",
       "fsid",
       "host",
       NULL
@@ -258,6 +259,10 @@ public:
 
     if (log->graylog() && (changed.count("log_graylog_host") || changed.count("log_graylog_port"))) {
       log->graylog()->set_destination(conf->log_graylog_host, conf->log_graylog_port);
+    }
+
+    if (changed.find("log_coarse_timestamps") != changed.end()) {
+      log->set_coarse_timestamps(conf->_get_val<bool>("log_coarse_timestamps"));
     }
 
     // metadata

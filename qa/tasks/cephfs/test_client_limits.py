@@ -29,7 +29,7 @@ class TestClientLimits(CephFSTestCase):
     REQUIRE_KCLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
 
-    def _test_client_pin(self, use_subdir):
+    def _test_client_pin(self, use_subdir, open_files):
         """
         When a client pins an inode in its cache, for example because the file is held open,
         it should reject requests from the MDS to trim these caps.  The MDS should complain
@@ -39,12 +39,15 @@ class TestClientLimits(CephFSTestCase):
         :param use_subdir: whether to put test files in a subdir or use root
         """
 
-        cache_size = 100
-        open_files = 200
+        cache_size = open_files/2
 
         self.set_conf('mds', 'mds cache size', cache_size)
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
+
+        mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
+        self.assertTrue(open_files >= mds_min_caps_per_client)
+        mds_max_ratio_caps_per_client = float(self.fs.get_config("mds_max_ratio_caps_per_client"))
 
         mount_a_client_id = self.mount_a.get_global_id()
         path = "subdir/mount_a" if use_subdir else "mount_a"
@@ -62,8 +65,7 @@ class TestClientLimits(CephFSTestCase):
         # MDS should not be happy about that, as the client is failing to comply
         # with the SESSION_RECALL messages it is being sent
         mds_recall_state_timeout = float(self.fs.get_config("mds_recall_state_timeout"))
-        self.wait_for_health("MDS_CLIENT_RECALL",
-                mds_recall_state_timeout + 10)
+        self.wait_for_health("MDS_CLIENT_RECALL", mds_recall_state_timeout+10)
 
         # We can also test that the MDS health warning for oversized
         # cache is functioning as intended.
@@ -82,19 +84,31 @@ class TestClientLimits(CephFSTestCase):
 
         # The remaining caps should comply with the numbers sent from MDS in SESSION_RECALL message,
         # which depend on the caps outstanding, cache size and overall ratio
-        self.wait_until_equal(
-            lambda: self.get_session(mount_a_client_id)['num_caps'],
-            int(open_files * 0.2),
-            timeout=30,
-            reject_fn=lambda x: x < int(open_files*0.2))
+        recall_expected_value = int((1.0-mds_max_ratio_caps_per_client)*(open_files+2))
+        def expected_caps():
+            num_caps = self.get_session(mount_a_client_id)['num_caps']
+            if num_caps < mds_min_caps_per_client:
+                raise RuntimeError("client caps fell below min!")
+            elif num_caps == mds_min_caps_per_client:
+                return True
+            elif recall_expected_value*.95 <= num_caps <= recall_expected_value*1.05:
+                return True
+            else:
+                return False
+
+        self.wait_until_true(expected_caps, timeout=60)
 
     @needs_trimming
     def test_client_pin_root(self):
-        self._test_client_pin(False)
+        self._test_client_pin(False, 400)
 
     @needs_trimming
     def test_client_pin(self):
-        self._test_client_pin(True)
+        self._test_client_pin(True, 800)
+
+    @needs_trimming
+    def test_client_pin_mincaps(self):
+        self._test_client_pin(True, 200)
 
     def test_client_release_bug(self):
         """

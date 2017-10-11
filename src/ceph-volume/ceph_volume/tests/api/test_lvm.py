@@ -1,6 +1,6 @@
 import pytest
 from ceph_volume import process, exceptions
-from ceph_volume.devices.lvm import api
+from ceph_volume.api import lvm as api
 
 
 class TestParseTags(object):
@@ -188,6 +188,20 @@ class TestVolumes(object):
         volumes.append(volume2)
         with pytest.raises(exceptions.MultipleLVsError):
             volumes.get(lv_name='foo')
+
+    def test_as_dict_infers_type_from_tags(self, volumes):
+        lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
+        osd = api.Volume(lv_name='volume1', lv_path='/dev/vg/lv', lv_tags=lv_tags)
+        volumes.append(osd)
+        result = volumes.get(lv_tags={'ceph.type': 'data'}).as_dict()
+        assert result['type'] == 'data'
+
+    def test_as_dict_populates_path_from_lv_api(self, volumes):
+        lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
+        osd = api.Volume(lv_name='volume1', lv_path='/dev/vg/lv', lv_tags=lv_tags)
+        volumes.append(osd)
+        result = volumes.get(lv_tags={'ceph.type': 'data'}).as_dict()
+        assert result['path'] == '/dev/vg/lv'
 
     def test_find_the_correct_one(self, volumes):
         volume1 = api.Volume(lv_name='volume1', lv_path='/dev/vg/lv', lv_tags='')

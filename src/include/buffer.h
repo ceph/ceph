@@ -288,6 +288,9 @@ namespace buffer CEPH_BUFFER_API {
       return have_raw() && (start() > 0 || end() < raw_length());
     }
 
+    void reassign_to_mempool(int pool);
+    void try_assign_to_mempool(int pool);
+
     // accessors
     raw *get_raw() const { return _raw; }
     const char *c_str() const;
@@ -593,7 +596,6 @@ namespace buffer CEPH_BUFFER_API {
 
     class page_aligned_appender {
       bufferlist *pbl;
-      size_t offset;
       unsigned min_alloc;
       ptr buffer;
       char *pos, *end;

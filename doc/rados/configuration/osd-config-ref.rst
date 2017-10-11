@@ -76,6 +76,13 @@ that Ceph uses the entire partition for the journal.
 :Default: ``90``
 
 
+``osd max object size``
+
+:Description: The maximum size of a RADOS object in bytes.
+:Type: 32-bit Unsigned Integer
+:Default: 128MB
+
+
 ``osd client message size cap`` 
 
 :Description: The largest client data message allowed in memory.

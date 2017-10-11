@@ -1656,7 +1656,6 @@ int FileStore::mount()
 
   // check fsid with omap
   // get omap fsid
-  int omap_fsid_fd;
   char omap_fsid_buf[PATH_MAX];
   struct ::stat omap_fsid_stat;
   snprintf(omap_fsid_buf, sizeof(omap_fsid_buf), "%s/osd_uuid", omap_dir.c_str());
@@ -1665,7 +1664,8 @@ int FileStore::mount()
     dout(10) << __FUNC__ << ": osd_uuid not found under omap, "
              << "assume as matched."
              << dendl;
-  }else{
+  } else {
+    int omap_fsid_fd;
     // if osd_uuid exists, compares osd_uuid with fsid
     omap_fsid_fd = ::open(omap_fsid_buf, O_RDONLY, 0644);
     if (omap_fsid_fd < 0) {
@@ -1677,7 +1677,6 @@ int FileStore::mount()
     }
     ret = read_fsid(omap_fsid_fd, &omap_fsid);
     VOID_TEMP_FAILURE_RETRY(::close(omap_fsid_fd));
-    omap_fsid_fd = -1; // defensive 
     if (ret < 0) {
       derr << __FUNC__ << ": error reading omap_fsid_fd"
            << ", omap_fsid = " << omap_fsid
@@ -3572,8 +3571,8 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
     if (ret < 0) {
       ret = -errno;
     } else {
-      // ensure we extent file size, if needed
-      if (offset + len > (uint64_t)st.st_size) {
+      // ensure we extend file size, if needed
+      if (len > 0 && offset + len > (uint64_t)st.st_size) {
 	ret = ::ftruncate(**fd, offset + len);
 	if (ret < 0) {
 	  ret = -errno;

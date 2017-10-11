@@ -69,12 +69,13 @@ void RefreshParentRequest<I>::send() {
 
 template <typename I>
 void RefreshParentRequest<I>::apply() {
+  assert(m_child_image_ctx.cache_lock.is_locked());
+  assert(m_child_image_ctx.snap_lock.is_wlocked());
+  assert(m_child_image_ctx.parent_lock.is_wlocked());
   if (m_child_image_ctx.parent != nullptr) {
     // closing parent image
     m_child_image_ctx.clear_nonexistence_cache();
   }
-  assert(m_child_image_ctx.snap_lock.is_wlocked());
-  assert(m_child_image_ctx.parent_lock.is_wlocked());
   std::swap(m_child_image_ctx.parent, m_parent_image_ctx);
 }
 

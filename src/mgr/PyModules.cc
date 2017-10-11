@@ -105,24 +105,31 @@ PyObject *PyModules::list_servers_python()
   dout(10) << " >" << dendl;
 
   PyFormatter f(false, true);
-  const auto &all = daemon_state.get_all_servers();
-  for (const auto &i : all) {
-    const auto &hostname = i.first;
+  daemon_state.with_daemons_by_server([this, &f]
+      (const std::map<std::string, DaemonStateCollection> &all) {
+    for (const auto &i : all) {
+      const auto &hostname = i.first;
 
-    f.open_object_section("server");
-    dump_server(hostname, i.second, &f);
-    f.close_section();
-  }
+      f.open_object_section("server");
+      dump_server(hostname, i.second, &f);
+      f.close_section();
+    }
+  });
 
   return f.get();
 }
 
 PyObject *PyModules::get_metadata_python(
   std::string const &handle,
-  const std::string &svc_name,
+  const std::string &svc_type,
   const std::string &svc_id)
 {
-  auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
+  auto metadata = daemon_state.get(DaemonKey(svc_type, svc_id));
+  if (metadata == nullptr) {
+    derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
+    Py_RETURN_NONE;
+  }
+
   Mutex::Locker l(metadata->lock);
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
@@ -135,10 +142,15 @@ PyObject *PyModules::get_metadata_python(
 
 PyObject *PyModules::get_daemon_status_python(
   std::string const &handle,
-  const std::string &svc_name,
+  const std::string &svc_type,
   const std::string &svc_id)
 {
-  auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
+  auto metadata = daemon_state.get(DaemonKey(svc_type, svc_id));
+  if (metadata == nullptr) {
+    derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
+    Py_RETURN_NONE;
+  }
+
   Mutex::Locker l(metadata->lock);
   PyFormatter f;
   for (const auto &i : metadata->service_status) {
@@ -296,7 +308,7 @@ PyObject *PyModules::get_python(const std::string &what)
     } else if (what == "mon_status") {
       json = cluster_state.get_mon_status();
     } else {
-      assert(false);
+      ceph_abort();
     }
     f.dump_string("json", json.to_str());
     return f.get();
@@ -399,7 +411,7 @@ int PyModules::init()
 
   // Configure sys.path to include mgr_module_path
   std::string sys_path = std::string(Py_GetPath()) + ":" + get_site_packages()
-                         + ":" + g_conf->mgr_module_path;
+                         + ":" + g_conf->get_val<std::string>("mgr_module_path");
   dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
 
   // Drop the GIL and remember the main thread state (current
@@ -731,43 +743,42 @@ PyObject* PyModules::get_perf_schema_python(
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  DaemonStateCollection states;
+  DaemonStateCollection daemons;
 
   if (svc_type == "") {
-    states = daemon_state.get_all();
+    daemons = daemon_state.get_all();
   } else if (svc_id.empty()) {
-    states = daemon_state.get_by_service(svc_type);
+    daemons = daemon_state.get_by_service(svc_type);
   } else {
     auto key = DaemonKey(svc_type, svc_id);
     // so that the below can be a loop in all cases
     auto got = daemon_state.get(key);
     if (got != nullptr) {
-      states[key] = got;
+      daemons[key] = got;
     }
   }
 
   PyFormatter f;
-  f.open_object_section("perf_schema");
-
-  // FIXME: this is unsafe, I need to either be inside DaemonStateIndex's
-  // lock or put a lock on individual DaemonStates
-  if (!states.empty()) {
-    for (auto statepair : states) {
-      std::ostringstream daemon_name;
+  if (!daemons.empty()) {
+    for (auto statepair : daemons) {
       auto key = statepair.first;
       auto state = statepair.second;
-      Mutex::Locker l(state->lock);
+
+      std::ostringstream daemon_name;
       daemon_name << key.first << "." << key.second;
       f.open_object_section(daemon_name.str().c_str());
 
-      for (auto typestr : state->perf_counters.declared_types) {
-	f.open_object_section(typestr.c_str());
-	auto type = state->perf_counters.types[typestr];
+      Mutex::Locker l(state->lock);
+      for (auto ctr_inst_iter : state->perf_counters.instances) {
+        const auto &counter_name = ctr_inst_iter.first;
+	f.open_object_section(counter_name.c_str());
+	auto type = state->perf_counters.types[counter_name];
 	f.dump_string("description", type.description);
 	if (!type.nick.empty()) {
 	  f.dump_string("nick", type.nick);
 	}
 	f.dump_unsigned("type", type.type);
+	f.dump_unsigned("priority", type.priority);
 	f.close_section();
       }
       f.close_section();
@@ -776,7 +787,6 @@ PyObject* PyModules::get_perf_schema_python(
     dout(4) << __func__ << ": No daemon state found for "
               << svc_type << "." << svc_id << ")" << dendl;
   }
-  f.close_section();
   return f.get();
 }
 
@@ -843,7 +853,7 @@ static void _list_modules(
 
 void PyModules::list_modules(std::set<std::string> *modules)
 {
-  _list_modules(g_conf->mgr_module_path, modules);
+  _list_modules(g_conf->get_val<std::string>("mgr_module_path"), modules);
 }
 
 void PyModules::set_health_checks(const std::string& handle,

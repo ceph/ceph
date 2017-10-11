@@ -138,6 +138,10 @@ struct MockJournaler {
 };
 
 struct MockJournalerProxy {
+  MockJournalerProxy() {
+    MockJournaler::get_instance().construct();
+  }
+
   template <typename IoCtxT>
   MockJournalerProxy(IoCtxT &header_ioctx, const std::string &,
                      const std::string &, const Settings&) {

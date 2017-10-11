@@ -286,6 +286,38 @@ class interval_set {
       }
     }
   }
+
+  bool subset_size_sym(const interval_set &b) const {
+    auto pa = m.cbegin(), pb = b.m.cbegin();
+    const auto a_end = m.cend(), b_end = b.m.cend();
+
+    while (pa != a_end && pb != b_end) {
+      while (pb->first + pb->second <= pa->first) {
+        ++pb;
+        if (pb == b_end)
+          return false;
+      }
+
+      if (*pa == *pb) {
+        do {
+          ++pa;
+          ++pb;
+        } while (pa != a_end && pb != b_end && *pa == *pb);
+        continue;
+      }
+
+      // interval begins before other
+      if (pa->first < pb->first)
+        return false;
+      // interval is longer than other
+      if (pa->first + pa->second > pb->first + pb->second)
+        return false;
+
+      ++pa;
+    }
+
+    return pa == a_end;
+  }
   
  public:
   bool operator==(const interval_set& other) const {
@@ -606,12 +638,69 @@ class interval_set {
   }
 
   bool subset_of(const interval_set &big) const {
+    if (!size())
+      return true;
+    if (size() > big.size())
+      return false;
+    if (range_end() > big.range_end())
+      return false;
+
+    /*
+     * Use the lower_bound algorithm for larger size ratios
+     * where it performs better, but not for smaller size
+     * ratios where sequential search performs better.
+     */
+    if (big.size() / size() < 10)
+      return subset_size_sym(big);
+
     for (typename std::map<T,T>::const_iterator i = m.begin();
          i != m.end();
          i++) 
       if (!big.contains(i->first, i->second)) return false;
     return true;
   }  
+
+ /*
+   * build a subset of @other for given rage [@start, @end)
+   * E.g.:
+   * subset_of([5~10,20~5], 0, 100) -> [5~10,20~5]
+   * subset_of([5~10,20~5], 5, 25)  -> [5~10,20~5]
+   * subset_of([5~10,20~5], 1, 10)  -> [5~5]
+   * subset_of([5~10,20~5], 8, 24)  -> [8~7, 20~4]
+   */
+  void subset_of(const interval_set &other, T start, T end) {
+    assert(end >= start);
+    clear();
+    if (end == start) {
+      return;
+    }
+    typename std::map<T,T>::const_iterator p = other.find_inc(start);
+    if (p == other.m.end())
+      return;
+    if (p->first < start) {
+      if (p->first + p->second >= end) {
+        insert(start, end - start);
+        return;
+      } else {
+        insert(start, p->first + p->second - start);
+        ++p;
+      }
+    }
+    while (p != other.m.end()) {
+      assert(p->first >= start);
+      if (p->first >= end) {
+        return;
+      }
+      if (p->first + p->second >= end) {
+        insert(p->first, end - p->first);
+        return;
+      } else {
+        // whole
+        insert(p->first, p->second);
+        ++p;
+      }
+    }
+  }
 
   /*
    * build a subset of @other, starting at or after @start, and including

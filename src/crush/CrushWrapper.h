@@ -641,6 +641,7 @@ private:
    * @return true if present
    */
   bool _search_item_exists(int i) const;
+  bool is_parent_of(int child, int p) const;
 public:
 
   /**
@@ -1456,7 +1457,7 @@ public:
     ostream *ss) {
     vector<int> weight(weightf.size());
     for (unsigned i = 0; i < weightf.size(); ++i) {
-      weight[i] = (int)(weightf[i] * (float)0x10000);
+      weight[i] = (int)(weightf[i] * (double)0x10000);
     }
     return choose_args_adjust_item_weight(cct, cmap, id, weight, ss);
   }

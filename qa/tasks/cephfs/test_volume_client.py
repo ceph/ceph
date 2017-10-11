@@ -764,7 +764,7 @@ vc.disconnect()
         # auth ID belongs to, the auth ID's authorized access levels
         # for different volumes, versioning details, etc.
         expected_auth_metadata = {
-            u"version": 1,
+            u"version": 2,
             u"compat_version": 1,
             u"dirty": False,
             u"tenant_id": u"tenant1",
@@ -791,7 +791,7 @@ vc.disconnect()
         # Verify that the volume metadata file stores info about auth IDs
         # and their access levels to the volume, versioning details, etc.
         expected_vol_metadata = {
-            u"version": 1,
+            u"version": 2,
             u"compat_version": 1,
             u"auths": {
                 u"guest": {
@@ -905,3 +905,112 @@ vc.disconnect()
             volume_id=volume_id,
             auth_id=guestclient["auth_id"],
         )))
+
+    def test_put_object(self):
+        vc_mount = self.mounts[1]
+        vc_mount.umount_wait()
+        self._configure_vc_auth(vc_mount, "manila")
+
+        obj_data = 'test data'
+        obj_name = 'test_vc_obj_1'
+        pool_name = self.fs.get_data_pool_names()[0]
+
+        self._volume_client_python(vc_mount, dedent("""
+            vc.put_object("{pool_name}", "{obj_name}", b"{obj_data}")
+        """.format(
+            pool_name = pool_name,
+            obj_name = obj_name,
+            obj_data = obj_data
+        )))
+
+        read_data = self.fs.rados(['get', obj_name, '-'], pool=pool_name)
+        self.assertEqual(obj_data, read_data)
+
+    def test_get_object(self):
+        vc_mount = self.mounts[1]
+        vc_mount.umount_wait()
+        self._configure_vc_auth(vc_mount, "manila")
+
+        obj_data = 'test_data'
+        obj_name = 'test_vc_ob_2'
+        pool_name = self.fs.get_data_pool_names()[0]
+
+        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin_data=obj_data)
+
+        self._volume_client_python(vc_mount, dedent("""
+            data_read = vc.get_object("{pool_name}", "{obj_name}")
+            assert data_read == b"{obj_data}"
+        """.format(
+            pool_name = pool_name,
+            obj_name = obj_name,
+            obj_data = obj_data
+        )))
+
+    def test_delete_object(self):
+        vc_mount = self.mounts[1]
+        vc_mount.umount_wait()
+        self._configure_vc_auth(vc_mount, "manila")
+
+        obj_data = 'test data'
+        obj_name = 'test_vc_obj_3'
+        pool_name = self.fs.get_data_pool_names()[0]
+
+        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin_data=obj_data)
+
+        self._volume_client_python(vc_mount, dedent("""
+            data_read = vc.delete_object("{pool_name}", "{obj_name}")
+        """.format(
+            pool_name = pool_name,
+            obj_name = obj_name,
+        )))
+
+        with self.assertRaises(CommandFailedError):
+            self.fs.rados(['stat', obj_name], pool=pool_name)
+
+        # Check idempotency -- no error raised trying to delete non-existent
+        # object
+        self._volume_client_python(vc_mount, dedent("""
+            data_read = vc.delete_object("{pool_name}", "{obj_name}")
+        """.format(
+            pool_name = pool_name,
+            obj_name = obj_name,
+        )))
+
+    def test_21501(self):
+        """
+        Reproducer for #21501 "ceph_volume_client: sets invalid caps for
+        existing IDs with no caps" (http://tracker.ceph.com/issues/21501)
+        """
+
+        vc_mount = self.mounts[1]
+        vc_mount.umount_wait()
+
+        # Configure vc_mount as the handle for driving volumeclient
+        self._configure_vc_auth(vc_mount, "manila")
+
+        # Create a volume
+        group_id = "grpid"
+        volume_id = "volid"
+        mount_path = self._volume_client_python(vc_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            create_result = vc.create_volume(vp, 1024*1024*10)
+            print create_result['mount_path']
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id
+        )))
+
+        # Create an auth ID with no caps
+        guest_id = '21501'
+        self.fs.mon_manager.raw_cluster_cmd_result(
+            'auth', 'get-or-create', 'client.{0}'.format(guest_id))
+
+        guest_mount = self.mounts[2]
+        guest_mount.umount_wait()
+
+        # Set auth caps for the auth ID using the volumeclient
+        self._configure_guest_auth(vc_mount, guest_mount, guest_id, mount_path)
+
+        # Mount the volume in the guest using the auth ID to assert that the
+        # auth caps are valid
+        guest_mount.mount(mount_path=mount_path)

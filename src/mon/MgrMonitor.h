@@ -79,6 +79,7 @@ public:
   bool in_use() const { return map.epoch > 0; }
 
   void create_initial() override;
+  void get_store_prefixes(std::set<string>& s) const override;
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;
   void encode_pending(MonitorDBStore::TransactionRef t) override;

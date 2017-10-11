@@ -1352,13 +1352,11 @@ int Operations<I>::metadata_set(const std::string &key,
   ldout(cct, 5) << this << " " << __func__ << ": key=" << key << ", value="
                 << value << dendl;
 
-  string start = m_image_ctx.METADATA_CONF_PREFIX;
-  size_t conf_prefix_len = start.size();
-
-  if (key.size() > conf_prefix_len && !key.compare(0, conf_prefix_len, start)) {
+  std::string config_key;
+  bool config_override = util::is_metadata_config_override(key, &config_key);
+  if (config_override) {
     // validate config setting
-    string subkey = key.substr(conf_prefix_len, key.size() - conf_prefix_len);
-    int r = md_config_t().set_val(subkey.c_str(), value);
+    int r = md_config_t().set_val(config_key.c_str(), value);
     if (r < 0) {
       return r;
     }
@@ -1392,6 +1390,11 @@ int Operations<I>::metadata_set(const std::string &key,
     r = metadata_ctx.wait();
   }
 
+  if (config_override && r >= 0) {
+    // apply new config key immediately
+    r = m_image_ctx.state->refresh_if_required();
+  }
+
   return r;
 }
 
@@ -1406,7 +1409,9 @@ void Operations<I>::execute_metadata_set(const std::string &key,
                 << value << dendl;
 
   operation::MetadataSetRequest<I> *request =
-    new operation::MetadataSetRequest<I>(m_image_ctx, on_finish, key, value);
+    new operation::MetadataSetRequest<I>(m_image_ctx,
+					 new C_NotifyUpdate<I>(m_image_ctx, on_finish),
+					 key, value);
   request->send();
 }
 
@@ -1452,6 +1457,12 @@ int Operations<I>::metadata_remove(const std::string &key) {
     r = metadata_ctx.wait();
   }
 
+  std::string config_key;
+  if (util::is_metadata_config_override(key, &config_key) && r >= 0) {
+    // apply new config key immediately
+    r = m_image_ctx.state->refresh_if_required();
+  }
+
   return r;
 }
 
@@ -1464,7 +1475,9 @@ void Operations<I>::execute_metadata_remove(const std::string &key,
   ldout(cct, 5) << this << " " << __func__ << ": key=" << key << dendl;
 
   operation::MetadataRemoveRequest<I> *request =
-    new operation::MetadataRemoveRequest<I>(m_image_ctx, on_finish, key);
+    new operation::MetadataRemoveRequest<I>(
+	m_image_ctx,
+	new C_NotifyUpdate<I>(m_image_ctx, on_finish), key);
   request->send();
 }
 

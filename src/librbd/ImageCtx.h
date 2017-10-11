@@ -309,7 +309,8 @@ namespace librbd {
     void cancel_async_requests();
     void cancel_async_requests(Context *on_finish);
 
-    void apply_metadata(const std::map<std::string, bufferlist> &meta);
+    void apply_metadata(const std::map<std::string, bufferlist> &meta,
+                        bool thread_safe);
 
     ExclusiveLock<ImageCtx> *create_exclusive_lock();
     ObjectMap<ImageCtx> *create_object_map(uint64_t snap_id);

@@ -43,18 +43,6 @@ class CephContext;
 class CrushWrapper;
 class health_check_map_t;
 
-// FIXME C++11 does not have std::equal for two differently-typed containers.
-// use this until we move to c++14
-template<typename A, typename B>
-bool vectors_equal(A a, B b)
-{
-  return
-    a.size() == b.size() &&
-    (a.empty() ||
-     memcmp((char*)&a[0], (char*)&b[0], sizeof(a[0]) * a.size()) == 0);
-}
-
-
 /*
  * we track up to two intervals during which the osd was alive and
  * healthy.  the most recent is [up_from,up_thru), where up_thru is
@@ -1129,14 +1117,14 @@ public:
   bool pg_is_ec(pg_t pg) const {
     auto i = pools.find(pg.pool());
     assert(i != pools.end());
-    return i->second.ec_pool();
+    return i->second.is_erasure();
   }
   bool get_primary_shard(const pg_t& pgid, spg_t *out) const {
     auto i = get_pools().find(pgid.pool());
     if (i == get_pools().end()) {
       return false;
     }
-    if (!i->second.ec_pool()) {
+    if (!i->second.is_erasure()) {
       *out = spg_t(pgid);
       return true;
     }
@@ -1171,7 +1159,7 @@ public:
   void get_pool_ids_by_rule(int rule_id, set<int64_t> *pool_ids) const {
     assert(pool_ids);
     for (auto &p: pools) {
-      if ((int)p.second.get_crush_rule() == rule_id) {
+      if (p.second.get_crush_rule() == rule_id) {
         pool_ids->insert(p.first);
       }
     }

@@ -122,8 +122,9 @@ public:
   int _init(bool format);
 
   int do_open(ostream &out, bool create);
-  int open(ostream &out) override { return do_open(out, false); }
-  int create_and_open(ostream &out) override { return do_open(out, true); }
+  int open(ostream &out, const std::vector<ColumnFamily>&) override;
+  int create_and_open(ostream &out, const std::vector<ColumnFamily>&) override;
+  using KeyValueDB::create_and_open;
 
   KeyValueDB::Transaction get_transaction() override {
     return std::shared_ptr<MDBTransactionImpl>(new MDBTransactionImpl(this));
@@ -201,9 +202,7 @@ public:
     return 0;
   }
 
-protected:
-
-  WholeSpaceIterator _get_iterator() override {
+  WholeSpaceIterator get_wholespace_iterator() override {
     return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
       new MDBWholeSpaceIteratorImpl(&m_map, &m_lock, &iterator_seq_no, m_using_btree));
   }

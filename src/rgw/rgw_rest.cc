@@ -1419,6 +1419,9 @@ int RGWPostObj_ObjStore::read_form_part_header(struct post_form_part* const part
     }
 
     r = read_line(bl, chunk_size, reached_boundary, done);
+    if (r < 0) {
+      return r;
+    }
   }
 
   return 0;

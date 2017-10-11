@@ -4,7 +4,7 @@
 #pragma once
 
 #include <string>
-#include <list>
+#include <vector>
 #include <boost/variant.hpp>
 #include "include/str_list.h"
 #include "msg/msg_types.h"
@@ -79,19 +79,19 @@ struct Option {
   // Additionally: "common" for settings that exist in any Ceph code.  Do
   // not use common for settings that are just shared some places: for those
   // places, list them.
-  std::list<const char*> services;
+  std::vector<const char*> services;
 
   // Topics like:
   // "service": a catchall for the boring stuff like log/asok paths.
   // "network"
   // "performance": a setting that may need adjustment depending on
   //                environment/workload to get best performance.
-  std::list<const char*> tags;
+  std::vector<const char*> tags;
 
-  std::list<const char*> see_also;
+  std::vector<const char*> see_also;
 
   value_t min, max;
-  std::list<std::string> enum_allowed;
+  std::vector<const char*> enum_allowed;
 
   bool safe;
 
@@ -191,7 +191,7 @@ struct Option {
     tags.push_back(tag);
     return *this;
   }
-  Option& add_tag(std::initializer_list<const char*> ts) {
+  Option& add_tag(const std::initializer_list<const char*>& ts) {
     tags.insert(tags.end(), ts);
     return *this;
   }
@@ -199,7 +199,7 @@ struct Option {
     services.push_back(service);
     return *this;
   }
-  Option& add_service(std::initializer_list<const char*> ss) {
+  Option& add_service(const std::initializer_list<const char*>& ss) {
     services.insert(services.end(), ss);
     return *this;
   }
@@ -207,7 +207,7 @@ struct Option {
     see_also.push_back(t);
     return *this;
   }
-  Option& add_see_also(std::initializer_list<const char*> ts) {
+  Option& add_see_also(const std::initializer_list<const char*>& ts) {
     see_also.insert(see_also.end(), ts);
     return *this;
   }
@@ -233,9 +233,9 @@ struct Option {
     return *this;
   }
 
-  Option& set_enum_allowed(const std::list<std::string> allowed)
+  Option& set_enum_allowed(const std::initializer_list<const char*>& allowed)
   {
-    enum_allowed = allowed;
+    enum_allowed.insert(enum_allowed.end(), allowed);
     return *this;
   }
 

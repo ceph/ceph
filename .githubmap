@@ -1,6 +1,6 @@
 #
 # More information at
-#  https://wiki.ceph.com/Community/Ceph_contributors_list_maintenance_guide
+#  http://tracker.ceph.com/projects/ceph/wiki/Ceph_contributors_list_maintenance_guide
 #
 # See .mailmap for name and mail normalization.
 # See .organizationmap for organization affiliation
@@ -15,6 +15,7 @@ bassamtabbara Bassam Tabbara <bassam.tabbara@quantum.com>
 batrick Patrick Donnelly <pdonnell@redhat.com>
 branch-predictor Piotr Dałek <piotr.dalek@corp.ovh.com>
 chhabaramesh Ramesh Chander <Ramesh.Chander@sandisk.com>
+dragonylffly Li Wang <laurence.liwang@gmail.com>
 dvanders Dan van der Ster <daniel.vanderster@cern.ch>
 fullerdj Douglas Fuller <dfuller@redhat.com>
 gregsfortytwo Gregory Farnum <gfarnum@redhat.com>
@@ -33,7 +34,7 @@ renhwztetecs huanwen ren <ren.huanwen@zte.com.cn>
 smithfarm Nathan Cutler <ncutler@suse.com>
 tchaikov Kefu Chai <kchai@redhat.com>
 theanalyst Abhishek Lekshmanan <abhishek.lekshmanan@gmail.com>
-trociny Mykola Golub <mgolub@mirantis.com>
+trociny Mykola Golub <to.my.trociny@gmail.com>
 ukernel Zheng Yan <zyan@redhat.com>
 vasukulkarni Vasu Kulkarni <vasu@redhat.com>
 vuhuong Vu Pham <vuhuong@mellanox.com>
@@ -42,3 +43,4 @@ xiexingguo xie xingguo <xie.xingguo@zte.com.cn>
 yangdongsheng Dongsheng Yang <dongsheng.yang@easystack.cn>
 yuyuyu101 Haomai Wang <haomai@xsky.com>
 jtlayton Jeff Layton <jlayton@redhat.com>
+yuriw Yuri Weinstein <yweins@redhat.com>

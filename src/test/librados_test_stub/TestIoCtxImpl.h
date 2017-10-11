@@ -185,9 +185,9 @@ private:
   };
 
   TestRadosClient *m_client;
-  int64_t m_pool_id;
+  int64_t m_pool_id = 0;
   std::string m_pool_name;
-  snap_t m_snap_seq;
+  snap_t m_snap_seq = 0;
   SnapContext m_snapc;
   std::atomic<uint64_t> m_refcount = { 0 };
   std::atomic<uint64_t> m_pending_ops = { 0 };

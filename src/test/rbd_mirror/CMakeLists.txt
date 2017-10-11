@@ -30,6 +30,7 @@ add_executable(unittest_rbd_mirror
   image_replayer/test_mock_PrepareLocalImageRequest.cc
   image_replayer/test_mock_PrepareRemoteImageRequest.cc
   image_sync/test_mock_ImageCopyRequest.cc
+  image_sync/test_mock_MetadataCopyRequest.cc
   image_sync/test_mock_ObjectCopyRequest.cc
   image_sync/test_mock_SnapshotCopyRequest.cc
   image_sync/test_mock_SnapshotCreateRequest.cc
@@ -37,7 +38,7 @@ add_executable(unittest_rbd_mirror
   image_sync/test_mock_SyncPointPruneRequest.cc
   pool_watcher/test_mock_RefreshImagesRequest.cc
   )
-add_ceph_unittest(unittest_rbd_mirror ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rbd_mirror)
+add_ceph_unittest(unittest_rbd_mirror)
 set_target_properties(unittest_rbd_mirror PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 add_dependencies(unittest_rbd_mirror

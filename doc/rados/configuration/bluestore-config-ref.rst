@@ -85,21 +85,21 @@ certain point.
 ``bluestore_cache_size``
 
 :Description: The amount of memory BlueStore will use for its cache.  If zero, ``bluestore_cache_size_hdd`` or ``bluestore_cache_size_ssd`` will be used instead.
-:Type: Integer
+:Type: Unsigned Integer
 :Required: Yes
 :Default: ``0``
 
 ``bluestore_cache_size_hdd``
 
 :Description: The default amount of memory BlueStore will use for its cache when backed by an HDD.
-:Type: Integer
+:Type: Unsigned Integer
 :Required: Yes
 :Default: ``1 * 1024 * 1024 * 1024`` (1 GB)
 
 ``bluestore_cache_size_ssd``
 
 :Description: The default amount of memory BlueStore will use for its cache when backed by an SSD.
-:Type: Integer
+:Type: Unsigned Integer
 :Required: Yes
 :Default: ``3 * 1024 * 1024 * 1024`` (3 GB)
 
@@ -120,7 +120,7 @@ certain point.
 ``bluestore_cache_kv_max``
 
 :Description: The maximum amount of cache devoted to key/value data (rocksdb).
-:Type: Floating point
+:Type: Unsigned Integer
 :Required: Yes
 :Default: ``512 * 1024*1024`` (512 MB)
 

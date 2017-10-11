@@ -90,6 +90,12 @@
                 var width=4;
                 var unit = 0;
 
+                if (n == null) {
+                    // People shouldn't really be passing null, but let's
+                    // do something sensible instead of barfing.
+                    return "-";
+                }
+
                 while (Math.floor(n / (divisor**unit)).toString().length > width - 1) {
                     unit = unit + 1;
                 }
@@ -150,8 +156,7 @@
         });
       </script>
 
-      <link rel="shortcut icon" href="https://ceph.com/wp-content/themes/cephTheme/Resources/Favicons/favicon-96x96.png">
-      <link rel="shortcut icon" href="{{ url_prefix }}/static/favicon.ico">
+      <link rel="icon" href="{{ url_prefix }}/static/favicon.ico">
 
     <style>
         div.box {

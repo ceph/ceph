@@ -1414,6 +1414,8 @@ void OSDMap::_calc_up_osd_features()
     if (!is_up(osd))
       continue;
     const osd_xinfo_t &xi = get_xinfo(osd);
+    if (xi.features == 0)
+      continue;  // bogus xinfo, maybe #20751 or similar, skipping
     if (first) {
       cached_up_osd_features = xi.features;
       first = false;
@@ -1525,7 +1527,7 @@ void OSDMap::clean_temps(CephContext *cct,
     vector<int> raw_up;
     int primary;
     tmpmap.pg_to_raw_up(pg.first, &raw_up, &primary);
-    if (vectors_equal(raw_up, pg.second)) {
+    if (raw_up == pg.second) {
       ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
 		     << pg.second << " that matches raw_up mapping" << dendl;
       if (osdmap.pg_temp->count(pg.first))
@@ -3275,9 +3277,10 @@ int OSDMap::validate_crush_rules(CrushWrapper *newcrush,
       *ss << "pool " << i.first << " type does not match rule " << ruleno;
       return -EINVAL;
     }
-    if (pool.get_size() < (int)newcrush->get_rule_mask_min_size(ruleno) ||
-	pool.get_size() > (int)newcrush->get_rule_mask_max_size(ruleno)) {
-      *ss << "pool " << i.first << " size " << pool.get_size() << " does not"
+    int poolsize = pool.get_size();
+    if (poolsize < newcrush->get_rule_mask_min_size(ruleno) ||
+	poolsize > newcrush->get_rule_mask_max_size(ruleno)) {
+      *ss << "pool " << i.first << " size " << poolsize << " does not"
 	  << " fall within rule " << ruleno
 	  << " min_size " << newcrush->get_rule_mask_min_size(ruleno)
 	  << " and max_size " << newcrush->get_rule_mask_max_size(ruleno);
@@ -3709,7 +3712,7 @@ int OSDMap::clean_pg_upmaps(
     vector<int> raw;
     int primary;
     pg_to_raw_osds(p.first, &raw, &primary);
-    if (vectors_equal(raw, p.second)) {
+    if (raw == p.second) {
       ldout(cct, 10) << " removing redundant pg_upmap " << p.first << " "
 		     << p.second << dendl;
       pending_inc->old_pg_upmap.insert(p.first);
@@ -3832,8 +3835,9 @@ int OSDMap::calc_pg_upmaps(
       tmp.crush->get_rule_weight_osd_map(ruleno, &pmap);
       ldout(cct,30) << __func__ << " pool " << i.first << " ruleno " << ruleno << dendl;
       for (auto p : pmap) {
-	osd_weight[p.first] += p.second;
-	osd_weight_total += p.second;
+	auto adjusted_weight = tmp.get_weightf(p.first) * p.second;
+	osd_weight[p.first] += adjusted_weight;
+	osd_weight_total += adjusted_weight;
       }
     }
     for (auto& i : osd_weight) {
@@ -4683,10 +4687,10 @@ void OSDMap::check_health(health_check_map_t *checks) const
       const string& pool_name = get_pool_name(it.first);
       if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
 	stringstream ss;
-        if (pool.has_flag(pg_pool_t::FLAG_FULL_NO_QUOTA)) {
+        if (pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
           // may run out of space too,
           // but we want EQUOTA taking precedence
-          ss << "pool '" << pool_name << "' is full (no quota)";
+          ss << "pool '" << pool_name << "' is full (running out of quota)";
         } else {
           ss << "pool '" << pool_name << "' is full (no space)";
         }

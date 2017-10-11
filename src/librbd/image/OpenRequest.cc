@@ -73,7 +73,7 @@ Context *OpenRequest<I>::handle_v1_detect_header(int *result) {
 
     m_image_ctx->old_format = true;
     m_image_ctx->header_oid = util::old_header_name(m_image_ctx->name);
-    m_image_ctx->apply_metadata({});
+    m_image_ctx->apply_metadata({}, true);
 
     send_register_watch();
   }
@@ -150,7 +150,7 @@ Context *OpenRequest<I>::handle_v2_get_id(int *result) {
                << dendl;
     send_close_image(*result);
   } else {
-    send_v2_get_immutable_metadata();
+    send_v2_get_initial_metadata();
   }
   return nullptr;
 }
@@ -190,9 +190,8 @@ Context *OpenRequest<I>::handle_v2_get_name(int *result) {
                    << "rbd directory, searching in rbd trash..." << dendl;
     send_v2_get_name_from_trash();
   } else {
-    send_v2_get_immutable_metadata();
+    send_v2_get_initial_metadata();
   }
-
   return nullptr;
 }
 
@@ -236,14 +235,14 @@ Context *OpenRequest<I>::handle_v2_get_name_from_trash(int *result) {
     }
     send_close_image(*result);
   } else {
-    send_v2_get_immutable_metadata();
+    send_v2_get_initial_metadata();
   }
 
   return nullptr;
 }
 
 template <typename I>
-void OpenRequest<I>::send_v2_get_immutable_metadata() {
+void OpenRequest<I>::send_v2_get_initial_metadata() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
@@ -251,11 +250,11 @@ void OpenRequest<I>::send_v2_get_immutable_metadata() {
   m_image_ctx->header_oid = util::header_name(m_image_ctx->id);
 
   librados::ObjectReadOperation op;
-  cls_client::get_immutable_metadata_start(&op);
+  cls_client::get_initial_metadata_start(&op);
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
-    klass, &klass::handle_v2_get_immutable_metadata>(this);
+    klass, &klass::handle_v2_get_initial_metadata>(this);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
                                   &m_out_bl);
@@ -263,21 +262,26 @@ void OpenRequest<I>::send_v2_get_immutable_metadata() {
 }
 
 template <typename I>
-Context *OpenRequest<I>::handle_v2_get_immutable_metadata(int *result) {
+Context *OpenRequest<I>::handle_v2_get_initial_metadata(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
 
   if (*result == 0) {
     bufferlist::iterator it = m_out_bl.begin();
-    *result = cls_client::get_immutable_metadata_finish(
-      &it, &m_image_ctx->object_prefix, &m_image_ctx->order);
+    *result = cls_client::get_initial_metadata_finish(
+      &it, &m_image_ctx->object_prefix, &m_image_ctx->order, &m_image_ctx->features);
   }
   if (*result < 0) {
-    lderr(cct) << "failed to retreive immutable metadata: "
+    lderr(cct) << "failed to retreive initial metadata: "
                << cpp_strerror(*result) << dendl;
     send_close_image(*result);
-  } else {
+    return nullptr;
+  }
+
+  if (m_image_ctx->test_features(RBD_FEATURE_STRIPINGV2)) {
     send_v2_get_stripe_unit_count();
+  } else {
+    send_v2_get_create_timestamp();
   }
 
   return nullptr;
@@ -466,7 +470,7 @@ Context *OpenRequest<I>::handle_v2_apply_metadata(int *result) {
     }
   }
 
-  m_image_ctx->apply_metadata(m_metadata);
+  m_image_ctx->apply_metadata(m_metadata, true);
 
   send_register_watch();
   return nullptr;

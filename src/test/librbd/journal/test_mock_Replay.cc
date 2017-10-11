@@ -1700,8 +1700,8 @@ TEST_F(TestMockJournalReplay, MetadataSetEvent) {
 
   InSequence seq;
   Context *on_finish = nullptr;
-  expect_refresh_image(mock_image_ctx, false, 0);
   expect_metadata_set(mock_image_ctx, &on_finish, "key", "value");
+  expect_refresh_image(mock_image_ctx, false, 0);
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
@@ -1737,8 +1737,8 @@ TEST_F(TestMockJournalReplay, MetadataRemoveEvent) {
 
   InSequence seq;
   Context *on_finish = nullptr;
-  expect_refresh_image(mock_image_ctx, false, 0);
   expect_metadata_remove(mock_image_ctx, &on_finish, "key");
+  expect_refresh_image(mock_image_ctx, false, 0);
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
@@ -1774,7 +1774,6 @@ TEST_F(TestMockJournalReplay, MetadataRemoveEventDNE) {
 
   InSequence seq;
   Context *on_finish = nullptr;
-  expect_refresh_image(mock_image_ctx, false, 0);
   expect_metadata_remove(mock_image_ctx, &on_finish, "key");
 
   C_SaferCond on_start_ready;

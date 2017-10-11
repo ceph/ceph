@@ -947,6 +947,17 @@ using namespace ceph;
 
   bool buffer::ptr::at_buffer_tail() const { return _off + _len == _raw->len; }
 
+  void buffer::ptr::reassign_to_mempool(int pool) {
+    if (_raw) {
+      _raw->reassign_to_mempool(pool);
+    }
+  }
+  void buffer::ptr::try_assign_to_mempool(int pool) {
+    if (_raw) {
+      _raw->try_assign_to_mempool(pool);
+    }
+  }
+
   const char *buffer::ptr::c_str() const {
     assert(_raw);
     if (buffer_track_c_str)
@@ -1809,6 +1820,8 @@ using namespace ceph;
     _buffers.splice(_buffers.begin(), bl._buffers );
     bl._len = 0;
     bl.last_p = bl.begin();
+    // we modified _buffers
+    last_p = begin();
   }
 
   void buffer::list::claim_append_piecewise(list& bl)
