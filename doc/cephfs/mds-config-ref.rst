@@ -102,7 +102,7 @@
               OSDMap blacklist. It has no effect on how long something is
               blacklisted when the administrator blacklists it manually. For
               example, ``ceph osd blacklist add`` will still use the default
-              blacklist time.)
+              blacklist time.
 :Type:  Float
 :Default: ``24.0*60.0``
 
