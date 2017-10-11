@@ -15,6 +15,7 @@
 *.tmp
 *.orig
 *.patch
+!debian/patches/*.patch
 *.rej
 *.rpm
 *.pyc
