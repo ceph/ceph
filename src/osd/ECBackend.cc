@@ -1447,9 +1447,6 @@ int ECBackend::get_min_avail_to_read_shards(
   // Make sure we don't do redundant reads for recovery
   assert(!for_recovery || !do_redundant_reads);
 
-  map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::const_iterator miter =
-    get_parent()->get_missing_loc_shards().find(hoid);
-
   set<int> have;
   map<shard_id_t, pg_shard_t> shards;
 
@@ -1487,16 +1484,28 @@ int ECBackend::get_min_avail_to_read_shards(
       }
     }
 
-    if (miter != get_parent()->get_missing_loc_shards().end()) {
+    bool miter_first = true;
+    for (map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::const_iterator miter =
+	   get_parent()->get_missing_loc_shards().find(hoid);
+	 miter != get_parent()->get_missing_loc_shards().end();
+	 miter++) {
+      if (miter_first) {
+	dout(20) << __func__ << hoid
+		 << " has missing_loc, resetting have" << dendl;
+	miter_first = false;
+	have.clear();
+      }
+      dout(20) << __func__ << hoid
+	       << " presumed available at " << miter->second
+	       << dendl;
       for (set<pg_shard_t>::iterator i = miter->second.begin();
 	   i != miter->second.end();
 	   ++i) {
 	dout(10) << __func__ << ": checking missing_loc " << *i << dendl;
 	boost::optional<const pg_missing_t &> m =
 	  get_parent()->maybe_get_shard_missing(*i);
-	if (m) {
-	  assert(!(*m).is_missing(hoid));
-	}
+	if (m && (*m).is_missing(hoid))
+	  continue;
 	have.insert(i->shard);
 	shards.insert(make_pair(i->shard, *i));
       }
