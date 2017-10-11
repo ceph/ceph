@@ -244,18 +244,27 @@ void RDMADispatcher::polling()
       perf_logger->set(l_msgr_rdma_inflight_tx_chunks, inflight);
       if (num_dead_queue_pair) {
         Mutex::Locker l(lock); // FIXME reuse dead qp because creating one qp costs 1 ms
-        for (auto &i : dead_queue_pairs) {
-          // Bypass QPs that do not collect all Tx completions yet.
-          if (i->get_tx_wr())
-            continue;
-          ldout(cct, 10) << __func__ << " finally delete qp=" << i << dendl;
-          delete i;
-          auto it = std::find(dead_queue_pairs.begin(), dead_queue_pairs.end(), i);
-          if (it != dead_queue_pairs.end())
-            dead_queue_pairs.erase(it);
-          perf_logger->dec(l_msgr_rdma_active_queue_pair);
-          --num_dead_queue_pair;
-        }
+        
+        // replace the for range-based loop with a library function
+        // to ensure that the vector does not get corrupt
+        auto del_itr = std::remove_if(dead_queue_pairs.begin(),
+          dead_queue_pairs.end(), [this](QueuePair* &qp_ptr) -> bool
+          { // Bypass QPs that do not collect all Tx completions yet.
+            if(qp_ptr->get_tx_wr())
+              return false;        // do not remove this item
+
+            ldout(cct, 10) << __func__ << " finally delete qp=" << qp_ptr << dendl;
+            delete qp_ptr; // delete a disconnected QueuePair
+
+            perf_logger->dec(l_msgr_rdma_active_queue_pair);
+            --num_dead_queue_pair;
+            
+            return true; // need to remove this item from the vector
+
+          }); 
+
+        // update the vector that stores pointers
+        dead_queue_pairs.erase(del_itr, dead_queue_pairs.end());
       }
       if (!num_qp_conn && done && dead_queue_pairs.empty())
         break;
