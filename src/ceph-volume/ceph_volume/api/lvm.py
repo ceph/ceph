@@ -190,14 +190,35 @@ def create_pv(device):
     ])
 
 
+def create_vg(name, *devices):
+    """
+    Create a Volume Group. Command looks like::
+
+        vgcreate --force --yes group_name device
+
+    Once created the volume group is returned as a ``VolumeGroup`` object
+    """
+    process.run([
+        'sudo',
+        'vgcreate',
+        '--force',
+        '--yes',
+        name] + list(devices)
+    )
+
+    vg = get_vg(vg_name=name)
+    return vg
+
+
 def create_lv(name, group, size=None, **tags):
     """
     Create a Logical Volume in a Volume Group. Command looks like::
 
         lvcreate -L 50G -n gfslv vg0
 
-    ``name``, ``group``, and ``size`` are required. Tags are optional and are "translated" to include
-    the prefixes for the Ceph LVM tag API.
+    ``name``, ``group``, are required. If ``size`` is provided it must follow
+    lvm's size notation (like 1G, or 20M). Tags are optional and are
+    "translated" to include the prefixes for the Ceph LVM tag API.
 
     """
     # XXX add CEPH_VOLUME_LVM_DEBUG to enable -vvvv on lv operations
@@ -215,7 +236,7 @@ def create_lv(name, group, size=None, **tags):
             'lvcreate',
             '--yes',
             '-L',
-            '%sG' % size,
+            '%s' % size,
             '-n', name, group
         ])
     # create the lv with all the space available, this is needed because the
