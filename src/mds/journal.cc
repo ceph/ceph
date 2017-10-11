@@ -2964,7 +2964,14 @@ void EImportStart::replay(MDSRank *mds)
     bufferlist::iterator blp = client_map.begin();
     ::decode(cm, blp);
     mds->sessionmap.open_sessions(cm);
-    assert(mds->sessionmap.get_version() == cmapv);
+    if (mds->sessionmap.get_version() != cmapv)
+    {
+      derr << "sessionmap version " << mds->sessionmap.get_version()
+           << " != cmapv " << cmapv << dendl;
+      mds->clog->error() << "failure replaying journal (EImportStart)";
+      mds->damaged();
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
+    }
     mds->sessionmap.set_projected(mds->sessionmap.get_version());
   }
   update_segment();
