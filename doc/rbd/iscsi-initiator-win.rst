@@ -1,6 +1,6 @@
------------------------------------------
-The iSCSI Initiator for Microsoft Windows
------------------------------------------
+-------------------------------------
+iSCSI Initiator for Microsoft Windows
+-------------------------------------
 
 **Prerequisite:**
 
