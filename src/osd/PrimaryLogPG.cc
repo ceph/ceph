@@ -717,7 +717,7 @@ void PrimaryLogPG::maybe_force_recovery()
   if (!is_degraded() &&
       !state_test(PG_STATE_RECOVERING |
                   PG_STATE_RECOVERY_WAIT |
-		  PG_STATE_BACKFILL |
+		  PG_STATE_BACKFILLING |
 		  PG_STATE_BACKFILL_WAIT |
 		  PG_STATE_BACKFILL_TOOFULL))
     return;
@@ -1553,7 +1553,7 @@ void PrimaryLogPG::calc_trim_to()
   if (is_degraded() ||
       state_test(PG_STATE_RECOVERING |
 		 PG_STATE_RECOVERY_WAIT |
-		 PG_STATE_BACKFILL |
+		 PG_STATE_BACKFILLING |
 		 PG_STATE_BACKFILL_WAIT |
 		 PG_STATE_BACKFILL_TOOFULL)) {
     target = cct->_conf->osd_max_pg_log_entries;
@@ -11314,7 +11314,7 @@ bool PrimaryLogPG::start_recovery_ops(
   assert(is_primary());
 
   if (!state_test(PG_STATE_RECOVERING) &&
-      !state_test(PG_STATE_BACKFILL)) {
+      !state_test(PG_STATE_BACKFILLING)) {
     /* TODO: I think this case is broken and will make do_recovery()
      * unhappy since we're returning false */
     dout(10) << "recovery raced and were queued twice, ignoring!" << dendl;
@@ -11349,7 +11349,7 @@ bool PrimaryLogPG::start_recovery_ops(
 
   bool deferred_backfill = false;
   if (recovering.empty() &&
-      state_test(PG_STATE_BACKFILL) &&
+      state_test(PG_STATE_BACKFILLING) &&
       !backfill_targets.empty() && started < max &&
       missing.num_missing() == 0 &&
       waiting_on_backfill.empty()) {
@@ -11438,7 +11438,7 @@ bool PrimaryLogPG::start_recovery_ops(
             AllReplicasRecovered())));
     }
   } else { // backfilling
-    state_clear(PG_STATE_BACKFILL);
+    state_clear(PG_STATE_BACKFILLING);
     state_clear(PG_STATE_FORCED_BACKFILL);
     state_clear(PG_STATE_FORCED_RECOVERY);
     dout(10) << "recovery done, backfill done" << dendl;

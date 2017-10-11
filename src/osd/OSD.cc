@@ -247,9 +247,9 @@ OSDService::OSDService(OSD *osd) :
   recovery_sleep_lock("OSDService::recovery_sleep_lock"),
   recovery_sleep_timer(cct, recovery_sleep_lock, false),
   reserver_finisher(cct),
-  local_reserver(&reserver_finisher, cct->_conf->osd_max_backfills,
+  local_reserver(cct, &reserver_finisher, cct->_conf->osd_max_backfills,
 		 cct->_conf->osd_min_recovery_priority),
-  remote_reserver(&reserver_finisher, cct->_conf->osd_max_backfills,
+  remote_reserver(cct, &reserver_finisher, cct->_conf->osd_max_backfills,
 		  cct->_conf->osd_min_recovery_priority),
   pg_temp_lock("OSDService::pg_temp_lock"),
   snap_sleep_lock("OSDService::snap_sleep_lock"),
@@ -258,7 +258,7 @@ OSDService::OSDService(OSD *osd) :
   scrub_sleep_lock("OSDService::scrub_sleep_lock"),
   scrub_sleep_timer(
     osd->client_messenger->cct, scrub_sleep_lock, false /* relax locking */),
-  snap_reserver(&reserver_finisher,
+  snap_reserver(cct, &reserver_finisher,
 		cct->_conf->osd_max_trimming_pgs),
   recovery_lock("OSDService::recovery_lock"),
   recovery_ops_active(0),
@@ -8930,6 +8930,8 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 	m->query_epoch,
 	PG::RemoteBackfillReserved()));
   } else if (m->type == MBackfillReserve::REJECT) {
+    // NOTE: this is replica -> primary "i reject your request"
+    //      and also primary -> replica "cancel my previously-granted request"
     evt = PG::CephPeeringEvtRef(
       new PG::CephPeeringEvt(
 	m->query_epoch,
@@ -9322,7 +9324,7 @@ void OSDService::adjust_pg_priorities(const vector<PGRef>& pgs, int newflags)
       i->lock();
       int pgstate = i->get_state();
       if ( ((newstate == PG_STATE_FORCED_RECOVERY) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_RECOVERY_WAIT | PG_STATE_RECOVERING))) ||
-	    ((newstate == PG_STATE_FORCED_BACKFILL) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILL))) )
+	    ((newstate == PG_STATE_FORCED_BACKFILL) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILLING))) )
         i->_change_recovery_force_mode(newstate, false);
       i->unlock();
     }
@@ -9407,18 +9409,18 @@ void OSD::do_recovery(
       pg->discover_all_missing(*rctx.query_map);
       if (rctx.query_map->empty()) {
 	string action;
-        if (pg->state_test(PG_STATE_BACKFILL)) {
+        if (pg->state_test(PG_STATE_BACKFILLING)) {
 	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
 	    queued,
 	    queued,
-	    PG::CancelBackfill()));
+	    PG::DeferBackfill(cct->_conf->osd_recovery_retry_interval)));
 	  pg->queue_peering_event(evt);
 	  action = "in backfill";
         } else if (pg->state_test(PG_STATE_RECOVERING)) {
 	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
 	    queued,
 	    queued,
-	    PG::CancelRecovery()));
+	    PG::DeferRecovery(cct->_conf->osd_recovery_retry_interval)));
 	  pg->queue_peering_event(evt);
 	  action = "in recovery";
 	} else {
