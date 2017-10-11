@@ -39,10 +39,6 @@ void ClientIO::init_env(CephContext *cct)
       env.set("CONTENT_TYPE", value);
       continue;
     }
-    if (field == beast::http::field::connection) {
-      conn_keepalive = boost::algorithm::iequals(value, "keep-alive");
-      conn_close = boost::algorithm::iequals(value, "close");
-    }
 
     static const boost::string_ref HTTP_{"HTTP_"};
 
@@ -175,10 +171,10 @@ size_t ClientIO::complete_header()
     sent += txbuf.sputn(timestr, strlen(timestr));
   }
 
-  if (conn_keepalive) {
+  if (parser.is_keep_alive()) {
     constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
     sent += txbuf.sputn(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
-  } else if (conn_close) {
+  } else {
     constexpr char CONN_KEEP_CLOSE[] = "Connection: close\r\n";
     sent += txbuf.sputn(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
   }
