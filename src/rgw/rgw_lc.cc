@@ -244,16 +244,20 @@ int RGWLC::bucket_lc_prepare(int index)
   return 0;
 }
 
-bool RGWLC::obj_has_expired(double timediff, int days)
+bool RGWLC::obj_has_expired(ceph::real_time mtime, int days)
 {
-  double cmp;
+  double timediff, cmp;
+  utime_t base_time;
   if (cct->_conf->rgw_lc_debug_interval <= 0) {
     /* Normal case, run properly */
     cmp = days*24*60*60;
+    base_time = ceph_clock_now().round_to_day();
   } else {
     /* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
     cmp = days*cct->_conf->rgw_lc_debug_interval;
+    base_time = ceph_clock_now();
   }
+  timediff = base_time - ceph::real_clock::to_time_t(mtime);
 
   return (timediff >= cmp);
 }
@@ -298,9 +302,8 @@ int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<strin
           return ret;
       }
 
-      utime_t now = ceph_clock_now();
       for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
-        if (obj_has_expired(now - ceph::real_clock::to_time_t(obj_iter->meta.mtime), prefix_iter->second.mp_expiration)) {
+        if (obj_has_expired(obj_iter->meta.mtime, prefix_iter->second.mp_expiration)) {
           rgw_obj_key key(obj_iter->key);
           if (!mp_obj.from_meta(key.name)) {
             continue;
@@ -384,7 +387,6 @@ int RGWLC::bucket_lc_process(string& shard_id)
           return ret;
         }
         
-        utime_t now = ceph_clock_now();
         bool is_expired;
         for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
           rgw_obj_key key(obj_iter->key);
@@ -396,7 +398,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
             //we have checked it before
             is_expired = true;
           } else {
-            is_expired = obj_has_expired(now - ceph::real_clock::to_time_t(obj_iter->meta.mtime), prefix_iter->second.expiration);
+            is_expired = obj_has_expired(obj_iter->meta.mtime, prefix_iter->second.expiration);
           }
           if (is_expired) {
             RGWObjectCtx rctx(store);
@@ -450,7 +452,6 @@ int RGWLC::bucket_lc_process(string& shard_id)
           return ret;
         }
 
-        utime_t now = ceph_clock_now();
         ceph::real_time mtime;
         bool remove_indeed = true;
         int expiration;
@@ -485,9 +486,9 @@ int RGWLC::bucket_lc_process(string& shard_id)
               continue;
             } else if (!skip_expiration) {
               if (expiration > 0) {
-                is_expired = obj_has_expired(now - ceph::real_clock::to_time_t(mtime), expiration);
+                is_expired = obj_has_expired(mtime, expiration);
               } else {
-                is_expired = now >= ceph::real_clock::to_time_t(*prefix_iter->second.expiration_date);
+                is_expired = ceph_clock_now() >= ceph::real_clock::to_time_t(*prefix_iter->second.expiration_date);
               }
             }
           } else {
@@ -497,7 +498,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
             remove_indeed = true;
             mtime = (obj_iter == objs.begin())?pre_obj.meta.mtime:(obj_iter - 1)->meta.mtime;
             expiration = prefix_iter->second.noncur_expiration;
-            is_expired = obj_has_expired(now - ceph::real_clock::to_time_t(mtime), expiration);
+            is_expired = obj_has_expired(mtime, expiration);
           }
           if (skip_expiration || is_expired) {
             if (obj_iter->is_visible()) {

@@ -32,7 +32,12 @@ bool LCExpiration_S3::xml_end(const char * el) {
   } else {
     date = lc_date->get_data();
     //We need return xml error according to S3
-    if (boost::none == ceph::from_iso_8601(date)) {
+    boost::optional<ceph::real_time> expiration_date = ceph::from_iso_8601(date);
+    if (boost::none == expiration_date) {
+      return false;
+    }
+    struct timespec expiration_time = ceph::real_clock::to_timespec(*expiration_date);
+    if (expiration_time.tv_sec % (24*60*60) || expiration_time.tv_nsec) {
       return false;
     }
   }
