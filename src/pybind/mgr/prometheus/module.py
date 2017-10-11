@@ -33,33 +33,6 @@ def global_instance():
     return _global_instance['plugin']
 
 
-# counter value types
-PERFCOUNTER_TIME = 1
-PERFCOUNTER_U64 = 2
-
-# counter types
-PERFCOUNTER_LONGRUNAVG = 4
-PERFCOUNTER_COUNTER = 8
-PERFCOUNTER_HISTOGRAM = 0x10
-PERFCOUNTER_TYPE_MASK = ~2
-
-
-def stattype_to_str(stattype):
-
-    typeonly = stattype & PERFCOUNTER_TYPE_MASK
-    if typeonly == 0:
-        return 'gauge'
-    if typeonly == PERFCOUNTER_LONGRUNAVG:
-        # this lie matches the DaemonState decoding: only val, no counts
-        return 'counter'
-    if typeonly == PERFCOUNTER_COUNTER:
-        return 'counter'
-    if typeonly == PERFCOUNTER_HISTOGRAM:
-        return 'histogram'
-
-    return ''
-
-
 def health_status_to_number(status):
 
     if status == 'HEALTH_OK':
@@ -167,6 +140,21 @@ class Module(MgrModule):
         self.metrics = self._setup_static_metrics()
         self.schema = OrderedDict()
         _global_instance['plugin'] = self
+
+    def _stattype_to_str(self, stattype):
+
+        typeonly = stattype & self.PERFCOUNTER_TYPE_MASK
+        if typeonly == 0:
+            return 'gauge'
+        if typeonly == self.PERFCOUNTER_LONGRUNAVG:
+            # this lie matches the DaemonState decoding: only val, no counts
+            return 'counter'
+        if typeonly == self.PERFCOUNTER_COUNTER:
+            return 'counter'
+        if typeonly == self.PERFCOUNTER_HISTOGRAM:
+            return 'histogram'
+
+        return ''
 
     def _setup_static_metrics(self):
         metrics = {}
@@ -323,7 +311,7 @@ class Module(MgrModule):
 
         for daemon, counters in self.get_all_perf_counters().iteritems():
             for path, counter_info in counters.items():
-                stattype = stattype_to_str(counter_info['type'])
+                stattype = self._stattype_to_str(counter_info['type'])
                 # XXX simplify first effort: no histograms
                 # averages are already collapsed to one value for us
                 if not stattype or stattype == 'histogram':
