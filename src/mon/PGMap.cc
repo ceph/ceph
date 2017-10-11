@@ -1991,7 +1991,7 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
   }
 }
 
-void PGMap::get_filtered_pg_stats(uint32_t state, int64_t poolid, int64_t osdid,
+void PGMap::get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
                                   bool primary, set<pg_t>& pgs) const
 {
   for (auto i = pg_stat.begin();
@@ -2950,7 +2950,7 @@ int process_pg_map_command(
     if (states.empty())
       states.push_back("all");
 
-    uint32_t state = 0;
+    uint64_t state = 0;
 
     while (!states.empty()) {
       string state_str = states.back();
@@ -2959,13 +2959,13 @@ int process_pg_map_command(
         state = -1;
         break;
       } else {
-        int64_t filter = pg_string_state(state_str);
-        if (filter < 0) {
+        auto filter = pg_string_state(state_str);
+        if (!filter) {
           *ss << "'" << state_str << "' is not a valid pg state,"
               << " available choices: " << pg_state_string(0xFFFFFFFF);
           return -EINVAL;
         }
-        state |= filter;
+        state |= *filter;
       }
 
       states.pop_back();
