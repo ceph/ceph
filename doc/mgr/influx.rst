@@ -51,7 +51,7 @@ For example, a typical configuration might look like this:
 Additional optional configuration settings are:
 
 :interval: Time between reports to InfluxDB.  Default 5 seconds.
-:database: InfluxDB database name.  Default "ceph"
+:database: InfluxDB database name.  Default "ceph".  You will need to create this database and grant write privileges to the configured username or the username must have admin privileges to create it.  
 :port: InfluxDB server port.  Default 8086
     
 
