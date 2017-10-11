@@ -14,7 +14,7 @@
 # display a warning if there is more than one root
 #
   $ crushtool --outfn "$map" --build --num_osds 5 node straw 2 rack straw 1 
-  .* The crush rulesets will use the root rack0 (re)
+  The crush rulesets will use the root rack0 (re)
   and ignore the others.
   There are 3 roots, they can be
   grouped into a single root by appending something like:
