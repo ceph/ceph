@@ -24,8 +24,6 @@ class ClientIO : public io::RestfulClient,
   parser_type& parser;
   beast::flat_buffer& buffer; //< parse buffer
 
-  bool conn_keepalive{false};
-  bool conn_close{false};
   RGWEnv env;
 
   rgw::io::StaticOutputBufferer<> txbuf;
