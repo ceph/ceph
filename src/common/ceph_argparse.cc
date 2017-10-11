@@ -98,10 +98,20 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
 
   std::vector<const char*> env_options;
   std::vector<const char*> env_arguments;
-  static vector<string> str_vec;
   std::vector<const char*> env;
-  str_vec.clear();
-  get_str_vec(p, " ", str_vec);
+
+  static std::mutex str_vec_lock;
+  static vector<string> str_vec;
+
+  /*
+   * We can only populate str_vec once. Other threads could hold pointers into
+   * it, so clearing it out and replacing it is not currently safe.
+   */
+  str_vec_lock.lock();
+  if (str_vec.empty())
+    get_str_vec(p, " ", str_vec);
+  str_vec_lock.unlock();
+
   for (vector<string>::iterator i = str_vec.begin();
        i != str_vec.end();
        ++i)
