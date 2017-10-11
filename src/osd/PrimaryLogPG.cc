@@ -8020,7 +8020,7 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
   if (!cop->temp_cursor.data_complete) {
     assert(cop->data.length() + cop->temp_cursor.data_offset ==
 	   cop->cursor.data_offset);
-    if (pool.info.requires_aligned_append() &&
+    if (pool.info.required_alignment() &&
 	!cop->cursor.data_complete) {
       /**
        * Trim off the unaligned bit at the end, we'll adjust cursor.data_offset
