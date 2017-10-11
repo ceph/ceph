@@ -275,8 +275,8 @@ class Module(MgrModule):
         osd_devices = self.get('osd_map_crush')['devices']
         for osd in osd_map['osds']:
             id_ = osd['osd']
-            p_addr = osd['public_addr']
-            c_addr = osd['cluster_addr']
+            p_addr = osd['public_addr'].split(':')[0]
+            c_addr = osd['cluster_addr'].split(':')[0]
             dev_class = next((osd for osd in osd_devices if osd['id'] == id_))
             self.metrics['osd_metadata'].set(0, (
                 c_addr,
