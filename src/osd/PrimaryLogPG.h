@@ -1269,7 +1269,7 @@ protected:
   void _write_copy_chunk(CopyOpRef cop, PGTransaction *t);
   uint64_t get_copy_chunk_size() const {
     uint64_t size = cct->_conf->osd_copyfrom_max_chunk;
-    if (pool.info.requires_aligned_append()) {
+    if (pool.info.required_alignment()) {
       uint64_t alignment = pool.info.required_alignment();
       if (size % alignment) {
 	size += alignment - (size % alignment);
