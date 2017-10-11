@@ -7,7 +7,6 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
-//#include "librbd/cache/FileImageCache.h"
 #include "librbd/cache/ReplicatedWriteLog.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"

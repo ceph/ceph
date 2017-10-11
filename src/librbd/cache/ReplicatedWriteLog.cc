@@ -835,11 +835,14 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
   //ldout(cct, 20) << "image_extents=" << image_extents << ", "
   //               << "on_finish=" << on_finish << dendl;
 
+  m_image_cache.aio_read(std::move(image_extents), bl, fadvise_flags, on_finish);
   // TODO handle fadvise flags
+  /*
   BlockGuard::C_BlockRequest *req = new C_ReadBlockRequest<I>(
     m_image_ctx, m_image_writeback, *m_image_store, m_release_block, bl,
     on_finish);
   map_blocks(IO_TYPE_READ, std::move(image_extents), req);
+  */
 }
 
 template <typename I>
@@ -859,11 +862,14 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
     }
   }
 
+  m_image_cache.aio_write(std::move(image_extents), std::move(bl), fadvise_flags, on_finish);
+  /*
   // TODO handle fadvise flags
   BlockGuard::C_BlockRequest *req = new C_WriteBlockRequest<I>(
     m_image_ctx, m_image_writeback, *m_policy, *m_journal_store, *m_image_store,
     *m_meta_store, m_release_block, m_detain_block, std::move(bl), BLOCK_SIZE, on_finish);
   map_blocks(IO_TYPE_WRITE, std::move(image_extents), req);
+  */
 }
 
 template <typename I>
@@ -882,6 +888,8 @@ void ReplicatedWriteLog<I>::aio_discard(uint64_t offset, uint64_t length,
     }
   }
 
+  m_image_cache.aio_discard(offset, length, skip_partial_discard, on_finish);
+  /*
   if (!is_block_aligned({{offset, length}})) {
     // For clients that don't use LBA extents, re-align the discard request
     // to work with the cache
@@ -905,6 +913,7 @@ void ReplicatedWriteLog<I>::aio_discard(uint64_t offset, uint64_t length,
       invalidate({{offset, length}}, invalidate_done_ctx);
     });
   flush(invalidate_ctx);
+  */
 }
 
 template <typename I>
@@ -920,6 +929,8 @@ void ReplicatedWriteLog<I>::aio_flush(Context *on_finish) {
     }
   }
 
+  m_image_cache.aio_flush(on_finish);
+  /*
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
       if (r < 0) {
@@ -929,7 +940,7 @@ void ReplicatedWriteLog<I>::aio_flush(Context *on_finish) {
     });
 
   flush(ctx);
-
+  */
 }
 
 template <typename I>
@@ -942,7 +953,6 @@ void ReplicatedWriteLog<I>::aio_writesame(uint64_t offset, uint64_t length,
                  << "data_len=" << bl.length() << ", "
                  << "on_finish=" << on_finish << dendl;
   {
-
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only) {
       on_finish->complete(-EROFS);
@@ -950,6 +960,9 @@ void ReplicatedWriteLog<I>::aio_writesame(uint64_t offset, uint64_t length,
     }
   }
 
+  m_image_cache.aio_writesame(offset, length, std::move(bl), fadvise_flags, on_finish);
+
+  /*
   bufferlist total_bl;
 
   uint64_t left = length;
@@ -959,6 +972,7 @@ void ReplicatedWriteLog<I>::aio_writesame(uint64_t offset, uint64_t length,
   }
   assert(length == total_bl.length());
   aio_write({{offset, length}}, std::move(total_bl), fadvise_flags, on_finish);
+  */
 }
 
 template <typename I>
@@ -976,7 +990,7 @@ void ReplicatedWriteLog<I>::aio_compare_and_write(Extents &&image_extents,
 //  ldout(cct, 20) << "image_extents=" << image_extents << ", "
 //                 << "on_finish=" << on_finish << dendl;
 
-  m_image_writeback.aio_compare_and_write(
+  m_image_cache.aio_compare_and_write(
     std::move(image_extents), std::move(cmp_bl), std::move(bl), mismatch_offset,
     fadvise_flags, on_finish);
 }
