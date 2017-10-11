@@ -82,13 +82,20 @@ bool split_dashdash(const std::vector<const char*>& args,
   return dashdash;
 }
 
+static std::mutex g_str_vec_lock;
+static vector<string> g_str_vec;
+
+void clear_g_str_vec()
+{
+  g_str_vec_lock.lock();
+  g_str_vec.clear();
+  g_str_vec_lock.unlock();
+}
+
 void env_to_vec(std::vector<const char*>& args, const char *name)
 {
   if (!name)
     name = "CEPH_ARGS";
-  char *p = getenv(name);
-  if (!p)
-    return;
 
   bool dashdash = false;
   std::vector<const char*> options;
@@ -100,21 +107,23 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
   std::vector<const char*> env_arguments;
   std::vector<const char*> env;
 
-  static std::mutex str_vec_lock;
-  static vector<string> str_vec;
-
   /*
    * We can only populate str_vec once. Other threads could hold pointers into
    * it, so clearing it out and replacing it is not currently safe.
    */
-  str_vec_lock.lock();
-  if (str_vec.empty())
-    get_str_vec(p, " ", str_vec);
-  str_vec_lock.unlock();
+  g_str_vec_lock.lock();
+  if (g_str_vec.empty()) {
+    char *p = getenv(name);
+    if (!p) {
+      g_str_vec_lock.unlock();
+      return;
+    }
+    get_str_vec(p, " ", g_str_vec);
+  }
+  g_str_vec_lock.unlock();
 
-  for (vector<string>::iterator i = str_vec.begin();
-       i != str_vec.end();
-       ++i)
+  vector<string>::iterator i;
+  for (i = g_str_vec.begin(); i != g_str_vec.end(); ++i)
     env.push_back(i->c_str());
   if (split_dashdash(env, env_options, env_arguments))
     dashdash = true;
