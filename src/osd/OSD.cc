@@ -1825,7 +1825,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     waiter.wait();
   }
 
-  ret = write_meta(store, sb.cluster_fsid, sb.osd_fsid, whoami);
+  ret = write_meta(cct, store, sb.cluster_fsid, sb.osd_fsid, whoami);
   if (ret) {
     derr << "OSD::mkfs: failed to write fsid file: error "
          << cpp_strerror(ret) << dendl;
@@ -1839,7 +1839,7 @@ free_store:
   return ret;
 }
 
-int OSD::write_meta(ObjectStore *store, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami)
+int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami)
 {
   char val[80];
   int r;
@@ -1858,6 +1858,14 @@ int OSD::write_meta(ObjectStore *store, uuid_d& cluster_fsid, uuid_d& osd_fsid, 
   r = store->write_meta("ceph_fsid", val);
   if (r < 0)
     return r;
+
+  string key = cct->_conf->get_val<string>("key");
+  lderr(cct) << "key " << key << dendl;
+  if (key.size()) {
+    r = store->write_meta("osd_key", key);
+    if (r < 0)
+      return r;
+  }
 
   r = store->write_meta("ready", "ready");
   if (r < 0)
