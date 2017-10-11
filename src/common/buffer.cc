@@ -952,6 +952,17 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 
   bool buffer::ptr::at_buffer_tail() const { return _off + _len == _raw->len; }
 
+  void buffer::ptr::reassign_to_mempool(int pool) {
+    if (_raw) {
+      _raw->reassign_to_mempool(pool);
+    }
+  }
+  void buffer::ptr::try_assign_to_mempool(int pool) {
+    if (_raw) {
+      _raw->try_assign_to_mempool(pool);
+    }
+  }
+
   const char *buffer::ptr::c_str() const {
     assert(_raw);
     if (buffer_track_c_str)
