@@ -167,7 +167,7 @@ class Module(MgrModule):
                     activity = ""
 
                     if state == "active":
-                        activity = "Reqs: " + self.format_units(
+                        activity = "Reqs: " + self.format_dimless(
                             self.get_rate("mds", info['name'], "mds_server.handle_client_request"),
                             5
                         ) + "/s"
