@@ -136,9 +136,13 @@ public:
 /// pextent: physical extent
 struct bluestore_pextent_t : public AllocExtent {
   const static uint64_t INVALID_OFFSET = ~0ull;
+  const static uint64_t FAST_TIER_MASK = 1ull << 63;
 
   bluestore_pextent_t() : AllocExtent() {}
-  bluestore_pextent_t(uint64_t o, uint64_t l) : AllocExtent(o, l) {}
+  bluestore_pextent_t(uint64_t o, uint64_t l, bool bdev_fast = false) : AllocExtent(o, l) {
+    if (bdev_fast)
+      offset |= FAST_TIER_MASK;
+  }
   bluestore_pextent_t(const AllocExtent &ext) :
     AllocExtent(ext.offset, ext.length) { }
 
@@ -149,6 +153,12 @@ struct bluestore_pextent_t : public AllocExtent {
   }
   bool is_valid() const {
     return offset != INVALID_OFFSET;
+  }
+  bool is_on_fast_tier() const {
+    return is_valid() && (offset & FAST_TIER_MASK);
+  }
+  uint64_t get_offset() const {
+    return offset & ~FAST_TIER_MASK;
   }
 
   DENC(bluestore_pextent_t, v, p) {
@@ -742,7 +752,7 @@ public:
     while (x_len > 0) {
       assert(p != extents.end());
       uint64_t l = std::min(p->length - x_off, x_len);
-      int r = f(p->offset + x_off, l);
+      int r = f(p->get_offset() + x_off, l);
       if (r < 0)
         return r;
       x_off = 0;
@@ -768,7 +778,7 @@ public:
       uint64_t l = std::min(p->length - x_off, x_len);
       bufferlist t;
       it.copy(l, t);
-      f(p->offset + x_off, t);
+      f(p->get_offset() + x_off, t);
       x_off = 0;
       x_len -= l;
       ++p;
@@ -887,7 +897,7 @@ public:
   }
 
   void split(uint32_t blob_offset, bluestore_blob_t& rb);
-  void allocated(uint32_t b_off, uint32_t length, const AllocExtentVector& allocs);
+  void allocated(uint32_t b_off, uint32_t length, const AllocExtentVector& allocs, bool bdev_fast = false);
   void allocated_test(const bluestore_pextent_t& alloc); // intended for UT only
 
   /// updates blob's pextents container and return unused pextents eligible

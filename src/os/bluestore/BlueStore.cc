@@ -10640,12 +10640,12 @@ int BlueStore::_do_alloc_write(
     }
     for (auto& p : extents) {
       if (o->onode.alloc_hint_flags & CEPH_OSD_ALLOC_HINT_FLAG_FAST_TIER) {
- 	 txc->allocated_fast.insert(p.offset, p.length);
+        txc->allocated_fast.insert(p.offset, p.length);
       } else {
-         txc->allocated.insert(p.offset, p.length);
+        txc->allocated.insert(p.offset, p.length);
       }
     }
-    dblob.allocated(p2align(b_off, min_alloc_size), final_length, extents);
+    dblob.allocated(P2ALIGN(b_off, min_alloc_size), final_length, extents, bdev_target == bdev_fast);
 
     dout(20) << __func__ << " blob " << *b << dendl;
     if (dblob.has_csum()) {
@@ -10752,9 +10752,9 @@ void BlueStore::_wctx_finish(
       dout(20) << __func__ << "  release " << e << dendl;
       uint32_t flags = o->onode.alloc_hint_flags;
       if (flags & CEPH_OSD_ALLOC_HINT_FLAG_FAST_TIER) {
-	txc->released_fast.insert(e.offset, e.length);
+	txc->released_fast.insert(e.get_offset(), e.length);
       } else {
-         txc->released.insert(e.offset, e.length);
+        txc->released.insert(e.get_offset(), e.length);
       }
       txc->statfs_delta.allocated() -= e.length;
       if (blob.is_compressed()) {

@@ -762,7 +762,8 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
     return 0;
 }
 
-void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const AllocExtentVector& allocs)
+void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const AllocExtentVector& allocs,
+                                 bool bdev_fast)
 {
   if (extents.size() == 0) {
     // if blob is compressed then logical length to be already configured
@@ -777,7 +778,7 @@ void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const AllocExt
     }
     uint32_t new_len = b_off;
     for (auto& a : allocs) {
-      extents.emplace_back(a.offset, a.length);
+      extents.emplace_back(a.offset, a.length, bdev_fast);
       new_len += a.length;
     }
     if (!is_compressed()) {
