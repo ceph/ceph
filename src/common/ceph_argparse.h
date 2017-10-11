@@ -41,6 +41,7 @@ public:
 
 /////////////////////// Functions ///////////////////////
 extern void string_to_vec(std::vector<std::string>& args, std::string argstr);
+extern void clear_g_str_vec();
 extern void env_to_vec(std::vector<const char*>& args, const char *name=NULL);
 extern void argv_to_vec(int argc, const char **argv,
                  std::vector<const char*>& args);
