@@ -14,6 +14,7 @@
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
 #include "common/errno.h"
+#include "common/safe_io.h"
 
 #include "os/bluestore/BlueFS.h"
 #include "os/bluestore/BlueStore.h"
@@ -143,7 +144,7 @@ int main(int argc, char **argv)
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, show-label")
+    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, show-label, prime-osd-dir")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -176,6 +177,16 @@ int main(int argc, char **argv)
   if (action == "fsck" || action == "repair") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (action == "prime-osd-dev") {
+    if (devs.size() != 1) {
+      cerr << "must specify the main bluestore device" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (path.empty()) {
+      cerr << "must specify osd dir to prime" << std::endl;
       exit(EXIT_FAILURE);
     }
   }
@@ -266,6 +277,68 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     cout << action << " success" << std::endl;
+  }
+  else if (action == "prime-osd-dir") {
+    bluestore_bdev_label_t label;
+    int r = BlueStore::_read_bdev_label(cct.get(), devs.front(), &label);
+    if (r < 0) {
+      cerr << "failed to read label for " << devs.front() << ": "
+	   << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    // kludge some things into the map that we want to populate into
+    // target dir
+    label.meta["path_block"] = devs.front();
+    label.meta["type"] = "bluestore";
+    label.meta["fsid"] = stringify(label.osd_uuid);
+    
+    for (auto kk : {
+	"whoami",
+	  "osd_key",
+	  "path_block", "path_block.db", "path_block.wal",
+	  "ceph_fsid",
+	  "fsid",
+	  "type",
+	  "ready" }) {
+      string k = kk;
+      auto i = label.meta.find(k);
+      if (i == label.meta.end()) {
+	continue;
+      }
+      string p = path + "/" + k;
+      string v = i->second;
+      if (k == "osd_key") {
+	p = path + "/keyring";
+	v = "[osd.";
+	v += label.meta["whoami"];
+	v += "]\nkey = " + i->second;
+      }
+      v += "\n";
+      if (k.find("path_") == 0) {
+	p = path + "/" + k.substr(5);
+	int r = ::symlink(v.c_str(), p.c_str());
+	if (r < 0) {
+	  cerr << "error symlinking " << p << ": " << cpp_strerror(errno)
+	       << std::endl;
+	  exit(EXIT_FAILURE);
+	}
+      } else {
+	int fd = ::open(p.c_str(), O_CREAT|O_TRUNC|O_WRONLY, 0600);
+	if (fd < 0) {
+	  cerr << "error writing " << p << ": " << cpp_strerror(errno)
+	       << std::endl;
+	  exit(EXIT_FAILURE);
+	}
+	int r = safe_write(fd, v.c_str(), v.size());
+	if (r < 0) {
+	  cerr << "error writing to " << p << ": " << cpp_strerror(errno)
+	       << std::endl;
+	  exit(EXIT_FAILURE);
+	}
+	::close(fd);
+      }
+    }
   }
   else if (action == "show-label") {
     JSONFormatter jf(true);
