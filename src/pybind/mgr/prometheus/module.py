@@ -52,7 +52,9 @@ DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
 DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
 
-OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr', 'weight')
+OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
+
+OSD_STATUS = ['weight', 'up', 'in']
 
 POOL_METADATA = ('pool_id', 'name')
 
@@ -191,6 +193,15 @@ class Module(MgrModule):
             'POOL Metadata',
             POOL_METADATA
         )
+        for state in OSD_STATUS:
+            path = 'osd_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'untyped',
+                path,
+                'OSD status {}'.format(state),
+                ('ceph_daemon',)
+            )
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
             self.log.debug("init: creating {}".format(path))
@@ -259,22 +270,25 @@ class Module(MgrModule):
             if state not in reported_states:
                 self.metrics[path].set(0)
 
-    def get_osd_metadata(self):
+    def get_metadata_and_osd_status(self):
         osd_map = self.get('osd_map')
         osd_devices = self.get('osd_map_crush')['devices']
         for osd in osd_map['osds']:
             id_ = osd['osd']
             p_addr = osd['public_addr']
             c_addr = osd['cluster_addr']
-            w = osd['weight']
             dev_class = next((osd for osd in osd_devices if osd['id'] == id_))
             self.metrics['osd_metadata'].set(0, (
                 c_addr,
                 dev_class['class'],
                 id_,
-                p_addr,
-                w
+                p_addr
             ))
+            for state in OSD_STATUS:
+                status = osd[state]
+                self.metrics['osd_{}'.format(state)].set(
+                    status,
+                    ('osd.{}'.format(id_),))
 
             osd_metadata = self.get_metadata("osd", str(id_))
             dev_keys = ("backend_filestore_dev_node", "bluestore_bdev_dev_node")
@@ -306,7 +320,7 @@ class Module(MgrModule):
         self.get_health()
         self.get_df()
         self.get_quorum_status()
-        self.get_osd_metadata()
+        self.get_metadata_and_osd_status()
         self.get_pg_status()
 
         for daemon, counters in self.get_all_perf_counters().iteritems():
