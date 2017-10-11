@@ -8568,52 +8568,49 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
     fm->release(p.get_start(), p.get_len(), t);
   }
 
-  if (!bdev_fast) {
-    _txc_update_store_statfs(txc);
-    return;
-  }
+  if (bdev_fast) {
+    dout(20) << __func__ << " txc " << txc << std::hex
+	     << " allocated (fast) 0x" << txc->allocated_fast
+	     << " released (fast) 0x" << txc->released_fast
+	     << std::dec << dendl;
 
-  dout(20) << __func__ << " txc " << txc << std::hex
-	   << " allocated (fast) 0x" << txc->allocated_fast
-	   << " released (fast) 0x" << txc->released_fast
-	   << std::dec << dendl;
-
-  // We have to handle the case where we allocate *and* deallocate the
-  // same region in this transaction.  The freelist doesn't like that.
-  // (Actually, the only thing that cares is the BitmapFreelistManager
-  // debug check. But that's important.)
-  interval_set<uint64_t> tmp_allocated_fast, tmp_released_fast;
-  interval_set<uint64_t> *pallocated_fast = &txc->allocated_fast;
-  interval_set<uint64_t> *preleased_fast = &txc->released_fast;
-  if (!txc->allocated_fast.empty() && !txc->released_fast.empty()) {
-    interval_set<uint64_t> overlap;
-    overlap.intersection_of(txc->allocated_fast, txc->released_fast);
-    if (!overlap.empty()) {
-      tmp_allocated_fast = txc->allocated_fast;
-      tmp_allocated_fast.subtract(overlap);
-      tmp_released_fast = txc->released_fast;
-      tmp_released_fast.subtract(overlap);
-      dout(20) << __func__ << "  overlap (fast) 0x" << std::hex << overlap
-	       << ", new allocated (fast) 0x" << tmp_allocated_fast
-	       << " released (fast) 0x" << tmp_released_fast << std::dec
-	       << dendl;
-      pallocated_fast = &tmp_allocated_fast;
-      preleased_fast = &tmp_released_fast;
+    // We have to handle the case where we allocate *and* deallocate the
+    // same region in this transaction.  The freelist doesn't like that.
+    // (Actually, the only thing that cares is the BitmapFreelistManager
+    // debug check. But that's important.)
+    interval_set<uint64_t> tmp_allocated_fast, tmp_released_fast;
+    interval_set<uint64_t> *pallocated_fast = &txc->allocated_fast;
+    interval_set<uint64_t> *preleased_fast = &txc->released_fast;
+    if (!txc->allocated_fast.empty() && !txc->released_fast.empty()) {
+      interval_set<uint64_t> overlap;
+      overlap.intersection_of(txc->allocated_fast, txc->released_fast);
+      if (!overlap.empty()) {
+	tmp_allocated_fast = txc->allocated_fast;
+	tmp_allocated_fast.subtract(overlap);
+	tmp_released_fast = txc->released_fast;
+	tmp_released_fast.subtract(overlap);
+	dout(20) << __func__ << "  overlap (fast) 0x" << std::hex << overlap
+		 << ", new allocated (fast) 0x" << tmp_allocated_fast
+		 << " released (fast) 0x" << tmp_released_fast << std::dec
+		 << dendl;
+	pallocated_fast = &tmp_allocated_fast;
+	preleased_fast = &tmp_released_fast;
+      }
     }
-  }
 
-  // update freelist with non-overlap sets
-  for (interval_set<uint64_t>::iterator p = pallocated_fast->begin();
-       p != pallocated_fast->end();
-       ++p) {
-    fm_fast->allocate(p.get_start(), p.get_len(), t);
-  }
-  for (interval_set<uint64_t>::iterator p = preleased_fast->begin();
-       p != preleased_fast->end();
-       ++p) {
-    dout(20) << __func__ << " release (fast) 0x" << std::hex << p.get_start()
-	     << "~" << p.get_len() << std::dec << dendl;
-    fm_fast->release(p.get_start(), p.get_len(), t);
+    // update freelist with non-overlap sets
+    for (interval_set<uint64_t>::iterator p = pallocated_fast->begin();
+	 p != pallocated_fast->end();
+	 ++p) {
+      fm_fast->allocate(p.get_start(), p.get_len(), t);
+    }
+    for (interval_set<uint64_t>::iterator p = preleased_fast->begin();
+	 p != preleased_fast->end();
+	 ++p) {
+      dout(20) << __func__ << " release (fast) 0x" << std::hex << p.get_start()
+	       << "~" << p.get_len() << std::dec << dendl;
+      fm_fast->release(p.get_start(), p.get_len(), t);
+    }
   }
 
   _txc_update_store_statfs(txc);
