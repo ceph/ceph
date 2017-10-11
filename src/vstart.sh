@@ -633,9 +633,14 @@ EOF
             echo "add osd$osd $uuid"
             ceph_adm osd create $uuid
             ceph_adm osd crush add osd.$osd 1.0 host=$HOSTNAME root=default
-            $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey --osd-uuid $uuid
+	    OSD_SECRET=$($CEPH_BIN/ceph-authtool --gen-print-key)
+            $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
+	    cat > $key_fn<<EOF
+[osd.$osd]
+	key = $OSD_SECRET
+EOF
             echo adding osd$osd key to auth repository
             ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd" mgr "allow profile osd"
         fi
