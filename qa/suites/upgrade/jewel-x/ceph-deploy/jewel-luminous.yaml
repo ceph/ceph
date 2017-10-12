@@ -18,6 +18,15 @@ overrides:
         osd sloppy crc: true
       client:
         rbd default features: 5
+openstack:
+- machine:
+    disk: 100
+- volumes:
+    count: 3
+    size: 30
+#  reluctantely :( hard-coded machine type
+#  it will override command line args with teuthology-suite  
+machine_type: vps
 roles:
 - - mon.a
   - mds.a
@@ -37,10 +46,12 @@ roles:
   - client.0
 tasks:
 - ssh-keys:
+- print: "**** done ssh-keys"
 - ceph-deploy:
     branch:
       stable: jewel
     skip-mgr: True
+- print: "**** done initial ceph-deploy"
 - ceph-deploy.upgrade:
     branch:
       dev: luminous
@@ -50,12 +61,22 @@ tasks:
       - mon.a
       - mon.b
       - mon.c
+      - osd.6
+- print: "**** done ceph-deploy upgrade"
+- exec:
+     osd.0:
+      - ceph osd require-osd-release luminous
+      - ceph osd set-require-min-compat-client luminous
+- print: "**** done `ceph osd require-osd-release luminous`"
 - workunit:
     clients:
       all:
         - kernel_untar_build.sh
+- print: "**** done kernel_untar_build.sh"
 - systemd:
+- print: "**** done systemd"
 - workunit:
     clients:
       all:
       - rados/load-gen-mix.sh
+- print: "**** done rados/load-gen-mix.sh"
