@@ -84,14 +84,13 @@ static int chown_path(const std::string &pathname, const uid_t owner, const gid_
 void global_pre_init(std::vector < const char * > *alt_def_args,
 		     std::vector < const char* >& args,
 		     uint32_t module_type, code_environment_t code_env,
-		     int flags,
-		     const char *data_dir_option)
+		     int flags)
 {
   std::string conf_file_list;
   std::string cluster = "";
   CephInitParameters iparams = ceph_argparse_early_args(args, module_type,
 							&cluster, &conf_file_list);
-  CephContext *cct = common_preinit(iparams, code_env, flags, data_dir_option);
+  CephContext *cct = common_preinit(iparams, code_env, flags);
   cct->_conf->cluster = cluster;
   global_init_set_globals(cct);
   md_config_t *conf = cct->_conf;
