@@ -8174,7 +8174,7 @@ void OSD::do_notifies(
       continue;
     }
     service.share_map_peer(it->first, con.get(), curmap);
-    dout(7) << __func__ << " osd " << it->first
+    dout(7) << __func__ << " osd." << it->first
 	    << " on " << it->second.size() << " PGs" << dendl;
     MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
 				       it->second);
