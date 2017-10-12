@@ -2315,6 +2315,16 @@ void pg_stat_t::dump(Formatter *f) const
   f->close_section();
   f->dump_int("up_primary", up_primary);
   f->dump_int("acting_primary", acting_primary);
+  f->open_array_section("purged_snaps");
+  for (interval_set<snapid_t>::const_iterator i = purged_snaps.begin();
+       i != purged_snaps.end();
+       ++i) {
+    f->open_object_section("interval");
+    f->dump_stream("start") << i.get_start();
+    f->dump_stream("length") << i.get_len();
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void pg_stat_t::dump_brief(Formatter *f) const
@@ -2334,7 +2344,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(23, 22, bl);
+  ENCODE_START(24, 22, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
@@ -2376,6 +2386,7 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(last_became_peered, bl);
   ::encode(pin_stats_invalid, bl);
   ::encode(state, bl);
+  ::encode(purged_snaps, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2383,7 +2394,7 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(23, bl);
+  DECODE_START(24, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
   ::decode(reported_epoch, bl);
@@ -2434,6 +2445,9 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     ::decode(state, bl);
   } else {
     state = old_state;
+  }
+  if (struct_v >= 24) {
+    ::decode(purged_snaps, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -2528,7 +2542,8 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.hitset_bytes_stats_invalid == r.hitset_bytes_stats_invalid &&
     l.up_primary == r.up_primary &&
     l.acting_primary == r.acting_primary &&
-    l.pin_stats_invalid == r.pin_stats_invalid;
+    l.pin_stats_invalid == r.pin_stats_invalid &&
+    l.purged_snaps == r.purged_snaps;
 }
 
 // -- pool_stat_t --
