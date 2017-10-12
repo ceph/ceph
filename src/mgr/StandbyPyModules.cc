@@ -97,10 +97,11 @@ int StandbyPyModules::start_one(std::string const &module_name,
     modules.erase(module_name);
     return r;
   } else {
-    std::ostringstream thread_name;
-    thread_name << "mgr." << module_name;
     dout(4) << "Starting thread for " << module_name << dendl;
-    modules[module_name]->thread.create(thread_name.str().c_str());
+    // Giving Thread the module's module_name member as its
+    // char* thread name: thread must not outlive module class lifetime.
+    modules[module_name]->thread.create(
+        modules[module_name]->get_name().c_str());
     return 0;
   }
 }
