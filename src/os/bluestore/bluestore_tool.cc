@@ -342,7 +342,7 @@ int main(int argc, char **argv)
   }
   else if (action == "show-label") {
     JSONFormatter jf(true);
-    jf.open_array_section("devices");
+    jf.open_object_section("devices");
     for (auto& i : devs) {
       bluestore_bdev_label_t label;
       int r = BlueStore::_read_bdev_label(cct.get(), i, &label);
