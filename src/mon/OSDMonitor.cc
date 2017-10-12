@@ -571,6 +571,8 @@ void OSDMonitor::create_pending()
 {
   pending_inc = OSDMap::Incremental(osdmap.epoch+1);
   pending_inc.fsid = mon->monmap->fsid;
+  pending_metadata.clear();
+  pending_metadata_rm.clear();
 
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 
