@@ -2816,6 +2816,22 @@ void PG::publish_stats_to_osd()
   pre_publish.stats.add(unstable_stats);
   utime_t cutoff = now;
   cutoff -= cct->_conf->osd_pg_stat_report_interval_max;
+
+  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_MIMIC) {
+    // share (some of) our purged_snaps via the pg_stats. limit # of intervals
+    // because we don't want to make the pg_stat_t structures too expensive.
+    unsigned max = cct->_conf->get_val<uint64_t>("osd_max_snap_prune_intervals_per_epoch");
+    unsigned num = 0;
+    auto i = info.purged_snaps.begin();
+    while (num < max && i != info.purged_snaps.end()) {
+      pre_publish.purged_snaps.insert(i.get_start(), i.get_len());
+      ++num;
+      ++i;
+    }
+    dout(20) << __func__ << " reporting purged_snaps "
+	     << pre_publish.purged_snaps << dendl;
+  }
+
   if (pg_stats_publish_valid && pre_publish == pg_stats_publish &&
       info.stats.last_fresh > cutoff) {
     dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
