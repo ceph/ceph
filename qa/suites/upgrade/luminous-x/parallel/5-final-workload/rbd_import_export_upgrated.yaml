@@ -1,6 +1,7 @@
 meta:
 - desc: |
    run basic import/export cli tests for rbd
+   on upgrated client
 tasks:
   - workunit:
       clients:
@@ -8,4 +9,4 @@ tasks:
           - rbd/import_export.sh
       env:
         RBD_CREATE_ARGS: --new-format
-  - print: "**** done rbd/import_export.sh 4-final-workload"
+  - print: "**** done rbd/import_export.sh 4-final-workload  on upgrated client"
