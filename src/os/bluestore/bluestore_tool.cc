@@ -195,12 +195,14 @@ int main(int argc, char **argv)
       cerr << "must specify bluestore path *or* raw device(s)" << std::endl;
       exit(EXIT_FAILURE);
     }
-    cout << "infering bluefs devices from bluestore path" << std::endl;
-    for (auto fn : {"block", "block.wal", "block.db"}) {
-      string p = path + "/" + fn;
-      struct stat st;
-      if (::stat(p.c_str(), &st) == 0) {
-	devs.push_back(p);
+    if (devs.empty()) {
+      cout << "infering bluefs devices from bluestore path" << std::endl;
+      for (auto fn : {"block", "block.wal", "block.db"}) {
+	string p = path + "/" + fn;
+	struct stat st;
+	if (::stat(p.c_str(), &st) == 0) {
+	  devs.push_back(p);
+	}
       }
     }
   }
