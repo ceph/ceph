@@ -1077,6 +1077,7 @@ void Objecter::_scan_requests(OSDSession *s,
     Op *op = p->second;
     ++p;   // check_op_pool_dne() may touch ops; prevent iterator invalidation
     ldout(cct, 10) << " checking op " << op->tid << dendl;
+    _prune_snapc(osdmap->get_new_removed_snaps(), op);
     bool force_resend_writes = cluster_full;
     if (pool_full_map)
       force_resend_writes = force_resend_writes ||
@@ -1230,6 +1231,9 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	update_pool_full_map(pool_full_map);
 
 	// check all outstanding requests on every epoch
+	for (auto& i : need_resend) {
+	  _prune_snapc(osdmap->get_new_removed_snaps(), i.second);
+	}
 	_scan_requests(homeless_session, skipped_map, cluster_full,
 		       &pool_full_map, need_resend,
 		       need_resend_linger, need_resend_command, sul);
@@ -2756,6 +2760,35 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   if (!p)
     return -ENOENT;
   return p->raw_hash_to_pg(p->hash_key(key, ns));
+}
+
+void Objecter::_prune_snapc(
+  const mempool::osdmap::map<int64_t,
+  mempool::osdmap::flat_set<snapid_t>>& new_removed_snaps,
+  Op *op)
+{
+  bool match = false;
+  auto i = new_removed_snaps.find(op->target.base_pgid.pool());
+  if (i != new_removed_snaps.end()) {
+    for (auto s : op->snapc.snaps) {
+      if (i->second.count(s)) {
+	match = true;
+	break;
+      }
+    }
+    if (match) {
+      vector<snapid_t> new_snaps;
+      for (auto s : op->snapc.snaps) {
+	if (std::find(i->second.begin(), i->second.end(), s) ==
+	    i->second.end()) {
+	  new_snaps.push_back(s);
+	}
+      }
+      op->snapc.snaps.swap(new_snaps);
+      ldout(cct,10) << __func__ << " op " << op->tid << " snapc " << op->snapc
+		    << " (was " << new_snaps << ")" << dendl;
+    }
+  }
 }
 
 int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
