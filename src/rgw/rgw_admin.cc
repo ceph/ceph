@@ -87,11 +87,13 @@ void usage()
   cout << "  bucket rm                  remove bucket\n";
   cout << "  bucket check               check bucket index\n";
   cout << "  bucket reshard             reshard bucket\n";
+  cout << "  bucket rewrite             rewrite all objects in the specified bucket\n";
   cout << "  bucket sync disable        disable bucket sync\n";
   cout << "  bucket sync enable         enable bucket sync\n";
   cout << "  bi get                     retrieve bucket index object entries\n";
   cout << "  bi put                     store bucket index object entries\n";
   cout << "  bi list                    list raw bucket index entries\n";
+  cout << "  bi purge                   purge bucket index entries\n";
   cout << "  object rm                  remove object\n";
   cout << "  object stat                stat an object for its metadata\n";
   cout << "  object unlink              unlink object from bucket index\n";
@@ -170,6 +172,9 @@ void usage()
   cout << "  metadata put               put metadata info\n";
   cout << "  metadata rm                remove metadata info\n";
   cout << "  metadata list              list metadata info\n";
+  cout << "  metadata sync status       get metadata sync status\n";
+  cout << "  metadata sync init         init metadata sync\n";
+  cout << "  metadata sync run          run metadata sync\n";
   cout << "  mdlog list                 list metadata log\n";
   cout << "  mdlog trim                 trim metadata log (use start-date, end-date or\n";
   cout << "                             start-marker, end-marker)\n";
@@ -205,6 +210,9 @@ void usage()
   cout << "  reshard cancel             cancel resharding a bucket\n";
   cout << "  reshard stale-instances list list stale-instances from bucket resharding\n";
   cout << "  reshard stale-instances rm   cleanup stale-instances from bucket resharding\n";
+  cout << "  data sync status           get data sync status\n";
+  cout << "  data sync init             init data sync\n";
+  cout << "  data sync run              run data sync\n";
   cout << "  sync error list            list sync error\n";
   cout << "  sync error trim            trim sync error\n";
   cout << "options:\n";

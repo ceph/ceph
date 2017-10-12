@@ -50,6 +50,9 @@ which are as follows:
 :command:`user stats`
   Show user stats as accounted by quota subsystem.
 
+:command:`user list`
+  List all users.
+
 :command:`caps add`
   Add user capabilities.
 
@@ -77,6 +80,9 @@ which are as follows:
   removes ordering requirement, possibly generating results more
   quickly in buckets with large number of objects.
 
+:command:`bucket limit check`
+  Show bucket sharding stats.
+
 :command:`bucket link`
   Link bucket to specified user.
 
@@ -92,11 +98,74 @@ which are as follows:
 :command:`bucket check`
   Check bucket index.
 
+:command:`bucket rewrite`
+  Rewrite all objects in the specified bucket.
+
+:command:`bucket reshard`
+  Reshard a bucket.
+
+:command:`bucket sync disable`
+  Disable bucket sync.
+
+:command:`bucket sync enable`
+  Enable bucket sync.
+
+:command:`bi get`
+  Retrieve bucket index object entries.
+
+:command:`bi put`
+  Store bucket index object entries.
+
+:command:`bi list`
+  List raw bucket index entries.
+
+:command:`bi purge`
+  Purge bucket index entries.
+
 :command:`object rm`
   Remove an object.
 
+:command:`object stat`
+  Stat an object for its metadata.
+
 :command:`object unlink`
   Unlink object from bucket index.
+
+:command:`object rewrite`
+  Rewrite the specified object.
+
+:command:`objects expire`
+  Run expired objects cleanup.
+
+:command:`objects expire-stale list`
+  List stale expired objects (caused by reshard).
+
+:command:`objects expire-stale rm`
+  Remove stale expired objects.
+
+:command:`period delete`
+  Delete a period.
+
+:command:`period get`
+  Get the period info.
+
+:command:`period get-current`
+  Get the current period info.
+
+:command:`period pull`
+  Pull a period.
+
+:command:`period push`
+  Push a period.
+
+:command:`period list`
+  List all periods.
+
+:command:`period update`
+  Update the staging period.
+
+:command:`period commit`
+  Commit the staging period.
 
 :command:`quota set`
   Set quota params.
@@ -107,23 +176,98 @@ which are as follows:
 :command:`quota disable`
   Disable quota.
 
-:command:`region get`
-  Show region info.
+:command:`global quota get`
+  View global quota parameters.
 
-:command:`region list`
-  List all regions set on this cluster.
+:command:`global quota set`
+  Set global quota parameters.
 
-:command:`region set`
-  Set region info (requires infile).
+:command:`global quota enable`
+  Enable a global quota.
 
-:command:`region default`
-  Set default region.
+:command:`global quota disable`
+  Disable a global quota.
 
-:command:`region-map get`
-  Show region-map.
+:command:`realm create`
+  Create a new realm.
 
-:command:`region-map set`
-  Set region-map (requires infile).
+:command:`realm delete`
+  Delete a realm.
+
+:command:`realm get`
+  Show the realm info.
+
+:command:`realm get-default`
+  Get the default realm name.
+
+:command:`realm list`
+  List all realms.
+
+:command:`realm list-periods`
+  List all realm periods.
+
+:command:`realm rename`
+  Rename a realm.
+
+:command:`realm set`
+  Set the realm info (requires infile).
+
+:command:`realm default`
+  Set the realm as default.
+
+:command:`realm pull`
+  Pull a realm and its current period.
+
+:command:`zonegroup add`
+  Add a zone to a zonegroup.
+
+:command:`zonegroup create`
+  Create a new zone group info.
+
+:command:`zonegroup default`
+  Set the default zone group.
+
+:command:`zonegroup delete`
+  Delete a zone group info.
+
+:command:`zonegroup get`
+  Show the zone group info.
+
+:command:`zonegroup modify`
+  Modify an existing zonegroup.
+
+:command:`zonegroup set`
+  Set the zone group info (requires infile).
+
+:command:`zonegroup remove`
+  Remove a zone from a zonegroup.
+
+:command:`zonegroup rename`
+  Rename a zone group.
+
+:command:`zonegroup list`
+  List all zone groups set on this cluster.
+
+:command:`zonegroup placement list`
+  List zonegroup's placement targets.
+
+:command:`zonegroup placement add`
+  Add a placement target id to a zonegroup.
+
+:command:`zonegroup placement modify`
+  Modify a placement target of a specific zonegroup.
+
+:command:`zonegroup placement rm`
+  Remove a placement target from a zonegroup.
+
+:command:`zonegroup placement default`
+  Set a zonegroup's default placement target.
+
+:command:`zone create`
+  Create a new zone.
+
+:command:`zone delete`
+  Delete a zone.
 
 :command:`zone get`
   Show zone cluster params.
@@ -131,14 +275,26 @@ which are as follows:
 :command:`zone set`
   Set zone cluster params (requires infile).
 
+:command:`zone modify`
+  Modify an existing zone.
+
 :command:`zone list`
   List all zones set on this cluster.
 
-:command:`sync error list`
-  list sync error.
+:command:`zone rename`
+  Rename a zone.
 
-:command:`sync error trim`
-  trim sync error.
+:command:`zone placement list`
+  List zone's placement targets.
+
+:command:`zone placement add`
+  Add a zone placement target.
+
+:command:`zone placement modify`
+  Modify a zone placement target.
+
+:command:`zone placement rm`
+  Remove a zone placement target.
 
 :command:`pool add`
   Add an existing pool for data placement.
@@ -175,6 +331,12 @@ which are as follows:
 :command:`gc process`
   Manually process garbage.
 
+:command:`lc list`
+  List all bucket lifecycle progress.
+
+:command:`lc process`
+  Manually process lifecycle.
+
 :command:`metadata get`
   Get metadata info.
 
@@ -187,11 +349,23 @@ which are as follows:
 :command:`metadata list`
   List metadata info.
 
+:command:`metadata sync status`
+  Get metadata sync status.
+
+:command:`metadata sync init`
+  Init metadata sync.
+
+:command:`metadata sync run`
+  Run metadata sync.
+
 :command:`mdlog list`
   List metadata log.
 
 :command:`mdlog trim`
   Trim metadata log.
+
+:command:`mdlog status`
+  Read metadata log status.
 
 :command:`bilog list`
   List bucket index log.
@@ -204,6 +378,9 @@ which are as follows:
 
 :command:`datalog trim`
   Trim data log.
+
+:command:`datalog status`
+  Read data log status.
 
 :command:`opstate list`
   List stateful operations entries (use client_id, op_id, object).
@@ -220,6 +397,9 @@ which are as follows:
 :command:`replicalog get`
   Get replica metadata log entry.
 
+:command:`replicalog update`
+  Update replica metadata log entry.
+
 :command:`replicalog delete`
   Delete replica metadata log entry.
 
@@ -228,6 +408,36 @@ which are as follows:
 
 :command:`orphans finish`
   Clean up search for leaked rados objects
+
+:command:`orphans list-jobs`
+  List the current job-ids for the orphans search.
+
+:command:`role create`
+  create a new AWS role for use with STS.
+
+:command:`role delete`
+  Delete a role.
+
+:command:`role get`
+  Get a role.
+
+:command:`role list`
+  List the roles with specified path prefix.
+
+:command:`role modify`
+  Modify the assume role policy of an existing role.
+
+:command:`role-policy put`
+  Add/update permission policy to role.
+
+:command:`role-policy list`
+  List the policies attached to a role.
+
+:command:`role-policy get`
+  Get the specified inline policy document embedded with the given role.
+
+:command:`role-policy delete`
+  Delete the policy attached to a role
 
 :command:`reshard add`
   Schedule a resharding of a bucket
@@ -243,6 +453,27 @@ which are as follows:
 
 :command:`reshard cancel`
   Cancel resharding a bucket
+
+:command:`reshard stale-instances list`
+  List stale-instances from bucket resharding.
+
+:command:`reshard stale-instances rm`
+  Clean up stale-instances from bucket resharding.
+
+:command:`data sync status`
+  Get data sync status of the specified source zone.
+
+:command:`data sync init`
+  Init data sync for the specified source zone.
+
+:command:`data sync run`
+  Run data sync for the specified source zone.
+
+:command:`sync error list`
+  list sync error.
+
+:command:`sync error trim`
+  trim sync error.
 
 Options
 =======
