@@ -2966,18 +2966,20 @@ void OSDMonitor::send_incremental(epoch_t first,
   }
 
   if (first < get_first_committed()) {
+    MOSDMap *m = new MOSDMap(osdmap.get_fsid());
+    m->oldest_map = get_first_committed();
+    m->newest_map = osdmap.get_epoch();
+
+    // share removed snaps during the gap
+    get_removed_snaps_range(first, m->oldest_map, &m->gap_removed_snaps);
+
     first = get_first_committed();
     bufferlist bl;
     int err = get_version_full(first, bl);
     assert(err == 0);
     assert(bl.length());
-
     dout(20) << "send_incremental starting with base full "
 	     << first << " " << bl.length() << " bytes" << dendl;
-
-    MOSDMap *m = new MOSDMap(osdmap.get_fsid());
-    m->oldest_map = get_first_committed();
-    m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
 
     if (req) {
@@ -3007,6 +3009,28 @@ void OSDMonitor::send_incremental(epoch_t first,
     session->osd_epoch = last;
     if (onetime || req)
       break;
+  }
+}
+
+void OSDMonitor::get_removed_snaps_range(
+  epoch_t start, epoch_t end,
+  mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps)
+{
+  // we only care about pools that exist now.
+  for (auto& p : osdmap.get_pools()) {
+    auto& t = (*gap_removed_snaps)[p.first];
+    for (epoch_t epoch = start; epoch < end; ++epoch) {
+      string k = make_snap_epoch_key(p.first, epoch);
+      bufferlist v;
+      mon->store->get(OSD_SNAP_PREFIX, k, v);
+      if (v.length()) {
+	auto q = v.begin();
+	OSDMap::snap_interval_set_t snaps;
+	::decode(snaps, q);
+	t.union_of(snaps);
+      }
+    }
+    dout(10) << __func__ << " " << p.first << " " << t << dendl;
   }
 }
 
