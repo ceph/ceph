@@ -262,8 +262,6 @@ int main(int argc, char **argv)
 			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(cct.get());
 
-  cout << "action " << action << std::endl;
-
   if (action == "fsck" ||
       action == "repair") {
     validate_path(cct.get(), path, false);
