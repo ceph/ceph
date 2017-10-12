@@ -19,3 +19,4 @@ usr/share/man/man8/ceph-disk.8
 usr/share/man/man8/ceph-volume.8
 usr/share/man/man8/ceph-volume-systemd.8
 usr/share/man/man8/ceph-osd.8
+usr/share/man/man8/ceph-bluestore-tool.8
