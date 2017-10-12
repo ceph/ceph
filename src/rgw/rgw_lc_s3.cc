@@ -24,6 +24,11 @@ bool LCExpiration_S3::xml_end(const char * el) {
   }
   if (lc_days) {
     days = lc_days->get_data();
+    string err;
+    strict_strtol(days.c_str(), 10, &err);
+    if (!err.empty()) {
+      return false;
+    }
   } else if (lc_dm) {
     dm_expiration = lc_dm->get_data().compare("true") == 0;
     if (!dm_expiration) {
@@ -50,6 +55,11 @@ bool LCNoncurExpiration_S3::xml_end(const char *el) {
     return false;
   }
   days = lc_noncur_days->get_data();
+  string err;
+  strict_strtol(days.c_str(), 10, &err);
+  if (!err.empty()) {
+    return false;
+  }
   return true;
 }
 
@@ -59,6 +69,11 @@ bool LCMPExpiration_S3::xml_end(const char *el) {
     return false;
   }
   days = lc_mp_days->get_data();
+  string err;
+  strict_strtol(days.c_str(), 10, &err);
+  if (!err.empty()) {
+    return false;
+  }
   return true;
 }
 
