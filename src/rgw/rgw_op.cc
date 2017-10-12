@@ -4623,10 +4623,10 @@ int RGWGetACLs::verify_permission()
 {
   bool perm;
   if (!s->object.empty()) {
-    perm = verify_object_permission(s,
-				    s->object.instance.empty() ?
-				    rgw::IAM::s3GetObjectAcl :
-				    rgw::IAM::s3GetObjectVersionAcl);
+    iam_action = s->object.instance.empty() ? rgw::IAM::s3GetObjectAcl : rgw::IAM::s3GetObjectVersionAcl;
+    rgw_obj obj = rgw_obj(s->bucket, s->object);
+    rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+    perm = verify_object_permission(s, iam_action);
   } else {
     perm = verify_bucket_permission(s, rgw::IAM::s3GetBucketAcl);
   }
