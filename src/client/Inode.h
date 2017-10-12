@@ -4,6 +4,8 @@
 #ifndef CEPH_CLIENT_INODE_H
 #define CEPH_CLIENT_INODE_H
 
+#include <numeric>
+
 #include "include/types.h"
 #include "include/xlist.h"
 
@@ -15,6 +17,7 @@
 
 #include "InodeRef.h"
 #include "UserPerm.h"
+#include "Delegation.h"
 
 class Client;
 struct MetaSession;
@@ -198,6 +201,7 @@ struct Inode {
 
   list<Cond*>       waitfor_caps;
   list<Cond*>       waitfor_commit;
+  list<Cond*>	    waitfor_deleg;
 
   Dentry *get_first_parent() {
     assert(!dn_set.empty());
@@ -225,6 +229,8 @@ struct Inode {
   // file locks
   std::unique_ptr<ceph_lock_state_t> fcntl_locks;
   std::unique_ptr<ceph_lock_state_t> flock_locks;
+
+  list<Delegation> delegations;
 
   xlist<MetaRequest*> unsafe_ops;
 
@@ -291,6 +297,33 @@ struct Inode {
   void rm_fh(Fh *f) {fhs.erase(f);}
   void set_async_err(int r);
   void dump(Formatter *f) const;
+
+  void break_all_delegs() { break_deleg(false); };
+
+  void recall_deleg(bool skip_read);
+  bool has_recalled_deleg();
+  int set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv);
+  void unset_deleg(Fh *fh);
+
+private:
+  // how many opens for write on this Inode?
+  long open_count_for_write()
+  {
+    return (long)(open_by_mode[CEPH_FILE_MODE_RDWR] +
+		  open_by_mode[CEPH_FILE_MODE_WR]);
+  };
+
+  // how many opens of any sort on this inode?
+  long open_count()
+  {
+    return (long) std::accumulate(open_by_mode.begin(), open_by_mode.end(), 0,
+				  [] (int value, const std::map<int, int>::value_type& p)
+                   { return value + p.second; });
+  };
+
+  void break_deleg(bool skip_read);
+  bool delegations_broken(bool skip_read);
+
 };
 
 ostream& operator<<(ostream &out, const Inode &in);

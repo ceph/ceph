@@ -1572,6 +1572,51 @@ int ceph_ll_getlk(struct ceph_mount_info *cmount,
 int ceph_ll_setlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
 
+/*
+ * Delegation support
+ *
+ * Delegations are way for an application to request exclusive or
+ * semi-exclusive access to an Inode. The client requests the delegation and
+ * if it's successful it can reliably cache file data and metadata until the
+ * delegation is recalled.
+ *
+ * Recalls are issued via a callback function, provided by the application.
+ * Callback functions should act something like signal handlers.  You want to
+ * do as little as possible in the callback. Any major work should be deferred
+ * in some fashion as it's difficult to predict the context in which this
+ * function will be called.
+ *
+ * Once the delegation has been recalled, the application should return it as
+ * soon as possible. The application has client_deleg_timeout seconds to
+ * return it, after which the cmount structure is forcibly unmounted and
+ * further calls into it fail.
+ *
+ * The application can set the client_deleg_timeout config option to suit its
+ * needs, but it should take care to choose a value that allows it to avoid
+ * forcible eviction from the cluster in the event of an application bug.
+ */
+typedef void (*ceph_deleg_cb_t)(struct Fh *fh, void *priv);
+
+/* Commands for manipulating delegation state */
+#ifndef CEPH_DELEGATION_NONE
+# define CEPH_DELEGATION_NONE	0
+# define CEPH_DELEGATION_RD	1
+# define CEPH_DELEGATION_WR	2
+#endif
+
+/**
+ * Request a delegation on an open Fh
+ * @param cmount the ceph mount handle to use.
+ * @param fh file handle
+ * @param cmd CEPH_DELEGATION_* command
+ * @param cb callback function for recalling delegation
+ * @param priv opaque token passed back during recalls
+ *
+ * Returns 0 if the delegation was granted, -EAGAIN if there was a conflict
+ * and other error codes if there is a fatal error of some sort (e.g. -ENOMEM)
+ */
+int ceph_ll_delegation(struct ceph_mount_info *cmount, Fh *fh,
+		       unsigned int cmd, ceph_deleg_cb_t cb, void *priv);
 #ifdef __cplusplus
 }
 #endif
