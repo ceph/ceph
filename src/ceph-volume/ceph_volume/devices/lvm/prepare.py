@@ -1,6 +1,5 @@
 from __future__ import print_function
 import json
-import os
 import uuid
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
@@ -36,14 +35,13 @@ def prepare_filestore(device, journal, secrets, id_=None, fsid=None):
     # get the latest monmap
     prepare_utils.get_monmap(osd_id)
     # prepare the osd filesystem
-    prepare_utils.osd_mkfs(osd_id, fsid)
+    prepare_utils.osd_mkfs_filestore(osd_id, fsid)
     # write the OSD keyring if it doesn't exist already
     prepare_utils.write_keyring(osd_id, cephx_secret)
 
 
-def prepare_bluestore(data, block, wal, db, secrets, id_=None, fsid=None):
+def prepare_bluestore(block, wal, db, secrets, id_=None, fsid=None):
     """
-    :param data: The name of the logical volume for OSD data directories
     :param block: The name of the logical volume for the bluestore data
     :param wal: a regular/plain disk or logical volume, to be used for block.wal
     :param db: a regular/plain disk or logical volume, to be used for block.db
@@ -59,21 +57,19 @@ def prepare_bluestore(data, block, wal, db, secrets, id_=None, fsid=None):
     # allow re-using an id, in case a prepare failed
     osd_id = id_ or prepare_utils.create_id(fsid, json_secrets)
     # create the directory
-    prepare_utils.create_path(osd_id)
-    # format the device
-    prepare_utils.format_device(data)
-    # mount the data device
-    prepare_utils.mount_osd(data, osd_id)
+    prepare_utils.create_osd_path(osd_id, tmpfs=True)
     # symlink the block, wal, and db
     prepare_utils.link_block(block, osd_id)
-    prepare_utils.link_wal(wal, osd_id)
-    prepare_utils.link_db(db, osd_id)
+    if wal:
+        prepare_utils.link_wal(wal, osd_id)
+    if db:
+        prepare_utils.link_db(db, osd_id)
     # get the latest monmap
     prepare_utils.get_monmap(osd_id)
-    # prepare the osd filesystem
-    prepare_utils.osd_mkfs(osd_id, fsid)
     # write the OSD keyring if it doesn't exist already
     prepare_utils.write_keyring(osd_id, cephx_secret)
+    # prepare the osd filesystem
+    prepare_utils.osd_mkfs_bluestore(osd_id, fsid, keyring=cephx_secret)
 
 
 class Prepare(object):
@@ -140,54 +136,24 @@ class Prepare(object):
         # allow re-using an id, in case a prepare failed
         osd_id = args.osd_id or prepare_utils.create_id(osd_fsid, json.dumps(secrets))
         if args.filestore:
-            vg_name, lv_name = args.data.split('/')
-            data_lv = api.get_lv(lv_name=lv_name, vg_name=vg_name)
-
-            # we must have either an existing data_lv or a newly created, so lets make
-            # sure that the tags are correct
-            if not data_lv:
-                raise RuntimeError('no data logical volume found with: %s' % args.data)
-
             if not args.journal:
                 raise RuntimeError('--journal is required when using --filestore')
 
-            journal_lv = self.get_lv(args.journal)
-            if journal_lv:
-                journal_device = journal_lv.lv_path
-                journal_uuid = journal_lv.lv_uuid
-                # we can only set tags on an lv, the pv (if any) can't as we
-                # aren't making it part of an lvm group (vg)
-                journal_lv.set_tags({
-                    'ceph.type': 'journal',
-                    'ceph.osd_fsid': osd_fsid,
-                    'ceph.osd_id': osd_id,
-                    'ceph.cluster_fsid': cluster_fsid,
-                    'ceph.journal_device': journal_device,
-                    'ceph.journal_uuid': journal_uuid,
-                    'ceph.data_device': data_lv.lv_path,
-                    'ceph.data_uuid': data_lv.lv_uuid,
-                })
+            data_lv = self.get_lv(args.data)
+            if not data_lv:
+                raise RuntimeError('no data logical volume found with: %s' % args.data)
 
-            # allow a file
-            elif os.path.isfile(args.journal):
-                journal_uuid = ''
-                journal_device = args.journal
-
-            # otherwise assume this is a regular disk partition
-            else:
-                journal_uuid = self.get_ptuuid(args.journal)
-                journal_device = args.journal
-
-            data_lv.set_tags({
-                'ceph.type': 'data',
+            tags = {
                 'ceph.osd_fsid': osd_fsid,
                 'ceph.osd_id': osd_id,
                 'ceph.cluster_fsid': cluster_fsid,
-                'ceph.journal_device': journal_device,
-                'ceph.journal_uuid': journal_uuid,
                 'ceph.data_device': data_lv.lv_path,
                 'ceph.data_uuid': data_lv.lv_uuid,
-            })
+            }
+
+            journal_device, journal_uuid, tags = self.setup_device('journal', args.journal, tags)
+
+            data_lv.set_tags(tags)
 
             prepare_filestore(
                 data_lv.lv_path,
@@ -197,34 +163,27 @@ class Prepare(object):
                 fsid=osd_fsid,
             )
         elif args.bluestore:
-            data_vg = api.get_vg(vg_name=vg_name)
-            if disk.is_partition(args.data):
-                error = (
-                    'Cannot use a partition (%s) for bluestore, ' % args.data,
-                    'a full path to a block device or a volume group are accepted arguments'
-                )
-                raise RuntimeError(' '.join(error))
-            if not data_vg:
-                if disk.is_device(args.data):
-                    # we must create a vg, and then two lvs
+            block_lv = self.get_lv(args.data)
+            if not block_lv:
+                if disk.is_partition(args.data) or disk.is_device(args.data):
+                    # we must create a vg, and then a single lv
                     vg_name = "ceph-%s" % cluster_fsid
                     if api.get_vg(vg_name=vg_name):
                         # means we already have a group for this, make a different one
                         # XXX this could end up being annoying for an operator, maybe?
                         vg_name = "ceph-%s" % str(uuid.uuid4())
-                    api.create_vg("ceph-%s" % cluster_fsid, args.data)
-            # we can carve out the data and store for the osd
-            data_name = "osd-data-%s" % osd_fsid
-            block_name = "osd-block-%s" % osd_fsid
-            data_lv = api.create_lv(
-                data_name,
-                args.data,  # the volume group
-                size='100M',
-                tags={'ceph.type': 'data'})
-            block_lv = api.create_lv(
-                block_name,
-                args.data,  # the volume group
-                tags={'ceph.type': 'block'})
+                    api.create_vg(vg_name, args.data)
+                    block_name = "osd-block-%s" % osd_fsid
+                    block_lv = api.create_lv(
+                        block_name,
+                        vg_name,  # the volume group
+                        tags={'ceph.type': 'block'})
+                else:
+                    error = [
+                        'Cannot use device (%s) for bluestore. ' % args.data,
+                        'A vg/lv path or an existing device is needed'
+                    ]
+                    raise RuntimeError(' '.join(error))
 
             tags = {
                 'ceph.osd_fsid': osd_fsid,
@@ -232,18 +191,15 @@ class Prepare(object):
                 'ceph.cluster_fsid': cluster_fsid,
                 'ceph.block_device': block_lv.lv_path,
                 'ceph.block_uuid': block_lv.lv_uuid,
-                'ceph.data_device': data_lv.lv_path,
-                'ceph.data_uuid': data_lv.lv_uuid,
             }
 
             wal_device, wal_uuid, tags = self.setup_device('wal', args.block_wal, tags)
             db_device, db_uuid, tags = self.setup_device('db', args.block_db, tags)
 
-            data_lv.set_tags(tags)
             block_lv.set_tags(tags)
 
             prepare_bluestore(
-                data_lv.lv_path,
+                block_lv.lv_path,
                 wal_device,
                 db_device,
                 secrets,
@@ -268,26 +224,26 @@ class Prepare(object):
 
           Existing logical volume (lv) or device:
 
-              ceph-volume lvm prepare --filestore --data {vg name/lv name} --journal /path/to/device
+              ceph-volume lvm prepare --filestore --data {vg/lv} --journal /path/to/device
 
           Or:
 
-              ceph-volume lvm prepare --filestore --data {vg name/lv name} --journal {vg name/lv name}
+              ceph-volume lvm prepare --filestore --data {vg/lv} --journal {vg/lv}
 
         Bluestore
         ---------
 
-          Existing logical group (vg):
+          Existing logical volume (lv):
 
-              ceph-volume lvm prepare --bluestore --data {vg}
+              ceph-volume lvm prepare --bluestore --data {vg/lv}
 
-          Existing block device, that will be made a group:
+          Existing block device, that will be made a group and logical volume:
 
               ceph-volume lvm prepare --bluestore --data /path/to/device
 
           Optionally, can consume db and wal devices or logical volumes:
 
-              ceph-volume lvm prepare --bluestore --data {vg} --block.wal {lv} --block-db {lv}
+              ceph-volume lvm prepare --bluestore --data {vg/lv} --block.wal {device} --block-db {vg/lv}
         """)
         parser = prepare_parser(
             prog='ceph-volume lvm prepare',
