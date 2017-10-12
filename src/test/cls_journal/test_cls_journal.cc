@@ -547,6 +547,14 @@ TEST_F(TestClsJournal, TagList) {
   ASSERT_EQ(0, client::tag_list(ioctx, oid, "id1", boost::optional<uint64_t>(0),
                                 &tags));
   ASSERT_EQ(expected_filtered_tags, tags);
+
+  librados::ObjectWriteOperation op1;
+  client::client_commit(&op1, "id1", {{{96, 0, 120}}});
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+
+  ASSERT_EQ(0, client::tag_list(ioctx, oid, "id1", boost::optional<uint64_t>(),
+                                &tags));
+  ASSERT_EQ(expected_all_tags, tags);
 }
 
 TEST_F(TestClsJournal, GuardAppend) {
