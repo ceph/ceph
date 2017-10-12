@@ -922,8 +922,6 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
   }
 
-  bufferlist bl;
-
   {
     OSDMap tmp;
     tmp.deepish_copy_from(osdmap);
@@ -1197,6 +1195,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // encode
   assert(get_last_committed() + 1 == pending_inc.epoch);
+  bufferlist bl;
   ::encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
 
   dout(20) << " full_crc " << tmp.get_crc()
