@@ -158,7 +158,7 @@ class AsyncConnection : public Connection {
       assert(delay_queue.empty());
     }
     void set_center(EventCenter *c) { center = c; }
-    void do_request(int id) override;
+    void do_request(uint64_t id) override;
     void queue(double delay_period, utime_t release, Message *m) {
       std::lock_guard<std::mutex> l(delay_lock);
       delay_queue.push_back(std::make_pair(release, m));
