@@ -1946,6 +1946,8 @@ struct pg_stat_t {
 
   vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
 
+  interval_set<snapid_t> purged_snaps;  ///< recently removed snaps that we've purged
+
   utime_t last_became_active;
   utime_t last_became_peered;
 
