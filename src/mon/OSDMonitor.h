@@ -169,6 +169,8 @@ private:
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;  // prepare a new pending
   void encode_pending(MonitorDBStore::TransactionRef t) override;
+  void check_required_feature(uint64_t& features, uint8_t release) const;
+  void encode_pending_handle_flags(OSDMap& tmp);
   void on_active() override;
   void on_restart() override;
   void on_shutdown() override;
