@@ -7,12 +7,17 @@ class DaemonGroup(object):
     """
     Collection of daemon state instances
     """
-    def __init__(self):
+    def __init__(self, use_systemd=False):
         """
         self.daemons is a dictionary indexed by role.  Each entry is a
         dictionary of DaemonState values indexed by an id parameter.
+
+        :param use_systemd: Whether or not to use systemd when appropriate
+                            (default: False) Note: This option may be removed
+                            in the future.
         """
         self.daemons = {}
+        self.use_systemd = use_systemd
 
     def add_daemon(self, remote, type_, id_, *args, **kwargs):
         """
@@ -56,7 +61,8 @@ class DaemonGroup(object):
         if remote.init_system == 'systemd':
             # We currently cannot use systemd and valgrind together because
             # it would require rewriting the unit files
-            if not any(map(lambda i: i == 'valgrind', args)):
+            if self.use_systemd and \
+                    not any(map(lambda i: i == 'valgrind', args)):
                 klass = SystemDState
         self.daemons[role][id_] = klass(
             remote, role, id_, *args, **kwargs)
