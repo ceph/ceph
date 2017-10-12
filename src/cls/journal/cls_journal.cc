@@ -1047,6 +1047,7 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
         // completed calculation of tag class minimums
         if (tag.tid >= minimum_tag_tid) {
           vals.clear();
+          more = false;
           break;
         }
       } else if (tag_pass == TAG_PASS_LIST) {
