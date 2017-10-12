@@ -467,6 +467,10 @@ Options
 
    Connect to specified monitor (instead of looking through ceph.conf).
 
+.. option:: --tenant=<tenant>
+
+   Name of the tenant.
+
 .. option:: --uid=uid
 
    The radosgw user ID.
@@ -475,25 +479,21 @@ Options
 
 	Name of the subuser.
 
+.. option:: --access-key=<key>
+
+        S3 access key.
+
 .. option:: --email=email
 
    The e-mail address of the user.
 
-.. option:: --display-name=name
+.. option:: --secret/--secret-key=<key>
 
-   Configure the display name of the user.
-
-.. option:: --access-key=<key>
-
-	S3 access key.
+   The secret key.
 
 .. option:: --gen-access-key
 
 	Generate random access key (for S3).
-
-.. option:: --secret=secret
-
-   The secret associated with a given key.
 
 .. option:: --gen-secret
 
@@ -507,13 +507,35 @@ Options
 
 	Temporary url key.
 
+.. option:: --access=<access>
+
+   Set the access permissions for the sub-user.
+   Available access permissions are read, write, readwrite and full.
+
+.. option:: --display-name=<name>
+
+   The display name of the user.
+
+.. option:: --max-buckets
+
+   Maximum number of buckets for a user.
+
+.. option:: --admin
+
+   Set the admin flag on the user.
+
 .. option:: --system
 
-	Set the system flag on the user.
+   Set the system flag on the user.
 
 .. option:: --bucket=bucket
 
    Specify the bucket name.
+
+.. option:: --pool=<pool>
+
+   Specify the pool name.
+   Also used with `orphans find` as data pool to scan for leaked rados objects.
 
 .. option:: --object=object
 
@@ -521,15 +543,19 @@ Options
 
 .. option:: --date=yyyy-mm-dd
 
-   The date needed for some commands.
+   The date in the format yyyy-mm-dd.
 
 .. option:: --start-date=yyyy-mm-dd
 
-   The start date needed for some commands.
+   The start date in the format yyyy-mm-dd.
 
 .. option:: --end-date=yyyy-mm-dd
 
-   The end date needed for some commands.
+   The end date in the format yyyy-mm-dd.
+
+.. option:: --bucket-id=<bucket-id>
+
+   Specify the bucket id.
 
 .. option:: --shard-id=<shard-id>
 
@@ -542,7 +568,7 @@ Options
 
 .. option:: --purge-data
 
-   Remove user data before user removal.
+   When specified, user removal will also purge all the user data.
 
 .. option:: --purge-keys
 
@@ -550,23 +576,147 @@ Options
    
 .. option:: --purge-objects
 
-   Remove all objects before bucket removal.
+   When specified, the bucket removal will also purge all objects in it.
 
 .. option:: --metadata-key=<key>
 
 	Key to retrieve metadata from with ``metadata get``.
 
-.. option:: --rgw-region=<region>
+.. option:: --remote=<remote>
 
-	Region in which radosgw is running.
+   Zone or zonegroup id of remote gateway.
+
+.. option:: --period=<id>
+
+   Period id.
+
+.. option:: --epoch=<number>
+
+   Period epoch.
+
+.. option:: --commit
+
+   Commit the period during 'period update'.
+
+.. option:: --staging
+
+   Get the staging period info.
+
+.. option:: --master
+
+   Set as master.
+
+.. option:: --master-zone=<id>
+
+   Master zone id.
+
+.. option:: --rgw-realm=<name>
+
+   The realm name.
+
+.. option:: --realm-id=<id>
+
+   The realm id.
+
+.. option:: --realm-new-name=<name>
+
+   New name of realm.
+
+.. option:: --rgw-zonegroup=<name>
+
+   The zonegroup name.
+
+.. option:: --zonegroup-id=<id>
+
+   The zonegroup id.
+
+.. option:: --zonegroup-new-name=<name>
+
+   The new name of the zonegroup.
 
 .. option:: --rgw-zone=<zone>
 
 	Zone in which radosgw is running.
 
-.. option:: --source-zone=<zone>
+.. option:: --zone-id=<id>
 
-  Specify the source zone for data sync.
+   The zone id.
+
+.. option:: --zone-new-name=<name>
+
+   The new name of the zone.
+
+.. option:: --source-zone
+
+   The source zone for data sync.
+
+.. option:: --default
+
+   Set the entity (realm, zonegroup, zone) as default.
+
+.. option:: --read-only
+
+   Set the zone as read-only when adding to the zonegroup.
+
+.. option:: --placement-id
+
+   Placement id for the zonegroup placement commands.
+
+.. option:: --tags=<list>
+
+   The list of tags for zonegroup placement add and modify commands.
+
+.. option:: --tags-add=<list>
+
+   The list of tags to add for zonegroup placement modify command.
+
+.. option:: --tags-rm=<list>
+
+   The list of tags to remove for zonegroup placement modify command.
+
+.. option:: --endpoints=<list>
+
+   The zone endpoints.
+
+.. option:: --index-pool=<pool>
+
+   The placement target index pool.
+
+.. option:: --data-pool=<pool>
+
+   The placement target data pool.
+
+.. option:: --data-extra-pool=<pool>
+
+   The placement target data extra (non-ec) pool.
+
+.. option:: --placement-index-type=<type>
+
+   The placement target index type (normal, indexless, or #id).
+
+.. option:: --tier-type=<type>
+
+   The zone tier type.
+
+.. option:: --tier-config=<k>=<v>[,...]
+
+   Set zone tier config keys, values.
+
+.. option:: --tier-config-rm=<k>[,...]
+
+   Unset zone tier config keys.
+
+.. option:: --sync-from-all[=false]
+
+   Set/reset whether zone syncs from all zonegroup peers.
+
+.. option:: --sync-from=[zone-name][,...]
+
+   Set the list of zones to sync from.
+
+.. option:: --sync-from-rm=[zone-name][,...]
+
+   Remove the zones from list of zones to sync from.
 
 .. option:: --fix
 
@@ -578,12 +728,12 @@ Options
 
 .. option:: --format=<format>
 
-	Specify output format for certain operations: xml, json.
+	Specify output format for certain operations. Supported formats: xml, json.
 
 .. option:: --sync-stats
 
-	Option to 'user stats', update user stats with current stats reported by
-	user's buckets indexes.
+	Option for 'user stats' command. When specified, it will update user stats with
+	the current stats reported by user's buckets indexes.
 
 .. option:: --show-log-entries=<flag>
 
@@ -602,11 +752,11 @@ Options
 
 	Specify a file to read in when setting data.
 
-.. option:: --state=<state string>
+.. option:: --state=<state>
 
 	Specify a state for the opstate set command.
 
-.. option:: --replica-log-type
+.. option:: --replica-log-type <logtypestr>
 
 	Replica log type (metadata, data, bucket), required for replica log
 	operations.
@@ -641,6 +791,21 @@ Options
     is set to 0, then the specified object will always be
     rewritten for restriping.
 
+.. option:: --warnings-only
+
+   When specified with bucket limit check,
+   list only buckets nearing or over the current max objects per shard value.
+
+.. option:: --bypass-gc
+
+   When specified with bucket deletion,
+   triggers object deletions by not involving GC.
+
+.. option:: --inconsistent-index
+
+   When specified with bucket deletion and bypass-gc set to true,
+   ignores bucket index consistency.
+
 Quota Options
 =============
 
@@ -650,19 +815,15 @@ Quota Options
 
 .. option:: --max-size
 
-	Specify max size (in bytes, negative value to disable).
+	Specify max size (in B/K/M/G/T, negative value to disable).
 
 .. option:: --quota-scope
 
-	Scope of quota (bucket, user).
+	The scope of quota (bucket, user).
 
 
 Orphans Search Options
 ======================
-
-.. option:: --pool
-
-	Data pool to scan for leaked rados objects
 
 .. option:: --num-shards
 
@@ -682,6 +843,42 @@ Orphans Search Options
         Maximum concurrent ios for orphans find.
         Default is 32.
 
+
+Orphans list-jobs options
+=========================
+
+.. option:: --extra-info
+
+   Provide extra info in the job list.
+
+
+Role Options
+============
+
+.. option:: --role-name
+
+   The name of the role to create.
+
+.. option:: --path
+
+   The path to the role.
+
+.. option:: --assume-role-policy-doc
+
+   The trust relationship policy document that grants an entity permission to
+   assume the role.
+
+.. option:: --policy-name
+
+   The name of the policy document.
+
+.. option:: --policy-doc
+
+   The permission policy document.
+
+.. option:: --path-prefix
+
+   The path prefix for filtering the roles.
 
 Examples
 ========
