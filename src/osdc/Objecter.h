@@ -2082,7 +2082,7 @@ private:
   void unset_osdmap_full_try() { osdmap_full_try = false; }
 
   void _scan_requests(OSDSession *s,
-		      bool force_resend,
+		      bool skipped_map,
 		      bool cluster_full,
 		      map<int64_t, bool> *pool_full_map,
 		      map<ceph_tid_t, Op*>& need_resend,

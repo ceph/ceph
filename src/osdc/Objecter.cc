@@ -1022,7 +1022,7 @@ bool Objecter::ms_dispatch(Message *m)
 }
 
 void Objecter::_scan_requests(OSDSession *s,
-			      bool force_resend,
+			      bool skipped_map,
 			      bool cluster_full,
 			      map<int64_t, bool> *pool_full_map,
 			      map<ceph_tid_t, Op*>& need_resend,
@@ -1052,7 +1052,7 @@ void Objecter::_scan_requests(OSDSession *s,
 	(*pool_full_map)[op->target.base_oloc.pool];
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      if (!force_resend && !force_resend_writes)
+      if (!skipped_map && !force_resend_writes)
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -1086,7 +1086,7 @@ void Objecter::_scan_requests(OSDSession *s,
 			 op->session ? op->session->con.get() : nullptr);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      if (!force_resend && !(force_resend_writes && op->respects_full()))
+      if (!skipped_map && !(force_resend_writes && op->respects_full()))
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -1116,7 +1116,7 @@ void Objecter::_scan_requests(OSDSession *s,
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       // resend if skipped map; otherwise do nothing.
-      if (!force_resend && !force_resend_writes)
+      if (!skipped_map && !force_resend_writes)
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
