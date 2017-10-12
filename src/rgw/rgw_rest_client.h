@@ -110,13 +110,20 @@ public:
 };
 
 class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
+  bool send_data_hint{false};
 public:
   RGWRESTStreamRWRequest(CephContext *_cct, const string& _method, const string& _url, RGWGetDataCB *_cb,
 		param_vec_t *_headers, param_vec_t *_params) : RGWHTTPStreamRWRequest(_cct, _method, _url, _cb, _headers, _params) {
   }
   virtual ~RGWRESTStreamRWRequest() override {}
+
+  int send_prepare(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = nullptr /* optional input data */);
+  int send_prepare(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj);
+  int send(RGWHTTPManager *mgr);
+
   int send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr);
   int send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr, bufferlist *send_data = nullptr /* optional input data */);
+
   int complete_request(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs);
 };
 
