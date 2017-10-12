@@ -262,7 +262,7 @@ public:
     }
 
     if (changed.find("log_coarse_timestamps") != changed.end()) {
-      log->set_coarse_timestamps(conf->_get_val<bool>("log_coarse_timestamps"));
+      log->set_coarse_timestamps(conf->get_val<bool>("log_coarse_timestamps"));
     }
 
     // metadata
