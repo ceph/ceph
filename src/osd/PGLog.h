@@ -1257,15 +1257,14 @@ public:
   void read_log_and_missing(
     ObjectStore *store,
     coll_t pg_coll,
-    coll_t log_coll,
-    ghobject_t log_oid,
+    ghobject_t pgmeta_oid,
     const pg_info_t &info,
     ostringstream &oss,
     bool tolerate_divergent_missing_log,
     bool debug_verify_stored_missing = false
     ) {
     return read_log_and_missing(
-      store, pg_coll, log_coll, log_oid, info,
+      store, pg_coll, pgmeta_oid, info,
       log, missing, oss,
       tolerate_divergent_missing_log,
       &clear_divergent_priors,
@@ -1278,8 +1277,7 @@ public:
   static void read_log_and_missing(
     ObjectStore *store,
     coll_t pg_coll,
-    coll_t log_coll,
-    ghobject_t log_oid,
+    ghobject_t pgmeta_oid,
     const pg_info_t &info,
     IndexedLog &log,
     missing_type &missing,
@@ -1291,18 +1289,19 @@ public:
     bool debug_verify_stored_missing = false
     ) {
     ldpp_dout(dpp, 20) << "read_log_and_missing coll " << pg_coll
-		       << " log_oid " << log_oid << dendl;
+		       << " " << pgmeta_oid << dendl;
 
     // legacy?
     struct stat st;
-    int r = store->stat(log_coll, log_oid, &st);
+    int r = store->stat(pg_coll, pgmeta_oid, &st);
     assert(r == 0);
     assert(st.st_size == 0);
 
     // will get overridden below if it had been recorded
     eversion_t on_disk_can_rollback_to = info.last_update;
     eversion_t on_disk_rollback_info_trimmed_to = eversion_t();
-    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
+    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(pg_coll,
+							      pgmeta_oid);
     map<eversion_t, hobject_t> divergent_priors;
     bool must_rebuild = false;
     missing.may_include_deletes = false;

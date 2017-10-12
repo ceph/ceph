@@ -8564,6 +8564,29 @@ void BlueStore::_kv_sync_thread()
       int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
       assert(r == 0);
 
+      {
+	std::unique_lock<std::mutex> m(kv_finalize_lock);
+	if (kv_committing_to_finalize.empty()) {
+	  kv_committing_to_finalize.swap(kv_committing);
+	} else {
+	  kv_committing_to_finalize.insert(
+	      kv_committing_to_finalize.end(),
+	      kv_committing.begin(),
+	      kv_committing.end());
+	  kv_committing.clear();
+	}
+	if (deferred_stable_to_finalize.empty()) {
+	  deferred_stable_to_finalize.swap(deferred_stable);
+	} else {
+	  deferred_stable_to_finalize.insert(
+	      deferred_stable_to_finalize.end(),
+	      deferred_stable.begin(),
+	      deferred_stable.end());
+	  deferred_stable.clear();
+	}
+	kv_finalize_cond.notify_one();
+      }
+
       if (new_nid_max) {
 	nid_max = new_nid_max;
 	dout(10) << __func__ << " nid_max now " << nid_max << dendl;
@@ -8596,29 +8619,6 @@ void BlueStore::_kv_sync_thread()
 		 << bluefs_extents_reclaiming << std::dec << dendl;
 	alloc->release(bluefs_extents_reclaiming);
 	bluefs_extents_reclaiming.clear();
-      }
-
-      {
-	std::unique_lock<std::mutex> m(kv_finalize_lock);
-	if (kv_committing_to_finalize.empty()) {
-	  kv_committing_to_finalize.swap(kv_committing);
-	} else {
-	  kv_committing_to_finalize.insert(
-	    kv_committing_to_finalize.end(),
-	    kv_committing.begin(),
-	    kv_committing.end());
-	  kv_committing.clear();
-	}
-	if (deferred_stable_to_finalize.empty()) {
-	  deferred_stable_to_finalize.swap(deferred_stable);
-	} else {
-	  deferred_stable_to_finalize.insert(
-	    deferred_stable_to_finalize.end(),
-	    deferred_stable.begin(),
-	    deferred_stable.end());
-          deferred_stable.clear();
-	}
-	kv_finalize_cond.notify_one();
       }
 
       l.lock();
@@ -10561,7 +10561,7 @@ int BlueStore::_do_zero(TransContext *txc,
   o->extent_map.dirty_range(offset, length);
   _wctx_finish(txc, c, o, &wctx);
 
-  if (offset + length > o->onode.size) {
+  if (length > 0 && offset + length > o->onode.size) {
     o->onode.size = offset + length;
     dout(20) << __func__ << " extending size to " << offset + length
 	     << dendl;

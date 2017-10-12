@@ -415,6 +415,10 @@ public:
       assert(is_backfill_targets(peer));
     return should_send;
   }
+
+  bool pg_is_undersized() const override {
+    return is_undersized();
+  }
   
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
@@ -952,7 +956,7 @@ protected:
   void populate_obc_watchers(ObjectContextRef obc);
   void check_blacklisted_obc_watchers(ObjectContextRef obc);
   void check_blacklisted_watchers() override;
-  void get_watchers(list<obj_watch_item_t> &pg_watchers) override;
+  void get_watchers(list<obj_watch_item_t> *ls) override;
   void get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t> &pg_watchers);
 public:
   void handle_watch_timeout(WatchRef watch);
@@ -1780,7 +1784,8 @@ public:
   void on_activate() override;
   void on_flushed() override;
   void on_removal(ObjectStore::Transaction *t) override;
-  void on_shutdown() override;
+  void shutdown() override;
+  void on_shutdown();
   bool check_failsafe_full(ostream &ss) override;
   bool check_osdmap_full(const set<pg_shard_t> &missing_on) override;
   int rep_repair_primary_object(const hobject_t& soid, OpRequestRef op);

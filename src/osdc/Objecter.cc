@@ -2097,7 +2097,7 @@ void Objecter::_linger_ops_resend(map<uint64_t, LingerOp *>& lresend,
     op->put();
     lresend.erase(lresend.begin());
   }
-  ul = unique_lock(sul.release_to_unique());
+  ul = sul.release_to_unique();
 }
 
 void Objecter::start_tick()

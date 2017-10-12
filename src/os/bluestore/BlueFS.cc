@@ -2206,7 +2206,7 @@ int BlueFS::lock_file(const string& dirname, const string& filename,
     file = q->second.get();
     if (file->locked) {
       dout(10) << __func__ << " already locked" << dendl;
-      return -EBUSY;
+      return -ENOLCK;
     }
   }
   file->locked = true;

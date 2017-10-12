@@ -389,6 +389,13 @@ std::vector<Option> get_global_options() {
     .set_description("port number for the remote graylog server")
     .add_see_also("log_graylog_host"),
 
+    Option("log_coarse_timestamps", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("timestamp log entries from coarse system clock "
+		     "to improve performance")
+    .add_service("common")
+    .add_tag("performance")
+    .add_tag("service"),
 
 
     // unmodified
@@ -3666,7 +3673,7 @@ std::vector<Option> get_global_options() {
     // filestore
 
     Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_DEV)
-    .set_default("")
+    .set_default("compaction_readahead_size=2097152")
     .set_description(""),
 
     Option("filestore_omap_backend", Option::TYPE_STR, Option::LEVEL_DEV)
@@ -4215,6 +4222,10 @@ std::vector<Option> get_global_options() {
     Option("debug_deliberately_leak_memory", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
+      
+    Option("debug_asserts_on_shutdown", Option::TYPE_BOOL,Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Enable certain asserts to check for refcounting bugs on shutdown; see http://tracker.ceph.com/issues/21738"),
   });
 }
 

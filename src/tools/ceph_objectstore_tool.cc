@@ -289,12 +289,9 @@ struct lookup_ghobject : public action_on_object_t {
   }
 };
 
-ghobject_t infos_oid = OSD::make_infos_oid();
-ghobject_t log_oid;
-ghobject_t biginfo_oid;
-
 int file_fd = fd_none;
 bool debug;
+bool force = false;
 super_header sh;
 uint64_t testalign;
 
@@ -325,12 +322,12 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
   try {
     ostringstream oss;
     assert(struct_ver > 0);
-    PGLog::read_log_and_missing(fs, coll,
-		    struct_ver >= 8 ? coll : coll_t::meta(),
-		    struct_ver >= 8 ? pgid.make_pgmeta_oid() : log_oid,
-		    info, log, missing,
-		    oss,
-		    g_ceph_context->_conf->osd_ignore_stale_divergent_priors);
+    PGLog::read_log_and_missing(
+      fs, coll,
+      pgid.make_pgmeta_oid(),
+      info, log, missing,
+      oss,
+      g_ceph_context->_conf->osd_ignore_stale_divergent_priors);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }
@@ -397,14 +394,13 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   coll_t coll(pgid);
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
 
-  bufferlist bl;
   epoch_t map_epoch = 0;
-  int r = PG::peek_map_epoch(fs, pgid, &map_epoch, &bl);
+  int r = PG::peek_map_epoch(fs, pgid, &map_epoch);
   if (r < 0)
     cerr << __func__ << " warning: peek_map_epoch reported error" << std::endl;
   PastIntervals past_intervals;
   __u8 struct_v;
-  r = PG::read_info(fs, pgid, coll, bl, info, past_intervals, struct_v);
+  r = PG::read_info(fs, pgid, coll, info, past_intervals, struct_v);
   if (r < 0) {
     cerr << __func__ << " error on read_info " << cpp_strerror(r) << std::endl;
     return r;
@@ -469,6 +465,7 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
 	     divergent_priors_t &divergent,
 	     pg_missing_t &missing)
 {
+  cout << __func__ << " epoch " << epoch << " info " << info << std::endl;
   int ret = write_info(t, epoch, info, past_intervals);
   if (ret)
     return ret;
@@ -755,7 +752,7 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
   PGLog::IndexedLog log;
   pg_missing_t missing;
 
-  cerr << "Exporting " << pgid << std::endl;
+  cerr << "Exporting " << pgid << " info " << info << std::endl;
 
   int ret = get_log(fs, struct_ver, coll, pgid, info, log, missing);
   if (ret > 0)
@@ -1006,40 +1003,45 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
   spg_t old_pgid = ms.info.pgid;
   ms.info.pgid = pgid;
 
-#if DIAGNOSTIC
-  Formatter *formatter = new JSONFormatter(true);
-  cout << "export pgid " << old_pgid << std::endl;
-  cout << "struct_v " << (int)ms.struct_ver << std::endl;
-  cout << "map epoch " << ms.map_epoch << std::endl;
+  if (debug) {
+    cout << "export pgid " << old_pgid << std::endl;
+    cout << "struct_v " << (int)ms.struct_ver << std::endl;
+    cout << "map epoch " << ms.map_epoch << std::endl;
 
-  formatter->open_object_section("importing OSDMap");
-  ms.osdmap.dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
+#ifdef DIAGNOSTIC
+    Formatter *formatter = new JSONFormatter(true);
+    formatter->open_object_section("stuff");
 
-  cout << "osd current epoch " << sb.current_epoch << std::endl;
-  formatter->open_object_section("current OSDMap");
-  curmap.dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
+    formatter->open_object_section("importing OSDMap");
+    ms.osdmap.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
 
-  formatter->open_object_section("info");
-  ms.info.dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
+    cout << "osd current epoch " << sb.current_epoch << std::endl;
+    formatter->open_object_section("current OSDMap");
+    curmap.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
 
-  formatter->open_object_section("log");
-  ms.log.dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
+    formatter->open_object_section("info");
+    ms.info.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
 
-  formatter->flush(cout);
-  cout << std::endl;
+    formatter->open_object_section("log");
+    ms.log.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
+
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
 #endif
+  }
 
   if (ms.osdmap.get_epoch() != 0 && ms.map_epoch != ms.osdmap.get_epoch()) {
     cerr << "FATAL: Invalid OSDMap epoch in export data" << std::endl;
@@ -1071,6 +1073,15 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     } else {
       cerr << "WARNING: No OSDMap in old export,"
            " some objects may be ignored due to a split" << std::endl;
+    }
+  }
+  if (ms.osdmap.get_epoch() < sb.oldest_map) {
+    cerr << "PG export's map " << ms.osdmap.get_epoch()
+	 << " is older than OSD's oldest_map " << sb.oldest_map << std::endl;
+    if (!force) {
+      cerr << " pass --force to proceed anyway (with incomplete PastIntervals)"
+	   << std::endl;
+      return -EINVAL;
     }
   }
 
@@ -1109,14 +1120,94 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     cerr << "Zero same_interval_since " << ms.info.history.same_interval_since << std::endl;
   }
 
-  // Let osd recompute past_intervals and same_interval_since
-  ms.past_intervals.clear();
-  ms.info.history.same_interval_since =  0;
-
   if (debug)
     cerr << "Changing pg epoch " << ms.map_epoch << " to " << sb.current_epoch << std::endl;
 
-  ms.map_epoch = sb.current_epoch;
+  // advance map and fill in PastIntervals
+  if (ms.map_epoch < sb.current_epoch) {
+    if (debug)
+      cerr << "Advancing PG from " << ms.map_epoch << " to " << sb.current_epoch
+	   << std::endl;
+
+    OSDMap *startmap = new OSDMap;
+    startmap->deepish_copy_from(ms.osdmap);
+    OSDMapRef lastmap(startmap);
+
+    int up_primary, acting_primary;
+    vector<int> up, acting;
+    lastmap->pg_to_up_acting_osds(
+      ms.info.pgid.pgid, &up, &up_primary, &acting, &acting_primary);
+
+    while (ms.map_epoch < sb.current_epoch) {
+      ++ms.map_epoch;
+      if (ms.map_epoch < sb.oldest_map) {
+	// cheat!
+	ms.map_epoch = sb.oldest_map;
+      }
+
+      OSDMap *t = new OSDMap;
+      bufferlist nextmap_bl;
+      int ret = get_osdmap(store, ms.map_epoch, *t, nextmap_bl);
+      OSDMapRef nextmap(t);
+      if (ret < 0) {
+	cerr << "cannot load osdmap " << ms.map_epoch << std::endl;
+	return -EINVAL;
+      }
+      
+      int new_up_primary, new_acting_primary;
+      vector<int> new_up, new_acting;
+      nextmap->pg_to_up_acting_osds(
+	ms.info.pgid.pgid, &new_up, &new_up_primary, &new_acting,
+	&new_acting_primary);
+
+      // this is a bit imprecise, but sufficient?
+      struct min_size_predicate_t : public IsPGRecoverablePredicate {
+	const pg_pool_t *pi;
+	bool operator()(const set<pg_shard_t> &have) const {
+	  return have.size() >= pi->min_size;
+	}
+	min_size_predicate_t(const pg_pool_t *i) : pi(i) {}
+      } min_size_predicate(nextmap->get_pg_pool(ms.info.pgid.pgid.pool()));
+
+
+      bool new_interval = PastIntervals::check_new_interval(
+	acting_primary,
+	new_acting_primary,
+	acting, new_acting,
+	up_primary,
+	new_up_primary,
+	up, new_up,
+	ms.info.history.same_interval_since,
+	ms.info.history.last_epoch_clean,
+	nextmap,
+	lastmap,
+	ms.info.pgid.pgid,
+	&min_size_predicate,
+	&ms.past_intervals,
+	&cerr);
+      if (new_interval) {
+	ms.info.history.same_interval_since = nextmap->get_epoch();
+	if (up != new_up) {
+	  ms.info.history.same_up_since = nextmap->get_epoch();
+	}
+	if (acting_primary != new_acting_primary) {
+	  ms.info.history.same_primary_since = nextmap->get_epoch();
+	}
+	if (pgid.pgid.is_split(lastmap->get_pg_num(ms.info.pgid.pgid.pool()),
+			       nextmap->get_pg_num(ms.info.pgid.pgid.pool()),
+			       nullptr)) {
+	  ms.info.history.last_epoch_split = nextmap->get_epoch();
+	}
+	up = new_up;
+	acting = new_acting;
+	up_primary = new_up_primary;
+	acting_primary = new_acting_primary;
+      }
+      lastmap = nextmap;
+    }
+    if (debug)
+      cerr << "new PastIntervals " << ms.past_intervals << std::endl;
+  }
 
   return 0;
 }
@@ -1268,8 +1359,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   }
 
   ghobject_t pgmeta_oid = pgid.make_pgmeta_oid();
-  log_oid = OSD::make_pg_log_oid(pgid);
-  biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
   //Check for PG already present.
   coll_t coll(pgid);
@@ -2490,7 +2579,6 @@ int main(int argc, char **argv)
   unsigned epoch = 0;
   ghobject_t ghobj;
   bool human_readable;
-  bool force;
   Formatter *formatter;
   bool head;
 
@@ -2504,11 +2592,11 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, use if tool can't find it")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory for info, log, remove, export, export-remove, rm-past-intervals, mark-complete, and mandatory for apply-layout-settings if --pool is not specified")
+     "PG id, mandatory for info, log, remove, export, export-remove, mark-complete, and mandatory for apply-layout-settings if --pool is not specified")
     ("pool", po::value<string>(&pool),
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+     "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
@@ -3007,7 +3095,7 @@ int main(int argc, char **argv)
   // The ops which require --pgid option are checked here and
   // mentioned in the usage for --pgid.
   if ((op == "info" || op == "log" || op == "remove" || op == "export"
-      || op == "export-remove" || op == "rm-past-intervals" || op == "mark-complete") &&
+      || op == "export-remove" || op == "mark-complete") &&
       pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
@@ -3109,9 +3197,6 @@ int main(int argc, char **argv)
     goto out;
   }
 
-  log_oid = OSD::make_pg_log_oid(pgid);
-  biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
-
   if (op == "remove") {
     if (!force && !dry_run) {
       cerr << "Please use export-remove or you must use --force option" << std::endl;
@@ -3210,8 +3295,8 @@ int main(int argc, char **argv)
 
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
-  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
-    cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete") {
+    cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
       "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)"
 	 << std::endl;
     usage(desc);
@@ -3460,9 +3545,8 @@ int main(int argc, char **argv)
       goto out;
     }
 
-    bufferlist bl;
     map_epoch = 0;
-    ret = PG::peek_map_epoch(fs, pgid, &map_epoch, &bl);
+    ret = PG::peek_map_epoch(fs, pgid, &map_epoch);
     if (ret < 0)
       cerr << "peek_map_epoch reports error" << std::endl;
     if (debug)
@@ -3471,13 +3555,12 @@ int main(int argc, char **argv)
     pg_info_t info(pgid);
     PastIntervals past_intervals;
     __u8 struct_ver;
-    ret = PG::read_info(fs, pgid, coll, bl, info, past_intervals,
-		      struct_ver);
+    ret = PG::read_info(fs, pgid, coll, info, past_intervals, struct_ver);
     if (ret < 0) {
       cerr << "read_info error " << cpp_strerror(ret) << std::endl;
       goto out;
     }
-    if (struct_ver < PG::compat_struct_v) {
+    if (struct_ver < PG::get_compat_struct_v()) {
       cerr << "PG is too old to upgrade, use older Ceph version" << std::endl;
       ret = -EFAULT;
       goto out;
@@ -3510,38 +3593,13 @@ int main(int argc, char **argv)
           goto out;
 
       dump_log(formatter, cout, log, missing);
-    } else if (op == "rm-past-intervals") {
-      ObjectStore::Transaction tran;
-      ObjectStore::Transaction *t = &tran;
-
-      if (struct_ver < PG::compat_struct_v) {
-        cerr << "Can't remove past-intervals, version mismatch " << (int)struct_ver
-          << " (pg)  < compat " << (int)PG::compat_struct_v << " (tool)"
-          << std::endl;
-        ret = -EFAULT;
-        goto out;
-      }
-
-      cout << "Remove past-intervals " << past_intervals << std::endl;
-
-      past_intervals.clear();
-      if (dry_run) {
-        ret = 0;
-        goto out;
-      }
-      ret = write_info(*t, map_epoch, info, past_intervals);
-
-      if (ret == 0) {
-        fs->apply_transaction(osr, std::move(*t));
-        cout << "Removal succeeded" << std::endl;
-      }
     } else if (op == "mark-complete") {
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
 
-      if (struct_ver < PG::compat_struct_v) {
+      if (struct_ver < PG::get_compat_struct_v()) {
         cerr << "Can't mark-complete, version mismatch " << (int)struct_ver
-	     << " (pg)  < compat " << (int)PG::compat_struct_v << " (tool)"
+	     << " (pg)  < compat " << (int)PG::get_compat_struct_v() << " (tool)"
 	     << std::endl;
 	ret = 1;
 	goto out;

@@ -157,16 +157,12 @@ public:
 
   static bool check_omap_dir(string &omap_dir);
   /// Opens underlying db
-  int open(ostream &out) override {
-    return do_open(out, false);
-  }
-  int open(ostream &out, const vector<ColumnFamily>& cfs) override {
+  int open(ostream &out, const vector<ColumnFamily>& cfs = {}) override {
     return do_open(out, false, &cfs);
   }
   /// Creates underlying db if missing and opens it
-  int create_and_open(ostream &out) override;
   int create_and_open(ostream &out,
-		      const vector<ColumnFamily>& cfs) override;
+		      const vector<ColumnFamily>& cfs = {}) override;
 
   void close() override;
 

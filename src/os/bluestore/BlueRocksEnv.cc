@@ -5,6 +5,7 @@
 #include "BlueFS.h"
 #include "include/stringify.h"
 #include "kv/RocksDBStore.h"
+#include "string.h"
 
 rocksdb::Status err_to_status(int r)
 {
@@ -18,6 +19,8 @@ rocksdb::Status err_to_status(int r)
   case -EIO:
   case -EEXIST:
     return rocksdb::Status::IOError(rocksdb::Status::kNone);
+  case -ENOLCK:
+    return rocksdb::Status::IOError(strerror(r));
   default:
     // FIXME :(
     assert(0 == "unrecognized error code");
