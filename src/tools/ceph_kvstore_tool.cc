@@ -28,7 +28,7 @@
 #include "kv/KeyValueDB.h"
 #include "common/url_escape.h"
 
-#ifdef HAVE_LIBAIO
+#ifdef WITH_BLUESTORE
 #include "os/bluestore/BlueStore.h"
 #endif
 
@@ -36,7 +36,7 @@ using namespace std;
 
 class StoreTool
 {
-#ifdef HAVE_LIBAIO
+#ifdef WITH_BLUESTORE
   struct Deleter {
     BlueStore *bluestore;
     Deleter(BlueStore *store = nullptr)
@@ -61,7 +61,7 @@ class StoreTool
   public:
   StoreTool(string type, const string &path, bool need_open_db=true) : store_path(path) {
     if (type == "bluestore-kv") {
-#ifdef HAVE_LIBAIO
+#ifdef WITH_BLUESTORE
       auto bluestore = new BlueStore(g_ceph_context, path, need_open_db);
       KeyValueDB *db_ptr;
       int r = bluestore->start_kv_only(&db_ptr);

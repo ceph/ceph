@@ -136,6 +136,9 @@
 /* ibverbs experimental conditional compilation */
 #cmakedefine HAVE_IBV_EXP
 
+/* define if bluestore enabled */
+#cmakedefine WITH_BLUESTORE
+
 /* define if embedded enabled */
 #cmakedefine WITH_EMBEDDED
 
