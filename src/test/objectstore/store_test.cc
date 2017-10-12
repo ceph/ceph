@@ -26,7 +26,7 @@
 
 #include "os/ObjectStore.h"
 #include "os/filestore/FileStore.h"
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
 #endif
 #include "include/Context.h"
@@ -1327,7 +1327,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
   }
 }
 
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
 TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
@@ -5523,7 +5523,7 @@ TEST_P(StoreTest, TryMoveRename) {
   ASSERT_EQ(store->stat(cid, hoid2, &st), 0);
 }
 
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
 TEST_P(StoreTest, BluestoreOnOffCSumTest) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -5712,7 +5712,7 @@ INSTANTIATE_TEST_CASE_P(
   ::testing::Values(
     "memstore",
     "filestore",
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
     "bluestore",
 #endif
     "kstore"));
@@ -5724,7 +5724,7 @@ INSTANTIATE_TEST_CASE_P(
   ::testing::Values(
     "memstore",
     "filestore",
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
     "bluestore",
 #endif
     "kstore"));
@@ -5823,7 +5823,7 @@ TEST_P(StoreTestSpecificAUSize, TooManyBlobsTest) {
   ASSERT_EQ(res_stat.allocated, max_object);
 }
 
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
 void get_mempool_stats(uint64_t* total_bytes, uint64_t* total_items)
 {
   uint64_t onode_allocated = mempool::bluestore_cache_onode::allocated_bytes();
@@ -6464,7 +6464,7 @@ TEST_P(StoreTestSpecificAUSize, SmallWriteOnShardedExtents) {
   g_conf->set_val("bluestore_csum_type", "crc32c");
 }
 
-#endif //#if defined(HAVE_LIBAIO)
+#endif //#if defined(WITH_BLUESTORE)
 
 TEST_P(StoreTest, KVDBHistogramTest) {
   if (string(GetParam()) != "bluestore")
@@ -6549,7 +6549,7 @@ TEST_P(StoreTest, KVDBStatsTest) {
   g_conf->set_val("rocksdb_collect_memory_stats","false");
 }
 
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
 TEST_P(StoreTestSpecificAUSize, garbageCollection) {
   ObjectStore::Sequencer osr("test");
   int r;

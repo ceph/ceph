@@ -5,7 +5,7 @@
 
 #include "common/errno.h"
 #include "os/ObjectStore.h"
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
 #endif
 #include "store_test_fixture.h"
@@ -42,7 +42,7 @@ void StoreTestFixture::SetUp() {
     cerr << __func__ << ": objectstore type " << type << " doesn't exist yet!" << std::endl;
   }
   ASSERT_TRUE(store);
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
   if (type == "bluestore") {
     BlueStore *s = static_cast<BlueStore*>(store.get());
     // better test coverage!

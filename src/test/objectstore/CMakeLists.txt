@@ -107,7 +107,7 @@ add_executable(unittest_rocksdb_option
 add_ceph_unittest(unittest_rocksdb_option)
 target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
 
-if(HAVE_LIBAIO)
+if(WITH_BLUESTORE)
   # unittest_bit_alloc
   add_executable(unittest_bit_alloc
     BitAllocator_test.cc
@@ -136,7 +136,7 @@ if(HAVE_LIBAIO)
     )
   add_ceph_unittest(unittest_bluestore_types)
   target_link_libraries(unittest_bluestore_types os global)
-endif(HAVE_LIBAIO)
+endif(WITH_BLUESTORE)
 
 # unittest_transaction
 add_executable(unittest_transaction
