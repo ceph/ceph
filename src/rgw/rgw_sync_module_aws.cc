@@ -52,12 +52,12 @@ public:
                                                                                  sync_env(_sync_env), conn(_conn), src_obj(_src_obj) {
   }
 
-  int init(RGWBucketInfo& bucket_info, rgw_obj_key& key) {
+  int init() override {
     /* init input connection */
     RGWRESTStreamRWRequest *in_req;
     int ret = conn->get_obj(rgw_user(),  nullptr, src_obj,
                             nullptr /* mod_ptr */, nullptr /* unmod_ptr */, 0 /* mod_zone_id */, 0 /* mod_pg_ver */,
-                            true /* prepend_metadata */, true /* get_op */, true /*rgwx_stat */,
+                            true /* prepend_metadata */, true /* get_op */, false /*rgwx_stat */,
                             false /* sync_manifest */, true /* skip_descrypt */, false /* send */,
                             nullptr /* cb */, &in_req);
     if (ret < 0) {
@@ -67,7 +67,23 @@ public:
 
     set_req(in_req);
 
+    return RGWStreamReadHTTPResourceCRF::init();
+  }
+
+  int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info) override {
+    for (auto header : headers) {
+      const string& val = header.second;
+      if (header.first == "RGWX_OBJECT_SIZE") {
+        rest_obj.content_len = atoi(val.c_str());
+      } else {
+        rest_obj.attrs[header.first] = val;
+      }
+    }
+
+    ldout(sync_env->cct, 20) << __func << ":" << " headers=" << headers << " extra_data.length()=" << extra_data.length() << dendl;
+
     return 0;
+
   }
 
   bool need_extra_data() override {
@@ -98,21 +114,24 @@ public:
 
     set_req(out_req);
 
-    return 0;
+    return RGWStreamWriteHTTPResourceCRF::init();
   }
 
-  void send_ready(const std::map<string, string>& attrs) override {
+  void send_ready(const rgw_rest_obj& rest_obj) override {
     RGWRESTStreamS3PutObj *r = (RGWRESTStreamS3PutObj *)req;
+
+    /* here we need to convert rest_obj.attrs to cloud specific representation */
 
     map<string, bufferlist> new_attrs;
 
-    for (auto attr : attrs) {
-      const string& val = attr.second;
-      new_attrs[attr.first].append(bufferptr(val.c_str(), val.size() - 1));
+    for (auto attr : rest_obj.attrs) {
+      new_attrs[attr.first].append(attr.second);
     }
 
     RGWAccessControlPolicy policy;
     ::encode(policy, new_attrs[RGW_ATTR_ACL]);
+
+    r->set_send_length(rest_obj.content_len);
 
     r->send_ready(conn->get_key(), new_attrs, false);
   }
@@ -127,7 +146,7 @@ class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
   string target_bucket_name;
   std::shared_ptr<RGWStreamReadHTTPResourceCRF> in_crf;
   std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
-
+  rgw_rest_obj rest_obj;
   string obj_path;
   int ret{0};
 

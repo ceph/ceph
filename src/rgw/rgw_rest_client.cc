@@ -541,18 +541,32 @@ static int parse_rgwx_mtime(CephContext *cct, const string& s, ceph::real_time *
   return 0;
 }
 
-int RGWRESTStreamRWRequest::send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr)
+static void send_prepare_convert(const rgw_obj& obj, string *resource)
 {
   string urlsafe_bucket, urlsafe_object;
   url_encode(obj.bucket.get_key(':', 0), urlsafe_bucket);
   url_encode(obj.key.name, urlsafe_object);
-  string resource = urlsafe_bucket + "/" + urlsafe_object;
+  *resource = urlsafe_bucket + "/" + urlsafe_object;
+}
+
+int RGWRESTStreamRWRequest::send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr)
+{
+  string resource;
+  send_prepare_convert(obj, &resource);
 
   return send_request(&key, extra_headers, resource, mgr);
 }
 
-int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
-                                         RGWHTTPManager *mgr, bufferlist *send_data)
+int RGWRESTStreamRWRequest::send_prepare(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj)
+{
+  string resource;
+  send_prepare_convert(obj, &resource);
+
+  return send_prepare(&key, extra_headers, resource);
+}
+
+int RGWRESTStreamRWRequest::send_prepare(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
+                                         bufferlist *send_data)
 {
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
@@ -609,7 +623,6 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
     headers.emplace_back(kv);
   }
 
-  bool send_data_hint = false;
   if (send_data) {
     set_outbl(*send_data);
     send_data_hint = true;
@@ -618,6 +631,23 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
   method = new_info.method;
   url = new_url;
 
+  return 0;
+}
+
+int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
+                                         RGWHTTPManager *mgr, bufferlist *send_data)
+{
+  int ret = send_prepare(key, extra_headers, resource, send_data);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return send(mgr);
+}
+
+
+int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
+{
   if (!mgr) {
     return RGWHTTP::send(this);
   }

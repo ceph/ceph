@@ -10,6 +10,21 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+class TestSpliceCR : public RGWCoroutine {
+  CephContext *cct;
+  RGWHTTPManager *http_manager;
+  RGWHTTPStreamRWRequest *in_req{nullptr};
+  RGWHTTPStreamRWRequest *out_req{nullptr};
+  std::shared_ptr<RGWStreamReadHTTPResourceCRF> in_crf;
+  std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
+public:
+  TestSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
+               RGWHTTPStreamRWRequest *_in_req,
+               RGWHTTPStreamRWRequest *_out_req);
+
+  int operate();
+};
+
 class RGWCRHTTPGetDataCB : public RGWGetDataCB {
   Mutex lock;
   RGWCoroutinesEnv *env;
@@ -93,7 +108,7 @@ int RGWStreamReadHTTPResourceCRF::init()
   return 0;
 }
 
-int RGWStreamWriteHTTPResourceCRF::init()
+int RGWStreamWriteHTTPResourceCRF::send()
 {
   env->stack->init_new_io(req);
 
@@ -116,6 +131,17 @@ void RGWStreamReadHTTPResourceCRF::get_attrs(std::map<string, string> *attrs)
   *attrs = req->get_out_headers();
 }
 
+int RGWStreamReadHTTPResourceCRF::decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info) {
+  /* basic generic implementation */
+  for (auto header : headers) {
+    const string& val = header.second;
+
+    rest_obj.attrs[header.first] = val;
+  }
+
+  return 0;
+}
+
 int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool *io_pending)
 {
     reenter(&read_state) {
@@ -130,10 +156,22 @@ int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool 
           continue;
         }
         extra_data.claim_append(in_cb->get_extra_data());
+        map<string, string> attrs = req->get_out_headers();
+        int ret = decode_rest_obj(attrs, extra_data, &rest_obj);
+        if (ret < 0) {
+          ldout(cct, 0) << "ERROR: " << __func__ << " decode_rest_obj() returned ret=" << ret << dendl;
+          return ret;
+        }
         got_extra_data = true;
       }
       *io_pending = false;
       in_cb->claim_data(out, max_size);
+      if (out->length() == 0) {
+        /* this may happen if we just read the prepended extra_data and didn't have any data
+         * after. In that case, retry reading, so that caller doesn't assume it's EOF.
+         */
+        continue;
+      }
       if (!req->is_done()) {
         yield;
       }
@@ -142,14 +180,11 @@ int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool 
   return 0;
 }
 
-void RGWStreamWriteHTTPResourceCRF::send_ready(const map<string, string>& attrs)
+void RGWStreamWriteHTTPResourceCRF::send_ready(const rgw_rest_obj& rest_obj)
 {
-  for (auto h : attrs) {
-    if (h.first == "CONTENT_LENGTH") {
-      req->set_send_length(atoi(h.second.c_str()));
-    } else {
-      req->append_header(h.first, h.second);
-    }
+  req->set_send_length(rest_obj.content_len);
+  for (auto h : rest_obj.attrs) {
+    req->append_header(h.first, h.second);
   }
 }
 
@@ -225,10 +260,12 @@ int RGWStreamSpliceCR::operate() {
       }
 
       if (!sent_attrs) {
-        map<string, string> attrs;
-        in_crf->get_attrs(&attrs);
-        out_crf->send_ready(attrs);
         int ret = out_crf->init();
+        if (ret < 0) {
+          return set_cr_error(ret);
+        }
+        out_crf->send_ready(in_crf->get_rest_obj());
+        ret = out_crf->send();
         if (ret < 0) {
           return set_cr_error(ret);
         }

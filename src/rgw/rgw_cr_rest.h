@@ -7,7 +7,16 @@
 #include "rgw_coroutine.h"
 #include "rgw_rest_conn.h"
 
-class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine{
+
+struct rgw_rest_obj {
+  rgw_obj_key key;
+  uint64_t content_len;
+  std::map<string, string> attrs;
+  std::map<string, string> custom_attrs;
+  RGWAccessControlPolicy acls;
+};
+
+class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine {
   bufferlist *result;
  protected:
   RGWRESTConn *conn;
@@ -315,6 +324,7 @@ protected:
 public:
   virtual int init() = 0;
   virtual int read(bufferlist *data, uint64_t max, bool *need_retry) = 0; /* reentrant */
+  virtual int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info) = 0;
   virtual bool has_attrs() = 0;
   virtual void get_attrs(std::map<string, string> *attrs) = 0;
 };
@@ -326,12 +336,14 @@ protected:
 
 public:
   virtual int init() = 0;
-  virtual void send_ready(const std::map<string, string>& attrs) = 0;
+  virtual void send_ready(const rgw_rest_obj& rest_obj) = 0;
+  virtual int send() = 0;
   virtual int write(bufferlist& data) = 0; /* reentrant */
   virtual int drain_writes(bool *need_retry) = 0; /* reentrant */
 };
 
 class RGWStreamReadHTTPResourceCRF : public RGWStreamReadResourceCRF {
+  CephContext *cct;
   RGWCoroutinesEnv *env;
   RGWCoroutine *caller;
   RGWHTTPManager *http_manager;
@@ -345,23 +357,32 @@ class RGWStreamReadHTTPResourceCRF : public RGWStreamReadResourceCRF {
   bool got_attrs{false};
   bool got_extra_data{false};
 
+protected:
+  rgw_rest_obj rest_obj;
+
 public:
   RGWStreamReadHTTPResourceCRF(CephContext *_cct,
                                RGWCoroutinesEnv *_env,
                                RGWCoroutine *_caller,
-                               RGWHTTPManager *_http_manager) : env(_env),
-                                                               caller(_caller),
-                                                               http_manager(_http_manager) {}
+                               RGWHTTPManager *_http_manager) : cct(_cct),
+                                                                env(_env),
+                                                                caller(_caller),
+                                                                http_manager(_http_manager) {}
   virtual ~RGWStreamReadHTTPResourceCRF();
 
   int init() override;
   int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
+  int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info);
   bool has_attrs() override;
-  void get_attrs(std::map<string, string> *pattrs) override;
+  void get_attrs(std::map<string, string> *attrs);
   virtual bool need_extra_data() { return false; }
 
   void set_req(RGWHTTPStreamRWRequest *r) {
     req = r;
+  }
+
+  rgw_rest_obj& get_rest_obj() {
+    return rest_obj;
   }
 };
 
@@ -382,8 +403,11 @@ public:
                                                                http_manager(_http_manager) {}
   virtual ~RGWStreamWriteHTTPResourceCRF() {}
 
-  int init() override;
-  void send_ready(const std::map<string, string>& attrs) override;
+  int init() override {
+    return 0;
+  }
+  void send_ready(const rgw_rest_obj& rest_obj) override;
+  int send() override;
   int write(bufferlist& data) override; /* reentrant */
   int drain_writes(bool *need_retry) override; /* reentrant */
 
@@ -408,21 +432,6 @@ public:
                     std::shared_ptr<RGWStreamReadHTTPResourceCRF>& _in_crf,
                     std::shared_ptr<RGWStreamWriteHTTPResourceCRF>& _out_crf);
   ~RGWStreamSpliceCR();
-
-  int operate();
-};
-
-class TestSpliceCR : public RGWCoroutine {
-  CephContext *cct;
-  RGWHTTPManager *http_manager;
-  RGWHTTPStreamRWRequest *in_req{nullptr};
-  RGWHTTPStreamRWRequest *out_req{nullptr};
-  std::shared_ptr<RGWStreamReadHTTPResourceCRF> in_crf;
-  std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
-public:
-  TestSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
-               RGWHTTPStreamRWRequest *_in_req,
-               RGWHTTPStreamRWRequest *_out_req);
 
   int operate();
 };
