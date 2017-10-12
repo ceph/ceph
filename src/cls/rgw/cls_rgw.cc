@@ -935,6 +935,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     unaccount_entry(header, remove_entry);
 
     if (op.log_op && !header.syncstopped) {
+      ++header.ver; // increment index version, or we'll overwrite keys previously written
       rc = log_index_operation(hctx, remove_key, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
                                remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
       if (rc < 0)
