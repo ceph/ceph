@@ -6,4 +6,4 @@ tasks:
       clients:
         client.1:
           - cls/test_cls_rbd.sh
-  - print: "**** done cls/test_cls_rbd.sh 4-final-workload"
+  - print: "**** done cls/test_cls_rbd.sh 7-final-workload"

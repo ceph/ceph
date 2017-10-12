@@ -1,1 +1,23 @@
-../../../../releases/luminous.yaml
+# this is the same fragment as ../../../../releases/luminous.yaml
+# but without line "ceph osd set-require-min-compat-client luminous" 
+
+tasks:
+- exec:
+    mgr.x:
+      - mkdir -p /var/lib/ceph/mgr/ceph-x
+      - ceph auth get-or-create-key mgr.x mon 'allow profile mgr'
+      - ceph auth export mgr.x > /var/lib/ceph/mgr/ceph-x/keyring
+- ceph.restart:
+    daemons: [mgr.x]
+    wait-for-healthy: false
+- exec:
+    osd.0:
+      - ceph osd require-osd-release luminous
+- ceph.healthy:
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false
+    log-whitelist:
+      - no active mgr
