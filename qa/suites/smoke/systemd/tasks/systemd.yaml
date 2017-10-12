@@ -18,6 +18,7 @@ overrides:
 tasks:
 - ssh-keys:
 - ceph-ansible:
+- install.ship_utilities:
 - systemd:
 - workunit:
     clients:
