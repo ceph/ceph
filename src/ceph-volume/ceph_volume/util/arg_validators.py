@@ -1,4 +1,5 @@
 import argparse
+import os
 
 
 class LVPath(object):
@@ -7,12 +8,20 @@ class LVPath(object):
 
         <vg name>/<lv name>
 
+    Or a full path to a device, like ``/dev/sda``
+
     Because for LVM it is better to be specific on what group does an lv
     belongs to.
     """
 
     def __call__(self, string):
         error = None
+        if string.startswith('/'):
+            if not os.path.exists(string):
+                error = "Argument (device) does not exist: %s" % string
+                raise argparse.ArgumentError(None, error)
+            else:
+                return string
         try:
             vg, lv = string.split('/')
         except ValueError:
