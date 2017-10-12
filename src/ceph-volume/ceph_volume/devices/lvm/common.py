@@ -15,20 +15,20 @@ def common_parser(prog, description):
     required_args = parser.add_argument_group('required arguments')
     parser.add_argument(
         '--journal',
-        help='A logical volume (vg_name/lv_name), or path to a device',
+        help='(filestore) A logical volume (vg_name/lv_name), or path to a device',
     )
     required_args.add_argument(
         '--data',
         required=True,
         type=arg_validators.LVPath(),
-        help='A logical volume (vg_name/lv_name) for OSD data',
+        help='OSD data path. Bluestore: A physical device or volume group. Filestore: A logical volume (vg_name/lv_name)',
     )
     parser.add_argument(
         '--journal-size',
         default=5,
         metavar='GB',
         type=int,
-        help='Size (in GB) A logical group name or a path to a logical volume',
+        help='(filestore) Size (in GB) A logical group name or a path to a logical volume',
     )
     parser.add_argument(
         '--bluestore',
@@ -50,11 +50,13 @@ def common_parser(prog, description):
     )
     parser.add_argument(
         '--block.db',
-        help='Path to bluestore block.db logical volume or device',
+        dest='block_db',
+        help='(bluestore) Path to bluestore block.db logical volume or device',
     )
     parser.add_argument(
         '--block.wal',
-        help='Path to bluestore block.wal logical volume or device',
+        dest='block_wal',
+        help='(bluestore) Path to bluestore block.wal logical volume or device',
     )
     # Do not parse args, so that consumers can do something before the args get
     # parsed triggering argparse behavior
