@@ -903,7 +903,6 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
   RGWAccessKey new_key;
   RGWUserInfo duplicate_check;
 
-  int ret = 0;
   int key_type = op_state.get_key_type();
   bool gen_access = op_state.will_gen_access();
   bool gen_secret = op_state.will_gen_secret();
@@ -956,13 +955,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     key = op_state.get_secret_key();
   } else {
     char secret_key_buf[SECRET_KEY_LEN + 1];
-
-    ret = gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
-    if (ret < 0) {
-      set_err_msg(err_msg, "unable to generate secret key");
-      return ret;
-    }
-
+    gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
     key = secret_key_buf;
   }
 
@@ -972,14 +965,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
 
     do {
       int id_buf_size = sizeof(public_id_buf);
-      ret = gen_rand_alphanumeric_upper(g_ceph_context,
-               public_id_buf, id_buf_size);
-
-      if (ret < 0) {
-        set_err_msg(err_msg, "unable to generate access key");
-        return ret;
-      }
-
+      gen_rand_alphanumeric_upper(g_ceph_context, public_id_buf, id_buf_size);
       id = public_id_buf;
       if (!validate_access_key(id))
         continue;
@@ -1068,15 +1054,8 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
 
   if (op_state.will_gen_secret()) {
     char secret_key_buf[SECRET_KEY_LEN + 1];
-
-    int ret;
     int key_buf_size = sizeof(secret_key_buf);
-    ret = gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, key_buf_size);
-    if (ret < 0) {
-      set_err_msg(err_msg, "unable to generate secret key");
-      return ret;
-    }
-
+    gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, key_buf_size);
     key = secret_key_buf;
   }
 

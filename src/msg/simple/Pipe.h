@@ -162,7 +162,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     void writer();
     void unlock_maybe_reap();
 
-    int randomize_out_seq();
+    void randomize_out_seq();
 
     int read_message(Message **pm,
 		     AuthSessionHandler *session_security_copy);
