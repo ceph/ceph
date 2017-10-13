@@ -109,7 +109,7 @@ struct CompatSet {
 	   p != names.end();
 	   ++p) {
 	char s[18];
-	snprintf(s, sizeof(s), "feature_%lld", (unsigned long long)p->first);
+	snprintf(s, sizeof(s), "feature_%llu", (unsigned long long)p->first);
 	f->dump_string(s, p->second);
       }
     }
