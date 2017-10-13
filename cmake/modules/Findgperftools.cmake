@@ -21,12 +21,14 @@ if(Tcmalloc_INCLUDE_DIR AND EXISTS "${Tcmalloc_INCLUDE_DIR}/gperftools/tcmalloc.
   foreach(ver "MAJOR" "MINOR" "PATCH")
     file(STRINGS "${Tcmalloc_INCLUDE_DIR}/gperftools/tcmalloc.h" TC_VER_${ver}_LINE
       REGEX "^#define[ \t]+TC_VERSION_${ver}[ \t]+[^ \t]+$")
-    string(REGEX REPLACE "^#define[ \t]+TC_VERSION_${ver}[ \t]+(\".)?([0-9]+)\"?$"
+    string(REGEX REPLACE "^#define[ \t]+TC_VERSION_${ver}[ \t]+(\".)?([0-9]*)\"?$"
       "\\2" TCMALLOC_VERSION_${ver} "${TC_VER_${ver}_LINE}")
     unset(TC_VER_${ver}_LINE)
   endforeach()
-  set(TCMALLOC_VERSION_STRING
-    "${TCMALLOC_VERSION_MAJOR}.${TCMALLOC_VERSION_MINOR}.${TCMALLOC_VERSION_PATCH}")
+  set(TCMALLOC_VERSION_STRING "${TCMALLOC_VERSION_MAJOR}.${TCMALLOC_VERSION_MINOR}")
+  if(NOT TCMALLOC_VERSION_PATCH STREQUAL "")
+    set(TCMALLOC_VERSION_STRING "${TCMALLOC_VERSION_STRING}.${TCMALLOC_VERSION_PATCH}")
+  endif()
 endif()
 
 foreach(component tcmalloc tcmalloc_minimal profiler)
