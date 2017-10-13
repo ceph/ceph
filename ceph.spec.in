@@ -933,6 +933,7 @@ rm -rf %{buildroot}
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
+%{_bindir}/ceph-kvstore-tool
 %{_bindir}/ceph-run
 %{_bindir}/ceph-detect-init
 %{_libexecdir}/systemd/system-preset/50-ceph.preset
@@ -985,6 +986,7 @@ rm -rf %{buildroot}
 %{_mandir}/man8/crushtool.8*
 %{_mandir}/man8/osdmaptool.8*
 %{_mandir}/man8/monmaptool.8*
+%{_mandir}/man8/ceph-kvstore-tool.8*
 #set up placeholder directories
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/tmp
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
@@ -1240,6 +1242,7 @@ fi
 %files mon
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-rest-api
+%{_bindir}/ceph-monstore-tool
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-rest-api.8*
 %{python_sitelib}/ceph_rest_api.py*
@@ -1408,6 +1411,7 @@ fi
 %{_bindir}/ceph-clsinfo
 %{_bindir}/ceph-bluestore-tool
 %{_bindir}/ceph-objectstore-tool
+%{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph-osd
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
 %dir %{_udevrulesdir}
@@ -1640,9 +1644,6 @@ fi
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-coverage
-%{_bindir}/ceph-monstore-tool
-%{_bindir}/ceph-osdomap-tool
-%{_bindir}/ceph-kvstore-tool
 %{_bindir}/ceph-debugpack
 %{_mandir}/man8/ceph-debugpack.8*
 %dir %{_libdir}/ceph
