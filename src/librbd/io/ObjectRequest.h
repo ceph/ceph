@@ -58,6 +58,11 @@ public:
                                         const ::SnapContext &snapc,
 					const ZTracer::Trace &parent_trace,
                                         Context *completion);
+  static ObjectRequest* create_trim(ImageCtxT *ictx, const std::string &oid,
+                                    uint64_t object_no,
+                                    const ::SnapContext &snapc,
+                                    bool post_object_map_update,
+                                    Context *completion);
   static ObjectRequest* create_write(ImageCtxT *ictx, const std::string &oid,
                                      uint64_t object_no,
                                      uint64_t object_off,

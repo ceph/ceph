@@ -24,6 +24,10 @@ public:
                            prog_ctx);
   }
 
+  TrimRequest(ImageCtxT &image_ctx, Context *on_finish,
+	      uint64_t original_size, uint64_t new_size,
+	      ProgressContext &prog_ctx);
+
   void send() override;
 
 protected:
@@ -85,10 +89,6 @@ private:
   uint64_t m_delete_off;
   uint64_t m_new_size;
   ProgressContext &m_prog_ctx;
-
-  TrimRequest(ImageCtxT &image_ctx, Context *on_finish,
-	      uint64_t original_size, uint64_t new_size,
-	      ProgressContext &prog_ctx);
 
   void send_pre_trim();
   void send_copyup_objects();
