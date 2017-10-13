@@ -589,6 +589,7 @@ void PG::MissingLoc::add_batch_sources_info(
   ldout(pg->cct, 10) << __func__ << ": adding sources in batch "
 		     << sources.size() << dendl;
   unsigned loop = 0;
+  bool sources_updated = false;
   for (map<hobject_t, pg_missing_item>::const_iterator i = needs_recovery_map.begin();
       i != needs_recovery_map.end();
       ++i) {
@@ -599,7 +600,10 @@ void PG::MissingLoc::add_batch_sources_info(
     if (i->second.is_delete())
       continue;
     missing_loc[i->first].insert(sources.begin(), sources.end());
-    missing_loc_sources.insert(sources.begin(), sources.end());
+    if (!sources_updated) {
+      missing_loc_sources.insert(sources.begin(), sources.end());
+      sources_updated = true;
+    }
   }
 }
 
@@ -611,6 +615,7 @@ bool PG::MissingLoc::add_source_info(
 {
   bool found_missing = false;
   unsigned loop = 0;
+  bool sources_updated = false;
   // found items?
   for (map<hobject_t,pg_missing_item>::const_iterator p = needs_recovery_map.begin();
        p != needs_recovery_map.end();
@@ -664,7 +669,10 @@ bool PG::MissingLoc::add_source_info(
 		       << " is on osd." << fromosd << dendl;
 
     missing_loc[soid].insert(fromosd);
-    missing_loc_sources.insert(fromosd);
+    if (!sources_updated) {
+      missing_loc_sources.insert(fromosd);
+      sources_updated = true;
+    }
     found_missing = true;
   }
 
