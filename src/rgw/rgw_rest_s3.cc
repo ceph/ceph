@@ -2102,7 +2102,8 @@ int RGWCopyObj_ObjStore_S3::get_params()
     } else if (!source_zone.empty()) {
       attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-zone_group copy
     } else {
-      ldout(s->cct, 0) << "invalid metadata directive" << dendl;
+      s->err.message = "Unknown metadata directive.";
+      ldout(s->cct, 0) << s->err.message << dendl;
       return -EINVAL;
     }
   }
@@ -2114,8 +2115,10 @@ int RGWCopyObj_ObjStore_S3::get_params()
       src_object.instance.empty() &&
       (attrs_mod != RGWRados::ATTRSMOD_REPLACE)) {
     /* can only copy object into itself if replacing attrs */
-    ldout(s->cct, 0) << "can't copy object into itself if not replacing attrs"
-		     << dendl;
+    s->err.message = "This copy request is illegal because it is trying to copy "
+                     "an object to itself without changing the object's metadata, "
+                     "storage class, website redirect location or encryption attributes.";
+    ldout(s->cct, 0) << s->err.message << dendl;
     return -ERR_INVALID_REQUEST;
   }
   return 0;
