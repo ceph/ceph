@@ -224,7 +224,7 @@ void PG::dump_live_ids()
 #endif
 
 
-void PGPool::update(OSDMapRef map)
+void PGPool::update(CephContext *cct, OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);
   assert(pi);
@@ -273,6 +273,19 @@ void PGPool::update(OSDMapRef map)
     << " snapc " << snapc
     << (updated ? " (updated)":" (no change)")
     << dendl;
+  if (cct->_conf->osd_debug_verify_cached_snaps) {
+    interval_set<snapid_t> actual_removed_snaps;
+    pi->build_removed_snaps(actual_removed_snaps);
+    if (!(actual_removed_snaps == cached_removed_snaps)) {
+      lgeneric_derr(cct) << __func__
+			 << ": mismatch between the actual removed snaps "
+			 << actual_removed_snaps
+			 << " and pool.cached_removed_snaps "
+			 << " pool.cached_removed_snaps " << cached_removed_snaps
+			 << dendl;
+    }
+    assert(actual_removed_snaps == cached_removed_snaps);
+  }
 }
 
 PG::PG(OSDService *o, OSDMapRef curmap,
@@ -5912,20 +5925,7 @@ void PG::handle_advance_map(
 	   << " -- " << up_primary << "/" << acting_primary
 	   << dendl;
   update_osdmap_ref(osdmap);
-  pool.update(osdmap);
-  if (cct->_conf->osd_debug_verify_cached_snaps) {
-    interval_set<snapid_t> actual_removed_snaps;
-    const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());
-    assert(pi);
-    pi->build_removed_snaps(actual_removed_snaps);
-    if (!(actual_removed_snaps == pool.cached_removed_snaps)) {
-      derr << __func__ << ": mismatch between the actual removed snaps "
-	   << actual_removed_snaps << " and pool.cached_removed_snaps "
-	   << " pool.cached_removed_snaps " << pool.cached_removed_snaps
-	   << dendl;
-    }
-    assert(actual_removed_snaps == pool.cached_removed_snaps);
-  }
+  pool.update(cct, osdmap);
   AdvMap evt(
     osdmap, lastmap, newup, up_primary,
     newacting, acting_primary);
