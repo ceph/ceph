@@ -57,7 +57,7 @@ void usage()
 {
   cout << "usage: radosgw-admin <cmd> [options...]" << std::endl;
   cout << "commands:\n";
-  cout << "  user create                create a new user\n" ;
+  cout << "  user create                create a new user. ptltool testing.\n" ;
   cout << "  user modify                modify user\n";
   cout << "  user info                  get user info\n";
   cout << "  user rm                    remove user\n";
