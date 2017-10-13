@@ -1422,7 +1422,7 @@ void DaemonServer::send_report()
   auto m = new MMonMgrReport();
   py_modules.get_health_checks(&m->health_checks);
 
-  cluster_state.with_pgmap([&](const PGMap& pg_map) {
+  cluster_state.with_mutable_pgmap([&](PGMap& pg_map) {
       cluster_state.update_delta_stats();
 
       if (pending_service_map.epoch) {
