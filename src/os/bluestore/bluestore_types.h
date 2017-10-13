@@ -661,6 +661,7 @@ public:
       ++p;
     }
     assert(0 == "we should not get here");
+    return false;
   }
 
   /// return true if the entire range is allocated
