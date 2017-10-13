@@ -47,7 +47,7 @@ bool is_block_aligned(const ImageCache::Extents &image_extents) {
 struct WriteLogEntry {
   uint64_t image_offset_bytes;
   uint64_t write_bytes;
-  WriteLogEntry() {};
+  //WriteLogEntry() {};
   WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
     : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes) {
   }
