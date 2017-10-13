@@ -343,6 +343,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     get_version_full(latest_full, latest_bl);
     assert(latest_bl.length() != 0);
     dout(7) << __func__ << " loading latest full map e" << latest_full << dendl;
+    osdmap = OSDMap();
     osdmap.decode(latest_bl);
   }
 
