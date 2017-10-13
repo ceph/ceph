@@ -34,4 +34,4 @@ tasks:
      client.0:
       - yum install -y cephmetrics
       - sleep 20
-      - yum uninstall -y cephmetrics
+      - yum remove -y cephmetrics
