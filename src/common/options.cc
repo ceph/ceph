@@ -3474,6 +3474,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Enable use of rocksdb column families for bluestore metadata"),
 
+    Option("bluestore_rocksdb_cfs", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("M= P= L=")
+    .set_description("List of whitespace-separate key/value pairs where key is CF name and value is CF options"),
+
     Option("bluestore_fsck_on_mount", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Run fsck at mount"),
