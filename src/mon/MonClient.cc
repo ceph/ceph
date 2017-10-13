@@ -792,20 +792,14 @@ void MonClient::_un_backoff()
 
 void MonClient::schedule_tick()
 {
-  struct C_Tick : public Context {
-    MonClient *monc;
-    explicit C_Tick(MonClient *m) : monc(m) {}
-    void finish(int r) override {
-      monc->tick();
-    }
-  };
-
+  auto do_tick = make_lambda_context([this]() { tick(); });
   if (_hunting()) {
-    timer.add_event_after(cct->_conf->mon_client_hunt_interval
-			  * reopen_interval_multiplier,
-			  new C_Tick(this));
-  } else
-    timer.add_event_after(cct->_conf->mon_client_ping_interval, new C_Tick(this));
+    const auto hunt_interval = (cct->_conf->mon_client_hunt_interval *
+				reopen_interval_multiplier);
+    timer.add_event_after(hunt_interval, do_tick);
+  } else {
+    timer.add_event_after(cct->_conf->mon_client_ping_interval, do_tick);
+  }
 }
 
 // ---------
