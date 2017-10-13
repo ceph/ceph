@@ -354,18 +354,21 @@ void ActivePyModules::shutdown()
   for (auto &i : modules) {
     auto module = i.second.get();
     const auto& name = i.first;
-    dout(10) << "waiting for module " << name << " to shutdown" << dendl;
+
     lock.Unlock();
+    dout(10) << "calling module " << name << " shutdown()" << dendl;
     module->shutdown();
+    dout(10) << "module " << name << " shutdown() returned" << dendl;
     lock.Lock();
-    dout(10) << "module " << name << " shutdown" << dendl;
   }
 
   // For modules implementing serve(), finish the threads where we
   // were running that.
   for (auto &i : modules) {
     lock.Unlock();
+    dout(10) << "joining module " << i.first << dendl;
     i.second->thread.join();
+    dout(10) << "joined module " << i.first << dendl;
     lock.Lock();
   }
 
@@ -644,12 +647,49 @@ PyObject *ActivePyModules::get_context()
   return capsule;
 }
 
-static void delete_osdmap(PyObject *object)
+/**
+ * Helper for our wrapped types that take a capsule in their constructor.
+ */
+PyObject *construct_with_capsule(
+    const std::string &module_name,
+    const std::string &clsname,
+    void *wrapped)
 {
-  OSDMap *osdmap = static_cast<OSDMap*>(PyCapsule_GetPointer(object, nullptr));
-  assert(osdmap);
-  dout(10) << __func__ << " " << osdmap << dendl;
-  delete osdmap;
+  // Look up the OSDMap type which we will construct
+  PyObject *module = PyImport_ImportModule(module_name.c_str());
+  if (!module) {
+    derr << "Failed to import python module:" << dendl;
+    derr << handle_pyerror() << dendl;
+  }
+  assert(module);
+
+  PyObject *wrapper_type = PyObject_GetAttrString(
+      module, (const char*)clsname.c_str());
+  if (!wrapper_type) {
+    derr << "Failed to get python type:" << dendl;
+    derr << handle_pyerror() << dendl;
+  }
+  assert(wrapper_type);
+
+  // Construct a capsule containing an OSDMap.
+  auto wrapped_capsule = PyCapsule_New(wrapped, nullptr, nullptr);
+  assert(wrapped_capsule);
+
+  // Construct the python OSDMap
+  auto pArgs = PyTuple_Pack(1, wrapped_capsule);
+  auto wrapper_instance = PyObject_CallObject(wrapper_type, pArgs);
+  if (wrapper_instance == nullptr) {
+    derr << "Failed to construct python OSDMap:" << dendl;
+    derr << handle_pyerror() << dendl;
+  }
+  assert(wrapper_instance != nullptr);
+  Py_DECREF(pArgs);
+  Py_DECREF(wrapped_capsule);
+
+  Py_DECREF(wrapper_type);
+  Py_DECREF(module);
+
+  return wrapper_instance;
 }
 
 PyObject *ActivePyModules::get_osdmap()
@@ -658,13 +698,13 @@ PyObject *ActivePyModules::get_osdmap()
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  // Construct a capsule containing an OSDMap.
   OSDMap *newmap = new OSDMap;
+
   cluster_state.with_osdmap([&](const OSDMap& o) {
       newmap->deepish_copy_from(o);
     });
-  dout(10) << __func__ << " " << newmap << dendl;
-  return PyCapsule_New(newmap, nullptr, &delete_osdmap);
+
+  return construct_with_capsule("mgr_module", "OSDMap", (void*)newmap);
 }
 
 void ActivePyModules::set_health_checks(const std::string& module_name,

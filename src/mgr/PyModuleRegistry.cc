@@ -231,28 +231,22 @@ int PyModule::load(PyThreadState *pMainThreadState)
     PyObject *ceph_module = Py_InitModule("ceph_module", ModuleMethods);
     assert(ceph_module != nullptr);
 
-    Py_InitModule("ceph_osdmap", OSDMapMethods);
-    Py_InitModule("ceph_osdmap_incremental", OSDMapIncrementalMethods);
-    Py_InitModule("ceph_crushmap", CRUSHMapMethods);
+    auto load_class = [ceph_module](const char *name, PyTypeObject *type)
+    {
+      type->tp_new = PyType_GenericNew;
+      if (PyType_Ready(type) < 0) {
+          assert(0);
+      }
+      Py_INCREF(type);
 
-    // Initialize base classes
-    BaseMgrModuleType.tp_new = PyType_GenericNew;
-    if (PyType_Ready(&BaseMgrModuleType) < 0) {
-        assert(0);
-    }
+      PyModule_AddObject(ceph_module, name, (PyObject *)type);
+    };
 
-    Py_INCREF(&BaseMgrModuleType);
-    PyModule_AddObject(ceph_module, "BaseMgrModule",
-                       (PyObject *)&BaseMgrModuleType);
-
-    BaseMgrModuleType.tp_new = PyType_GenericNew;
-    if (PyType_Ready(&BaseMgrStandbyModuleType) < 0) {
-        assert(0);
-    }
-
-    Py_INCREF(&BaseMgrStandbyModuleType);
-    PyModule_AddObject(ceph_module, "BaseMgrStandbyModule",
-                       (PyObject *)&BaseMgrStandbyModuleType);
+    load_class("BaseMgrModule", &BaseMgrModuleType);
+    load_class("BaseMgrStandbyModule", &BaseMgrStandbyModuleType);
+    load_class("BasePyOSDMap", &BasePyOSDMapType);
+    load_class("BasePyOSDMapIncremental", &BasePyOSDMapIncrementalType);
+    load_class("BasePyCRUSH", &BasePyCRUSHType);
   }
 
   // Environment is all good, import the external module

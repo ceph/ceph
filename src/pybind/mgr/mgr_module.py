@@ -1,8 +1,8 @@
 
 import ceph_module  # noqa
-import ceph_osdmap  #noqa
-import ceph_osdmap_incremental  #noqa
-import ceph_crushmap  #noqa
+#import ceph_osdmap  #noqa
+#import ceph_osdmap_incremental  #noqa
+#import ceph_crushmap  #noqa
 
 import json
 import logging
@@ -74,87 +74,72 @@ class CommandResult(object):
         return self.r, self.outb, self.outs
 
 
-class OSDMap(object):
-    def __init__(self, handle):
-        self._handle = handle
-
+class OSDMap(ceph_module.BasePyOSDMap):
     def get_epoch(self):
-        return ceph_osdmap.get_epoch(self._handle)
+        return self._get_epoch()
 
     def get_crush_version(self):
-        return ceph_osdmap.get_crush_version(self._handle)
+        return self._get_crush_version()
 
     def dump(self):
-        return ceph_osdmap.dump(self._handle)
+        return self._dump()
 
     def new_incremental(self):
-        return OSDMapIncremental(ceph_osdmap.new_incremental(self._handle))
+        return self._new_incremental()
 
     def apply_incremental(self, inc):
-        return OSDMap(ceph_osdmap.apply_incremental(self._handle, inc._handle))
+        return self._apply_incremental(inc)
 
     def get_crush(self):
-        return CRUSHMap(ceph_osdmap.get_crush(self._handle), self)
+        return self._get_crush()
 
     def get_pools_by_take(self, take):
-        return ceph_osdmap.get_pools_by_take(self._handle, take).get('pools', [])
+        return self._get_pools_by_take(take).get('pools', [])
 
     def calc_pg_upmaps(self, inc,
                        max_deviation=.01, max_iterations=10, pools=[]):
-        return ceph_osdmap.calc_pg_upmaps(
-            self._handle,
+        return self._calc_pg_upmaps(
             inc._handle,
             max_deviation, max_iterations, pools)
 
     def map_pool_pgs_up(self, poolid):
-        return ceph_osdmap.map_pool_pgs_up(self._handle, poolid)
+        return self._map_pool_pgs_up(poolid)
 
-class OSDMapIncremental(object):
-    def __init__(self, handle):
-        self._handle = handle
-
+class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
     def get_epoch(self):
-        return ceph_osdmap_incremental.get_epoch(self._handle)
+        return self._get_epoch()
 
     def dump(self):
-        return ceph_osdmap_incremental.dump(self._handle)
+        return self._dump()
 
     def set_osd_reweights(self, weightmap):
         """
         weightmap is a dict, int to float.  e.g. { 0: .9, 1: 1.0, 3: .997 }
         """
-        return ceph_osdmap_incremental.set_osd_reweights(self._handle, weightmap)
+        return self._set_osd_reweights(weightmap)
 
     def set_crush_compat_weight_set_weights(self, weightmap):
         """
         weightmap is a dict, int to float.  devices only.  e.g.,
         { 0: 3.4, 1: 3.3, 2: 3.334 }
         """
-        return ceph_osdmap_incremental.set_crush_compat_weight_set_weights(
-            self._handle, weightmap)
+        return self._set_crush_compat_weight_set_weights(weightmap)
 
-
-
-class CRUSHMap(object):
-    def __init__(self, handle, parent_osdmap):
-        self._handle = handle
-        # keep ref to parent osdmap since handle lifecycle is owned by it
-        self._parent_osdmap = parent_osdmap
-
+class CRUSHMap(ceph_module.BasePyCRUSH):
     def dump(self):
-        return ceph_crushmap.dump(self._handle)
+        return self._dump()
 
     def get_item_weight(self, item):
-        return ceph_crushmap.get_item_weight(self._handle, item)
+        return self._get_item_weight(item)
 
     def get_item_name(self, item):
-        return ceph_crushmap.get_item_name(self._handle, item)
+        return self._get_item_name(item)
 
     def find_takes(self):
-        return ceph_crushmap.find_takes(self._handle).get('takes',[])
+        return self._find_takes().get('takes', [])
 
     def get_take_weight_osd_map(self, root):
-        uglymap = ceph_crushmap.get_take_weight_osd_map(self._handle, root)
+        uglymap = self._get_take_weight_osd_map(root)
         return { int(k): v for k, v in uglymap.get('weights', {}).iteritems() }
 
 class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
@@ -507,7 +492,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         OSDMap.
         :return: OSDMap
         """
-        return OSDMap(self._ceph_get_osdmap())
+        return self._ceph_get_osdmap()
 
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL):
         """
