@@ -2310,9 +2310,6 @@ RGWHandler_REST* RGWREST::get_handler(
   int* const init_error
 ) {
   *init_error = preprocess(s, rio);
-  if (*init_error < 0) {
-    return nullptr;
-  }
 
   RGWRESTMgr *m = mgr.get_manager(s, frontend_prefix, s->decoded_uri,
                                   &s->relative_uri);
@@ -2326,6 +2323,9 @@ RGWHandler_REST* RGWREST::get_handler(
   }
 
   RGWHandler_REST* handler = m->get_handler(s, auth_registry, frontend_prefix);
+  if (*init_error < 0) {
+    return nullptr;
+  }
   if (! handler) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
