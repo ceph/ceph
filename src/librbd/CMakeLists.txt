@@ -136,7 +136,8 @@ if(ENABLE_SHARED)
     OUTPUT_NAME rbd
     VERSION 1.12.0
     SOVERSION 1
-    COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON)
     if(NOT APPLE)
       set_property(TARGET librbd APPEND_STRING PROPERTY
         LINK_FLAGS " -Wl,--exclude-libs,ALL")

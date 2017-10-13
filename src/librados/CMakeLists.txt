@@ -24,10 +24,8 @@ if(ENABLE_SHARED)
     OUTPUT_NAME rados
     VERSION 2.0.0
     SOVERSION 2
-    # use COMPILE_FLAGS for the backward compatibility with cmake 2.8.11, should have been:
-    #  CXX_VISIBILITY_PRESET hidden
-    #  VISIBILITY_INLINES_HIDDEN ON
-    COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON)
   if(NOT APPLE)
     set_property(TARGET librados APPEND_STRING PROPERTY
       LINK_FLAGS " -Wl,--exclude-libs,ALL")
