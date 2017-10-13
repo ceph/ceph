@@ -1693,6 +1693,7 @@ protected:
     }
   };
 
+public:
   struct MInfoRec : boost::statechart::event< MInfoRec > {
     pg_shard_t from;
     pg_info_t info;
@@ -1703,7 +1704,6 @@ protected:
       *out << "MInfoRec from " << from << " info: " << info;
     }
   };
-
   struct MLogRec : boost::statechart::event< MLogRec > {
     pg_shard_t from;
     boost::intrusive_ptr<MOSDPGLog> msg;
@@ -1725,7 +1725,6 @@ protected:
         << " features: 0x" << hex << features << dec;
     }
   };
-
   struct MQuery : boost::statechart::event< MQuery > {
     pg_shard_t from;
     pg_query_t query;
@@ -1738,6 +1737,7 @@ protected:
 	   << " query: " << query;
     }
   };
+protected:
 
   struct AdvMap : boost::statechart::event< AdvMap > {
     OSDMapRef osdmap;
@@ -1772,6 +1772,7 @@ protected:
       *out << "Activate from " << activation_epoch;
     }
   };
+public:
   struct RequestBackfillPrio : boost::statechart::event< RequestBackfillPrio > {
     unsigned priority;
     explicit RequestBackfillPrio(unsigned prio) :
@@ -1801,22 +1802,28 @@ protected:
       *out << "DeferRecovery: delay " << delay;
     }
   };
-
+protected:
   TrivialEvent(Initialize)
   TrivialEvent(Load)
   TrivialEvent(GotInfo)
   TrivialEvent(NeedUpThru)
+  public:
   TrivialEvent(NullEvt)
+  protected:
   TrivialEvent(FlushedEvt)
   TrivialEvent(Backfilled)
   TrivialEvent(LocalBackfillReserved)
+  public:
   TrivialEvent(RemoteBackfillReserved)
+  protected:
   TrivialEvent(RejectRemoteReservation)
+  public:
   TrivialEvent(RemoteReservationRejected)
   TrivialEvent(RemoteReservationCanceled)
   TrivialEvent(RequestBackfill)
   TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
+  protected:
   TrivialEvent(BackfillTooFull)
   TrivialEvent(RecoveryTooFull)
 
@@ -1829,7 +1836,9 @@ protected:
   TrivialEvent(AllReplicasRecovered)
   TrivialEvent(DoRecovery)
   TrivialEvent(LocalRecoveryReserved)
+  public:
   TrivialEvent(RemoteRecoveryReserved)
+  protected:
   TrivialEvent(AllRemotesReserved)
   TrivialEvent(AllBackfillsReserved)
   TrivialEvent(GoClean)
