@@ -114,7 +114,7 @@ endif()
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)
 
-target_link_libraries(librbd LINK_PRIVATE 
+target_link_libraries(librbd PRIVATE
   rbd_internal
   rbd_types
   journal
@@ -128,7 +128,7 @@ target_link_libraries(librbd LINK_PRIVATE
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
 if(HAVE_UDEV)
-  target_link_libraries(librbd LINK_PRIVATE
+  target_link_libraries(librbd PRIVATE
     udev)
 endif()
 if(ENABLE_SHARED)

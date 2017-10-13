@@ -239,7 +239,7 @@ set(librgw_srcs
   librgw.cc
   rgw_file.cc)
 add_library(rgw SHARED ${librgw_srcs})
-target_link_libraries(rgw LINK_PRIVATE
+target_link_libraries(rgw PRIVATE
   rgw_a
   librados
   cls_rgw_client
