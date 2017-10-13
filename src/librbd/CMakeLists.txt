@@ -114,7 +114,7 @@ endif()
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)
 
-target_link_libraries(librbd LINK_PRIVATE 
+target_link_libraries(librbd PRIVATE
   rbd_internal
   rbd_types
   journal
@@ -128,7 +128,7 @@ target_link_libraries(librbd LINK_PRIVATE
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
 if(HAVE_UDEV)
-  target_link_libraries(librbd LINK_PRIVATE
+  target_link_libraries(librbd PRIVATE
     udev)
 endif()
 if(ENABLE_SHARED)
@@ -136,7 +136,8 @@ if(ENABLE_SHARED)
     OUTPUT_NAME rbd
     VERSION 1.12.0
     SOVERSION 1
-    COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON)
     if(NOT APPLE)
       set_property(TARGET librbd APPEND_STRING PROPERTY
         LINK_FLAGS " -Wl,--exclude-libs,ALL")
