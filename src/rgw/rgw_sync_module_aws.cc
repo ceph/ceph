@@ -24,10 +24,8 @@ static string aws_bucket_name(const RGWBucketInfo& bucket_info, bool user_bucket
 
 static string aws_object_name(const RGWBucketInfo& bucket_info, const rgw_obj_key&key, bool user_buckets=false){
   string bucket_name = aws_bucket_name(bucket_info, user_buckets);
-  string object_name = bucket_name+"/";
-  if (!user_buckets){
-    object_name += bucket_info.owner.tenant + bucket_info.owner.id + "/";
-  }
+  string object_name;
+  object_name += bucket_info.owner.to_str() + "/";
   object_name += bucket_info.bucket.name + "/" + key.name;
   return object_name;
 }
@@ -80,7 +78,7 @@ public:
       }
     }
 
-    ldout(sync_env->cct, 20) << __func << ":" << " headers=" << headers << " extra_data.length()=" << extra_data.length() << dendl;
+    ldout(sync_env->cct, 20) << __func__ << ":" << " headers=" << headers << " extra_data.length()=" << extra_data.length() << dendl;
 
     return 0;
 
@@ -262,7 +260,7 @@ public:
       ldout(sync_env->cct, 0) << ": remove remote obj: z=" << sync_env->source_zone
                               << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
-        string path = aws_object_name(bucket_info, key);
+        string path = aws_bucket_name(bucket_info) + "/" + aws_object_name(bucket_info, key);
         ldout(sync_env->cct, 0) << "AWS: removing aws object at" << path << dendl;
         call(new RGWDeleteRESTResourceCR(sync_env->cct, conf.conn.get(),
                                          sync_env->http_manager,
