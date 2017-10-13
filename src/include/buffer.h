@@ -446,6 +446,7 @@ namespace buffer CEPH_BUFFER_API {
 
       void advance(int o);
       void seek(unsigned o);
+      using iterator_impl<false>::operator*;
       char operator*();
       iterator& operator++();
       ptr get_current_ptr();
