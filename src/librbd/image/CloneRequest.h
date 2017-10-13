@@ -90,7 +90,7 @@ private:
   std::string m_id;
   ImageOptions m_opts;
   ParentSpec m_pspec;
-  ImageCtxT *m_imctx;
+  ImageCtxT *m_imctx = nullptr;
   cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
@@ -100,14 +100,14 @@ private:
 
   CephContext *m_cct;
   bool m_use_p_features;
-  uint64_t m_p_features;
-  uint64_t m_features;
+  uint64_t m_p_features = 0;
+  uint64_t m_features = 0;
   map<string, bufferlist> m_pairs;
   bufferlist m_out_bl;
-  uint64_t m_size;
+  uint64_t m_size = 0;
   int m_r_saved = 0;
-  bool m_is_primary;
-  bool m_force_non_primary;
+  bool m_is_primary = false;
+  bool m_force_non_primary = false;
 
   void validate_options();
 
