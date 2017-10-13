@@ -148,8 +148,6 @@ protected:
     return "aio_read";
   }
 private:
-  char *m_buf;
-  bufferlist *m_pbl;
   int m_op_flags;
 };
 
