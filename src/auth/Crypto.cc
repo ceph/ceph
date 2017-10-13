@@ -35,31 +35,48 @@
 #include "common/debug.h"
 #include <errno.h>
 
-int get_random_bytes(char *buf, int len)
+// use getentropy() if available. it uses the same source of randomness
+// as /dev/urandom without the filesystem overhead
+#ifdef HAVE_GETENTROPY
+
+#include <unistd.h>
+
+CryptoRandom::CryptoRandom() : fd(0) {}
+CryptoRandom::~CryptoRandom() = default;
+
+void CryptoRandom::get_bytes(char *buf, int len)
 {
-  int fd = TEMP_FAILURE_RETRY(::open("/dev/urandom", O_RDONLY));
-  if (fd < 0)
-    return -errno;
-  int ret = safe_read_exact(fd, buf, len);
+  auto ret = TEMP_FAILURE_RETRY(::getentropy(buf, len));
+  if (ret < 0) {
+    throw std::system_error(errno, std::system_category());
+  }
+}
+
+#else // !HAVE_GETENTROPY
+
+// open /dev/urandom once on construction and reuse the fd for all reads
+CryptoRandom::CryptoRandom()
+  : fd(TEMP_FAILURE_RETRY(::open("/dev/urandom", O_RDONLY)))
+{
+  if (fd < 0) {
+    throw std::system_error(errno, std::system_category());
+  }
+}
+
+CryptoRandom::~CryptoRandom()
+{
   VOID_TEMP_FAILURE_RETRY(::close(fd));
-  return ret;
 }
 
-static int get_random_bytes(int len, bufferlist& bl)
+void CryptoRandom::get_bytes(char *buf, int len)
 {
-  char buf[len];
-  get_random_bytes(buf, len);
-  bl.append(buf, len);
-  return 0;
+  auto ret = safe_read_exact(fd, buf, len);
+  if (ret < 0) {
+    throw std::system_error(-ret, std::system_category());
+  }
 }
 
-uint64_t get_random(uint64_t min_val, uint64_t max_val)
-{
-  uint64_t r;
-  get_random_bytes((char *)&r, sizeof(r));
-  r = min_val + r % (max_val - min_val + 1);
-  return r;
-}
+#endif
 
 
 // ---------------------------------------------------
@@ -85,7 +102,7 @@ public:
   int get_type() const override {
     return CEPH_CRYPTO_NONE;
   }
-  int create(bufferptr& secret) override {
+  int create(CryptoRandom *random, bufferptr& secret) override {
     return 0;
   }
   int validate_secret(const bufferptr& secret) override {
@@ -107,7 +124,7 @@ public:
   int get_type() const override {
     return CEPH_CRYPTO_AES;
   }
-  int create(bufferptr& secret) override;
+  int create(CryptoRandom *random, bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
   CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
 };
@@ -329,13 +346,11 @@ public:
 
 // ------------------------------------------------------------
 
-int CryptoAES::create(bufferptr& secret)
+int CryptoAES::create(CryptoRandom *random, bufferptr& secret)
 {
-  bufferlist bl;
-  int r = get_random_bytes(AES_KEY_LEN, bl);
-  if (r < 0)
-    return r;
-  secret = buffer::ptr(bl.c_str(), bl.length());
+  bufferptr buf(AES_KEY_LEN);
+  random->get_bytes(buf.c_str(), buf.length());
+  secret = std::move(buf);
   return 0;
 }
 
@@ -438,7 +453,7 @@ int CryptoKey::create(CephContext *cct, int t)
     return -EOPNOTSUPP;
   }
   bufferptr s;
-  int r = ch->create(s);
+  int r = ch->create(cct->random(), s);
   delete ch;
   if (r < 0)
     return r;

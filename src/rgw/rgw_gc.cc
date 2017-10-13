@@ -6,7 +6,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/lock/cls_lock_client.h"
-#include "auth/Crypto.h"
+#include "include/random.h"
 
 #include <list>
 
@@ -240,14 +240,11 @@ int RGWGC::process()
 {
   int max_secs = cct->_conf->rgw_gc_processor_max_time;
 
-  unsigned start;
-  int ret = get_random_bytes((char *)&start, sizeof(start));
-  if (ret < 0)
-    return ret;
+  const int start = ceph::util::generate_random_number(0, max_objs - 1);
 
   for (int i = 0; i < max_objs; i++) {
     int index = (i + start) % max_objs;
-    ret = process(index, max_secs);
+    int ret = process(index, max_secs);
     if (ret < 0)
       return ret;
   }

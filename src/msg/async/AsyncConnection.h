@@ -70,7 +70,7 @@ class AsyncConnection : public Connection {
   void discard_out_queue();
   void discard_requeued_up_to(uint64_t seq);
   void requeue_sent();
-  int randomize_out_seq();
+  void randomize_out_seq();
   void handle_ack(uint64_t seq);
   void _append_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
   ssize_t write_message(Message *m, bufferlist& bl, bool more);

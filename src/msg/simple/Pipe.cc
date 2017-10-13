@@ -31,11 +31,11 @@
 
 // Below included to get encode_encrypt(); That probably should be in Crypto.h, instead
 
-#include "auth/Crypto.h"
 #include "auth/cephx/CephxProtocol.h"
 #include "auth/AuthSessionHandler.h"
 
 #include "include/sock_compat.h"
+#include "include/random.h"
 
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
@@ -160,10 +160,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
     connection_state->pipe = get();
   }
 
-  if (randomize_out_seq()) {
-    lsubdout(msgr->cct,ms,15) << "Pipe(): Could not get random bytes to set seq number for session reset; set seq number to " << out_seq << dendl;
-  }
-    
+  randomize_out_seq();
 
   msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
   if (msgr->timeout == 0)
@@ -1546,19 +1543,15 @@ void Pipe::fault(bool onread)
   }
 }
 
-int Pipe::randomize_out_seq()
+void Pipe::randomize_out_seq()
 {
   if (connection_state->get_features() & CEPH_FEATURE_MSG_AUTH) {
-    // Set out_seq to a random value, so CRC won't be predictable.   Don't bother checking seq_error
-    // here.  We'll check it on the call.  PLR
-    int seq_error = get_random_bytes((char *)&out_seq, sizeof(out_seq));
-    out_seq &= SEQ_MASK;
+    // Set out_seq to a random value, so CRC won't be predictable.
+    out_seq = ceph::util::generate_random_number<uint64_t>(0, SEQ_MASK);
     lsubdout(msgr->cct, ms, 10) << "randomize_out_seq " << out_seq << dendl;
-    return seq_error;
   } else {
     // previously, seq #'s always started at 0.
     out_seq = 0;
-    return 0;
   }
 }
 
@@ -1574,9 +1567,7 @@ void Pipe::was_session_reset()
 
   msgr->dispatch_queue.queue_remote_reset(connection_state.get());
 
-  if (randomize_out_seq()) {
-    lsubdout(msgr->cct,ms,15) << "was_session_reset(): Could not get random bytes to set seq number for session reset; set seq number to " << out_seq << dendl;
-  }
+  randomize_out_seq();
 
   in_seq = 0;
   connect_seq = 0;

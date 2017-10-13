@@ -632,6 +632,7 @@ CephContext::CephContext(uint32_t module_type_,
 
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);
+  _crypto_random.reset(new CryptoRandom());
 
   MempoolObs *mempool_obs = 0;
   lookup_or_create_singleton_object(mempool_obs, "mempool_obs");

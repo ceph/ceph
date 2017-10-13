@@ -26,6 +26,18 @@ class CephContext;
 class CryptoKeyContext;
 namespace ceph { class Formatter; }
 
+/*
+ * Random byte stream generator suitable for cryptographic use
+ */
+class CryptoRandom {
+  const int fd;
+ public:
+  CryptoRandom(); // throws on failure
+  ~CryptoRandom();
+
+  /// copy up to 256 random bytes into the given buffer. throws on failure
+  void get_bytes(char *buf, int len);
+};
 
 /*
  * some per-key context that is specific to a particular crypto backend
@@ -136,7 +148,7 @@ class CryptoHandler {
 public:
   virtual ~CryptoHandler() {}
   virtual int get_type() const = 0;
-  virtual int create(bufferptr& secret) = 0;
+  virtual int create(CryptoRandom *random, bufferptr& secret) = 0;
   virtual int validate_secret(const bufferptr& secret) = 0;
   virtual CryptoKeyHandler *get_key_handler(const bufferptr& secret,
 					    string& error) = 0;
@@ -144,7 +156,5 @@ public:
   static CryptoHandler *create(int type);
 };
 
-extern int get_random_bytes(char *buf, int len);
-extern uint64_t get_random(uint64_t min_val, uint64_t max_val);
 
 #endif

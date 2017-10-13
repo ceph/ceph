@@ -823,10 +823,7 @@ int RGWPutObj_BlockEncrypt::throttle_data(void *handle,
 
 std::string create_random_key_selector(CephContext * const cct) {
   char random[AES_256_KEYSIZE];
-  if (get_random_bytes(&random[0], sizeof(random)) != 0) {
-    ldout(cct, 0) << "ERROR: cannot get_random_bytes. " << dendl;
-    for (char& v:random) v=rand();
-  }
+  cct->random()->get_bytes(&random[0], sizeof(random));
   return std::string(random, sizeof(random));
 }
 
