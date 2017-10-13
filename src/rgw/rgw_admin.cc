@@ -4222,7 +4222,7 @@ int main(int argc, const char **argv)
 	  cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
 	} else {
 	  ret = zonegroup.rename_zone(zone);
-	  if (ret < 0 && ret ) {
+	  if (ret < 0) {
 	    cerr << "Error in zonegroup rename for " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
 	    return -ret;
 	  }
