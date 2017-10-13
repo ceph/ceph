@@ -237,7 +237,7 @@ struct PGPool {
     pi->build_removed_snaps(cached_removed_snaps);
   }
 
-  void update(OSDMapRef map);
+  void update(CephContext *cct, OSDMapRef map);
 };
 
 /** PG - Replica Placement Group
