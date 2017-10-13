@@ -341,6 +341,9 @@ void Server::handle_client_session(MClientSession *m)
 	session->is_stale() ||
 	session->is_killing()) {
       dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
+      // set client metadata for session opened by prepare_force_open_sessions
+      if (!m->client_meta.empty())
+	session->set_client_metadata(m->client_meta);
       m->put();
       return;
     }
