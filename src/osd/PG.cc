@@ -2632,7 +2632,11 @@ void PG::_update_calc_stats()
         } else {
           assert(peer_missing.count(p));
           osd_missing = peer_missing[p].num_missing();
-          object_copies += peer_info[p].stats.stats.sum.num_objects;
+          // During recovery peer_info[p].stats.stats.sum.num_objects
+          // doesn't reflect the object count, but num_missing
+          // does reflect the missing and decreases as recovery progresses
+          // so use primary's object count.
+          object_copies += num_objects;
         }
         missing += osd_missing;
         // Count non-missing objects not in up as misplaced
