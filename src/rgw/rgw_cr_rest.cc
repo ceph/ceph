@@ -10,21 +10,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-class TestSpliceCR : public RGWCoroutine {
-  CephContext *cct;
-  RGWHTTPManager *http_manager;
-  RGWHTTPStreamRWRequest *in_req{nullptr};
-  RGWHTTPStreamRWRequest *out_req{nullptr};
-  std::shared_ptr<RGWStreamReadHTTPResourceCRF> in_crf;
-  std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
-public:
-  TestSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
-               RGWHTTPStreamRWRequest *_in_req,
-               RGWHTTPStreamRWRequest *_out_req);
-
-  int operate();
-};
-
 class RGWCRHTTPGetDataCB : public RGWGetDataCB {
   Mutex lock;
   RGWCoroutinesEnv *env;
@@ -309,28 +294,4 @@ int RGWStreamSpliceCR::operate() {
   }
   return 0;
 }
-
-TestSpliceCR::TestSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
-                           RGWHTTPStreamRWRequest *_in_req,
-                           RGWHTTPStreamRWRequest *_out_req) : RGWCoroutine(_cct), cct(_cct), http_manager(_mgr),
-                                                               in_req(_in_req), out_req(_out_req) {
-    in_crf.reset(new RGWStreamReadHTTPResourceCRF(cct, get_env(), this, http_manager));
-    in_crf->set_req(in_req);
-    out_crf.reset(new RGWStreamWriteHTTPResourceCRF(cct, get_env(), this, http_manager));
-    out_crf->set_req(out_req);
-}
-
-int TestSpliceCR::operate() {
-  reenter(this) {
-    yield call(new RGWStreamSpliceCR(cct, http_manager, in_crf, out_crf));
-
-    if (retcode < 0) {
-      return set_cr_error(retcode);
-    }
-
-    return set_cr_done();
-  }
-
-  return 0;
-};
 
