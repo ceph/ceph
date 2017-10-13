@@ -51,7 +51,8 @@ public:
 
   static void setup_merge_operator(KeyValueDB *db, string prefix);
 
-  int create(uint64_t size, KeyValueDB::Transaction txn) override;
+  int create(uint64_t size, uint64_t min_alloc_size,
+	     KeyValueDB::Transaction txn) override;
 
   int init(uint64_t dev_size) override;
   void shutdown() override;

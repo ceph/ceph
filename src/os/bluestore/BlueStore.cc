@@ -4184,18 +4184,19 @@ int BlueStore::_open_fm(bool create)
       bl.append(freelist_type);
       t->set(PREFIX_SUPER, "freelist_type", bl);
     }
-    fm->create(bdev->get_size(), t);
+    fm->create(bdev->get_size(), min_alloc_size, t);
 
     // allocate superblock reserved space.  note that we do not mark
     // bluefs space as allocated in the freelist; we instead rely on
     // bluefs_extents.
-    fm->allocate(0, SUPER_RESERVED, t);
+    uint64_t reserved = ROUND_UP_TO(MAX(SUPER_RESERVED, min_alloc_size),
+				    min_alloc_size);
+    fm->allocate(0, reserved, t);
 
-    uint64_t reserved = 0;
     if (cct->_conf->bluestore_bluefs) {
       assert(bluefs_extents.num_intervals() == 1);
       interval_set<uint64_t>::iterator p = bluefs_extents.begin();
-      reserved = p.get_start() + p.get_len();
+      reserved = ROUND_UP_TO(p.get_start() + p.get_len(), min_alloc_size);
       dout(20) << __func__ << " reserved 0x" << std::hex << reserved << std::dec
 	       << " for bluefs" << dendl;
       bufferlist bl;
@@ -4203,8 +4204,6 @@ int BlueStore::_open_fm(bool create)
       t->set(PREFIX_SUPER, "bluefs_extents", bl);
       dout(20) << __func__ << " bluefs_extents 0x" << std::hex << bluefs_extents
 	       << std::dec << dendl;
-    } else {
-      reserved = SUPER_RESERVED;
     }
 
     if (cct->_conf->bluestore_debug_prefill > 0) {
@@ -4570,6 +4569,13 @@ int BlueStore::_open_db(bool create)
 	bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
 			    cct->_conf->bluestore_bluefs_gift_ratio);
       initial = MAX(initial, cct->_conf->bluestore_bluefs_min);
+      if (cct->_conf->bluefs_alloc_size % min_alloc_size) {
+	derr << __func__ << " bluefs_alloc_size 0x" << std::hex
+	     << cct->_conf->bluefs_alloc_size << " is not a multiple of "
+	     << "min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+	r = -EINVAL;
+	goto free_bluefs;
+      }
       // align to bluefs's alloc_size
       initial = P2ROUNDUP(initial, cct->_conf->bluefs_alloc_size);
       // put bluefs in the middle of the device in case it is an HDD
@@ -5188,6 +5194,28 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_fsid;
 
+  // choose min_alloc_size
+  if (cct->_conf->bluestore_min_alloc_size) {
+    min_alloc_size = cct->_conf->bluestore_min_alloc_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      min_alloc_size = cct->_conf->bluestore_min_alloc_size_hdd;
+    } else {
+      min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
+    }
+  }
+
+  // make sure min_alloc_size is power of 2 aligned.
+  if (!ISP2(min_alloc_size)) {
+    derr << __func__ << " min_alloc_size 0x"
+	 << std::hex << min_alloc_size << std::dec
+	 << " is not power of 2 aligned!"
+	 << dendl;
+    r = -EINVAL;
+    goto out_close_bdev;
+  }
+
   r = _open_db(true);
   if (r < 0)
     goto out_close_bdev;
@@ -5203,28 +5231,6 @@ int BlueStore::mkfs()
       ::encode((uint64_t)0, bl);
       t->set(PREFIX_SUPER, "nid_max", bl);
       t->set(PREFIX_SUPER, "blobid_max", bl);
-    }
-
-    // choose min_alloc_size
-    if (cct->_conf->bluestore_min_alloc_size) {
-      min_alloc_size = cct->_conf->bluestore_min_alloc_size;
-    } else {
-      assert(bdev);
-      if (bdev->is_rotational()) {
-	min_alloc_size = cct->_conf->bluestore_min_alloc_size_hdd;
-      } else {
-	min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
-      }
-    }
-
-    // make sure min_alloc_size is power of 2 aligned.
-    if (!ISP2(min_alloc_size)) {
-      derr << __func__ << " min_alloc_size 0x"
-           << std::hex << min_alloc_size << std::dec
-           << " is not power of 2 aligned!"
-           << dendl;
-      r = -EINVAL;
-      goto out_close_fm;
     }
 
     {
@@ -5483,7 +5489,7 @@ int BlueStore::_fsck_check_extents(
     }
     bool already = false;
     apply(
-      e.offset, e.length, block_size, used_blocks, __func__,
+      e.offset, e.length, min_alloc_size, used_blocks, __func__,
       [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	if (bs.test(pos))
 	  already = true;
@@ -5585,9 +5591,10 @@ int BlueStore::fsck(bool deep)
   if (r < 0)
     goto out_scan;
 
-  used_blocks.resize(bdev->get_size() / block_size);
+  used_blocks.resize(bdev->get_size() / min_alloc_size);
   apply(
-    0, SUPER_RESERVED, block_size, used_blocks, "0~SUPER_RESERVED",
+    0, MAX(min_alloc_size, SUPER_RESERVED), min_alloc_size, used_blocks,
+    "0~SUPER_RESERVED",
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
       bs.set(pos);
     }
@@ -5596,7 +5603,7 @@ int BlueStore::fsck(bool deep)
   if (bluefs) {
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), block_size, used_blocks, "bluefs",
+        e.get_start(), e.get_len(), min_alloc_size, used_blocks, "bluefs",
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
           bs.set(pos);
         }
@@ -5995,7 +6002,7 @@ int BlueStore::fsck(bool deep)
 	       << " released 0x" << std::hex << wt.released << std::dec << dendl;
       for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
         apply(
-          e.get_start(), e.get_len(), block_size, used_blocks, "deferred",
+          e.get_start(), e.get_len(), min_alloc_size, used_blocks, "deferred",
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
             bs.set(pos);
           }
@@ -6010,7 +6017,8 @@ int BlueStore::fsck(bool deep)
     // know they are allocated.
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), block_size, used_blocks, "bluefs_extents",
+        e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+        "bluefs_extents",
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	  bs.reset(pos);
         }
@@ -6021,7 +6029,7 @@ int BlueStore::fsck(bool deep)
     while (fm->enumerate_next(&offset, &length)) {
       bool intersects = false;
       apply(
-        offset, length, block_size, used_blocks, "free",
+        offset, length, min_alloc_size, used_blocks, "free",
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
           if (bs.test(pos)) {
             intersects = true;
@@ -6031,10 +6039,22 @@ int BlueStore::fsck(bool deep)
         }
       );
       if (intersects) {
-	derr << __func__ << " error: free extent 0x" << std::hex << offset
-	     << "~" << length << std::dec
-	     << " intersects allocated blocks" << dendl;
-	++errors;
+	if (offset == SUPER_RESERVED &&
+	    length == min_alloc_size - SUPER_RESERVED) {
+	  // this is due to the change just after luminous to min_alloc_size
+	  // granularity allocations, and our baked in assumption at the top
+	  // of _fsck that 0~ROUND_UP_TO(SUPER_RESERVED,min_alloc_size) is used
+	  // (vs luminous's ROUND_UP_TO(SUPER_RESERVED,block_size)).  harmless,
+	  // since we will never allocate this region below min_alloc_size.
+	  dout(10) << __func__ << " ignoring free extent between SUPER_RESERVED"
+		   << " and min_alloc_size, 0x" << std::hex << offset << "~"
+		   << length << dendl;
+	} else {
+	  derr << "fsck error: free extent 0x" << std::hex << offset
+	       << "~" << length << std::dec
+	       << " intersects allocated blocks" << dendl;
+	  ++errors;
+	}
       }
     }
     fm->enumerate_reset();
@@ -6050,8 +6070,8 @@ int BlueStore::fsck(bool deep)
 	  size_t next = used_blocks.find_next(cur);
 	  if (next != cur + 1) {
 	    derr << __func__ << " error: leaked extent 0x" << std::hex
-		 << ((uint64_t)start * block_size) << "~"
-		 << ((cur + 1 - start) * block_size) << std::dec
+		 << ((uint64_t)start * min_alloc_size) << "~"
+		 << ((cur + 1 - start) * min_alloc_size) << std::dec
 		 << dendl;
 	    start = next;
 	    break;
