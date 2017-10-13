@@ -7,15 +7,6 @@ if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
   cmake_policy(SET CMP0046 OLD)
 endif()
-# we use LINK_PRIVATE keyword instead of PRIVATE, but do not specify the LINK_PUBLIC
-# for target_link_libraries() command when PUBLIC should be used instead, it's just
-# for backward compatibility with cmake 2.8.11.
-if (POLICY CMP0022)
-cmake_policy(SET CMP0022 OLD)
-endif (POLICY CMP0022)
-if (POLICY CMP0023)
-cmake_policy(SET CMP0023 OLD)
-endif (POLICY CMP0023)
 if(POLICY CMP0056)
   cmake_policy(SET CMP0056 NEW)
 endif()
