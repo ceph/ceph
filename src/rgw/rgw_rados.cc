@@ -3749,7 +3749,7 @@ int RGWRados::register_to_service_map(const string& daemon_type, const map<strin
   metadata["zone_name"] = zone_name();
   metadata["zone_id"] = zone_id();;
   string name = cct->_conf->name.get_id();
-  if (name.find("rgw.") == 0) {
+  if (name.compare(0, 4, "rgw.") == 0) {
     name = name.substr(4);
   }
   int ret = rados[0].service_daemon_register(daemon_type, name, metadata);
