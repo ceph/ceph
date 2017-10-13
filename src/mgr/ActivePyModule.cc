@@ -134,7 +134,19 @@ int ActivePyModule::load_commands()
   // Don't need a Gil here -- this is called from ActivePyModule::load(),
   // which already has one.
   PyObject *command_list = PyObject_GetAttrString(pClassInstance, "COMMANDS");
-  assert(command_list != nullptr);
+  if (command_list == nullptr) {
+    // Even modules that don't define command should still have the COMMANDS
+    // from the MgrModule definition.  Something is wrong!
+    derr << "Module " << get_name() << " has missing COMMANDS member" << dendl;
+    return -EINVAL;
+  }
+  if (!PyObject_TypeCheck(command_list, &PyList_Type)) {
+    // Relatively easy mistake for human to make, e.g. defining COMMANDS
+    // as a {} instead of a []
+    derr << "Module " << get_name() << " has COMMANDS member of wrong type ("
+            "should be a list)" << dendl;
+    return -EINVAL;
+  }
   const size_t list_size = PyList_Size(command_list);
   for (size_t i = 0; i < list_size; ++i) {
     PyObject *command = PyList_GetItem(command_list, i);
@@ -210,3 +222,4 @@ void ActivePyModule::get_health_checks(health_check_map_t *checks)
 {
   checks->merge(health_checks);
 }
+

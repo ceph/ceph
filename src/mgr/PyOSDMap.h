@@ -3,8 +3,18 @@
 
 #pragma once
 
+#include <string>
+
 #include "Python.h"
 
-extern PyMethodDef OSDMapMethods[];
-extern PyMethodDef OSDMapIncrementalMethods[];
-extern PyMethodDef CRUSHMapMethods[];
+
+
+extern PyTypeObject BasePyOSDMapType;
+extern PyTypeObject BasePyOSDMapIncrementalType;
+extern PyTypeObject BasePyCRUSHType;
+
+PyObject *construct_with_capsule(
+    const std::string &module,
+    const std::string &clsname,
+    void *wrapped);
+
