@@ -375,6 +375,7 @@ public:
   int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info);
   bool has_attrs() override;
   void get_attrs(std::map<string, string> *attrs);
+  bool is_done();
   virtual bool need_extra_data() { return false; }
 
   void set_req(RGWHTTPStreamRWRequest *r) {
