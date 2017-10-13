@@ -33,7 +33,7 @@ typedef std::map<uint64_t, bufferlist> ExtentBuffers;
 typedef std::function<void(uint64_t)> ReleaseBlock;
 typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
 
-static const uint32_t BLOCK_SIZE = 4096;
+static const uint32_t BLOCK_SIZE = 512;
 
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
   for (auto &extent : image_extents) {
@@ -47,10 +47,13 @@ bool is_block_aligned(const ImageCache::Extents &image_extents) {
 struct WriteLogEntry {
   uint64_t image_offset_bytes;
   uint64_t write_bytes;
+  WriteLogEntry() {};
   WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
     : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes) {
   }
 };
+typedef std::list<WriteLogEntry> WriteLogEntries;
+typedef std::unordered_map<uint64_t, WriteLogEntry> BlockToWriteLogEntry;
   
 struct C_BlockIORequest : public Context {
   CephContext *cct;
@@ -872,12 +875,18 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
 
   m_image_cache.aio_write(std::move(image_extents), std::move(bl), fadvise_flags, on_finish);
 
+  if (!is_block_aligned(image_extents)) {
+    lderr(cct) << "unaligned write fails" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+  WriteLogEntries entries;
   for (auto &extent : image_extents) {
     /* Is there space in the write log for this entire write? */
     /* If not, defer this IO */
     /* Reserve log space for this write entry & data */
     /* Allocate new write log entry */
-    WriteLogEntry *entry = new WriteLogEntry(extent.first, extent.second);
+    entries.emplace_back(WriteLogEntry(extent.first, extent.second));
   }
 
   /*// TODO handle fadvise flags
