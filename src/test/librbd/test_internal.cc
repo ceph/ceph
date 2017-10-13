@@ -548,6 +548,26 @@ TEST_F(TestInternal, MetadataFilter) {
   ASSERT_TRUE(res.size() == 3U);
 }
 
+TEST_F(TestInternal, MetadataConfApply) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(-ENOENT, ictx->operations->metadata_remove("conf_rbd_cache"));
+
+  bool cache = ictx->cache;
+  std::string rbd_conf_cache = cache ? "true" : "false";
+  std::string new_rbd_conf_cache = !cache ? "true" : "false";
+
+  ASSERT_EQ(0, ictx->operations->metadata_set("conf_rbd_cache",
+                                              new_rbd_conf_cache));
+  ASSERT_EQ(!cache, ictx->cache);
+
+  ASSERT_EQ(0, ictx->operations->metadata_remove("conf_rbd_cache"));
+  ASSERT_EQ(cache, ictx->cache);
+}
+
 TEST_F(TestInternal, SnapshotCopyup)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
