@@ -64,7 +64,7 @@ class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine {
 
 
   virtual int wait_result() {
-    return http_op->wait_bl(result);
+    return http_op->wait(result);
   }
 
   int request_complete() override {
@@ -172,7 +172,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
       ret = http_op->wait(result);
     } else {
       bufferlist bl;
-      ret = http_op->wait_bl(&bl);
+      ret = http_op->wait(&bl);
     }
     auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
@@ -238,6 +238,17 @@ class RGWPutRawRESTResourceCR: public RGWSendRawRESTResourceCR <T> {
 
 };
 
+template <class T>
+class RGWPostRawRESTResourceCR: public RGWSendRawRESTResourceCR <T> {
+ public:
+  RGWPostRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                          RGWHTTPManager *_http_manager,
+                          const string& _path,
+                          rgw_http_param_pair *_params, bufferlist& _input, T *_result)
+    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "POST", _path, _params, _input, _result, true){}
+
+};
+
 
 template <class S, class T>
 class RGWPutRESTResourceCR : public RGWSendRESTResourceCR<S, T> {
@@ -293,7 +304,7 @@ public:
   int request_complete() override {
     int ret;
     bufferlist bl;
-    ret = http_op->wait_bl(&bl);
+    ret = http_op->wait(&bl);
     auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
       error_stream << "http operation failed: " << op->to_str()

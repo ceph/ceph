@@ -1039,7 +1039,7 @@ public:
         return io_block(0);
       }
       yield {
-        int ret = http_op->wait_bl(pbl);
+        int ret = http_op->wait(pbl);
         http_op->put();
         if (ret < 0) {
           return set_cr_error(ret);
