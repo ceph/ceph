@@ -28,7 +28,7 @@ std::string handle_pyerror();
 
 PyModuleRunner::~PyModuleRunner()
 {
-  Gil gil(pMyThreadState);
+  Gil gil(pMyThreadState, true);
 
   if (pClassInstance) {
     Py_XDECREF(pClassInstance);
