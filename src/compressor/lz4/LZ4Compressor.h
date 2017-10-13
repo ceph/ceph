@@ -39,7 +39,7 @@ class LZ4Compressor : public Compressor {
     const char *data;
     unsigned num = src.get_num_buffers();
     uint32_t origin_len;
-    uint32_t compressed_len;
+    int compressed_len;
     ::encode((uint32_t)num, dst);
     while (left) {
       origin_len = p.get_ptr_and_advance(left, &data);
@@ -51,7 +51,7 @@ class LZ4Compressor : public Compressor {
       pos += compressed_len;
       left -= origin_len;
       ::encode(origin_len, dst);
-      ::encode(compressed_len, dst);
+      ::encode((uint32_t)compressed_len, dst);
     }
     assert(p.end());
 
