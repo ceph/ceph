@@ -25,8 +25,8 @@ TEST(BitAllocator, test_bmap_iter)
   int off = 2;
 
   class BmapEntityTmp {
-      int64_t m_num;
-      int64_t m_len;
+      int64_t m_num = 0;
+      int64_t m_len = 0;
     public:
       void init(int index) {
         m_num = index;
