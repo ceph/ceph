@@ -605,7 +605,7 @@ void PGBackend::be_scan_list(
 
       // calculate the CRC32 on deep scrubs
       if (deep) {
-	be_deep_scrub(*p, seed, o, handle);
+	be_deep_scrub(*p, seed, o, handle, &map);
       }
 
       dout(25) << __func__ << "  " << poid << dendl;
@@ -1128,6 +1128,18 @@ void PGBackend::be_large_omap_check(const map<pg_shard_t,ScrubMap*> &maps,
   int& large_omap_objects,
   ostream &warnstream) const
 {
+  bool needs_check = false;
+  for (const auto& map : maps) {
+    if (map.second->has_large_omap_object_errors) {
+      needs_check = true;
+      break;
+    }
+  }
+
+  if (!needs_check) {
+    return;
+  }
+
   // Iterate through objects and check large omap object flag
   for (const auto& k : master_set) {
     for (const auto& map : maps) {

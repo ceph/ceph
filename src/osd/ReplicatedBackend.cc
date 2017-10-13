@@ -707,7 +707,8 @@ void ReplicatedBackend::be_deep_scrub(
   const hobject_t &poid,
   uint32_t seed,
   ScrubMap::object &o,
-  ThreadPool::TPHandle &handle)
+  ThreadPool::TPHandle &handle,
+  ScrubMap* const map)
 {
   dout(10) << __func__ << " " << poid << " seed " 
 	   << std::hex << seed << std::dec << dendl;
@@ -803,6 +804,7 @@ void ReplicatedBackend::be_deep_scrub(
     o.large_omap_object_found = true;
     o.large_omap_object_key_count = keys_scanned;
     o.large_omap_object_value_size = value_sum;
+    map->has_large_omap_object_errors = true;
   }
 
   if (iter->status() < 0) {

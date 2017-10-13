@@ -4965,6 +4965,7 @@ struct ScrubMap {
   map<hobject_t,object> objects;
   eversion_t valid_through;
   eversion_t incr_since;
+  bool has_large_omap_object_errors:1;
 
   void merge_incr(const ScrubMap &l);
   void insert(const ScrubMap &r) {
