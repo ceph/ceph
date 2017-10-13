@@ -45,8 +45,8 @@ public:
     string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
 
-    auto req = new io::ObjectTrimRequest(&image_ctx, oid, m_object_no,
-                                         m_snapc, false, this);
+    auto req = io::ObjectRequest<I>::create_trim(&image_ctx, oid, m_object_no,
+                                                 m_snapc, false, this);
     req->send();
     return 0;
   }
@@ -58,7 +58,7 @@ private:
 template <typename I>
 class C_RemoveObject : public C_AsyncObjectThrottle<I> {
 public:
-  C_RemoveObject(AsyncObjectThrottle<I> &throttle, ImageCtx *image_ctx,
+  C_RemoveObject(AsyncObjectThrottle<I> &throttle, I *image_ctx,
                  uint64_t object_no)
     : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_object_no(object_no)
   {
@@ -281,7 +281,7 @@ void TrimRequest<I>::send_post_trim() {
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     if (image_ctx.object_map != nullptr) {
-      ldout(image_ctx.cct, 5) << this << " send_post_copyup:"
+      ldout(image_ctx.cct, 5) << this << " send_post_trim:"
                               << " delete_start_min=" << m_delete_start_min
                               << " num_objects=" << m_num_objects << dendl;
       m_state = STATE_POST_TRIM;
@@ -338,13 +338,15 @@ void TrimRequest<I>::send_clean_boundary() {
     ldout(cct, 20) << " ex " << *p << dendl;
     Context *req_comp = new C_ContextCompletion(*completion);
 
-    io::ObjectRequest<> *req;
+    io::ObjectRequest<I> *req;
     if (p->offset == 0) {
-      req = new io::ObjectTrimRequest(&image_ctx, p->oid.name, p->objectno,
-                                      snapc, true, req_comp);
+      req = io::ObjectRequest<I>::create_trim(&image_ctx, p->oid.name,
+                                              p->objectno, snapc, true,
+                                              req_comp);
     } else {
-      req = new io::ObjectTruncateRequest(&image_ctx, p->oid.name, p->objectno,
-                                          p->offset, snapc, {}, req_comp);
+      req = io::ObjectRequest<I>::create_truncate(&image_ctx, p->oid.name,
+                                                  p->objectno, p->offset, snapc,
+                                                  {}, req_comp);
     }
     req->send();
   }
