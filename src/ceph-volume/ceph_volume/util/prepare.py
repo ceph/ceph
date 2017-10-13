@@ -98,13 +98,35 @@ def mount_osd(device, osd_id):
     process.run(command)
 
 
-def link_journal(journal_device, osd_id):
-    journal_path = '/var/lib/ceph/osd/%s-%s/journal' % (
+def _link_device(device, device_type, osd_id):
+    """
+    Allow linking any device type in an OSD directory. ``device`` must the be
+    source, with an absolute path and ``device_type`` will be the destination
+    name, like 'journal', or 'block'
+    """
+    device_path = '/var/lib/ceph/osd/%s-%s/%s' % (
         conf.cluster,
-        osd_id
+        osd_id,
+        device_type
     )
-    command = ['sudo', 'ln', '-s', journal_device, journal_path]
+    command = ['sudo', 'ln', '-s', device, device_path]
     process.run(command)
+
+
+def link_journal(journal_device, osd_id):
+    _link_device(journal_device, 'journal', osd_id)
+
+
+def link_block(block_device, osd_id):
+    _link_device(block_device, 'block', osd_id)
+
+
+def link_wal(wal_device, osd_id):
+    _link_device(wal_device, 'wal', osd_id)
+
+
+def link_db(db_device, osd_id):
+    _link_device(db_device, 'db', osd_id)
 
 
 def get_monmap(osd_id):
