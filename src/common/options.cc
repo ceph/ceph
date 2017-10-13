@@ -5280,7 +5280,20 @@ static std::vector<Option> get_rbd_options() {
     Option("rbd_persistent_cache_metadata_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5242880)
     .set_description(""),
-  });
+
+    Option("rbd_rwl_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description(""),
+
+    Option("rbd_rwl_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1073741824)
+    .set_description(""),
+
+    Option("rbd_rwl_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/tmp")
+    .set_description(""),
+
+    });
 }
 
 static std::vector<Option> get_rbd_mirror_options() {

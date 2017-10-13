@@ -68,6 +68,7 @@ private:
   ImageCtxT &m_image_ctx;
   ImageWriteback<ImageCtxT> m_image_writeback;
   FileImageCache<ImageCtxT> m_image_cache;
+  //BlockGuard m_persist_pending_guard;
   BlockGuard m_block_guard;
 
   file::Policy *m_policy = nullptr;

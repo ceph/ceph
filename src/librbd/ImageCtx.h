@@ -200,6 +200,7 @@ namespace librbd {
     bool blkin_trace_all;
 
     bool persistent_cache_enabled;
+    bool rwl_enabled;
 
     LibrbdAdminSocketHook *asok_hook;
 
