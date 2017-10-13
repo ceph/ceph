@@ -101,22 +101,21 @@ namespace ceph {
 
   mClockClientQueue::osd_op_type_t
   mClockClientQueue::get_osd_op_type(const Request& request) {
-    osd_op_type_t type =
-      boost::apply_visitor(pg_queueable_visitor, request.second.get_variant());
-
+    switch (request.get_op_type()) {
     // if we got client_op back then we need to distinguish between
     // a client op and an osd subop.
-
-    if (osd_op_type_t::client_op != type) {
-      return type;
-      /* fixme: this should match REPOP and probably others
-    } else if (MSG_OSD_SUBOP ==
-	       boost::get<OpRequestRef>(
-		 request.second.get_variant())->get_req()->get_header().type) {
-      return osd_op_type_t::osd_subop;
-      */
-    } else {
+    case OpQueueItem::op_type_t::client_op:
       return osd_op_type_t::client_op;
+    case OpQueueItem::op_type_t::osd_subop:
+      return osd_op_type_t::osd_subop;
+    case OpQueueItem::op_type_t::bg_snaptrim:
+      return osd_op_type_t::bg_snaptrim;
+    case OpQueueItem::op_type_t::bg_recovery:
+      return osd_op_type_t::bg_recovery;
+    case OpQueueItem::op_type_t::bg_scrub:
+      return osd_op_type_t::bg_scrub;
+    default:
+      assert(0);
     }
   }
 
@@ -133,31 +132,35 @@ namespace ceph {
 
   inline void mClockClientQueue::enqueue_strict(Client cl,
 						unsigned priority,
-						Request item) {
-    queue.enqueue_strict(get_inner_client(cl, item), priority, item);
+						Request&& item) {
+    queue.enqueue_strict(get_inner_client(cl, item), priority,
+			 std::move(item));
   }
 
   // Enqueue op in the front of the strict queue
   inline void mClockClientQueue::enqueue_strict_front(Client cl,
 						      unsigned priority,
-						      Request item) {
-    queue.enqueue_strict_front(get_inner_client(cl, item), priority, item);
+						      Request&& item) {
+    queue.enqueue_strict_front(get_inner_client(cl, item), priority,
+			       std::move(item));
   }
 
   // Enqueue op in the back of the regular queue
   inline void mClockClientQueue::enqueue(Client cl,
 					 unsigned priority,
 					 unsigned cost,
-					 Request item) {
-    queue.enqueue(get_inner_client(cl, item), priority, cost, item);
+					 Request&& item) {
+    queue.enqueue(get_inner_client(cl, item), priority, cost,
+		  std::move(item));
   }
 
   // Enqueue the op in the front of the regular queue
   inline void mClockClientQueue::enqueue_front(Client cl,
 					       unsigned priority,
 					       unsigned cost,
-					       Request item) {
-    queue.enqueue_front(get_inner_client(cl, item), priority, cost, item);
+					       Request&& item) {
+    queue.enqueue_front(get_inner_client(cl, item), priority, cost,
+			std::move(item));
   }
 
   // Return an op to be dispatched
