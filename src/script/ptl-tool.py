@@ -93,7 +93,6 @@ USER = getpass.getuser()
 with open(expanduser("~/.github.key")) as f:
     PASSWORD = f.read().strip()
 BRANCH_PREFIX = "wip-%s-testing-" % USER
-TESTING_LABEL = "wip-%s-testing" % USER
 TESTING_BRANCH_NAME = BRANCH_PREFIX + datetime.datetime.now().strftime("%Y%m%d")
 
 SPECIAL_BRANCHES = ('master', 'luminous', 'jewel', 'HEAD')
@@ -120,7 +119,7 @@ def build_branch(args):
     branch = args.branch
     label = args.label
 
-    if label and label != '-':
+    if label:
         #Check the label format
         if re.search(r'\bwip-(.*?)-testing\b', label) is None:
             log.error("Unknown Label '{lblname}'. Label Format: wip-<name>-testing".format(lblname=label))
@@ -253,7 +252,7 @@ def build_branch(args):
 
         G.git.merge(c.hexsha, '--no-ff', m=message)
 
-        if label and label != '-':
+        if label:
             req = requests.post("https://api.github.com/repos/ceph/ceph/issues/{pr}/labels".format(pr=pr), data=json.dumps([label]), auth=(USER, PASSWORD))
             if req.status_code != 200:
                 log.error("PR #%d could not be labeled %s: %s" % (pr, label, req))
@@ -286,7 +285,7 @@ def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
     default_base = 'master'
     default_branch = TESTING_BRANCH_NAME
-    default_label = TESTING_LABEL
+    default_label = ''
     if len(sys.argv) > 1 and sys.argv[1] in SPECIAL_BRANCHES:
         argv = sys.argv[2:]
         default_branch = 'HEAD' # Leave HEAD deatched
