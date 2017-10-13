@@ -1394,6 +1394,7 @@ void MDSRank::rejoin_joint_start()
 void MDSRank::rejoin_start()
 {
   dout(1) << "rejoin_start" << dendl;
+  finish_contexts(g_ceph_context, waiting_for_replay);  // kick waiters
   mdcache->rejoin_start(new C_MDS_VoidFn(this, &MDSRank::rejoin_done));
 }
 void MDSRank::rejoin_done()
