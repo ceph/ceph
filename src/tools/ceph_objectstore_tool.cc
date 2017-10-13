@@ -1181,7 +1181,8 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
 	ms.info.history.last_epoch_clean,
 	nextmap,
 	lastmap,
-	ms.info.pgid.pgid,
+	ms.info.pgid.pgid.get_ancestor(
+	  lastmap->get_pg_num(ms.info.pgid.pgid.pool())),
 	&min_size_predicate,
 	&ms.past_intervals,
 	&cerr);
@@ -1193,10 +1194,19 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
 	if (acting_primary != new_acting_primary) {
 	  ms.info.history.same_primary_since = nextmap->get_epoch();
 	}
-	if (pgid.pgid.is_split(lastmap->get_pg_num(ms.info.pgid.pgid.pool()),
-			       nextmap->get_pg_num(ms.info.pgid.pgid.pool()),
-			       nullptr)) {
-	  ms.info.history.last_epoch_split = nextmap->get_epoch();
+	unsigned old_pg_num = lastmap->get_pg_num(ms.info.pgid.pgid.pool());
+	unsigned new_pg_num = nextmap->get_pg_num(ms.info.pgid.pgid.pool());
+	if (pgid.pgid.m_seed >= old_pg_num) {
+	  if (pgid.pgid.m_seed < new_pg_num) {
+	    ms.info.history.epoch_created = nextmap->get_epoch();
+	    ms.info.history.last_epoch_split = nextmap->get_epoch();
+	  }
+	  // we don't actually care about the ancestor splits because only
+	  // the latest split is recorded.
+	} else {
+	  if (pgid.pgid.is_split(old_pg_num, new_pg_num, nullptr)) {
+	    ms.info.history.last_epoch_split = nextmap->get_epoch();
+	  }
 	}
 	up = new_up;
 	acting = new_acting;
