@@ -59,7 +59,7 @@ public:
     } else {
       ANNOTATE_HAPPENS_BEFORE(&nref);
     }
-    if (local_cct)
+    if (local_cct && (v != 0))
       lsubdout(local_cct, refs, 1) << "RefCountedObject::put " << this << " "
 				   << (v + 1) << " -> " << v
 				   << dendl;
