@@ -10,6 +10,7 @@
 #include "include/encoding.h"
 #include "include/types.h"
 #include "include/utime.h"
+#include "librbd/Types.h"
 #include <iosfwd>
 #include <list>
 #include <boost/none.hpp>
@@ -526,7 +527,6 @@ enum MirrorPeerState {
 
 struct MirrorPeerClientMeta {
   typedef std::list<MirrorPeerSyncPoint> SyncPoints;
-  typedef std::map<uint64_t, uint64_t> SnapSeqs;
 
   static const ClientMetaType TYPE = MIRROR_PEER_CLIENT_META_TYPE;
 

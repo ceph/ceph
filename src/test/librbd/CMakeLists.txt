@@ -6,6 +6,7 @@ set(librbd_test
   test_internal.cc
   test_mirroring.cc
   test_BlockGuard.cc
+  test_DeepCopy.cc
   test_Groups.cc
   test_MirroringWatcher.cc
   test_ObjectMap.cc
@@ -27,10 +28,17 @@ set_target_properties(rbd_test_mock PROPERTIES COMPILE_FLAGS
 set(unittest_librbd_srcs
   test_main.cc
   test_mock_fixture.cc
+  test_mock_DeepCopyRequest.cc
   test_mock_ExclusiveLock.cc
   test_mock_Journal.cc
   test_mock_ManagedLock.cc
   test_mock_ObjectMap.cc
+  deep_copy/test_mock_ImageCopyRequest.cc
+  deep_copy/test_mock_MetadataCopyRequest.cc
+  deep_copy/test_mock_ObjectCopyRequest.cc
+  deep_copy/test_mock_SetHeadRequest.cc
+  deep_copy/test_mock_SnapshotCopyRequest.cc
+  deep_copy/test_mock_SnapshotCreateRequest.cc
   exclusive_lock/test_mock_PreAcquireRequest.cc
   exclusive_lock/test_mock_PostAcquireRequest.cc
   exclusive_lock/test_mock_PreReleaseRequest.cc
