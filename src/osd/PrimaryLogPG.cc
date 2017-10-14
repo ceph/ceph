@@ -11503,11 +11503,31 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 
   // this is FAR from an optimal recovery order.  pretty lame, really.
   assert(!actingbackfill.empty());
-  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-       i != actingbackfill.end();
-       ++i) {
-    if (*i == get_primary()) continue;
-    pg_shard_t peer = *i;
+  // choose replicas to recover, replica has the shortest missing list first
+  // so we can bring it back to normal ASAP
+  std::vector<std::pair<unsigned int, pg_shard_t>> replicas_by_num_missing;
+  replicas_by_num_missing.reserve(actingbackfill.size() - 1);
+  for (auto &p: actingbackfill) {
+    if (p == get_primary()) {
+      continue;
+    }
+    auto pm = peer_missing.find(p);
+    assert(pm != peer_missing.end());
+    auto nm = pm->second.num_missing();
+    if (nm != 0) {
+      replicas_by_num_missing.push_back(make_pair(nm, p));
+    }
+  }
+  // sort by number of missing objects, in ascending order.
+  std::sort(replicas_by_num_missing.begin(), replicas_by_num_missing.end(),
+    [](const std::pair<unsigned int, pg_shard_t> &lhs,
+       const std::pair<unsigned int, pg_shard_t> &rhs) {
+      return lhs.first < rhs.first;
+    }
+  );
+  for (auto &replica: replicas_by_num_missing) {
+    pg_shard_t &peer = replica.second;
+    assert(peer != get_primary());
     map<pg_shard_t, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
     assert(pm != peer_missing.end());
     map<pg_shard_t, pg_info_t>::const_iterator pi = peer_info.find(peer);
@@ -11565,8 +11585,7 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
       map<hobject_t,pg_missing_item>::const_iterator r = m.get_items().find(soid);
-      started += prep_object_replica_pushes(soid, r->second.need,
-					    h);
+      started += prep_object_replica_pushes(soid, r->second.need, h);
     }
   }
 
