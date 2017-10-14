@@ -827,33 +827,30 @@ void OSDMonitor::maybe_prime_pg_temp()
   }
 }
 
-void OSDMonitor::prime_pg_temp(
-  const OSDMap& next,
-  pg_t pgid)
-{
-  // TODO: remove this creating_pgs direct access?
-  if (creating_pgs.pgs.count(pgid)) {
-    return;
-  }
-  if (!osdmap.pg_exists(pgid)) {
-    return;
-  }
+std::size_t OSDMonitor::creating_pgs_count(pg_t& pgid) const {
+  return creating_pgs.pgs.count(pgid);
+}
 
-  vector<int> up, acting;
+void OSDMonitor::prime_pg_temp(const OSDMap& next, pg_t pgid)
+{
+  if (creating_pgs.pgs.count(pgid))
+    return;
+
+  if (!osdmap.pg_exists(pgid))
+    return;
+
+  std::vector<int> up, acting;
   mapping.get(pgid, &up, nullptr, &acting, nullptr);
 
-  vector<int> next_up, next_acting;
+  std::vector<int> next_up, next_acting;
   int next_up_primary, next_acting_primary;
-  next.pg_to_up_acting_osds(pgid, &next_up, &next_up_primary,
-			    &next_acting, &next_acting_primary);
+  next.pg_to_up_acting_osds(pgid, &next_up, &next_up_primary, &next_acting,
+    &next_acting_primary);
+
   if (acting == next_acting && next_up != next_acting)
     return;  // no change since last epoch
-
-  if (acting.empty())
+  else if (acting.empty())
     return;  // if previously empty now we can be no worse off
-  const pg_pool_t *pool = next.get_pg_pool(pgid.pool());
-  if (pool && acting.size() < pool->min_size)
-    return;  // can be no worse off than before
 
   if (next_up == next_acting) {
     acting.clear();
@@ -861,15 +858,18 @@ void OSDMonitor::prime_pg_temp(
              << dendl;
   }
 
-  dout(20) << __func__ << " " << pgid << " " << up << "/" << acting
-	   << " -> " << next_up << "/" << next_acting
-	   << ", priming " << acting
-	   << dendl;
+  dout(20) << __func__ << " " << pgid << " " << up << "/" << acting << " -> "
+           << next_up << "/" << next_acting << ", priming " << acting << dendl;
+
+  const pg_pool_t *pool = next.get_pg_pool(pgid.pool());
+
+  if (pool && acting.size() < pool->min_size)
+    return;  // can be no worse off than before
+
   {
     Mutex::Locker l(prime_pg_temp_lock);
     // do not touch a mapping if a change is pending
-    pending_inc.new_pg_temp.emplace(
-      pgid,
+    pending_inc.new_pg_temp.emplace(pgid,
       mempool::osdmap::vector<int>(acting.begin(), acting.end()));
   }
 }

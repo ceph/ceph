@@ -476,6 +476,7 @@ public:
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
   bool prepare_command_impl(MonOpRequestRef op, map<string,cmd_vartype>& cmdmap);
+  std::size_t creating_pgs_count(pg_t& pgid) const;
 
   int validate_osd_create(
       const int32_t id,
