@@ -234,8 +234,6 @@ void usage()
   cout << "   --commit                  commit the period during 'period update'\n";
   cout << "   --staging                 get staging period info\n";
   cout << "   --master                  set as master\n";
-  cout << "   --master-url              master url\n";
-  cout << "   --master-zonegroup=<id>   master zonegroup id\n";
   cout << "   --master-zone=<id>        master zone id\n";
   cout << "   --rgw-realm=<name>        realm name\n";
   cout << "   --realm-id=<id>           realm id\n";
@@ -2339,7 +2337,7 @@ int main(int argc, const char **argv)
   std::string start_date, end_date;
   std::string key_type_str;
   std::string period_id, period_epoch, remote, url;
-  std::string master_zonegroup, master_zone;
+  std::string master_zone;
   std::string realm_name, realm_id, realm_new_name;
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
@@ -2351,7 +2349,6 @@ int main(int argc, const char **argv)
   bool sync_from_all = false;
   list<string> sync_from;
   list<string> sync_from_rm;
-  std::string master_url;
   int is_master_int;
   int set_default = 0;
   bool is_master = false;
@@ -2710,10 +2707,6 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &read_only_int, NULL, "--read-only", (char*)NULL)) {
       read_only = (bool)read_only_int;
       is_read_only_set = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--master-url", (char*)NULL)) {
-      master_url = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--master-zonegroup", (char*)NULL)) {
-      master_zonegroup = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--master-zone", (char*)NULL)) {
       master_zone = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--period", (char*)NULL)) {
