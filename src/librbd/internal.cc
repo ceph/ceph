@@ -327,31 +327,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
   }
 
-  std::ostream &operator<<(std::ostream &os, const ImageOptions &opts) {
-    os << "[";
-
-    const char *delimiter = "";
-    for (auto &i : IMAGE_OPTIONS_TYPE_MAPPING) {
-      if (i.second == STR) {
-	std::string val;
-	if (opts.get(i.first, &val) == 0) {
-	  os << delimiter << image_option_name(i.first) << "=" << val;
-	  delimiter = ", ";
-	}
-      } else if (i.second == UINT64) {
-	uint64_t val;
-	if (opts.get(i.first, &val) == 0) {
-	  os << delimiter << image_option_name(i.first) << "=" << val;
-	  delimiter = ", ";
-	}
-      }
-    }
-
-    os << "]";
-
-    return os;
-  }
-
   void image_options_create(rbd_image_options_t* opts)
   {
     image_options_ref* opts_ = new image_options_ref(new image_options_t());
@@ -2355,3 +2330,29 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
 
 }
+
+std::ostream &operator<<(std::ostream &os, const librbd::ImageOptions &opts) {
+  os << "[";
+
+  const char *delimiter = "";
+  for (auto &i : librbd::IMAGE_OPTIONS_TYPE_MAPPING) {
+    if (i.second == librbd::STR) {
+      std::string val;
+      if (opts.get(i.first, &val) == 0) {
+        os << delimiter << librbd::image_option_name(i.first) << "=" << val;
+        delimiter = ", ";
+      }
+    } else if (i.second == librbd::UINT64) {
+      uint64_t val;
+      if (opts.get(i.first, &val) == 0) {
+        os << delimiter << librbd::image_option_name(i.first) << "=" << val;
+        delimiter = ", ";
+      }
+    }
+  }
+
+  os << "]";
+
+  return os;
+}
+
