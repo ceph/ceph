@@ -111,10 +111,10 @@ bool ObjectMap<I>::object_may_exist(uint64_t object_no) const
 }
 
 template <typename I>
-bool ObjectMap<I>::update_required(uint64_t object_no, uint8_t new_state) {
+bool ObjectMap<I>::update_required(const ceph::BitVector<2>::Iterator& it,
+                                   uint8_t new_state) {
   assert(m_image_ctx.object_map_lock.is_wlocked());
-  uint8_t state = (*this)[object_no];
-
+  uint8_t state = *it;
   if ((state == new_state) ||
       (new_state == OBJECT_PENDING && state == OBJECT_NONEXISTENT) ||
       (new_state == OBJECT_NONEXISTENT && state != OBJECT_PENDING)) {
@@ -224,7 +224,7 @@ void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
 
   BlockGuardCell *cell;
   int r = m_update_guard->detain({op.start_object_no, op.end_object_no},
-                                &op, &cell);
+                                 &op, &cell);
   if (r < 0) {
     lderr(cct) << "failed to detain object map update: " << cpp_strerror(r)
                << dendl;
@@ -297,13 +297,14 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
       return;
     }
 
-    uint64_t object_no;
-    for (object_no = start_object_no; object_no < end_object_no; ++object_no) {
-      if (update_required(object_no, new_state)) {
+    auto it = m_object_map.begin() + start_object_no;
+    auto end_it = m_object_map.begin() + end_object_no;
+    for (; it != end_it; ++it) {
+      if (update_required(it, new_state)) {
         break;
       }
     }
-    if (object_no == end_object_no) {
+    if (it == end_it) {
       ldout(cct, 20) << "object map update not required" << dendl;
       m_image_ctx.op_work_queue->queue(on_finish, 0);
       return;
