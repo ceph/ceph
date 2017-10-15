@@ -93,7 +93,7 @@ void Notify::do_timeout()
 {
   assert(lock.is_locked_by_me());
   dout(10) << "timeout" << dendl;
-  cb = NULL;
+  cb = nullptr;
   if (is_discarded()) {
     lock.Unlock();
     return;
@@ -140,7 +140,7 @@ void Notify::unregister_cb()
   {
     osd->watch_lock.Lock();
     osd->watch_timer.cancel_event(cb);
-    cb = NULL;
+    cb = nullptr;
     osd->watch_lock.Unlock();
   }
 }
@@ -247,7 +247,7 @@ public:
     boost::intrusive_ptr<PrimaryLogPG> pg(watch->pg);
     osd->watch_lock.Unlock();
     pg->lock();
-    watch->cb = NULL;
+    watch->cb = nullptr;
     if (!watch->is_discarded() && !canceled)
       watch->pg->handle_watch_timeout(watch);
     delete this; // ~Watch requires pg lock!
@@ -268,7 +268,7 @@ public:
     OSDService *osd(watch->osd);
     dout(10) << "HandleWatchTimeoutDelayed" << dendl;
     assert(watch->pg->is_locked());
-    watch->cb = NULL;
+    watch->cb = nullptr;
     if (!watch->is_discarded() && !canceled)
       watch->pg->handle_watch_timeout(watch);
   }
@@ -349,7 +349,7 @@ void Watch::unregister_cb()
     Mutex::Locker l(osd->watch_lock);
     osd->watch_timer.cancel_event(cb); // harmless if not registered with timer
   }
-  cb = NULL;
+  cb = nullptr;
 }
 
 void Watch::got_ping(utime_t t)
