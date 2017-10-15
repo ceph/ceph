@@ -799,29 +799,25 @@ void OSDMonitor::maybe_prime_pg_temp()
     }
   } else {
     dout(10) << __func__ << " " << osds.size() << " interesting osds" << dendl;
+    typedef typename mempool::osdmap_mapping::vector<pg_t> acting_pgs_t;
     utime_t stop = ceph_clock_now();
     stop += g_conf->mon_osd_prime_pg_temp_max_time;
-    const int chunk = 1000;
-    int n = chunk;
     std::unordered_set<pg_t> did_pgs;
-    for (auto osd : osds) {
-      auto& pgs = mapping.get_osd_acting_pgs(osd);
+    for (const unsigned osd : osds) {
+      const acting_pgs_t& pgs = mapping.get_osd_acting_pgs(osd);
       dout(20) << __func__ << " osd." << osd << " " << pgs << dendl;
-      for (auto pgid : pgs) {
-	if (!did_pgs.insert(pgid).second) {
-	  continue;
-	}
-	prime_pg_temp(next, pgid);
-	if (--n <= 0) {
-	  n = chunk;
-	  if (ceph_clock_now() > stop) {
-	    dout(10) << __func__ << " consumed more than "
-		     << g_conf->mon_osd_prime_pg_temp_max_time
-		     << " seconds, stopping"
-		     << dendl;
-	    return;
-	  }
-	}
+      for (const pg_t pgid : pgs) {
+        if (!did_pgs.insert(pgid).second) {
+          continue;
+        }
+        prime_pg_temp(next, pgid);
+        if (ceph_clock_now() > stop) {
+          dout(10) << __func__ << " consumed more than "
+                   << g_conf->mon_osd_prime_pg_temp_max_time
+                   << " seconds, stopping"
+                   << dendl;
+          return;
+        }
       }
     }
   }
