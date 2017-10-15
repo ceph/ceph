@@ -1264,7 +1264,7 @@ void ECBackend::complete_read_op(ReadOp &rop, RecoveryMessages *m)
       pair<RecoveryMessages *, read_result_t &> arg(
 	m, resiter->second);
       reqiter->second.cb->complete(arg);
-      reqiter->second.cb = NULL;
+      reqiter->second.cb = nullptr;
     }
   }
   tid_to_read_map.erase(rop.tid);
@@ -1332,7 +1332,7 @@ void ECBackend::filter_read_op(
 	     << "  for obj " << *i << dendl;
     assert(req.cb);
     delete req.cb;
-    req.cb = NULL;
+    req.cb = nullptr;
 
     op.to_read.erase(*i);
     op.complete.erase(*i);
@@ -1393,7 +1393,7 @@ void ECBackend::on_change()
 	 j != i->second.to_read.end();
 	 ++j) {
       delete j->second.cb;
-      j->second.cb = 0;
+      j->second.cb = nullptr;
     }
   }
   tid_to_read_map.clear();
