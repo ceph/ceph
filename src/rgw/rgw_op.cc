@@ -1807,7 +1807,7 @@ void RGWListBuckets::execute()
   bool started = false;
   uint64_t total_count = 0;
 
-  uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
+  const uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
   op_ret = get_params();
   if (op_ret < 0) {
@@ -1861,10 +1861,10 @@ void RGWListBuckets::execute()
     }
 
     if (!m.empty()) {
-      send_response_data(buckets);
-
       map<string, RGWBucketEnt>::reverse_iterator riter = m.rbegin();
       marker = riter->first;
+
+      handle_listing_chunk(std::move(buckets));
     }
   } while (is_truncated && !done);
 
