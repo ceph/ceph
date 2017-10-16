@@ -4046,6 +4046,11 @@ int BlueStore::_write_bdev_label(CephContext *cct,
     derr << __func__ << " failed to write to " << path
 	 << ": " << cpp_strerror(r) << dendl;
   }
+  r = ::fsync(fd);
+  if (r < 0) {
+    derr << __func__ << " failed to fsync " << path
+	 << ": " << cpp_strerror(r) << dendl;
+  }
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   return r;
 }
