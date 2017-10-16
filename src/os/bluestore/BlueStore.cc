@@ -3814,7 +3814,7 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
     return ObjectStore::write_meta(key, value);
   }
   label.meta[key] = value;
-  r = _write_bdev_label(p, label);
+  r = _write_bdev_label(cct, p, label);
   assert(r == 0);
   return ObjectStore::write_meta(key, value);
 }
@@ -4029,7 +4029,8 @@ void BlueStore::_close_path()
   path_fd = -1;
 }
 
-int BlueStore::_write_bdev_label(string path, bluestore_bdev_label_t label)
+int BlueStore::_write_bdev_label(CephContext *cct,
+				 string path, bluestore_bdev_label_t label)
 {
   dout(10) << __func__ << " path " << path << " label " << label << dendl;
   bufferlist bl;
@@ -4110,7 +4111,7 @@ int BlueStore::_check_or_set_bdev_label(
     label.size = size;
     label.btime = ceph_clock_now();
     label.description = desc;
-    int r = _write_bdev_label(path, label);
+    int r = _write_bdev_label(cct, path, label);
     if (r < 0)
       return r;
   } else {
