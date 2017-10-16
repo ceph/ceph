@@ -4713,9 +4713,9 @@ int RGWPutACLs::verify_permission()
     rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
   }
 
+  rgw_add_grant_to_iam_environment(s->env, s);
   if (!s->object.empty()) {
     auto iam_action = s->object.instance.empty() ? rgw::IAM::s3PutObjectAcl : rgw::IAM::s3PutObjectVersionAcl;
-    rgw_add_grant_to_iam_environment(s->env, s);
     auto obj = rgw_obj(s->bucket, s->object);
     op_ret = rgw_iam_add_existing_objtags(store, s, obj, iam_action);
     perm = verify_object_permission(s, iam_action);
