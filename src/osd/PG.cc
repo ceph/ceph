@@ -354,7 +354,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   peer_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   acting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   upacting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
-  last_epoch(0)
+  last_epoch(0),
+  last_require_osd_release(curmap->require_osd_release)
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
@@ -5955,6 +5956,7 @@ void PG::handle_advance_map(
     on_pool_change();
     update_store_with_options();
   }
+  last_require_osd_release = osdmap->require_osd_release;
 }
 
 void PG::handle_activate_map(RecoveryCtx *rctx)
@@ -7317,13 +7319,27 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
 	  decltype(pg->snap_trimq) added, overlap;
 	  added.insert(j.first, j.second);
 	  overlap.intersection_of(pg->snap_trimq, added);
-	  lderr(pg->cct) << __func__ << " removed_snaps already contains "
-			 << overlap << dendl;
-	  bad = true;
+	  if (pg->last_require_osd_release < CEPH_RELEASE_MIMIC) {
+	    lderr(pg->cct) << __func__ << " removed_snaps already contains "
+			   << overlap << ", but this is the first mimic+ osdmap,"
+			   << " so it's expected" << dendl;
+	  } else {
+	    lderr(pg->cct) << __func__ << " removed_snaps already contains "
+			   << overlap << dendl;
+	    bad = true;
+	  }
 	  pg->snap_trimq.union_of(added);
 	} else {
 	  pg->snap_trimq.insert(j.first, j.second);
 	}
+      }
+      if (pg->last_require_osd_release < CEPH_RELEASE_MIMIC) {
+	// at upgrade, we report *all* previously removed snaps as removed in
+	// the first mimic epoch.  remove the ones we previously divined were
+	// removed (and subsequently purged) from the trimq.
+	lderr(pg->cct) << __func__ << " first mimic map, filtering purged_snaps"
+		       << " from new removed_snaps" << dendl;
+	pg->snap_trimq.subtract(pg->info.purged_snaps);
       }
       ldout(pg->cct,10) << __func__ << " new removed_snaps " << i->second
 			<< ", snap_trimq now " << pg->snap_trimq << dendl;
