@@ -193,7 +193,7 @@ void MgrStandby::tick()
   dout(10) << __func__ << dendl;
   send_beacon();
 
-  if (active_mgr) {
+  if (active_mgr && active_mgr->is_initialized()) {
     active_mgr->tick();
   }
 
@@ -219,8 +219,6 @@ void MgrStandby::shutdown()
 
   dout(4) << "Shutting down" << dendl;
 
-  py_module_registry.shutdown();
-
   // stop sending beacon first, i use monc to talk with monitors
   timer.shutdown();
   // client uses monc and objecter
@@ -231,6 +229,9 @@ void MgrStandby::shutdown()
   if (active_mgr) {
     active_mgr->shutdown();
   }
+
+  py_module_registry.shutdown();
+
   // objecter is used by monc and active_mgr
   objecter.shutdown();
   // client_messenger is used by all of them, so stop it in the end
