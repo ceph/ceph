@@ -56,10 +56,10 @@ private:
   Context *m_on_finish;
 
   CephContext *m_cct;
-  Journaler *m_journaler;
-  SafeTimer *m_timer;
-  Mutex *m_timer_lock;
-  int m_r_saved;
+  Journaler *m_journaler = nullptr;
+  SafeTimer *m_timer = nullptr;
+  Mutex *m_timer_lock = nullptr;
+  int m_r_saved = 0;
 
   void stat_journal();
   Context *handle_stat_journal(int *result);
