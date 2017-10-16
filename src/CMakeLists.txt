@@ -720,6 +720,7 @@ if (WITH_MGR)
       mgr/MgrPyModule.cc
       mgr/MgrStandby.cc
       mgr/Mgr.cc
+      mgr/Gil.cc
       mgr/mgr_commands.cc)
   add_executable(ceph-mgr ${mgr_srcs}
                  $<TARGET_OBJECTS:heap_profiler_objs>)
