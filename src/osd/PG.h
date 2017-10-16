@@ -514,6 +514,9 @@ public:
     return ref;
   }
 
+  virtual void repop_queue_lock() {}
+  virtual void repop_queue_unlock() {}
+
 
   // ctor
   PG(OSDService *o, OSDMapRef curmap,

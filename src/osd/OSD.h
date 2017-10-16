@@ -1593,6 +1593,7 @@ private:
    * and already requeued the items.
    */
   friend class PGOpItem;
+  friend class PGOpItemOpLock;
   friend class PGRecovery;
 
   class ShardedOpWQ
@@ -1786,6 +1787,8 @@ private:
     PGRef pg, OpRequestRef op,
     ThreadPool::TPHandle &handle);
 
+  bool can_op_lock(OpRequestRef op); 
+
   // -- peering queue --
   struct PeeringWQ : public ThreadPool::BatchWorkQueue<PG> {
     list<PG*> peering_queue;
@@ -1917,6 +1920,7 @@ protected:
 
   PG   *_lookup_lock_pg_with_map_lock_held(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);
+  PG   *_lookup_lock_pg(spg_t pgid, OpQueueItem::OrderLocker::Ref &locker);
 
 public:
   PG   *lookup_lock_pg(spg_t pgid);

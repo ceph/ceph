@@ -3882,6 +3882,18 @@ PG *OSD::_lookup_lock_pg(spg_t pgid)
   return pg;
 }
 
+PG *OSD::_lookup_lock_pg(spg_t pgid, OpQueueItem::OrderLocker::Ref &locker)
+{
+  RWLock::RLocker l(pg_map_lock);
+
+  auto pg_map_entry = pg_map.find(pgid);
+  if (pg_map_entry == pg_map.end())
+    return nullptr;
+  PG *pg = pg_map_entry->second;
+  locker->lock(pg);
+  return pg;
+}
+
 PG *OSD::lookup_lock_pg(spg_t pgid)
 {
   return _lookup_lock_pg(pgid);
@@ -8941,14 +8953,31 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch)
   op->osd_trace.keyval("cost", op->get_req()->get_cost());
   op->mark_queued_for_pg();
   logger->tinc(l_osd_op_before_queue_op_lat, latency);
-  op_shardedwq.queue(
-    OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(pg, op)),
-      op->get_req()->get_cost(),
-      op->get_req()->get_priority(),
-      op->get_req()->get_recv_stamp(),
-      op->get_req()->get_source().num(),
-      epoch));
+  if (!can_op_lock(op)) {
+    op_shardedwq.queue(
+      OpQueueItem(
+	unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(pg, op)),
+	op->get_req()->get_cost(),
+	op->get_req()->get_priority(),
+	op->get_req()->get_recv_stamp(),
+	op->get_req()->get_source().num(),
+	epoch));
+  } else {
+    op_shardedwq.queue(
+      OpQueueItem(
+	unique_ptr<OpQueueItem::OpQueueable>(new PGOpItemOpLock(pg, op)),
+	op->get_req()->get_cost(),
+	op->get_req()->get_priority(),
+	op->get_req()->get_recv_stamp(),
+	op->get_req()->get_source().num(),
+	epoch));
+
+  }
+}
+
+bool OSD::can_op_lock(OpRequestRef op) 
+{
+  return false;
 }
 
 /*
@@ -9613,6 +9642,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   PGRef pg;
   uint64_t requeue_seq;
   const auto token = item.get_ordering_token();
+  OpQueueItem::OrderLocker::Ref l = item.get_order_locker(pg);
   {
     auto& slot = sdata->pg_slots[token];
     dout(30) << __func__ << " " << token
@@ -9639,9 +9669,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
   // [lookup +] lock pg (if we have it)
   if (!pg) {
-    pg = osd->_lookup_lock_pg(token);
+    pg = osd->_lookup_lock_pg(token, l);
   } else {
-    pg->lock();
+    l->lock(pg);
   }
 
   osd->service.maybe_inject_dispatch_delay();
@@ -9660,7 +9690,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     dout(20) << __func__ << " " << token
 	     << " nothing queued" << dendl;
     if (pg) {
-      pg->unlock();
+      l->unlock(pg);
     }
     sdata->sdata_op_ordering_lock.Unlock();
     return;
@@ -9671,7 +9701,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	     << requeue_seq << ", we raced with wake_pg_waiters"
 	     << dendl;
     if (pg) {
-      pg->unlock();
+      l->unlock(pg);
     }
     sdata->sdata_op_ordering_lock.Unlock();
     return;
@@ -9689,7 +9719,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     dout(20) << __func__ << " " << token
 	     << " slot is waiting_for_pg" << dendl;
     if (pg) {
-      pg->unlock();
+      l->unlock(pg);
     }
     sdata->sdata_op_ordering_lock.Unlock();
     return;
@@ -9779,7 +9809,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
         reqid.name._num, reqid.tid, reqid.inc);
   }
 
-  pg->unlock();
+  l->unlock(pg);
 }
 
 void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {

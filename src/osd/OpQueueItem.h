@@ -32,6 +32,8 @@ public:
     using Ref = unique_ptr<OrderLocker>;
     virtual void lock() = 0;
     virtual void unlock() = 0;
+    virtual void lock(PGRef) = 0;
+    virtual void unlock(PGRef) = 0;
     virtual ~OrderLocker() {}
   };
   // Abstraction for operations queueable in the op queue
@@ -164,6 +166,57 @@ public:
       void unlock() override final {
 	pg->unlock();
       }
+      void lock(PGRef pgref) override final {
+       pgref->lock();
+       return;
+      }
+      void unlock(PGRef pgref) override final {
+       pgref->unlock();
+       return;
+      }
+    };
+    return OpQueueItem::OrderLocker::Ref(
+      new Locker(pg));
+  }
+};
+
+class PGOpQueueableOpLock : public OpQueueItem::OpQueueable {
+  spg_t pgid;
+protected:
+  const spg_t& get_pgid() const {
+    return pgid;
+  }
+public:
+  PGOpQueueableOpLock(spg_t pg) : pgid(pg) {}
+  uint32_t get_queue_token() const override final {
+    return get_pgid().ps();
+  }
+
+  const spg_t& get_ordering_token() const override final {
+    return get_pgid();
+  }
+
+  OpQueueItem::OrderLocker::Ref get_order_locker(PGRef pg) override final {
+    class Locker : public OpQueueItem::OrderLocker {
+      PGRef pg;
+    public:
+      Locker(PGRef pg) : pg(pg) {}
+      void lock() override final {
+       pg->repop_queue_lock();
+       return;
+      }
+      void unlock() override final {
+       pg->repop_queue_unlock();
+       return;
+      }
+      void lock(PGRef pgref) override final {
+       pgref->repop_queue_lock();
+       return;
+      }
+      void unlock(PGRef pgref) override final {
+       pgref->repop_queue_unlock();
+       return;
+      }
     };
     return OpQueueItem::OrderLocker::Ref(
       new Locker(pg));
@@ -179,6 +232,22 @@ public:
   }
   ostream &print(ostream &rhs) const override final {
     return rhs << "PGOpItem(op=" << *(op->get_req()) << ")";
+  }
+  boost::optional<OpRequestRef> maybe_get_op() const override final {
+    return op;
+  }
+  void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+};
+
+class PGOpItemOpLock : public PGOpQueueableOpLock {
+  OpRequestRef op;
+public:
+  PGOpItemOpLock(spg_t pg, OpRequestRef op) : PGOpQueueableOpLock(pg), op(op) {}
+  op_type_t get_op_type() const override final {
+    return op_type_t::client_op;
+  }
+  virtual ostream &print(ostream &rhs) const override final {
+    return rhs << "PGOpItemOpLock(op=" << *(op->get_req()) << ")";
   }
   boost::optional<OpRequestRef> maybe_get_op() const override final {
     return op;

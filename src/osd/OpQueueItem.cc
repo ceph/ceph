@@ -22,6 +22,13 @@ void PGOpItem::run(OSD *osd,
   osd->dequeue_op(pg, op, handle);
 }
 
+void PGOpItemOpLock::run(OSD *osd,
+                   PGRef& pg,
+                   ThreadPool::TPHandle &handle)
+{
+  osd->dequeue_op(pg, op, handle);
+}
+
 void PGSnapTrim::run(OSD *osd,
                    PGRef& pg,
                    ThreadPool::TPHandle &handle)
