@@ -263,7 +263,7 @@ TEST(Log, TimeFormat)
     ceph::logging::append_time(t, buf, buflen);
     auto c = std::strrchr(buf, '.');
     ASSERT_NE(c, nullptr);
-    ASSERT_EQ(strlen(c + 1), 3);
+    ASSERT_EQ(3u, strlen(c + 1));
   }
   {
     clock.refine();
@@ -271,6 +271,6 @@ TEST(Log, TimeFormat)
     ceph::logging::append_time(t, buf, buflen);
     auto c = std::strrchr(buf, '.');
     ASSERT_NE(c, nullptr);
-    ASSERT_EQ(std::strlen(c + 1), 6);
+    ASSERT_EQ(6u, std::strlen(c + 1));
   }
 }
