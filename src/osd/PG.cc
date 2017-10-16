@@ -2589,8 +2589,6 @@ void PG::_update_calc_stats()
     // values for the summation, not individual stat categories.
     int64_t num_objects = info.stats.stats.sum.num_objects;
 
-    // Total sum of all missing
-    int64_t missing = 0;
     // Objects that have arrived backfilled to up OSDs (not in acting)
     int64_t backfilled = 0;
     // A misplaced object is not stored on the correct OSD
@@ -2622,41 +2620,36 @@ void PG::_update_calc_stats()
       //   - not in up  Compute misplaced objects excluding num_missing
       // backfill       Compute total objects already backfilled
       if (!is_backfill_targets(p)) {
-        unsigned osd_missing;
+        unsigned osd_missing, osd_objects;
         // primary handling
         if (p == pg_whoami) {
           osd_missing = pg_log.get_missing().num_missing();
           info.stats.stats.sum.num_objects_missing_on_primary =
               osd_missing;
-          object_copies += num_objects; // My local (primary) count
         } else {
           assert(peer_missing.count(p));
           osd_missing = peer_missing[p].num_missing();
-          // During recovery peer_info[p].stats.stats.sum.num_objects
-          // doesn't reflect the object count, but num_missing
-          // does reflect the missing and decreases as recovery progresses
-          // so use primary's object count.
-          object_copies += num_objects;
         }
-        missing += osd_missing;
+
+        osd_objects = MAX(0, num_objects - osd_missing);
+        object_copies += osd_objects;
         // Count non-missing objects not in up as misplaced
-        if (!in_up && num_objects > osd_missing)
-	  misplaced += num_objects - osd_missing;
+        if (!in_up)
+	  misplaced += osd_objects;
       } else {
         // If this peer has more objects then it should, ignore them
-        backfilled += MIN(num_objects, peer_info[p].stats.stats.sum.num_objects);
+        int64_t osd_backfilled = MIN(num_objects, peer_info[p].stats.stats.sum.num_objects);
+        // Include computed backfilled objects on up nodes
+        object_copies += osd_backfilled;
+        backfilled += osd_backfilled;
       }
     }
 
     // Any objects that have been backfilled to up OSDs can deducted from misplaced
     misplaced = MAX(0, misplaced - backfilled);
 
-    // Deduct computed total missing on acting nodes
-    object_copies -= missing;
-    // Include computed backfilled objects on up nodes
-    object_copies += backfilled;
     // a degraded objects has fewer replicas or EC shards than the
-    // pool specifies.  num_object_copies will never be smaller than target * num_copies.
+    // pool specifies.  num_object_copies will never be smaller than target * num_objects.
     int64_t degraded = MAX(0, info.stats.stats.sum.num_object_copies - object_copies);
 
     info.stats.stats.sum.num_objects_degraded = degraded;
