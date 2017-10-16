@@ -1021,6 +1021,11 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   assert(inc.version == version+1);
   version++;
 
+  // set fake but reasonable first stamp
+  if (stamp == utime_t()){
+    stamp = utime_t(time(0) - g_conf->get_val<int64_t>("mgr_tick_period"), 0);
+  }
+
   utime_t delta_t;
   delta_t = inc.stamp;
   delta_t -= stamp;
@@ -1085,13 +1090,20 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     }
   }
 
-  // calculate a delta, and average over the last 2 deltas.
   pool_stat_t d = pg_sum;
   d.stats.sub(pg_sum_old.stats);
-  pg_sum_deltas.push_back(make_pair(d, delta_t));
-  stamp_delta += delta_t;
 
-  pg_sum_delta.stats.add(d.stats);
+  // if mgr restarts first update of pg_sum is previous pg_sum
+  // so skip this huge value
+  if (!pg_sum_delta_skipped_first) {
+    if (!(pg_sum.stats.sum == object_stat_sum_t()))
+      pg_sum_delta_skipped_first = true;
+  } else {
+    stamp_delta += delta_t;
+    pg_sum_deltas.push_back(make_pair(d, delta_t));
+    pg_sum_delta.stats.add(d.stats);
+  }
+
   if (pg_sum_deltas.size() > (unsigned)MAX(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1)) {
     pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
     stamp_delta -= pg_sum_deltas.front().second;

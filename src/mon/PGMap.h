@@ -89,6 +89,7 @@ public:
    */
   mempool::pgmap::unordered_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
 
+  bool pg_sum_delta_skipped_first = false;
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
