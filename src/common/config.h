@@ -304,9 +304,9 @@ public:
 
 public:
   unsigned get_osd_pool_default_min_size() const {
-    return osd_pool_default_min_size ?
-      MIN(osd_pool_default_min_size, osd_pool_default_size) :
-      osd_pool_default_size - osd_pool_default_size / 2;
+    auto min_size = get_val<uint64_t>("osd_pool_default_min_size");
+    auto size = get_val<uint64_t>("osd_pool_default_size");
+    return min_size ? std::min(min_size, size) : (size - size / 2);
   }
 
   /** A lock that protects the md_config_t internals. It is

@@ -2994,7 +2994,7 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
  */
 int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
 {
-  int crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
+  int crush_ruleset = cct->_conf->get_val<int64_t>("osd_pool_default_crush_rule");
   if (crush_ruleset < 0) {
     crush_ruleset = find_first_ruleset(pg_pool_t::TYPE_REPLICATED);
   } else if (!ruleset_exists(crush_ruleset)) {
