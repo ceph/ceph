@@ -65,6 +65,9 @@ private:
   typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
   typedef std::list<Context *> Contexts;
 
+  uint64_t m_free_log_entries;
+  uint64_t m_free_blocks;
+  
   ImageCtxT &m_image_ctx;
   ImageWriteback<ImageCtxT> m_image_writeback;
   FileImageCache<ImageCtxT> m_image_cache;

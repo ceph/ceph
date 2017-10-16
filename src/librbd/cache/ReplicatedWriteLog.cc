@@ -845,7 +845,11 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
   //ldout(cct, 20) << "image_extents=" << image_extents << ", "
   //               << "on_finish=" << on_finish << dendl;
 
-  m_image_cache.aio_read(std::move(image_extents), bl, fadvise_flags, on_finish);
+  if (m_image_ctx.persistent_cache_enabled) {
+    m_image_cache.aio_read(std::move(image_extents), bl, fadvise_flags, on_finish);
+  } else {
+    m_image_writeback.aio_read(std::move(image_extents), bl, fadvise_flags, on_finish);
+  }
   // TODO handle fadvise flags
   /*
   BlockGuard::C_BlockRequest *req = new C_ReadBlockRequest<I>(
@@ -872,21 +876,23 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
     }
   }
 
-  m_image_cache.aio_write(std::move(image_extents), std::move(bl), fadvise_flags, on_finish);
-
   if (!is_block_aligned(image_extents)) {
     lderr(cct) << "unaligned write fails" << dendl;
     on_finish->complete(-EINVAL);
     return;
   }
+
+  /* Make empty log entry objects for each extent */
   WriteLogEntries entries;
+  uint64_t total_bytes = 0;
   for (auto &extent : image_extents) {
-    /* Is there space in the write log for this entire write? */
-    /* If not, defer this IO */
-    /* Reserve log space for this write entry & data */
-    /* Allocate new write log entry */
+    total_bytes += extent.second;
     entries.emplace_back(WriteLogEntry(extent.first, extent.second));
   }
+  //if ()
+  /* Is there space in the write log for this entire write? */
+  /* If not, defer this IO */
+  /* Reserve log space for this write entry & data */
 
   /*// TODO handle fadvise flags
   BlockGuard::C_BlockRequest *req = new C_WriteBlockRequest<I>(
@@ -894,6 +900,13 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
     *m_meta_store, m_release_block, m_detain_block, std::move(bl), BLOCK_SIZE, on_finish);
   map_blocks(IO_TYPE_WRITE, std::move(image_extents), req);
   */
+
+  /* Pass write through */
+  if (m_image_ctx.persistent_cache_enabled) {
+    m_image_cache.aio_write(std::move(image_extents), std::move(bl), fadvise_flags, on_finish);
+  } else {
+    m_image_writeback.aio_write(std::move(image_extents), std::move(bl), 0, on_finish);
+  }
 }
 
 template <typename I>
@@ -912,7 +925,11 @@ void ReplicatedWriteLog<I>::aio_discard(uint64_t offset, uint64_t length,
     }
   }
 
-  m_image_cache.aio_discard(offset, length, skip_partial_discard, on_finish);
+  if (m_image_ctx.persistent_cache_enabled) {
+    m_image_cache.aio_discard(offset, length, skip_partial_discard, on_finish);
+  } else {
+    m_image_writeback.aio_discard(offset, length, skip_partial_discard, on_finish);
+  }
   /*
   if (!is_block_aligned({{offset, length}})) {
     // For clients that don't use LBA extents, re-align the discard request
@@ -953,7 +970,11 @@ void ReplicatedWriteLog<I>::aio_flush(Context *on_finish) {
     }
   }
 
-  m_image_cache.aio_flush(on_finish);
+  if (m_image_ctx.persistent_cache_enabled) {
+    m_image_cache.aio_flush(on_finish);
+  } else {
+    m_image_writeback.aio_flush(on_finish);
+  }
   /*
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
@@ -984,7 +1005,11 @@ void ReplicatedWriteLog<I>::aio_writesame(uint64_t offset, uint64_t length,
     }
   }
 
-  m_image_cache.aio_writesame(offset, length, std::move(bl), fadvise_flags, on_finish);
+  if (m_image_ctx.persistent_cache_enabled) {
+    m_image_cache.aio_writesame(offset, length, std::move(bl), fadvise_flags, on_finish);
+  } else {
+    m_image_writeback.aio_writesame(offset, length, std::move(bl), fadvise_flags, on_finish);
+  }
 
   /*
   bufferlist total_bl;
@@ -1014,9 +1039,15 @@ void ReplicatedWriteLog<I>::aio_compare_and_write(Extents &&image_extents,
 //  ldout(cct, 20) << "image_extents=" << image_extents << ", "
 //                 << "on_finish=" << on_finish << dendl;
 
-  m_image_cache.aio_compare_and_write(
-    std::move(image_extents), std::move(cmp_bl), std::move(bl), mismatch_offset,
-    fadvise_flags, on_finish);
+  if (m_image_ctx.persistent_cache_enabled) {
+    m_image_cache.aio_compare_and_write(
+      std::move(image_extents), std::move(cmp_bl), std::move(bl), mismatch_offset,
+      fadvise_flags, on_finish);
+  } else {
+    m_image_writeback.aio_compare_and_write(
+      std::move(image_extents), std::move(cmp_bl), std::move(bl), mismatch_offset,
+      fadvise_flags, on_finish);
+  }
 }
 
 template <typename I>
@@ -1073,7 +1104,11 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
       m_meta_store->set_entry_size(m_policy->get_entry_size());
       m_meta_store->init(&meta_bl, ctx);
     });
-  m_image_cache.init(ctx);
+  if (m_image_ctx.persistent_cache_enabled) {
+    m_image_cache.init(ctx);
+  } else {
+    ctx->complete(0);
+  }
 }
 
 template <typename I>
@@ -1100,7 +1135,11 @@ void ReplicatedWriteLog<I>::shut_down(Context *on_finish) {
             ctx->complete(r);
           });
       }
-      m_image_cache.shut_down(next_ctx);
+      if (m_image_ctx.persistent_cache_enabled) {
+	m_image_cache.shut_down(next_ctx);
+      } else {
+	ctx->complete(0);
+      }
     });
   ctx = new FunctionContext(
     [this, ctx](int r) {
@@ -1147,7 +1186,11 @@ void ReplicatedWriteLog<I>::invalidate(Context *on_finish) {
 
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
-      m_image_cache.invalidate(on_finish);
+      if (m_image_ctx.persistent_cache_enabled) {
+	m_image_cache.invalidate(on_finish);
+      } else {
+	on_finish->complete(0);
+      }
     });
   // TODO
   invalidate({{0, m_image_ctx.size}}, ctx);

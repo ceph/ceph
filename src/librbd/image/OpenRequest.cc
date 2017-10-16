@@ -570,7 +570,8 @@ Context *OpenRequest<I>::handle_set_snap(int *result) {
 template <typename I>
 Context *OpenRequest<I>::send_init_image_cache(int *result) {
   if (m_image_ctx->old_format || m_image_ctx->read_only ||
-      !m_image_ctx->persistent_cache_enabled) {
+      (!m_image_ctx->persistent_cache_enabled &&
+       !m_image_ctx->rwl_enabled)) {
     *result = 0;
     return m_on_finish;
   }
@@ -579,7 +580,6 @@ Context *OpenRequest<I>::send_init_image_cache(int *result) {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   // TODO: hard-coded for prototype
-  // For now persistent cache must be enabled to enable rwl
   if (m_image_ctx->rwl_enabled) {
     ldout(cct, 4) << this << " " << __func__ << "RWL enabled" << dendl;
     m_image_ctx->image_cache = new cache::ReplicatedWriteLog<ImageCtx>(*m_image_ctx);
