@@ -303,7 +303,7 @@ static int do_kernel_map(const char *poolname, const char *imgname,
     // default and omit it even if it was specified by the user
     // (see ceph.git commit fb0f1986449b)
     if (it->first == "rw" && it->second == "rw") {
-      map_options.erase(it);
+      it = map_options.erase(it);
     } else {
       if (it != map_options.begin())
         oss << ",";
