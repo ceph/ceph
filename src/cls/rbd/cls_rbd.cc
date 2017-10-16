@@ -2732,7 +2732,7 @@ int metadata_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  CLS_LOG(20, "metdata_set key=%s", key.c_str());
+  CLS_LOG(20, "metdata_remove key=%s", key.c_str());
 
   int r = cls_cxx_map_remove_key(hctx, metadata_key_for_name(key));
   if (r < 0) {
