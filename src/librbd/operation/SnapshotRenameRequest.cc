@@ -34,7 +34,8 @@ SnapshotRenameRequest<I>::SnapshotRenameRequest(I &image_ctx,
 						Context *on_finish,
 						uint64_t snap_id,
 						const std::string &snap_name)
-  : Request<I>(image_ctx, on_finish), m_snap_id(snap_id), m_snap_name(snap_name) {
+  : Request<I>(image_ctx, on_finish), m_snap_id(snap_id),
+    m_snap_name(snap_name), m_state(STATE_RENAME_SNAP) {
 }
 
 template <typename I>
@@ -82,8 +83,6 @@ void SnapshotRenameRequest<I>::send_rename_snap() {
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
-
-  m_state = STATE_RENAME_SNAP;
 
   librados::ObjectWriteOperation op;
   if (image_ctx.old_format) {
