@@ -3745,7 +3745,6 @@ public:
   virtual bool have_missing() const = 0;
   virtual bool is_missing(const hobject_t& oid, pg_missing_item *out = nullptr) const = 0;
   virtual bool is_missing(const hobject_t& oid, eversion_t v) const = 0;
-  virtual eversion_t have_old(const hobject_t& oid) const = 0;
   virtual ~pg_missing_const_i() {}
 };
 
@@ -3835,14 +3834,6 @@ public:
     if (item.need > v)
       return false;
     return true;
-  }
-  eversion_t have_old(const hobject_t& oid) const override {
-    map<hobject_t, item>::const_iterator m =
-      missing.find(oid);
-    if (m == missing.end())
-      return eversion_t();
-    const item &item(m->second);
-    return item.have;
   }
 
   void claim(pg_missing_set& o) {
