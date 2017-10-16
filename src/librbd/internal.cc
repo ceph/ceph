@@ -1900,18 +1900,28 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -EINVAL;
     }
     int r;
+    const uint32_t MAX_KEYS = 64;
     map<string, bufferlist> pairs;
+    std::string last_key = "";
+    bool more_results = true;
 
-    r = cls_client::metadata_list(&src->md_ctx, src->header_oid, "", 0, &pairs);
-    if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-      lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
-      return r;
-    } else if (r == 0 && !pairs.empty()) {
-      r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, pairs);
-      if (r < 0) {
-        lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
+    while (more_results) {
+      r = cls_client::metadata_list(&src->md_ctx, src->header_oid, last_key, 0, &pairs);
+      if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
+        lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
         return r;
+      } else if (r == 0 && !pairs.empty()) {
+        r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, pairs);
+        if (r < 0) {
+          lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
+          return r;
+        }
+
+        last_key = pairs.rbegin()->first;
       }
+
+      more_results = (pairs.size() == MAX_KEYS);
+      pairs.clear();
     }
 
     ZTracer::Trace trace;
