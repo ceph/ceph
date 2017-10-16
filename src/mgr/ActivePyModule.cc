@@ -54,7 +54,7 @@ std::string handle_pyerror()
 int ActivePyModule::load(ActivePyModules *py_modules)
 {
   assert(py_modules);
-  Gil gil(pMyThreadState);
+  Gil gil(pMyThreadState, true);
 
   // We tell the module how we name it, so that it can be consistent
   // with us in logging etc.
@@ -82,7 +82,7 @@ void ActivePyModule::notify(const std::string &notify_type, const std::string &n
 {
   assert(pClassInstance != nullptr);
 
-  Gil gil(pMyThreadState);
+  Gil gil(pMyThreadState, true);
 
   // Execute
   auto pValue = PyObject_CallMethod(pClassInstance,
@@ -105,7 +105,7 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
 {
   assert(pClassInstance != nullptr);
 
-  Gil gil(pMyThreadState);
+  Gil gil(pMyThreadState, true);
 
   // Construct python-ized LogEntry
   PyFormatter f;
@@ -187,7 +187,7 @@ int ActivePyModule::handle_command(
   assert(ss != nullptr);
   assert(ds != nullptr);
 
-  Gil gil(pMyThreadState);
+  Gil gil(pMyThreadState, true);
 
   PyFormatter f;
   cmdmap_dump(cmdmap, &f);

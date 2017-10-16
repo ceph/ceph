@@ -33,7 +33,7 @@ private:
   std::string get_site_packages();
 
 public:
-  PyThreadState *pMyThreadState = nullptr;
+  SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
   PyObject *pStandbyClass = nullptr;
 
@@ -41,6 +41,8 @@ public:
     : module_name(module_name_)
   {
   }
+
+  ~PyModule();
 
   int load(PyThreadState *pMainThreadState);
 
@@ -68,7 +70,7 @@ private:
   std::unique_ptr<ActivePyModules> active_modules;
   std::unique_ptr<StandbyPyModules> standby_modules;
 
-  PyThreadState *pMainThreadState = nullptr;
+  PyThreadState *pMainThreadState;
 
   // We have our own copy of MgrMap, because we are constructed
   // before ClusterState exists.

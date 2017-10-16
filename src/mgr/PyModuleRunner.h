@@ -55,14 +55,14 @@ public:
   PyModuleRunner(
       const std::string &module_name_,
       PyObject *pClass_,
-      PyThreadState *pMyThreadState_)
+      const SafeThreadState &pMyThreadState_)
     : 
       module_name(module_name_),
       pClass(pClass_), pMyThreadState(pMyThreadState_),
       thread(this)
   {
     assert(pClass != nullptr);
-    assert(pMyThreadState != nullptr);
+    assert(pMyThreadState.ts != nullptr);
     assert(!module_name.empty());
   }
 
