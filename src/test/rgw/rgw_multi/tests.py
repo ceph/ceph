@@ -10,6 +10,7 @@ try:
 except ImportError:
     from itertools import zip_longest
 from itertools import combinations
+from cStringIO import StringIO
 
 import boto
 import boto.s3.connection
@@ -930,6 +931,27 @@ def test_bucket_sync_disable_enable():
 
     for bucket_name in buckets:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
+
+def test_multipart_object_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    _, bucket = zone_bucket[0]
+
+    # initiate a multipart upload
+    upload = bucket.initiate_multipart_upload('MULTIPART')
+    mp = boto.s3.multipart.MultiPartUpload(bucket)
+    mp.key_name = upload.key_name
+    mp.id = upload.id
+    part_size = 5 * 1024 * 1024 # 5M min part size
+    mp.upload_part_from_file(StringIO('a' * part_size), 1)
+    mp.upload_part_from_file(StringIO('b' * part_size), 2)
+    mp.upload_part_from_file(StringIO('c' * part_size), 3)
+    mp.upload_part_from_file(StringIO('d' * part_size), 4)
+    mp.complete_upload()
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 def test_encrypted_object_sync():
     zonegroup = realm.master_zonegroup()
