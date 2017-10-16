@@ -20,6 +20,19 @@ namespace rbd {
 namespace mirror {
 namespace image_map {
 
+struct Listener {
+  virtual ~Listener() {
+  }
+
+  virtual void acquire_image(const std::string &global_image_id,
+                             const std::string &instance_id) = 0;
+  virtual void release_image(const std::string &global_image_id,
+                             const std::string &instance_id) = 0;
+  virtual void remove_image(const std::string &mirror_uuid,
+                            const std::string &global_image_id,
+                            const std::string &instance_id) = 0;
+};
+
 enum PolicyMetaType {
   POLICY_META_TYPE_NONE = 0,
 };
