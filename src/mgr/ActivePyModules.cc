@@ -322,7 +322,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
 }
 
 int ActivePyModules::start_one(std::string const &module_name,
-    PyObject *pClass, PyThreadState *pMyThreadState)
+    PyObject *pClass, const SafeThreadState &pMyThreadState)
 {
   Mutex::Locker l(lock);
 

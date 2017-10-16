@@ -155,6 +155,7 @@ int PyModuleRegistry::init(const MgrMap &map)
   // Drop the GIL and remember the main thread state (current
   // thread state becomes NULL)
   pMainThreadState = PyEval_SaveThread();
+  assert(pMainThreadState != nullptr);
 
   std::list<std::string> failed_modules;
 
@@ -191,14 +192,15 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
   // Configure sub-interpreter and construct C++-generated python classes
   {
-    Gil gil(pMainThreadState);
+    SafeThreadState sts(pMainThreadState);
+    Gil gil(sts);
 
-    pMyThreadState = Py_NewInterpreter();
-
-    if (pMyThreadState == nullptr) {
+    auto thread_state = Py_NewInterpreter();
+    if (thread_state == nullptr) {
       derr << "Failed to create python sub-interpreter for '" << module_name << '"' << dendl;
       return -EINVAL;
     } else {
+      pMyThreadState.set(thread_state);
       // Some python modules do not cope with an unpopulated argv, so lets
       // fake one.  This step also picks up site-packages into sys.path.
       const char *argv[] = {"ceph-mgr"};
@@ -288,6 +290,15 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
   return 0;
 } 
+
+PyModule::~PyModule()
+{
+  if (pMyThreadState.ts != nullptr) {
+    Gil gil(pMyThreadState, true);
+    Py_XDECREF(pClass);
+    Py_XDECREF(pStandbyClass);
+  }
+}
 
 void PyModuleRegistry::standby_start(MonClient *monc)
 {

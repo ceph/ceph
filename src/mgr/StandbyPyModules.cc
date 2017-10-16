@@ -77,7 +77,7 @@ void StandbyPyModules::shutdown()
 }
 
 int StandbyPyModules::start_one(std::string const &module_name,
-    PyObject *pClass, PyThreadState *pMyThreadState)
+    PyObject *pClass, const SafeThreadState &pMyThreadState)
 {
   Mutex::Locker l(lock);
 
@@ -108,7 +108,7 @@ int StandbyPyModules::start_one(std::string const &module_name,
 
 int StandbyPyModule::load()
 {
-  Gil gil(pMyThreadState);
+  Gil gil(pMyThreadState, true);
 
   // We tell the module how we name it, so that it can be consistent
   // with us in logging etc.
