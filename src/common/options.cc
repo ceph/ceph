@@ -5485,6 +5485,11 @@ static std::vector<Option> get_rbd_mirror_options() {
     Option("rbd_mirror_image_policy_migration_throttle", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(300)
     .set_description("number of seconds after which an image can be reshuffled (migrated) again"),
+
+    Option("rbd_mirror_image_policy_update_throttle_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_min(1)
+    .set_description("interval (in seconds) to throttle images for mirror daemon peer updates"),
   });
 }
 
