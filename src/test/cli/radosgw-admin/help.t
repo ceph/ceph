@@ -56,7 +56,6 @@
     realm get-default          get default realm name
     realm list                 list realms
     realm list-periods         list all realm periods
-    realm remove               remove a zonegroup from the realm
     realm rename               rename a realm
     realm set                  set realm info (requires infile)
     realm default              set realm as default

@@ -113,7 +113,6 @@ void usage()
   cout << "  realm get-default          get default realm name\n";
   cout << "  realm list                 list realms\n";
   cout << "  realm list-periods         list all realm periods\n";
-  cout << "  realm remove               remove a zonegroup from the realm\n";
   cout << "  realm rename               rename a realm\n";
   cout << "  realm set                  set realm info (requires infile)\n";
   cout << "  realm default              set realm as default\n";
@@ -454,7 +453,6 @@ enum {
   OPT_REALM_GET_DEFAULT,
   OPT_REALM_LIST,
   OPT_REALM_LIST_PERIODS,
-  OPT_REALM_REMOVE,
   OPT_REALM_RENAME,
   OPT_REALM_SET,
   OPT_REALM_DEFAULT,
@@ -719,8 +717,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_REALM_LIST;
     if (strcmp(cmd, "list-periods") == 0)
       return OPT_REALM_LIST_PERIODS;
-    if (strcmp(cmd, "remove") == 0)
-      return OPT_REALM_REMOVE;
     if (strcmp(cmd, "rename") == 0)
       return OPT_REALM_RENAME;
     if (strcmp(cmd, "set") == 0)
@@ -2923,7 +2919,7 @@ int main(int argc, const char **argv)
 			 OPT_GLOBAL_QUOTA_ENABLE, OPT_GLOBAL_QUOTA_DISABLE,
 			 OPT_REALM_DELETE, OPT_REALM_GET, OPT_REALM_LIST,
 			 OPT_REALM_LIST_PERIODS,
-			 OPT_REALM_GET_DEFAULT, OPT_REALM_REMOVE,
+			 OPT_REALM_GET_DEFAULT,
 			 OPT_REALM_RENAME, OPT_REALM_SET,
 			 OPT_REALM_DEFAULT, OPT_REALM_PULL};
 
