@@ -2630,6 +2630,9 @@ protected:
 
   epoch_t last_epoch;
 
+  /// most recently consumed osdmap's require_osd_version
+  unsigned last_require_osd_release = 0;
+
 protected:
   void reset_min_peer_features() {
     peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
