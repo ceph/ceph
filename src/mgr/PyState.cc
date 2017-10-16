@@ -35,7 +35,7 @@ class MonCommandCompletion : public Context
 {
   PyObject *python_completion;
   const std::string tag;
-  PyThreadState *pThreadState;
+  SafeThreadState pThreadState;
 
 public:
   std::string outs;

@@ -13,7 +13,6 @@
 
 #include "PyState.h"
 #include "PyOSDMap.h"
-#include "Gil.h"
 
 #include "PyFormatter.h"
 
@@ -85,14 +84,14 @@ MgrPyModule::MgrPyModule(const std::string &module_name_, const std::string &sys
     pClassInstance(nullptr),
     pMainThreadState(main_ts_)
 {
-  assert(pMainThreadState != nullptr);
-
   Gil gil(pMainThreadState);
 
-  pMyThreadState = Py_NewInterpreter();
-  if (pMyThreadState == nullptr) {
+  auto thread_state = Py_NewInterpreter();
+  if (thread_state == nullptr) {
     derr << "Failed to create python sub-interpreter for '" << module_name << '"' << dendl;
   } else {
+    pMyThreadState.set(thread_state);
+
     // Some python modules do not cope with an unpopulated argv, so lets
     // fake one.  This step also picks up site-packages into sys.path.
     const char *argv[] = {"ceph-mgr"};
@@ -120,7 +119,7 @@ MgrPyModule::MgrPyModule(const std::string &module_name_, const std::string &sys
 
 MgrPyModule::~MgrPyModule()
 {
-  if (pMyThreadState != nullptr) {
+  if (pMyThreadState.ts != nullptr) {
     Gil gil(pMyThreadState);
 
     Py_XDECREF(pClassInstance);
@@ -153,7 +152,7 @@ MgrPyModule::~MgrPyModule()
 
 int MgrPyModule::load()
 {
-  if (pMyThreadState == nullptr) {
+  if (pMyThreadState.ts == nullptr) {
     derr << "No python sub-interpreter exists for module '" << module_name << "'" << dendl;
     return -EINVAL;
   }
