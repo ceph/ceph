@@ -21,6 +21,7 @@
 #include "common/Thread.h"
 #include "common/Mutex.h"
 
+#include "mgr/Gil.h"
 #include "mon/MonClient.h"
 #include "mon/MgrMap.h"
 #include "mgr/PyModuleRunner.h"
@@ -90,7 +91,7 @@ class StandbyPyModule : public PyModuleRunner
       StandbyPyModuleState &state_,
       const std::string &module_name_,
       PyObject *pClass_,
-      PyThreadState *pMyThreadState_)
+      const SafeThreadState &pMyThreadState_)
     :
       PyModuleRunner(module_name_, pClass_, pMyThreadState_),
       state(state_)
@@ -136,7 +137,7 @@ public:
 
   int start_one(std::string const &module_name,
                 PyObject *pClass,
-                PyThreadState *pMyThreadState);
+                const SafeThreadState &pMyThreadState);
 
   void shutdown();
 

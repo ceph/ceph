@@ -66,7 +66,7 @@ void PyModuleRunner::shutdown()
 {
   assert(pClassInstance != nullptr);
 
-  Gil gil(pMyThreadState);
+  Gil gil(pMyThreadState, true);
 
   auto pValue = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("shutdown"), nullptr);

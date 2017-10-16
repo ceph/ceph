@@ -60,7 +60,7 @@ private:
 public:
   ActivePyModule(const std::string &module_name_,
       PyObject *pClass_,
-      PyThreadState *my_ts_)
+      const SafeThreadState &my_ts_)
     : PyModuleRunner(module_name_, pClass_, my_ts_)
   {}
 
