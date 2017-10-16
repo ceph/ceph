@@ -59,7 +59,7 @@ template <>
 class ImageCopyRequest<librbd::MockTestImageCtx> {
 public:
   static ImageCopyRequest* s_instance;
-  Context *on_finish;
+  Context *on_finish = nullptr;
 
   static ImageCopyRequest* create(librbd::MockTestImageCtx *local_image_ctx,
                                   librbd::MockTestImageCtx *remote_image_ctx,
