@@ -206,6 +206,55 @@ void RGWOp_Bucket_Remove::execute()
   http_ret = RGWBucketAdminOp::remove_bucket(store, op_state);
 }
 
+class RGWOp_Set_Bucket_Quota : public RGWRESTOp {
+
+public:
+  RGWOp_Set_Bucket_Quota() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("buckets", RGW_CAP_WRITE);
+  }
+
+  void execute();
+
+  virtual const string name() { return "set_bucket_quota"; }
+};
+
+#define QUOTA_INPUT_MAX_LEN 1024
+
+void RGWOp_Set_Bucket_Quota::execute()
+{
+  bool uid_arg_existed = false;
+  std::string uid_str;
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str, &uid_arg_existed);
+  if (! uid_arg_existed) {
+    http_ret = -EINVAL;
+    return;
+  }
+  rgw_user uid(uid_str);
+  bool bucket_arg_existed = false;
+  std::string bucket;
+  RESTArgs::get_string(s, "bucket", bucket, &bucket, &bucket_arg_existed);
+  if (! bucket_arg_existed) {
+    http_ret = -EINVAL;
+    return;
+  }
+  RGWQuotaInfo quota;
+  bool empty;
+  http_ret = rgw_rest_get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
+  if (http_ret < 0) {
+    ldout(store->ctx(), 20) << "failed to retrieve input" << dendl;
+    return;
+  }
+
+  RGWBucketAdminOpState op_state;
+  op_state.set_user_id(uid);
+  op_state.set_bucket_name(bucket);
+  op_state.set_quota(quota);
+
+  http_ret = RGWBucketAdminOp::set_quota(store, op_state);
+}
+
 class RGWOp_Object_Remove: public RGWRESTOp {
 
 public:
@@ -250,6 +299,8 @@ RGWOp *RGWHandler_Bucket::op_get()
 
 RGWOp *RGWHandler_Bucket::op_put()
 {
+  if (s->info.args.sub_resource_exists("quota"))
+    return new RGWOp_Set_Bucket_Quota;
   return new RGWOp_Bucket_Link;
 }
 
