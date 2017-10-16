@@ -151,6 +151,9 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
+BuildRequires:  python-psutil
+BuildRequires:  python-prettytable 
+             
 
 #################################################################################
 # distro-conditional dependencies
@@ -1239,6 +1242,7 @@ fi
 %files mon
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-rest-api
+%{_bindir}/ceph-watcher
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-rest-api.8*
 %{python_sitelib}/ceph_rest_api.py*

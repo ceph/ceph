@@ -1,0 +1,187 @@
+#!/usr/bin/python
+
+import psutil
+import re
+import os
+import optparse
+import json
+from prettytable import PrettyTable
+
+#
+# Copyright (C) 2015, 2016 Red Hat <contact@redhat.com>
+#
+# Author: song baisen <song.baisen@zte.com.cn>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Library Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Library Public License for more details.
+#
+
+CEPH_MOUNT_PREFIX = '/var/lib/ceph/osd/ceph-'
+OSD_NAME = "ceph-osd"
+MON_NAME = 'ceph-mon'
+MON_PATH = "/var/lib/ceph/mon"
+WATCH_THREADS = [OSD_NAME, MON_NAME]
+CPU_INTERVAL = 1
+
+
+def get_osd_disk_usage():
+    osd_disk = {}
+    for elem in psutil.disk_partitions():
+        if re.match(CEPH_MOUNT_PREFIX, elem[1]):
+            osd_disk[elem[1][len(CEPH_MOUNT_PREFIX):]] = {'disk_percent': psutil.disk_usage(elem[1])[3]}
+    return osd_disk
+
+
+def get_all_thread_info():
+    thread_infos = []
+    for proc in psutil.process_iter():
+        try:
+            thread_info = proc.as_dict(attrs=['pid', 'name', 'cmdline'])
+            thread_infos.append(thread_info)
+        except psutil.NoSuchProcess:
+            pass
+    return thread_infos
+
+
+def filter_thread_relate():
+    thread_infos = get_all_thread_info()
+    ceph_watches = []
+    for elem in thread_infos:
+        if elem['name'] in WATCH_THREADS:
+            ceph_watches.append(elem)
+    return ceph_watches
+
+
+def process_one_shot(thread_id):
+    p = psutil.Process(thread_id)
+
+    return {
+        'thread_name': p.name(),
+        'cpu_percent': p.cpu_percent(interval=CPU_INTERVAL),
+        'num_threads': p.num_threads(),
+        'memory_percent': str("%.2f" % p.memory_percent()),
+        'num_fds': p.num_fds()
+    }
+
+
+def process_osd_usage(ceph_watches, all_usage):
+    osd_disk_usages = get_osd_disk_usage()
+    for elem in ceph_watches:
+        if elem['name'] == OSD_NAME:
+            osd_id = elem['cmdline'][5]
+            osd_usage = {
+                'name': 'ceph-osd',
+                'id': osd_id
+            }
+            osd_usage.update(process_one_shot(elem['pid']))
+            osd_usage.update(osd_disk_usages[osd_id] if osd_id in osd_disk_usages else dict(disk_percent=''))
+            all_usage.append(osd_usage)
+
+
+def get_mon_disk_usages():
+    mon_disk = {'disk_percent': ""}
+    if os.path.exists(MON_PATH):
+        mon_disk = {'disk_percent': psutil.disk_usage(MON_PATH)[3]}
+    return mon_disk
+
+
+def process_mon_usage(ceph_watches, all_usage):
+    for elem in ceph_watches:
+        if elem['name'] == MON_NAME:
+            mon_id = elem['cmdline'][5]
+            mon_usage = {
+                'name': 'ceph-mon',
+                'id': mon_id
+            }
+            mon_usage.update(process_one_shot(elem['pid']))
+            mon_usage.update(get_mon_disk_usages())
+            all_usage.append(mon_usage)
+
+
+def print_pretty_table(all_usage, row_names):
+    table = PrettyTable(row_names)
+    for elem in all_usage:
+        row = []
+        for row_name in row_names:
+            row.append(elem[row_name])
+        table.add_row(row)
+    print (table)
+
+
+def print_ceph_pretty_table(all_usage):
+    row_names = ['name', 'id', 'cpu_percent', 'memory_percent', 'disk_percent',
+                 'num_threads', 'num_fds']
+    print_pretty_table(all_usage, row_names)
+
+
+def print_json_show(all_usage):
+    json_str = json.dumps(all_usage)
+    print json_str
+
+
+def process_ceph_usage(osd_usage, mon_usage, json_show):
+    ceph_watches = filter_thread_relate()
+    all_usage = []
+    if osd_usage:
+        process_osd_usage(ceph_watches, all_usage)
+    if mon_usage:
+        process_mon_usage(ceph_watches, all_usage)
+
+    if json_show:
+        print_json_show(all_usage)
+    else:
+        print_ceph_pretty_table(all_usage)
+
+
+def main():
+    usage = "\n\t Show the ceph process usages tool\n" \
+            "\t   -a Show all the osds and mon usages info\n" \
+            "\t   -o Only show the osds usages info\n" \
+            "\t   -m Only show the mon usages info\n" \
+            "\t   -j Out the usages in json format\n" \
+            "\t         version v.1.0             \n"
+
+    parser = optparse.OptionParser(usage=usage)
+    parser.add_option("-a", "--all",
+                      action="store_true",
+                      dest="all",
+                      default=False,
+                      help="Show all the osds and mon usages info")
+    parser.add_option("-o", "--osd",
+                      action="store_true",
+                      dest="osd",
+                      default=False,
+                      help="Only show the osds usages info")
+    parser.add_option("-m", "--mon",
+                      action="store_true",
+                      dest="mon",
+                      default=False,
+                      help="Only show the mon usages info")
+    parser.add_option("-j", "--json",
+                      action="store_true",
+                      dest="json",
+                      default=False,
+                      help="Show the usages in json format")
+    (options, args) = parser.parse_args()
+    osd_usage = mon_usage = json_show = False
+    if options.all:
+        osd_usage = mon_usage = True
+    if options.osd:
+        osd_usage = True
+    if options.mon:
+        mon_usage = True
+    if options.json:
+        json_show = True
+    process_ceph_usage(osd_usage, mon_usage, json_show)
+
+
+if __name__ == "__main__":
+    main()
+
