@@ -52,7 +52,7 @@ SnapshotRemoveRequest<I>::SnapshotRemoveRequest(I &image_ctx,
 						const std::string &snap_name,
 						uint64_t snap_id)
   : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
-    m_snap_name(snap_name), m_snap_id(snap_id) {
+    m_snap_name(snap_name), m_snap_id(snap_id), m_state(STATE_REMOVE_OBJECT_MAP) {
 }
 
 template <typename I>
@@ -114,7 +114,6 @@ void SnapshotRemoveRequest<I>::send_remove_object_map() {
 
     if (image_ctx.object_map != nullptr) {
       ldout(cct, 5) << this << " " << __func__ << dendl;
-      m_state = STATE_REMOVE_OBJECT_MAP;
 
       image_ctx.object_map->snapshot_remove(
         m_snap_id, this->create_callback_context());
