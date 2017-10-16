@@ -917,6 +917,27 @@ int RGWBucket::unlink(RGWBucketAdminOpState& op_state, std::string *err_msg)
   return r;
 }
 
+int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg)
+{
+  rgw_bucket bucket = op_state.get_bucket();
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
+  RGWObjectCtx obj_ctx(store);
+  int r = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, bucket_info, NULL, &attrs);
+  if (r < 0) {
+    set_err_msg(err_msg, "could not get bucket info for bucket=" + bucket.name + ": " + cpp_strerror(-r));
+    return r;
+  }
+
+  bucket_info.quota = op_state.quota;
+  r = store->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
+  if (r < 0) {
+    set_err_msg(err_msg, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
+    return r;
+  }
+  return r;
+}
+
 int RGWBucket::remove(RGWBucketAdminOpState& op_state, bool bypass_gc,
                       bool keep_index_consistent, std::string *err_msg)
 {
@@ -1624,6 +1645,15 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
   return 0;
 }
 
+int RGWBucketAdminOp::set_quota(RGWRados *store, RGWBucketAdminOpState& op_state)
+{
+  RGWBucket bucket;
+
+  int ret = bucket.init(store, op_state);
+  if (ret < 0)
+    return ret;
+  return bucket.set_quota(op_state);
+}
 
 void rgw_data_change::dump(Formatter *f) const
 {
