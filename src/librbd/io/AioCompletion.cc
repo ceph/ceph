@@ -94,7 +94,7 @@ void AioCompletion::complete() {
     lock.Lock();
   }
 
-  if (ictx && event_notify && ictx->event_socket.is_valid()) {
+  if (event_notify && ictx->event_socket.is_valid()) {
     ictx->completed_reqs_lock.Lock();
     ictx->completed_reqs.push_back(&m_xlist_item);
     ictx->completed_reqs_lock.Unlock();
