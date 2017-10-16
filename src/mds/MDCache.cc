@@ -6457,8 +6457,8 @@ void MDCache::trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*> &expiremap
       unexpirables.push_back(dn);
     } else {
       trimmed++;
+      if (count > 0) count--;
     }
-    count--;
   }
 
   for (auto &dn : unexpirables) {
