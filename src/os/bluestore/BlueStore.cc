@@ -10877,17 +10877,10 @@ void BlueStore::_do_omap_clear(TransContext *txc, const string& omap_prefix,
   string prefix, tail;
   get_omap_header(id, &prefix);
   get_omap_tail(id, &tail);
-  it->lower_bound(prefix);
-  while (it->valid()) {
-    if (it->key() >= tail) {
-      dout(30) << __func__ << "  stop at " << pretty_binary_string(tail)
-	       << dendl;
-      break;
-    }
-    txc->t->rmkey(omap_prefix, it->key());
-    dout(30) << __func__ << "  rm " << pretty_binary_string(it->key()) << dendl;
-    it->next();
-  }
+  txc->t->rm_range_keys(omap_prefix, prefix, tail);
+  dout(30) << __func__ << "remove range start: "
+           << pretty_binary_string(prefix) << " end: "
+           << pretty_binary_string(tail) << dendl;
 }
 
 int BlueStore::_omap_clear(TransContext *txc,
@@ -11027,21 +11020,12 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
     const string& prefix =
       o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
     o->flush();
-    it = db->get_iterator(prefix);
     get_omap_key(o->onode.nid, first, &key_first);
     get_omap_key(o->onode.nid, last, &key_last);
-    it->lower_bound(key_first);
-    while (it->valid()) {
-      if (it->key() >= key_last) {
-	dout(30) << __func__ << "  stop at " << pretty_binary_string(key_last)
-		 << dendl;
-	break;
-      }
-      txc->t->rmkey(prefix, it->key());
-      dout(30) << __func__ << "  rm " << pretty_binary_string(it->key())
-	       << dendl;
-      it->next();
-    }
+    txc->t->rm_range_keys(prefix, key_first, key_last);
+    dout(30) << __func__ << "remove range start: "
+             << pretty_binary_string(key_first) << " end: "
+             << pretty_binary_string(key_last) << dendl;
   }
   txc->note_modified_object(o);
 
