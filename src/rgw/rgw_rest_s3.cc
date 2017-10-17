@@ -2093,7 +2093,8 @@ int RGWCopyObj_ObjStore_S3::get_params()
     }
   }
 
-  const char *md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
+  copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
   if (md_directive) {
     if (strcasecmp(md_directive, "COPY") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_NONE;

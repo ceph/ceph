@@ -4546,11 +4546,27 @@ int RGWCopyObj::verify_permission()
   if (op_ret < 0) {
     return op_ret;
   }
-
+  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, store, dest_attrs, dest_bucket.tenant);
   /* admin request overrides permission checks */
-  if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id()) &&
-      ! dest_bucket_policy.verify_permission(*s->auth.identity, s->perm_mask,
-                                             RGW_PERM_WRITE)) {
+  if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id())){
+    if (dest_iam_policy != boost::none) {
+      rgw_add_to_iam_environment(s->env, "s3:x-amz-copy-source", copy_source);
+      rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive", md_directive);
+
+      auto e = dest_iam_policy->eval(s->env, *s->auth.identity,
+                                     rgw::IAM::s3PutObject,
+                                     ARN(dest_obj));
+      if (e == Effect::Deny) {
+        return -EACCES;
+      } else if (e == Effect::Pass &&
+                 ! dest_bucket_policy.verify_permission(*s->auth.identity,
+                                                        s->perm_mask,
+                                                        RGW_PERM_WRITE)){
+        return -EACCES;
+      }
+    }
+  } else if (! dest_bucket_policy.verify_permission(*s->auth.identity, s->perm_mask,
+                                                    RGW_PERM_WRITE)) {
     return -EACCES;
   }
 
