@@ -1313,10 +1313,29 @@ public:
 
   struct OnodeSpace {
   private:
+    struct ghobject_hash_helper_t : public ghobject_t {
+      uint32_t obj_hash;
+
+      ghobject_hash_helper_t(const ghobject_t& o)
+        : ghobject_t(o) {
+        static std::hash<object_t> H;
+        static std::hash<ghobject_t> I;
+        this->obj_hash = H(o.hobj.oid) ^ I(o);
+      }
+    };
+
+    struct onode_hasher_t {
+      size_t operator()(const ghobject_hash_helper_t &r) const {
+        return r.obj_hash;
+      }
+    };
+
     Cache *cache;
 
     /// forward lookups
-    mempool::bluestore_cache_other::unordered_map<ghobject_t,OnodeRef> onode_map;
+    mempool::bluestore_cache_other::unordered_map<ghobject_hash_helper_t,
+						  OnodeRef,
+						  onode_hasher_t> onode_map;
 
     friend class Collection; // for split_cache()
 
