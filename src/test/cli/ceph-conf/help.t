@@ -17,10 +17,14 @@
     -r|--resolve-search             search for the first file that exists and
                                     can be opened in the resulted comma
                                     delimited search list.
+    -D|--dump-all                   dump all variables.
   
   FLAGS
     --name name                     Set type.id
     [-s <section>]                  Add to list of sections to search
+    [--format plain|json|json-pretty]
+                                    dump variables in plain text, json or pretty
+                                    json
   
   If there is no action given, the action will default to --lookup.
   
