@@ -39,8 +39,6 @@ static const uint32_t BLOCK_SIZE = 512;
 
 static const uint64_t DEFAULT_POOL_SIZE = 10u<<30;
 static const uint64_t MIN_POOL_SIZE = 1u<<20;
-/* Appears in pool metadata, and is used as a component of type names */
-//#define RWL_POOL_LAYOUT_NAME ceph_rbd_rwl_1
 static const char* rwl_pool_layout_name = POBJ_LAYOUT_NAME(rbd_rwl);
 
 POBJ_LAYOUT_BEGIN(rbd_rwl);
