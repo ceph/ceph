@@ -2643,6 +2643,10 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     goto ignore;
   }
 
+  if (m->forced) {
+    return false;
+  }
+
   for (auto p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
     dout(20) << " " << p->first
 	     << (osdmap.pg_temp->count(p->first) ? osdmap.pg_temp->get(p->first) : empty)
@@ -5417,10 +5421,10 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
 
 int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
 {
-  int64_t max_pgs_per_osd = g_conf->get_val<int64_t>("mon_max_pg_per_osd");
-  int num_osds = MAX(osdmap.get_num_in_osds(), 3);   // assume min cluster size 3
-  int64_t max_pgs = max_pgs_per_osd * num_osds;
-  int64_t projected = 0;
+  auto max_pgs_per_osd = g_conf->get_val<uint64_t>("mon_max_pg_per_osd");
+  auto num_osds = std::max(osdmap.get_num_in_osds(), 3u);   // assume min cluster size 3
+  auto max_pgs = max_pgs_per_osd * num_osds;
+  uint64_t projected = 0;
   if (pool < 0) {
     projected += pg_num * size;
   }

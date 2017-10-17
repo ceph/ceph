@@ -1910,6 +1910,10 @@ protected:
   RWLock pg_map_lock; // this lock orders *above* individual PG _locks
   ceph::unordered_map<spg_t, PG*> pg_map; // protected by pg_map lock
 
+  std::mutex pending_creates_lock;
+  std::set<pg_t> pending_creates_from_osd;
+  unsigned pending_creates_from_mon = 0;
+
   map<spg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
 
@@ -1959,7 +1963,9 @@ protected:
     const PastIntervals& pi,
     epoch_t epoch,
     PG::CephPeeringEvtRef evt);
-  
+  bool maybe_wait_for_max_pg(spg_t pgid, bool is_mon_create);
+  void resume_creating_pg();
+
   void load_pgs();
 
   /// build initial pg history and intervals on create
