@@ -64,11 +64,19 @@ public:
 
   ~MonCommandCompletion() override
   {
-    Py_DECREF(python_completion);
+    if (python_completion) {
+      // Usually do this in finish(): this path is only for if we're
+      // being destroyed without completing.
+      Gil gil(pThreadState, true);
+      Py_DECREF(python_completion);
+      python_completion = nullptr;
+    }
   }
 
   void finish(int r) override
   {
+    assert(python_completion != nullptr);
+
     dout(10) << "MonCommandCompletion::finish()" << dendl;
     {
       // Scoped so the Gil is released before calling notify_all()
@@ -92,6 +100,10 @@ public:
 	Py_DECREF(rtn);
       }
       Py_DECREF(args);
+      Py_DECREF(set_fn);
+
+      Py_DECREF(python_completion);
+      python_completion = nullptr;
     }
     py_modules->notify_all("command", tag);
   }
