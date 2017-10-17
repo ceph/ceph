@@ -2395,14 +2395,14 @@ void PGMap::get_health_checks(
   // TOO_FEW_PGS
   unsigned num_in = osdmap.get_num_in_osds();
   auto sum_pg_up = std::max(static_cast<size_t>(pg_sum.up), pg_stat.size());
-  if (num_in &&
-      cct->_conf->mon_pg_warn_min_per_osd > 0 &&
-      osdmap.get_pools().size() > 0) {
+  const auto min_pg_per_osd =
+    cct->_conf->get_val<uint64_t>("mon_pg_warn_min_per_osd");
+  if (num_in && min_pg_per_osd > 0 && osdmap.get_pools().size() > 0) {
     auto per = sum_pg_up / num_in;
-    if (per < cct->_conf->mon_pg_warn_min_per_osd && per) {
+    if (per < min_pg_per_osd && per) {
       ostringstream ss;
       ss << "too few PGs per OSD (" << per
-	 << " < min " << cct->_conf->mon_pg_warn_min_per_osd << ")";
+	 << " < min " << min_pg_per_osd << ")";
       checks->add("TOO_FEW_PGS", HEALTH_WARN, ss.str());
     }
   }
