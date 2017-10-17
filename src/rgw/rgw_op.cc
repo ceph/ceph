@@ -3039,6 +3039,8 @@ int RGWPutObj::verify_permission()
     }
 
     rgw_add_to_iam_environment(s->env, "s3:x-amz-copy-source", copy_source);
+    rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive", copy_source);
+
     rgw_add_grant_to_iam_environment(s->env, s);
     /* admin request overrides permission checks */
     if (! s->auth.identity->is_admin_of(cs_acl.get_owner().get_id())) {
