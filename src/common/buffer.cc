@@ -212,11 +212,12 @@ using namespace ceph;
       }
     }
 
+private:
     // no copying.
     // cppcheck-suppress noExplicitConstructor
-    raw(const raw &other);
-    const raw& operator=(const raw &other);
-
+    raw(const raw &other) = delete;
+    const raw& operator=(const raw &other) = delete;
+public:
     virtual char *get_data() {
       return data;
     }
