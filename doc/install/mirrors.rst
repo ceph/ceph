@@ -24,7 +24,7 @@ These mirrors are available on the following locations:
 - **UK: UK**: http://uk.ceph.com
 - **US-East: US East Coast**: http://us-east.ceph.com/
 - **US-West: US West Coast**: http://us-west.ceph.com/
-- **CN: China**: http://cn.ceph.com/
+- **CN: China**: http://mirrors.ustc.edu.cn/ceph/
 
 You can replace all download.ceph.com URLs with any of the mirrors, for example:
 
