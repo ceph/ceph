@@ -573,7 +573,14 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, std::string&& key, std
 }
 
 void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const std::string& key, const std::string& val){
-  e[key] = val;
+  if (!val.empty())
+    e[key] = val;
+}
+
+
+void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const char* key, const char* val){
+  if (key != nullptr && val != nullptr)
+    e[key] = val;
 }
 
 static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
