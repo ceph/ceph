@@ -4,9 +4,10 @@ overrides:
     vars:
       ceph_conf_overrides:
           global:
-            osd_default_pool_size: 2
-            osd_pool_default_pg_num: 128
-            osd_pool_default_pgp_num: 128
+            osd default pool size: 2
+            osd pool default pg num: 64
+            osd pool default pgp num: 64
+            mon max pg per osd: 1024
       dmcrypt_journal_collocation: true
       ceph_stable_release: luminous
       ceph_origin: distro
