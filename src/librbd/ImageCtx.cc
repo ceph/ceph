@@ -22,6 +22,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
+#include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/LibrbdWriteback.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
