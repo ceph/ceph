@@ -48,6 +48,9 @@ enum {
 
   l_librbd_invalidate_cache,
 
+  l_librbd_opened_time,
+  l_librbd_lock_acquired_time,
+
   l_librbd_last,
 };
 
