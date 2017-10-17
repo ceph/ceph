@@ -69,14 +69,6 @@ endif()
 
 add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 
-if(WITH_BLUEFS)
-  add_library(bluefs SHARED 
-    bluestore/BlueRocksEnv.cc)
-  target_include_directories(bluefs PUBLIC ${ROCKSDB_INCLUDE_DIR})
-  target_link_libraries(bluefs global)
-  install(TARGETS bluefs DESTINATION lib)
-endif(WITH_BLUEFS)
-
 if(HAVE_LIBAIO)
   target_link_libraries(os ${AIO_LIBRARIES})
 endif(HAVE_LIBAIO)
@@ -97,7 +89,8 @@ if(WITH_SPDK)
    set(DPDK_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/include)
    set(check_LIBRARIES ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/lib/librte_eal.a
                        ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/lib/librte_mempool.a
-                       ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/lib/librte_ring.a)
+                       ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/lib/librte_ring.a
+                       ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/lib/librte_mempool_ring.a)
    set(DPDK_LIBRARIES -Wl,--whole-archive ${check_LIBRARIES} -Wl,--no-whole-archive)
    target_link_libraries(os
     ${SPDK_LIBRARIES}
@@ -127,15 +120,12 @@ if(HAVE_LIBAIO)
 endif()
 
 if(WITH_SPDK)
+  include(BuildDpdk)
   include_directories("${CMAKE_SOURCE_DIR}/src/spdk/include")
-  add_custom_target(build_dpdk
-    COMMAND
-    make config T=x86_64-native-linuxapp-gcc && make EXTRA_CFLAGS="-fPIC"
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/dpdk
-    COMMENT "dpdk building")
   add_custom_target(build_spdk
     COMMAND
-    $(MAKE) DPDK_DIR=${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build
+	$(MAKE) DPDK_DIR=${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build
+    DEPENDS build_dpdk
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk
     COMMENT "spdk building")
   # TODO: should use add_library(spdk INTERFACE IMPORTED) instead in new cmake,
