@@ -4169,7 +4169,7 @@ int OSD::handle_pg_peering_evt(
 bool OSD::maybe_wait_for_max_pg(spg_t pgid, bool is_mon_create)
 {
   const auto max_pgs_per_osd =
-    (cct->_conf->get_val<int64_t>("mon_max_pg_per_osd") *
+    (cct->_conf->get_val<uint64_t>("mon_max_pg_per_osd") *
      cct->_conf->get_val<double>("osd_max_pg_per_osd_hard_ratio"));
 
   RWLock::RLocker pg_map_locker{pg_map_lock};
@@ -4205,7 +4205,7 @@ void OSD::resume_creating_pg()
   assert(pg_map_lock.is_locked());
 
   const auto max_pgs_per_osd =
-    (cct->_conf->get_val<int64_t>("mon_max_pg_per_osd") *
+    (cct->_conf->get_val<uint64_t>("mon_max_pg_per_osd") *
      cct->_conf->get_val<double>("osd_max_pg_per_osd_hard_ratio"));
   if (max_pgs_per_osd <= pg_map.size()) {
     // this could happen if admin decreases this setting before a PG is removed
