@@ -322,10 +322,8 @@ int RocksDBStore::create_and_open(ostream &out,
   }
 }
 
-int RocksDBStore::do_open(ostream &out, bool create_if_missing,
-			  const vector<ColumnFamily>* cfs)
+int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt)
 {
-  rocksdb::Options opt;
   rocksdb::Status status;
 
   if (options_str.length()) {
@@ -440,6 +438,20 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing,
 	   << dendl;
 
   opt.merge_operator.reset(new MergeOperatorRouter(*this));
+
+  return 0;
+}
+
+int RocksDBStore::do_open(ostream &out, bool create_if_missing,
+			  const vector<ColumnFamily>* cfs)
+{
+  rocksdb::Options opt;
+  int r = load_rocksdb_options(create_if_missing, opt);
+  if (r) {
+    dout(1) << __func__ << " load rocksdb options failed" << dendl;
+    return r;
+  }
+  rocksdb::Status status;
   if (create_if_missing) {
     status = rocksdb::DB::Open(opt, path, &db);
     if (!status.ok()) {
@@ -616,6 +628,24 @@ void RocksDBStore::close()
 
   if (logger)
     cct->get_perfcounters_collection()->remove(logger);
+}
+
+int RocksDBStore::repair(std::ostream &out)
+{
+  rocksdb::Options opt;
+  int r = load_rocksdb_options(false, opt);
+  if (r) {
+    dout(1) << __func__ << " load rocksdb options failed" << dendl;
+    out << "load rocksdb options failed" << std::endl;
+    return r;
+  }
+  rocksdb::Status status = rocksdb::RepairDB(path, opt);
+  if (status.ok()) {
+    return 0;
+  } else {
+    out << "repair rocksdb failed : " << status.ToString() << std::endl;
+    return 1;
+  }
 }
 
 void RocksDBStore::split_stats(const std::string &s, char delim, std::vector<std::string> &elems) {
