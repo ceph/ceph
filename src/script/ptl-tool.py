@@ -20,7 +20,7 @@
 #
 # Merging PR #1234567 and #2345678 into a new test branch with a testing label added to the PR:
 #
-# $ env PTL_TOOL_BASE_PATH=refs/remotes/upstream/ src/script/ptl-tool.py --base master 1234567 2345678
+# $ src/script/ptl-tool.py --base master 1234567 2345678 --label wip-pdonnell-testing
 # Detaching HEAD onto base: master
 # Merging PR #1234567
 # Labeled PR #1234567 wip-pdonnell-testing
@@ -33,7 +33,7 @@
 #
 # Merging PR #1234567 into master leaving a detached HEAD (i.e. do not update your repo's master branch) and do not label:
 #
-# $ env PTL_TOOL_BASE_PATH=refs/remotes/upstream/ src/script/ptl-tool.py --base master --branch HEAD --merge-branch-name --label - master 1234567
+# $ src/script/ptl-tool.py --base master --branch HEAD --merge-branch-name master 1234567
 # Detaching HEAD onto base: master
 # Merging PR #1234567
 # Leaving HEAD detached; no branch anchors your commits
@@ -44,7 +44,7 @@
 #
 # Merging PR #12345678 into luminous leaving a detached HEAD (i.e. do not update your repo's master branch) and do not label:
 #
-# $ env PTL_TOOL_BASE_PATH=refs/remotes/upstream/ src/script/ptl-tool.py --base luminous --branch HEAD --merge-branch-name luminous --label - 12345678
+# $ src/script/ptl-tool.py --base luminous --branch HEAD --merge-branch-name luminous 12345678
 # Detaching HEAD onto base: luminous
 # Merging PR #12345678
 # Leaving HEAD detached; no branch anchors your commits
@@ -93,7 +93,6 @@ USER = getpass.getuser()
 with open(expanduser("~/.github.key")) as f:
     PASSWORD = f.read().strip()
 BRANCH_PREFIX = "wip-%s-testing-" % USER
-TESTING_LABEL = "wip-%s-testing" % USER
 TESTING_BRANCH_NAME = BRANCH_PREFIX + datetime.datetime.now().strftime("%Y%m%d")
 
 SPECIAL_BRANCHES = ('master', 'luminous', 'jewel', 'HEAD')
@@ -120,7 +119,7 @@ def build_branch(args):
     branch = args.branch
     label = args.label
 
-    if label and label != '-':
+    if label:
         #Check the label format
         if re.search(r'\bwip-(.*?)-testing\b', label) is None:
             log.error("Unknown Label '{lblname}'. Label Format: wip-<name>-testing".format(lblname=label))
@@ -253,7 +252,7 @@ def build_branch(args):
 
         G.git.merge(c.hexsha, '--no-ff', m=message)
 
-        if label and label != '-':
+        if label:
             req = requests.post("https://api.github.com/repos/ceph/ceph/issues/{pr}/labels".format(pr=pr), data=json.dumps([label]), auth=(USER, PASSWORD))
             if req.status_code != 200:
                 log.error("PR #%d could not be labeled %s: %s" % (pr, label, req))
@@ -286,7 +285,7 @@ def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
     default_base = 'master'
     default_branch = TESTING_BRANCH_NAME
-    default_label = TESTING_LABEL
+    default_label = ''
     if len(sys.argv) > 1 and sys.argv[1] in SPECIAL_BRANCHES:
         argv = sys.argv[2:]
         default_branch = 'HEAD' # Leave HEAD deatched
