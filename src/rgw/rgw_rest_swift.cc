@@ -79,10 +79,8 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 }
 
 static void dump_account_metadata(struct req_state * const s,
-                                  const uint32_t buckets_count,
-                                  const uint64_t buckets_object_count,
-                                  const uint64_t buckets_size,
-                                  const uint64_t buckets_size_rounded,
+                                  const RGWUsageStats& global_stats,
+                                  const std::map<std::string, RGWUsageStats> policies_stats,
                                   /* const */map<string, bufferlist>& attrs,
                                   const RGWQuotaInfo& quota,
                                   const RGWAccessControlPolicy_SWIFTAcct &policy)
@@ -90,10 +88,24 @@ static void dump_account_metadata(struct req_state * const s,
   /* Adding X-Timestamp to keep align with Swift API */
   dump_header(s, "X-Timestamp", ceph_clock_now());
 
-  dump_header(s, "X-Account-Container-Count", buckets_count);
-  dump_header(s, "X-Account-Object-Count", buckets_object_count);
-  dump_header(s, "X-Account-Bytes-Used", buckets_size);
-  dump_header(s, "X-Account-Bytes-Used-Actual", buckets_size_rounded);
+  dump_header(s, "X-Account-Container-Count", global_stats.buckets_count);
+  dump_header(s, "X-Account-Object-Count", global_stats.objects_count);
+  dump_header(s, "X-Account-Bytes-Used", global_stats.bytes_used);
+  dump_header(s, "X-Account-Bytes-Used-Actual", global_stats.bytes_used_rounded);
+
+  for (const auto& kv : policies_stats) {
+    const auto& policy_name = camelcase_dash_http_attr(kv.first);
+    const auto& policy_stats = kv.second;
+
+    dump_header_infixed(s, "X-Account-Storage-Policy-", policy_name,
+                        "-Container-Count", policy_stats.buckets_count);
+    dump_header_infixed(s, "X-Account-Storage-Policy-", policy_name,
+                        "-Object-Count", policy_stats.objects_count);
+    dump_header_infixed(s, "X-Account-Storage-Policy-", policy_name,
+                        "-Bytes-Used", policy_stats.bytes_used);
+    dump_header_infixed(s, "X-Account-Storage-Policy-", policy_name,
+                        "-Bytes-Used-Actual", policy_stats.bytes_used_rounded);
+  }
 
   /* Dump TempURL-related stuff */
   if (s->perm_mask == RGW_PERM_FULL_CONTROL) {
@@ -156,10 +168,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
   if (! s->cct->_conf->rgw_swift_enforce_content_length) {
     /* Adding account stats in the header to keep align with Swift API */
     dump_account_metadata(s,
-            buckets_count,
-            buckets_objcount,
-            buckets_size,
-            buckets_size_rounded,
+            global_stats,
+            policies_stats,
             attrs,
             user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
@@ -263,10 +273,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
   if (s->cct->_conf->rgw_swift_enforce_content_length) {
     /* Adding account stats in the header to keep align with Swift API */
     dump_account_metadata(s,
-            buckets_count,
-            buckets_objcount,
-            buckets_size,
-            buckets_size_rounded,
+            global_stats,
+            policies_stats,
             attrs,
             user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
@@ -525,10 +533,8 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
     dump_account_metadata(s,
-            buckets_count,
-            buckets_objcount,
-            buckets_size,
-            buckets_size_rounded,
+            global_stats,
+            policies_stats,
             attrs,
             user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
