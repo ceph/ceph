@@ -212,6 +212,8 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   std::cout << "bench "
        << " type " << (io_type == IO_TYPE_READ ? "read" :
                        io_type == IO_TYPE_WRITE ? "write" : "readwrite")
+       << (io_type == IO_TYPE_RW ? " read:write=" +
+           to_string(read_proportion) + ":" + to_string(100 - read_proportion) : "")
        << " io_size " << io_size
        << " io_threads " << io_threads
        << " bytes " << io_bytes
