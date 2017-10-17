@@ -363,14 +363,24 @@ struct C_InvalidateCache : public Context {
   }
 
   void ImageCtx::perf_start(string name) {
+    auto perf_prio = PerfCountersBuilder::PRIO_DEBUGONLY;
+    if (child == nullptr) {
+      // ensure top-level IO stats are exported for librbd daemons
+      perf_prio = PerfCountersBuilder::PRIO_USEFUL;
+    }
+
     PerfCountersBuilder plb(cct, name, l_librbd_first, l_librbd_last);
 
-    plb.add_u64_counter(l_librbd_rd, "rd", "Reads");
-    plb.add_u64_counter(l_librbd_rd_bytes, "rd_bytes", "Data size in reads");
-    plb.add_time_avg(l_librbd_rd_latency, "rd_latency", "Latency of reads");
-    plb.add_u64_counter(l_librbd_wr, "wr", "Writes");
-    plb.add_u64_counter(l_librbd_wr_bytes, "wr_bytes", "Written data");
-    plb.add_time_avg(l_librbd_wr_latency, "wr_latency", "Write latency");
+    plb.add_u64_counter(l_librbd_rd, "rd", "Reads", "r", perf_prio);
+    plb.add_u64_counter(l_librbd_rd_bytes, "rd_bytes", "Data size in reads",
+                        "rb", perf_prio);
+    plb.add_time_avg(l_librbd_rd_latency, "rd_latency", "Latency of reads",
+                     "rl", perf_prio);
+    plb.add_u64_counter(l_librbd_wr, "wr", "Writes", "w", perf_prio);
+    plb.add_u64_counter(l_librbd_wr_bytes, "wr_bytes", "Written data",
+                        "wb", perf_prio);
+    plb.add_time_avg(l_librbd_wr_latency, "wr_latency", "Write latency",
+                     "wl", perf_prio);
     plb.add_u64_counter(l_librbd_discard, "discard", "Discards");
     plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes", "Discarded data");
     plb.add_time_avg(l_librbd_discard_latency, "discard_latency", "Discard latency");
