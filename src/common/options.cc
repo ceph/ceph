@@ -1052,7 +1052,7 @@ std::vector<Option> get_global_options() {
     .set_default(30)
     .set_description(""),
 
-    Option("mon_max_pg_per_osd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_max_pg_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(200)
     .set_description("Max number of PGs per OSD the cluster will allow"),
 
