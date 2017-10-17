@@ -51,7 +51,7 @@ suitable for installation we recommend you build deb or rpm packages,
 or refer to the `ceph.spec.in` or `debian/rules` to see which
 configuration options are specified for production builds.
 
-Prerequisite: CMake 2.8.11
+Prerequisite: CMake 2.8.12
 
 Build instructions:
 
