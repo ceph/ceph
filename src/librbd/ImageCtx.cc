@@ -407,8 +407,15 @@ struct C_InvalidateCache : public Context {
     plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes", "Data size in read ahead");
     plb.add_u64_counter(l_librbd_invalidate_cache, "invalidate_cache", "Cache invalidates");
 
+    plb.add_time(l_librbd_opened_time, "opened_time", "Opened time",
+                 "ots", perf_prio);
+    plb.add_time(l_librbd_lock_acquired_time, "lock_acquired_time",
+                 "Lock acquired time", "lats", perf_prio);
+
     perfcounter = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perfcounter);
+
+    perfcounter->tset(l_librbd_opened_time, ceph_clock_now());
   }
 
   void ImageCtx::perf_stop() {

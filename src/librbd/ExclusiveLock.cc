@@ -274,6 +274,8 @@ void ExclusiveLock<I>::handle_post_acquired_lock(int r) {
   }
 
   if (r >= 0) {
+    m_image_ctx.perfcounter->tset(l_librbd_lock_acquired_time,
+                                  ceph_clock_now());
     m_image_ctx.image_watcher->notify_acquired_lock();
     m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_BOTH, false);
     m_image_ctx.io_work_queue->unblock_writes();
