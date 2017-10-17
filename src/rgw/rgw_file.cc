@@ -1894,8 +1894,14 @@ int rgw_write(struct rgw_fs *rgw_fs,
   if (! rgw_fh->is_file())
     return -EISDIR;
 
-  if (! rgw_fh->is_open())
-    return -EPERM;
+  if (! rgw_fh->is_open()) {
+    if (flags & RGW_OPEN_FLAG_V3) {
+      rc = rgw_fh->open(flags);
+      if (!! rc)
+	return rc;
+    } else
+      return -EPERM;
+  }
 
   rc = rgw_fh->write(offset, length, bytes_written, buffer);
 
