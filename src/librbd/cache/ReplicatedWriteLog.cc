@@ -878,6 +878,9 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
 
   if (!is_block_aligned(image_extents)) {
     lderr(cct) << "unaligned write fails" << dendl;
+    for (auto &extent : image_extents) {
+      lderr(cct) << "start: " << extent.first << " length: " << extent.second << dendl;
+    }
     on_finish->complete(-EINVAL);
     return;
   }
@@ -1057,8 +1060,30 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
 
   ldout(cct,5) << "rbd_rwl_enabled:" << cct->_conf->get_val<bool>("rbd_rwl_enabled") << dendl;
   ldout(cct,5) << "rbd_rwl_size:" << cct->_conf->get_val<uint64_t>("rbd_rwl_size") << dendl;
-  ldout(cct,5) << "rbd_rwl_path:" << cct->_conf->get_val<std::string>("rbd_rwl_path") << dendl;
+  std::string rwl_path = cct->_conf->get_val<std::string>("rbd_rwl_path");
+  ldout(cct,5) << "rbd_rwl_path:" << rwl_path << dendl;
 
+  m_log_pool_name = rwl_path + "/rbd_rwl." + m_image_ctx.id + ".pool";
+
+  
+  if (access(m_log_pool_name.c_str(), F_OK) != 0) {
+    if ((m_log_pool =
+	 pmemobj_create(m_log_pool_name.c_str(),
+			POBJ_LAYOUT_NAME(array),
+			PMEMOBJ_MIN_POOL,
+			(S_IWUSR | S_IRUSR))) == NULL) {
+      //printf("failed to create pool\n");
+      //return 1;
+    }
+  } else {
+    if ((m_log_pool =
+	 pmemobj_open(m_log_pool_name.c_str(),
+		      POBJ_LAYOUT_NAME(array))) == NULL) {
+      //printf("failed to open pool\n");
+      //return 1;
+    }
+  }
+  
   bufferlist meta_bl;
   // chain the initialization of the meta, image, and journal stores
   Context *ctx = new FunctionContext(
@@ -1124,6 +1149,7 @@ void ReplicatedWriteLog<I>::shut_down(Context *on_finish) {
       delete m_journal_store;
       delete m_image_store;
       delete m_meta_store;
+      pmemobj_close(m_log_pool);
       on_finish->complete(r);
     });
   ctx = new FunctionContext(

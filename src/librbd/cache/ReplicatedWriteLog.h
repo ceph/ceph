@@ -4,6 +4,10 @@
 #ifndef CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
 #define CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
 
+//#if defined(HAVE_PMEM)
+//#include <libpmem.h>
+#include <libpmemobj.h>
+//#endif
 #include "librbd/cache/ImageCache.h"
 #include "librbd/cache/FileImageCache.h"
 #include "librbd/Utils.h"
@@ -67,7 +71,9 @@ private:
 
   uint64_t m_free_log_entries;
   uint64_t m_free_blocks;
-  
+  std::string m_log_pool_name;
+  static PMEMobjpool *m_log_pool;
+
   ImageCtxT &m_image_ctx;
   ImageWriteback<ImageCtxT> m_image_writeback;
   FileImageCache<ImageCtxT> m_image_cache;
