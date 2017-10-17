@@ -4202,45 +4202,50 @@ static vector<int32_t> twiddle(const vector<int>& acting) {
 
 void OSD::resume_creating_pg()
 {
-  assert(pg_map_lock.is_locked());
-
-  const auto max_pgs_per_osd =
-    (cct->_conf->get_val<uint64_t>("mon_max_pg_per_osd") *
-     cct->_conf->get_val<double>("osd_max_pg_per_osd_hard_ratio"));
-  if (max_pgs_per_osd <= pg_map.size()) {
-    // this could happen if admin decreases this setting before a PG is removed
-    return;
+  bool do_sub_pg_creates = false;
+  MOSDPGTemp *pgtemp = nullptr;
+  {
+    const auto max_pgs_per_osd =
+      (cct->_conf->get_val<uint64_t>("mon_max_pg_per_osd") *
+       cct->_conf->get_val<double>("osd_max_pg_per_osd_hard_ratio"));
+    RWLock::RLocker l(pg_map_lock);
+    if (max_pgs_per_osd <= pg_map.size()) {
+      // this could happen if admin decreases this setting before a PG is removed
+      return;
+    }
+    unsigned spare_pgs = max_pgs_per_osd - pg_map.size();
+    auto&& locker = guardedly_lock(pending_creates_lock);
+    if (pending_creates_from_mon > 0) {
+      do_sub_pg_creates = true;
+      if (pending_creates_from_mon >= spare_pgs) {
+	spare_pgs = pending_creates_from_mon = 0;
+      } else {
+	spare_pgs -= pending_creates_from_mon;
+	pending_creates_from_mon = 0;
+      }
+    }
+    auto pg = pending_creates_from_osd.cbegin();
+    while (spare_pgs > 0 && pg != pending_creates_from_osd.cend()) {
+      if (!pgtemp) {
+	pgtemp = new MOSDPGTemp{osdmap->get_epoch()};
+      }
+      vector<int> acting;
+      osdmap->pg_to_up_acting_osds(*pg, nullptr, nullptr, &acting, nullptr);
+      pgtemp->pg_temp[*pg] = twiddle(acting);
+      pg = pending_creates_from_osd.erase(pg);
+      spare_pgs--;
+    }
   }
-  unsigned spare_pgs = max_pgs_per_osd - pg_map.size();
-  assert(spare_pgs > 0);
-
-  auto&& locker = guardedly_lock(pending_creates_lock);
-  if (pending_creates_from_mon > 0) {
+  if (do_sub_pg_creates) {
     if (monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0)) {
       dout(4) << __func__ << ": resolicit pg creates from mon since "
 	      << last_pg_create_epoch << dendl;
       monc->renew_subs();
     }
-    if (spare_pgs <= pending_creates_from_mon) {
-      pending_creates_from_mon = 0;
-      return;
-    }
-    spare_pgs -= pending_creates_from_mon;
-    pending_creates_from_mon = 0;
   }
-  if (!pending_creates_from_osd.empty()) {
-    auto m = new MOSDPGTemp(osdmap->get_epoch());
-    for (auto pg = pending_creates_from_osd.cbegin();
-	 pg != pending_creates_from_osd.cend();) {
-      vector<int> acting;
-      osdmap->pg_to_up_acting_osds(*pg, nullptr, nullptr, &acting, nullptr);
-      m->pg_temp[*pg] = twiddle(acting);
-      pg = pending_creates_from_osd.erase(pg);
-      if (--spare_pgs == 0)
-	break;
-    }
-    m->forced = true;
-    monc->send_mon_message(m);
+  if (pgtemp) {
+    pgtemp->forced = true;
+    monc->send_mon_message(pgtemp);
   }
 }
 
@@ -4986,6 +4991,7 @@ void OSD::tick_without_osd_lock()
       sched_scrub();
     }
     service.promote_throttle_recalibrate();
+    resume_creating_pg();
     bool need_send_beacon = false;
     const auto now = ceph::coarse_mono_clock::now();
     {
@@ -8815,10 +8821,7 @@ void OSD::_remove_pg(PG *pg)
   // remove from map
   pg_map.erase(pg->pg_id);
   pg->put("PGMap"); // since we've taken it out of map
-
-  resume_creating_pg();
 }
-
 
 // =========================================================
 // RECOVERY
