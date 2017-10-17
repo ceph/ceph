@@ -305,8 +305,10 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
   jf.flush(*_dout);
   *_dout << dendl;
 
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->set_health_checks(self->this_module->get_name(),
                                       std::move(out_checks));
+  PyEval_RestoreThread(tstate);
   
   Py_RETURN_NONE;
 }
@@ -493,7 +495,9 @@ ceph_set_uri(BaseMgrModule *self, PyObject *args)
   // We call down into PyModules even though we have a MgrPyModule
   // reference here, because MgrPyModule's fields are protected
   // by PyModules' lock.
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->set_uri(self->this_module->get_name(), svc_str);
+  PyEval_RestoreThread(tstate);
 
   Py_RETURN_NONE;
 }
