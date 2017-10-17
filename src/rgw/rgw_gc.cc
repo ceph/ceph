@@ -169,6 +169,8 @@ int RGWGC::process(int index, int max_secs)
       goto done;
 
     string last_pool;
+    bool refcount_put = false;
+    bool refcount_is_zero = false;    
     std::list<cls_rgw_gc_obj_info>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
       bool remove_tag;
@@ -201,14 +203,37 @@ int RGWGC::process(int index, int max_secs)
 
 	dout(5) << "gc::process: removing " << obj.pool << ":" << obj.key.name << dendl;
 	ObjectWriteOperation op;
-	cls_refcount_put(op, info.tag, true);
-        ret = ctx->operate(oid, &op);
-	if (ret == -ENOENT)
-	  ret = 0;
-        if (ret < 0) {
-          remove_tag = false;
-          dout(0) << "failed to remove " << obj.pool << ":" << oid << "@" << obj.loc << dendl;
-        }
+
+  if (refcount_is_zero) {
+    cls_refcount_put(op, info.tag, true);
+    ret = ctx->operate(oid, &op);
+    if (ret == -ENOENT)
+      ret = 0;
+    if (ret < 0) {
+      remove_tag = false;
+      dout(0) << "failed to remove " << obj.pool << ":" << oid << "@" << obj.loc << dendl;
+    }    /* code */
+  }
+
+  if (! refcount_put) {
+    cls_refcount_put(op, info.tag, true);
+    ret = ctx->operate(oid, &op);
+    if (ret == -ENOENT)
+      ret = 0;
+    if (ret < 0) {
+      remove_tag = false;
+      dout(0) << "failed to remove " << obj.pool << ":" << oid << "@" << obj.loc << dendl;
+    }
+
+    refcount_put = true;
+
+    std::list<string> refs;
+    cls_refcount_read(*ctx, obj.key.name, &refs, true);
+    if (refs.empty()) {
+      // the refcount is 0
+      refcount_is_zero = true;
+    }
+  }
 
         if (going_down()) // leave early, even if tag isn't removed, it's ok
           goto done;
