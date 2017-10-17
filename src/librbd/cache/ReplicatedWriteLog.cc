@@ -34,6 +34,7 @@ typedef std::function<void(uint64_t)> ReleaseBlock;
 typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
 
 static const uint32_t BLOCK_SIZE = 512;
+static const uint64_t DEFAULT_POOL_SIZE = 10u<<30;
 
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
   for (auto &extent : image_extents) {
@@ -821,15 +822,15 @@ struct C_WritebackRequest : public Context {
 
 template <typename I>
 ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
-  : m_image_ctx(image_ctx), m_image_writeback(image_ctx),
-    m_image_cache(image_ctx),
+  : m_image_ctx(image_ctx), 
+    m_log_pool_size(DEFAULT_POOL_SIZE), m_free_log_entries(0), m_free_blocks(0),
+    m_image_writeback(image_ctx), m_image_cache(image_ctx),
     m_block_guard(image_ctx.cct, 256, BLOCK_SIZE),
-    m_policy(new StupidPolicy<I>(m_image_ctx, m_block_guard)),
     m_release_block(std::bind(&ReplicatedWriteLog<I>::release_block, this,
                               std::placeholders::_1)),
     m_lock("librbd::cache::ReplicatedWriteLog::m_lock") {
-  CephContext *cct = m_image_ctx.cct;
-  uint8_t write_mode = cct->_conf->get_val<bool>("rbd_persistent_cache_writeback")?1:0;
+  //CephContext *cct = m_image_ctx.cct;
+  m_policy = new StupidPolicy<I>(m_image_ctx, m_block_guard);
   m_policy->set_write_mode(0);
 }
 
@@ -841,7 +842,7 @@ ReplicatedWriteLog<I>::~ReplicatedWriteLog() {
 template <typename I>
 void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
                                  int fadvise_flags, Context *on_finish) {
-  CephContext *cct = m_image_ctx.cct;
+  //CephContext *cct = m_image_ctx.cct;
   //ldout(cct, 20) << "image_extents=" << image_extents << ", "
   //               << "on_finish=" << on_finish << dendl;
 
@@ -876,6 +877,7 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
     }
   }
 
+  // TODO: Handle unaligned IO
   if (!is_block_aligned(image_extents)) {
     lderr(cct) << "unaligned write fails" << dendl;
     for (auto &extent : image_extents) {
@@ -1038,9 +1040,11 @@ void ReplicatedWriteLog<I>::aio_compare_and_write(Extents &&image_extents,
   // TODO:
   // Compare source may be RWL, image cache, or image.
   // Write will be to RWL
-  CephContext *cct = m_image_ctx.cct;
-//  ldout(cct, 20) << "image_extents=" << image_extents << ", "
-//                 << "on_finish=" << on_finish << dendl;
+
+  //CephContext *cct = m_image_ctx.cct;
+
+  //ldout(cct, 20) << "image_extents=" << image_extents << ", "
+  //               << "on_finish=" << on_finish << dendl;
 
   if (m_image_ctx.persistent_cache_enabled) {
     m_image_cache.aio_compare_and_write(
@@ -1064,7 +1068,6 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
   ldout(cct,5) << "rbd_rwl_path:" << rwl_path << dendl;
 
   m_log_pool_name = rwl_path + "/rbd_rwl." + m_image_ctx.id + ".pool";
-
   
   if (access(m_log_pool_name.c_str(), F_OK) != 0) {
     if ((m_log_pool =
@@ -1326,6 +1329,7 @@ void ReplicatedWriteLog<I>::process_work() {
     process_detained_block_ios();
     process_deferred_block_ios();
 
+#if 0
     // TODO
     Contexts post_work_contexts;
     {
@@ -1339,6 +1343,7 @@ void ReplicatedWriteLog<I>::process_work() {
       }
       continue;
     }
+#endif
   } while (false); // TODO need metric to only perform X amount of work per cycle
 
   // process delayed shut down request (if any)
@@ -1420,7 +1425,7 @@ void ReplicatedWriteLog<I>::process_deferred_block_ios() {
 template <typename I>
 void ReplicatedWriteLog<I>::invalidate(Extents&& image_extents,
                                    Context *on_finish) {
-  CephContext *cct = m_image_ctx.cct;
+  //CephContext *cct = m_image_ctx.cct;
   //ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
   // TODO - ensure sync with in-flight flushes
@@ -1450,6 +1455,7 @@ void ReplicatedWriteLog<I>::flush(Context *on_finish) {
   ldout(cct, 20) << dendl;
 
   // TODO -- need deferred set for tracking op ordering
+#if 0
   if (m_journal_store->is_writeback_pending()) {
     Mutex::Locker locker(m_lock);
     m_post_work_contexts.push_back(new FunctionContext(
@@ -1457,7 +1463,8 @@ void ReplicatedWriteLog<I>::flush(Context *on_finish) {
         flush(on_finish);
       }));
   }
-
+#endif
+  
   // image cache will be write-through, so no flush passed on
   on_finish->complete(0);
 

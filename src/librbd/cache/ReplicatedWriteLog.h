@@ -69,12 +69,15 @@ private:
   typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
   typedef std::list<Context *> Contexts;
 
+  ImageCtxT &m_image_ctx;
+
+  std::string m_log_pool_name;
+  PMEMobjpool *m_log_pool;
+  uint64_t m_log_pool_size;
+  
   uint64_t m_free_log_entries;
   uint64_t m_free_blocks;
-  std::string m_log_pool_name;
-  static PMEMobjpool *m_log_pool;
 
-  ImageCtxT &m_image_ctx;
   ImageWriteback<ImageCtxT> m_image_writeback;
   FileImageCache<ImageCtxT> m_image_cache;
   //BlockGuard m_persist_pending_guard;
