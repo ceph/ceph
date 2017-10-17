@@ -84,9 +84,6 @@ private:
   BlockGuard m_block_guard;
 
   file::Policy *m_policy = nullptr;
-  file::MetaStore<ImageCtx> *m_meta_store = nullptr;
-  file::JournalStore<ImageCtx> *m_journal_store = nullptr;
-  file::ImageStore<ImageCtx> *m_image_store = nullptr;
 
   ReleaseBlock m_release_block;
   AppendDetainedBlock m_detain_block;

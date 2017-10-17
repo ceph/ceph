@@ -18,7 +18,7 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::FileImageCache: " << this << " " \
+#define dout_prefix *_dout << "librbd::cache::ReplicatedWriteLog: " << this << " " \
                            <<  __func__ << ": "
 
 namespace librbd {
@@ -34,8 +34,54 @@ typedef std::function<void(uint64_t)> ReleaseBlock;
 typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
 
 static const uint32_t BLOCK_SIZE = 512;
-static const uint64_t DEFAULT_POOL_SIZE = 10u<<30;
 
+/**** Write log entries ****/
+
+static const uint64_t DEFAULT_POOL_SIZE = 10u<<30;
+static const uint64_t MIN_POOL_SIZE = 1u<<20;
+/* Appears in pool metadata, and is used as a component of type names */
+//#define RWL_POOL_LAYOUT_NAME ceph_rbd_rwl_1
+static const char* rwl_pool_layout_name = POBJ_LAYOUT_NAME(rbd_rwl);
+
+POBJ_LAYOUT_BEGIN(rbd_rwl);
+POBJ_LAYOUT_ROOT(rbd_rwl, struct WriteLogPoolRoot);
+POBJ_LAYOUT_TOID(rbd_rwl, uint8_t);
+POBJ_LAYOUT_TOID(rbd_rwl, struct WriteLogPmemEntry);
+POBJ_LAYOUT_END(rbd_rwl);
+
+struct WriteLogPmemEntry {
+  uint64_t image_offset_bytes;
+  uint64_t write_bytes;
+  uint64_t first_pool_block;
+  struct {
+    uint8_t unmap :1; /* first_pool_block will be NULL if this is an unmap */
+  };
+  WriteLogPmemEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
+    : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes), first_pool_block(0), unmap(0) {
+  }
+  WriteLogPmemEntry() {} 
+};
+
+struct WriteLogPoolRoot {
+  TOID(uint8_t) data_blocks;	         /* contiguous array of blocks */
+  TOID(struct WriteLogPmemEntry) log_entries;   /* contiguous array of log entries */
+  size_t bsize;			         /* block size */
+  size_t nblocks;		         /* number of available blocks */
+};
+
+struct WriteLogEntry {
+  WriteLogPmemEntry persisted;
+  WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
+    : persisted(image_offset_bytes, write_bytes) {
+  }
+  WriteLogEntry() {} 
+};
+  
+typedef std::list<WriteLogEntry> WriteLogEntries;
+typedef std::unordered_map<uint64_t, WriteLogEntry> BlockToWriteLogEntry;
+
+/**** Write log entries ****/
+  
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
   for (auto &extent : image_extents) {
     if (extent.first % BLOCK_SIZE != 0 || extent.second % BLOCK_SIZE != 0) {
@@ -45,16 +91,6 @@ bool is_block_aligned(const ImageCache::Extents &image_extents) {
   return true;
 }
 
-struct WriteLogEntry {
-  uint64_t image_offset_bytes;
-  uint64_t write_bytes;
-  WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
-    : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes) {
-  }
-};
-typedef std::list<WriteLogEntry> WriteLogEntries;
-typedef std::unordered_map<uint64_t, WriteLogEntry> BlockToWriteLogEntry;
-  
 struct C_BlockIORequest : public Context {
   CephContext *cct;
   C_BlockIORequest *next_block_request;
@@ -1067,13 +1103,15 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
   std::string rwl_path = cct->_conf->get_val<std::string>("rbd_rwl_path");
   ldout(cct,5) << "rbd_rwl_path:" << rwl_path << dendl;
 
-  m_log_pool_name = rwl_path + "/rbd_rwl." + m_image_ctx.id + ".pool";
+  m_log_pool_name = rwl_path + "/rbd-rwl." + m_image_ctx.id + ".pool";
+  m_log_pool_size = ceph::max(cct->_conf->get_val<uint64_t>("rbd_rwl_size"), MIN_POOL_SIZE);
+  m_policy->set_block_count(m_image_ctx.size / BLOCK_SIZE);
   
   if (access(m_log_pool_name.c_str(), F_OK) != 0) {
     if ((m_log_pool =
 	 pmemobj_create(m_log_pool_name.c_str(),
-			POBJ_LAYOUT_NAME(array),
-			PMEMOBJ_MIN_POOL,
+			rwl_pool_layout_name,
+			m_log_pool_size,
 			(S_IWUSR | S_IRUSR))) == NULL) {
       //printf("failed to create pool\n");
       //return 1;
@@ -1081,7 +1119,7 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
   } else {
     if ((m_log_pool =
 	 pmemobj_open(m_log_pool_name.c_str(),
-		      POBJ_LAYOUT_NAME(array))) == NULL) {
+		      rwl_pool_layout_name)) == NULL) {
       //printf("failed to open pool\n");
       //return 1;
     }
@@ -1092,45 +1130,9 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
       if (r >= 0) {
-        // TODO need to support dynamic image resizes
-        m_policy->set_block_count(
-          m_meta_store->offset_to_block(m_image_ctx.size));
+	// Init succeeded
       }
       on_finish->complete(r);
-    });
-  ctx = new FunctionContext(
-    [this, ctx](int r) {
-      if (r < 0) {
-        ctx->complete(r);
-        return;
-      }
-
-      // TODO: do not enable journal store if writeback disabled
-      m_journal_store = new JournalStore<I>(m_image_ctx, m_block_guard,
-                                            *m_meta_store);
-      m_journal_store->init(ctx);
-    });
-  ctx = new FunctionContext(
-    [this, meta_bl, ctx](int r) mutable {
-      if (r < 0) {
-        ctx->complete(r);
-        return;
-      }
-      //load meta_bl to policy entry
-      m_policy->bufferlist_to_entry(meta_bl);
-      m_image_store = new ImageStore<I>(m_image_ctx, *m_meta_store);
-      m_image_store->init(ctx);
-
-    });
-  ctx = new FunctionContext(
-    [this, meta_bl, ctx](int r) mutable {
-      if (r < 0) {
-        ctx->complete(r);
-        return;
-      }
-      m_meta_store = new MetaStore<I>(m_image_ctx, BLOCK_SIZE);
-      m_meta_store->set_entry_size(m_policy->get_entry_size());
-      m_meta_store->init(&meta_bl, ctx);
     });
   if (m_image_ctx.persistent_cache_enabled) {
     m_image_cache.init(ctx);
@@ -1146,59 +1148,22 @@ void ReplicatedWriteLog<I>::shut_down(Context *on_finish) {
 
   // TODO flush all in-flight IO and pending writeback prior to shut down
 
-  // chain the shut down of the journal, image, and meta stores
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
-      delete m_journal_store;
-      delete m_image_store;
-      delete m_meta_store;
       pmemobj_close(m_log_pool);
       on_finish->complete(r);
     });
-  ctx = new FunctionContext(
-    [this, ctx](int r) {
-      Context *next_ctx = ctx;
-      if (r < 0) {
-        next_ctx = new FunctionContext(
-          [r, ctx](int _r) {
-            ctx->complete(r);
-          });
-      }
-      if (m_image_ctx.persistent_cache_enabled) {
-	m_image_cache.shut_down(next_ctx);
-      } else {
-	ctx->complete(0);
-      }
-    });
-  ctx = new FunctionContext(
-    [this, ctx](int r) {
-      Context *next_ctx = ctx;
-      if (r < 0) {
-        next_ctx = new FunctionContext(
-          [r, ctx](int _r) {
-            ctx->complete(r);
-          });
-      }
-      m_meta_store->shut_down(next_ctx);
-    });
-  ctx = new FunctionContext(
-    [this, ctx](int r) {
-      Context *next_ctx = ctx;
-      if (r < 0) {
-        next_ctx = new FunctionContext(
-          [r, ctx](int _r) {
-            ctx->complete(r);
-          });
-      }
-      m_image_store->shut_down(next_ctx);
-    });
-  ctx = new FunctionContext(
-    [this, ctx](int r) {
-      m_journal_store->shut_down(ctx);
-    });
+  if (m_image_ctx.persistent_cache_enabled) {
+    ctx = new FunctionContext(
+      [this, ctx](int r) {
+        if (r < 0) ctx->complete(r);
+	m_image_cache.shut_down(ctx);
+      });
+  }
   ctx = new FunctionContext(
     [this, ctx](int r) {
       // flush writeback journal to OSDs
+      if (r < 0) ctx->complete(r);
       flush(ctx);
     });
 
@@ -1363,6 +1328,7 @@ bool ReplicatedWriteLog<I>::is_work_available() const {
 
 template <typename I>
 void ReplicatedWriteLog<I>::process_writeback_dirty_blocks() {
+#if 0
   CephContext *cct = m_image_ctx.cct;
 
   // TODO throttle the amount of in-flight writebacks
@@ -1390,6 +1356,7 @@ void ReplicatedWriteLog<I>::process_writeback_dirty_blocks() {
       demoted, BLOCK_SIZE);
     req->send();
   }
+#endif
 }
 
 template <typename I>
@@ -1433,14 +1400,13 @@ void ReplicatedWriteLog<I>::invalidate(Extents&& image_extents,
     uint64_t image_offset = extent.first;
     uint64_t image_length = extent.second;
     while (image_length > 0) {
-      uint64_t block = m_meta_store->offset_to_block(image_offset);
+      //uint64_t block = m_meta_store->offset_to_block(image_offset);
       uint32_t block_start_offset = image_offset % BLOCK_SIZE;
       uint32_t block_end_offset = MIN(block_start_offset + image_length,
                                       BLOCK_SIZE);
       uint32_t block_length = block_end_offset - block_start_offset;
 
-      m_policy->invalidate(block);
-
+      //m_policy->invalidate(block);
       image_offset += block_length;
       image_length -= block_length;
     }
