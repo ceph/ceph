@@ -853,9 +853,9 @@ std::string pg_state_string(int state)
   return ret;
 }
 
-int pg_string_state(const std::string& state)
+boost::optional<uint64_t> pg_string_state(const std::string& state)
 {
-  int type;
+  boost::optional<uint64_t> type;
   if (state == "active")
     type = PG_STATE_ACTIVE;
   else if (state == "clean")
@@ -909,7 +909,7 @@ int pg_string_state(const std::string& state)
   else if (state == "snaptrim_error")
     type = PG_STATE_SNAPTRIM_ERROR;
   else
-    type = -1;
+    type = boost::none;
   return type;
 }
 
