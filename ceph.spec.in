@@ -1636,6 +1636,8 @@ fi
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph-kvstore-tool
 %{_bindir}/ceph-debugpack
+%{_bindir}/ceph_omap_create
+%{_bindir}/ceph_omap_delete
 %{_mandir}/man8/ceph-debugpack.8*
 %{_mandir}/man8/ceph-kvstore-tool.8*
 %dir %{_libdir}/ceph

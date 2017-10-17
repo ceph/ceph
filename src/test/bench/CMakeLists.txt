@@ -76,9 +76,27 @@ add_executable(ceph_tpbench
 target_link_libraries(ceph_tpbench librados Boost::program_options global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
+# ceph_omap_create
+set(omap_create_srcs
+  omap_create.cc)
+add_executable(ceph_omap_create
+  ${omap_create_srcs}
+  )
+target_link_libraries(ceph_omap_create librados ${CMAKE_DL_LIBS})
+
+# ceph_omap_delete
+set(omap_delete_srcs
+  omap_delete.cc)
+add_executable(ceph_omap_delete
+  ${omap_delete_srcs}
+  )
+target_link_libraries(ceph_omap_delete librados ${CMAKE_DL_LIBS})
+
 install(TARGETS
   ceph_smalliobench
   ceph_smalliobenchfs
   ceph_smalliobenchdumb
   ceph_tpbench
+  ceph_omap_create
+  ceph_omap_delete
   DESTINATION bin)

@@ -442,6 +442,8 @@ ceph_test() {
 		ceph_smalliobenchdumb \
 		ceph_smalliobenchfs \
 		ceph_smalliobenchrbd \
+		ceph_omap_create \
+		ceph_omap_delete \
 		ceph_test_* \
 		ceph_tpbench \
 		ceph_xattr_bench \
