@@ -20,7 +20,7 @@
 #
 # Merging PR #1234567 and #2345678 into a new test branch with a testing label added to the PR:
 #
-# $ env PTL_TOOL_BASE_PATH=refs/remotes/upstream/ src/script/ptl-tool.py --base master 1234567 2345678
+# $ src/script/ptl-tool.py --base master 1234567 2345678 --label wip-pdonnell-testing
 # Detaching HEAD onto base: master
 # Merging PR #1234567
 # Labeled PR #1234567 wip-pdonnell-testing
@@ -33,7 +33,7 @@
 #
 # Merging PR #1234567 into master leaving a detached HEAD (i.e. do not update your repo's master branch) and do not label:
 #
-# $ env PTL_TOOL_BASE_PATH=refs/remotes/upstream/ src/script/ptl-tool.py --base master --branch HEAD --merge-branch-name --label - master 1234567
+# $ src/script/ptl-tool.py --base master --branch HEAD --merge-branch-name master 1234567
 # Detaching HEAD onto base: master
 # Merging PR #1234567
 # Leaving HEAD detached; no branch anchors your commits
@@ -44,7 +44,7 @@
 #
 # Merging PR #12345678 into luminous leaving a detached HEAD (i.e. do not update your repo's master branch) and do not label:
 #
-# $ env PTL_TOOL_BASE_PATH=refs/remotes/upstream/ src/script/ptl-tool.py --base luminous --branch HEAD --merge-branch-name luminous --label - 12345678
+# $ src/script/ptl-tool.py --base luminous --branch HEAD --merge-branch-name luminous 12345678
 # Detaching HEAD onto base: luminous
 # Merging PR #12345678
 # Leaving HEAD detached; no branch anchors your commits
