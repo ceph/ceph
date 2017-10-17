@@ -1048,9 +1048,9 @@ std::vector<Option> get_global_options() {
     .set_default(1)
     .set_description(""),
 
-    Option("mon_pg_warn_min_per_osd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_pg_warn_min_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
+    .set_description("minimal number PGs per (in) osd before we warn the admin"),
 
     Option("mon_max_pg_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(200)
