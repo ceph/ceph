@@ -258,7 +258,7 @@ Ceph configuration file.
 ``osd max pg per osd hard ratio``
 
 :Description: The ratio of number of PGs per OSD allowed by the cluster before
-              OSD refuses to create new PGs. OSD stops creates new PGs the number
+              OSD refuses to create new PGs. OSD stops creating new PGs if the number
               of PGs it serves exceeds
               ``osd max pg per osd hard ratio`` \* ``mon max pg per osd``.
 
