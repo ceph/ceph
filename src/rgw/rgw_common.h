@@ -412,15 +412,15 @@ public:
   bool exists_prefix(const char *prefix) const;
   void remove(const char *name);
   const std::map<string, string, ltstr_nocase>& get_map() const { return env_map; }
-  int rgw_conf_get_enable_ops_log() const {
+  int get_enable_ops_log() const {
     return conf.enable_ops_log;
   }
 
-  int rgw_conf_get_enable_usage_log() const {
+  int get_enable_usage_log() const {
     return conf.enable_usage_log;
   }
 
-  int rgw_conf_get_defer_to_bucket_acls() const {
+  int get_defer_to_bucket_acls() const {
     return conf.defer_to_bucket_acls;
   }
 };
