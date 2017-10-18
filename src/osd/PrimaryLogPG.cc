@@ -10165,7 +10165,7 @@ int PrimaryLogPG::recover_missing(
       }
     }
     head_obc = get_object_context(
-      soid.get_head(),
+      head,
       false,
       0);
     assert(head_obc);
