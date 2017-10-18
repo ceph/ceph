@@ -496,12 +496,13 @@ ClientLease *CDentry::add_client_lease(client_t c, Session *session)
     l = client_lease_map[c];
   else {
     dout(20) << "add_client_lease client." << c << " on " << lock << dendl;
-    if (client_lease_map.empty())
+    if (client_lease_map.empty()) {
       get(PIN_CLIENTLEASE);
+      lock.get_client_lease();
+    }
     l = client_lease_map[c] = new ClientLease(c, this);
     l->seq = ++session->lease_seq;
   
-    lock.get_client_lease();
   }
   
   return l;
@@ -514,17 +515,17 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
   bool gather = false;
 
   dout(20) << "remove_client_lease client." << l->client << " on " << lock << dendl;
-  lock.put_client_lease();
-  if (lock.get_num_client_lease() == 0 && !lock.is_stable())
-    gather = true;
 
   client_lease_map.erase(l->client);
   l->item_lease.remove_myself();
   l->item_session_lease.remove_myself();
   delete l;
 
-  if (client_lease_map.empty())
+  if (client_lease_map.empty()) {
+    gather = !lock.is_stable();
+    lock.put_client_lease();
     put(PIN_CLIENTLEASE);
+  }
 
   if (gather)
     locker->eval_gather(&lock);

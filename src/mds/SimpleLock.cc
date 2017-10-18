@@ -31,7 +31,7 @@ void SimpleLock::dump(Formatter *f) const {
   }
   f->close_section();
 
-  f->dump_int("num_client_lease", num_client_lease);
+  f->dump_bool("is_leased", is_leased());
   f->dump_int("num_rdlocks", get_num_rdlocks());
   f->dump_int("num_wrlocks", get_num_wrlocks());
   f->dump_int("num_xlocks", get_num_xlocks());
