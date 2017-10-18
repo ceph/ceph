@@ -81,6 +81,8 @@ import requests
 import sys
 
 from os.path import expanduser
+from email.utils import parseaddr
+from email_validator import validate_email, EmailNotValidError
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.StreamHandler())
@@ -222,13 +224,29 @@ def build_branch(args):
                         indications.add("Reviewed-by: "+NEW_CONTRIBUTORS[user])
                     except KeyError as e:
                         try:
-                            name = raw_input("Need name for contributor \"%s\"; Reviewed-by: " % user)
-                            name = name.strip()
-                            if len(name) == 0:
+                            nameandemail = raw_input("Enter Name and Email Address of the contributor \"%s\"; Reviewed-by: " % user)
+                            nameandemail = nameandemail.strip()
+                            if len(nameandemail) == 0:
                                 continue
-                            NEW_CONTRIBUTORS[user] = name
-                            new_new_contributors[user] = name
-                            indications.add("Reviewed-by: "+name)
+
+                            #Validate email address. Not validating name as we have non-english names.
+                            name = parseaddr(nameandemail)[0]
+                            email = parseaddr(nameandemail)[1]
+
+                            if not name or not email:
+                                log.error("Unknown Format. Syntax: Firstname Lastname <Email Address>")
+                                sys.exit(1)
+
+                            try:
+                                v = validate_email(email)
+                                email = v["email"]
+                            except EmailNotValidError as e:
+                                log.error(str(e))
+                                sys.exit(1)
+
+                            NEW_CONTRIBUTORS[user] = nameandemail
+                            new_new_contributors[user] = nameandemail
+                            indications.add("Reviewed-by: "+nameandemail)
                         except EOFError as e:
                             continue
 
