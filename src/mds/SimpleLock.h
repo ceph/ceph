@@ -168,7 +168,8 @@ protected:
   __s16 state_flags;
 
   enum {
-    LEASED   = 1 << 0,
+    LEASED		= 1 << 0,
+    NEED_RECOVER	= 1 << 1,
   };
 
 private:
@@ -325,13 +326,17 @@ public:
     //assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
     return s;
   }
-  void set_state_rejoin(int s, list<MDSInternalContextBase*>& waiters) {
-    if (!is_stable() && get_parent()->is_auth()) {
-      state = s;
-      get_parent()->auth_unpin(this);
-    } else {
-      state = s;
-    }
+  void set_state_rejoin(int s, list<MDSInternalContextBase*>& waiters, bool survivor) {
+    assert(!get_parent()->is_auth());
+
+    // If lock in the replica object was not in SYNC state when auth mds of the object failed.
+    // Auth mds of the object may take xlock on the lock and change the object when replaying
+    // unsafe requests.
+    if (!survivor || state != LOCK_SYNC)
+      mark_need_recover();
+
+    state = s;
+
     if (is_stable())
       take_waiting(SimpleLock::WAIT_ALL, waiters);
   }
@@ -545,6 +550,16 @@ public:
     return is_xlocked() || is_rdlocked() || is_wrlocked() || is_leased();
   }
 
+  bool needs_recover() const {
+    return state_flags & NEED_RECOVER;
+  }
+  void mark_need_recover() {
+    state_flags |= NEED_RECOVER;
+  }
+  void clear_need_recover() {
+    state_flags &= ~NEED_RECOVER;
+  }
+
   // encode/decode
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
@@ -574,10 +589,10 @@ public:
     if (is_new)
       state = s;
   }
-  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters) {
+  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters, bool survivor) {
     __s16 s;
     ::decode(s, p);
-    set_state_rejoin(s, waiters);
+    set_state_rejoin(s, waiters, survivor);
   }
 
 
