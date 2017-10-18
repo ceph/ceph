@@ -1,5 +1,6 @@
 from __future__ import print_function
 import argparse
+import logging
 import os
 from textwrap import dedent
 from ceph_volume import process, conf, decorators
@@ -7,6 +8,9 @@ from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.systemd import systemctl
 from ceph_volume.api import lvm as api
+
+
+logger = logging.getLogger(__name__)
 
 
 def activate_filestore(lvs):
@@ -128,6 +132,16 @@ class Activate(object):
             lvs.filter(lv_tags={'ceph.osd_fsid': args.osd_fsid})
         if not lvs:
             raise RuntimeError('could not find osd.%s with fsid %s' % (args.osd_id, args.osd_fsid))
+        if args.auto_detect_objecstore:
+            logger.info('auto detecting objectstore')
+            # may get multiple lvs, so can't do lvs.get() calls here
+            for lv in lvs:
+                has_journal = lv.tags.get('ceph.journal_uuid')
+                if has_journal:
+                    logger.info('found a journal associated with the OSD, assuming filestore')
+                    return activate_filestore(lvs)
+            logger.info('unable to find a journal associated with the OSD, assuming bluestore')
+            return activate_bluestore(lvs)
         if args.bluestore:
             activate_bluestore(lvs)
         elif args.filestore:
@@ -161,6 +175,11 @@ class Activate(object):
             metavar='FSID',
             nargs='?',
             help='The FSID of the OSD, similar to a SHA1'
+        )
+        parser.add_argument(
+            '--auto-detect-objectstore',
+            action='store_true',
+            help='Autodetect the objectstore by inspecting the OSD',
         )
         parser.add_argument(
             '--bluestore',
