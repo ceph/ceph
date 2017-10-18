@@ -316,6 +316,16 @@ int main(int argc, char **argv)
       cerr << "readdir in root failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
+
+    if (::access(out_dir.c_str(), F_OK)) {
+      r = ::mkdir(out_dir.c_str(), 0755);
+      if (r < 0) {
+        r = -errno;
+        cerr << "mkdir " << out_dir << " failed: " << cpp_strerror(r) << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
+
     for (auto& dir : dirs) {
       if (dir[0] == '.')
 	continue;
@@ -327,11 +337,13 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
       string full = out_dir + "/" + dir;
-      r = ::mkdir(full.c_str(), 0755);
-      if (r < 0) {
-        r = -errno;
-	cerr << "mkdir " << full << " failed: " << cpp_strerror(r) << std::endl;
-	exit(EXIT_FAILURE);
+      if (::access(full.c_str(), F_OK)) {
+        r = ::mkdir(full.c_str(), 0755);
+        if (r < 0) {
+          r = -errno;
+          cerr << "mkdir " << full << " failed: " << cpp_strerror(r) << std::endl;
+          exit(EXIT_FAILURE);
+        }
       }
       for (auto& file : ls) {
 	if (file[0] == '.')
