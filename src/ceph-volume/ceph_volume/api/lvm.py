@@ -213,6 +213,25 @@ def create_vg(name, *devices):
     return vg
 
 
+def remove_lv(path):
+    """
+    Removes a logical volume given it's absolute path.
+    """
+    stdout, stderr, returncode = process.call(
+        [
+            'sudo',
+            'lvremove',
+            '-v',  # verbose
+            '-f',  # force it
+            path
+        ],
+        show_command=True,
+        terminal_verbose=True,
+    )
+    if returncode != 0:
+        raise RuntimeError("Unable to remove %s".format(path))
+
+
 def create_lv(name, group, size=None, tags=None):
     """
     Create a Logical Volume in a Volume Group. Command looks like::
