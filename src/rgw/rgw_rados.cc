@@ -9677,17 +9677,10 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
   if (state) {
-    string tag;
-    append_rand_alpha(cct, tag, tag, 32);
-    state->write_tag = tag;
-    r = index_op.prepare(CLS_RGW_OP_ADD, &state->write_tag);
+    r = index_op.prepare(CLS_RGW_OP_ADD);
 
     if (r < 0)
       return r;
-
-    bl.append(tag.c_str(), tag.size() + 1);
-
-    op.setxattr(RGW_ATTR_ID_TAG,  bl);
   }
 
 
