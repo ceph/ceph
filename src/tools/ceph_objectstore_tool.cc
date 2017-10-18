@@ -1116,8 +1116,8 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
 
   if (debug) {
     cerr << "Import pgid " << ms.info.pgid << std::endl;
-    cerr << "Clearing past_intervals " << ms.past_intervals << std::endl;
-    cerr << "Zero same_interval_since " << ms.info.history.same_interval_since << std::endl;
+    cerr << "Previous past_intervals " << ms.past_intervals << std::endl;
+    cerr << "history.same_interval_since " << ms.info.history.same_interval_since << std::endl;
   }
 
   if (debug)
