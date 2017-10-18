@@ -85,6 +85,9 @@ private:
 
   file::Policy *m_policy = nullptr;
 
+  uint64_t m_free_entry_hint;
+  uint64_t m_valid_entry_hint;
+  
   ReleaseBlock m_release_block;
   AppendDetainedBlock m_detain_block;
 

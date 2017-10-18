@@ -39,6 +39,7 @@ static const uint32_t BLOCK_SIZE = 512;
 
 static const uint64_t DEFAULT_POOL_SIZE = 10u<<30;
 static const uint64_t MIN_POOL_SIZE = 1u<<20;
+#define USABLE_SIZE (7.0 / 10)
 static const char* rwl_pool_layout_name = POBJ_LAYOUT_NAME(rbd_rwl);
 
 POBJ_LAYOUT_BEGIN(rbd_rwl);
@@ -48,23 +49,37 @@ POBJ_LAYOUT_TOID(rbd_rwl, struct WriteLogPmemEntry);
 POBJ_LAYOUT_END(rbd_rwl);
 
 struct WriteLogPmemEntry {
+  uint64_t sync_gen_number;
+  uint64_t write_sequence_number;
   uint64_t image_offset_bytes;
   uint64_t write_bytes;
   uint64_t first_pool_block;
   struct {
-    uint8_t unmap :1; /* first_pool_block will be NULL if this is an unmap */
+    uint8_t entry_valid :1; /* if 0, this entry is free */
+    uint8_t sync_point :1;  /* No data. No write sequence
+			       number. Marks sync point for thsi sync
+			       gen number */
+    uint8_t sequenced :1;   /* write sequence number is valid */
+    uint8_t first_pool_block_valid :1; /* first_pool_block field is valid */
+    uint8_t unmap :1;       /* first_pool_block_valid will be 0 if this
+			       is an unmap */
   };
   WriteLogPmemEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
-    : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes), first_pool_block(0), unmap(0) {
+    : sync_gen_number(0), write_sequence_number(0),
+      image_offset_bytes(image_offset_bytes), write_bytes(write_bytes), first_pool_block(0),
+      entry_valid(0), sync_point(0), sequenced(0), first_pool_block_valid(0), unmap(0) {
   }
-  WriteLogPmemEntry() {} 
+  WriteLogPmemEntry() { WriteLogPmemEntry(0, 0); } 
 };
 
 struct WriteLogPoolRoot {
   TOID(uint8_t) data_blocks;	         /* contiguous array of blocks */
   TOID(struct WriteLogPmemEntry) log_entries;   /* contiguous array of log entries */
-  size_t bsize;			         /* block size */
-  size_t nblocks;		         /* number of available blocks */
+  uint64_t block_size;			         /* block size */
+  uint64_t num_blocks;		         /* total data blocks */
+  uint64_t num_log_entries;
+  uint64_t valid_entry_hint;    /* Start looking here for the oldest valid entry */
+  uint64_t free_entry_hint;     /* Start looking here for the next free entry */
 };
 
 struct WriteLogEntry {
@@ -1095,6 +1110,7 @@ template <typename I>
 void ReplicatedWriteLog<I>::init(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
+  TOID(struct WriteLogPoolRoot) pool_root;
 
   ldout(cct,5) << "rbd_rwl_enabled:" << cct->_conf->get_val<bool>("rbd_rwl_enabled") << dendl;
   ldout(cct,5) << "rbd_rwl_size:" << cct->_conf->get_val<uint64_t>("rbd_rwl_size") << dendl;
@@ -1111,16 +1127,50 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
 			rwl_pool_layout_name,
 			m_log_pool_size,
 			(S_IWUSR | S_IRUSR))) == NULL) {
-      //printf("failed to create pool\n");
-      //return 1;
+      lderr(cct) << "failed to create pool (" << m_log_pool_name << ")"
+                 << pmemobj_errormsg() << dendl;
+      on_finish->complete(-1);
+      return;
     }
+    pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
+
+    /* new pool, calculate and store metadata */
+    TX_BEGIN(m_log_pool) {
+      TX_ADD(pool_root);
+      D_RW(pool_root)->block_size = BLOCK_SIZE;
+      size_t effective_pool_size = (size_t)(m_log_pool_size * USABLE_SIZE);
+      size_t small_write_size = BLOCK_SIZE + sizeof(struct WriteLogPmemEntry);
+      uint64_t num_small_writes = (uint64_t)(effective_pool_size / small_write_size);
+      D_RW(pool_root)->num_blocks = num_small_writes;
+      D_RW(pool_root)->num_log_entries = num_small_writes;
+      D_RW(pool_root)->data_blocks = TX_ALLOC(uint8_t, num_small_writes * BLOCK_SIZE);
+      D_RW(pool_root)->log_entries = TX_ZALLOC(struct WriteLogPmemEntry, num_small_writes);
+      m_valid_entry_hint = 0;
+      D_RW(pool_root)->valid_entry_hint = m_valid_entry_hint;
+      m_free_entry_hint = 0;
+      D_RW(pool_root)->free_entry_hint = m_free_entry_hint;
+    } TX_ONABORT {
+      lderr(cct) << "failed to initialize pool (" << m_log_pool_name << ")" << dendl;
+      on_finish->complete(-1);
+      return;
+    } TX_END;	
   } else {
     if ((m_log_pool =
 	 pmemobj_open(m_log_pool_name.c_str(),
 		      rwl_pool_layout_name)) == NULL) {
-      //printf("failed to open pool\n");
-      //return 1;
+      lderr(cct) << "failed to open pool (" << m_log_pool_name << "): "
+                 << pmemobj_errormsg() << dendl;
+      on_finish->complete(-1);
+      return;
     }
+    pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
+    if (D_RO(pool_root)->block_size != BLOCK_SIZE) {
+      lderr(cct) << "Pool block size is " << D_RO(pool_root)->block_size << " expected " << BLOCK_SIZE << dendl;
+      on_finish->complete(-1);
+      return;
+    }
+    ldout(cct,5) << "pool " << m_log_pool_name << "has " << D_RO(pool_root)->num_log_entries <<
+      " log entries and " << D_RO(pool_root)->num_blocks << " data blocks" << dendl;
   }
   
   bufferlist meta_bl;
