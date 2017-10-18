@@ -20,6 +20,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include <common/errno.h>
+#include "include/random.h"
 #include "auth/Crypto.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/lock/cls_lock_client.h"
@@ -152,32 +153,28 @@ static string render_target_key(CephContext *cct, const string prefix)
   string target_key;
 
   char unique_string_buf[BL_UNIQUE_STRING_LEN + 1];
-  int ret = gen_rand_alphanumeric_plain(g_ceph_context, unique_string_buf,
-					sizeof(unique_string_buf));
-  if (ret < 0) {
-      return target_key;
-  } else {
-    string unique_str = string(unique_string_buf);
-    utime_t now = ceph_clock_now();
-    struct tm current_time;
-    time_t tt = now.sec();
-    localtime_r(&tt, &current_time);
-    char buffer[20];
-    strftime(buffer, 20, "%Y-%m-%d-%H-%M-%S", &current_time);
-    std::string time(buffer);
+  gen_rand_alphanumeric_plain(g_ceph_context, unique_string_buf,
+                              sizeof(unique_string_buf));
 
-    target_key += prefix;
-    target_key += time;
-    target_key += "-";
-    target_key += unique_str;
+  string unique_str = string(unique_string_buf);
+  utime_t now = ceph_clock_now();
+  struct tm current_time;
+  time_t tt = now.sec();
+  localtime_r(&tt, &current_time);
+  char buffer[20];
+  strftime(buffer, 20, "%Y-%m-%d-%H-%M-%S", &current_time);
+  std::string time(buffer);
 
-    ldout(cct, 20) << "RGWBL::render_target_key "<< "prefix=" << prefix
-                   << " unique_str=" << unique_str
-                   << " target_key=" << target_key << dendl;
+  target_key += prefix;
+  target_key += time;
+  target_key += "-";
+  target_key += unique_str;
 
-    return target_key;
-  }
+  ldout(cct, 20) << "RGWBL::render_target_key "<< "prefix=" << prefix
+                 << " unique_str=" << unique_str
+                 << " target_key=" << target_key << dendl;
 
+  return target_key;
 }
 
 int RGWBL::bucket_bl_fetch(const string opslog_obj, bufferlist *buffer)
@@ -821,14 +818,11 @@ int RGWBL::process()
 {
   int max_secs = deliver_interval;
 
-  unsigned start;
-  int ret = get_random_bytes((char *)&start, sizeof(start));
-  if (ret < 0)
-    return ret;
+  const unsigned start = ceph::util::generate_random_number(0, max_objs - 1);
 
   for (int i = 0; i < max_objs; i++) {
     int index = (i + start) % max_objs;
-    ret = process(index, max_secs);
+    int ret = process(index, max_secs);
     if (ret < 0)
       dout(0) << __func__ << " processed  bl object=" << obj_names[index]
                           << " ret=" << cpp_strerror(-ret) << dendl;

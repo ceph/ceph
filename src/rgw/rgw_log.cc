@@ -88,15 +88,9 @@ string render_log_object_name(const string& format,
           if (!unique_str_specified) {
             unique_str_specified = true;
             char unique_string_buf[OPSLOG_UNIQUE_STRING_LEN + 1];
-            int get_randstr_ret = gen_rand_alphanumeric_plain(g_ceph_context, unique_string_buf,
-                                                              sizeof(unique_string_buf));
-            if (get_randstr_ret < 0) {
-              char pid_buf[8];
-              sprintf(pid_buf, "%d", ::getpid());
-              unique_str = std::string(pid_buf);
-            } else {
-              unique_str = std::string(unique_string_buf);
-            }
+            gen_rand_alphanumeric_plain(g_ceph_context, unique_string_buf,
+                                        sizeof(unique_string_buf));
+            unique_str = std::string(unique_string_buf);
           }
           o += unique_str;
         }
