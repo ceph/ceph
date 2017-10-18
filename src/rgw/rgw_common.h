@@ -265,14 +265,14 @@ enum {
   l_rgw_last,
 };
 
-typedef std::map<int, std::string> rgw_prot_flags_map;
-extern rgw_prot_flags_map rgw_prot_flags;
+typedef std::map<int, std::string> rgw_prot_flags_map_t;
+extern rgw_prot_flags_map_t rgw_prot_flags;
 
-typedef std::map<int, std::string> rgw_resources_map;
-extern rgw_resources_map rgw_resources;
+typedef std::map<int, std::string> rgw_resources_map_t;
+extern rgw_resources_map_t rgw_resources;
 
-typedef std::map<int, std::string> rgw_http_methods_map;
-extern rgw_http_methods_map rgw_http_methods;
+typedef std::map<int, std::string> rgw_http_methods_map_t;
+extern rgw_http_methods_map_t rgw_http_methods;
 
  /* size should be the required string size + 1 */
 int gen_rand_base64(CephContext *cct, char *dest, int size);

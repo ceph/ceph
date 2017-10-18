@@ -135,7 +135,7 @@ rgw_http_errors rgw_http_swift_errors({
     { ERR_ZERO_IN_URL, {412, "Invalid UTF8 or contains NULL"}},
 });
 
-rgw_prot_flags_map rgw_prot_flags({
+rgw_prot_flags_map_t rgw_prot_flags({
     { RGW_REST_SWIFT, "SWIFT_REST" },
     { RGW_REST_SWIFT_AUTH, "SWIFT_AUTH" },
     { RGW_REST_S3, "REST" },
@@ -143,7 +143,7 @@ rgw_prot_flags_map rgw_prot_flags({
     { RGW_REST_ADMIN, "ADMIN" },
 });
 
-rgw_resources_map rgw_resources({
+rgw_resources_map_t rgw_resources({
     { RGW_RESOURCE_CATEGORY_NONE, "NONE" },
     // {S3,S3website} specific resource
     { RGW_RESOURCE_CATEGORY_BUCKETS, "BUCKETS" },
@@ -229,7 +229,7 @@ rgw_resources_map rgw_resources({
     { RGW_RESOURCE_CATEGORY_PERIOD, "PERIOD" },
 });
 
-rgw_http_methods_map rgw_http_methods({
+rgw_http_methods_map_t rgw_http_methods({
     { OP_GET, "GET" },
     { OP_PUT, "PUT" },
     { OP_DELETE, "DELETE" },
