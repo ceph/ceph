@@ -3473,7 +3473,7 @@ void OSDMonitor::dump_info(Formatter *f)
 
 namespace {
   enum osd_pool_get_choices {
-    SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
+    SIZE, MIN_SIZE,
     PG_NUM, PGP_NUM, CRUSH_RULE, HASHPSPOOL,
     NODELETE, NOPGCHANGE, NOSIZECHANGE,
     WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
@@ -4062,7 +4062,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     const choices_map_t ALL_CHOICES = {
       {"size", SIZE},
       {"min_size", MIN_SIZE},
-      {"crash_replay_interval", CRASH_REPLAY_INTERVAL},
       {"pg_num", PG_NUM}, {"pgp_num", PGP_NUM},
       {"crush_rule", CRUSH_RULE},
       {"hashpspool", HASHPSPOOL}, {"nodelete", NODELETE},
@@ -4187,10 +4186,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case MIN_SIZE:
 	    f->dump_int("min_size", p->get_min_size());
-	    break;
-	  case CRASH_REPLAY_INTERVAL:
-	    f->dump_int("crash_replay_interval",
-			p->get_crash_replay_interval());
 	    break;
 	  case CRUSH_RULE:
 	    if (osdmap.crush->rule_exists(p->get_crush_rule())) {
@@ -4347,10 +4342,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case MIN_SIZE:
 	    ss << "min_size: " << p->get_min_size() << "\n";
-	    break;
-	  case CRASH_REPLAY_INTERVAL:
-	    ss << "crash_replay_interval: " <<
-	      p->get_crash_replay_interval() << "\n";
 	    break;
 	  case CRUSH_RULE:
 	    if (osdmap.crush->rule_exists(p->get_crush_rule())) {
@@ -5755,12 +5746,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.auid = n;
-  } else if (var == "crash_replay_interval") {
-    if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
-      return -EINVAL;
-    }
-    p.crash_replay_interval = n;
   } else if (var == "pg_num") {
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
