@@ -29,11 +29,11 @@ The thread of Ceph Object Gateway which uploading bucket logging files
 use `bl_deliver` typed S3 user. `bl_deliver` typed user has limited
 permission, which can only upload objects(can't create bucket).
 
-`bl_deliver` typed user can be created by specifing `--bl_deliver`
+`bl_deliver` typed user can be created by specifing `--bl-deliver`
 flag. For example::
 
   $ radosgw-admin user create --uid=log-delivery-service --display-name="Bucket Logging Delivery" \
-                              --bl_deliver
+                              --bl-deliver
   {
   ...
       "user_id": "bl_deliver",

@@ -219,7 +219,7 @@ void usage()
   cout << "   --max-buckets             max number of buckets for a user\n";
   cout << "   --admin                   set the admin flag on the user\n";
   cout << "   --system                  set the system flag on the user\n";
-  cout << "   --bl_deliver              set the bucket logging deliver flag on the user\n";
+  cout << "   --bl-deliver              set the bucket logging deliver flag on the user\n";
   cout << "   --bucket=<bucket>\n";
   cout << "   --pool=<pool>\n";
   cout << "   --object=<object>\n";
@@ -2549,7 +2549,7 @@ int main(int argc, const char **argv)
       admin_specified = true;
     } else if (ceph_argparse_binary_flag(args, i, &system, NULL, "--system", (char*)NULL)) {
       system_specified = true;
-    } else if (ceph_argparse_binary_flag(args, i, &bl_deliver, NULL, "--bl_deliver", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &bl_deliver, NULL, "--bl-deliver", (char*)NULL)) {
       bl_deliver_specified = true;
     } else if (ceph_argparse_binary_flag(args, i, &verbose, NULL, "--verbose", (char*)NULL)) {
       // do nothing
