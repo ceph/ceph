@@ -316,11 +316,23 @@ class CephAnsible(Task):
                 'libselinux-python'
             ])
         else:
+            # update ansible from ppa
+            ceph_installer.run(args=[
+                'sudo',
+                'add-apt-repository',
+                run.Raw('ppa:ansible/ansible'),
+            ])
+            ceph_installer.run(args=[
+                'sudo',
+                'apt-get',
+                'update',
+            ])
             ceph_installer.run(args=[
                 'sudo',
                 'apt-get',
                 'install',
                 '-y',
+                'ansible',
                 'libssl-dev',
                 'python-openssl',
                 'libffi-dev',
