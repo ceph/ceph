@@ -11,7 +11,7 @@ OSD_IMPLEMENTED_COMMANDS = [
 
 # Valid values for the 'var' argument to 'ceph osd pool set'
 POOL_PROPERTIES_1 = [
-    'size', 'min_size', 'crash_replay_interval', 'pg_num',
+    'size', 'min_size', 'pg_num',
     'crush_rule', 'hashpspool',
 ]
 

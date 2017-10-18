@@ -1300,7 +1300,6 @@ public:
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
   uint64_t auid;            ///< who owns the pg
-  __u32 crash_replay_interval; ///< seconds to allow clients to replay ACKed but unCOMMITted requests
 
   uint64_t quota_max_bytes; ///< maximum number of bytes for this pool
   uint64_t quota_max_objects; ///< maximum number of objects for this pool
@@ -1417,7 +1416,6 @@ public:
       last_force_op_resend_preluminous(0),
       snap_seq(0), snap_epoch(0),
       auid(0),
-      crash_replay_interval(0),
       quota_max_bytes(0), quota_max_objects(0),
       pg_num_mask(0), pgp_num_mask(0),
       tier_of(-1), read_tier(-1), write_tier(-1),
@@ -1474,7 +1472,6 @@ public:
   epoch_t get_snap_epoch() const { return snap_epoch; }
   snapid_t get_snap_seq() const { return snap_seq; }
   uint64_t get_auid() const { return auid; }
-  unsigned get_crash_replay_interval() const { return crash_replay_interval; }
 
   void set_snap_seq(snapid_t s) { snap_seq = s; }
   void set_snap_epoch(epoch_t e) { snap_epoch = e; }
