@@ -80,12 +80,8 @@ public:
 
 class RGWHandler_Opstate : public RGWHandler_Auth_S3 {
 protected:
-  RGWOp *op_get() override {
-    return new RGWOp_Opstate_List;
-  }
-  RGWOp *op_delete() override {
-    return new RGWOp_Opstate_Delete;
-  }
+  RGWOp *op_get() override;
+  RGWOp *op_delete() override;
   RGWOp *op_post() override;
 
   int read_permissions(RGWOp*) override {
@@ -101,9 +97,10 @@ public:
   RGWRESTMgr_Opstate() = default;
   ~RGWRESTMgr_Opstate() override = default;
 
-  RGWHandler_REST* get_handler(struct req_state*,
+  RGWHandler_REST* get_handler(struct req_state* const s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
+    s->prot_flags |= RGW_REST_ADMIN;
     return new RGWHandler_Opstate(auth_registry);
   }
 };

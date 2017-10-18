@@ -34,7 +34,10 @@ struct rgw_log_entry {
   string referrer;
   string bucket_id;
   string request_id;
+  int prot_flags;
   headers_map x_headers;
+  int resource;
+  int http_method;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(10, 5, bl);
@@ -61,6 +64,9 @@ struct rgw_log_entry {
     ::encode(bucket_owner, bl);
     ::encode(x_headers, bl);
     ::encode(request_id, bl);
+    ::encode(prot_flags, bl);
+    ::encode(resource, bl);
+    ::encode(http_method, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
@@ -110,9 +116,10 @@ struct rgw_log_entry {
     if (struct_v >= 9) {
       ::decode(x_headers, p);
     }
-
     if (struct_v >= 10) {
-      ::decode(request_id, p);
+      ::decode(prot_flags, p);
+      ::decode(resource, p);
+      ::decode(http_method, p);
     }
     DECODE_FINISH(p);
   }

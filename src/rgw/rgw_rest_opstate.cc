@@ -183,9 +183,21 @@ void RGWOp_Opstate_Delete::execute() {
   }
 }
 
+RGWOp *RGWHandler_Opstate::op_get() {
+  s->resource = RGW_RESOURCE_CATEGORY_OPSTATE;
+  return new RGWOp_Opstate_List;
+}
+
+RGWOp *RGWHandler_Opstate::op_delete() {
+  s->resource = RGW_RESOURCE_CATEGORY_OPSTATE;
+  return new RGWOp_Opstate_Delete;
+}
+
 RGWOp *RGWHandler_Opstate::op_post() {
+  s->resource = RGW_RESOURCE_CATEGORY_OPSTATE;
   if (s->info.args.exists("renew")) {
     return new RGWOp_Opstate_Renew;
   } 
   return new RGWOp_Opstate_Set;
 }
+

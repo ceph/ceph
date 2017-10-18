@@ -581,8 +581,6 @@ void RGW_SWIFT_Auth_Get::execute()
   const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
   const char *user = s->info.env->get("HTTP_X_AUTH_USER");
 
-  s->prot_flags |= RGW_REST_SWIFT;
-
   string user_str;
   RGWUserInfo info;
   bufferlist bl;
@@ -712,6 +710,7 @@ int RGWHandler_SWIFT_Auth::authorize()
 
 RGWOp *RGWHandler_SWIFT_Auth::op_get()
 {
+  s->resource = RGW_RESOURCE_CATEGORY_AUTH;
   return new RGW_SWIFT_Auth_Get;
 }
 

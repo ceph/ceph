@@ -287,6 +287,9 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   formatter->dump_int("total_time", total_time);
   formatter->dump_string("user_agent",  entry.user_agent);
   formatter->dump_string("referrer",  entry.referrer);
+  formatter->dump_string("prot_flags", rgw_prot_flags[entry.prot_flags]);
+  formatter->dump_string("resource", rgw_resources[entry.resource]);
+  formatter->dump_string("http_method", rgw_http_methods[entry.http_method]);
   if (entry.x_headers.size() > 0) {
     formatter->open_array_section("http_x_headers");
     for (const auto& iter: entry.x_headers) {
@@ -414,6 +417,8 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   set_param_str(s, "REQUEST_URI", entry.uri);
   set_param_str(s, "REQUEST_METHOD", entry.op);
 
+  entry.http_method = s->op; // track parsed http method
+
   /* custom header logging */
   if (rest) {
     if (rest->log_x_headers()) {
@@ -448,6 +453,8 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   entry.error_code = s->err.err_code;
   entry.bucket_id = bucket_id;
   entry.request_id = s->trans_id;
+  entry.prot_flags = s->prot_flags;
+  entry.resource = s->resource;
 
   bufferlist bl;
   ::encode(entry, bl);
