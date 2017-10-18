@@ -238,6 +238,14 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
   std::string error_code = entry.error_code.empty() ? "-" : entry.error_code;
   std::string referrer = entry.referrer.empty() ? "\"-\"" : ("\""+entry.referrer+"\"");
   std::string user_agent = entry.user_agent.empty() ? "\"-\"" : ("\""+entry.user_agent+"\"");
+  /*
+     operation format supported as following:
+     + REST.HTTP_method.resource_type,
+     + WEBSITE.HTTP_method.resource_type
+  */
+  std::string operation = rgw_prot_flags[entry.prot_flags]+"."+
+                          rgw_http_methods[entry.http_method]+"."+
+                          rgw_resources[entry.resource];
 
                                                                                // S3 BL field
   pending_column << owner_id << row_separator                                  // Bucket Owner
@@ -246,7 +254,7 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
                  << entry.remote_addr << row_separator                         // Remote IP
                  << user << row_separator                                      // Requester
                  << entry.request_id << row_separator                          // Request ID
-                 << entry.op << row_separator                                  // Operation
+                 << operation << row_separator                                 // Operation
                  << oname << row_separator                                     // Key
                  << uri << row_separator                                       // Request-URI
                  << entry.http_status << row_separator                         // HTTP status
