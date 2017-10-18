@@ -273,9 +273,9 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   : cct(_cct), cio(NULL), op(OP_UNKNOWN), user(u), has_acl_header(false),
     info(_cct, e)
 {
-  enable_ops_log = e->rgw_conf_get_enable_ops_log();
-  enable_usage_log = e->rgw_conf_get_enable_usage_log();
-  defer_to_bucket_acls = e->rgw_conf_get_defer_to_bucket_acls();
+  enable_ops_log = e->get_enable_ops_log();
+  enable_usage_log = e->get_enable_usage_log();
+  defer_to_bucket_acls = e->get_defer_to_bucket_acls();
   content_started = false;
   format = 0;
   formatter = NULL;
