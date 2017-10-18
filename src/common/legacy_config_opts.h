@@ -803,7 +803,6 @@ OPTION(osd_op_log_threshold, OPT_INT) // how many op log messages to show in one
 OPTION(osd_verify_sparse_read_holes, OPT_BOOL)  // read fiemap-reported holes and verify they are zeros
 OPTION(osd_backoff_on_unfound, OPT_BOOL)   // object unfound
 OPTION(osd_backoff_on_degraded, OPT_BOOL) // [mainly for debug?] object unreadable/writeable
-OPTION(osd_backoff_on_down, OPT_BOOL)      // pg in down/incomplete state
 OPTION(osd_backoff_on_peering, OPT_BOOL)  // [debug] pg peering
 OPTION(osd_debug_crash_on_ignored_backoff, OPT_BOOL) // crash osd if client ignores a backoff; useful for debugging
 OPTION(osd_debug_inject_dispatch_delay_probability, OPT_DOUBLE)
