@@ -75,6 +75,8 @@ private:
   PMEMobjpool *m_log_pool;
   uint64_t m_log_pool_size;
   
+  uint64_t m_total_log_entries;
+  uint64_t m_total_blocks;
   uint64_t m_free_log_entries;
   uint64_t m_free_blocks;
 
@@ -85,6 +87,14 @@ private:
 
   file::Policy *m_policy = nullptr;
 
+  /* When m_first_free_entry == m_last_free_entry, the log is empty */
+  uint64_t m_first_free_entry;  /* Entries from here to m_first_valid_entry-1 are free */
+  uint64_t m_first_valid_entry; /* Entries from here to m_first_free_entry-1 are valid */
+
+  /* When m_next_free_block == m_last_free_bloock, all blocks are free */
+  uint64_t m_next_free_block; /* Blocks from here to m_last_free_block are free */
+  uint64_t m_last_free_block;
+  
   uint64_t m_free_entry_hint;
   uint64_t m_valid_entry_hint;
   

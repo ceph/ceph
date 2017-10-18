@@ -41,7 +41,8 @@ static const uint64_t DEFAULT_POOL_SIZE = 10u<<30;
 static const uint64_t MIN_POOL_SIZE = 1u<<20;
 #define USABLE_SIZE (7.0 / 10)
 static const char* rwl_pool_layout_name = POBJ_LAYOUT_NAME(rbd_rwl);
-
+static const uint8_t RWL_POOL_VERSION = 1;
+  
 POBJ_LAYOUT_BEGIN(rbd_rwl);
 POBJ_LAYOUT_ROOT(rbd_rwl, struct WriteLogPoolRoot);
 POBJ_LAYOUT_TOID(rbd_rwl, uint8_t);
@@ -73,6 +74,12 @@ struct WriteLogPmemEntry {
 };
 
 struct WriteLogPoolRoot {
+  union {
+    struct {
+      uint8_t layout_version;    /* Version of this structure (RWL_POOL_VERSION) */ 
+    };
+    uint64_t _u64;
+  } header;
   TOID(uint8_t) data_blocks;	         /* contiguous array of blocks */
   TOID(struct WriteLogPmemEntry) log_entries;   /* contiguous array of log entries */
   uint64_t block_size;			         /* block size */
@@ -94,7 +101,16 @@ typedef std::list<WriteLogEntry> WriteLogEntries;
 typedef std::unordered_map<uint64_t, WriteLogEntry> BlockToWriteLogEntry;
 
 /**** Write log entries ****/
+
+struct WriteLogOperation {
+  struct WriteLogEntry log_entry;
+  WriteLogOperation(uint64_t image_offset_bytes, uint64_t write_bytes) 
+    : log_entry(image_offset_bytes, write_bytes) {
+  }
+};
+typedef std::list<WriteLogOperation> WriteLogOperations;
   
+
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
   for (auto &extent : image_extents) {
     if (extent.first % BLOCK_SIZE != 0 || extent.second % BLOCK_SIZE != 0) {
@@ -872,7 +888,9 @@ struct C_WritebackRequest : public Context {
 template <typename I>
 ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), 
-    m_log_pool_size(DEFAULT_POOL_SIZE), m_free_log_entries(0), m_free_blocks(0),
+    m_log_pool_size(DEFAULT_POOL_SIZE),
+    m_total_log_entries(0), m_total_blocks(0),
+    m_free_log_entries(0), m_free_blocks(0),
     m_image_writeback(image_ctx), m_image_cache(image_ctx),
     m_block_guard(image_ctx.cct, 256, BLOCK_SIZE),
     m_release_block(std::bind(&ReplicatedWriteLog<I>::release_block, this,
@@ -926,7 +944,9 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
     }
   }
 
-  // TODO: Handle unaligned IO
+  // TODO: Handle unaligned IO. RMW must block overlapping writes (to
+  // the limits of the read phase) and wait for prior overlaping
+  // writes to complete.
   if (!is_block_aligned(image_extents)) {
     lderr(cct) << "unaligned write fails" << dendl;
     for (auto &extent : image_extents) {
@@ -937,11 +957,27 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
   }
 
   /* Make empty log entry objects for each extent */
-  WriteLogEntries entries;
+  WriteLogOperations operations;
   uint64_t total_bytes = 0;
   for (auto &extent : image_extents) {
     total_bytes += extent.second;
-    entries.emplace_back(WriteLogEntry(extent.first, extent.second));
+    operations.emplace_back(WriteLogOperation(extent.first, extent.second));
+  }
+  {
+    Mutex::Locker locker(m_lock);
+    if (m_free_log_entries < operations.size()) {
+      ldout(cct, 6) << "wait for " << operations.size() << " log entries" << dendl;
+    } else if (m_free_blocks < total_bytes / BLOCK_SIZE) {
+      ldout(cct, 6) << "wait for " << total_bytes / BLOCK_SIZE << " data blocks" << dendl;
+    } else {
+      for (auto &operation : operations) {
+	operation.log_entry.persisted.first_pool_block = m_next_free_block;
+	m_next_free_block = (m_next_free_block + 1) % m_total_blocks;
+	m_free_log_entries--;
+	m_free_blocks -= operation.log_entry.persisted.write_bytes / BLOCK_SIZE;
+      }
+    }
+      
   }
   //if ()
   /* Is there space in the write log for this entire write? */
@@ -1135,24 +1171,41 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
     pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
 
     /* new pool, calculate and store metadata */
+    size_t effective_pool_size = (size_t)(m_log_pool_size * USABLE_SIZE);
+    size_t small_write_size = BLOCK_SIZE + sizeof(struct WriteLogPmemEntry);
+    uint64_t num_small_writes = (uint64_t)(effective_pool_size / small_write_size);
+    m_valid_entry_hint = 0;
+    m_free_entry_hint = 0;
+    /* Log ring empty */
+    m_first_free_entry = 0;
+    m_first_valid_entry = 0;
+    /* Block pool empty */
+    m_next_free_block = 0;
+    m_last_free_block = 0;
     TX_BEGIN(m_log_pool) {
       TX_ADD(pool_root);
+      D_RW(pool_root)->header.layout_version = RWL_POOL_VERSION;
       D_RW(pool_root)->block_size = BLOCK_SIZE;
-      size_t effective_pool_size = (size_t)(m_log_pool_size * USABLE_SIZE);
-      size_t small_write_size = BLOCK_SIZE + sizeof(struct WriteLogPmemEntry);
-      uint64_t num_small_writes = (uint64_t)(effective_pool_size / small_write_size);
-      D_RW(pool_root)->num_blocks = num_small_writes;
-      D_RW(pool_root)->num_log_entries = num_small_writes;
+      D_RW(pool_root)->num_blocks = num_small_writes-1; // leave one free
+      D_RW(pool_root)->num_log_entries = num_small_writes-1; // leave one free
       D_RW(pool_root)->data_blocks = TX_ALLOC(uint8_t, num_small_writes * BLOCK_SIZE);
       D_RW(pool_root)->log_entries = TX_ZALLOC(struct WriteLogPmemEntry, num_small_writes);
-      m_valid_entry_hint = 0;
       D_RW(pool_root)->valid_entry_hint = m_valid_entry_hint;
-      m_free_entry_hint = 0;
       D_RW(pool_root)->free_entry_hint = m_free_entry_hint;
+    } TX_ONCOMMIT {
+      m_total_log_entries = D_RO(pool_root)->num_log_entries;
+      m_free_log_entries = D_RO(pool_root)->num_log_entries;
+      m_total_blocks = D_RO(pool_root)->num_blocks;
+      m_free_blocks = D_RO(pool_root)->num_blocks;
     } TX_ONABORT {
+      m_total_log_entries = 0;
+      m_total_blocks = 0;
+      m_free_log_entries = 0;
+      m_free_blocks = 0;
       lderr(cct) << "failed to initialize pool (" << m_log_pool_name << ")" << dendl;
       on_finish->complete(-1);
       return;
+    } TX_FINALLY {
     } TX_END;	
   } else {
     if ((m_log_pool =
@@ -1164,11 +1217,23 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
       return;
     }
     pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
+    if (D_RO(pool_root)->header.layout_version != RWL_POOL_VERSION) {
+      lderr(cct) << "Pool layout version is " << D_RO(pool_root)->header.layout_version
+		 << " expected " << RWL_POOL_VERSION << dendl;
+      on_finish->complete(-1);
+      return;
+    }
     if (D_RO(pool_root)->block_size != BLOCK_SIZE) {
       lderr(cct) << "Pool block size is " << D_RO(pool_root)->block_size << " expected " << BLOCK_SIZE << dendl;
       on_finish->complete(-1);
       return;
     }
+    m_total_log_entries = D_RO(pool_root)->num_log_entries;
+    m_free_log_entries = D_RO(pool_root)->num_log_entries;
+    m_total_blocks = D_RO(pool_root)->num_blocks;
+    m_free_blocks = D_RO(pool_root)->num_blocks;
+    m_valid_entry_hint = D_RO(pool_root)->valid_entry_hint;
+    m_free_entry_hint = D_RO(pool_root)->free_entry_hint;
     ldout(cct,5) << "pool " << m_log_pool_name << "has " << D_RO(pool_root)->num_log_entries <<
       " log entries and " << D_RO(pool_root)->num_blocks << " data blocks" << dendl;
   }
