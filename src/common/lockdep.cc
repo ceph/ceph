@@ -216,7 +216,7 @@ void lockdep_unregister(int id)
   std::string name;
   map<int, std::string>::iterator p = lock_names.find(id);
   if (p == lock_names.end())
-    name = { "unknown" };
+    name = "unknown" ;
   else
     name = p->second;
 
