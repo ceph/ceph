@@ -183,6 +183,7 @@ BuildRequires:	keyutils-libs-devel
 BuildRequires:	libibverbs-devel
 BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
+BuildRequires:  CUnit-devel
 BuildRequires:  redhat-lsb-core
 BuildRequires:	Cython
 BuildRequires:	python-prettytable

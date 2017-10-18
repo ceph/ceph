@@ -219,7 +219,12 @@ if(WITH_ZFS)
   set(HAVE_LIBZFS ${ZFS_FOUND})
 endif()
 
-option(WITH_SPDK "Enable SPDK" OFF)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64")
+  option(WITH_SPDK "Enable SPDK" ON)
+else()
+  option(WITH_SPDK "Enable SPDK" OFF)
+endif()
+
 if(WITH_SPDK)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
