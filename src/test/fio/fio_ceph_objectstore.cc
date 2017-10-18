@@ -179,9 +179,7 @@ struct Object {
   Collection& coll;
 
   Object(const char* name, Collection& coll)
-    : oid(hobject_t(name, "", CEPH_NOSNAP,
-                    ceph_str_hash(CEPH_STR_HASH_RJENKINS, name, strlen(name)),
-                    coll.pg.pool(), "")),
+    : oid(hobject_t(name, "", CEPH_NOSNAP, coll.pg.ps(), coll.pg.pool(), "")),
       coll(coll) {}
 };
 
