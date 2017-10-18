@@ -3,6 +3,7 @@ lib/udev/rules.d/95-ceph-osd.rules
 usr/bin/ceph-bluestore-tool
 usr/bin/ceph-clsinfo
 usr/bin/ceph-objectstore-tool
+usr/bin/ceph-osdomap-tool
 usr/bin/ceph-osd
 usr/bin/ceph_objectstore_bench
 usr/lib/ceph/ceph-osd-prestart.sh
