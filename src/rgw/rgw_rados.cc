@@ -6756,18 +6756,6 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                                   handler);
 }
 
-/**
- * Write/overwrite an object to the bucket storage.
- * bucket: the bucket to store the object in
- * obj: the object name/key
- * data: the object contents/value
- * size: the amount of data to write (data must be this long)
- * accounted_size: original size of data before compression, encryption
- * mtime: if non-NULL, writes the given mtime to the bucket storage
- * attrs: all the given attrs are written to bucket storage for the given object
- * exclusive: create object exclusively
- * Returns: 0 on success, -ERR# otherwise.
- */
 int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_size,
                                            map<string, bufferlist>& attrs,
                                            bool assume_noent, bool modify_tail,
