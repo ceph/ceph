@@ -3553,7 +3553,7 @@ void CInode::_decode_locks_full(bufferlist::iterator& p)
   want_loner_cap = loner_cap;  // for now, we'll eval() shortly.
 }
 
-void CInode::_encode_locks_state_for_replica(bufferlist& bl)
+void CInode::_encode_locks_state_for_replica(bufferlist& bl, bool need_recover)
 {
   authlock.encode_state_for_replica(bl);
   linklock.encode_state_for_replica(bl);
@@ -3564,7 +3564,9 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl)
   snaplock.encode_state_for_replica(bl);
   flocklock.encode_state_for_replica(bl);
   policylock.encode_state_for_replica(bl);
+  ::encode(need_recover, bl);
 }
+
 void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
 {
   authlock.encode_state_for_replica(bl);
@@ -3577,6 +3579,7 @@ void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
   flocklock.encode_state_for_replica(bl);
   policylock.encode_state_for_replica(bl);
 }
+
 void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
 {
   authlock.decode_state(p, is_new);
@@ -3588,19 +3591,35 @@ void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
   snaplock.decode_state(p, is_new);
   flocklock.decode_state(p, is_new);
   policylock.decode_state(p, is_new);
+
+  bool need_recover;
+  ::decode(need_recover, p);
+  if (need_recover && is_new) {
+    // Auth mds replicated this inode while it's recovering. Auth mds may take xlock on the lock
+    // and change the object when replaying unsafe requests.
+    authlock.mark_need_recover();
+    linklock.mark_need_recover();
+    dirfragtreelock.mark_need_recover();
+    filelock.mark_need_recover();
+    nestlock.mark_need_recover();
+    xattrlock.mark_need_recover();
+    snaplock.mark_need_recover();
+    flocklock.mark_need_recover();
+    policylock.mark_need_recover();
+  }
 }
 void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters,
-				  list<SimpleLock*>& eval_locks)
+				  list<SimpleLock*>& eval_locks, bool survivor)
 {
-  authlock.decode_state_rejoin(p, waiters);
-  linklock.decode_state_rejoin(p, waiters);
-  dirfragtreelock.decode_state_rejoin(p, waiters);
-  filelock.decode_state_rejoin(p, waiters);
-  nestlock.decode_state_rejoin(p, waiters);
-  xattrlock.decode_state_rejoin(p, waiters);
-  snaplock.decode_state_rejoin(p, waiters);
-  flocklock.decode_state_rejoin(p, waiters);
-  policylock.decode_state_rejoin(p, waiters);
+  authlock.decode_state_rejoin(p, waiters, survivor);
+  linklock.decode_state_rejoin(p, waiters, survivor);
+  dirfragtreelock.decode_state_rejoin(p, waiters, survivor);
+  filelock.decode_state_rejoin(p, waiters, survivor);
+  nestlock.decode_state_rejoin(p, waiters, survivor);
+  xattrlock.decode_state_rejoin(p, waiters, survivor);
+  snaplock.decode_state_rejoin(p, waiters, survivor);
+  flocklock.decode_state_rejoin(p, waiters, survivor);
+  policylock.decode_state_rejoin(p, waiters, survivor);
 
   if (!dirfragtreelock.is_stable() && !dirfragtreelock.is_wrlocked())
     eval_locks.push_back(&dirfragtreelock);

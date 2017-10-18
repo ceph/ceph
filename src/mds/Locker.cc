@@ -585,33 +585,20 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       }
     } else {
       assert(mdr->is_master());
-      if ((*p)->is_scatterlock()) {
-	ScatterLock *slock = static_cast<ScatterLock *>(*p);
-	if (slock->is_rejoin_mix()) {
-	  // If there is a recovering mds who replcated an object when it failed
-	  // and scatterlock in the object was in MIX state, It's possible that
-	  // the recovering mds needs to take wrlock on the scatterlock when it
-	  // replays unsafe requests. So this mds should delay taking rdlock on
-	  // the scatterlock until the recovering mds finishes replaying unsafe.
-	  // Otherwise unsafe requests may get replayed after current request.
-	  //
-	  // For example:
-	  // The recovering mds is auth mds of a dirfrag, this mds is auth mds
-	  // of correspinding inode. when 'rm -rf' the direcotry, this mds should
-	  // delay the rmdir request until the recovering mds has replayed unlink
-	  // requests.
-	  if (mds->is_cluster_degraded()) {
-	    if (!mdr->is_replay()) {
-	      drop_locks(mdr.get());
-	      mds->wait_for_cluster_recovered(new C_MDS_RetryRequest(mdcache, mdr));
-	      dout(10) << " rejoin mix scatterlock " << *slock << " " << *(*p)->get_parent()
-		       << ", waiting for cluster recovered" << dendl;
-	      marker.message = "rejoin mix scatterlock, waiting for cluster recovered";
-	      return false;
-	    }
-	  } else {
-	    slock->clear_rejoin_mix();
+      if ((*p)->needs_recover()) {
+	if (mds->is_cluster_degraded()) {
+	  if (!mdr->is_replay()) {
+	    // see comments in SimpleLock::set_state_rejoin() and
+	    // ScatterLock::encode_state_for_rejoin()
+	    drop_locks(mdr.get());
+	    mds->wait_for_cluster_recovered(new C_MDS_RetryRequest(mdcache, mdr));
+	    dout(10) << " rejoin recovering " << **p << " " << *(*p)->get_parent()
+		     << ", waiting for cluster recovered" << dendl;
+	    marker.message = "rejoin recovering lock, waiting for cluster recovered";
+	    return false;
 	  }
+	} else {
+	  (*p)->clear_need_recover();
 	}
       }
 
