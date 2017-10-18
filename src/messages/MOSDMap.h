@@ -97,7 +97,8 @@ public:
 	(features & CEPH_FEATURE_OSDENC) == 0 ||
         (features & CEPH_FEATURE_OSDMAP_ENC) == 0 ||
 	(features & CEPH_FEATURE_MSG_ADDR2) == 0 ||
-	!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+	!HAVE_FEATURE(features, SERVER_LUMINOUS) ||
+	!HAVE_FEATURE(features, SERVER_MIMIC)) {
       if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	  (features & CEPH_FEATURE_PGPOOL3) == 0)
 	header.version = 1;  // old old_client version
