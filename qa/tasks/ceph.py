@@ -338,17 +338,18 @@ def create_rbd_pool(ctx, config):
         remote=mon_remote,
         ceph_cluster=cluster_name,
     )
-    log.info('Creating RBD pool')
-    mon_remote.run(
-        args=['sudo', 'ceph', '--cluster', cluster_name,
-              'osd', 'pool', 'create', 'rbd', '8'])
-    mon_remote.run(
-        args=[
-            'sudo', 'ceph', '--cluster', cluster_name,
-            'osd', 'pool', 'application', 'enable',
-            'rbd', 'rbd', '--yes-i-really-mean-it'
-        ],
-        check_status=False)
+    if config.get('create_rbd_pool', True):
+        log.info('Creating RBD pool')
+        mon_remote.run(
+            args=['sudo', 'ceph', '--cluster', cluster_name,
+                  'osd', 'pool', 'create', 'rbd', '8'])
+        mon_remote.run(
+            args=[
+                'sudo', 'ceph', '--cluster', cluster_name,
+                'osd', 'pool', 'application', 'enable',
+                'rbd', 'rbd', '--yes-i-really-mean-it'
+            ],
+            check_status=False)
     yield
 
 @contextlib.contextmanager
