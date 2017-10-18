@@ -33,6 +33,7 @@
 	mon allow pool delete = true
 
 	mon cluster log file level = debug
+	debug asserts on shutdown = true
 
 [osd]
         osd journal size = 100
