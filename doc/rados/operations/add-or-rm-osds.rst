@@ -184,9 +184,9 @@ need to be keep intact after the OSD is destroyed for replacement.
 
 #. Prepare the disk for replacement by using the previously destroyed OSD id::
 
-     ceph-disk prepare --bluestore /dev/sdX  --osd-id {id} --osd-uuid `uuidgen`
+     ceph-disk prepare --osd-id {id} /dev/sdX
 
-#. And activate the OSD::
+#. And activate the OSD (if not done automatically)::
 
      ceph-disk activate /dev/sdX1
 
