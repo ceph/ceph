@@ -1389,7 +1389,7 @@ std::vector<Option> get_global_options() {
     .set_description("Duration in seconds that blacklist entries for clients "
                      "remain in the OSD map"),
 
-    Option("mds_blacklist_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    Option("mon_mds_blacklist_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1_day)
     .set_min(1_hr)
     .set_description("Duration in seconds that blacklist entries for MDS "
