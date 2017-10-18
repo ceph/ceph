@@ -43,7 +43,6 @@ class ScatterLock : public SimpleLock {
     DIRTY            = 1 << 10,
     FLUSHING         = 1 << 11,
     FLUSHED          = 1 << 12,
-    REJOIN_MIX       = 1 << 13,
   };
 
 public:
@@ -125,9 +124,6 @@ public:
   bool is_dirty_or_flushing() const {
     return is_dirty() || is_flushing();
   }
-  bool is_rejoin_mix() const {
-    return state_flags & REJOIN_MIX;
-  }
 
   void mark_dirty() { 
     if (!is_dirty()) {
@@ -159,9 +155,6 @@ public:
   void clear_flushed() override {
     state_flags &= ~FLUSHED;
   }
-  void clear_rejoin_mix() {
-    state_flags &= ~REJOIN_MIX;
-  }
 
   void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
     if (rstate == LOCK_MIX || 
@@ -182,14 +175,26 @@ public:
 	s = LOCK_MIX_LOCK;
     }
 
+    // If there is a recovering mds who replcated an object when it failed
+    // and scatterlock in the object was in MIX state, It's possible that
+    // the recovering mds needs to take wrlock on the scatterlock when it
+    // replays unsafe requests. So this mds should delay taking rdlock on
+    // the scatterlock until the recovering mds finishes replaying unsafe.
+    // Otherwise unsafe requests may get replayed after current request.
+    //
+    // For example:
+    // The recovering mds is auth mds of a dirfrag, this mds is auth mds
+    // of correspinding inode. when 'rm -rf' the direcotry, this mds should
+    // delay the rmdir request until the recovering mds has replayed unlink
+    // requests.
     if (s == LOCK_MIX || s == LOCK_MIX_LOCK || s == LOCK_MIX_SYNC)
-      state_flags |= REJOIN_MIX;
+      mark_need_recover();
 
     ::encode(s, bl);
   }
 
-  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters) {
-    SimpleLock::decode_state_rejoin(p, waiters);
+  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters, bool survivor) {
+    SimpleLock::decode_state_rejoin(p, waiters, survivor);
     if (is_flushing()) {
       set_dirty();
       clear_flushing();

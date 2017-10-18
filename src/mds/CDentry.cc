@@ -402,15 +402,18 @@ void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
 
   inodeno_t rino;
   unsigned char rdtype;
-  __s32 ls;
   ::decode(rino, p);
   ::decode(rdtype, p);
-  ::decode(ls, p);
+  lock.decode_state(p, is_new);
+
+  bool need_recover;
+  ::decode(need_recover, p);
 
   if (is_new) {
     if (rino)
       dir->link_remote_inode(this, rino, rdtype);
-    lock.set_state(ls);
+    if (need_recover)
+      lock.mark_need_recover();
   }
 }
 
