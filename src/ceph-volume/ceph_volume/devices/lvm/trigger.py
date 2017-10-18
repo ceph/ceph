@@ -67,4 +67,4 @@ class Trigger(object):
         args = parser.parse_args(self.argv)
         osd_id = parse_osd_id(args.systemd_data)
         osd_uuid = parse_osd_uuid(args.systemd_data)
-        Activate([osd_id, osd_uuid]).main()
+        Activate(['--auto-detect-objectstore', osd_id, osd_uuid]).main()
