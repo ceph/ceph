@@ -1131,26 +1131,52 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
        i != pending_inc.new_state.end();
        ++i) {
     int s = i->second ? i->second : CEPH_OSD_UP;
-    if (s & CEPH_OSD_UP)
-      dout(2) << " osd." << i->first << " DOWN" << dendl;
-    if (s & CEPH_OSD_EXISTS)
-      dout(2) << " osd." << i->first << " DNE" << dendl;
+    if (s & CEPH_OSD_UP) {
+      const int32_t osd = i->first;
+      const entity_addr_t cluster_addr = osdmap.get_cluster_addr(osd);
+      dout(2) << __func__ << " "
+              << "osd." << osd << " "
+              << "cluster addr " << cluster_addr << " DOWN" << dendl;
+    }
+    if (s & CEPH_OSD_EXISTS) {
+      const int32_t osd = i->first;
+      const entity_addr_t cluster_addr = osdmap.get_cluster_addr(osd);
+      dout(2) << __func__ << " "
+              << "osd." << osd << " "
+              << "cluster addr " << cluster_addr << " DNE" << dendl;
+    }
   }
   for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up_client.begin();
        i != pending_inc.new_up_client.end();
        ++i) {
-    //FIXME: insert cluster addresses too
-    dout(2) << " osd." << i->first << " UP " << i->second << dendl;
+    const int32_t osd = i->first;
+    const entity_addr_t cluster_addr = osdmap.get_cluster_addr(osd);
+    dout(2) << __func__ << " "
+            << "osd." << osd << " "
+            << "cluster addr " << cluster_addr << " UP " << i->second << dendl;
   }
   for (map<int32_t,uint32_t>::iterator i = pending_inc.new_weight.begin();
        i != pending_inc.new_weight.end();
        ++i) {
     if (i->second == CEPH_OSD_OUT) {
-      dout(2) << " osd." << i->first << " OUT" << dendl;
+      const int32_t osd = i->first;
+      const entity_addr_t cluster_addr = osdmap.get_cluster_addr(osd);
+      dout(2) << __func__ << " "
+              << "osd." << osd << " "
+              << "cluster addr " << cluster_addr << " OUT" << dendl;
     } else if (i->second == CEPH_OSD_IN) {
-      dout(2) << " osd." << i->first << " IN" << dendl;
+      const int32_t osd = i->first;
+      const entity_addr_t cluster_addr = osdmap.get_cluster_addr(osd);
+      dout(2) << __func__ << " "
+              << " osd." << osd << " "
+              << "cluster addr " << cluster_addr << " IN" << dendl;
     } else {
-      dout(2) << " osd." << i->first << " WEIGHT " << hex << i->second << dec << dendl;
+      const int32_t osd = i->first;
+      const entity_addr_t cluster_addr = osdmap.get_cluster_addr(osd);
+      dout(2) << __func__ << " "
+              << "osd." << osd << " "
+              << "cluster addr " << cluster_addr << " WEIGHT "
+              << hex << i->second << dec << dendl;
     }
   }
 
