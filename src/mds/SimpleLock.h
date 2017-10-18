@@ -165,10 +165,14 @@ protected:
 
   // lock state
   __s16 state;
+  __s16 state_flags;
+
+  enum {
+    LEASED   = 1 << 0,
+  };
 
 private:
-  __s16 num_rdlock;
-  __s32 num_client_lease;
+  int num_rdlock;
 
   struct unstable_bits_t {
     set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
@@ -225,8 +229,8 @@ public:
     type(lt),
     parent(o), 
     state(LOCK_SYNC),
-    num_rdlock(0),
-    num_client_lease(0)
+    state_flags(0),
+    num_rdlock(0)
   {}
   virtual ~SimpleLock() {}
 
@@ -525,25 +529,20 @@ public:
   }
   
   // lease
+  bool is_leased() const {
+    return state_flags & LEASED;
+  }
   void get_client_lease() {
-    num_client_lease++;
+    assert(!is_leased());
+    state_flags |= LEASED;
   }
   void put_client_lease() {
-    assert(num_client_lease > 0);
-    num_client_lease--;
-    if (num_client_lease == 0) {
-      try_clear_more();
-    }
-  }
-  bool is_leased() const {
-    return num_client_lease > 0;
-  }
-  int get_num_client_lease() const {
-    return num_client_lease;
+    assert(is_leased());
+    state_flags &= ~LEASED;
   }
 
   bool is_used() const {
-    return is_xlocked() || is_rdlocked() || is_wrlocked() || num_client_lease;
+    return is_xlocked() || is_rdlocked() || is_wrlocked() || is_leased();
   }
 
   // encode/decode
@@ -657,8 +656,8 @@ public:
     out << get_state_name(get_state());
     if (!get_gather_set().empty())
       out << " g=" << get_gather_set();
-    if (num_client_lease)
-      out << " l=" << num_client_lease;
+    if (is_leased())
+      out << " l";
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
     if (is_wrlocked()) 
