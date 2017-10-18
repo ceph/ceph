@@ -118,7 +118,7 @@ public:
     explicit StreamObjData(rgw_obj& _obj) : obj(_obj) {}
 };
 
-int RGWRESTConn::put_obj_send_init(rgw_obj& obj, RGWRESTStreamS3PutObj **req)
+int RGWRESTConn::put_obj_send_init(rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req)
 {
   string url;
   int ret = get_url(url);
@@ -128,6 +128,11 @@ int RGWRESTConn::put_obj_send_init(rgw_obj& obj, RGWRESTStreamS3PutObj **req)
   rgw_user uid;
   param_vec_t params;
   populate_params(params, &uid, self_zone_group);
+
+  if (extra_params) {
+    append_param_list(params, extra_params);
+  }
+
   RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params);
   wr->send_init(obj);
   *req = wr;
@@ -184,12 +189,28 @@ static void set_header(T val, map<string, string>& headers, const string& header
 }
 
 
-int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
+int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, const rgw_obj& obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, bool get_op, bool rgwx_stat,
                          bool sync_manifest, bool skip_decrypt,
                          bool send, RGWGetDataCB *cb, RGWRESTStreamRWRequest **req)
+{
+  get_obj_params params;
+  params.uid = uid;
+  params.info = info;
+  params.mod_ptr = mod_ptr;
+  params.mod_pg_ver = mod_pg_ver;
+  params.prepend_metadata = prepend_metadata;
+  params.get_op = get_op;
+  params.rgwx_stat = rgwx_stat;
+  params.sync_manifest = sync_manifest;
+  params.skip_decrypt = skip_decrypt;
+  params.cb = cb;
+  return get_obj(obj, params, send, req);
+}
+
+int RGWRESTConn::get_obj(const rgw_obj& obj, const get_obj_params& in_params, bool send, RGWRESTStreamRWRequest **req)
 {
   string url;
   int ret = get_url(url);
@@ -197,31 +218,31 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
     return ret;
 
   param_vec_t params;
-  populate_params(params, &uid, self_zone_group);
-  if (prepend_metadata) {
+  populate_params(params, &in_params.uid, self_zone_group);
+  if (in_params.prepend_metadata) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "prepend-metadata", "true"));
   }
-  if (rgwx_stat) {
+  if (in_params.rgwx_stat) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "stat", "true"));
   }
-  if (sync_manifest) {
+  if (in_params.sync_manifest) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "sync-manifest", ""));
   }
-  if (skip_decrypt) {
+  if (in_params.skip_decrypt) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "skip-decrypt", ""));
   }
   if (!obj.key.instance.empty()) {
     const string& instance = obj.key.instance;
     params.push_back(param_pair_t("versionId", instance));
   }
-  if (get_op) {
-    *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
+  if (in_params.get_op) {
+    *req = new RGWRESTStreamReadRequest(cct, url, in_params.cb, NULL, &params);
   } else {
-    *req = new RGWRESTStreamHeadRequest(cct, url, cb, NULL, &params);
+    *req = new RGWRESTStreamHeadRequest(cct, url, in_params.cb, NULL, &params);
   }
   map<string, string> extra_headers;
-  if (info) {
-    const auto& orig_map = info->env->get_map();
+  if (in_params.info) {
+    const auto& orig_map = in_params.info->env->get_map();
 
     /* add original headers that start with HTTP_X_AMZ_ */
     static constexpr char SEARCH_AMZ_PREFIX[] = "HTTP_X_AMZ_";
@@ -235,13 +256,18 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
     }
   }
 
-  set_date_header(mod_ptr, extra_headers, "HTTP_IF_MODIFIED_SINCE");
-  set_date_header(unmod_ptr, extra_headers, "HTTP_IF_UNMODIFIED_SINCE");
-  if (mod_zone_id != 0) {
-    set_header(mod_zone_id, extra_headers, "HTTP_DEST_ZONE_SHORT_ID");
+  set_date_header(in_params.mod_ptr, extra_headers, "HTTP_IF_MODIFIED_SINCE");
+  set_date_header(in_params.unmod_ptr, extra_headers, "HTTP_IF_UNMODIFIED_SINCE");
+  if (in_params.mod_zone_id != 0) {
+    set_header(in_params.mod_zone_id, extra_headers, "HTTP_DEST_ZONE_SHORT_ID");
   }
-  if (mod_pg_ver != 0) {
-    set_header(mod_pg_ver, extra_headers, "HTTP_DEST_PG_VER");
+  if (in_params.mod_pg_ver != 0) {
+    set_header(in_params.mod_pg_ver, extra_headers, "HTTP_DEST_PG_VER");
+  }
+  if (in_params.range_is_set) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "bytes=%lld-%lld", (long long)in_params.range_start, (long long)in_params.range_end);
+    set_header(buf, extra_headers, "RANGE");
   }
 
   int r = (*req)->send_prepare(key, extra_headers, obj);

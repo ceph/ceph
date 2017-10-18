@@ -36,16 +36,22 @@ struct rgw_http_param_pair {
   const char *val;
 };
 
-// copy a null-terminated rgw_http_param_pair list into a list of string pairs
-inline param_vec_t make_param_list(const rgw_http_param_pair* pp)
+// append a null-terminated rgw_http_param_pair list into a list of string pairs
+inline void append_param_list(param_vec_t& params, const rgw_http_param_pair* pp)
 {
-  param_vec_t params;
   while (pp && pp->key) {
     string k = pp->key;
     string v = (pp->val ? pp->val : "");
     params.emplace_back(make_pair(std::move(k), std::move(v)));
     ++pp;
   }
+}
+
+// copy a null-terminated rgw_http_param_pair list into a list of string pairs
+inline param_vec_t make_param_list(const rgw_http_param_pair* pp)
+{
+  param_vec_t params;
+  append_param_list(params, pp);
   return params;
 }
 
@@ -89,12 +95,36 @@ public:
 
 
   /* async requests */
-  int put_obj_send_init(rgw_obj& obj, RGWRESTStreamS3PutObj **req);
+  int put_obj_send_init(rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
   int put_obj_async(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
                     map<string, bufferlist>& attrs, bool send, RGWRESTStreamS3PutObj **req);
   int complete_request(RGWRESTStreamS3PutObj *req, string& etag, ceph::real_time *mtime);
 
-  int get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
+  struct get_obj_params {
+    rgw_user uid;
+    req_info *info{nullptr};
+    const ceph::real_time *mod_ptr{nullptr};
+    const ceph::real_time *unmod_ptr{nullptr};
+
+    uint32_t mod_zone_id{0};
+    uint64_t mod_pg_ver{0};
+
+    bool prepend_metadata{false};
+    bool get_op{false};
+    bool rgwx_stat{false};
+    bool sync_manifest{false};
+
+    bool skip_decrypt{true};
+    RGWGetDataCB *cb{nullptr};
+
+    bool range_is_set{false};
+    uint64_t range_start{0};
+    uint64_t range_end{0};
+  };
+
+  int get_obj(const rgw_obj& obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
+
+  int get_obj(const rgw_user& uid, req_info *info /* optional */, const rgw_obj& obj,
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
