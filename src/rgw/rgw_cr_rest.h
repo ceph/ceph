@@ -371,6 +371,12 @@ class RGWStreamReadHTTPResourceCRF : public RGWStreamReadResourceCRF {
 protected:
   rgw_rest_obj rest_obj;
 
+  struct range_info {
+    bool is_set{false};
+    uint64_t ofs;
+    uint64_t size;
+  } range;
+
 public:
   RGWStreamReadHTTPResourceCRF(CephContext *_cct,
                                RGWCoroutinesEnv *_env,
@@ -396,6 +402,12 @@ public:
   rgw_rest_obj& get_rest_obj() {
     return rest_obj;
   }
+
+  void set_range(uint64_t ofs, uint64_t size) {
+    range.is_set = true;
+    range.ofs = ofs;
+    range.size = size;
+  }
 };
 
 class RGWStreamWriteHTTPResourceCRF : public RGWStreamWriteResourceCRF {
@@ -405,6 +417,13 @@ protected:
   RGWHTTPManager *http_manager;
 
   RGWHTTPStreamRWRequest *req{nullptr};
+
+  struct multipart_info {
+    bool is_multipart{false};
+    string upload_id;
+    int part_num{0};
+    uint64_t part_size;
+  } multipart;
 
 public:
   RGWStreamWriteHTTPResourceCRF(CephContext *_cct,
@@ -425,6 +444,13 @@ public:
 
   void set_req(RGWHTTPStreamRWRequest *r) {
     req = r;
+  }
+
+  void set_multipart(const string& upload_id, int part_num, uint64_t part_size) {
+    multipart.is_multipart = true;
+    multipart.upload_id = upload_id;
+    multipart.part_num = part_num;
+    multipart.part_size = part_size;
   }
 };
 

@@ -30,6 +30,11 @@ static string aws_object_name(const RGWBucketInfo& bucket_info, const rgw_obj_ke
   return object_name;
 }
 
+static string obj_to_aws_path(const rgw_obj& obj)
+{
+  return obj.bucket.name + "/" + obj.key.name;
+}
+
 struct AWSConfig {
   string id;
   std::unique_ptr<RGWRESTConn> conn;
@@ -40,6 +45,7 @@ class RGWRESTStreamGetCRF : public RGWStreamReadHTTPResourceCRF
   RGWDataSyncEnv *sync_env;
   RGWRESTConn *conn;
   rgw_obj src_obj;
+  RGWRESTConn::get_obj_params req_params;
 public:
   RGWRESTStreamGetCRF(CephContext *_cct,
                                RGWCoroutinesEnv *_env,
@@ -52,12 +58,19 @@ public:
 
   int init() override {
     /* init input connection */
+
+
+    req_params.get_op = true;
+    req_params.prepend_metadata = true;
+
+    if (range.is_set) {
+      req_params.range_is_set = true;
+      req_params.range_start = range.ofs;
+      req_params.range_end = range.ofs + range.size - 1;
+    }
+
     RGWRESTStreamRWRequest *in_req;
-    int ret = conn->get_obj(rgw_user(),  nullptr, src_obj,
-                            nullptr /* mod_ptr */, nullptr /* unmod_ptr */, 0 /* mod_zone_id */, 0 /* mod_pg_ver */,
-                            true /* prepend_metadata */, true /* get_op */, false /*rgwx_stat */,
-                            false /* sync_manifest */, true /* skip_descrypt */, false /* send */,
-                            nullptr /* cb */, &in_req);
+    int ret = conn->get_obj(src_obj, req_params, false /* send */, &in_req);
     if (ret < 0) {
       ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): conn->get_obj() returned ret=" << ret << dendl;
       return ret;
@@ -108,7 +121,16 @@ public:
     /* init output connection */
     RGWRESTStreamS3PutObj *out_req{nullptr};
 
-    conn->put_obj_send_init(dest_obj, &out_req);
+    if (multipart.is_multipart) {
+      char buf[32];
+      snprintf(buf, sizeof(buf), "%d", multipart.part_num);
+      rgw_http_param_pair params[] = { { "uploadId", multipart.upload_id.c_str() },
+                                       { "partNumber", buf },
+                                       { nullptr, nullptr } };
+      conn->put_obj_send_init(dest_obj, params, &out_req);
+    } else {
+      conn->put_obj_send_init(dest_obj, nullptr, &out_req);
+    }
 
     set_req(out_req);
 
@@ -179,7 +201,6 @@ public:
   }
 };
 
-#if 0
 class RGWAWSStreamObjToCloudMultipartPartCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   RGWRESTConn *source_conn;
@@ -187,6 +208,7 @@ class RGWAWSStreamObjToCloudMultipartPartCR : public RGWCoroutine {
   rgw_obj src_obj;
   rgw_obj dest_obj;
 
+  string upload_id;
   uint64_t ofs;
   uint64_t size;
   int part_num;
@@ -200,6 +222,7 @@ public:
                                 const rgw_obj& _src_obj,
                                 RGWRESTConn *_dest_conn,
                                 const rgw_obj& _dest_obj,
+                                const string& _upload_id,
                                 uint64_t _ofs,
                                 uint64_t _size,
                                 int _part_num) : RGWCoroutine(_sync_env->cct),
@@ -208,6 +231,7 @@ public:
                                                    dest_conn(_dest_conn),
                                                    src_obj(_src_obj),
                                                    dest_obj(_dest_obj),
+                                                   upload_id(_upload_id),
                                                    ofs(_ofs), size(_size),
                                                    part_num(_part_num) {}
 
@@ -222,7 +246,7 @@ public:
       out_crf.reset(new RGWAWSStreamPutCRF(cct, get_env(), this, sync_env, dest_conn,
                                            dest_obj));
 
-      out_crf->set_multipart(part_num, size);
+      out_crf->set_multipart(upload_id, part_num, size);
 
       yield call(new RGWStreamSpliceCR(cct, sync_env->http_manager, in_crf, out_crf));
       if (retcode < 0) {
@@ -235,7 +259,45 @@ public:
     return 0;
   }
 };
-#endif
+
+class RGWAWSAbortMultipartCR : public RGWCoroutine {
+  RGWDataSyncEnv *sync_env;
+  RGWRESTConn *dest_conn;
+  rgw_obj dest_obj;
+
+  string upload_id;
+
+public:
+  RGWAWSAbortMultipartCR(RGWDataSyncEnv *_sync_env,
+                        RGWRESTConn *_dest_conn,
+                        const rgw_obj& _dest_obj,
+                        const string& _upload_id) : RGWCoroutine(_sync_env->cct),
+                                                   sync_env(_sync_env),
+                                                   dest_conn(_dest_conn),
+                                                   dest_obj(_dest_obj),
+                                                   upload_id(_upload_id) {}
+
+  int operate() {
+    reenter(this) {
+
+      yield {
+        rgw_http_param_pair params[] = { { "uploadId", upload_id.c_str() }, {nullptr, nullptr} };
+        bufferlist bl;
+        call(new RGWDeleteRESTResourceCR(sync_env->cct, dest_conn, sync_env->http_manager,
+                                         obj_to_aws_path(dest_obj), params));
+      }
+
+      if (retcode < 0) {
+        ldout(sync_env->cct, 0) << "ERROR: failed to abort multipart upload for dest object=" << dest_obj << " (retcode=" << retcode << ")" << dendl;
+        return set_cr_error(retcode);
+      }
+
+      return set_cr_done();
+    }
+
+    return 0;
+  }
+};
 
 class RGWAWSInitMultipartCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
@@ -279,11 +341,10 @@ public:
     reenter(this) {
 
       yield {
-        string path = dest_obj.bucket.name + "/" + dest_obj.key.name;
         rgw_http_param_pair params[] = { { "uploads", nullptr }, {nullptr, nullptr} };
         bufferlist bl;
         call(new RGWPostRawRESTResourceCR <bufferlist> (sync_env->cct, dest_conn, sync_env->http_manager,
-                                                 path, params, bl, &out_bl));
+                                                 obj_to_aws_path(dest_obj), params, bl, &out_bl));
       }
 
       if (retcode < 0) {
@@ -291,7 +352,11 @@ public:
         return set_cr_error(retcode);
       }
       {
-#warning need to cancel upload in case of error here
+        /*
+         * If one of the following fails we cannot abort upload, as we cannot
+         * extract the upload id. If one of these fail it's very likely that that's
+         * the least of our problem.
+         */
         RGWXMLDecoder::XMLParser parser;
         if (!parser.init()) {
           ldout(sync_env->cct, 0) << "ERROR: failed to initialize xml parser for parsing multipart init response from server" << dendl;
