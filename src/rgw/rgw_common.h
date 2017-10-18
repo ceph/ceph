@@ -385,7 +385,9 @@ class RGWEnv;
 
 class RGWConf {
   friend class RGWEnv;
-protected:
+  int enable_ops_log;
+  int enable_usage_log;
+  uint8_t defer_to_bucket_acls;
   void init(CephContext *cct);
 public:
   RGWConf()
@@ -393,17 +395,12 @@ public:
       enable_usage_log(1),
       defer_to_bucket_acls(0) {
   }
-
-  int enable_ops_log;
-  int enable_usage_log;
-  uint8_t defer_to_bucket_acls;
 };
 
 class RGWEnv {
   std::map<string, string, ltstr_nocase> env_map;
-public:
   RGWConf conf;
-
+public:
   void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
   void set(const boost::string_ref& name, const boost::string_ref& val);
@@ -413,10 +410,19 @@ public:
   size_t get_size(const char *name, size_t def_val = 0) const;
   bool exists(const char *name) const;
   bool exists_prefix(const char *prefix) const;
-
   void remove(const char *name);
-
   const std::map<string, string, ltstr_nocase>& get_map() const { return env_map; }
+  int rgw_conf_get_enable_ops_log() const {
+    return conf.enable_ops_log;
+  }
+
+  int rgw_conf_get_enable_usage_log() const {
+    return conf.enable_usage_log;
+  }
+
+  int rgw_conf_get_defer_to_bucket_acls() const {
+    return conf.defer_to_bucket_acls;
+  }
 };
 
 enum http_op {
