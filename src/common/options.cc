@@ -1361,7 +1361,7 @@ std::vector<Option> get_global_options() {
 
     Option("mds_blacklist_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(24*60*60)
-    .set_min(1_hr)
+    .set_min(60*60)
     .set_description("Duration in seconds that blacklist entries for MDS "
                      "daemons remain in the OSD map"),
 
