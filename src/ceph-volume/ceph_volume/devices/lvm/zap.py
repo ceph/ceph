@@ -1,6 +1,12 @@
 import argparse
+import logging
 
 from textwrap import dedent
+
+from ceph_volume import decorators, terminal
+from ceph_volume.api import lvm as api
+
+logger = logging.getLogger(__name__)
 
 
 class Zap(object):
@@ -10,8 +16,18 @@ class Zap(object):
     def __init__(self, argv):
         self.argv = argv
 
+    @decorators.needs_root
     def zap(self, args):
-        pass
+        device = args.device
+        lv = api.get_lv_from_argument(device)
+        if lv:
+            # we are zapping a logical volume
+            logger.info("Zapping logical volume: %s", lv.path)
+            terminal.write("Zapping logical volume: %s", lv.path)
+            api.remove_lv(lv.path)
+        else:
+            # we are zapping a partition
+            pass
 
     def main(self):
         sub_command_help = dedent("""
