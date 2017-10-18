@@ -94,10 +94,15 @@ def activate_bluestore(lvs):
         # mkdir -p and mount as tmpfs
         prepare_utils.create_osd_path(osd_id, tmpfs=True)
 
+    process.run([
+        'sudo', 'ceph-bluestore-tool',
+        'prime-osd-dir', '--dev', osd_lv.lv_path,
+        '--path', osd_path])
     # always re-do the symlink regardless if it exists, so that the block,
     # block.wal, and block.db devices that may have changed can be mapped
     # correctly every time
     process.run(['sudo', 'ln', '-snf', osd_lv.lv_path, os.path.join(osd_path, 'block')])
+    system.chown(os.path.join(osd_path, 'block'))
     system.chown(osd_path)
     if db_device_path:
         destination = os.path.join(osd_path, 'block.db')
@@ -132,7 +137,7 @@ class Activate(object):
             lvs.filter(lv_tags={'ceph.osd_fsid': args.osd_fsid})
         if not lvs:
             raise RuntimeError('could not find osd.%s with fsid %s' % (args.osd_id, args.osd_fsid))
-        if args.auto_detect_objecstore:
+        if args.auto_detect_objectstore:
             logger.info('auto detecting objectstore')
             # may get multiple lvs, so can't do lvs.get() calls here
             for lv in lvs:
