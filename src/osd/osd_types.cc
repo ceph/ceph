@@ -4900,6 +4900,7 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   user_version = other.user_version;
   data_digest = other.data_digest;
   omap_digest = other.omap_digest;
+  extents = other.extents;
 }
 
 void object_info_t::encode(bufferlist& bl, uint64_t features) const
