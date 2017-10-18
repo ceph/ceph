@@ -41,7 +41,8 @@ public:
       	        const ZTracer::Trace &parent_trace, Context *on_finish)
     : Request(image_ctx, snap_id, on_finish), m_object_map(*object_map),
       m_start_object_no(start_object_no), m_end_object_no(end_object_no),
-      m_new_state(new_state), m_current_state(current_state),
+      m_update_start_object_no(start_object_no), m_new_state(new_state),
+      m_current_state(current_state),
       m_trace(util::create_trace(image_ctx, "update object map", parent_trace))
   {
     m_trace.event("start");
@@ -56,12 +57,35 @@ protected:
   void finish_request() override;
 
 private:
+  /**
+   * @verbatim
+   *
+   * <start>
+   *    |
+   *    |/------------------\
+   *    v                   | (repeat in batches)
+   * UPDATE_OBJECT_MAP -----/
+   *    |
+   *    v
+   * <finish>
+   *
+   * @endverbatim
+   */
+
   ceph::BitVector<2> &m_object_map;
   uint64_t m_start_object_no;
   uint64_t m_end_object_no;
+  uint64_t m_update_start_object_no;
+  uint64_t m_update_end_object_no = 0;
   uint8_t m_new_state;
   boost::optional<uint8_t> m_current_state;
   ZTracer::Trace m_trace;
+
+  void update_object_map();
+  void handle_update_object_map(int r);
+
+  void update_in_memory_object_map();
+
 };
 
 } // namespace object_map

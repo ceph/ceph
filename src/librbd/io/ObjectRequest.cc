@@ -55,6 +55,16 @@ ObjectRequest<I>::create_truncate(I *ictx, const std::string &oid,
 
 template <typename I>
 ObjectRequest<I>*
+ObjectRequest<I>::create_trim(I *ictx, const std::string &oid,
+                              uint64_t object_no, const ::SnapContext &snapc,
+                              bool post_object_map_update,
+                              Context *completion) {
+  return new ObjectTrimRequest(util::get_image_ctx(ictx), oid, object_no,
+                               snapc, post_object_map_update, completion);
+}
+
+template <typename I>
+ObjectRequest<I>*
 ObjectRequest<I>::create_write(I *ictx, const std::string &oid,
                                uint64_t object_no, uint64_t object_off,
                                const ceph::bufferlist &data,
