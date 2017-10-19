@@ -334,7 +334,7 @@ class TestCreateLV(object):
         monkeypatch.setattr(process, 'run', capture)
         monkeypatch.setattr(process, 'call', capture)
         monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
-        api.create_lv('foo', 'foo_group', size=5, type='data')
+        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'})
         expected = ['sudo', 'lvcreate', '--yes', '-L', '5G', '-n', 'foo', 'foo_group']
         assert capture.calls[0]['args'][0] == expected
 
@@ -342,7 +342,7 @@ class TestCreateLV(object):
         monkeypatch.setattr(process, 'run', capture)
         monkeypatch.setattr(process, 'call', capture)
         monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
-        api.create_lv('foo', 'foo_group', size=5, type='data')
+        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'})
         ceph_tag = ['sudo', 'lvchange', '--addtag', 'ceph.type=data', '/path']
         assert capture.calls[1]['args'][0] == ceph_tag
 
@@ -350,6 +350,6 @@ class TestCreateLV(object):
         monkeypatch.setattr(process, 'run', capture)
         monkeypatch.setattr(process, 'call', capture)
         monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
-        api.create_lv('foo', 'foo_group', size=5, type='data')
+        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'})
         data_tag = ['sudo', 'lvchange', '--addtag', 'ceph.data_device=/path', '/path']
         assert capture.calls[2]['args'][0] == data_tag
