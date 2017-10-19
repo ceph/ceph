@@ -176,6 +176,7 @@ namespace librbd {
     bool localize_snap_reads;
     bool balance_parent_reads;
     bool localize_parent_reads;
+    uint64_t sparse_read_threshold_bytes;
     uint32_t readahead_trigger_requests;
     uint64_t readahead_max_bytes;
     uint64_t readahead_disable_after_bytes;
