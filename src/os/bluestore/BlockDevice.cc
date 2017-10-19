@@ -24,7 +24,7 @@
 
 #if defined(HAVE_PMEM)
 #include "PMEMDevice.h"
-#include <libpmem.h>
+#include "libpmem.h"
 #endif
 
 #include "common/debug.h"

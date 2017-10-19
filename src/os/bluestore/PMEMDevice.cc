@@ -18,9 +18,9 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <libpmem.h>
 
 #include "PMEMDevice.h"
+#include "libpmem.h"
 #include "include/types.h"
 #include "include/compat.h"
 #include "include/stringify.h"
