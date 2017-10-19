@@ -14,6 +14,7 @@
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
 #include "common/errno.h"
+#include "common/safe_io.h"
 
 #include "os/bluestore/BlueFS.h"
 #include "os/bluestore/BlueStore.h"
@@ -129,6 +130,7 @@ int main(int argc, char **argv)
   string path;
   string action;
   string log_file;
+  string key, value;
   int log_level = 30;
   bool fsck_deep = false;
   po::options_description po_options("Options");
@@ -140,10 +142,12 @@ int main(int argc, char **argv)
     ("log-level", po::value<int>(&log_level), "log level (30=most, 20=lots, 10=some, 1=little)")
     ("dev", po::value<vector<string>>(&devs), "device(s)")
     ("deep", po::value<bool>(&fsck_deep), "deep fsck (read all data)")
+    ("key,k", po::value<string>(&key), "label metadata key name")
+    ("value,v", po::value<string>(&value), "label metadata value")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, show-label")
+    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, show-label, set-label-key, rm-label-key, prime-osd-dir")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -179,17 +183,44 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
   }
+  if (action == "prime-osd-dev") {
+    if (devs.size() != 1) {
+      cerr << "must specify the main bluestore device" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (path.empty()) {
+      cerr << "must specify osd dir to prime" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (action == "set-label-key" ||
+      action == "rm-label-key") {
+    if (devs.size() != 1) {
+      cerr << "must specify the main bluestore device" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (key.size() == 0) {
+      cerr << "must specify a key name with -k" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (action == "set-label-key" && value.size() == 0) {
+      cerr << "must specify a value with -v" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
   if (action == "show-label") {
     if (devs.empty() && path.empty()) {
       cerr << "must specify bluestore path *or* raw device(s)" << std::endl;
       exit(EXIT_FAILURE);
     }
-    cout << "infering bluefs devices from bluestore path" << std::endl;
-    for (auto fn : {"block", "block.wal", "block.db"}) {
-      string p = path + "/" + fn;
-      struct stat st;
-      if (::stat(p.c_str(), &st) == 0) {
-	devs.push_back(p);
+    if (devs.empty()) {
+      cout << "infering bluefs devices from bluestore path" << std::endl;
+      for (auto fn : {"block", "block.wal", "block.db"}) {
+	string p = path + "/" + fn;
+	struct stat st;
+	if (::stat(p.c_str(), &st) == 0) {
+	  devs.push_back(p);
+	}
       }
     }
   }
@@ -249,8 +280,6 @@ int main(int argc, char **argv)
 			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(cct.get());
 
-  cout << "action " << action << std::endl;
-
   if (action == "fsck" ||
       action == "repair") {
     validate_path(cct.get(), path, false);
@@ -267,9 +296,71 @@ int main(int argc, char **argv)
     }
     cout << action << " success" << std::endl;
   }
+  else if (action == "prime-osd-dir") {
+    bluestore_bdev_label_t label;
+    int r = BlueStore::_read_bdev_label(cct.get(), devs.front(), &label);
+    if (r < 0) {
+      cerr << "failed to read label for " << devs.front() << ": "
+	   << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    // kludge some things into the map that we want to populate into
+    // target dir
+    label.meta["path_block"] = devs.front();
+    label.meta["type"] = "bluestore";
+    label.meta["fsid"] = stringify(label.osd_uuid);
+    
+    for (auto kk : {
+	"whoami",
+	  "osd_key",
+	  "path_block", "path_block.db", "path_block.wal",
+	  "ceph_fsid",
+	  "fsid",
+	  "type",
+	  "ready" }) {
+      string k = kk;
+      auto i = label.meta.find(k);
+      if (i == label.meta.end()) {
+	continue;
+      }
+      string p = path + "/" + k;
+      string v = i->second;
+      if (k == "osd_key") {
+	p = path + "/keyring";
+	v = "[osd.";
+	v += label.meta["whoami"];
+	v += "]\nkey = " + i->second;
+      }
+      v += "\n";
+      if (k.find("path_") == 0) {
+	p = path + "/" + k.substr(5);
+	int r = ::symlink(v.c_str(), p.c_str());
+	if (r < 0) {
+	  cerr << "error symlinking " << p << ": " << cpp_strerror(errno)
+	       << std::endl;
+	  exit(EXIT_FAILURE);
+	}
+      } else {
+	int fd = ::open(p.c_str(), O_CREAT|O_TRUNC|O_WRONLY, 0600);
+	if (fd < 0) {
+	  cerr << "error writing " << p << ": " << cpp_strerror(errno)
+	       << std::endl;
+	  exit(EXIT_FAILURE);
+	}
+	int r = safe_write(fd, v.c_str(), v.size());
+	if (r < 0) {
+	  cerr << "error writing to " << p << ": " << cpp_strerror(errno)
+	       << std::endl;
+	  exit(EXIT_FAILURE);
+	}
+	::close(fd);
+      }
+    }
+  }
   else if (action == "show-label") {
     JSONFormatter jf(true);
-    jf.open_array_section("devices");
+    jf.open_object_section("devices");
     for (auto& i : devs) {
       bluestore_bdev_label_t label;
       int r = BlueStore::_read_bdev_label(cct.get(), i, &label);
@@ -284,6 +375,42 @@ int main(int argc, char **argv)
     }
     jf.close_section();
     jf.flush(cout);
+  }
+  else if (action == "set-label-key") {
+    bluestore_bdev_label_t label;
+    int r = BlueStore::_read_bdev_label(cct.get(), devs.front(), &label);
+    if (r < 0) {
+      cerr << "unable to read label for " << devs.front() << ": "
+	   << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    label.meta[key] = value;
+    r = BlueStore::_write_bdev_label(cct.get(), devs.front(), label);
+    if (r < 0) {
+      cerr << "unable to write label for " << devs.front() << ": "
+	   << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  else if (action == "rm-label-key") {
+    bluestore_bdev_label_t label;
+    int r = BlueStore::_read_bdev_label(cct.get(), devs.front(), &label);
+    if (r < 0) {
+      cerr << "unable to read label for " << devs.front() << ": "
+	   << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (!label.meta.count(key)) {
+      cerr << "key '" << key << "' not present" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    label.meta.erase(key);
+    r = BlueStore::_write_bdev_label(cct.get(), devs.front(), label);
+    if (r < 0) {
+      cerr << "unable to write label for " << devs.front() << ": "
+	   << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
   }
   else if (action == "bluefs-bdev-sizes") {
     BlueFS *fs = open_bluefs(cct.get(), path, devs);
