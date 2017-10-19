@@ -8664,7 +8664,7 @@ void OSD::handle_pg_query(OpRequestRef op)
       peering_wait_for_split[pgid].push_back(
 	PG::CephPeeringEvtRef(
 	  new PG::CephPeeringEvt(
-	    it->second.epoch_sent, it->second.epoch_sent,
+	    m->get_epoch(), it->second.epoch_sent,
 	    PG::MQuery(pg_shard_t(from, it->second.from),
 		       it->second, it->second.epoch_sent))));
       continue;
@@ -8676,7 +8676,7 @@ void OSD::handle_pg_query(OpRequestRef op)
         PG *pg = 0;
         pg = _lookup_lock_pg_with_map_lock_held(pgid);
         pg->queue_query(
-            it->second.epoch_sent, it->second.epoch_sent,
+            m->get_epoch(), it->second.epoch_sent,
             pg_shard_t(from, it->second.from), it->second);
         pg->unlock();
         continue;
