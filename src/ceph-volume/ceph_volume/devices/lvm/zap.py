@@ -51,18 +51,25 @@ class Zap(object):
         lv = api.get_lv_from_argument(device)
         if lv:
             # we are zapping a logical volume
-            logger.info("Zapping logical volume: %s", lv.path)
-            terminal.write("Zapping logical volume: %s", lv.path)
-            api.remove_lv(lv.path)
+            path = lv.path
         else:
             # we are zapping a partition
-            pass
+            #TODO: ensure device is a partition
+            path = device
+
+        logger.info("Zapping: %s", path)
+        terminal.write("Zapping: %s", path)
+
+        wipefs(path)
+        zap_data(path)
 
     def main(self):
         sub_command_help = dedent("""
-        Destroys the given logical volume or partition. If given a path to a logical
-        volume it must be in the format of vg name/lv name. The logical volume will then
-        be removed. If given a partition name like /dev/sdc1 the partition will be destroyed.
+        Zaps the given logical volume or partition. If given a path to a logical
+        volume it must be in the format of vg name/lv name. Any filesystems present
+        on the given lv or partition will be removed and all data will be purged.
+
+        However, the lv or partition will be kept intact.
 
         Example calls for supported scenarios:
 
