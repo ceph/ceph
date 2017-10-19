@@ -513,8 +513,10 @@ void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& con
   }
   stack->set_interval_wait(false);
   if (!stack->is_done()) {
-    scheduled_stacks.push_back(stack);
-    stack->set_is_scheduled(true);
+    if (!stack->is_scheduled) {
+      scheduled_stacks.push_back(stack);
+      stack->set_is_scheduled(true);
+    }
   } else {
     context_stacks.erase(stack);
     stack->put();
@@ -530,8 +532,10 @@ void RGWCoroutinesManager::schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *s
 void RGWCoroutinesManager::_schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *stack)
 {
   assert(lock.is_wlocked());
-  env->scheduled_stacks->push_back(stack);
-  stack->set_is_scheduled(true);
+  if (!stack->is_scheduled) {
+    env->scheduled_stacks->push_back(stack);
+    stack->set_is_scheduled(true);
+  }
   set<RGWCoroutinesStack *>& context_stacks = run_contexts[env->run_context];
   context_stacks.insert(stack);
 }
@@ -573,6 +577,8 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 
   for (list<RGWCoroutinesStack *>::iterator iter = scheduled_stacks.begin(); iter != scheduled_stacks.end() && !going_down;) {
     RGWCoroutinesStack *stack = *iter;
+    ++iter;
+    scheduled_stacks.pop_front();
 
     if (context_stacks.find(stack) == context_stacks.end()) {
       /* stack was probably schedule more than once due to IO, but was since complete */
@@ -662,10 +668,6 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     }
 
 next:
-    ++iter;
-    scheduled_stacks.pop_front();
-
-
     while (scheduled_stacks.empty() && blocked_count > 0) {
       lock.unlock();
       ret = completion_mgr->get_next(&io);
