@@ -3656,8 +3656,8 @@ void BlueStore::_set_compression()
     return;
   }
 
-  if (cct->_conf->bluestore_compression_max_blob_size) {
-    comp_min_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+  if (cct->_conf->bluestore_compression_min_blob_size) {
+    comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size;
   } else {
     assert(bdev);
     if (bdev->is_rotational()) {
