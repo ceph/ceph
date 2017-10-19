@@ -290,6 +290,7 @@ namespace buffer CEPH_BUFFER_API {
       return have_raw() && (start() > 0 || end() < raw_length());
     }
 
+    int get_mempool() const;
     void reassign_to_mempool(int pool);
     void try_assign_to_mempool(int pool);
 
@@ -353,7 +354,6 @@ namespace buffer CEPH_BUFFER_API {
     unsigned _len;
     unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
-    int _mempool = -1;
 
   public:
     class iterator;
@@ -687,7 +687,6 @@ namespace buffer CEPH_BUFFER_API {
       _memcopy_count = other._memcopy_count;
       last_p = begin();
       append_buffer.swap(other.append_buffer);
-      _mempool = other._mempool;
       other.clear();
       return *this;
     }
@@ -696,6 +695,7 @@ namespace buffer CEPH_BUFFER_API {
     const ptr& front() const { return _buffers.front(); }
     const ptr& back() const { return _buffers.back(); }
 
+    int get_mempool() const;
     void reassign_to_mempool(int pool);
     void try_assign_to_mempool(int pool);
 
