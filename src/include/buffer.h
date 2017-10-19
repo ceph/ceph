@@ -151,11 +151,13 @@ namespace buffer CEPH_BUFFER_API {
    */
   raw* copy(const char *c, unsigned len);
   raw* create(unsigned len);
+  raw* create_in_mempool(unsigned len, int mempool);
   raw* claim_char(unsigned len, char *buf);
   raw* create_malloc(unsigned len);
   raw* claim_malloc(unsigned len, char *buf);
   raw* create_static(unsigned len, char *buf);
   raw* create_aligned(unsigned len, unsigned align);
+  raw* create_aligned_in_mempool(unsigned len, unsigned align, int mempool);
   raw* create_page_aligned(unsigned len);
   raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   raw* create_unshareable(unsigned len);
