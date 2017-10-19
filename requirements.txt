@@ -61,7 +61,7 @@ packaging==16.8           # via cryptography
 paramiko==2.1.2
 pbr==2.0.0                # via cliff, debtcollector, keystoneauth1, openstacksdk, osc-lib, oslo.i18n, oslo.serialization, oslo.utils, positional, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient, requestsexceptions, stevedore
 pexpect==4.2.1
-pip-tools==1.9.0
+pip-tools==1.10.1
 pluggy==0.4.0             # via tox
 positional==1.1.1         # via keystoneauth1, python-keystoneclient
 prettytable==0.7.2
