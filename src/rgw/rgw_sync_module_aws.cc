@@ -401,6 +401,19 @@ class RGWAWSStreamObjToCloudMultipartCR : public RGWCoroutine {
 
   string upload_id;
 
+  uint32_t part_size;
+  int num_parts;
+
+  struct part_info {
+    int part_num;
+    uint64_t ofs;
+    uint64_t size;
+    string etag;
+  };
+
+  int cur_part{0};
+  uint64_t cur_ofs{0};
+
 public:
   RGWAWSStreamObjToCloudMultipartCR(RGWDataSyncEnv *_sync_env,
                                 RGWRESTConn *_source_conn,
@@ -415,27 +428,37 @@ public:
                                                    src_obj(_src_obj),
                                                    dest_obj(_dest_obj),
                                                    obj_size(_obj_size),
-                                                   mtime(_mtime) {}
+                                                   mtime(_mtime) {
+#warning flexible part size needed
+    part_size = 5 * 1024 * 1024;
+
+    num_parts = (obj_size + part_size - 1) / part_size;
+  }
+
 
   int operate() {
     reenter(this) {
-#if 0
-      /* init input */
-      in_crf.reset(new RGWRESTStreamGetCRF(cct, get_env(), this, sync_env, source_conn, src_obj));
-
-      /* init output */
-      out_crf.reset(new RGWAWSStreamPutCRF(cct, get_env(), this, sync_env, dest_conn,
-                                           dest_obj));
-
-      yield call(new RGWStreamSpliceCR(cct, sync_env->http_manager, in_crf, out_crf));
-      if (retcode < 0) {
-        return set_cr_error(retcode);
-      }
-#endif
-
       yield call(new RGWAWSInitMultipartCR(sync_env, dest_conn, dest_obj, obj_size, mtime, &upload_id));
       if (retcode < 0) {
         return set_cr_error(retcode);
+      }
+
+      for (cur_part = 1; cur_part <= num_parts; ++cur_part) {
+        yield {
+          part_info cur_part_info;
+          cur_part_info.part_num = cur_part + 1;
+          cur_part_info.ofs = cur_ofs;
+          cur_part_info.size = std::min((uint64_t)part_size, obj_size - cur_ofs);
+
+          cur_ofs += part_size;
+
+          call(new RGWAWSStreamObjToCloudMultipartPartCR(sync_env,
+                                                             source_conn, src_obj,
+                                                             dest_conn, dest_obj,
+                                                             upload_id,
+                                                             cur_part_info.ofs, cur_part_info.size,
+                                                             cur_part_info.part_num));
+        }
       }
 
       return set_cr_done();
