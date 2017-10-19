@@ -23,14 +23,6 @@ struct ImageCtx;
 
 namespace cache {
 
-namespace file {
-
-template <typename> class ImageStore;
-template <typename> class JournalStore;
-template <typename> class MetaStore;
-
-} // namespace file
-
 /**
  * Prototype pmem-based, client-side, replicated write log
  */
@@ -97,6 +89,16 @@ private:
   
   uint64_t m_free_entry_hint;
   uint64_t m_valid_entry_hint;
+
+  /* Starts at 0 for a new write log. Incremented on every flush. */
+  uint64_t m_current_sync_gen;
+  /* Starts at 0 on each sync gen increase. Incremented before applied
+     to an operation */
+  uint64_t m_last_op_sequence_num;
+
+  bool m_persist_on_write_until_flush;
+  bool m_persist_on_flush; /* If false, persist each write before completion */
+  bool m_flush_seen;
   
   ReleaseBlock m_release_block;
   AppendDetainedBlock m_detain_block;

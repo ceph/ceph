@@ -58,19 +58,33 @@ struct WriteLogPmemEntry {
   struct {
     uint8_t entry_valid :1; /* if 0, this entry is free */
     uint8_t sync_point :1;  /* No data. No write sequence
-			       number. Marks sync point for thsi sync
+			       number. Marks sync point for this sync
 			       gen number */
     uint8_t sequenced :1;   /* write sequence number is valid */
-    uint8_t first_pool_block_valid :1; /* first_pool_block field is valid */
-    uint8_t unmap :1;       /* first_pool_block_valid will be 0 if this
+    uint8_t has_data :1; /* first_pool_block field is valid */
+    uint8_t unmap :1;       /* has_data will be 0 if this
 			       is an unmap */
   };
   WriteLogPmemEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
     : sync_gen_number(0), write_sequence_number(0),
       image_offset_bytes(image_offset_bytes), write_bytes(write_bytes), first_pool_block(0),
-      entry_valid(0), sync_point(0), sequenced(0), first_pool_block_valid(0), unmap(0) {
+      entry_valid(0), sync_point(0), sequenced(0), has_data(0), unmap(0) {
   }
-  WriteLogPmemEntry() { WriteLogPmemEntry(0, 0); } 
+  WriteLogPmemEntry() { WriteLogPmemEntry(0, 0); }
+  friend std::ostream &operator<<(std::ostream &os,
+				  const WriteLogPmemEntry &entry) {
+    os << "entry_valid=" << entry.entry_valid << ", "
+       << "sync_point=" << entry.sync_point << ", "
+       << "sequenced=" << entry.sequenced << ", "
+       << "has_data=" << entry.has_data << ", "
+       << "unmap=" << entry.unmap << ", "
+       << "sync_gen_number=" << entry.sync_gen_number << ", "
+       << "write_sequence_number=" << entry.write_sequence_number << ", "
+       << "image_offset_bytes=" << entry.image_offset_bytes << ", "
+       << "write_bytes=" << entry.write_bytes << ", "
+       << "first_pool_block=" << entry.first_pool_block << ", ";
+    return os;
+  }
 };
 
 struct WriteLogPoolRoot {
@@ -91,10 +105,17 @@ struct WriteLogPoolRoot {
 
 struct WriteLogEntry {
   WriteLogPmemEntry persisted;
+  uint64_t log_entry;
+  WriteLogPmemEntry *
   WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
     : persisted(image_offset_bytes, write_bytes) {
   }
   WriteLogEntry() {} 
+  friend std::ostream &operator<<(std::ostream &os,
+				  WriteLogEntry &entry) {
+    os << "persisted=[" << entry.persisted << "] , ";
+    return os;
+  }
 };
   
 typedef std::list<WriteLogEntry> WriteLogEntries;
@@ -283,7 +304,7 @@ struct C_ReadFromImageRequest : public C_BlockIORequest {
   }
 
   virtual void send() override {
-    ldout(cct, 20) << "(" << get_name() << "): "
+   ldout(cct, 20) << "(" << get_name() << "): "
                    << "block_io=[" << block_io << "]" << dendl;
 
     // TODO improve scatter/gather to include buffer offsets
@@ -893,6 +914,8 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
     m_free_log_entries(0), m_free_blocks(0),
     m_image_writeback(image_ctx), m_image_cache(image_ctx),
     m_block_guard(image_ctx.cct, 256, BLOCK_SIZE),
+    m_persist_on_write_until_flush(true), m_persist_on_flush(false),
+    m_flush_seen(false),
     m_release_block(std::bind(&ReplicatedWriteLog<I>::release_block, this,
                               std::placeholders::_1)),
     m_lock("librbd::cache::ReplicatedWriteLog::m_lock") {
@@ -933,6 +956,8 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
                                   int fadvise_flags,
                                   Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
+  TOID(struct WriteLogPoolRoot) pool_root;
+  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
   //ldout(cct, 20) << "image_extents=" << image_extents << ", "
   //               << "on_finish=" << on_finish << dendl;
 
@@ -971,14 +996,61 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
       ldout(cct, 6) << "wait for " << total_bytes / BLOCK_SIZE << " data blocks" << dendl;
     } else {
       for (auto &operation : operations) {
-	operation.log_entry.persisted.first_pool_block = m_next_free_block;
-	m_next_free_block = (m_next_free_block + 1) % m_total_blocks;
+	operation.log_entry.log_entry = m_first_free_entry;
+	m_first_free_entry = (m_first_free_entry + 1) % m_total_log_entries;
 	m_free_log_entries--;
+	operation.log_entry.persisted.first_pool_block = m_next_free_block;
+	operation.log_entry.persisted.has_data = 1;
+	m_next_free_block = (m_next_free_block + 1) % m_total_blocks;
 	m_free_blocks -= operation.log_entry.persisted.write_bytes / BLOCK_SIZE;
+	operation.log_entry.persisted.sync_gen_number = m_current_sync_gen;
+	if (m_persist_on_flush) {
+	  /* Persist on flush. Sequence #0 is never used. */
+	  operation.log_entry.persisted.write_sequence_number = 0;
+	} else {
+	  /* Persist on write */
+	  operation.log_entry.persisted.write_sequence_number = ++m_last_op_sequence_num;
+	  operation.log_entry.persisted.sequenced = 1;
+	}
+	operation.log_entry.persisted.sync_point = 0;
+	operation.log_entry.persisted.unmap = 0;
+	operation.log_entry.persisted.entry_valid = 1;
       }
     }
-      
   }
+
+  /* Write data */
+  for (auto &operation : operations) {
+  }
+
+#if 0
+  TX_BEGIN(m_log_pool) {
+    TX_ADD(pool_root);
+    D_RW(pool_root)->header.layout_version = RWL_POOL_VERSION;
+    D_RW(pool_root)->block_size = BLOCK_SIZE;
+    D_RW(pool_root)->num_blocks = num_small_writes-1; // leave one free
+    D_RW(pool_root)->num_log_entries = num_small_writes-1; // leave one free
+    D_RW(pool_root)->data_blocks = TX_ALLOC(uint8_t, num_small_writes * BLOCK_SIZE);
+    D_RW(pool_root)->log_entries = TX_ZALLOC(struct WriteLogPmemEntry, num_small_writes);
+    D_RW(pool_root)->valid_entry_hint = m_valid_entry_hint;
+    D_RW(pool_root)->free_entry_hint = m_free_entry_hint;
+  } TX_ONCOMMIT {
+    m_total_log_entries = D_RO(pool_root)->num_log_entries;
+    m_free_log_entries = D_RO(pool_root)->num_log_entries;
+    m_total_blocks = D_RO(pool_root)->num_blocks;
+    m_free_blocks = D_RO(pool_root)->num_blocks;
+  } TX_ONABORT {
+    m_total_log_entries = 0;
+    m_total_blocks = 0;
+    m_free_log_entries = 0;
+    m_free_blocks = 0;
+    lderr(cct) << "failed to initialize pool (" << m_log_pool_name << ")" << dendl;
+    on_finish->complete(-1);
+    return;
+  } TX_FINALLY {
+  } TX_END;
+#endif
+  
   //if ()
   /* Is there space in the write log for this entire write? */
   /* If not, defer this IO */
@@ -1060,6 +1132,18 @@ void ReplicatedWriteLog<I>::aio_flush(Context *on_finish) {
     }
   }
 
+  if (!m_flush_seen) {
+    Mutex::Locker locker(m_lock);
+    if (!m_flush_seen) {
+      ldout(cct, 5) << "flush seen" << dendl;
+      m_flush_seen = true;
+      if (!m_persist_on_flush && m_persist_on_write_until_flush) {
+	m_persist_on_flush = true;
+	ldout(cct, 5) << "now persisting on flush" << dendl;
+      }
+    }
+  }
+  
   if (m_image_ctx.persistent_cache_enabled) {
     m_image_cache.aio_flush(on_finish);
   } else {
@@ -1206,7 +1290,7 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
       on_finish->complete(-1);
       return;
     } TX_FINALLY {
-    } TX_END;	
+    } TX_END;
   } else {
     if ((m_log_pool =
 	 pmemobj_open(m_log_pool_name.c_str(),
@@ -1236,6 +1320,9 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
     m_free_entry_hint = D_RO(pool_root)->free_entry_hint;
     ldout(cct,5) << "pool " << m_log_pool_name << "has " << D_RO(pool_root)->num_log_entries <<
       " log entries and " << D_RO(pool_root)->num_blocks << " data blocks" << dendl;
+    if (m_valid_entry_hint == m_free_entry_hint) {
+      ldout(cct,5) << "write log is empy" << dendl;
+    }
   }
   
   bufferlist meta_bl;
