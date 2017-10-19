@@ -1389,3 +1389,7 @@ void md_config_t::complain_about_parse_errors(CephContext *cct)
   ::complain_about_parse_errors(cct, &parse_errors);
 }
 
+std::string md_config_t::get_config_file() const
+{
+  return cf.get_config_filename();
+}

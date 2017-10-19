@@ -72,6 +72,7 @@ void ConfFile::
 clear()
 {
   sections.clear();
+  config_filename = "";
 }
 
 /* We load the whole file into memory and then parse it.  Although this is not
@@ -143,6 +144,7 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
     }
   }
 
+  config_filename = fname;
   load_from_buffer(buf, sz, errors, warnings);
   ret = 0;
 
@@ -271,6 +273,16 @@ std::ostream &operator<<(std::ostream &oss, const ConfFile &cf)
     }
   }
   return oss;
+}
+
+/*
+ * Returns a filename of current config file. If empty, it was read from
+ * buffer.
+ */
+std::string ConfFile::
+get_config_filename() const
+{
+  return config_filename;
 }
 
 void ConfFile::
