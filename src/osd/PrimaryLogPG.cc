@@ -7673,7 +7673,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
 
   bool async_read_started = false;
   object_copy_data_t _reply_obj;
-  C_CopyFrom_AsyncReadCb *cb = NULL;
+  C_CopyFrom_AsyncReadCb *cb = nullptr;
   if (pool.info.require_rollback()) {
     cb = new C_CopyFrom_AsyncReadCb(&osd_op, features);
   }
