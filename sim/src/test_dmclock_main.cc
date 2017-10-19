@@ -118,8 +118,8 @@ int main(int argc, char* argv[]) {
       return i;
     };
 
-    auto client_info_f = [=](const ClientId& c) -> test::dmc::ClientInfo {
-      return client_info[ret_client_group_f(c)];
+    auto client_info_f = [=](const ClientId& c) -> const test::dmc::ClientInfo* {
+      return &client_info[ret_client_group_f(c)];
     };
 
     auto client_disp_filter = [=] (const ClientId& i) -> bool {
