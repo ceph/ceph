@@ -40,7 +40,7 @@ def zap_data(path):
 
 class Zap(object):
 
-    help = 'Destroy a logical volume or partition.'
+    help = 'Removes all data and filesystems from a logical volume or partition.'
 
     def __init__(self, argv):
         self.argv = argv
@@ -70,7 +70,7 @@ class Zap(object):
     def main(self):
         sub_command_help = dedent("""
         Zaps the given logical volume or partition. If given a path to a logical
-        volume it must be in the format of vg name/lv name. Any filesystems present
+        volume it must be in the format of vg/lv. Any filesystems present
         on the given lv or partition will be removed and all data will be purged.
 
         However, the lv or partition will be kept intact.
