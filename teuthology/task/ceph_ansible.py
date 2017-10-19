@@ -42,6 +42,15 @@ class CephAnsible(Task):
         * Set ``public_network`` for each host if ``public_network`` is unset
     """.format(git_base=teuth_config.ceph_git_base_url)
 
+    groups_to_roles = dict(
+        mons='mon',
+        mgrs='mgr',
+        mdss='mds',
+        osds='osd',
+        rgws='rgw',
+        clients='client',
+    )
+
     def __init__(self, ctx, config):
         super(CephAnsible, self).__init__(ctx, config)
         config = self.config or dict()
@@ -114,17 +123,9 @@ class CephAnsible(Task):
             self.run_playbook()
 
     def generate_hosts_file(self):
-        groups_to_roles = dict(
-            mons='mon',
-            mgrs='mgr',
-            mdss='mds',
-            osds='osd',
-            rgws='rgw',
-            clients='client',
-        )
         hosts_dict = dict()
-        for group in sorted(groups_to_roles.keys()):
-            role_prefix = groups_to_roles[group]
+        for group in sorted(self.groups_to_roles.keys()):
+            role_prefix = self.groups_to_roles[group]
             want = lambda role: role.startswith(role_prefix)
             for (remote, roles) in self.cluster.only(want).remotes.iteritems():
                 hostname = remote.hostname
@@ -261,7 +262,15 @@ class CephAnsible(Task):
             log.info('Archiving logs...')
             path = os.path.join(ctx.archive, 'remote')
             os.makedirs(path)
-            for remote in ctx.cluster.remotes.iterkeys():
+
+            def wanted(role):
+                # Only attempt to collect logs from hosts which are part of the
+                # cluster
+                return any(map(
+                    lambda role_stub: role.startswith(role_stub),
+                    self.groups_to_roles.values(),
+                ))
+            for remote in ctx.cluster.only(wanted).remotes.keys():
                 sub = os.path.join(path, remote.shortname)
                 os.makedirs(sub)
                 misc.pull_directory(remote, '/var/log/ceph',
