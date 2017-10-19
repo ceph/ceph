@@ -10786,6 +10786,13 @@ void PrimaryLogPG::mark_all_unfound_lost(
 	log_entries.push_back(e);
         oids.push_back(oid);
 
+	// If context found mark object as deleted in case
+	// of racing with new creation.  This can happen if
+	// object lost and EIO at primary.
+	obc = object_contexts.lookup(oid);
+	if (obc)
+	  obc->obs.exists = false;
+
 	++v.version;
 	++m;
       }
@@ -10812,10 +10819,6 @@ void PrimaryLogPG::mark_all_unfound_lost(
 	  }
 	}
 
-	for (auto& p : waiting_for_unreadable_object) {
-	  release_backoffs(p.first);
-	}
-	requeue_object_waiters(waiting_for_unreadable_object);
 	if (is_recovery_unfound()) {
 	  queue_peering_event(
 	    CephPeeringEvtRef(
