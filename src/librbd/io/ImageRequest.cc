@@ -355,7 +355,7 @@ void ImageReadRequest<I>::send_request() {
         aio_comp);
       ObjectReadRequest<I> *req = ObjectReadRequest<I>::create(
         &image_ctx, extent.oid.name, extent.objectno, extent.offset,
-        extent.length, extent.buffer_extents, snap_id, true, m_op_flags,
+        extent.length, extent.buffer_extents, snap_id, m_op_flags,
 	this->m_trace, req_comp);
       req_comp->request = req;
 

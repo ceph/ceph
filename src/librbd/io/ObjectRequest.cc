@@ -205,14 +205,13 @@ template <typename I>
 ObjectReadRequest<I>::ObjectReadRequest(I *ictx, const std::string &oid,
                                         uint64_t objectno, uint64_t offset,
                                         uint64_t len, Extents& be,
-                                        librados::snap_t snap_id, bool sparse,
-					int op_flags,
+                                        librados::snap_t snap_id, int op_flags,
 					const ZTracer::Trace &parent_trace,
                                         Context *completion)
   : ObjectRequest<I>(ictx, oid, objectno, offset, len, snap_id, false, "read",
                      parent_trace, completion),
-    m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
-    m_op_flags(op_flags), m_state(LIBRBD_AIO_READ_FLAT) {
+    m_buffer_extents(be), m_tried_parent(false), m_op_flags(op_flags),
+    m_state(LIBRBD_AIO_READ_FLAT) {
   guard_read();
 }
 
@@ -326,7 +325,7 @@ void ObjectReadRequest<I>::send() {
 
   librados::ObjectReadOperation op;
   int flags = image_ctx->get_read_flags(this->m_snap_id);
-  if (m_sparse) {
+  if (this->m_object_len >= image_ctx->sparse_read_threshold_bytes) {
     op.sparse_read(this->m_object_off, this->m_object_len, &m_ext_map,
                    &m_read_data, nullptr);
   } else {
