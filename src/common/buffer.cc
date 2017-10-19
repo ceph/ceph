@@ -960,6 +960,13 @@ public:
 
   bool buffer::ptr::at_buffer_tail() const { return _off + _len == _raw->len; }
 
+  int buffer::ptr::get_mempool() const {
+    if (_raw) {
+      return _raw->mempool;
+    }
+    return mempool::mempool_buffer_anon;
+  }
+
   void buffer::ptr::reassign_to_mempool(int pool) {
     if (_raw) {
       _raw->reassign_to_mempool(pool);
@@ -1512,7 +1519,6 @@ public:
   {
     std::swap(_len, other._len);
     std::swap(_memcopy_count, other._memcopy_count);
-    std::swap(_mempool, other._mempool);
     _buffers.swap(other._buffers);
     append_buffer.swap(other.append_buffer);
     //last_p.swap(other.last_p);
@@ -1685,9 +1691,16 @@ public:
     return is_aligned(CEPH_PAGE_SIZE);
   }
 
+  int buffer::list::get_mempool() const
+  {
+    if (_buffers.empty()) {
+      return mempool::mempool_buffer_anon;
+    }
+    return _buffers.back().get_mempool();
+  }
+
   void buffer::list::reassign_to_mempool(int pool)
   {
-    _mempool = pool;
     if (append_buffer.get_raw()) {
       append_buffer.get_raw()->reassign_to_mempool(pool);
     }
@@ -1698,7 +1711,6 @@ public:
 
   void buffer::list::try_assign_to_mempool(int pool)
   {
-    _mempool = pool;
     if (append_buffer.get_raw()) {
       append_buffer.get_raw()->try_assign_to_mempool(pool);
     }
@@ -1797,10 +1809,7 @@ public:
   void buffer::list::reserve(size_t prealloc)
   {
     if (append_buffer.unused_tail_length() < prealloc) {
-      append_buffer = buffer::create(prealloc);
-      if (_mempool >= 0) {
-	append_buffer.get_raw()->reassign_to_mempool(_mempool);
-      }
+      append_buffer = buffer::create_in_mempool(prealloc, get_mempool());
       append_buffer.set_length(0);   // unused, so far.
     }
   }
@@ -1900,11 +1909,9 @@ public:
     unsigned gap = append_buffer.unused_tail_length();
     if (!gap) {
       // make a new append_buffer!
-      append_buffer = raw_combined::create(CEPH_BUFFER_APPEND_SIZE);
+      append_buffer = raw_combined::create(CEPH_BUFFER_APPEND_SIZE, 0,
+					   get_mempool());
       append_buffer.set_length(0);   // unused, so far.
-      if (_mempool >= 0) {
-	append_buffer.get_raw()->reassign_to_mempool(_mempool);
-      }
     }
     append(append_buffer, append_buffer.append(c) - 1, 1);	// add segment to the list
   }
@@ -1930,11 +1937,8 @@ public:
       size_t need = ROUND_UP_TO(len, sizeof(size_t)) + sizeof(raw_combined);
       size_t alen = ROUND_UP_TO(need, CEPH_BUFFER_ALLOC_UNIT) -
 	sizeof(raw_combined);
-      append_buffer = raw_combined::create(alen, 0);
+      append_buffer = raw_combined::create(alen, 0, get_mempool());
       append_buffer.set_length(0);   // unused, so far.
-      if (_mempool >= 0) {
-	append_buffer.get_raw()->reassign_to_mempool(_mempool);
-      }
     }
   }
 
