@@ -73,16 +73,16 @@ struct WriteLogPmemEntry {
   WriteLogPmemEntry() { WriteLogPmemEntry(0, 0); }
   friend std::ostream &operator<<(std::ostream &os,
 				  const WriteLogPmemEntry &entry) {
-    os << "entry_valid=" << entry.entry_valid << ", "
-       << "sync_point=" << entry.sync_point << ", "
-       << "sequenced=" << entry.sequenced << ", "
-       << "has_data=" << entry.has_data << ", "
-       << "unmap=" << entry.unmap << ", "
+    os << "entry_valid=" << (bool)entry.entry_valid << ", "
+       << "sync_point=" << (bool)entry.sync_point << ", "
+       << "sequenced=" << (bool)entry.sequenced << ", "
+       << "has_data=" << (bool)entry.has_data << ", "
+       << "unmap=" << (bool)entry.unmap << ", "
        << "sync_gen_number=" << entry.sync_gen_number << ", "
        << "write_sequence_number=" << entry.write_sequence_number << ", "
        << "image_offset_bytes=" << entry.image_offset_bytes << ", "
        << "write_bytes=" << entry.write_bytes << ", "
-       << "first_pool_block=" << entry.first_pool_block << ", ";
+       << "first_pool_block=" << entry.first_pool_block;
     return os;
   }
 };
@@ -104,16 +104,20 @@ struct WriteLogPoolRoot {
 };
 
 struct WriteLogEntry {
-  WriteLogPmemEntry persisted;
-  uint64_t log_entry;
-  WriteLogPmemEntry *
+  WriteLogPmemEntry ram_entry;
+  uint64_t log_entry_index;
+  WriteLogPmemEntry *pmem_entry;
+  uint8_t *pmem_block;
   WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
-    : persisted(image_offset_bytes, write_bytes) {
+    : ram_entry(image_offset_bytes, write_bytes), log_entry_index(0), pmem_entry(NULL), pmem_block(NULL)  {
   }
   WriteLogEntry() {} 
   friend std::ostream &operator<<(std::ostream &os,
 				  WriteLogEntry &entry) {
-    os << "persisted=[" << entry.persisted << "] , ";
+    os << "ram_entry=[" << entry.ram_entry << "], "
+       << "log_entry_index=" << entry.log_entry_index << ", "
+       << "pmem_entry=" << (void*)entry.pmem_entry << ", "
+       << "pmem_block=" << (void*)entry.pmem_block;
     return os;
   }
 };
@@ -125,8 +129,15 @@ typedef std::unordered_map<uint64_t, WriteLogEntry> BlockToWriteLogEntry;
 
 struct WriteLogOperation {
   struct WriteLogEntry log_entry;
+  bufferlist bl;
   WriteLogOperation(uint64_t image_offset_bytes, uint64_t write_bytes) 
     : log_entry(image_offset_bytes, write_bytes) {
+  }
+  friend std::ostream &operator<<(std::ostream &os,
+				  WriteLogOperation &op) {
+    os << "log_entry=[" << op.log_entry << "], "
+       << "bl=[" << op.bl << "]";
+    return os;
   }
 };
 typedef std::list<WriteLogOperation> WriteLogOperations;
@@ -988,6 +999,12 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
     total_bytes += extent.second;
     operations.emplace_back(WriteLogOperation(extent.first, extent.second));
   }
+
+  /* TODO: If there isn't space for this whole write, defer it */
+
+  ldout(cct,6) << "bl=[" << bl << "]" << dendl;
+  uint8_t *pmem_blocks = D_RW(D_RW(pool_root)->data_blocks);
+  struct WriteLogPmemEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
   {
     Mutex::Locker locker(m_lock);
     if (m_free_log_entries < operations.size()) {
@@ -996,59 +1013,70 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
       ldout(cct, 6) << "wait for " << total_bytes / BLOCK_SIZE << " data blocks" << dendl;
     } else {
       for (auto &operation : operations) {
-	operation.log_entry.log_entry = m_first_free_entry;
+	operation.log_entry.log_entry_index = m_first_free_entry;
 	m_first_free_entry = (m_first_free_entry + 1) % m_total_log_entries;
 	m_free_log_entries--;
-	operation.log_entry.persisted.first_pool_block = m_next_free_block;
-	operation.log_entry.persisted.has_data = 1;
+	operation.log_entry.pmem_entry = &pmem_log_entries[operation.log_entry.log_entry_index];
+	operation.log_entry.ram_entry.first_pool_block = m_next_free_block;
+	operation.log_entry.ram_entry.has_data = 1;
 	m_next_free_block = (m_next_free_block + 1) % m_total_blocks;
-	m_free_blocks -= operation.log_entry.persisted.write_bytes / BLOCK_SIZE;
-	operation.log_entry.persisted.sync_gen_number = m_current_sync_gen;
+	m_free_blocks -= operation.log_entry.ram_entry.write_bytes / BLOCK_SIZE;
+	operation.log_entry.pmem_block = pmem_blocks + (operation.log_entry.ram_entry.first_pool_block * BLOCK_SIZE);
+	operation.log_entry.ram_entry.sync_gen_number = m_current_sync_gen;
 	if (m_persist_on_flush) {
 	  /* Persist on flush. Sequence #0 is never used. */
-	  operation.log_entry.persisted.write_sequence_number = 0;
+	  operation.log_entry.ram_entry.write_sequence_number = 0;
 	} else {
 	  /* Persist on write */
-	  operation.log_entry.persisted.write_sequence_number = ++m_last_op_sequence_num;
-	  operation.log_entry.persisted.sequenced = 1;
+	  operation.log_entry.ram_entry.write_sequence_number = ++m_last_op_sequence_num;
+	  operation.log_entry.ram_entry.sequenced = 1;
 	}
-	operation.log_entry.persisted.sync_point = 0;
-	operation.log_entry.persisted.unmap = 0;
-	operation.log_entry.persisted.entry_valid = 1;
+	operation.log_entry.ram_entry.sync_point = 0;
+	operation.log_entry.ram_entry.unmap = 0;
+	operation.log_entry.ram_entry.entry_valid = 1;
+	operation.bl.substr_of(bl,
+			       operation.log_entry.ram_entry.image_offset_bytes,
+			       operation.log_entry.ram_entry.write_bytes);
+	ldout(cct, 6) << "operation=[" << operation << "]" << dendl;
       }
     }
   }
 
-  /* Write data */
+  /* Write data - drain once for all */
   for (auto &operation : operations) {
+    bufferlist::iterator i(&operation.bl);
+    i.copy((unsigned)operation.log_entry.ram_entry.write_bytes, (char*)operation.log_entry.pmem_block);
+    pmemobj_flush(m_log_pool, operation.log_entry.pmem_block, operation.log_entry.ram_entry.write_bytes);
   }
+  pmemobj_drain(m_log_pool);
 
-#if 0
+  /* TODO: For persist-on-flush, complete user write here */
+
+  /* Write data is now (locally) persisted. It's now safe to persist the log entries that refer to them */
+  
+  /* Write log entries - write all in a transaction */
   TX_BEGIN(m_log_pool) {
-    TX_ADD(pool_root);
-    D_RW(pool_root)->header.layout_version = RWL_POOL_VERSION;
-    D_RW(pool_root)->block_size = BLOCK_SIZE;
-    D_RW(pool_root)->num_blocks = num_small_writes-1; // leave one free
-    D_RW(pool_root)->num_log_entries = num_small_writes-1; // leave one free
-    D_RW(pool_root)->data_blocks = TX_ALLOC(uint8_t, num_small_writes * BLOCK_SIZE);
-    D_RW(pool_root)->log_entries = TX_ZALLOC(struct WriteLogPmemEntry, num_small_writes);
-    D_RW(pool_root)->valid_entry_hint = m_valid_entry_hint;
-    D_RW(pool_root)->free_entry_hint = m_free_entry_hint;
+    for (auto &operation : operations) {
+      TX_MEMCPY(operation.log_entry.pmem_entry,
+		&operation.log_entry.ram_entry,
+		sizeof(operation.log_entry.ram_entry));
+    }
   } TX_ONCOMMIT {
-    m_total_log_entries = D_RO(pool_root)->num_log_entries;
-    m_free_log_entries = D_RO(pool_root)->num_log_entries;
-    m_total_blocks = D_RO(pool_root)->num_blocks;
-    m_free_blocks = D_RO(pool_root)->num_blocks;
   } TX_ONABORT {
-    m_total_log_entries = 0;
-    m_total_blocks = 0;
-    m_free_log_entries = 0;
-    m_free_blocks = 0;
-    lderr(cct) << "failed to initialize pool (" << m_log_pool_name << ")" << dendl;
+    lderr(cct) << "failed to commit log entries (" << m_log_pool_name << ")" << dendl;
     on_finish->complete(-1);
     return;
   } TX_FINALLY {
   } TX_END;
+  
+#if 0
+  for (auto &operation : operations) {
+    memcpy(operation.log_entry.pmem_entry,
+	   &operation.log_entry.ram_entry,
+	   sizeof(operation.log_entry.ram_entry));
+    pmemobj_flush(m_log_pool, operation.log_entry.pmem_block, operation.log_entry.ram_entry.write_bytes);
+  }
+  pmemobj_drain(m_log_pool);
 #endif
   
   //if ()
