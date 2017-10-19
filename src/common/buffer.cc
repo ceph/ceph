@@ -172,17 +172,17 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     char *data;
     unsigned len;
     std::atomic<unsigned> nref { 0 };
-    int mempool = mempool::mempool_buffer_anon;
+    int mempool;
 
     mutable std::atomic_flag crc_spinlock = ATOMIC_FLAG_INIT;
     map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
-    explicit raw(unsigned l)
-      : data(NULL), len(l), nref(0) {
+    explicit raw(unsigned l, int mempool=mempool::mempool_buffer_anon)
+      : data(NULL), len(l), nref(0), mempool(mempool) {
       mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
     }
-    raw(char *c, unsigned l)
-      : data(c), len(l), nref(0) {
+    raw(char *c, unsigned l, int mempool=mempool::mempool_buffer_anon)
+      : data(c), len(l), nref(0), mempool(mempool) {
       mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
     }
     virtual ~raw() {
@@ -281,8 +281,9 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
   class buffer::raw_combined : public buffer::raw {
     size_t alignment;
   public:
-    raw_combined(char *dataptr, unsigned l, unsigned align=0)
-      : raw(dataptr, l),
+    raw_combined(char *dataptr, unsigned l, unsigned align,
+		 int mempool)
+      : raw(dataptr, l, mempool),
 	alignment(align) {
       inc_total_alloc(len);
       inc_history_alloc(len);
@@ -294,7 +295,9 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
       return create(len, alignment);
     }
 
-    static raw_combined *create(unsigned len, unsigned align=0) {
+    static raw_combined *create(unsigned len,
+				unsigned align,
+				int mempool = mempool::mempool_buffer_anon) {
       if (!align)
 	align = sizeof(size_t);
       size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined),
@@ -314,7 +317,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 
       // actual data first, since it has presumably larger alignment restriction
       // then put the raw_combined at the end
-      return new (ptr + datalen) raw_combined(ptr, len, align);
+      return new (ptr + datalen) raw_combined(ptr, len, align, mempool);
     }
 
     static void operator delete(void *ptr) {
@@ -771,6 +774,9 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
   buffer::raw* buffer::create(unsigned len) {
     return buffer::create_aligned(len, sizeof(size_t));
   }
+  buffer::raw* buffer::create_in_mempool(unsigned len, int mempool) {
+    return buffer::create_aligned_in_mempool(len, sizeof(size_t), mempool);
+  }
   buffer::raw* buffer::claim_char(unsigned len, char *buf) {
     return new raw_claimed_char(len, buf);
   }
@@ -787,7 +793,8 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     return new raw_claim_buffer(buf, len, std::move(del));
   }
 
-  buffer::raw* buffer::create_aligned(unsigned len, unsigned align) {
+  buffer::raw* buffer::create_aligned_in_mempool(
+    unsigned len, unsigned align, int mempool) {
     // If alignment is a page multiple, use a separate buffer::raw to
     // avoid fragmenting the heap.
     //
@@ -805,7 +812,12 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
       return new raw_hack_aligned(len, align);
 #endif
     }
-    return raw_combined::create(len, align);
+    return raw_combined::create(len, align, mempool);
+  }
+  buffer::raw* buffer::create_aligned(
+    unsigned len, unsigned align) {
+    return create_aligned_in_mempool(len, align,
+				     mempool::mempool_buffer_anon);
   }
 
   buffer::raw* buffer::create_page_aligned(unsigned len) {
@@ -1920,7 +1932,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
       size_t need = ROUND_UP_TO(len, sizeof(size_t)) + sizeof(raw_combined);
       size_t alen = ROUND_UP_TO(need, CEPH_BUFFER_ALLOC_UNIT) -
 	sizeof(raw_combined);
-      append_buffer = raw_combined::create(alen);
+      append_buffer = raw_combined::create(alen, 0);
       append_buffer.set_length(0);   // unused, so far.
       if (_mempool >= 0) {
 	append_buffer.get_raw()->reassign_to_mempool(_mempool);
