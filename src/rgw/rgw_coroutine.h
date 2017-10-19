@@ -413,7 +413,7 @@ public:
     io_blocked_id = io_id;
   }
   bool is_io_blocked() {
-    return blocked_flag;
+    return blocked_flag && !done_flag;
   }
   bool can_io_unblock(int64_t io_id) {
     return (io_blocked_id == io_id) ||
