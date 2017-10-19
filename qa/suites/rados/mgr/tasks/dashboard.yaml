@@ -11,9 +11,6 @@ tasks:
         - \(PG_
         - replacing it with standby
         - No standby daemons available
-        - Reduced data availability
-        - Degraded data redundancy
-        - objects misplaced
   - cephfs_test_runner:
       modules:
-        - tasks.mgr.test_module_selftest
+        - tasks.mgr.test_dashboard
