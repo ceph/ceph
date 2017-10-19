@@ -1264,14 +1264,17 @@ void PG::calc_replicated_acting(
     }
   }
 
+  if (usable >= size) {
+    return;
+  }
+
+  std::vector<std::pair<eversion_t, int>> candidate_by_last_update;
+  candidate_by_last_update.reserve(acting.size());
   // This no longer has backfill OSDs, but they are covered above.
   for (vector<int>::const_iterator i = acting.begin();
        i != acting.end();
        ++i) {
     pg_shard_t acting_cand(*i, shard_id_t::NO_SHARD);
-    if (usable >= size)
-      break;
-
     // skip up osds we already considered above
     if (acting_cand == primary->first)
       continue;
@@ -1283,25 +1286,41 @@ void PG::calc_replicated_acting(
     if (cur_info.is_incomplete() ||
 	cur_info.last_update < oldest_auth_log_entry) {
       ss << " shard " << acting_cand << " (acting) REJECTED "
-	       << cur_info << std::endl;
-    } else {
-      want->push_back(*i);
-      acting_backfill->insert(acting_cand);
-      ss << " shard " << acting_cand << " (acting) accepted "
 	 << cur_info << std::endl;
-      usable++;
+    } else {
+      candidate_by_last_update.push_back(make_pair(cur_info.last_update, *i));
+    }
+  }
+
+  // sort by last_update, in descending order.
+  std::sort(candidate_by_last_update.begin(), candidate_by_last_update.end(),
+    [](const std::pair<eversion_t, int> &lhs,
+       const std::pair<eversion_t, int> &rhs) {
+      return lhs.first > rhs.first;
+    }
+  );
+
+  for (auto &p: candidate_by_last_update) {
+    assert(usable < size);
+    want->push_back(p.second);
+    pg_shard_t s = pg_shard_t(p.second, shard_id_t::NO_SHARD);
+    acting_backfill->insert(s);
+    ss << " shard " << s << " (acting) accepted "
+       << all_info.find(s)->second << std::endl;
+    usable++;
+    if (usable >= size) {
+      return;
     }
   }
 
   if (restrict_to_up_acting) {
     return;
   }
+  candidate_by_last_update.clear();
+  candidate_by_last_update.reserve(all_info.size()); // overestimate but fine
   for (map<pg_shard_t,pg_info_t>::const_iterator i = all_info.begin();
        i != all_info.end();
        ++i) {
-    if (usable >= size)
-      break;
-
     // skip up osds we already considered above
     if (i->first == primary->first)
       continue;
@@ -1318,11 +1337,34 @@ void PG::calc_replicated_acting(
       ss << " shard " << i->first << " (stray) REJECTED "
 	 << i->second << std::endl;
     } else {
-      want->push_back(i->first.osd);
-      acting_backfill->insert(i->first);
-      ss << " shard " << i->first << " (stray) accepted "
-	 << i->second << std::endl;
-      usable++;
+      candidate_by_last_update.push_back(
+        make_pair(i->second.last_update, i->first.osd));
+    }
+  }
+
+  if (candidate_by_last_update.empty()) {
+    // save us some effort
+    return;
+  }
+
+  // sort by last_update, in descending order.
+  std::sort(candidate_by_last_update.begin(), candidate_by_last_update.end(),
+    [](const std::pair<eversion_t, int> &lhs,
+       const std::pair<eversion_t, int> &rhs) {
+      return lhs.first > rhs.first;
+    }
+  );
+
+  for (auto &p: candidate_by_last_update) {
+    assert(usable < size);
+    want->push_back(p.second);
+    pg_shard_t s = pg_shard_t(p.second, shard_id_t::NO_SHARD);
+    acting_backfill->insert(s);
+    ss << " shard " << s << " (stray) accepted "
+       << all_info.find(s)->second << std::endl;
+    usable++;
+    if (usable >= size) {
+      return;
     }
   }
 }
