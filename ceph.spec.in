@@ -109,6 +109,7 @@ BuildRequires:	python-werkzeug
 %if 0%{?suse_version}
 BuildRequires:	python-CherryPy
 BuildRequires:	python-Werkzeug
+BuildRequires:	python-numpy-devel
 %endif
 BuildRequires:	python-pecan
 BuildRequires:	socat
