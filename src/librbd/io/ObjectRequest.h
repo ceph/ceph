@@ -21,7 +21,7 @@ struct ImageCtx;
 namespace io {
 
 struct AioCompletion;
-class CopyupRequest;
+template <typename> class CopyupRequest;
 class ObjectRemoveRequest;
 class ObjectTruncateRequest;
 class ObjectWriteRequest;
@@ -97,7 +97,7 @@ public:
                                                  const ZTracer::Trace &parent_trace,
                                                  Context *completion);
 
-  ObjectRequest(ImageCtx *ictx, const std::string &oid,
+  ObjectRequest(ImageCtxT *ictx, const std::string &oid,
                 uint64_t objectno, uint64_t off, uint64_t len,
                 librados::snap_t snap_id, bool hide_enoent,
 		const char *trace_name, const ZTracer::Trace &parent_trace,
@@ -129,7 +129,7 @@ public:
 protected:
   bool compute_parent_extents();
 
-  ImageCtx *m_ictx;
+  ImageCtxT *m_ictx;
   std::string m_oid;
   uint64_t m_object_no, m_object_off, m_object_len;
   librados::snap_t m_snap_id;
