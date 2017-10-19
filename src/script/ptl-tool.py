@@ -85,6 +85,8 @@ log = logging.getLogger(__name__)
 log.addHandler(logging.StreamHandler())
 log.setLevel(logging.INFO)
 
+BASE_PROJECT = os.getenv("PTL_TOOL_BASE_PROJECT", "ceph")
+BASE_REPO = os.getenv("PTL_TOOL_BASE_REPO", "ceph")
 BASE_REMOTE = os.getenv("PTL_TOOL_BASE_REMOTE", "upstream")
 BASE_PATH = os.getenv("PTL_TOOL_BASE_PATH", "refs/remotes/upstream/heads/")
 GITDIR = os.getenv("PTL_TOOL_GITDIR", ".")
@@ -130,7 +132,7 @@ def build_branch(args):
             sys.exit(1)
 
         #Check if the Label exist in the repo
-        res = requests.get("https://api.github.com/repos/ceph/ceph/labels/{lblname}".format(lblname=label), auth=(USER, PASSWORD))
+        res = requests.get("https://api.github.com/repos/{project}/{repo}/labels/{lblname}".format(lblname=label, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
         if res.status_code != 200:
             log.error("Label '{lblname}' not found in the repo".format(lblname=label))
             sys.exit(1)
@@ -147,7 +149,7 @@ def build_branch(args):
             log.error("--pr-label must have a non-space value")
             sys.exit(1)
         payload = {'labels': args.pr_label, 'sort': 'created', 'direction': 'desc'}
-        labeled_prs = requests.get("https://api.github.com/repos/ceph/ceph/issues", auth=(USER, PASSWORD), params=payload)
+        labeled_prs = requests.get("https://api.github.com/repos/{project}/{repo}/issues".format(project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD), params=payload)
         if labeled_prs.status_code != 200:
             log.error("Failed to load labeled PRs: {}".format(labeled_prs))
             sys.exit(1)
@@ -205,17 +207,17 @@ def build_branch(args):
 
         message = message + "\n"
 
-        comments = requests.get("https://api.github.com/repos/ceph/ceph/issues/{pr}/comments".format(pr=pr), auth=(USER, PASSWORD))
+        comments = requests.get("https://api.github.com/repos/{project}/{repo}/issues/{pr}/comments".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
         if comments.status_code != 200:
             log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
             sys.exit(1)
 
-        reviews = requests.get("https://api.github.com/repos/ceph/ceph/pulls/{pr}/reviews".format(pr=pr), auth=(USER, PASSWORD))
+        reviews = requests.get("https://api.github.com/repos/{project}/{repo}/pulls/{pr}/reviews".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
         if reviews.status_code != 200:
             log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
             sys.exit(1)
 
-        review_comments = requests.get("https://api.github.com/repos/ceph/ceph/pulls/{pr}/comments".format(pr=pr), auth=(USER, PASSWORD))
+        review_comments = requests.get("https://api.github.com/repos/{project}/{repo}/pulls/{pr}/comments".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
         if review_comments.status_code != 200:
             log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
             sys.exit(1)
@@ -274,7 +276,7 @@ def build_branch(args):
         G.git.merge(c.hexsha, '--no-ff', m=message)
 
         if label:
-            req = requests.post("https://api.github.com/repos/ceph/ceph/issues/{pr}/labels".format(pr=pr), data=json.dumps([label]), auth=(USER, PASSWORD))
+            req = requests.post("https://api.github.com/repos/{project}/{repo}/issues/{pr}/labels".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), data=json.dumps([label]), auth=(USER, PASSWORD))
             if req.status_code != 200:
                 log.error("PR #%d could not be labeled %s: %s" % (pr, label, req))
                 sys.exit(1)
