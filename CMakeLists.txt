@@ -226,10 +226,9 @@ if(WITH_SPDK)
 endif(WITH_SPDK)
 
 option(WITH_PMEM "Enable PMEM" OFF)
-if(WITH_PMEM)
-  find_package(pmem REQUIRED)
-  set(HAVE_PMEM ${PMEM_FOUND})
-endif(WITH_PMEM)
+if (WITH_PMEM)
+  set(HAVE_PMEM ON)
+endif()
 
 option(WITH_BLUEFS "libbluefs library" OFF)
 

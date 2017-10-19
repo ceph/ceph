@@ -85,10 +85,6 @@ if(WITH_FUSE)
   target_link_libraries(os ${FUSE_LIBRARIES})
 endif()
 
-if(WITH_PMEM)
-  target_link_libraries(os ${PMEM_LIBRARY})
-endif()
-
 if(HAVE_LIBZFS)
   target_link_libraries(os ${ZFS_LIBRARIES})
 endif()
@@ -140,6 +136,31 @@ if(WITH_SPDK)
     list(APPEND SPDK_LIBRARIES spdk_${lib})
   endforeach()
 endif(WITH_SPDK)
+
+if(WITH_PMEM)
+  include(ExternalProject)
+  ExternalProject_Add(nvml_ext
+    DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/src/
+    GIT_REPOSITORY "https://github.com/ceph/nvml.git"
+    GIT_TAG "dd5b62dbc2cbbe048087dea"
+    SOURCE_DIR ${CMAKE_BINARY_DIR}/src/nvml
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND $(MAKE)
+    BUILD_IN_SOURCE 1
+    INSTALL_COMMAND "true")
+
+  ExternalProject_Add_Step(nvml_ext forcebuild
+    DEPENDEES configure
+    DEPENDERS build
+    COMMAND "true"
+    ALWAYS 1)
+  add_library(pmem STATIC IMPORTED GLOBAL)
+  add_dependencies(pmem nvml_ext)
+  set_target_properties(pmem PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/nvml/src/nondebug/libpmem.a")
+  target_link_libraries(os pmem)
+  target_include_directories(os PRIVATE "${CMAKE_BINARY_DIR}/src/nvml/src/include")
+endif(WITH_PMEM)
 
 if(WITH_LTTNG AND WITH_EVENTTRACE)
   add_dependencies(os eventtrace_tp)
