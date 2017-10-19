@@ -180,16 +180,13 @@ void PurgeQueue::open(Context *completion)
   }));
 }
 
-bool PurgeQueue::is_recovered()
-{
-  Mutex::Locker l(lock);
-  return recovered;
-}
-
 void PurgeQueue::wait_for_recovery(Context* c)
 {
   Mutex::Locker l(lock);
-  waiting_for_recovery.push_back(c);
+  if (recovered)
+    c->complete(0);
+  else
+    waiting_for_recovery.push_back(c);
 }
 
 void PurgeQueue::_recover()
