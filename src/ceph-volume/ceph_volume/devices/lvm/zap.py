@@ -3,10 +3,39 @@ import logging
 
 from textwrap import dedent
 
-from ceph_volume import decorators, terminal
+from ceph_volume import decorators, terminal, process
 from ceph_volume.api import lvm as api
 
 logger = logging.getLogger(__name__)
+
+
+def wipefs(path):
+    """
+    Removes the filesystem from an lv or partition.
+    """
+    process.run([
+        'sudo',
+        'wipefs',
+        '--all',
+        path
+    ])
+
+
+def zap_data(path):
+    """
+    Clears all data from the given path. Path should be
+    an absolute path to an lv or partition.
+
+    10M of data is written to the path to make sure that
+    there is no trace left of any previous Filesystem.
+    """
+    process.run([
+        'dd',
+        'if=/dev/zero',
+        'of={path}'.format(path=path),
+        'bs=1M',
+        'count=10',
+    ])
 
 
 class Zap(object):
