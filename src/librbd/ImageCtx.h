@@ -52,8 +52,8 @@ namespace librbd {
   namespace io {
   class AioCompletion;
   class AsyncOperation;
+  template <typename> class CopyupRequest;
   template <typename> class ImageRequestWQ;
-  class CopyupRequest;
   }
   namespace journal { struct Policy; }
 
@@ -140,7 +140,7 @@ namespace librbd {
     Readahead readahead;
     uint64_t total_bytes_read;
 
-    std::map<uint64_t, io::CopyupRequest*> copyup_list;
+    std::map<uint64_t, io::CopyupRequest<ImageCtx>*> copyup_list;
 
     xlist<io::AsyncOperation*> async_ops;
     xlist<AsyncRequest<>*> async_requests;

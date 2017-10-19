@@ -80,11 +80,11 @@ private:
 
 } // anonymous namespace
 
-
-CopyupRequest::CopyupRequest(ImageCtx *ictx, const std::string &oid,
-                             uint64_t objectno, Extents &&image_extents,
-			     const ZTracer::Trace &parent_trace)
-  : m_ictx(ictx), m_oid(oid), m_object_no(objectno),
+template <typename I>
+CopyupRequest<I>::CopyupRequest(I *ictx, const std::string &oid,
+                                uint64_t objectno, Extents &&image_extents,
+                                const ZTracer::Trace &parent_trace)
+  : m_ictx(util::get_image_ctx(ictx)), m_oid(oid), m_object_no(objectno),
     m_image_extents(image_extents),
     m_trace(util::create_trace(*m_ictx, "copy-up", parent_trace)),
     m_state(STATE_READ_FROM_PARENT)
@@ -92,17 +92,20 @@ CopyupRequest::CopyupRequest(ImageCtx *ictx, const std::string &oid,
   m_async_op.start_op(*m_ictx);
 }
 
-CopyupRequest::~CopyupRequest() {
+template <typename I>
+CopyupRequest<I>::~CopyupRequest() {
   assert(m_pending_requests.empty());
   m_async_op.finish_op();
 }
 
-void CopyupRequest::append_request(ObjectRequest<> *req) {
+template <typename I>
+void CopyupRequest<I>::append_request(ObjectRequest<I> *req) {
   ldout(m_ictx->cct, 20) << req << dendl;
   m_pending_requests.push_back(req);
 }
 
-void CopyupRequest::complete_requests(int r) {
+template <typename I>
+void CopyupRequest<I>::complete_requests(int r) {
   while (!m_pending_requests.empty()) {
     vector<ObjectRequest<> *>::iterator it = m_pending_requests.begin();
     ObjectRequest<> *req = *it;
@@ -112,7 +115,8 @@ void CopyupRequest::complete_requests(int r) {
   }
 }
 
-bool CopyupRequest::send_copyup() {
+template <typename I>
+bool CopyupRequest<I>::send_copyup() {
   bool add_copyup_op = !m_copyup_data.is_zero();
   bool copy_on_read = m_pending_requests.empty();
   if (!add_copyup_op && copy_on_read) {
@@ -189,7 +193,8 @@ bool CopyupRequest::send_copyup() {
   return false;
 }
 
-bool CopyupRequest::is_copyup_required() {
+template <typename I>
+bool CopyupRequest<I>::is_copyup_required() {
   bool noop = true;
   for (const ObjectRequest<> *req : m_pending_requests) {
     if (!req->is_op_payload_empty()) {
@@ -201,7 +206,8 @@ bool CopyupRequest::is_copyup_required() {
   return (m_copyup_data.is_zero() && noop);
 }
 
-void CopyupRequest::send()
+template <typename I>
+void CopyupRequest<I>::send()
 {
   m_state = STATE_READ_FROM_PARENT;
   AioCompletion *comp = AioCompletion::create_and_start(
@@ -215,7 +221,8 @@ void CopyupRequest::send()
                            ReadResult{&m_copyup_data}, 0, m_trace);
 }
 
-void CopyupRequest::complete(int r)
+template <typename I>
+void CopyupRequest<I>::complete(int r)
 {
   if (should_complete(r)) {
     complete_requests(r);
@@ -223,7 +230,8 @@ void CopyupRequest::complete(int r)
   }
 }
 
-bool CopyupRequest::should_complete(int r)
+template <typename I>
+bool CopyupRequest<I>::should_complete(int r)
 {
   CephContext *cct = m_ictx->cct;
   ldout(cct, 20) << "oid " << m_oid
@@ -277,17 +285,18 @@ bool CopyupRequest::should_complete(int r)
   return (r < 0);
 }
 
-void CopyupRequest::remove_from_list()
+template <typename I>
+void CopyupRequest<I>::remove_from_list()
 {
   Mutex::Locker l(m_ictx->copyup_list_lock);
 
-  map<uint64_t, CopyupRequest*>::iterator it =
-    m_ictx->copyup_list.find(m_object_no);
+  auto it = m_ictx->copyup_list.find(m_object_no);
   assert(it != m_ictx->copyup_list.end());
   m_ictx->copyup_list.erase(it);
 }
 
-bool CopyupRequest::send_object_map_head() {
+template <typename I>
+bool CopyupRequest<I>::send_object_map_head() {
   CephContext *cct = m_ictx->cct;
   ldout(cct, 20) << dendl;
 
@@ -346,7 +355,8 @@ bool CopyupRequest::send_object_map_head() {
   return send_object_map();
 }
 
-bool CopyupRequest::send_object_map() {
+template <typename I>
+bool CopyupRequest<I>::send_object_map() {
   // avoid possible recursive lock attempts
   if (m_snap_ids.empty()) {
     // no object map update required
@@ -371,3 +381,5 @@ bool CopyupRequest::send_object_map() {
 
 } // namespace io
 } // namespace librbd
+
+template class librbd::io::CopyupRequest<librbd::ImageCtx>;
