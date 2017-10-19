@@ -652,6 +652,14 @@ class Volume(object):
         obj['path'] = self.lv_path
         return obj
 
+    def clear_tags(self):
+        """
+        Removes all tags from the Logical Volume.
+        """
+        for k, v in self.tags.items():
+            tag = "%s=%s" % (k, v)
+            process.run(['sudo', 'lvchange', '--deltag', tag, self.lv_path])
+
     def set_tags(self, tags):
         """
         :param tags: A dictionary of tag names and values, like::
