@@ -20,6 +20,7 @@
 #include "OSDMap.h"
 #include <algorithm>
 #include "common/config.h"
+#include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"
 #include "include/ceph_features.h"
@@ -1145,20 +1146,40 @@ int OSDMap::calc_num_osds()
   return num_osd;
 }
 
-void OSDMap::count_full_nearfull_osds(int *full, int *backfill, int *nearfull) const
+void OSDMap::get_full_pools(CephContext *cct,
+                            set<int64_t> *full,
+                            set<int64_t> *backfillfull,
+                            set<int64_t> *nearfull) const
 {
-  *full = 0;
-  *backfill = 0;
-  *nearfull = 0;
+  assert(full);
+  assert(backfillfull);
+  assert(nearfull);
+  full->clear();
+  backfillfull->clear();
+  nearfull->clear();
+
+  vector<int> full_osds;
+  vector<int> backfillfull_osds;
+  vector<int> nearfull_osds;
   for (int i = 0; i < max_osd; ++i) {
     if (exists(i) && is_up(i) && is_in(i)) {
       if (osd_state[i] & CEPH_OSD_FULL)
-	++(*full);
+        full_osds.push_back(i);
       else if (osd_state[i] & CEPH_OSD_BACKFILLFULL)
-	++(*backfill);
+	backfillfull_osds.push_back(i);
       else if (osd_state[i] & CEPH_OSD_NEARFULL)
-	++(*nearfull);
+	nearfull_osds.push_back(i);
     }
+  }
+
+  for (auto i: full_osds) {
+    get_pool_ids_by_osd(cct, i, full);
+  }
+  for (auto i: backfillfull_osds) {
+    get_pool_ids_by_osd(cct, i, backfillfull);
+  }
+  for (auto i: nearfull_osds) {
+    get_pool_ids_by_osd(cct, i, nearfull);
   }
 }
 
@@ -3973,6 +3994,31 @@ int OSDMap::get_osds_by_bucket_name(const string &name, set<int> *osds) const
   return crush->get_leaves(name, osds);
 }
 
+// get pools whose crush rules might reference the given osd
+void OSDMap::get_pool_ids_by_osd(CephContext *cct,
+                                int osd,
+                                set<int64_t> *pool_ids) const
+{
+  assert(pool_ids);
+  set<int> raw_rules;
+  int r = crush->get_rules_by_osd(osd, &raw_rules);
+  if (r < 0) {
+    lderr(cct) << __func__ << " get_rules_by_osd failed: " << cpp_strerror(r)
+               << dendl;
+    assert(r >= 0);
+  }
+  set<int> rules;
+  for (auto &i: raw_rules) {
+    // exclude any dead rule
+    if (crush_ruleset_in_use(i)) {
+      rules.insert(i);
+    }
+  }
+  for (auto &r: rules) {
+    get_pool_ids_by_rule(r, pool_ids);
+  }
+}
+
 template <typename F>
 class OSDUtilizationDumper : public CrushTreeDumper::Dumper<F> {
 public:
@@ -4528,6 +4574,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
   {
     // warn about flags
     uint64_t warn_flags =
+      CEPH_OSDMAP_NEARFULL |
       CEPH_OSDMAP_FULL |
       CEPH_OSDMAP_PAUSERD |
       CEPH_OSDMAP_PAUSEWR |
@@ -4634,23 +4681,49 @@ void OSDMap::check_health(health_check_map_t *checks) const
   // OSD_UPGRADE_FINISHED
   // none of these (yet) since we don't run until luminous upgrade is done.
 
-  // POOL_FULL
+  // POOL_NEARFULL/BACKFILLFULL/FULL
   {
-    list<string> detail;
+    list<string> full_detail, backfillfull_detail, nearfull_detail;
     for (auto it : get_pools()) {
       const pg_pool_t &pool = it.second;
+      const string& pool_name = get_pool_name(it.first);
       if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
-	const string& pool_name = get_pool_name(it.first);
 	stringstream ss;
-	ss << "pool '" << pool_name << "' is full";
-	detail.push_back(ss.str());
+        if (pool.has_flag(pg_pool_t::FLAG_FULL_NO_QUOTA)) {
+          // may run out of space too,
+          // but we want EQUOTA taking precedence
+          ss << "pool '" << pool_name << "' is full (no quota)";
+        } else {
+          ss << "pool '" << pool_name << "' is full (no space)";
+        }
+	full_detail.push_back(ss.str());
+      } else if (pool.has_flag(pg_pool_t::FLAG_BACKFILLFULL)) {
+        stringstream ss;
+        ss << "pool '" << pool_name << "' is backfillfull";
+        backfillfull_detail.push_back(ss.str());
+      } else if (pool.has_flag(pg_pool_t::FLAG_NEARFULL)) {
+        stringstream ss;
+        ss << "pool '" << pool_name << "' is nearfull";
+        nearfull_detail.push_back(ss.str());
       }
     }
-    if (!detail.empty()) {
+    if (!full_detail.empty()) {
       ostringstream ss;
-      ss << detail.size() << " pool(s) full";
+      ss << full_detail.size() << " pool(s) full";
       auto& d = checks->add("POOL_FULL", HEALTH_WARN, ss.str());
-      d.detail.swap(detail);
+      d.detail.swap(full_detail);
+    }
+    if (!backfillfull_detail.empty()) {
+      ostringstream ss;
+      ss << backfillfull_detail.size() << " pool(s) backfillfull";
+      auto& d = checks->add("POOL_BACKFILLFULL", HEALTH_WARN, ss.str());
+      d.detail.swap(backfillfull_detail);
+    }
+    if (!nearfull_detail.empty()) {
+      ostringstream ss;
+      ss << nearfull_detail.size() << " pool(s) nearfull";
+      auto& d = checks->add("POOL_NEARFULL", HEALTH_WARN, ss.str());
+      d.detail.swap(nearfull_detail);
     }
   }
 }

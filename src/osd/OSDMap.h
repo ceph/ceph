@@ -644,13 +644,15 @@ public:
   float get_nearfull_ratio() const {
     return nearfull_ratio;
   }
-  void count_full_nearfull_osds(int *full, int *backfill, int *nearfull) const;
   void get_full_osd_util(
     const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &osd_stat,
     map<int, float> *full,
     map<int, float> *backfill,
     map<int, float> *nearfull) const;
-
+  void get_full_pools(CephContext *cct,
+                      set<int64_t> *full,
+                      set<int64_t> *backfillfull,
+                      set<int64_t> *nearfull) const;
   void get_full_osd_counts(set<int> *full, set<int> *backfill,
 			   set<int> *nearfull) const;
 
@@ -1171,6 +1173,17 @@ public:
   mempool::osdmap::map<int64_t,pg_pool_t>& get_pools() {
     return pools;
   }
+  void get_pool_ids_by_rule(int rule_id, set<int64_t> *pool_ids) const {
+    assert(pool_ids);
+    for (auto &p: pools) {
+      if ((int)p.second.get_crush_rule() == rule_id) {
+        pool_ids->insert(p.first);
+      }
+    }
+  }
+  void get_pool_ids_by_osd(CephContext *cct,
+                           int osd,
+                           set<int64_t> *pool_ids) const;
   const string& get_pool_name(int64_t p) const {
     auto i = pool_name.find(p);
     assert(i != pool_name.end());

@@ -2054,6 +2054,44 @@ int CrushWrapper::get_rules_by_class(const string &class_name, set<int> *rules)
   return 0;
 }
 
+// return rules that might reference the given osd
+int CrushWrapper::get_rules_by_osd(int osd, set<int> *rules)
+{
+  assert(rules);
+  rules->clear();
+  if (osd < 0) {
+    return -EINVAL;
+  }
+  for (unsigned i = 0; i < crush->max_rules; ++i) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j = 0; j < r->len; ++j) {
+      if (r->steps[j].op == CRUSH_RULE_TAKE) {
+        int step_item = r->steps[j].arg1;
+        list<int> unordered;
+        int rc = _get_leaves(step_item, &unordered);
+        if (rc < 0) {
+          return rc; // propagate fatal errors!
+        }
+        bool match = false;
+        for (auto &o: unordered) {
+          assert(o >= 0);
+          if (o == osd) {
+            match = true;
+            break;
+          }
+        }
+        if (match) {
+          rules->insert(i);
+          break;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
 bool CrushWrapper::_class_is_dead(int class_id)
 {
   for (auto &p: class_map) {

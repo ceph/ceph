@@ -1221,6 +1221,7 @@ public:
   int populate_classes(
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
   int get_rules_by_class(const string &class_name, set<int> *rules);
+  int get_rules_by_osd(int osd, set<int> *rules);
   bool _class_is_dead(int class_id);
   void cleanup_dead_classes();
   int rebuild_roots_with_classes();

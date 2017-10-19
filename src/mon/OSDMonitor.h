@@ -358,7 +358,8 @@ private:
 		       ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 
-  void update_pool_flags(int64_t pool_id, uint64_t flags);
+  void set_pool_flags(int64_t pool_id, uint64_t flags);
+  void clear_pool_flags(int64_t pool_id, uint64_t flags);
   bool update_pools_status();
 
   bool prepare_set_flag(MonOpRequestRef op, int flag);
