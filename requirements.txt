@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file requirements.txt setup.py
 #
-ansible==2.3.0.0
+ansible==2.4.0.0
 apache-libcloud==1.5.0
 appdirs==1.4.3            # via os-client-config
 argparse==1.4.0
@@ -21,7 +21,7 @@ cmd2==0.7.0               # via cliff
 configobj==5.0.6
 configparser==3.5.0
 contextlib2==0.5.4        # via raven
-cryptography==1.8.1       # via paramiko, pyopenssl
+cryptography==1.8.1       # via ansible, paramiko, pyopenssl
 debtcollector==1.13.0     # via oslo.config, oslo.utils, python-keystoneclient, python-neutronclient
 deprecation==1.0          # via openstacksdk
 docopt==0.6.2
@@ -70,7 +70,6 @@ ptyprocess==0.5.1         # via pexpect
 py==1.4.33                # via tox
 pyasn1==0.2.3
 pycparser==2.17           # via cffi
-pycrypto==2.6.1           # via ansible
 pyopenssl==16.2.0
 pyparsing==2.2.0          # via cliff, cmd2, oslo.utils, packaging
 python-cinderclient==2.0.1  # via python-openstackclient
