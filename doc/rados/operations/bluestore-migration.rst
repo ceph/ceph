@@ -69,7 +69,7 @@ more data migration than should be necessary, so it is not optimal.
 
      umount /var/lib/ceph/osd/ceph-$ID
 
-#. Destroy the OSD data.  Be *EXTREMELY CAREUL* as this will destroy
+#. Destroy the OSD data.  Be *EXTREMELY CAREFUL* as this will destroy
    the contents of the device; be certain the data on the device is
    not needed (i.e., that the cluster is healthy) before proceeding. ::
 
