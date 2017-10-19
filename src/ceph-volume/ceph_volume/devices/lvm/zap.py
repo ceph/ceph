@@ -63,6 +63,10 @@ class Zap(object):
         wipefs(path)
         zap_data(path)
 
+        if lv:
+            # remove all lvm metadata
+            lv.clear_tags()
+
     def main(self):
         sub_command_help = dedent("""
         Zaps the given logical volume or partition. If given a path to a logical
