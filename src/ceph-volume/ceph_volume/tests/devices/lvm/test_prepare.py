@@ -33,8 +33,9 @@ class TestPrepare(object):
         with pytest.raises(SystemExit):
             lvm.prepare.Prepare(argv=['--help']).main()
         stdout, stderr = capsys.readouterr()
-        assert 'required arguments:' in stdout
-        assert 'A logical group name or a path' in stdout
+        assert 'Use the filestore objectstore' in stdout
+        assert 'Use the bluestore objectstore' in stdout
+        assert 'Bluestore: A physical device or volume' in stdout
 
 
 class TestGetJournalLV(object):
