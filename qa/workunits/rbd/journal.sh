@@ -96,16 +96,17 @@ test_rbd_journal()
     rbd snap create ${image1}@test
     restore_commit_position ${journal1}
     # check that commit position is properly updated: the journal should contain
-    # 12 entries (10 AioWrite + 1 SnapCreate + 1 OpFinish) and commit
-    # position set to tid=11
+    # 14 entries (2 AioFlush + 10 AioWrite + 1 SnapCreate + 1 OpFinish) and
+    # commit position set to tid=14
     rbd journal inspect --image ${image1} --verbose | awk '
+      /AioFlush/          {a++}         # match: "event_type": "AioFlush",
       /AioWrite/          {w++}         # match: "event_type": "AioWrite",
       /SnapCreate/        {s++}         # match: "event_type": "SnapCreate",
       /OpFinish/          {f++}         # match: "event_type": "OpFinish",
-      /entries inspected/ {t=$1; e=$4}  # match: 12 entries inspected, 0 errors
+      /entries inspected/ {t=$1; e=$4}  # match: 14 entries inspected, 0 errors
                           {print}       # for diagnostic
       END                 {
-        if (w != 10 || s != 1 || f != 1 || t != 12 || e != 0) exit(1)
+        if (a != 2 || w != 10 || s != 1 || f != 1 || t != 14 || e != 0) exit(1)
       }
     '
 
