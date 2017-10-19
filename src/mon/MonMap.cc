@@ -439,31 +439,34 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
 {
   const md_config_t *conf = cct->_conf;
   // file?
-  if (!conf->monmap.empty()) {
+  const auto monmap = conf->get_val<std::string>("monmap");
+  if (!monmap.empty()) {
     int r;
     try {
-      r = read(conf->monmap.c_str());
+      r = read(monmap.c_str());
     }
     catch (const buffer::error &e) {
       r = -EINVAL;
     }
     if (r >= 0)
       return 0;
-    errout << "unable to read/decode monmap from " << conf->monmap
+    errout << "unable to read/decode monmap from " << monmap
 	 << ": " << cpp_strerror(-r) << std::endl;
     return r;
   }
 
   // fsid from conf?
-  if (!cct->_conf->fsid.is_zero()) {
-    fsid = cct->_conf->fsid;
+  const auto new_fsid = conf->get_val<uuid_d>("fsid");
+  if (!new_fsid.is_zero()) {
+    fsid = new_fsid;
   }
 
   // -m foo?
-  if (!conf->mon_host.empty()) {
-    int r = build_from_host_list(conf->mon_host, "noname-");
+  const auto mon_host = conf->get_val<std::string>("mon_host");
+  if (!mon_host.empty()) {
+    int r = build_from_host_list(mon_host, "noname-");
     if (r < 0) {
-      errout << "unable to parse addrs in '" << conf->mon_host << "'"
+      errout << "unable to parse addrs in '" << mon_host << "'"
              << std::endl;
       return r;
     }
@@ -536,7 +539,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
 
   if (size() == 0) {
     // no info found from conf options lets try use DNS SRV records
-    string srv_name = conf->mon_dns_srv_name;
+    string srv_name = conf->get_val<std::string>("mon_dns_srv_name");
     string domain;
     // check if domain is also provided and extract it from srv_name
     size_t idx = srv_name.find("_");

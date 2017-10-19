@@ -259,7 +259,7 @@ public:
     }
 
     if (log->graylog() && changed.count("fsid")) {
-      log->graylog()->set_fsid(conf->fsid);
+      log->graylog()->set_fsid(conf->get_val<uuid_d>("fsid"));
     }
   }
 };
