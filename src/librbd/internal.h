@@ -30,9 +30,7 @@ enum {
   l_librbd_discard_bytes,
   l_librbd_discard_latency,
   l_librbd_flush,
-
-  l_librbd_aio_flush,
-  l_librbd_aio_flush_latency,
+  l_librbd_flush_latency,
   l_librbd_ws,
   l_librbd_ws_bytes,
   l_librbd_ws_latency,
@@ -205,7 +203,6 @@ namespace librbd {
   void readahead(ImageCtx *ictx,
                  const vector<pair<uint64_t,uint64_t> >& image_extents);
 
-  int flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);
   int poll_io_events(ImageCtx *ictx, io::AioCompletion **comps, int numcomp);
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
