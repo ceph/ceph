@@ -227,8 +227,11 @@ class TestAnsibleTask(TestTask):
         with patch.object(ansible, 'NamedTemporaryFile') as m_NTF:
             m_NTF.return_value = hosts_file_obj
             task.generate_hosts_file()
-            m_NTF.assert_called_once_with(prefix="teuth_ansible_hosts_",
-                                          delete=False)
+            m_NTF.assert_called_once_with(
+                prefix="teuth_ansible_hosts_",
+                delete=False,
+                suffix='',
+            )
         assert task.generated_inventory is True
         assert task.inventory == hosts_file_path
         hosts_file_obj.seek(0)
@@ -255,9 +258,11 @@ class TestAnsibleTask(TestTask):
             task.find_repo()
             task.get_playbook()
             task.generate_playbook()
-            m_NTF.assert_called_once_with(prefix="teuth_ansible_playbook_",
-                                          dir=task.repo_path,
-                                          delete=False)
+            m_NTF.assert_called_once_with(
+                prefix="teuth_ansible_playbook_",
+                dir=task.repo_path,
+                delete=False,
+            )
         assert task.generated_playbook is True
         assert task.playbook_file == playbook_file_obj
         playbook_file_obj.seek(0)
@@ -483,8 +488,11 @@ class TestCephLabTask(TestTask):
         with patch.object(ansible, 'NamedTemporaryFile') as m_NTF:
             m_NTF.return_value = hosts_file_obj
             task.generate_hosts_file()
-            m_NTF.assert_called_once_with(prefix="teuth_ansible_hosts_",
-                                          delete=False)
+            m_NTF.assert_called_once_with(
+                prefix="teuth_ansible_hosts_",
+                delete=False,
+                suffix='',
+            )
         assert task.generated_inventory is True
         assert task.inventory == hosts_file_path
         hosts_file_obj.seek(0)
