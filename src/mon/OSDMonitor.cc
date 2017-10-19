@@ -5300,7 +5300,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       if (err)
 	break;
       uint32_t data_chunks = erasure_code->get_data_chunk_count();
-      uint32_t stripe_unit = g_conf->osd_pool_erasure_code_stripe_unit;
+      uint32_t stripe_unit = g_conf->get_val<uint64_t>("osd_pool_erasure_code_stripe_unit");
       auto it = profile.find("stripe_unit");
       if (it != profile.end()) {
 	string err_str;
@@ -5471,9 +5471,9 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pg_num = g_conf->get_val<uint64_t>("osd_pool_default_pg_num");
   if (pgp_num == 0)
     pgp_num = g_conf->get_val<uint64_t>("osd_pool_default_pgp_num");
-  if (pg_num > (unsigned)g_conf->mon_max_pool_pg_num) {
+  if (pg_num > g_conf->get_val<uint64_t>("mon_max_pool_pg_num")) {
     *ss << "'pg_num' must be greater than 0 and less than or equal to "
-        << g_conf->mon_max_pool_pg_num
+        << g_conf->get_val<uint64_t>("mon_max_pool_pg_num")
         << " (you may adjust 'mon max pool pg num' for higher values)";
     return -ERANGE;
   }
@@ -5761,9 +5761,9 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	return -EEXIST;
       return 0;
     }
-    if (n > (unsigned)g_conf->mon_max_pool_pg_num) {
+    if (static_cast<uint64_t>(n) > g_conf->get_val<uint64_t>("mon_max_pool_pg_num")) {
       ss << "'pg_num' must be greater than 0 and less than or equal to "
-         << g_conf->mon_max_pool_pg_num
+         << g_conf->get_val<uint64_t>("mon_max_pool_pg_num")
          << " (you may adjust 'mon max pool pg num' for higher values)";
       return -ERANGE;
     }
@@ -5864,7 +5864,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	return err;
       if (val == "bloom") {
 	BloomHitSet::Params *bsp = new BloomHitSet::Params;
-	bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
+	bsp->set_fpp(g_conf->get_val<double>("osd_pool_default_hit_set_bloom_fpp"));
 	p.hit_set_params = HitSet::Params(bsp);
       } else if (val == "explicit_hash")
 	p.hit_set_params = HitSet::Params(new ExplicitHashHitSet::Params);
@@ -10530,7 +10530,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOTEMPTY;
       goto reply;
     }
-    string modestr = g_conf->osd_tier_default_cache_mode;
+    auto& modestr = g_conf->get_val<string>("osd_tier_default_cache_mode");
     pg_pool_t::cache_mode_t mode = pg_pool_t::get_cache_mode_from_str(modestr);
     if (mode < 0) {
       ss << "osd tier cache default mode '" << modestr << "' is not a valid cache mode";
@@ -10538,18 +10538,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     HitSet::Params hsp;
-    if (g_conf->osd_tier_default_cache_hit_set_type == "bloom") {
+    auto& cache_hit_set_type =
+      g_conf->get_val<string>("osd_tier_default_cache_hit_set_type");
+    if (cache_hit_set_type == "bloom") {
       BloomHitSet::Params *bsp = new BloomHitSet::Params;
-      bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
+      bsp->set_fpp(g_conf->get_val<double>("osd_pool_default_hit_set_bloom_fpp"));
       hsp = HitSet::Params(bsp);
-    } else if (g_conf->osd_tier_default_cache_hit_set_type == "explicit_hash") {
+    } else if (cache_hit_set_type == "explicit_hash") {
       hsp = HitSet::Params(new ExplicitHashHitSet::Params);
-    }
-    else if (g_conf->osd_tier_default_cache_hit_set_type == "explicit_object") {
+    } else if (cache_hit_set_type == "explicit_object") {
       hsp = HitSet::Params(new ExplicitObjectHitSet::Params);
     } else {
-      ss << "osd tier cache default hit set type '" <<
-	g_conf->osd_tier_default_cache_hit_set_type << "' is not a known type";
+      ss << "osd tier cache default hit set type '"
+	 << cache_hit_set_type << "' is not a known type";
       err = -EINVAL;
       goto reply;
     }
@@ -10567,12 +10568,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ntp->set_last_force_op_resend(pending_inc.epoch);
     ntp->tier_of = pool_id;
     ntp->cache_mode = mode;
-    ntp->hit_set_count = g_conf->osd_tier_default_cache_hit_set_count;
-    ntp->hit_set_period = g_conf->osd_tier_default_cache_hit_set_period;
-    ntp->min_read_recency_for_promote = g_conf->osd_tier_default_cache_min_read_recency_for_promote;
-    ntp->min_write_recency_for_promote = g_conf->osd_tier_default_cache_min_write_recency_for_promote;
-    ntp->hit_set_grade_decay_rate = g_conf->osd_tier_default_cache_hit_set_grade_decay_rate;
-    ntp->hit_set_search_last_n = g_conf->osd_tier_default_cache_hit_set_search_last_n;
+    ntp->hit_set_count = g_conf->get_val<uint64_t>("osd_tier_default_cache_hit_set_count");
+    ntp->hit_set_period = g_conf->get_val<uint64_t>("osd_tier_default_cache_hit_set_period");
+    ntp->min_read_recency_for_promote = g_conf->get_val<uint64_t>("osd_tier_default_cache_min_read_recency_for_promote");
+    ntp->min_write_recency_for_promote = g_conf->get_val<uint64_t>("osd_tier_default_cache_min_write_recency_for_promote");
+    ntp->hit_set_grade_decay_rate = g_conf->get_val<uint64_t>("osd_tier_default_cache_hit_set_grade_decay_rate");
+    ntp->hit_set_search_last_n = g_conf->get_val<uint64_t>("osd_tier_default_cache_hit_set_search_last_n");
     ntp->hit_set_params = hsp;
     ntp->target_max_bytes = size;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a cache tier of '" << poolstr << "'";
