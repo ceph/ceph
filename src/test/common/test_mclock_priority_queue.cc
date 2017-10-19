@@ -48,10 +48,10 @@ struct Client {
 };
 
 
-crimson::dmclock::ClientInfo client_info_func(const Client& c) {
+const crimson::dmclock::ClientInfo* client_info_func(const Client& c) {
   static const crimson::dmclock::ClientInfo
     the_info(10.0, 10.0, 10.0);
-  return the_info;
+  return &the_info;
 }
 
 
