@@ -5658,6 +5658,18 @@ static std::vector<Option> get_rbd_options() {
     .set_default(false)
     .set_description("localize parent requests to closest OSD"),
 
+    Option("rbd_sparse_read_threshold_bytes", Option::TYPE_UINT,
+           Option::LEVEL_ADVANCED)
+    .set_default(64_K)
+    .set_description("threshold for issuing a sparse-read")
+    .set_long_description("minimum number of sequential bytes to read against "
+                          "an object before issuing a sparse-read request to "
+                          "the cluster. 0 implies it must be a full object read"
+                          "to issue a sparse-read, 1 implies always use "
+                          "sparse-read, and any value larger than the maximum "
+                          "object size will disable sparse-read for all "
+                          "requests"),
+
     Option("rbd_readahead_trigger_requests", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_description("number of sequential requests necessary to trigger readahead"),
