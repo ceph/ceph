@@ -51,7 +51,7 @@ class Zap(object):
         lv = api.get_lv_from_argument(device)
         if lv:
             # we are zapping a logical volume
-            path = lv.path
+            path = lv.lv_path
         else:
             # we are zapping a partition
             #TODO: ensure device is a partition
