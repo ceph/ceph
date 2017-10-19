@@ -114,6 +114,9 @@ public:
   // Hard Link file src to target.
   rocksdb::Status LinkFile(const std::string& src, const std::string& target) override;
 
+  rocksdb::Status AreFilesSame(const std::string& first,
+                               const std::string& second, bool* res) override;
+
   // Lock the specified file.  Used to prevent concurrent access to
   // the same db by multiple processes.  On failure, stores nullptr in
   // *lock and returns non-OK.
