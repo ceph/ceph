@@ -905,7 +905,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
   bl.append(std::string(1 << ictx->order, '1'));
   ASSERT_EQ((ssize_t)bl.length(),
             ictx->io_work_queue->write(0, bl.length(), bufferlist{bl}, 0));
-  ASSERT_EQ(0, librbd::flush(ictx));
+  ASSERT_EQ(0, ictx->io_work_queue->flush());
 
   ASSERT_EQ(0, create_snapshot("snap1", true));
 

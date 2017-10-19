@@ -2221,28 +2221,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
-  int flush(ImageCtx *ictx)
-  {
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "flush " << ictx << dendl;
-
-    int r = ictx->state->refresh_if_required();
-    if (r < 0) {
-      return r;
-    }
-
-    ictx->user_flushed();
-    C_SaferCond ctx;
-    {
-      RWLock::RLocker owner_locker(ictx->owner_lock);
-      ictx->flush(&ctx);
-    }
-    r = ctx.wait();
-
-    ictx->perfcounter->inc(l_librbd_flush);
-    return r;
-  }
-
   int invalidate_cache(ImageCtx *ictx)
   {
     CephContext *cct = ictx->cct;

@@ -374,8 +374,7 @@ struct C_InvalidateCache : public Context {
     plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes", "Discarded data");
     plb.add_time_avg(l_librbd_discard_latency, "discard_latency", "Discard latency");
     plb.add_u64_counter(l_librbd_flush, "flush", "Flushes");
-    plb.add_u64_counter(l_librbd_aio_flush, "aio_flush", "Async flushes");
-    plb.add_time_avg(l_librbd_aio_flush_latency, "aio_flush_latency", "Latency of async flushes");
+    plb.add_time_avg(l_librbd_flush_latency, "flush_latency", "Latency of flushes");
     plb.add_u64_counter(l_librbd_ws, "ws", "WriteSames");
     plb.add_u64_counter(l_librbd_ws_bytes, "ws_bytes", "WriteSame data");
     plb.add_time_avg(l_librbd_ws_latency, "ws_latency", "WriteSame latency");

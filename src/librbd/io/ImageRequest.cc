@@ -750,7 +750,7 @@ void ImageFlushRequest<I>::send_request() {
     aio_comp->put();
   }
 
-  image_ctx.perfcounter->inc(l_librbd_aio_flush);
+  image_ctx.perfcounter->inc(l_librbd_flush);
 }
 
 template <typename I>
