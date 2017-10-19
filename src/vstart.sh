@@ -515,8 +515,10 @@ $DAEMONOPTS
         osd copyfrom max chunk = 524288
         bluestore fsck on mount = true
         bluestore block create = true
+	bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
         bluestore block db size = 67108864
         bluestore block db create = true
+	bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
         bluestore block wal create = true
 $COSDDEBUG
@@ -633,9 +635,14 @@ EOF
             echo "add osd$osd $uuid"
             ceph_adm osd create $uuid
             ceph_adm osd crush add osd.$osd 1.0 host=$HOSTNAME root=default
-            $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey --osd-uuid $uuid
+	    OSD_SECRET=$($CEPH_BIN/ceph-authtool --gen-print-key)
+            $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
+	    cat > $key_fn<<EOF
+[osd.$osd]
+	key = $OSD_SECRET
+EOF
             echo adding osd$osd key to auth repository
             ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd" mgr "allow profile osd"
         fi
