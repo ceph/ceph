@@ -249,7 +249,7 @@ class MDSRank {
 
     ceph_tid_t last_tid;    // for mds-initiated requests (e.g. stray rename)
 
-    list<MDSInternalContextBase*> waiting_for_active, waiting_for_replay, waiting_for_reconnect, waiting_for_resolve;
+    list<MDSInternalContextBase*> waiting_for_active, waiting_for_rejoin, waiting_for_replay, waiting_for_reconnect, waiting_for_resolve;
     list<MDSInternalContextBase*> replay_queue;
     map<mds_rank_t, list<MDSInternalContextBase*> > waiting_for_active_peer;
     map<epoch_t, list<MDSInternalContextBase*> > waiting_for_mdsmap;
@@ -367,8 +367,11 @@ class MDSRank {
     void wait_for_active(MDSInternalContextBase *c) {
       waiting_for_active.push_back(c);
     }
-    void wait_for_replay(MDSInternalContextBase *c) { 
-      waiting_for_replay.push_back(c); 
+    void wait_for_rejoin(MDSInternalContextBase *c) {
+      waiting_for_rejoin.push_back(c);
+    }
+    void wait_for_replay(MDSInternalContextBase *c) {
+      waiting_for_replay.push_back(c);
     }
     void wait_for_reconnect(MDSInternalContextBase *c) {
       waiting_for_reconnect.push_back(c);

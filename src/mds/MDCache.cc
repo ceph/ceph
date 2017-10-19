@@ -4310,7 +4310,11 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
     ::encode(imported_caps, ack->imported_caps);
   } else {
-    assert(mds->is_rejoin());
+    if (!mds->is_rejoin()) {
+      dout(10) << "cannot handle MMDSCacheRejoin::OP_WEAK; not yet in rejoin state, delaying" << dendl;
+      mds->wait_for_rejoin(new C_MDS_RetryMessage(mds, weak));
+      return;
+    }
 
     // we may have already received a strong rejoin from the sender.
     rejoin_scour_survivor_replicas(from, NULL, acked_inodes, gather_locks);
