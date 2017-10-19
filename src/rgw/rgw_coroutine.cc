@@ -224,6 +224,7 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
     r = unwind(op_retcode);
     op->put();
     done_flag = (pos == ops.end());
+    blocked_flag &= ~done_flag;
     if (done_flag) {
       retcode = op_retcode;
     }
@@ -321,6 +322,7 @@ int RGWCoroutinesStack::unwind(int retcode)
   rgw_spawned_stacks *src_spawned = &(*pos)->spawned;
 
   if (pos == ops.begin()) {
+    ldout(cct, 0) << "stack " << (void *)this << " end" << dendl;
     spawned.inherit(src_spawned);
     ops.clear();
     pos = ops.end();
@@ -505,11 +507,14 @@ void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& con
   if (!stack->try_io_unblock(io.io_id)) {
     return;
   }
-  --(*blocked_count);
-  stack->set_io_blocked(false);
+  if (stack->is_io_blocked()) {
+    --(*blocked_count);
+    stack->set_io_blocked(false);
+  }
   stack->set_interval_wait(false);
   if (!stack->is_done()) {
     scheduled_stacks.push_back(stack);
+    stack->set_is_scheduled(true);
   } else {
     context_stacks.erase(stack);
     stack->put();
@@ -651,7 +656,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       ret = completion_mgr->get_next(&io);
       lock.get_write();
       if (ret < 0) {
-       ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
+       ldout(cct, 0) << "ERROR: completion_mgr.get_next() returned ret=" << ret << dendl;
       }
       handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count);
     }
@@ -666,7 +671,7 @@ next:
       ret = completion_mgr->get_next(&io);
       lock.get_write();
       if (ret < 0) {
-	ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
+	ldout(cct, 0) << "ERROR: completion_mgr.get_next() returned ret=" << ret << dendl;
       }
       if (going_down) {
 	ldout(cct, 5) << __func__ << "(): was stopped, exiting" << dendl;
