@@ -24,124 +24,15 @@
 namespace librbd {
 namespace cache {
 
+using namespace librbd::cache::rwl;
 using namespace librbd::cache::file;
 
-namespace {
+namespace rwl {
 
 typedef std::list<bufferlist> Buffers;
 typedef std::map<uint64_t, bufferlist> ExtentBuffers;
 typedef std::function<void(uint64_t)> ReleaseBlock;
 typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
-
-static const uint32_t BLOCK_SIZE = 512;
-
-/**** Write log entries ****/
-
-static const uint64_t DEFAULT_POOL_SIZE = 10u<<30;
-static const uint64_t MIN_POOL_SIZE = 1u<<20;
-#define USABLE_SIZE (7.0 / 10)
-static const char* rwl_pool_layout_name = POBJ_LAYOUT_NAME(rbd_rwl);
-static const uint8_t RWL_POOL_VERSION = 1;
-  
-POBJ_LAYOUT_BEGIN(rbd_rwl);
-POBJ_LAYOUT_ROOT(rbd_rwl, struct WriteLogPoolRoot);
-POBJ_LAYOUT_TOID(rbd_rwl, uint8_t);
-POBJ_LAYOUT_TOID(rbd_rwl, struct WriteLogPmemEntry);
-POBJ_LAYOUT_END(rbd_rwl);
-
-struct WriteLogPmemEntry {
-  uint64_t sync_gen_number;
-  uint64_t write_sequence_number;
-  uint64_t image_offset_bytes;
-  uint64_t write_bytes;
-  uint64_t first_pool_block;
-  struct {
-    uint8_t entry_valid :1; /* if 0, this entry is free */
-    uint8_t sync_point :1;  /* No data. No write sequence
-			       number. Marks sync point for this sync
-			       gen number */
-    uint8_t sequenced :1;   /* write sequence number is valid */
-    uint8_t has_data :1; /* first_pool_block field is valid */
-    uint8_t unmap :1;       /* has_data will be 0 if this
-			       is an unmap */
-  };
-  WriteLogPmemEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
-    : sync_gen_number(0), write_sequence_number(0),
-      image_offset_bytes(image_offset_bytes), write_bytes(write_bytes), first_pool_block(0),
-      entry_valid(0), sync_point(0), sequenced(0), has_data(0), unmap(0) {
-  }
-  WriteLogPmemEntry() { WriteLogPmemEntry(0, 0); }
-  friend std::ostream &operator<<(std::ostream &os,
-				  const WriteLogPmemEntry &entry) {
-    os << "entry_valid=" << (bool)entry.entry_valid << ", "
-       << "sync_point=" << (bool)entry.sync_point << ", "
-       << "sequenced=" << (bool)entry.sequenced << ", "
-       << "has_data=" << (bool)entry.has_data << ", "
-       << "unmap=" << (bool)entry.unmap << ", "
-       << "sync_gen_number=" << entry.sync_gen_number << ", "
-       << "write_sequence_number=" << entry.write_sequence_number << ", "
-       << "image_offset_bytes=" << entry.image_offset_bytes << ", "
-       << "write_bytes=" << entry.write_bytes << ", "
-       << "first_pool_block=" << entry.first_pool_block;
-    return os;
-  }
-};
-
-struct WriteLogPoolRoot {
-  union {
-    struct {
-      uint8_t layout_version;    /* Version of this structure (RWL_POOL_VERSION) */ 
-    };
-    uint64_t _u64;
-  } header;
-  TOID(uint8_t) data_blocks;	         /* contiguous array of blocks */
-  TOID(struct WriteLogPmemEntry) log_entries;   /* contiguous array of log entries */
-  uint64_t block_size;			         /* block size */
-  uint64_t num_blocks;		         /* total data blocks */
-  uint64_t num_log_entries;
-  uint64_t valid_entry_hint;    /* Start looking here for the oldest valid entry */
-  uint64_t free_entry_hint;     /* Start looking here for the next free entry */
-};
-
-struct WriteLogEntry {
-  WriteLogPmemEntry ram_entry;
-  uint64_t log_entry_index;
-  WriteLogPmemEntry *pmem_entry;
-  uint8_t *pmem_block;
-  WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
-    : ram_entry(image_offset_bytes, write_bytes), log_entry_index(0), pmem_entry(NULL), pmem_block(NULL)  {
-  }
-  WriteLogEntry() {} 
-  friend std::ostream &operator<<(std::ostream &os,
-				  WriteLogEntry &entry) {
-    os << "ram_entry=[" << entry.ram_entry << "], "
-       << "log_entry_index=" << entry.log_entry_index << ", "
-       << "pmem_entry=" << (void*)entry.pmem_entry << ", "
-       << "pmem_block=" << (void*)entry.pmem_block;
-    return os;
-  }
-};
-  
-typedef std::list<WriteLogEntry> WriteLogEntries;
-typedef std::unordered_map<uint64_t, WriteLogEntry> BlockToWriteLogEntry;
-
-/**** Write log entries ****/
-
-struct WriteLogOperation {
-  struct WriteLogEntry log_entry;
-  bufferlist bl;
-  WriteLogOperation(uint64_t image_offset_bytes, uint64_t write_bytes) 
-    : log_entry(image_offset_bytes, write_bytes) {
-  }
-  friend std::ostream &operator<<(std::ostream &os,
-				  WriteLogOperation &op) {
-    os << "log_entry=[" << op.log_entry << "], "
-       << "bl=[" << op.bl << "]";
-    return os;
-  }
-};
-typedef std::list<WriteLogOperation> WriteLogOperations;
-  
 
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
   for (auto &extent : image_extents) {
@@ -915,7 +806,7 @@ struct C_WritebackRequest : public Context {
   }
 };
 
-} // anonymous namespace
+} // namespace rwl
 
 template <typename I>
 ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
@@ -1000,13 +891,14 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
     operations.emplace_back(WriteLogOperation(extent.first, extent.second));
   }
 
-  /* TODO: If there isn't space for this whole write, defer it */
 
   ldout(cct,6) << "bl=[" << bl << "]" << dendl;
   uint8_t *pmem_blocks = D_RW(D_RW(pool_root)->data_blocks);
   struct WriteLogPmemEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
+
   {
     Mutex::Locker locker(m_lock);
+    /* TODO: If there isn't space for this whole write, defer it */
     if (m_free_log_entries < operations.size()) {
       ldout(cct, 6) << "wait for " << operations.size() << " log entries" << dendl;
     } else if (m_free_blocks < total_bytes / BLOCK_SIZE) {
@@ -1051,8 +943,15 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
   pmemobj_drain(m_log_pool);
 
   /* TODO: For persist-on-flush, complete user write here */
+  /* TODO: Better yet: split the loop above at the i.copy, and push
+   * the rest to another thread. Rather than pushing as a work item,
+   * Let a single WF do all the pmemobj_flush for all the waiting ops
+   * (after sorting them in address order and merging them into fewer
+   * larger persist calls), do one pmemobj_drain, then append all
+   * their log entries on one transaction. */
 
-  /* Write data is now (locally) persisted. It's now safe to persist the log entries that refer to them */
+  /* Write data is now (locally) persisted. It's now safe to persist
+   *  the log entries that refer to them */
   
   /* Write log entries - write all in a transaction */
   TX_BEGIN(m_log_pool) {
@@ -1069,21 +968,7 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
   } TX_FINALLY {
   } TX_END;
   
-#if 0
-  for (auto &operation : operations) {
-    memcpy(operation.log_entry.pmem_entry,
-	   &operation.log_entry.ram_entry,
-	   sizeof(operation.log_entry.ram_entry));
-    pmemobj_flush(m_log_pool, operation.log_entry.pmem_block, operation.log_entry.ram_entry.write_bytes);
-  }
-  pmemobj_drain(m_log_pool);
-#endif
   
-  //if ()
-  /* Is there space in the write log for this entire write? */
-  /* If not, defer this IO */
-  /* Reserve log space for this write entry & data */
-
   /*// TODO handle fadvise flags
   BlockGuard::C_BlockRequest *req = new C_WriteBlockRequest<I>(
     m_image_ctx, m_image_writeback, *m_policy, *m_journal_store, *m_image_store,
@@ -1672,3 +1557,7 @@ void ReplicatedWriteLog<I>::flush(Context *on_finish) {
 } // namespace librbd
 
 template class librbd::cache::ReplicatedWriteLog<librbd::ImageCtx>;
+
+/* Local Variables: */
+/* eval: (c-set-offset 'innamespace 0) */
+/* End: */

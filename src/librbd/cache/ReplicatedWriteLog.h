@@ -23,6 +23,133 @@ struct ImageCtx;
 
 namespace cache {
 
+static const uint32_t BLOCK_SIZE = 512;
+
+namespace rwl {
+
+/**** Write log entries ****/
+
+static const uint64_t DEFAULT_POOL_SIZE = 10u<<30;
+static const uint64_t MIN_POOL_SIZE = 1u<<20;
+#define USABLE_SIZE (7.0 / 10)
+static const uint8_t RWL_POOL_VERSION = 1;
+
+POBJ_LAYOUT_BEGIN(rbd_rwl);
+POBJ_LAYOUT_ROOT(rbd_rwl, struct WriteLogPoolRoot);
+POBJ_LAYOUT_TOID(rbd_rwl, uint8_t);
+POBJ_LAYOUT_TOID(rbd_rwl, struct WriteLogPmemEntry);
+POBJ_LAYOUT_END(rbd_rwl);
+
+struct WriteLogPmemEntry {
+  uint64_t sync_gen_number;
+  uint64_t write_sequence_number;
+  uint64_t image_offset_bytes;
+  uint64_t write_bytes;
+  uint64_t first_pool_block;
+  struct {
+    uint8_t entry_valid :1; /* if 0, this entry is free */
+    uint8_t sync_point :1;  /* No data. No write sequence
+			       number. Marks sync point for this sync
+			       gen number */
+    uint8_t sequenced :1;   /* write sequence number is valid */
+    uint8_t has_data :1; /* first_pool_block field is valid */
+    uint8_t unmap :1;       /* has_data will be 0 if this
+			       is an unmap */
+  };
+  WriteLogPmemEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
+    : sync_gen_number(0), write_sequence_number(0),
+      image_offset_bytes(image_offset_bytes), write_bytes(write_bytes), first_pool_block(0),
+      entry_valid(0), sync_point(0), sequenced(0), has_data(0), unmap(0) {
+  }
+  WriteLogPmemEntry() { WriteLogPmemEntry(0, 0); }
+  friend std::ostream &operator<<(std::ostream &os,
+				  const WriteLogPmemEntry &entry) {
+    os << "entry_valid=" << (bool)entry.entry_valid << ", "
+       << "sync_point=" << (bool)entry.sync_point << ", "
+       << "sequenced=" << (bool)entry.sequenced << ", "
+       << "has_data=" << (bool)entry.has_data << ", "
+       << "unmap=" << (bool)entry.unmap << ", "
+       << "sync_gen_number=" << entry.sync_gen_number << ", "
+       << "write_sequence_number=" << entry.write_sequence_number << ", "
+       << "image_offset_bytes=" << entry.image_offset_bytes << ", "
+       << "write_bytes=" << entry.write_bytes << ", "
+       << "first_pool_block=" << entry.first_pool_block;
+    return os;
+  }
+};
+
+struct WriteLogPoolRoot {
+  union {
+    struct {
+      uint8_t layout_version;    /* Version of this structure (RWL_POOL_VERSION) */ 
+    };
+    uint64_t _u64;
+  } header;
+  TOID(uint8_t) data_blocks;	         /* contiguous array of blocks */
+  TOID(struct WriteLogPmemEntry) log_entries;   /* contiguous array of log entries */
+  uint64_t block_size;			         /* block size */
+  uint64_t num_blocks;		         /* total data blocks */
+  uint64_t num_log_entries;
+  uint64_t valid_entry_hint;    /* Start looking here for the oldest valid entry */
+  uint64_t free_entry_hint;     /* Start looking here for the next free entry */
+};
+
+struct WriteLogEntry {
+  WriteLogPmemEntry ram_entry;
+  uint64_t log_entry_index;
+  WriteLogPmemEntry *pmem_entry;
+  uint8_t *pmem_block;
+  /* TODO: occlusion by subsequent writes */
+  /* TODO: flush state: portions flushed, in-progress flushes */
+  WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
+    : ram_entry(image_offset_bytes, write_bytes), log_entry_index(0), pmem_entry(NULL), pmem_block(NULL)  {
+  }
+  WriteLogEntry() {} 
+  friend std::ostream &operator<<(std::ostream &os,
+				  WriteLogEntry &entry) {
+    os << "ram_entry=[" << entry.ram_entry << "], "
+       << "log_entry_index=" << entry.log_entry_index << ", "
+       << "pmem_entry=" << (void*)entry.pmem_entry << ", "
+       << "pmem_block=" << (void*)entry.pmem_block;
+    return os;
+  }
+};
+  
+typedef std::list<WriteLogEntry> WriteLogEntries;
+typedef std::unordered_map<uint64_t, WriteLogEntry> BlockToWriteLogEntry;
+
+/**** Write log entries end ****/
+
+struct WriteLogOperation {
+  struct WriteLogEntry log_entry;
+  bufferlist bl;
+  WriteLogOperation(uint64_t image_offset_bytes, uint64_t write_bytes) 
+    : log_entry(image_offset_bytes, write_bytes) {
+  }
+  friend std::ostream &operator<<(std::ostream &os,
+				  WriteLogOperation &op) {
+    os << "log_entry=[" << op.log_entry << "], "
+       << "bl=[" << op.bl << "]";
+    return os;
+  }
+};
+typedef std::list<WriteLogOperation> WriteLogOperations;
+
+struct SyncPointOperations {
+  CephContext *m_cct;
+  const uint64_t m_sync_gen_num;
+  /* Log entries that must appear in all replicas before this sync
+   * message can appear anywhere */
+  C_Gather *prior_log_entries;
+  SyncPointOperations(CephContext *cct, uint64_t sync_gen_num)
+    : m_cct(cct), m_sync_gen_num(sync_gen_num) {
+    prior_log_entries = new C_Gather(cct, NULL);
+  }
+};
+  
+} // namespace rwl
+
+
 /**
  * Prototype pmem-based, client-side, replicated write log
  */
@@ -60,6 +187,8 @@ private:
   typedef std::function<void(uint64_t)> ReleaseBlock;
   typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
   typedef std::list<Context *> Contexts;
+
+  const char* rwl_pool_layout_name = POBJ_LAYOUT_NAME(rbd_rwl);
 
   ImageCtxT &m_image_ctx;
 
@@ -137,3 +266,7 @@ private:
 extern template class librbd::cache::ReplicatedWriteLog<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
+
+/* Local Variables: */
+/* eval: (c-set-offset 'innamespace 0) */
+/* End: */
