@@ -499,6 +499,13 @@ rocksdb::Status BlueRocksEnv::LinkFile(
   ceph_abort();
 }
 
+rocksdb::Status BlueRocksEnv::AreFilesSame(
+  const std::string& first,
+  const std::string& second,
+  bool* res) {
+  return rocksdb::Status::NotSupported("AreFilesSame is not supported for this Env");
+}
+
 rocksdb::Status BlueRocksEnv::LockFile(
   const std::string& fname,
   rocksdb::FileLock** lock)
