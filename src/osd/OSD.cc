@@ -3128,6 +3128,10 @@ void OSD::create_logger()
     l_osd_pg_stray, "numpg_stray",
     "Placement groups ready to be deleted from this osd");
   osd_plb.add_u64(
+    l_osd_pg_removing, "numpg_removing",
+    "Placement groups queued for local deletion", "pgsr",
+    PerfCountersBuilder::PRIO_USEFUL);
+  osd_plb.add_u64(
     l_osd_hb_to, "heartbeat_to_peers", "Heartbeat (ping) peers we send to");
   osd_plb.add_u64_counter(l_osd_map, "map_messages", "OSD map messages");
   osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs", "OSD map epochs");
@@ -4971,6 +4975,7 @@ void OSD::tick_without_osd_lock()
   logger->set(l_osd_cached_crc, buffer::get_cached_crc());
   logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
   logger->set(l_osd_missed_crc, buffer::get_missed_crc());
+  logger->set(l_osd_pg_removing, remove_wq.get_remove_queue_len());
 
   // osd_lock is not being held, which means the OSD state
   // might change when doing the monitor report
@@ -7865,6 +7870,7 @@ void OSD::consume_map()
   logger->set(l_osd_pg_primary, num_pg_primary);
   logger->set(l_osd_pg_replica, num_pg_replica);
   logger->set(l_osd_pg_stray, num_pg_stray);
+  logger->set(l_osd_pg_removing, remove_wq.get_remove_queue_len());
 }
 
 void OSD::activate_map()
