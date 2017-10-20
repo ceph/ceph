@@ -21,7 +21,7 @@ def common_parser(prog, description):
         '--data',
         required=True,
         type=arg_validators.LVPath(),
-        help='OSD data path. Bluestore: A physical device or volume group. Filestore: A logical volume (vg_name/lv_name)',
+        help='OSD data path. Bluestore: A physical device or logical volume. Filestore: A logical volume (vg_name/lv_name)',
     )
     parser.add_argument(
         '--journal-size',
