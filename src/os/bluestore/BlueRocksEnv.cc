@@ -499,6 +499,29 @@ rocksdb::Status BlueRocksEnv::LinkFile(
   ceph_abort();
 }
 
+rocksdb::Status BlueRocksEnv::AreFilesSame(
+  const std::string& first,
+  const std::string& second, bool* res)
+{
+  for (auto& path : {first, second}) {
+    if (fs->dir_exists(path)) {
+      continue;
+    }
+    std::string dir, file;
+    split(path, &dir, &file);
+    int r = fs->stat(dir, file, nullptr, nullptr);
+    if (!r) {
+      continue;
+    } else if (r == -ENOENT) {
+      return rocksdb::Status::NotFound("AreFilesSame", path);
+    } else {
+      return err_to_status(r);
+    }
+  }
+  *res = (first == second);
+  return rocksdb::Status::OK();
+}
+
 rocksdb::Status BlueRocksEnv::LockFile(
   const std::string& fname,
   rocksdb::FileLock** lock)
