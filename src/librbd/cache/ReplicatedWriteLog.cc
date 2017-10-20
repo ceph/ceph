@@ -34,6 +34,12 @@ typedef std::map<uint64_t, bufferlist> ExtentBuffers;
 typedef std::function<void(uint64_t)> ReleaseBlock;
 typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
 
+SyncPoint::SyncPoint(CephContext *cct, uint64_t sync_gen_num)
+    : m_cct(cct), m_sync_gen_num(sync_gen_num) {
+    prior_log_entries = new C_Gather(cct, NULL);
+  }
+
+
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
   for (auto &extent : image_extents) {
     if (extent.first % BLOCK_SIZE != 0 || extent.second % BLOCK_SIZE != 0) {
@@ -811,11 +817,16 @@ struct C_WritebackRequest : public Context {
 template <typename I>
 ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), 
-    m_log_pool_size(DEFAULT_POOL_SIZE),
+    m_log_pool(NULL), m_log_pool_size(DEFAULT_POOL_SIZE),
     m_total_log_entries(0), m_total_blocks(0),
     m_free_log_entries(0), m_free_blocks(0),
     m_image_writeback(image_ctx), m_image_cache(image_ctx),
     m_block_guard(image_ctx.cct, 256, BLOCK_SIZE),
+    m_first_free_entry(0), m_first_valid_entry(0),
+    m_next_free_block(0), m_last_free_block(0),
+    m_free_entry_hint(0), m_valid_entry_hint(0),
+    m_current_sync_gen(0), m_current_sync_point(NULL),
+    m_last_op_sequence_num(0),
     m_persist_on_write_until_flush(true), m_persist_on_flush(false),
     m_flush_seen(false),
     m_release_block(std::bind(&ReplicatedWriteLog<I>::release_block, this,
@@ -1139,6 +1150,21 @@ void ReplicatedWriteLog<I>::aio_compare_and_write(Extents &&image_extents,
   }
 }
 
+/**
+ * Begin a new sync point
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::new_sync_point(void) {
+  CephContext *cct = m_image_ctx.cct;
+  SyncPoint *old_sync_point = m_current_sync_point;
+  ldout(cct, 20) << dendl;
+
+  assert(m_lock.is_locked());
+
+  m_current_sync_point = new SyncPoint(cct, ++m_current_sync_gen);
+  
+}
+
 template <typename I>
 void ReplicatedWriteLog<I>::init(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
@@ -1231,12 +1257,17 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
     m_free_blocks = D_RO(pool_root)->num_blocks;
     m_valid_entry_hint = D_RO(pool_root)->valid_entry_hint;
     m_free_entry_hint = D_RO(pool_root)->free_entry_hint;
+    /* TODO: Actually load all the log entries already persisted */
+    /* TODO: Set m_current_sync_gen to the successor of the last one seen in the log */
     ldout(cct,5) << "pool " << m_log_pool_name << "has " << D_RO(pool_root)->num_log_entries <<
       " log entries and " << D_RO(pool_root)->num_blocks << " data blocks" << dendl;
     if (m_valid_entry_hint == m_free_entry_hint) {
       ldout(cct,5) << "write log is empy" << dendl;
     }
   }
+
+  /* Start the sync point following the last one seen in the log */
+  m_current_sync_point = new SyncPoint(cct, m_current_sync_gen);
   
   bufferlist meta_bl;
   // chain the initialization of the meta, image, and journal stores

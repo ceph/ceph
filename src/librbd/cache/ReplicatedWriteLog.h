@@ -94,7 +94,8 @@ struct WriteLogPoolRoot {
   uint64_t free_entry_hint;     /* Start looking here for the next free entry */
 };
 
-struct WriteLogEntry {
+class WriteLogEntry {
+public:
   WriteLogPmemEntry ram_entry;
   uint64_t log_entry_index;
   WriteLogPmemEntry *pmem_entry;
@@ -120,7 +121,8 @@ typedef std::unordered_map<uint64_t, WriteLogEntry> BlockToWriteLogEntry;
 
 /**** Write log entries end ****/
 
-struct WriteLogOperation {
+class WriteLogOperation {
+public:
   struct WriteLogEntry log_entry;
   bufferlist bl;
   WriteLogOperation(uint64_t image_offset_bytes, uint64_t write_bytes) 
@@ -135,20 +137,20 @@ struct WriteLogOperation {
 };
 typedef std::list<WriteLogOperation> WriteLogOperations;
 
-struct SyncPointOperations {
+class SyncPoint {
+public:
   CephContext *m_cct;
   const uint64_t m_sync_gen_num;
   /* Log entries that must appear in all replicas before this sync
    * message can appear anywhere */
   C_Gather *prior_log_entries;
-  SyncPointOperations(CephContext *cct, uint64_t sync_gen_num)
-    : m_cct(cct), m_sync_gen_num(sync_gen_num) {
-    prior_log_entries = new C_Gather(cct, NULL);
-  }
+  Context *on_sync_point_append;
+  SyncPoint(CephContext *cct, uint64_t sync_gen_num);
 };
   
 } // namespace rwl
 
+using namespace librbd::cache::rwl;
 
 /**
  * Prototype pmem-based, client-side, replicated write log
@@ -221,6 +223,7 @@ private:
 
   /* Starts at 0 for a new write log. Incremented on every flush. */
   uint64_t m_current_sync_gen;
+  SyncPoint *m_current_sync_point;
   /* Starts at 0 on each sync gen increase. Incremented before applied
      to an operation */
   uint64_t m_last_op_sequence_num;
@@ -258,6 +261,7 @@ private:
 
   void invalidate(Extents&& image_extents, Context *on_finish);
 
+  void new_sync_point(void);
 };
 
 } // namespace cache
