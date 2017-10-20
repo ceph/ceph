@@ -573,7 +573,6 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, std::string&& key, std
 }
 
 void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const std::string& key, const std::string& val){
-  if (!val.empty())
     e[key] = val;
 }
 
@@ -584,15 +583,13 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const char* key, const
 }
 
 static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
-  int op_ret;
   RGWObjTags tagset;
   try {
     auto bliter = bl.begin();
     tagset.decode(bliter);
   } catch (buffer::error& err) {
     ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
-    op_ret= -EIO;
-    return op_ret;
+    return -EIO;
   }
 
   for (const auto& tag: tagset.get_tags()){
