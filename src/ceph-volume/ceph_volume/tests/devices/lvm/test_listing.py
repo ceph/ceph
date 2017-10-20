@@ -101,7 +101,21 @@ class TestFullReport(object):
         assert result['0'][0]['name'] == 'volume1'
         assert result['0'][1]['name'] == 'journal'
 
-    def test_physical_disk_gets_reported(self, volumes, monkeypatch):
+    def test_ceph_wal_lv_reported(self, volumes, monkeypatch):
+        tags = 'ceph.osd_id=0,ceph.wal_uuid=x,ceph.type=data'
+        wal_tags = 'ceph.osd_id=0,ceph.wal_uuid=x,ceph.type=wal'
+        osd = api.Volume(
+            lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', lv_tags=tags)
+        wal = api.Volume(
+            lv_name='wal', lv_uuid='x', lv_path='/dev/VolGroup/wal', lv_tags=wal_tags)
+        volumes.append(osd)
+        volumes.append(wal)
+        monkeypatch.setattr(lvm.listing.api, 'Volumes', lambda: volumes)
+        result = lvm.listing.List([]).full_report()
+        assert result['0'][0]['name'] == 'volume1'
+        assert result['0'][1]['name'] == 'wal'
+
+    def test_physical_journal_gets_reported(self, volumes, monkeypatch):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
         osd = api.Volume(
             lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', lv_tags=tags)
@@ -112,6 +126,18 @@ class TestFullReport(object):
         assert result['0'][1]['path'] == '/dev/sda1'
         assert result['0'][1]['tags'] == {'PARTUUID': 'x'}
         assert result['0'][1]['type'] == 'journal'
+
+    def test_physical_wal_gets_reported(self, volumes, monkeypatch):
+        tags = 'ceph.osd_id=0,ceph.wal_uuid=x,ceph.type=data'
+        osd = api.Volume(
+            lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', lv_tags=tags)
+        volumes.append(osd)
+        monkeypatch.setattr(lvm.listing.api, 'Volumes', lambda: volumes)
+        monkeypatch.setattr(lvm.listing.disk, 'get_device_from_partuuid', lambda x: '/dev/sda1')
+        result = lvm.listing.List([]).full_report()
+        assert result['0'][1]['path'] == '/dev/sda1'
+        assert result['0'][1]['tags'] == {'PARTUUID': 'x'}
+        assert result['0'][1]['type'] == 'wal'
 
 
 class TestSingleReport(object):
