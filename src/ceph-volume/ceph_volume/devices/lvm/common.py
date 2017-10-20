@@ -28,7 +28,7 @@ def common_parser(prog, description):
         default=5,
         metavar='GB',
         type=int,
-        help='(filestore) Size (in GB) A logical group name or a path to a logical volume',
+        help='(filestore) Size (in GB) for the journal',
     )
     parser.add_argument(
         '--bluestore',
