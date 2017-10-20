@@ -2,10 +2,11 @@
 
 ``prepare``
 ===========
-This subcommand allows a :term:`filestore` setup (:term:`bluestore` support is
-planned) and currently consumes only logical volumes for both the data and
-journal. It will not create or modify the logical volumes except for adding
-extra metadata.
+This subcommand allows a :term:`filestore` or :term:`bluestore` setup. It is
+recommended to pre-provision a logical volume before using it with
+``ceph-volume lvm``.
+
+Logical volumes are not altered except for adding extra metadata.
 
 .. note:: This is part of a two step process to deploy an OSD. If looking for
           a single-call way, please see :ref:`ceph-volume-lvm-create`
@@ -23,21 +24,19 @@ the back end can be specified with:
 
 
 * :ref:`--filestore <ceph-volume-lvm-prepare_filestore>`
-* ``--bluestore``
-
-.. when available, this will need to be updated to:
-.. * :ref:`--bluestore <ceph-volume-prepare_bluestore>`
+* :ref:`--bluestore <ceph-volume-lvm-prepare_bluestore>`
 
 .. _ceph-volume-lvm-prepare_filestore:
 
 ``filestore``
 -------------
-This is the default OSD backend and allows preparation of logical volumes for
-a :term:`filestore` OSD.
+This is the OSD backend that allows preparation of logical volumes for
+a :term:`filestore` objectstore OSD.
 
-The process is *very* strict, it requires two logical volumes that are ready to
-be used. No special preparation is needed for these volumes other than
-following the minimum size requirements for data and journal.
+The process is *very* strict, it requires an existing logical volume for the
+OSD data and a partitioned physical device or logical volume for the journal.
+No special preparation is needed for these volumes other than following the
+minimum size requirements for data and journal.
 
 The API call looks like::
 
