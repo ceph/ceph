@@ -517,7 +517,7 @@ void MgrMonitor::get_health(
     if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       utime_t now = ceph_clock_now();
       if (first_seen_inactive != utime_t() &&
-	  now - first_seen_inactive > g_conf->mon_mgr_inactive_grace) {
+	  now - first_seen_inactive > g_conf->get_val<int64_t>("mon_mgr_inactive_grace")) {
 	level = HEALTH_ERR;
       }
     }
