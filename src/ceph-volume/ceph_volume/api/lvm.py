@@ -139,8 +139,7 @@ def get_lv_from_argument(argument):
     """
     if argument.startswith('/'):
         lv = get_lv(lv_path=argument)
-        if lv:
-            return lv
+        return lv
     try:
         vg_name, lv_name = argument.split('/')
     except (ValueError, AttributeError):
