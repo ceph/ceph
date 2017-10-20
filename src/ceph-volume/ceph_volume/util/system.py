@@ -122,7 +122,7 @@ def get_mounts(devices=False, paths=False):
         proc_mounts = mounts.readlines()
 
     for line in proc_mounts:
-        fields = line.split()
+        fields = [as_string(f) for f in line.split()]
         if len(fields) < 3:
             continue
         device = os.path.realpath(fields[0]) if fields[0].startswith('/') else fields[0]
