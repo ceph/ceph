@@ -154,7 +154,7 @@ def is_device(dev):
         return TYPE == 'disk'
 
     # fallback to stat
-    return _stat_is_device(os.lstat(dev))
+    return _stat_is_device(os.lstat(dev).st_mode)
     if stat.S_ISBLK(os.lstat(dev)):
         return True
     return False
@@ -173,7 +173,7 @@ def is_partition(dev):
 
     # fallback to stat
     stat_obj = os.stat(dev)
-    if _stat_is_device(stat_obj):
+    if _stat_is_device(stat_obj.st_mode):
         return False
 
     major = os.major(stat_obj.st_rdev)
