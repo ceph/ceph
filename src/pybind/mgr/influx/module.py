@@ -5,7 +5,6 @@ import json
 import errno
 
 from mgr_module import MgrModule
-from mgr_module import PERFCOUNTER_HISTOGRAM
 
 try:
     from influxdb import InfluxDBClient
@@ -77,7 +76,7 @@ class Module(MgrModule):
             metadata = self.get_metadata(svc_type, svc_id)
 
             for path, counter_info in counters.items():
-                if counter_info['type'] & PERFCOUNTER_HISTOGRAM:
+                if counter_info['type'] & self.PERFCOUNTER_HISTOGRAM:
                     continue
 
                 value = counter_info['value']

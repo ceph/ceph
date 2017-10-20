@@ -9,24 +9,6 @@ import threading
 from collections import defaultdict
 
 
-# Priority definitions for perf counters
-PRIO_CRITICAL = 10
-PRIO_INTERESTING = 8
-PRIO_USEFUL = 5
-PRIO_UNINTERESTING = 2
-PRIO_DEBUGONLY = 0
-
-# counter value types
-PERFCOUNTER_TIME = 1
-PERFCOUNTER_U64 = 2
-
-# counter types
-PERFCOUNTER_LONGRUNAVG = 4
-PERFCOUNTER_COUNTER = 8
-PERFCOUNTER_HISTOGRAM = 0x10
-PERFCOUNTER_TYPE_MASK = ~2
-
-
 class CommandResult(object):
     """
     Use with MgrModule.send_command
@@ -135,6 +117,23 @@ class CRUSHMap(object):
 
 class MgrModule(object):
     COMMANDS = []
+
+    # Priority definitions for perf counters
+    PRIO_CRITICAL = 10
+    PRIO_INTERESTING = 8
+    PRIO_USEFUL = 5
+    PRIO_UNINTERESTING = 2
+    PRIO_DEBUGONLY = 0
+
+    # counter value types
+    PERFCOUNTER_TIME = 1
+    PERFCOUNTER_U64 = 2
+
+    # counter types
+    PERFCOUNTER_LONGRUNAVG = 4
+    PERFCOUNTER_COUNTER = 8
+    PERFCOUNTER_HISTOGRAM = 0x10
+    PERFCOUNTER_TYPE_MASK = ~2
 
     def __init__(self, handle):
         self._handle = handle
