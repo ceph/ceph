@@ -1809,7 +1809,7 @@ namespace librbd {
     int r = librbd::poll_io_events(ictx, cs, numcomp);
     tracepoint(librbd, poll_io_events_exit, r);
     if (r > 0) {
-      for (int i = 0; i < numcomp; ++i)
+      for (int i = 0; i < r; ++i)
         comps[i] = (RBD::AioCompletion *)cs[i]->rbd_comp;
     }
     return r;
