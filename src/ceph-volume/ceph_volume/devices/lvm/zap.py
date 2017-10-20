@@ -58,7 +58,7 @@ class Zap(object):
             path = device
 
         logger.info("Zapping: %s", path)
-        terminal.write("Zapping: %s", path)
+        terminal.write("Zapping: %s" % path)
 
         wipefs(path)
         zap_data(path)
