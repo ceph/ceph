@@ -73,6 +73,9 @@ def volumes(monkeypatch):
     monkeypatch.setattr(process, 'call', lambda x: ('', '', 0))
     volumes = api.Volumes()
     volumes._purge()
+    # also patch api.Volumes so that when it is called, it will use the newly
+    # created fixture, with whatever the test method wants to append to it
+    monkeypatch.setattr(api, 'Volumes', lambda: volumes)
     return volumes
 
 
@@ -323,6 +326,31 @@ class TestVolumeGroups(object):
     def test_filter_requires_params(self, volume_groups):
         with pytest.raises(TypeError):
             volume_groups.filter()
+
+
+class TestGetLVFromArgument(object):
+
+    def setup(self):
+        self.foo_volume = api.Volume(
+            lv_name='foo', lv_path='/path/to/lv',
+            vg_name='foo_group', lv_tags=''
+        )
+
+    def test_non_absolute_path_is_not_valid(self, volumes):
+        volumes.append(self.foo_volume)
+        assert api.get_lv_from_argument('foo') is None
+
+    def test_too_many_slashes_is_invalid(self, volumes):
+        volumes.append(self.foo_volume)
+        assert api.get_lv_from_argument('path/to/lv') is None
+
+    def test_absolute_path_is_not_lv(self, volumes):
+        volumes.append(self.foo_volume)
+        assert api.get_lv_from_argument('/path') is None
+
+    def test_absolute_path_is_lv(self, volumes):
+        volumes.append(self.foo_volume)
+        assert api.get_lv_from_argument('/path/to/lv') == self.foo_volume
 
 
 class TestCreateLV(object):
