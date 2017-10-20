@@ -1195,6 +1195,14 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   new_log = new File;
   new_log->fnode.ino = 0;   // so that _flush_range won't try to log the fnode
 
+  // 0. wait for any racing flushes to complete.  (We do not want to block
+  // in _flush_sync_log with jump_to set or else a racing thread might flush
+  // our entries and our jump_to update won't be correct.)
+  while (log_flushing) {
+    dout(10) << __func__ << " log is currently flushing, waiting" << dendl;
+    log_cond.wait(l);
+  }
+
   // 1. allocate new log space and jump to it.
   old_log_jump_to = log_file->fnode.get_allocated();
   uint64_t need = old_log_jump_to + cct->_conf->bluefs_max_log_runway;
@@ -1345,16 +1353,19 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   while (log_flushing) {
     dout(10) << __func__ << " want_seq " << want_seq
 	     << " log is currently flushing, waiting" << dendl;
+    assert(!jump_to);
     log_cond.wait(l);
   }
   if (want_seq && want_seq <= log_seq_stable) {
     dout(10) << __func__ << " want_seq " << want_seq << " <= log_seq_stable "
 	     << log_seq_stable << ", done" << dendl;
+    assert(!jump_to);
     return 0;
   }
   if (log_t.empty() && dirty_files.empty()) {
     dout(10) << __func__ << " want_seq " << want_seq
 	     << " " << log_t << " not dirty, dirty_files empty, no-op" << dendl;
+    assert(!jump_to);
     return 0;
   }
 
