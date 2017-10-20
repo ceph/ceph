@@ -6904,7 +6904,12 @@ OSDService::ScrubJob::ScrubJob(CephContext* cct,
     double r = rand() / (double)RAND_MAX;
     sched_time +=
       scrub_min_interval * cct->_conf->osd_scrub_interval_randomize_ratio * r;
-    deadline += scrub_max_interval;
+    if (scrub_max_interval == 0) {
+      deadline = utime_t();
+    } else {
+      deadline += scrub_max_interval;
+    }
+
   }
 }
 
@@ -7007,7 +7012,7 @@ void OSD::sched_scrub()
 	break;
       }
 
-      if ((scrub.deadline >= now) && !(time_permit && load_is_low)) {
+      if ((scrub.deadline.is_zero() || scrub.deadline >= now) && !(time_permit && load_is_low)) {
         dout(10) << __func__ << " not scheduling scrub for " << scrub.pgid << " due to "
                  << (!time_permit ? "time not permit" : "high load") << dendl;
         continue;
