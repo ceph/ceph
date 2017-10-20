@@ -33,12 +33,12 @@ def common_parser(prog, description):
     parser.add_argument(
         '--bluestore',
         action='store_true', default=True,
-        help='Use the bluestore objectstore (not currently supported)',
+        help='Use the bluestore objectstore',
     )
     parser.add_argument(
         '--filestore',
         action='store_true', default=False,
-        help='Use the filestore objectstore (currently the only supported object store)',
+        help='Use the filestore objectstore',
     )
     parser.add_argument(
         '--osd-id',
