@@ -35,7 +35,7 @@ class TestPrepare(object):
         stdout, stderr = capsys.readouterr()
         assert 'Use the filestore objectstore' in stdout
         assert 'Use the bluestore objectstore' in stdout
-        assert 'Bluestore: A physical device or volume' in stdout
+        assert 'Bluestore: A physical device or logical' in stdout
 
 
 class TestGetJournalLV(object):
