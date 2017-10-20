@@ -2075,12 +2075,12 @@ void RGWObjManifest::obj_iterator::operator++()
   if (ofs < head_size) {
     rule_iter = manifest->rules.begin();
     RGWObjManifestRule *rule = &rule_iter->second;
-    ofs = MIN(head_size, obj_size);
+    ofs = std::min(head_size, obj_size);
     stripe_ofs = ofs;
     cur_stripe = 1;
-    stripe_size = MIN(obj_size - ofs, rule->stripe_max_size);
+    stripe_size = std::min(obj_size - ofs, rule->stripe_max_size);
     if (rule->part_size > 0) {
-      stripe_size = MIN(stripe_size, rule->part_size);
+      stripe_size = std::min(stripe_size, rule->part_size);
     }
     update_location();
     return;
@@ -2119,7 +2119,7 @@ void RGWObjManifest::obj_iterator::operator++()
       rule = &rule_iter->second;
     }
 
-    stripe_size = MIN(rule->part_size - (stripe_ofs - part_ofs), rule->stripe_max_size);
+    stripe_size = std::min(rule->part_size - (stripe_ofs - part_ofs), rule->stripe_max_size);
   }
 
   cur_override_prefix = rule->override_prefix;
@@ -2599,7 +2599,7 @@ int RGWPutObjProcessor_Aio::prepare(RGWRados *store, string *oid_rand)
 int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again)
 {
   *phandle = NULL;
-  uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
+  uint64_t max_write_size = std::min(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
 
   pending_data_bl.claim_append(bl);
   if (pending_data_bl.length() < max_write_size) {
@@ -2709,7 +2709,7 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
   while (pending_data_bl.length()) {
     void *handle = nullptr;
     rgw_raw_obj obj;
-    uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
+    uint64_t max_write_size = std::min(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
     if (max_write_size > pending_data_bl.length()) {
       max_write_size = pending_data_bl.length();
     }
@@ -10088,7 +10088,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
 
     uint64_t stripe_ofs = iter.get_stripe_ofs();
     read_obj = iter.get_location().get_raw_obj(store);
-    len = min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
+    len = std::min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
     read_ofs = iter.location_ofs() + (ofs - stripe_ofs);
     reading_from_head = (read_obj == state.head_obj);
   } else {
@@ -10122,7 +10122,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
       }
 
       if (ofs < astate->data.length()) {
-        unsigned copy_len = min((uint64_t)astate->data.length() - ofs, len);
+        unsigned copy_len = std::min((uint64_t)astate->data.length() - ofs, len);
         astate->data.copy(ofs, copy_len, bl);
         read_len -= copy_len;
         read_ofs += copy_len;
@@ -10530,7 +10530,7 @@ int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
 
     if (astate &&
         obj_ofs < astate->data.length()) {
-      unsigned chunk_len = min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
+      unsigned chunk_len = std::min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
 
       d->data_lock.Lock();
       r = d->client_cb->handle_data(astate->data, obj_ofs, chunk_len);
@@ -10667,7 +10667,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
 
       while (ofs < next_stripe_ofs && ofs <= end) {
         read_obj = iter.get_location().get_raw_obj(this);
-        uint64_t read_len = min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
+        uint64_t read_len = std::min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
         read_ofs = iter.location_ofs() + (ofs - stripe_ofs);
 
         if (read_len > max_chunk_size) {
@@ -10687,7 +10687,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
   } else {
     while (ofs <= end) {
       read_obj = head_obj;
-      uint64_t read_len = min(len, max_chunk_size);
+      uint64_t read_len = std::min(len, max_chunk_size);
 
       r = iterate_obj_cb(bucket_info, obj, read_obj, ofs, ofs, read_len, reading_from_head, astate, arg);
       if (r < 0) {
@@ -13275,7 +13275,7 @@ int RGWRados::add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t n
 
   uint32_t num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
 
-  new_num_shards = min(new_num_shards, get_max_bucket_shards());
+  new_num_shards = std::min(new_num_shards, get_max_bucket_shards());
   if (new_num_shards <= num_source_shards) {
     ldout(cct, 20) << "not resharding bucket name=" << bucket_info.bucket.name << ", orig_num=" << num_source_shards << ", new_num_shards=" << new_num_shards << dendl;
     return 0;
