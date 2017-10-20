@@ -53,6 +53,9 @@ Install the iSCSI initiator and multipath tools:
 
 **iSCSI Discovery and Setup:**
 
+#. If CHAP was setup on the iSCSI gateway, provide a CHAP username and
+   password by updating the ``/etc/iscsi/iscsid.conf`` file accordingly.
+
 #. Discover the target portals:
 
    ::
