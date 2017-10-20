@@ -11,7 +11,7 @@ from .common import prepare_parser
 
 def prepare_filestore(device, journal, secrets, id_=None, fsid=None):
     """
-    :param device: The name of the volume group or lvm to work with
+    :param device: The name of the logical volume to work with
     :param journal: similar to device but can also be a regular/plain disk
     :param secrets: A dict with the secrets needed to create the osd (e.g. cephx)
     :param id_: The OSD id
