@@ -69,7 +69,18 @@ See :ref:`ceph-volume-lvm-existing-osds` for details on how to proceed.
 
 Summary
 -------
-To recap the ``activate`` process:
+To recap the ``activate`` process for :term:`bluestore`:
+
+#. require both :term:`OSD id` and :term:`OSD uuid`
+#. enable the system unit with matching id and uuid
+#. Create the ``tmpfs`` mount at the OSD directory in
+   ``/var/lib/ceph/osd/$cluster-$id/``
+#. Recreate all the files needed with ``ceph-bluestore-tool prime-osd-dir`` by
+   pointing it to the OSD ``block`` device.
+#. the systemd unit will ensure all devices are ready and linked
+#. the matching ``ceph-osd`` systemd unit will get started
+
+And for :term:`filestore`:
 
 #. require both :term:`OSD id` and :term:`OSD uuid`
 #. enable the system unit with matching id and uuid
