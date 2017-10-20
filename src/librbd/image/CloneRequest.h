@@ -103,6 +103,7 @@ private:
   uint64_t m_p_features;
   uint64_t m_features;
   map<string, bufferlist> m_pairs;
+  std::string m_last_metadata_key;
   bufferlist m_out_bl;
   uint64_t m_size;
   int m_r_saved = 0;
