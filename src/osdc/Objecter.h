@@ -333,6 +333,8 @@ struct ObjectOperation {
 				  int *prval)
       : data_bl(data_bl), extents(extents), prval(prval) {}
     void finish(int r) override {
+      if (!bl.length())
+        return;
       bufferlist::iterator iter = bl.begin();
       if (r >= 0) {
 	try {
