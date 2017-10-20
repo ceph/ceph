@@ -459,6 +459,15 @@ void BlueFS::collect_metadata(map<string,string> *pm, unsigned skip_bdev_id)
     bdev[BDEV_WAL]->collect_metadata("bluefs_wal_", pm);
 }
 
+void BlueFS::get_devices(set<string> *ls)
+{
+  for (unsigned i = 0; i < MAX_BDEV; ++i) {
+    if (bdev[i]) {
+      bdev[i]->get_devices(ls);
+    }
+  }
+}
+
 int BlueFS::fsck()
 {
   std::lock_guard<std::mutex> l(lock);

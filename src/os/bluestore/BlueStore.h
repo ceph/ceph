@@ -2122,6 +2122,8 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
+  int get_devices(set<string> *ls) override;
+
   bool is_rotational() override;
   bool is_journal_rotational() override;
 
