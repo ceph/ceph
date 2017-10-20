@@ -217,6 +217,42 @@ class CephAnsible(Task):
                     run.Raw(str_args)
                 ]
             )
+            # cleanup the ansible ppa repository we added
+            # and also remove the dependency pkgs we installed
+            if installer_node.os.package_type == 'deb':
+                    installer_node.run(args=[
+                        'sudo',
+                        'add-apt-repository',
+                        '--remove',
+                        run.Raw('ppa:ansible/ansible'),
+                    ])
+                    installer_node.run(args=[
+                        'sudo',
+                        'apt-get',
+                        'update',
+                    ])
+                    installer_node.run(args=[
+                        'sudo',
+                        'apt-get',
+                        'remove',
+                        '-y',
+                        'ansible',
+                        'libssl-dev',
+                        'libffi-dev',
+                        'python-dev'
+                    ])
+            else:
+                # cleanup rpm packages the task installed
+                installer_node.run(args=[
+                    'sudo',
+                    'yum',
+                    'remove',
+                    '-y',
+                    'libffi-devel',
+                    'python-devel',
+                    'openssl-devel',
+                    'libselinux-python'
+                ])
 
     def collect_logs(self):
         ctx = self.ctx
@@ -316,11 +352,23 @@ class CephAnsible(Task):
                 'libselinux-python'
             ])
         else:
+            # update ansible from ppa
+            ceph_installer.run(args=[
+                'sudo',
+                'add-apt-repository',
+                run.Raw('ppa:ansible/ansible'),
+            ])
+            ceph_installer.run(args=[
+                'sudo',
+                'apt-get',
+                'update',
+            ])
             ceph_installer.run(args=[
                 'sudo',
                 'apt-get',
                 'install',
                 '-y',
+                'ansible',
                 'libssl-dev',
                 'python-openssl',
                 'libffi-dev',
