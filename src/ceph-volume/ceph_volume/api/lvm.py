@@ -137,6 +137,10 @@ def get_lv_from_argument(argument):
     in the form of `vg/lv`, but with some validation so that an argument that is a full
     path to a device can be ignored
     """
+    if argument.startswith('/'):
+        lv = get_lv(lv_path=argument)
+        if lv:
+            return lv
     try:
         vg_name, lv_name = argument.split('/')
     except (ValueError, AttributeError):
