@@ -1562,6 +1562,11 @@ public:
   virtual bool wants_journal() = 0;  //< prefers a journal
   virtual bool allows_journal() = 0; //< allows a journal
 
+  /// enumerate hardware devices (by 'devname', e.g., 'sda' as in /sys/block/sda)
+  virtual int get_devices(std::set<string> *devls) {
+    return -EOPNOTSUPP;
+  }
+
   /**
    * is_rotational
    *
