@@ -74,10 +74,10 @@ void *RGWBL::BLWorker::entry() {
 
     end = ceph_clock_now();
     int secs = schedule_next_start_time(end);
-    time_t next_time = end + secs;
-    char buf[30];
-    char *nt = ctime_r(&next_time, buf);
-    ldout(cct, 5) << "schedule bucket logging deliver next start time: " << nt <<dendl;
+    utime_t next;
+    next.set_from_double(end + secs);
+
+    ldout(cct, 5) << "schedule bucket logging deliver next start time: " << rgw_to_asctime(next) <<dendl;
 
     lock.Lock();
     cond.WaitInterval(lock, utime_t(secs, 0));
