@@ -49,5 +49,33 @@ raw* create(temporary_buffer&& buf) {
   return new raw_seastar_local_ptr(std::move(buf));
 }
 
+// buffer::ptr conversions
+
+ptr::operator seastar::temporary_buffer<char>() &
+{
+  return {c_str(), _len, seastar::make_object_deleter(*this)};
+}
+
+ptr::operator seastar::temporary_buffer<char>() &&
+{
+  auto data = c_str();
+  auto length = _len;
+  return {data, length, seastar::make_object_deleter(std::move(*this))};
+}
+
+// buffer::list conversions
+
+list::operator seastar::net::packet() &&
+{
+  seastar::net::packet p;
+  p.reserve(_buffers.size());
+  for (auto& ptr : _buffers) {
+    // append each ptr as a temporary_buffer
+    p = seastar::net::packet(std::move(p), std::move(ptr));
+  }
+  clear();
+  return p;
+}
+
 } // namespace buffer
 } // namespace ceph
