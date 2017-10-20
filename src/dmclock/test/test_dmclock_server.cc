@@ -54,12 +54,12 @@ namespace crimson {
       dmc::ClientInfo ci1(reservation, weight, 0.0);
       dmc::ClientInfo ci2(reservation, weight, 1.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	if (client1 == c) return ci1;
-	else if (client2 == c) return ci2;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &ci1;
+	else if (client2 == c) return &ci2;
 	else {
 	  ADD_FAILURE() << "got request from neither of two clients";
-	  return ci1; // must return
+	  return nullptr;
 	}
       };
 
@@ -91,7 +91,9 @@ namespace crimson {
       double reservation = 100.0;
 
       dmc::ClientInfo ci(reservation, 1.0, 0.0);
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo { return ci; };
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &ci;
+      };
       auto server_ready_f = [] () -> bool { return true; };
       auto submit_req_f = [] (const ClientId& c,
 			      std::unique_ptr<Request> req,
@@ -186,7 +188,9 @@ namespace crimson {
       dmc::ClientInfo ci(1.0, 0.0, 0.0);
       Queue pq;
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo { return ci; };
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &ci;
+      };
       auto server_ready_f = [] () -> bool { return true; };
       auto submit_req_f = [&] (const ClientId& c,
 			       std::unique_ptr<Request> req,
@@ -241,8 +245,8 @@ namespace crimson {
 
       dmc::ClientInfo info1(0.0, 1.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info1;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info1;
       };
 
       Queue pq(client_info_f, true);
@@ -309,8 +313,8 @@ namespace crimson {
 
       dmc::ClientInfo info1(0.0, 1.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info1;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info1;
       };
 
       Queue pq(client_info_f, true);
@@ -391,8 +395,8 @@ namespace crimson {
 
       dmc::ClientInfo info1(0.0, 1.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info1;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info1;
       };
 
       Queue pq(client_info_f, true);
@@ -473,8 +477,8 @@ namespace crimson {
 
       dmc::ClientInfo info1(0.0, 1.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info1;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info1;
       };
 
       Queue pq(client_info_f, true);
@@ -542,12 +546,12 @@ namespace crimson {
 
       QueueRef pq;
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	if (client1 == c) return info1;
-	else if (client2 == c) return info2;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &info1;
+	else if (client2 == c) return &info2;
 	else {
 	  ADD_FAILURE() << "client info looked up for non-existant client";
-	  return info1;
+	  return nullptr;
 	}
       };
 
@@ -595,12 +599,12 @@ namespace crimson {
       dmc::ClientInfo info1(2.0, 0.0, 0.0);
       dmc::ClientInfo info2(1.0, 0.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	if (client1 == c) return info1;
-	else if (client2 == c) return info2;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &info1;
+	else if (client2 == c) return &info2;
 	else {
 	  ADD_FAILURE() << "client info looked up for non-existant client";
-	  return info1;
+	  return nullptr;
 	}
       };
 
@@ -652,12 +656,12 @@ namespace crimson {
 
       QueueRef pq;
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	if (client1 == c) return info1;
-	else if (client2 == c) return info2;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &info1;
+	else if (client2 == c) return &info2;
 	else {
 	  ADD_FAILURE() << "client info looked up for non-existant client";
-	  return info1;
+	  return nullptr;
 	}
       };
 
@@ -749,12 +753,12 @@ namespace crimson {
 
       QueueRef pq;
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	if (client1 == c) return info1[cli_info_group];
-	else if (client2 == c) return info2[cli_info_group];
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &info1[cli_info_group];
+	else if (client2 == c) return &info2[cli_info_group];
 	else {
 	  ADD_FAILURE() << "client info looked up for non-existant client";
-	  return info1[0];
+	  return nullptr;
 	}
       };
 
@@ -838,12 +842,12 @@ namespace crimson {
       dmc::ClientInfo info1(1.0, 0.0, 0.0);
       dmc::ClientInfo info2(1.0, 0.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	if (client1 == c) return info1;
-	else if (client2 == c) return info2;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &info1;
+	else if (client2 == c) return &info2;
 	else {
 	  ADD_FAILURE() << "client info looked up for non-existant client";
-	  return info1;
+	  return nullptr;
 	}
       };
 
@@ -898,8 +902,8 @@ namespace crimson {
 
       dmc::ClientInfo info(1.0, 1.0, 1.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
       };
 
       QueueRef pq(new Queue(client_info_f, false));
@@ -925,8 +929,8 @@ namespace crimson {
 
       dmc::ClientInfo info(1.0, 0.0, 1.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
       };
 
       QueueRef pq(new Queue(client_info_f, false));
@@ -956,8 +960,8 @@ namespace crimson {
 
       dmc::ClientInfo info(0.0, 1.0, 1.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
       };
 
       QueueRef pq(new Queue(client_info_f, true));
@@ -987,8 +991,8 @@ namespace crimson {
 
       dmc::ClientInfo info(1.0, 0.0, 1.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
       };
 
       QueueRef pq(new Queue(client_info_f, true));

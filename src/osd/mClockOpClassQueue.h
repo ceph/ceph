@@ -60,7 +60,7 @@ namespace ceph {
 
     mClockOpClassQueue(CephContext *cct);
 
-    static crimson::dmclock::ClientInfo
+    static const crimson::dmclock::ClientInfo*
     op_class_client_info_f(const osd_op_type_t& op_type);
 
     inline unsigned length() const override final {

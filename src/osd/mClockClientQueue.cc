@@ -58,24 +58,24 @@ namespace ceph {
   }
 
 
-  dmc::ClientInfo
+  const dmc::ClientInfo*
   mClockClientQueue::op_class_client_info_f(
     const mClockClientQueue::InnerClient& client)
   {
     switch(client.second) {
     case osd_op_type_t::client_op:
-      return mclock_op_tags->client_op;
+      return &mclock_op_tags->client_op;
     case osd_op_type_t::osd_subop:
-      return mclock_op_tags->osd_subop;
+      return &mclock_op_tags->osd_subop;
     case osd_op_type_t::bg_snaptrim:
-      return mclock_op_tags->snaptrim;
+      return &mclock_op_tags->snaptrim;
     case osd_op_type_t::bg_recovery:
-      return mclock_op_tags->recov;
+      return &mclock_op_tags->recov;
     case osd_op_type_t::bg_scrub:
-      return mclock_op_tags->scrub;
+      return &mclock_op_tags->scrub;
     default:
       assert(0);
-      return dmc::ClientInfo(-1, -1, -1);
+      return nullptr;
     }
   }
 

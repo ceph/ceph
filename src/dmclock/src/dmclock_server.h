@@ -305,14 +305,14 @@ namespace crimson {
 
       public:
 
-	ClientInfo            info;
+	const ClientInfo*     info;
 	bool                  idle;
 	Counter               last_tick;
 	uint32_t              cur_rho;
 	uint32_t              cur_delta;
 
 	ClientRec(C _client,
-		  const ClientInfo& _info,
+		  const ClientInfo* _info,
 		  Counter current_tick) :
 	  client(_client),
 	  prev_tag(0.0, 0.0, 0.0, TimeZero),
@@ -474,7 +474,7 @@ namespace crimson {
 
 
       // a function that can be called to look up client information
-      using ClientInfoFunc = std::function<ClientInfo(const C&)>;
+      using ClientInfoFunc = std::function<const ClientInfo*(const C&)>;
 
 
       bool empty() const {
@@ -788,7 +788,7 @@ namespace crimson {
       }
 
 
-      inline const ClientInfo get_cli_info(ClientRec& client) const {
+      inline const ClientInfo* get_cli_info(ClientRec& client) const {
 	if (is_dynamic_cli_info_f) {
 	  client.info = client_info_f(client.client);
 	}
@@ -812,7 +812,7 @@ namespace crimson {
 	if (client_map.end() != client_it) {
 	  temp_client = &(*client_it->second); // address of obj of shared_ptr
 	} else {
-	  ClientInfo info = client_info_f(client_id);
+	  const ClientInfo* info = client_info_f(client_id);
 	  ClientRecRef client_rec =
 	    std::make_shared<ClientRec>(client_id, info, tick);
 	  resv_heap.push(client_rec);
@@ -882,8 +882,10 @@ namespace crimson {
 	RequestTag tag(0, 0, 0, time);
 
 	if (!client.has_request()) {
+	  const ClientInfo* client_info = get_cli_info(client);
+	  assert(client_info);
 	  tag = RequestTag(client.get_req_tag(),
-			   get_cli_info(client),
+			   *client_info,
 			   req_params,
 			   time,
 			   cost,
@@ -893,8 +895,10 @@ namespace crimson {
 	  client.update_req_tag(tag, tick);
 	}
 #else
+	const ClientInfo* client_info = get_cli_info(client);
+	assert(client_info);
 	RequestTag tag(client.get_req_tag(),
-		       get_cli_info(client),
+		       *client_info,
 		       req_params,
 		       time,
 		       cost,
@@ -949,7 +953,9 @@ namespace crimson {
 #ifndef DO_NOT_DELAY_TAG_CALC
 	if (top.has_request()) {
 	  ClientReq& next_first = top.next_request();
-	  next_first.tag = RequestTag(tag, get_cli_info(top),
+	  const ClientInfo* client_info = get_cli_info(top);
+	  assert(client_info);
+	  next_first.tag = RequestTag(tag, *client_info,
 				      top.cur_delta, top.cur_rho,
 				      next_first.tag.arrival,
                                       0.0, anticipation_timeout);
@@ -974,7 +980,7 @@ namespace crimson {
       // data_mtx should be held when called
       void reduce_reservation_tags(ClientRec& client) {
 	for (auto& r : client.requests) {
-	  r.tag.reservation -= client.info.reservation_inv;
+	  r.tag.reservation -= client.info->reservation_inv;
 
 #ifndef DO_NOT_DELAY_TAG_CALC
 	  // reduce only for front tag. because next tags' value are invalid
@@ -982,7 +988,7 @@ namespace crimson {
 #endif
 	}
 	// don't forget to update previous tag
-	client.prev_tag.reservation -= client.info.reservation_inv;
+	client.prev_tag.reservation -= client.info->reservation_inv;
 	resv_heap.promote(client);
       }
 
