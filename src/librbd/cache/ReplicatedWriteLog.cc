@@ -35,10 +35,12 @@ typedef std::function<void(uint64_t)> ReleaseBlock;
 typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
 
 SyncPoint::SyncPoint(CephContext *cct, uint64_t sync_gen_num)
-    : m_cct(cct), m_sync_gen_num(sync_gen_num) {
-    prior_log_entries = new C_Gather(cct, NULL);
-  }
-
+  : m_cct(cct), m_sync_gen_num(sync_gen_num), on_sync_point_persisted(NULL) {
+  prior_log_entries_appended = new C_Gather(cct, NULL);
+  /* TODO: Connect prior_log_entries_appended finisher to append this sync message */
+  prior_log_entries_persisted = new C_Gather(cct, NULL);
+  /* TODO: Connect prior_log_entries_persisted finisher to call on_sync_point_persisted and delete thsi object */
+}
 
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
   for (auto &extent : image_extents) {
@@ -899,7 +901,7 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
   uint64_t total_bytes = 0;
   for (auto &extent : image_extents) {
     total_bytes += extent.second;
-    operations.emplace_back(WriteLogOperation(extent.first, extent.second));
+    operations.emplace_back(new WriteLogOperation(extent.first, extent.second));
   }
 
 
@@ -916,30 +918,30 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
       ldout(cct, 6) << "wait for " << total_bytes / BLOCK_SIZE << " data blocks" << dendl;
     } else {
       for (auto &operation : operations) {
-	operation.log_entry.log_entry_index = m_first_free_entry;
+	operation->log_entry.log_entry_index = m_first_free_entry;
 	m_first_free_entry = (m_first_free_entry + 1) % m_total_log_entries;
 	m_free_log_entries--;
-	operation.log_entry.pmem_entry = &pmem_log_entries[operation.log_entry.log_entry_index];
-	operation.log_entry.ram_entry.first_pool_block = m_next_free_block;
-	operation.log_entry.ram_entry.has_data = 1;
+	operation->log_entry.pmem_entry = &pmem_log_entries[operation->log_entry.log_entry_index];
+	operation->log_entry.ram_entry.first_pool_block = m_next_free_block;
+	operation->log_entry.ram_entry.has_data = 1;
 	m_next_free_block = (m_next_free_block + 1) % m_total_blocks;
-	m_free_blocks -= operation.log_entry.ram_entry.write_bytes / BLOCK_SIZE;
-	operation.log_entry.pmem_block = pmem_blocks + (operation.log_entry.ram_entry.first_pool_block * BLOCK_SIZE);
-	operation.log_entry.ram_entry.sync_gen_number = m_current_sync_gen;
+	m_free_blocks -= operation->log_entry.ram_entry.write_bytes / BLOCK_SIZE;
+	operation->log_entry.pmem_block = pmem_blocks + (operation->log_entry.ram_entry.first_pool_block * BLOCK_SIZE);
+	operation->log_entry.ram_entry.sync_gen_number = m_current_sync_gen;
 	if (m_persist_on_flush) {
 	  /* Persist on flush. Sequence #0 is never used. */
-	  operation.log_entry.ram_entry.write_sequence_number = 0;
+	  operation->log_entry.ram_entry.write_sequence_number = 0;
 	} else {
 	  /* Persist on write */
-	  operation.log_entry.ram_entry.write_sequence_number = ++m_last_op_sequence_num;
-	  operation.log_entry.ram_entry.sequenced = 1;
+	  operation->log_entry.ram_entry.write_sequence_number = ++m_last_op_sequence_num;
+	  operation->log_entry.ram_entry.sequenced = 1;
 	}
-	operation.log_entry.ram_entry.sync_point = 0;
-	operation.log_entry.ram_entry.unmap = 0;
-	operation.log_entry.ram_entry.entry_valid = 1;
-	operation.bl.substr_of(bl,
-			       operation.log_entry.ram_entry.image_offset_bytes,
-			       operation.log_entry.ram_entry.write_bytes);
+	operation->log_entry.ram_entry.sync_point = 0;
+	operation->log_entry.ram_entry.unmap = 0;
+	operation->log_entry.ram_entry.entry_valid = 1;
+	operation->bl.substr_of(bl,
+			       operation->log_entry.ram_entry.image_offset_bytes,
+			       operation->log_entry.ram_entry.write_bytes);
 	ldout(cct, 6) << "operation=[" << operation << "]" << dendl;
       }
     }
@@ -947,9 +949,9 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
 
   /* Write data - drain once for all */
   for (auto &operation : operations) {
-    bufferlist::iterator i(&operation.bl);
-    i.copy((unsigned)operation.log_entry.ram_entry.write_bytes, (char*)operation.log_entry.pmem_block);
-    pmemobj_flush(m_log_pool, operation.log_entry.pmem_block, operation.log_entry.ram_entry.write_bytes);
+    bufferlist::iterator i(&operation->bl);
+    i.copy((unsigned)operation->log_entry.ram_entry.write_bytes, (char*)operation->log_entry.pmem_block);
+    pmemobj_flush(m_log_pool, operation->log_entry.pmem_block, operation->log_entry.ram_entry.write_bytes);
   }
   pmemobj_drain(m_log_pool);
 
@@ -967,9 +969,9 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
   /* Write log entries - write all in a transaction */
   TX_BEGIN(m_log_pool) {
     for (auto &operation : operations) {
-      TX_MEMCPY(operation.log_entry.pmem_entry,
-		&operation.log_entry.ram_entry,
-		sizeof(operation.log_entry.ram_entry));
+      TX_MEMCPY(operation->log_entry.pmem_entry,
+		&operation->log_entry.ram_entry,
+		sizeof(operation->log_entry.ram_entry));
     }
   } TX_ONCOMMIT {
   } TX_ONABORT {
@@ -1161,8 +1163,16 @@ void ReplicatedWriteLog<I>::new_sync_point(void) {
 
   assert(m_lock.is_locked());
 
+  old_sync_point->m_final_op_sequence_num = m_last_op_sequence_num;
   m_current_sync_point = new SyncPoint(cct, ++m_current_sync_gen);
-  
+  /* Append of new sync point deferred until this sync point is appended */
+  old_sync_point->on_sync_point_persisted = m_current_sync_point->prior_log_entries_appended->new_sub();
+  /* This sync points Gathers will acquire no more sub-ops */
+  old_sync_point->prior_log_entries_appended->activate();
+  old_sync_point->prior_log_entries_persisted->activate();
+
+  ldout(cct,6) << "new sync point = [" << m_current_sync_point
+	       << "], prior = [" << old_sync_point << "]" << dendl;
 }
 
 template <typename I>
@@ -1268,8 +1278,8 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
 
   /* Start the sync point following the last one seen in the log */
   m_current_sync_point = new SyncPoint(cct, m_current_sync_gen);
+  ldout(cct,6) << "new sync point = [" << m_current_sync_point << "]" << dendl;
   
-  bufferlist meta_bl;
   // chain the initialization of the meta, image, and journal stores
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {

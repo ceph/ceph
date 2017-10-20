@@ -75,7 +75,7 @@ struct WriteLogPmemEntry {
        << "write_bytes=" << entry.write_bytes << ", "
        << "first_pool_block=" << entry.first_pool_block;
     return os;
-  }
+  };
 };
 
 struct WriteLogPoolRoot {
@@ -106,6 +106,8 @@ public:
     : ram_entry(image_offset_bytes, write_bytes), log_entry_index(0), pmem_entry(NULL), pmem_block(NULL)  {
   }
   WriteLogEntry() {} 
+  WriteLogEntry(const WriteLogEntry&) = delete;
+  WriteLogEntry &operator=(const WriteLogEntry&) = delete;
   friend std::ostream &operator<<(std::ostream &os,
 				  WriteLogEntry &entry) {
     os << "ram_entry=[" << entry.ram_entry << "], "
@@ -113,11 +115,11 @@ public:
        << "pmem_entry=" << (void*)entry.pmem_entry << ", "
        << "pmem_block=" << (void*)entry.pmem_block;
     return os;
-  }
+  };
 };
   
-typedef std::list<WriteLogEntry> WriteLogEntries;
-typedef std::unordered_map<uint64_t, WriteLogEntry> BlockToWriteLogEntry;
+typedef std::list<WriteLogEntry*> WriteLogEntries;
+typedef std::unordered_map<uint64_t, WriteLogEntry*> BlockToWriteLogEntry;
 
 /**** Write log entries end ****/
 
@@ -128,24 +130,56 @@ public:
   WriteLogOperation(uint64_t image_offset_bytes, uint64_t write_bytes) 
     : log_entry(image_offset_bytes, write_bytes) {
   }
+  WriteLogOperation(const WriteLogOperation&) = delete;
+  WriteLogOperation &operator=(const WriteLogOperation&) = delete;
   friend std::ostream &operator<<(std::ostream &os,
 				  WriteLogOperation &op) {
     os << "log_entry=[" << op.log_entry << "], "
        << "bl=[" << op.bl << "]";
     return os;
-  }
+  };
 };
-typedef std::list<WriteLogOperation> WriteLogOperations;
+typedef std::list<WriteLogOperation*> WriteLogOperations;
 
 class SyncPoint {
 public:
   CephContext *m_cct;
   const uint64_t m_sync_gen_num;
-  /* Log entries that must appear in all replicas before this sync
-   * message can appear anywhere */
-  C_Gather *prior_log_entries;
-  Context *on_sync_point_append;
+  uint64_t m_final_op_sequence_num;
+  /* A sync point can't appear in the log until all the writes bearing it have 
+   * been appended, and all prior sync points have been appended and persisted. 
+   * A sync point isn't considered persisted until all the writes bearing it are
+   * persisted.
+   */
+  /*
+   * Log entries that must appear in all replicas before this sync
+   * message can appear anywhere. Writes bearing this sync gen number
+   * may signal this when they are appended to all log replicas but
+   * not yet persisted. Prior sync points only signal this when they
+   * are persisted to all replicas. This sync point may be appended
+   * when this object completes. */
+  C_Gather *prior_log_entries_appended;
+  /* Writes bearing this sync gen number complete this once they are
+   * persisted in all replicas. This sync point will not complete
+   * until all these complete. */
+  C_Gather *prior_log_entries_persisted;
+  /* Signal this when this sync point is appended and persisted. This
+   * is probably a sub-operation of the next sync point's
+   * prior_log_entries_appended Gather. */
+  Context *on_sync_point_persisted;
+  
   SyncPoint(CephContext *cct, uint64_t sync_gen_num);
+  SyncPoint(const SyncPoint&) = delete;
+  SyncPoint &operator=(const SyncPoint&) = delete;
+  friend std::ostream &operator<<(std::ostream &os,
+				  SyncPoint &p) {
+    os << "m_sync_gen_num=" << p.m_sync_gen_num << ", "
+       << "m_final_op_sequence_num=" << p.m_final_op_sequence_num << ", "
+       << "prior_log_entries_appended=[" << p.prior_log_entries_appended << "], "
+       << "prior_log_entries_persisted=[" << p.prior_log_entries_persisted << "], "
+       << "on_sync_point_persisted=[" << p.on_sync_point_persisted << "]";
+    return os;
+  };
 };
   
 } // namespace rwl
@@ -161,6 +195,8 @@ public:
   //using typename FileImageCache<ImageCtxT>::Extents;
   ReplicatedWriteLog(ImageCtx &image_ctx);
   ~ReplicatedWriteLog();
+  ReplicatedWriteLog(const ReplicatedWriteLog&) = delete;
+  ReplicatedWriteLog &operator=(const ReplicatedWriteLog&) = delete;
 
   /// client AIO methods
   void aio_read(Extents&& image_extents, ceph::bufferlist *bl,
