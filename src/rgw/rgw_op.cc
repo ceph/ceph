@@ -3045,10 +3045,6 @@ int RGWPutObj::verify_permission()
       return -EACCES;
     }
 
-    rgw_add_to_iam_environment(s->env, "s3:x-amz-copy-source", copy_source);
-    rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive", copy_source);
-
-    rgw_add_grant_to_iam_environment(s->env, s);
     /* admin request overrides permission checks */
     if (! s->auth.identity->is_admin_of(cs_acl.get_owner().get_id())) {
       if (policy) {
@@ -3071,7 +3067,6 @@ int RGWPutObj::verify_permission()
     }
   }
 
-
   auto op_ret = get_params();
   if (op_ret < 0) {
     ldout(s->cct, 20) << "get_params() returned ret=" << op_ret << dendl;
@@ -3079,6 +3074,8 @@ int RGWPutObj::verify_permission()
   }
 
   if (s->iam_policy) {
+    rgw_add_grant_to_iam_environment(s->env, s);
+
     if (!s->canned_acl.empty()){
       rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
     }
