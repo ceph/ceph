@@ -5480,13 +5480,13 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pg_num = g_conf->get_val<uint64_t>("osd_pool_default_pg_num");
   if (pgp_num == 0)
     pgp_num = g_conf->get_val<uint64_t>("osd_pool_default_pgp_num");
-  if (pg_num > (unsigned)g_conf->mon_max_pool_pg_num) {
+  if (pg_num == 0 || pg_num > (unsigned)g_conf->mon_max_pool_pg_num) {
     *ss << "'pg_num' must be greater than 0 and less than or equal to "
         << g_conf->mon_max_pool_pg_num
-        << " (you may adjust 'mon max pool pg num' for higher values)";
+        << " (you may adjust 'mon_max_pool_pg_num' for higher values)";
     return -ERANGE;
   }
-  if (pgp_num > pg_num) {
+  if (pgp_num == 0 || pgp_num > pg_num) {
     *ss << "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'"
         << ", which in this case is " << pg_num;
     return -ERANGE;
