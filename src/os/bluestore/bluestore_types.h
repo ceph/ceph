@@ -36,6 +36,8 @@ struct bluestore_bdev_label_t {
   utime_t btime;       ///< birth time
   string description;  ///< device description
 
+  map<string,string> meta; ///< {read,write}_meta() content from ObjectStore
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;

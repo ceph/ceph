@@ -26,7 +26,8 @@ set(osd_srcs
   ceph-volume.rst
   ceph-volume-systemd.rst
   ceph-osd.rst
-  osdmaptool.rst)
+  osdmaptool.rst
+  ceph-bluestore-tool.rst)
 
 set(mon_srcs
   ceph-mon.rst

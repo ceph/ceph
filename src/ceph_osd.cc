@@ -266,29 +266,6 @@ int main(int argc, const char **argv)
   cephd_preload_embedded_plugins();
 #endif
 
-  if (mkfs) {
-    common_init_finish(g_ceph_context);
-    MonClient mc(g_ceph_context);
-    if (mc.build_initial_monmap() < 0)
-      return -1;
-    if (mc.get_monmap_privately() < 0)
-      return -1;
-
-    if (mc.monmap.fsid.is_zero()) {
-      derr << "must specify cluster fsid" << dendl;
-      return -EINVAL;
-    }
-
-    int err = OSD::mkfs(g_ceph_context, store, g_conf->osd_data,
-			mc.monmap.fsid, whoami);
-    if (err < 0) {
-      derr << TEXT_RED << " ** ERROR: error creating empty object store in "
-	   << g_conf->osd_data << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
-      exit(1);
-    }
-    derr << "created object store " << g_conf->osd_data
-	 << " for osd." << whoami << " fsid " << mc.monmap.fsid << dendl;
-  }
   if (mkkey) {
     common_init_finish(g_ceph_context);
     KeyRing *keyring = KeyRing::create_empty();
@@ -316,6 +293,29 @@ int main(int argc, const char **argv)
       else
 	derr << "created new key in keyring " << g_conf->keyring << dendl;
     }
+  }
+  if (mkfs) {
+    common_init_finish(g_ceph_context);
+    MonClient mc(g_ceph_context);
+    if (mc.build_initial_monmap() < 0)
+      return -1;
+    if (mc.get_monmap_privately() < 0)
+      return -1;
+
+    if (mc.monmap.fsid.is_zero()) {
+      derr << "must specify cluster fsid" << dendl;
+      return -EINVAL;
+    }
+
+    int err = OSD::mkfs(g_ceph_context, store, g_conf->osd_data,
+			mc.monmap.fsid, whoami);
+    if (err < 0) {
+      derr << TEXT_RED << " ** ERROR: error creating empty object store in "
+	   << g_conf->osd_data << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
+      exit(1);
+    }
+    derr << "created object store " << g_conf->osd_data
+	 << " for osd." << whoami << " fsid " << mc.monmap.fsid << dendl;
   }
   if (mkfs || mkkey)
     exit(0);

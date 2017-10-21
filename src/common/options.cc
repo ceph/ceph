@@ -534,11 +534,16 @@ std::vector<Option> get_global_options() {
 
     Option("key", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("Authentication key")
+    .set_long_description("A CephX authentication key, base64 encoded.  It normally looks something like 'AQAtut9ZdMbNJBAAHz6yBAWyJyz2yYRyeMWDag=='.")
+    .add_see_also("keyfile")
+    .add_see_also("keyring"),
 
     Option("keyfile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("Path to a file containing a key")
+    .set_long_description("The file should contain a CephX authentication key and optionally a trailing newline, but nothing else.")
+    .add_see_also("key"),
 
     Option("keyring", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(
@@ -550,7 +555,10 @@ std::vector<Option> get_global_options() {
       "/usr/local/etc/ceph/keyring,/usr/local/etc/ceph/keyring.bin," 
   #endif
     )
-    .set_description(""),
+    .set_description("Path to a keyring file.")
+    .set_long_description("A keyring file is an INI-style formatted file where the section names are client or daemon names (e.g., 'osd.0') and each section contains a 'key' property with CephX authentication key as the value.")
+    .add_see_also("key")
+    .add_see_also("keyfile"),
 
     Option("heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
