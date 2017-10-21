@@ -768,7 +768,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   eversion_t auth_version;
   bufferlist first_bl;
 
-  // Create list of shards with primary last so it will be auth copy all
+  // Create list of shards with primary first so it will be auth copy all
   // other things being equal.
   list<pg_shard_t> shards;
   for (map<pg_shard_t, ScrubMap *>::const_iterator j = maps.begin();
@@ -778,7 +778,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       continue;
     shards.push_back(j->first);
   }
-  shards.push_back(get_parent()->whoami_shard());
+  shards.push_front(get_parent()->whoami_shard());
 
   map<pg_shard_t, ScrubMap *>::const_iterator auth = maps.end();
   for (auto &l : shards) {
