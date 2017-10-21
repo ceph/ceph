@@ -117,7 +117,7 @@ TYPE(ObjectStore::Transaction)
 #include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
 
-#ifdef HAVE_LIBAIO
+#ifdef WITH_BLUESTORE
 #include "os/bluestore/bluestore_types.h"
 TYPE(bluestore_cnode_t)
 TYPE(bluestore_compression_header_t)

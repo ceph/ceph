@@ -23,6 +23,7 @@ rm -rf build && ./do_cmake.sh "$*" \
 	-D WITH_SYSTEM_BOOST=ON \
 	-D WITH_LTTNG=OFF \
 	-D WITH_BLKID=OFF \
+	-D WITH_BLUESTORE=OFF \
 	-D WITH_FUSE=ON \
 	-D WITH_KRBD=OFF \
 	-D WITH_XFS=OFF \
