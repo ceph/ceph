@@ -829,14 +829,15 @@ int main(int argc, const char **argv)
 
     {
       set<int> roots;
-      crush.find_roots(roots);
-      if (roots.size() > 1)
-	dout(1)	<< "The crush rulesets will use the root " << root << "\n"
-		<< "and ignore the others.\n"
-		<< "There are " << roots.size() << " roots, they can be\n"
-		<< "grouped into a single root by appending something like:\n"
-		<< "  root straw 0\n"
-		<< dendl;
+      crush.find_roots(&roots);
+      if (roots.size() > 1) {
+	cerr << "The crush rulesets will use the root " << root << "\n"
+	     << "and ignore the others.\n"
+	     << "There are " << roots.size() << " roots, they can be\n"
+	     << "grouped into a single root by appending something like:\n"
+	     << "  root straw 0\n"
+	     << std::endl;
+      }
     }
     
     if (OSDMap::build_simple_crush_rules(g_ceph_context, crush, root, &cerr))
