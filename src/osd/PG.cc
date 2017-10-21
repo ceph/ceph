@@ -2608,7 +2608,7 @@ void PG::_update_calc_stats()
   info.stats.stats.sum.num_objects_degraded = 0;
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
-  if ((is_degraded() || is_undersized() || !is_clean()) && is_peered()) {
+  if (!is_clean() && is_peered()) {
     // NOTE: we only generate copies, degraded, misplaced and unfound
     // values for the summation, not individual stat categories.
     int64_t num_objects = info.stats.stats.sum.num_objects;
