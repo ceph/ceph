@@ -574,11 +574,11 @@ class Module(MgrModule):
         if unknown > 0.0:
             self.log.info('Some PGs (%f) are unknown; waiting', unknown)
         elif degraded > 0.0:
-            self.log.info('Some PGs (%f) are degraded; waiting', degraded)
+            self.log.info('Some objects (%f) are degraded; waiting', degraded)
         elif inactive > 0.0:
             self.log.info('Some PGs (%f) are inactive; waiting', inactive)
         elif misplaced >= max_misplaced:
-            self.log.info('Too many PGs (%f > %f) are misplaced; waiting',
+            self.log.info('Too many objects (%f > %f) are misplaced; waiting',
                           misplaced, max_misplaced)
         else:
             if plan.mode == 'upmap':
