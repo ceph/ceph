@@ -39,9 +39,10 @@ class StoreTool
 #ifdef WITH_BLUESTORE
   struct Deleter {
     BlueStore *bluestore;
-    Deleter(BlueStore *store = nullptr)
-    : bluestore(store)
-    {}
+    Deleter()
+      : bluestore(nullptr) {}
+    Deleter(BlueStore *store)
+      : bluestore(store) {}
     void operator()(KeyValueDB *db) {
       if (bluestore) {
 	bluestore->umount();
