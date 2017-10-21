@@ -20,6 +20,9 @@ namespace ceph::net {
 
 /// net error codes
 enum class error {
+  bad_connect_banner,
+  bad_peer_address,
+  negotiation_failure,
   read_eof,
   connection_aborted,
   connection_refused,
