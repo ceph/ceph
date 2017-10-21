@@ -764,6 +764,8 @@ OPTION(osd_max_scrubs, OPT_INT)
 OPTION(osd_scrub_during_recovery, OPT_BOOL) // Allow new scrubs to start while recovery is active on the OSD
 OPTION(osd_scrub_begin_hour, OPT_INT)
 OPTION(osd_scrub_end_hour, OPT_INT)
+OPTION(osd_scrub_begin_week_day, OPT_INT)
+OPTION(osd_scrub_end_week_day, OPT_INT)
 OPTION(osd_scrub_load_threshold, OPT_FLOAT)
 OPTION(osd_scrub_min_interval, OPT_FLOAT)    // if load is low
 OPTION(osd_scrub_max_interval, OPT_FLOAT)  // regardless of load
