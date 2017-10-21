@@ -442,6 +442,8 @@ public:
   int write(bufferlist& data) override; /* reentrant */
   int drain_writes(bool *need_retry) override; /* reentrant */
 
+  virtual void handle_headers(const std::map<string, string>& headers) {}
+
   void set_req(RGWHTTPStreamRWRequest *r) {
     req = r;
   }
