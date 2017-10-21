@@ -6,6 +6,9 @@ tasks:
     log-whitelist:
       - overall HEALTH_
       - \(MGR_DOWN\)
+      - \(PG_
+      - \(OSD_
+      - \(OBJECT_
 - exec:
     mon.a:
       - ceph restful create-key admin
