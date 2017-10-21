@@ -65,8 +65,6 @@ class SocketConnection : public Connection {
 
   seastar::future<> server_handshake() override;
 
-  seastar::future<ceph_msg_header> read_header() override;
-
   seastar::future<MessageRef> read_message() override;
 
   seastar::future<> send(MessageRef msg) override;

@@ -93,21 +93,19 @@ seastar::future<bufferlist> SocketConnection::read(size_t bytes)
     });
 }
 
-seastar::future<ceph_msg_header> SocketConnection::read_header()
-{
-  return read(sizeof(m.header))
-    .then([this] (bufferlist bl) {
-      auto p = bl.begin();
-      ::decode(m.header, p);
-      return m.header;
-    });
-}
-
 seastar::future<MessageRef> SocketConnection::read_message()
 {
-  // read front
-  return read(m.header.front_len)
-    .then([this] (bufferlist bl) {
+  return on_message.get_future()
+    .then([this] {
+      // read header
+      return read(sizeof(m.header));
+    }).then([this] (bufferlist bl) {
+      auto p = bl.cbegin();
+      ::decode(m.header, p);
+    }).then([this] {
+      // read front
+      return read(m.header.front_len);
+    }).then([this] (bufferlist bl) {
       m.front = std::move(bl);
       // read middle
       return read(m.header.middle_len);
