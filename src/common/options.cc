@@ -2487,6 +2487,14 @@ std::vector<Option> get_global_options() {
     .set_default(24)
     .set_description(""),
 
+    Option("osd_scrub_begin_week_day", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("The begin week day permits to scrub, include this day, 0 Sunday,1 Monday, .., 6 Saturday"),
+
+    Option("osd_scrub_end_week_day", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(7)
+    .set_description("The end week day permits to scrub, not include this day, 0 Sunday,1 Monday, .., 6 Saturday"),
+
     Option("osd_scrub_load_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.5)
     .set_description(""),
