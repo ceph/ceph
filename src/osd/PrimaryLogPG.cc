@@ -1979,7 +1979,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
 
     // too big?
-    if (cct->_conf->osd_max_write_size &&
+    if (osd->store->get_type() != "bluestore" &&
+        cct->_conf->osd_max_write_size &&
         m->get_data_len() > cct->_conf->osd_max_write_size << 20) {
       // journal can't hold commit!
       derr << "do_op msg data len " << m->get_data_len()
