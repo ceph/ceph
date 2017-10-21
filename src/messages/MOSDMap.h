@@ -113,6 +113,14 @@ public:
 	  inc.fullmap.clear();
 	  m.encode(inc.fullmap, features | CEPH_FEATURE_RESERVED);
 	}
+	if (inc.crush.length()) {
+	  // embedded crush map
+	  CrushWrapper c;
+	  auto p = inc.crush.begin();
+	  c.decode(p);
+	  inc.crush.clear();
+	  c.encode(inc.crush, features);
+	}
 	inc.encode(p->second, features | CEPH_FEATURE_RESERVED);
       }
       for (map<epoch_t,bufferlist>::iterator p = maps.begin();
