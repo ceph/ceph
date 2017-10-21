@@ -1842,6 +1842,16 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
   return 0;
 }
 
+int CrushWrapper::bucket_set_alg(int bid, int alg)
+{
+  crush_bucket *b = get_bucket(bid);
+  if (!b) {
+    return -ENOENT;
+  }
+  b->alg = alg;
+  return 0;
+}
+
 int CrushWrapper::update_device_class(int id,
                                       const string& class_name,
                                       const string& name,

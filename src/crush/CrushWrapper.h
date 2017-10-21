@@ -1252,6 +1252,7 @@ public:
     crush_finalize(crush);
     have_uniform_rules = !has_legacy_rule_ids();
   }
+  int bucket_set_alg(int id, int alg);
 
   int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
   int remove_device_class(CephContext *cct, int id, ostream *ss);
