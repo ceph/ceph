@@ -2544,6 +2544,28 @@ TEST_F(TestLibRBD, TestClone)
   ASSERT_EQ(-ENOENT, rbd_get_parent_info(parent, NULL, 0, NULL, 0, NULL, 0));
   printf("parent has no parent info\n");
 
+  // create 70 metadatas to verify we can clone all key/value pairs
+  std::string key;
+  std::string val;
+  size_t sum_key_len = 0;
+  size_t sum_value_len = 0;
+  for (int i = 1; i <= 70; i++) {
+    key = "key" + stringify(i);
+    val = "value" + stringify(i);
+    ASSERT_EQ(0, rbd_metadata_set(parent, key.c_str(), val.c_str()));
+
+    sum_key_len += (key.size() + 1);
+    sum_value_len += (val.size() + 1);
+  }
+
+  char keys[1024];
+  char vals[1024];
+  size_t keys_len = sizeof(keys);
+  size_t vals_len = sizeof(vals);
+
+  char value[1024];
+  size_t value_len = sizeof(value);
+
   // create a snapshot, reopen as the parent we're interested in
   ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
   printf("made snapshot \"parent@parent_snap\"\n");
@@ -2586,6 +2608,22 @@ TEST_F(TestLibRBD, TestClone)
   EXPECT_EQ(cinfo.obj_size, pinfo.obj_size);
   EXPECT_EQ(cinfo.order, pinfo.order);
   printf("sizes and overlaps are good between parent and child\n");
+
+  // check key/value pairs in child image
+  ASSERT_EQ(0, rbd_metadata_list(child, "", 70, keys, &keys_len, vals,
+                                &vals_len));
+  ASSERT_EQ(sum_key_len, keys_len);
+  ASSERT_EQ(sum_value_len, vals_len);
+
+  for (int i = 1; i <= 70; i++) {
+    key = "key" + stringify(i);
+    val = "value" + stringify(i);
+    ASSERT_EQ(0, rbd_metadata_get(child, key.c_str(), value, &value_len));
+    ASSERT_STREQ(val.c_str(), value);
+
+    value_len = sizeof(value);
+  }
+  printf("child image successfully cloned all image-meta pairs\n");
 
   // sizing down child results in changing overlap and size, not parent size
   ASSERT_EQ(0, rbd_resize(child, 2UL<<20));
