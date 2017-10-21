@@ -35,6 +35,18 @@ class SocketConnection : public Connection {
   /// read the requested number of bytes into a bufferlist
   seastar::future<bufferlist> read(size_t bytes);
 
+  /// state for handshake
+  struct Handshake {
+    ceph_msg_connect connect;
+    ceph_msg_connect_reply reply;
+    seastar::promise<> promise;
+  } h;
+
+  /// server side of handshake negotiation
+  seastar::future<> handle_connect();
+  /// client side of handshake negotiation
+  seastar::future<> handle_connect_reply();
+
   /// state for an incoming message
   struct MessageReader {
     ceph_msg_header header;
