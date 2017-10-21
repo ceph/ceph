@@ -127,6 +127,7 @@ enum {
   l_osd_pg_primary,
   l_osd_pg_replica,
   l_osd_pg_stray,
+  l_osd_pg_removing,
   l_osd_hb_to,
   l_osd_map,
   l_osd_mape,
@@ -2207,6 +2208,12 @@ protected:
 		  ThreadPool::TPHandle &) override;
     void _clear() override {
       remove_queue.clear();
+    }
+    int get_remove_queue_len() {
+      lock();
+      int r = remove_queue.size();
+      unlock();
+      return r;
     }
   } remove_wq;
 
