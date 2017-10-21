@@ -18,7 +18,7 @@ set(libos_srcs
   kstore/kstore_types.cc
   fs/FS.cc)
 
-if(HAVE_LIBAIO)
+if(WITH_BLUESTORE)
   list(APPEND libos_srcs
     bluestore/Allocator.cc
     bluestore/BitmapFreelistManager.cc
@@ -35,7 +35,7 @@ if(HAVE_LIBAIO)
     bluestore/BitAllocator.cc
     bluestore/aio.cc
   )
-endif(HAVE_LIBAIO)
+endif(WITH_BLUESTORE)
 
 if(WITH_FUSE)
   list(APPEND libos_srcs
@@ -108,7 +108,7 @@ add_dependencies(os compressor_plugins)
 add_dependencies(os crypto_plugins)
 
 
-if(HAVE_LIBAIO)
+if(WITH_BLUESTORE)
   add_executable(ceph-bluestore-tool
     bluestore/bluestore_tool.cc)
   target_link_libraries(ceph-bluestore-tool
