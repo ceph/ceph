@@ -291,6 +291,7 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
   if (info.last_complete > newhead)
     info.last_complete = newhead;
 
+  auto old_crt = log.get_can_rollback_to();
   auto divergent = log.rewind_from_head(newhead);
   if (!divergent.empty()) {
     mark_dirty_from(divergent.front().version);
@@ -304,7 +305,7 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
     log,
     divergent,
     info,
-    log.get_can_rollback_to(),
+    old_crt,
     missing,
     rollbacker,
     this);
@@ -402,6 +403,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
 	     << lower_bound << dendl;
     mark_dirty_from(lower_bound);
 
+    auto old_crt = log.get_can_rollback_to();
     auto divergent = log.rewind_from_head(lower_bound);
     // move aside divergent items
     for (auto &&oe: divergent) {
@@ -425,7 +427,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
       log,
       divergent,
       info,
-      log.get_can_rollback_to(),
+      old_crt,
       missing,
       rollbacker,
       this);
