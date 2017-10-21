@@ -1027,7 +1027,7 @@ class TestOSD(TestArgparse):
                                                     'toomany']))
 
     def test_pool_get(self):
-        for var in ('size', 'min_size', 'crash_replay_interval',
+        for var in ('size', 'min_size',
                     'pg_num', 'pgp_num', 'crush_rule', 'auid', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
                     'deep_scrub_interval', 'recovery_priority',
@@ -1046,7 +1046,7 @@ class TestOSD(TestArgparse):
                                                     'invalid']))
 
     def test_pool_set(self):
-        for var in ('size', 'min_size', 'crash_replay_interval',
+        for var in ('size', 'min_size',
                     'pg_num', 'pgp_num', 'crush_rule',
                     'hashpspool', 'auid', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
