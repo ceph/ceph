@@ -7551,12 +7551,12 @@ void PrimaryLogPG::apply_stats(
   }
 
   if (is_primary() && scrubber.active) {
-    if (soid < scrubber.start) {
-      dout(20) << __func__ << " " << soid << " < [" << scrubber.start
+    if (soid < scrubber.start || soid >= scrubber.end) {
+      dout(20) << __func__ << " " << soid << " escapes [" << scrubber.start
 	       << "," << scrubber.end << ")" << dendl;
       scrub_cstat.add(delta_stats);
     } else {
-      dout(20) << __func__ << " " << soid << " >= [" << scrubber.start
+      dout(20) << __func__ << " " << soid << " trapped in [" << scrubber.start
 	       << "," << scrubber.end << ")" << dendl;
     }
   }
