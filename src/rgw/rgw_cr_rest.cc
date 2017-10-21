@@ -42,7 +42,10 @@ public:
       }
     }
 
-    env->manager->io_complete(cr, io_id);
+#define GET_DATA_WINDOW_SIZE 1 * 1024 * 1024
+    if (bl.length() >= GET_DATA_WINDOW_SIZE) {
+      env->manager->io_complete(cr, io_id);
+    }
     return 0;
   }
 
@@ -202,6 +205,10 @@ int RGWStreamWriteHTTPResourceCRF::drain_writes(bool *need_retry)
       yield caller->io_block(0, req->get_io_id());
       *need_retry = !req->is_done();
     }
+
+#warning need to lock in_req->headers
+    handle_headers(req->get_out_headers());
+
     return req->get_req_retcode();
   }
   return 0;
@@ -267,6 +274,7 @@ int RGWStreamSpliceCR::operate() {
       total_read += bl.length();
 
       yield {
+        ldout(cct, 20) << "writing " << bl.length() << " bytes" << dendl;
         ret = out_crf->write(bl);
         if (ret < 0)  {
           return set_cr_error(ret);
@@ -277,8 +285,6 @@ int RGWStreamSpliceCR::operate() {
         ldout(cct, 20) << __func__ << ": out_crf->write() retcode=" << retcode << dendl;
         return set_cr_error(ret);
       }
-
-      ldout(cct, 20) << "wrote " << bl.length() << " bytes" << dendl;
     } while (true);
 
     do {

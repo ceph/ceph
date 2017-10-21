@@ -427,6 +427,11 @@ void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
   map<string, string>& args = new_info.args.get_params();
   get_params_str(args, params_str);
 
+  /* merge params with extra args so that we can sign correctly */
+  for (param_vec_t::iterator iter = params.begin(); iter != params.end(); ++iter) {
+    new_info.args.append(iter->first, iter->second);
+  }
+
   new_url.append(resource + params_str);
 
   new_env.set("HTTP_DATE", date_str.c_str());
