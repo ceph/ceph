@@ -25,6 +25,8 @@ const std::error_category& net_category()
 
     std::string message(int ev) const override {
       switch (static_cast<error>(ev)) {
+        case error::read_eof:
+          return "read eof";
         case error::connection_aborted:
           return "connection aborted";
         case error::connection_refused:
