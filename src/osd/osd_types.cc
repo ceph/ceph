@@ -1168,7 +1168,6 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("object_hash", get_object_hash());
   f->dump_unsigned("pg_num", get_pg_num());
   f->dump_unsigned("pg_placement_num", get_pgp_num());
-  f->dump_unsigned("crash_replay_interval", get_crash_replay_interval());
   f->dump_stream("last_change") << get_last_change();
   f->dump_stream("last_force_op_resend") << get_last_force_op_resend();
   f->dump_stream("last_force_op_resend_preluminous")
@@ -1491,7 +1490,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(removed_snaps, bl);
     ::encode(auid, bl);
     ::encode(flags, bl);
-    ::encode(crash_replay_interval, bl);
+    ::encode((uint32_t)0, bl); // crash_replay_interval
     return;
   }
 
@@ -1518,7 +1517,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(removed_snaps, bl);
     ::encode(auid, bl);
     ::encode(flags, bl);
-    ::encode(crash_replay_interval, bl);
+    ::encode((uint32_t)0, bl); // crash_replay_interval
     ::encode(min_size, bl);
     ::encode(quota_max_bytes, bl);
     ::encode(quota_max_objects, bl);
@@ -1571,7 +1570,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(removed_snaps, bl);
   ::encode(auid, bl);
   ::encode(flags, bl);
-  ::encode(crash_replay_interval, bl);
+  ::encode((uint32_t)0, bl); // crash_replay_interval
   ::encode(min_size, bl);
   ::encode(quota_max_bytes, bl);
   ::encode(quota_max_objects, bl);
@@ -1657,18 +1656,10 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
 
   if (struct_v >= 4) {
     ::decode(flags, bl);
+    uint32_t crash_replay_interval;
     ::decode(crash_replay_interval, bl);
   } else {
     flags = 0;
-
-    // if this looks like the 'data' pool, set the
-    // crash_replay_interval appropriately.  unfortunately, we can't
-    // be precise here.  this should be good enough to preserve replay
-    // on the data pool for the majority of cluster upgrades, though.
-    if (crush_rule == 0 && auid == 0)
-      crash_replay_interval = 60;
-    else
-      crash_replay_interval = 0;
   }
   if (struct_v >= 7) {
     ::decode(min_size, bl);
@@ -1798,7 +1789,6 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.snap_seq = 10;
   a.snap_epoch = 11;
   a.auid = 12;
-  a.crash_replay_interval = 13;
   a.quota_max_bytes = 473;
   a.quota_max_objects = 474;
   o.push_back(new pg_pool_t(a));
@@ -1861,8 +1851,6 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " owner " << p.get_auid();
   if (p.flags)
     out << " flags " << p.get_flags_string();
-  if (p.crash_replay_interval)
-    out << " crash_replay_interval " << p.crash_replay_interval;
   if (p.quota_max_bytes)
     out << " max_bytes " << p.quota_max_bytes;
   if (p.quota_max_objects)
