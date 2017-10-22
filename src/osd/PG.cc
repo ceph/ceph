@@ -2633,6 +2633,9 @@ void PG::_update_calc_stats()
       }
     }
 
+    // Objects backfilled, sorted by # objects.
+    set<pair<int64_t,pg_shard_t>> backfill_target_objects;
+
     assert(!actingbackfill.empty());
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
@@ -2662,10 +2665,24 @@ void PG::_update_calc_stats()
 	  misplaced += osd_objects;
       } else {
         // If this peer has more objects then it should, ignore them
-        int64_t osd_backfilled = MIN(num_objects, peer_info[p].stats.stats.sum.num_objects);
-        // Include computed backfilled objects on up nodes
-        object_copies += osd_backfilled;
-        backfilled += osd_backfilled;
+        int64_t osd_backfilled = MIN(num_objects,
+				     peer_info[p].stats.stats.sum.num_objects);
+	backfill_target_objects.insert(make_pair(osd_backfilled, p));
+	backfilled += osd_backfilled;
+      }
+    }
+
+    // Only include backfill targets below pool size into the object_copies
+    // count.  Use the most-full targets.
+    int num_backfill_shards_seen = 0;
+    for (auto i = backfill_target_objects.rbegin();
+	 i != backfill_target_objects.rend();
+	 ++i) {
+      if (actingset.size() + num_backfill_shards_seen < pool.info.size) {
+	object_copies += i->first;
+	++num_backfill_shards_seen;
+      } else {
+	break;
       }
     }
 
