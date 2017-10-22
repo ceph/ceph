@@ -391,6 +391,7 @@ include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/googletest/googletest/includ
 if(WITH_SEASTAR)
   set(SEASTAR_ENABLE_TESTS OFF CACHE BOOL "disable seastar testing")
   add_subdirectory(seastar)
+  add_subdirectory(crimson)
 endif()
 
 set(xio_common_srcs)
