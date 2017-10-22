@@ -6872,7 +6872,8 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserve
         new MRecoveryReserve(
 	  MRecoveryReserve::REQUEST,
 	  spg_t(pg->info.pgid.pgid, remote_recovery_reservation_it->shard),
-	  pg->get_osdmap()->get_epoch()),
+	  pg->get_osdmap()->get_epoch(),
+	  pg->get_recovery_priority()),
 	con.get());
     }
     ++remote_recovery_reservation_it;
