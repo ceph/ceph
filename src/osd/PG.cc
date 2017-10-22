@@ -6345,7 +6345,7 @@ PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
     if (con) {
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
-	  MBackfillReserve::CANCEL,
+	  MBackfillReserve::RELEASE,
 	  spg_t(pg->info.pgid.pgid, it->shard),
 	  pg->get_osdmap()->get_epoch()),
 	con.get());
@@ -6377,7 +6377,7 @@ PG::RecoveryState::Backfilling::react(const UnfoundBackfill &c)
     if (con) {
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
-	  MBackfillReserve::CANCEL,
+	  MBackfillReserve::RELEASE,
 	  spg_t(pg->info.pgid.pgid, it->shard),
 	  pg->get_osdmap()->get_epoch()),
 	con.get());
@@ -6405,7 +6405,7 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
     if (con) {
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
-	  MBackfillReserve::CANCEL,
+	  MBackfillReserve::RELEASE,
 	  spg_t(pg->info.pgid.pgid, it->shard),
 	  pg->get_osdmap()->get_epoch()),
 	con.get());
@@ -6498,7 +6498,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
     if (con) {
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
-	MBackfillReserve::CANCEL,
+	MBackfillReserve::RELEASE,
 	spg_t(pg->info.pgid.pgid, it->shard),
 	pg->get_osdmap()->get_epoch()),
       con.get());

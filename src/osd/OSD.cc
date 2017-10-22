@@ -8555,7 +8555,7 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 	m->query_epoch,
 	m->query_epoch,
 	PG::RemoteReservationRejected()));
-  } else if (m->type == MBackfillReserve::CANCEL) {
+  } else if (m->type == MBackfillReserve::RELEASE) {
     evt = PG::CephPeeringEvtRef(
       new PG::CephPeeringEvt(
 	m->query_epoch,
