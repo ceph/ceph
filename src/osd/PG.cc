@@ -6623,14 +6623,6 @@ PG::RecoveryState::RepWaitRecoveryReserved::RepWaitRecoveryReserved(my_context c
     NamedState(context< RecoveryMachine >().pg, "Started/ReplicaActive/RepWaitRecoveryReserved")
 {
   context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
-
-  pg->osd->remote_reserver.request_reservation(
-    pg->info.pgid,
-    new QueuePeeringEvt<RemoteRecoveryReserved>(
-      pg, pg->get_osdmap()->get_epoch(),
-      RemoteRecoveryReserved()),
-    pg->get_recovery_priority());
 }
 
 boost::statechart::result
@@ -6696,6 +6688,24 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
         RemoteBackfillReserved()), evt.priority);
   }
   return transit<RepWaitBackfillReserved>();
+}
+
+boost::statechart::result
+PG::RecoveryState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  ostringstream ss;
+
+  // fall back to a local reckoning of priority of primary doesn't pass one
+  // (pre-mimic compat)
+  int prio = evt.priority ? evt.priority : pg->get_recovery_priority();
+  pg->osd->remote_reserver.request_reservation(
+    pg->info.pgid,
+    new QueuePeeringEvt<RemoteRecoveryReserved>(
+      pg, pg->get_osdmap()->get_epoch(),
+      RemoteRecoveryReserved()),
+    prio);
+  return transit<RepWaitRecoveryReserved>();
 }
 
 void PG::RecoveryState::RepWaitBackfillReserved::exit()

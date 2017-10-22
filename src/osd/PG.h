@@ -1795,6 +1795,15 @@ public:
       *out << "RequestBackfillPrio: priority " << priority;
     }
   };
+  struct RequestRecoveryPrio : boost::statechart::event< RequestRecoveryPrio > {
+    unsigned priority;
+    explicit RequestRecoveryPrio(unsigned prio) :
+              boost::statechart::event< RequestRecoveryPrio >(),
+			  priority(prio) {}
+    void print(std::ostream *out) const {
+      *out << "RequestRecoveryPrio: priority " << priority;
+    }
+  };
 #define TrivialEvent(T) struct T : boost::statechart::event< T > { \
     T() : boost::statechart::event< T >() {}			   \
     void print(std::ostream *out) const {			   \
@@ -1846,7 +1855,6 @@ protected:
   TrivialEvent(RemoteReservationRejected)
   TrivialEvent(RemoteReservationCanceled)
   TrivialEvent(RequestBackfill)
-  TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
   protected:
   TrivialEvent(BackfillTooFull)
@@ -2313,14 +2321,15 @@ protected:
 
     struct RepNotRecovering : boost::statechart::state< RepNotRecovering, ReplicaActive>, NamedState {
       typedef boost::mpl::list<
+	boost::statechart::custom_reaction< RequestRecoveryPrio >,
 	boost::statechart::custom_reaction< RequestBackfillPrio >,
-        boost::statechart::transition< RequestRecovery, RepWaitRecoveryReserved >,
 	boost::statechart::custom_reaction< RejectRemoteReservation >,
 	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,
 	boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
 	boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
 	> reactions;
       explicit RepNotRecovering(my_context ctx);
+      boost::statechart::result react(const RequestRecoveryPrio &evt);
       boost::statechart::result react(const RequestBackfillPrio &evt);
       boost::statechart::result react(const RejectRemoteReservation &evt);
       void exit();
