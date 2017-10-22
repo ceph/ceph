@@ -2622,6 +2622,8 @@ void PG::_update_calc_stats()
     // Total of object copies/shards found
     int64_t object_copies = 0;
 
+    int num_backfill_shards_seen = 0;
+
     // num_objects_missing on each peer
     for (map<pg_shard_t, pg_info_t>::iterator pi =
         peer_info.begin();
@@ -2663,8 +2665,15 @@ void PG::_update_calc_stats()
         if (!in_up && num_objects > osd_missing)
 	  misplaced += num_objects - osd_missing;
       } else {
-        // If this peer has more objects then it should, ignore them
-        backfilled += MIN(num_objects, peer_info[p].stats.stats.sum.num_objects);
+	// If this peer has more objects then it should, ignore them
+	int64_t backfilled_here = MIN(num_objects,
+				      peer_info[p].stats.stats.sum.num_objects);
+	backfilled += backfilled_here;
+	if (actingset.size() + num_backfill_shards_seen < pool.info.size) {
+	  // This backfill target's progress counts against degraded.
+	  object_copies += backfilled_here;
+	}
+	++num_backfill_shards_seen;
       }
     }
 
@@ -2673,10 +2682,9 @@ void PG::_update_calc_stats()
 
     // Deduct computed total missing on acting nodes
     object_copies -= missing;
-    // Include computed backfilled objects on up nodes
-    object_copies += backfilled;
     // a degraded objects has fewer replicas or EC shards than the
-    // pool specifies.  num_object_copies will never be smaller than target * num_copies.
+    // pool specifies.  num_object_copies will never be smaller than
+    // target * num_copies.
     int64_t degraded = MAX(0, info.stats.stats.sum.num_object_copies - object_copies);
 
     info.stats.stats.sum.num_objects_degraded = degraded;
