@@ -24,9 +24,9 @@ public:
   spg_t pgid;
   epoch_t query_epoch;
   enum {
-    REQUEST = 0,
-    GRANT = 1,
-    RELEASE = 2,
+    REQUEST = 0,   // primary->replica: please reserve slot
+    GRANT = 1,     // replica->primary: ok, i reserved it
+    RELEASE = 2,   // primary->replica: release the slot i reserved before
   };
   uint32_t type;
   uint32_t priority = 0;
