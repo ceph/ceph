@@ -16,6 +16,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 
+#include "Errors.h"
 #include "msg/msg_types.h"
 
 class Message;
