@@ -8596,7 +8596,7 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
       new PG::CephPeeringEvt(
 	m->query_epoch,
 	m->query_epoch,
-	PG::RequestRecovery()));
+	PG::RequestRecoveryPrio(m->priority)));
   } else if (m->type == MRecoveryReserve::GRANT) {
     evt = PG::CephPeeringEvtRef(
       new PG::CephPeeringEvt(
