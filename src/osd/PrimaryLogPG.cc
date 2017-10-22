@@ -7199,14 +7199,16 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
     oi.size = new_size;
   }
   if (length && oi.has_extents()) {
-     // count newly write bytes, exclude overwrites
-     interval_set<uint64_t> ne;
-     ne.insert(offset, length);
-     interval_set<uint64_t> overlap;
-     overlap.intersection_of(ne, oi.extents);
-     ne.subtract(overlap);
-     oi.extents.union_of(ne);
-     delta_stats.num_bytes += ne.size();
+     delta_stats.num_bytes -= oi.extents.size();
+     if (write_full) {
+       // oi.size may shrink
+       oi.extents.clear();
+       assert(offset == 0);
+       oi.extents.insert(0, length);
+     } else {
+       oi.extents.union_of(ch); // deduplicated
+     }
+     delta_stats.num_bytes += oi.extents.size();
   }
   delta_stats.num_wr++;
   delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
