@@ -2619,8 +2619,9 @@ void PG::_update_calc_stats()
     int64_t backfilled = 0;
     // A misplaced object is not stored on the correct OSD
     int64_t misplaced = 0;
+
     // Total of object copies/shards found
-    int64_t object_copies = 0;
+    int64_t object_copies = acting.size() * num_objects;
 
     int num_backfill_shards_seen = 0;
 
@@ -2654,16 +2655,15 @@ void PG::_update_calc_stats()
           osd_missing = pg_log.get_missing().num_missing();
           info.stats.stats.sum.num_objects_missing_on_primary =
               osd_missing;
-          object_copies += num_objects; // My local (primary) count
         } else {
           assert(peer_missing.count(p));
           osd_missing = peer_missing[p].num_missing();
-          object_copies += peer_info[p].stats.stats.sum.num_objects;
         }
         missing += osd_missing;
         // Count non-missing objects not in up as misplaced
-        if (!in_up && num_objects > osd_missing)
+        if (!in_up && num_objects > osd_missing) {
 	  misplaced += num_objects - osd_missing;
+	}
       } else {
 	// If this peer has more objects then it should, ignore them
 	int64_t backfilled_here = MIN(num_objects,
