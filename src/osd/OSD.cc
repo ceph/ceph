@@ -5019,21 +5019,9 @@ void OSD::tick_without_osd_lock()
     }
   }
 
-  check_ops_in_flight();
+  mgrc.update_osd_health(get_health_metrics());
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
-}
-
-void OSD::check_ops_in_flight()
-{
-  string summary;
-  vector<string> warnings;
-  if (op_tracker.check_ops_in_flight(&summary, warnings)) {
-    clog->warn() << summary;
-    for (const auto& warning : warnings) {
-      clog->warn() << warning;
-    }
-  }
 }
 
 // Usage:
@@ -7094,6 +7082,42 @@ MPGStats* OSD::collect_pg_stats()
   }
 
   return m;
+}
+
+vector<OSDHealthMetric> OSD::get_health_metrics()
+{
+  vector<OSDHealthMetric> metrics;
+  {
+    utime_t oldest_secs;
+    const utime_t now = ceph_clock_now();
+    auto too_old = now;
+    too_old -= cct->_conf->get_val<double>("osd_op_complaint_time");
+    int slow = 0;
+    auto count_slow_ops = [&](TrackedOp& op) {
+      if (op.get_initiated() < too_old) {
+	slow++;
+	return true;
+      } else {
+	return false;
+      }
+    };
+    if (op_tracker.visit_ops_in_flight(&oldest_secs, count_slow_ops)) {
+      metrics.emplace_back(osd_metric::SLOW_OPS, slow, oldest_secs);
+    } else {
+      // no news is not good news.
+      metrics.emplace_back(osd_metric::SLOW_OPS, 0, 0);
+    }
+  }
+  with_unique_lock(pending_creates_lock, [&]() {
+      auto n_primaries = pending_creates_from_mon;
+      for (const auto& create : pending_creates_from_osd) {
+	if (create.second) {
+	  n_primaries++;
+	}
+      }
+      metrics.emplace_back(osd_metric::PENDING_CREATING_PGS, n_primaries);
+    });
+  return metrics;
 }
 
 // =====================================================
