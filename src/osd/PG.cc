@@ -2619,6 +2619,8 @@ void PG::_update_calc_stats()
     int64_t misplaced = 0;
     // Total of object copies/shards found
     int64_t object_copies = 0;
+    // Total number of OSDs with misplaced objects
+    int num_misplaced = 0;
 
     // num_objects_missing on each peer
     for (map<pg_shard_t, pg_info_t>::iterator pi =
@@ -2661,8 +2663,10 @@ void PG::_update_calc_stats()
         osd_objects = MAX(0, num_objects - osd_missing);
         object_copies += osd_objects;
         // Count non-missing objects not in up as misplaced
-        if (!in_up)
+	if (!in_up) {
 	  misplaced += osd_objects;
+	  ++num_misplaced;
+	}
       } else {
         // If this peer has more objects then it should, ignore them
         int64_t osd_backfilled = MIN(num_objects,
@@ -2687,7 +2691,15 @@ void PG::_update_calc_stats()
     }
 
     // Any objects that have been backfilled to up OSDs can deducted from misplaced
-    misplaced = MAX(0, misplaced - backfilled);
+    // adjusted by the assumption that backfill is happening approximately evenly
+    // across backfill nodes.  Use the most-full targets.
+    int64_t adjust_misplaced = 0;
+    for (auto i = backfill_target_objects.rbegin();
+	 i != backfill_target_objects.rend() && num_misplaced;
+	 ++i, --num_misplaced) {
+      adjust_misplaced += i->first;
+    }
+    misplaced = MAX(0, misplaced - adjust_misplaced);
 
     // a degraded objects has fewer replicas or EC shards than the
     // pool specifies.  num_object_copies will never be smaller than target * num_objects.
