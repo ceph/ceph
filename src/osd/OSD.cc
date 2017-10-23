@@ -1712,7 +1712,7 @@ void OSDService::queue_for_scrub(PG *pg, bool with_high_priority)
   enqueue_back(
     OpQueueItem(
       unique_ptr<OpQueueItem::OpQueueable>(new PGScrub(pg->get_pgid(), epoch)),
-      cct->_conf->osd_snap_trim_cost,
+      cct->_conf->osd_scrub_cost,
       scrub_queue_priority,
       ceph_clock_now(),
       0,
