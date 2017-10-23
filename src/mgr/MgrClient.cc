@@ -221,8 +221,11 @@ void MgrClient::send_stats()
   send_report();
   send_pgstats();
   if (stats_period != 0) {
-    report_callback = new FunctionContext([this](int){send_stats();});
-    timer.add_event_after(stats_period, report_callback);
+    report_callback = timer.add_event_after(
+      stats_period,
+      new FunctionContext([this](int) {
+	  send_stats();
+	}));
   }
 }
 
