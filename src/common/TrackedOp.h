@@ -69,7 +69,7 @@ class OpTracker {
   OpHistory history;
   float complaint_time;
   int log_threshold;
-  bool tracking_enabled;
+  std::atomic<bool> tracking_enabled;
   RWLock       lock;
 
 public:
@@ -87,7 +87,6 @@ public:
     history.set_slow_op_size_and_threshold(new_size, new_threshold);
   }
   void set_tracking(bool enable) {
-    RWLock::WLocker l(lock);
     tracking_enabled = enable;
   }
   bool dump_ops_in_flight(Formatter *f, bool print_only_blocked = false, set<string> filters = {""});
