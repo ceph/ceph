@@ -435,15 +435,9 @@ void AsyncConnection::process()
           recv_stamp = ceph_clock_now();
           ldout(async_msgr->cct, 20) << __func__ << " begin MSG" << dendl;
           ceph_msg_header header;
-          ceph_msg_header_old oldheader;
           __u32 header_crc = 0;
-          unsigned len;
-          if (has_feature(CEPH_FEATURE_NOSRCADDR))
-            len = sizeof(header);
-          else
-            len = sizeof(oldheader);
 
-          r = read_until(len, state_buffer);
+          r = read_until(sizeof(header), state_buffer);
           if (r < 0) {
             ldout(async_msgr->cct, 1) << __func__ << " read message header failed" << dendl;
             goto fail;
@@ -453,22 +447,10 @@ void AsyncConnection::process()
 
           ldout(async_msgr->cct, 20) << __func__ << " got MSG header" << dendl;
 
-          if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
-            header = *((ceph_msg_header*)state_buffer);
-            if (msgr->crcflags & MSG_CRC_HEADER)
-              header_crc = ceph_crc32c(0, (unsigned char *)&header,
-                                       sizeof(header) - sizeof(header.crc));
-          } else {
-            oldheader = *((ceph_msg_header_old*)state_buffer);
-            // this is fugly
-            memcpy(&header, &oldheader, sizeof(header));
-            header.src = oldheader.src.name;
-            header.reserved = oldheader.reserved;
-            if (msgr->crcflags & MSG_CRC_HEADER) {
-              header.crc = oldheader.crc;
-              header_crc = ceph_crc32c(0, (unsigned char *)&oldheader, sizeof(oldheader) - sizeof(oldheader.crc));
-            }
-          }
+          header = *((ceph_msg_header*)state_buffer);
+          if (msgr->crcflags & MSG_CRC_HEADER)
+            header_crc = ceph_crc32c(0, (unsigned char *)&header,
+                                     sizeof(header) - sizeof(header.crc));
 
           ldout(async_msgr->cct, 20) << __func__ << " got envelope type=" << header.type
                               << " src " << entity_name_t(header.src)
@@ -657,15 +639,8 @@ void AsyncConnection::process()
       case STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH:
         {
           ceph_msg_footer footer;
-          ceph_msg_footer_old old_footer;
-          unsigned len;
-          // footer
-          if (has_feature(CEPH_FEATURE_MSG_AUTH))
-            len = sizeof(footer);
-          else
-            len = sizeof(old_footer);
 
-          r = read_until(len, state_buffer);
+          r = read_until(sizeof(footer), state_buffer);
           if (r < 0) {
             ldout(async_msgr->cct, 1) << __func__ << " read footer data error " << dendl;
             goto fail;
@@ -673,16 +648,7 @@ void AsyncConnection::process()
             break;
           }
 
-          if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
-            footer = *((ceph_msg_footer*)state_buffer);
-          } else {
-            old_footer = *((ceph_msg_footer_old*)state_buffer);
-            footer.front_crc = old_footer.front_crc;
-            footer.middle_crc = old_footer.middle_crc;
-            footer.data_crc = old_footer.data_crc;
-            footer.sig = 0;
-            footer.flags = old_footer.flags;
-          }
+          footer = *((ceph_msg_footer*)state_buffer);
           int aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
           ldout(async_msgr->cct, 10) << __func__ << " aborted = " << aborted << dendl;
           if (aborted) {
@@ -2221,20 +2187,7 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   unsigned original_bl_len = outcoming_bl.length();
 
   outcoming_bl.append(CEPH_MSGR_TAG_MSG);
-
-  if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
-    outcoming_bl.append((char*)&header, sizeof(header));
-  } else {
-    ceph_msg_header_old oldheader;
-    memcpy(&oldheader, &header, sizeof(header));
-    oldheader.src.name = header.src;
-    oldheader.src.addr = get_peer_addr();
-    oldheader.orig_src = oldheader.src;
-    oldheader.reserved = header.reserved;
-    oldheader.crc = ceph_crc32c(0, (unsigned char*)&oldheader,
-                                sizeof(oldheader) - sizeof(oldheader.crc));
-    outcoming_bl.append((char*)&oldheader, sizeof(oldheader));
-  }
+  outcoming_bl.append((char*)&header, sizeof(header));
 
   ldout(async_msgr->cct, 20) << __func__ << " sending message type=" << header.type
                              << " src " << entity_name_t(header.src)
@@ -2250,22 +2203,7 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
     outcoming_bl.claim_append(bl);  
   }
 
-  // send footer; if receiver doesn't support signatures, use the old footer format
-  ceph_msg_footer_old old_footer;
-  if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
-    outcoming_bl.append((char*)&footer, sizeof(footer));
-  } else {
-    if (msgr->crcflags & MSG_CRC_HEADER) {
-      old_footer.front_crc = footer.front_crc;
-      old_footer.middle_crc = footer.middle_crc;
-      old_footer.data_crc = footer.data_crc;
-    } else {
-       old_footer.front_crc = old_footer.middle_crc = 0;
-    }
-    old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
-    old_footer.flags = footer.flags;
-    outcoming_bl.append((char*)&old_footer, sizeof(old_footer));
-  }
+  outcoming_bl.append((char*)&footer, sizeof(footer));
 
   m->trace.event("async writing message");
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()
