@@ -961,9 +961,6 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
 bool Objecter::ms_dispatch(Message *m)
 {
   ldout(cct, 10) << __func__ << " " << cct << " " << *m << dendl;
-  if (!initialized)
-    return false;
-
   switch (m->get_type()) {
     // these we exlusively handle
   case CEPH_MSG_OSD_OPREPLY:
