@@ -37,7 +37,7 @@ public:
                               const std::map<std::string,std::string>& metadata) override {
     return 0;
   }
-  int service_daemon_update_status(const std::map<std::string,std::string>& status) override {
+  int service_daemon_update_status(std::map<std::string,std::string>&& status) override {
     return 0;
   }
 

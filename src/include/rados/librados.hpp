@@ -1318,7 +1318,7 @@ namespace librados
       const std::string& name,     ///< daemon name (e.g., 'gwfoo')
       const std::map<std::string,std::string>& metadata); ///< static metadata about daemon
     int service_daemon_update_status(
-      const std::map<std::string,std::string>& status);
+      std::map<std::string,std::string>&& status);
 
     int pool_create(const char *name);
     int pool_create(const char *name, uint64_t auid);

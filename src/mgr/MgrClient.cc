@@ -459,11 +459,11 @@ int MgrClient::service_daemon_register(
 }
 
 int MgrClient::service_daemon_update_status(
-  const std::map<std::string,std::string>& status)
+  std::map<std::string,std::string>&& status)
 {
   Mutex::Locker l(lock);
   ldout(cct,10) << status << dendl;
-  daemon_status = status;
+  daemon_status = std::move(status);
   daemon_dirty_status = true;
   return 0;
 }
