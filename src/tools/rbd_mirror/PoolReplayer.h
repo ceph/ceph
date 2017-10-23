@@ -89,7 +89,8 @@ private:
 
   int init_rados(const std::string &cluster_name,
                  const std::string &client_name,
-                 const std::string &description, RadosRef *rados_ref);
+                 const std::string &description, RadosRef *rados_ref,
+                 bool strip_cluster_overrides);
 
   void handle_post_acquire_leader(Context *on_finish);
   void handle_pre_release_leader(Context *on_finish);
