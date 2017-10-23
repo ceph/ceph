@@ -195,6 +195,23 @@ ssize_t ImageRequestWQ<I>::compare_and_write(uint64_t off, uint64_t len,
 }
 
 template <typename I>
+int ImageRequestWQ<I>::flush() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << dendl;
+
+  C_SaferCond cond;
+  AioCompletion *c = AioCompletion::create(&cond);
+  aio_flush(c, false);
+
+  int r = cond.wait();
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
 void ImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
 				 ReadResult &&read_result, int op_flags,
 				 bool native_async) {

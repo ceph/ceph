@@ -37,6 +37,7 @@ public:
   ssize_t compare_and_write(uint64_t off, uint64_t len,
                             bufferlist &&cmp_bl, bufferlist &&bl,
                             uint64_t *mismatch_off, int op_flags);
+  int flush();
 
   void aio_read(AioCompletion *c, uint64_t off, uint64_t len,
                 ReadResult &&read_result, int op_flags, bool native_async=true);
