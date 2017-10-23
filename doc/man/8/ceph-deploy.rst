@@ -597,7 +597,7 @@ Availability
 ============
 
 :program:`ceph-deploy` is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the documentation at http://ceph.com/ceph-deploy/docs for more information.
+the documentation at https://ceph.com/ceph-deploy/docs for more information.
 
 
 See also

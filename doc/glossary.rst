@@ -25,7 +25,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph
 	Ceph Platform
 		All Ceph software, which includes any piece of code hosted at
-		`http://github.com/ceph`_.
+		`https://github.com/ceph`_.
 
 	Ceph System
 	Ceph Stack
@@ -183,5 +183,5 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		Ceph-specific information about devices and its relationship with
 		OSDs.
 
-.. _http://github.com/ceph: http://github.com/ceph
+.. _https://github.com/ceph: https://github.com/ceph
 .. _Cluster Map: ../architecture#cluster-map

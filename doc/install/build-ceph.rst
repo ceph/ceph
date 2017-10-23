@@ -82,11 +82,11 @@ Once you have installed the tools, setup an RPM compilation environment::
 
 Fetch the source tarball for the RPM compilation environment::
 
-	wget -P ~/rpmbuild/SOURCES/ http://ceph.com/download/ceph-<version>.tar.bz2
+	wget -P ~/rpmbuild/SOURCES/ https://download.ceph.com/tarballs/ceph-<version>.tar.bz2
 
 Or from the EU mirror::
 
-	wget -P ~/rpmbuild/SOURCES/ http://eu.ceph.com/download/ceph-<version>.tar.bz2
+	wget -P ~/rpmbuild/SOURCES/ http://eu.ceph.com/tarballs/ceph-<version>.tar.bz2
 
 Extract the specfile::
 
