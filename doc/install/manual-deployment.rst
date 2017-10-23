@@ -164,11 +164,15 @@ The procedure is as follows:
 
 	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --set-uid=0 --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *' --cap mgr 'allow *'
 
+#. Generate a bootstrap-osd keyring, generate a ``client.bootstrap-osd`` user and add
+   the user to the keyring. ::
 
-#. Add the ``client.admin`` key to the ``ceph.mon.keyring``. ::
+	sudo ceph-authtool --create-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring --gen-key -n client.bootstrap-osd --cap mon 'profile bootstrap-osd'
 
-	ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
+#. Add the generated keys to the ``ceph.mon.keyring``. ::
 
+	sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
+	sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring
 
 #. Generate a monitor map using the hostname(s), host IP address(es) and the FSID.
    Save it as ``/tmp/monmap``::
@@ -186,7 +190,7 @@ The procedure is as follows:
 
    For example::
 
-	sudo mkdir /var/lib/ceph/mon/ceph-node1
+	sudo -u ceph mkdir /var/lib/ceph/mon/ceph-node1
 
    See `Monitor Config Reference - Data`_ for details.
 
@@ -213,7 +217,7 @@ The procedure is as follows:
 	auth client required = cephx
 	osd journal size = {n}
 	osd pool default size = {n}  # Write an object n times.
-	osd pool default min size = {n} # Allow writing n copy in a degraded state.
+	osd pool default min size = {n} # Allow writing n copies in a degraded state.
 	osd pool default pg num = {n}
 	osd pool default pgp num = {n}
 	osd crush chooseleaf type = {n}
@@ -244,7 +248,11 @@ The procedure is as follows:
 
 #. Start the monitor(s).
 
-   For Ubuntu, use Upstart::
+   For most distributions, services are started via systemd now::
+
+	sudo systemctl start ceph-mon@node1
+
+   For Ubuntu Trusty, use Upstart::
 
 	sudo start ceph-mon id=node1 [cluster={cluster-name}]
 
@@ -257,18 +265,18 @@ The procedure is as follows:
 
 	sudo touch /var/lib/ceph/mon/ceph-node1/upstart
 
-   For Debian/CentOS/RHEL, use sysvinit::
+   For older Debian/CentOS/RHEL, use sysvinit::
 
 	sudo /etc/init.d/ceph start mon.node1
 
 
-#. Verify that Ceph created the default pools. ::
+#. Verify that Ceph created the default pool. ::
 
 	ceph osd lspools
 
    You should see output like this::
 
-	0 data,1 metadata,2 rbd,
+	0 rbd,
 
 
 #. Verify that the monitor is running. ::
@@ -279,23 +287,33 @@ The procedure is as follows:
    you should see a health error indicating that placement groups are stuck
    inactive. It should look something like this::
 
-	cluster a7f64266-0894-4f1e-a635-d0aeaca0e993
-	  health HEALTH_ERR 192 pgs stuck inactive; 192 pgs stuck unclean; no osds
-	  monmap e1: 1 mons at {node1=192.168.0.1:6789/0}, election epoch 1, quorum 0 node1
-	  osdmap e1: 0 osds: 0 up, 0 in
-	  pgmap v2: 192 pgs, 3 pools, 0 bytes data, 0 objects
-	     0 kB used, 0 kB / 0 kB avail
-	     192 creating
+      cluster:
+        id:     a7f64266-0894-4f1e-a635-d0aeaca0e993
+        health: HEALTH_ERR
+                no osds
+                64 pgs stale
+
+      services:
+        mon: 1 daemons, quorum node1
+        mgr: node1(active)
+        osd: 0 osds: 0 up, 0 in
+
+      data:
+        pools:   1 pools, 64 pgs
+        objects: 0 objects, 0 bytes
+        usage:   0 kB used, 0 kB / 0 kB avail
+        pgs:     64 creating
+
 
    **Note:** Once you add OSDs and start them, the placement group health errors
-   should disappear. See the next section for details.
+   should disappear. See `Adding OSDs`_ for details.
 
 Manager daemon configuration
 ============================
 
 On each node where you run a ceph-mon daemon, you should also set up a ceph-mgr daemon.
 
-See :ref:`mgr-administrator-guide`
+See `ceph-mgr Administrator Guide`_
 
 Adding OSDs
 ===========
@@ -486,3 +504,4 @@ To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
 .. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data
 .. _create a Ceph filesystem: ../../cephfs/createfs
+.. _ceph-mgr Administrator Guide: :ref:`mgr-administrator-guide`
