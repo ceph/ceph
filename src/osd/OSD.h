@@ -1554,7 +1554,7 @@ private:
   
   // -- op tracking --
   OpTracker op_tracker;
-  void check_ops_in_flight();
+  void update_daemon_status_to_mgr();
   void test_ops(std::string command, std::string args, ostream& ss);
   friend class TestOpsSocketHook;
   TestOpsSocketHook *test_ops_hook;

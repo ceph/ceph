@@ -4987,20 +4987,22 @@ void OSD::tick_without_osd_lock()
     }
   }
 
-  check_ops_in_flight();
+  update_daemon_status_to_mgr();
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
 }
 
-void OSD::check_ops_in_flight()
+void OSD::update_daemon_status_to_mgr()
 {
-  vector<string> warnings;
-  if (op_tracker.check_ops_in_flight(warnings)) {
-    for (vector<string>::iterator i = warnings.begin();
-        i != warnings.end();
-        ++i) {
-      clog->warn() << *i;
+  map<string,string> daemon_status;
+  {
+    vector<string> warnings;
+    if (op_tracker.check_ops_in_flight(warnings)) {
+      daemon_status.emplace("ops_in_flight", str_join(warnings, "\n"));
     }
+  }
+  if (!daemon_status.empty()) {
+    mgrc.service_daemon_update_status(std::move(daemon_status));
   }
 }
 
