@@ -3339,7 +3339,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 						    " onnvram" : " ack"))
 		  << " ... stray" << dendl;
     sl.unlock();
-    put_session(s);
+    s->put();
     m->put();
     return;
   }
@@ -3362,7 +3362,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     }
     _session_op_remove(s, op);
     sl.unlock();
-    put_session(s);
+    s->put();
 
     _op_submit(op, sul, NULL);
     m->put();
@@ -3378,7 +3378,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		    << op->session->con->get_peer_addr() << dendl;
       m->put();
       sl.unlock();
-      put_session(s);
+      s->put();
       return;
     }
   } else {
@@ -3397,7 +3397,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       num_in_flight--;
     _session_op_remove(s, op);
     sl.unlock();
-    put_session(s);
+    s->put();
 
     // FIXME: two redirects could race and reorder
 
@@ -3416,7 +3416,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       num_in_flight--;
     _session_op_remove(s, op);
     sl.unlock();
-    put_session(s);
+    s->put();
 
     op->tid = 0;
     op->target.flags &= ~(CEPH_OSD_FLAG_BALANCE_READS |
@@ -3510,7 +3510,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   }
 
   m->put();
-  put_session(s);
+  s->put();
 }
 
 void Objecter::handle_osd_backoff(MOSDBackoff *m)
