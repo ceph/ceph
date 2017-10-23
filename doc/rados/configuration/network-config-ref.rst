@@ -490,5 +490,5 @@ Ceph disables TCP buffering by default.
 .. _hardware recommendations: ../../../start/hardware-recommendations
 .. _Monitor / OSD Interaction: ../mon-osd-interaction
 .. _Message Signatures: ../auth-config-ref#signatures
-.. _CIDR: http://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing
-.. _Nagle's Algorithm: http://en.wikipedia.org/wiki/Nagle's_algorithm
+.. _CIDR: https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing
+.. _Nagle's Algorithm: https://en.wikipedia.org/wiki/Nagle's_algorithm

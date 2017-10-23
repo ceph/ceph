@@ -30,7 +30,7 @@ and configure Hadoop to use the Ceph file system.
 CephFS Java Packages
 --------------------
 
-* CephFS Hadoop plugin (`hadoop-cephfs.jar <http://ceph.com/download/hadoop-cephfs.jar>`_)
+* CephFS Hadoop plugin (`hadoop-cephfs.jar <https://download.ceph.com/tarballs/hadoop-cephfs.jar>`_)
 
 Adding these dependencies to a Hadoop installation will depend on your
 particular deployment. In general the dependencies must be present on each
