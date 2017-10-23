@@ -712,6 +712,8 @@ Depends: ceph-common,
          xmlstarlet,
          ${misc:Depends},
          ${shlibs:Depends},
+Replaces: ceph-base (<< 11)
+Breaks: ceph-base (<< 1)
 Description: Ceph test and benchmarking tools
  This package contains tools for testing and benchmarking Ceph.
 
