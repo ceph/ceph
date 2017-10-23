@@ -47,8 +47,8 @@ Configuration
 
 Two configuration keys are mandatory for the module to work:
 
-- mgr/zabbix/zabbix_host
-- mgr/zabbix/identifier
+- zabbix_host
+- identifier
 
 The parameter *zabbix_host* controls the hostname of the Zabbix server to which
 *zabbix_sender* will send the items. This can be a IP-Address if required by
@@ -60,9 +60,9 @@ your Zabbix server.
 
 Additional configuration keys which can be configured and their default values:
 
-- mgr/zabbix/zabbix_port: 10051
-- mgr/zabbix/zabbix_sender: /usr/bin/zabbix_sender
-- mgr/zabbix/interval: 60
+- zabbix_port: 10051
+- zabbix_sender: /usr/bin/zabbix_sender
+- interval: 60
 
 Configuration keys
 ^^^^^^^^^^^^^^^^^^^
@@ -72,14 +72,32 @@ these are usually Monitors where the *client.admin* key is present.
 
 ::
 
-    ceph config-key set <key> <value>
+    ceph zabbix config-set <key> <value>
 
 For example:
 
 ::
 
-    ceph config-key set mgr/zabbix/zabbix_host zabbix.localdomain
-    ceph config-key set mgr/zabbix/identifier ceph.eu-ams02.local
+    ceph zabbix config-set zabbix_host zabbix.localdomain
+    ceph zabbix config-set identifier ceph.eu-ams02.local
+
+The current configuration of the module can also be shown:
+
+::
+
+   ceph zabbix config-show
+
+Manually sending data
+---------------------
+If needed the module can be asked to send data immediately instead of waiting for
+the interval.
+
+This can be done with this command:
+
+::
+    ceph zabbix send
+
+The module will now send its latest data to the Zabbix server.
 
 Debugging
 ---------
