@@ -137,6 +137,9 @@ def get_lv_from_argument(argument):
     in the form of `vg/lv`, but with some validation so that an argument that is a full
     path to a device can be ignored
     """
+    if argument.startswith('/'):
+        lv = get_lv(lv_path=argument)
+        return lv
     try:
         vg_name, lv_name = argument.split('/')
     except (ValueError, AttributeError):
@@ -190,24 +193,46 @@ def create_pv(device):
     ])
 
 
-def create_lv(name, group, size=None, **tags):
+def create_vg(name, *devices):
+    """
+    Create a Volume Group. Command looks like::
+
+        vgcreate --force --yes group_name device
+
+    Once created the volume group is returned as a ``VolumeGroup`` object
+    """
+    process.run([
+        'sudo',
+        'vgcreate',
+        '--force',
+        '--yes',
+        name] + list(devices)
+    )
+
+    vg = get_vg(vg_name=name)
+    return vg
+
+
+def create_lv(name, group, size=None, tags=None):
     """
     Create a Logical Volume in a Volume Group. Command looks like::
 
         lvcreate -L 50G -n gfslv vg0
 
-    ``name``, ``group``, and ``size`` are required. Tags are optional and are "translated" to include
-    the prefixes for the Ceph LVM tag API.
+    ``name``, ``group``, are required. If ``size`` is provided it must follow
+    lvm's size notation (like 1G, or 20M). Tags are an optional dictionary and is expected to
+    conform to the convention of prefixing them with "ceph." like::
 
+        {"ceph.block_device": "/dev/ceph/osd-1"}
     """
     # XXX add CEPH_VOLUME_LVM_DEBUG to enable -vvvv on lv operations
     type_path_tag = {
         'journal': 'ceph.journal_device',
         'data': 'ceph.data_device',
-        'block': 'ceph.block',
-        'wal': 'ceph.wal',
-        'db': 'ceph.db',
-        'lockbox': 'ceph.lockbox_device',
+        'block': 'ceph.block_device',
+        'wal': 'ceph.wal_device',
+        'db': 'ceph.db_device',
+        'lockbox': 'ceph.lockbox_device',  # XXX might not ever need this lockbox sorcery
     }
     if size:
         process.run([
@@ -215,7 +240,7 @@ def create_lv(name, group, size=None, **tags):
             'lvcreate',
             '--yes',
             '-L',
-            '%sG' % size,
+            '%s' % size,
             '-n', name, group
         ])
     # create the lv with all the space available, this is needed because the
@@ -231,17 +256,15 @@ def create_lv(name, group, size=None, **tags):
         ])
 
     lv = get_lv(lv_name=name, vg_name=group)
-    ceph_tags = {}
-    for k, v in tags.items():
-        ceph_tags['ceph.%s' % k] = v
-    lv.set_tags(ceph_tags)
+    lv.set_tags(tags)
 
     # when creating a distinct type, the caller doesn't know what the path will
     # be so this function will set it after creation using the mapping
-    path_tag = type_path_tag[tags['type']]
-    lv.set_tags(
-        {path_tag: lv.lv_path}
-    )
+    path_tag = type_path_tag.get(tags.get('ceph.type'))
+    if path_tag:
+        lv.set_tags(
+            {path_tag: lv.lv_path}
+        )
     return lv
 
 

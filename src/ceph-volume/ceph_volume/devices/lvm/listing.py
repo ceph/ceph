@@ -90,15 +90,19 @@ class List(object):
                 # will get ignored
                 continue
 
-            journal_uuid = lv.tags['ceph.journal_uuid']
-            # query blkid for the UUID, if it matches we have a physical device
-            # which needs to be compared to ensure it is up to date
-            journal_device = disk.get_device_from_partuuid(journal_uuid)
-            if journal_device:
-                if lv.tags['ceph.journal_device'] != journal_device:
-                    # this means that the device has changed, so it must be updated
-                    # on the API to reflect this
-                    lv.set_tags({'ceph.journal_device': journal_device})
+            for device_type in ['journal', 'block', 'wal', 'db']:
+                device_name = 'ceph.%s_device' % device_type
+                device_uuid = lv.tags.get('ceph.%s_uuid' % device_type)
+                if not device_uuid:
+                    # bluestore will not have a journal, filestore will not have
+                    # a block/wal/db, so we must skip if not present
+                    continue
+                disk_device = disk.get_device_from_partuuid(device_uuid)
+                if disk_device:
+                    if lv.tags[device_name] != disk_device:
+                        # this means that the device has changed, so it must be updated
+                        # on the API to reflect this
+                        lv.set_tags({device_name: disk_device})
 
     def generate(self, args):
         """
@@ -133,22 +137,25 @@ class List(object):
             )
 
         else:
-            # this has to be a journal device (not a logical volume) so try
+            # this has to be a journal/wal/db device (not a logical volume) so try
             # to find the PARTUUID that should be stored in the OSD logical
             # volume
-            associated_lv = lvs.get(lv_tags={'ceph.journal_device': device})
-            if associated_lv:
-                _id = associated_lv.tags['ceph.osd_id']
-                uuid = associated_lv.tags['ceph.journal_uuid']
+            for device_type in ['journal', 'block', 'wal', 'db']:
+                device_tag_name = 'ceph.%s_device' % device_type
+                device_tag_uuid = 'ceph.%s_uuid' % device_type
+                associated_lv = lvs.get(lv_tags={device_tag_name: device})
+                if associated_lv:
+                    _id = associated_lv.tags['ceph.osd_id']
+                    uuid = associated_lv.tags[device_tag_uuid]
 
-                report.setdefault(_id, [])
-                report[_id].append(
-                    {
-                        'tags': {'PARTUUID': uuid},
-                        'type': 'journal',
-                        'path': device,
-                    }
-                )
+                    report.setdefault(_id, [])
+                    report[_id].append(
+                        {
+                            'tags': {'PARTUUID': uuid},
+                            'type': device_type,
+                            'path': device,
+                        }
+                    )
         return report
 
     def full_report(self):
@@ -171,18 +178,23 @@ class List(object):
                 lv.as_dict()
             )
 
-            journal_uuid = lv.tags['ceph.journal_uuid']
-            if not api.get_lv(lv_uuid=journal_uuid):
-                # means we have a regular device, so query blkid
-                journal_device = disk.get_device_from_partuuid(journal_uuid)
-                if journal_device:
-                    report[_id].append(
-                        {
-                            'tags': {'PARTUUID': journal_uuid},
-                            'type': 'journal',
-                            'path': journal_device,
-                        }
-                    )
+            for device_type in ['journal', 'block', 'wal', 'db']:
+                device_uuid = lv.tags.get('ceph.%s_uuid' % device_type)
+                if not device_uuid:
+                    # bluestore will not have a journal, filestore will not have
+                    # a block/wal/db, so we must skip if not present
+                    continue
+                if not api.get_lv(lv_uuid=device_uuid):
+                    # means we have a regular device, so query blkid
+                    disk_device = disk.get_device_from_partuuid(device_uuid)
+                    if disk_device:
+                        report[_id].append(
+                            {
+                                'tags': {'PARTUUID': device_uuid},
+                                'type': device_type,
+                                'path': disk_device,
+                            }
+                        )
 
         return report
 

@@ -44,3 +44,22 @@ be mounted at::
 Once that process is complete, a call will be made to start the OSD::
 
     systemctl start ceph-osd@0
+
+
+Failure and Retries
+-------------------
+It is common to have failures when a system is coming up online. The devices
+are sometimes not fully available and this unpredictable behavior may cause an
+OSD to not be ready to be used.
+
+There are two configurable environment variables used to set the retry
+behavior:
+
+* ``CEPH_VOLUME_SYSTEMD_TRIES``: Defaults to 30
+* ``CEPH_VOLUME_SYSTEMD_INTERVAL``: Defaults to 5
+
+The *"tries"* is a number that sets the maximum amount of times the unit will
+attempt to activate an OSD before giving up.
+
+The *"interval"* is a value in seconds that determines the waiting time before
+initiating another try at activating the OSD.

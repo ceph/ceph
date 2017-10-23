@@ -73,6 +73,9 @@ def volumes(monkeypatch):
     monkeypatch.setattr(process, 'call', lambda x: ('', '', 0))
     volumes = api.Volumes()
     volumes._purge()
+    # also patch api.Volumes so that when it is called, it will use the newly
+    # created fixture, with whatever the test method wants to append to it
+    monkeypatch.setattr(api, 'Volumes', lambda: volumes)
     return volumes
 
 
@@ -325,6 +328,31 @@ class TestVolumeGroups(object):
             volume_groups.filter()
 
 
+class TestGetLVFromArgument(object):
+
+    def setup(self):
+        self.foo_volume = api.Volume(
+            lv_name='foo', lv_path='/path/to/lv',
+            vg_name='foo_group', lv_tags=''
+        )
+
+    def test_non_absolute_path_is_not_valid(self, volumes):
+        volumes.append(self.foo_volume)
+        assert api.get_lv_from_argument('foo') is None
+
+    def test_too_many_slashes_is_invalid(self, volumes):
+        volumes.append(self.foo_volume)
+        assert api.get_lv_from_argument('path/to/lv') is None
+
+    def test_absolute_path_is_not_lv(self, volumes):
+        volumes.append(self.foo_volume)
+        assert api.get_lv_from_argument('/path') is None
+
+    def test_absolute_path_is_lv(self, volumes):
+        volumes.append(self.foo_volume)
+        assert api.get_lv_from_argument('/path/to/lv') == self.foo_volume
+
+
 class TestCreateLV(object):
 
     def setup(self):
@@ -334,7 +362,7 @@ class TestCreateLV(object):
         monkeypatch.setattr(process, 'run', capture)
         monkeypatch.setattr(process, 'call', capture)
         monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
-        api.create_lv('foo', 'foo_group', size=5, type='data')
+        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'})
         expected = ['sudo', 'lvcreate', '--yes', '-L', '5G', '-n', 'foo', 'foo_group']
         assert capture.calls[0]['args'][0] == expected
 
@@ -342,7 +370,7 @@ class TestCreateLV(object):
         monkeypatch.setattr(process, 'run', capture)
         monkeypatch.setattr(process, 'call', capture)
         monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
-        api.create_lv('foo', 'foo_group', size=5, type='data')
+        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'})
         ceph_tag = ['sudo', 'lvchange', '--addtag', 'ceph.type=data', '/path']
         assert capture.calls[1]['args'][0] == ceph_tag
 
@@ -350,6 +378,6 @@ class TestCreateLV(object):
         monkeypatch.setattr(process, 'run', capture)
         monkeypatch.setattr(process, 'call', capture)
         monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
-        api.create_lv('foo', 'foo_group', size=5, type='data')
+        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'})
         data_tag = ['sudo', 'lvchange', '--addtag', 'ceph.data_device=/path', '/path']
         assert capture.calls[2]['args'][0] == data_tag
