@@ -2355,9 +2355,9 @@ int librados::Rados::service_daemon_register(
 }
 
 int librados::Rados::service_daemon_update_status(
-  const std::map<std::string,std::string>& status)
+  std::map<std::string,std::string>&& status)
 {
-  return client->service_daemon_update_status(status);
+  return client->service_daemon_update_status(std::move(status));
 }
 
 int librados::Rados::pool_create(const char *name)
@@ -3338,7 +3338,7 @@ CEPH_RADOS_API int rados_service_update_status(rados_t cluster,
   std::map<std::string, std::string> status;
   dict_to_map(status_dict, &status);
 
-  return client->service_daemon_update_status(status);
+  return client->service_daemon_update_status(std::move(status));
 }
 
 static void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen)
