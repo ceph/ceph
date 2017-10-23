@@ -21,9 +21,9 @@
 
 #include "common/config.h"
 #include "common/ceph_context.h"
-#include "osd/OpQueueItem.h"
-
 #include "common/mClockPriorityQueue.h"
+#include "osd/OpQueueItem.h"
+#include "osd/mClockOpClassSupport.h"
 
 
 namespace ceph {
@@ -37,8 +37,7 @@ namespace ceph {
   // appropriately.
   class mClockClientQueue : public OpQueue<Request, Client> {
 
-    enum class osd_op_type_t {
-      client_op, osd_subop, bg_snaptrim, bg_recovery, bg_scrub };
+    using osd_op_type_t = ceph::mclock::osd_op_type_t;
 
     using InnerClient = std::pair<uint64_t,osd_op_type_t>;
 
@@ -46,24 +45,13 @@ namespace ceph {
 
     queue_t queue;
 
-    struct mclock_op_tags_t {
-      crimson::dmclock::ClientInfo client_op;
-      crimson::dmclock::ClientInfo osd_subop;
-      crimson::dmclock::ClientInfo snaptrim;
-      crimson::dmclock::ClientInfo recov;
-      crimson::dmclock::ClientInfo scrub;
-
-      mclock_op_tags_t(CephContext *cct);
-    };
-
-    static std::unique_ptr<mclock_op_tags_t> mclock_op_tags;
+    ceph::mclock::OpClassClientInfoMgr client_info_mgr;
 
   public:
 
     mClockClientQueue(CephContext *cct);
 
-    static const crimson::dmclock::ClientInfo*
-    op_class_client_info_f(const InnerClient& client);
+    const crimson::dmclock::ClientInfo* op_class_client_info_f(const InnerClient& client);
 
     inline unsigned length() const override final {
       return queue.length();
@@ -117,28 +105,6 @@ namespace ceph {
 
   protected:
 
-    struct pg_queueable_visitor_t : public boost::static_visitor<osd_op_type_t> {
-      osd_op_type_t operator()(const OpRequestRef& o) const {
-	// don't know if it's a client_op or a
-        return osd_op_type_t::client_op;
-      }
-
-      osd_op_type_t operator()(const PGSnapTrim& o) const {
-        return osd_op_type_t::bg_snaptrim;
-      }
-
-      osd_op_type_t operator()(const PGScrub& o) const {
-        return osd_op_type_t::bg_scrub;
-      }
-
-      osd_op_type_t operator()(const PGRecovery& o) const {
-        return osd_op_type_t::bg_recovery;
-      }
-    }; // class pg_queueable_visitor_t
-
-    static pg_queueable_visitor_t pg_queueable_visitor;
-
-    osd_op_type_t get_osd_op_type(const Request& request);
     InnerClient get_inner_client(const Client& cl, const Request& request);
   }; // class mClockClientAdapter
 
