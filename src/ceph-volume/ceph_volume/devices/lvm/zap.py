@@ -67,6 +67,8 @@ class Zap(object):
             # remove all lvm metadata
             lv.clear_tags()
 
+        terminal.success("Zapping successful for: %s" % path)
+
     def main(self):
         sub_command_help = dedent("""
         Zaps the given logical volume or partition. If given a path to a logical
