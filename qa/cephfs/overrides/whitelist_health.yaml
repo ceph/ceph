@@ -7,3 +7,4 @@ overrides:
       - \(MDS_DEGRADED\)
       - \(FS_WITH_FAILED_MDS\)
       - \(MDS_DAMAGE\)
+      - \(MDS_CACHE_OVERSIZED\)
