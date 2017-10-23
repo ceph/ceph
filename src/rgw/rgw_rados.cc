@@ -7190,7 +7190,7 @@ class RGWRadosPutObj : public RGWGetDataCB
   void (*progress_cb)(off_t, void *);
   void *progress_data;
   bufferlist extra_data_bl;
-  uint64_t extra_data_len;
+  uint64_t extra_data_left;
   uint64_t data_len;
   map<string, bufferlist> src_attrs;
 public:
@@ -7209,7 +7209,7 @@ public:
                        opstate(_ops),
                        progress_cb(_progress_cb),
                        progress_data(_progress_data),
-                       extra_data_len(0),
+                       extra_data_left(0),
                        data_len(0) {}
 
   int process_attrs(void) {
@@ -7238,17 +7238,17 @@ public:
     if (progress_cb) {
       progress_cb(ofs, progress_data);
     }
-    if (extra_data_len) {
+    if (extra_data_left) {
       size_t extra_len = bl.length();
-      if (extra_len > extra_data_len)
-        extra_len = extra_data_len;
+      if (extra_len > extra_data_left)
+        extra_len = extra_data_left;
 
       bufferlist extra;
       bl.splice(0, extra_len, &extra);
       extra_data_bl.append(extra);
 
-      extra_data_len -= extra_len;
-      if (extra_data_len == 0) {
+      extra_data_left -= extra_len;
+      if (extra_data_left == 0) {
         int res = process_attrs();
         if (res < 0)
           return res;
@@ -7256,7 +7256,13 @@ public:
       if (bl.length() == 0) {
         return 0;
       }
+      ofs += extra_len;
     }
+    // adjust ofs based on extra_data_len, so the result is a logical offset
+    // into the object data
+    assert(uint64_t(ofs) >= extra_data_len);
+    ofs -= extra_data_len;
+
     data_len += bl.length();
     bool again = false;
 
@@ -7300,7 +7306,8 @@ public:
   map<string, bufferlist>& get_attrs() { return src_attrs; }
 
   void set_extra_data_len(uint64_t len) override {
-    extra_data_len = len;
+    extra_data_left = len;
+    RGWGetDataCB::set_extra_data_len(len);
   }
 
   uint64_t get_data_len() {
