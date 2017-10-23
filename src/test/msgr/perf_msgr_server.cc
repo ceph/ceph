@@ -80,7 +80,7 @@ class ServerDispatcher : public Dispatcher {
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
-    case CEPH_MSG_OSD_OP:
+    case CEPH_MSG_OSD_OPREPLY:
       return true;
     default:
       return false;
