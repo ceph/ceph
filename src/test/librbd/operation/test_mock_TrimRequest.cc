@@ -53,6 +53,7 @@ struct AsyncRequest<librbd::MockTestImageCtx> {
 
   void async_complete(int r) {
     on_finish->complete(r);
+    delete this;
   }
 
   bool is_canceled() const {
