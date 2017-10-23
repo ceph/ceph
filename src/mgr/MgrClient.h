@@ -116,7 +116,7 @@ public:
     const std::string& name,
     const std::map<std::string,std::string>& metadata);
   int service_daemon_update_status(
-    const std::map<std::string,std::string>& status);
+    std::map<std::string,std::string>&& status);
 
 private:
   void send_stats();

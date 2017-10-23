@@ -2580,7 +2580,7 @@ public:
   void finalize();
 
   int register_to_service_map(const string& daemon_type, const map<string, string>& meta);
-  int update_service_map(const std::map<std::string, std::string>& status);
+  int update_service_map(std::map<std::string, std::string>&& status);
 
   void schedule_context(Context *c);
 
