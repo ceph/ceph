@@ -86,6 +86,9 @@ public:
   void set_history_slow_op_size_and_threshold(uint32_t new_size, uint32_t new_threshold) {
     history.set_slow_op_size_and_threshold(new_size, new_threshold);
   }
+  bool is_tracking() const {
+    return tracking_enabled;
+  }
   void set_tracking(bool enable) {
     tracking_enabled = enable;
   }
