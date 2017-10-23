@@ -270,15 +270,6 @@ The procedure is as follows:
 	sudo /etc/init.d/ceph start mon.node1
 
 
-#. Verify that Ceph created the default pool. ::
-
-	ceph osd lspools
-
-   You should see output like this::
-
-	0 rbd,
-
-
 #. Verify that the monitor is running. ::
 
 	ceph -s
@@ -289,9 +280,7 @@ The procedure is as follows:
 
       cluster:
         id:     a7f64266-0894-4f1e-a635-d0aeaca0e993
-        health: HEALTH_ERR
-                no osds
-                64 pgs stale
+        health: HEALTH_OK
 
       services:
         mon: 1 daemons, quorum node1
@@ -299,10 +288,10 @@ The procedure is as follows:
         osd: 0 osds: 0 up, 0 in
 
       data:
-        pools:   1 pools, 64 pgs
+        pools:   0 pools, 0 pgs
         objects: 0 objects, 0 bytes
         usage:   0 kB used, 0 kB / 0 kB avail
-        pgs:     64 creating
+        pgs:
 
 
    **Note:** Once you add OSDs and start them, the placement group health errors
@@ -313,7 +302,7 @@ Manager daemon configuration
 
 On each node where you run a ceph-mon daemon, you should also set up a ceph-mgr daemon.
 
-See `ceph-mgr Administrator Guide`_
+See :ref:`mgr-administrator-guide`
 
 Adding OSDs
 ===========
@@ -504,4 +493,3 @@ To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
 .. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data
 .. _create a Ceph filesystem: ../../cephfs/createfs
-.. _ceph-mgr Administrator Guide: :ref:`mgr-administrator-guide`
