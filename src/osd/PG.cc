@@ -7001,7 +7001,6 @@ boost::statechart::result
 PG::RecoveryState::Recovering::react(const AllReplicasRecovered &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->state_clear(PG_STATE_RECOVERING);
   pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
@@ -7012,7 +7011,6 @@ boost::statechart::result
 PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->state_clear(PG_STATE_RECOVERING);
   pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
@@ -7024,7 +7022,6 @@ PG::RecoveryState::Recovering::react(const DeferRecovery &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 10) << "defer recovery, retry delay " << evt.delay << dendl;
-  pg->state_clear(PG_STATE_RECOVERING);
   pg->state_set(PG_STATE_RECOVERY_WAIT);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   release_reservations(true);
@@ -7038,7 +7035,6 @@ PG::RecoveryState::Recovering::react(const UnfoundRecovery &evt)
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 10) << "recovery has unfound, can't continue" << dendl;
   pg->state_set(PG_STATE_RECOVERY_UNFOUND);
-  pg->state_clear(PG_STATE_RECOVERING);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   release_reservations(true);
   return transit<NotRecovering>();
@@ -7049,6 +7045,7 @@ void PG::RecoveryState::Recovering::exit()
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
+  pg->state_clear(PG_STATE_RECOVERING);
   pg->osd->recoverystate_perf->tinc(rs_recovering_latency, dur);
 }
 
