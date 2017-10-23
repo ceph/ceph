@@ -1729,7 +1729,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, flush_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-    int r = librbd::flush(ictx);
+    int r = ictx->io_work_queue->flush();
     tracepoint(librbd, flush_exit, r);
     return r;
   }
@@ -3771,7 +3771,7 @@ extern "C" int rbd_flush(rbd_image_t image)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, flush_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-  int r = librbd::flush(ictx);
+  int r = ictx->io_work_queue->flush();
   tracepoint(librbd, flush_exit, r);
   return r;
 }

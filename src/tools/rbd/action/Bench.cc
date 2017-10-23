@@ -207,6 +207,12 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     return -EINVAL;
   }
 
+  int r = image.flush();
+  if (r < 0 && (r != -EROFS || io_type != IO_TYPE_READ)) {
+    std::cerr << "rbd: failed to flush: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
   rbd_bencher b(&image, io_type, io_size);
 
   std::cout << "bench "
@@ -316,10 +322,13 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     }
   }
   b.wait_for(0);
-  int r = image.flush();
-  if (r < 0) {
-    std::cerr << "Error flushing data at the end: " << cpp_strerror(r)
-              << std::endl;
+
+  if (io_type != IO_TYPE_READ) {
+    r = image.flush();
+    if (r < 0) {
+      std::cerr << "rbd: failed to flush at the end: " << cpp_strerror(r)
+                << std::endl;
+    }
   }
 
   utime_t now = ceph_clock_now();
