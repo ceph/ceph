@@ -5001,6 +5001,14 @@ void OSD::update_daemon_status_to_mgr()
       daemon_status.emplace("ops_in_flight", str_join(warnings, "\n"));
     }
   }
+  with_unique_lock(pending_creates_lock, [&]() {
+      auto pending_creates = (pending_creates_from_osd.size() +
+			      pending_creates_from_mon);
+      if (pending_creates) {
+	daemon_status.emplace("pending_creating_pgs",
+			      std::to_string(pending_creates));
+      }
+    });
   if (!daemon_status.empty()) {
     mgrc.service_daemon_update_status(std::move(daemon_status));
   }
