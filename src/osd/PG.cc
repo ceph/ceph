@@ -6419,6 +6419,34 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRevokedTooFull &)
   return transit<NotBackfilling>();
 }
 
+boost::statechart::result
+PG::RecoveryState::Backfilling::react(const RemoteReservationRevoked &)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  pg->state_set(PG_STATE_BACKFILL_WAIT);
+
+  for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
+       it != pg->backfill_targets.end();
+       ++it) {
+    assert(*it != pg->pg_whoami);
+    ConnectionRef con = pg->osd->get_con_osd_cluster(
+      it->osd, pg->get_osdmap()->get_epoch());
+    if (con) {
+      pg->osd->send_message_osd_cluster(
+        new MBackfillReserve(
+	  MBackfillReserve::RELEASE,
+	  spg_t(pg->info.pgid.pgid, it->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
+    }
+  }
+
+  pg->waiting_on_backfill.clear();
+
+  return transit<WaitLocalBackfillReserved>();
+}
+
 void PG::RecoveryState::Backfilling::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -6681,11 +6709,20 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 		       << ss.str() << dendl;
     post_event(RejectRemoteReservation());
   } else {
+    Context *preempt = nullptr;
+    if (HAVE_FEATURE(pg->upacting_features, SERVER_MIMIC)) {
+      // older peers will interpret preemption as TOOFULL
+      preempt = new QueuePeeringEvt<RemoteBackfillPreempted>(
+	pg, pg->get_osdmap()->get_epoch(),
+	RemoteBackfillPreempted());
+    }
     pg->osd->remote_reserver.request_reservation(
       pg->info.pgid,
       new QueuePeeringEvt<RemoteBackfillReserved>(
         pg, pg->get_osdmap()->get_epoch(),
-        RemoteBackfillReserved()), evt.priority);
+        RemoteBackfillReserved()),
+      evt.priority,
+      preempt);
   }
   return transit<RepWaitBackfillReserved>();
 }
@@ -6790,6 +6827,20 @@ PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
     pg->primary.osd,
     new MBackfillReserve(
       MBackfillReserve::TOOFULL,
+      spg_t(pg->info.pgid.pgid, pg->primary.shard),
+      pg->get_osdmap()->get_epoch()),
+    pg->get_osdmap()->get_epoch());
+  return discard_event();
+}
+
+boost::statechart::result
+PG::RecoveryState::RepRecovering::react(const RemoteBackfillPreempted &)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->send_message_osd_cluster(
+    pg->primary.osd,
+    new MBackfillReserve(
+      MBackfillReserve::REVOKE,
       spg_t(pg->info.pgid.pgid, pg->primary.shard),
       pg->get_osdmap()->get_epoch()),
     pg->get_osdmap()->get_epoch());
