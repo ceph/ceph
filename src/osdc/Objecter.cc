@@ -2043,7 +2043,6 @@ void Objecter::_kick_requests(OSDSession *session,
        p != session->ops.end();) {
     Op *op = p->second;
     ++p;
-    logger->inc(l_osdc_op_resend);
     if (op->should_resend) {
       if (!op->target.paused)
 	resend[op->tid] = op;
@@ -2053,26 +2052,27 @@ void Objecter::_kick_requests(OSDSession *session,
     }
   }
 
+  logger->inc(l_osdc_op_resend, resend.size());
   while (!resend.empty()) {
     _send_op(resend.begin()->second);
     resend.erase(resend.begin());
   }
 
   // resend lingers
+  logger->inc(l_osdc_linger_resend, session->linger_ops.size());
   for (map<ceph_tid_t, LingerOp*>::iterator j = session->linger_ops.begin();
        j != session->linger_ops.end(); ++j) {
     LingerOp *op = j->second;
     op->get();
-    logger->inc(l_osdc_linger_resend);
     assert(lresend.count(j->first) == 0);
     lresend[j->first] = op;
   }
 
   // resend commands
+  logger->inc(l_osdc_command_resend, session->command_ops.size());
   map<uint64_t,CommandOp*> cresend;  // resend in order
   for (map<ceph_tid_t, CommandOp*>::iterator k = session->command_ops.begin();
        k != session->command_ops.end(); ++k) {
-    logger->inc(l_osdc_command_resend);
     cresend[k->first] = k->second;
   }
   while (!cresend.empty()) {
