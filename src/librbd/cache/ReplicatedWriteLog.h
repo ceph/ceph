@@ -14,6 +14,7 @@
 #include "librbd/cache/BlockGuard.h"
 #include "librbd/cache/ImageWriteback.h"
 #include "librbd/cache/file/Policy.h"
+#include "librbd/BlockGuard.h"
 #include <functional>
 #include <list>
 
@@ -135,21 +136,22 @@ public:
    * Writes bearing this sync gen number and the prior sync point will
    * be sub-ops of this Gather. This sync point will not be appended
    * until all these complete. */
-  C_Gather *prior_log_entries_persisted;
+  C_Gather *m_prior_log_entries_persisted;
   /* Signal this when this sync point is appended and persisted. This
    * is a sub-operation of the next sync point's
-   * prior_log_entries_persisted Gather. */
-  Context *on_sync_point_persisted;
+   * m_prior_log_entries_persisted Gather. */
+  Context *m_on_sync_point_persisted;
   
   SyncPoint(CephContext *cct, uint64_t sync_gen_num);
+  ~SyncPoint();
   SyncPoint(const SyncPoint&) = delete;
   SyncPoint &operator=(const SyncPoint&) = delete;
   friend std::ostream &operator<<(std::ostream &os,
 				  SyncPoint &p) {
     os << "m_sync_gen_num=" << p.m_sync_gen_num << ", "
        << "m_final_op_sequence_num=" << p.m_final_op_sequence_num << ", "
-       << "prior_log_entries_persisted=[" << p.prior_log_entries_persisted << "], "
-       << "on_sync_point_persisted=[" << p.on_sync_point_persisted << "]";
+       << "m_prior_log_entries_persisted=[" << p.m_prior_log_entries_persisted << "], "
+       << "m_on_sync_point_persisted=[" << p.m_on_sync_point_persisted << "]";
     return os;
   };
 };
@@ -161,7 +163,7 @@ public:
   Context *on_write_persist;
   WriteLogOperation(SyncPoint *sync_point, uint64_t image_offset_bytes, uint64_t write_bytes) 
     : log_entry(new WriteLogEntry(image_offset_bytes, write_bytes)) {
-    on_write_persist = sync_point->prior_log_entries_persisted->new_sub();
+    on_write_persist = sync_point->m_prior_log_entries_persisted->new_sub();
   }
   ~WriteLogOperation() {
     if (NULL != log_entry) {
@@ -178,6 +180,29 @@ public:
   };
 };
 typedef std::list<WriteLogOperation*> WriteLogOperations;
+
+class WriteLogOperationSet {
+public:
+  CephContext *m_cct;
+  librbd::BlockExtent m_extent; /* in blocks */
+  Context *m_on_finish;
+  BlockGuardCell *m_cell;
+  C_Gather *m_extent_ops;
+  WriteLogOperationSet(CephContext *cct, librbd::BlockExtent extent, Context *on_finish);
+  WriteLogOperationSet(const WriteLogOperationSet&) = delete;
+  ~WriteLogOperationSet();
+  WriteLogOperationSet &operator=(const WriteLogOperationSet&) = delete;
+  friend std::ostream &operator<<(std::ostream &os,
+				  WriteLogOperationSet &s) {
+    os << "m_extent=[" << s.m_extent.block_start << "," << s.m_extent.block_end << "] "
+       << "m_on_finish=" << s.m_on_finish << ", "
+       << "m_cell=" << (void*)s.m_cell << ", "
+       << "m_extent_ops=[" << s.m_extent_ops << "]";
+    return os;
+  };
+};
+
+typedef librbd::BlockGuard<WriteLogOperationSet> WriteLogGuard;
 
 } // namespace rwl
 

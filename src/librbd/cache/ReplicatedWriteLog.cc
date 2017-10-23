@@ -35,11 +35,23 @@ typedef std::function<void(uint64_t)> ReleaseBlock;
 typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
 
 SyncPoint::SyncPoint(CephContext *cct, uint64_t sync_gen_num)
-  : m_cct(cct), m_sync_gen_num(sync_gen_num), on_sync_point_persisted(NULL) {
-  prior_log_entries_persisted = new C_Gather(cct, NULL);
-  /* TODO: Connect prior_log_entries_persisted finisher to append this
+  : m_cct(cct), m_sync_gen_num(sync_gen_num), m_on_sync_point_persisted(NULL) {
+  m_prior_log_entries_persisted = new C_Gather(cct, NULL);
+  /* TODO: Connect m_prior_log_entries_persisted finisher to append this
      sync point and on persist complete call on_sync_point_persisted
      and delete this object */
+}
+SyncPoint::~SyncPoint() {
+  /* TODO: will m_prior_log_entries_persisted always delete itself? */
+}
+
+WriteLogOperationSet::WriteLogOperationSet(CephContext *cct, librbd::BlockExtent extent, Context *on_finish)
+  : m_cct(cct), m_extent(extent), m_on_finish(on_finish)  {
+  m_extent_ops = new C_Gather(cct, NULL);
+}
+
+WriteLogOperationSet::~WriteLogOperationSet() {
+  /* TODO: Will m_extent_ops always delete itself? */
 }
 
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
@@ -844,6 +856,37 @@ ReplicatedWriteLog<I>::~ReplicatedWriteLog() {
   delete m_policy;
 }
 
+template <typename ExtentsType>
+class ExtentsSummary {
+public:
+  uint64_t total_bytes;
+  uint64_t first_image_byte;
+  uint64_t last_image_byte;
+  uint64_t first_block;
+  uint64_t last_block;
+  ExtentsSummary(const ExtentsType &extents) {
+    total_bytes = 0;
+    first_image_byte = 0;
+    last_image_byte = 0;
+    first_block = 0;
+    last_block = 0;
+    if (extents.empty()) return;
+    first_image_byte = extents.front().first;
+    last_image_byte = first_image_byte + extents.front().second;
+    for (auto &extent : extents) {
+      total_bytes += extent.second;
+      if (extent.first < first_image_byte) {
+	first_image_byte = extent.first;
+      }
+      if ((extent.first + extent.second) > last_image_byte) {
+	last_image_byte = extent.first + extent.second;
+      }
+    }
+    first_block = first_image_byte / BLOCK_SIZE;
+    last_block = last_image_byte / BLOCK_SIZE;
+  }
+};
+  
 template <typename I>
 void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
                                  int fadvise_flags, Context *on_finish) {
@@ -896,25 +939,24 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
     return;
   }
 
-  /* Make empty log entry objects for each extent */
-  uint64_t total_bytes = 0;
-  for (auto &extent : image_extents) {
-    total_bytes += extent.second;
-  }
-
+  ExtentsSummary<ImageCache::Extents> image_extents_summary(image_extents);
+    
   ldout(cct,6) << "bl=[" << bl << "]" << dendl;
   uint8_t *pmem_blocks = D_RW(D_RW(pool_root)->data_blocks);
   struct WriteLogPmemEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
 
   WriteLogOperations operations;
+  WriteLogOperationSet *set(new WriteLogOperationSet(
+     cct, librbd::BlockExtent(image_extents_summary.first_block,
+			      image_extents_summary.last_block), on_finish));
   {
     uint64_t buffer_offset = 0;
     Mutex::Locker locker(m_lock);
     /* TODO: If there isn't space for this whole write, defer it */
     if (m_free_log_entries < operations.size()) {
       ldout(cct, 6) << "wait for " << operations.size() << " log entries" << dendl;
-    } else if (m_free_blocks < total_bytes / BLOCK_SIZE) {
-      ldout(cct, 6) << "wait for " << total_bytes / BLOCK_SIZE << " data blocks" << dendl;
+    } else if (m_free_blocks < image_extents_summary.total_bytes / BLOCK_SIZE) {
+      ldout(cct, 6) << "wait for " << image_extents_summary.total_bytes / BLOCK_SIZE << " data blocks" << dendl;
     } else {
       for (auto &extent : image_extents) {
 	WriteLogOperation *operation =
@@ -1170,9 +1212,9 @@ void ReplicatedWriteLog<I>::new_sync_point(void) {
   old_sync_point->m_final_op_sequence_num = m_last_op_sequence_num;
   m_current_sync_point = new SyncPoint(cct, ++m_current_sync_gen);
   /* Append of new sync point deferred until this sync point is persisted */
-  old_sync_point->on_sync_point_persisted = m_current_sync_point->prior_log_entries_persisted->new_sub();
+  old_sync_point->m_on_sync_point_persisted = m_current_sync_point->m_prior_log_entries_persisted->new_sub();
   /* This sync point will acquire no more sub-ops */
-  old_sync_point->prior_log_entries_persisted->activate();
+  old_sync_point->m_prior_log_entries_persisted->activate();
 
   ldout(cct,6) << "new sync point = [" << m_current_sync_point
 	       << "], prior = [" << old_sync_point << "]" << dendl;
