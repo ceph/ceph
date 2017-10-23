@@ -11418,6 +11418,9 @@ bool PrimaryLogPG::start_recovery_ops(
   if (state_test(PG_STATE_RECOVERING)) {
     state_clear(PG_STATE_RECOVERING);
     state_clear(PG_STATE_FORCED_RECOVERY);
+    if (get_osdmap()->get_pg_size(info.pgid.pgid) <= acting.size()) {
+      state_clear(PG_STATE_DEGRADED);
+    }
     if (needs_backfill()) {
       dout(10) << "recovery done, queuing backfill" << dendl;
       queue_peering_event(
