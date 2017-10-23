@@ -28,6 +28,7 @@ public:
     GRANT = 1,     // replica->primary: ok, i reserved it
     REJECT = 2,    // replica->primary: sorry, try again later (*)
     RELEASE = 3,   // primary->replcia: release the slot i reserved before
+    TOOFULL = 4,   // replica->primary: too full, stop backfilling
     // (*) NOTE: prior to luminous, REJECT was overloaded to also mean release
   };
   uint32_t type;
@@ -62,6 +63,9 @@ public:
     case RELEASE:
       out << "RELEASE ";
       break;
+    case TOOFULL:
+      out << "TOOFULL ";
+      break;
     }
     out << " pgid: " << pgid << ", query_epoch: " << query_epoch;
     if (type == REQUEST) out << ", prio: " << priority;
@@ -83,7 +87,8 @@ public:
       header.compat_version = 3;
       ::encode(pgid.pgid, payload);
       ::encode(query_epoch, payload);
-      ::encode(type == RELEASE ? REJECT : type, payload);
+      ::encode((type == RELEASE || type == TOOFULL) ?
+	       REJECT : type, payload);
       ::encode(priority, payload);
       ::encode(pgid.shard, payload);
       return;

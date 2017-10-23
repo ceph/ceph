@@ -1853,6 +1853,7 @@ protected:
   TrivialEvent(RejectRemoteReservation)
   public:
   TrivialEvent(RemoteReservationRejected)
+  TrivialEvent(RemoteReservationRevokedTooFull)
   TrivialEvent(RemoteReservationCanceled)
   TrivialEvent(RequestBackfill)
   TrivialEvent(RecoveryDone)
@@ -2176,10 +2177,16 @@ protected:
 	boost::statechart::transition< Backfilled, Recovered >,
 	boost::statechart::custom_reaction< DeferBackfill >,
 	boost::statechart::custom_reaction< UnfoundBackfill >,
-	boost::statechart::custom_reaction< RemoteReservationRejected >
+	boost::statechart::custom_reaction< RemoteReservationRejected >,
+	boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>
 	> reactions;
       explicit Backfilling(my_context ctx);
-      boost::statechart::result react(const RemoteReservationRejected& evt);
+      boost::statechart::result react(const RemoteReservationRejected& evt) {
+	// for compat with old peers
+	post_event(RemoteReservationRevokedTooFull());
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteReservationRevokedTooFull& evt);
       boost::statechart::result react(const DeferBackfill& evt);
       boost::statechart::result react(const UnfoundBackfill& evt);
       void exit();

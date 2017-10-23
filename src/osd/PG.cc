@@ -6390,7 +6390,7 @@ PG::RecoveryState::Backfilling::react(const UnfoundBackfill &c)
 }
 
 boost::statechart::result
-PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
+PG::RecoveryState::Backfilling::react(const RemoteReservationRevokedTooFull &)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
@@ -6786,7 +6786,13 @@ boost::statechart::result
 PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->reject_reservation();
+  pg->osd->send_message_osd_cluster(
+    pg->primary.osd,
+    new MBackfillReserve(
+      MBackfillReserve::TOOFULL,
+      spg_t(pg->info.pgid.pgid, pg->primary.shard),
+      pg->get_osdmap()->get_epoch()),
+    pg->get_osdmap()->get_epoch());
   return discard_event();
 }
 
