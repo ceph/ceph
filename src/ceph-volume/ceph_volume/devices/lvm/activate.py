@@ -137,7 +137,9 @@ class Activate(object):
             lvs.filter(lv_tags={'ceph.osd_fsid': args.osd_fsid})
         if not lvs:
             raise RuntimeError('could not find osd.%s with fsid %s' % (args.osd_id, args.osd_fsid))
-        if args.auto_detect_objectstore:
+        # This argument is only available when passed in directly or via
+        # systemd, not when ``create`` is being used
+        if getattr(args, 'auto_detect_objectstore', False):
             logger.info('auto detecting objectstore')
             # may get multiple lvs, so can't do lvs.get() calls here
             for lv in lvs:
