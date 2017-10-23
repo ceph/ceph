@@ -185,14 +185,6 @@ add_executable(unittest_bit_vector
 add_ceph_unittest(unittest_bit_vector)
 target_link_libraries(unittest_bit_vector ceph-common)
 
-# unittest_async_compressor
-# the test is disabled, because async_compressor is not used anywhere yet.
-add_executable(unittest_async_compressor
-  test_async_compressor.cc)
-target_link_libraries(unittest_async_compressor global ${UNITTEST_LIBS})
-add_dependencies(unittest_async_compressor ceph_snappy)
-set_target_properties(unittest_async_compressor PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
-
 # unittest_interval_map
 add_executable(unittest_interval_map
   test_interval_map.cc
