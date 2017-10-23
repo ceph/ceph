@@ -53,18 +53,17 @@
 # $ git push upstream HEAD:luminous
 #
 #
-# Fetching PRs by label:
+# Merging all PRs labelled 'wip-pdonnell-testing' into master leaving a detached HEAD:
 #
-# $ src/script/ptl-tool.py --base master --branch HEAD --merge-branch-name master --label - --pr-label wip-pdonnell-testing
-# Detaching HEAD onto base: master
+# $ src/script/ptl-tool.py --base master --branch HEAD --merge-branch-name master --pr-label wip-pdonnell-testing
 # Adding labeled PR #18192 to PR list
 # Will merge PRs: [18192]
+# Detaching HEAD onto base: master
 # Merging PR #18192
 # Leaving HEAD detached; no branch anchors your commit
 
 
 # TODO
-# Fetch PRs by label.
 # Look for check failures?
 # redmine issue update: http://www.redmine.org/projects/redmine/wiki/Rest_Issues
 
