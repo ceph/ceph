@@ -300,7 +300,26 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
     if (!overlap.empty()) {
       ldout(cct, 20) << __func__ << " bin " << i << " rm 0x" << std::hex << overlap
 		     << std::dec << dendl;
-      free[i].subtract(overlap);
+      auto it = overlap.begin();
+      auto it_end = overlap.end();
+      while (it != it_end) {
+        auto o = it.get_start();
+        auto l = it.get_len();
+
+        free[i].erase(o, l,
+          [&](uint64_t off, uint64_t len) {
+            unsigned newbin = _choose_bin(len);
+            if (newbin != i) {
+              ldout(cct, 30) << __func__ << " demoting1 0x" << std::hex << off << "~" << len
+                             << std::dec << " to bin " << newbin << dendl;
+              _insert_free(off, len);
+              return false;
+            }
+            return true;
+          });
+        ++it;
+      }
+
       rm.subtract(overlap);
     }
   }
