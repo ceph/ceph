@@ -287,7 +287,7 @@ class CephFSTestCase(CephTestCase):
 
                 # Determine the PID of the crashed MDS by inspecting the MDSMap, it had
                 # to talk to the mons to get assigned a rank to reach the point of crashing
-                addr = self.mds_cluster.mon_manager.get_mds_status(daemon_id)['addr']
+                addr = self.mds_cluster.status().get_mds(daemon_id)['addr']
                 pid_str = addr.split("/")[1]
                 log.info("Determined crasher PID was {0}".format(pid_str))
 
