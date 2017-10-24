@@ -20,12 +20,6 @@
 namespace librbd {
 namespace image {
 
-namespace {
-
-static uint64_t MAX_METADATA_ITEMS = 128;
-
-}
-
 using util::create_context_callback;
 using util::create_rados_callback;
 
@@ -33,8 +27,7 @@ template <typename I>
 OpenRequest<I>::OpenRequest(I *image_ctx, bool skip_open_parent,
                             Context *on_finish)
   : m_image_ctx(image_ctx), m_skip_open_parent_image(skip_open_parent),
-    m_on_finish(on_finish), m_error_result(0),
-    m_last_metadata_key(ImageCtx::METADATA_CONF_PREFIX) {
+    m_on_finish(on_finish), m_error_result(0) {
 }
 
 template <typename I>
@@ -75,7 +68,7 @@ Context *OpenRequest<I>::handle_v1_detect_header(int *result) {
     m_image_ctx->header_oid = util::old_header_name(m_image_ctx->name);
     m_image_ctx->apply_metadata({}, true);
 
-    send_register_watch();
+    send_refresh();
   }
   return nullptr;
 }
@@ -418,99 +411,14 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
   }
 
   m_image_ctx->init_layout();
-  send_v2_apply_metadata();
-  return nullptr;
-}
-
-template <typename I>
-void OpenRequest<I>::send_v2_apply_metadata() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": "
-                 << "start_key=" << m_last_metadata_key << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::metadata_list_start(&op, m_last_metadata_key, MAX_METADATA_ITEMS);
-
-  using klass = OpenRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_v2_apply_metadata>(this);
-  m_out_bl.clear();
-  m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
-                                  &m_out_bl);
-  comp->release();
-}
-
-template <typename I>
-Context *OpenRequest<I>::handle_v2_apply_metadata(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
-
-  std::map<std::string, bufferlist> metadata;
-  if (*result == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
-    *result = cls_client::metadata_list_finish(&it, &metadata);
-  }
-
-  if (*result == -EOPNOTSUPP || *result == -EIO) {
-    ldout(cct, 10) << "config metadata not supported by OSD" << dendl;
-  } else if (*result < 0) {
-    lderr(cct) << "failed to retrieve metadata: " << cpp_strerror(*result)
-               << dendl;
-    send_close_image(*result);
-    return nullptr;
-  }
-
-  if (!metadata.empty()) {
-    m_metadata.insert(metadata.begin(), metadata.end());
-    m_last_metadata_key = metadata.rbegin()->first;
-    if (boost::starts_with(m_last_metadata_key,
-                           ImageCtx::METADATA_CONF_PREFIX)) {
-      send_v2_apply_metadata();
-      return nullptr;
-    }
-  }
-
-  m_image_ctx->apply_metadata(m_metadata, true);
-
-  send_register_watch();
-  return nullptr;
-}
-
-template <typename I>
-void OpenRequest<I>::send_register_watch() {
-  m_image_ctx->init();
-
-  if (m_image_ctx->read_only) {
-    send_refresh();
-    return;
-  }
-
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  using klass = OpenRequest<I>;
-  Context *ctx = create_context_callback<
-    klass, &klass::handle_register_watch>(this);
-  m_image_ctx->register_watch(ctx);
-}
-
-template <typename I>
-Context *OpenRequest<I>::handle_register_watch(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
-
-  if (*result < 0) {
-    lderr(cct) << "failed to register watch: " << cpp_strerror(*result)
-               << dendl;
-    send_close_image(*result);
-  } else {
-    send_refresh();
-  }
+  send_refresh();
   return nullptr;
 }
 
 template <typename I>
 void OpenRequest<I>::send_refresh() {
+  m_image_ctx->init();
+
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
@@ -531,9 +439,41 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
                << dendl;
     send_close_image(*result);
     return nullptr;
-  } else {
+  }
+
+  m_image_ctx->init_cache();
+  return send_register_watch(result);
+}
+
+template <typename I>
+Context *OpenRequest<I>::send_register_watch(int *result) {
+  if (m_image_ctx->read_only) {
     return send_set_snap(result);
   }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  using klass = OpenRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_register_watch>(this);
+  m_image_ctx->register_watch(ctx);
+  return nullptr;
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_register_watch(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to register watch: " << cpp_strerror(*result)
+               << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
+  return send_set_snap(result);
 }
 
 template <typename I>
