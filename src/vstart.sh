@@ -366,13 +366,24 @@ fi
 
 ARGS="-c $conf_fn"
 
+quoted_print() {
+    for s in "$@"; do
+        if [[ "$s" =~ \  ]]; then
+            printf -- "'%s' " "$s"
+        else
+            printf -- "$s "
+        fi
+    done
+    printf '\n'
+}
+
 prunb() {
-    printf "'%s' " "$@"; echo '&'
+    quoted_print $* '&'
     "$@" &
 }
 
 prun() {
-    printf "'%s' " "$@"; echo
+    quoted_print $*
     "$@"
 }
 
