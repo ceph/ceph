@@ -367,4 +367,4 @@ the monitors should operate successfully.
 
 .. _Manual Deployment: ../../../install/manual-deployment
 .. _Monitor Bootstrap: ../../../dev/mon-bootstrap
-.. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
+.. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)

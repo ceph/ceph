@@ -1205,12 +1205,12 @@ Miscellaneous
 
 
 
-.. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
+.. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)
 .. _Monitor Keyrings: ../../../dev/mon-bootstrap#secret-keys
 .. _Ceph configuration file: ../ceph-conf/#monitors
 .. _Network Configuration Reference: ../network-config-ref
 .. _Monitor lookup through DNS: ../mon-lookup-dns
-.. _ACID: http://en.wikipedia.org/wiki/ACID
+.. _ACID: https://en.wikipedia.org/wiki/ACID
 .. _Adding/Removing a Monitor: ../../operations/add-or-rm-mons
 .. _Add/Remove a Monitor (ceph-deploy): ../../deployment/ceph-deploy-mon
 .. _Monitoring a Cluster: ../../operations/monitoring
