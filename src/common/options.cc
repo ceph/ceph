@@ -3232,6 +3232,10 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
+    Option("bluestore_spdk_io_sleep", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(5)
+    .set_description("Specify the time to sleep when their is no completed I/O"),
+
     Option("bluestore_block_path", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
     .add_tag("mkfs")
