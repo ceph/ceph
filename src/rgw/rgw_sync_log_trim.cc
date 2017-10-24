@@ -61,7 +61,7 @@ struct TrimNotifyHandler {
 struct TrimCounters {
   /// counter for a single bucket
   struct BucketCounter {
-    std::string bucket;
+    std::string bucket; //< bucket instance metadata key
     int count{0};
 
     BucketCounter() = default;
