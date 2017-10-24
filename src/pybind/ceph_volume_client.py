@@ -747,7 +747,7 @@ class CephFSVolumeClient(object):
             pool_id = self._get_pool_id(osd_map, pool_name)
             mds_map = self.get_mds_map()
             if pool_id in mds_map['data_pools']:
-                self._rados_command("fs {} remove_data_pool".format(mds_map['fs_name']), {
+                self._rados_command("fs {} rm_data_pool".format(mds_map['fs_name']), {
                     'pool': pool_name
                 })
             self._rados_command("osd pool delete",
