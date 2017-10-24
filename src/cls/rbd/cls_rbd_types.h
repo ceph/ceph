@@ -252,13 +252,13 @@ struct GroupSnapshotNamespace {
 
   GroupSnapshotNamespace(int64_t _group_pool,
 			 const string &_group_id,
-			 const snapid_t &_snapshot_id) :group_pool(_group_pool),
-							group_id(_group_id),
-							snapshot_id(_snapshot_id) {}
+                         snapid_t _snapshot_id)
+    : group_id(_group_id), group_pool(_group_pool), snapshot_id(_snapshot_id) {
+  }
 
+  std::string group_id;
   int64_t group_pool = 0;
-  string group_id;
-  snapid_t snapshot_id;
+  snapid_t snapshot_id = CEPH_NOSNAP;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);
