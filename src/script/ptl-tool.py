@@ -88,11 +88,10 @@ log.setLevel(logging.INFO)
 BASE_REMOTE = os.getenv("PTL_TOOL_BASE_REMOTE", "upstream")
 BASE_PATH = os.getenv("PTL_TOOL_BASE_PATH", "refs/remotes/upstream/heads/")
 GITDIR = os.getenv("PTL_TOOL_GITDIR", ".")
-USER = getpass.getuser()
+USER = os.getenv("PTL_TOOL_USER", getpass.getuser())
 with open(expanduser("~/.github.key")) as f:
     PASSWORD = f.read().strip()
-BRANCH_PREFIX = "wip-%s-testing-" % USER
-TESTING_BRANCH_NAME = BRANCH_PREFIX + datetime.datetime.now().strftime("%Y%m%d")
+TEST_BRANCH = os.getenv("PTL_TOOL_TEST_BRANCH", "wip-{user}-testing-%Y%m%d.%H%M%S")
 
 SPECIAL_BRANCHES = ('master', 'luminous', 'jewel', 'HEAD')
 
@@ -118,8 +117,11 @@ TRACKER_MATCH = re.compile("(.*https?://tracker.ceph.com/.*)")
 
 def build_branch(args):
     base = args.base
-    branch = args.branch
+    branch = datetime.datetime.utcnow().strftime(args.branch).format(user=USER)
     label = args.label
+    merge_branch_name = args.merge_branch_name
+    if merge_branch_name is False:
+        merge_branch_name = branch
 
     if label:
         #Check the label format
@@ -190,7 +192,7 @@ def build_branch(args):
             log.error("PR '{pr}' not found: {c}".format(pr=pr,c=pr_req))
             sys.exit(1)
 
-        message = "Merge PR #%d into %s\n\n* %s:\n" % (pr, args.merge_branch_name, remote_ref)
+        message = "Merge PR #%d into %s\n\n* %s:\n" % (pr, merge_branch_name, remote_ref)
 
         for commit in G.iter_commits(rev="HEAD.."+str(tip)):
             message = message + ("\t%s\n" % commit.message.split('\n', 1)[0])
@@ -303,7 +305,7 @@ def build_branch(args):
 def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
     default_base = 'master'
-    default_branch = TESTING_BRANCH_NAME
+    default_branch = TEST_BRANCH
     default_label = ''
     if len(sys.argv) > 1 and sys.argv[1] in SPECIAL_BRANCHES:
         argv = sys.argv[2:]
@@ -313,7 +315,7 @@ def main():
     else:
         argv = sys.argv[1:]
     parser.add_argument('--branch', dest='branch', action='store', default=default_branch, help='branch to create ("HEAD" leaves HEAD detached; i.e. no branch is made)')
-    parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', help='name of the branch for merge messages')
+    parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
     parser.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
     parser.add_argument('--base-path', dest='base_path', action='store', default=BASE_PATH, help='base for branch')
     parser.add_argument('--git-dir', dest='git', action='store', default=GITDIR, help='git directory')
@@ -321,8 +323,6 @@ def main():
     parser.add_argument('--pr-label', dest='pr_label', action='store', help='label PRs for testing')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
     args = parser.parse_args(argv)
-    if getattr(args, 'merge_branch_name') is None:
-        setattr(args, 'merge_branch_name', args.branch)
     return build_branch(args)
 
 if __name__ == "__main__":
