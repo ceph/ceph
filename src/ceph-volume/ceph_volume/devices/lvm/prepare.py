@@ -153,6 +153,7 @@ class Prepare(object):
 
             journal_device, journal_uuid, tags = self.setup_device('journal', args.journal, tags)
 
+            tags['ceph.type'] = 'data'
             data_lv.set_tags(tags)
 
             prepare_filestore(
@@ -196,6 +197,7 @@ class Prepare(object):
             wal_device, wal_uuid, tags = self.setup_device('wal', args.block_wal, tags)
             db_device, db_uuid, tags = self.setup_device('db', args.block_db, tags)
 
+            tags['ceph.type'] = 'block'
             block_lv.set_tags(tags)
 
             prepare_bluestore(
