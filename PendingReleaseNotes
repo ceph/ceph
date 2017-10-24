@@ -1,6 +1,21 @@
 >= 12.2.0
 ---------
 
+- *CephFS*:
+
+  * Several "ceph mds" commands have been obsoleted and replaced
+    by equivalent "ceph fs" commands:
+      - mds dump -> fs dump
+      - mds getmap -> fs dump
+      - mds stop -> mds deactivate
+      - mds set_max_mds -> fs set max_mds
+      - mds set -> fs set
+      - mds cluster_down -> fs set cluster_down true
+      - mds cluster_up -> fs set cluster_down false
+      - mds add_data_pool -> fs add_data_pool
+      - mds remove_data_pool -> fs rm_data_pool
+      - mds rm_data_pool -> fs rm_data_pool
+
 
 12.2.1
 ------

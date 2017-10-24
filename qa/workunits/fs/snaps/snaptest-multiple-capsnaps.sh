@@ -2,7 +2,7 @@
 
 set -e
 
-ceph mds set allow_new_snaps true --yes-i-really-mean-it
+ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
 
 echo asdf > a
 mkdir .snap/1

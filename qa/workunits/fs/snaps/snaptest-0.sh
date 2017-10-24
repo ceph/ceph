@@ -5,9 +5,9 @@ expect_failure() {
 }
 set -e
 
-ceph mds set allow_new_snaps false
+ceph fs set cephfs allow_new_snaps false
 expect_failure mkdir .snap/foo
-ceph mds set allow_new_snaps true --yes-i-really-mean-it
+ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
 
 echo asdf > foo
 mkdir .snap/foo
@@ -21,7 +21,7 @@ grep asdf .snap/bar/bar
 rmdir .snap/bar
 rm foo
 
-ceph mds set allow_new_snaps false
+ceph fs set cephfs allow_new_snaps false
 expect_failure mkdir .snap/baz
 
 echo OK

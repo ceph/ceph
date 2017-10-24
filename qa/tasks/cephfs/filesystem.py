@@ -441,6 +441,9 @@ class Filesystem(MDSCluster):
     def set_allow_dirfrags(self, yes):
         self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
 
+    def set_allow_new_snaps(self, yes):
+        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "allow_new_snaps", str(yes).lower(), '--yes-i-really-mean-it')
+
     def get_pgs_per_fs_pool(self):
         """
         Calculate how many PGs to use when creating a pool, in order to avoid raising any

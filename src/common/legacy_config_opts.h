@@ -419,7 +419,7 @@ OPTION(filer_max_purge_ops, OPT_U32)
 OPTION(filer_max_truncate_ops, OPT_U32)
 
 OPTION(mds_data, OPT_STR)
-OPTION(mds_max_file_size, OPT_U64) // Used when creating new CephFS. Change with 'ceph mds set max_file_size <size>' afterwards
+OPTION(mds_max_file_size, OPT_U64) // Used when creating new CephFS. Change with 'ceph fs set <fs_name> max_file_size <size>' afterwards
 // max xattr kv pairs size for each dir/file
 OPTION(mds_max_xattr_pairs_size, OPT_U32)
 OPTION(mds_max_file_recover, OPT_U32)
