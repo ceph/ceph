@@ -330,6 +330,7 @@ Requires:       pyOpenSSL
 Requires: 	python-CherryPy
 Requires:       python-Werkzeug
 Requires:       python-pyOpenSSL
+Recommends:     python-influxdb
 %endif
 Requires:       python-pecan
 %description mgr
