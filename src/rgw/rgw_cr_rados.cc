@@ -492,25 +492,14 @@ int RGWAsyncGetBucketInstanceInfo::_send_request()
   return 0;
 }
 
-static std::string normalize_shard_marker(const std::string& marker)
-{
-  // markers may be formatted with '<shard-id>#' at the beginning.
-  // CLSRGWIssueBILogTrim would fix this for us, but it's synchronous
-  auto p = marker.find(BucketIndexShardsManager::KEY_VALUE_SEPARATOR);
-  if (p == marker.npos) {
-    return marker;
-  }
-  return marker.substr(p + 1);
-}
-
 RGWRadosBILogTrimCR::RGWRadosBILogTrimCR(RGWRados *store,
                                          const RGWBucketInfo& bucket_info,
                                          int shard_id,
                                          const std::string& start_marker,
                                          const std::string& end_marker)
   : RGWSimpleCoroutine(store->ctx()), bs(store),
-    start_marker(normalize_shard_marker(start_marker)),
-    end_marker(normalize_shard_marker(end_marker))
+    start_marker(BucketIndexShardsManager::get_shard_marker(start_marker)),
+    end_marker(BucketIndexShardsManager::get_shard_marker(end_marker))
 {
   bs.init(bucket_info, shard_id);
 }
