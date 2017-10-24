@@ -797,8 +797,10 @@ int BucketTrimCR::operate()
 
       set_status("listing cold buckets for trim");
       yield {
+        // capture a reference so 'this' remains valid in the callback
+        auto ref = boost::intrusive_ptr<RGWCoroutine>{this};
         // list cold buckets to consider for trim
-        auto cb = [this] (std::string&& bucket, std::string&& marker) {
+        auto cb = [this, ref] (std::string&& bucket, std::string&& marker) {
           // filter out keys that we trimmed recently
           if (observer->trimmed_recently(bucket)) {
             return true;
