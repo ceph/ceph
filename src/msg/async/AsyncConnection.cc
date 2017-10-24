@@ -1807,7 +1807,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   }
   if (state != STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
     ldout(async_msgr->cct, 1) << __func__ << " state changed while accept_conn, it must be mark_down" << dendl;
-    assert(state == STATE_CLOSED);
+    assert(state == STATE_CLOSED || state == STATE_NONE);
     goto fail_registered;
   }
 
