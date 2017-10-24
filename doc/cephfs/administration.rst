@@ -189,7 +189,7 @@ These legacy commands are obsolete and no longer usable post-Luminous.
     mds dump  # replaced by "fs get"
     mds getmap # replaced by "fs dump"
     mds newfs # replaced by "fs new"
-    mds remove_data_pool # replaced by "fs remove_data_pool"
+    mds remove_data_pool # replaced by "fs rm_data_pool"
     mds set # replaced by "fs set"
     mds set_max_mds # replaced by "fs set max_mds"
     mds stop  # replaced by "mds deactivate"

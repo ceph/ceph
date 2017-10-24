@@ -926,8 +926,8 @@ function test_mon_mds()
   check_response "Error ENOENT"
   ceph fs add_data_pool cephfs foobarbaz >& $TMPFILE || true
   check_response "Error ENOENT"
-  ceph fs remove_data_pool cephfs $data2_pool
-  ceph fs remove_data_pool cephfs $data3_pool
+  ceph fs rm_data_pool cephfs $data2_pool
+  ceph fs rm_data_pool cephfs $data3_pool
   ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
   ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
   ceph fs set cephfs allow_multimds false
