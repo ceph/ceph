@@ -9,7 +9,7 @@ setfattr -n ceph.file.layout.pool -v foo.$$ foo.$$
 
 # cleanup
 rm foo.$$
-ceph fs remove_data_pool cephfs foo.$$
+ceph fs rm_data_pool cephfs foo.$$
 rados rmpool foo.$$ foo.$$ --yes-i-really-really-mean-it
 
 echo OK
