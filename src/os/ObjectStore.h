@@ -853,7 +853,7 @@ public:
     /// offset of buffer as aligned to destination within object.
     int get_data_alignment() {
       if (!data.largest_data_len)
-	return -1;
+	return 0;
       return (0 - get_data_offset()) & ~CEPH_PAGE_MASK;
     }
     /// Is the Transaction empty (no operations)
