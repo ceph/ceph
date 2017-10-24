@@ -25,7 +25,7 @@ def prepare_filestore(device, journal, secrets, id_=None, fsid=None):
     # allow re-using an id, in case a prepare failed
     osd_id = id_ or prepare_utils.create_id(fsid, json_secrets)
     # create the directory
-    prepare_utils.create_path(osd_id)
+    prepare_utils.create_osd_path(osd_id)
     # format the device
     prepare_utils.format_device(device)
     # mount the data device
