@@ -218,6 +218,15 @@ public:
     }
     return 0;
   }
+
+  // trim the '<shard-id>#' prefix from a single shard marker if present
+  static std::string get_shard_marker(const std::string& marker) {
+    auto p = marker.find(KEY_VALUE_SEPARATOR);
+    if (p == marker.npos) {
+      return marker;
+    }
+    return marker.substr(p + 1);
+  }
 };
 
 /* bucket index */
