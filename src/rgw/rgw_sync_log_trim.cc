@@ -983,7 +983,7 @@ void configure_bucket_trim(CephContext *cct, BucketTrimConfig& config)
       conf->get_val<int64_t>("rgw_sync_log_trim_min_cold_buckets");
   config.concurrent_buckets =
       conf->get_val<int64_t>("rgw_sync_log_trim_concurrent_buckets");
-  config.notify_timeout_ms = 10;
+  config.notify_timeout_ms = 10000;
   config.recent_size = 128;
   config.recent_duration = std::chrono::hours(2);
 }
