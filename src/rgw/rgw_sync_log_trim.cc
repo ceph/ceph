@@ -295,8 +295,10 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
 
   void stop()
   {
-    ref.ioctx.unwatch2(handle);
-    ref.ioctx.close();
+    if (handle) {
+      ref.ioctx.unwatch2(handle);
+      ref.ioctx.close();
+    }
   }
 
   /// respond to bucket trim notifications
