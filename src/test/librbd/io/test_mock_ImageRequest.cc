@@ -136,8 +136,7 @@ struct ObjectReadRequest<librbd::MockTestImageCtx> : public ObjectRequest<librbd
                                    const std::string &oid,
                                    uint64_t objectno, uint64_t offset,
                                    uint64_t len, Extents &buffer_extents,
-                                   librados::snap_t snap_id, bool sparse,
-                                   int op_flags,
+                                   librados::snap_t snap_id, int op_flags,
                                    const ZTracer::Trace &parent_trace,
                                    Context *completion) {
     assert(s_instance != nullptr);

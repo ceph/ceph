@@ -21,7 +21,7 @@ struct ImageCtx;
 namespace io {
 
 struct AioCompletion;
-class CopyupRequest;
+template <typename> class CopyupRequest;
 class ObjectRemoveRequest;
 class ObjectTruncateRequest;
 class ObjectWriteRequest;
@@ -97,7 +97,7 @@ public:
                                                  const ZTracer::Trace &parent_trace,
                                                  Context *completion);
 
-  ObjectRequest(ImageCtx *ictx, const std::string &oid,
+  ObjectRequest(ImageCtxT *ictx, const std::string &oid,
                 uint64_t objectno, uint64_t off, uint64_t len,
                 librados::snap_t snap_id, bool hide_enoent,
 		const char *trace_name, const ZTracer::Trace &parent_trace,
@@ -129,7 +129,7 @@ public:
 protected:
   bool compute_parent_extents();
 
-  ImageCtx *m_ictx;
+  ImageCtxT *m_ictx;
   std::string m_oid;
   uint64_t m_object_no, m_object_off, m_object_len;
   librados::snap_t m_snap_id;
@@ -151,20 +151,19 @@ public:
   static ObjectReadRequest* create(ImageCtxT *ictx, const std::string &oid,
                                    uint64_t objectno, uint64_t offset,
                                    uint64_t len, Extents &buffer_extents,
-                                   librados::snap_t snap_id, bool sparse,
-				   int op_flags,
+                                   librados::snap_t snap_id, int op_flags,
 				   const ZTracer::Trace &parent_trace,
                                    Context *completion) {
     return new ObjectReadRequest(ictx, oid, objectno, offset, len,
-                                 buffer_extents, snap_id, sparse, op_flags,
+                                 buffer_extents, snap_id, op_flags,
 				 parent_trace, completion);
   }
 
   ObjectReadRequest(ImageCtxT *ictx, const std::string &oid,
                     uint64_t objectno, uint64_t offset, uint64_t len,
                     Extents& buffer_extents, librados::snap_t snap_id,
-                    bool sparse, int op_flags,
-		    const ZTracer::Trace &parent_trace, Context *completion);
+                    int op_flags, const ZTracer::Trace &parent_trace,
+                    Context *completion);
 
   bool should_complete(int r) override;
   void send() override;
@@ -197,7 +196,6 @@ public:
 private:
   Extents m_buffer_extents;
   bool m_tried_parent;
-  bool m_sparse;
   int m_op_flags;
   ceph::bufferlist m_read_data;
   ExtentMap m_ext_map;

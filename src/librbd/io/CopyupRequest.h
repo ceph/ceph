@@ -26,13 +26,21 @@ namespace io {
 struct AioCompletion;
 template <typename I> class ObjectRequest;
 
+template <typename ImageCtxT = librbd::ImageCtx>
 class CopyupRequest {
 public:
-  CopyupRequest(ImageCtx *ictx, const std::string &oid, uint64_t objectno,
+  static CopyupRequest* create(ImageCtxT *ictx, const std::string &oid,
+                               uint64_t objectno, Extents &&image_extents,
+                               const ZTracer::Trace &parent_trace) {
+    return new CopyupRequest(ictx, oid, objectno, std::move(image_extents),
+                             parent_trace);
+  }
+
+  CopyupRequest(ImageCtxT *ictx, const std::string &oid, uint64_t objectno,
                 Extents &&image_extents, const ZTracer::Trace &parent_trace);
   ~CopyupRequest();
 
-  void append_request(ObjectRequest<ImageCtx> *req);
+  void append_request(ObjectRequest<ImageCtxT> *req);
 
   void send();
 
@@ -84,7 +92,7 @@ private:
 
   State m_state;
   ceph::bufferlist m_copyup_data;
-  std::vector<ObjectRequest<ImageCtx> *> m_pending_requests;
+  std::vector<ObjectRequest<ImageCtxT> *> m_pending_requests;
   std::atomic<unsigned> m_pending_copyups { 0 };
 
   AsyncOperation m_async_op;
@@ -106,5 +114,7 @@ private:
 
 } // namespace io
 } // namespace librbd
+
+extern template class librbd::io::CopyupRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_IO_COPYUP_REQUEST_H
