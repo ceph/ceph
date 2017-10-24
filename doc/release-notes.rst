@@ -724,8 +724,8 @@ upgrades from Jewel to Luminous.
   which means that a librados user might get fewer keys than they asked for.
   This is necessary to prevent careless users from requesting an unreasonable
   amount of data from the cluster in a single operation.  The new limits are
-  configured with `osd_max_omap_entries_per_request`, defaulting to 131,072, and
-  'osd_max_omap_bytes_per_request', defaulting to 4MB.
+  configured with ``osd_max_omap_entries_per_request``, defaulting to 131,072, and
+  ``osd_max_omap_bytes_per_request``, defaulting to 4MB.
 
 * Calculation of recovery priorities has been updated.
   This could lead to unintuitive recovery prioritization
@@ -4264,8 +4264,8 @@ Upgrade notes
   which means that a librados user might get fewer keys than they asked for.
   This is necessary to prevent careless users from requesting an unreasonable
   amount of data from the cluster in a single operation.  The new limits are
-  configured with `osd_max_omap_entries_per_request`, defaulting to 131,072, and
-  'osd_max_omap_bytes_per_request', defaulting to 4MB.
+  configured with ``osd_max_omap_entries_per_request``, defaulting to 131,072, and
+  ``osd_max_omap_bytes_per_request``, defaulting to 4MB.
 
 * Calculation of recovery priorities has been updated.
   This could lead to unintuitive recovery prioritization
