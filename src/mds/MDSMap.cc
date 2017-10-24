@@ -12,14 +12,16 @@
  * 
  */
 
+#include "common/debug.h"
+#include "mon/health_check.h"
 
 #include "MDSMap.h"
 
 #include <sstream>
 using std::stringstream;
 
-#include "mon/health_check.h"
-
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_
 
 // features
 CompatSet get_mdsmap_compat_set_all() {
@@ -633,6 +635,23 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(balancer, bl);
   ::encode(standby_count_wanted, bl);
   ENCODE_FINISH(bl);
+}
+
+void MDSMap::sanitize(std::function<bool(int64_t pool)> pool_exists)
+{
+  /* Before we did stricter checking, it was possible to remove a data pool
+   * without also deleting it from the MDSMap. Check for that here after
+   * decoding the data pools.
+   */
+
+  for (auto it = data_pools.begin(); it != data_pools.end();) {
+    if (!pool_exists(*it)) {
+      dout(0) << "removed non-existant data pool " << *it << " from MDSMap" << dendl;
+      it = data_pools.erase(it);
+    } else {
+      it++;
+    }
+  }
 }
 
 void MDSMap::decode(bufferlist::iterator& p)
