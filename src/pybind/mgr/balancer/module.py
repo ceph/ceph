@@ -325,14 +325,25 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
+    def time_in_interval(self, tod, begin, end):
+        if begin <= end:
+            return tod >= begin and tod < end
+        else:
+            return tod >= begin or tod < end
+
     def serve(self):
         self.log.info('Starting')
         while self.run:
-            self.log.debug('Waking up')
             self.active = self.get_config('active', '') is not ''
+            begin_time = self.get_config('begin_time') or '0000'
+            end_time = self.get_config('end_time') or '2400'
+            timeofday = time.strftime('%H%M', time.localtime())
+            self.log.debug('Waking up [%s, scheduled for %s-%s, now %s]',
+                           "active" if self.active else "inactive",
+                           begin_time, end_time, timeofday)
             sleep_interval = float(self.get_config('sleep_interval',
                                                    default_sleep_interval))
-            if self.active:
+            if self.active and self.time_in_interval(timeofday, begin_time, end_time):
                 self.log.debug('Running')
                 name = 'auto_%s' % time.strftime(TIME_FORMAT, time.gmtime())
                 plan = self.plan_create(name)
