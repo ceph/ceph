@@ -158,10 +158,10 @@ OpTracker::~OpTracker() {
 
 bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration, set<string> filters)
 {
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
+  RWLock::RLocker l(lock);
   utime_t now = ceph_clock_now();
   if (by_duration) {
     history.dump_ops_by_duration(now, f, filters);
@@ -197,10 +197,10 @@ void OpHistory::dump_slow_ops(utime_t now, Formatter *f, set<string> filters)
 
 bool OpTracker::dump_historic_slow_ops(Formatter *f, set<string> filters)
 {
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
+  RWLock::RLocker l(lock);
   utime_t now = ceph_clock_now();
   history.dump_slow_ops(now, f, filters);
   return true;
@@ -208,10 +208,10 @@ bool OpTracker::dump_historic_slow_ops(Formatter *f, set<string> filters)
 
 bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<string> filters)
 {
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
+  RWLock::RLocker l(lock);
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
   f->open_array_section("ops"); // list of TrackedOps
@@ -243,10 +243,10 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
 
 bool OpTracker::register_inflight_op(TrackedOp *i)
 {
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
+  RWLock::RLocker l(lock);
   uint64_t current_seq = ++seq;
   uint32_t shard_index = current_seq % num_optracker_shards;
   ShardedTrackingData* sdata = sharded_in_flight_list[shard_index];
@@ -274,10 +274,10 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   }
   i->_unregistered();
 
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     delete i;
   else {
+    RWLock::RLocker l(lock);
     i->state = TrackedOp::STATE_HISTORY;
     utime_t now = ceph_clock_now();
     history.insert(now, TrackedOpRef(i));
@@ -286,10 +286,10 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
 
 bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *slow)
 {
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
+  RWLock::RLocker l(lock);
   utime_t now = ceph_clock_now();
   utime_t too_old = now;
   too_old -= complaint_time;
