@@ -2635,6 +2635,17 @@ void PG::_update_calc_stats()
       }
     }
 
+    // Add recovery objects not part of actingbackfill to be used to reduce
+    // degraded and account as misplaced.
+    for (auto i = peer_info.begin() ; i != peer_info.end() ; ++i) {
+      if (actingbackfill.find(i->first) == actingbackfill.end())
+	object_copies += i->second.stats.stats.sum.num_objects;
+	misplaced += i->second.stats.stats.sum.num_objects;
+	++num_misplaced;
+    }
+    if (object_copies)
+      dout(20) << __func__ << " objects not part of up/acting " << object_copies << dendl;
+
     // Objects backfilled, sorted by # objects.
     set<pair<int64_t,pg_shard_t>> backfill_target_objects;
 
