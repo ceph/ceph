@@ -5479,10 +5479,6 @@ std::vector<Option> get_mds_options() {
     .set_default(1024)
     .set_description(""),
 
-    Option("mds_revoke_cap_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60)
-    .set_description(""),
-
     Option("mds_recall_state_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(60)
     .set_description(""),
