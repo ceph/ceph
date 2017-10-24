@@ -3492,7 +3492,7 @@ void Locker::remove_client_cap(CInode *in, client_t client)
 
 /**
  * Return true if any currently revoking caps exceed the
- * mds_revoke_cap_timeout threshold.
+ * mds_session_timeout threshold.
  */
 bool Locker::any_late_revoking_caps(xlist<Capability*> const &revoking) const
 {
@@ -3503,7 +3503,7 @@ bool Locker::any_late_revoking_caps(xlist<Capability*> const &revoking) const
     } else {
       utime_t now = ceph_clock_now();
       utime_t age = now - (*p)->get_last_revoke_stamp();
-      if (age <= g_conf->mds_revoke_cap_timeout) {
+      if (age <= g_conf->mds_session_timeout) {
           return false;
       } else {
           return true;
@@ -3548,8 +3548,8 @@ void Locker::caps_tick()
 
     utime_t age = now - cap->get_last_revoke_stamp();
     dout(20) << __func__ << " age = " << age << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
-    if (age <= g_conf->mds_revoke_cap_timeout) {
-      dout(20) << __func__ << " age below timeout " << g_conf->mds_revoke_cap_timeout << dendl;
+    if (age <= g_conf->mds_session_timeout) {
+      dout(20) << __func__ << " age below timeout " << g_conf->mds_session_timeout << dendl;
       break;
     } else {
       ++i;
@@ -3560,7 +3560,7 @@ void Locker::caps_tick()
       }
     }
     // exponential backoff of warning intervals
-    if (age > g_conf->mds_revoke_cap_timeout * (1 << cap->get_num_revoke_warnings())) {
+    if (age > g_conf->mds_session_timeout * (1 << cap->get_num_revoke_warnings())) {
       cap->inc_num_revoke_warnings();
       stringstream ss;
       ss << "client." << cap->get_client() << " isn't responding to mclientcaps(revoke), ino "
