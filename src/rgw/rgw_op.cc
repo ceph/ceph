@@ -5186,7 +5186,7 @@ int RGWSetRequestPayment::verify_permission()
    if (e == Effect::Allow) {
      return 0;
    }else if (e == Effect::Deny) {
-     return -EACCESS;
+     return -EACCES;
    }
   }
   if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
