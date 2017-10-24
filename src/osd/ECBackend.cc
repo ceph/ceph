@@ -1447,7 +1447,8 @@ void ECBackend::submit_transaction(
   Context *on_all_commit,
   ceph_tid_t tid,
   osd_reqid_t reqid,
-  OpRequestRef client_op
+  OpRequestRef client_op,
+  CompletionItem *comp_item
   )
 {
   assert(!tid_to_op_map.count(tid));

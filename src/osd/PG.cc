@@ -3161,7 +3161,8 @@ void PG::append_log(
   eversion_t trim_to,
   eversion_t roll_forward_to,
   ObjectStore::Transaction &t,
-  bool transaction_applied)
+  bool transaction_applied,
+  CompletionItem *comp_item)
 {
   if (transaction_applied)
     update_snap_map(logv, t);

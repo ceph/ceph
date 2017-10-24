@@ -1737,6 +1737,55 @@ void OSDService::_queue_for_recovery(
       p.first));
 }
 
+void OSDService::_queue_for_completion(
+  spg_t pg,
+  OpRequestRef op,
+  bool front,
+  Context *cb)
+{
+  class PGOpCompItem : public PGOpQueueable {
+    OpRequestRef op;
+    Context *cb;
+  public:
+    PGOpCompItem(spg_t pg, OpRequestRef op, Context *cb) : PGOpQueueable(pg), op(op), cb(cb) {}
+    op_type_t get_op_type() const override final {
+      return op_type_t::client_op;
+    }
+    virtual ostream &print(ostream &rhs) const override final {
+      return rhs << "PGOpItem(op=" << *(op->get_req()) << ")";
+    }
+    boost::optional<OpRequestRef> maybe_get_op() const override final {
+      return op;
+    }
+    virtual void run(
+      OSD *osd, PGRef &pg, ThreadPool::TPHandle &handle) override final {
+      cb->complete(0);
+    }
+  };
+  epoch_t epoch = static_cast<const MOSDFastDispatchOp*>(op->get_req())->get_map_epoch();
+  if (front) {
+    osd->op_shardedwq.queue_front(
+      OpQueueItem(
+       unique_ptr<OpQueueItem::OpQueueable>(
+         new PGOpCompItem(pg, op, cb)),
+       op->get_req()->get_cost(),
+       op->get_req()->get_priority(),
+       op->get_req()->get_recv_stamp(),
+       op->get_req()->get_source().num(),
+       epoch));
+  } else {
+    osd->op_shardedwq.queue(
+      OpQueueItem(
+       unique_ptr<OpQueueItem::OpQueueable>(
+         new PGOpCompItem(pg, op, cb)),
+       op->get_req()->get_cost(),
+       op->get_req()->get_priority(),
+       op->get_req()->get_recv_stamp(),
+       op->get_req()->get_source().num(),
+       epoch));
+  }
+}
+
 // ====================================================================
 // OSD
 

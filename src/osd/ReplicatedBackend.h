@@ -371,7 +371,8 @@ public:
     Context *on_all_commit,
     ceph_tid_t tid,
     osd_reqid_t reqid,
-    OpRequestRef op
+    OpRequestRef op,
+    CompletionItem *comp_item = NULL
     ) override;
 
 private:

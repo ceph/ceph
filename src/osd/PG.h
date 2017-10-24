@@ -241,6 +241,8 @@ struct PGPool {
   void update(OSDMapRef map);
 };
 
+class CompletionItem;
+
 /** PG - Replica Placement Group
  *
  */
@@ -516,6 +518,7 @@ public:
 
   virtual void repop_queue_lock() {}
   virtual void repop_queue_unlock() {}
+  virtual bool do_completion(bool need_lock) {return false;}
 
 
   // ctor
@@ -2642,7 +2645,8 @@ protected:
     eversion_t trim_to,
     eversion_t roll_forward_to,
     ObjectStore::Transaction &t,
-    bool transaction_applied = true);
+    bool transaction_applied = true,
+    CompletionItem *comp_item = NULL);
   bool check_log_for_corruption(ObjectStore *store);
   void trim_log();
 
@@ -2748,5 +2752,36 @@ protected:
 
 
 ostream& operator<<(ostream& out, const PG::BackfillInterval& bi);
+
+enum COMP_OP_TYPE {
+  OP_COMP_PRIMARY_OP,
+  OP_COMP_SECONDARY_OP,
+  OP_COMP_NO_OP,
+};
+
+class CompletionItem {
+public:
+  int comp_type;
+
+  /* callback functions which need the PG lock */
+  list<std::function<void()>> on_applied_pg_lock;
+
+  template <typename F>
+  void register_on_applied_pg_lock(F &&f) {
+    on_applied_pg_lock.emplace_back(std::forward<F>(f));
+  }
+
+  CompletionItem(int comp_type):comp_type(comp_type) {}
+  CompletionItem():comp_type(OP_COMP_PRIMARY_OP) {}
+  virtual ~CompletionItem() {}
+
+  virtual void lock() = 0;
+  virtual void unlock() = 0;
+  virtual ceph_tid_t get_tid() = 0;
+  virtual OpRequestRef get_op() = 0;
+  virtual void set_applied() = 0;
+  virtual void set_committed() = 0;
+  virtual bool is_completed() = 0;
+};
 
 #endif

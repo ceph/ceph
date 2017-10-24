@@ -860,6 +860,7 @@ public:
   AsyncReserver<spg_t> snap_reserver;
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG *pg, bool with_high_priority);
+  void _queue_for_completion(spg_t pg, OpRequestRef op, bool front, Context *cb);
 
 private:
   // -- pg recovery and associated throttling --

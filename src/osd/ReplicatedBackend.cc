@@ -494,7 +494,8 @@ void ReplicatedBackend::submit_transaction(
   Context *on_all_commit,
   ceph_tid_t tid,
   osd_reqid_t reqid,
-  OpRequestRef orig_op)
+  OpRequestRef orig_op,
+  CompletionItem *comp_item)
 {
   parent->apply_stats(
     soid,

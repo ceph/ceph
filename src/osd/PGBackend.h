@@ -36,6 +36,7 @@ struct inconsistent_obj_wrapper;
 class OSDMap;
 class PGLog;
 typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
+class CompletionItem;
 
  /**
   * PGBackend
@@ -224,7 +225,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        const eversion_t &trim_to,
        const eversion_t &roll_forward_to,
        bool transaction_applied,
-       ObjectStore::Transaction &t) = 0;
+       ObjectStore::Transaction &t,
+       CompletionItem *comp_item = NULL) = 0;
 
      virtual void pgb_set_object_snap_mapping(
        const hobject_t &soid,
@@ -377,6 +379,10 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    /// the variant of handle_message that is overridden by child classes
    virtual bool _handle_message(OpRequestRef op) = 0;
 
+   virtual bool handle_message_op_lock(
+     OpRequestRef op
+   ) { return false; }
+
    virtual void check_recovery_sources(const OSDMapRef& osdmap) = 0;
 
 
@@ -437,7 +443,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      Context *on_all_commit,              ///< [in] called when all commit
      ceph_tid_t tid,                      ///< [in] tid
      osd_reqid_t reqid,                   ///< [in] reqid
-     OpRequestRef op                      ///< [in] op
+     OpRequestRef op,                      ///< [in] op
+     CompletionItem *comp_item = NULL
      ) = 0;
 
    /// submit callback to be called in order with pending writes
@@ -599,6 +606,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
      CephContext *cct);
+
+   virtual void erase_inprogress_op(ceph_tid_t tid) {};
 };
 
 #endif
