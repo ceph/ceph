@@ -431,17 +431,17 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
 
 void FSMap::decode(bufferlist::iterator& p)
 {
-  // Because the mon used to store an MDSMap where we now
-  // store an FSMap, FSMap knows how to decode the legacy
-  // MDSMap format (it never needs to encode it though).
-  MDSMap legacy_mds_map;
-  
   // The highest MDSMap encoding version before we changed the
   // MDSMonitor to store an FSMap instead of an MDSMap was
   // 5, so anything older than 6 is decoded as an MDSMap,
   // and anything newer is decoded as an FSMap.
   DECODE_START_LEGACY_COMPAT_LEN_16(7, 4, 4, p);
   if (struct_v < 6) {
+    // Because the mon used to store an MDSMap where we now
+    // store an FSMap, FSMap knows how to decode the legacy
+    // MDSMap format (it never needs to encode it though).
+    MDSMap legacy_mds_map;
+
     // Decoding an MDSMap (upgrade)
     ::decode(epoch, p);
     ::decode(legacy_mds_map.flags, p);
@@ -621,6 +621,12 @@ void FSMap::decode(bufferlist::iterator& p)
   DECODE_FINISH(p);
 }
 
+void FSMap::sanitize(std::function<bool(int64_t pool)> pool_exists)
+{
+  for (auto &fs : filesystems) {
+    fs.second->mds_map.sanitize(pool_exists);
+  }
+}
 
 void Filesystem::encode(bufferlist& bl, uint64_t features) const
 {
