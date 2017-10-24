@@ -629,7 +629,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
 	 i != objects.end();
 	 ++i) {
       assert(!i->hobj.is_meta());
-      if (i->is_pgmeta() || i->hobj.is_temp()) {
+      if (i->is_pgmeta() || i->hobj.is_temp() || !i->is_no_gen()) {
 	continue;
       }
       r = export_file(store, coll, *i);
