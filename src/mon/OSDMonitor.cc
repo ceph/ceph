@@ -7111,6 +7111,26 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << osdmap.get_crush_version() + 1;
     goto update;
 
+  } else if (prefix == "osd crush set-all-straw-buckets-to-straw2") {
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    for (int b = 0; b < newcrush.get_max_buckets(); ++b) {
+      int bid = -1 - b;
+      if (newcrush.bucket_exists(bid) &&
+	  newcrush.get_bucket_alg(bid) == CRUSH_BUCKET_STRAW) {
+	dout(20) << " bucket " << bid << " is straw, can convert" << dendl;
+	newcrush.bucket_set_alg(bid, CRUSH_BUCKET_STRAW2);
+      }
+    }
+    if (!validate_crush_against_features(&newcrush, ss)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd crush set-device-class") {
     string device_class;
     if (!cmd_getval(cct, cmdmap, "class", device_class)) {

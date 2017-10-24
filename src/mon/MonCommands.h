@@ -534,6 +534,9 @@ COMMAND("osd crush add " \
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
 	"add or update crushmap position and weight for <name> with <weight> and location <args>", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush set-all-straw-buckets-to-straw2",
+        "convert all CRUSH current straw buckets to use the straw2 algorithm",
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush set-device-class " \
         "name=class,type=CephString " \
 	"name=ids,type=CephString,n=N", \
