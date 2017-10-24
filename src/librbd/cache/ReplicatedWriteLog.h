@@ -202,7 +202,34 @@ public:
   };
 };
 
-typedef librbd::BlockGuard<WriteLogOperationSet> WriteLogGuard;
+class GuardedRequestFunctionContext : public Context {
+public:
+  GuardedRequestFunctionContext(boost::function<void(BlockGuardCell*)> &&callback)
+    : m_callback(std::move(callback))
+  {
+  }
+
+
+  void finish(int r) override {}
+  void finish(BlockGuardCell *cell) {
+    m_callback(cell);
+  }
+private:
+  boost::function<void(BlockGuardCell*)> m_callback;
+};
+
+struct GuardedRequest {
+  uint64_t first_block_num;
+  uint64_t last_block_num;
+  GuardedRequestFunctionContext *on_guard_grant; /* Work to do when guard on range obtained */
+  
+  GuardedRequest(uint64_t first_block_num, uint64_t last_block_num, GuardedRequestFunctionContext *on_guard_grant)
+    : first_block_num(first_block_num), last_block_num(last_block_num), on_guard_grant(on_guard_grant) {
+  }
+};
+
+
+typedef librbd::BlockGuard<GuardedRequest> WriteLogGuard;
 
 } // namespace rwl
 
@@ -243,6 +270,9 @@ public:
   void invalidate(Context *on_finish) override;
   void flush(Context *on_finish) override;
 
+  //typedef std::function<void(BlockGuardCell*, )> ReleaseBlock;
+  void detain_guarded_request(GuardedRequest &&req);
+  void release_guarded_request(BlockGuardCell *cell, int r, Context *on_finish);
 private:
   typedef std::function<void(uint64_t)> ReleaseBlock;
   typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
@@ -265,7 +295,8 @@ private:
   FileImageCache<ImageCtxT> m_image_cache;
   //BlockGuard m_persist_pending_guard;
   BlockGuard m_block_guard;
-
+  WriteLogGuard m_write_log_guard;
+  
   file::Policy *m_policy = nullptr;
 
   /* When m_first_free_entry == m_last_free_entry, the log is empty */

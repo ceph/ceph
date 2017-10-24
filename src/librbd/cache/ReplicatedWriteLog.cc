@@ -87,6 +87,18 @@ struct C_BlockIORequest : public Context {
   virtual const char *get_name() const = 0;
 };
 
+struct C_GuardedBlockIORequest : public C_BlockIORequest {
+  CephContext *cct;
+  BlockGuardCell *cell;
+
+  C_GuardedBlockIORequest(CephContext *cct, C_BlockIORequest *next_block_request)
+    : C_BlockIORequest(cct, next_block_request), cct(cct), cell(NULL) {
+  }
+
+  virtual void send() = 0;
+  virtual const char *get_name() const = 0;
+};
+
 struct C_ReleaseBlockGuard : public C_BlockIORequest {
   uint64_t block;
   ReleaseBlock &release_block;
@@ -836,6 +848,7 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
     m_free_log_entries(0), m_free_blocks(0),
     m_image_writeback(image_ctx), m_image_cache(image_ctx),
     m_block_guard(image_ctx.cct, 256, BLOCK_SIZE),
+    m_write_log_guard(image_ctx.cct),
     m_first_free_entry(0), m_first_valid_entry(0),
     m_next_free_block(0), m_last_free_block(0),
     m_free_entry_hint(0), m_valid_entry_hint(0),
@@ -909,6 +922,123 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
 }
 
 template <typename I>
+void ReplicatedWriteLog<I>::detain_guarded_request(GuardedRequest &&req)
+{
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+
+  BlockGuardCell *cell;
+  int r = m_write_log_guard.detain({req.first_block_num, req.last_block_num},
+				   &req, &cell);
+  if (r < 0) {
+    lderr(cct) << "failed to detain guarded request: " << cpp_strerror(r)
+               << dendl;
+    m_image_ctx.op_work_queue->queue(req.on_guard_grant, r);
+    return;
+  } else if (r > 0) {
+    ldout(cct, 20) << "detaining guarded request due to in-flight requests: "
+                   << "start=" << req.first_block_num << ", "
+		   << "end=" << req.last_block_num << dendl;
+    return;
+  }
+
+  ldout(cct, 20) << "in-flight request cell: " << cell << dendl;
+  Context *on_finish = req.on_guard_grant;
+#if 0
+  Context *ctx = new FunctionContext([this, cell, on_finish](int r) {
+      handle_detained_aio_update(cell, r, on_finish);
+    });
+  aio_update(CEPH_NOSNAP, op.start_object_no, op.end_object_no, op.new_state,
+             op.current_state, op.parent_trace, ctx);
+#endif
+}
+
+/*
+
+detain (ObjectMap.cc):
+
+template <typename I>
+void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+
+  assert(m_image_ctx.snap_lock.is_locked());
+  assert(m_image_ctx.object_map_lock.is_wlocked());
+
+  BlockGuardCell *cell;
+  int r = m_update_guard->detain({op.start_object_no, op.end_object_no},
+                                &op, &cell);
+
+  if (r < 0) {
+    lderr(cct) << "failed to detain object map update: " << cpp_strerror(r)
+               << dendl;
+    m_image_ctx.op_work_queue->queue(op.on_finish, r);
+    return;
+  } else if (r > 0) {
+    ldout(cct, 20) << "detaining object map update due to in-flight update: "
+                   << "start=" << op.start_object_no << ", "
+		   << "end=" << op.end_object_no << ", "
+                   << (op.current_state ?
+                         stringify(static_cast<uint32_t>(*op.current_state)) :
+                         "")
+		   << "->" << static_cast<uint32_t>(op.new_state) << dendl;
+    return;
+  }
+
+  ldout(cct, 20) << "in-flight update cell: " << cell << dendl;
+  Context *on_finish = op.on_finish;
+  Context *ctx = new FunctionContext([this, cell, on_finish](int r) {
+      handle_detained_aio_update(cell, r, on_finish);
+    });
+  aio_update(CEPH_NOSNAP, op.start_object_no, op.end_object_no, op.new_state,
+             op.current_state, op.parent_trace, ctx);
+
+release:
+
+template <typename I>
+void ObjectMap<I>::handle_detained_aio_update(BlockGuardCell *cell, int r,
+                                              Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "cell=" << cell << ", r=" << r << dendl;
+
+  typename UpdateGuard::BlockOperations block_ops;
+  m_update_guard->release(cell, &block_ops);
+
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
+    for (auto &op : block_ops) {
+      detained_aio_update(std::move(op));
+    }
+  }
+
+  on_finish->complete(r);
+}
+
+
+ */
+
+template <typename I>
+class C_WriteRequest : public C_BlockIORequest {
+  CephContext *cct;
+  ImageCache::Extents image_extents;
+  bufferlist bl;
+  int fadvise_flags;
+  C_WriteRequest(CephContext *cct, ImageCache::Extents &&image_extents, bufferlist&& bl, int fadvise_flags, Context *on_finish)
+    : cct(cct), image_extents(std::move(image_extents)), bl(std::move(bl)),
+      fadvise_flags(fadvise_flags), C_BlockIORequest(cct, on_finish) {
+  }
+  virtual void send() override {
+  }
+  virtual void finish(int r) {
+    C_BlockIORequest::finish(r);
+  }
+  virtual const char *get_name() const override {
+    return "C_WriteRequest";
+  }  
+};
+  
+template <typename I>
 void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
                                   bufferlist&& bl,
                                   int fadvise_flags,
@@ -940,7 +1070,20 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
   }
 
   ExtentsSummary<ImageCache::Extents> image_extents_summary(image_extents);
-    
+
+  GuardedRequestFunctionContext *ctx = new GuardedRequestFunctionContext([this, on_finish](BlockGuardCell *cell) {
+      CephContext *cct = m_image_ctx.cct;
+      ldout(cct, 6) << "cell=" << cell << dendl;
+      //handle_detained_aio_update(cell, r, on_finish);
+    });
+
+  GuardedRequest guarded(image_extents_summary.first_block,
+			 image_extents_summary.last_block,
+			 ctx); //TODO: Needs to be a C_WriteReq
+  detain_guarded_request(std::move(guarded));
+  // TODO: return here
+
+  // TODO: Move to C_WriteRequest::send()
   ldout(cct,6) << "bl=[" << bl << "]" << dendl;
   uint8_t *pmem_blocks = D_RW(D_RW(pool_root)->data_blocks);
   struct WriteLogPmemEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
