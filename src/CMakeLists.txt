@@ -1084,7 +1084,8 @@ add_custom_target(vstart-base DEPENDS
 
 add_custom_target(vstart DEPENDS
     vstart-base
-    ceph-mds)
+    ceph-mds
+    cython_rbd)
 if(WITH_RADOSGW)
   add_dependencies(vstart radosgw radosgw-admin)
 endif(WITH_RADOSGW)
