@@ -661,7 +661,7 @@ It took 11 tries to map 42 PGs, 12 tries to map 44 PGs etc. The highest number o
 .. _here: ../../configuration/pool-pg-config-ref
 .. _Placement Groups: ../../operations/placement-groups
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
-.. _NTP: http://en.wikipedia.org/wiki/Network_Time_Protocol
+.. _NTP: https://en.wikipedia.org/wiki/Network_Time_Protocol
 .. _The Network Time Protocol: http://www.ntp.org/
 .. _Clock Settings: ../../configuration/mon-config-ref/#clock
 

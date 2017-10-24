@@ -20058,7 +20058,7 @@ v0.56 "bobtail"
 ===============
 
 Bobtail is the second stable release of Ceph, named in honor of the
-`Bobtail Squid`: http://en.wikipedia.org/wiki/Bobtail_squid.
+`Bobtail Squid`: https://en.wikipedia.org/wiki/Bobtail_squid.
 
 Key features since v0.48 "argonaut"
 -----------------------------------

@@ -1237,7 +1237,7 @@ you have not installed yet.
 
 Once Docker is up and running, install ``ceph-workbench`` by following the
 `Installation instructions in the ceph-workbench documentation
-<http://ceph-workbench.readthedocs.org/en/latest/#installation>`_.
+<http://ceph-workbench.readthedocs.io/en/latest/#installation>`_.
 
 Linking ceph-workbench with your OpenStack tenant
 -------------------------------------------------

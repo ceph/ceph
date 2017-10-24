@@ -72,4 +72,4 @@ an object:
 +------------------+--------------------------------------------------------+----------------------------------------------+
 
 .. _RFC 2104: http://www.ietf.org/rfc/rfc2104.txt
-.. _HMAC: http://en.wikipedia.org/wiki/HMAC
+.. _HMAC: https://en.wikipedia.org/wiki/HMAC

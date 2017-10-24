@@ -792,7 +792,7 @@ a size of 3).
 
 
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
-.. _Bloom Filter: http://en.wikipedia.org/wiki/Bloom_filter
+.. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter
 .. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups
 .. _Erasure Coding with Overwrites: ../erasure-code#erasure-coding-with-overwrites
 .. _Block Device Commands: ../../../rbd/rados-rbd-cmds/#create-a-block-device-pool
