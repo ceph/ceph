@@ -2023,24 +2023,10 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   ceph_msg_footer footer;
   __u32 header_crc = 0;
 
-  if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
-    if (tcp_read((char*)&header, sizeof(header)) < 0)
-      return -1;
-    if (msgr->crcflags & MSG_CRC_HEADER) {
-      header_crc = ceph_crc32c(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
-    }
-  } else {
-    ceph_msg_header_old oldheader;
-    if (tcp_read((char*)&oldheader, sizeof(oldheader)) < 0)
-      return -1;
-    // this is fugly
-    memcpy(&header, &oldheader, sizeof(header));
-    header.src = oldheader.src.name;
-    header.reserved = oldheader.reserved;
-    if (msgr->crcflags & MSG_CRC_HEADER) {
-      header.crc = oldheader.crc;
-      header_crc = ceph_crc32c(0, (unsigned char *)&oldheader, sizeof(oldheader) - sizeof(oldheader.crc));
-    }
+  if (tcp_read((char*)&header, sizeof(header)) < 0)
+    return -1;
+  if (msgr->crcflags & MSG_CRC_HEADER) {
+    header_crc = ceph_crc32c(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
   }
 
   ldout(msgr->cct,20) << "reader got envelope type=" << header.type
@@ -2170,19 +2156,8 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   }
 
   // footer
-  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH)) {
-    if (tcp_read((char*)&footer, sizeof(footer)) < 0)
-      goto out_dethrottle;
-  } else {
-    ceph_msg_footer_old old_footer;
-    if (tcp_read((char*)&old_footer, sizeof(old_footer)) < 0)
-      goto out_dethrottle;
-    footer.front_crc = old_footer.front_crc;
-    footer.middle_crc = old_footer.middle_crc;
-    footer.data_crc = old_footer.data_crc;
-    footer.sig = 0;
-    footer.flags = old_footer.flags;
-  }
+  if (tcp_read((char*)&footer, sizeof(footer)) < 0)
+    goto out_dethrottle;
   
   aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
   ldout(msgr->cct,10) << "aborted = " << aborted << dendl;
@@ -2376,29 +2351,10 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
   msg.msg_iovlen++;
 
   // send envelope
-  ceph_msg_header_old oldheader;
-  if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
-    msgvec[msg.msg_iovlen].iov_base = (char*)&header;
-    msgvec[msg.msg_iovlen].iov_len = sizeof(header);
-    msglen += sizeof(header);
-    msg.msg_iovlen++;
-  } else {
-    memcpy(&oldheader, &header, sizeof(header));
-    oldheader.src.name = header.src;
-    oldheader.src.addr = connection_state->get_peer_addr();
-    oldheader.orig_src = oldheader.src;
-    oldheader.reserved = header.reserved;
-    if (msgr->crcflags & MSG_CRC_HEADER) {
-	oldheader.crc = ceph_crc32c(0, (unsigned char*)&oldheader,
-				    sizeof(oldheader) - sizeof(oldheader.crc));
-    } else {
-	oldheader.crc = 0;
-    }
-    msgvec[msg.msg_iovlen].iov_base = (char*)&oldheader;
-    msgvec[msg.msg_iovlen].iov_len = sizeof(oldheader);
-    msglen += sizeof(oldheader);
-    msg.msg_iovlen++;
-  }
+  msgvec[msg.msg_iovlen].iov_base = (char*)&header;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(header);
+  msglen += sizeof(header);
+  msg.msg_iovlen++;
 
   // payload (front+data)
   list<bufferptr>::const_iterator pb = blist.buffers().begin();
@@ -2449,26 +2405,10 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
 
   // send footer; if receiver doesn't support signatures, use the old footer format
 
-  ceph_msg_footer_old old_footer;
-  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH)) {
-    msgvec[msg.msg_iovlen].iov_base = (void*)&footer;
-    msgvec[msg.msg_iovlen].iov_len = sizeof(footer);
-    msglen += sizeof(footer);
-    msg.msg_iovlen++;
-  } else {
-    if (msgr->crcflags & MSG_CRC_HEADER) {
-      old_footer.front_crc = footer.front_crc;
-      old_footer.middle_crc = footer.middle_crc;
-    } else {
-	old_footer.front_crc = old_footer.middle_crc = 0;
-    }
-    old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
-    old_footer.flags = footer.flags;   
-    msgvec[msg.msg_iovlen].iov_base = (char*)&old_footer;
-    msgvec[msg.msg_iovlen].iov_len = sizeof(old_footer);
-    msglen += sizeof(old_footer);
-    msg.msg_iovlen++;
-  }
+  msgvec[msg.msg_iovlen].iov_base = (void*)&footer;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(footer);
+  msglen += sizeof(footer);
+  msg.msg_iovlen++;
 
   // send
   if (do_sendmsg(&msg, msglen))
