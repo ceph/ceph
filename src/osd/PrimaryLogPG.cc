@@ -2026,7 +2026,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     return;
   }
 
-  if (write_ordered &&
+  if (write_ordered && scrubber.is_chunky_scrub_active() &&
       scrubber.write_blocked_by_scrub(head)) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_scrub.push_back(op);
