@@ -741,6 +741,19 @@ void CephContext::start_service_thread()
   if (_conf->log_flush_on_exit)
     _log->set_flush_on_exit();
 
+  if (_conf->admin_socket.length()) {
+    // Reset admin_socket raw value if it is defined in conffile.
+    // Just in case it used metavarirables (e.g, $pid) which could be expanded 
+    // again to the correct value here in child process.
+    std::vector <std::string> my_sections;
+    std::string admin_socket;
+    _conf->get_my_sections(my_sections);
+    if (_conf->get_val_from_conf_file(my_sections, "admin_socket",
+        admin_socket, false) == 0) {
+      _conf->set_val("admin_socket", admin_socket);
+    }
+  }
+
   // Trigger callbacks on any config observers that were waiting for
   // it to become safe to start threads.
   _conf->set_val("internal_safe_to_start_threads", "true");
