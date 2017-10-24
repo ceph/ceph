@@ -37,7 +37,7 @@ def activate_filestore(lvs):
     # mount the osd
     source = osd_lv.lv_path
     destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
-    if not system.is_mounted(source, destination=destination):
+    if not system.device_is_mounted(source, destination=destination):
         process.run(['sudo', 'mount', '-v', source, destination])
 
     # always re-do the symlink regardless if it exists, so that the journal
