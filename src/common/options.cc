@@ -1503,7 +1503,7 @@ std::vector<Option> get_global_options() {
     .set_default(1000)
     .set_description(""),
 
-    Option("mon_max_pool_pg_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_max_pool_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(65536)
     .set_description(""),
 
@@ -1715,7 +1715,8 @@ std::vector<Option> get_global_options() {
 
     Option("osd_pool_erasure_code_stripe_unit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(4_K)
-    .set_description(""),
+    .set_description("the amount of data (in bytes) in a data chunk, per stripe")
+    .add_service("mon"),
 
     Option("osd_pool_default_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
@@ -1743,7 +1744,8 @@ std::vector<Option> get_global_options() {
     Option("osd_pool_default_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("replicated")
     .set_enum_allowed({"replicated", "erasure"})
-    .set_description(""),
+    .set_description("")
+    .add_service("mon"),
 
     Option("osd_pool_default_erasure_code_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("plugin=jerasure technique=reed_sol_van k=2 m=1")
@@ -1783,7 +1785,8 @@ std::vector<Option> get_global_options() {
 
     Option("osd_pool_default_hit_set_bloom_fpp", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.05)
-    .set_description(""),
+    .set_description("")
+    .add_see_also("osd_tier_default_cache_hit_set_type"),
 
     Option("osd_pool_default_cache_target_dirty_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.4)
@@ -1831,33 +1834,36 @@ std::vector<Option> get_global_options() {
 
     Option("osd_tier_default_cache_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("writeback")
+    .set_enum_allowed({"none", "writeback", "forward",
+	               "readonly", "readforward", "readproxy", "proxy"})
     .set_description(""),
 
-    Option("osd_tier_default_cache_hit_set_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_tier_default_cache_hit_set_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(4)
     .set_description(""),
 
-    Option("osd_tier_default_cache_hit_set_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_tier_default_cache_hit_set_period", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1200)
     .set_description(""),
 
     Option("osd_tier_default_cache_hit_set_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("bloom")
+    .set_enum_allowed({"bloom", "explicit_hash", "explicit_object"})
     .set_description(""),
 
-    Option("osd_tier_default_cache_min_read_recency_for_promote", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_tier_default_cache_min_read_recency_for_promote", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description(""),
+    .set_description("number of recent HitSets the object must appear in to be promoted (on read)"),
 
-    Option("osd_tier_default_cache_min_write_recency_for_promote", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_tier_default_cache_min_write_recency_for_promote", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description(""),
+    .set_description("number of recent HitSets the object must appear in to be promoted (on write)"),
 
-    Option("osd_tier_default_cache_hit_set_grade_decay_rate", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_tier_default_cache_hit_set_grade_decay_rate", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(20)
     .set_description(""),
 
-    Option("osd_tier_default_cache_hit_set_search_last_n", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_tier_default_cache_hit_set_search_last_n", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description(""),
 
@@ -3708,7 +3714,7 @@ std::vector<Option> get_global_options() {
     // filestore
 
     Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_DEV)
-    .set_default("max_background_compactions=8;compaction_readahead_size=2097152")
+    .set_default("max_background_jobs=10,compaction_readahead_size=2097152")
     .set_description(""),
 
     Option("filestore_omap_backend", Option::TYPE_STR, Option::LEVEL_DEV)

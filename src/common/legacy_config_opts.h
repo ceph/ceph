@@ -345,7 +345,6 @@ OPTION(mon_client_ping_timeout, OPT_DOUBLE)   // fail if we don't hear back
 OPTION(mon_client_hunt_interval_backoff, OPT_DOUBLE) // each time we reconnect to a monitor, double our timeout
 OPTION(mon_client_hunt_interval_max_multiple, OPT_DOUBLE) // up to a max of 10*default (30 seconds)
 OPTION(mon_client_max_log_entries_per_message, OPT_INT)
-OPTION(mon_max_pool_pg_num, OPT_INT)
 OPTION(mon_pool_quota_warn_threshold, OPT_INT) // percent of quota at which to issue warnings
 OPTION(mon_pool_quota_crit_threshold, OPT_INT) // percent of quota at which to issue errors
 OPTION(client_cache_size, OPT_INT)
@@ -604,7 +603,6 @@ OPTION(osd_pool_use_gmt_hitset, OPT_BOOL) // try to use gmt for hitset archive n
 OPTION(osd_crush_update_on_start, OPT_BOOL)
 OPTION(osd_class_update_on_start, OPT_BOOL) // automatically set device class on start
 OPTION(osd_crush_initial_weight, OPT_DOUBLE) // if >=0, the initial weight is for newly added osds.
-OPTION(osd_pool_erasure_code_stripe_unit, OPT_U32) // in bytes
 OPTION(osd_erasure_code_plugins, OPT_STR) // list of erasure code plugins
 
 // Allows the "peered" state for recovery and backfill below min_size
@@ -630,14 +628,6 @@ OPTION(osd_hit_set_namespace, OPT_STR) // rados namespace for hit_set tracking
 OPTION(osd_tier_promote_max_objects_sec, OPT_U64)
 OPTION(osd_tier_promote_max_bytes_sec, OPT_U64)
 
-OPTION(osd_tier_default_cache_mode, OPT_STR)
-OPTION(osd_tier_default_cache_hit_set_count, OPT_INT)
-OPTION(osd_tier_default_cache_hit_set_period, OPT_INT)
-OPTION(osd_tier_default_cache_hit_set_type, OPT_STR)
-OPTION(osd_tier_default_cache_min_read_recency_for_promote, OPT_INT) // number of recent HitSets the object must appear in to be promoted (on read)
-OPTION(osd_tier_default_cache_min_write_recency_for_promote, OPT_INT) // number of recent HitSets the object must appear in to be promoted (on write)
-OPTION(osd_tier_default_cache_hit_set_grade_decay_rate, OPT_INT)
-OPTION(osd_tier_default_cache_hit_set_search_last_n, OPT_INT)
 OPTION(osd_objecter_finishers, OPT_INT)
 
 OPTION(osd_map_dedup, OPT_BOOL)
