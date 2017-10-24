@@ -100,9 +100,7 @@ public:
   bool handle_mgr_configure(MMgrConfigure *m);
   bool handle_command_reply(MCommandReply *m);
 
-  void send_report();
   void send_pgstats();
-
   void set_pgstats_cb(std::function<MPGStats*()> cb_)
   {
     Mutex::Locker l(lock);
@@ -118,8 +116,11 @@ public:
     const std::string& name,
     const std::map<std::string,std::string>& metadata);
   int service_daemon_update_status(
-    const std::map<std::string,std::string>& status);
+    std::map<std::string,std::string>&& status);
+
+private:
+  void send_stats();
+  void send_report();
 };
 
 #endif
-

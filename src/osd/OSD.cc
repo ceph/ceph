@@ -2594,40 +2594,7 @@ int OSD::init()
   if (r < 0)
     goto out;
 
-  // This implementation unconditionally sends every is_primary PG's
-  // stats every time we're called.  This has equivalent cost to the
-  // previous implementation's worst case where all PGs are busy and
-  // their stats are always enqueued for sending.
-  mgrc.set_pgstats_cb([this](){
-      RWLock::RLocker l(map_lock);
-      
-      utime_t had_for = ceph_clock_now() - had_map_since;
-      osd_stat_t cur_stat = service.get_osd_stat();
-      cur_stat.os_perf_stat = store->get_cur_stats();
-
-      MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
-      m->osd_stat = cur_stat;
-
-      Mutex::Locker lec{min_last_epoch_clean_lock};
-      min_last_epoch_clean = osdmap->get_epoch();
-      min_last_epoch_clean_pgs.clear();
-      RWLock::RLocker lpg(pg_map_lock);
-      for (const auto &i : pg_map) {
-        PG *pg = i.second;
-        if (!pg->is_primary()) {
-          continue;
-        }
-
-	pg->get_pg_stats([&](const pg_stat_t& s, epoch_t lec) {
-	    m->pg_stat[pg->pg_id.pgid] = s;
-	    min_last_epoch_clean = min(min_last_epoch_clean, lec);
-	    min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
-	  });
-      }
-
-      return m;
-  });
-
+  mgrc.set_pgstats_cb([this](){ return collect_pg_stats(); });
   mgrc.init();
   client_messenger->add_dispatcher_head(&mgrc);
 
@@ -5020,20 +4987,30 @@ void OSD::tick_without_osd_lock()
     }
   }
 
-  check_ops_in_flight();
+  update_daemon_status_to_mgr();
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
 }
 
-void OSD::check_ops_in_flight()
+void OSD::update_daemon_status_to_mgr()
 {
-  vector<string> warnings;
-  if (op_tracker.check_ops_in_flight(warnings)) {
-    for (vector<string>::iterator i = warnings.begin();
-        i != warnings.end();
-        ++i) {
-      clog->warn() << *i;
+  map<string,string> daemon_status;
+  {
+    vector<string> warnings;
+    if (op_tracker.check_ops_in_flight(warnings)) {
+      daemon_status.emplace("ops_in_flight", str_join(warnings, "\n"));
     }
+  }
+  with_unique_lock(pending_creates_lock, [&]() {
+      auto pending_creates = (pending_creates_from_osd.size() +
+			      pending_creates_from_mon);
+      if (pending_creates) {
+	daemon_status.emplace("pending_creating_pgs",
+			      std::to_string(pending_creates));
+      }
+    });
+  if (!daemon_status.empty()) {
+    mgrc.service_daemon_update_status(std::move(daemon_status));
   }
 }
 
@@ -7059,7 +7036,40 @@ void OSD::sched_scrub()
   dout(20) << "sched_scrub done" << dendl;
 }
 
+MPGStats* OSD::collect_pg_stats()
+{
+  // This implementation unconditionally sends every is_primary PG's
+  // stats every time we're called.  This has equivalent cost to the
+  // previous implementation's worst case where all PGs are busy and
+  // their stats are always enqueued for sending.
+  RWLock::RLocker l(map_lock);
 
+  utime_t had_for = ceph_clock_now() - had_map_since;
+  osd_stat_t cur_stat = service.get_osd_stat();
+  cur_stat.os_perf_stat = store->get_cur_stats();
+
+  auto m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
+  m->osd_stat = cur_stat;
+
+  Mutex::Locker lec{min_last_epoch_clean_lock};
+  min_last_epoch_clean = osdmap->get_epoch();
+  min_last_epoch_clean_pgs.clear();
+  RWLock::RLocker lpg(pg_map_lock);
+  for (const auto &i : pg_map) {
+    PG *pg = i.second;
+    if (!pg->is_primary()) {
+      continue;
+    }
+
+    pg->get_pg_stats([&](const pg_stat_t& s, epoch_t lec) {
+	m->pg_stat[pg->pg_id.pgid] = s;
+	min_last_epoch_clean = min(min_last_epoch_clean, lec);
+	min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
+      });
+  }
+
+  return m;
+}
 
 // =====================================================
 // MAP

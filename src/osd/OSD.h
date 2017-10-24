@@ -1554,7 +1554,7 @@ private:
   
   // -- op tracking --
   OpTracker op_tracker;
-  void check_ops_in_flight();
+  void update_daemon_status_to_mgr();
   void test_ops(std::string command, std::string args, ostream& ss);
   friend class TestOpsSocketHook;
   TestOpsSocketHook *test_ops_hook;
@@ -2216,6 +2216,9 @@ protected:
       return r;
     }
   } remove_wq;
+
+  // -- status reporting --
+  MPGStats *collect_pg_stats();
 
 private:
   bool ms_can_fast_dispatch_any() const override { return true; }
