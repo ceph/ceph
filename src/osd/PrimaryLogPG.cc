@@ -5689,6 +5689,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    t->truncate(soid, op.extent.truncate_size);
 	    oi.truncate_seq = op.extent.truncate_seq;
 	    oi.truncate_size = op.extent.truncate_size;
+	    if (oi.size > op.extent.truncate_size) {
+	      interval_set<uint64_t> trim;
+	      trim.insert(op.extent.truncate_size,
+	        oi.size - op.extent.truncate_size);
+	      ctx->modified_ranges.union_of(trim);
+	    }
 	    if (op.extent.truncate_size != oi.size) {
               truncate_update_size_and_usage(ctx->delta_stats,
                                              oi,
