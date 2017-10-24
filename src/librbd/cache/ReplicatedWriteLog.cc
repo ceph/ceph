@@ -74,6 +74,7 @@ struct C_BlockIORequest : public Context {
   virtual void finish(int r) override {
     ldout(cct, 20) << "(" << get_name() << "): r=" << r << dendl;
 
+    assert(NULL != next_block_request);
     if (r < 0) {
       // abort the chain of requests upon failure
       next_block_request->complete(r);
@@ -88,11 +89,11 @@ struct C_BlockIORequest : public Context {
 };
 
 struct C_GuardedBlockIORequest : public C_BlockIORequest {
-  CephContext *cct;
-  BlockGuardCell *cell;
+  BlockGuardCell *m_cell;
 
   C_GuardedBlockIORequest(CephContext *cct, C_BlockIORequest *next_block_request)
-    : C_BlockIORequest(cct, next_block_request), cct(cct), cell(NULL) {
+    : C_BlockIORequest(cct, next_block_request), m_cell(NULL) {
+    ldout(cct, 6) << dendl;
   }
 
   virtual void send() = 0;
@@ -1018,21 +1019,25 @@ void ObjectMap<I>::handle_detained_aio_update(BlockGuardCell *cell, int r,
 
  */
 
-template <typename I>
-class C_WriteRequest : public C_BlockIORequest {
-  CephContext *cct;
+struct C_WriteRequest : public C_GuardedBlockIORequest {
   ImageCache::Extents image_extents;
   bufferlist bl;
   int fadvise_flags;
-  C_WriteRequest(CephContext *cct, ImageCache::Extents &&image_extents, bufferlist&& bl, int fadvise_flags, Context *on_finish)
-    : cct(cct), image_extents(std::move(image_extents)), bl(std::move(bl)),
-      fadvise_flags(fadvise_flags), C_BlockIORequest(cct, on_finish) {
+  Context *on_finish; /* User write request */
+  C_WriteRequest(CephContext *cct, ImageCache::Extents &&image_extents,
+		 bufferlist&& bl, int fadvise_flags, Context *on_finish)
+    : C_GuardedBlockIORequest(cct, NULL), image_extents(std::move(image_extents)),
+      bl(std::move(bl)), fadvise_flags(fadvise_flags), on_finish(on_finish) {
   }
+  
   virtual void send() override {
+    // TODO: Do we invoke our own complete() here?
   }
+  
   virtual void finish(int r) {
-    C_BlockIORequest::finish(r);
+    // TODO: Do we invoke on_finish->complete() here?
   }
+  
   virtual const char *get_name() const override {
     return "C_WriteRequest";
   }  
@@ -1071,10 +1076,13 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
 
   ExtentsSummary<ImageCache::Extents> image_extents_summary(image_extents);
 
-  GuardedRequestFunctionContext *ctx = new GuardedRequestFunctionContext([this, on_finish](BlockGuardCell *cell) {
+  C_WriteRequest *write_req =
+    new C_WriteRequest(cct, std::move(image_extents), std::move(bl), fadvise_flags, on_finish);
+  GuardedRequestFunctionContext *ctx = new GuardedRequestFunctionContext([this, write_req](BlockGuardCell *cell) {
       CephContext *cct = m_image_ctx.cct;
       ldout(cct, 6) << "cell=" << cell << dendl;
-      //handle_detained_aio_update(cell, r, on_finish);
+      write_req->m_cell = cell;
+      write_req->send();
     });
 
   GuardedRequest guarded(image_extents_summary.first_block,
