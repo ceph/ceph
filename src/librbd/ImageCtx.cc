@@ -274,6 +274,11 @@ struct C_InvalidateCache : public Context {
     trace_endpoint.copy_name(pname);
     perf_start(pname);
 
+    assert(image_watcher == NULL);
+    image_watcher = new ImageWatcher<>(*this);
+  }
+
+  void ImageCtx::init_cache() {
     if (cache) {
       Mutex::Locker l(cache_lock);
       ldout(cct, 20) << "enabling caching..." << dendl;
@@ -290,9 +295,9 @@ struct C_InvalidateCache : public Context {
 		     << " max_dirty_age="
 		     << cache_max_dirty_age << dendl;
 
-      object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
-				       NULL, NULL,
-				       cache_size,
+      object_cacher = new ObjectCacher(cct, perfcounter->get_name(),
+                                       *writeback_handler, cache_lock, NULL,
+                                       NULL, cache_size,
 				       10,  /* reset this in init */
 				       init_max_dirty,
 				       cache_target_dirty,
@@ -845,8 +850,7 @@ struct C_InvalidateCache : public Context {
   }
 
   void ImageCtx::register_watch(Context *on_finish) {
-    assert(image_watcher == NULL);
-    image_watcher = new ImageWatcher<>(*this);
+    assert(image_watcher != NULL);
     image_watcher->register_watch(on_finish);
   }
 

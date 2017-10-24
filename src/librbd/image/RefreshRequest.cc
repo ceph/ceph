@@ -11,6 +11,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
@@ -345,7 +346,8 @@ Context *RefreshRequest<I>::handle_v2_get_metadata(int *result) {
     }
   }
 
-  m_image_ctx.apply_metadata(m_metadata, false);
+  bool thread_safe = m_image_ctx.image_watcher->is_unregistered();
+  m_image_ctx.apply_metadata(m_metadata, thread_safe);
 
   send_v2_get_flags();
   return nullptr;
