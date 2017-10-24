@@ -380,7 +380,7 @@ class CephFSVolumeClient(object):
 
     def get_mds_map(self):
         fs_map = self._rados_command("fs dump", {})
-        return fs_map['filesystems'][0]
+        return fs_map['filesystems'][0]['mdsmap']
 
     def evict(self, auth_id, timeout=30, volume_path=None):
         """
