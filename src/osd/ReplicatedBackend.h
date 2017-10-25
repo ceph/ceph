@@ -433,7 +433,8 @@ private:
     const hobject_t &obj,
     uint32_t seed,
     ScrubMap::object &o,
-    ThreadPool::TPHandle &handle) override;
+    ThreadPool::TPHandle &handle,
+    ScrubMap* const map = nullptr) override;
   uint64_t be_get_ondisk_size(uint64_t logical_size) override { return logical_size; }
 };
 
