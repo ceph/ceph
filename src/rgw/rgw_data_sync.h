@@ -531,6 +531,7 @@ public:
   int init_sync_status();
 
   static string status_oid(const string& source_zone, const rgw_bucket_shard& bs);
+  static string obj_status_oid(const string& source_zone, const rgw_obj& obj); /* can be used by sync modules */
 
   int read_sync_status();
   int run();
