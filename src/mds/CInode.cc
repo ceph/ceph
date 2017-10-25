@@ -3955,7 +3955,12 @@ next:
                                        << "(" << path << "), rewriting it";
         in->_mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
                            false);
+        // Flag that we repaired this BT so that it won't go into damagetable
         results->backtrace.repaired = true;
+
+        // Flag that we did some repair work so that our repair operation
+        // can be flushed at end of scrub
+        in->scrub_infop->header->set_repaired();
       }
 
       // If the inode's number was free in the InoTable, fix that
@@ -4320,7 +4325,7 @@ void CInode::scrub_maybe_delete_info()
 }
 
 void CInode::scrub_initialize(CDentry *scrub_parent,
-			      const ScrubHeaderRefConst& header,
+			      ScrubHeaderRef& header,
 			      MDSInternalContextBase *f)
 {
   dout(20) << __func__ << " with scrub_version " << get_version() << dendl;

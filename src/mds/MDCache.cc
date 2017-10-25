@@ -12111,14 +12111,45 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 
   header->set_origin(in);
 
-  // only set completion context for non-recursive scrub, because we don't 
-  // want to block asok caller on long running scrub
+  Context *fin = nullptr;
   if (!header->get_recursive()) {
-    Context *fin = cs->take_finisher();
+    cs->take_finisher();
+  }
+
+  // If the scrub did some repair, then flush the journal at the end of
+  // the scrub.  Otherwise in the case of e.g. rewriting a backtrace
+  // the on disk state will still look damaged.
+  auto expiry_fin = new FunctionContext([this, header, fin](int r){
+      if (header->get_repaired()) {
+        dout(4) << "Flushing journal because scrub did some repairs" << dendl;
+        mds->mdlog->start_new_segment();
+        mds->mdlog->trim_all();
+        if (fin) {
+          MDSGatherBuilder expiry_gather(g_ceph_context);
+          const std::set<LogSegment*> &expiring_segments = mds->mdlog->get_expiring_segments();
+          for (std::set<LogSegment*>::const_iterator i = expiring_segments.begin();
+               i != expiring_segments.end(); ++i) {
+            (*i)->wait_for_expiry(expiry_gather.new_sub());
+          }
+          expiry_gather.set_finisher(new MDSInternalContextWrapper(mds, fin));
+          expiry_gather.activate();
+        }
+      } else {
+        if (fin) {
+          fin->complete(r);
+        }
+      }
+  });
+
+  if (!header->get_recursive()) {
     mds->scrubstack->enqueue_inode_top(in, header,
-				       new MDSInternalContextWrapper(mds, fin));
-  } else
-    mds->scrubstack->enqueue_inode_bottom(in, header, NULL);
+				       new MDSInternalContextWrapper(mds,
+                                         expiry_fin));
+  } else {
+    mds->scrubstack->enqueue_inode_bottom(in, header, 
+				       new MDSInternalContextWrapper(mds,
+                                         expiry_fin));
+  }
 
   mds->server->respond_to_request(mdr, 0);
   return;
