@@ -1131,7 +1131,6 @@ void PG::calc_ec_acting(
   vector<int> *_want,
   set<pg_shard_t> *backfill,
   set<pg_shard_t> *acting_backfill,
-  pg_shard_t *want_primary,
   ostream &ss)
 {
   vector<int> want(size, CRUSH_ITEM_NONE);
@@ -1181,14 +1180,9 @@ void PG::calc_ec_acting(
     }
   }
 
-  bool found_primary = false;
   for (uint8_t i = 0; i < want.size(); ++i) {
     if (want[i] != CRUSH_ITEM_NONE) {
       acting_backfill->insert(pg_shard_t(want[i], shard_id_t(i)));
-      if (!found_primary) {
-	*want_primary = pg_shard_t(want[i], shard_id_t(i));
-	found_primary = true;
-      }
     }
   }
   acting_backfill->insert(backfill->begin(), backfill->end());
@@ -1213,7 +1207,6 @@ void PG::calc_replicated_acting(
   vector<int> *want,
   set<pg_shard_t> *backfill,
   set<pg_shard_t> *acting_backfill,
-  pg_shard_t *want_primary,
   ostream &ss)
 {
   ss << "calc_acting newest update on osd." << auth_log_shard->first
@@ -1238,13 +1231,14 @@ void PG::calc_replicated_acting(
 
   ss << "calc_acting primary is osd." << primary->first
      << " with " << primary->second << std::endl;
-  *want_primary = primary->first;
   want->push_back(primary->first.osd);
   acting_backfill->insert(primary->first);
   unsigned usable = 1;
 
   // select replicas that have log contiguity with primary.
-  // prefer up, then acting, then any peer_info osds 
+  // prefer up, then acting, then any peer_info osds
+  eversion_t oldest_auth_log_entry =
+    std::min(primary->second.log_tail, auth_log_shard->second.log_tail);
   for (vector<int>::const_iterator i = up.begin();
        i != up.end();
        ++i) {
@@ -1253,9 +1247,7 @@ void PG::calc_replicated_acting(
       continue;
     const pg_info_t &cur_info = all_info.find(up_cand)->second;
     if (cur_info.is_incomplete() ||
-      cur_info.last_update < MIN(
-	primary->second.log_tail,
-	auth_log_shard->second.log_tail)) {
+        cur_info.last_update < oldest_auth_log_entry) {
       /* We include auth_log_shard->second.log_tail because in GetLog,
        * we will request logs back to the min last_update over our
        * acting_backfill set, which will result in our log being extended
@@ -1272,44 +1264,63 @@ void PG::calc_replicated_acting(
     }
   }
 
+  if (usable >= size) {
+    return;
+  }
+
+  std::vector<std::pair<eversion_t, int>> candidate_by_last_update;
+  candidate_by_last_update.reserve(acting.size());
   // This no longer has backfill OSDs, but they are covered above.
   for (vector<int>::const_iterator i = acting.begin();
        i != acting.end();
        ++i) {
     pg_shard_t acting_cand(*i, shard_id_t::NO_SHARD);
-    if (usable >= size)
-      break;
-
     // skip up osds we already considered above
     if (acting_cand == primary->first)
       continue;
-    vector<int>::const_iterator up_it = find(up.begin(), up.end(), acting_cand.osd);
+    vector<int>::const_iterator up_it = find(up.begin(), up.end(), *i);
     if (up_it != up.end())
       continue;
 
     const pg_info_t &cur_info = all_info.find(acting_cand)->second;
     if (cur_info.is_incomplete() ||
-	cur_info.last_update < primary->second.log_tail) {
+	cur_info.last_update < oldest_auth_log_entry) {
       ss << " shard " << acting_cand << " (acting) REJECTED "
-	       << cur_info << std::endl;
-    } else {
-      want->push_back(*i);
-      acting_backfill->insert(acting_cand);
-      ss << " shard " << acting_cand << " (acting) accepted "
 	 << cur_info << std::endl;
-      usable++;
+    } else {
+      candidate_by_last_update.push_back(make_pair(cur_info.last_update, *i));
+    }
+  }
+
+  // sort by last_update, in descending order.
+  std::sort(candidate_by_last_update.begin(), candidate_by_last_update.end(),
+    [](const std::pair<eversion_t, int> &lhs,
+       const std::pair<eversion_t, int> &rhs) {
+      return lhs.first > rhs.first;
+    }
+  );
+
+  for (auto &p: candidate_by_last_update) {
+    assert(usable < size);
+    want->push_back(p.second);
+    pg_shard_t s = pg_shard_t(p.second, shard_id_t::NO_SHARD);
+    acting_backfill->insert(s);
+    ss << " shard " << s << " (acting) accepted "
+       << all_info.find(s)->second << std::endl;
+    usable++;
+    if (usable >= size) {
+      return;
     }
   }
 
   if (restrict_to_up_acting) {
     return;
   }
+  candidate_by_last_update.clear();
+  candidate_by_last_update.reserve(all_info.size()); // overestimate but fine
   for (map<pg_shard_t,pg_info_t>::const_iterator i = all_info.begin();
        i != all_info.end();
        ++i) {
-    if (usable >= size)
-      break;
-
     // skip up osds we already considered above
     if (i->first == primary->first)
       continue;
@@ -1322,15 +1333,38 @@ void PG::calc_replicated_acting(
       continue;
 
     if (i->second.is_incomplete() ||
-	i->second.last_update < primary->second.log_tail) {
+	i->second.last_update < oldest_auth_log_entry) {
       ss << " shard " << i->first << " (stray) REJECTED "
 	 << i->second << std::endl;
     } else {
-      want->push_back(i->first.osd);
-      acting_backfill->insert(i->first);
-      ss << " shard " << i->first << " (stray) accepted "
-	 << i->second << std::endl;
-      usable++;
+      candidate_by_last_update.push_back(
+        make_pair(i->second.last_update, i->first.osd));
+    }
+  }
+
+  if (candidate_by_last_update.empty()) {
+    // save us some effort
+    return;
+  }
+
+  // sort by last_update, in descending order.
+  std::sort(candidate_by_last_update.begin(), candidate_by_last_update.end(),
+    [](const std::pair<eversion_t, int> &lhs,
+       const std::pair<eversion_t, int> &rhs) {
+      return lhs.first > rhs.first;
+    }
+  );
+
+  for (auto &p: candidate_by_last_update) {
+    assert(usable < size);
+    want->push_back(p.second);
+    pg_shard_t s = pg_shard_t(p.second, shard_id_t::NO_SHARD);
+    acting_backfill->insert(s);
+    ss << " shard " << s << " (stray) accepted "
+       << all_info.find(s)->second << std::endl;
+    usable++;
+    if (usable >= size) {
+      return;
     }
   }
 }
@@ -1385,7 +1419,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
 
   set<pg_shard_t> want_backfill, want_acting_backfill;
   vector<int> want;
-  pg_shard_t want_primary;
   stringstream ss;
   if (!pool.info.is_erasure())
     calc_replicated_acting(
@@ -1399,7 +1432,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
       &want,
       &want_backfill,
       &want_acting_backfill,
-      &want_primary,
       ss);
   else
     calc_ec_acting(
@@ -1412,7 +1444,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
       &want,
       &want_backfill,
       &want_acting_backfill,
-      &want_primary,
       ss);
   dout(10) << ss.str() << dendl;
 
