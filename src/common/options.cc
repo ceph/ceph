@@ -662,7 +662,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("ms_dispatch_throttle_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(100 << 20)
+    .set_default(100_M)
     .set_description(""),
 
     Option("ms_bind_ipv6", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -2457,7 +2457,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_recovery_max_chunk", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(8<<20)
+    .set_default(8_M)
     .set_description(""),
 
     Option("osd_recovery_max_omap_entries_per_chunk", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -2465,7 +2465,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_copyfrom_max_chunk", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(8<<20)
+    .set_default(8_M)
     .set_description(""),
 
     Option("osd_push_per_object_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -3036,7 +3036,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_max_omap_bytes_per_request", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1<<30)
+    .set_default(1_G)
     .set_description(""),
 
     Option("osd_objectstore", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -3056,11 +3056,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_bench_large_size_max_throughput", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(100 << 20)
+    .set_default(100_M)
     .set_description(""),
 
     Option("osd_bench_max_block_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(64 << 20)
+    .set_default(64_M)
     .set_description(""),
 
     Option("osd_bench_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -3845,15 +3845,15 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("filestore_max_xattr_value_size_xfs", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(64<<10)
+    .set_default(64_K)
     .set_description(""),
 
     Option("filestore_max_xattr_value_size_btrfs", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(64<<10)
+    .set_default(64_K)
     .set_description(""),
 
     Option("filestore_max_xattr_value_size_other", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(1<<10)
+    .set_default(1_K)
     .set_description(""),
 
     Option("filestore_sloppy_crc", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -3937,7 +3937,7 @@ std::vector<Option> get_global_options() {
     .set_description("Max IO operations in flight"),
 
     Option("filestore_queue_max_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(100 << 20)
+    .set_default(100_M)
     .set_description("Max (written) bytes in flight"),
 
     Option("filestore_caller_concurrency", Option::TYPE_INT, Option::LEVEL_DEV)
@@ -3945,7 +3945,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("filestore_expected_throughput_bytes", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(200 << 20)
+    .set_default(200_M)
     .set_description("Expected throughput of backend device (aids throttling calculations)"),
 
     Option("filestore_expected_throughput_ops", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -4073,7 +4073,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("journal_max_write_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(10 << 20)
+    .set_default(10_M)
     .set_description("Max bytes in flight to journal"),
 
     Option("journal_max_write_entries", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -4097,7 +4097,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("journal_align_min_size", Option::TYPE_INT, Option::LEVEL_DEV)
-    .set_default(64 << 10)
+    .set_default(64_K)
     .set_description(""),
 
     Option("journal_replay_from", Option::TYPE_INT, Option::LEVEL_DEV)
@@ -4787,7 +4787,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_obj_stripe_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(4 << 20)
+    .set_default(4_M)
     .set_description(""),
 
     Option("rgw_extended_http_attrs", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -4799,11 +4799,11 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_get_obj_window_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(16 << 20)
+    .set_default(16_M)
     .set_description(""),
 
     Option("rgw_get_obj_max_req_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(4 << 20)
+    .set_default(4_M)
     .set_description(""),
 
     Option("rgw_relaxed_s3_bucket_names", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -5226,15 +5226,15 @@ static std::vector<Option> get_rbd_options() {
                      "flushes so that writeback is safe"),
 
     Option("rbd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(32<<20)
+    .set_default(32_M)
     .set_description("cache size in bytes"),
 
     Option("rbd_cache_max_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(24<<20)
+    .set_default(24_M)
     .set_description("dirty limit in bytes - set to 0 for write-through caching"),
 
     Option("rbd_cache_target_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(16<<20)
+    .set_default(16_M)
     .set_description("target dirty limit in bytes"),
 
     Option("rbd_cache_max_dirty_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -5466,7 +5466,7 @@ std::vector<Option> get_mds_options() {
     .set_description(""),
 
     Option("mds_max_xattr_pairs_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(64 << 10)
+    .set_default(64_K)
     .set_description(""),
 
     Option("mds_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
