@@ -170,31 +170,51 @@ int MgrPyModule::load()
   }
 
   // Find the class
-  // TODO: let them call it what they want instead of just 'Module'
-  auto pClass = PyObject_GetAttrString(pModule, (const char*)"Module");
-  Py_DECREF(pModule);
-  if (pClass == nullptr) {
-    derr << "Class not found in module '" << module_name << "'" << dendl;
+  PyObject *mgr_module = PyImport_ImportModule("mgr_module");
+  if (mgr_module == nullptr) {
+    derr << "Module not found: 'mgr_module'" << dendl;
+    derr << handle_pyerror() << dendl;
+    return -ENOENT;
+  }
+
+  auto mgr_module_type = PyObject_GetAttrString(mgr_module, (const char*)"MgrModule");
+  if (mgr_module_type == nullptr) {
+    derr << "Unable to import MgrModule from mgr_module" << dendl;
     derr << handle_pyerror() << dendl;
     return -EINVAL;
   }
 
-  
-  // Just using the module name as the handle, replace with a
-  // uuidish thing if needed
-  auto pyHandle = PyString_FromString(module_name.c_str());
-  auto pArgs = PyTuple_Pack(1, pyHandle);
-  pClassInstance = PyObject_CallObject(pClass, pArgs);
-  Py_DECREF(pClass);
-  Py_DECREF(pyHandle);
-  Py_DECREF(pArgs);
-  if (pClassInstance == nullptr) {
-    derr << "Failed to construct class in '" << module_name << "'" << dendl;
-    derr << handle_pyerror() << dendl;
-    return -EINVAL;
-  } else {
-    dout(1) << "Constructed class from module: " << module_name << dendl;
+  auto locals = PyModule_GetDict(pModule);
+  Py_DECREF(mgr_module);
+  Py_DECREF(pModule);
+  PyObject *key, *value;
+  Py_ssize_t pos = 0;
+
+  while (PyDict_Next(locals, &pos, &key, &value)) {
+    if (!PyType_Check(value)) {
+      continue;
+    }
+    if (!PyObject_IsSubclass(value, mgr_module_type)) {
+      continue;
+    }
+    // Just using the module name as the handle, replace with a
+    // uuidish thing if needed
+    auto pClass = value;
+    auto class_name = PyString_AsString(key);
+    auto pyHandle = PyString_FromString(module_name.c_str());
+    auto pArgs = PyTuple_Pack(1, pyHandle);
+    pClassInstance = PyObject_CallObject(pClass, pArgs);
+    Py_DECREF(pyHandle);
+    Py_DECREF(pArgs);
+    if (pClassInstance == nullptr) {
+      derr << "Failed to construct class '" << class_name << "'" << " in " << "'" << module_name << "'" << dendl;
+      derr << handle_pyerror() << dendl;
+      return -EINVAL;
+    } else {
+      dout(1) << "Constructed class: " << class_name << " from module: " << module_name << dendl;
+    }
   }
+  Py_DECREF(mgr_module_type);
 
   return load_commands();
 }
