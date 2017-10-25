@@ -64,6 +64,9 @@ public:
   bool _handle_message(
     OpRequestRef op
     ) override;
+  bool handle_message_op_lock(
+    OpRequestRef op
+    );
 
   void on_change() override;
   void clear_recovery_state() override;
@@ -336,11 +339,14 @@ private:
     Context *on_applied;
     OpRequestRef op;
     eversion_t v;
+    CompletionItem * comp_item;
+    pg_shard_t shard; 
+
     InProgressOp(
       ceph_tid_t tid, Context *on_commit, Context *on_applied,
       OpRequestRef op, eversion_t v)
       : tid(tid), on_commit(on_commit), on_applied(on_applied),
-	op(op), v(v) {}
+	op(op), v(v), comp_item(NULL) {}
     bool done() const {
       return waiting_for_commit.empty() &&
 	waiting_for_applied.empty();
@@ -374,6 +380,7 @@ public:
     OpRequestRef op,
     CompletionItem *comp_item = NULL
     ) override;
+  void erase_inprogress_op(ceph_tid_t tid);
 
 private:
   Message * generate_subop(
@@ -405,6 +412,9 @@ private:
     ObjectStore::Transaction &op_t);
   void op_applied(InProgressOp *op);
   void op_commit(InProgressOp *op);
+  void check_committed_completion(InProgressOp * op);
+  void check_applied_completion(InProgressOp * op);
+  bool check_all_completion(InProgressOp * op);
   void do_repop_reply(OpRequestRef op);
   void do_repop(OpRequestRef op);
 
@@ -417,8 +427,10 @@ private:
 
     ObjectStore::Transaction opt, localt;
     
+    CompletionItem * comp_item;
+    pg_shard_t shard;
     RepModify() : applied(false), committed(false), ackerosd(-1),
-		  epoch_started(0) {}
+		  epoch_started(0), comp_item(NULL) {}
   };
   typedef ceph::shared_ptr<RepModify> RepModifyRef;
 

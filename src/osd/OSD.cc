@@ -9026,6 +9026,12 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch)
 
 bool OSD::can_op_lock(OpRequestRef op) 
 {
+  switch (op->get_req()->get_type()) {
+    case MSG_OSD_REPOPREPLY:
+      return true;
+    default:
+      break;
+  }
   return false;
 }
 

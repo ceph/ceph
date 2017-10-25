@@ -516,8 +516,8 @@ public:
     return ref;
   }
 
-  virtual void repop_queue_lock() {}
-  virtual void repop_queue_unlock() {}
+  virtual void repop_queue_lock() = 0;
+  virtual void repop_queue_unlock() = 0;
   virtual bool do_completion(bool need_lock) {return false;}
 
 
@@ -860,7 +860,6 @@ protected:
   eversion_t  last_complete_ondisk;  // last_complete that has committed.
   eversion_t  last_update_applied;
 
-
   struct C_UpdateLastRollbackInfoTrimmedToApplied : Context {
     PGRef pg;
     epoch_t e;
@@ -870,11 +869,12 @@ protected:
     void finish(int) override {
       pg->lock();
       if (!pg->pg_has_reset_since(e)) {
-	pg->last_rollback_info_trimmed_to_applied = v;
+       pg->last_rollback_info_trimmed_to_applied = v;
       }
       pg->unlock();
     }
   };
+
   // entries <= last_rollback_info_trimmed_to_applied have been trimmed,
   // and the transaction has applied
   eversion_t  last_rollback_info_trimmed_to_applied;

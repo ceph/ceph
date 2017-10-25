@@ -1956,7 +1956,7 @@ public:
   void add_completion_q(CompletionItem *comp_item);
   void do_primary_comp(CompletionItem * comp_item);
   void do_sub_comp(CompletionItem * comp_item);
-  void repop_queue_lock(ThreadPool::TPHandle &handle);
+  void repop_queue_lock();
   void repop_queue_unlock();
   RepSub *new_repop_sub(OpRequestRef op, ceph_tid_t rep_tid, int type);
   CompletionItem *new_sub_comp_item(OpRequestRef op);

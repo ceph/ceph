@@ -21,6 +21,8 @@
 #include "messages/MOSDPGPushReply.h"
 #include "common/EventTrace.h"
 
+#include "PrimaryLogPG.h"
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
@@ -190,6 +192,22 @@ bool ReplicatedBackend::can_handle_while_inactive(OpRequestRef op)
   }
 }
 
+bool ReplicatedBackend::handle_message_op_lock(OpRequestRef op)
+{
+  bool can_handle = false;
+  switch (op->get_req()->get_type()) {
+    case MSG_OSD_REPOPREPLY: {
+      can_handle = true;
+      dout(20) << __func__ << " can op lock tid: " << op->get_req()->get_tid() << dendl;
+      do_repop_reply(op);
+      break; 
+    }
+    default:
+      break;
+  }
+  return can_handle;
+}
+
 bool ReplicatedBackend::_handle_message(
   OpRequestRef op
   )
@@ -210,11 +228,6 @@ bool ReplicatedBackend::_handle_message(
 
   case MSG_OSD_REPOP: {
     do_repop(op);
-    return true;
-  }
-
-  case MSG_OSD_REPOPREPLY: {
-    do_repop_reply(op);
     return true;
   }
 
@@ -251,6 +264,8 @@ void ReplicatedBackend::on_change()
       delete i->second.on_commit;
     if (i->second.on_applied)
       delete i->second.on_applied;
+    i->second.on_commit = NULL;
+    i->second.on_applied = NULL;
   }
   clear_recovery_state();
 }
@@ -531,7 +546,11 @@ void ReplicatedBackend::submit_transaction(
   op.waiting_for_commit.insert(
     parent->get_actingbackfill_shards().begin(),
     parent->get_actingbackfill_shards().end());
-
+  if (comp_item) {
+    op.comp_item = comp_item;
+    op.shard = get_parent()->whoami_shard();
+  }
+  
   issue_op(
     soid,
     at_version,
@@ -555,15 +574,25 @@ void ReplicatedBackend::submit_transaction(
     trim_to,
     at_version,
     true,
-    op_t);
+    op_t,
+    comp_item);
   
   op_t.register_on_applied_sync(on_local_applied_sync);
-  op_t.register_on_applied(
-    parent->bless_context(
-      new C_OSD_OnOpApplied(this, &op)));
-  op_t.register_on_commit(
-    parent->bless_context(
-      new C_OSD_OnOpCommit(this, &op)));
+  if (!comp_item) {
+    op_t.register_on_applied(
+      parent->bless_context(
+	new C_OSD_OnOpApplied(this, &op)));
+    op_t.register_on_commit(
+      parent->bless_context(
+	new C_OSD_OnOpCommit(this, &op)));
+  } else {
+    op_t.register_on_applied(
+      parent->op_comp_context(
+	new C_OSD_OnOpApplied(this, &op), comp_item));
+    op_t.register_on_commit(
+      parent->op_comp_context(
+	new C_OSD_OnOpCommit(this, &op), comp_item));
+  }
 
   vector<ObjectStore::Transaction> tls;
   tls.push_back(std::move(op_t));
@@ -577,22 +606,18 @@ void ReplicatedBackend::op_applied(
   FUNCTRACE();
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_APPLIED_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
+  CompletionItem * comp_item = op->comp_item;
+  assert(comp_item);
+
   if (op->op) {
     op->op->mark_event("op_applied");
     op->op->pg_trace.event("op applied");
   }
 
-  op->waiting_for_applied.erase(get_parent()->whoami_shard());
-  parent->op_applied(op->v);
+  op->waiting_for_applied.erase(op->shard);
 
-  if (op->waiting_for_applied.empty()) {
-    op->on_applied->complete(0);
-    op->on_applied = 0;
-  }
-  if (op->done()) {
-    assert(!op->on_commit && !op->on_applied);
-    in_progress_ops.erase(op->tid);
-  }
+  check_applied_completion(op);
+  check_all_completion(op);
 }
 
 void ReplicatedBackend::op_commit(
@@ -601,20 +626,72 @@ void ReplicatedBackend::op_commit(
   FUNCTRACE();
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
+  CompletionItem * comp_item = op->comp_item;
+  assert(comp_item);
+
   if (op->op) {
     op->op->mark_event("op_commit");
     op->op->pg_trace.event("op commit");
   }
 
-  op->waiting_for_commit.erase(get_parent()->whoami_shard());
+  op->waiting_for_commit.erase(op->shard);
+
+  check_committed_completion(op);
+  check_all_completion(op);
+}
+
+void ReplicatedBackend::check_committed_completion(InProgressOp * op) 
+{
+  CompletionItem * comp_item = op->comp_item;
+  assert(comp_item);
 
   if (op->waiting_for_commit.empty()) {
-    op->on_commit->complete(0);
-    op->on_commit = 0;
+    if (op->on_commit) {
+      dout(20) << __func__ << " tid: " << op->tid << dendl;
+      op->on_commit->complete(0);
+      op->on_commit = 0;
+    } 
   }
+}
+
+void ReplicatedBackend::check_applied_completion(InProgressOp * op) 
+{
+  CompletionItem * comp_item = op->comp_item;
+  assert(comp_item);
+
+  if (op->waiting_for_applied.empty()) {
+    if (op->on_applied) {
+      dout(20) << __func__ << " tid:" << op->tid << dendl;
+      op->on_applied->complete(0);
+      op->on_applied = 0;
+    } 
+  }
+}
+
+bool ReplicatedBackend::check_all_completion(InProgressOp * op) 
+{
+  CompletionItem * comp_item = op->comp_item;
+  assert(comp_item);
+
   if (op->done()) {
-    assert(!op->on_commit && !op->on_applied);
-    in_progress_ops.erase(op->tid);
+    if (comp_item->is_completed()) {
+      parent->add_completion_q(comp_item);
+    } else {
+      assert(0);
+    } 
+    return true;
+  }
+  return false;
+}
+
+void ReplicatedBackend::erase_inprogress_op(ceph_tid_t tid) 
+{
+  if (in_progress_ops.count(tid)) {
+    dout(20) << __func__ << " " << __LINE__ << 
+           " op deleted out tid:" << tid << dendl;
+    in_progress_ops.erase(tid);
+  } else {
+    assert(0);
   }
 }
 
@@ -634,6 +711,10 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
     map<ceph_tid_t, InProgressOp>::iterator iter =
       in_progress_ops.find(rep_tid);
     InProgressOp &ip_op = iter->second;
+    CompletionItem * comp_item = ip_op.comp_item;
+    assert(comp_item);
+    comp_item->lock();
+
     const MOSDOp *m = NULL;
     if (ip_op.op)
       m = static_cast<const MOSDOp *>(ip_op.op->get_req());
@@ -671,24 +752,17 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
     }
     ip_op.waiting_for_applied.erase(from);
 
+    PrimaryLogPG::RepGather *repop = static_cast<PrimaryLogPG::RepGather *>(comp_item);
+    repop->fromosd = from;
+    repop->fromlcod = r->get_last_complete_ondisk();
+
     parent->update_peer_last_complete_ondisk(
       from,
       r->get_last_complete_ondisk());
-
-    if (ip_op.waiting_for_applied.empty() &&
-        ip_op.on_applied) {
-      ip_op.on_applied->complete(0);
-      ip_op.on_applied = 0;
-    }
-    if (ip_op.waiting_for_commit.empty() &&
-        ip_op.on_commit) {
-      ip_op.on_commit->complete(0);
-      ip_op.on_commit= 0;
-    }
-    if (ip_op.done()) {
-      assert(!ip_op.on_commit && !ip_op.on_applied);
-      in_progress_ops.erase(iter);
-    }
+    check_applied_completion(&ip_op);
+    check_committed_completion(&ip_op);
+    check_all_completion(&ip_op);
+    comp_item->unlock();
   }
 }
 
@@ -1099,6 +1173,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   rm->ackerosd = ackerosd;
   rm->last_complete = get_info().last_complete;
   rm->epoch_started = get_osdmap()->get_epoch();
+  rm->shard = parent->whoami_shard();
 
   assert(m->logbl.length());
   // shipped transaction and log entries
@@ -1106,6 +1181,11 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
   ::decode(rm->opt, p);
+  CompletionItem * comp_item = parent->new_sub_comp_item(op);
+  rm->comp_item = comp_item;
+  PrimaryLogPG::RepSub *repop_sub = static_cast<PrimaryLogPG::RepSub *>(comp_item); 
+  repop_sub->lcod = get_info().last_complete;
+  repop_sub->lua = m->version;
 
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
@@ -1140,14 +1220,17 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     m->pg_trim_to,
     m->pg_roll_forward_to,
     update_snaps,
-    rm->localt);
+    rm->localt,
+    comp_item);
 
   rm->opt.register_on_commit(
     parent->bless_context(
-      new C_OSD_RepModifyCommit(this, rm)));
+      parent->op_comp_context(new C_OSD_RepModifyCommit(this, rm), 
+			      comp_item)));
   rm->localt.register_on_applied(
     parent->bless_context(
-      new C_OSD_RepModifyApply(this, rm)));
+      parent->op_comp_context(new C_OSD_RepModifyApply(this, rm),
+			      comp_item)));
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(rm->localt));
@@ -1168,18 +1251,23 @@ void ReplicatedBackend::repop_applied(RepModifyRef rm)
   const MOSDRepOp *req = static_cast<const MOSDRepOp*>(m);
   eversion_t version = req->version;
 
+  CompletionItem * comp_item = rm->comp_item;
+  assert(comp_item);
+  comp_item->set_applied();
   // send ack to acker only if we haven't sent a commit already
   if (!rm->committed) {
     Message *ack = new MOSDRepOpReply(
-      req, parent->whoami_shard(),
-      0, get_osdmap()->get_epoch(), req->min_epoch, CEPH_OSD_FLAG_ACK);
+      req, rm->shard,
+      0, rm->epoch_started, req->min_epoch, CEPH_OSD_FLAG_ACK);
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
     ack->trace = rm->op->pg_trace;
     get_parent()->send_message_osd_cluster(
-      rm->ackerosd, ack, get_osdmap()->get_epoch());
+      rm->ackerosd, ack, rm->epoch_started);
   }
 
-  parent->op_applied(version);
+  if (comp_item->is_completed()) {
+    get_parent()->add_completion_q(comp_item);
+  }
 }
 
 void ReplicatedBackend::repop_commit(RepModifyRef rm)
@@ -1194,19 +1282,23 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   dout(10) << __func__ << " on op " << *m
 	   << ", sending commit to osd." << rm->ackerosd
 	   << dendl;
-  assert(get_osdmap()->is_up(rm->ackerosd));
-
-  get_parent()->update_last_complete_ondisk(rm->last_complete);
+  CompletionItem * comp_item = rm->comp_item;
+  assert(comp_item);
+  comp_item->set_committed();
 
   MOSDRepOpReply *reply = new MOSDRepOpReply(
     m,
-    get_parent()->whoami_shard(),
-    0, get_osdmap()->get_epoch(), m->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
+    rm->shard,
+    0, rm->epoch_started, m->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
   reply->set_last_complete_ondisk(rm->last_complete);
   reply->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
   reply->trace = rm->op->pg_trace;
   get_parent()->send_message_osd_cluster(
     rm->ackerosd, reply, get_osdmap()->get_epoch());
+
+  if (comp_item->is_completed()) {
+    get_parent()->add_completion_q(comp_item);
+  }
 
   log_subop_stats(get_parent()->get_logger(), rm->op, l_osd_sop_w);
 }

@@ -286,6 +286,10 @@ class CompletionItem;
 
      virtual bool check_osdmap_full(const set<pg_shard_t> &missing_on) = 0;
 
+     virtual void add_completion_q(CompletionItem *) {}
+     virtual CompletionItem * new_sub_comp_item(OpRequestRef op) {return NULL;}
+     virtual Context *op_comp_context(Context *c, CompletionItem *comp_item) {return NULL;}
+
      virtual ~Listener() {}
    };
    Listener *parent;
