@@ -1327,8 +1327,6 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     }
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
-  if (entity_type != CEPH_ENTITY_TYPE_CLIENT)
-    mask |= CEPH_FEATURE_OSD_ERASURE_CODES;
 
   if (osd_primary_affinity) {
     for (int i = 0; i < max_osd; ++i) {
@@ -1376,7 +1374,6 @@ uint8_t OSDMap::get_min_compat_client() const
   }
   if (HAVE_FEATURE(f, OSD_PRIMARY_AFFINITY) || // v0.76-553-gf825624
       HAVE_FEATURE(f, CRUSH_TUNABLES3) ||      // v0.76-395-ge20a55d
-      HAVE_FEATURE(f, OSD_ERASURE_CODES) ||    // v0.73-498-gbfc86a8
       HAVE_FEATURE(f, OSD_CACHEPOOL)) {        // v0.67-401-gb91c1c5
     return CEPH_RELEASE_FIREFLY;   // v0.80.0
   }
