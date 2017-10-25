@@ -2343,6 +2343,39 @@ void PGMap::get_health_checks(
     checks->add("OSD_SCRUB_ERRORS", HEALTH_ERR, ss.str());
   }
 
+  // LARGE_OMAP_OBJECTS
+  if (pg_sum.stats.sum.num_large_omap_objects) {
+    list<string> detail;
+    for (auto &pool : pools) {
+      const string& pool_name = osdmap.get_pool_name(pool.first);
+      auto it2 = pg_pool_sum.find(pool.first);
+      if (it2 == pg_pool_sum.end()) {
+        continue;
+      }
+      const pool_stat_t *pstat = &it2->second;
+      if (pstat == nullptr) {
+        continue;
+      }
+      const object_stat_sum_t& sum = pstat->stats.sum;
+      if (sum.num_large_omap_objects) {
+        stringstream ss;
+        ss << sum.num_large_omap_objects << " large objects found in pool "
+           << "'" << pool_name << "'";
+        detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << pg_sum.stats.sum.num_large_omap_objects << " large omap objects";
+      auto& d = checks->add("LARGE_OMAP_OBJECTS", HEALTH_WARN, ss.str());
+      stringstream tip;
+      tip << "Search the cluster log for 'Large omap object found' for more "
+          << "details.";
+      detail.push_back(tip.str());
+      d.detail.swap(detail);
+    }
+  }
+
   // CACHE_POOL_NEAR_FULL
   {
     list<string> detail;

@@ -2384,7 +2384,8 @@ void ECBackend::be_deep_scrub(
   const hobject_t &poid,
   uint32_t seed,
   ScrubMap::object &o,
-  ThreadPool::TPHandle &handle) {
+  ThreadPool::TPHandle &handle,
+  ScrubMap* const map) {
   bufferhash h(-1); // we always used -1
   int r;
   uint64_t stride = cct->_conf->osd_deep_scrub_stride;
