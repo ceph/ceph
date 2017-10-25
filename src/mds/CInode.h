@@ -273,7 +273,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     /// my own (temporary) stamps and versions for each dirfrag we have
     std::map<frag_t, scrub_stamp_info_t> dirfrag_stamps;
 
-    ScrubHeaderRefConst header;
+    ScrubHeaderRef header;
 
     scrub_info_t() : scrub_stamp_info_t(),
 	scrub_parent(NULL), on_finish(NULL),
@@ -285,6 +285,14 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     if (!scrub_infop)
       scrub_info_create();
     return scrub_infop;
+  }
+
+  ScrubHeaderRef get_scrub_header() {
+    if (scrub_infop == nullptr) {
+      return nullptr;
+    } else {
+      return scrub_infop->header;
+    }
   }
 
   bool scrub_is_in_progress() const {
@@ -299,7 +307,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * directory's get_projected_version())
    */
   void scrub_initialize(CDentry *scrub_parent,
-			const ScrubHeaderRefConst& header,
+			ScrubHeaderRef& header,
 			MDSInternalContextBase *f);
   /**
    * Get the next dirfrag to scrub. Gives you a frag_t in output param which
