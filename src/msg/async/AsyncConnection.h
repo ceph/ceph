@@ -113,17 +113,16 @@ class AsyncConnection : public Connection {
   }
   Message *_get_next_outgoing(bufferlist *bl) {
     Message *m = 0;
-    while (!m && !out_q.empty()) {
+    if (!out_q.empty()) {
       map<int, list<pair<bufferlist, Message*> > >::reverse_iterator it = out_q.rbegin();
-      if (!it->second.empty()) {
-        list<pair<bufferlist, Message*> >::iterator p = it->second.begin();
-        m = p->second;
-        if (bl)
-          bl->swap(p->first);
-        it->second.erase(p);
-      }
+      assert(!it->second.empty());
+      list<pair<bufferlist, Message*> >::iterator p = it->second.begin();
+      m = p->second;
+      if (bl)
+	bl->swap(p->first);
+      it->second.erase(p);
       if (it->second.empty())
-        out_q.erase(it->first);
+	out_q.erase(it->first);
     }
     return m;
   }
