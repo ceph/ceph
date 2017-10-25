@@ -34,17 +34,11 @@ void MetaSession::dump(Formatter *f) const
   f->dump_string("state", get_state_name());
 }
 
-MetaSession::~MetaSession()
-{
-  if (release)
-    release->put();
-}
-
 void MetaSession::enqueue_cap_release(inodeno_t ino, uint64_t cap_id, ceph_seq_t iseq,
     ceph_seq_t mseq, epoch_t osd_barrier)
 {
   if (!release) {
-    release = new MClientCapRelease;
+    release.reset(new MClientCapRelease, false);
   }
 
   if (osd_barrier > release->osd_epoch_barrier) {
