@@ -378,12 +378,12 @@ quoted_print() {
 }
 
 prunb() {
-    quoted_print $* '&'
+    quoted_print "$@" '&'
     "$@" &
 }
 
 prun() {
-    quoted_print $*
+    quoted_print "$@"
     "$@"
 }
 
