@@ -711,7 +711,7 @@ void PrimaryLogPG::maybe_force_recovery()
 		  PG_STATE_BACKFILL_TOOFULL))
     return;
 
-  if (pg_log.get_log().approx_size() <
+  if (pg_log.get_log().log.size() <
       cct->_conf->osd_max_pg_log_entries *
         cct->_conf->osd_force_recovery_pg_log_entries_factor)
     return;
