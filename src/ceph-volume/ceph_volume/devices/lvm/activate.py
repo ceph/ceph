@@ -19,6 +19,7 @@ def activate_filestore(lvs):
     if not osd_lv:
         raise RuntimeError('Unable to find a data LV for filestore activation')
     osd_id = osd_lv.tags['ceph.osd_id']
+    conf.cluster = osd_lv.tags['ceph.cluster_name']
     # it may have a volume with a journal
     osd_journal_lv = lvs.get(lv_tags={'ceph.type': 'journal'})
     # TODO: add sensible error reporting if this is ever the case
@@ -84,6 +85,7 @@ def activate_bluestore(lvs):
     # find the osd
     osd_lv = lvs.get(lv_tags={'ceph.type': 'block'})
     osd_id = osd_lv.tags['ceph.osd_id']
+    conf.cluster = osd_lv.tags['ceph.cluster_name']
     osd_fsid = osd_lv.tags['ceph.osd_fsid']
     db_device_path = get_osd_device_path(osd_lv, lvs, 'db')
     wal_device_path = get_osd_device_path(osd_lv, lvs, 'wal')
