@@ -8078,15 +8078,20 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     if (tail_placement.bucket.name.empty()) {
       manifest.set_tail_placement(tail_placement.placement_rule, src_obj.bucket);
     }
-    for (; miter != astate->manifest.obj_end(); ++miter) {
-      ObjectWriteOperation op;
-      cls_refcount_get(op, tag, true);
-      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(this);
-      ref.ioctx.locator_set_key(loc.loc);
 
-      ret = ref.ioctx.operate(loc.oid, &op);
-      if (ret < 0) {
-        goto done_ret;
+    bool refcount_get = false;
+    for (; miter != astate->manifest.obj_end(); ++miter) {
+      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(this);
+      if (! refcount_get) {
+        ObjectWriteOperation op;
+        cls_refcount_get(op, tag, true);
+        ref.ioctx.locator_set_key(loc.loc);
+
+        ret = ref.ioctx.operate(loc.oid, &op);
+        if (ret < 0) {
+          goto done_ret;
+        }
+        refcount_get = true;
       }
 
       ref_objs.push_back(loc);
@@ -8130,13 +8135,13 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
 done_ret:
   if (!copy_itself) {
-    vector<rgw_raw_obj>::iterator riter;
+
+    vector<rgw_raw_obj>::iterator riter = ref_objs.begin();
 
     /* rollback reference */
-    for (riter = ref_objs.begin(); riter != ref_objs.end(); ++riter) {
+    if (riter != ref_objs.end()) {
       ObjectWriteOperation op;
       cls_refcount_put(op, tag, true);
-
       ref.ioctx.locator_set_key(riter->loc);
 
       int r = ref.ioctx.operate(riter->oid, &op);
