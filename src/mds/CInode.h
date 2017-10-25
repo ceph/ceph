@@ -1132,6 +1132,8 @@ public:
         passed_validation(false) {}
 
     void dump(Formatter *f) const;
+
+    bool all_damage_repaired() const;
   };
 
   /**
