@@ -1885,12 +1885,15 @@ void PG::activate(ObjectStore::Transaction& t,
 
       build_might_have_unfound();
 
+      // XXX: Has _update_calc_stats() run?  If so, base on num_objects_degraded?
       state_set(PG_STATE_DEGRADED);
       if (have_unfound())
 	discover_all_missing(query_map);
     }
 
     // degraded?
+    // num_objects_degraded if calculated should reflect this too, unless no
+    // missing and we are about to go clean.
     if (get_osdmap()->get_pg_size(info.pgid.pgid) > actingset.size()) {
       state_set(PG_STATE_DEGRADED);
       state_set(PG_STATE_UNDERSIZED);
@@ -2689,114 +2692,82 @@ void PG::_update_calc_stats()
   info.stats.stats.sum.num_objects_degraded = 0;
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
-  if ((is_degraded() || is_undersized() || !is_clean()) && is_peered()) {
-    // NOTE: we only generate copies, degraded, misplaced and unfound
+  if (!is_clean() && is_peered()) {
+    dout(20) << __func__ << " not clean" << dendl;
+
+    assert(!actingbackfill.empty());
+
+    // NOTE: we only generate degraded, misplaced and unfound
     // values for the summation, not individual stat categories.
     int64_t num_objects = info.stats.stats.sum.num_objects;
 
-    // Objects that have arrived backfilled to up OSDs (not in acting)
-    int64_t backfilled = 0;
+    // Objects missing from up nodes, sorted by # objects.
+    boost::container::flat_set<pair<int64_t,pg_shard_t>> missing_target_objects;
+    // Objects missing from nodes not in up, sort by # objects
+    boost::container::flat_set<pair<int64_t,pg_shard_t>> acting_source_objects;
+
+    int64_t missing;
+
+    // Primary first
+    missing = pg_log.get_missing().num_missing();
+    assert(actingbackfill.count(pg_whoami));
+    if (upset.count(pg_whoami)) {
+      missing_target_objects.insert(make_pair(missing, pg_whoami));
+    } else {
+      acting_source_objects.insert(make_pair(missing, pg_whoami));
+    }
+    info.stats.stats.sum.num_objects_missing_on_primary = missing;
+
+    // All other peers
+    for (auto& peer : peer_info) {
+      // Ignore other peers until we add code to look at detailed missing
+      // information. (recovery)
+      if (!actingbackfill.count(peer.first)) {
+	continue;
+      }
+      missing = 0;
+      // Backfill targets always track num_objects accurately
+      // all other peers track missing accurately.
+      if (is_backfill_targets(peer.first)) {
+	missing = std::max((int64_t)0, num_objects - peer.second.stats.stats.sum.num_objects);
+        if (missing < 0) missing = 0;
+      } else {
+	if (peer_missing.count(peer.first)) {
+	  missing = peer_missing[peer.first].num_missing();
+	} else {
+	  dout(20) << __func__ << " no peer_mssing found for " << peer.first << dendl;
+        }
+      }
+      if (upset.count(peer.first)) {
+	missing_target_objects.insert(make_pair(missing, peer.first));
+      } else {
+	acting_source_objects.insert(make_pair(missing, peer.first));
+      }
+      peer.second.stats.stats.sum.num_objects_missing = missing;
+    }
+
+    for (const auto& item : missing_target_objects)
+      dout(20) << __func__ << " missing shard " << item.second << " missing= " << item.first << dendl;
+    for (const auto& item : acting_source_objects)
+      dout(20) << __func__ << " acting shard " << item.second << " missing=" << item.first << dendl;
+
     // A misplaced object is not stored on the correct OSD
     int64_t misplaced = 0;
-    // Total of object copies/shards found
-    int64_t object_copies = 0;
-    // Total number of OSDs with misplaced objects
-    int num_misplaced = 0;
+    // a degraded objects has fewer replicas or EC shards than the pool specifies.
+    int64_t degraded = 0;
 
-    // num_objects_missing on each peer
-    for (map<pg_shard_t, pg_info_t>::iterator pi =
-        peer_info.begin();
-        pi != peer_info.end();
-        ++pi) {
-      map<pg_shard_t, pg_missing_t>::const_iterator pm =
-        peer_missing.find(pi->first);
-      if (pm != peer_missing.end()) {
-        pi->second.stats.stats.sum.num_objects_missing =
-          pm->second.num_missing();
-      }
-    }
+    for (auto m = missing_target_objects.rbegin();
+        m != missing_target_objects.rend(); ++m) {
 
-    // Add recovery objects not part of actingbackfill to be used to reduce
-    // degraded and account as misplaced.
-    for (const auto& peer : peer_info) {
-      if (actingbackfill.find(peer.first) == actingbackfill.end()) {
-	object_copies += peer.second.stats.stats.sum.num_objects;
-	misplaced += peer.second.stats.stats.sum.num_objects;
-	++num_misplaced;
-      }
-    }
-    if (object_copies)
-      dout(20) << __func__ << " objects not part of up/acting " << object_copies << dendl;
-
-    // Objects backfilled, sorted by # objects.
-    set<pair<int64_t,pg_shard_t>> backfill_target_objects;
-
-    assert(!actingbackfill.empty());
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
-	 ++i) {
-      const pg_shard_t &p = *i;
-      bool in_up = (upset.find(p) != upset.end());
-
-      // recovery       Compute total objects excluding num_missing
-      //   - not in up  Compute misplaced objects excluding num_missing
-      // backfill       Compute total objects already backfilled
-      if (!is_backfill_targets(p)) {
-        unsigned osd_missing, osd_objects;
-        // primary handling
-        if (p == pg_whoami) {
-          osd_missing = pg_log.get_missing().num_missing();
-          info.stats.stats.sum.num_objects_missing_on_primary =
-              osd_missing;
-        } else {
-          assert(peer_missing.count(p));
-          osd_missing = peer_missing[p].num_missing();
-        }
-
-        osd_objects = std::max<int64_t>(0, num_objects - osd_missing);
-        object_copies += osd_objects;
-        // Count non-missing objects not in up as misplaced
-	if (!in_up) {
-	  misplaced += osd_objects;
-	  ++num_misplaced;
-	}
+      if (!acting_source_objects.empty()) {
+	auto extra_copy = acting_source_objects.begin();
+        misplaced += m->first - extra_copy->first;
+        degraded += extra_copy->first;
+        acting_source_objects.erase(*extra_copy);
       } else {
-        // If this peer has more objects then it should, ignore them
-        int64_t osd_backfilled = std::min(num_objects,
-					  peer_info[p].stats.stats.sum.num_objects);
-	backfill_target_objects.insert(make_pair(osd_backfilled, p));
-	backfilled += osd_backfilled;
+	degraded += m->first;
       }
     }
-
-    // Only include backfill targets below pool size into the object_copies
-    // count.  Use the most-full targets.
-    int num_backfill_shards_seen = 0;
-    for (auto i = backfill_target_objects.rbegin();
-	 i != backfill_target_objects.rend();
-	 ++i) {
-      if (actingset.size() + num_backfill_shards_seen < pool.info.size) {
-	object_copies += i->first;
-	++num_backfill_shards_seen;
-      } else {
-	break;
-      }
-    }
-
-    // Any objects that have been backfilled to up OSDs can deducted from misplaced
-    // adjusted by the assumption that backfill is happening approximately evenly
-    // across backfill nodes.  Use the most-full targets.
-    int64_t adjust_misplaced = 0;
-    for (auto i = backfill_target_objects.rbegin();
-	 i != backfill_target_objects.rend() && num_misplaced;
-	 ++i, --num_misplaced) {
-      adjust_misplaced += i->first;
-    }
-    misplaced = std::max<int64_t>(0, misplaced - adjust_misplaced);
-
-    // a degraded objects has fewer replicas or EC shards than the
-    // pool specifies.  num_object_copies will never be smaller than target * num_objects.
-    int64_t degraded = std::max<int64_t>(0, info.stats.stats.sum.num_object_copies - object_copies);
 
     info.stats.stats.sum.num_objects_degraded = degraded;
     info.stats.stats.sum.num_objects_unfound = get_num_unfound();
@@ -7398,6 +7369,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
       pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid)) {
     if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <= pg->actingset.size()) {
       pg->state_clear(PG_STATE_UNDERSIZED);
+      // XXX: Base this on num_objects_degraded instead?
       if (pg->needs_recovery()) {
 	pg->state_set(PG_STATE_DEGRADED);
       } else {
