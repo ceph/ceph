@@ -2479,9 +2479,6 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
     return cache_result_t::NOOP;
   }
 
-  // older versions do not proxy the feature bits.
-  bool can_proxy_write = get_osdmap()->get_up_osd_features() &
-    CEPH_FEATURE_OSD_PROXY_WRITE_FEATURES;
   OpRequestRef promote_op;
 
   switch (pool.info.cache_mode) {
@@ -2505,13 +2502,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
     }
 
     if (op->may_write() || op->may_cache()) {
-      if (can_proxy_write) {
-        do_proxy_write(op);
-      } else {
-	// promote if can't proxy the write
-	promote_object(obc, missing_oid, oloc, op, promote_obc);
-	return cache_result_t::BLOCKED_PROMOTE;
-      }
+      do_proxy_write(op);
 
       // Promote too?
       if (!op->need_skip_promote() && 
@@ -2583,10 +2574,8 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
   case pg_pool_t::CACHEMODE_PROXY:
     if (!must_promote) {
       if (op->may_write() || op->may_cache() || write_ordered) {
-	if (can_proxy_write) {
-	  do_proxy_write(op);
-	  return cache_result_t::HANDLED_PROXY;
-	}
+	do_proxy_write(op);
+	return cache_result_t::HANDLED_PROXY;
       } else {
 	do_proxy_read(op);
 	return cache_result_t::HANDLED_PROXY;
