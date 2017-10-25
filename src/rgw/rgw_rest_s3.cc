@@ -641,6 +641,8 @@ void RGWGetUsage_ObjStore_S3::send_response()
 
 int RGWListBucket_ObjStore_S3::get_params()
 {
+  if (s->info.args.exists("uploadId"))
+    return -EINVAL;
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
   if (!list_versions) {
