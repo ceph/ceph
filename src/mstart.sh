@@ -28,7 +28,7 @@ RUN_ROOT_PATH=${root_path}/run
 
 mkdir -p $RUN_ROOT_PATH
 
-if [ "$CLUSTERS_LIST" == "" ]
+if [ -z "$CLUSTERS_LIST" ]
 then
   CLUSTERS_LIST=$RUN_ROOT_PATH/.clusters.list
 fi
