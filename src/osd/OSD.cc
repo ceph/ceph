@@ -7714,8 +7714,7 @@ void OSD::check_osdmap_features()
       cluster_messenger->set_policy(entity_name_t::TYPE_OSD, p);
     }
 
-    if ((features & CEPH_FEATURE_OSD_ERASURE_CODES) &&
-	!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS)) {
+    if (!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS)) {
       dout(0) << __func__ << " enabling on-disk ERASURE CODES compat feature" << dendl;
       superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
       ObjectStore::Transaction t;
