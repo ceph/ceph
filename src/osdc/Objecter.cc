@@ -677,7 +677,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
     return;
   }
 
-  ceph::mono_time now = ceph::mono_clock::now();
+  ceph::coarse_mono_time now = ceph::coarse_mono_clock::now();
   ldout(cct, 10) << __func__ << " " << info->linger_id << " now " << now
 		 << dendl;
 
@@ -703,7 +703,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
   logger->inc(l_osdc_linger_ping);
 }
 
-void Objecter::_linger_ping(LingerOp *info, int r, mono_time sent,
+void Objecter::_linger_ping(LingerOp *info, int r, ceph::coarse_mono_time sent,
 			    uint32_t register_gen)
 {
   LingerOp::unique_lock l(info->watch_lock);
@@ -730,10 +730,10 @@ int Objecter::linger_check(LingerOp *info)
 {
   LingerOp::shared_lock l(info->watch_lock);
 
-  mono_time stamp = info->watch_valid_thru;
+  ceph::coarse_mono_time stamp = info->watch_valid_thru;
   if (!info->watch_pending_async.empty())
     stamp = MIN(info->watch_valid_thru, info->watch_pending_async.front());
-  auto age = mono_clock::now() - stamp;
+  auto age = ceph::coarse_mono_clock::now() - stamp;
 
   ldout(cct, 10) << __func__ << " " << info->linger_id
 		 << " err " << info->last_error
@@ -785,7 +785,7 @@ Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
   if (info->target.base_oloc.key == oid)
     info->target.base_oloc.key.clear();
   info->target.flags = flags;
-  info->watch_valid_thru = mono_clock::now();
+  info->watch_valid_thru = ceph::coarse_mono_clock::now();
 
   unique_lock l(rwlock);
 
@@ -2127,7 +2127,7 @@ void Objecter::tick()
 
 
   // look for laggy requests
-  auto cutoff = ceph::mono_clock::now();
+  auto cutoff = ceph::coarse_mono_clock::now();
   cutoff -= ceph::make_timespan(cct->_conf->objecter_timeout);  // timeout
 
   unsigned laggy_ops = 0;
@@ -3141,7 +3141,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
 
   op->target.paused = false;
-  op->stamp = ceph::mono_clock::now();
+  op->stamp = ceph::coarse_mono_clock::now();
 
   hobject_t hobj = op->target.get_hobj();
   MOSDOp *m = new MOSDOp(client_inc, op->tid,
@@ -4019,7 +4019,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
   if (op->snapid) m->snapid = op->snapid;
   if (op->crush_rule) m->crush_rule = op->crush_rule;
   monc->send_mon_message(m);
-  op->last_submit = ceph::mono_clock::now();
+  op->last_submit = ceph::coarse_mono_clock::now();
 
   logger->inc(l_osdc_poolop_send);
 }
@@ -4168,7 +4168,7 @@ void Objecter::_poolstat_submit(PoolStatOp *op)
   monc->send_mon_message(new MGetPoolStats(monc->get_fsid(), op->tid,
 					   op->pools,
 					   last_seen_pgmap_version));
-  op->last_submit = ceph::mono_clock::now();
+  op->last_submit = ceph::coarse_mono_clock::now();
 
   logger->inc(l_osdc_poolstat_send);
 }
@@ -4270,7 +4270,7 @@ void Objecter::_fs_stats_submit(StatfsOp *op)
   monc->send_mon_message(new MStatfs(monc->get_fsid(), op->tid,
 				     op->data_pool,
 				     last_seen_pgmap_version));
-  op->last_submit = ceph::mono_clock::now();
+  op->last_submit = ceph::coarse_mono_clock::now();
 
   logger->inc(l_osdc_statfs_send);
 }

@@ -1240,7 +1240,7 @@ private:
   using unique_lock = std::unique_lock<decltype(rwlock)>;
   using shared_lock = boost::shared_lock<decltype(rwlock)>;
   using shunique_lock = ceph::shunique_lock<decltype(rwlock)>;
-  ceph::timer<ceph::mono_clock> timer;
+  ceph::timer<ceph::coarse_mono_clock> timer;
 
   PerfCounters *logger;
 
@@ -1362,7 +1362,7 @@ public:
     version_t *objver;
     epoch_t *reply_epoch;
 
-    ceph::mono_time stamp;
+    ceph::coarse_mono_time stamp;
 
     epoch_t map_dne_bound;
 
@@ -1563,7 +1563,7 @@ public:
     Context *onfinish;
     uint64_t ontimeout;
 
-    ceph::mono_time last_submit;
+    ceph::coarse_mono_time last_submit;
   };
 
   struct StatfsOp {
@@ -1573,7 +1573,7 @@ public:
     Context *onfinish;
     uint64_t ontimeout;
 
-    ceph::mono_time last_submit;
+    ceph::coarse_mono_time last_submit;
   };
 
   struct PoolOp {
@@ -1588,7 +1588,7 @@ public:
     snapid_t snapid;
     bufferlist *blp;
 
-    ceph::mono_time last_submit;
+    ceph::coarse_mono_time last_submit;
     PoolOp() : tid(0), pool(0), onfinish(NULL), ontimeout(0), pool_op(0),
 	       auid(0), crush_rule(0), snapid(0), blp(NULL) {}
   };
@@ -1614,7 +1614,7 @@ public:
 
     Context *onfinish = nullptr;
     uint64_t ontimeout = 0;
-    ceph::mono_time last_submit;
+    ceph::coarse_mono_time last_submit;
 
     CommandOp(
       int target_osd,
@@ -1683,7 +1683,7 @@ public:
     version_t *pobjver;
 
     bool is_watch;
-    ceph::mono_time watch_valid_thru; ///< send time for last acked ping
+    ceph::coarse_mono_time watch_valid_thru; ///< send time for last acked ping
     int last_error;  ///< error from last failed ping|reconnect, if any
     boost::shared_mutex watch_lock;
     using lock_guard = std::unique_lock<decltype(watch_lock)>;
@@ -1693,7 +1693,7 @@ public:
 
     // queue of pending async operations, with the timestamp of
     // when they were queued.
-    list<ceph::mono_time> watch_pending_async;
+    list<ceph::coarse_mono_time> watch_pending_async;
 
     uint32_t register_gen;
     bool registered;
@@ -1715,7 +1715,7 @@ public:
 
     void _queued_async() {
       // watch_lock ust be locked unique
-      watch_pending_async.push_back(ceph::mono_clock::now());
+      watch_pending_async.push_back(ceph::coarse_mono_clock::now());
     }
     void finished_async() {
       unique_lock l(watch_lock);
@@ -1786,7 +1786,7 @@ public:
   struct C_Linger_Ping : public Context {
     Objecter *objecter;
     LingerOp *info;
-    ceph::mono_time sent;
+    ceph::coarse_mono_time sent;
     uint32_t register_gen;
     C_Linger_Ping(Objecter *o, LingerOp *l)
       : objecter(o), info(l), register_gen(info->register_gen) {
@@ -1936,7 +1936,7 @@ public:
   void _linger_commit(LingerOp *info, int r, bufferlist& outbl);
   void _linger_reconnect(LingerOp *info, int r);
   void _send_linger_ping(LingerOp *info);
-  void _linger_ping(LingerOp *info, int r, ceph::mono_time sent,
+  void _linger_ping(LingerOp *info, int r, ceph::coarse_mono_time sent,
 		    uint32_t register_gen);
   int _normalize_watch_error(int r);
 
