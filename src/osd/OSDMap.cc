@@ -4656,11 +4656,9 @@ void OSDMap::check_health(health_check_map_t *checks) const
   }
 
   // OSD_NO_SORTBITWISE
-  if (!test_flag(CEPH_OSDMAP_SORTBITWISE) &&
-      (get_up_osd_features() &
-       CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
+  if (!test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     ostringstream ss;
-    ss << "no legacy OSD present but 'sortbitwise' flag is not set";
+    ss << "'sortbitwise' flag is not set";
     checks->add("OSD_NO_SORTBITWISE", HEALTH_WARN, ss.str());
   }
 
