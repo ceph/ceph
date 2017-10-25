@@ -8434,20 +8434,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     else if (key == "notieragent")
       return prepare_set_flag(op, CEPH_OSDMAP_NOTIERAGENT);
     else if (key == "sortbitwise") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        err = -EPERM;
-        goto reply;
-      }
-      if ((osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)
-          || sure == "--yes-i-really-mean-it") {
-	return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
-      } else {
-	ss << "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature";
-	err = -EPERM;
-	goto reply;
-      }
+      return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
     } else if (key == "recovery_deletes") {
       if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
