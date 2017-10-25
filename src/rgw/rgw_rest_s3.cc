@@ -1220,7 +1220,7 @@ void RGWCreateBucket_ObjStore_S3::send_response()
 void RGWDeleteBucket_ObjStore_S3::send_response()
 {
   int r = op_ret;
-  if (!r)
+  if (!r || r == -ERR_NO_SUCH_BUCKET)
     r = STATUS_NO_CONTENT;
 
   set_req_state_err(s, r);
