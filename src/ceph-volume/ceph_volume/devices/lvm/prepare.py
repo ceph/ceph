@@ -69,7 +69,12 @@ def prepare_bluestore(block, wal, db, secrets, id_=None, fsid=None):
     # write the OSD keyring if it doesn't exist already
     prepare_utils.write_keyring(osd_id, cephx_secret)
     # prepare the osd filesystem
-    prepare_utils.osd_mkfs_bluestore(osd_id, fsid, keyring=cephx_secret)
+    prepare_utils.osd_mkfs_bluestore(
+        osd_id, fsid,
+        keyring=cephx_secret,
+        wal=wal,
+        db=db
+    )
 
 
 class Prepare(object):
