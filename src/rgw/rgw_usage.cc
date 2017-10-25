@@ -10,26 +10,6 @@
 
 using namespace std;
 
-
-static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool> *categories)
-{
-  formatter->open_array_section("categories");
-  map<string, rgw_usage_data>::const_iterator uiter;
-  for (uiter = entry.usage_map.begin(); uiter != entry.usage_map.end(); ++uiter) {
-    if (categories && !categories->empty() && !categories->count(uiter->first))
-      continue;
-    const rgw_usage_data& usage = uiter->second;
-    formatter->open_object_section("entry");
-    formatter->dump_string("category", uiter->first);
-    formatter->dump_int("bytes_sent", usage.bytes_sent);
-    formatter->dump_int("bytes_received", usage.bytes_received);
-    formatter->dump_int("ops", usage.ops);
-    formatter->dump_int("successful_ops", usage.successful_ops);
-    formatter->close_section(); // entry
-  }
-  formatter->close_section(); // categories
-}
-
 int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
 		   uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
 		   map<string, bool> *categories,
@@ -94,7 +74,7 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
         if (!payer.empty() && payer != owner) {
           formatter->dump_string("payer", payer);
         }
-        dump_usage_categories_info(formatter, entry, categories);
+        rgw_dump_usage_categories_info(formatter, entry, categories);
         formatter->close_section(); // bucket
         flusher.flush();
       }
@@ -117,7 +97,7 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
       const rgw_usage_log_entry& entry = siter->second;
       formatter->open_object_section("user");
       formatter->dump_string("user", siter->first);
-      dump_usage_categories_info(formatter, entry, categories);
+      rgw_dump_usage_categories_info(formatter, entry, categories);
       rgw_usage_data total_usage;
       entry.sum(total_usage, *categories);
       formatter->open_object_section("total");
