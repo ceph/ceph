@@ -6412,15 +6412,10 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
   pg->publish_stats_to_osd();
 }
 
-boost::statechart::result
-PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
+void PG::RecoveryState::Backfilling::cancel_backfill()
 {
   PG *pg = context< RecoveryMachine >().pg;
-  ldout(pg->cct, 10) << "defer backfill, retry delay " << c.delay << dendl;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
-
-  pg->state_set(PG_STATE_BACKFILL_WAIT);
-  pg->state_clear(PG_STATE_BACKFILLING);
 
   for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
        it != pg->backfill_targets.end();
@@ -6438,8 +6433,20 @@ PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
     }
   }
 
-  pg->waiting_on_backfill.clear();
+  if (!pg->waiting_on_backfill.empty()) {
+    pg->waiting_on_backfill.clear();
+    pg->finish_recovery_op(hobject_t::get_max());
+  }
+}
 
+boost::statechart::result
+PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  ldout(pg->cct, 10) << "defer backfill, retry delay " << c.delay << dendl;
+  pg->state_set(PG_STATE_BACKFILL_WAIT);
+  pg->state_clear(PG_STATE_BACKFILLING);
+  cancel_backfill();
   pg->schedule_backfill_retry(c.delay);
   return transit<NotBackfilling>();
 }
@@ -6449,29 +6456,9 @@ PG::RecoveryState::Backfilling::react(const UnfoundBackfill &c)
 {
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 10) << "backfill has unfound, can't continue" << dendl;
-  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
-
   pg->state_set(PG_STATE_BACKFILL_UNFOUND);
   pg->state_clear(PG_STATE_BACKFILLING);
-
-  for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
-       it != pg->backfill_targets.end();
-       ++it) {
-    assert(*it != pg->pg_whoami);
-    ConnectionRef con = pg->osd->get_con_osd_cluster(
-      it->osd, pg->get_osdmap()->get_epoch());
-    if (con) {
-      pg->osd->send_message_osd_cluster(
-        new MBackfillReserve(
-	  MBackfillReserve::RELEASE,
-	  spg_t(pg->info.pgid.pgid, it->shard),
-	  pg->get_osdmap()->get_epoch()),
-	con.get());
-    }
-  }
-
-  pg->waiting_on_backfill.clear();
-
+  cancel_backfill();
   return transit<NotBackfilling>();
 }
 
@@ -6479,28 +6466,9 @@ boost::statechart::result
 PG::RecoveryState::Backfilling::react(const RemoteReservationRevokedTooFull &)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
-
-  for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
-       it != pg->backfill_targets.end();
-       ++it) {
-    assert(*it != pg->pg_whoami);
-    ConnectionRef con = pg->osd->get_con_osd_cluster(
-      it->osd, pg->get_osdmap()->get_epoch());
-    if (con) {
-      pg->osd->send_message_osd_cluster(
-        new MBackfillReserve(
-	  MBackfillReserve::RELEASE,
-	  spg_t(pg->info.pgid.pgid, it->shard),
-	  pg->get_osdmap()->get_epoch()),
-	con.get());
-    }
-  }
-
-  pg->waiting_on_backfill.clear();
-  pg->finish_recovery_op(hobject_t::get_max());
-
+  pg->state_clear(PG_STATE_BACKFILLING);
+  cancel_backfill();
   pg->schedule_backfill_retry(pg->cct->_conf->osd_recovery_retry_interval);
   return transit<NotBackfilling>();
 }
@@ -6509,27 +6477,8 @@ boost::statechart::result
 PG::RecoveryState::Backfilling::react(const RemoteReservationRevoked &)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   pg->state_set(PG_STATE_BACKFILL_WAIT);
-
-  for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
-       it != pg->backfill_targets.end();
-       ++it) {
-    assert(*it != pg->pg_whoami);
-    ConnectionRef con = pg->osd->get_con_osd_cluster(
-      it->osd, pg->get_osdmap()->get_epoch());
-    if (con) {
-      pg->osd->send_message_osd_cluster(
-        new MBackfillReserve(
-	  MBackfillReserve::RELEASE,
-	  spg_t(pg->info.pgid.pgid, it->shard),
-	  pg->get_osdmap()->get_epoch()),
-	con.get());
-    }
-  }
-
-  pg->waiting_on_backfill.clear();
-
+  cancel_backfill();
   return transit<WaitLocalBackfillReserved>();
 }
 

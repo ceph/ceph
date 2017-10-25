@@ -2193,6 +2193,7 @@ protected:
       boost::statechart::result react(const RemoteReservationRevoked& evt);
       boost::statechart::result react(const DeferBackfill& evt);
       boost::statechart::result react(const UnfoundBackfill& evt);
+      void cancel_backfill();
       void exit();
     };
 
