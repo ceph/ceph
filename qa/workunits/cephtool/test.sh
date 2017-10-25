@@ -614,7 +614,6 @@ function test_auth_profiles()
   ceph -n client.xx-profile-ro -k client.xx.keyring osd dump
   ceph -n client.xx-profile-ro -k client.xx.keyring pg dump
   ceph -n client.xx-profile-ro -k client.xx.keyring mon dump
-  ceph -n client.xx-profile-ro -k client.xx.keyring fs get cephfs
   # read-only gets access denied for rw commands or auth commands
   ceph -n client.xx-profile-ro -k client.xx.keyring log foo >& $TMPFILE || true
   check_response "EACCES: access denied"
