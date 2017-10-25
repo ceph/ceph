@@ -3173,7 +3173,8 @@ void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
   }
 }
 
-void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
+void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b,
+					     const ghobject_t& obj)
 {
   ldout(store->cct, 10) << __func__ << " " << *b << dendl;
   assert(!b->shared_blob->is_loaded());
@@ -3185,6 +3186,7 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
   // update shared blob
   b->shared_blob->loaded = true;
   b->shared_blob->persistent = new bluestore_shared_blob_t(sbid);
+  b->shared_blob->persistent->set_partial_backpointer(obj);
   shared_blob_set.add(this, b->shared_blob.get());
   for (auto p : blob.get_extents()) {
     if (p.is_valid()) {
@@ -11250,7 +11252,7 @@ int BlueStore::_do_clone_range(
       const bluestore_blob_t& blob = e.blob->get_blob();
       // make sure it is shared
       if (!blob.is_shared()) {
-	c->make_blob_shared(_assign_blobid(txc), e.blob);
+	c->make_blob_shared(_assign_blobid(txc), e.blob, oldo->oid);
 	if (!src_dirty) {
 	  src_dirty = true;
           dirty_range_begin = e.logical_offset;

@@ -465,7 +465,11 @@ struct shard_id_t {
   void decode(bufferlist::iterator &bl) {
     ::decode(id, bl);
   }
+  DENC(shard_id_t, v, p) {
+    denc(v.id, p);
+  }
 };
+WRITE_CLASS_DENC(shard_id_t)
 WRITE_CLASS_ENCODER(shard_id_t)
 WRITE_EQ_OPERATORS_1(shard_id_t, id)
 WRITE_CMP_OPERATORS_1(shard_id_t, id)

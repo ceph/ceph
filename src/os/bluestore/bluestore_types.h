@@ -911,14 +911,29 @@ struct bluestore_shared_blob_t {
   uint64_t sbid;                       ///> shared blob id
   bluestore_extent_ref_map_t ref_map;  ///< shared blob extents
 
+  // approximate backpointer for who created us
+  shard_id_t shard;
+  int64_t pool = -1;
+  uint32_t hash = 0;
+
   bluestore_shared_blob_t(uint64_t _sbid) : sbid(_sbid) {}
 
   DENC(bluestore_shared_blob_t, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.ref_map, p);
+    if (struct_v >= 2) {
+      denc(v.shard, p);
+      denc(v.pool, p);
+      denc(v.hash, p);
+    }
     DENC_FINISH(p);
   }
 
+  void set_partial_backpointer(const ghobject_t& oid) {
+    shard = oid.shard_id;
+    pool = oid.hobj.pool;
+    hash = oid.hobj.get_hash();
+  }
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_shared_blob_t*>& ls);
