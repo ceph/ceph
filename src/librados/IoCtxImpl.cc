@@ -1197,6 +1197,17 @@ int librados::IoCtxImpl::aio_setxattr(const object_t& oid, AioCompletionImpl *c,
   return aio_operate(oid, &op, c, snapc, 0);
 }
 
+int librados::IoCtxImpl::aio_set_alloc_hint(const object_t& oid, AioCompletionImpl *c,
+                                            uint64_t expected_object_size,
+                                            uint64_t expected_write_size,
+                                            uint32_t flags)
+{
+  ::ObjectOperation wr;
+  prepare_assert_ops(&wr);
+  wr.set_alloc_hint(expected_object_size, expected_write_size, flags);
+  return aio_operate(oid, &wr, c, snapc, 0);
+}
+
 namespace {
 struct AioGetxattrsData {
   AioGetxattrsData(librados::AioCompletionImpl *c, map<string, bufferlist>* attrset,

@@ -2022,6 +2022,15 @@ int librados::IoCtx::aio_rmxattr(const std::string& oid, AioCompletion *c,
   return io_ctx_impl->aio_rmxattr(obj, c->pc, name);
 }
 
+int librados::IoCtx::aio_set_alloc_hint(const std::string& oid, AioCompletion *c,
+                                        uint64_t expected_object_size,
+                                        uint64_t expected_write_size,
+                                        uint32_t flags)
+{
+  object_t obj(oid);
+  return io_ctx_impl->aio_set_alloc_hint(obj, c->pc, expected_object_size, expected_write_size, flags);
+}
+
 int librados::IoCtx::aio_stat(const std::string& oid, librados::AioCompletion *c,
 			      uint64_t *psize, time_t *pmtime)
 {

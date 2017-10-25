@@ -224,6 +224,10 @@ struct librados::IoCtxImpl {
 		    map<string, bufferlist>& attrset);
   int aio_rmxattr(const object_t& oid, AioCompletionImpl *c,
 		  const char *name);
+  int aio_set_alloc_hint(const object_t& oid, AioCompletionImpl *c,
+                         uint64_t expected_object_size,
+                         uint64_t expected_write_size,
+                         uint32_t flags);
   int aio_cancel(AioCompletionImpl *c);
 
   int pool_change_auid(unsigned long long auid);
