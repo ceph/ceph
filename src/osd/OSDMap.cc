@@ -1330,18 +1330,6 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
     }
   }
-  if (entity_type == CEPH_ENTITY_TYPE_OSD) {
-    for (auto &erasure_code_profile : erasure_code_profiles) {
-      auto& profile = erasure_code_profile.second;
-      const auto& plugin = profile.find("plugin");
-      if (plugin != profile.end()) {
-	if (plugin->second == "isa" || plugin->second == "lrc")
-	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
-	if (plugin->second == "shec")
-	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3;
-      }
-    }
-  }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
   if (entity_type != CEPH_ENTITY_TYPE_CLIENT)
     mask |= CEPH_FEATURE_OSD_ERASURE_CODES;
