@@ -2186,20 +2186,6 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (any_of(osdmap.get_pools().begin(),
-	     osdmap.get_pools().end(),
-	     [](const std::pair<int64_t,pg_pool_t>& pool)
-	     { return pool.second.use_gmt_hitset; })) {
-    assert(osdmap.get_num_up_osds() == 0 ||
-	   osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT);
-    if (!(m->osd_features & CEPH_FEATURE_OSD_HITSET_GMT)) {
-      dout(0) << __func__ << " one or more pools uses GMT hitsets but osd at "
-	      << m->get_orig_source_inst()
-	      << " doesn't announce support -- ignore" << dendl;
-      goto ignore;
-    }
-  }
-
   // make sure upgrades stop at nautilus
   if (HAVE_FEATURE(m->osd_features, SERVER_O) &&
       osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
@@ -5577,8 +5563,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   if (g_conf->osd_pool_default_flag_nosizechange)
     pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
-  if (g_conf->osd_pool_use_gmt_hitset &&
-      (osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT))
+  if (g_conf->osd_pool_use_gmt_hitset)
     pi->use_gmt_hitset = true;
   else
     pi->use_gmt_hitset = false;
