@@ -1940,13 +1940,13 @@ void AsyncConnection::requeue_sent()
     return;
 
   list<pair<bufferlist, Message*> >& rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  out_seq -= sent.size();
   while (!sent.empty()) {
     Message* m = sent.back();
     sent.pop_back();
     ldout(async_msgr->cct, 10) << __func__ << " " << *m << " for resend "
                                << " (" << m->get_seq() << ")" << dendl;
     rq.push_front(make_pair(bufferlist(), m));
-    out_seq--;
   }
 }
 
