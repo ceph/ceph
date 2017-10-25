@@ -610,6 +610,130 @@ Upgrading from pre-Jewel releases (like Hammer)
 You *must* first upgrade to Jewel (10.2.z) before attempting an
 upgrade to Luminous.
 
+Upgrade compatibility notes, Jewel to Kraken
+--------------------------------------------
+
+These changes occurred between the Jewel and Kraken releases and will affect
+upgrades from Jewel to Luminous.
+
+* The ``osd crush location`` config option is no longer supported.  Please
+  update your ceph.conf to use the ``crush location`` option instead.  Be sure
+  to update your config file to avoid any movement of OSDs from your customized
+  location back to the default one.
+
+* The OSDs now avoid starting new scrubs while recovery is in progress.  To
+  revert to the old behavior (and do not let recovery activity affect the
+  scrub scheduling) you can set the following option::
+
+    osd scrub during recovery = true
+
+* The list of monitor hosts/addresses for building the monmap can now be
+  obtained from DNS SRV records. The service name used in when querying the DNS
+  is defined in the "mon_dns_srv_name" config option, which defaults to
+  "ceph-mon".
+
+* The 'osd class load list' config option is a list of object class names that
+  the OSD is permitted to load (or '*' for all classes). By default it
+  contains all existing in-tree classes for backwards compatibility.
+
+* The 'osd class default list' config option is a list of object class
+  names (or '*' for all classes) that clients may invoke having only
+  the '*', 'x', 'class-read', or 'class-write' capabilities. By
+  default it contains all existing in-tree classes for backwards
+  compatibility. Invoking classes not listed in 'osd class default
+  list' requires a capability naming the class (e.g. 'allow class
+  foo').
+
+* The 'rgw rest getusage op compat' config option allows you to dump
+  (or not dump) the description of user stats in the S3 GetUsage
+  API. This option defaults to false.  If the value is true, the
+  reponse data for GetUsage looks like::
+
+    "stats": {
+                "TotalBytes": 516,
+                "TotalBytesRounded": 1024,
+                "TotalEntries": 1
+             }
+
+  If the value is false, the reponse for GetUsage looks as it did before::
+
+    {
+         516,
+         1024,
+         1
+    }
+
+* The 'osd out ...' and 'osd in ...' commands now preserve the OSD
+  weight.  That is, after marking an OSD out and then in, the weight
+  will be the same as before (instead of being reset to 1.0).
+  Previously the mons would only preserve the weight if the mon
+  automatically marked and OSD out and then in, but not when an admin
+  did so explicitly.
+
+* The 'ceph osd perf' command will display 'commit_latency(ms)' and
+  'apply_latency(ms)'. Previously, the names of these two columns are
+  'fs_commit_latency(ms)' and 'fs_apply_latency(ms)'. We remove the
+  prefix 'fs\_', because they are not filestore specific.
+
+* Monitors will no longer allow pools to be removed by default.  The
+  setting mon_allow_pool_delete has to be set to true (defaults to
+  false) before they allow pools to be removed.  This is a additional
+  safeguard against pools being removed by accident.
+
+* If you have manually specified the monitor user rocksdb via the
+  ``mon keyvaluedb = rocksdb`` option, you will need to manually add a
+  file to the mon data directory to preserve this option::
+
+     echo rocksdb > /var/lib/ceph/mon/ceph-`hostname`/kv_backend
+
+  New monitors will now use rocksdb by default, but if that file is
+  not present, existing monitors will use leveldb.  The ``mon
+  keyvaluedb`` option now only affects the backend chosen when a
+  monitor is created.
+
+* The 'osd crush initial weight' option allows you to specify a CRUSH
+  weight for a newly added OSD.  Previously a value of 0 (the default)
+  meant that we should use the size of the OSD's store to weight the
+  new OSD.  Now, a value of 0 means it should have a weight of 0, and
+  a negative value (the new default) means we should automatically
+  weight the OSD based on its size.  If your configuration file
+  explicitly specifies a value of 0 for this option you will need to
+  change it to a negative value (e.g., -1) to preserve the current
+  behavior.
+
+* The static libraries are no longer included by the debian
+  development packages (lib*-dev) as it is not required per debian
+  packaging policy.  The shared (.so) versions are packaged as before.
+
+* The libtool pseudo-libraries (.la files) are no longer included by
+  the debian development packages (lib*-dev) as they are not required
+  per https://wiki.debian.org/ReleaseGoals/LAFileRemoval and
+  https://www.debian.org/doc/manuals/maint-guide/advanced.en.html.
+
+* The jerasure and shec plugins can now detect SIMD instruction at
+  runtime and no longer need to be explicitly configured for different
+  processors.  The following plugins are now deprecated:
+  jerasure_generic, jerasure_sse3, jerasure_sse4, jerasure_neon,
+  shec_generic, shec_sse3, shec_sse4, and shec_neon. If you use any of
+  these plugins directly you will see a warning in the mon log file.
+  Please switch to using just 'jerasure' or 'shec'.
+
+* The librados omap get_keys and get_vals operations include a start key and a
+  limit on the number of keys to return.  The OSD now imposes a configurable
+  limit on the number of keys and number of total bytes it will respond with,
+  which means that a librados user might get fewer keys than they asked for.
+  This is necessary to prevent careless users from requesting an unreasonable
+  amount of data from the cluster in a single operation.  The new limits are
+  configured with ``osd_max_omap_entries_per_request``, defaulting to 131,072, and
+  ``osd_max_omap_bytes_per_request``, defaulting to 4MB.
+
+* Calculation of recovery priorities has been updated.
+  This could lead to unintuitive recovery prioritization
+  during cluster upgrade. In case of such recovery, OSDs
+  in old version would operate on different priority ranges
+  than new ones. Once upgraded, cluster will operate on
+  consistent values.
+
 
 Upgrade compatibility notes, Kraken to Luminous
 -----------------------------------------------
@@ -4114,8 +4238,8 @@ Upgrade notes
   change it to a negative value (e.g., -1) to preserve the current
   behavior.
 
-* The `osd crush location` config option is no longer supported.  Please
-  update your ceph.conf to use the `crush location` option instead.
+* The ``osd crush location`` config option is no longer supported.  Please
+  update your ceph.conf to use the ``crush location`` option instead.
 
 * The static libraries are no longer included by the debian
   development packages (lib*-dev) as it is not required per debian
@@ -4140,8 +4264,8 @@ Upgrade notes
   which means that a librados user might get fewer keys than they asked for.
   This is necessary to prevent careless users from requesting an unreasonable
   amount of data from the cluster in a single operation.  The new limits are
-  configured with `osd_max_omap_entries_per_request`, defaulting to 131,072, and
-  'osd_max_omap_bytes_per_request', defaulting to 4MB.
+  configured with ``osd_max_omap_entries_per_request``, defaulting to 131,072, and
+  ``osd_max_omap_bytes_per_request``, defaulting to 4MB.
 
 * Calculation of recovery priorities has been updated.
   This could lead to unintuitive recovery prioritization
