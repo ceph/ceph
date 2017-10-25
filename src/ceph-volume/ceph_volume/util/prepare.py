@@ -183,8 +183,6 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
     """
     path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
     monmap = os.path.join(path, 'activate.monmap')
-    wal_path = os.path.join(path, 'block.wal')
-    db_path = os.path.join(path, 'block.db')
 
     system.chown(path)
 
@@ -211,13 +209,15 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
 
     if wal:
         base_command.extend(
-            ['--bluestore-block-wal-path', wal_path]
+            ['--bluestore-block-wal-path', wal]
         )
+        system.chown(wal)
 
     if db:
         base_command.extend(
-            ['--bluestore-block-db-path', db_path]
+            ['--bluestore-block-db-path', db]
         )
+        system.chown(db)
 
     command = base_command + supplementary_command
 
