@@ -44,7 +44,7 @@ void RGWLoadGenProcess::run()
   for (i = 0; i < num_buckets; i++) {
     buckets[i] = "/loadgen";
     string& bucket = buckets[i];
-    append_rand_alpha(NULL, bucket, bucket, 16);
+    append_rand_alpha(cct, bucket, bucket, 16);
 
     /* first create a bucket */
     gen_request("PUT", bucket, 0, &failed);
@@ -60,7 +60,7 @@ void RGWLoadGenProcess::run()
 
   for (i = 0; i < num_objs; i++) {
     char buf[16 + 1];
-    gen_rand_alphanumeric(NULL, buf, sizeof(buf));
+    gen_rand_alphanumeric(cct, buf, sizeof(buf));
     buf[16] = '\0';
     objs[i] = buckets[i % num_buckets] + "/" + buf;
   }
