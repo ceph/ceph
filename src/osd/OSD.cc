@@ -8550,17 +8550,31 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
     // NOTE: this is replica -> primary "i reject your request"
     //      and also primary -> replica "cancel my previously-granted request"
     //                                  (for older peers)
+    //      and also replica -> primary "i revoke your reservation"
+    //                                  (for older peers)
     evt = PG::CephPeeringEvtRef(
       new PG::CephPeeringEvt(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RemoteReservationRejected()));
-  } else if (m->type == MBackfillReserve::CANCEL) {
+  } else if (m->type == MBackfillReserve::RELEASE) {
     evt = PG::CephPeeringEvtRef(
       new PG::CephPeeringEvt(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RemoteReservationCanceled()));
+  } else if (m->type == MBackfillReserve::TOOFULL) {
+    evt = PG::CephPeeringEvtRef(
+      new PG::CephPeeringEvt(
+	m->query_epoch,
+	m->query_epoch,
+	PG::RemoteReservationRevokedTooFull()));
+  } else if (m->type == MBackfillReserve::REVOKE) {
+    evt = PG::CephPeeringEvtRef(
+      new PG::CephPeeringEvt(
+	m->query_epoch,
+	m->query_epoch,
+	PG::RemoteReservationRevoked()));
   } else {
     ceph_abort();
   }
@@ -8596,7 +8610,7 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
       new PG::CephPeeringEvt(
 	m->query_epoch,
 	m->query_epoch,
-	PG::RequestRecovery()));
+	PG::RequestRecoveryPrio(m->priority)));
   } else if (m->type == MRecoveryReserve::GRANT) {
     evt = PG::CephPeeringEvtRef(
       new PG::CephPeeringEvt(
