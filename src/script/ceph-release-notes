@@ -38,9 +38,9 @@ from git import Repo
 fixes_re = re.compile(r"Fixes\:? #(\d+)")
 reviewed_by_re = re.compile(r"Rev(.*)By", re.IGNORECASE)
 # labels is the list of relevant labels defined for github.com/ceph/ceph
-labels = ['bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
+labels = {'bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
           'mon', 'performance', 'pybind', 'rdma', 'rgw', 'rbd', 'tests',
-          'tools']
+          'tools'}
 merge_re = re.compile("Merge pull request #(\d+).*")
 # prefixes is the list of commit description prefixes we recognize
 prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
@@ -106,9 +106,9 @@ def split_component(title, gh, number):
         issue_labels = {it['name'] for it in issue['labels']}
         if 'documentation' in issue_labels:
             return 'doc: ' + title
-        item = labels.intersection(issue_labels)
+        item = set(prefixes).intersection(issue_labels)
         if item:
-            return ",".join(item) + ': ' + title
+            return ",".join(sorted(item)) + ': ' + title
         else:
             return 'UNKNOWN: ' + title
 
