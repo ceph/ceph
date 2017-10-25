@@ -2152,14 +2152,6 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE) &&
-      !(m->osd_features & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
-    mon->clog->info() << "disallowing boot of OSD "
-		      << m->get_orig_source_inst()
-		      << " because 'sortbitwise' osdmap flag is set and OSD lacks the OSD_BITWISE_HOBJ_SORT feature";
-    goto ignore;
-  }
-
   if (osdmap.test_flag(CEPH_OSDMAP_RECOVERY_DELETES) &&
       !(m->osd_features & CEPH_FEATURE_OSD_RECOVERY_DELETES)) {
     mon->clog->info() << "disallowing boot of OSD "
