@@ -1108,14 +1108,13 @@ public:
    */
   struct validated_data {
     template<typename T>struct member_status {
-      bool checked;
-      bool passed;
-      int ondisk_read_retval;
+      bool checked = false;
+      bool passed = false;
+      bool repaired = false;
+      int ondisk_read_retval = 0;
       T ondisk_value;
       T memory_value;
       std::stringstream error_str;
-      member_status() : checked(false), passed(false),
-          ondisk_read_retval(0) {}
     };
 
     bool performed_validation;

@@ -3955,6 +3955,7 @@ next:
                                        << "(" << path << "), rewriting it";
         in->_mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
                            false);
+        results->backtrace.repaired = true;
       }
 
       // If the inode's number was free in the InoTable, fix that
