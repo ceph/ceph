@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <map>
-#include <set>
 #include <iterator>
 #include <string>
 #include <vector>
@@ -16,7 +15,6 @@
 #include "rgw_rest.h"
 #include "rgw_crypt_sanitize.h"
 
-#include <boost/algorithm/string/join.hpp>
 #include <boost/container/small_vector.hpp>
 #include <boost/utility/string_view.hpp>
 
@@ -569,7 +567,7 @@ get_v4_canonical_headers(const req_info& info,
                          const bool using_qs,
                          const bool force_boto2_compat)
 {
-  std::set<std::string> canonical_hdrs_set;
+  std::map<boost::string_view, std::string> canonical_hdrs_map;
   for (const auto& token : get_str_vec<5>(signedheaders, ";")) {
     /* TODO(rzarzynski): we'd like to switch to sstring here but it should
      * get push_back() and reserve() first. */
@@ -616,14 +614,17 @@ get_v4_canonical_headers(const req_info& info,
       }
     }
 
-    canonical_hdrs_set.insert(
-	boost::algorithm::join(std::vector<std::string>(
-	    {std::string(token), rgw_trim_whitespace(token_value)} ), ":"));
+    canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
   }
 
   std::string canonical_hdrs;
-  for (const auto& header : canonical_hdrs_set) {
-    canonical_hdrs.append(header.data(), header.length())
+  for (const auto& header : canonical_hdrs_map) {
+    const boost::string_view& name = header.first;
+    const std::string& value = header.second;
+
+    canonical_hdrs.append(name.data(), name.length())
+                  .append(":", std::strlen(":"))
+                  .append(value)
                   .append("\n", std::strlen("\n"));
   }
 
