@@ -4449,7 +4449,12 @@ void CInode::scrub_finished(MDSInternalContextBase **c) {
   if (scrub_infop->header->get_origin() == this) {
     // We are at the point that a tagging scrub was initiated
     LogChannelRef clog = mdcache->mds->clog;
-    clog->info() << "scrub complete with tag '" << scrub_infop->header->get_tag() << "'";
+    if (scrub_infop->header->get_tag().empty()) {
+      clog->info() << "scrub complete";
+    } else {
+      clog->info() << "scrub complete with tag '"
+                   << scrub_infop->header->get_tag() << "'";
+    }
   }
 }
 
