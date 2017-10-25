@@ -2402,13 +2402,15 @@ void AsyncConnection::handle_write()
         prepare_send_message(get_features(), m, data);
 
       r = write_message(m, data, more);
-      if (r < 0) {
-        ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
-        goto fail;
-      }
+
       write_lock.lock();
-      if (r > 0)
-        break;
+      if (r == 0) {
+	;
+      } else if (r < 0) {
+	ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
+	break;
+      } else if (r > 0)
+	break;
     } while (can_write == WriteStatus::CANWRITE);
     write_lock.unlock();
 
