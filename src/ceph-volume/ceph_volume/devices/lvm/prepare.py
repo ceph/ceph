@@ -148,6 +148,7 @@ class Prepare(object):
                 'ceph.osd_fsid': osd_fsid,
                 'ceph.osd_id': osd_id,
                 'ceph.cluster_fsid': cluster_fsid,
+                'ceph.cluster_name': conf.cluster,
                 'ceph.data_device': data_lv.lv_path,
                 'ceph.data_uuid': data_lv.lv_uuid,
             }
@@ -191,6 +192,7 @@ class Prepare(object):
                 'ceph.osd_fsid': osd_fsid,
                 'ceph.osd_id': osd_id,
                 'ceph.cluster_fsid': cluster_fsid,
+                'ceph.cluster_name': conf.cluster,
                 'ceph.block_device': block_lv.lv_path,
                 'ceph.block_uuid': block_lv.lv_uuid,
             }
