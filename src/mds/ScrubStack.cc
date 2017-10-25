@@ -396,9 +396,14 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
 
   // Inform the cluster log if we found an error
   if (!result.passed_validation) {
-    clog->warn() << "Scrub error on inode " << in->ino()
-                 << " (" << path << ") see " << g_conf->name
-                 << " log and `damage ls` output for details";
+    if (result.all_damage_repaired()) {
+      clog->info() << "Scrub repaired inode " << in->ino()
+                   << " (" << path << ")";
+    } else {
+      clog->warn() << "Scrub error on inode " << in->ino()
+                   << " (" << path << ") see " << g_conf->name
+                   << " log and `damage ls` output for details";
+    }
 
     // Put the verbose JSON output into the MDS log for later inspection
     JSONFormatter f;
