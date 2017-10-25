@@ -5900,18 +5900,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     bloomp->set_fpp(f);
   } else if (var == "use_gmt_hitset") {
     if (val == "true" || (interr.empty() && n == 1)) {
-      string force;
-      cmd_getval(cct, cmdmap, "force", force);
-      if (!osdmap.get_num_up_osds() && force != "--yes-i-really-mean-it") {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        return -EPERM;
-      }
-      if (!(osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT)
-          && force != "--yes-i-really-mean-it") {
-	ss << "not all OSDs support GMT hit set.";
-	return -EINVAL;
-      }
       p.use_gmt_hitset = true;
     } else {
       ss << "expecting value 'true' or '1'";
