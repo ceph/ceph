@@ -2554,7 +2554,7 @@ int OSD::init()
     goto out;
   }
   osdmap = get_map(superblock.current_epoch);
-  check_osdmap_features(store);
+  check_osdmap_features();
 
   create_recoverystate_perf();
 
@@ -7621,7 +7621,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 
   map_lock.put_write();
 
-  check_osdmap_features(store);
+  check_osdmap_features();
 
   // yay!
   consume_map();
@@ -7668,7 +7668,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 
 }
 
-void OSD::check_osdmap_features(ObjectStore *fs)
+void OSD::check_osdmap_features()
 {
   // adjust required feature bits?
 

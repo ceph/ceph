@@ -1202,7 +1202,7 @@ protected:
   void _dispatch(Message *m);
   void dispatch_op(OpRequestRef op);
 
-  void check_osdmap_features(ObjectStore *store);
+  void check_osdmap_features();
 
   // asok
   friend class OSDSocketHook;
