@@ -35,6 +35,7 @@ static string datalog_sync_status_oid_prefix = "datalog.sync-status";
 static string datalog_sync_status_shard_prefix = "datalog.sync-status.shard";
 static string datalog_sync_full_sync_index_prefix = "data.full-sync.index";
 static string bucket_status_oid_prefix = "bucket.sync-status";
+static string object_status_oid_prefix = "bucket.sync-status";
 
 class RGWSyncDebugLogger {
   CephContext *cct;
@@ -3182,6 +3183,13 @@ string RGWBucketSyncStatusManager::status_oid(const string& source_zone,
                                               const rgw_bucket_shard& bs)
 {
   return bucket_status_oid_prefix + "." + source_zone + ":" + bs.get_key();
+}
+
+string RGWBucketSyncStatusManager::obj_status_oid(const string& source_zone,
+                                                  const rgw_obj& obj)
+{
+  return object_status_oid_prefix + "." + source_zone + ":" + obj.bucket.get_key() + ":" +
+         obj.key.name + ":" + obj.key.instance;
 }
 
 class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
