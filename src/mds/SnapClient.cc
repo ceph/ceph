@@ -55,18 +55,20 @@ void SnapClient::handle_query_result(MMDSTableRequest *m)
     break;
   case 'F': // full
     {
-      set<snapid_t> old_snaps;
-      if (cached_version > 0)
-	get_snaps(old_snaps);
-
       decode(cached_snaps, p);
       decode(cached_pending_update, p);
       decode(cached_pending_destroy, p);
-      cached_version = m->get_tid();
 
-      // increase destroy_seq if any snapshot gets destroyed.
-      if (!old_snaps.empty() && old_snaps != filter(old_snaps))
-	destroy_seq++;
+      snapid_t last_created, last_destroyed;
+      decode(last_created, p);
+      decode(last_destroyed, p);
+
+      if (last_created > cached_last_created)
+	cached_last_created = last_created;
+      if (last_destroyed > cached_last_destroyed)
+	cached_last_destroyed = last_destroyed;
+
+      cached_version = m->get_tid();
     }
     break;
   default:
@@ -75,12 +77,18 @@ void SnapClient::handle_query_result(MMDSTableRequest *m)
 
   if (!committing_tids.empty()) {
     for (auto p = committing_tids.begin();
-	 p != committing_tids.end() && *p < cached_version; ) {
-      if (!cached_pending_update.count(*p) && !cached_pending_destroy.count(*p)) {
+	 p != committing_tids.end() && *p <= cached_version; ) {
+      if (cached_pending_update.count(*p)) {
+	if (cached_pending_update[*p].snapid > cached_last_created)
+	  cached_last_created = cached_pending_update[*p].snapid;
+	++p;
+      } else if (cached_pending_destroy.count(*p)) {
+	if (cached_pending_destroy[*p].second > cached_last_destroyed)
+	  cached_last_destroyed = cached_pending_destroy[*p].second;
+	++p;
+      } else {
 	// pending update/destroy have been committed.
 	committing_tids.erase(p++);
-      } else {
-	++p;
       }
     }
   }
@@ -119,9 +127,12 @@ void SnapClient::notify_commit(version_t tid)
     committing_tids.insert(tid);
   } else if (cached_pending_update.count(tid)) {
     committing_tids.insert(tid);
+    if (cached_pending_update[tid].snapid > cached_last_created)
+      cached_last_created = cached_pending_update[tid].snapid;
   } else if (cached_pending_destroy.count(tid)) {
     committing_tids.insert(tid);
-    destroy_seq++;
+    if (cached_pending_destroy[tid].second > cached_last_destroyed)
+      cached_last_destroyed = cached_pending_destroy[tid].second;
   } else if (cached_version > tid) {
     // no need to record the tid if it has already been committed.
   } else {
