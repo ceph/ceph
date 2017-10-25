@@ -66,7 +66,6 @@ def get_prefixed_url(url):
     return global_instance().url_prefix + url
 
 
-
 class StandbyModule(MgrStandbyModule):
     def serve(self):
         server_addr = self.get_localized_config('server_addr', '::')
@@ -768,6 +767,48 @@ class Module(MgrModule):
                     content_data=json.dumps(self._servers(), indent=2)
                 )
 
+            @cherrypy.expose
+            def monitors(self):
+                template = env.get_template("monitors.html")
+                return template.render(
+                    url_prefix = global_instance().url_prefix,
+                    ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
+                    toplevel_data=json.dumps(self._toplevel_data(), indent=2),
+                    content_data=json.dumps(self._monitors(), indent=2)
+                )
+
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def monitors_data(self):
+                return self._monitors
+
+            def _monitors(self):
+                in_quorum, out_quorum = [], []
+
+                counters = [ 'mon.num_sessions'
+                ]
+
+                mon_status = global_instance().get_sync_object(MonStatus).data
+                for mon in mon_status["monmap"]["mons"]:
+                    mon["stats"] = {}
+                    for counter in counters:
+                        data = global_instance().get_counter("mon", mon["name"], counter)
+                        if data is not None:
+                            mon["stats"][counter.split(".")[1]] = data[counter] 
+                        else:
+                            mon["stats"][counter.split(".")[1]] = []
+                    if mon["rank"] in mon_status["quorum"]:
+                        in_quorum.append(mon)
+                    else:
+                        out_quorum.append(mon)
+                    
+                return {
+                    'mon_status': mon_status,
+                    'in_quorum' : in_quorum,
+                    'out_quorum': out_quorum,                
+                }
+            
             def _servers(self):
                 return {
                     'servers': global_instance().list_servers()
