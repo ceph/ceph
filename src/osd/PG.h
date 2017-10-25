@@ -840,7 +840,7 @@ protected:
   int recovery_ops_active;
   set<pg_shard_t> waiting_on_backfill;
 #ifdef DEBUG_RECOVERY_OIDS
-  set<hobject_t> recovering_oids;
+  multiset<hobject_t> recovering_oids;
 #endif
 
 protected:

@@ -2209,7 +2209,6 @@ void PG::start_recovery_op(const hobject_t& soid)
   assert(recovery_ops_active >= 0);
   recovery_ops_active++;
 #ifdef DEBUG_RECOVERY_OIDS
-  assert(recovering_oids.count(soid) == 0);
   recovering_oids.insert(soid);
 #endif
   osd->start_recovery_op(this, soid);
@@ -2226,7 +2225,7 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
   recovery_ops_active--;
 #ifdef DEBUG_RECOVERY_OIDS
   assert(recovering_oids.count(soid));
-  recovering_oids.erase(soid);
+  recovering_oids.erase(recovering_oids.find(soid));
 #endif
   osd->finish_recovery_op(this, soid, dequeue);
 
