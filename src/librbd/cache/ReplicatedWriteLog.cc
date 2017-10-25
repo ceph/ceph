@@ -1124,16 +1124,17 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
     *m_meta_store, m_release_block, m_detain_block, std::move(bl), BLOCK_SIZE, on_finish);
     map_blocks(IO_TYPE_WRITE, std::move(image_extents), req);
   */
-  
+#if 0 
   /* Pass write through */
   if (m_image_ctx.persistent_cache_enabled) {
     m_image_cache.aio_write(std::move(write_req->image_extents), std::move(write_req->bl),
-			    write_req->fadvise_flags, write_req->_on_finish);
+			    write_req->fadvise_flags, write_req->user_req);
   } else {
     m_image_writeback.aio_write(std::move(write_req->image_extents), std::move(write_req->bl),
-				0, write_req->_on_finish);
+				0, write_req->user_req);
   }
   //write_req->on_finish = NULL;
+#endif
   write_req->complete(0);
 }
 
