@@ -273,7 +273,11 @@ int AvlAllocator::_allocate(
 
 AvlAllocator::AvlAllocator(CephContext* cct, int64_t device_size) :
   cct(cct),
-  num_total(device_size)
+  num_total(device_size),
+  range_size_alloc_threshold(
+    cct->_conf->get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
+  range_size_alloc_free_pct(
+    cct->_conf->get_val<uint64_t>("bluestore_avl_alloc_bf_free_pct"))
 {
   avl_create(&range_tree, range_tree_compare,
     sizeof(range_seg_t), offsetof(range_seg_t, rs_node));

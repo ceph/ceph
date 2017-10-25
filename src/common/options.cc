@@ -3926,6 +3926,14 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
+    Option("bluestore_avl_alloc_bf_threshold", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(131072)
+    .set_description(""),
+
+    Option("bluestore_avl_alloc_bf_free_pct", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(4)
+    .set_description(""),
+
     // -----------------------------------------
     // kstore
 

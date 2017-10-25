@@ -50,14 +50,14 @@ class AvlAllocator : public Allocator {
    * an allocation of this size then it switches to using more
    * aggressive strategy (i.e search by size rather than offset).
    */
-  uint64_t range_size_alloc_threshold = 1ULL << 17; ///< 128K
+  uint64_t range_size_alloc_threshold = 0;
   /*
    * The minimum free space, in percent, which must be available
    * in allocator to continue allocations in a first-fit fashion.
    * Once the allocator's free space drops below this level we dynamically
    * switch to using best-fit allocations.
    */
-  int range_size_alloc_free_pct = 4;
+  int range_size_alloc_free_pct = 0;
 
   range_seg_t* _find_block(avl_tree_t *t, uint64_t start, uint64_t size);
   uint64_t _block_picker(avl_tree_t *t, uint64_t *cursor, uint64_t size,
