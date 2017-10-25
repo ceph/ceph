@@ -10691,10 +10691,14 @@ int BlueStore::_do_remove(
     if (b.is_shared() &&
 	sb->loaded &&
 	maybe_unshared_blobs.count(sb)) {
-      b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
-        expect[sb].get(off, len);
-	return 0;
-      });
+      if (b.is_compressed()) {
+	expect[sb].get(0, b.get_ondisk_length());
+      } else {
+	b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
+	    expect[sb].get(off, len);
+	    return 0;
+	  });
+      }
     }
   }
 
