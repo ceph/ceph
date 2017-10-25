@@ -224,6 +224,7 @@ struct PGPool {
 
   interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
   interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
+  interval_set<snapid_t> cached_deleting_snaps;  // current set to be purged
 
   PGPool(CephContext* cct, OSDMapRef map, int64_t i)
     : cct(cct),
@@ -236,6 +237,7 @@ struct PGPool {
     info = *pi;
     snapc = pi->get_snap_context();
     pi->build_removed_snaps(cached_removed_snaps);
+    cached_deleting_snaps = pi->get_deleting_snaps();
   }
 
   void update(OSDMapRef map);

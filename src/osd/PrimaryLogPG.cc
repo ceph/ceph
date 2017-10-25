@@ -14050,6 +14050,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 		       << dendl;
     pg->info.purged_snaps.insert(snap_to_trim);
     pg->snap_trimq.erase(snap_to_trim);
+    pg->pool.info.purged_snap(snap_to_trim);
     ldout(pg->cct, 10) << "purged_snaps now "
 		       << pg->info.purged_snaps << ", snap_trimq now "
 		       << pg->snap_trimq << dendl;
