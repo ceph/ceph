@@ -78,7 +78,6 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
 	::decode(info.name, p);
 	::decode(info.stamp, p);
 	info.snapid = ++last_snap;
-	info.long_name = "create";
 	pending_update[version] = info;
 	dout(10) << "prepare v" << version << " create " << info << dendl;
       } else {
@@ -115,7 +114,6 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       ::decode(info.snapid, p);
       ::decode(info.name, p);
       ::decode(info.stamp, p);
-      info.long_name = "update";
 
       // bump last_snap... we use it as a version value on the snaprealm.
       ++last_snap;
@@ -136,7 +134,7 @@ void SnapServer::_get_reply_buffer(version_t tid, bufferlist *pbl) const
 {
   auto p = pending_update.find(tid);
   if (p != pending_update.end()) {
-    if (pbl && p->second.long_name == "create")
+    if (pbl && !snaps.count(p->second.snapid)) // create
       ::encode(p->second.snapid, *pbl);
     return;
   }
@@ -160,12 +158,13 @@ void SnapServer::_commit(version_t tid, MMDSTableRequest *req)
   if (pending_update.count(tid)) {
     SnapInfo &info = pending_update[tid];
     string opname;
-    if (info.long_name.empty())
+    if (snaps.count(info.snapid)) {
+      opname = "update";
+      if (info.stamp == utime_t())
+	info.stamp = snaps[info.snapid].stamp;
+    } else {
       opname = "create";
-    else
-      opname.swap(info.long_name);
-    if (info.stamp == utime_t() && snaps.count(info.snapid))
-      info.stamp = snaps[info.snapid].stamp;
+    }
     dout(7) << "commit " << tid << " " << opname << " " << info << dendl;
     snaps[info.snapid] = info;
     pending_update.erase(tid);
@@ -199,10 +198,10 @@ void SnapServer::_rollback(version_t tid)
   if (pending_update.count(tid)) {
     SnapInfo &info = pending_update[tid];
     string opname;
-    if (info.long_name.empty())
-      opname = "create";
+    if (snaps.count(info.snapid))
+      opname = "update";
     else
-      opname.swap(info.long_name);
+      opname = "create";
     dout(7) << "rollback " << tid << " " << opname << " " << info << dendl;
     pending_update.erase(tid);
   } 
