@@ -6521,6 +6521,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	t->omap_setkeys(soid, to_set_bl);
 	ctx->delta_stats.num_wr++;
+        ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(to_set_bl.length(), 10);
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
       obs.oi.clear_omap_digest();
