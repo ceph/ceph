@@ -927,16 +927,16 @@ void ReplicatedWriteLog<I>::detain_guarded_request(GuardedRequest &&req)
 {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
-
+  
   BlockGuardCell *cell;
   int r = m_write_log_guard.detain({req.first_block_num, req.last_block_num},
 				   &req, &cell);
   if (r < 0) {
     lderr(cct) << "failed to detain guarded request: " << cpp_strerror(r)
-               << dendl;
-    m_image_ctx.op_work_queue->queue(req.on_guard_grant, r);
+		   << dendl;
+    m_image_ctx.op_work_queue->queue(req.on_guard_acquire, r);
     return;
-  } else if (r > 0) {
+  } else if (r > 0) { 
     ldout(cct, 20) << "detaining guarded request due to in-flight requests: "
                    << "start=" << req.first_block_num << ", "
 		   << "end=" << req.last_block_num << dendl;
@@ -944,113 +944,205 @@ void ReplicatedWriteLog<I>::detain_guarded_request(GuardedRequest &&req)
   }
 
   ldout(cct, 20) << "in-flight request cell: " << cell << dendl;
-  Context *on_finish = req.on_guard_grant;
-#if 0
-  Context *ctx = new FunctionContext([this, cell, on_finish](int r) {
-      handle_detained_aio_update(cell, r, on_finish);
-    });
-  aio_update(CEPH_NOSNAP, op.start_object_no, op.end_object_no, op.new_state,
-             op.current_state, op.parent_trace, ctx);
-#endif
+  req.on_guard_acquire->acquired(cell);
 }
 
-/*
-
-detain (ObjectMap.cc):
-
 template <typename I>
-void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
+void ReplicatedWriteLog<I>::release_guarded_request(BlockGuardCell *cell)
+{
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 20) << "cell=" << cell << dendl;
 
-  assert(m_image_ctx.snap_lock.is_locked());
-  assert(m_image_ctx.object_map_lock.is_wlocked());
+  WriteLogGuard::BlockOperations block_ops;
+  m_write_log_guard.release(cell, &block_ops);
 
-  BlockGuardCell *cell;
-  int r = m_update_guard->detain({op.start_object_no, op.end_object_no},
-                                &op, &cell);
-
-  if (r < 0) {
-    lderr(cct) << "failed to detain object map update: " << cpp_strerror(r)
-               << dendl;
-    m_image_ctx.op_work_queue->queue(op.on_finish, r);
-    return;
-  } else if (r > 0) {
-    ldout(cct, 20) << "detaining object map update due to in-flight update: "
-                   << "start=" << op.start_object_no << ", "
-		   << "end=" << op.end_object_no << ", "
-                   << (op.current_state ?
-                         stringify(static_cast<uint32_t>(*op.current_state)) :
-                         "")
-		   << "->" << static_cast<uint32_t>(op.new_state) << dendl;
-    return;
+  for (auto &op : block_ops) {
+    detain_guarded_request(std::move(op));
   }
-
-  ldout(cct, 20) << "in-flight update cell: " << cell << dendl;
-  Context *on_finish = op.on_finish;
-  Context *ctx = new FunctionContext([this, cell, on_finish](int r) {
-      handle_detained_aio_update(cell, r, on_finish);
-    });
-  aio_update(CEPH_NOSNAP, op.start_object_no, op.end_object_no, op.new_state,
-             op.current_state, op.parent_trace, ctx);
-
-release:
-
-template <typename I>
-void ObjectMap<I>::handle_detained_aio_update(BlockGuardCell *cell, int r,
-                                              Context *on_finish) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "cell=" << cell << ", r=" << r << dendl;
-
-  typename UpdateGuard::BlockOperations block_ops;
-  m_update_guard->release(cell, &block_ops);
-
-  {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
-    for (auto &op : block_ops) {
-      detained_aio_update(std::move(op));
-    }
-  }
-
-  on_finish->complete(r);
 }
 
-
+/**
+ * This is the custodian of the BlockGuard cell for this write, and
+ * the state information about the progress of this write. This object
+ * lives until the write is persisted in all (live) log replicas.
+ * User write op may be completed from here before the write
+ * persists. Block guard is not released until the write persists
+ * everywhere (this is how we guarantee to each log repica that they
+ * will never see overlapping writes).
  */
-
 struct C_WriteRequest : public C_GuardedBlockIORequest {
   ImageCache::Extents image_extents;
   bufferlist bl;
   int fadvise_flags;
-  Context *on_finish; /* User write request */
+  Context *user_req; /* User write request */
+  Context *_on_finish; /* Block guard release */
+  std::atomic<bool> m_user_req_completed;
   C_WriteRequest(CephContext *cct, ImageCache::Extents &&image_extents,
-		 bufferlist&& bl, int fadvise_flags, Context *on_finish)
+		 bufferlist&& bl, int fadvise_flags, Context *user_req)
     : C_GuardedBlockIORequest(cct, NULL), image_extents(std::move(image_extents)),
-      bl(std::move(bl)), fadvise_flags(fadvise_flags), on_finish(on_finish) {
+      bl(std::move(bl)), fadvise_flags(fadvise_flags),
+      user_req(user_req), _on_finish(NULL), m_user_req_completed(false) {
   }
   
   virtual void send() override {
-    // TODO: Do we invoke our own complete() here?
+    /* Should never be called */
+    ldout(cct, 6) << dendl;
   }
   
   virtual void finish(int r) {
-    // TODO: Do we invoke on_finish->complete() here?
+    bool initial = false;
+    ldout(cct, 6) << dendl;
+
+    if (m_user_req_completed.compare_exchange_strong(initial, true)) {
+      user_req->complete(r);
+      // TODO: Make a WQ addressable from here
+      //m_image_ctx.op_work_queue->queue(user_req, r)
+    }
+    _on_finish->complete(0);
   }
   
   virtual const char *get_name() const override {
     return "C_WriteRequest";
   }  
 };
+
+/**
+ * Takes custody of write_req.
+ *
+ * Locking:
+ * Acquires m_lock
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
+{
+  CephContext *cct = m_image_ctx.cct;
+  BlockGuardCell *cell = write_req->m_cell;
   
+  TOID(struct WriteLogPoolRoot) pool_root;
+  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
+
+  write_req->_on_finish =
+    new FunctionContext([this, cell](int r) {
+	CephContext *cct = m_image_ctx.cct;
+	ldout(cct, 6) << "cell=" << cell << dendl;
+	release_guarded_request(cell);
+    });
+
+  ldout(cct,6) << "bl=[" << write_req->bl << "]" << dendl;
+  uint8_t *pmem_blocks = D_RW(D_RW(pool_root)->data_blocks);
+  struct WriteLogPmemEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
+
+  ExtentsSummary<ImageCache::Extents> image_extents_summary(write_req->image_extents);
+
+  WriteLogOperations operations;
+  WriteLogOperationSet *set(new WriteLogOperationSet(
+    cct, librbd::BlockExtent(image_extents_summary.first_block,
+			     image_extents_summary.last_block), write_req));
+  {
+    uint64_t buffer_offset = 0;
+    Mutex::Locker locker(m_lock);
+    /* TODO: If there isn't space for this whole write, defer it */
+    if (m_free_log_entries < operations.size()) {
+      ldout(cct, 6) << "wait for " << operations.size() << " log entries" << dendl;
+    } else if (m_free_blocks < image_extents_summary.total_bytes / BLOCK_SIZE) {
+      ldout(cct, 6) << "wait for " << image_extents_summary.total_bytes / BLOCK_SIZE << " data blocks" << dendl;
+    } else {
+      for (auto &extent : write_req->image_extents) {
+	WriteLogOperation *operation =
+	  new WriteLogOperation(m_current_sync_point, extent.first, extent.second);
+	operations.emplace_back(operation);
+	operation->log_entry->log_entry_index = m_first_free_entry;
+	m_first_free_entry = (m_first_free_entry + 1) % m_total_log_entries;
+	m_free_log_entries--;
+	operation->log_entry->pmem_entry = &pmem_log_entries[operation->log_entry->log_entry_index];
+	operation->log_entry->ram_entry.first_pool_block = m_next_free_block;
+	operation->log_entry->ram_entry.has_data = 1;
+	m_next_free_block = (m_next_free_block + 1) % m_total_blocks;
+	m_free_blocks -= operation->log_entry->ram_entry.write_bytes / BLOCK_SIZE;
+	operation->log_entry->pmem_block =
+	  pmem_blocks + (operation->log_entry->ram_entry.first_pool_block * BLOCK_SIZE);
+	operation->log_entry->ram_entry.sync_gen_number = m_current_sync_gen;
+	if (m_persist_on_flush) {
+	  /* Persist on flush. Sequence #0 is never used. */
+	  operation->log_entry->ram_entry.write_sequence_number = 0;
+	} else {
+	  /* Persist on write */
+	  operation->log_entry->ram_entry.write_sequence_number = ++m_last_op_sequence_num;
+	  operation->log_entry->ram_entry.sequenced = 1;
+	}
+	operation->log_entry->ram_entry.sync_point = 0;
+	operation->log_entry->ram_entry.unmap = 0;
+	operation->log_entry->ram_entry.entry_valid = 1;
+	operation->bl.substr_of(write_req->bl, buffer_offset,
+				operation->log_entry->ram_entry.write_bytes);
+	buffer_offset += operation->log_entry->ram_entry.write_bytes;
+	ldout(cct, 6) << "operation=[" << *operation << "]" << dendl;
+      }
+    }
+  }
+  
+  /* Write data - drain once for all */
+  for (auto &operation : operations) {
+    bufferlist::iterator i(&operation->bl);
+    i.copy((unsigned)operation->log_entry->ram_entry.write_bytes, (char*)operation->log_entry->pmem_block);
+    ldout(cct, 6) << operation->bl << dendl;
+    pmemobj_flush(m_log_pool, operation->log_entry->pmem_block, operation->log_entry->ram_entry.write_bytes);
+  }
+  pmemobj_drain(m_log_pool);
+  
+  /* TODO: For persist-on-flush, complete user write here */
+  /* TODO: Better yet: split the loop above at the i.copy, and push
+   * the rest to another thread. Rather than pushing as a work item,
+   * Let a single WF do all the pmemobj_flush for all the waiting ops
+   * (after sorting them in address order and merging them into fewer
+   * larger persist calls), do one pmemobj_drain, then append all
+   * their log entries on one transaction. */
+  
+  /* Write data is now (locally) persisted. It's now safe to persist
+   * the log entries that refer to them */
+  
+  /* Write log entries - write all in a transaction */
+  TX_BEGIN(m_log_pool) {
+    for (auto &operation : operations) {
+      TX_MEMCPY(operation->log_entry->pmem_entry,
+		&operation->log_entry->ram_entry,
+		sizeof(operation->log_entry->ram_entry));
+    }
+  } TX_ONCOMMIT {
+  } TX_ONABORT {
+    lderr(cct) << "failed to commit log entries (" << m_log_pool_name << ")" << dendl;
+    //write_req->on_finish->complete(-1);
+    //write_req->on_finish = NULL;
+    return;
+  } TX_FINALLY {
+  } TX_END;
+  
+  
+  /*// TODO handle fadvise flags
+    BlockGuard::C_BlockRequest *req = new C_WriteBlockRequest<I>(
+    m_image_ctx, m_image_writeback, *m_policy, *m_journal_store, *m_image_store,
+    *m_meta_store, m_release_block, m_detain_block, std::move(bl), BLOCK_SIZE, on_finish);
+    map_blocks(IO_TYPE_WRITE, std::move(image_extents), req);
+  */
+  
+  /* Pass write through */
+  if (m_image_ctx.persistent_cache_enabled) {
+    m_image_cache.aio_write(std::move(write_req->image_extents), std::move(write_req->bl),
+			    write_req->fadvise_flags, write_req->_on_finish);
+  } else {
+    m_image_writeback.aio_write(std::move(write_req->image_extents), std::move(write_req->bl),
+				0, write_req->_on_finish);
+  }
+  //write_req->on_finish = NULL;
+  write_req->complete(0);
+}
+
 template <typename I>
 void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
                                   bufferlist&& bl,
                                   int fadvise_flags,
                                   Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  TOID(struct WriteLogPoolRoot) pool_root;
-  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
   //ldout(cct, 20) << "image_extents=" << image_extents << ", "
   //               << "on_finish=" << on_finish << dendl;
 
@@ -1078,120 +1170,24 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
 
   C_WriteRequest *write_req =
     new C_WriteRequest(cct, std::move(image_extents), std::move(bl), fadvise_flags, on_finish);
-  GuardedRequestFunctionContext *ctx = new GuardedRequestFunctionContext([this, write_req](BlockGuardCell *cell) {
+
+  /* The lambda below will be called when the block guard for all
+   * blocks affected by this write is obtained */
+  GuardedRequestFunctionContext *guarded_ctx =
+    new GuardedRequestFunctionContext([this, write_req](BlockGuardCell *cell) {
       CephContext *cct = m_image_ctx.cct;
       ldout(cct, 6) << "cell=" << cell << dendl;
+
       write_req->m_cell = cell;
-      write_req->send();
+
+      /* TODO: Defer write_req until log resources available */
+      dispatch_aio_write(write_req);
     });
 
   GuardedRequest guarded(image_extents_summary.first_block,
 			 image_extents_summary.last_block,
-			 ctx); //TODO: Needs to be a C_WriteReq
+			 guarded_ctx);
   detain_guarded_request(std::move(guarded));
-  // TODO: return here
-
-  // TODO: Move to C_WriteRequest::send()
-  ldout(cct,6) << "bl=[" << bl << "]" << dendl;
-  uint8_t *pmem_blocks = D_RW(D_RW(pool_root)->data_blocks);
-  struct WriteLogPmemEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
-
-  WriteLogOperations operations;
-  WriteLogOperationSet *set(new WriteLogOperationSet(
-     cct, librbd::BlockExtent(image_extents_summary.first_block,
-			      image_extents_summary.last_block), on_finish));
-  {
-    uint64_t buffer_offset = 0;
-    Mutex::Locker locker(m_lock);
-    /* TODO: If there isn't space for this whole write, defer it */
-    if (m_free_log_entries < operations.size()) {
-      ldout(cct, 6) << "wait for " << operations.size() << " log entries" << dendl;
-    } else if (m_free_blocks < image_extents_summary.total_bytes / BLOCK_SIZE) {
-      ldout(cct, 6) << "wait for " << image_extents_summary.total_bytes / BLOCK_SIZE << " data blocks" << dendl;
-    } else {
-      for (auto &extent : image_extents) {
-	WriteLogOperation *operation =
-	  new WriteLogOperation(m_current_sync_point, extent.first, extent.second);
-	operations.emplace_back(operation);
-	operation->log_entry->log_entry_index = m_first_free_entry;
-	m_first_free_entry = (m_first_free_entry + 1) % m_total_log_entries;
-	m_free_log_entries--;
-	operation->log_entry->pmem_entry = &pmem_log_entries[operation->log_entry->log_entry_index];
-	operation->log_entry->ram_entry.first_pool_block = m_next_free_block;
-	operation->log_entry->ram_entry.has_data = 1;
-	m_next_free_block = (m_next_free_block + 1) % m_total_blocks;
-	m_free_blocks -= operation->log_entry->ram_entry.write_bytes / BLOCK_SIZE;
-	operation->log_entry->pmem_block =
-	  pmem_blocks + (operation->log_entry->ram_entry.first_pool_block * BLOCK_SIZE);
-	operation->log_entry->ram_entry.sync_gen_number = m_current_sync_gen;
-	if (m_persist_on_flush) {
-	  /* Persist on flush. Sequence #0 is never used. */
-	  operation->log_entry->ram_entry.write_sequence_number = 0;
-	} else {
-	  /* Persist on write */
-	  operation->log_entry->ram_entry.write_sequence_number = ++m_last_op_sequence_num;
-	  operation->log_entry->ram_entry.sequenced = 1;
-	}
-	operation->log_entry->ram_entry.sync_point = 0;
-	operation->log_entry->ram_entry.unmap = 0;
-	operation->log_entry->ram_entry.entry_valid = 1;
-	operation->bl.substr_of(bl, buffer_offset,
-				operation->log_entry->ram_entry.write_bytes);
-	buffer_offset += operation->log_entry->ram_entry.write_bytes;
-	ldout(cct, 6) << "operation=[" << *operation << "]" << dendl;
-      }
-    }
-  }
-
-  /* Write data - drain once for all */
-  for (auto &operation : operations) {
-    bufferlist::iterator i(&operation->bl);
-    i.copy((unsigned)operation->log_entry->ram_entry.write_bytes, (char*)operation->log_entry->pmem_block);
-    ldout(cct, 6) << operation->bl << dendl;
-    pmemobj_flush(m_log_pool, operation->log_entry->pmem_block, operation->log_entry->ram_entry.write_bytes);
-  }
-  pmemobj_drain(m_log_pool);
-
-  /* TODO: For persist-on-flush, complete user write here */
-  /* TODO: Better yet: split the loop above at the i.copy, and push
-   * the rest to another thread. Rather than pushing as a work item,
-   * Let a single WF do all the pmemobj_flush for all the waiting ops
-   * (after sorting them in address order and merging them into fewer
-   * larger persist calls), do one pmemobj_drain, then append all
-   * their log entries on one transaction. */
-
-  /* Write data is now (locally) persisted. It's now safe to persist
-   *  the log entries that refer to them */
-  
-  /* Write log entries - write all in a transaction */
-  TX_BEGIN(m_log_pool) {
-    for (auto &operation : operations) {
-      TX_MEMCPY(operation->log_entry->pmem_entry,
-		&operation->log_entry->ram_entry,
-		sizeof(operation->log_entry->ram_entry));
-    }
-  } TX_ONCOMMIT {
-  } TX_ONABORT {
-    lderr(cct) << "failed to commit log entries (" << m_log_pool_name << ")" << dendl;
-    on_finish->complete(-1);
-    return;
-  } TX_FINALLY {
-  } TX_END;
-  
-  
-  /*// TODO handle fadvise flags
-  BlockGuard::C_BlockRequest *req = new C_WriteBlockRequest<I>(
-    m_image_ctx, m_image_writeback, *m_policy, *m_journal_store, *m_image_store,
-    *m_meta_store, m_release_block, m_detain_block, std::move(bl), BLOCK_SIZE, on_finish);
-  map_blocks(IO_TYPE_WRITE, std::move(image_extents), req);
-  */
-
-  /* Pass write through */
-  if (m_image_ctx.persistent_cache_enabled) {
-    m_image_cache.aio_write(std::move(image_extents), std::move(bl), fadvise_flags, on_finish);
-  } else {
-    m_image_writeback.aio_write(std::move(image_extents), std::move(bl), 0, on_finish);
-  }
 }
 
 template <typename I>

@@ -203,16 +203,25 @@ public:
 };
 
 class GuardedRequestFunctionContext : public Context {
+  std::atomic<bool> m_callback_invoked;
 public:
   GuardedRequestFunctionContext(boost::function<void(BlockGuardCell*)> &&callback)
-    : m_callback(std::move(callback))
-  {
+    : m_callback_invoked(false), m_callback(std::move(callback)) { }
+
+  void finish(int r) override {
+    if (r < 0) {
+      bool initial = false;
+      if (m_callback_invoked.compare_exchange_strong(initial, true)) {
+	m_callback(NULL);
+      }
+    }
   }
-
-
-  void finish(int r) override {}
-  void finish(BlockGuardCell *cell) {
-    m_callback(cell);
+  
+  void acquired(BlockGuardCell *cell) {
+    bool initial = false;
+    if (m_callback_invoked.compare_exchange_strong(initial, true)) {
+      m_callback(cell);
+    }
   }
 private:
   boost::function<void(BlockGuardCell*)> m_callback;
@@ -221,10 +230,10 @@ private:
 struct GuardedRequest {
   uint64_t first_block_num;
   uint64_t last_block_num;
-  GuardedRequestFunctionContext *on_guard_grant; /* Work to do when guard on range obtained */
+  GuardedRequestFunctionContext *on_guard_acquire; /* Work to do when guard on range obtained */
   
-  GuardedRequest(uint64_t first_block_num, uint64_t last_block_num, GuardedRequestFunctionContext *on_guard_grant)
-    : first_block_num(first_block_num), last_block_num(last_block_num), on_guard_grant(on_guard_grant) {
+  GuardedRequest(uint64_t first_block_num, uint64_t last_block_num, GuardedRequestFunctionContext *on_guard_acquire)
+    : first_block_num(first_block_num), last_block_num(last_block_num), on_guard_acquire(on_guard_acquire) {
   }
 };
 
@@ -234,6 +243,8 @@ typedef librbd::BlockGuard<GuardedRequest> WriteLogGuard;
 } // namespace rwl
 
 using namespace librbd::cache::rwl;
+
+struct C_WriteRequest;
 
 /**
  * Prototype pmem-based, client-side, replicated write log
@@ -272,7 +283,7 @@ public:
 
   //typedef std::function<void(BlockGuardCell*, )> ReleaseBlock;
   void detain_guarded_request(GuardedRequest &&req);
-  void release_guarded_request(BlockGuardCell *cell, int r, Context *on_finish);
+  void release_guarded_request(BlockGuardCell *cell);
 private:
   typedef std::function<void(uint64_t)> ReleaseBlock;
   typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
@@ -351,6 +362,8 @@ private:
   void invalidate(Extents&& image_extents, Context *on_finish);
 
   void new_sync_point(void);
+
+  void dispatch_aio_write(C_WriteRequest *write_req);
 };
 
 } // namespace cache
