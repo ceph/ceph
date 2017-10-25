@@ -2113,15 +2113,6 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   assert(m->get_orig_source_inst().name.is_osd());
 
   // check if osd has required features to boot
-  if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
-       CEPH_FEATURE_OSD_ERASURE_CODES) &&
-      !(m->get_connection()->get_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
-    dout(0) << __func__ << " osdmap requires erasure code but osd at "
-            << m->get_orig_source_inst()
-            << " doesn't announce support -- ignore" << dendl;
-    goto ignore;
-  }
-
   if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
       !HAVE_FEATURE(m->osd_features, SERVER_LUMINOUS)) {
     mon->clog->info() << "disallowing boot of OSD "
@@ -9850,13 +9841,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (pool_type_str == "replicated") {
       pool_type = pg_pool_t::TYPE_REPLICATED;
     } else if (pool_type_str == "erasure") {
-      err = check_cluster_features(CEPH_FEATURE_CRUSH_V2 |
-				   CEPH_FEATURE_OSD_ERASURE_CODES,
-				   ss);
-      if (err == -EAGAIN)
-	goto wait;
-      if (err)
-	goto reply;
       pool_type = pg_pool_t::TYPE_ERASURE;
     } else {
       ss << "unknown pool type '" << pool_type_str << "'";
