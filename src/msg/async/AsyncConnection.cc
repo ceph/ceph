@@ -2412,18 +2412,21 @@ void AsyncConnection::handle_write()
     } while (can_write == WriteStatus::CANWRITE);
     write_lock.unlock();
 
-    uint64_t left = ack_left;
-    if (left) {
-      ceph_le64 s;
-      s = in_seq;
-      outcoming_bl.append(CEPH_MSGR_TAG_ACK);
-      outcoming_bl.append((char*)&s, sizeof(s));
-      ldout(async_msgr->cct, 10) << __func__ << " try send msg ack, acked " << left << " messages" << dendl;
-      ack_left -= left;
-      left = ack_left;
-      r = _try_send(left);
-    } else if (is_queued()) {
-      r = _try_send();
+    // if r > 0 mean data still lefted, so no need _try_send.
+    if (r == 0) {
+      uint64_t left = ack_left;
+      if (left) {
+	ceph_le64 s;
+	s = in_seq;
+	outcoming_bl.append(CEPH_MSGR_TAG_ACK);
+	outcoming_bl.append((char*)&s, sizeof(s));
+	ldout(async_msgr->cct, 10) << __func__ << " try send msg ack, acked " << left << " messages" << dendl;
+	ack_left -= left;
+	left = ack_left;
+	r = _try_send(left);
+      } else if (is_queued()) {
+	r = _try_send();
+      }
     }
 
     logger->tinc(l_msgr_running_send_time, ceph::mono_clock::now() - start);
