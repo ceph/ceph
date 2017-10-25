@@ -29,7 +29,6 @@ struct SnapRealm {
 protected:
   // cache
   mutable snapid_t cached_seq;           // max seq over self and all past+present parents.
-  mutable uint64_t cached_destroy_seq;
   mutable snapid_t cached_last_created;  // max last_created over all past+present parents
   mutable snapid_t cached_last_destroyed;
   mutable set<snapid_t> cached_snaps;
@@ -57,7 +56,6 @@ public:
   map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
 
   SnapRealm(MDCache *c, CInode *in) : 
-    cached_destroy_seq(0),
     srnode(),
     mdcache(c), inode(in),
     open(false), parent(0),

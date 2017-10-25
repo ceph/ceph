@@ -58,6 +58,8 @@ void SnapServer::reset_state()
     if (first_free > last_snap)
       last_snap = first_free;
   }
+  last_created = last_snap;
+  last_destroyed = last_snap;
   version++;
 }
 
@@ -168,6 +170,8 @@ void SnapServer::_commit(version_t tid, MMDSTableRequest *req)
 	info.stamp = snaps[info.snapid].stamp;
     } else {
       opname = "create";
+      if (info.snapid > last_created)
+	last_created = info.snapid;
     }
     dout(7) << "commit " << tid << " " << opname << " " << info << dendl;
     snaps[info.snapid] = info;
@@ -179,6 +183,8 @@ void SnapServer::_commit(version_t tid, MMDSTableRequest *req)
     snapid_t seq = pending_destroy[tid].second;
     dout(7) << "commit " << tid << " destroy " << sn << " seq " << seq << dendl;
     snaps.erase(sn);
+    if (seq > last_destroyed)
+      last_destroyed = seq;
 
     for (const auto p : mds->mdsmap->get_data_pools()) {
       need_to_purge[p].insert(sn);
@@ -255,6 +261,8 @@ bool SnapServer::_notify_prep(version_t tid)
   encode(snaps, bl);
   encode(pending_update, bl);
   encode(pending_destroy, bl);
+  encode(last_created, bl);
+  encode(last_destroyed, bl);
   assert(version == tid);
 
   for (auto p : active_clients) {
@@ -289,6 +297,8 @@ void SnapServer::handle_query(MMDSTableRequest *req)
 	encode(snaps, reply->bl);
 	encode(pending_update, reply->bl);
 	encode(pending_destroy, reply->bl);
+	encode(last_created, reply->bl);
+	encode(last_destroyed, reply->bl);
       }
       // FIXME: implement incremental change
       break;

@@ -243,8 +243,6 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
     max_seq = srnode.seq;
   if (srnode.last_created > max_last_created)
     max_last_created = srnode.last_created;
-  if (srnode.last_destroyed > max_last_destroyed)
-    max_last_destroyed = srnode.last_destroyed;
 
   // include my snaps within interval [first,last]
   for (auto p = srnode.snaps.lower_bound(first); // first element >= first
@@ -284,18 +282,17 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
 void SnapRealm::check_cache() const
 {
   assert(have_past_parents_open());
-  uint64_t destroy_seq = mdcache->mds->snapclient->get_destroy_seq();
+  snapid_t last_destroyed = mdcache->mds->snapclient->get_last_destroyed();
   if (cached_seq >= srnode.seq &&
-      cached_destroy_seq == destroy_seq)
+      cached_last_destroyed == last_destroyed)
     return;
 
   cached_snaps.clear();
   cached_snap_context.clear();
 
   cached_last_created = srnode.last_created;
-  cached_last_destroyed = srnode.last_destroyed;
   cached_seq = srnode.seq;
-  cached_destroy_seq = destroy_seq;
+  cached_last_destroyed = last_destroyed;
   build_snap_set(cached_snaps, cached_seq, cached_last_created, cached_last_destroyed,
 		 0, CEPH_NOSNAP);
 
@@ -305,7 +302,6 @@ void SnapRealm::check_cache() const
   dout(10) << "check_cache rebuilt " << cached_snaps
 	   << " seq " << srnode.seq
 	   << " cached_seq " << cached_seq
-	   << " cached_destroy_seq " << cached_destroy_seq
 	   << " cached_last_created " << cached_last_created
 	   << " cached_last_destroyed " << cached_last_destroyed
 	   << ")" << dendl;

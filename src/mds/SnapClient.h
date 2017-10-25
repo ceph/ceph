@@ -26,6 +26,7 @@ class LogSegment;
 
 class SnapClient : public MDSTableClient {
   version_t cached_version;
+  snapid_t cached_last_created, cached_last_destroyed;
   map<snapid_t, SnapInfo> cached_snaps;
   map<version_t, SnapInfo> cached_pending_update;
   map<version_t, pair<snapid_t,snapid_t> > cached_pending_destroy;
@@ -34,14 +35,14 @@ class SnapClient : public MDSTableClient {
 
   map<version_t, std::list<MDSInternalContextBase*> > waiting_for_version;
 
-  uint64_t destroy_seq;
-
   uint64_t sync_reqid;
   bool synced;
+
 public:
   explicit SnapClient(MDSRank *m) :
     MDSTableClient(m, TABLE_SNAP),
-    cached_version(0), destroy_seq(1), sync_reqid(0),  synced(false) {}
+    cached_version(0), cached_last_created(0), cached_last_destroyed(0),
+    sync_reqid(0), synced(false) {}
 
   void resend_queries() override;
   void handle_query_result(MMDSTableRequest *m) override;
@@ -89,7 +90,6 @@ public:
   }
 
   version_t get_cached_version() const { return cached_version; }
-  uint64_t get_destroy_seq() const { return destroy_seq; }
   void refresh(version_t want, MDSInternalContextBase *onfinish);
 
   void sync(MDSInternalContextBase *onfinish);
@@ -99,6 +99,9 @@ public:
     assert(!synced);
     waiting_for_version[MAX(cached_version, 1)].push_back(c);
   }
+
+  snapid_t get_last_created() const { return cached_last_created; }
+  snapid_t get_last_destroyed() const { return cached_last_destroyed; }
 
   void get_snaps(set<snapid_t>& snaps) const;
   set<snapid_t> filter(const set<snapid_t>& snaps) const;
