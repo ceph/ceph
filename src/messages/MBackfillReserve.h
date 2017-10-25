@@ -24,10 +24,13 @@ public:
   spg_t pgid;
   epoch_t query_epoch;
   enum {
-    REQUEST = 0,
-    GRANT = 1,
-    REJECT = 2,
-    CANCEL = 3,
+    REQUEST = 0,   // primary->replica: please reserve a slot
+    GRANT = 1,     // replica->primary: ok, i reserved it
+    REJECT = 2,    // replica->primary: sorry, try again later (*)
+    RELEASE = 3,   // primary->replcia: release the slot i reserved before
+    TOOFULL = 4,   // replica->primary: too full, stop backfilling
+    REVOKE = 5,    // replica->primary: i'm taking back the slot i gave you
+    // (*) NOTE: prior to luminous, REJECT was overloaded to also mean release
   };
   uint32_t type;
   uint32_t priority;
@@ -58,8 +61,14 @@ public:
     case REJECT:
       out << "REJECT ";
       break;
-    case CANCEL:
-      out << "CANCEL ";
+    case RELEASE:
+      out << "RELEASE ";
+      break;
+    case TOOFULL:
+      out << "TOOFULL ";
+      break;
+    case REVOKE:
+      out << "REVOKE ";
       break;
     }
     out << " pgid: " << pgid << ", query_epoch: " << query_epoch;
@@ -82,7 +91,8 @@ public:
       header.compat_version = 3;
       ::encode(pgid.pgid, payload);
       ::encode(query_epoch, payload);
-      ::encode(type == CANCEL ? REJECT : type, payload);
+      ::encode((type == RELEASE || type == TOOFULL || type == REVOKE) ?
+	       REJECT : type, payload);
       ::encode(priority, payload);
       ::encode(pgid.shard, payload);
       return;

@@ -6432,7 +6432,7 @@ PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
     if (con) {
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
-	  MBackfillReserve::CANCEL,
+	  MBackfillReserve::RELEASE,
 	  spg_t(pg->info.pgid.pgid, it->shard),
 	  pg->get_osdmap()->get_epoch()),
 	con.get());
@@ -6464,7 +6464,7 @@ PG::RecoveryState::Backfilling::react(const UnfoundBackfill &c)
     if (con) {
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
-	  MBackfillReserve::CANCEL,
+	  MBackfillReserve::RELEASE,
 	  spg_t(pg->info.pgid.pgid, it->shard),
 	  pg->get_osdmap()->get_epoch()),
 	con.get());
@@ -6477,7 +6477,7 @@ PG::RecoveryState::Backfilling::react(const UnfoundBackfill &c)
 }
 
 boost::statechart::result
-PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
+PG::RecoveryState::Backfilling::react(const RemoteReservationRevokedTooFull &)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
@@ -6492,7 +6492,7 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
     if (con) {
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
-	  MBackfillReserve::CANCEL,
+	  MBackfillReserve::RELEASE,
 	  spg_t(pg->info.pgid.pgid, it->shard),
 	  pg->get_osdmap()->get_epoch()),
 	con.get());
@@ -6504,6 +6504,34 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
 
   pg->schedule_backfill_retry(pg->cct->_conf->osd_recovery_retry_interval);
   return transit<NotBackfilling>();
+}
+
+boost::statechart::result
+PG::RecoveryState::Backfilling::react(const RemoteReservationRevoked &)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  pg->state_set(PG_STATE_BACKFILL_WAIT);
+
+  for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
+       it != pg->backfill_targets.end();
+       ++it) {
+    assert(*it != pg->pg_whoami);
+    ConnectionRef con = pg->osd->get_con_osd_cluster(
+      it->osd, pg->get_osdmap()->get_epoch());
+    if (con) {
+      pg->osd->send_message_osd_cluster(
+        new MBackfillReserve(
+	  MBackfillReserve::RELEASE,
+	  spg_t(pg->info.pgid.pgid, it->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
+    }
+  }
+
+  pg->waiting_on_backfill.clear();
+
+  return transit<WaitLocalBackfillReserved>();
 }
 
 void PG::RecoveryState::Backfilling::exit()
@@ -6585,7 +6613,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
     if (con) {
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
-	MBackfillReserve::CANCEL,
+	MBackfillReserve::RELEASE,
 	spg_t(pg->info.pgid.pgid, it->shard),
 	pg->get_osdmap()->get_epoch()),
       con.get());
@@ -6710,14 +6738,6 @@ PG::RecoveryState::RepWaitRecoveryReserved::RepWaitRecoveryReserved(my_context c
     NamedState(context< RecoveryMachine >().pg, "Started/ReplicaActive/RepWaitRecoveryReserved")
 {
   context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
-
-  pg->osd->remote_reserver.request_reservation(
-    pg->info.pgid,
-    new QueuePeeringEvt<RemoteRecoveryReserved>(
-      pg, pg->get_osdmap()->get_epoch(),
-      RemoteRecoveryReserved()),
-    pg->get_recovery_priority());
 }
 
 boost::statechart::result
@@ -6776,13 +6796,40 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 		       << ss.str() << dendl;
     post_event(RejectRemoteReservation());
   } else {
+    Context *preempt = nullptr;
+    if (HAVE_FEATURE(pg->upacting_features, SERVER_MIMIC)) {
+      // older peers will interpret preemption as TOOFULL
+      preempt = new QueuePeeringEvt<RemoteBackfillPreempted>(
+	pg, pg->get_osdmap()->get_epoch(),
+	RemoteBackfillPreempted());
+    }
     pg->osd->remote_reserver.request_reservation(
       pg->info.pgid,
       new QueuePeeringEvt<RemoteBackfillReserved>(
         pg, pg->get_osdmap()->get_epoch(),
-        RemoteBackfillReserved()), evt.priority);
+        RemoteBackfillReserved()),
+      evt.priority,
+      preempt);
   }
   return transit<RepWaitBackfillReserved>();
+}
+
+boost::statechart::result
+PG::RecoveryState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  ostringstream ss;
+
+  // fall back to a local reckoning of priority of primary doesn't pass one
+  // (pre-mimic compat)
+  int prio = evt.priority ? evt.priority : pg->get_recovery_priority();
+  pg->osd->remote_reserver.request_reservation(
+    pg->info.pgid,
+    new QueuePeeringEvt<RemoteRecoveryReserved>(
+      pg, pg->get_osdmap()->get_epoch(),
+      RemoteRecoveryReserved()),
+    prio);
+  return transit<RepWaitRecoveryReserved>();
 }
 
 void PG::RecoveryState::RepWaitBackfillReserved::exit()
@@ -6863,7 +6910,27 @@ boost::statechart::result
 PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->reject_reservation();
+  pg->osd->send_message_osd_cluster(
+    pg->primary.osd,
+    new MBackfillReserve(
+      MBackfillReserve::TOOFULL,
+      spg_t(pg->info.pgid.pgid, pg->primary.shard),
+      pg->get_osdmap()->get_epoch()),
+    pg->get_osdmap()->get_epoch());
+  return discard_event();
+}
+
+boost::statechart::result
+PG::RecoveryState::RepRecovering::react(const RemoteBackfillPreempted &)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->send_message_osd_cluster(
+    pg->primary.osd,
+    new MBackfillReserve(
+      MBackfillReserve::REVOKE,
+      spg_t(pg->info.pgid.pgid, pg->primary.shard),
+      pg->get_osdmap()->get_epoch()),
+    pg->get_osdmap()->get_epoch());
   return discard_event();
 }
 
@@ -6959,7 +7026,8 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserve
         new MRecoveryReserve(
 	  MRecoveryReserve::REQUEST,
 	  spg_t(pg->info.pgid.pgid, remote_recovery_reservation_it->shard),
-	  pg->get_osdmap()->get_epoch()),
+	  pg->get_osdmap()->get_epoch(),
+	  pg->get_recovery_priority()),
 	con.get());
     }
     ++remote_recovery_reservation_it;
@@ -7020,9 +7088,9 @@ boost::statechart::result
 PG::RecoveryState::Recovering::react(const AllReplicasRecovered &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->state_clear(PG_STATE_RECOVERING);
   pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   return transit<Recovered>();
 }
 
@@ -7030,10 +7098,10 @@ boost::statechart::result
 PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->state_clear(PG_STATE_RECOVERING);
   pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
-  return transit<WaitRemoteBackfillReserved>();
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  return transit<WaitLocalBackfillReserved>();
 }
 
 boost::statechart::result
@@ -7041,7 +7109,6 @@ PG::RecoveryState::Recovering::react(const DeferRecovery &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 10) << "defer recovery, retry delay " << evt.delay << dendl;
-  pg->state_clear(PG_STATE_RECOVERING);
   pg->state_set(PG_STATE_RECOVERY_WAIT);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   release_reservations(true);
@@ -7055,7 +7122,6 @@ PG::RecoveryState::Recovering::react(const UnfoundRecovery &evt)
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 10) << "recovery has unfound, can't continue" << dendl;
   pg->state_set(PG_STATE_RECOVERY_UNFOUND);
-  pg->state_clear(PG_STATE_RECOVERING);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   release_reservations(true);
   return transit<NotRecovering>();
@@ -7066,6 +7132,7 @@ void PG::RecoveryState::Recovering::exit()
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
+  pg->state_clear(PG_STATE_RECOVERING);
   pg->osd->recoverystate_perf->tinc(rs_recovering_latency, dur);
 }
 
@@ -7078,7 +7145,6 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
   assert(!pg->needs_recovery());
 
