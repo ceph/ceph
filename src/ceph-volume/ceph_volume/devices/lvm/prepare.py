@@ -58,12 +58,8 @@ def prepare_bluestore(block, wal, db, secrets, id_=None, fsid=None):
     osd_id = id_ or prepare_utils.create_id(fsid, json_secrets)
     # create the directory
     prepare_utils.create_osd_path(osd_id, tmpfs=True)
-    # symlink the block, wal, and db
+    # symlink the block
     prepare_utils.link_block(block, osd_id)
-    if wal:
-        prepare_utils.link_wal(wal, osd_id)
-    if db:
-        prepare_utils.link_db(db, osd_id)
     # get the latest monmap
     prepare_utils.get_monmap(osd_id)
     # write the OSD keyring if it doesn't exist already
