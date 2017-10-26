@@ -1940,13 +1940,13 @@ void AsyncConnection::requeue_sent()
     return;
 
   list<pair<bufferlist, Message*> >& rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  out_seq -= sent.size();
   while (!sent.empty()) {
     Message* m = sent.back();
     sent.pop_back();
     ldout(async_msgr->cct, 10) << __func__ << " " << *m << " for resend "
                                << " (" << m->get_seq() << ")" << dendl;
     rq.push_front(make_pair(bufferlist(), m));
-    out_seq--;
   }
 }
 
@@ -2184,8 +2184,6 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
     }
   }
   
-  unsigned original_bl_len = outcoming_bl.length();
-
   outcoming_bl.append(CEPH_MSGR_TAG_MSG);
   outcoming_bl.append((char*)&header, sizeof(header));
 
@@ -2213,12 +2211,9 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   if (rc < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " error sending " << m << ", "
                               << cpp_strerror(rc) << dendl;
-  } else if (rc == 0) {
-    logger->inc(l_msgr_send_bytes, total_send_size - original_bl_len);
-    ldout(async_msgr->cct, 10) << __func__ << " sending " << m << " done." << dendl;
   } else {
     logger->inc(l_msgr_send_bytes, total_send_size - outcoming_bl.length());
-    ldout(async_msgr->cct, 10) << __func__ << " sending " << m << " continuely." << dendl;
+    ldout(async_msgr->cct, 10) << __func__ << " sending " << m << (rc ? " continuely." :" done.") << dendl;
   }
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
@@ -2402,28 +2397,33 @@ void AsyncConnection::handle_write()
         prepare_send_message(get_features(), m, data);
 
       r = write_message(m, data, more);
-      if (r < 0) {
-        ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
-        goto fail;
-      }
+
       write_lock.lock();
-      if (r > 0)
-        break;
+      if (r == 0) {
+	;
+      } else if (r < 0) {
+	ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
+	break;
+      } else if (r > 0)
+	break;
     } while (can_write == WriteStatus::CANWRITE);
     write_lock.unlock();
 
-    uint64_t left = ack_left;
-    if (left) {
-      ceph_le64 s;
-      s = in_seq;
-      outcoming_bl.append(CEPH_MSGR_TAG_ACK);
-      outcoming_bl.append((char*)&s, sizeof(s));
-      ldout(async_msgr->cct, 10) << __func__ << " try send msg ack, acked " << left << " messages" << dendl;
-      ack_left -= left;
-      left = ack_left;
-      r = _try_send(left);
-    } else if (is_queued()) {
-      r = _try_send();
+    // if r > 0 mean data still lefted, so no need _try_send.
+    if (r == 0) {
+      uint64_t left = ack_left;
+      if (left) {
+	ceph_le64 s;
+	s = in_seq;
+	outcoming_bl.append(CEPH_MSGR_TAG_ACK);
+	outcoming_bl.append((char*)&s, sizeof(s));
+	ldout(async_msgr->cct, 10) << __func__ << " try send msg ack, acked " << left << " messages" << dendl;
+	ack_left -= left;
+	left = ack_left;
+	r = _try_send(left);
+      } else if (is_queued()) {
+	r = _try_send();
+      }
     }
 
     logger->tinc(l_msgr_running_send_time, ceph::mono_clock::now() - start);
