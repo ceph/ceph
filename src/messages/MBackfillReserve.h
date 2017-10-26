@@ -86,7 +86,7 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    if (!HAVE_FEATURE(features, RECOVERY_RESERVATION_2)) {
       header.version = 3;
       header.compat_version = 3;
       ::encode(pgid.pgid, payload);
