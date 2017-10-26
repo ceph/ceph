@@ -1093,7 +1093,9 @@ void MDSRank::boot_start(BootStep step, int r)
         MDSGatherBuilder gather(g_ceph_context,
             new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
 
-        mdcache->open_mydir_inode(gather.new_sub());
+	mdcache->open_mydir_inode(gather.new_sub());
+
+	mdcache->create_global_snaprealm();
 
         if (is_starting() ||
             whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
@@ -1538,6 +1540,9 @@ void MDSRank::boot_create()
 
   dout(3) << "boot_create creating mydir hierarchy" << dendl;
   mdcache->create_mydir_hierarchy(fin.get());
+
+  dout(3) << "boot_create creating global snaprealm" << dendl;
+  mdcache->create_global_snaprealm();
 
   // fixme: fake out inotable (reset, pretend loaded)
   dout(10) << "boot_create creating fresh inotable table" << dendl;

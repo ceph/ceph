@@ -422,8 +422,24 @@ sr_t *CInode::prepare_new_srnode(snapid_t snapid)
 
   if (cur_srnode) {
     new_srnode = new sr_t(*cur_srnode);
+    if (!new_srnode->past_parents.empty()) {
+      // convert past_parents to past_parent_snaps
+      assert(snaprealm);
+      auto& snaps = snaprealm->get_snaps();
+      for (auto p : snaps) {
+	if (p >= new_srnode->current_parent_since)
+	  break;
+	if (!new_srnode->snaps.count(p))
+	  new_srnode->past_parent_snaps.insert(p);
+      }
+      new_srnode->seq = snaprealm->get_newest_seq();
+      new_srnode->past_parents.clear();
+    }
   } else {
+    if (snapid == 0)
+      snapid = mdcache->get_global_snaprealm()->get_newest_seq();
     new_srnode = new sr_t();
+    new_srnode->seq = snapid;
     new_srnode->created = snapid;
     new_srnode->current_parent_since = get_oldest_snap();
   }
@@ -436,6 +452,21 @@ void CInode::project_snaprealm(sr_t *new_srnode)
   assert(projected_nodes.back().snapnode == projected_inode::UNDEF_SRNODE);
   projected_nodes.back().snapnode = new_srnode;
   ++num_projected_srnodes;
+}
+
+void CInode::mark_snaprealm_global(sr_t *new_srnode)
+{
+  assert(!is_dir());
+  new_srnode->current_parent_since = get_oldest_snap();
+  new_srnode->mark_parent_global();
+}
+
+bool CInode::is_projected_snaprealm_global() const
+{
+  const sr_t *srnode = get_projected_srnode();
+  if (srnode && srnode->is_parent_global())
+    return true;
+  return false;
 }
 
 void CInode::project_snaprealm_past_parent(SnapRealm *newparent)
@@ -452,26 +483,11 @@ void CInode::record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent)
   SnapRealm *oldparent;
   if (!snaprealm) {
     oldparent = find_snaprealm();
-    new_snap->seq = oldparent->get_newest_seq();
   } else {
     oldparent = snaprealm->parent;
   }
 
   if (newparent != oldparent) {
-    // convert past_parents to past_parent_snaps
-    if (!new_snap->past_parents.empty()) {
-      assert(snaprealm);
-      const set<snapid_t>& snaps = snaprealm->get_snaps();
-      for (auto p = snaps.begin();
-	   p != snaps.end() && *p < new_snap->current_parent_since;
-	   ++p) {
-	if (!new_snap->snaps.count(*p))
-	  new_snap->past_parent_snaps.insert(*p);
-      }
-      new_snap->seq = snaprealm->get_newest_seq();
-      new_snap->past_parents.clear();
-    }
-
     snapid_t oldparentseq = oldparent->get_newest_seq();
     if (oldparentseq + 1 > new_snap->current_parent_since) {
       // copy old parent's snaps
@@ -482,7 +498,7 @@ void CInode::record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent)
       if (oldparentseq > new_snap->seq)
 	new_snap->seq = oldparentseq;
     }
-    new_snap->current_parent_since = std::max(oldparentseq, newparent->get_last_created()) + 1;
+    new_snap->current_parent_since = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
   }
 }
 
@@ -513,8 +529,14 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm, bool early)
       dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
 	       << " -> " << next_snaprealm->past_parents << dendl;
     }
+    auto old_flags = snaprealm->srnode.flags;
     snaprealm->srnode = *next_snaprealm;
     delete next_snaprealm;
+
+    if ((snaprealm->srnode.flags ^ old_flags) & sr_t::PARENT_GLOBAL) {
+      snaprealm->close_parents();
+      snaprealm->adjust_parent();
+    }
 
     // we should be able to open these up (or have them already be open).
     bool ok = snaprealm->_open_parents(NULL);
@@ -2733,11 +2755,17 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
   using ceph::decode;
   if (snapbl.length()) {
     open_snaprealm();
+    auto old_flags = snaprealm->srnode.flags;
     bufferlist::iterator p = snapbl.begin();
     decode(snaprealm->srnode, p);
     if (is_base()) {
       bool ok = snaprealm->_open_parents(NULL);
       assert(ok);
+    } else {
+      if ((snaprealm->srnode.flags ^ old_flags) & sr_t::PARENT_GLOBAL) {
+	snaprealm->close_parents();
+	snaprealm->adjust_parent();
+      }
     }
     dout(20) << __func__ << " " << *snaprealm << dendl;
   } else if (snaprealm) {

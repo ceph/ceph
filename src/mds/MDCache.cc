@@ -213,6 +213,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   decayrate.set_halflife(g_conf->mds_decay_halflife);
 
   did_shutdown_log_cap = false;
+
+  global_snaprealm = NULL;
 }
 
 MDCache::~MDCache() 
@@ -327,7 +329,7 @@ void MDCache::remove_inode(CInode *o)
     }
     if (o->is_base())
       base_inodes.erase(o);
-    }
+  }
 
   // delete it
   assert(o->get_num_ref() == 0);
@@ -606,13 +608,8 @@ void MDCache::open_root_inode(MDSInternalContextBase *c)
 
 void MDCache::open_mydir_inode(MDSInternalContextBase *c)
 {
-  MDSGatherBuilder gather(g_ceph_context);
-
   CInode *in = create_system_inode(MDS_INO_MDSDIR(mds->get_nodeid()), S_IFDIR|0755);  // initially inaccurate!
-  in->fetch(gather.new_sub());
-
-  gather.set_finisher(c);
-  gather.activate();
+  in->fetch(c);
 }
 
 void MDCache::open_root()
@@ -5869,6 +5866,8 @@ void MDCache::open_snaprealms()
     }
   }
 
+  notify_global_snaprealm_update(CEPH_SNAP_OP_UPDATE);
+
   if (gather.has_subs()) {
     // for multimds, must succeed the first time
     assert(recovery_set.empty());
@@ -6660,11 +6659,14 @@ bool MDCache::trim(uint64_t count)
   // Other rank's base inodes (when I'm stopping)
   if (mds->is_stopping()) {
     for (set<CInode*>::iterator p = base_inodes.begin();
-         p != base_inodes.end(); ++p) {
-      if (MDS_INO_MDSDIR_OWNER((*p)->ino()) != mds->get_nodeid()) {
-        dout(20) << __func__ << ": maybe trimming base: " << *(*p) << dendl;
-        if ((*p)->get_num_ref() == 0) {
-          trim_inode(NULL, *p, NULL, expiremap);
+         p != base_inodes.end();) {
+      CInode *base_in = *p;
+      ++p;
+      if (MDS_INO_IS_MDSDIR(base_in->ino()) &&
+	  MDS_INO_MDSDIR_OWNER(base_in->ino()) != mds->get_nodeid()) {
+        dout(20) << __func__ << ": maybe trimming base: " << *base_in << dendl;
+        if (base_in->get_num_ref() == 0) {
+          trim_inode(NULL, base_in, NULL, expiremap);
         }
       }
     }
@@ -7758,6 +7760,9 @@ bool MDCache::shutdown_pass()
 
   if (myin)
     remove_inode(myin);
+
+  if (global_snaprealm)
+    remove_inode(global_snaprealm->inode);
   
   // done!
   dout(2) << "shutdown done." << dendl;
@@ -9381,6 +9386,14 @@ void MDCache::request_kill(MDRequestRef& mdr)
 // -------------------------------------------------------------------------------
 // SNAPREALMS
 
+void MDCache::create_global_snaprealm()
+{
+  CInode *in = new CInode(this); // dummy inode
+  create_unlinked_system_inode(in, MDS_INO_GLOBAL_SNAPREALM, S_IFDIR|0755);
+  add_inode(in);
+  global_snaprealm = in->snaprealm;
+}
+
 struct C_MDC_snaprealm_create_finish : public MDCacheLogContext {
   MDRequestRef mdr;
   MutationRef mut;
@@ -9581,18 +9594,29 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CIno
 void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
 {
   dout(10) << __func__ << " " << *in << " stid " << stid << dendl;
-
-  bufferlist snap_blob;
-  in->encode_snap(snap_blob);
+  assert(in->is_auth());
 
   set<mds_rank_t> mds_set;
-  mds->mdsmap->get_mds_set_lower_bound(mds_set, MDSMap::STATE_RESOLVE);
-  mds_set.erase(mds->get_nodeid());
-  for (auto p : mds_set) {
-    MMDSSnapUpdate *m = new MMDSSnapUpdate(in->ino(), stid, snap_op);
-    m->snap_blob = snap_blob;
-    mds->send_message_mds(m, p);
+  if (stid > 0) {
+    mds->mdsmap->get_mds_set_lower_bound(mds_set, MDSMap::STATE_RESOLVE);
+    mds_set.erase(mds->get_nodeid());
+  } else {
+    in->list_replicas(mds_set);
   }
+
+  if (!mds_set.empty()) {
+    bufferlist snap_blob;
+    in->encode_snap(snap_blob);
+
+    for (auto p : mds_set) {
+      MMDSSnapUpdate *m = new MMDSSnapUpdate(in->ino(), stid, snap_op);
+      m->snap_blob = snap_blob;
+      mds->send_message_mds(m, p);
+    }
+  }
+
+  if (stid > 0)
+    notify_global_snaprealm_update(snap_op);
 }
 
 void MDCache::handle_snap_update(MMDSSnapUpdate *m)
@@ -9606,7 +9630,15 @@ void MDCache::handle_snap_update(MMDSSnapUpdate *m)
     return;
   }
 
-  mds->snapclient->notify_commit(m->get_tid());
+  // null rejoin_done means open_snaprealms() has already been called
+  bool notify_clients = mds->get_state() > MDSMap::STATE_REJOIN ||
+			(mds->is_rejoin() && !rejoin_done);
+
+  if (m->get_tid() > 0) {
+    mds->snapclient->notify_commit(m->get_tid());
+    if (notify_clients)
+      notify_global_snaprealm_update(m->get_snap_op());
+  }
 
   CInode *in = get_inode(m->get_ino());
   if (in) {
@@ -9616,15 +9648,10 @@ void MDCache::handle_snap_update(MMDSSnapUpdate *m)
       bufferlist::iterator p = m->snap_blob.begin();
       in->decode_snap(p);
 
-      bool notify_clients = true;
-      if (mds->is_rejoin()) {
-	if (rejoin_done) {
-	  // rejoin_done is non-null, it means open_snaprealms() hasn't been called
-	  if (!rejoin_pending_snaprealms.count(in)) {
-	    in->get(CInode::PIN_OPENINGSNAPPARENTS);
-	    rejoin_pending_snaprealms.insert(in);
-	  }
-	  notify_clients = false;
+      if (!notify_clients) {
+	if (!rejoin_pending_snaprealms.count(in)) {
+	  in->get(CInode::PIN_OPENINGSNAPPARENTS);
+	  rejoin_pending_snaprealms.insert(in);
 	}
       }
       do_realm_invalidate_and_update_notify(in, m->get_snap_op(), notify_clients);
@@ -9632,6 +9659,22 @@ void MDCache::handle_snap_update(MMDSSnapUpdate *m)
   }
 
   m->put();
+}
+
+void MDCache::notify_global_snaprealm_update(int snap_op)
+{
+  if (snap_op != CEPH_SNAP_OP_DESTROY)
+    snap_op = CEPH_SNAP_OP_UPDATE;
+  set<Session*> sessions;
+  mds->sessionmap.get_client_session_set(sessions);
+  for (auto &session : sessions) {
+    if (!session->is_open() && !session->is_stale())
+      continue;
+    MClientSnap *update = new MClientSnap(snap_op);
+    update->head.split = global_snaprealm->inode->ino();
+    update->bl = global_snaprealm->get_snap_trace();
+    mds->send_message_client_counted(update, session);
+  }
 }
 
 // -------------------------------------------------------------------------------

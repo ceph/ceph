@@ -3948,6 +3948,7 @@ public:
 
     if (new_realm) {
       int op = CEPH_SNAP_OP_SPLIT;
+      mds->mdcache->send_snap_update(in, 0, op);
       mds->mdcache->do_realm_invalidate_and_update_notify(in, op);
     }
 
@@ -5379,6 +5380,8 @@ void Server::handle_client_link(MDRequestRef& mdr)
   }
 
   xlocks.insert(&targeti->linklock);
+  xlocks.insert(&targeti->snaplock);
+  rdlocks.erase(&targeti->snaplock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -5410,14 +5413,15 @@ class C_MDS_link_local_finish : public ServerLogContext {
   CInode *targeti;
   version_t dnpv;
   version_t tipv;
+  bool adjust_realm;
 public:
   C_MDS_link_local_finish(Server *s, MDRequestRef& r, CDentry *d, CInode *ti,
-			  version_t dnpv_, version_t tipv_) :
+			  version_t dnpv_, version_t tipv_, bool ar) :
     ServerLogContext(s, r), dn(d), targeti(ti),
-    dnpv(dnpv_), tipv(tipv_) { }
+    dnpv(dnpv_), tipv(tipv_), adjust_realm(ar) { }
   void finish(int r) override {
     assert(r == 0);
-    server->_link_local_finish(mdr, dn, targeti, dnpv, tipv);
+    server->_link_local_finish(mdr, dn, targeti, dnpv, tipv, adjust_realm);
   }
 };
 
@@ -5439,6 +5443,13 @@ void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
   pi.inode.change_attr++;
   pi.inode.version = tipv;
 
+  bool adjust_realm = false;
+  if (!targeti->is_projected_snaprealm_global()) {
+    sr_t *newsnap = targeti->project_snaprealm();
+    targeti->mark_snaprealm_global(newsnap);
+    adjust_realm = true;
+  }
+
   // log + wait
   EUpdate *le = new EUpdate(mdlog, "link_local");
   mdlog->start_entry(le);
@@ -5451,11 +5462,12 @@ void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
   // do this after predirty_*, to avoid funky extra dnl arg
   dn->push_projected_linkage(targeti->ino(), targeti->d_type());
 
-  journal_and_reply(mdr, targeti, dn, le, new C_MDS_link_local_finish(this, mdr, dn, targeti, dnpv, tipv));
+  journal_and_reply(mdr, targeti, dn, le,
+		    new C_MDS_link_local_finish(this, mdr, dn, targeti, dnpv, tipv, adjust_realm));
 }
 
 void Server::_link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
-				version_t dnpv, version_t tipv)
+				version_t dnpv, version_t tipv, bool adjust_realm)
 {
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << dendl;
 
@@ -5472,6 +5484,12 @@ void Server::_link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
 
   MDRequestRef null_ref;
   mdcache->send_dentry_link(dn, null_ref);
+
+  if (adjust_realm) {
+    int op = CEPH_SNAP_OP_SPLIT;
+    mds->mdcache->send_snap_update(targeti, 0, op);
+    mds->mdcache->do_realm_invalidate_and_update_notify(targeti, op);
+  }
 
   // bump target popularity
   mds->balancer->hit_inode(mdr->get_mds_stamp(), targeti, META_POP_IWR);
@@ -5616,12 +5634,13 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
 
 class C_MDS_SlaveLinkPrep : public ServerLogContext {
   CInode *targeti;
+  bool adjust_realm;
 public:
-  C_MDS_SlaveLinkPrep(Server *s, MDRequestRef& r, CInode *t) :
-    ServerLogContext(s, r), targeti(t) { }
+  C_MDS_SlaveLinkPrep(Server *s, MDRequestRef& r, CInode *t, bool ar) :
+    ServerLogContext(s, r), targeti(t), adjust_realm(ar) { }
   void finish(int r) override {
     assert(r == 0);
-    server->_logged_slave_link(mdr, targeti);
+    server->_logged_slave_link(mdr, targeti, adjust_realm);
   }
 };
 
@@ -5669,9 +5688,15 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
 
   // update journaled target inode
   bool inc;
+  bool adjust_realm = false;
   if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
     inc = true;
     pi.inode.nlink++;
+    if (!targeti->is_projected_snaprealm_global()) {
+      sr_t *newsnap = targeti->project_snaprealm();
+      targeti->mark_snaprealm_global(newsnap);
+      adjust_realm = true;
+    }
   } else {
     inc = false;
     pi.inode.nlink--;
@@ -5685,6 +5710,14 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   rollback.old_dir_mtime = pf->fragstat.mtime;
   rollback.old_dir_rctime = pf->rstat.rctime;
   rollback.was_inc = inc;
+  if (adjust_realm) {
+    if (targeti->snaprealm) {
+      encode(true, rollback.snapbl);
+      targeti->encode_snap_blob(rollback.snapbl);
+    } else {
+      encode(false, rollback.snapbl);
+    }
+  }
   encode(rollback, le->rollback);
   mdr->more()->rollback_bl = le->rollback;
 
@@ -5701,12 +5734,12 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti);
 
   mdr->more()->slave_update_journaled = true;
-  submit_mdlog_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti),
+  submit_mdlog_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti, adjust_realm),
                      mdr, __func__);
   mdlog->flush();
 }
 
-void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti)
+void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti, bool adjust_realm)
 {
   dout(10) << "_logged_slave_link " << *mdr
 	   << " " << *targeti << dendl;
@@ -5723,6 +5756,12 @@ void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti)
   // done.
   mdr->slave_request->put();
   mdr->slave_request = 0;
+
+  if (adjust_realm) {
+    int op = CEPH_SNAP_OP_SPLIT;
+    mds->mdcache->send_snap_update(targeti, 0, op);
+    mds->mdcache->do_realm_invalidate_and_update_notify(targeti, op);
+  }
 
   // ack
   if (!mdr->aborted) {
@@ -5780,9 +5819,14 @@ void Server::_committed_slave(MDRequestRef& mdr)
 
 struct C_MDS_LoggedLinkRollback : public ServerLogContext {
   MutationRef mut;
-  C_MDS_LoggedLinkRollback(Server *s, MutationRef& m, MDRequestRef& r) : ServerLogContext(s, r), mut(m) {}
+  map<client_t,MClientSnap*> splits;
+  C_MDS_LoggedLinkRollback(Server *s, MutationRef& m, MDRequestRef& r,
+			   map<client_t,MClientSnap*>& _splits) :
+    ServerLogContext(s, r), mut(m) {
+    splits.swap(_splits);
+  }
   void finish(int r) override {
-    server->_link_rollback_finish(mut, mdr);
+    server->_link_rollback_finish(mut, mdr, splits);
   }
 };
 
@@ -5834,6 +5878,27 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& 
   else
     pi.inode.nlink++;
 
+  map<client_t,MClientSnap*> splits;
+  if (rollback.snapbl.length() && in->snaprealm) {
+    bool hadrealm;
+    bufferlist::iterator p = rollback.snapbl.begin();
+    decode(hadrealm, p);
+    if (hadrealm) {
+      if (!mds->is_resolve()) {
+	sr_t *new_srnode = new sr_t();
+	decode(*new_srnode, p);
+	in->project_snaprealm(new_srnode);
+      } else {
+	decode(in->snaprealm->srnode, p);
+      }
+    } else {
+      SnapRealm *realm = parent->get_inode()->find_snaprealm();
+      if (!mds->is_resolve())
+	mdcache->prepare_realm_merge(in->snaprealm, realm, splits);
+      in->project_snaprealm(NULL);
+    }
+  }
+
   // journal it
   ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_rollback", rollback.reqid, master,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::LINK);
@@ -5842,18 +5907,23 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& 
   le->commit.add_dir(parent, true);
   le->commit.add_primary_dentry(in->get_projected_parent_dn(), 0, true);
   
-  submit_mdlog_entry(le, new C_MDS_LoggedLinkRollback(this, mut, mdr),
+  submit_mdlog_entry(le, new C_MDS_LoggedLinkRollback(this, mut, mdr, splits),
                      mdr, __func__);
   mdlog->flush();
 }
 
-void Server::_link_rollback_finish(MutationRef& mut, MDRequestRef& mdr)
+void Server::_link_rollback_finish(MutationRef& mut, MDRequestRef& mdr,
+				   map<client_t,MClientSnap*>& splits)
 {
   dout(10) << "_link_rollback_finish" << dendl;
 
   assert(g_conf->mds_kill_link_at != 10);
 
   mut->apply();
+
+  if (!mds->is_resolve())
+    mdcache->send_snaps(splits);
+
   if (mdr)
     mdcache->request_finish(mdr);
 
@@ -7954,7 +8024,6 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
     rollback.stray.dname = straydn->get_name();
   }
   if (mdr->slave_request->desti_snapbl.length()) {
-    assert(destdnl->is_primary());
     CInode *oldin = destdnl->get_inode();
     if (oldin->snaprealm) {
       encode(true, rollback.desti_snapbl);
@@ -7964,7 +8033,6 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
     }
   }
   if (mdr->slave_request->srci_snapbl.length()) {
-    assert(srcdnl->is_primary());
     if (srci->snaprealm) {
       encode(true, rollback.srci_snapbl);
       srci->encode_snap_blob(rollback.srci_snapbl);

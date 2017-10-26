@@ -46,6 +46,8 @@ public:
   CInode *inode;
 
   mutable bool open;                        // set to true once all past_parents are opened
+  bool global;
+
   SnapRealm *parent;
   set<SnapRealm*> open_children;    // active children that are currently open
   set<SnapRealm*> open_past_children;  // past children who has pinned me
@@ -55,13 +57,7 @@ public:
   elist<CInode*> inodes_with_caps;             // for efficient realm splits
   map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
 
-  SnapRealm(MDCache *c, CInode *in) : 
-    srnode(),
-    mdcache(c), inode(in),
-    open(false), parent(0),
-    num_open_past_parents(0),
-    inodes_with_caps(0) 
-  { }
+  SnapRealm(MDCache *c, CInode *in);
 
   bool exists(std::string_view name) const {
     for (map<snapid_t,SnapInfo>::const_iterator p = srnode.snaps.begin();

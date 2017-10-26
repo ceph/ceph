@@ -59,10 +59,19 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
     }
     out << ")";
   }
+
+  if (realm.srnode.is_parent_global())
+    out << " global ";
   out << " " << &realm << ")";
   return out;
 }
 
+SnapRealm::SnapRealm(MDCache *c, CInode *in) :
+    mdcache(c), inode(in), open(false), parent(0),
+    num_open_past_parents(0), inodes_with_caps(0)
+{
+  global = (inode->ino() == MDS_INO_GLOBAL_SNAPREALM);
+}
 
 void SnapRealm::add_open_past_parent(SnapRealm *parent, snapid_t last)
 {
@@ -237,9 +246,12 @@ void SnapRealm::build_snap_set() const
 {
   dout(10) << "build_snap_set on " << *this << dendl;
 
-  cached_seq = srnode.seq;
-  cached_last_created = srnode.last_created;
   cached_snaps.clear();
+
+  if (global) {
+    mdcache->mds->snapclient->get_snaps(cached_snaps);
+    return;
+  }
 
   // include my snaps
   for (const auto& p : srnode.snaps)
@@ -286,20 +298,31 @@ void SnapRealm::build_snap_set() const
 void SnapRealm::check_cache() const
 {
   assert(have_past_parents_open());
+  snapid_t seq;
+  snapid_t last_created;
   snapid_t last_destroyed = mdcache->mds->snapclient->get_last_destroyed();
-  if (cached_seq >= srnode.seq &&
+  if (global || srnode.is_parent_global()) {
+    last_created = mdcache->mds->snapclient->get_last_created();
+    seq = MAX(last_created, last_destroyed);
+  } else {
+    last_created = srnode.last_created;
+    seq = srnode.seq;
+  }
+  if (cached_seq >= seq &&
       cached_last_destroyed == last_destroyed)
     return;
 
   cached_snap_context.clear();
 
+  cached_seq = seq;
+  cached_last_created = last_created;
   cached_last_destroyed = last_destroyed;
   build_snap_set();
 
   build_snap_trace();
   
   dout(10) << "check_cache rebuilt " << cached_snaps
-	   << " seq " << srnode.seq
+	   << " seq " << seq
 	   << " cached_seq " << cached_seq
 	   << " cached_last_created " << cached_last_created
 	   << " cached_last_destroyed " << cached_last_destroyed
@@ -484,8 +507,13 @@ snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid
 
 void SnapRealm::adjust_parent()
 {
-  CDentry *pdn = inode->get_parent_dn();
-  SnapRealm *newparent = pdn ? pdn->get_dir()->get_inode()->find_snaprealm() : NULL;
+  SnapRealm *newparent;
+  if (srnode.is_parent_global()) {
+    newparent = mdcache->get_global_snaprealm();
+  } else {
+    CDentry *pdn = inode->get_parent_dn();
+    newparent = pdn ? pdn->get_dir()->get_inode()->find_snaprealm() : NULL;
+  }
   if (newparent != parent) {
     dout(10) << "adjust_parent " << parent << " -> " << newparent << dendl;
     if (parent)
@@ -589,6 +617,17 @@ void SnapRealm::build_snap_trace() const
 {
   cached_snap_trace.clear();
 
+  if (global) {
+    SnapRealmInfo info(inode->ino(), 0, cached_seq, 0);
+    info.my_snaps.reserve(cached_snaps.size());
+    for (auto p = cached_snaps.rbegin(); p != cached_snaps.rend(); ++p)
+      info.my_snaps.push_back(*p);
+
+    dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
+    encode(info, cached_snap_trace);
+    return;
+  }
+
   SnapRealmInfo info(inode->ino(), srnode.created, srnode.seq, srnode.current_parent_since);
   if (parent) {
     info.h.parent = parent->inode->ino();
@@ -616,8 +655,7 @@ void SnapRealm::build_snap_trace() const
       dout(10) << "build_snap_trace prior_parent_snaps from [1," << *past.rbegin() << "] "
 	       << info.prior_parent_snaps << dendl;
     }
-  } else 
-    info.h.parent = 0;
+  }
 
   info.my_snaps.reserve(srnode.snaps.size());
   for (auto p = srnode.snaps.rbegin();
