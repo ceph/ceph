@@ -2262,25 +2262,28 @@ void ECommitted::generate_test_instances(list<ECommitted*>& ls)
 
 void link_rollback::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   encode(reqid, bl);
   encode(ino, bl);
   encode(was_inc, bl);
   encode(old_ctime, bl);
   encode(old_dir_mtime, bl);
   encode(old_dir_rctime, bl);
+  encode(snapbl, bl);
   ENCODE_FINISH(bl);
 }
 
 void link_rollback::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(reqid, bl);
   decode(ino, bl);
   decode(was_inc, bl);
   decode(old_ctime, bl);
   decode(old_dir_mtime, bl);
   decode(old_dir_rctime, bl);
+  if (struct_v >= 3)
+    decode(snapbl, bl);
   DECODE_FINISH(bl);
 }
 

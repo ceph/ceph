@@ -510,6 +510,10 @@ public:
     else
       return NULL;
   }
+
+  void mark_snaprealm_global(sr_t *new_srnode);
+  bool is_projected_snaprealm_global() const;
+
   void record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent);
   void project_snaprealm_past_parent(SnapRealm *newparent);
   void early_pop_projected_snaprealm();
@@ -709,7 +713,7 @@ public:
     return (mds_rank_t)MDS_INO_STRAY_OWNER(inode.ino);
   }
   bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(inode.ino); }
-  bool is_base() const { return is_root() || is_mdsdir(); }
+  bool is_base() const { return MDS_INO_IS_BASE(inode.ino); }
   bool is_system() const { return inode.ino < MDS_INO_SYSTEM_BASE; }
   bool is_normal() const { return !(is_base() || is_system() || is_stray()); }
 

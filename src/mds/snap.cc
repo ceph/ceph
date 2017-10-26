@@ -123,7 +123,7 @@ ostream& operator<<(ostream& out, const snaplink_t &l)
 
 void sr_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(5, 4, bl);
+  ENCODE_START(6, 4, bl);
   encode(seq, bl);
   encode(created, bl);
   encode(last_created, bl);
@@ -132,12 +132,13 @@ void sr_t::encode(bufferlist& bl) const
   encode(snaps, bl);
   encode(past_parents, bl);
   encode(past_parent_snaps, bl);
+  encode(flags, bl);
   ENCODE_FINISH(bl);
 }
 
 void sr_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 4, 4, p);
   if (struct_v == 2) {
     __u8 struct_v;
     decode(struct_v, p);  // yes, really: extra byte for v2 encoding only, see 6ee52e7d.
@@ -151,6 +152,10 @@ void sr_t::decode(bufferlist::iterator& p)
   decode(past_parents, p);
   if (struct_v >= 5)
     decode(past_parent_snaps, p);
+  if (struct_v >= 6)
+    decode(flags, p);
+  else
+    flags = 0;
   DECODE_FINISH(p);
 }
 

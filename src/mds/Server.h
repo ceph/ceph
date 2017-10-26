@@ -239,21 +239,21 @@ public:
   // link
   void handle_client_link(MDRequestRef& mdr);
   void _link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti);
-  void _link_local_finish(MDRequestRef& mdr,
-			  CDentry *dn, CInode *targeti,
-			  version_t, version_t);
+  void _link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
+			  version_t, version_t, bool);
 
   void _link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti);
   void _link_remote_finish(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
 			   version_t);
 
   void handle_slave_link_prep(MDRequestRef& mdr);
-  void _logged_slave_link(MDRequestRef& mdr, CInode *targeti);
+  void _logged_slave_link(MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
   void _commit_slave_link(MDRequestRef& mdr, int r, CInode *targeti);
   void _committed_slave(MDRequestRef& mdr);  // use for rename, too
   void handle_slave_link_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *m);
   void do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr);
-  void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr);
+  void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr,
+			     map<client_t,MClientSnap*>& split);
 
   // unlink
   void handle_client_unlink(MDRequestRef& mdr);
