@@ -34,7 +34,7 @@ BlkDev::BlkDev(int f) {
   fd = f;
 }
 
-int BlkDev::get_devid(dev_t *id) {
+int BlkDev::get_devid(dev_t *id) const {
   struct stat st;
   int r;
 
@@ -57,11 +57,11 @@ static const char *blkdev_props2strings[] = {
   [BLKDEV_PROP_VENDOR]              = "device/device/vendor",
 };
 
-const char *BlkDev::sysfsdir() {
+const char *BlkDev::sysfsdir() const {
   return "/sys";
 }
 
-int BlkDev::get_size(int64_t *psize)
+int BlkDev::get_size(int64_t *psize) const
 {
 #ifdef BLKGETSIZE64
   int ret = ::ioctl(fd, BLKGETSIZE64, psize);
@@ -86,7 +86,7 @@ int BlkDev::get_size(int64_t *psize)
  * return negative error on error
  */
 int64_t BlkDev::get_string_property(blkdev_prop_t prop,
-                                        char *val, size_t maxlen)
+                                        char *val, size_t maxlen) const
 {
   int r;
   const char *propstr;
@@ -128,7 +128,7 @@ int64_t BlkDev::get_string_property(blkdev_prop_t prop,
  * return the value (we assume it is positive)
  * return negative error on error
  */
-int64_t BlkDev::get_int_property(blkdev_prop_t prop)
+int64_t BlkDev::get_int_property(blkdev_prop_t prop) const
 {
   char buff[256] = {0};
   int r = get_string_property(prop, buff, sizeof(buff));
@@ -148,18 +148,18 @@ int64_t BlkDev::get_int_property(blkdev_prop_t prop)
   return r;
 }
 
-bool BlkDev::support_discard()
+bool BlkDev::support_discard() const
 {
   return get_int_property(BLKDEV_PROP_DISCARD_GRANULARITY) > 0;
 }
 
-int BlkDev::discard(int64_t offset, int64_t len)
+int BlkDev::discard(int64_t offset, int64_t len) const
 {
   uint64_t range[2] = {(uint64_t)offset, (uint64_t)len};
   return ioctl(fd, BLKDISCARD, range);
 }
 
-bool BlkDev::is_nvme()
+bool BlkDev::is_nvme() const
 {
   char vendor[80];
   // nvme has a device/device/vendor property; infer from that.  There is
@@ -168,27 +168,27 @@ bool BlkDev::is_nvme()
   return (r == 0);
 }
 
-bool BlkDev::is_rotational()
+bool BlkDev::is_rotational() const
 {
   return get_int_property(BLKDEV_PROP_ROTATIONAL) > 0;
 }
 
-int BlkDev::dev(char *dev, size_t max)
+int BlkDev::dev(char *dev, size_t max) const
 {
   return get_string_property(BLKDEV_PROP_DEV, dev, max);
 }
 
-int BlkDev::model(char *model, size_t max)
+int BlkDev::model(char *model, size_t max) const
 {
   return get_string_property(BLKDEV_PROP_MODEL, model, max);
 }
 
-int BlkDev::serial(char *serial, size_t max)
+int BlkDev::serial(char *serial, size_t max) const
 {
   return get_string_property(BLKDEV_PROP_SERIAL, serial, max);
 }
 
-int BlkDev::partition(char *partition, size_t max)
+int BlkDev::partition(char *partition, size_t max) const
 {
   dev_t id;
   int r = get_devid(&id);
@@ -204,7 +204,7 @@ int BlkDev::partition(char *partition, size_t max)
   return 0;
 }
 
-int BlkDev::wholedisk(char *device, size_t max)
+int BlkDev::wholedisk(char *device, size_t max) const
 {
   dev_t id;
   int r = get_devid(&id);
@@ -221,12 +221,12 @@ int BlkDev::wholedisk(char *device, size_t max)
 #elif defined(__APPLE__)
 #include <sys/disk.h>
 
-const char *BlkDev::sysfsdir() {
+const char *BlkDev::sysfsdir() const {
   assert(false);  // Should never be called on Apple
   return "";
 }
 
-int BlkDev::dev(char *dev, size_t max)
+int BlkDev::dev(char *dev, size_t max) const
 {
   struct stat sb;
 
@@ -238,7 +238,7 @@ int BlkDev::dev(char *dev, size_t max)
   return 0;
 }
 
-int BlkDev::get_size(int64_t *psize)
+int BlkDev::get_size(int64_t *psize) const
 {
   unsigned long blocksize = 0;
   int ret = ::ioctl(fd, DKIOCGETBLOCKSIZE, &blocksize);
@@ -253,53 +253,53 @@ int BlkDev::get_size(int64_t *psize)
   return ret;
 }
 
-bool BlkDev::support_discard()
+bool BlkDev::support_discard() const
 {
   return false;
 }
 
-int BlkDev::discard(int64_t offset, int64_t len)
+int BlkDev::discard(int64_t offset, int64_t len) const
 {
   return -EOPNOTSUPP;
 }
 
-bool BlkDev::is_nvme()
+bool BlkDev::is_nvme() const
 {
   return false;
 }
 
-bool BlkDev::is_rotational()
+bool BlkDev::is_rotational() const
 {
   return false;
 }
 
-int BlkDev::model(char *model, size_t max)
+int BlkDev::model(char *model, size_t max) const
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::serial(char *serial, size_t max)
+int BlkDev::serial(char *serial, size_t max) const
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::partition(char *partition, size_t max)
+int BlkDev::partition(char *partition, size_t max) const
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::wholedisk(char *device, size_t max)
+int BlkDev::wholedisk(char *device, size_t max) const
 {
   return -EOPNOTSUPP;
 }
 #elif defined(__FreeBSD__)
 
-const char *BlkDev::sysfsdir() {
+const char *BlkDev::sysfsdir() const {
   assert(false);  // Should never be called on FreeBSD
   return "";
 }
 
-int BlkDev::dev(char *dev, size_t max)
+int BlkDev::dev(char *dev, size_t max) const
 {
   struct stat sb;
 
@@ -311,7 +311,7 @@ int BlkDev::dev(char *dev, size_t max)
   return 0;
 }
 
-int BlkDev::get_size(int64_t *psize)
+int BlkDev::get_size(int64_t *psize) const
 {
   int ret = ::ioctl(fd, DIOCGMEDIASIZE, psize);
   if (ret < 0)
@@ -319,7 +319,7 @@ int BlkDev::get_size(int64_t *psize)
   return ret;
 }
 
-bool BlkDev::support_discard()
+bool BlkDev::support_discard() const
 {
   struct diocgattr_arg arg;
   int ret;
@@ -334,12 +334,12 @@ bool BlkDev::support_discard()
   return ret;
 }
 
-int BlkDev::discard(int64_t offset, int64_t len)
+int BlkDev::discard(int64_t offset, int64_t len) const
 {
   return -EOPNOTSUPP;
 }
 
-bool BlkDev::is_nvme()
+bool BlkDev::is_nvme() const
 {
   // FreeBSD doesn't have a good way to tell if a device's underlying protocol
   // is NVME, especially since multiple GEOM transforms may be involved.  So
@@ -358,7 +358,7 @@ bool BlkDev::is_nvme()
           strncmp(nda, devname, strlen(nda)) == 0);
 }
 
-bool BlkDev::is_rotational()
+bool BlkDev::is_rotational() const
 {
 #if __FreeBSD_version >= 1200049
   struct diocgattr_arg arg;
@@ -385,7 +385,7 @@ bool BlkDev::is_rotational()
 #endif
 }
 
-int BlkDev::model(char *model, size_t max)
+int BlkDev::model(char *model, size_t max) const
 {
   struct diocgattr_arg arg;
   char *p;
@@ -410,7 +410,7 @@ int BlkDev::model(char *model, size_t max)
   return 0;
 }
 
-int BlkDev::serial(char *serial, size_t max)
+int BlkDev::serial(char *serial, size_t max) const
 {
   char ident[DISK_IDENT_SIZE];
 
@@ -433,7 +433,7 @@ static int block_device_devname(int fd, char *devname, size_t max)
   return 0;
 }
 
-int BlkDev::partition(char *partition, size_t max)
+int BlkDev::partition(char *partition, size_t max) const
 {
   char devname[PATH_MAX];
 
@@ -443,7 +443,7 @@ int BlkDev::partition(char *partition, size_t max)
   return 0;
 }
 
-int BlkDev::wholedisk(char *wd, size_t max)
+int BlkDev::wholedisk(char *wd, size_t max) const
 {
   char devname[PATH_MAX];
   size_t first_digit, next_nondigit;
@@ -463,57 +463,57 @@ int BlkDev::wholedisk(char *wd, size_t max)
 
 #else
 
-const char *BlkDev::sysfsdir() {
+const char *BlkDev::sysfsdir() const {
   assert(false);  // Should never be called on non-Linux
   return "";
 }
 
-int BlkDev::dev(char *dev, size_t max)
+int BlkDev::dev(char *dev, size_t max) const
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::get_size(int64_t *psize)
+int BlkDev::get_size(int64_t *psize) const
 {
   return -EOPNOTSUPP;
 }
 
-bool BlkDev::support_discard()
+bool BlkDev::support_discard() const
 {
   return false;
 }
 
-int BlkDev::discard(int fd, int64_t offset, int64_t len)
+int BlkDev::discard(int fd, int64_t offset, int64_t len) const
 {
   return -EOPNOTSUPP;
 }
 
-bool BlkDev::is_nvme(const char *devname)
+bool BlkDev::is_nvme(const char *devname) const
 {
   return false;
 }
 
-bool BlkDev::is_rotational(const char *devname)
+bool BlkDev::is_rotational(const char *devname) const
 {
   return false;
 }
 
-int BlkDev::model(char *model, size_t max)
+int BlkDev::model(char *model, size_t max) const
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::serial(char *serial, size_t max)
+int BlkDev::serial(char *serial, size_t max) const
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::partition(char *partition, size_t max)
+int BlkDev::partition(char *partition, size_t max) const
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::wholedisk(char *wd, size_t max)
+int BlkDev::wholedisk(char *wd, size_t max) const
 {
   return -EOPNOTSUPP;
 }
