@@ -2184,8 +2184,6 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
     }
   }
   
-  unsigned original_bl_len = outcoming_bl.length();
-
   outcoming_bl.append(CEPH_MSGR_TAG_MSG);
   outcoming_bl.append((char*)&header, sizeof(header));
 
@@ -2213,12 +2211,9 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   if (rc < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " error sending " << m << ", "
                               << cpp_strerror(rc) << dendl;
-  } else if (rc == 0) {
-    logger->inc(l_msgr_send_bytes, total_send_size - original_bl_len);
-    ldout(async_msgr->cct, 10) << __func__ << " sending " << m << " done." << dendl;
   } else {
     logger->inc(l_msgr_send_bytes, total_send_size - outcoming_bl.length());
-    ldout(async_msgr->cct, 10) << __func__ << " sending " << m << " continuely." << dendl;
+    ldout(async_msgr->cct, 10) << __func__ << " sending " << m << (rc ? " continuely." :" done.") << dendl;
   }
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
