@@ -14,9 +14,10 @@ class RGWCRHTTPGetDataCB : public RGWGetDataCB {
   Mutex lock;
   RGWCoroutinesEnv *env;
   RGWCoroutine *cr;
+  int64_t io_id;
   bufferlist data;
 public:
-  RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr) : lock("RGWCRHTTPGetDataCB"), env(_env), cr(_cr) {}
+  RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, int64_t _io_id) : lock("RGWCRHTTPGetDataCB"), env(_env), cr(_cr), io_id(_io_id) {}
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
     {
@@ -28,7 +29,7 @@ public:
       }
     }
 
-    env->manager->io_complete(cr);
+    env->manager->io_complete(cr, io_id);
     return 0;
   }
 
@@ -59,9 +60,10 @@ RGWStreamRWHTTPResourceCRF::~RGWStreamRWHTTPResourceCRF()
 
 int RGWStreamRWHTTPResourceCRF::init()
 {
-  in_cb = new RGWCRHTTPGetDataCB(env, caller);
+  env->stack->init_new_io(req);
 
-  req->set_user_info(env->stack);
+  in_cb = new RGWCRHTTPGetDataCB(env, caller, req->get_io_id());
+
   req->set_in_cb(in_cb);
 
   int r = http_manager->add_request(req);
@@ -78,7 +80,7 @@ int RGWStreamRWHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool *i
     while (!req->is_done()) {
       *io_pending = true;
       if (!in_cb->has_data()) {
-        yield caller->io_block();
+        yield caller->io_block(0, req->get_io_id());
       }
       *io_pending = false;
       in_cb->claim_data(out, max_size);

@@ -39,7 +39,7 @@ class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine{
     auto op = boost::intrusive_ptr<RGWRESTReadResource>(
         new RGWRESTReadResource(conn, path, params, NULL, http_manager));
 
-    op->set_user_info((void *)stack);
+    init_new_io(op.get());
 
     int ret = op->aio_read();
     if (ret < 0) {
@@ -145,7 +145,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
     auto op = boost::intrusive_ptr<RGWRESTSendResource>(
         new RGWRESTSendResource(conn, method, path, params, nullptr, http_manager));
 
-    op->set_user_info((void *)stack);
+    init_new_io(op.get());
 
     int ret = op->aio_send(input_bl);
     if (ret < 0) {
@@ -267,7 +267,7 @@ public:
     auto op = boost::intrusive_ptr<RGWRESTDeleteResource>(
         new RGWRESTDeleteResource(conn, path, params, nullptr, http_manager));
 
-    op->set_user_info((void *)stack);
+    init_new_io(op.get());
 
     bufferlist bl;
 

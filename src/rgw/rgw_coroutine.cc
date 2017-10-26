@@ -8,6 +8,7 @@
 #include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
 
 
 class RGWCompletionManager::WaitContext : public Context {
@@ -33,10 +34,10 @@ RGWCompletionManager::~RGWCompletionManager()
   timer.shutdown();
 }
 
-void RGWCompletionManager::complete(RGWAioCompletionNotifier *cn, void *user_info)
+void RGWCompletionManager::complete(RGWAioCompletionNotifier *cn, int64_t io_id, void *user_info)
 {
   Mutex::Locker l(lock);
-  _complete(cn, user_info);
+  _complete(cn, io_id, user_info);
 }
 
 void RGWCompletionManager::register_completion_notifier(RGWAioCompletionNotifier *cn)
@@ -55,16 +56,17 @@ void RGWCompletionManager::unregister_completion_notifier(RGWAioCompletionNotifi
   }
 }
 
-void RGWCompletionManager::_complete(RGWAioCompletionNotifier *cn, void *user_info)
+void RGWCompletionManager::_complete(RGWAioCompletionNotifier *cn, int64_t io_id, void *user_info)
 {
   if (cn) {
     cns.erase(cn);
   }
-  complete_reqs.push_back(user_info);
+
+  complete_reqs.push_back(io_completion{io_id, user_info});
   cond.Signal();
 }
 
-int RGWCompletionManager::get_next(void **user_info)
+int RGWCompletionManager::get_next(io_completion *io)
 {
   Mutex::Locker l(lock);
   while (complete_reqs.empty()) {
@@ -73,18 +75,18 @@ int RGWCompletionManager::get_next(void **user_info)
     }
     cond.Wait(lock);
   }
-  *user_info = complete_reqs.front();
+  *io = complete_reqs.front();
   complete_reqs.pop_front();
   return 0;
 }
 
-bool RGWCompletionManager::try_get_next(void **user_info)
+bool RGWCompletionManager::try_get_next(io_completion *io)
 {
   Mutex::Locker l(lock);
   if (complete_reqs.empty()) {
     return false;
   }
-  *user_info = complete_reqs.front();
+  *io = complete_reqs.front();
   complete_reqs.pop_front();
   return true;
 }
@@ -119,7 +121,7 @@ void RGWCompletionManager::_wakeup(void *opaque)
   if (iter != waiters.end()) {
     void *user_id = iter->second;
     waiters.erase(iter);
-    _complete(NULL, user_id);
+    _complete(NULL, -1 /* no IO id */, user_id);
   }
 }
 
@@ -127,6 +129,11 @@ RGWCoroutine::~RGWCoroutine() {
   for (auto stack : spawned.entries) {
     stack->put();
   }
+}
+
+void RGWCoroutine::init_new_io(RGWIOProvider *io_provider)
+{
+  stack->init_new_io(io_provider);
 }
 
 void RGWCoroutine::set_io_blocked(bool flag) {
@@ -137,9 +144,17 @@ void RGWCoroutine::set_sleeping(bool flag) {
   stack->set_sleeping(flag);
 }
 
-int RGWCoroutine::io_block(int ret) {
+int RGWCoroutine::io_block(int ret, int64_t io_id) {
+  if (stack->consume_io_finish(io_id)) {
+    return 0;
+  }
   set_io_blocked(true);
+  stack->set_io_blocked_id(io_id);
   return ret;
+}
+
+void RGWCoroutine::io_complete(int64_t io_id) {
+  stack->io_complete(io_id);
 }
 
 void RGWCoroutine::StatusItem::dump(Formatter *f) const {
@@ -161,6 +176,11 @@ stringstream& RGWCoroutine::Status::set_status()
   timestamp = ceph_clock_now();
 
   return status;
+}
+
+int64_t RGWCoroutinesManager::get_next_io_id()
+{
+  return (int64_t)++max_io_id;
 }
 
 RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start) : cct(_cct), ops_mgr(_ops_mgr),
@@ -236,6 +256,16 @@ void RGWCoroutinesStack::call(RGWCoroutine *next_op) {
   }
 }
 
+void RGWCoroutinesStack::schedule()
+{
+  env->manager->schedule(env, this);
+}
+
+void RGWCoroutinesStack::_schedule()
+{
+  env->manager->_schedule(env, this);
+}
+
 RGWCoroutinesStack *RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCoroutine *op, bool wait)
 {
   if (!op) {
@@ -278,6 +308,12 @@ void RGWCoroutinesStack::wakeup()
 {
   RGWCompletionManager *completion_mgr = env->manager->get_completion_mgr();
   completion_mgr->wakeup((void *)this);
+}
+
+void RGWCoroutinesStack::io_complete(int64_t io_id)
+{
+  RGWCompletionManager *completion_mgr = env->manager->get_completion_mgr();
+  completion_mgr->complete(nullptr, io_id, (void *)this);
 }
 
 int RGWCoroutinesStack::unwind(int retcode)
@@ -376,7 +412,8 @@ static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
   ((RGWAioCompletionNotifier *)arg)->cb();
 }
 
-RGWAioCompletionNotifier::RGWAioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data) : completion_mgr(_mgr),
+RGWAioCompletionNotifier::RGWAioCompletionNotifier(RGWCompletionManager *_mgr, int64_t _io_id, void *_user_data) : completion_mgr(_mgr),
+                                                                         io_id(_io_id),
                                                                          user_data(_user_data), lock("RGWAioCompletionNotifier"), registered(true) {
   c = librados::Rados::aio_create_completion((void *)this, NULL,
 					     _aio_completion_notifier_cb);
@@ -430,9 +467,44 @@ void RGWCoroutinesStack::dump(Formatter *f) const {
   f->close_section();
 }
 
-void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& scheduled_stacks, RGWCoroutinesStack *stack, int *blocked_count)
+void RGWCoroutinesStack::init_new_io(RGWIOProvider *io_provider)
 {
-  RWLock::WLocker wl(lock);
+  io_provider->set_io_user_info((void *)this);
+  io_provider->set_io_id(env->manager->get_next_io_id());
+}
+
+bool RGWCoroutinesStack::try_io_unblock(int64_t io_id)
+{
+  if (!can_io_unblock(io_id)) {
+    io_finish_ids.insert(io_id);
+    return false;
+  }
+
+  return true;
+}
+
+bool RGWCoroutinesStack::consume_io_finish(int64_t io_id)
+{
+  auto iter = io_finish_ids.find(io_id);
+  if (iter == io_finish_ids.end()) {
+    return false;
+  }
+  io_finish_ids.erase(iter);
+  return true;
+}
+
+
+void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& scheduled_stacks,
+                                                  RGWCompletionManager::io_completion& io, int *blocked_count)
+{
+  assert(lock.is_wlocked());
+  RGWCoroutinesStack *stack = (RGWCoroutinesStack *)io.user_info;
+  if (context_stacks.find(stack) == context_stacks.end()) {
+    return;
+  }
+  if (!stack->try_io_unblock(io.io_id)) {
+    return;
+  }
   --(*blocked_count);
   stack->set_io_blocked(false);
   stack->set_interval_wait(false);
@@ -446,8 +518,15 @@ void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& con
 
 void RGWCoroutinesManager::schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *stack)
 {
+  RWLock::WLocker wl(lock);
+  _schedule(env, stack);
+}
+
+void RGWCoroutinesManager::_schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *stack)
+{
   assert(lock.is_wlocked());
   env->scheduled_stacks->push_back(stack);
+  stack->set_is_scheduled(true);
   set<RGWCoroutinesStack *>& context_stacks = run_contexts[env->run_context];
   context_stacks.insert(stack);
 }
@@ -458,6 +537,12 @@ void RGWCoroutinesManager::set_sleeping(RGWCoroutine *cr, bool flag)
   cr->set_sleeping(flag);
 }
 
+void RGWCoroutinesManager::io_complete(RGWCoroutine *cr, int64_t io_id)
+{
+  RWLock::WLocker wl(lock);
+  cr->io_complete(io_id);
+}
+
 int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 {
   int ret = 0;
@@ -465,6 +550,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   int interval_wait_count = 0;
   bool canceled = false; // set on going_down
   RGWCoroutinesEnv env;
+  bool op_not_blocked;
 
   uint64_t run_context = ++run_context_count;
 
@@ -474,20 +560,27 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   for (auto& st : stacks) {
     context_stacks.insert(st);
     scheduled_stacks.push_back(st);
+    st->set_is_scheduled(true);
   }
-  lock.unlock();
-
   env.run_context = run_context;
   env.manager = this;
   env.scheduled_stacks = &scheduled_stacks;
 
   for (list<RGWCoroutinesStack *>::iterator iter = scheduled_stacks.begin(); iter != scheduled_stacks.end() && !going_down;) {
-    lock.get_write();
-
     RGWCoroutinesStack *stack = *iter;
+
+    if (context_stacks.find(stack) == context_stacks.end()) {
+      /* stack was probably schedule more than once due to IO, but was since complete */
+      goto next;
+    }
     env.stack = stack;
 
+    lock.unlock();
+
     ret = stack->operate(&env);
+
+    lock.get_write();
+
     stack->set_is_scheduled(false);
     if (ret < 0) {
       ldout(cct, 20) << "stack->operate() returned ret=" << ret << dendl;
@@ -497,7 +590,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       report_error(stack);
     }
 
-    bool op_not_blocked = false;
+    op_not_blocked = false;
 
     if (stack->is_io_blocked()) {
       ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is io blocked" << dendl;
@@ -522,13 +615,13 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
             }
 	    blocked_count++;
 	  } else {
-	    s->schedule();
+	    s->_schedule();
 	  }
 	}
       }
       if (stack->parent && stack->parent->waiting_for_child()) {
         stack->parent->set_wait_for_child(false);
-        stack->parent->schedule();
+        stack->parent->_schedule();
       }
       context_stacks.erase(stack);
       stack->put();
@@ -536,18 +629,16 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     } else {
       op_not_blocked = true;
       stack->run_count++;
-      stack->schedule();
+      stack->_schedule();
     }
 
     if (!op_not_blocked && stack) {
       stack->run_count = 0;
     }
 
-    lock.unlock();
-
-    RGWCoroutinesStack *blocked_stack;
-    while (completion_mgr->try_get_next((void **)&blocked_stack)) {
-      handle_unblocked_stack(context_stacks, scheduled_stacks, blocked_stack, &blocked_count);
+    RGWCompletionManager::io_completion io;
+    while (completion_mgr->try_get_next(&io)) {
+      handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count);
     }
 
     /*
@@ -556,19 +647,24 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
      * these aren't really waiting for IOs
      */
     while (blocked_count - interval_wait_count >= ops_window) {
-      ret = completion_mgr->get_next((void **)&blocked_stack);
+      lock.unlock();
+      ret = completion_mgr->get_next(&io);
+      lock.get_write();
       if (ret < 0) {
        ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       }
-      handle_unblocked_stack(context_stacks, scheduled_stacks, blocked_stack, &blocked_count);
+      handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count);
     }
 
+next:
     ++iter;
     scheduled_stacks.pop_front();
 
 
     while (scheduled_stacks.empty() && blocked_count > 0) {
-      ret = completion_mgr->get_next((void **)&blocked_stack);
+      lock.unlock();
+      ret = completion_mgr->get_next(&io);
+      lock.get_write();
       if (ret < 0) {
 	ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       }
@@ -578,7 +674,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
         canceled = true;
         break;
       }
-      handle_unblocked_stack(context_stacks, scheduled_stacks, blocked_stack, &blocked_count);
+      handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count);
       iter = scheduled_stacks.begin();
     }
     if (canceled) {
@@ -590,7 +686,6 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     }
   }
 
-  lock.get_write();
   if (!context_stacks.empty() && !going_down) {
     JSONFormatter formatter(true);
     formatter.open_array_section("context_stacks");
@@ -624,7 +719,7 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
   op->get();
   stack->call(op);
 
-  stack->schedule(&stacks);
+  stacks.push_back(stack);
 
   int r = run(stacks);
   if (r < 0) {
@@ -639,7 +734,7 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
 
 RGWAioCompletionNotifier *RGWCoroutinesManager::create_completion_notifier(RGWCoroutinesStack *stack)
 {
-  RGWAioCompletionNotifier *cn = new RGWAioCompletionNotifier(completion_mgr, (void *)stack);
+  RGWAioCompletionNotifier *cn = new RGWAioCompletionNotifier(completion_mgr, get_next_io_id(), (void *)stack);
   completion_mgr->register_completion_notifier(cn);
   return cn;
 }
