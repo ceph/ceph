@@ -44,6 +44,7 @@ DISTRO_CODENAME_MAP = {
     },
     "sle": {
         "12.2": "sle",
+        "12.3": "sle",
     },
     "opensuse-leap": {
         "42.2": "leap",
@@ -57,7 +58,7 @@ DEFAULT_OS_VERSION = dict(
     fedora="25",
     centos="7.4",
     opensuse="42.1",
-    sle="12.2",
+    sle="12.3",
     rhel="7.4",
     debian='8.0'
 )
@@ -85,7 +86,7 @@ class OS(object):
     @staticmethod
     def _version_to_codename(name, version):
         for (_version, codename) in DISTRO_CODENAME_MAP[name].iteritems():
-            if version == _version or version.split('.')[0] == _version:
+            if str(version) == _version or str(version).split('.')[0] == _version:
                 return codename
 
     @staticmethod

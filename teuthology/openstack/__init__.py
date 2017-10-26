@@ -34,6 +34,7 @@ import tempfile
 import teuthology
 import time
 import types
+import yaml
 
 from subprocess import CalledProcessError
 
@@ -231,8 +232,8 @@ class OpenStack(object):
             os.environ['OS_TOKEN_VALUE'] = OpenStack.token
             OpenStack.token_expires = int(time.time() + OpenStack.token_cache_duration)
             os.environ['OS_TOKEN_EXPIRES'] = str(OpenStack.token_expires)
-            log.info("caching OS_TOKEN_VALUE "
-                     "during %s seconds" % OpenStack.token_cache_duration)
+            log.debug("caching OS_TOKEN_VALUE "
+                      "during %s seconds" % OpenStack.token_cache_duration)
         return True
 
     def get_os_url(self, cmd, type=None):
@@ -620,6 +621,7 @@ class TeuthologyOpenStack(OpenStack):
             if original_argv[0] in ('--name',
                                     '--teuthology-branch',
                                     '--teuthology-git-url',
+                                    '--test-repo',
                                     '--archive-upload',
                                     '--archive-upload-url',
                                     '--key-name',
@@ -635,6 +637,30 @@ class TeuthologyOpenStack(OpenStack):
                 original_argv.pop(0)
             else:
                 argv.append(original_argv.pop(0))
+        if self.args.test_repo:
+            repos = [{'name':k, 'url': v}
+                                    for k, v in [x.split(':', 1)
+                                    for x in self.args.test_repo]]
+            log.info("Using repos: %s" % self.args.test_repo)
+
+            overrides = {
+                'overrides': {
+                    'install': {
+                        'repos' : repos
+                    }
+                }
+            }
+            yaml_data = yaml.dump(overrides, default_flow_style=False)
+            with tempfile.NamedTemporaryFile(mode='w+b',
+                                             suffix='-artifact.yaml',
+                                             delete=False) as f:
+                yaml_file = f.name
+                log.debug("Using file " + yaml_file)
+                print >> f, yaml_data
+
+            path = self._upload_yaml_file(yaml_file)
+            argv.append(path)
+
         #
         # If --upload, provide --archive-upload{,-url} regardless of
         # what was originally provided on the command line because the
@@ -651,8 +677,13 @@ class TeuthologyOpenStack(OpenStack):
                 " ~/.teuthology.yaml"
             ).format(opt='ceph_git_url', value=ceph_repo)
             self.ssh(command)
-        argv.append('/home/' + self.username +
-                    '/teuthology/teuthology/openstack/openstack.yaml')
+        user_home = '/home/' + self.username
+        openstack_home = user_home + '/teuthology/teuthology/openstack'
+        if self.args.test_repo:
+            argv.append(openstack_home + '/openstack-basic.yaml')
+        else:
+            argv.append(openstack_home + '/openstack-basic.yaml')
+            argv.append(openstack_home + '/openstack-buildpackages.yaml')
         command = (
             "source ~/.bashrc_teuthology ; " + self.teuthology_suite + " " +
             " --machine-type openstack " +
