@@ -97,6 +97,8 @@ Pool specific commands
 
 :command:`put` *name* *infile* [--offset offset]
   Write object name with start offset (default:0) to the cluster with contents from infile.
+  
+  **Warning:** Please be aware that this directly creates a single object at the RADOS layer directly. This can interfere with data distribution across the OSDs and even overload the cluster when trying to replicate it. Consider using the frontend protocols like S3, RBD, CephFS instead, which all stripe the data properly.
 
 :command:`append` *name* *infile*
   Append object name to the cluster with contents from infile.
