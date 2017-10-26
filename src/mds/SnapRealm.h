@@ -88,13 +88,11 @@ public:
 	   !srnode.past_parents.empty();
   }
 
-  void build_snap_set(set<snapid_t>& s, 
-		      snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,
-		      snapid_t first, snapid_t last) const;
+  void build_snap_set() const;
   void get_snap_info(map<snapid_t, const SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
-  const bufferlist& get_snap_trace();
-  void build_snap_trace(bufferlist& snapbl) const;
+  const bufferlist& get_snap_trace() const;
+  void build_snap_trace() const;
 
   std::string_view get_snapname(snapid_t snapid, inodeno_t atino);
   snapid_t resolve_snapname(std::string_view name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
