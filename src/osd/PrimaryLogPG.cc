@@ -7205,17 +7205,21 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
     }
     oi.size = new_size;
   }
-  if (length && oi.has_extents()) {
-     delta_stats.num_bytes -= oi.extents.size();
-     if (write_full) {
-       // oi.size may shrink
-       oi.extents.clear();
-       assert(offset == 0);
-       oi.extents.insert(0, length);
-     } else {
-       oi.extents.union_of(ch); // deduplicated
-     }
-     delta_stats.num_bytes += oi.extents.size();
+  if (oi.has_extents()) {
+    delta_stats.num_bytes -= oi.extents.size();
+    if (write_full) {
+      // oi.size may shrink
+      oi.extents.clear();
+      assert(offset == 0);
+      if (length) {
+        oi.extents.insert(0, length);
+      }
+    } else {
+      if (length) {
+        oi.extents.union_of(ch); // deduplicated
+      }
+    }
+    delta_stats.num_bytes += oi.extents.size();
   }
   delta_stats.num_wr++;
   delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
