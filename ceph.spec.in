@@ -884,6 +884,7 @@ mkdir -p %{buildroot}%{_sbindir}
 install -m 0644 -D src/logrotate.conf %{buildroot}%{_sysconfdir}/logrotate.d/ceph
 chmod 0644 %{buildroot}%{_docdir}/ceph/sample.ceph.conf
 install -m 0644 -D COPYING %{buildroot}%{_docdir}/ceph/COPYING
+install -m 0644 -D src/90-ceph-osd.conf %{buildroot}%{_sysctldir}/90-ceph-osd.conf
 
 # firewall templates and /sbin/mount.ceph symlink
 %if 0%{?suse_version}
@@ -1420,6 +1421,7 @@ fi
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-osd.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
+%config(noreplace) %{_sysctldir}/90-ceph-osd.conf
 
 %post osd
 %if 0%{?suse_version}
@@ -1433,6 +1435,11 @@ fi
 if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-osd.target >/dev/null 2>&1 || :
 fi
+%if 0%{?sysctl_apply}
+    %sysctl_apply 90-ceph-osd.conf
+%else
+    /usr/lib/systemd/systemd-sysctl %{_sysctldir}/90-ceph-osd.conf > /dev/null 2>&1 || :
+%endif
 
 %preun osd
 %if 0%{?suse_version}
