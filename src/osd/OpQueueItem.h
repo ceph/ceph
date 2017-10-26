@@ -25,6 +25,11 @@
 
 class OSD;
 
+enum class lock_type_t {
+  pg,
+  repop,
+};
+
 class OpQueueItem {
 public:
   class OrderLocker {
@@ -66,6 +71,7 @@ public:
 
     virtual ostream &print(ostream &rhs) const = 0;
 
+    virtual lock_type_t get_lock_type() = 0;
     virtual void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) = 0;
     virtual ~OpQueueable() {}
     friend ostream& operator<<(ostream& out, const OpQueueable& q) {
@@ -123,6 +129,9 @@ public:
   void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) {
     qitem->run(osd, pg, handle);
   }
+  lock_type_t get_lock_type() const {
+    return qitem->get_lock_type();
+  }
   unsigned get_priority() const { return priority; }
   int get_cost() const { return cost; }
   utime_t get_start_time() const { return start_time; }
@@ -167,16 +176,21 @@ public:
 	pg->unlock();
       }
       void lock(PGRef pgref) override final {
+       assert(pgref);
        pgref->lock();
        return;
       }
       void unlock(PGRef pgref) override final {
+       assert(pgref);
        pgref->unlock();
        return;
       }
     };
     return OpQueueItem::OrderLocker::Ref(
       new Locker(pg));
+  }
+  lock_type_t get_lock_type() {
+    return lock_type_t::pg;
   }
 };
 
@@ -210,16 +224,21 @@ public:
        return;
       }
       void lock(PGRef pgref) override final {
+       assert(pgref);
        pgref->repop_queue_lock();
        return;
       }
       void unlock(PGRef pgref) override final {
+       assert(pgref);
        pgref->repop_queue_unlock();
        return;
       }
     };
     return OpQueueItem::OrderLocker::Ref(
       new Locker(pg));
+  }
+  lock_type_t get_lock_type() {
+    return lock_type_t::repop;
   }
 };
 

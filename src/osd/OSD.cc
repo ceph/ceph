@@ -3939,7 +3939,9 @@ PG *OSD::_lookup_lock_pg(spg_t pgid, OpQueueItem::OrderLocker::Ref &locker)
   if (pg_map_entry == pg_map.end())
     return nullptr;
   PG *pg = pg_map_entry->second;
-  locker->lock(pg);
+  if (pg) {
+    locker->lock(pg);
+  }
   return pg;
 }
 
@@ -9705,6 +9707,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   uint64_t requeue_seq;
   const auto token = item.get_ordering_token();
   OpQueueItem::OrderLocker::Ref l = item.get_order_locker(pg);
+  lock_type_t item_lock = item.get_lock_type();
   {
     auto& slot = sdata->pg_slots[token];
     dout(30) << __func__ << " " << token
@@ -9757,6 +9760,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     sdata->sdata_op_ordering_lock.Unlock();
     return;
   }
+  dout(20) << __func__ << " " << token << dendl;
   if (requeue_seq != slot.requeue_seq) {
     dout(20) << __func__ << " " << token
 	     << " requeue_seq " << slot.requeue_seq << " > our "
@@ -9833,6 +9837,20 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   }
   sdata->sdata_op_ordering_lock.Unlock();
 
+  OpQueueItem::OrderLocker::Ref lock;
+  bool diff_lock = false;
+  if (item_lock != qi.get_lock_type()) {
+    diff_lock = true;
+    if (pg) {
+      l->unlock(pg);
+    }
+    if (pg) {
+      lock = qi.get_order_locker(pg);
+      lock->lock(pg);
+    }
+    dout(20) << __func__ << " item lock type " << (int)item_lock << " qi lock type " 
+	      << (int)qi.get_lock_type() << dendl;
+  }
 
   // osd_opwq_process marks the point at which an operation has been dequeued
   // and will begin to be handled by a worker thread.
@@ -9871,7 +9889,12 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
         reqid.name._num, reqid.tid, reqid.inc);
   }
 
-  l->unlock(pg);
+  if (!diff_lock) {
+    l->unlock(pg);
+  } else {
+    assert(lock);
+    lock->unlock(pg);
+  }
 }
 
 void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
