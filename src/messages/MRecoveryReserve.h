@@ -27,6 +27,7 @@ public:
     REQUEST = 0,   // primary->replica: please reserve slot
     GRANT = 1,     // replica->primary: ok, i reserved it
     RELEASE = 2,   // primary->replica: release the slot i reserved before
+    REVOKE = 3,    // replica->primary: i'm taking back the slot i gave you
   };
   uint32_t type;
   uint32_t priority = 0;
@@ -57,6 +58,9 @@ public:
       break;
     case RELEASE:
       out << " RELEASE";
+      break;
+    case REVOKE:
+      out << " REVOKE";
       break;
     }
     out << " e" << query_epoch << ")";

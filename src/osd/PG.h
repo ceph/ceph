@@ -1859,6 +1859,7 @@ protected:
   TrivialEvent(RequestBackfill)
   TrivialEvent(RecoveryDone)
   protected:
+  TrivialEvent(RemoteRecoveryPreempted)
   TrivialEvent(RemoteBackfillPreempted)
   TrivialEvent(BackfillTooFull)
   TrivialEvent(RecoveryTooFull)
@@ -2295,9 +2296,11 @@ protected:
 	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,
 	boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
 	boost::statechart::custom_reaction< BackfillTooFull >,
+	boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
 	boost::statechart::custom_reaction< RemoteBackfillPreempted >
 	> reactions;
       explicit RepRecovering(my_context ctx);
+      boost::statechart::result react(const RemoteRecoveryPreempted &evt);
       boost::statechart::result react(const BackfillTooFull &evt);
       boost::statechart::result react(const RemoteBackfillPreempted &evt);
       void exit();
