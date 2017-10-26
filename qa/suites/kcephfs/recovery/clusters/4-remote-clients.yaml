@@ -1,6 +1,6 @@
 roles:
-- [mon.a, osd.0, mds.a, mds.c, client.2]
-- [mgr.x, osd.1, osd.2, mds.b, mds.d, client.3]
+- [mon.a, osd.0, osd.1, osd.2, osd.3, mds.a, mds.c, client.2]
+- [mgr.x, osd.4, osd.5, osd.6, osd.7, mds.b, mds.d, client.3]
 - [client.0]
 - [client.1]
 openstack:
