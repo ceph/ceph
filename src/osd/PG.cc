@@ -2760,15 +2760,28 @@ void PG::_update_calc_stats()
     for (auto m = missing_target_objects.rbegin();
         m != missing_target_objects.rend(); ++m) {
 
+      int64_t extra_missing = -1;
+
       if (!acting_source_objects.empty()) {
 	auto extra_copy = acting_source_objects.begin();
-        misplaced += m->first - extra_copy->first;
-        degraded += extra_copy->first;
+	extra_missing = extra_copy->first;
         acting_source_objects.erase(*extra_copy);
+      }
+
+      if (extra_missing >= 0 && m->first >= extra_missing) {
+	// We don't know which of the objects on the target
+	// are part of extra_missing so assume are all degraded.
+	misplaced += m->first - extra_missing;
+	degraded += extra_missing;
       } else {
+	// 1. extra_missing == -1, more targets than sources so degraded
+	// 2. extra_missing > m->first, so that we know that some extra_missing
+	//    previously degraded are now present on the target.
 	degraded += m->first;
       }
     }
+    dout(20) << __func__ << " degraded " << degraded << dendl;
+    dout(20) << __func__ << " misplaced " << misplaced << dendl;
 
     info.stats.stats.sum.num_objects_degraded = degraded;
     info.stats.stats.sum.num_objects_unfound = get_num_unfound();
