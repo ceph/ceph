@@ -4716,13 +4716,28 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
   dout(20) << __func__ << dendl;
   ceph_osd_op& op = osd_op.op;
 
-  if (!ctx->obs->exists || ctx->obs->oi.is_whiteout()) {
+  auto& oi = ctx->new_obs.oi;
+  uint64_t size = oi.size;
+  if ((oi.truncate_seq < op.extent.truncate_seq) &&
+      (op.extent.offset + op.extent.length > op.extent.truncate_size)) {
+    size = op.extent.truncate_size;
+  }
+
+  if (op.extent.offset >= size) {
+    op.extent.length = 0;
+  } else if (op.extent.offset + op.extent.length > size) {
+    op.extent.length = size - op.extent.offset;
+  }
+
+  if (op.extent.length == 0) {
+    dout(20) << __func__ << " zero length extent" << dendl;
+    return finish_extent_cmp(osd_op, bufferlist{});
+  } else if (!ctx->obs->exists || ctx->obs->oi.is_whiteout()) {
     dout(20) << __func__ << " object DNE" << dendl;
     return finish_extent_cmp(osd_op, {});
   } else if (pool.info.require_rollback()) {
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.
-    auto& oi = ctx->new_obs.oi;
     boost::optional<uint32_t> maybe_crc;
     if (oi.is_data_digest() && op.checksum.offset == 0 &&
         op.checksum.length >= oi.size) {
