@@ -7,7 +7,7 @@ tasks:
       client.1:
         - rbd/notify_slave.sh
     env:
-      RBD_FEATURES: "13"
+      RBD_FEATURES: "61"
 - print: "**** done rbd: old librbd -> new librbd"
 - workunit:
     branch: kraken
@@ -17,5 +17,5 @@ tasks:
       client.1:
         - rbd/notify_master.sh
     env:
-      RBD_FEATURES: "13"
+      RBD_FEATURES: "61"
 - print: "**** done rbd: new librbd -> old librbd"
