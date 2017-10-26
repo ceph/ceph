@@ -6974,6 +6974,7 @@ PG::RecoveryState::Recovering::react(const AllReplicasRecovered &evt)
   pg->state_clear(PG_STATE_RECOVERING);
   pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   return transit<Recovered>();
 }
 
@@ -6984,7 +6985,8 @@ PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
   pg->state_clear(PG_STATE_RECOVERING);
   pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
-  return transit<WaitRemoteBackfillReserved>();
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  return transit<WaitLocalBackfillReserved>();
 }
 
 boost::statechart::result
@@ -7017,7 +7019,6 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
   assert(!pg->needs_recovery());
 
