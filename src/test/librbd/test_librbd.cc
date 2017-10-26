@@ -3954,7 +3954,8 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_STREQ(vals + strlen(vals) + 1, "value2");
 
   ASSERT_EQ(0, rbd_metadata_remove(image1, "key1"));
-  ASSERT_EQ(0, rbd_metadata_remove(image1, "key3"));
+  int r = rbd_metadata_remove(image1, "key3");
+  ASSERT_TRUE(r == 0 || r == -ENOENT);
   value_len = sizeof(value);
   ASSERT_EQ(-ENOENT, rbd_metadata_get(image1, "key3", value, &value_len));
   ASSERT_EQ(0, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
@@ -4119,7 +4120,8 @@ TEST_F(TestLibRBD, MetadataPP)
 
   pairs.clear();
   ASSERT_EQ(0, image1.metadata_remove("key1"));
-  ASSERT_EQ(0, image1.metadata_remove("key3"));
+  int r= image1.metadata_remove("key3");
+  ASSERT_TRUE(r == 0 || r == -ENOENT);
   ASSERT_TRUE(image1.metadata_get("key3", &value) < 0);
   ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
   ASSERT_EQ(1U, pairs.size());
