@@ -5689,6 +5689,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    t->truncate(soid, op.extent.truncate_size);
 	    oi.truncate_seq = op.extent.truncate_seq;
 	    oi.truncate_size = op.extent.truncate_size;
+	    if (oi.size > op.extent.truncate_size) {
+	      interval_set<uint64_t> trim;
+	      trim.insert(op.extent.truncate_size,
+	        oi.size - op.extent.truncate_size);
+	      ctx->modified_ranges.union_of(trim);
+	    }
 	    if (op.extent.truncate_size != oi.size) {
               truncate_update_size_and_usage(ctx->delta_stats,
                                              oi,
@@ -7200,14 +7206,16 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
     oi.size = new_size;
   }
   if (length && oi.has_extents()) {
-     // count newly write bytes, exclude overwrites
-     interval_set<uint64_t> ne;
-     ne.insert(offset, length);
-     interval_set<uint64_t> overlap;
-     overlap.intersection_of(ne, oi.extents);
-     ne.subtract(overlap);
-     oi.extents.union_of(ne);
-     delta_stats.num_bytes += ne.size();
+     delta_stats.num_bytes -= oi.extents.size();
+     if (write_full) {
+       // oi.size may shrink
+       oi.extents.clear();
+       assert(offset == 0);
+       oi.extents.insert(0, length);
+     } else {
+       oi.extents.union_of(ch); // deduplicated
+     }
+     delta_stats.num_bytes += oi.extents.size();
   }
   delta_stats.num_wr++;
   delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);

@@ -5121,7 +5121,18 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
       << " " << oi.alloc_hint_flags << "]";
   if (oi.has_manifest())
     out << " " << oi.manifest;
-
+  if (oi.has_extents()) {
+    out << " extents [";
+    for (interval_set<uint64_t>::const_iterator p = oi.extents.begin();
+         p != oi.extents.end();) {
+      out << p.get_start() << "~" << p.get_len();
+      ++p;
+      if (p != oi.extents.end()) {
+        out << ", ";
+      }
+    }
+    out << "]";
+  }
   out << ")";
   return out;
 }
