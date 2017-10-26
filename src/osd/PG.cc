@@ -6542,8 +6542,7 @@ void PG::RecoveryState::WaitRemoteBackfillReserved::exit()
   pg->osd->recoverystate_perf->tinc(rs_waitremotebackfillreserved_latency, dur);
 }
 
-boost::statechart::result
-PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationRejected &evt)
+void PG::RecoveryState::WaitRemoteBackfillReserved::retry()
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
@@ -6573,7 +6572,19 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
   pg->publish_stats_to_osd();
 
   pg->schedule_backfill_retry(pg->cct->_conf->osd_recovery_retry_interval);
+}
 
+boost::statechart::result
+PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationRejected &evt)
+{
+  retry();
+  return transit<NotBackfilling>();
+}
+
+boost::statechart::result
+PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationRevoked &evt)
+{
+  retry();
   return transit<NotBackfilling>();
 }
 
