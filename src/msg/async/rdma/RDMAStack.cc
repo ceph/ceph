@@ -567,8 +567,8 @@ void RDMAWorker::handle_pending_message()
   dispatcher->notify_pending_workers();
 }
 
-RDMAStack::RDMAStack(CephContext *cct, const string &t)
-  : NetworkStack(cct, t), ib(cct), dispatcher(cct, this)
+RDMAStack::RDMAStack(CephContext *cct, const string &t, string mname)
+  : NetworkStack(cct, t, mname), ib(cct, mname), dispatcher(cct, this)
 {
   ldout(cct, 20) << __func__ << " constructing RDMAStack..." << dendl;
 

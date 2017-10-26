@@ -278,8 +278,8 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
   return 0;
 }
 
-PosixNetworkStack::PosixNetworkStack(CephContext *c, const string &t)
-    : NetworkStack(c, t)
+PosixNetworkStack::PosixNetworkStack(CephContext *c, const string &t, string mname)
+    : NetworkStack(c, t, mname)
 {
   vector<string> corestrs;
   get_str_vec(cct->_conf->ms_async_affinity_cores, corestrs);

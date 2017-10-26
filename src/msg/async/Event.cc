@@ -184,13 +184,27 @@ EventCenter::~EventCenter()
 }
 
 
-void EventCenter::set_owner()
+void EventCenter::set_owner(string mname)
 {
   owner = pthread_self();
   ldout(cct, 2) << __func__ << " idx=" << idx << " owner=" << owner << dendl;
+  std::string msgr_type = cct->_conf->get_val<std::string>("ms_type");
   if (!global_centers) {
+    string _center_name;
+    if (msgr_type.find("posix") != std::string::npos ||
+      msgr_type.find("dpdk") != std::string::npos ||
+      cct->_conf->ms_async_rdma_cluster_device_name ==
+      cct->_conf->ms_async_rdma_public_device_name)
+      _center_name = "AsyncMessenger::EventCenter::global_center";
+    else {
+      if ("hb_back_client" == mname || "hb_back_server" == mname || "cluster" == mname)
+        _center_name = "AsyncMessenger::EventCenter::global_center::Cluster";
+      else
+        _center_name = "AsyncMessenger::EventCenter::global_center::Public";
+    }
+
     cct->lookup_or_create_singleton_object<EventCenter::AssociatedCenters>(
-        global_centers, "AsyncMessenger::EventCenter::global_center::"+type);
+        global_centers, _center_name+"::"+type);
     assert(global_centers);
     global_centers->centers[idx] = this;
     if (driver->need_wakeup()) {
