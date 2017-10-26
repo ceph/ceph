@@ -95,13 +95,17 @@ def activate_bluestore(lvs):
     if not system.path_is_mounted(osd_path):
         # mkdir -p and mount as tmpfs
         prepare_utils.create_osd_path(osd_id, tmpfs=True)
-        # if the osd dir was not mounted via tmpfs, it means that the files are
-        # gone, so it needs to be 'primed' again. The command would otherwise
-        # fail if the directory was already populated
-        process.run([
-            'sudo', 'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
-            'prime-osd-dir', '--dev', osd_lv.lv_path,
-            '--path', osd_path])
+    # XXX This needs to be removed once ceph-bluestore-tool can deal with
+    # symlinks that exist in the osd dir
+    for link_name in ['block', 'block.db', 'block.wal']:
+        link_path = os.path.join(osd_path, link_name)
+        if os.path.exists(link_path):
+            os.unlink(os.path.join(osd_path, link_name))
+    # Once symlinks are removed, the osd dir can be 'primed again.
+    process.run([
+        'sudo', 'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
+        'prime-osd-dir', '--dev', osd_lv.lv_path,
+        '--path', osd_path])
     # always re-do the symlink regardless if it exists, so that the block,
     # block.wal, and block.db devices that may have changed can be mapped
     # correctly every time
