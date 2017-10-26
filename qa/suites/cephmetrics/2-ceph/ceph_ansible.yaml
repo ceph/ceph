@@ -1,0 +1,22 @@
+meta:
+- desc: "Build the ceph cluster using ceph-ansible"
+
+overrides:
+   ceph_ansible:
+     branch: stable-3.0
+     vars:
+        ceph_conf_overrides:
+          global:
+            osd default pool size: 2
+            mon pg warn min per osd: 2
+        ceph_test: true
+        ceph_stable_release: luminous
+        osd_scenario: collocated
+        journal_size: 1024
+        osd_auto_discovery: false
+        ceph_origin: repository
+        ceph_repository: dev
+tasks:
+- ssh-keys:
+- ceph_ansible:
+- install.ship_utilities:
