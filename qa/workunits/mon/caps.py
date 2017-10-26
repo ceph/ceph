@@ -238,10 +238,6 @@ def test_all():
         {
           'cmd':('mds getmap', '', 'r'),
           },
-        {
-          'cmd':('mds cluster_down', '', 'rw'),
-          'post':'mds cluster_up'
-          },
         ],
       'mon':[
         {
