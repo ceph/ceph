@@ -447,22 +447,23 @@ void AsyncConnection::process()
           ldout(async_msgr->cct, 20) << __func__ << " got MSG header" << dendl;
 
           header = *((ceph_msg_header*)state_buffer);
-          if (msgr->crcflags & MSG_CRC_HEADER)
-            header_crc = ceph_crc32c(0, (unsigned char *)&header,
-                                     sizeof(header) - sizeof(header.crc));
 
-          ldout(async_msgr->cct, 20) << __func__ << " got envelope type=" << header.type
+	  ldout(async_msgr->cct, 20) << __func__ << " got envelope type=" << header.type
                               << " src " << entity_name_t(header.src)
                               << " front=" << header.front_len
                               << " data=" << header.data_len
                               << " off " << header.data_off << dendl;
 
-          // verify header crc
-          if (msgr->crcflags & MSG_CRC_HEADER && header_crc != header.crc) {
-            ldout(async_msgr->cct,0) << __func__ << " got bad header crc "
-                                     << header_crc << " != " << header.crc << dendl;
-            goto fail;
-          }
+	  if (msgr->crcflags & MSG_CRC_HEADER) {
+	    header_crc = ceph_crc32c(0, (unsigned char *)&header,
+		sizeof(header) - sizeof(header.crc));
+	    // verify header crc
+	    if (header_crc != header.crc) {
+	      ldout(async_msgr->cct,0) << __func__ << " got bad header crc "
+		<< header_crc << " != " << header.crc << dendl;
+	      goto fail;
+	    }
+	  }
 
           // Reset state
           data_buf.clear();
