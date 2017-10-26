@@ -9992,8 +9992,6 @@ void PrimaryLogPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
   assert(!oi.soid.is_snapdir());
 
   object_stat_sum_t stat;
-  stat.num_bytes += oi.has_extents() ?
-                    oi.extents.size() : oi.size;
   stat.num_objects++;
   if (oi.is_dirty())
     stat.num_objects_dirty++;
@@ -10010,12 +10008,10 @@ void PrimaryLogPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
     if (!obc->ssc)
       obc->ssc = get_snapset_context(oi.soid, false);
     assert(obc->ssc);
-
-    // subtract off clone overlap
-    auto it = obc->ssc->snapset.clone_overlap.find(oi.soid.snap);
-    if (it != obc->ssc->snapset.clone_overlap.end()) {
-      stat.num_bytes -= it->second.size();
-    }
+    stat.num_bytes += obc->ssc->snapset.get_clone_bytes(oi.soid.snap);
+  } else {
+    stat.num_bytes += oi.has_extents() ?
+                      oi.extents.size() : oi.size;
   }
 
   // add it in
