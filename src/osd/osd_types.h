@@ -4392,6 +4392,8 @@ public:
   epoch_t mounted;     // last epoch i mounted
   epoch_t clean_thru;  // epoch i was active and clean thru
 
+  utime_t last_smart_report; // when i last ran smartctl 
+
   OSDSuperblock() : 
     whoami(-1), 
     current_epoch(0), oldest_map(0), newest_map(0), weight(0),

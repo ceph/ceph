@@ -4549,7 +4549,7 @@ void pg_hit_set_history_t::generate_test_instances(list<pg_hit_set_history_t*>& 
 
 void OSDSuperblock::encode(bufferlist &bl) const
 {
-  ENCODE_START(8, 5, bl);
+  ENCODE_START(9, 5, bl);
   ::encode(cluster_fsid, bl);
   ::encode(whoami, bl);
   ::encode(current_epoch, bl);
@@ -4562,12 +4562,13 @@ void OSDSuperblock::encode(bufferlist &bl) const
   ::encode(osd_fsid, bl);
   ::encode((epoch_t)0, bl);  // epoch_t last_epoch_marked_full
   ::encode((uint32_t)0, bl);  // map<int64_t,epoch_t> pool_last_epoch_marked_full
+  ::encode(last_smart_report, bl);
   ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 5, 5, bl);
   if (struct_v < 3) {
     string magic;
     ::decode(magic, bl);
@@ -4595,6 +4596,8 @@ void OSDSuperblock::decode(bufferlist::iterator &bl)
     map<int64_t,epoch_t> pool_last_map_marked_full;
     ::decode(pool_last_map_marked_full, bl);
   }
+  if (struct_v >= 9)
+    ::decode(last_smart_report, bl); 
   DECODE_FINISH(bl);
 }
 
@@ -4612,6 +4615,7 @@ void OSDSuperblock::dump(Formatter *f) const
   f->close_section();
   f->dump_int("clean_thru", clean_thru);
   f->dump_int("last_epoch_mounted", mounted);
+  f->dump_int("last_smart_report", last_smart_report);
 }
 
 void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)

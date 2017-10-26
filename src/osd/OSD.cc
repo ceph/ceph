@@ -46,6 +46,7 @@
 #include "common/version.h"
 #include "common/io_priority.h"
 #include "common/pick_address.h"
+#include "common/SubProcess.h"
 
 #include "os/ObjectStore.h"
 #ifdef HAVE_LIBFUSE
@@ -4993,7 +4994,58 @@ void OSD::tick_without_osd_lock()
 
   check_ops_in_flight();
   service.kick_recovery_queue();
+  
+  // check whether to run smartctl
+  double smart_interval = cct->_conf->get_val<double>("osd_smart_report_interval"); // interval in seconds
+  uint64_t smart_timeout = cct->_conf->get_val<uint64_t>("osd_smart_report_timeout"); 
+
+  if ((smart_interval > 0) && (superblock.last_smart_report + smart_interval <= ceph_clock_now())) {
+    set<string> devnames;
+    store->get_devices(&devnames);
+
+    for (auto it = devnames.begin(); it != devnames.end(); ++it) {
+      // we call smartctl for all devices, except for 'dm-*', which are not physical devices
+      if ((*it).find("dm-") == std::string::npos) {
+	probe_smart(("/dev/" + (*it)).c_str(), smart_timeout);
+	superblock.last_smart_report = ceph_clock_now();
+      }
+    }
+  }
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
+}
+
+int OSD::probe_smart(const char *device, int timeout)
+{
+  // when using --json, smartctl will report its errors in JSON format to stdout 
+  SubProcessTimed smartctl("smartctl", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::CLOSE, timeout);
+  smartctl.add_cmd_args(
+      "-a",
+      //"-x",
+      //"--json"
+      device,
+      NULL);
+
+  int ret = smartctl.spawn();
+  if (ret != 0) {
+    derr << "failed run smartctl: " << smartctl.err() << dendl;
+    return ret;
+  }
+
+  bufferlist output;
+  ret = output.read_fd(smartctl.get_stdout(), 100*1024);
+  if (ret < 0) {
+    derr << "failed read from smartctl: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  derr << "smartctl output is: " << output.c_str() << dendl;
+
+  if (smartctl.join() != 0) {
+    derr << smartctl.err() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
 }
 
 void OSD::check_ops_in_flight()
