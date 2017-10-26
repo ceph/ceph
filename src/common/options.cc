@@ -178,6 +178,10 @@ std::vector<Option> get_global_options() {
     .add_service("osd")
     .add_tag("network"),
 
+    Option("osd_heartbeat_addr", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
+    .set_default(entity_addr_t())
+    .set_description(""),
+
     Option("public_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service({"mon", "mds", "osd", "mgr"})
     .add_tag("network")
@@ -199,6 +203,17 @@ std::vector<Option> get_global_options() {
     .add_tag("network")
     .set_description("Interface name(s) from which to choose an address from a cluster_network to bind to; cluster_network must also be specified.")
     .add_see_also("cluster_network"),
+
+    Option("osd_heartbeat_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .add_service("osd")
+    .add_tag("network")
+    .set_description("Network(s) from which to choose a osd heartbeat network address to bind to"),
+
+    Option("osd_heartbeat_network_interface", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .add_service({"mon", "mds", "osd", "mgr"})
+    .add_tag("network")
+    .set_description("Interface name(s) from which to choose an address from a osd_heartbeat_network to bind to; osd_heartbeat_network must also be specified.")
+    .add_see_also("osd_heartbeat_network"),
 
     Option("monmap", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("path to MonMap file")
@@ -2349,10 +2364,6 @@ std::vector<Option> get_global_options() {
 
     Option("osd_command_thread_suicide_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(15_min)
-    .set_description(""),
-
-    Option("osd_heartbeat_addr", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
-    .set_default(entity_addr_t())
     .set_description(""),
 
     Option("osd_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)

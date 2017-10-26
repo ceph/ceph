@@ -17,8 +17,10 @@ OPTION(host, OPT_STR) // "" means that ceph will use short hostname
 OPTION(public_addr, OPT_ADDR)
 OPTION(public_bind_addr, OPT_ADDR)
 OPTION(cluster_addr, OPT_ADDR)
+OPTION(osd_heartbeat_addr, OPT_ADDR)
 OPTION(public_network, OPT_STR)
 OPTION(cluster_network, OPT_STR)
+OPTION(osd_heartbeat_network, OPT_STR)
 OPTION(lockdep, OPT_BOOL)
 OPTION(lockdep_force_backtrace, OPT_BOOL) // always gather current backtrace at every lock
 OPTION(run_dir, OPT_STR)       // the "/var/run/ceph" dir, created on daemon startup
@@ -720,7 +722,6 @@ OPTION(osd_remove_thread_timeout, OPT_INT)
 OPTION(osd_remove_thread_suicide_timeout, OPT_INT)
 OPTION(osd_command_thread_timeout, OPT_INT)
 OPTION(osd_command_thread_suicide_timeout, OPT_INT)
-OPTION(osd_heartbeat_addr, OPT_ADDR)
 OPTION(osd_heartbeat_interval, OPT_INT)       // (seconds) how often we ping peers
 
 // (seconds) how long before we decide a peer has failed

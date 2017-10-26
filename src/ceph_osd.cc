@@ -447,7 +447,8 @@ flushjournal_out:
   }
 
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC
-                                |CEPH_PICK_ADDRESS_CLUSTER);
+                                |CEPH_PICK_ADDRESS_CLUSTER
+                                |CEPH_PICK_ADDRESS_HEARTBEAT);
 
   if (g_conf->public_addr.is_blank_ip() && !g_conf->cluster_addr.is_blank_ip()) {
     derr << TEXT_YELLOW

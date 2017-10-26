@@ -191,6 +191,14 @@ void pick_addresses(CephContext *cct, int needs)
     }
   }
 
+  if ((needs & CEPH_PICK_ADDRESS_HEARTBEAT)
+	  && cct->_conf->osd_heartbeat_addr.is_blank_ip()
+	  && !cct->_conf->osd_heartbeat_network.empty()) {
+	fill_in_one_address(cct, ifa, cct->_conf->osd_heartbeat_network,
+			cct->_conf->get_val<string>("osd_heartbeat_network_interface"),
+			"osd_heartbeat_addr");
+  }
+
   freeifaddrs(ifa);
 }
 
