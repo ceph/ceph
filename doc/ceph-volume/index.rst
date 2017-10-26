@@ -28,3 +28,4 @@ technologies, including plain disks.
    lvm/prepare
    lvm/scan
    lvm/systemd
+   lvm/list
