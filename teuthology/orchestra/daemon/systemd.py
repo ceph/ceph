@@ -136,6 +136,8 @@ class SystemDState(DaemonState):
             self.remote.run(args=[run.Raw(self.start_cmd)])
         else:
             self.remote.run(args=[run.Raw(self.restart_cmd)])
+        # check status will also fail if the process hasn't restarted
+        self.check_status()
 
     def restart_with_args(self, extra_args):
         """
