@@ -9059,8 +9059,15 @@ void OSD::dequeue_op(
   Session *session = static_cast<Session *>(
     op->get_req()->get_connection()->get_priv());
   if (session) {
-    maybe_share_map(session, op, pg->get_osdmap());
-    session->put();
+    if (!can_op_lock(op)) {
+      maybe_share_map(session, op, pg->get_osdmap());
+      session->put();
+    } else if (can_op_lock(op)) {
+      if (op->check_send_map) {
+	maybe_share_map(session, op, osdmap);
+      } 
+      session->put();
+    }
   }
 
   if (pg->is_deleting())
