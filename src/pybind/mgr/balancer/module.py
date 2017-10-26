@@ -119,18 +119,21 @@ class Eval:
     def __init__(self, ms):
         self.ms = ms
 
-    def show(self):
-        r = self.ms.desc + '\n'
-        r += 'target_by_root %s\n' % self.target_by_root
-        r += 'actual_by_pool %s\n' % self.actual_by_pool
-        r += 'actual_by_root %s\n' % self.actual_by_root
-        r += 'count_by_pool %s\n' % self.count_by_pool
-        r += 'count_by_root %s\n' % self.count_by_root
-        r += 'total_by_pool %s\n' % self.total_by_pool
-        r += 'total_by_root %s\n' % self.total_by_root
-        r += 'stats_by_root %s\n' % self.stats_by_root
-        r += 'score_by_pool %s\n' % self.score_by_pool
-        r += 'score_by_root %s\n' % self.score_by_root
+    def show(self, verbose=False):
+        if verbose:
+            r = self.ms.desc + '\n'
+            r += 'target_by_root %s\n' % self.target_by_root
+            r += 'actual_by_pool %s\n' % self.actual_by_pool
+            r += 'actual_by_root %s\n' % self.actual_by_root
+            r += 'count_by_pool %s\n' % self.count_by_pool
+            r += 'count_by_root %s\n' % self.count_by_root
+            r += 'total_by_pool %s\n' % self.total_by_pool
+            r += 'total_by_root %s\n' % self.total_by_root
+            r += 'stats_by_root %s\n' % self.stats_by_root
+            r += 'score_by_pool %s\n' % self.score_by_pool
+            r += 'score_by_root %s\n' % self.score_by_root
+        else:
+            r = self.ms.desc + ' '
         r += 'score %f (lower is better)\n' % self.score
         return r
 
@@ -214,6 +217,11 @@ class Module(MgrModule):
             "perm": "r",
         },
         {
+            "cmd": "balancer eval-verbose name=plan,type=CephString,req=false",
+            "desc": "Evaluate data distribution for the current cluster or specific plan (verbosely)",
+            "perm": "r",
+        },
+        {
             "cmd": "balancer optimize name=plan,type=CephString",
             "desc": "Run optimizer to create a new plan",
             "perm": "rw",
@@ -277,7 +285,8 @@ class Module(MgrModule):
                 self.active = False
             self.event.set()
             return (0, '', '')
-        elif command['prefix'] == 'balancer eval':
+        elif command['prefix'] == 'balancer eval' or command['prefix'] == 'balancer eval-verbose':
+            verbose = command['prefix'] == 'balancer eval-verbose'
             if 'plan' in command:
                 plan = self.plans.get(command['plan'])
                 if not plan:
@@ -288,7 +297,7 @@ class Module(MgrModule):
                 ms = MappingState(self.get_osdmap(),
                                   self.get("pg_dump"),
                                   'current cluster')
-            return (0, self.evaluate(ms), '')
+            return (0, self.evaluate(ms, verbose=verbose), '')
         elif command['prefix'] == 'balancer optimize':
             plan = self.plan_create(command['plan'])
             self.optimize(plan)
@@ -552,9 +561,9 @@ class Module(MgrModule):
         pe.score /= 3 * len(roots)
         return pe
 
-    def evaluate(self, ms):
+    def evaluate(self, ms, verbose=False):
         pe = self.calc_eval(ms)
-        return pe.show()
+        return pe.show(verbose=verbose)
 
     def optimize(self, plan):
         self.log.info('Optimize plan %s' % plan.name)
