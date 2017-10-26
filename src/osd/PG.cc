@@ -6756,7 +6756,7 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
     post_event(RejectRemoteReservation());
   } else {
     Context *preempt = nullptr;
-    if (HAVE_FEATURE(pg->upacting_features, SERVER_MIMIC)) {
+    if (HAVE_FEATURE(pg->upacting_features, RECOVERY_RESERVATION_2)) {
       // older peers will interpret preemption as TOOFULL
       preempt = new QueuePeeringEvt<RemoteBackfillPreempted>(
 	pg, pg->get_osdmap()->get_epoch(),
