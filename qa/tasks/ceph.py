@@ -367,7 +367,8 @@ def cephfs_setup(ctx, config):
     if mdss.remotes:
         log.info('Setting up CephFS filesystem...')
 
-        fs = Filesystem(ctx, name='cephfs', create=True)
+        fs = Filesystem(ctx, name='cephfs', create=True,
+                        ec_profile=config.get('cephfs_ec_profile', None))
 
         is_active_mds = lambda role: 'mds.' in role and not role.endswith('-s') and '-s-' not in role
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
