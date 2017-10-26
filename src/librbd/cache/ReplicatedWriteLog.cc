@@ -35,8 +35,10 @@ typedef std::function<void(uint64_t)> ReleaseBlock;
 typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
 
 SyncPoint::SyncPoint(CephContext *cct, uint64_t sync_gen_num)
-  : m_cct(cct), m_sync_gen_num(sync_gen_num), m_on_sync_point_persisted(NULL) {
+  : m_cct(cct), m_sync_gen_num(sync_gen_num),
+    m_prior_log_entries_persisted_status(0), m_on_sync_point_persisted(NULL) {
   m_prior_log_entries_persisted = new C_Gather(cct, NULL);
+  ldout(cct, 6) << "sync point" << m_sync_gen_num << dendl;
   /* TODO: Connect m_prior_log_entries_persisted finisher to append this
      sync point and on persist complete call on_sync_point_persisted
      and delete this object */
@@ -45,13 +47,9 @@ SyncPoint::~SyncPoint() {
   /* TODO: will m_prior_log_entries_persisted always delete itself? */
 }
 
-WriteLogOperationSet::WriteLogOperationSet(CephContext *cct, librbd::BlockExtent extent, Context *on_finish)
-  : m_cct(cct), m_extent(extent), m_on_finish(on_finish)  {
-  m_extent_ops = new C_Gather(cct, NULL);
-}
-
-WriteLogOperationSet::~WriteLogOperationSet() {
-  /* TODO: Will m_extent_ops always delete itself? */
+WriteLogOperation::WriteLogOperation(WriteLogOperationSet *set, uint64_t image_offset_bytes, uint64_t write_bytes)
+  : log_entry(new WriteLogEntry(image_offset_bytes, write_bytes)) {
+  on_write_persist = set->m_extent_ops->new_sub();
 }
 
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
@@ -983,6 +981,15 @@ struct C_WriteRequest : public C_GuardedBlockIORequest {
       bl(std::move(bl)), fadvise_flags(fadvise_flags),
       user_req(user_req), _on_finish(NULL), m_user_req_completed(false) {
   }
+
+  void complete_user_request(int r) {
+    bool initial = false;
+    if (m_user_req_completed.compare_exchange_strong(initial, true)) {
+      user_req->complete(r);
+      // TODO: Make a WQ addressable from here
+      //m_image_ctx.op_work_queue->queue(user_req, r)
+    }
+  }
   
   virtual void send() override {
     /* Should never be called */
@@ -990,14 +997,9 @@ struct C_WriteRequest : public C_GuardedBlockIORequest {
   }
   
   virtual void finish(int r) {
-    bool initial = false;
     ldout(cct, 6) << dendl;
 
-    if (m_user_req_completed.compare_exchange_strong(initial, true)) {
-      user_req->complete(r);
-      // TODO: Make a WQ addressable from here
-      //m_image_ctx.op_work_queue->queue(user_req, r)
-    }
+    complete_user_request(r);
     _on_finish->complete(0);
   }
   
@@ -1034,35 +1036,37 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 
   ExtentsSummary<ImageCache::Extents> image_extents_summary(write_req->image_extents);
 
-  WriteLogOperations operations;
   WriteLogOperationSet *set(new WriteLogOperationSet(
-    cct, librbd::BlockExtent(image_extents_summary.first_block,
-			     image_extents_summary.last_block), write_req));
+    cct, m_current_sync_point, m_persist_on_flush,
+    librbd::BlockExtent(image_extents_summary.first_block,
+			image_extents_summary.last_block), write_req));
   {
     uint64_t buffer_offset = 0;
     Mutex::Locker locker(m_lock);
     /* TODO: If there isn't space for this whole write, defer it */
-    if (m_free_log_entries < operations.size()) {
-      ldout(cct, 6) << "wait for " << operations.size() << " log entries" << dendl;
+    if (m_free_log_entries < write_req->image_extents.size()) {
+      ldout(cct, 6) << "wait for " << write_req->image_extents.size() << " log entries" << dendl;
     } else if (m_free_blocks < image_extents_summary.total_bytes / BLOCK_SIZE) {
       ldout(cct, 6) << "wait for " << image_extents_summary.total_bytes / BLOCK_SIZE << " data blocks" << dendl;
     } else {
       for (auto &extent : write_req->image_extents) {
+	/* operation->on_write_persist connected to m_prior_log_entries_persisted Gather */
 	WriteLogOperation *operation =
-	  new WriteLogOperation(m_current_sync_point, extent.first, extent.second);
-	operations.emplace_back(operation);
-	operation->log_entry->log_entry_index = m_first_free_entry;
-	m_first_free_entry = (m_first_free_entry + 1) % m_total_log_entries;
+	  new WriteLogOperation(set, extent.first, extent.second);
+	set->operations.emplace_back(operation);
+
+	/* Reserve both log entry and data block space */
 	m_free_log_entries--;
-	operation->log_entry->pmem_entry = &pmem_log_entries[operation->log_entry->log_entry_index];
+	m_free_blocks -= operation->log_entry->ram_entry.write_bytes / BLOCK_SIZE;
+
+	/* Allocate data blocks */
 	operation->log_entry->ram_entry.first_pool_block = m_next_free_block;
 	operation->log_entry->ram_entry.has_data = 1;
 	m_next_free_block = (m_next_free_block + 1) % m_total_blocks;
-	m_free_blocks -= operation->log_entry->ram_entry.write_bytes / BLOCK_SIZE;
 	operation->log_entry->pmem_block =
 	  pmem_blocks + (operation->log_entry->ram_entry.first_pool_block * BLOCK_SIZE);
 	operation->log_entry->ram_entry.sync_gen_number = m_current_sync_gen;
-	if (m_persist_on_flush) {
+	if (set->m_persist_on_flush) {
 	  /* Persist on flush. Sequence #0 is never used. */
 	  operation->log_entry->ram_entry.write_sequence_number = 0;
 	} else {
@@ -1072,7 +1076,6 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 	}
 	operation->log_entry->ram_entry.sync_point = 0;
 	operation->log_entry->ram_entry.unmap = 0;
-	operation->log_entry->ram_entry.entry_valid = 1;
 	operation->bl.substr_of(write_req->bl, buffer_offset,
 				operation->log_entry->ram_entry.write_bytes);
 	buffer_offset += operation->log_entry->ram_entry.write_bytes;
@@ -1081,13 +1084,28 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
     }
   }
   
-  /* Write data - drain once for all */
-  for (auto &operation : operations) {
+  /* Write data */
+  for (auto &operation : set->operations) {
     bufferlist::iterator i(&operation->bl);
-    i.copy((unsigned)operation->log_entry->ram_entry.write_bytes, (char*)operation->log_entry->pmem_block);
     ldout(cct, 6) << operation->bl << dendl;
+    i.copy((unsigned)operation->log_entry->ram_entry.write_bytes, (char*)operation->log_entry->pmem_block);
+  }
+
+  if (set->m_persist_on_flush) {
+    /* 
+     * We're done with the caller's buffer, and not guaranteeing
+     * persistence until the next flush. The block guard for this
+     * write_req will not be released until the write is persisted
+     * everywhere.
+     */
+    write_req->complete_user_request(0);
+  }
+  
+  /* Flush data */
+  for (auto &operation : set->operations) {
     pmemobj_flush(m_log_pool, operation->log_entry->pmem_block, operation->log_entry->ram_entry.write_bytes);
   }
+  /* Drain once for all */
   pmemobj_drain(m_log_pool);
   
   /* TODO: For persist-on-flush, complete user write here */
@@ -1100,10 +1118,22 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
   
   /* Write data is now (locally) persisted. It's now safe to persist
    * the log entries that refer to them */
-  
+
+  /* Allocate the (already reserved) log entries */
+  {
+    Mutex::Locker locker(m_lock);
+
+    for (auto &operation : set->operations) {
+      operation->log_entry->log_entry_index = m_first_free_entry;
+      m_first_free_entry = (m_first_free_entry + 1) % m_total_log_entries;
+      operation->log_entry->pmem_entry = &pmem_log_entries[operation->log_entry->log_entry_index];
+      operation->log_entry->ram_entry.entry_valid = 1;
+    }
+  }
+
   /* Write log entries - write all in a transaction */
   TX_BEGIN(m_log_pool) {
-    for (auto &operation : operations) {
+    for (auto &operation : set->operations) {
       TX_MEMCPY(operation->log_entry->pmem_entry,
 		&operation->log_entry->ram_entry,
 		sizeof(operation->log_entry->ram_entry));
@@ -1347,25 +1377,61 @@ void ReplicatedWriteLog<I>::aio_compare_and_write(Extents &&image_extents,
 }
 
 /**
+ * Called when the specified sync point can be appended to the log
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::append_sync_point(SyncPoint *sync_point, int status) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+
+  assert(m_lock.is_locked_by_me());
+  sync_point->m_prior_log_entries_persisted_status = status;
+  // TODO: Write sync point, and complete this
+}
+
+/**
  * Begin a new sync point
  */
 template <typename I>
 void ReplicatedWriteLog<I>::new_sync_point(void) {
   CephContext *cct = m_image_ctx.cct;
   SyncPoint *old_sync_point = m_current_sync_point;
+  SyncPoint *new_sync_point;
   ldout(cct, 20) << dendl;
 
-  assert(m_lock.is_locked());
+  assert(m_lock.is_locked_by_me());
 
-  old_sync_point->m_final_op_sequence_num = m_last_op_sequence_num;
-  m_current_sync_point = new SyncPoint(cct, ++m_current_sync_gen);
-  /* Append of new sync point deferred until this sync point is persisted */
-  old_sync_point->m_on_sync_point_persisted = m_current_sync_point->m_prior_log_entries_persisted->new_sub();
-  /* This sync point will acquire no more sub-ops */
-  old_sync_point->m_prior_log_entries_persisted->activate();
+  if (NULL != old_sync_point) {
+    new_sync_point = new SyncPoint(cct, ++m_current_sync_gen);
+  } else {
+    /* First sync point - don't advance gen number */
+    new_sync_point = new SyncPoint(cct, m_current_sync_gen);
+  }
+  m_current_sync_point = new_sync_point;
+  
+  if (NULL != old_sync_point) {
+    old_sync_point->m_final_op_sequence_num = m_last_op_sequence_num;
+    /* Append of new sync point deferred until this sync point is persisted */
+    old_sync_point->m_on_sync_point_persisted = m_current_sync_point->m_prior_log_entries_persisted->new_sub();
+    /* This sync point will acquire no more sub-ops */
+    old_sync_point->m_prior_log_entries_persisted->activate();
+  }
 
-  ldout(cct,6) << "new sync point = [" << m_current_sync_point
-	       << "], prior = [" << old_sync_point << "]" << dendl;
+  /* TODO: Make this part of the SyncPoint object. */
+  new_sync_point->m_prior_log_entries_persisted->
+    set_finisher(new FunctionContext([this, new_sync_point](int r) {
+	  CephContext *cct = m_image_ctx.cct;
+	  ldout(cct, 20) << "Prior log entries persisted for sync point =[" << new_sync_point << "]" << dendl;
+	  append_sync_point(new_sync_point, r);
+	}));
+  
+  if (NULL != old_sync_point) {
+    ldout(cct,6) << "new sync point = [" << m_current_sync_point
+		 << "], prior = [" << old_sync_point << "]" << dendl;
+  } else {
+    ldout(cct,6) << "first sync point = [" << m_current_sync_point
+		 << "]" << dendl;
+  }
 }
 
 template <typename I>

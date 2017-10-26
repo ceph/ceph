@@ -53,7 +53,7 @@ struct WriteLogPmemEntry {
 			       number. Marks sync point for this sync
 			       gen number */
     uint8_t sequenced :1;   /* write sequence number is valid */
-    uint8_t has_data :1; /* first_pool_block field is valid */
+    uint8_t has_data :1;    /* first_pool_block field is valid */
     uint8_t unmap :1;       /* has_data will be 0 if this
 			       is an unmap */
   };
@@ -137,6 +137,7 @@ public:
    * be sub-ops of this Gather. This sync point will not be appended
    * until all these complete. */
   C_Gather *m_prior_log_entries_persisted;
+  int m_prior_log_entries_persisted_status;
   /* Signal this when this sync point is appended and persisted. This
    * is a sub-operation of the next sync point's
    * m_prior_log_entries_persisted Gather. */
@@ -155,16 +156,14 @@ public:
     return os;
   };
 };
-  
+
+class WriteLogOperationSet;
 class WriteLogOperation {
 public:
   WriteLogEntry *log_entry;
   bufferlist bl;
-  Context *on_write_persist;
-  WriteLogOperation(SyncPoint *sync_point, uint64_t image_offset_bytes, uint64_t write_bytes) 
-    : log_entry(new WriteLogEntry(image_offset_bytes, write_bytes)) {
-    on_write_persist = sync_point->m_prior_log_entries_persisted->new_sub();
-  }
+  Context *on_write_persist; /* Completion for things waiting on this write to persist */
+  WriteLogOperation(WriteLogOperationSet *set, uint64_t image_offset_bytes, uint64_t write_bytes);
   ~WriteLogOperation() {
     if (NULL != log_entry) {
       delete(log_entry);
@@ -186,11 +185,30 @@ public:
   CephContext *m_cct;
   librbd::BlockExtent m_extent; /* in blocks */
   Context *m_on_finish;
+  bool m_persist_on_flush;
   BlockGuardCell *m_cell;
   C_Gather *m_extent_ops;
-  WriteLogOperationSet(CephContext *cct, librbd::BlockExtent extent, Context *on_finish);
+  Context *m_on_ops_persist;
+  WriteLogOperations operations;
+  void complete(int r) {
+  }
+  WriteLogOperationSet(CephContext *cct, SyncPoint *sync_point, bool persist_on_flush,
+		       librbd::BlockExtent extent, Context *on_finish)
+    : m_cct(cct), m_extent(extent), m_on_finish(on_finish), m_persist_on_flush(persist_on_flush) {
+    m_on_ops_persist = sync_point->m_prior_log_entries_persisted->new_sub();
+    m_extent_ops =
+      new C_Gather(cct,
+		   new FunctionContext( [this](int r) {
+		       //ldout(m_cct, 6) << "m_extent_ops completed" << dendl;
+		       m_on_ops_persist->complete(r);
+		       m_on_finish->complete(r);
+		       delete(this);
+		     }));
+  }
   WriteLogOperationSet(const WriteLogOperationSet&) = delete;
-  ~WriteLogOperationSet();
+  ~WriteLogOperationSet() {
+    /* TODO: Will m_extent_ops always delete itself? */
+  }
   WriteLogOperationSet &operator=(const WriteLogOperationSet&) = delete;
   friend std::ostream &operator<<(std::ostream &os,
 				  WriteLogOperationSet &s) {
@@ -361,6 +379,7 @@ private:
 
   void invalidate(Extents&& image_extents, Context *on_finish);
 
+  void append_sync_point(SyncPoint *sync_point, int prior_write_status);
   void new_sync_point(void);
 
   void dispatch_aio_write(C_WriteRequest *write_req);
