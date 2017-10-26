@@ -203,12 +203,15 @@ class Ansible(Task):
         self.inventory = self._write_hosts_file(hosts_str)
         self.generated_inventory = True
 
-    def _write_hosts_file(self, content):
+    def _write_hosts_file(self, content, suffix=''):
         """
         Actually write the hosts file
         """
-        hosts_file = NamedTemporaryFile(prefix="teuth_ansible_hosts_",
-                                        delete=False)
+        hosts_file = NamedTemporaryFile(
+            prefix="teuth_ansible_hosts_",
+            suffix=suffix,
+            delete=False,
+        )
         hosts_file.write(content)
         hosts_file.flush()
         return hosts_file.name
