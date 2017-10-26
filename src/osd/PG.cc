@@ -6423,7 +6423,11 @@ PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
     }
   }
 
-  pg->waiting_on_backfill.clear();
+
+  if (!pg->waiting_on_backfill.empty()) {
+    pg->waiting_on_backfill.clear();
+    pg->finish_recovery_op(hobject_t::get_max());
+  }
 
   pg->schedule_backfill_retry(c.delay);
   return transit<NotBackfilling>();
@@ -6452,8 +6456,10 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
     }
   }
 
-  pg->waiting_on_backfill.clear();
-  pg->finish_recovery_op(hobject_t::get_max());
+  if (!pg->waiting_on_backfill.empty()) {
+    pg->waiting_on_backfill.clear();
+    pg->finish_recovery_op(hobject_t::get_max());
+  }
 
   pg->schedule_backfill_retry(pg->cct->_conf->osd_recovery_retry_interval);
   return transit<NotBackfilling>();
