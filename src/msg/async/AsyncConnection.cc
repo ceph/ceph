@@ -138,7 +138,6 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
   write_handler = new C_handle_write(this);
   wakeup_handler = new C_time_wakeup(this);
   tick_handler = new C_tick_wakeup(this);
-  memset(msgvec, 0, sizeof(msgvec));
   // double recv_max_prefetch see "read_until"
   recv_buf = new char[2*recv_max_prefetch];
   state_buffer = new char[4096];
