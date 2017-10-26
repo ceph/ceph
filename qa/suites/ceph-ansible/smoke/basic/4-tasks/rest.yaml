@@ -5,7 +5,7 @@ tasks:
       - sleep 5
       - ceph -s
 - exec:
-    mon.a:
+    mgr.y:
       - ceph restful create-key admin
       - ceph restful create-self-signed-cert
       - ceph restful restart
