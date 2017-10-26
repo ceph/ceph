@@ -324,7 +324,6 @@ class AsyncConnection : public Connection {
   EventCallbackRef write_handler;
   EventCallbackRef wakeup_handler;
   EventCallbackRef tick_handler;
-  struct iovec msgvec[ASYNC_IOV_MAX];
   char *recv_buf;
   uint32_t recv_max_prefetch;
   uint32_t recv_start;
