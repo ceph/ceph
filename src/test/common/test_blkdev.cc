@@ -28,7 +28,6 @@ class MockBlkDev : public BlkDev {
 
 class BlockDevTest : public ::testing::Test {
 public:
-
   string *root;
 
 protected:

@@ -36,9 +36,8 @@ BlkDev::BlkDev(int f) {
 
 int BlkDev::get_devid(dev_t *id) const {
   struct stat st;
-  int r;
 
-  r = fstat(fd, &st);
+  int r = fstat(fd, &st);
 
   if (r < 0)
     return -errno;
@@ -89,11 +88,10 @@ int64_t BlkDev::get_string_property(blkdev_prop_t prop,
                                         char *val, size_t maxlen) const
 {
   int r;
-  const char *propstr;
   char filename[PATH_MAX], wd[PATH_MAX];
 
   assert(prop < BLKDEV_PROP_NUMPROPS);
-  propstr = blkdev_props2strings[prop];
+  const char *propstr = blkdev_props2strings[prop];
 
   // sysfs isn't fully populated for partitions, so we need to lookup the sysfs
   // entry for the underlying whole disk.
@@ -362,13 +360,12 @@ bool BlkDev::is_rotational() const
 {
 #if __FreeBSD_version >= 1200049
   struct diocgattr_arg arg;
-  int ioctl_ret;
   bool ret;
 
   strlcpy(arg.name, "GEOM::rotation_rate", sizeof(arg.name));
   arg.len = sizeof(arg.value.u16);
 
-  ioctl_ret = ioctl(fd, DIOCGATTR, &arg);
+  int ioctl_ret = ioctl(fd, DIOCGATTR, &arg);
   if (ioctl_ret < 0 || arg.value.u16 == DISK_RR_UNKNOWN)
     // DISK_RR_UNKNOWN usually indicates an old drive, which is usually spinny
     ret = true;
@@ -388,7 +385,6 @@ bool BlkDev::is_rotational() const
 int BlkDev::model(char *model, size_t max) const
 {
   struct diocgattr_arg arg;
-  char *p;
 
   strlcpy(arg.name, "GEOM::descr", sizeof(arg.name));
   arg.len = sizeof(arg.value.str);
@@ -399,7 +395,7 @@ int BlkDev::model(char *model, size_t max) const
   // The GEOM description is of the form "vendor product" for SCSI disks
   // and "ATA device_model" for ATA disks.  Some vendors choose to put the
   // vendor name in device_model, and some don't.  Strip the first bit.
-  p = arg.value.str;
+  char *p = arg.value.str;
   if (p == NULL || *p == '\0') {
     *model = '\0';
   } else {
@@ -446,14 +442,13 @@ int BlkDev::partition(char *partition, size_t max) const
 int BlkDev::wholedisk(char *wd, size_t max) const
 {
   char devname[PATH_MAX];
-  size_t first_digit, next_nondigit;
 
   if (block_device_devname(fd, devname, sizeof(devname)) < 0)
     return -errno;
 
-  first_digit = strcspn(devname, "0123456789");
+  size_t first_digit = strcspn(devname, "0123456789");
   // first_digit now indexes the first digit or null character of devname
-  next_nondigit = strspn(&devname[first_digit], "0123456789");
+  size_t next_nondigit = strspn(&devname[first_digit], "0123456789");
   next_nondigit += first_digit;
   // next_nondigit now indexes the first alphabetic or null character after the
   // unit number
