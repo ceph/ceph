@@ -20,7 +20,18 @@ void rgw_http_client_cleanup();
 struct rgw_http_req_data;
 class RGWHTTPManager;
 
-class RGWHTTPClient
+class RGWIOProvider
+{
+public:
+  RGWIOProvider() {}
+
+  virtual void set_io_id(int64_t _io_id) = 0;
+  virtual void set_io_user_info(void *_user_info) = 0;
+  virtual int64_t get_io_id() = 0;
+  virtual void *get_io_user_info() = 0;
+};
+
+class RGWHTTPClient : public RGWIOProvider
 {
   friend class RGWHTTPManager;
 
@@ -30,9 +41,10 @@ class RGWHTTPClient
   bool has_send_len;
   long http_status;
 
-  rgw_http_req_data *req_data;
+  int64_t io_id{-1};
+  void *user_info{nullptr};
 
-  void *user_info;
+  rgw_http_req_data *req_data;
 
   bool verify_ssl; // Do not validate self signed certificates, default to false
 
@@ -109,19 +121,10 @@ public:
       has_send_len(false),
       http_status(HTTP_STATUS_NOSTATUS),
       req_data(nullptr),
-      user_info(nullptr),
       verify_ssl(cct->_conf->rgw_verify_ssl),
       cct(cct),
       method(_method),
       url(_url) {
-  }
-
-  void set_user_info(void *info) {
-    user_info = info;
-  }
-
-  void *get_user_info() {
-    return user_info;
   }
 
   void append_header(const string& name, const string& val) {
@@ -159,6 +162,22 @@ public:
 
   void set_method(const string& _method) {
     method = _method;
+  }
+
+  void set_io_id(int64_t _io_id) override {
+    io_id = _io_id;
+  }
+
+  void set_io_user_info(void *_user_info) override {
+    user_info = _user_info;
+  }
+
+  int64_t get_io_id() override {
+    return io_id;
+  }
+
+  void *get_io_user_info() override {
+    return user_info;
   }
 };
 

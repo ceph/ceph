@@ -34,8 +34,15 @@ class RGWCoroutinesManager;
 class RGWAioCompletionNotifier;
 
 class RGWCompletionManager : public RefCountedObject {
+  friend class RGWCoroutinesManager;
+
   CephContext *cct;
-  list<void *> complete_reqs;
+
+  struct io_completion {
+    int64_t io_id;
+    void *user_info;
+  };
+  list<io_completion> complete_reqs;
   using NotifierRef = boost::intrusive_ptr<RGWAioCompletionNotifier>;
   set<NotifierRef> cns;
 
@@ -52,14 +59,14 @@ class RGWCompletionManager : public RefCountedObject {
 
 protected:
   void _wakeup(void *opaque);
-  void _complete(RGWAioCompletionNotifier *cn, void *user_info);
+  void _complete(RGWAioCompletionNotifier *cn, int64_t io_id, void *user_info);
 public:
   RGWCompletionManager(CephContext *_cct);
   ~RGWCompletionManager() override;
 
-  void complete(RGWAioCompletionNotifier *cn, void *user_info);
-  int get_next(void **user_info);
-  bool try_get_next(void **user_info);
+  void complete(RGWAioCompletionNotifier *cn, int64_t io_id, void *user_info);
+  int get_next(io_completion *io);
+  bool try_get_next(io_completion *io);
 
   void go_down();
 
@@ -77,12 +84,13 @@ public:
 class RGWAioCompletionNotifier : public RefCountedObject {
   librados::AioCompletion *c;
   RGWCompletionManager *completion_mgr;
+  int64_t io_id;
   void *user_data;
   Mutex lock;
   bool registered;
 
 public:
-  RGWAioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data);
+  RGWAioCompletionNotifier(RGWCompletionManager *_mgr, int64_t _io_id, void *_user_data);
   ~RGWAioCompletionNotifier() override {
     c->release();
     lock.Lock();
@@ -120,7 +128,7 @@ public:
     completion_mgr->get();
     registered = false;
     lock.Unlock();
-    completion_mgr->complete(this, user_data);
+    completion_mgr->complete(this, io_id, user_data);
     completion_mgr->put();
     put();
   }
@@ -219,7 +227,6 @@ protected:
     return 0;
   }
   void set_io_blocked(bool flag);
-  int io_block(int ret = 0);
 
   void reset_description() {
     description.str(string());
@@ -285,6 +292,11 @@ public:
   RGWCoroutinesEnv *get_env() const;
 
   void dump(Formatter *f) const;
+
+  void init_new_io(RGWIOProvider *io_provider);
+
+  int io_block(int ret = 0, int64_t io_id = -1);
+  void io_complete(int64_t io_id = -1);
 };
 
 ostream& operator<<(ostream& out, const RGWCoroutine& cr);
@@ -355,6 +367,9 @@ class RGWCoroutinesStack : public RefCountedObject {
   set<RGWCoroutinesStack *> blocked_by_stack;
   set<RGWCoroutinesStack *> blocking_stacks;
 
+  set<int64_t> io_finish_ids;
+  int64_t io_blocked_id{-1};
+
   bool done_flag;
   bool error_flag;
   bool blocked_flag;
@@ -394,9 +409,18 @@ public:
   void set_io_blocked(bool flag) {
     blocked_flag = flag;
   }
+  void set_io_blocked_id(int64_t io_id) {
+    io_blocked_id = io_id;
+  }
   bool is_io_blocked() {
     return blocked_flag;
   }
+  bool can_io_unblock(int64_t io_id) {
+    return (io_blocked_id == io_id) ||
+           (io_blocked_id < 0);
+  }
+  bool try_io_unblock(int64_t io_id);
+  bool consume_io_finish(int64_t io_id);
   void set_interval_wait(bool flag) {
     interval_wait_flag = flag;
   }
@@ -422,15 +446,8 @@ public:
           is_io_blocked() || waiting_for_child() ;
   }
 
-  void schedule(list<RGWCoroutinesStack *> *stacks = NULL) {
-    if (!stacks) {
-      stacks = env->scheduled_stacks;
-    }
-    if (!is_scheduled) {
-      stacks->push_back(this);
-      is_scheduled = true;
-    }
-  }
+  void schedule();
+  void _schedule();
 
   int get_ret_status() {
     return retcode;
@@ -444,6 +461,7 @@ public:
 
   int wait(const utime_t& interval);
   void wakeup();
+  void io_complete(int64_t io_id = -1);
 
   bool collect(int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
 
@@ -468,6 +486,8 @@ public:
   RGWCoroutinesEnv *get_env() const { return env; }
 
   void dump(Formatter *f) const;
+
+  void init_new_io(RGWIOProvider *io_provider);
 };
 
 template <class T>
@@ -518,9 +538,12 @@ class RGWCoroutinesManager {
   std::atomic<int64_t> run_context_count = { 0 };
   map<uint64_t, set<RGWCoroutinesStack *> > run_contexts;
 
+  std::atomic<int64_t> max_io_id = { 0 };
+
   RWLock lock;
 
-  void handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& scheduled_stacks, RGWCoroutinesStack *stack, int *waiting_count);
+  void handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& scheduled_stacks,
+                              RGWCompletionManager::io_completion& io, int *waiting_count);
 protected:
   RGWCompletionManager *completion_mgr;
   RGWCoroutinesManagerRegistry *cr_registry;
@@ -561,9 +584,13 @@ public:
   RGWCompletionManager *get_completion_mgr() { return completion_mgr; }
 
   void schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *stack);
+  void _schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *stack);
   RGWCoroutinesStack *allocate_stack();
 
+  int64_t get_next_io_id();
+
   void set_sleeping(RGWCoroutine *cr, bool flag);
+  void io_complete(RGWCoroutine *cr, int64_t io_id = -1);
 
   virtual string get_id();
   void dump(Formatter *f) const;

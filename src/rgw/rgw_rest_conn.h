@@ -155,7 +155,7 @@ public:
   }
 };
 
-class RGWRESTReadResource : public RefCountedObject {
+class RGWRESTReadResource : public RefCountedObject, public RGWIOProvider {
   CephContext *cct;
   RGWRESTConn *conn;
   string resource;
@@ -182,11 +182,20 @@ public:
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
-  void set_user_info(void *user_info) {
-    req.set_user_info(user_info);
+  void set_io_id(int64_t _io_id) override {
+    req.set_io_id(_io_id);
   }
-  void *get_user_info() {
-    return req.get_user_info();
+
+  int64_t get_io_id() override {
+    return req.get_io_id();
+  }
+
+  void set_io_user_info(void *user_info) override {
+    req.set_io_user_info(user_info);
+  }
+
+  void *get_io_user_info() override {
+    return req.get_io_user_info();
   }
 
   template <class T>
@@ -269,7 +278,7 @@ int RGWRESTReadResource::wait(T *dest)
   return 0;
 }
 
-class RGWRESTSendResource : public RefCountedObject {
+class RGWRESTSendResource : public RefCountedObject, public RGWIOProvider {
   CephContext *cct;
   RGWRESTConn *conn;
   string method;
@@ -299,11 +308,20 @@ public:
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
-  void set_user_info(void *user_info) {
-    req.set_user_info(user_info);
+  void set_io_id(int64_t _io_id) override {
+    req.set_io_id(_io_id);
   }
-  void *get_user_info() {
-    return req.get_user_info();
+
+  int64_t get_io_id() override {
+    return req.get_io_id();
+  }
+
+  void set_io_user_info(void *user_info) override {
+    req.set_io_user_info(user_info);
+  }
+
+  void *get_io_user_info() override {
+    return req.get_io_user_info();
   }
 
   template <class T>
