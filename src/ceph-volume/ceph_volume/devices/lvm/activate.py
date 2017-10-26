@@ -99,7 +99,7 @@ def activate_bluestore(lvs):
         # gone, so it needs to be 'primed' again. The command would otherwise
         # fail if the directory was already populated
         process.run([
-            'sudo', 'ceph-bluestore-tool',
+            'sudo', 'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
             'prime-osd-dir', '--dev', osd_lv.lv_path,
             '--path', osd_path])
     # always re-do the symlink regardless if it exists, so that the block,
