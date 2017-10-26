@@ -688,10 +688,10 @@ void FileStore::collect_metadata(map<string,string> *pm)
 
   if (cct->_conf->filestore_collect_device_partition_information) {
     BlkDev blkdev(fsid_fd);
-    rc = blkdev.block_device_partition(partition_path, PATH_MAX);
+    rc = blkdev.partition(partition_path, PATH_MAX);
     if (rc == 0)
       (*pm)["backend_filestore_partition_path"] = string(partition_path);
-    rc = blkdev.block_device_wholedisk(dev_node, PATH_MAX);
+    rc = blkdev.wholedisk(dev_node, PATH_MAX);
     if (rc == 0)
       (*pm)["backend_filestore_dev_node"] = string(dev_node);
   } else {

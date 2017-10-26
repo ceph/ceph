@@ -120,7 +120,7 @@ int KernelDevice::open(const string& p)
 
   if (S_ISBLK(st.st_mode)) {
     int64_t s;
-    r = blkdev_direct.get_block_device_size(&s);
+    r = blkdev_direct.get_size(&s);
     if (r < 0) {
       goto out_fail;
     }
@@ -129,7 +129,7 @@ int KernelDevice::open(const string& p)
     size = st.st_size;
   }
 
-  rotational = blkdev_buffered.block_device_is_rotational();
+  rotational = blkdev_buffered.is_rotational();
 
   r = _aio_start();
   if (r < 0) {
@@ -203,19 +203,19 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
 
     (*pm)[prefix + "access_mode"] = "blk";
 
-    blkdev.block_device_model(buffer, sizeof(buffer));
+    blkdev.model(buffer, sizeof(buffer));
     (*pm)[prefix + "model"] = buffer;
 
     buffer[0] = '\0';
-    blkdev.block_device_dev(buffer, sizeof(buffer));
+    blkdev.dev(buffer, sizeof(buffer));
     (*pm)[prefix + "dev"] = buffer;
 
     // nvme exposes a serial number
     buffer[0] = '\0';
-    blkdev.block_device_serial(buffer, sizeof(buffer));
+    blkdev.serial(buffer, sizeof(buffer));
     (*pm)[prefix + "serial"] = buffer;
 
-    if (blkdev.block_device_is_nvme())
+    if (blkdev.is_nvme())
       (*pm)[prefix + "type"] = "nvme";
   } else {
     (*pm)[prefix + "access_mode"] = "file";

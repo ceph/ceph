@@ -75,7 +75,7 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
       return;
     }
     BlkDev blkdev(fd);
-    m_rotational = blkdev.block_device_is_rotational();
+    m_rotational = blkdev.is_rotational();
     dout(20) << __func__ << " basedir " << fn
 	     << " rotational " << (int)m_rotational << dendl;
     ::close(fd);
@@ -89,7 +89,7 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
       return;
     }
     BlkDev blkdev(fd);
-    m_journal_rotational = blkdev.block_device_is_rotational();
+    m_journal_rotational = blkdev.is_rotational();
     dout(20) << __func__ << " journal filename " << fn.c_str()
 	     << " journal rotational " << (int)m_journal_rotational << dendl;
     ::close(fd);

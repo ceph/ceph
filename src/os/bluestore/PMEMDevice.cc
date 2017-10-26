@@ -85,7 +85,7 @@ int PMEMDevice::open(const string& p)
   if (S_ISBLK(st.st_mode)) {
     int64_t s;
     BlkDev blkdev(fd);
-    r = get_block_device_size(&s);
+    r = fd.get_size(&s);
     if (r < 0) {
       goto out_fail;
     }
@@ -157,19 +157,19 @@ int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) c
     char buffer[1024] = {0};
     BlkDev blkdev(fd_buffered);
 
-    blkdev.block_device_model(buffer, sizeof(buffer));
+    blkdev.model(buffer, sizeof(buffer));
     (*pm)[prefix + "model"] = buffer;
 
     buffer[0] = '\0';
-    blkdev.block_device_dev(buffer, sizeof(buffer));
+    blkdev.dev(buffer, sizeof(buffer));
     (*pm)[prefix + "dev"] = buffer;
 
     // nvme exposes a serial number
     buffer[0] = '\0';
-    blkdev.block_device_serial(buffer, sizeof(buffer));
+    blkdev.serial(buffer, sizeof(buffer));
     (*pm)[prefix + "serial"] = buffer;
 
-    if (blkdev.block_device_nvme())
+    if (blkdev.is_nvme())
       (*pm)[prefix + "type"] = "nvme";
   } else {
     (*pm)[prefix + "access_mode"] = "file";

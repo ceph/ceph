@@ -36,45 +36,45 @@ int main(int argc, char **argv)
 
 	BlkDev blkdev(fd);
 
-	if ((ret = blkdev.get_block_device_size(&size)) < 0) {
-		fprintf(stderr, "get_block_device_size: %s\n", strerror(-ret));
+	if ((ret = blkdev.get_size(&size)) < 0) {
+		fprintf(stderr, "get_size: %s\n", strerror(-ret));
 		return -1;
 	}
 
-	discard_support = blkdev.block_device_support_discard();
+	discard_support = blkdev.support_discard();
 
-	nvme = blkdev.block_device_is_nvme();
+	nvme = blkdev.is_nvme();
 
-	rotational = blkdev.block_device_is_rotational();
+	rotational = blkdev.is_rotational();
 
-	if ((ret = blkdev.block_device_dev(dev, BUFSIZE)) < 0) {
-		fprintf(stderr, "block_device_dev: %s\n", strerror(-ret));
+	if ((ret = blkdev.dev(dev, BUFSIZE)) < 0) {
+		fprintf(stderr, "dev: %s\n", strerror(-ret));
 		return -1;
 	}
 
-	if ((ret = blkdev.block_device_partition(partition, BUFSIZE)) < 0) {
-		fprintf(stderr, "block_device_partition: %s\n", strerror(-ret));
+	if ((ret = blkdev.partition(partition, BUFSIZE)) < 0) {
+		fprintf(stderr, "partition: %s\n", strerror(-ret));
 		return -1;
 	}
 
-	if ((ret = blkdev.block_device_wholedisk(wholedisk, BUFSIZE)) < 0) {
-		fprintf(stderr, "block_device_wholedisk: %s\n", strerror(-ret));
+	if ((ret = blkdev.wholedisk(wholedisk, BUFSIZE)) < 0) {
+		fprintf(stderr, "wholedisk: %s\n", strerror(-ret));
 		return -1;
 	}
 
-	ret = blkdev.block_device_model(model, BUFSIZE);
+	ret = blkdev.model(model, BUFSIZE);
 	if (ret == -ENOENT) {
 		snprintf(model, BUFSIZE, "Unknown");
 	} else if (ret < 0) {
-		fprintf(stderr, "block_device_model: %s\n", strerror(-ret));
+		fprintf(stderr, "model: %s\n", strerror(-ret));
 		return -1;
 	}
 
-	ret = blkdev.block_device_serial(serial, BUFSIZE);
+	ret = blkdev.serial(serial, BUFSIZE);
 	if (ret == -ENOENT) {
 		snprintf(serial, BUFSIZE, "Unknown");
 	} else if (ret < 0) {
-		fprintf(stderr, "block_device_serial: %s\n", strerror(-ret));
+		fprintf(stderr, "serial: %s\n", strerror(-ret));
 		return -1;
 	}
 

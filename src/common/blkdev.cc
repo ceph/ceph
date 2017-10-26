@@ -61,7 +61,7 @@ const char *BlkDev::sysfsdir() {
   return "/sys";
 }
 
-int BlkDev::get_block_device_size(int64_t *psize)
+int BlkDev::get_size(int64_t *psize)
 {
 #ifdef BLKGETSIZE64
   int ret = ::ioctl(fd, BLKGETSIZE64, psize);
@@ -71,7 +71,7 @@ int BlkDev::get_block_device_size(int64_t *psize)
   *psize = sectors * 512ULL;
 #else
 // cppcheck-suppress preprocessorErrorDirective
-# error "Linux configuration error (get_block_device_size)"
+# error "Linux configuration error (get_size)"
 #endif
   if (ret < 0)
     ret = -errno;
@@ -85,23 +85,23 @@ int BlkDev::get_block_device_size(int64_t *psize)
  * return 0 on success
  * return negative error on error
  */
-int64_t BlkDev::get_block_device_string_property( blkdev_prop_t prop,
+int64_t BlkDev::get_string_property(blkdev_prop_t prop,
                                         char *val, size_t maxlen)
 {
   int r;
   const char *propstr;
-  char filename[PATH_MAX], wholedisk[PATH_MAX];
+  char filename[PATH_MAX], wd[PATH_MAX];
 
   assert(prop < BLKDEV_PROP_NUMPROPS);
   propstr = blkdev_props2strings[prop];
 
   // sysfs isn't fully populated for partitions, so we need to lookup the sysfs
   // entry for the underlying whole disk.
-  if ((r = block_device_wholedisk(wholedisk, maxlen)) < 0)
+  if ((r = wholedisk(wd, maxlen)) < 0)
     return r;
 
   snprintf(filename, sizeof(filename),
-    "%s/block/%s/%s", sysfsdir(), wholedisk, propstr);
+    "%s/block/%s/%s", sysfsdir(), wd, propstr);
 
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
@@ -128,10 +128,10 @@ int64_t BlkDev::get_block_device_string_property( blkdev_prop_t prop,
  * return the value (we assume it is positive)
  * return negative error on error
  */
-int64_t BlkDev::get_block_device_int_property(blkdev_prop_t prop)
+int64_t BlkDev::get_int_property(blkdev_prop_t prop)
 {
   char buff[256] = {0};
-  int r = get_block_device_string_property(prop, buff, sizeof(buff));
+  int r = get_string_property(prop, buff, sizeof(buff));
   if (r < 0)
     return r;
   // take only digits
@@ -148,47 +148,47 @@ int64_t BlkDev::get_block_device_int_property(blkdev_prop_t prop)
   return r;
 }
 
-bool BlkDev::block_device_support_discard()
+bool BlkDev::support_discard()
 {
-  return get_block_device_int_property(BLKDEV_PROP_DISCARD_GRANULARITY) > 0;
+  return get_int_property(BLKDEV_PROP_DISCARD_GRANULARITY) > 0;
 }
 
-int BlkDev::block_device_discard(int64_t offset, int64_t len)
+int BlkDev::discard(int64_t offset, int64_t len)
 {
   uint64_t range[2] = {(uint64_t)offset, (uint64_t)len};
   return ioctl(fd, BLKDISCARD, range);
 }
 
-bool BlkDev::block_device_is_nvme()
+bool BlkDev::is_nvme()
 {
   char vendor[80];
   // nvme has a device/device/vendor property; infer from that.  There is
   // probably a better way?
-  int r = get_block_device_string_property(BLKDEV_PROP_VENDOR, vendor, 80);
+  int r = get_string_property(BLKDEV_PROP_VENDOR, vendor, 80);
   return (r == 0);
 }
 
-bool BlkDev::block_device_is_rotational()
+bool BlkDev::is_rotational()
 {
-  return get_block_device_int_property(BLKDEV_PROP_ROTATIONAL) > 0;
+  return get_int_property(BLKDEV_PROP_ROTATIONAL) > 0;
 }
 
-int BlkDev::block_device_dev(char *dev, size_t max)
+int BlkDev::dev(char *dev, size_t max)
 {
-  return get_block_device_string_property(BLKDEV_PROP_DEV, dev, max);
+  return get_string_property(BLKDEV_PROP_DEV, dev, max);
 }
 
-int BlkDev::block_device_model(char *model, size_t max)
+int BlkDev::model(char *model, size_t max)
 {
-  return get_block_device_string_property(BLKDEV_PROP_MODEL, model, max);
+  return get_string_property(BLKDEV_PROP_MODEL, model, max);
 }
 
-int BlkDev::block_device_serial(char *serial, size_t max)
+int BlkDev::serial(char *serial, size_t max)
 {
-  return get_block_device_string_property(BLKDEV_PROP_SERIAL, serial, max);
+  return get_string_property(BLKDEV_PROP_SERIAL, serial, max);
 }
 
-int BlkDev::block_device_partition(char *partition, size_t max)
+int BlkDev::partition(char *partition, size_t max)
 {
   dev_t id;
   int r = get_devid(&id);
@@ -204,7 +204,7 @@ int BlkDev::block_device_partition(char *partition, size_t max)
   return 0;
 }
 
-int BlkDev::block_device_wholedisk(char *device, size_t max)
+int BlkDev::wholedisk(char *device, size_t max)
 {
   dev_t id;
   int r = get_devid(&id);
@@ -226,7 +226,7 @@ const char *BlkDev::sysfsdir() {
   return "";
 }
 
-int BlkDev::block_device_dev(char *dev, size_t max)
+int BlkDev::dev(char *dev, size_t max)
 {
   struct stat sb;
 
@@ -238,7 +238,7 @@ int BlkDev::block_device_dev(char *dev, size_t max)
   return 0;
 }
 
-int BlkDev::get_block_device_size(int64_t *psize)
+int BlkDev::get_size(int64_t *psize)
 {
   unsigned long blocksize = 0;
   int ret = ::ioctl(fd, DKIOCGETBLOCKSIZE, &blocksize);
@@ -253,42 +253,42 @@ int BlkDev::get_block_device_size(int64_t *psize)
   return ret;
 }
 
-bool BlkDev::block_device_support_discard()
+bool BlkDev::support_discard()
 {
   return false;
 }
 
-int BlkDev::block_device_discard(int64_t offset, int64_t len)
+int BlkDev::discard(int64_t offset, int64_t len)
 {
   return -EOPNOTSUPP;
 }
 
-bool BlkDev::block_device_is_nvme()
+bool BlkDev::is_nvme()
 {
   return false;
 }
 
-bool BlkDev::block_device_is_rotational()
+bool BlkDev::is_rotational()
 {
   return false;
 }
 
-int BlkDev::block_device_model(char *model, size_t max)
+int BlkDev::model(char *model, size_t max)
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::block_device_serial(char *serial, size_t max)
+int BlkDev::serial(char *serial, size_t max)
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::block_device_partition(char *partition, size_t max)
+int BlkDev::partition(char *partition, size_t max)
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::block_device_wholedisk(char *device, size_t max)
+int BlkDev::wholedisk(char *device, size_t max)
 {
   return -EOPNOTSUPP;
 }
@@ -299,7 +299,7 @@ const char *BlkDev::sysfsdir() {
   return "";
 }
 
-int BlkDev::block_device_dev(char *dev, size_t max)
+int BlkDev::dev(char *dev, size_t max)
 {
   struct stat sb;
 
@@ -311,7 +311,7 @@ int BlkDev::block_device_dev(char *dev, size_t max)
   return 0;
 }
 
-int BlkDev::get_block_device_size(int64_t *psize)
+int BlkDev::get_size(int64_t *psize)
 {
   int ret = ::ioctl(fd, DIOCGMEDIASIZE, psize);
   if (ret < 0)
@@ -319,7 +319,7 @@ int BlkDev::get_block_device_size(int64_t *psize)
   return ret;
 }
 
-bool BlkDev::block_device_support_discard()
+bool BlkDev::support_discard()
 {
   struct diocgattr_arg arg;
   int ret;
@@ -334,12 +334,12 @@ bool BlkDev::block_device_support_discard()
   return ret;
 }
 
-int BlkDev::block_device_discard(int64_t offset, int64_t len)
+int BlkDev::discard(int64_t offset, int64_t len)
 {
   return -EOPNOTSUPP;
 }
 
-bool BlkDev::block_device_is_nvme()
+bool BlkDev::is_nvme()
 {
   // FreeBSD doesn't have a good way to tell if a device's underlying protocol
   // is NVME, especially since multiple GEOM transforms may be involved.  So
@@ -358,7 +358,7 @@ bool BlkDev::block_device_is_nvme()
           strncmp(nda, devname, strlen(nda)) == 0);
 }
 
-bool BlkDev::block_device_is_rotational()
+bool BlkDev::is_rotational()
 {
 #if __FreeBSD_version >= 1200049
   struct diocgattr_arg arg;
@@ -385,7 +385,7 @@ bool BlkDev::block_device_is_rotational()
 #endif
 }
 
-int BlkDev::block_device_model(char *model, size_t max)
+int BlkDev::model(char *model, size_t max)
 {
   struct diocgattr_arg arg;
   char *p;
@@ -410,7 +410,7 @@ int BlkDev::block_device_model(char *model, size_t max)
   return 0;
 }
 
-int BlkDev::block_device_serial(char *serial, size_t max)
+int BlkDev::serial(char *serial, size_t max)
 {
   char ident[DISK_IDENT_SIZE];
 
@@ -433,7 +433,7 @@ static int block_device_devname(int fd, char *devname, size_t max)
   return 0;
 }
 
-int BlkDev::block_device_partition(char *partition, size_t max)
+int BlkDev::partition(char *partition, size_t max)
 {
   char devname[PATH_MAX];
 
@@ -443,7 +443,7 @@ int BlkDev::block_device_partition(char *partition, size_t max)
   return 0;
 }
 
-int BlkDev::block_device_wholedisk(char *wholedisk, size_t max)
+int BlkDev::wholedisk(char *wd, size_t max)
 {
   char devname[PATH_MAX];
   size_t first_digit, next_nondigit;
@@ -457,7 +457,7 @@ int BlkDev::block_device_wholedisk(char *wholedisk, size_t max)
   next_nondigit += first_digit;
   // next_nondigit now indexes the first alphabetic or null character after the
   // unit number
-  strlcpy(wholedisk, devname, next_nondigit + 1);
+  strlcpy(wd, devname, next_nondigit + 1);
   return 0;
 }
 
@@ -468,52 +468,52 @@ const char *BlkDev::sysfsdir() {
   return "";
 }
 
-int BlkDev::block_device_dev(char *dev, size_t max)
+int BlkDev::dev(char *dev, size_t max)
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::get_block_device_size(int64_t *psize)
+int BlkDev::get_size(int64_t *psize)
 {
   return -EOPNOTSUPP;
 }
 
-bool BlkDev::block_device_support_discard()
+bool BlkDev::support_discard()
 {
   return false;
 }
 
-int BlkDev::block_device_discard(int fd, int64_t offset, int64_t len)
+int BlkDev::discard(int fd, int64_t offset, int64_t len)
 {
   return -EOPNOTSUPP;
 }
 
-bool BlkDev::block_device_is_nvme(const char *devname)
+bool BlkDev::is_nvme(const char *devname)
 {
   return false;
 }
 
-bool BlkDev::block_device_is_rotational(const char *devname)
+bool BlkDev::is_rotational(const char *devname)
 {
   return false;
 }
 
-int BlkDev::block_device_model(char *model, size_t max)
+int BlkDev::model(char *model, size_t max)
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::block_device_serial(char *serial, size_t max)
+int BlkDev::serial(char *serial, size_t max)
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::block_device_partition(char *partition, size_t max)
+int BlkDev::partition(char *partition, size_t max)
 {
   return -EOPNOTSUPP;
 }
 
-int BlkDev::block_device_wholedisk(char *wholedisk, size_t max)
+int BlkDev::wholedisk(char *wd, size_t max)
 {
   return -EOPNOTSUPP;
 }

@@ -19,24 +19,24 @@ public:
   virtual ~BlkDev() {}
 
   // from an fd
-  int block_device_discard(int64_t offset, int64_t len);
-  int get_block_device_size(int64_t *psize);
+  int discard(int64_t offset, int64_t len);
+  int get_size(int64_t *psize);
   int get_devid(dev_t *id);
-  int block_device_partition(char* partition, size_t max);
-  bool block_device_support_discard();
-  bool block_device_is_nvme();
-  bool block_device_is_rotational();
-  int block_device_dev(char *dev, size_t max);
-  int block_device_model(char *model, size_t max);
-  int block_device_serial(char *serial, size_t max);
+  int partition(char* partition, size_t max);
+  bool support_discard();
+  bool is_nvme();
+  bool is_rotational();
+  int dev(char *dev, size_t max);
+  int model(char *model, size_t max);
+  int serial(char *serial, size_t max);
 
   /* virtual for testing purposes */
   virtual const char *sysfsdir();
-  virtual int block_device_wholedisk(char* device, size_t max);
+  virtual int wholedisk(char* device, size_t max);
 
 protected:
-  int64_t get_block_device_int_property(blkdev_prop_t prop);
-  int64_t get_block_device_string_property( blkdev_prop_t prop, char *val,
+  int64_t get_int_property(blkdev_prop_t prop);
+  int64_t get_string_property( blkdev_prop_t prop, char *val,
     size_t maxlen);
 
 private:
