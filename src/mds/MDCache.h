@@ -201,6 +201,8 @@ public:
 
   DecayRate decayrate;
 
+  int num_shadow_inodes;
+
   int num_inodes_with_caps;
 
   unsigned max_dir_commit_size;
