@@ -377,6 +377,9 @@ protected:
     uint64_t size;
   } range;
 
+  ceph::real_time mtime;
+  string etag;
+
 public:
   RGWStreamReadHTTPResourceCRF(CephContext *_cct,
                                RGWCoroutinesEnv *_env,

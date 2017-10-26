@@ -29,10 +29,36 @@ struct rgw_sync_aws_multipart_part_info {
 };
 WRITE_CLASS_ENCODER(rgw_sync_aws_multipart_part_info)
 
+struct rgw_sync_aws_src_obj_properties {
+  ceph::real_time mtime;
+  string etag;
+  uint32_t zone_short_id{0};
+  uint64_t pg_ver{0};
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(mtime, bl);
+    encode(etag, bl);
+    encode(zone_short_id, bl);
+    encode(pg_ver, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    decode(mtime, bl);
+    decode(etag, bl);
+    decode(zone_short_id, bl);
+    decode(pg_ver, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_sync_aws_src_obj_properties)
+
 struct rgw_sync_aws_multipart_upload_info {
   string upload_id;
   uint64_t obj_size;
-  ceph::real_time mtime;
+  rgw_sync_aws_src_obj_properties src_properties;
   uint32_t part_size{0};
   uint32_t num_parts{0};
 
@@ -45,7 +71,7 @@ struct rgw_sync_aws_multipart_upload_info {
     ENCODE_START(1, 1, bl);
     encode(upload_id, bl);
     encode(obj_size, bl);
-    encode(mtime, bl);
+    encode(src_properties, bl);
     encode(part_size, bl);
     encode(num_parts, bl);
     encode(cur_part, bl);
@@ -58,7 +84,7 @@ struct rgw_sync_aws_multipart_upload_info {
     DECODE_START(1, bl);
     decode(upload_id, bl);
     decode(obj_size, bl);
-    decode(mtime, bl);
+    decode(src_properties, bl);
     decode(part_size, bl);
     decode(num_parts, bl);
     decode(cur_part, bl);

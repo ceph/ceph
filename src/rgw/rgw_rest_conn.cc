@@ -169,14 +169,18 @@ int RGWRESTConn::complete_request(RGWRESTStreamS3PutObj *req, string& etag, real
   return ret;
 }
 
-static void set_date_header(const real_time *t, map<string, string>& headers, const string& header_name)
+static void set_date_header(const real_time *t, map<string, string>& headers, bool high_precision_time, const string& header_name)
 {
   if (!t) {
     return;
   }
   stringstream s;
   utime_t tm = utime_t(*t);
-  tm.gmtime_nsec(s);
+  if (high_precision_time) {
+    tm.gmtime_nsec(s);
+  } else {
+    tm.gmtime(s);
+  }
   headers[header_name] = s.str();
 }
 
@@ -256,8 +260,11 @@ int RGWRESTConn::get_obj(const rgw_obj& obj, const get_obj_params& in_params, bo
     }
   }
 
-  set_date_header(in_params.mod_ptr, extra_headers, "HTTP_IF_MODIFIED_SINCE");
-  set_date_header(in_params.unmod_ptr, extra_headers, "HTTP_IF_UNMODIFIED_SINCE");
+  set_date_header(in_params.mod_ptr, extra_headers, in_params.high_precision_time, "HTTP_IF_MODIFIED_SINCE");
+  set_date_header(in_params.unmod_ptr, extra_headers, in_params.high_precision_time, "HTTP_IF_UNMODIFIED_SINCE");
+  if (!in_params.etag.empty()) {
+    set_header(in_params.etag, extra_headers, "HTTP_IF_MATCH");
+  }
   if (in_params.mod_zone_id != 0) {
     set_header(in_params.mod_zone_id, extra_headers, "HTTP_DEST_ZONE_SHORT_ID");
   }

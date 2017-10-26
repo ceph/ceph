@@ -105,6 +105,9 @@ public:
     req_info *info{nullptr};
     const ceph::real_time *mod_ptr{nullptr};
     const ceph::real_time *unmod_ptr{nullptr};
+    bool high_precision_time{true};
+
+    string etag;
 
     uint32_t mod_zone_id{0};
     uint64_t mod_pg_ver{0};
