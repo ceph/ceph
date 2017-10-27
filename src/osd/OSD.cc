@@ -5025,12 +5025,12 @@ void OSD::tick_without_osd_lock()
 
 void OSD::check_ops_in_flight()
 {
+  string summary;
   vector<string> warnings;
-  if (op_tracker.check_ops_in_flight(warnings)) {
-    for (vector<string>::iterator i = warnings.begin();
-        i != warnings.end();
-        ++i) {
-      clog->warn() << *i;
+  if (op_tracker.check_ops_in_flight(&summary, warnings)) {
+    clog->warn() << summary;
+    for (const auto& warning : warnings) {
+      clog->warn() << warning;
     }
   }
 }
