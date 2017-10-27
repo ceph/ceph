@@ -743,6 +743,7 @@ public:
 
   void send_response() override = 0;
   const string name() override { return "get_bucket_location"; }
+  RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOCATION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
