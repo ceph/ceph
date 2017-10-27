@@ -2285,12 +2285,12 @@ will start to track new ops received afterwards.";
     auto start = ceph::coarse_mono_clock::now();
     store->compact();
     auto end = ceph::coarse_mono_clock::now();
-    auto time_span = chrono::duration_cast<chrono::duration<double>>(end - start);
+    double duration = std::chrono::duration<double>(end-start).count();
     dout(1) << "finished manual compaction in " 
-            << time_span.count()
+            << duration
             << " seconds" << dendl;
     f->open_object_section("compact_result");
-    f->dump_float("elapsed_time", time_span.count());
+    f->dump_float("elapsed_time", duration);
     f->close_section();
   } else {
     assert(0 == "broken asok registration");
@@ -6403,11 +6403,11 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     auto start = ceph::coarse_mono_clock::now();
     store->compact();
     auto end = ceph::coarse_mono_clock::now();
-    auto time_span = chrono::duration_cast<chrono::duration<double>>(end - start);
+    double duration = std::chrono::duration<double>(end-start).count();
     dout(1) << "finished manual compaction in "
-            << time_span.count()
+            << duration
             << " seconds" << dendl;
-    ss << "compacted omap in " << time_span.count() << " seconds";
+    ss << "compacted omap in " << duration << " seconds";
   }
 
   else {
