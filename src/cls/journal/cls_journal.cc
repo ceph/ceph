@@ -188,6 +188,7 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
       if (tag.tid >= minimum_tag_tid) {
         // no need to check for tag classes beyond this point
         vals.clear();
+        more = false;
         break;
       }
     }
