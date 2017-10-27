@@ -1119,3 +1119,7 @@ add_subdirectory(script)
 if(WITH_EMBEDDED)
   add_subdirectory(libcephd)
 endif()
+
+add_custom_target(clang_complete
+  COMMAND sh -c "echo ${CMAKE_CXX_FLAGS} | tr \\  \\\\n > ${CMAKE_SOURCE_DIR}/.clang_complete"
+  VERBATIM)
