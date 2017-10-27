@@ -1,4 +1,4 @@
 overrides:
   deepsea:
     exec:
-    - suites/basic/health-ok-encrypted.sh --cli
+    - suites/basic/health-ok.sh --cli --encrypted
