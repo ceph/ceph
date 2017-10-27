@@ -47,7 +47,7 @@ void SessionMap::register_perfcounters()
   PerfCountersBuilder plb(g_ceph_context, "mds_sessions",
       l_mdssm_first, l_mdssm_last);
   plb.add_u64(l_mdssm_session_count, "session_count",
-      "Session count");
+      "Session count", "sess", PerfCountersBuilder::PRIO_USEFUL);
   plb.add_u64_counter(l_mdssm_session_add, "session_add",
       "Sessions added");
   plb.add_u64_counter(l_mdssm_session_remove, "session_remove",
