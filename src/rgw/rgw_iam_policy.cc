@@ -220,32 +220,13 @@ optional<ARN> ARN::parse(const string& s, bool wildcards) {
 
   if ((s == "*") && wildcards) {
     return ARN(Partition::wildcard, Service::wildcard, "*", "*", "*");
-  } else if (regex_match(s, match, wildcards ? rx_wild : rx_no_wild)) {
-    if (match.size() != 6) {
-      return boost::none;
-    }
-
-    ARN a;
-    {
-      auto p = to_partition(match[1], wildcards);
-      if (!p)
-	return none;
-
-      a.partition = *p;
-    }
-    {
-      auto s = to_service(match[2], wildcards);
-      if (!s) {
-	return none;
+  } else if (regex_match(s, match, wildcards ? rx_wild : rx_no_wild) &&
+	     match.size() == 6) {
+    if (auto p = to_partition(match[1], wildcards)) {
+      if (auto s = to_service(match[2], wildcards)) {
+	return ARN(*p, *s, match[3], match[4], match[5]);
       }
-      a.service = *s;
     }
-
-    a.region = match[3];
-    a.account = match[4];
-    a.resource = match[5];
-
-    return a;
   }
   return none;
 }
@@ -741,7 +722,7 @@ bool ParseState::key(const char* s, size_t l) {
 // I should just rewrite a few helper functions to use iterators,
 // which will make all of this ever so much nicer.
 static optional<Principal> parse_principal(CephContext* cct, TokenID t,
-				    string&& s) {
+					   string&& s) {
   // Wildcard!
   if ((t == TokenID::AWS) && (s == "*")) {
     return Principal::wildcard();
@@ -751,8 +732,27 @@ static optional<Principal> parse_principal(CephContext* cct, TokenID t,
 
     // AWS ARNs
   } else if (t == TokenID::AWS) {
-    auto a = ARN::parse(s);
-    if (!a) {
+    if (auto a = ARN::parse(s)) {
+      if (a->resource == "root") {
+	return Principal::tenant(std::move(a->account));
+      }
+
+      static const char rx_str[] = "([^/]*)/(.*)";
+      static const regex rx(rx_str, sizeof(rx_str) - 1,
+			    ECMAScript | optimize);
+      smatch match;
+      if (regex_match(a->resource, match, rx) && match.size() == 3) {
+	if (match[1] == "user") {
+	  return Principal::user(std::move(a->account),
+				 match[2]);
+	}
+
+	if (match[1] == "role") {
+	  return Principal::role(std::move(a->account),
+				 match[2]);
+	}
+      }
+    } else {
       if (std::none_of(s.begin(), s.end(),
 		       [](const char& c) {
 			 return (c == ':') || (c == '/');
@@ -761,30 +761,6 @@ static optional<Principal> parse_principal(CephContext* cct, TokenID t,
 	// way to see if one exists or not. So we return the thing and
 	// let them try to match against it.
 	return Principal::tenant(std::move(s));
-      }
-    }
-
-    if (a->resource == "root") {
-      return Principal::tenant(std::move(a->account));
-    }
-
-    static const char rx_str[] = "([^/]*)/(.*)";
-    static const regex rx(rx_str, sizeof(rx_str) - 1,
-			  ECMAScript | optimize);
-    smatch match;
-    if (regex_match(a->resource, match, rx)) {
-      if (match.size() != 3) {
-	return boost::none;
-      }
-
-      if (match[1] == "user") {
-	return Principal::user(std::move(a->account),
-			       match[2]);
-      }
-
-      if (match[1] == "role") {
-	return Principal::role(std::move(a->account),
-			       match[2]);
       }
     }
   }
@@ -853,9 +829,10 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
     auto& pri = pp->s[pp->s.size() - 2].w->id == TokenID::Principal ?
       t->princ : t->noprinc;
 
-    auto o = parse_principal(pp->cct, w->id, string(s, l));
-    if (o)
+
+    if (auto o = parse_principal(pp->cct, w->id, string(s, l))) {
       pri.emplace(std::move(*o));
+    }
 
     // Failure
 
