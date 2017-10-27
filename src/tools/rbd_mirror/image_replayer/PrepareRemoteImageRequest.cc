@@ -129,20 +129,18 @@ void PrepareRemoteImageRequest<I>::handle_get_client(int r) {
 
   if (r == -ENOENT) {
     dout(10) << "client not registered" << dendl;
+    register_client();
   } else if (r < 0) {
     derr << "failed to retrieve client: " << cpp_strerror(r) << dendl;
     finish(r);
-    return;
-  }
-
-  *m_client_state = m_client.state;
-  if (decode_client_meta()) {
+  } else if (!decode_client_meta()) {
+    // require operator intervention since the data is corrupt
+    finish(-EBADMSG);
+  } else {
     // skip registration if it already exists
+    *m_client_state = m_client.state;
     finish(0);
-    return;
   }
-
-  register_client();
 }
 
 template <typename I>
