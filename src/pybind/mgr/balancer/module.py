@@ -377,11 +377,13 @@ class Module(MgrModule):
     def calc_eval(self, ms):
         pe = Eval(ms)
         pool_rule = {}
+        pool_info = {}
         for p in ms.osdmap_dump.get('pools',[]):
             pe.pool_name[p['pool']] = p['pool_name']
             pe.pool_id[p['pool_name']] = p['pool']
             pool_rule[p['pool_name']] = p['crush_rule']
             pe.pool_roots[p['pool_name']] = []
+            pool_info[p['pool_name']] = p
         pools = pe.pool_id.keys()
         if len(pools) == 0:
             return pe
@@ -433,9 +435,7 @@ class Module(MgrModule):
         self.log.debug('target_by_root %s' % pe.target_by_root)
 
         # pool and root actual
-        for pool in pools:
-            pi = [p for p in ms.osdmap_dump.get('pools',[])
-                  if p['pool_name'] == pool][0]
+        for pool, pi in pool_info.iteritems():
             poolid = pi['pool']
             pm = ms.pg_up_by_poolid[poolid]
             pgs = 0
