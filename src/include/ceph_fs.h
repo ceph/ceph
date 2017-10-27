@@ -278,8 +278,8 @@ extern const char *ceph_mds_state_name(int s);
  */
 #define CEPH_LOCK_DVERSION    1
 #define CEPH_LOCK_DN          2
-#define CEPH_LOCK_ISNAP       16
-#define CEPH_LOCK_IVERSION    32    /* mds internal */
+#define CEPH_LOCK_IVERSION    16    /* mds internal */
+#define CEPH_LOCK_ISNAP       32
 #define CEPH_LOCK_IFILE       64
 #define CEPH_LOCK_IAUTH       128
 #define CEPH_LOCK_ILINK       256
