@@ -2287,6 +2287,12 @@ protected:
       boost::statechart::result react(const UnfoundBackfill& evt) {
 	return discard_event();
       }
+      boost::statechart::result react(const RemoteBackfillPreempted& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteRecoveryPreempted& evt) {
+	return discard_event();
+      }
     };
 
     struct RepRecovering : boost::statechart::state< RepRecovering, ReplicaActive >, NamedState {
