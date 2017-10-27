@@ -5,7 +5,7 @@ from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import system, disk
 from ceph_volume import conf, decorators, terminal
-from . import api
+from ceph_volume.api import lvm as api
 from .common import prepare_parser
 
 
