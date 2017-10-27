@@ -117,8 +117,6 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   assert(fsmap_bl.length() > 0);
   dout(10) << __func__ << " got " << version << dendl;
   fsmap.decode(fsmap_bl);
-  auto &osdmap = mon->osdmon()->osdmap;
-  fsmap.sanitize([&osdmap](int64_t pool){return osdmap.have_pg_pool(pool);});
 
   // new map
   dout(4) << "new map" << dendl;
@@ -139,6 +137,11 @@ void MDSMonitor::create_pending()
 {
   pending_fsmap = fsmap;
   pending_fsmap.epoch++;
+
+  if (mon->osdmon()->is_readable()) {
+    auto &osdmap = mon->osdmon()->osdmap;
+    pending_fsmap.sanitize([&osdmap](int64_t pool){return osdmap.have_pg_pool(pool);});
+  }
 
   dout(10) << "create_pending e" << pending_fsmap.epoch << dendl;
 }
