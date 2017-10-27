@@ -23,10 +23,8 @@ failures within it are unlikely to make non-inlined data inaccessible
 Inline data has always been off by default and requires setting
 the "inline_data" flag.
 
-
-
 Mantle: Programmable Metadata Load Balancer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-------------------------------------------
 
 Mantle is a programmable metadata balancer built into the MDS. The idea is to
 protect the mechanisms for balancing load (migration, replication,
