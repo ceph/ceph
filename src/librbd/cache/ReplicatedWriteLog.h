@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
 
 //#if defined(HAVE_PMEM)
-//#include <libpmem.h>
 #include <libpmemobj.h>
 //#endif
 #include "common/RWLock.h"
@@ -272,7 +271,6 @@ struct C_WriteRequest;
 template <typename ImageCtxT = librbd::ImageCtx>
 class ReplicatedWriteLog : public ImageCache {
 public:
-  //using typename FileImageCache<ImageCtxT>::Extents;
   ReplicatedWriteLog(ImageCtx &image_ctx);
   ~ReplicatedWriteLog();
   ReplicatedWriteLog(const ReplicatedWriteLog&) = delete;
@@ -301,7 +299,6 @@ public:
   void invalidate(Context *on_finish) override;
   void flush(Context *on_finish) override;
 
-  //typedef std::function<void(BlockGuardCell*, )> ReleaseBlock;
   void detain_guarded_request(GuardedRequest &&req);
   void release_guarded_request(BlockGuardCell *cell);
 private:
@@ -324,12 +321,8 @@ private:
 
   ImageWriteback<ImageCtxT> m_image_writeback;
   FileImageCache<ImageCtxT> m_image_cache;
-  //BlockGuard m_persist_pending_guard;
-  BlockGuard m_block_guard;
   WriteLogGuard m_write_log_guard;
   
-  file::Policy *m_policy = nullptr;
-
   /* When m_first_free_entry == m_last_free_entry, the log is empty */
   uint64_t m_first_free_entry;  /* Entries from here to m_first_valid_entry-1 are free */
   uint64_t m_first_valid_entry; /* Entries from here to m_first_free_entry-1 are valid */
@@ -352,9 +345,6 @@ private:
   bool m_persist_on_flush; /* If false, persist each write before completion */
   bool m_flush_seen;
   
-  ReleaseBlock m_release_block;
-  AppendDetainedBlock m_detain_block;
-
   util::AsyncOpTracker m_async_op_tracker;
 
   mutable Mutex m_lock;
@@ -370,12 +360,6 @@ private:
   WriteLogOperations m_ops_to_flush; /* Write ops neding flush in local log */
 
   WriteLogOperations m_ops_to_append; /* Write ops needing event append in local log */
-  
-  void map_blocks(IOType io_type, Extents &&image_extents,
-                  BlockGuard::C_BlockRequest *block_request);
-  void map_block(bool detain_block, BlockGuard::BlockIO &&block_io);
-  void release_block(uint64_t block);
-  void append_detain_block(BlockGuard::BlockIO &block_io);
 
   void wake_up();
   void process_work();
