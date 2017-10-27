@@ -981,15 +981,6 @@ OPTION(bluestore_bluefs_balance_interval, OPT_FLOAT) // how often (sec) to balan
 // get the serial number of Intel(R) Fultondale NVMe controllers.
 // Example:
 // bluestore_block_path = spdk:55cd2e404bd73932
-// If you want to run multiple SPDK instances per node, you must specify the
-// amount of dpdk memory size in MB each instance will use, to make sure each
-// instance uses its own dpdk memory
-OPTION(bluestore_spdk_mem, OPT_U32)
-// A hexadecimal bit mask of the cores to run on. Note the core numbering can change between platforms and should be determined beforehand.
-OPTION(bluestore_spdk_coremask, OPT_STR)
-// Specify the maximal I/Os to be batched completed while checking queue pair completions.
-// Default value 0 means that let SPDK nvme library determine the value.
-OPTION(bluestore_spdk_max_io_completion, OPT_U32)
 OPTION(bluestore_block_path, OPT_STR)
 OPTION(bluestore_block_size, OPT_U64)  // 10gb for testing
 OPTION(bluestore_block_create, OPT_BOOL)

@@ -358,6 +358,8 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
 
   int r = 0;
   uint64_t lba_off, lba_count;
+  uint32_t max_io_completion = (uint32_t)g_conf->get_val<uint64_t>("bluestore_spdk_max_io_completion");
+  uint64_t io_sleep_in_us = g_conf->get_val<uint64_t>("bluestore_spdk_io_sleep");
 
   ceph::coarse_real_clock::time_point cur, start
     = ceph::coarse_real_clock::now();
@@ -365,7 +367,12 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
  again:
     dout(40) << __func__ << " polling" << dendl;
     if (current_queue_depth) {
-      spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion);
+      r = spdk_nvme_qpair_process_completions(qpair, max_io_completion);
+      if (r < 0) {
+        ceph_abort();
+      } else if (r == 0) {
+        usleep(io_sleep_in_us);
+      }
     }
 
     for (; t; t = t->next) {
@@ -577,8 +584,8 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   unsigned long long core_value;
   uint32_t core_num = 0;
   int m_core_arg = -1;
-  uint32_t mem_size_arg = g_conf->bluestore_spdk_mem;
-  char *coremask_arg = (char *)g_conf->bluestore_spdk_coremask.c_str();
+  uint32_t mem_size_arg = (uint32_t)g_conf->get_val<uint64_t>("bluestore_spdk_mem");
+  char *coremask_arg = (char *)(g_conf->get_val<std::string>("bluestore_spdk_coremask")).c_str();
 
   if (sn_tag.empty()) {
     r = -ENOENT;
@@ -626,6 +633,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
         opts.master_core = m_core_arg;
         opts.mem_size = mem_size_arg;
         spdk_env_init(&opts);
+        spdk_unaffinitize_thread();
 
         spdk_nvme_retry_count = g_ceph_context->_conf->bdev_nvme_retry_count;
         if (spdk_nvme_retry_count < 0)
