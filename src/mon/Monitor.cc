@@ -3104,13 +3104,13 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   if (prefix == "compact" || prefix == "mon compact") {
     dout(1) << "triggering manual compaction" << dendl;
-    utime_t start = ceph_clock_now();
+    auto start = ceph::coarse_mono_clock::now();
     store->compact();
-    utime_t end = ceph_clock_now();
-    end -= start;
-    dout(1) << "finished manual compaction in " << end << " seconds" << dendl;
+    auto end = ceph::coarse_mono_clock::now();
+    double duration = std::chrono::duration<double>(end-start).count();
+    dout(1) << "finished manual compaction in " << duration << " seconds" << dendl;
     ostringstream oss;
-    oss << "compacted " << g_conf->get_val<std::string>("mon_keyvaluedb") << " in " << end << " seconds";
+    oss << "compacted " << g_conf->get_val<std::string>("mon_keyvaluedb") << " in " << duration << " seconds";
     rs = oss.str();
     r = 0;
   }
