@@ -58,18 +58,19 @@ def prepare_bluestore(block, wal, db, secrets, id_=None, fsid=None):
     osd_id = id_ or prepare_utils.create_id(fsid, json_secrets)
     # create the directory
     prepare_utils.create_osd_path(osd_id, tmpfs=True)
-    # symlink the block, wal, and db
+    # symlink the block
     prepare_utils.link_block(block, osd_id)
-    if wal:
-        prepare_utils.link_wal(wal, osd_id)
-    if db:
-        prepare_utils.link_db(db, osd_id)
     # get the latest monmap
     prepare_utils.get_monmap(osd_id)
     # write the OSD keyring if it doesn't exist already
     prepare_utils.write_keyring(osd_id, cephx_secret)
     # prepare the osd filesystem
-    prepare_utils.osd_mkfs_bluestore(osd_id, fsid, keyring=cephx_secret)
+    prepare_utils.osd_mkfs_bluestore(
+        osd_id, fsid,
+        keyring=cephx_secret,
+        wal=wal,
+        db=db
+    )
 
 
 class Prepare(object):
@@ -147,12 +148,14 @@ class Prepare(object):
                 'ceph.osd_fsid': osd_fsid,
                 'ceph.osd_id': osd_id,
                 'ceph.cluster_fsid': cluster_fsid,
+                'ceph.cluster_name': conf.cluster,
                 'ceph.data_device': data_lv.lv_path,
                 'ceph.data_uuid': data_lv.lv_uuid,
             }
 
             journal_device, journal_uuid, tags = self.setup_device('journal', args.journal, tags)
 
+            tags['ceph.type'] = 'data'
             data_lv.set_tags(tags)
 
             prepare_filestore(
@@ -189,6 +192,7 @@ class Prepare(object):
                 'ceph.osd_fsid': osd_fsid,
                 'ceph.osd_id': osd_id,
                 'ceph.cluster_fsid': cluster_fsid,
+                'ceph.cluster_name': conf.cluster,
                 'ceph.block_device': block_lv.lv_path,
                 'ceph.block_uuid': block_lv.lv_uuid,
             }
@@ -196,6 +200,7 @@ class Prepare(object):
             wal_device, wal_uuid, tags = self.setup_device('wal', args.block_wal, tags)
             db_device, db_uuid, tags = self.setup_device('db', args.block_db, tags)
 
+            tags['ceph.type'] = 'block'
             block_lv.set_tags(tags)
 
             prepare_bluestore(
@@ -253,4 +258,8 @@ class Prepare(object):
             print(sub_command_help)
             return
         args = parser.parse_args(self.argv)
+        # Default to bluestore here since defaulting it in add_argument may
+        # cause both to be True
+        if args.bluestore is None and args.filestore is None:
+            args.bluestore = True
         self.prepare(args)
