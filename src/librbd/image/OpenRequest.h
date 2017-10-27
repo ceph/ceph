@@ -55,14 +55,11 @@ private:
    *            V2_GET_CREATE_TIMESTAMP             |
    *                |                               |
    *                v                               |
-   *            V2_GET_DATA_POOL                    |
-   *                |                               |
-   *                v                               |
-   *      /---> V2_APPLY_METADATA -------------> REGISTER_WATCH (skip if
-   *      |         |                               |            read-only)
-   *      \---------/                               v
-   *                                             REFRESH
+   *            V2_GET_DATA_POOL --------------> REFRESH
    *                                                |
+   *                                                v
+   *                                             REGISTER_WATCH (skip if
+   *                                                |            read-only)
    *                                                v
    *                                             SET_SNAP (skip if no snap)
    *                                                |
@@ -83,9 +80,6 @@ private:
 
   bufferlist m_out_bl;
   int m_error_result;
-
-  std::string m_last_metadata_key;
-  std::map<std::string, bufferlist> m_metadata;
 
   void send_v1_detect_header();
   Context *handle_v1_detect_header(int *result);
@@ -114,14 +108,11 @@ private:
   void send_v2_get_data_pool();
   Context *handle_v2_get_data_pool(int *result);
 
-  void send_v2_apply_metadata();
-  Context *handle_v2_apply_metadata(int *result);
-
-  void send_register_watch();
-  Context *handle_register_watch(int *result);
-
   void send_refresh();
   Context *handle_refresh(int *result);
+
+  Context *send_register_watch(int *result);
+  Context *handle_register_watch(int *result);
 
   Context *send_set_snap(int *result);
   Context *handle_set_snap(int *result);
