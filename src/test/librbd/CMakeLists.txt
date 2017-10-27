@@ -107,7 +107,7 @@ target_link_libraries(ceph_test_librbd
   journal
   cls_journal_client
   cls_rbd_client
-  rados_a
+  librados
   ${UNITTEST_LIBS}
   radostest)
 target_compile_definitions(ceph_test_librbd PUBLIC "-DTEST_LIBRBD_INTERNALS")
