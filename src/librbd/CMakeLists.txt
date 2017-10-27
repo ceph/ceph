@@ -110,6 +110,8 @@ add_library(rbd_internal STATIC
 if(WITH_LTTNG)
   add_dependencies(rbd_internal librbd-tp)
 endif()
+target_link_libraries(rbd_internal PRIVATE
+  osdc)
 
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)
@@ -119,7 +121,6 @@ target_link_libraries(librbd PRIVATE
   rbd_types
   journal
   librados 
-  osdc
   cls_rbd_client 
   cls_lock_client 
   cls_journal_client 
