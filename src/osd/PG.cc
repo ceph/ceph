@@ -6548,11 +6548,11 @@ void PG::RecoveryState::WaitRemoteBackfillReserved::retry()
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
   // Send CANCEL to all previously acquired reservations
-  set<pg_shard_t>::const_iterator it, begin, end, next;
+  set<pg_shard_t>::const_iterator it, begin, end;
   begin = context< Active >().remote_shards_to_reserve_backfill.begin();
   end = context< Active >().remote_shards_to_reserve_backfill.end();
   assert(begin != end);
-  for (next = it = begin, ++next ; next != backfill_osd_it; ++it, ++next) {
+  for (it = begin; it != backfill_osd_it; ++it) {
     //The primary never backfills itself
     assert(*it != pg->pg_whoami);
     ConnectionRef con = pg->osd->get_con_osd_cluster(
