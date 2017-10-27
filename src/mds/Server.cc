@@ -2051,6 +2051,7 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
       SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
 					       m->get_object_info());
       mdr->more()->slaves.insert(from);
+      lock->decode_locked_state(m->get_lock_data());
       dout(10) << "got remote xlock on " << *lock << " on " << *lock->get_parent() << dendl;
       mdr->xlocks.insert(lock);
       mdr->locks.insert(lock);
@@ -2164,6 +2165,8 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
 	MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, mdr->attempt, replycode);
 	r->set_lock_type(lock->get_type());
 	lock->get_parent()->set_object_info(r->get_object_info());
+	if (replycode == MMDSSlaveRequest::OP_XLOCKACK)
+	  lock->encode_locked_state(r->get_lock_data());
 	mds->send_message(r, mdr->slave_request->get_connection());
       }
 
@@ -6892,7 +6895,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 
   // we need to update srci's ctime.  xlock its least contended lock to do that...
   xlocks.insert(&srci->linklock);
-  if (srcdnl->is_primary() && srci->is_dir())
+  if (srcdnl->is_primary())
     xlocks.insert(&srci->snaplock);
   else
     rdlocks.insert(&srci->snaplock);
@@ -6900,9 +6903,10 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   if (oldin) {
     // xlock oldin (for nlink--)
     xlocks.insert(&oldin->linklock);
-    if (destdnl->is_primary() && oldin->is_dir()) {
-      rdlocks.insert(&oldin->filelock);   // to verify it's empty
+    if (destdnl->is_primary()) {
       xlocks.insert(&oldin->snaplock);
+      if (oldin->is_dir())
+	rdlocks.insert(&oldin->filelock);   // to verify it's empty
     } else
       rdlocks.insert(&oldin->snaplock);
   }
@@ -6986,7 +6990,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
       mdr->more()->desti_srnode = new_srnode;
     }
   }
-  if (srcdn->is_auth() && srcdnl->is_primary() && !mdr->more()->srci_srnode) {
+  if (srcdnl->is_primary() && !mdr->more()->srci_srnode) {
     SnapRealm *dest_realm = destdir->inode->find_snaprealm();
     SnapRealm *src_realm = srci->find_snaprealm();
     snapid_t follows = src_realm->get_newest_seq();
@@ -7836,8 +7840,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
       //  - avoid conflicting lock state changes
       //  - avoid concurrent updates to the inode
       //     (this could also be accomplished with the versionlock)
-      int allowance = 2; // 1 for the mdr auth_pin, 1 for the link lock
-      allowance += srcdnl->get_inode()->is_dir(); // for the snap lock
+      int allowance = 3; // 1 for the mdr auth_pin, 1 for the link lock, 1 for the snap lock
       dout(10) << " freezing srci " << *srcdnl->get_inode() << " with allowance " << allowance << dendl;
       bool frozen_inode = srcdnl->get_inode()->freeze_inode(allowance);
 
@@ -7899,25 +7902,11 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
       break;
     }
 
-    if (srcdnl->is_primary() && !mdr->slave_request->srci_snapbl.length()) {
-      SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
-      SnapRealm *src_realm = srci->find_snaprealm();
-      snapid_t follows = src_realm->get_newest_seq();
-      if (src_realm != dest_realm &&
-	  (srci->snaprealm || follows + 1 > srci->get_oldest_snap())) {
-	sr_t *new_srnode = srci->prepare_new_srnode(follows);
-	srci->record_snaprealm_past_parent(new_srnode, dest_realm);
-	encode(*new_srnode, mdr->slave_request->srci_snapbl);
-	delete new_srnode;
-      }
-    }
-
     if (reply_witness) {
       assert(!srcdnrep.empty());
       MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 						     MMDSSlaveRequest::OP_RENAMEPREPACK);
       reply->witnesses.swap(srcdnrep);
-      reply->srci_snapbl.swap(mdr->slave_request->srci_snapbl);
       mds->send_message_mds(reply, mdr->slave_to_mds);
       mdr->slave_request->put();
       mdr->slave_request = 0;
@@ -8068,9 +8057,6 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
   _rename_apply(mdr, srcdn, destdn, straydn);   
 
   CDentry::linkage_t *destdnl = destdn->get_linkage();
-
-  if (mdr->more()->is_inode_exporter)
-    reply->srci_snapbl.swap(mdr->slave_request->srci_snapbl);
 
   // bump popularity
   mds->balancer->hit_dir(mdr->get_mds_stamp(), srcdn->get_dir(), META_POP_IWR);
@@ -8666,13 +8652,6 @@ void Server::handle_slave_rename_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *a
     dout(10) << " got srci import" << dendl;
     mdr->more()->inode_import.claim(ack->inode_export);
     mdr->more()->inode_import_v = ack->inode_export_v;
-  }
-
-  if (ack->srci_snapbl.length() && !mdr->more()->srci_srnode) {
-    dout(10) << " got srci snapbl" << dendl;
-    mdr->more()->srci_srnode = new sr_t();
-    bufferlist::iterator p = ack->srci_snapbl.begin();
-    decode(*mdr->more()->srci_srnode, p);
   }
 
   // remove from waiting list

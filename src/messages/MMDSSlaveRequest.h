@@ -117,7 +117,6 @@ class MMDSSlaveRequest : public Message {
   set<mds_rank_t> witnesses;
   bufferlist inode_export;
   version_t inode_export_v;
-  bufferlist srci_replica;
   mds_rank_t srcdn_auth;
   utime_t op_stamp;
 
@@ -150,6 +149,7 @@ public:
   void mark_interrupted() { flags |= FLAG_INTERRUPTED; }
 
   void set_lock_type(int t) { lock_type = t; }
+  bufferlist& get_lock_data() { return inode_export; }
 
 
   // ----
@@ -178,7 +178,6 @@ public:
     encode(inode_export, payload);
     encode(inode_export_v, payload);
     encode(srcdn_auth, payload);
-    encode(srci_replica, payload);
     encode(straybl, payload);
     encode(srci_snapbl, payload);
     encode(desti_snapbl, payload);
@@ -199,7 +198,6 @@ public:
     decode(inode_export, p);
     decode(inode_export_v, p);
     decode(srcdn_auth, p);
-    decode(srci_replica, p);
     decode(straybl, p);
     decode(srci_snapbl, p);
     decode(desti_snapbl, p);
