@@ -9,6 +9,7 @@
 #include <boost/optional.hpp>
 
 #include "auth/Crypto.h"
+#include "compressor/Compressor.h"
 
 #include "common/armor.h"
 #include "common/ceph_json.h"
@@ -4250,6 +4251,13 @@ int main(int argc, const char **argv)
           cerr << "ERROR: --placement-id not specified" << std::endl;
           return EINVAL;
         }
+        // validate compression type
+        if (compression_type && *compression_type != "random"
+            && !Compressor::get_comp_alg_type(*compression_type)) {
+          std::cerr << "Unrecognized compression type" << std::endl;
+          return EINVAL;
+        }
+
 	RGWZoneParams zone(zone_id, zone_name);
 	int ret = zone.init(g_ceph_context, store);
         if (ret < 0) {
