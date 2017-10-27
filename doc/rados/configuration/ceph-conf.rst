@@ -554,6 +554,43 @@ ________
 Optional: upper and lower (inclusive) bounds on valid settings.
 
 
+Finding differences between configurations
+==========================================
+
+You may need to check what settings in your configuration are different from
+defaults, or what setting values are different from on-disk configuration
+due to manual changes at runtime. You can use "config diff" commands for that.
+There are 4 different incarnations of that command, computing differences
+between different objects.
+
+::
+
+	ceph daemon {daemon-type}.{id} config diff | less
+
+Shows the differences between current, in-memory configuration and Ceph defaults.
+
+::
+
+	ceph daemon {daemon-type}.{id} config diff get "{option}" | less
+
+Shows the difference between current, in-memory configuration and Ceph defaults
+for specified {option}.
+
+::
+
+	ceph daemon {daemon-type}.{id} config diff local | less
+
+Shows the difference between current, in-memory configuration and configuration
+file used upon initialization.
+
+::
+
+	ceph daemon {daemon-type}.{id} config diff file "{file}" | less
+
+Shows the difference between current, in-memory configuration and specified
+configuration file. Note that {file} needs to be on local (for that daemon)
+disk.
+
 
 
 Running Multiple Clusters
