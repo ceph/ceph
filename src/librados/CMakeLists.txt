@@ -4,12 +4,6 @@ add_library(librados_objs OBJECT
   RadosClient.cc)
 add_library(librados_api_obj OBJECT
   librados.cc)
-add_library(rados_a STATIC
-  $<TARGET_OBJECTS:librados_api_obj>
-  $<TARGET_OBJECTS:librados_objs>
-  $<TARGET_OBJECTS:common_buffer_obj>)
-target_link_libraries(rados_a osdc ceph-common cls_lock_client
-    ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 if(WITH_LTTNG)
   add_dependencies(librados_api_obj librados-tp)
 endif()
@@ -31,7 +25,11 @@ if(ENABLE_SHARED)
       LINK_FLAGS " -Wl,--exclude-libs,ALL")
   endif()
 else(ENABLE_SHARED)
-  add_library(librados ALIAS rados_a)
+  add_library(librados STATIC
+    $<TARGET_OBJECTS:librados_api_obj>
+    $<TARGET_OBJECTS:librados_objs>)
+  target_link_libraries(librados osdc ceph-common cls_lock_client
+    ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(ENABLE_SHARED)
 install(TARGETS librados DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
