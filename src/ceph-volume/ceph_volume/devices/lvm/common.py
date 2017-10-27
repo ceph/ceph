@@ -32,12 +32,12 @@ def common_parser(prog, description):
     )
     parser.add_argument(
         '--bluestore',
-        action='store_true', default=True,
+        action='store_true',
         help='Use the bluestore objectstore',
     )
     parser.add_argument(
         '--filestore',
-        action='store_true', default=False,
+        action='store_true',
         help='Use the filestore objectstore',
     )
     parser.add_argument(
