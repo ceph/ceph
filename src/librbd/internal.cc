@@ -2247,9 +2247,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
                    << dendl;
     int i = 0;
     Mutex::Locker l(ictx->completed_reqs_lock);
+    numcomp = std::min(numcomp, (int)ictx->completed_reqs.size());
     while (i < numcomp) {
-      if (ictx->completed_reqs.empty())
-        break;
       comps[i++] = ictx->completed_reqs.front();
       ictx->completed_reqs.pop_front();
     }
