@@ -46,6 +46,9 @@ snapshots. See the :doc:`/dev/cephfs-snapshots` page for more information.
 
 Snapshots are known not to work with multi-MDS filesystems.
 
+For somewhat obscure implementation reasons, the kernel client only supports up
+to 400 snapshots (http://tracker.ceph.com/issues/21420).
+
 Snapshotting was blocked off with the "allow_new_snaps" flag prior to Firefly.
 
 Multiple filesystems within a Ceph cluster
