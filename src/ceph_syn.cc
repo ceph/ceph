@@ -57,8 +57,8 @@ int main(int argc, const char **argv, char *envp[])
 
   list<Client*> clients;
   list<SyntheticClient*> synclients;
-  Messenger* messengers[num_client];
-  MonClient* mclients[num_client];
+  vector<Messenger*> messengers{static_cast<unsigned>(num_client), nullptr};
+  vector<MonClient*> mclients{static_cast<unsigned>(num_client), nullptr};
 
   cout << "ceph-syn: starting " << num_client << " syn client(s)" << std::endl;
   for (int i=0; i<num_client; i++) {
