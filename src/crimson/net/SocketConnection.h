@@ -56,6 +56,12 @@ class SocketConnection : public Connection {
     bufferlist data;
   } m;
 
+  /// satisfied when a CEPH_MSGR_TAG_MSG is read, indicating that a message
+  /// header will follow
+  seastar::promise<> on_message;
+
+  void read_tags_until_next_message();
+
   /// becomes available when handshake completes, and when all previous messages
   /// have been sent to the output stream. send() chains new messages as
   /// continuations to this future to act as a queue
