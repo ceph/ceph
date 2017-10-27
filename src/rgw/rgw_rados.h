@@ -2809,11 +2809,12 @@ public:
         const string *user_data;
         rgw_zone_set *zones_trace;
         bool modify_tail;
+        bool completeMultipart;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
                  if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr), zones_trace(nullptr),
-                 modify_tail(false) {}
+                 modify_tail(false),  completeMultipart(false) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
