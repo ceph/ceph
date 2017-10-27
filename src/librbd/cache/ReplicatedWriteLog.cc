@@ -1045,7 +1045,7 @@ void ReplicatedWriteLog<I>::schedule_append(WriteLogOperations &ops)
   {
     Mutex::Locker locker(m_lock);
 
-    m_ops_to_append.splice(m_ops_to_flush.end(), ops);
+    m_ops_to_append.splice(m_ops_to_append.end(), ops);
   }
 
   /* TODO: push this to a finisher */
@@ -1278,6 +1278,8 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
       }
     }
   }
+  /* All extent ops subs created */
+  set->m_extent_ops->activate();
   
   /* Write data */
   for (auto &operation : set->operations) {
