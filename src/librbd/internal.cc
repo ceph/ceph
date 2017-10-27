@@ -2256,8 +2256,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (numcomp <= 0)
       return -EINVAL;
     CephContext *cct = ictx->cct;
-    ldout(cct, 20) << __func__ << " " << ictx << " numcomp = " << numcomp
-                   << dendl;
+    //ldout(cct, 20) << __func__ << " " << ictx << " numcomp = " << numcomp
+    //               << dendl;
     int i = 0;
     Mutex::Locker l(ictx->completed_reqs_lock);
     while (i < numcomp) {
