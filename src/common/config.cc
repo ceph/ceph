@@ -1352,17 +1352,15 @@ void md_config_t::diff_helper(
   char other_buf[4096];
   set<string> checked_opts;
 
-  for (const auto &i : schema) {
-    const Option &opt = i.second;
-    if (!setting.empty()) {
-      if (setting == opt.name) {
-	checked_opts.insert(opt.name);
-	break;
-      } else {
-        continue;
-      }
+  if (setting.empty()) {
+    for (const auto &i : schema) {
+      checked_opts.insert(i.second.name);
     }
-    checked_opts.insert(opt.name);
+  } else {
+    const auto i = schema.find(setting);
+    if (i != schema.end()) {
+      checked_opts.insert(setting);
+    }
   }
 
   for (size_t o = 0; o < subsys.get_num(); o++) {
