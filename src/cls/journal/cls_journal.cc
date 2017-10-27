@@ -125,7 +125,7 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
 
   int r;
   uint64_t minimum_tag_tid = std::numeric_limits<uint64_t>::max();
-  std::string last_read = HEADER_KEY_CLIENT_PREFIX;
+  std::string last_read = "";
   do {
     std::map<std::string, bufferlist> vals;
     r = cls_cxx_map_get_vals(hctx, last_read, HEADER_KEY_CLIENT_PREFIX,
@@ -150,6 +150,14 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
         CLS_ERR("error decoding registered client: %s",
                 val.first.c_str());
         return -EIO;
+      }
+
+      if (client.state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+        // don't allow a disconnected client to prevent pruning
+        continue;
+      } else if (client.commit_position.object_positions.empty()) {
+        // cannot prune if one or more clients has an empty commit history
+        return 0;
       }
 
       for (auto object_position : client.commit_position.object_positions) {
