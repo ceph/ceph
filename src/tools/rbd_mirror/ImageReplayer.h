@@ -425,6 +425,8 @@ private:
 
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
+
+  void on_name_changed();
 };
 
 } // namespace mirror
