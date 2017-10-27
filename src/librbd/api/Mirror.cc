@@ -60,7 +60,7 @@ int list_mirror_images(librados::IoCtx& io_ctx,
     std::map<std::string, std::string> mirror_images;
     r =  cls_client::mirror_image_list(&io_ctx, last_read, max_read,
                                        &mirror_images);
-    if (r < 0) {
+    if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error listing mirrored image directory: "
                  << cpp_strerror(r) << dendl;
       return r;
@@ -810,6 +810,10 @@ int Mirror<I>::image_status_list(librados::IoCtx& io_ctx,
   for (auto it = images_.begin(); it != images_.end(); ++it) {
     auto &image_id = it->first;
     auto &info = it->second;
+    if (info.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLED) {
+      continue;
+    }
+
     auto &image_name = id_to_name[image_id];
     if (image_name.empty()) {
       lderr(cct) << "failed to find image name for image " << image_id << ", "
@@ -840,7 +844,7 @@ int Mirror<I>::image_status_summary(librados::IoCtx& io_ctx,
 
   std::map<cls::rbd::MirrorImageStatusState, int> states_;
   int r = cls_client::mirror_image_status_get_summary(&io_ctx, &states_);
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to get mirror status summary: "
                << cpp_strerror(r) << dendl;
     return r;
