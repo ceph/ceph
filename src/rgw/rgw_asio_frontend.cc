@@ -228,7 +228,10 @@ void AsioFrontend::stop()
   going_down = true;
 
   boost::system::error_code ec;
-  acceptor.close(ec); // unblock the run() threads
+  acceptor.close(ec);
+
+  // unblock the run() threads
+  service.stop();
 }
 
 void AsioFrontend::join()
@@ -247,9 +250,8 @@ void AsioFrontend::pause()
 {
   ldout(ctx(), 4) << "frontend pausing threads..." << dendl;
   pauser.pause(threads.size(), [=] {
-    // stop accepting but leave the port open
-    boost::system::error_code ec;
-    acceptor.cancel(ec);
+    // unblock the run() threads
+    service.stop();
   });
   ldout(ctx(), 4) << "frontend paused" << dendl;
 }
@@ -261,10 +263,6 @@ void AsioFrontend::unpause(RGWRados* const store,
   env.auth_registry = std::move(auth_registry);
   ldout(ctx(), 4) << "frontend unpaused" << dendl;
   service.reset();
-  acceptor.async_accept(peer_socket,
-                        [this] (boost::system::error_code ec) {
-                          return accept(ec);
-                        });
   pauser.unpause();
 }
 
