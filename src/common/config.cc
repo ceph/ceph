@@ -1350,35 +1350,58 @@ void md_config_t::diff_helper(
 
   char local_buf[4096];
   char other_buf[4096];
+  set<string> checked_opts;
+
   for (const auto &i : schema) {
     const Option &opt = i.second;
     if (!setting.empty()) {
-      if (setting != opt.name) {
+      if (setting == opt.name) {
+	checked_opts.insert(opt.name);
+	break;
+      } else {
         continue;
       }
     }
+    checked_opts.insert(opt.name);
+  }
+
+  for (size_t o = 0; o < subsys.get_num(); o++) {
+    std::string as_option("debug_");
+    as_option += subsys.get_name(o);
+    if (!setting.empty()) {
+      if (setting == as_option) {
+	checked_opts.insert(as_option);
+	break;
+      } else {
+	continue;
+      }
+    }
+    checked_opts.insert(as_option);
+  }
+
+  for (const auto &opt : checked_opts) {
     memset(local_buf, 0, sizeof(local_buf));
     memset(other_buf, 0, sizeof(other_buf));
 
     char *other_val = other_buf;
-    int err = other->get_val(opt.name, &other_val, sizeof(other_buf));
+    int err = other->get_val(opt, &other_val, sizeof(other_buf));
     if (err < 0) {
       if (err == -ENOENT) {
-        unknown->insert(opt.name);
+        unknown->insert(opt);
       }
       continue;
     }
 
     char *local_val = local_buf;
-    err = _get_val(opt.name, &local_val, sizeof(local_buf));
+    err = _get_val(opt, &local_val, sizeof(local_buf));
     if (err != 0)
       continue;
 
     if (strcmp(local_val, other_val))
-      diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
+      diff->insert(make_pair(opt, make_pair(local_val, other_val)));
     else if (!setting.empty()) {
-        diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
-        break;
+      diff->insert(make_pair(opt, make_pair(local_val, other_val)));
+      break;
     }
   }
 }
