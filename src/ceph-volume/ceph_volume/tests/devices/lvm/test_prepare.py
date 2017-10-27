@@ -33,8 +33,9 @@ class TestPrepare(object):
         with pytest.raises(SystemExit):
             lvm.prepare.Prepare(argv=['--help']).main()
         stdout, stderr = capsys.readouterr()
-        assert 'required arguments:' in stdout
-        assert 'A logical group name or a path' in stdout
+        assert 'Use the filestore objectstore' in stdout
+        assert 'Use the bluestore objectstore' in stdout
+        assert 'Bluestore: A physical device or logical' in stdout
 
 
 class TestGetJournalLV(object):
@@ -43,13 +44,13 @@ class TestGetJournalLV(object):
     def test_no_journal_on_invalid_path(self, monkeypatch, arg):
         monkeypatch.setattr(lvm.prepare.api, 'get_lv', lambda **kw: False)
         prepare = lvm.prepare.Prepare([])
-        assert prepare.get_journal_lv(arg) is None
+        assert prepare.get_lv(arg) is None
 
     def test_no_journal_lv_found(self, monkeypatch):
         # patch it with 0 so we know we are getting to get_lv
         monkeypatch.setattr(lvm.prepare.api, 'get_lv', lambda **kw: 0)
         prepare = lvm.prepare.Prepare([])
-        assert prepare.get_journal_lv('vg/lv') == 0
+        assert prepare.get_lv('vg/lv') == 0
 
 
 class TestActivate(object):

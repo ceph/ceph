@@ -6,6 +6,10 @@ from ceph_volume.api import lvm as api
 class Args(object):
 
     def __init__(self, **kw):
+        # default flags
+        self.bluestore = False
+        self.filestore = False
+        self.auto_detect_objectstore = None
         for k, v in kw.items():
             setattr(self, k, v)
 
@@ -21,7 +25,16 @@ class TestActivate(object):
         volumes.append(FooVolume)
         monkeypatch.setattr(api, 'Volumes', lambda: volumes)
         monkeypatch.setattr(activate, 'activate_filestore', capture)
-        args = Args(osd_id=None, osd_fsid='1234')
+        args = Args(osd_id=None, osd_fsid='1234', filestore=True)
+        activate.Activate([]).activate(args)
+        assert capture.calls[0]['args'][0] == [FooVolume]
+
+    def test_no_osd_id_matches_fsid_bluestore(self, is_root, volumes, monkeypatch, capture):
+        FooVolume = api.Volume(lv_name='foo', lv_path='/dev/vg/foo', lv_tags="ceph.osd_fsid=1234")
+        volumes.append(FooVolume)
+        monkeypatch.setattr(api, 'Volumes', lambda: volumes)
+        monkeypatch.setattr(activate, 'activate_bluestore', capture)
+        args = Args(osd_id=None, osd_fsid='1234', bluestore=True)
         activate.Activate([]).activate(args)
         assert capture.calls[0]['args'][0] == [FooVolume]
 

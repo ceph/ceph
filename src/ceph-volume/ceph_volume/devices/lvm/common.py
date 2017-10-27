@@ -15,30 +15,30 @@ def common_parser(prog, description):
     required_args = parser.add_argument_group('required arguments')
     parser.add_argument(
         '--journal',
-        help='A logical volume (vg_name/lv_name), or path to a device',
+        help='(filestore) A logical volume (vg_name/lv_name), or path to a device',
     )
     required_args.add_argument(
         '--data',
         required=True,
         type=arg_validators.LVPath(),
-        help='A logical volume (vg_name/lv_name) for OSD data',
+        help='OSD data path. Bluestore: A physical device or logical volume. Filestore: A logical volume (vg_name/lv_name)',
     )
     parser.add_argument(
         '--journal-size',
         default=5,
         metavar='GB',
         type=int,
-        help='Size (in GB) A logical group name or a path to a logical volume',
+        help='(filestore) Size (in GB) for the journal',
     )
     parser.add_argument(
         '--bluestore',
-        action='store_true', default=False,
-        help='Use the bluestore objectstore (not currently supported)',
+        action='store_true',
+        help='Use the bluestore objectstore',
     )
     parser.add_argument(
         '--filestore',
-        action='store_true', default=True,
-        help='Use the filestore objectstore (currently the only supported object store)',
+        action='store_true',
+        help='Use the filestore objectstore',
     )
     parser.add_argument(
         '--osd-id',
@@ -47,6 +47,16 @@ def common_parser(prog, description):
     parser.add_argument(
         '--osd-fsid',
         help='Reuse an existing OSD fsid',
+    )
+    parser.add_argument(
+        '--block.db',
+        dest='block_db',
+        help='(bluestore) Path to bluestore block.db logical volume or device',
+    )
+    parser.add_argument(
+        '--block.wal',
+        dest='block_wal',
+        help='(bluestore) Path to bluestore block.wal logical volume or device',
     )
     # Do not parse args, so that consumers can do something before the args get
     # parsed triggering argparse behavior
