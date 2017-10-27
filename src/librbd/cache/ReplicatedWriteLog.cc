@@ -52,6 +52,10 @@ WriteLogOperation::WriteLogOperation(WriteLogOperationSet *set, uint64_t image_o
   on_write_persist = set->m_extent_ops->new_sub();
 }
 
+/* Called when the write log operation is completed in all log replicas */
+void WriteLogOperation::complete(int result) {
+}
+
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
   for (auto &extent : image_extents) {
     if (extent.first % BLOCK_SIZE != 0 || extent.second % BLOCK_SIZE != 0) {
@@ -857,7 +861,8 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
     m_flush_seen(false),
     m_release_block(std::bind(&ReplicatedWriteLog<I>::release_block, this,
                               std::placeholders::_1)),
-    m_lock("librbd::cache::ReplicatedWriteLog::m_lock") {
+    m_lock("librbd::cache::ReplicatedWriteLog::m_lock"),
+    m_log_append_lock("librbd::cache::ReplicatedWriteLog::m_log_append_lock") {
   //CephContext *cct = m_image_ctx.cct;
   m_policy = new StupidPolicy<I>(m_image_ctx, m_block_guard);
   m_policy->set_write_mode(0);
@@ -1008,6 +1013,197 @@ struct C_WriteRequest : public C_GuardedBlockIORequest {
   }  
 };
 
+/*
+ * Performs the log event append operation for all of the scheduled
+ * events.
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::append_scheduled_ops(void)
+{
+  WriteLogOperations ops;
+  {
+    Mutex::Locker locker(m_lock);
+    std::swap(ops, m_ops_to_append);
+  }
+
+  /* Ops subsequently scheduled for flush may finish before these,
+   * which is fine. We're unconcerned with completion order until we
+   * get to the log message append step. */
+  if (ops.size()) {
+    alloc_and_append_entries(ops);
+  }
+}
+
+/*
+ * Takes custody of ops. They'll all get their log entries appended,
+ * and have their on_write_persist contexts completed once they and
+ * all prior log entries are persisted everywhere.
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::schedule_append(WriteLogOperations &ops)
+{
+  {
+    Mutex::Locker locker(m_lock);
+
+    m_ops_to_append.splice(m_ops_to_flush.end(), ops);
+  }
+
+  /* TODO: push this to a finisher */
+  append_scheduled_ops();
+}
+
+/*
+ * Performs the pme block flush on all scheduled ops, then schedules
+ * the log event append operation for all of them.
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::flush_then_append_scheduled_ops(void)
+{
+  WriteLogOperations ops;
+  {
+    Mutex::Locker locker(m_lock);
+    std::swap(ops, m_ops_to_flush);
+  }
+
+  /* Ops subsequently scheduled for flush may finish before these,
+   * which is fine. We're unconcerned with completion order until we
+   * get to the log message append step. */
+  if (ops.size()) {
+    flush_pmem_blocks(ops);
+    schedule_append(ops);
+  }
+}
+
+/*
+ * Takes custody of ops. They'll all get their pmem blocks flushed,
+ * then get their log entries appended.
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::schedule_flush_and_append(WriteLogOperations &ops)
+{
+  {
+    Mutex::Locker locker(m_lock);
+
+    m_ops_to_flush.splice(m_ops_to_flush.end(), ops);
+  }
+
+  /* TODO: push this to a finisher */
+  flush_then_append_scheduled_ops();
+}
+
+/*
+ * Flush the pmem regions for the data blocks of a set of operations
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::flush_pmem_blocks(WriteLogOperations &ops)
+{
+  for (auto &operation : ops) {
+    pmemobj_flush(m_log_pool, operation->log_entry->pmem_block, operation->log_entry->ram_entry.write_bytes);
+  }
+  /* Drain once for all */
+  pmemobj_drain(m_log_pool);
+}
+
+/*
+ * Allocate the (already resrved) write log entries for a set of operations.
+ *
+ * Locking:
+ * Acquires m_lock
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::alloc_op_log_entries(WriteLogOperations &ops)
+{
+  TOID(struct WriteLogPoolRoot) pool_root;
+  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
+  struct WriteLogPmemEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
+
+  /* Allocate the (already reserved) log entries */
+  {
+    Mutex::Locker locker(m_lock);
+
+    for (auto &operation : ops) {
+      operation->log_entry->log_entry_index = m_first_free_entry;
+      m_first_free_entry = (m_first_free_entry + 1) % m_total_log_entries;
+      operation->log_entry->pmem_entry = &pmem_log_entries[operation->log_entry->log_entry_index];
+      operation->log_entry->ram_entry.entry_valid = 1;
+    }
+  }
+}
+
+/*
+ * Write and persist the (already allocated) write log entries for a
+ * set of ops.
+ */
+template <typename I>
+int ReplicatedWriteLog<I>::append_op_log_entries(WriteLogOperations &ops)
+{
+  CephContext *cct = m_image_ctx.cct;
+  
+  /* Write log entries */
+  TX_BEGIN(m_log_pool) {
+    for (auto &operation : ops) {
+      TX_MEMCPY(operation->log_entry->pmem_entry,
+		&operation->log_entry->ram_entry,
+		sizeof(operation->log_entry->ram_entry));
+    }
+  } TX_ONCOMMIT {
+  } TX_ONABORT {
+    lderr(cct) << "failed to commit log entries (" << m_log_pool_name << ")" << dendl;
+    return(-EIO);
+  } TX_END;
+  return 0;
+}
+
+/*
+ * Complete a set of write ops with the result of append_op_entries.
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::complete_op_log_entries(WriteLogOperations &ops, int result)
+{
+  for (auto &operation : ops) {
+    operation->on_write_persist->complete(result);
+  }
+}
+
+/*
+ * Allocate the (already resrved) write log entries for a set of operations, then
+ * write and persist them all in a single transaction.
+ *
+ * Locking:
+ * Acquires m_lock, m_log_append_lock
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::alloc_and_append_entries(WriteLogOperations &ops)
+{
+  int append_result = 0;
+  {
+    /*
+     * We hold a read lock on m_log_append_lock across the sequence of
+     * assigning a log entry location to each of these write log ops
+     * and persistently writing it. A write lock is then unavailable
+     * until this group of log messages is persisted. 
+     */
+    RWLock::RLocker appender_locker(m_log_append_lock);
+    alloc_op_log_entries(ops);
+    append_result = append_op_log_entries(ops);
+  }
+  {
+    /* 
+     * These log entries are persisted, but there may be log entries
+     * positioned before them being persisted by another thread that
+     * are not yet complete. If so, that thread will still hold the
+     * read lock. 
+     * 
+     * We acquire (momentarily) a write lock on m_log_append_lock
+     * before completing these write log ops to ensure we wait for
+     * concurrent log append operations since they may appear before
+     * these entries.
+     */
+    RWLock::WLocker completer_locker(m_log_append_lock);
+  }
+  complete_op_log_entries(ops, append_result);
+}
+
 /**
  * Takes custody of write_req.
  *
@@ -1032,7 +1228,6 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 
   ldout(cct,6) << "bl=[" << write_req->bl << "]" << dendl;
   uint8_t *pmem_blocks = D_RW(D_RW(pool_root)->data_blocks);
-  struct WriteLogPmemEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
 
   ExtentsSummary<ImageCache::Extents> image_extents_summary(write_req->image_extents);
 
@@ -1101,71 +1296,8 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
     write_req->complete_user_request(0);
   }
   
-  /* Flush data */
-  for (auto &operation : set->operations) {
-    pmemobj_flush(m_log_pool, operation->log_entry->pmem_block, operation->log_entry->ram_entry.write_bytes);
-  }
-  /* Drain once for all */
-  pmemobj_drain(m_log_pool);
-  
-  /* TODO: For persist-on-flush, complete user write here */
-  /* TODO: Better yet: split the loop above at the i.copy, and push
-   * the rest to another thread. Rather than pushing as a work item,
-   * Let a single WF do all the pmemobj_flush for all the waiting ops
-   * (after sorting them in address order and merging them into fewer
-   * larger persist calls), do one pmemobj_drain, then append all
-   * their log entries on one transaction. */
-  
-  /* Write data is now (locally) persisted. It's now safe to persist
-   * the log entries that refer to them */
-
-  /* Allocate the (already reserved) log entries */
-  {
-    Mutex::Locker locker(m_lock);
-
-    for (auto &operation : set->operations) {
-      operation->log_entry->log_entry_index = m_first_free_entry;
-      m_first_free_entry = (m_first_free_entry + 1) % m_total_log_entries;
-      operation->log_entry->pmem_entry = &pmem_log_entries[operation->log_entry->log_entry_index];
-      operation->log_entry->ram_entry.entry_valid = 1;
-    }
-  }
-
-  /* Write log entries - write all in a transaction */
-  TX_BEGIN(m_log_pool) {
-    for (auto &operation : set->operations) {
-      TX_MEMCPY(operation->log_entry->pmem_entry,
-		&operation->log_entry->ram_entry,
-		sizeof(operation->log_entry->ram_entry));
-    }
-  } TX_ONCOMMIT {
-  } TX_ONABORT {
-    lderr(cct) << "failed to commit log entries (" << m_log_pool_name << ")" << dendl;
-    //write_req->on_finish->complete(-1);
-    //write_req->on_finish = NULL;
-    return;
-  } TX_FINALLY {
-  } TX_END;
-  
-  
-  /*// TODO handle fadvise flags
-    BlockGuard::C_BlockRequest *req = new C_WriteBlockRequest<I>(
-    m_image_ctx, m_image_writeback, *m_policy, *m_journal_store, *m_image_store,
-    *m_meta_store, m_release_block, m_detain_block, std::move(bl), BLOCK_SIZE, on_finish);
-    map_blocks(IO_TYPE_WRITE, std::move(image_extents), req);
-  */
-#if 0 
-  /* Pass write through */
-  if (m_image_ctx.persistent_cache_enabled) {
-    m_image_cache.aio_write(std::move(write_req->image_extents), std::move(write_req->bl),
-			    write_req->fadvise_flags, write_req->user_req);
-  } else {
-    m_image_writeback.aio_write(std::move(write_req->image_extents), std::move(write_req->bl),
-				0, write_req->user_req);
-  }
-  //write_req->on_finish = NULL;
-#endif
-  write_req->complete(0);
+  WriteLogOperations ops_copy = set->operations;
+  schedule_flush_and_append(ops_copy);
 }
 
 template <typename I>

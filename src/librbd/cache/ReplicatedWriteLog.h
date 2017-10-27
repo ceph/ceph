@@ -8,6 +8,7 @@
 //#include <libpmem.h>
 #include <libpmemobj.h>
 //#endif
+#include "common/RWLock.h"
 #include "librbd/cache/ImageCache.h"
 #include "librbd/cache/FileImageCache.h"
 #include "librbd/Utils.h"
@@ -177,6 +178,7 @@ public:
        << "bl=[" << op.bl << "]";
     return os;
   };
+  void complete(int r);
 };
 typedef std::list<WriteLogOperation*> WriteLogOperations;
 
@@ -363,6 +365,12 @@ private:
 
   Contexts m_post_work_contexts;
 
+  RWLock m_log_append_lock;
+
+  WriteLogOperations m_ops_to_flush; /* Write ops neding flush in local log */
+
+  WriteLogOperations m_ops_to_append; /* Write ops needing event append in local log */
+  
   void map_blocks(IOType io_type, Extents &&image_extents,
                   BlockGuard::C_BlockRequest *block_request);
   void map_block(bool detain_block, BlockGuard::BlockIO &&block_io);
@@ -383,6 +391,15 @@ private:
   void new_sync_point(void);
 
   void dispatch_aio_write(C_WriteRequest *write_req);
+  void append_scheduled_ops(void);
+  void schedule_append(WriteLogOperations &ops);
+  void flush_then_append_scheduled_ops(void);
+  void schedule_flush_and_append(WriteLogOperations &ops);
+  void flush_pmem_blocks(WriteLogOperations &ops);
+  void alloc_op_log_entries(WriteLogOperations &ops);
+  int append_op_log_entries(WriteLogOperations &ops);
+  void complete_op_log_entries(WriteLogOperations &ops, int r);
+  void alloc_and_append_entries(WriteLogOperations &ops);
 };
 
 } // namespace cache
