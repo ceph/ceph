@@ -6709,6 +6709,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     respond_to_request(mdr, -EROFS);
     return;
   }
+  CDir *srcdir = srcdn->get_dir();
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   CInode *srci = srcdnl->get_inode();
   dout(10) << " srci " << *srci << dendl;
@@ -6739,7 +6740,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 	respond_to_request(mdr, -ENOTDIR);
 	return;
       }
-      if (srci == oldin && !srcdn->get_dir()->inode->is_stray()) {
+      if (srci == oldin && !srcdir->inode->is_stray()) {
 	respond_to_request(mdr, 0);  // no-op.  POSIX makes no sense.
 	return;
       }
@@ -6775,7 +6776,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   }
 
   // src == dest?
-  if (srcdn->get_dir() == destdir && srcdn->get_name() == destname) {
+  if (srcdir == destdir && srcdn->get_name() == destname) {
     dout(7) << "rename src=dest, noop" << dendl;
     respond_to_request(mdr, 0);
     return;
@@ -6803,8 +6804,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     return;
   }
 
-  bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&
-		    (srcdnl->is_primary() || destdnl->is_primary()));
+  bool linkmerge = srcdnl->get_inode() == destdnl->get_inode();
   if (linkmerge)
     dout(10) << " this is a link merge" << dendl;
 
@@ -6850,18 +6850,18 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   for (int i=0; i<(int)srctrace.size(); i++) 
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
-  mds_rank_t srcdirauth = srcdn->get_dir()->authority().first;
+  mds_rank_t srcdirauth = srcdir->authority().first;
   if (srcdirauth != mds->get_nodeid()) {
     dout(10) << " will remote_wrlock srcdir scatterlocks on mds." << srcdirauth << dendl;
-    remote_wrlocks[&srcdn->get_dir()->inode->filelock] = srcdirauth;
-    remote_wrlocks[&srcdn->get_dir()->inode->nestlock] = srcdirauth;
+    remote_wrlocks[&srcdir->inode->filelock] = srcdirauth;
+    remote_wrlocks[&srcdir->inode->nestlock] = srcdirauth;
     if (srci->is_dir())
       rdlocks.insert(&srci->dirfragtreelock);
   } else {
-    wrlocks.insert(&srcdn->get_dir()->inode->filelock);
-    wrlocks.insert(&srcdn->get_dir()->inode->nestlock);
+    wrlocks.insert(&srcdir->inode->filelock);
+    wrlocks.insert(&srcdir->inode->nestlock);
   }
-  mds->locker->include_snap_rdlocks(rdlocks, srcdn->get_dir()->inode);
+  mds->locker->include_snap_rdlocks(rdlocks, srcdir->inode);
 
   // straydn?
   if (straydn) {
@@ -6916,8 +6916,11 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 				  &remote_wrlocks, auth_pin_freeze))
     return;
 
+  if (linkmerge)
+    assert(srcdir->inode->is_stray() && srcdnl->is_primary() && destdnl->is_remote());
+
   if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
-    if (!check_access(mdr, srcdn->get_dir()->get_inode(), MAY_WRITE))
+    if (!check_access(mdr, srcdir->get_inode(), MAY_WRITE))
       return;
 
     if (!check_access(mdr, destdn->get_dir()->get_inode(), MAY_WRITE))
@@ -7250,8 +7253,9 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   CInode *oldin = destdnl->get_inode();
 
   // primary+remote link merge?
-  bool linkmerge = (srci == destdnl->get_inode() &&
-		    (srcdnl->is_primary() || destdnl->is_primary()));
+  bool linkmerge = (srci == oldin);
+  if (linkmerge)
+    assert(srcdnl->is_primary() && destdnl->is_remote());
   bool silent = srcdn->get_dir()->inode->is_stray();
 
   bool force_journal_dest = false;
@@ -7459,28 +7463,18 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 
   // dest
   if (srcdnl->is_remote()) {
-    if (!linkmerge) {
-      if (destdn->is_auth() && !destdnl->is_null())
-	mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
-      else
-	destdn->first = next_dest_snap;
+    assert(!linkmerge);
+    if (destdn->is_auth() && !destdnl->is_null())
+      mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
+    else
+      destdn->first = next_dest_snap;
 
-      if (destdn->is_auth())
-        metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
-      if (srci->get_projected_parent_dn()->is_auth()) { // it's remote
-	metablob->add_dir_context(srci->get_projected_parent_dir());
-        mdcache->journal_cow_dentry(mdr.get(), metablob, srci->get_projected_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
-	metablob->add_primary_dentry(srci->get_projected_parent_dn(), srci, true);
-      }
-    } else {
-      if (destdn->is_auth() && !destdnl->is_null())
-	mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
-      else
-	// FIXME: stray reintegration, do we need to update destdn->first?
-	destdn->first = std::max(destdn->first, next_dest_snap);
-
-      if (destdn->is_auth())
-        metablob->add_primary_dentry(destdn, destdnl->get_inode(), true, true);
+    if (destdn->is_auth())
+      metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
+    if (srci->get_projected_parent_dn()->is_auth()) { // it's remote
+      metablob->add_dir_context(srci->get_projected_parent_dir());
+      mdcache->journal_cow_dentry(mdr.get(), metablob, srci->get_projected_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
+      metablob->add_primary_dentry(srci->get_projected_parent_dn(), srci, true);
     }
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
@@ -7562,8 +7556,9 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   CInode *oldin = destdnl->get_inode();
 
   // primary+remote link merge?
-  bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&
-		    (srcdnl->is_primary() || destdnl->is_primary()));
+  bool linkmerge = (srcdnl->get_inode() == oldin);
+  if (linkmerge)
+    assert(srcdnl->is_primary() || destdnl->is_remote());
 
   bool new_in_snaprealm = false;
   bool new_oldin_snaprealm = false;
@@ -7815,8 +7810,9 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   mdr->pin(srci);
 
   // stray?
-  bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&
-		    (srcdnl->is_primary() || destdnl->is_primary()));
+  bool linkmerge = srcdnl->get_inode() == destdnl->get_inode();
+  if (linkmerge)
+    assert(srcdnl->is_primary() && destdnl->is_remote());
   CDentry *straydn = mdr->straydn;
   if (destdnl->is_primary() && !linkmerge)
     assert(straydn);
