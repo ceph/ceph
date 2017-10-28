@@ -11155,7 +11155,7 @@ bool PrimaryLogPG::start_recovery_ops(
     info.last_complete = info.last_update;
   }
 
-  if (num_missing == num_unfound) {
+  if (num_unfound > 0 && num_missing == num_unfound) {
     // All of the missing objects we have are unfound.
     // Recover the replicas.
     started = recover_replicas(max, handle);
