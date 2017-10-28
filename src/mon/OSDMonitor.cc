@@ -1311,6 +1311,17 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	t->put(OSD_SNAP_PREFIX, k, v);
       }
     }
+    for (auto& i : pending_inc.new_purged_snaps) {
+      for (auto q = i.second.begin();
+	   q != i.second.end();
+	   ++q) {
+	bufferlist v;
+	string k = make_snap_purged_key_value(i.first, q.get_start(),
+					      q.get_len(), pending_inc.epoch,
+					      &v);
+	t->put(OSD_SNAP_PREFIX, k, v);
+      }
+    }
   }
 
   // health
@@ -3471,6 +3482,10 @@ void OSDMonitor::tick()
     }
   }
 
+  if (try_prune_purged_snaps()) {
+    do_propose = true;
+  }
+
   if (update_pools_status())
     do_propose = true;
 
@@ -4957,6 +4972,7 @@ string OSDMonitor::make_snap_key(int64_t pool, snapid_t snap)
   return k;
 }
 
+
 string OSDMonitor::make_snap_key_value(
   int64_t pool, snapid_t snap, snapid_t num,
   epoch_t epoch, bufferlist *v)
@@ -4967,6 +4983,130 @@ string OSDMonitor::make_snap_key_value(
   ::encode(snap + num, *v);
   ::encode(epoch, *v);
   return make_snap_key(pool, snap + num - 1);
+}
+
+string OSDMonitor::make_snap_purged_key(int64_t pool, snapid_t snap)
+{
+  char k[80];
+  snprintf(k, sizeof(k), "purged_snap_%lld_%016llx",
+	   (unsigned long long)pool, (unsigned long long)snap);
+  return k;
+}
+string OSDMonitor::make_snap_purged_key_value(
+  int64_t pool, snapid_t snap, snapid_t num,
+  epoch_t epoch, bufferlist *v)
+{
+  // encode the *last* epoch in the key so that we can use forward
+  // iteration only to search for an epoch in an interval.
+  ::encode(snap, *v);
+  ::encode(snap + num, *v);
+  ::encode(epoch, *v);
+  return make_snap_purged_key(pool, snap + num - 1);
+}
+
+int OSDMonitor::lookup_pruned_snap(int64_t pool, snapid_t snap,
+				   snapid_t *begin, snapid_t *end)
+{
+  string k = make_snap_key(pool, snap);
+  auto it = mon->store->get_iterator(OSD_SNAP_PREFIX);
+  it->lower_bound(k);
+  if (!it->valid()) {
+    return -ENOENT;
+  }
+  if (it->key().find(OSD_SNAP_PREFIX) != 0) {
+    return -ENOENT;
+  }
+  bufferlist v = it->value();
+  auto p = v.begin();
+  ::decode(*begin, p);
+  ::decode(*end, p);
+  if (snap < *begin || snap >= *end) {
+    return -ENOENT;
+  }
+  return 0;
+}
+
+bool OSDMonitor::try_prune_purged_snaps()
+{
+  if (!mon->mgrstatmon()->is_readable()) {
+    return false;
+  }
+  if (osdmap.require_osd_release < CEPH_RELEASE_MIMIC) {
+    return false;
+  }
+  if (!pending_inc.new_purged_snaps.empty()) {
+    return false;  // we already pruned for this epoch
+  }
+
+  unsigned max_prune = cct->_conf->get_val<uint64_t>(
+    "mon_max_snap_prune_per_epoch");
+  if (!max_prune) {
+    max_prune = 100000;
+  }
+  dout(10) << __func__ << " max_prune " << max_prune << dendl;
+
+  unsigned actually_pruned = 0;
+  auto& purged_snaps = mon->mgrstatmon()->get_digest().purged_snaps;
+  for (auto& p : osdmap.get_pools()) {
+    auto q = purged_snaps.find(p.first);
+    if (q == purged_snaps.end()) {
+      continue;
+    }
+    auto& purged = q->second;
+    if (purged.empty()) {
+      dout(20) << __func__ << " " << p.first << " nothing purged" << dendl;
+      continue;
+    }
+    dout(20) << __func__ << " pool " << p.first << " purged " << purged << dendl;
+    OSDMap::snap_interval_set_t to_prune;
+    unsigned maybe_pruned = actually_pruned;
+    for (auto i = purged.begin(); i != purged.end(); ++i) {
+      snapid_t begin = i.get_start();
+      auto end = i.get_start() + i.get_len();
+      snapid_t pbegin = 0, pend = 0;
+      int r = lookup_pruned_snap(p.first, begin, &pbegin, &pend);
+      if (r == 0) {
+	// already purged.
+	// be a bit aggressive about backing off here, because the mon may
+	// do a lot of work going through this set, and if we know the
+	// purged set from the OSDs is at least *partly* stale we may as
+	// well wait for it to be fresh.
+	dout(20) << __func__ << "  we've already pruned " << pbegin
+		 << "~" << (pend - pbegin) << dendl;
+	break;  // next pool
+      }
+      if (pbegin && pbegin < end) {
+	// the tail of [begin,end) is purged; shorten the range
+	assert(pbegin > begin);
+	end = pbegin;
+      }
+      to_prune.insert(begin, end - begin);
+      maybe_pruned += end - begin;
+      if (maybe_pruned >= max_prune) {
+	break;
+      }
+    }
+    if (!to_prune.empty()) {
+      // PGs may still be reporting things as purged that we have already
+      // pruned from removed_snaps_queue.
+      OSDMap::snap_interval_set_t actual;
+      auto r = osdmap.removed_snaps_queue.find(p.first);
+      if (r != osdmap.removed_snaps_queue.end()) {
+	actual.intersection_of(to_prune, r->second);
+      }
+      actually_pruned += actual.size();
+      dout(10) << __func__ << " pool " << p.first << " reports pruned " << to_prune
+	       << ", actual pruned " << actual << dendl;
+      if (!actual.empty()) {
+	pending_inc.new_purged_snaps[p.first].swap(actual);
+      }
+    }
+    if (actually_pruned >= max_prune) {
+      break;
+    }
+  }
+  dout(10) << __func__ << " actually pruned " << actually_pruned << dendl;
+  return !!actually_pruned;
 }
 
 bool OSDMonitor::update_pools_status()
