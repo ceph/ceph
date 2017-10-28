@@ -512,9 +512,12 @@ public:
   }
 
   void mark_snaprealm_global(sr_t *new_srnode);
+  void clear_snaprealm_global(sr_t *new_srnode);
   bool is_projected_snaprealm_global() const;
 
   void record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent);
+  void record_snaprealm_parent_dentry(sr_t *new_snap, SnapRealm *newparent,
+				      CDentry *dn, bool primary_dn);
   void project_snaprealm_past_parent(SnapRealm *newparent);
   void early_pop_projected_snaprealm();
 

@@ -635,6 +635,10 @@ void SnapRealm::build_snap_trace() const
     set<snapid_t> past;
     if (!srnode.past_parent_snaps.empty()) {
       past = mdcache->mds->snapclient->filter(srnode.past_parent_snaps);
+      if (srnode.is_parent_global()) {
+	auto p = past.lower_bound(srnode.current_parent_since);
+	past.erase(p, past.end());
+      }
     } else if (!srnode.past_parents.empty()) {
       const set<snapid_t>& snaps = get_snaps();
       for (const auto& p : srnode.past_parents) {
