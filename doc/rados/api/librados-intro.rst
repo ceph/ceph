@@ -202,7 +202,7 @@ app must supply a monitor address, a username and an authentication key
 RADOS provides a number of ways for you to set the required values. For
 the monitor and encryption key settings, an easy way to handle them is to ensure
 that your Ceph configuration file contains a ``keyring`` path to a keyring file
-and at least one monitor address (e.g,. ``mon host``). For example:: 
+and at least one monitor address (e.g., ``mon host``). For example::
 
 	[global]
 	mon host = 192.168.1.1
