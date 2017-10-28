@@ -236,10 +236,20 @@ string DBObjectMap::complete_prefix(Header header)
   return USER_PREFIX + header_key(header->seq) + COMPLETE_PREFIX;
 }
 
-string DBObjectMap::user_prefix(Header header)
+string DBObjectMap::default_user_prefix(const Header& header)
 {
   return USER_PREFIX + header_key(header->seq) + USER_PREFIX;
 }
+
+string DBObjectMap::pglog_prefix(const Header& header)
+{
+  if (is_pglog_object(header->oid) && pglog_colfam) {
+    return CEPH_OSD_PGLOG_PREFIX;
+  } else {
+    return USER_PREFIX + header_key(header->seq) + USER_PREFIX;
+  }
+}
+
 
 string DBObjectMap::sys_prefix(Header header)
 {
@@ -271,7 +281,10 @@ int DBObjectMap::DBObjectMapIteratorImpl::init()
     }
     parent_iter = std::make_shared<DBObjectMapIteratorImpl>(map, parent);
   }
-  key_iter = map->db->get_iterator(map->user_prefix(header));
+
+  key_iter = map->is_pglog_object(header->oid) ?
+    map->db->get_iterator(map->pglog_prefix(header)) :
+    map->db->get_iterator(map->default_user_prefix(header));
   assert(key_iter);
   complete_iter = map->db->get_iterator(map->complete_prefix(header));
   assert(complete_iter);
@@ -331,8 +344,9 @@ int DBObjectMap::DBObjectMapIteratorImpl::seek_to_last()
   return adjust();
 }
 
-int DBObjectMap::DBObjectMapIteratorImpl::lower_bound(const string &to)
+int DBObjectMap::DBObjectMapIteratorImpl::lower_bound(const string &to_)
 {
+  auto to = map->to_pglog_key(header->oid, to_);
   init();
   r = 0;
   if (parent_iter) {
@@ -346,8 +360,9 @@ int DBObjectMap::DBObjectMapIteratorImpl::lower_bound(const string &to)
   return adjust();
 }
 
-int DBObjectMap::DBObjectMapIteratorImpl::lower_bound_parent(const string &to)
+int DBObjectMap::DBObjectMapIteratorImpl::lower_bound_parent(const string &to_)
 {
+  auto to = map->to_pglog_key(header->oid, to_);
   int r = lower_bound(to);
   if (r < 0)
     return r;
@@ -357,8 +372,9 @@ int DBObjectMap::DBObjectMapIteratorImpl::lower_bound_parent(const string &to)
     return r;
 }
 
-int DBObjectMap::DBObjectMapIteratorImpl::upper_bound(const string &after)
+int DBObjectMap::DBObjectMapIteratorImpl::upper_bound(const string &after_)
 {
+  auto after = map->to_pglog_key(header->oid, after_);
   init();
   r = 0;
   if (parent_iter) {
@@ -439,9 +455,9 @@ int DBObjectMap::DBObjectMapIteratorImpl::in_complete_region(const string &to_te
 	      complete_iter->value().length() - 1);
   if (_end.empty() || _end > to_test) {
     if (begin)
-      *begin = complete_iter->key();
+      *begin = map->from_pglog_key(header->oid, complete_iter->key());
     if (end)
-      *end = _end;
+      *end = map->from_pglog_key(header->oid, _end);
     return true;
   } else {
     complete_iter->next();
@@ -486,7 +502,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::adjust()
 
 string DBObjectMap::DBObjectMapIteratorImpl::key()
 {
-  return cur_iter->key();
+  return map->from_pglog_key(header->oid, cur_iter->key());
 }
 
 bufferlist DBObjectMap::DBObjectMapIteratorImpl::value()
@@ -511,7 +527,18 @@ int DBObjectMap::set_keys(const ghobject_t &oid,
   if (check_spos(oid, header, spos))
     return 0;
 
-  t->set(user_prefix(header), set);
+  if (is_pglog_object(oid)) {
+    map<string, bufferlist> tset;
+    std::transform(set.cbegin(), set.cend(),
+		   std::inserter(tset, tset.end()),
+		   [&oid, this](const pair<string, bufferlist>& kv) {
+		     return std::make_pair(to_pglog_key(oid, kv.first),
+					   kv.second);
+		   });
+    t->set(pglog_prefix(header), tset);
+  } else {
+    t->set(default_user_prefix(header), set);
+  }
 
   return db->submit_transaction(t);
 }
@@ -638,7 +665,18 @@ int DBObjectMap::rm_keys(const ghobject_t &oid,
   KeyValueDB::Transaction t = db->get_transaction();
   if (check_spos(oid, header, spos))
     return 0;
-  t->rmkeys(user_prefix(header), to_clear);
+
+  if (is_pglog_object(oid)) {
+    set<string> tclear;
+    std::transform(to_clear.cbegin(), to_clear.cend(),
+		   std::inserter(tclear, tclear.end()),
+		   [&oid, this](const string& s) {
+		     return to_pglog_key(oid, s);
+		   });
+    t->rmkeys(pglog_prefix(header), tclear);
+  } else {
+    t->rmkeys(default_user_prefix(header), to_clear);
+  }
   if (!header->parent) {
     return db->submit_transaction(t);
   }
@@ -658,7 +696,7 @@ int DBObjectMap::rm_keys(const ghobject_t &oid,
       if (!to_clear.count(iter->key()))
         to_write[iter->key()] = iter->value();
     }
-    t->set(user_prefix(header), to_write);
+    t->set(default_user_prefix(header), to_write);
   } // destruct iter which has parent in_use
 
   copy_up_header(header, t);
@@ -908,6 +946,8 @@ int DBObjectMap::clone(const ghobject_t &oid,
 		       const ghobject_t &target,
 		       const SequencerPosition *spos)
 {
+  ceph_assert(!pglog_colfam ||
+	      !(is_pglog_object(oid) || is_pglog_object(target)));
   if (oid == target)
     return 0;
 
@@ -965,7 +1005,7 @@ int DBObjectMap::clone(const ghobject_t &oid,
       return iter->status();
     to_write[iter->key()] = iter->value();
   }
-  t->set(user_prefix(destination), to_write);
+  t->set(default_user_prefix(destination), to_write);
 
   return db->submit_transaction(t);
 }
@@ -1027,8 +1067,9 @@ int DBObjectMap::upgrade_to_v2()
   return 0;
 }
 
-int DBObjectMap::init(bool do_upgrade)
+int DBObjectMap::init(bool do_upgrade, bool use_pglog_colfam)
 {
+  pglog_colfam = use_pglog_colfam;
   map<string, bufferlist> result;
   set<string> to_get;
   to_get.insert(GLOBAL_STATE_KEY);
@@ -1218,8 +1259,11 @@ DBObjectMap::Header DBObjectMap::lookup_create_map_header(
 void DBObjectMap::clear_header(Header header, KeyValueDB::Transaction t)
 {
   dout(20) << "clear_header: clearing seq " << header->seq << dendl;
-  t->rmkeys_by_prefix(user_prefix(header));
+  t->rmkeys_by_prefix(default_user_prefix(header));
   t->rmkeys_by_prefix(sys_prefix(header));
+  if (pglog_colfam) {
+    t->rmkeys_by_prefix(pglog_prefix(header));
+  }
   if (state.v < 3)
     t->rmkeys_by_prefix(complete_prefix(header)); // Needed when header.parent != 0
   t->rmkeys_by_prefix(xattr_prefix(header));

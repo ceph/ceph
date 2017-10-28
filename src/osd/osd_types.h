@@ -44,6 +44,8 @@
 #include "include/cmp.h"
 #include "librados/ListObjectImpl.h"
 
+#define CEPH_OSD_PGLOG_PREFIX "pglog_"
+
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
 #define CEPH_OSD_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "initial feature set(~v.18)")

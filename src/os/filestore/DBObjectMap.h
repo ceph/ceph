@@ -57,6 +57,7 @@
  */
 class DBObjectMap : public ObjectMap {
 public:
+  bool pglog_colfam;
   boost::scoped_ptr<KeyValueDB> db;
 
   /**
@@ -218,7 +219,7 @@ public:
     );
 
   /// Read initial state from backing store
-  int init(bool upgrade = false);
+  int init(bool upgrade = false, bool use_pglog_colfam = false);
 
   /// Upgrade store to current version
   int upgrade_to_v2();
@@ -351,7 +352,8 @@ private:
   string map_header_key(const ghobject_t &oid);
   string header_key(uint64_t seq);
   string complete_prefix(Header header);
-  string user_prefix(Header header);
+  string default_user_prefix(const Header& header);
+  string pglog_prefix(const Header& header);
   string sys_prefix(Header header);
   string xattr_prefix(Header header);
   string sys_parent_prefix(_Header header);
@@ -551,6 +553,26 @@ private:
     }
   };
   friend class RemoveOnDelete;
+
+  bool is_pglog_object(const ghobject_t& oid) const {
+    return oid.hobj.oid.name.find(CEPH_OSD_PGLOG_PREFIX) == 0;
+  }
+
+  string to_pglog_key(const ghobject_t& oid, const string& key) const {
+    if (pglog_colfam && is_pglog_object(oid)) {
+      return oid.hobj.oid.name + "|" + key;
+    } else {
+      return key;
+    }
+  }
+
+  string from_pglog_key(const ghobject_t& oid, const string& key) const {
+    if (pglog_colfam && is_pglog_object(oid)) {
+      return key.substr(key.find('|') + 1);
+    } else {
+      return key;
+    }
+  }
 };
 WRITE_CLASS_ENCODER(DBObjectMap::_Header)
 WRITE_CLASS_ENCODER(DBObjectMap::State)
