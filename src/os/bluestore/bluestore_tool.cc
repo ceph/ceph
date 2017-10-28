@@ -183,7 +183,7 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
   }
-  if (action == "prime-osd-dev") {
+  if (action == "prime-osd-dir") {
     if (devs.size() != 1) {
       cerr << "must specify the main bluestore device" << std::endl;
       exit(EXIT_FAILURE);
