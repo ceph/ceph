@@ -677,7 +677,7 @@ int cls_current_subop_num(cls_method_context_t hctx)
 {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
 
-  return ctx->current_osd_subop_num;
+  return ctx->processed_subop_count;
 }
 
 uint64_t cls_get_features(cls_method_context_t hctx)
