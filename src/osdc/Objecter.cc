@@ -1328,7 +1328,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
       OSDSession *s = NULL;
       const int r = _get_session(op->target.osd, &s, sul);
       assert(r == 0);
-      assert(s != NULL);
+      assert(s);
       op->session = s;
       put_session(s);
     }
@@ -1544,7 +1544,7 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock *sl)
 
       OSDSession *s = op->session;
       if (s) {
-	assert(s != NULL);
+	assert(s);
 	assert(sl->mutex() == &s->lock);
 	bool session_locked = sl->owns_lock();
 	if (!session_locked) {
@@ -1798,7 +1798,7 @@ void Objecter::put_session(Objecter::OSDSession *s)
 
 void Objecter::get_session(Objecter::OSDSession *s)
 {
-  assert(s != NULL);
+  assert(s);
 
   if (!s->is_homeless()) {
     ldout(cct, 20) << __func__ << " s=" << s << " osd=" << s->osd << " "
@@ -2373,7 +2373,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   ldout(cct, 10) << __func__ << " op " << op << dendl;
 
   // pick target
-  assert(op->session == NULL);
+  assert(!op->session);
   OSDSession *s = NULL;
 
   bool check_for_latest_map = _calc_target(&op->target, nullptr)
@@ -2403,7 +2403,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
     }
   }
   if (r == -EAGAIN) {
-    assert(s == NULL);
+    assert(!s);
     r = _get_session(op->target.osd, &s, sul);
   }
   assert(r == 0);
@@ -2944,7 +2944,7 @@ int Objecter::_map_session(op_target_t *target, OSDSession **s,
 void Objecter::_session_op_assign(OSDSession *to, Op *op)
 {
   // to->lock is locked
-  assert(op->session == NULL);
+  assert(!op->session);
   assert(op->tid);
 
   get_session(to);
@@ -2977,7 +2977,7 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
 void Objecter::_session_linger_op_assign(OSDSession *to, LingerOp *op)
 {
   // to lock is locked unique
-  assert(op->session == NULL);
+  assert(!op->session);
 
   if (to->is_homeless()) {
     num_homeless_ops++;
@@ -3027,7 +3027,7 @@ void Objecter::_session_command_op_remove(OSDSession *from, CommandOp *op)
 void Objecter::_session_command_op_assign(OSDSession *to, CommandOp *op)
 {
   // to->lock is locked
-  assert(op->session == NULL);
+  assert(!op->session);
   assert(op->tid);
 
   if (to->is_homeless()) {
@@ -5107,7 +5107,7 @@ void Objecter::_enumerate_reply(
     return;
   }
 
-  assert(next != NULL);
+  assert(next);
 
   // Decode the results
   bufferlist::iterator iter = bl.begin();
