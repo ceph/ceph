@@ -332,7 +332,6 @@ int main(int argc, char **argv)
 	v += label.meta["whoami"];
 	v += "]\nkey = " + i->second;
       }
-      v += "\n";
       if (k.find("path_") == 0) {
 	p = path + "/" + k.substr(5);
 	int r = ::symlink(v.c_str(), p.c_str());
@@ -342,6 +341,7 @@ int main(int argc, char **argv)
 	  exit(EXIT_FAILURE);
 	}
       } else {
+	v += "\n";
 	int fd = ::open(p.c_str(), O_CREAT|O_TRUNC|O_WRONLY, 0600);
 	if (fd < 0) {
 	  cerr << "error writing " << p << ": " << cpp_strerror(errno)
