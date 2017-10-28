@@ -296,8 +296,8 @@ class interval_set {
   }
 
   bool subset_size_sym(const interval_set &b) const {
-    auto pa = m.cbegin(), pb = b.m.cbegin();
-    const auto a_end = m.cend(), b_end = b.m.cend();
+    auto pa = m.begin(), pb = b.m.begin();
+    const auto a_end = m.end(), b_end = b.m.end();
 
     while (pa != a_end && pb != b_end) {
       while (pb->first + pb->second <= pa->first) {
