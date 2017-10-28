@@ -457,8 +457,19 @@ void CInode::project_snaprealm(sr_t *new_srnode)
 void CInode::mark_snaprealm_global(sr_t *new_srnode)
 {
   assert(!is_dir());
-  new_srnode->current_parent_since = get_oldest_snap();
+  // 'last_destroyed' is no longer used, use it to store origin 'current_parent_since'
+  new_srnode->last_destroyed = new_srnode->current_parent_since;
+  new_srnode->current_parent_since = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
   new_srnode->mark_parent_global();
+}
+
+void CInode::clear_snaprealm_global(sr_t *new_srnode)
+{
+  // restore 'current_parent_since'
+  new_srnode->current_parent_since = new_srnode->last_destroyed;
+  new_srnode->last_destroyed = 0;
+  new_srnode->seq = mdcache->get_global_snaprealm()->get_newest_seq();
+  new_srnode->clear_parent_global();
 }
 
 bool CInode::is_projected_snaprealm_global() const
@@ -480,6 +491,7 @@ void CInode::project_snaprealm_past_parent(SnapRealm *newparent)
  if parent DNE, we need to find what the parent actually is and fill that in */
 void CInode::record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent)
 {
+  assert(!new_snap->is_parent_global());
   SnapRealm *oldparent;
   if (!snaprealm) {
     oldparent = find_snaprealm();
@@ -499,6 +511,26 @@ void CInode::record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent)
 	new_snap->seq = oldparentseq;
     }
     new_snap->current_parent_since = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
+  }
+}
+
+void CInode::record_snaprealm_parent_dentry(sr_t *new_snap, SnapRealm *newparent,
+					    CDentry *dn, bool primary_dn)
+{
+  assert(new_snap->is_parent_global());
+  SnapRealm *oldparent = dn->get_dir()->inode->find_snaprealm();
+  auto& snaps = oldparent->get_snaps();
+
+  if (!primary_dn) {
+    auto p = snaps.lower_bound(dn->first);
+    if (p != snaps.end())
+      new_snap->past_parent_snaps.insert(p, snaps.end());
+  } else if (newparent != oldparent) {
+    // 'last_destroyed' is used as 'current_parent_since'
+    auto p = snaps.lower_bound(new_snap->last_destroyed);
+    if (p != snaps.end())
+      new_snap->past_parent_snaps.insert(p, snaps.end());
+    new_snap->last_destroyed = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
   }
 }
 
