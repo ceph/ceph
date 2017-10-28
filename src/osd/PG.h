@@ -2267,7 +2267,9 @@ protected:
 	boost::statechart::custom_reaction< DeferRecovery >,
 	boost::statechart::custom_reaction< DeferBackfill >,
 	boost::statechart::custom_reaction< UnfoundRecovery >,
-	boost::statechart::custom_reaction< UnfoundBackfill >
+	boost::statechart::custom_reaction< UnfoundBackfill >,
+	boost::statechart::custom_reaction< RemoteBackfillPreempted >,
+	boost::statechart::custom_reaction< RemoteRecoveryPreempted >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MInfoRec& infoevt);
