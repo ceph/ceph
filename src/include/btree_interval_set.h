@@ -29,9 +29,7 @@
 # define MAX(a,b)  ((a)>=(b) ? (a):(b))
 #endif
 
-#include "cpp-btree/btree_map.h"
-#include "assert.h"
-#include "encoding_btree.h"
+#include "btree_map.h"
 
 template<typename T,
 	 typename Alloc = std::allocator<std::pair<const T, T>>>

@@ -17,9 +17,7 @@
 #include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
-#include "include/cpp-btree/btree.h"
-#include "include/cpp-btree/btree_map.h"
-#include "include/encoding_btree.h"
+#include "include/btree_map.h"
 #include "KeyValueDB.h"
 #include "osd/osd_types.h"
 
