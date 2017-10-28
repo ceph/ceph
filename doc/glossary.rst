@@ -135,7 +135,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 
 	Ceph Kernel Modules
 		The collection of kernel modules which can be used to interact with the
-		Ceph System (e.g,. ``ceph.ko``, ``rbd.ko``).
+		Ceph System (e.g., ``ceph.ko``, ``rbd.ko``).
 
 	Ceph Client Libraries
 		The collection of libraries that can be used to interact with components
