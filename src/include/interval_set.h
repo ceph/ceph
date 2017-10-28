@@ -22,6 +22,14 @@
 
 #include "encoding.h"
 
+/*
+ * *** NOTE ***
+ *
+ * This class is written to work with a variety of map-like containers,
+ * *include* ones that invalidate iterators when they are modified (e.g.,
+ * flat_map and btree_map).
+ */
+
 #ifndef MIN
 # define MIN(a,b)  ((a)<=(b) ? (a):(b))
 #endif
@@ -458,30 +466,34 @@ class interval_set {
         
         typename Map::iterator n = p;
         n++;
+	if (pstart)
+	  *pstart = p->first;
         if (n != m.end() && 
             start+len == n->first) {   // combine with next, too!
           p->second += n->second;
+	  if (plen)
+	    *plen = p->second;
           m.erase(n);
-        }
-	if (pstart)
-	  *pstart = p->first;
-	if (plen)
-	  *plen = p->second;
+        } else {
+	  if (plen)
+	    *plen = p->second;
+	}
       } else {
         if (start+len == p->first) {
-          m[start] = len + p->second;  // append to front 
 	  if (pstart)
 	    *pstart = start;
 	  if (plen)
 	    *plen = len + p->second;
+	  T psecond = p->second;
           m.erase(p);
+          m[start] = len + psecond;  // append to front
         } else {
           assert(p->first > start+len);
-          m[start] = len;              // new interval
 	  if (pstart)
 	    *pstart = start;
 	  if (plen)
 	    *plen = len;
+          m[start] = len;              // new interval
         }
       }
     }
