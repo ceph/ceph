@@ -1777,7 +1777,8 @@ bool OSDMonitor::can_mark_down(int i)
     dout(5) << __func__ << " no osds" << dendl;
     return false;
   }
-  int up = osdmap.get_num_up_osds() - pending_inc.get_net_marked_down(&osdmap);
+  unsigned up =
+    osdmap.get_num_up_osds() - pending_inc.get_net_marked_down(&osdmap);
   float up_ratio = (float)up / (float)num_osds;
   if (up_ratio < g_conf->mon_osd_min_up_ratio) {
     dout(2) << __func__ << " current up_ratio " << up_ratio << " < min "
@@ -3100,7 +3101,7 @@ void OSDMonitor::check_osdmap_sub(Subscription *sub)
 
 void OSDMonitor::check_pg_creates_subs()
 {
-  if (!osdmap.get_num_up_osds()) {
+  if (osdmap.get_num_up_osds() == 0) {
     return;
   }
   assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);
@@ -8500,7 +8501,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     else if (key == "notieragent")
       return prepare_set_flag(op, CEPH_OSDMAP_NOTIERAGENT);
     else if (key == "sortbitwise") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (osdmap.get_num_up_osds() == 0 && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
@@ -8515,7 +8516,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply;
       }
     } else if (key == "recovery_deletes") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (osdmap.get_num_up_osds() == 0 && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
@@ -8530,7 +8531,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply;
       }
     } else if (key == "require_jewel_osds") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (osdmap.get_num_up_osds() == 0 && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
@@ -8552,7 +8553,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -EPERM;
       }
     } else if (key == "require_kraken_osds") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (osdmap.get_num_up_osds() == 0 && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
@@ -8641,7 +8642,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
     if (rel == CEPH_RELEASE_MIMIC) {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (osdmap.get_num_up_osds() == 0 && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
@@ -10965,7 +10966,19 @@ bool OSDMonitor::prepare_pool_op_create(MonOpRequestRef op)
 int OSDMonitor::_check_remove_pool(int64_t pool_id, const pg_pool_t& pool,
 				   ostream *ss)
 {
-  const string& poolstr = osdmap.get_pool_name(pool_id);
+  const std::string& poolstr = osdmap.get_pool_name(pool_id);
+
+  // Check permission
+  if (!g_conf->mon_allow_pool_delete) {
+    *ss << "pool deletion is disabled; you must first set the "
+        << "mon_allow_pool_delete config option to true before you can "
+        << "destroyi a pool";
+    return -EPERM;
+  } else if (pool.has_flag(pg_pool_t::FLAG_NODELETE)) {
+    *ss << "pool deletion is disabled; you must unset nodelete flag for the "
+        << "pool first";
+    return -EPERM;
+  }
 
   // If the Pool is in use by CephFS, refuse to delete it
   FSMap const &pending_fsmap = mon->mdsmon()->get_pending();
@@ -10978,23 +10991,12 @@ int OSDMonitor::_check_remove_pool(int64_t pool_id, const pg_pool_t& pool,
     *ss << "pool '" << poolstr << "' is a tier of '"
 	<< osdmap.get_pool_name(pool.tier_of) << "'";
     return -EBUSY;
-  }
-  if (!pool.tiers.empty()) {
+  } else if (!pool.tiers.empty()) {
     *ss << "pool '" << poolstr << "' has tiers";
     for(auto tier : pool.tiers) {
       *ss << " " << osdmap.get_pool_name(tier);
     }
     return -EBUSY;
-  }
-
-  if (!g_conf->mon_allow_pool_delete) {
-    *ss << "pool deletion is disabled; you must first set the mon_allow_pool_delete config option to true before you can destroy a pool";
-    return -EPERM;
-  }
-
-  if (pool.has_flag(pg_pool_t::FLAG_NODELETE)) {
-    *ss << "pool deletion is disabled; you must unset nodelete flag for the pool first";
-    return -EPERM;
   }
 
   *ss << "pool '" << poolstr << "' removed";
