@@ -175,8 +175,8 @@ public:
   void finish(int r) override {
     first->complete(r);
     second->complete(r);
-    first = NULL;
-    second = NULL;
+    first = nullptr;
+    second = nullptr;
   }
 
   ~C_TwoContexts() override {
@@ -519,7 +519,7 @@ void Objecter::shutdown()
     AdminSocket* admin_socket = cct->get_admin_socket();
     admin_socket->unregister_command("objecter_requests");
     delete m_request_state_hook;
-    m_request_state_hook = NULL;
+    m_request_state_hook = nullptr;
   }
 }
 
@@ -529,9 +529,9 @@ void Objecter::_send_linger(LingerOp *info,
   assert(sul.owns_lock() && sul.mutex() == &rwlock);
 
   vector<OSDOp> opv;
-  Context *oncommit = NULL;
+  Context *oncommit = nullptr;
   LingerOp::shared_lock watchl(info->watch_lock);
-  bufferlist *poutbl = NULL;
+  bufferlist *poutbl = nullptr;
   if (info->registered && info->is_watch) {
     ldout(cct, 15) << "send_linger " << info->linger_id << " reconnect"
 		   << dendl;
@@ -856,7 +856,7 @@ void Objecter::_linger_submit(LingerOp *info, shunique_lock& sul)
   assert(info->linger_id);
 
   // Populate Op::target
-  OSDSession *s = NULL;
+  OSDSession *s = nullptr;
   _calc_target(&info->target, nullptr);
 
   // Create LingerOp<->OSDSession relation
@@ -866,6 +866,7 @@ void Objecter::_linger_submit(LingerOp *info, shunique_lock& sul)
   _session_linger_op_assign(s, info);
   sl.unlock();
   put_session(s);
+  s = nullptr;
 
   _send_linger(info, sul);
 }
@@ -1319,18 +1320,20 @@ void Objecter::handle_osd_map(MOSDMap *m)
     }
     sl.unlock();
     put_session(s);
+    s = nullptr;
   }
   for (list<LingerOp*>::iterator p = need_resend_linger.begin();
        p != need_resend_linger.end(); ++p) {
     LingerOp *op = *p;
     if (!op->session) {
       _calc_target(&op->target, nullptr);
-      OSDSession *s = NULL;
+      OSDSession *s = nullptr;
       const int r = _get_session(op->target.osd, &s, sul);
       assert(r == 0);
       assert(s != NULL);
       op->session = s;
       put_session(s);
+      s = nullptr;
     }
     if (!op->session->is_homeless()) {
       logger->inc(l_osdc_linger_resend);
@@ -1793,6 +1796,7 @@ void Objecter::put_session(Objecter::OSDSession *s)
     ldout(cct, 20) << __func__ << " s=" << s << " osd=" << s->osd << " "
 		   << s->get_nref() << dendl;
     s->put();
+    s = nullptr;
   }
 }
 
@@ -2374,7 +2378,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 
   // pick target
   assert(op->session == NULL);
-  OSDSession *s = NULL;
+  OSDSession *s = nullptr;
 
   bool check_for_latest_map = _calc_target(&op->target, nullptr)
     == RECALC_OP_TARGET_POOL_DNE;
@@ -2397,7 +2401,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 	== RECALC_OP_TARGET_POOL_DNE;
       if (s) {
 	put_session(s);
-	s = NULL;
+	s = nullptr;
 	r = -EAGAIN;
       }
     }
@@ -2451,7 +2455,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
     _maybe_request_map();
   }
 
-  MOSDOp *m = NULL;
+  MOSDOp *m = nullptr;
   if (need_send) {
     m = _prepare_osd_op(op);
   }
@@ -2480,10 +2484,11 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   }
   if (ptid)
     *ptid = tid;
-  op = NULL;
+  op = nullptr;
 
   sl.unlock();
   put_session(s);
+  s = nullptr;
 
   ldout(cct, 5) << num_in_flight << " in flight" << dendl;
 }
@@ -2969,7 +2974,8 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
 
   from->ops.erase(op->tid);
   put_session(from);
-  op->session = NULL;
+  from = nullptr;
+  op->session = nullptr;
 
   ldout(cct, 15) << __func__ << " " << from->osd << " " << op->tid << dendl;
 }
@@ -3002,7 +3008,8 @@ void Objecter::_session_linger_op_remove(OSDSession *from, LingerOp *op)
 
   from->linger_ops.erase(op->linger_id);
   put_session(from);
-  op->session = NULL;
+  from = nullptr;
+  op->session = nullptr;
 
   ldout(cct, 15) << __func__ << " " << from->osd << " " << op->linger_id
 		 << dendl;
@@ -3019,7 +3026,7 @@ void Objecter::_session_command_op_remove(OSDSession *from, CommandOp *op)
 
   from->command_ops.erase(op->tid);
   put_session(from);
-  op->session = NULL;
+  op->session = nullptr;
 
   ldout(cct, 15) << __func__ << " " << from->osd << " " << op->tid << dendl;
 }
@@ -3067,6 +3074,7 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op,
     }
 
     put_session(s);
+    s = nullptr;
     return RECALC_OP_TARGET_NEED_RESEND;
   }
   return r;
@@ -3303,7 +3311,7 @@ void Objecter::unregister_op(Op *op)
   op->session->ops.erase(op->tid);
   sl.unlock();
   put_session(op->session);
-  op->session = NULL;
+  op->session = nullptr;
 
   inflight_ops--;
 }
@@ -3343,6 +3351,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		  << " ... stray" << dendl;
     sl.unlock();
     put_session(s);
+    s = nullptr;
     m->put();
     return;
   }
@@ -3366,6 +3375,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     _session_op_remove(s, op);
     sl.unlock();
     put_session(s);
+    s = nullptr;
 
     _op_submit(op, sul, NULL);
     m->put();
@@ -3382,6 +3392,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       m->put();
       sl.unlock();
       put_session(s);
+      s = nullptr;
       return;
     }
   } else {
@@ -3401,7 +3412,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     _session_op_remove(s, op);
     sl.unlock();
     put_session(s);
-
+    s = nullptr;
     // FIXME: two redirects could race and reorder
 
     op->tid = 0;
@@ -3420,6 +3431,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     _session_op_remove(s, op);
     sl.unlock();
     put_session(s);
+    s = nullptr;
 
     op->tid = 0;
     op->target.flags &= ~(CEPH_OSD_FLAG_BALANCE_READS |
@@ -3514,6 +3526,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   m->put();
   put_session(s);
+  s = nullptr;
 }
 
 void Objecter::handle_osd_backoff(MOSDBackoff *m)
@@ -3616,6 +3629,7 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
 
   m->put();
   put_session(s);
+  s = nullptr;
 }
 
 uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
@@ -4841,10 +4855,12 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
 
   if (c->session != s) {
     put_session(s);
+    s = nullptr;
     return RECALC_OP_TARGET_NEED_RESEND;
   }
 
   put_session(s);
+  s = nullptr;
 
   ldout(cct, 20) << "_recalc_command_target " << c->tid << " no change, "
 		 << c->session << dendl;
@@ -4873,6 +4889,7 @@ void Objecter::_assign_command_session(CommandOp *c,
   }
 
   put_session(s);
+  s = nullptr;
 }
 
 void Objecter::_send_command(CommandOp *c)
