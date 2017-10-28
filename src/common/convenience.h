@@ -17,6 +17,7 @@
 #include <type_traits>
 #include <utility>
 
+#include <boost/optional.hpp>
 #include <boost/thread/shared_mutex.hpp>
 
 #include "common/backport14.h"
@@ -161,4 +162,41 @@ inline auto with_shared_lock(Mutex&& mutex, Fun&& fun, Args&&... args)
 #define SHUNIQUE_LOCK_T(m) \
   ::ceph::shunique_lock<ceph::remove_reference_t<decltype(m)>>
 
+// boost::optional is wonderful! Unfortunately it lacks a function for
+// the thing you would most obviously want to do with it: apply a
+// function to its contents.
+
+// There are two obvious candidates. The first is a function that
+// takes a function and an optional value and returns an optional
+// value, either holding the return value of the function or holding
+// nothing.
+//
+// I'd considered making more overloads for mutable lvalue
+// references, but those are going a bit beyond likely use cases.
+//
+template<typename T, typename F>
+auto maybe_do(const boost::optional<T>& t, F&& f) ->
+  boost::optional<ceph::result_of_t<F(const ceph::decay_t<T>)>>
+{
+  if (t)
+    return { std::forward<F>(f)(*t) };
+  else
+    return boost::none;
+}
+
+// The other obvious function takes an optional but returns an
+// ‘unwrapped’ value, either the result of evaluating the function or
+// a provided alternate value.
+//
+template<typename T, typename F, typename U>
+auto maybe_do_or(const boost::optional<T>& t, F&& f, U&& u) ->
+  ceph::result_of_t<F(const ceph::decay_t<T>)>
+{
+  static_assert(std::is_convertible<U, ceph::result_of_t<F(T)>>::value,
+		"Alternate value must be convertible to function return type.");
+  if (t)
+    return std::forward<F>(f)(*t);
+  else
+    return std::forward<U>(u);
+}
 #endif // CEPH_COMMON_CONVENIENCE_H
