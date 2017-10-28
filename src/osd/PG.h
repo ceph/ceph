@@ -2354,11 +2354,21 @@ protected:
 	boost::statechart::custom_reaction< RejectRemoteReservation >,
 	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,
 	boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
+	boost::statechart::custom_reaction< RemoteRecoveryReserved >,
+	boost::statechart::custom_reaction< RemoteBackfillReserved >,
 	boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
 	> reactions;
       explicit RepNotRecovering(my_context ctx);
       boost::statechart::result react(const RequestRecoveryPrio &evt);
       boost::statechart::result react(const RequestBackfillPrio &evt);
+      boost::statechart::result react(const RemoteBackfillReserved &evt) {
+	// my reservation completion raced with a RELEASE from primary
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteRecoveryReserved &evt) {
+	// my reservation completion raced with a RELEASE from primary
+	return discard_event();
+      }
       boost::statechart::result react(const RejectRemoteReservation &evt);
       void exit();
     };
