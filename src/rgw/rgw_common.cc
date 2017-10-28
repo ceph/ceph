@@ -1152,6 +1152,21 @@ bool verify_bucket_permission(struct req_state * const s, const uint64_t op)
                                   op);
 }
 
+int verify_bucket_owner_or_policy(struct req_state* const s,
+				  const uint64_t op)
+{
+  if (s->iam_policy) {
+    if (s->iam_policy->eval(s->env, *s->auth.identity, op,
+			    ARN(s->bucket)) == Effect::Allow) {
+      return 0;
+    }
+  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return 0;
+  }
+  return -EACCES;
+}
+
+
 static inline bool check_deferred_bucket_perms(struct req_state * const s,
 					       const rgw_bucket& bucket,
 					       RGWAccessControlPolicy * const user_acl,
