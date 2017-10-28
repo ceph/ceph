@@ -4465,16 +4465,6 @@ struct SnapSet {
     return out;
   }
 
-  // return min element of snaps > after, return max if no such element
-  snapid_t get_first_snap_after(snapid_t after, snapid_t max) const {
-    for (vector<snapid_t>::const_reverse_iterator i = snaps.rbegin();
-	 i != snaps.rend();
-	 ++i) {
-      if (*i > after)
-	return *i;
-    }
-    return max;
-  }
 
   SnapSet get_filtered(const pg_pool_t &pinfo) const;
   void filter(const pg_pool_t &pinfo);
