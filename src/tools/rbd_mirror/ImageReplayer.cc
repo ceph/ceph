@@ -620,9 +620,9 @@ void ImageReplayer<I>::handle_init_remote_journaler(int r) {
     return;
   }
 
-  derr << "image_id=" << m_local_image_id << ", "
-       << "m_client_meta.image_id=" << m_client_meta.image_id << ", "
-       << "client.state=" << client.state << dendl;
+  dout(5) << "image_id=" << m_local_image_id << ", "
+          << "client_meta.image_id=" << m_client_meta.image_id << ", "
+          << "client.state=" << client.state << dendl;
   if (m_client_meta.image_id == m_local_image_id &&
       client.state != cls::journal::CLIENT_STATE_CONNECTED) {
     dout(5) << "client flagged disconnected, stopping image replay" << dendl;
