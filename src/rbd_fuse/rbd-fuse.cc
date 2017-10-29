@@ -20,6 +20,7 @@
 #include <assert.h>
 #include <string>
 #include <mutex>
+#include <limits.h>
 
 #if defined(__FreeBSD__)
 #include <sys/param.h>
