@@ -1055,6 +1055,14 @@ void MDSRank::boot_start(BootStep step, int r)
         dout(2) << "boot_start " << step << ": opening mds log" << dendl;
         mdlog->open(gather.new_sub());
 
+	if (is_starting()) {
+	  dout(2) << "boot_start " << step << ": opening purge queue" << dendl;
+	  purge_queue.open(new C_IO_Wrapper(this, gather.new_sub()));
+	} else if (!standby_replaying) {
+	  dout(2) << "boot_start " << step << ": opening purge queue (async)" << dendl;
+	  purge_queue.open(NULL);
+	}
+
         if (mdsmap->get_tableserver() == whoami) {
           dout(2) << "boot_start " << step << ": opening snap table" << dendl;
           snapserver->set_rank(whoami);
@@ -1073,8 +1081,6 @@ void MDSRank::boot_start(BootStep step, int r)
 
         mdcache->open_mydir_inode(gather.new_sub());
 
-        purge_queue.open(new C_IO_Wrapper(this, gather.new_sub()));
-
         if (is_starting() ||
             whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
           mdcache->open_root_inode(gather.new_sub());
@@ -1087,8 +1093,17 @@ void MDSRank::boot_start(BootStep step, int r)
       break;
     case MDS_BOOT_PREPARE_LOG:
       if (is_any_replay()) {
-        dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
-        mdlog->replay(new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
+	dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
+	MDSGatherBuilder gather(g_ceph_context,
+	    new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
+
+	if (!standby_replaying) {
+	  dout(2) << "boot_start " << step << ": waiting for purge queue recovered" << dendl;
+	  purge_queue.wait_for_recovery(new C_IO_Wrapper(this, gather.new_sub()));
+	}
+
+	mdlog->replay(gather.new_sub());
+	gather.activate();
       } else {
         dout(2) << "boot_start " << step << ": positioning at end of old mds log" << dendl;
         mdlog->append();
@@ -1214,7 +1229,16 @@ void MDSRank::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
   }
 }
 
-inline void MDSRank::standby_replay_restart()
+class MDSRank::C_MDS_StandbyReplayRestart : public MDSInternalContext {
+public:
+  explicit C_MDS_StandbyReplayRestart(MDSRank *m) : MDSInternalContext(m) {}
+  void finish(int r) override {
+    assert(!r);
+    mds->standby_replay_restart();
+  }
+};
+
+void MDSRank::standby_replay_restart()
 {
   if (standby_replaying) {
     /* Go around for another pass of replaying in standby */
@@ -1227,30 +1251,23 @@ inline void MDSRank::standby_replay_restart()
     /* We are transitioning out of standby: wait for OSD map update
        before making final pass */
     dout(1) << "standby_replay_restart (final takeover pass)" << dendl;
-    Context *fin = new C_IO_Wrapper(this, new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
-    bool const ready =
-      objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(), fin);
+    Context *fin = new C_IO_Wrapper(this, new C_MDS_StandbyReplayRestart(this));
+    bool ready = objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(), fin);
     if (ready) {
       delete fin;
       mdlog->get_journaler()->reread_head_and_probe(
         new C_MDS_StandbyReplayRestartFinish(
           this,
 	  mdlog->get_journaler()->get_read_pos()));
+
+      dout(1) << " opening purge queue (async)" << dendl;
+      purge_queue.open(NULL);
     } else {
       dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch()
               << " (which blacklists prior instance)" << dendl;
     }
   }
 }
-
-class MDSRank::C_MDS_StandbyReplayRestart : public MDSInternalContext {
-public:
-  explicit C_MDS_StandbyReplayRestart(MDSRank *m) : MDSInternalContext(m) {}
-  void finish(int r) override {
-    assert(!r);
-    mds->standby_replay_restart();
-  }
-};
 
 void MDSRank::replay_done()
 {
