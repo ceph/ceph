@@ -228,7 +228,7 @@ def validate_target(target):
                   file=sys.stderr)
             return False
 
-        if service_id in exist_ids:
+        if service_id in exist_ids or len(exist_ids) > 0 and service_id == '*':
             return True
         else:
             print('WARN: the service id you provided does not exist. service id should '
