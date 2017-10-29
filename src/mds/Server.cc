@@ -1085,8 +1085,14 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
 void Server::recall_client_state(void)
 {
   /* try to recall at least 80% of all caps */
-  uint64_t max_caps_per_client = (Capability::count() * .8);
-  uint64_t min_caps_per_client = 100;
+  uint64_t max_caps_per_client = Capability::count() * g_conf->get_val<double>("mds_max_ratio_caps_per_client");
+  uint64_t min_caps_per_client = g_conf->get_val<uint64_t>("mds_min_caps_per_client");
+  if (max_caps_per_client < min_caps_per_client) {
+    dout(0) << "max_caps_per_client " << max_caps_per_client
+            << " < min_caps_per_client " << min_caps_per_client << dendl;
+    max_caps_per_client = min_caps_per_client + 1;
+  }
+
   /* unless this ratio is smaller: */
   /* ratio: determine the amount of caps to recall from each client. Use
    * percentage full over the cache reservation. Cap the ratio at 80% of client
@@ -1109,14 +1115,12 @@ void Server::recall_client_state(void)
 	     << ", leases " << session->leases.size()
 	     << dendl;
 
-    if (session->caps.size() > min_caps_per_client) {	
-      uint64_t newlim = MIN((session->caps.size() * ratio), max_caps_per_client);
-      if (session->caps.size() > newlim) {
-          MClientSession *m = new MClientSession(CEPH_SESSION_RECALL_STATE);
-          m->head.max_caps = newlim;
-          mds->send_message_client(m, session);
-          session->notify_recall_sent(newlim);
-      }
+    uint64_t newlim = MAX(MIN((session->caps.size() * ratio), max_caps_per_client), min_caps_per_client);
+    if (session->caps.size() > newlim) {
+      MClientSession *m = new MClientSession(CEPH_SESSION_RECALL_STATE);
+      m->head.max_caps = newlim;
+      mds->send_message_client(m, session);
+      session->notify_recall_sent(newlim);
     }
   }
 }

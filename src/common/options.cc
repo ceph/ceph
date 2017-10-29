@@ -5793,6 +5793,14 @@ std::vector<Option> get_mds_options() {
     Option("mds_client_writeable_range_max_inc_objs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1024)
     .set_description(""),
+ 
+    Option("mds_min_caps_per_client", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(100)
+    .set_description("minimum number of capabilities a client may hold"),
+
+    Option("mds_max_ratio_caps_per_client", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(.8)
+    .set_description("maximum ratio of current caps that may be recalled during MDS cache pressure"),
   });
 }
 
