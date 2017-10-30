@@ -52,10 +52,8 @@ int ECUtil::decode(
 
   assert(to_decode.size());
 
-  for (auto i = to_decode.begin();
-       i != to_decode.end();
-       ++i) {
-    if(i->second.length() == 0)
+  for (auto &&i : to_decode) {
+    if(i.second.length() == 0)
       return 0;
   }
 
@@ -69,39 +67,29 @@ int ECUtil::decode(
   }
 
   set<int> avail;
-  for (auto i = to_decode.begin();
-       i != to_decode.end();
-       ++i) {
-    assert(i->second.length() != 0);
-    avail.insert(i->first);
+  for (auto &&i : to_decode) {
+    assert(i.second.length() != 0);
+    avail.insert(i.first);
   }
 
   map<int, vector<pair<int, int>>> min;
-  assert(ec_impl->minimum_to_decode(need, avail, &min) == 0);
+  int r = ec_impl->minimum_to_decode(need, avail, &min);
+  assert(r == 0);
 
   int chunks_count = 0;
-  map<int, int> repair_data_per_chunk;
+  int repair_data_per_chunk = 0;
   int subchunk_size = sinfo.get_chunk_size()/ec_impl->get_sub_chunk_count();
 
-  for (map<int, bufferlist>::iterator i = to_decode.begin();
-       i != to_decode.end();
-       ++i) {
-    assert(min.find(i->first) != min.end());
-
-    int repair_subchunk_count = 0;
-    for (auto j = min[i->first].begin();
-          j != min[i->first].end(); ++j) {
-      repair_subchunk_count += j->second;
-    }
-    repair_data_per_chunk[i->first] = repair_subchunk_count*subchunk_size;
-    assert(i->second.length() % repair_data_per_chunk[i->first] == 0);
-
-    if (i == to_decode.begin()) {
-      chunks_count = (int) i->second.length() / repair_data_per_chunk[i->first];
-    }
-    else {
-      assert(chunks_count == 
-             (int) i->second.length() / repair_data_per_chunk[i->first]);
+  for (auto &&i : to_decode) {
+    auto found = min.find(i.first);
+    if (found != min.end()) {
+      int repair_subchunk_count = 0;
+      for (auto& subchunks : min[i.first]) {
+        repair_subchunk_count += subchunks.second;
+      }
+      repair_data_per_chunk = repair_subchunk_count * subchunk_size;
+      chunks_count = (int)i.second.length() / repair_data_per_chunk;
+      break;
     }
   }
 
@@ -111,11 +99,11 @@ int ECUtil::decode(
 	 j != to_decode.end();
 	 ++j) {
       chunks[j->first].substr_of(j->second, 
-                                 i*repair_data_per_chunk[j->first], 
-                                 repair_data_per_chunk[j->first]);
+                                 i*repair_data_per_chunk, 
+                                 repair_data_per_chunk);
     }
     map<int, bufferlist> out_bls;
-    int r = ec_impl->decode(need, chunks, &out_bls, sinfo.get_chunk_size());
+    r = ec_impl->decode(need, chunks, &out_bls, sinfo.get_chunk_size());
     assert(r == 0);
     for (auto j = out.begin(); j != out.end(); ++j) {
       assert(out_bls.count(j->first));
@@ -123,8 +111,8 @@ int ECUtil::decode(
       j->second->claim_append(out_bls[j->first]);
     }
   }
-  for (auto i = out.begin(); i != out.end(); ++i) {
-    assert(i->second->length() == chunks_count*sinfo.get_chunk_size());
+  for (auto &&i : out) {
+    assert(i.second->length() == chunks_count * sinfo.get_chunk_size());
   }
   return 0;
 }
