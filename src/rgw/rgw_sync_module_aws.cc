@@ -38,11 +38,18 @@ static string obj_to_aws_path(const rgw_obj& obj)
   return obj.bucket.name + "/" + obj.key.name;
 }
 
-struct AWSConfig {
-  string id;
-  std::unique_ptr<RGWRESTConn> conn;
+struct AWSSyncConfig {
+  string s3_endpoint;
+  RGWAccessKey key;
 };
 
+struct AWSSyncInstanceEnv {
+  AWSSyncConfig conf;
+  string id;
+  std::unique_ptr<RGWRESTConn> conn;
+
+  AWSSyncInstanceEnv(const AWSSyncConfig& _conf) : conf(_conf) {}
+};
 
 class RGWRESTStreamGetCRF : public RGWStreamReadHTTPResourceCRF
 {
@@ -734,7 +741,7 @@ int decode_attr(map<string, bufferlist>& attrs, const char *attr_name, T *result
 
 // maybe use Fetch Remote Obj instead?
 class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
-  const AWSConfig& conf;
+  const AWSSyncInstanceEnv& instance;
   RGWRESTConn *source_conn;
   bufferlist res;
   unordered_map <string, bool> bucket_created;
@@ -752,8 +759,8 @@ public:
   RGWAWSHandleRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
                             RGWBucketInfo& _bucket_info,
                             rgw_obj_key& _key,
-                            const AWSConfig& _conf) : RGWStatRemoteObjCBCR(_sync_env, _bucket_info, _key),
-                                                         conf(_conf)
+                            const AWSSyncInstanceEnv& _instance) : RGWStatRemoteObjCBCR(_sync_env, _bucket_info, _key),
+                                                         instance(_instance)
   {}
 
   ~RGWAWSHandleRemoteObjCBCR(){
@@ -791,7 +798,7 @@ public:
         yield {
           ldout(sync_env->cct,0) << "AWS: creating bucket" << target_bucket_name << dendl;
           bufferlist bl;
-          call(new RGWPutRawRESTResourceCR <int> (sync_env->cct, conf.conn.get(),
+          call(new RGWPutRawRESTResourceCR <int> (sync_env->cct, instance.conn.get(),
                                                   sync_env->http_manager,
                                                   target_bucket_name, nullptr, bl, nullptr));
         }
@@ -821,9 +828,9 @@ public:
         if (size < multipart_threshold) {
           call(new RGWAWSStreamObjToCloudPlainCR(sync_env, source_conn, src_obj,
                                                  src_properties,
-                                                 conf.conn.get(), dest_obj));
+                                                 instance.conn.get(), dest_obj));
         } else {
-          call(new RGWAWSStreamObjToCloudMultipartCR(sync_env, source_conn, src_obj, conf.conn.get(),
+          call(new RGWAWSStreamObjToCloudMultipartCR(sync_env, source_conn, src_obj, instance.conn.get(),
                                                      dest_obj, size, src_properties));
         }
       }
@@ -839,18 +846,18 @@ public:
 };
 
 class RGWAWSHandleRemoteObjCR : public RGWCallStatRemoteObjCR {
-  const AWSConfig& conf;
+  const AWSSyncInstanceEnv& instance;
 public:
   RGWAWSHandleRemoteObjCR(RGWDataSyncEnv *_sync_env,
                               RGWBucketInfo& _bucket_info, rgw_obj_key& _key,
-                              const AWSConfig& _conf) : RGWCallStatRemoteObjCR(_sync_env, _bucket_info, _key),
-                                                            conf(_conf) {
+                              const AWSSyncInstanceEnv& _instance) : RGWCallStatRemoteObjCR(_sync_env, _bucket_info, _key),
+                                                          instance(_instance) {
   }
 
   ~RGWAWSHandleRemoteObjCR() {}
 
   RGWStatRemoteObjCBCR *allocate_callback() override {
-    return new RGWAWSHandleRemoteObjCBCR(sync_env, bucket_info, key, conf);
+    return new RGWAWSHandleRemoteObjCBCR(sync_env, bucket_info, key, instance);
   }
 };
 
@@ -859,13 +866,13 @@ class RGWAWSRemoveRemoteObjCBCR : public RGWCoroutine {
   RGWBucketInfo bucket_info;
   rgw_obj_key key;
   ceph::real_time mtime;
-  const AWSConfig& conf;
+  const AWSSyncInstanceEnv& instance;
 public:
   RGWAWSRemoveRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
                           RGWBucketInfo& _bucket_info, rgw_obj_key& _key, const ceph::real_time& _mtime,
-                          const AWSConfig& _conf) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+                          const AWSSyncInstanceEnv& _instance) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
                                                         bucket_info(_bucket_info), key(_key),
-                                                        mtime(_mtime), conf(_conf) {}
+                                                        mtime(_mtime), instance(_instance) {}
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 0) << ": remove remote obj: z=" << sync_env->source_zone
@@ -873,7 +880,7 @@ public:
       yield {
         string path = aws_bucket_name(bucket_info) + "/" + aws_object_name(bucket_info, key);
         ldout(sync_env->cct, 0) << "AWS: removing aws object at" << path << dendl;
-        call(new RGWDeleteRESTResourceCR(sync_env->cct, conf.conn.get(),
+        call(new RGWDeleteRESTResourceCR(sync_env->cct, instance.conn.get(),
                                          sync_env->http_manager,
                                          path, nullptr /* params */));
       }
@@ -890,36 +897,33 @@ public:
 
 class RGWAWSDataSyncModule: public RGWDataSyncModule {
   CephContext *cct;
-  AWSConfig conf;
-  string s3_endpoint;
-  RGWAccessKey key;
+  AWSSyncInstanceEnv instance;
 public:
-  RGWAWSDataSyncModule(CephContext *_cct, const string& _s3_endpoint, const string& access_key, const string& secret) :
+  RGWAWSDataSyncModule(CephContext *_cct, const AWSSyncConfig& _conf) :
                   cct(_cct),
-                  s3_endpoint(_s3_endpoint),
-                  key(access_key, secret) {
+                  instance(_conf) {
   }
 
   void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) {
-    conf.id = string("s3:") + s3_endpoint;
-    conf.conn.reset(new RGWRESTConn(cct,
+    instance.id = string("s3:") + instance.conf.s3_endpoint;
+    instance.conn.reset(new RGWRESTConn(cct,
                                     sync_env->store,
-                                    conf.id,
-                                    { s3_endpoint },
-                                    key));
+                                    instance.id,
+                                    { instance.conf.s3_endpoint },
+                                    instance.conf.key));
   }
 
   ~RGWAWSDataSyncModule() {}
 
   RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch,
                             rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 0) << conf.id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
-    return new RGWAWSHandleRemoteObjCR(sync_env, bucket_info, key, conf);
+    ldout(sync_env->cct, 0) << instance.id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
+    return new RGWAWSHandleRemoteObjCR(sync_env, bucket_info, key, instance);
   }
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch,
                               rgw_zone_set *zones_trace) override {
     ldout(sync_env->cct, 0) <<"rm_object: b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
-    return new RGWAWSRemoveRemoteObjCBCR(sync_env, bucket_info, key, mtime, conf);
+    return new RGWAWSRemoveRemoteObjCBCR(sync_env, bucket_info, key, mtime, instance);
   }
   RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch,
@@ -933,17 +937,20 @@ public:
 class RGWAWSSyncModuleInstance : public RGWSyncModuleInstance {
   RGWAWSDataSyncModule data_handler;
 public:
-  RGWAWSSyncModuleInstance(CephContext *cct, const string& s3_endpoint, const string& access_key, const string& secret) : data_handler(cct, s3_endpoint, access_key, secret) {}
+  RGWAWSSyncModuleInstance(CephContext *cct, const AWSSyncConfig& _conf) : data_handler(cct, _conf) {}
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
 };
 
 int RGWAWSSyncModule::create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config,  RGWSyncModuleInstanceRef *instance){
-  string s3_endpoint, access_key, secret;
+  AWSSyncConfig conf;
   auto i = config.find("s3_endpoint");
   if (i != config.end())
-    s3_endpoint = i->second;
+    conf.s3_endpoint = i->second;
+
+  string access_key;
+  string secret;
 
   i = config.find("access_key");
   if (i != config.end())
@@ -953,6 +960,8 @@ int RGWAWSSyncModule::create_instance(CephContext *cct, map<string, string, ltst
   if (i != config.end())
     secret = i->second;
 
-  instance->reset(new RGWAWSSyncModuleInstance(cct, s3_endpoint, access_key, secret));
+  conf.key = RGWAccessKey(access_key, secret);
+
+  instance->reset(new RGWAWSSyncModuleInstance(cct, conf));
   return 0;
 }
