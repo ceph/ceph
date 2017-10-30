@@ -630,9 +630,9 @@ remove_image_retry()
     local pool=$2
     local image=$3
 
-    for s in 1 2 4 8 16 32; do
-        remove_image ${cluster} ${pool} ${image} && return 0
+    for s in 0 1 2 4 8 16 32; do
         sleep ${s}
+        remove_image ${cluster} ${pool} ${image} && return 0
     done
     return 1
 }
