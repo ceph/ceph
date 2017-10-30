@@ -1859,6 +1859,7 @@ protected:
   TrivialEvent(RequestBackfill)
   TrivialEvent(RecoveryDone)
   protected:
+  TrivialEvent(RemoteRecoveryPreempted)
   TrivialEvent(RemoteBackfillPreempted)
   TrivialEvent(BackfillTooFull)
   TrivialEvent(RecoveryTooFull)
@@ -2126,7 +2127,9 @@ protected:
 	boost::statechart::custom_reaction< DeferRecovery >,
 	boost::statechart::custom_reaction< DeferBackfill >,
 	boost::statechart::custom_reaction< UnfoundRecovery >,
-	boost::statechart::custom_reaction< UnfoundBackfill >
+	boost::statechart::custom_reaction< UnfoundBackfill >,
+	boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>,
+	boost::statechart::custom_reaction< RemoteReservationRevoked>
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap&);
@@ -2148,6 +2151,12 @@ protected:
 	return discard_event();
       }
       boost::statechart::result react(const UnfoundBackfill& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteReservationRevokedTooFull&) {
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteReservationRevoked&) {
 	return discard_event();
       }
     };
@@ -2266,7 +2275,9 @@ protected:
 	boost::statechart::custom_reaction< DeferRecovery >,
 	boost::statechart::custom_reaction< DeferBackfill >,
 	boost::statechart::custom_reaction< UnfoundRecovery >,
-	boost::statechart::custom_reaction< UnfoundBackfill >
+	boost::statechart::custom_reaction< UnfoundBackfill >,
+	boost::statechart::custom_reaction< RemoteBackfillPreempted >,
+	boost::statechart::custom_reaction< RemoteRecoveryPreempted >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MInfoRec& infoevt);
@@ -2286,6 +2297,12 @@ protected:
       boost::statechart::result react(const UnfoundBackfill& evt) {
 	return discard_event();
       }
+      boost::statechart::result react(const RemoteBackfillPreempted& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteRecoveryPreempted& evt) {
+	return discard_event();
+      }
     };
 
     struct RepRecovering : boost::statechart::state< RepRecovering, ReplicaActive >, NamedState {
@@ -2295,9 +2312,11 @@ protected:
 	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,
 	boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
 	boost::statechart::custom_reaction< BackfillTooFull >,
+	boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
 	boost::statechart::custom_reaction< RemoteBackfillPreempted >
 	> reactions;
       explicit RepRecovering(my_context ctx);
+      boost::statechart::result react(const RemoteRecoveryPreempted &evt);
       boost::statechart::result react(const BackfillTooFull &evt);
       boost::statechart::result react(const RemoteBackfillPreempted &evt);
       void exit();
@@ -2343,11 +2362,21 @@ protected:
 	boost::statechart::custom_reaction< RejectRemoteReservation >,
 	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,
 	boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
+	boost::statechart::custom_reaction< RemoteRecoveryReserved >,
+	boost::statechart::custom_reaction< RemoteBackfillReserved >,
 	boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
 	> reactions;
       explicit RepNotRecovering(my_context ctx);
       boost::statechart::result react(const RequestRecoveryPrio &evt);
       boost::statechart::result react(const RequestBackfillPrio &evt);
+      boost::statechart::result react(const RemoteBackfillReserved &evt) {
+	// my reservation completion raced with a RELEASE from primary
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteRecoveryReserved &evt) {
+	// my reservation completion raced with a RELEASE from primary
+	return discard_event();
+      }
       boost::statechart::result react(const RejectRemoteReservation &evt);
       void exit();
     };

@@ -8623,6 +8623,12 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
 	m->query_epoch,
 	m->query_epoch,
 	PG::RecoveryDone()));
+  } else if (m->type == MRecoveryReserve::REVOKE) {
+    evt = PG::CephPeeringEvtRef(
+      new PG::CephPeeringEvt(
+	m->query_epoch,
+	m->query_epoch,
+	PG::DeferRecovery(0.0)));
   } else {
     ceph_abort();
   }
