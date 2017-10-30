@@ -923,8 +923,9 @@ void Paxos::commit_finish()
   new_value.clear();
 
   // WRITING -> REFRESH
-  // among other things, this lets do_refresh() -> mon->bootstrap() know
-  // it doesn't need to flush the store queue
+  // among other things, this lets do_refresh() -> mon->bootstrap() ->
+  // wait_for_paxos_write() know that it doesn't need to flush the store
+  // queue. and it should not, as we are in the async completion thread now!
   assert(is_writing() || is_writing_previous());
   state = STATE_REFRESH;
   assert(commits_started > 0);
