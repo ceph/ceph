@@ -166,7 +166,7 @@ void ECSubWriteReply::generate_test_instances(list<ECSubWriteReply*>& o)
 void ECSubRead::encode(bufferlist &bl, uint64_t features) const
 {
   if ((features & CEPH_FEATURE_OSD_FADVISE_FLAGS) == 0) {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(from, bl);
     ::encode(tid, bl);
     map<hobject_t, list<pair<uint64_t, uint64_t> >> tmp;
@@ -181,21 +181,23 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
     }
     ::encode(tmp, bl);
     ::encode(attrs_to_read, bl);
+    ::encode(subchunks, bl);
     ENCODE_FINISH(bl);
     return;
   }
 
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(from, bl);
   ::encode(tid, bl);
   ::encode(to_read, bl);
   ::encode(attrs_to_read, bl);
+  ::encode(subchunks, bl);
   ENCODE_FINISH(bl);
 }
 
 void ECSubRead::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(2, bl);
+  DECODE_START(3, bl);
   ::decode(from, bl);
   ::decode(tid, bl);
   if (struct_v == 1) {
@@ -214,6 +216,13 @@ void ECSubRead::decode(bufferlist::iterator &bl)
     ::decode(to_read, bl);
   }
   ::decode(attrs_to_read, bl);
+  if (struct_v > 2 && struct_v > struct_compat) {
+  ::decode(subchunks, bl);
+  } else {
+    for (auto &&i:attrs_to_read) {
+      subchunks[i].push_back(make_pair(0,1));
+    }
+  }
   DECODE_FINISH(bl);
 }
 
