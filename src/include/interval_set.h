@@ -76,6 +76,9 @@ class interval_set {
         T get_len() const {
                 return _iter->second;
         }
+        T get_end() const {
+                return _iter->first + _iter->second;
+        }
 
         // Set the interval length.
         void set_len(T len) {
@@ -134,6 +137,9 @@ class interval_set {
         // Return the interval start.
         T get_start() const {
                 return _iter->first;
+        }
+        T get_end() const {
+                return _iter->first + _iter->second;
         }
 
         // Return the interval length.
