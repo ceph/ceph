@@ -72,7 +72,7 @@ void StupidAllocator::unreserve(uint64_t unused)
 
 /// return the effective length of the extent if we align to alloc_unit
 uint64_t StupidAllocator::_aligned_len(
-  btree_interval_set<uint64_t,allocator>::iterator p,
+  StupidAllocator::interval_set_t::iterator p,
   uint64_t alloc_unit)
 {
   uint64_t skew = p.get_start() % alloc_unit;
@@ -292,10 +292,10 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
   std::lock_guard<std::mutex> l(lock);
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   	 << std::dec << dendl;
-  btree_interval_set<uint64_t,allocator> rm;
+  interval_set_t rm;
   rm.insert(offset, length);
   for (unsigned i = 0; i < free.size() && !rm.empty(); ++i) {
-    btree_interval_set<uint64_t,allocator> overlap;
+    interval_set_t overlap;
     overlap.intersection_of(rm, free[i]);
     if (!overlap.empty()) {
       ldout(cct, 20) << __func__ << " bin " << i << " rm 0x" << std::hex << overlap

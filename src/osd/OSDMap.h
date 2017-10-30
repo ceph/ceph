@@ -19,8 +19,6 @@
 #ifndef CEPH_OSDMAP_H
 #define CEPH_OSDMAP_H
 
-#include "include/cpp-btree/btree_map.h"
-
 /*
  * describe properties of the OSD cluster.
  *   disks, disk groups, total # osds,
@@ -36,6 +34,7 @@
 #include <set>
 #include <map>
 #include "include/memory.h"
+#include "include/btree_map.h"
 using namespace std;
 
 // forward declaration
