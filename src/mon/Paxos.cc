@@ -936,8 +936,6 @@ void Paxos::commit_finish()
       extend_lease();
     }
 
-    finish_contexts(g_ceph_context, waiting_for_commit);
-
     assert(g_conf->paxos_kill_at != 10);
 
     finish_round();
@@ -962,9 +960,7 @@ void Paxos::handle_commit(MonOpRequestRef op)
   op->mark_paxos_event("store_state");
   store_state(commit);
 
-  if (do_refresh()) {
-    finish_contexts(g_ceph_context, waiting_for_commit);
-  }
+  (void)do_refresh();
 }
 
 void Paxos::extend_lease()
@@ -1330,7 +1326,6 @@ void Paxos::shutdown()
     shutdown_cond.Wait(mon->lock);
 
   finish_contexts(g_ceph_context, waiting_for_writeable, -ECANCELED);
-  finish_contexts(g_ceph_context, waiting_for_commit, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_readable, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_active, -ECANCELED);
   finish_contexts(g_ceph_context, pending_finishers, -ECANCELED);
@@ -1381,7 +1376,6 @@ void Paxos::peon_init()
 
   // no chance to write now!
   finish_contexts(g_ceph_context, waiting_for_writeable, -EAGAIN);
-  finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
   finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
   finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
 
@@ -1408,7 +1402,6 @@ void Paxos::restart()
 
   finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
   finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
-  finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_active, -EAGAIN);
 
   logger->inc(l_paxos_restart);
