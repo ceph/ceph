@@ -23,10 +23,8 @@ failures within it are unlikely to make non-inlined data inaccessible
 Inline data has always been off by default and requires setting
 the "inline_data" flag.
 
-
-
 Mantle: Programmable Metadata Load Balancer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-------------------------------------------
 
 Mantle is a programmable metadata balancer built into the MDS. The idea is to
 protect the mechanisms for balancing load (migration, replication,
@@ -47,6 +45,9 @@ a snapshot in one FS, expect to lose snapshotted file data in any other FS using
 snapshots. See the :doc:`/dev/cephfs-snapshots` page for more information.
 
 Snapshots are known not to work with multi-MDS filesystems.
+
+For somewhat obscure implementation reasons, the kernel client only supports up
+to 400 snapshots (http://tracker.ceph.com/issues/21420).
 
 Snapshotting was blocked off with the "allow_new_snaps" flag prior to Firefly.
 
