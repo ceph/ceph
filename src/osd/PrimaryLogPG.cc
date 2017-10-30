@@ -3333,96 +3333,52 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 
   // no need to capture PG ref, repop cancel will handle that
   // Can capture the ctx by pointer, it's owned by the repop
-  if (pool.info.is_erasure()) {
-    ctx->register_on_commit(
-      [m, ctx, this](){
-	if (ctx->op)
-	  log_op_stats(
-	    ctx);
+  ctx->register_on_commit_op_lock(
+    [m, ctx, this](){
+      if (ctx->op)
+	log_op_stats(
+	  ctx);
 
-	if (m && !ctx->sent_reply) {
-	  MOSDOpReply *reply = ctx->reply;
-	  if (reply)
-	    ctx->reply = nullptr;
-	  else {
-	    reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
-	    reply->set_reply_versions(ctx->at_version,
-				      ctx->user_at_version);
-	  }
-	  reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-	  dout(10) << " sending reply on " << *m << " " << reply << dendl;
-	  osd->send_message_osd_client(reply, m->get_connection());
-	  ctx->sent_reply = true;
-	  ctx->op->mark_commit_sent();
+      if (m && !ctx->sent_reply) {
+	MOSDOpReply *reply = ctx->reply;
+	if (reply)
+	  ctx->reply = nullptr;
+	else {
+	  lock();
+	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
+	  reply->set_reply_versions(ctx->at_version,
+				    ctx->user_at_version);
+	  unlock();
 	}
-      });
-    ctx->register_on_success(
-      [ctx, this]() {
-	do_osd_op_effects(
-	  ctx,
-	  ctx->op ? ctx->op->get_req()->get_connection() :
-	  ConnectionRef());
-      });
-    ctx->register_on_finish(
-      [ctx, this]() {
-	delete ctx;
-      });
-  } else {
-    ctx->register_on_commit_op_lock(
-      [m, ctx, this](){
-	if (ctx->op)
-	  log_op_stats(
-	    ctx);
-
-	if (m && !ctx->sent_reply) {
-	  MOSDOpReply *reply = ctx->reply;
-	  if (reply)
-	    ctx->reply = nullptr;
-	  else {
-	    lock();
-	    reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
-	    reply->set_reply_versions(ctx->at_version,
-				      ctx->user_at_version);
-	    unlock();
-	  }
-	  reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-	  dout(10) << " sending reply on " << *m << " " << reply << dendl;
-	  osd->send_message_osd_client(reply, m->get_connection());
-	  ctx->sent_reply = true;
-	  ctx->op->mark_commit_sent();
-	}
-      });
-    ctx->register_on_success_op_lock(
-      [ctx, this]() {
-	do_osd_op_effects(
-	  ctx,
-	  ctx->op ? ctx->op->get_req()->get_connection() :
-	  ConnectionRef());
-      });
-    ctx->register_on_finish_op_lock(
-      [ctx, this]() {
-	delete ctx;
-      });
-  }
+	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+	dout(10) << " sending reply on " << *m << " " << reply << dendl;
+	osd->send_message_osd_client(reply, m->get_connection());
+	ctx->sent_reply = true;
+	ctx->op->mark_commit_sent();
+      }
+    });
+  ctx->register_on_success_op_lock(
+    [ctx, this]() {
+      do_osd_op_effects(
+	ctx,
+	ctx->op ? ctx->op->get_req()->get_connection() :
+	ConnectionRef());
+    });
+  ctx->register_on_finish_op_lock(
+    [ctx, this]() {
+      delete ctx;
+    });
 
   // issue replica writes
   ceph_tid_t rep_tid = osd->get_tid();
 
   RepGather *repop;
-  if (pool.info.is_erasure()) {
-    repop = new_repop(ctx, obc, rep_tid);
-  } else {
-    _repop_queue_lock.Lock();
-    repop = new_repop(ctx, obc, rep_tid, OP_COMP_PRIMARY_OP);
-  }
+  _repop_queue_lock.Lock();
+  repop = new_repop(ctx, obc, rep_tid, OP_COMP_PRIMARY_OP);
 
 
   issue_repop(repop, ctx);
-  if (pool.info.is_erasure()) {
-    eval_repop(repop);
-  } else {
-    _repop_queue_lock.Unlock();
-  }
+  _repop_queue_lock.Unlock();
   do_completion(false);
   repop->put();
 }
@@ -9330,13 +9286,8 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
   Context *on_all_commit;
   Context *on_all_applied;
   Context *onapplied_sync;
-  if (pool.info.is_erasure()) {
-    on_all_commit = new C_OSD_RepopCommit(this, repop);
-    on_all_applied = new C_OSD_RepopApplied(this, repop);
-  } else {
-    on_all_commit = new C_OSD_RepopCommitOpComp(this, repop);
-    on_all_applied = new C_OSD_RepopAppliedOpComp(this, repop);
-  }
+  on_all_commit = new C_OSD_RepopCommitOpComp(this, repop);
+  on_all_applied = new C_OSD_RepopAppliedOpComp(this, repop);
   onapplied_sync = new C_OSD_OndiskWriteUnlock(
     ctx->obc,
     ctx->clone_obc,
@@ -9485,11 +9436,7 @@ void PrimaryLogPG::simple_opc_submit(OpContextUPtr ctx)
   RepGather *repop = new_repop(ctx.get(), ctx->obc, ctx->reqid.tid);
   dout(20) << __func__ << " " << repop << dendl;
   issue_repop(repop, ctx.get());
-  if (pool.info.is_erasure()) {
-    eval_repop(repop);
-  } else {
-    do_completion(false);
-  }
+  do_completion(false);
   calc_trim_to();
   repop->put();
 }

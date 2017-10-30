@@ -9030,6 +9030,7 @@ bool OSD::can_op_lock(OpRequestRef op)
 {
   switch (op->get_req()->get_type()) {
     case MSG_OSD_REPOPREPLY:
+    case MSG_OSD_EC_WRITE_REPLY:
       return true;
     default:
       break;

@@ -24,6 +24,7 @@
 #include "ECUtil.h"
 #include "ECTransaction.h"
 #include "ExtentCache.h"
+#include "messages/MOSDECSubOpWriteReply.h"
 
 //forward declaration
 struct ECSubWrite;
@@ -58,20 +59,24 @@ public:
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
   void sub_write_applied(
-    ceph_tid_t tid,
-    eversion_t version,
-    const ZTracer::Trace &trace);
+    const ZTracer::Trace &trace,
+    bool is_primary,
+    ECSubWriteReply *reply,
+    MOSDECSubOpWriteReply *r,
+    CompletionItem *comp_item);
   void sub_write_committed(
-    ceph_tid_t tid,
-    eversion_t version,
-    eversion_t last_complete,
-    const ZTracer::Trace &trace);
+    const ZTracer::Trace &trace,
+    bool is_primary,
+    ECSubWriteReply *reply,
+    MOSDECSubOpWriteReply *r,
+    CompletionItem *comp_item);
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
     const ZTracer::Trace &trace,
-    Context *on_local_applied_sync = 0
+    Context *on_local_applied_sync = 0,
+    CompletionItem *comp_item = NULL
     );
   void handle_sub_read(
     pg_shard_t from,
@@ -210,6 +215,10 @@ public:
       in_progress_client_reads.pop_front();
     }
   }
+
+  void erase_inprogress_op(ceph_tid_t tid);
+  bool check_all_completion(CompletionItem *comp_item);
+  bool handle_message_op_lock(OpRequestRef _op);
 
 private:
   friend struct ECRecoveryHandle;
@@ -499,6 +508,8 @@ public:
     bool write_in_progress() const {
       return !pending_commit.empty() || !pending_apply.empty();
     }
+
+    CompletionItem *comp_item;
 
     /// optional, may be null, for tracking purposes
     OpRequestRef client_op;
