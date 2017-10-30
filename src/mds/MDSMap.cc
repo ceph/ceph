@@ -637,7 +637,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void MDSMap::sanitize(std::function<bool(int64_t pool)> pool_exists)
+void MDSMap::sanitize(const std::function<bool(int64_t pool)>& pool_exists)
 {
   /* Before we did stricter checking, it was possible to remove a data pool
    * without also deleting it from the MDSMap. Check for that here after
