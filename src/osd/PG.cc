@@ -6548,11 +6548,11 @@ void PG::RecoveryState::WaitRemoteBackfillReserved::retry()
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
   // Send CANCEL to all previously acquired reservations
-  set<pg_shard_t>::const_iterator it, begin, end, next;
+  set<pg_shard_t>::const_iterator it, begin, end;
   begin = context< Active >().remote_shards_to_reserve_backfill.begin();
   end = context< Active >().remote_shards_to_reserve_backfill.end();
   assert(begin != end);
-  for (next = it = begin, ++next ; next != backfill_osd_it; ++it, ++next) {
+  for (it = begin; it != backfill_osd_it; ++it) {
     //The primary never backfills itself
     assert(*it != pg->pg_whoami);
     ConnectionRef con = pg->osd->get_con_osd_cluster(
@@ -6756,7 +6756,7 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
     post_event(RejectRemoteReservation());
   } else {
     Context *preempt = nullptr;
-    if (HAVE_FEATURE(pg->upacting_features, SERVER_MIMIC)) {
+    if (HAVE_FEATURE(pg->upacting_features, RECOVERY_RESERVATION_2)) {
       // older peers will interpret preemption as TOOFULL
       preempt = new QueuePeeringEvt<RemoteBackfillPreempted>(
 	pg, pg->get_osdmap()->get_epoch(),
@@ -6777,17 +6777,26 @@ boost::statechart::result
 PG::RecoveryState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  ostringstream ss;
 
   // fall back to a local reckoning of priority of primary doesn't pass one
   // (pre-mimic compat)
   int prio = evt.priority ? evt.priority : pg->get_recovery_priority();
+
+  Context *preempt = nullptr;
+  if (HAVE_FEATURE(pg->upacting_features, RECOVERY_RESERVATION_2)) {
+    // older peers can't handle this
+    preempt = new QueuePeeringEvt<RemoteRecoveryPreempted>(
+      pg, pg->get_osdmap()->get_epoch(),
+      RemoteRecoveryPreempted());
+  }
+
   pg->osd->remote_reserver.request_reservation(
     pg->info.pgid,
     new QueuePeeringEvt<RemoteRecoveryReserved>(
       pg, pg->get_osdmap()->get_epoch(),
       RemoteRecoveryReserved()),
-    prio);
+    prio,
+    preempt);
   return transit<RepWaitRecoveryReserved>();
 }
 
@@ -6863,6 +6872,20 @@ PG::RecoveryState::RepRecovering::RepRecovering(my_context ctx)
     NamedState(context< RecoveryMachine >().pg, "Started/ReplicaActive/RepRecovering")
 {
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result
+PG::RecoveryState::RepRecovering::react(const RemoteRecoveryPreempted &)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->send_message_osd_cluster(
+    pg->primary.osd,
+    new MRecoveryReserve(
+      MRecoveryReserve::REVOKE,
+      spg_t(pg->info.pgid.pgid, pg->primary.shard),
+      pg->get_osdmap()->get_epoch()),
+    pg->get_osdmap()->get_epoch());
+  return discard_event();
 }
 
 boost::statechart::result
