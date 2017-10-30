@@ -29,3 +29,4 @@ technologies, including plain disks.
    lvm/scan
    lvm/systemd
    lvm/list
+   lvm/zap
