@@ -332,7 +332,7 @@ public:
   int mount();
   void umount();
 
-  void collect_metadata(map<string,string> *pm);
+  void collect_metadata(map<string,string> *pm, unsigned skip_bdev_id);
   int fsck();
 
   uint64_t get_fs_usage();
