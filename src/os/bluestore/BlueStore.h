@@ -1741,6 +1741,7 @@ public:
 	// sure those threads see waiters and signal qcond.
 	++kv_submitted_waiters;
 	if (_is_all_kv_submitted()) {
+	  --kv_submitted_waiters;
 	  return;
 	}
 	qcond.wait(l);
