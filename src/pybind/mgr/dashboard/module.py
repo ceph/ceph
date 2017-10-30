@@ -255,6 +255,10 @@ class Module(MgrModule):
                 filesystem = fs
                 break
 
+        if filesystem is None:
+            raise cherrypy.HTTPError(404,
+                "Filesystem id {0} not found".format(fs_id))
+
         rank_table = []
 
         mdsmap = filesystem['mdsmap']
