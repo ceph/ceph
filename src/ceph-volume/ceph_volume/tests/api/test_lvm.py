@@ -353,6 +353,22 @@ class TestGetLVFromArgument(object):
         assert api.get_lv_from_argument('/path/to/lv') == self.foo_volume
 
 
+class TestRemoveLV(object):
+
+    def test_removes_lv(self, monkeypatch):
+        def mock_call(cmd, **kw):
+            return ('', '', 0)
+        monkeypatch.setattr(process, 'call', mock_call)
+        assert api.remove_lv("vg/lv")
+
+    def test_fails_to_remove_lv(self, monkeypatch):
+        def mock_call(cmd, **kw):
+            return ('', '', 1)
+        monkeypatch.setattr(process, 'call', mock_call)
+        with pytest.raises(RuntimeError):
+            api.remove_lv("vg/lv")
+
+
 class TestCreateLV(object):
 
     def setup(self):

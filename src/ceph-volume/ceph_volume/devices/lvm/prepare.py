@@ -120,9 +120,13 @@ class Prepare(object):
             tags['ceph.%s_uuid' % device_type] = uuid
             tags['ceph.%s_device' % device_type] = path
             lv.set_tags(tags)
-            return path, uuid, tags
-        # otherwise assume this is a regular disk partition
-        return device_name, self.get_ptuuid(device_name), tags
+        else:
+            # otherwise assume this is a regular disk partition
+            uuid = self.get_ptuuid(device_name)
+            path = device_name
+            tags['ceph.%s_uuid' % device_type] = uuid
+            tags['ceph.%s_device' % device_type] = path
+        return path, uuid, tags
 
     @decorators.needs_root
     def prepare(self, args):
