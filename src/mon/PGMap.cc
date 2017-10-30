@@ -2145,8 +2145,7 @@ void PGMap::get_health_checks(
     { PG_STATE_UNDERSIZED,       {DEGRADED,    [](const pg_stat_t &p){return p.last_fullsized;} } },
     { PG_STATE_STALE,            {UNAVAILABLE, [](const pg_stat_t &p){return p.last_unstale;}   } },
     // Delayed and inverted reports
-    { PG_STATE_ACTIVE,           {UNAVAILABLE, [](const pg_stat_t &p){return p.last_active;}, true} },
-    { PG_STATE_CLEAN,            {DEGRADED,    [](const pg_stat_t &p){return p.last_clean;}, true} }
+    { PG_STATE_ACTIVE,           {UNAVAILABLE, [](const pg_stat_t &p){return p.last_active;}, true} }
   };
 
   // Specialized state printer that takes account of inversion of
