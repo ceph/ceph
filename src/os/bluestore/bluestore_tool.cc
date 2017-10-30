@@ -66,14 +66,11 @@ void validate_path(CephContext *cct, const string& path, bool bluefs)
   }
 }
 
-BlueFS *open_bluefs(
+void add_devices(
+  BlueFS *fs,
   CephContext *cct,
-  const string& path,
   const vector<string>& devs)
 {
-  validate_path(cct, path, true);
-  BlueFS *fs = new BlueFS(cct);
-
   string main;
   set<int> got;
   for (auto& i : devs) {
@@ -113,6 +110,37 @@ BlueFS *open_bluefs(
       exit(EXIT_FAILURE);
     }
   }
+}
+
+void log_dump(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  validate_path(cct, path, true);
+  BlueFS *fs = new BlueFS(cct);
+  
+  add_devices(fs, cct, devs);
+
+  int r = fs->log_dump(cct, path, devs);
+  if (r < 0) {
+    cerr << "log_dump failed" << ": "
+         << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  delete fs;
+}
+
+BlueFS *open_bluefs(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  validate_path(cct, path, true);
+  BlueFS *fs = new BlueFS(cct);
+
+  add_devices(fs, cct, devs);
 
   int r = fs->mount();
   if (r < 0) {
@@ -147,7 +175,7 @@ int main(int argc, char **argv)
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, show-label, set-label-key, rm-label-key, prime-osd-dir")
+    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, show-label, set-label-key, rm-label-key, prime-osd-dir, bluefs-log-dump")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -224,12 +252,12 @@ int main(int argc, char **argv)
       }
     }
   }
-  if (action == "bluefs-export") {
+  if (action == "bluefs-export" || action == "bluefs-log-dump") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
     }
-    if (out_dir.empty()) {
+    if ((action == "bluefs-export") && out_dir.empty()) {
       cerr << "must specify out-dir to export bluefs" << std::endl;
       exit(EXIT_FAILURE);
     }
@@ -525,6 +553,8 @@ int main(int argc, char **argv)
     }
     fs->umount();
     delete fs;
+  } else if (action == "bluefs-log-dump") {
+    log_dump(cct.get(), path, devs);
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;

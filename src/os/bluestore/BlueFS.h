@@ -309,7 +309,7 @@ private:
 
   int _open_super();
   int _write_super();
-  int _replay(bool noop); ///< replay journal
+  int _replay(bool noop, bool to_stdout = false); ///< replay journal
 
   FileWriter *_create_writer(FileRef f);
   void _close_writer(FileWriter *h);
@@ -331,6 +331,11 @@ public:
   int mkfs(uuid_d osd_uuid);
   int mount();
   void umount();
+  
+  int log_dump(
+    CephContext *cct,
+    const string& path,
+    const vector<string>& devs);
 
   void collect_metadata(map<string,string> *pm);
   int fsck();
