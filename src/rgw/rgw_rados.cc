@@ -8174,9 +8174,6 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                string *ptag,
                ceph::buffer::list *petag)
 {
-  bufferlist first_chunk;
-  RGWObjManifest manifest;
-
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
