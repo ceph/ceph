@@ -17,7 +17,7 @@ Synopsis
   [ --deep ]
 | **ceph-bluestore-tool** fsck|repair --path *osd path* [ --deep ]
 | **ceph-bluestore-tool** show-label --dev *device* ...
-| **ceph-bluestore-tool** prime-osd-dev --dev *device* --path *osd path*
+| **ceph-bluestore-tool** prime-osd-dir --dev *device* --path *osd path*
 | **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
 | **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
 
