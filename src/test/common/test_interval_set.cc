@@ -15,8 +15,9 @@
  */
 
 #include <gtest/gtest.h>
+#include <boost/container/flat_map.hpp>
 #include "include/interval_set.h"
-#include "include/btree_interval_set.h"
+#include "include/btree_map.h"
 
 using namespace ceph;
 
@@ -29,7 +30,13 @@ class IntervalSetTest : public ::testing::Test {
   typedef T ISet;
 };
 
-typedef ::testing::Types< interval_set<IntervalValueType> ,  btree_interval_set<IntervalValueType> > IntervalSetTypes;
+typedef ::testing::Types<
+  interval_set<IntervalValueType>,
+  interval_set<IntervalValueType,
+	       btree::btree_map<IntervalValueType,IntervalValueType>>,
+  interval_set<IntervalValueType,
+	       boost::container::flat_map<IntervalValueType,IntervalValueType>>
+  > IntervalSetTypes;
 
 TYPED_TEST_CASE(IntervalSetTest, IntervalSetTypes);
 
