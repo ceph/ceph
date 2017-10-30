@@ -451,14 +451,12 @@ void BlueFS::umount()
   _shutdown_logger();
 }
 
-void BlueFS::collect_metadata(map<string,string> *pm)
+void BlueFS::collect_metadata(map<string,string> *pm, unsigned skip_bdev_id)
 {
-  if (bdev[BDEV_DB])
+  if (skip_bdev_id != BDEV_DB && bdev[BDEV_DB])
     bdev[BDEV_DB]->collect_metadata("bluefs_db_", pm);
   if (bdev[BDEV_WAL])
     bdev[BDEV_WAL]->collect_metadata("bluefs_wal_", pm);
-  if (bdev[BDEV_SLOW])
-    bdev[BDEV_SLOW]->collect_metadata("bluefs_slow_", pm);
 }
 
 int BlueFS::fsck()

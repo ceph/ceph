@@ -6233,7 +6233,7 @@ void BlueStore::collect_metadata(map<string,string> *pm)
   if (bluefs) {
     (*pm)["bluefs"] = "1";
     (*pm)["bluefs_single_shared_device"] = stringify((int)bluefs_single_shared_device);
-    bluefs->collect_metadata(pm);
+    bluefs->collect_metadata(pm, bluefs_shared_bdev);
   } else {
     (*pm)["bluefs"] = "0";
   }
