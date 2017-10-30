@@ -117,8 +117,7 @@ bool RGWStreamReadHTTPResourceCRF::has_attrs()
 
 void RGWStreamReadHTTPResourceCRF::get_attrs(std::map<string, string> *attrs)
 {
-#warning need to lock in_req->headers
-  *attrs = req->get_out_headers();
+  req->get_out_headers(attrs);
 }
 
 int RGWStreamReadHTTPResourceCRF::decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info) {
@@ -147,7 +146,8 @@ int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool 
           continue;
         }
         extra_data.claim_append(in_cb->get_extra_data());
-        map<string, string> attrs = req->get_out_headers();
+        map<string, string> attrs;
+        req->get_out_headers(&attrs);
         int ret = decode_rest_obj(attrs, extra_data, &rest_obj);
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: " << __func__ << " decode_rest_obj() returned ret=" << ret << dendl;
@@ -206,8 +206,9 @@ int RGWStreamWriteHTTPResourceCRF::drain_writes(bool *need_retry)
       *need_retry = !req->is_done();
     }
 
-#warning need to lock in_req->headers
-    handle_headers(req->get_out_headers());
+    map<string, string> headers;
+    req->get_out_headers(&headers);
+    handle_headers(headers);
 
     return req->get_req_retcode();
   }

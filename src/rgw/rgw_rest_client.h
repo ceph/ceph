@@ -13,6 +13,9 @@ protected:
   int http_status;
   int status;
 
+  using unique_lock = std::unique_lock<std::mutex>;
+
+  std::mutex out_headers_lock;
   map<string, string> out_headers;
   param_vec_t params;
 
@@ -51,7 +54,7 @@ public:
 
   bufferlist& get_response() { return response; }
 
-  map<string, string>& get_out_headers() { return out_headers; }
+  void get_out_headers(map<string, string> *pheaders); /* modifies out_headers */
 
   int get_http_status() { return http_status; }
   int get_status();

@@ -43,6 +43,8 @@ int RGWHTTPSimpleRequest::handle_header(const string& name, const string& val)
 
 int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
 {
+  unique_lock guard(out_headers_lock);
+
   char line[len + 1];
 
   char *s = (char *)ptr, *end = (char *)ptr + len;
@@ -206,6 +208,13 @@ void RGWHTTPSimpleRequest::get_params_str(map<string, string>& extra_args, strin
   for (iter = params.begin(); iter != params.end(); ++iter) {
     append_param(dest, iter->first, iter->second);
   }
+}
+
+void RGWHTTPSimpleRequest::get_out_headers(map<string, string> *pheaders)
+{
+  unique_lock guard(out_headers_lock);
+  pheaders->swap(out_headers);
+  out_headers.clear();
 }
 
 static int sign_request(CephContext *cct, RGWAccessKey& key, RGWEnv& env, req_info& info)
@@ -670,6 +679,9 @@ int RGWRESTStreamRWRequest::complete_request(string& etag, real_time *mtime, uin
   if (ret < 0) {
     return ret;
   }
+
+  unique_lock guard(out_headers_lock);
+
   set_str_from_headers(out_headers, "ETAG", etag);
   if (status >= 0) {
     if (mtime) {
