@@ -1722,10 +1722,8 @@ public:
     }
 
     bool _is_all_kv_submitted() {
-      // caller must hold qlock
-      if (q.empty()) {
-	return true;
-      }
+      // caller must hold qlock & q.empty() must not empty
+      assert(!q.empty());
       TransContext *txc = &q.back();
       if (txc->state >= TransContext::STATE_KV_SUBMITTED) {
 	return true;
@@ -1740,7 +1738,7 @@ public:
 	// may become true outside qlock, and we need to make
 	// sure those threads see waiters and signal qcond.
 	++kv_submitted_waiters;
-	if (_is_all_kv_submitted()) {
+	if (q.empty() || _is_all_kv_submitted()) {
 	  --kv_submitted_waiters;
 	  return;
 	}
