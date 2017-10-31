@@ -54,6 +54,14 @@ class DaemonsAndImages(RemoteViewCache):
                             [[0,0]])[-1][1] / 1000000000
                         if lock_acquired_time > image.get('optimized_since', None):
                             image['optimized_since'] = lock_acquired_time
+                            image['stats'] = {}
+                            image['stats_history'] = {}
+                            for s in ['rd', 'wr', 'rd_bytes', 'wr_bytes']:
+                                perf_key = "{}{}".format(perf_key_prefix, s)
+                                image['stats'][s] = self._module.get_rate(
+                                    'tcmu-runner', service_id, perf_key)
+                                image['stats_history'][s] = self._module.get_counter(
+                                    'tcmu-runner', service_id, perf_key)[perf_key]
                     else:
                         daemon['non_optimized_paths'] += 1
                         image['non_optimized_paths'].append(server['hostname'])
