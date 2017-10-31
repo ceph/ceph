@@ -63,6 +63,10 @@ struct WriteLogPmemEntry {
       entry_valid(0), sync_point(0), sequenced(0), has_data(0), unmap(0) {
   }
   WriteLogPmemEntry() { WriteLogPmemEntry(0, 0); }
+  BlockExtent block_extent() {
+    return BlockExtent(image_offset_bytes / BLOCK_SIZE,
+		       (image_offset_bytes + write_bytes) / BLOCK_SIZE);
+  }
   friend std::ostream &operator<<(std::ostream &os,
 				  const WriteLogPmemEntry &entry) {
     os << "entry_valid=" << (bool)entry.entry_valid << ", "
@@ -101,14 +105,17 @@ public:
   uint64_t log_entry_index;
   WriteLogPmemEntry *pmem_entry;
   uint8_t *pmem_block;
+  uint32_t referring_map_entries;
   /* TODO: occlusion by subsequent writes */
   /* TODO: flush state: portions flushed, in-progress flushes */
   WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
-    : ram_entry(image_offset_bytes, write_bytes), log_entry_index(0), pmem_entry(NULL), pmem_block(NULL)  {
+    : ram_entry(image_offset_bytes, write_bytes), log_entry_index(0),
+      pmem_entry(NULL), pmem_block(NULL), referring_map_entries(0) {
   }
   WriteLogEntry() {} 
   WriteLogEntry(const WriteLogEntry&) = delete;
   WriteLogEntry &operator=(const WriteLogEntry&) = delete;
+  BlockExtent block_extent() { return ram_entry.block_extent(); }
   friend std::ostream &operator<<(std::ostream &os,
 				  WriteLogEntry &entry) {
     os << "ram_entry=[" << entry.ram_entry << "], "
@@ -184,7 +191,7 @@ typedef std::list<WriteLogOperation*> WriteLogOperations;
 class WriteLogOperationSet {
 public:
   CephContext *m_cct;
-  librbd::BlockExtent m_extent; /* in blocks */
+  BlockExtent m_extent; /* in blocks */
   Context *m_on_finish;
   bool m_persist_on_flush;
   BlockGuardCell *m_cell;
@@ -194,7 +201,7 @@ public:
   void complete(int r) {
   }
   WriteLogOperationSet(CephContext *cct, SyncPoint *sync_point, bool persist_on_flush,
-		       librbd::BlockExtent extent, Context *on_finish)
+		       BlockExtent extent, Context *on_finish)
     : m_cct(cct), m_extent(extent), m_on_finish(on_finish), m_persist_on_flush(persist_on_flush) {
     m_on_ops_persist = sync_point->m_prior_log_entries_persisted->new_sub();
     m_extent_ops =
@@ -256,8 +263,160 @@ struct GuardedRequest {
   }
 };
 
-
 typedef librbd::BlockGuard<GuardedRequest> WriteLogGuard;
+
+#define dout_subsys ceph_subsys_rbd
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::cache::rwl::WriteLogMap: " << this << " " \
+                           <<  __func__ << ": "
+/**
+ * WriteLogMap: maps block extents to WriteLogEntries
+ *
+ */
+/* A WriteLogMapEntry refers to a portion of a WriteLogEntry */
+struct WriteLogMapEntry {
+  uint64_t first_block_num;
+  uint64_t last_block_num;
+  WriteLogEntry *log_entry;
+  
+  WriteLogMapEntry(uint64_t first_block_num, uint64_t last_block_num, WriteLogEntry *log_entry)
+    : first_block_num(first_block_num), last_block_num(last_block_num), log_entry(log_entry) {
+    log_entry->referring_map_entries++;
+  }
+  ~WriteLogMapEntry() {
+    log_entry->referring_map_entries--;
+  }
+};
+typedef std::list<WriteLogMapEntry> WriteLogMapEntries;
+class WriteLogMap {
+private:
+  struct WriteLogMapExtent;
+
+public:
+  WriteLogMap(CephContext *cct)
+    : m_cct(cct), m_lock("librbd::cache::rwl::WriteLogMap::m_lock") {
+  }
+
+  WriteLogMap(const WriteLogMap&) = delete;
+  WriteLogMap &operator=(const WriteLogMap&) = delete;
+
+  /**
+   * Add a write log entry to the map. Subsequent queries for blocks
+   * within this log entry's extent will find this log entry. Portions
+   * of prior write log entries overlapping with this log entry will
+   * be replaced in the map by this log entry.
+   *
+   * The map_entries field of the log entry object will be updated to
+   * contain this map entry.
+   *
+   * The map_entries fields of all log entries overlapping with this
+   * entry will be updated to remove the regions that overlap with
+   * this.
+   */
+  int add_entry(WriteLogEntry *log_entry) {
+    Mutex::Locker locker(m_lock);
+    const BlockExtent block_extent = log_entry->block_extent();
+    ldout(m_cct, 20) << "block_start=" << block_extent.block_start << ", "
+                     << "block_end=" << block_extent.block_end << ", "
+                     << "free_slots=" << m_free_map_extents.size()
+                     << dendl;
+#if 0
+    WriteLogMapExtent *detained_block_extent;
+    auto it = m_detained_block_extents.find(block_extent);
+    if (it != m_detained_block_extents.end()) {
+      // request against an already detained block
+      detained_block_extent = &(*it);
+      if (map_entry != nullptr) {
+        detained_block_extent->block_operations.emplace_back(
+          std::move(*map_entry));
+      }
+
+      // alert the caller that the IO was detained
+      return detained_block_extent->block_operations.size();
+    } else {
+      if (!m_free_map_extents.empty()) {
+        detained_block_extent = &m_free_map_extents.front();
+        detained_block_extent->block_operations.clear();
+        m_free_map_extents.pop_front();
+      } else {
+        ldout(m_cct, 20) << "no free detained block cells" << dendl;
+        m_detained_block_extent_pool.emplace_back();
+        detained_block_extent = &m_detained_block_extent_pool.back();
+      }
+
+      detained_block_extent->block_extent = block_extent;
+      m_detained_block_extents.insert(*detained_block_extent);
+      return 0;
+    }
+#endif
+  }
+
+  /**
+   * Remove any map entries that refer to the supplied write log
+   * entry.
+   */
+  void remove_entry(WriteLogEntry *log_entry) {
+    Mutex::Locker locker(m_lock);
+
+#if 0
+    assert(cell != nullptr);
+    auto &detained_block_extent = reinterpret_cast<WriteLogMapExtent &>(
+      *cell);
+    ldout(m_cct, 20) << "block_start="
+                     << detained_block_extent.block_extent.block_start << ", "
+                     << "block_end="
+                     << detained_block_extent.block_extent.block_end << ", "
+                     << "pending_ops="
+                     << (detained_block_extent.block_operations.empty() ?
+                          0 : detained_block_extent.block_operations.size() - 1)
+                     << dendl;
+
+    *block_operations = std::move(detained_block_extent.block_operations);
+    m_detained_block_extents.erase(detained_block_extent.block_extent);
+    m_free_detained_block_extents.push_back(detained_block_extent);
+#endif
+  }
+
+private:
+  struct WriteLogMapExtent : public boost::intrusive::list_base_hook<>,
+			     public boost::intrusive::set_base_hook<> {
+    BlockExtent block_extent;
+    WriteLogMapEntry map_entry;
+  };
+
+  struct WriteLogMapExtentKey {
+    typedef BlockExtent type;
+    const BlockExtent &operator()(const WriteLogMapExtent &value) {
+      return value.block_extent;
+    }
+  };
+
+  struct WriteLogMapExtentCompare {
+    bool operator()(const BlockExtent &lhs,
+                    const BlockExtent &rhs) const {
+      // check for range overlap (lhs < rhs)
+      if (lhs.block_end <= rhs.block_start) {
+        return true;
+      }
+      return false;
+    }
+  };
+
+  typedef std::deque<WriteLogMapExtent> WriteLogMapExtentsPool;
+  typedef boost::intrusive::list<WriteLogMapExtent> WriteLogMapExtents;
+  typedef boost::intrusive::set<
+    WriteLogMapExtent,
+    boost::intrusive::compare<WriteLogMapExtentCompare>,
+    boost::intrusive::key_of_value<WriteLogMapExtentKey> >
+      BlockExtentToWriteLogMapExtents;
+
+  CephContext *m_cct;
+
+  Mutex m_lock;
+  WriteLogMapExtentsPool m_map_extent_pool;
+  WriteLogMapExtents m_free_map_extents;
+  BlockExtentToWriteLogMapExtents m_block_to_log_entry_map;
+};
 
 } // namespace rwl
 
