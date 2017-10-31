@@ -27,20 +27,33 @@ class DaemonsAndImages(RemoteViewCache):
                         }
                         daemons[server['hostname']] = daemon
 
-                    image_id = service['id'].split(':')[-1]
-                    image = images.get(image_id)
+                    service_id = service['id']
+                    device_id = service_id.split(':')[-1]
+                    image = images.get(device_id)
                     if image is None:
                         image = {
-                            'id': image_id,
+                            'device_id': device_id,
                             'pool_name': metadata['pool_name'],
                             'name': metadata['image_name'],
+                            'id': metadata.get('image_id', None),
                             'optimized_paths': [],
                             'non_optimized_paths': []
                         }
-                        images[image_id] = image
+                        images[device_id] = image
                     if status.get('lock_owner', 'false') == 'true':
                         daemon['optimized_paths'] += 1
                         image['optimized_paths'].append(server['hostname'])
+
+                        perf_key_prefix = "librbd-{id}-{pool}-{name}.".format(
+                            id=metadata.get('image_id', ''),
+                            pool=metadata['pool_name'],
+                            name=metadata['image_name'])
+                        perf_key = "{}lock_acquired_time".format(perf_key_prefix)
+                        lock_acquired_time = (self._module.get_counter(
+                          'tcmu-runner', service_id, perf_key)[perf_key] or
+                            [[0,0]])[-1][1] / 1000000000
+                        if lock_acquired_time > image.get('optimized_since', None):
+                            image['optimized_since'] = lock_acquired_time
                     else:
                         daemon['non_optimized_paths'] += 1
                         image['non_optimized_paths'].append(server['hostname'])
