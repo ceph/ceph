@@ -113,6 +113,9 @@ with open(".githubmap") as f:
         m = patt.match(line)
         CONTRIBUTORS[m.group(1)] = m.group(2)
 
+BZ_MATCH = re.compile("(.*https?://bugzilla.redhat.com/.*)")
+TRACKER_MATCH = re.compile("(.*https?://tracker.ceph.com/.*)")
+
 def build_branch(args):
     base = args.base
     branch = args.branch
@@ -182,10 +185,21 @@ def build_branch(args):
             sys.exit(1)
         tip = fi[0].ref.commit
 
+        pr_req = requests.get("https://api.github.com/repos/ceph/ceph/pulls/{pr}".format(pr=pr), auth=(USER, PASSWORD))
+        if pr_req.status_code != 200:
+            log.error("PR '{pr}' not found: {c}".format(pr=pr,c=pr_req))
+            sys.exit(1)
+
         message = "Merge PR #%d into %s\n\n* %s:\n" % (pr, args.merge_branch_name, remote_ref)
 
         for commit in G.iter_commits(rev="HEAD.."+str(tip)):
             message = message + ("\t%s\n" % commit.message.split('\n', 1)[0])
+            # Get tracker issues / bzs cited so the PTL can do updates
+            short = commit.hexsha[:8]
+            for m in BZ_MATCH.finditer(commit.message):
+                log.info("[ {sha1} ] BZ cited: {cite}".format(sha1=short, cite=m.group(1)))
+            for m in TRACKER_MATCH.finditer(commit.message):
+                log.info("[ {sha1} ] Ceph tracker cited: {cite}".format(sha1=short, cite=m.group(1)))
 
         message = message + "\n"
 
@@ -205,7 +219,13 @@ def build_branch(args):
             sys.exit(1)
 
         indications = set()
-        for comment in comments.json()+review_comments.json():
+        for comment in [pr_req.json()]+comments.json()+reviews.json()+review_comments.json():
+            body = comment["body"]
+            url = comment["html_url"]
+            for m in BZ_MATCH.finditer(body):
+                log.info("[ {url} ] BZ cited: {cite}".format(url=url, cite=m.group(1)))
+            for m in TRACKER_MATCH.finditer(body):
+                log.info("[ {url} ] Ceph tracker cited: {cite}".format(url=url, cite=m.group(1)))
             for indication in INDICATIONS:
                 for cap in indication.findall(comment["body"]):
                     indications.add(cap)
