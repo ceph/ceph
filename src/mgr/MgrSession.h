@@ -23,6 +23,8 @@ struct MgrSession : public RefCountedObject {
   // mon caps are suitably generic for mgr
   MonCap caps;
 
+  std::set<std::string> declared_types;
+
   MgrSession(CephContext *cct) : RefCountedObject(cct, 0) {}
   ~MgrSession() override {}
 };
