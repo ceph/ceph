@@ -2070,10 +2070,8 @@ void OSDMap::pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool) {
-    if (primary)
-      *primary = -1;
-    if (raw)
-      raw->clear();
+    *primary = -1;
+    raw->clear();
     return;
   }
   _pg_to_raw_osds(*pool, pg, raw, NULL);
@@ -2084,10 +2082,8 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool) {
-    if (primary)
-      *primary = -1;
-    if (up)
-      up->clear();
+    *primary = -1;
+    up->clear();
     return;
   }
   vector<int> raw;
