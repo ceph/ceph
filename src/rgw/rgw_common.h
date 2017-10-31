@@ -1910,8 +1910,7 @@ struct RGWBucketEnt {
       size(e.size),
       size_rounded(e.size_rounded),
       creation_time(e.creation_time),
-      count(e.count),
-      placement_rule(std::move(e.placement_rule)) {
+      count(e.count) {
   }
 
   RGWBucketEnt& operator=(const RGWBucketEnt&) = default;
