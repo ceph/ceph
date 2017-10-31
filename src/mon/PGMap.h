@@ -280,9 +280,6 @@ public:
 
   utime_t stamp;
 
-  void update_global_delta(
-    CephContext *cct,
-    const utime_t ts, const pool_stat_t& pg_sum_old);
   void update_pool_deltas(
     CephContext *cct,
     const utime_t ts,

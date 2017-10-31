@@ -1913,20 +1913,6 @@ void PGMap::update_delta(
 }
 
 /**
- * update aggregated delta
- *
- * @param cct            ceph context
- * @param ts             Timestamp
- * @param pg_sum_old     Old pg_sum
- */
-void PGMap::update_global_delta(CephContext *cct,
-                                const utime_t ts, const pool_stat_t& pg_sum_old)
-{
-  update_delta(cct, ts, pg_sum_old, &stamp, pg_sum, &pg_sum_delta,
-               &stamp_delta, &pg_sum_deltas);
-}
-
-/**
  * Update a given pool's deltas
  *
  * @param cct           Ceph Context
