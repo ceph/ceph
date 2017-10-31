@@ -418,8 +418,12 @@ void RGWOp_Subuser_Modify::execute()
 
   op_state.set_user_id(uid);
   op_state.set_subuser(subuser);
-  op_state.set_secret_key(secret_key);
-  op_state.set_gen_secret();
+
+  if (!secret_key.empty())
+    op_state.set_secret_key(secret_key);
+
+  if (gen_secret)
+    op_state.set_gen_secret();
 
   if (!key_type_str.empty()) {
     if (key_type_str.compare("swift") == 0)
