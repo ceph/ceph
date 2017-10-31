@@ -1627,12 +1627,10 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
   if (missing) {
     dout(1) << " peer " << m->get_source_addr() << " missing features "
 	    << missing << dendl;
-    if (m->get_connection()->has_feature(CEPH_FEATURE_OSD_PRIMARY_AFFINITY)) {
-      MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_MISSING_FEATURES,
-				   name, has_ever_joined);
-      m->required_features = required_features;
-      m->get_connection()->send_message(r);
-    }
+    MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_MISSING_FEATURES,
+				 name, has_ever_joined);
+    m->required_features = required_features;
+    m->get_connection()->send_message(r);
     goto out;
   }
 
@@ -2036,18 +2034,12 @@ void Monitor::_apply_compatset_features(CompatSet &new_features)
 void Monitor::apply_quorum_to_compatset_features()
 {
   CompatSet new_features(features);
-  if (quorum_con_features & CEPH_FEATURE_OSD_ERASURE_CODES) {
-    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
-  }
+  new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
   if (quorum_con_features & CEPH_FEATURE_OSDMAP_ENC) {
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
   }
-  if (quorum_con_features & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2) {
-    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
-  }
-  if (quorum_con_features & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3) {
-    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3);
-  }
+  new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
+  new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3);
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
 }
@@ -2098,17 +2090,8 @@ void Monitor::calc_quorum_requirements()
   required_features = 0;
 
   // compatset
-  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES)) {
-    required_features |= CEPH_FEATURE_OSD_ERASURE_CODES;
-  }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC)) {
     required_features |= CEPH_FEATURE_OSDMAP_ENC;
-  }
-  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2)) {
-    required_features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
-  }
-  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3)) {
-    required_features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3;
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_KRAKEN)) {
     required_features |= CEPH_FEATUREMASK_SERVER_KRAKEN;

@@ -1310,10 +1310,6 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     if (pool.second.has_flag(pg_pool_t::FLAG_HASHPSPOOL)) {
       features |= CEPH_FEATURE_OSDHASHPSPOOL;
     }
-    if (pool.second.is_erasure() &&
-	entity_type != CEPH_ENTITY_TYPE_CLIENT) { // not for clients
-      features |= CEPH_FEATURE_OSD_ERASURE_CODES;
-    }
     if (!pool.second.tiers.empty() ||
 	pool.second.is_tier()) {
       features |= CEPH_FEATURE_OSD_CACHEPOOL;
@@ -1330,21 +1326,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
     }
   }
-  if (entity_type == CEPH_ENTITY_TYPE_OSD) {
-    for (auto &erasure_code_profile : erasure_code_profiles) {
-      auto& profile = erasure_code_profile.second;
-      const auto& plugin = profile.find("plugin");
-      if (plugin != profile.end()) {
-	if (plugin->second == "isa" || plugin->second == "lrc")
-	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
-	if (plugin->second == "shec")
-	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3;
-      }
-    }
-  }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
-  if (entity_type != CEPH_ENTITY_TYPE_CLIENT)
-    mask |= CEPH_FEATURE_OSD_ERASURE_CODES;
 
   if (osd_primary_affinity) {
     for (int i = 0; i < max_osd; ++i) {
@@ -1392,7 +1374,6 @@ uint8_t OSDMap::get_min_compat_client() const
   }
   if (HAVE_FEATURE(f, OSD_PRIMARY_AFFINITY) || // v0.76-553-gf825624
       HAVE_FEATURE(f, CRUSH_TUNABLES3) ||      // v0.76-395-ge20a55d
-      HAVE_FEATURE(f, OSD_ERASURE_CODES) ||    // v0.73-498-gbfc86a8
       HAVE_FEATURE(f, OSD_CACHEPOOL)) {        // v0.67-401-gb91c1c5
     return CEPH_RELEASE_FIREFLY;   // v0.80.0
   }
@@ -4670,11 +4651,9 @@ void OSDMap::check_health(health_check_map_t *checks) const
   }
 
   // OSD_NO_SORTBITWISE
-  if (!test_flag(CEPH_OSDMAP_SORTBITWISE) &&
-      (get_up_osd_features() &
-       CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
+  if (!test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     ostringstream ss;
-    ss << "no legacy OSD present but 'sortbitwise' flag is not set";
+    ss << "'sortbitwise' flag is not set";
     checks->add("OSD_NO_SORTBITWISE", HEALTH_WARN, ss.str());
   }
 

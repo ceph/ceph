@@ -544,9 +544,7 @@ bool PG::search_for_missing(
     from, oinfo, omissing, ctx->handle);
   if (found_missing && num_unfound_before != missing_loc.num_unfound())
     publish_stats_to_osd();
-  if (found_missing &&
-      (get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
-       CEPH_FEATURE_OSD_ERASURE_CODES)) {
+  if (found_missing) {
     pg_info_t tinfo(oinfo);
     tinfo.pgid.shard = pg_whoami.shard;
     (*(ctx->info_map))[from.osd].push_back(
