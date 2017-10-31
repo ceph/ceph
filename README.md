@@ -65,11 +65,11 @@ correct path to the checkout.
 
 To build only certain targets use:
 
-        make [target name]
+	make [target name]
 
 To install:
 
-        make install
+	make install
  
 ### CMake Options
 
@@ -77,28 +77,28 @@ If you run the `cmake` command by hand, there are many options you can
 set with "-D". For example the option to build the RADOS Gateway is
 defaulted to ON. To build without the RADOS Gateway:
 
-        cmake -DWITH_RADOSGW=OFF [path to top level ceph directory]
+	cmake -DWITH_RADOSGW=OFF [path to top level ceph directory]
 
 Another example below is building with debugging and alternate locations 
 for a couple of external dependencies:
 
-        cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" -DOFED_PREFIX="/opt/ofed" \
-        -DCMAKE_INSTALL_PREFIX=/opt/accelio -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
-        ..
+	cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" -DOFED_PREFIX="/opt/ofed" \
+	-DCMAKE_INSTALL_PREFIX=/opt/accelio -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
+	..
 
 To view an exhaustive list of -D options, you can invoke `cmake` with:
 
-        cmake -LH
+	cmake -LH
 
 If you often pipe `make` to `less` and would like to maintain the
 diagnostic colors for errors and warnings (and if your compiler
 supports it), you can invoke `cmake` with:
 
-        cmake -DDIAGNOSTICS_COLOR=always ..
+	cmake -DDIAGNOSTICS_COLOR=always ..
 
 Then you'll get the diagnostic colors when you execute:
 
-        make | less -R
+	make | less -R
 
 Other available values for 'DIAGNOSTICS_COLOR' are 'auto' (default) and
 'never'.
@@ -159,8 +159,8 @@ When failures occur, look in build/Testing/Temporary for logs.
 To build and run all tests and their dependencies without other
 unnecessary targets in Ceph:
 
-        cd build
-        make check -j$(nproc)
+	cd build
+	make check -j$(nproc)
 
 To run an individual test manually, run `ctest` with -R (regex matching):
 
