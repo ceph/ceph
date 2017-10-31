@@ -25,6 +25,7 @@ static const auto signed_subresources = {
   "acl",
   "cors",
   "delete",
+  "layout",
   "lifecycle",
   "location",
   "logging",
