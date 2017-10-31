@@ -1261,11 +1261,15 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, list_children_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-    int r = librbd::list_children(ictx, *children);
+    vector<librbd::child_info_t> children2;
+    int r = librbd::list_children(ictx, &children2);
     if (r >= 0) {
-      for (set<pair<string, string> >::const_iterator it = children->begin();
-	   it != children->end(); ++it) {
-	tracepoint(librbd, list_children_entry, it->first.c_str(), it->second.c_str());
+      for (std::vector<librbd::child_info_t>::iterator it = children2.begin();
+           it != children2.end(); ++it) {
+        if (!it->trash) {
+          children->insert(make_pair(it->pool_name, it->image_name));
+          tracepoint(librbd, list_children_entry, it->pool_name.c_str(), it->image_name.c_str());
+        }
       }
     }
     tracepoint(librbd, list_children_exit, r);
@@ -3295,11 +3299,19 @@ extern "C" ssize_t rbd_list_children(rbd_image_t image, char *pools,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, list_children_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
   set<pair<string, string> > image_set;
+  vector<librbd::child_info_t> children;
 
-  int r = librbd::list_children(ictx, image_set);
+  int r = librbd::list_children(ictx, &children);
   if (r < 0) {
     tracepoint(librbd, list_children_exit, r);
     return r;
+  }
+
+  for (std::vector<librbd::child_info_t>::iterator it = children.begin();
+       it != children.end(); ++it) {
+    if (!it->trash) {
+      image_set.insert(make_pair(it->pool_name, it->image_name));
+    }
   }
 
   size_t pools_total = 0;

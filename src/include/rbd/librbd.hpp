@@ -101,6 +101,13 @@ namespace librbd {
     time_t deferment_end_time;
   } trash_image_info_t;
 
+  typedef struct {
+    std::string pool_name;
+    std::string image_name;
+    std::string image_id;
+    bool trash;
+  } child_info_t;
+
 class CEPH_RBD_API RBD
 {
 public:
