@@ -3463,6 +3463,7 @@ def dmcrypt_map(dev, dmcrypt_key_dir):
 
 
 def mount_activate(
+    cluster,
     dev,
     activate_key_template,
     init,
@@ -3484,9 +3485,7 @@ def mount_activate(
             e,
         )
 
-    # TODO always using mount options from cluster=ceph for
-    # now; see http://tracker.newdream.net/issues/3253
-    mount_options = get_mount_options(cluster='ceph', fs_type=fstype)
+    mount_options = get_mount_options(cluster=cluster, fs_type=fstype)
 
     path = mount(dev=dev, fstype=fstype, options=mount_options)
 
@@ -3743,6 +3742,7 @@ def main_activate(args):
                 raise Error('%s is not a multipath block device' %
                             args.path)
             (cluster, osd_id) = mount_activate(
+                cluster=args.cluster,
                 dev=args.path,
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
@@ -3904,7 +3904,7 @@ def main_deactivate_locked(args):
     path = args.path
     target_dev = None
     dmcrypt = False
-    devices = list_devices()
+    devices = list_devices(args.cluster)
 
     # list all devices and found we need
     for device in devices:
@@ -3981,7 +3981,7 @@ def _remove_lockbox(uuid, cluster):
 
 
 def destroy_lookup_device(args, predicate, description):
-    devices = list_devices()
+    devices = list_devices(args.cluster)
     for device in devices:
         for partition in device.get('partitions', []):
             if partition['type'] == 'lockbox':
@@ -4144,6 +4144,7 @@ def main_activate_space(name, args):
             return
 
         (cluster, osd_id) = mount_activate(
+            cluster=args.cluster,
             dev=path,
             activate_key_template=args.activate_key_template,
             init=args.mark_init,
@@ -4188,6 +4189,7 @@ def main_activate_all(args):
                 try:
                     # never map dmcrypt cyphertext devices
                     (cluster, osd_id) = mount_activate(
+                        cluster=args.cluster,
                         dev=path,
                         activate_key_template=args.activate_key_template,
                         init=args.mark_init,
@@ -4527,7 +4529,7 @@ def list_dev(dev, uuid_map, space_map):
     return info
 
 
-def list_devices():
+def list_devices(cluster):
     partmap = list_all_partitions()
 
     uuid_map = {}
@@ -4553,7 +4555,7 @@ def list_devices():
 
                 fs_type = get_dev_fs(dev_to_mount)
                 if fs_type is not None:
-                    mount_options = get_mount_options(cluster='ceph',
+                    mount_options = get_mount_options(cluster=cluster,
                                                       fs_type=fs_type)
                     try:
                         tpath = mount(dev=dev_to_mount,
@@ -4624,7 +4626,7 @@ def main_list(args):
 
 
 def main_list_protected(args):
-    devices = list_devices()
+    devices = list_devices(args.cluster)
     if args.path:
         paths = []
         for path in args.path:
@@ -5264,6 +5266,12 @@ def make_activate_parser(subparsers):
         help='mount a block device [deprecated, ignored]',
     )
     activate_parser.add_argument(
+        '--cluster',
+        metavar='NAME',
+        default='ceph',
+        help='cluster name to assign this disk to',
+    )
+    activate_parser.add_argument(
         '--activate-key',
         metavar='PATH',
         help='bootstrap-osd keyring path template (%(default)s)',
@@ -5377,6 +5385,12 @@ def make_activate_space_parser(name, subparsers):
         help='path to %s block device' % name,
     )
     activate_space_parser.add_argument(
+        '--cluster',
+        metavar='NAME',
+        default='ceph',
+        help='cluster name to assign this disk to',
+    )
+    activate_space_parser.add_argument(
         '--activate-key',
         metavar='PATH',
         help='bootstrap-osd keyring path template (%(default)s)',
@@ -5424,6 +5438,12 @@ def make_activate_all_parser(subparsers):
         """)),
         help='Activate all tagged OSD partitions')
     activate_all_parser.add_argument(
+        '--cluster',
+        metavar='NAME',
+        default='ceph',
+        help='cluster name to assign this disk to',
+    )
+    activate_all_parser.add_argument(
         '--activate-key',
         metavar='PATH',
         help='bootstrap-osd keyring path template (%(default)s)',
@@ -5452,6 +5472,12 @@ def make_list_parser(subparsers):
         associated Ceph information, if any.
         """)),
         help='List disks, partitions, and Ceph OSDs')
+    list_parser.add_argument(
+        '--cluster',
+        metavar='NAME',
+        default='ceph',
+        help='cluster name to assign this disk to',
+    )
     list_parser.add_argument(
         '--format',
         help='output format',
