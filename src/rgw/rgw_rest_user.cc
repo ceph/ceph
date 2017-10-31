@@ -418,12 +418,8 @@ void RGWOp_Subuser_Modify::execute()
   perm_mask = rgw_str_to_perm(perm_str.c_str());
   op_state.set_perm(perm_mask);
 
-  // FIXME: no double checking
-  if (!uid.empty())
-    op_state.set_user_id(uid);
-
-  if (!subuser.empty())
-    op_state.set_subuser(subuser);
+  op_state.set_user_id(uid);
+  op_state.set_subuser(subuser);
 
   if (!secret_key.empty())
     op_state.set_secret_key(secret_key);
