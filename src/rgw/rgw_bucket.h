@@ -180,7 +180,6 @@ extern int rgw_link_bucket(RGWRados* store,
                            const rgw_user& user_id,
                            rgw_bucket& bucket,
                            ceph::real_time creation_time,
-                           std::string placement_rule,
                            bool update_entrypoint = true);
 extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
                              const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
