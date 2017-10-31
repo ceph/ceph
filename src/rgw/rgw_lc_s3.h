@@ -185,8 +185,11 @@ public:
 
 class LCRule_S3 : public LCRule, public XMLObj
 {
+protected:
+  CephContext *cct;
+
 public:
-  LCRule_S3() {}
+  LCRule_S3(CephContext *_cct) : cct(_cct) {}
   ~LCRule_S3() override {}
 
   void to_xml(CephContext *cct, ostream& out);
