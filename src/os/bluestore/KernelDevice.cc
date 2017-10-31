@@ -26,7 +26,6 @@
 #include "common/debug.h"
 #include "common/blkdev.h"
 #include "common/align.h"
-#include "common/blkdev.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
