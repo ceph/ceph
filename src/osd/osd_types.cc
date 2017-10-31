@@ -2890,7 +2890,7 @@ void pg_notify_t::dump(Formatter *f) const
 void pg_notify_t::generate_test_instances(list<pg_notify_t*>& o)
 {
   o.push_back(new pg_notify_t(shard_id_t(3), shard_id_t::NO_SHARD, 1, 1, pg_info_t()));
-  o.push_back(new pg_notify_t(shard_id_t(0), shard_id_t(0), 3, 10, pg_info_t()));
+  o.push_back(new pg_notify_t(shard_id_t(0), shard_id_t(255), 3, 10, pg_info_t()));
 }
 
 ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
