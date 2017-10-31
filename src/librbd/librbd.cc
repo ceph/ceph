@@ -3573,9 +3573,9 @@ extern "C" ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, writesame_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
-             ictx->read_only, ofs, len, data_len <= 0 ? NULL : buf, data_len, op_flags);
+             ictx->read_only, ofs, len, data_len == 0 ? NULL : buf, data_len, op_flags);
 
-  if (data_len <= 0 || len % data_len) {
+  if (data_len == 0 || len % data_len) {
     tracepoint(librbd, writesame_exit, -EINVAL);
     return -EINVAL;
   }
@@ -3793,10 +3793,10 @@ extern "C" int rbd_aio_writesame(rbd_image_t image, uint64_t off, size_t len,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_writesame_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
-             ictx->read_only, off, len, data_len <= 0 ? NULL : buf, data_len, comp->pc,
+             ictx->read_only, off, len, data_len == 0 ? NULL : buf, data_len, comp->pc,
              op_flags);
 
-  if (data_len <= 0 || len % data_len) {
+  if (data_len == 0 || len % data_len) {
     tracepoint(librbd, aio_writesame_exit, -EINVAL);
     return -EINVAL;
   }

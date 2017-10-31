@@ -2702,7 +2702,7 @@ TEST_F(TestLibRBD, TestClone)
   ASSERT_EQ(overlap, 2UL<<20);
   ASSERT_EQ(cinfo.size, 5UL<<20);
   ASSERT_EQ(0, rbd_stat(parent, &pinfo, sizeof(pinfo)));
-  printf("parent info: size %lld obj_size %lld parent_pool %lld\n",
+  printf("parent info: size %llu obj_size %llu parent_pool %llu\n",
 	 (unsigned long long)pinfo.size, (unsigned long long)pinfo.obj_size,
 	 (unsigned long long)pinfo.parent_pool);
   ASSERT_EQ(pinfo.size, 4UL<<20);

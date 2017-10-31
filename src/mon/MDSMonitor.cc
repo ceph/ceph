@@ -1552,7 +1552,7 @@ void MDSMonitor::check_sub(Subscription *sub)
     } else {
       // You're a client.  Did you request a particular
       // namespace?
-      if (sub->type.find("mdsmap.") == 0) {
+      if (sub->type.compare(0, 7, "mdsmap.") == 0) {
         auto namespace_id_str = sub->type.substr(std::string("mdsmap.").size());
         dout(10) << __func__ << ": namespace_id " << namespace_id_str << dendl;
         std::string err;

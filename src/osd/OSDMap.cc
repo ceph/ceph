@@ -2068,14 +2068,16 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
 
 void OSDMap::pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const
 {
-  *primary = -1;
-  raw->clear();
   const pg_pool_t *pool = get_pg_pool(pg.pool());
-  if (!pool)
+  if (!pool) {
+    if (primary)
+      *primary = -1;
+    if (raw)
+      raw->clear();
     return;
+  }
   _pg_to_raw_osds(*pool, pg, raw, NULL);
-  if (primary)
-    *primary = _pick_primary(*raw);
+  *primary = _pick_primary(*raw);
 }
 
 void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const

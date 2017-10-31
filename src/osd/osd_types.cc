@@ -436,7 +436,7 @@ bool spg_t::parse(const char *s)
 
   p = strchr(s, 's');
   if (p) {
-    r = sscanf(p, "s%d", &pshard);
+    r = sscanf(p, "s%u", &pshard);
     if (r == 1) {
       shard = shard_id_t(pshard);
     } else {

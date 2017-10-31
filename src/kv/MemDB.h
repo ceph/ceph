@@ -55,7 +55,8 @@ class MemDB : public KeyValueDB
 
 public:
   MemDB(CephContext *c, const string &path, void *p) :
-    m_using_btree(false), m_cct(c), m_priv(p), m_db_path(path), iterator_seq_no(1)
+    m_total_bytes(0), m_allocated_bytes(0), m_using_btree(false),
+    m_cct(c), m_priv(p), m_db_path(path), iterator_seq_no(1)
   {
     //Nothing as of now
   }

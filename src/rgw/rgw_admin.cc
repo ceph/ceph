@@ -4222,7 +4222,7 @@ int main(int argc, const char **argv)
 	  cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
 	} else {
 	  ret = zonegroup.rename_zone(zone);
-	  if (ret < 0 && ret ) {
+	  if (ret < 0) {
 	    cerr << "Error in zonegroup rename for " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
 	    return -ret;
 	  }
@@ -5856,7 +5856,7 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
-    if (inconsistent_index == false) {
+    if (!inconsistent_index) {
       RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, true);
     } else {
       if (!yes_i_really_mean_it) {
