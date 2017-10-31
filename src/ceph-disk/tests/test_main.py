@@ -46,7 +46,7 @@ class TestCephDisk(object):
         args = main.parse_args(['list', '--format', 'json'])
         with patch.multiple(
                 main,
-                list_devices=lambda: {}):
+                list_devices=lambda _: {}):
             main.main_list(args)
             out, err = capsys.readouterr()
             assert '{}\n' == out
@@ -61,7 +61,7 @@ class TestCephDisk(object):
         args = main.parse_args(['list'])
         with patch.multiple(
                 main,
-                list_devices=lambda: {}):
+                list_devices=lambda _: {}):
             main.main_list(args)
             out, err = capsys.readouterr()
             assert '' == out
@@ -325,7 +325,7 @@ class TestCephDisk(object):
                            'type': 'data',
                            'uuid': partition_uuid,
                        }]}]
-            assert expect == main.list_devices()
+            assert expect == main.list_devices('ceph')
 
     def test_list_dmcrypt_data(self):
         if platform.system() == "FreeBSD":
@@ -366,7 +366,7 @@ class TestCephDisk(object):
                                'type': 'data',
                                'uuid': partition_uuid,
                            }]}]
-                assert expect == main.list_devices()
+                assert expect == main.list_devices('ceph')
             #
             # dmcrypt data partition with two holders
             #
@@ -394,7 +394,7 @@ class TestCephDisk(object):
                                'type': 'data',
                                'uuid': partition_uuid,
                            }]}]
-                assert expect == main.list_devices()
+                assert expect == main.list_devices('ceph')
 
     def test_list_multipath(self):
         #
@@ -429,7 +429,7 @@ class TestCephDisk(object):
                            'type': 'data',
                            'uuid': partition_uuid,
                        }]}]
-            assert expect == main.list_devices()
+            assert expect == main.list_devices('ceph')
         #
         # multipath journal partition
         #
@@ -454,7 +454,7 @@ class TestCephDisk(object):
                            'type': 'journal',
                            'uuid': journal_partition_uuid,
                        }]}]
-            assert expect == main.list_devices()
+            assert expect == main.list_devices('ceph')
 
     def test_list_default(self):
         self.list(main.PTYPE['plain']['osd']['ready'],
@@ -605,7 +605,7 @@ class TestCephDisk(object):
                            'type': name,
                            'uuid': space_uuid,
                        }]}]
-            assert expect == main.list_devices()
+            assert expect == main.list_devices('ceph')
 
     def test_list_other(self):
         #
@@ -632,7 +632,7 @@ class TestCephDisk(object):
                                        'ptype': partition_type,
                                        'type': 'other',
                                        'uuid': partition_uuid}]}]
-            assert expect == main.list_devices()
+            assert expect == main.list_devices('ceph')
         #
         # not swap, mounted, ext4 fs type, with uuid
         #
@@ -662,7 +662,7 @@ class TestCephDisk(object):
                            'type': 'other',
                            'uuid': partition_uuid,
                        }]}]
-            assert expect == main.list_devices()
+            assert expect == main.list_devices('ceph')
 
         #
         # swap, with uuid
@@ -686,7 +686,7 @@ class TestCephDisk(object):
                                        'ptype': partition_type,
                                        'type': 'swap',
                                        'uuid': partition_uuid}]}]
-            assert expect == main.list_devices()
+            assert expect == main.list_devices('ceph')
 
         #
         # whole disk
@@ -704,7 +704,7 @@ class TestCephDisk(object):
                        'is_partition': False,
                        'ptype': 'unknown',
                        'type': 'other'}]
-            assert expect == main.list_devices()
+            assert expect == main.list_devices('ceph')
 
 
 class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
@@ -732,7 +732,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                         }]}]
         with patch.multiple(
                 main,
-                list_devices=lambda: fake_device,
+                list_devices=lambda _: fake_device,
         ):
             self.assertRaises(Exception, main.main_deactivate, args)
 
@@ -754,7 +754,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                         }]}]
         with patch.multiple(
                 main,
-                list_devices=lambda: fake_device,
+                list_devices=lambda _: fake_device,
                 _check_osd_status=lambda cluster, osd_id: 2,
                 _mark_osd_out=lambda cluster, osd_id: True
         ):
@@ -776,7 +776,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                         }]}]
         with patch.multiple(
                 main,
-                list_devices=lambda: fake_device,
+                list_devices=lambda _: fake_device,
                 _check_osd_status=lambda cluster, osd_id: 0,
         ):
             main.main_deactivate(args)
@@ -806,7 +806,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         with patch.multiple(
                 main,
                 mock_open,
-                list_devices=lambda: fake_device,
+                list_devices=lambda _: fake_device,
                 _check_osd_status=lambda cluster, osd_id: 3,
                 _mark_osd_out=lambda cluster, osd_id: True,
                 stop_daemon=lambda cluster, osd_id: True,
@@ -840,7 +840,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         with patch.multiple(
                 main,
                 mock_open,
-                list_devices=lambda: fake_device,
+                list_devices=lambda _: fake_device,
                 _check_osd_status=lambda cluster, osd_id: 1,
                 _mark_osd_out=lambda cluster, osd_id: True,
                 stop_daemon=lambda cluster, osd_id: True,
@@ -1217,7 +1217,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                                     'uuid': part_uuid,
                                     'journal_uuid': journal_uuid}]}]
 
-        def list_devices_return():
+        def list_devices_return(_):
             return fake_devices_normal
 
         #
