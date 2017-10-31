@@ -1,4 +1,4 @@
-include(CheckCXXSourceCompiles)
+include(CheckCXXSourceRuns)
 
 function(do_build_rocksdb)
     set(ROCKSDB_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
@@ -42,13 +42,13 @@ endfunction()
 
 function(check_aligned_alloc)
   set(SAVE_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
-  set(CMAKE_REQUIRED_FLAGS "-std=c++11 -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -nostdlib")
+  set(CMAKE_REQUIRED_FLAGS "-std=c++11 -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   if(LINUX)
     set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -D_GNU_SOURCE")
   endif()
   set(SAVE_CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})
   set(CMAKE_REQUIRED_LIBRARIES ${GPERFTOOLS_TCMALLOC_LIBRARY})
-  CHECK_CXX_SOURCE_COMPILES("
+  CHECK_CXX_SOURCE_RUNS("
 #include <stdlib.h>
 
 int main()
