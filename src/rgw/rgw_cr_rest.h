@@ -2,6 +2,7 @@
 #define CEPH_RGW_CR_REST_H
 
 #include <boost/intrusive_ptr.hpp>
+#include <mutex>
 #include "include/assert.h" // boost header clobbers our assert.h
 
 #include "rgw_coroutine.h"
@@ -349,7 +350,7 @@ public:
   virtual int init() = 0;
   virtual void send_ready(const rgw_rest_obj& rest_obj) = 0;
   virtual int send() = 0;
-  virtual int write(bufferlist& data) = 0; /* reentrant */
+  virtual int write(bufferlist& data, bool *need_retry) = 0; /* reentrant */
   virtual int drain_writes(bool *need_retry) = 0; /* reentrant */
 };
 
@@ -421,6 +422,11 @@ protected:
   RGWCoroutine *caller;
   RGWHTTPManager *http_manager;
 
+  using lock_guard = std::lock_guard<std::mutex>;
+
+  std::mutex blocked_lock;
+  bool is_blocked;
+
   RGWHTTPStreamRWRequest *req{nullptr};
 
   struct multipart_info {
@@ -430,13 +436,21 @@ protected:
     uint64_t part_size;
   } multipart;
 
+  class WriteDrainNotify : public RGWWriteDrainCB {
+    RGWStreamWriteHTTPResourceCRF *crf;
+  public:
+    WriteDrainNotify(RGWStreamWriteHTTPResourceCRF *_crf) : crf(_crf) {}
+    void notify(uint64_t pending_size) override;
+  } write_drain_notify_cb;
+
 public:
   RGWStreamWriteHTTPResourceCRF(CephContext *_cct,
                                RGWCoroutinesEnv *_env,
                                RGWCoroutine *_caller,
                                RGWHTTPManager *_http_manager) : env(_env),
                                                                caller(_caller),
-                                                               http_manager(_http_manager) {}
+                                                               http_manager(_http_manager),
+                                                               write_drain_notify_cb(this) {}
   virtual ~RGWStreamWriteHTTPResourceCRF() {}
 
   int init() override {
@@ -444,7 +458,8 @@ public:
   }
   void send_ready(const rgw_rest_obj& rest_obj) override;
   int send() override;
-  int write(bufferlist& data) override; /* reentrant */
+  int write(bufferlist& data, bool *need_retry) override; /* reentrant */
+  void write_drain_notify(uint64_t pending_size);
   int drain_writes(bool *need_retry) override; /* reentrant */
 
   virtual void handle_headers(const std::map<string, string>& headers) {}

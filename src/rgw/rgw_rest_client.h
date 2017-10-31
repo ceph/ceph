@@ -69,11 +69,19 @@ public:
   int forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
 };
 
+class RGWWriteDrainCB {
+public:
+  RGWWriteDrainCB() = default;
+  virtual ~RGWWriteDrainCB() = default;
+  virtual void notify(uint64_t pending_size) = 0;
+};
+
 
 class RGWHTTPStreamRWRequest : public RGWHTTPSimpleRequest {
   Mutex lock;
   Mutex write_lock;
   RGWGetDataCB *cb{nullptr};
+  RGWWriteDrainCB *write_drain_cb{nullptr};
   bufferlist outbl;
   bufferlist in_data;
   size_t chunk_ofs{0};
@@ -103,10 +111,13 @@ public:
   }
 
   void set_in_cb(RGWGetDataCB *_cb) { cb = _cb; }
+  void set_write_drain_cb(RGWWriteDrainCB *_cb) { write_drain_cb = _cb; }
 
   void add_send_data(bufferlist& bl);
 
   void set_stream_write(bool s);
+
+  uint64_t get_pending_send_size();
 
   /* finish streaming writes */
   void finish_write();

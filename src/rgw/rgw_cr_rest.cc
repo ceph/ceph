@@ -86,7 +86,7 @@ int RGWStreamReadHTTPResourceCRF::init()
 {
   env->stack->init_new_io(req);
 
-  in_cb = new RGWCRHTTPGetDataCB(env, caller, req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ));
+  in_cb = new RGWCRHTTPGetDataCB(env, caller, req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ |RGWHTTPClient::HTTPCLIENT_IO_CONTROL));
 
   req->set_in_cb(in_cb);
 
@@ -101,6 +101,8 @@ int RGWStreamReadHTTPResourceCRF::init()
 int RGWStreamWriteHTTPResourceCRF::send()
 {
   env->stack->init_new_io(req);
+
+  req->set_write_drain_cb(&write_drain_notify_cb);
 
   int r = http_manager->add_request(req);
   if (r < 0) {
@@ -164,7 +166,7 @@ int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool 
          */
         continue;
       }
-      if (!req->is_done()) {
+      if (!req->is_done() || out->length() >= max_size) {
         yield;
       }
     }
@@ -185,11 +187,38 @@ void RGWStreamWriteHTTPResourceCRF::send_ready(const rgw_rest_obj& rest_obj)
   }
 }
 
-int RGWStreamWriteHTTPResourceCRF::write(bufferlist& data)
+#define PENDING_WRITES_WINDOW (1 * 1024 * 1024)
+
+void RGWStreamWriteHTTPResourceCRF::write_drain_notify(uint64_t pending_size)
 {
-#warning write need to throttle and block
+  lock_guard l(blocked_lock);
+  if (is_blocked && (pending_size < PENDING_WRITES_WINDOW / 2)) {
+    env->manager->io_complete(caller, req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_WRITE | RGWHTTPClient::HTTPCLIENT_IO_CONTROL));
+    is_blocked = false;
+  }
+}
+
+void RGWStreamWriteHTTPResourceCRF::WriteDrainNotify::notify(uint64_t pending_size)
+{
+  crf->write_drain_notify(pending_size);
+}
+
+int RGWStreamWriteHTTPResourceCRF::write(bufferlist& data, bool *io_pending)
+{
   reenter(&write_state) {
     while (!req->is_done()) {
+      *io_pending = false;
+      if (req->get_pending_send_size() >= PENDING_WRITES_WINDOW) {
+        *io_pending = true;
+        {
+          lock_guard l(blocked_lock);
+          is_blocked = true;
+
+          /* it's ok to unlock here, even if io_complete() arrives before io_block(), it'll wakeup
+           * correctly */
+        }
+        yield caller->io_block(0, req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ | RGWHTTPClient::HTTPCLIENT_IO_CONTROL));
+      }
       yield req->add_send_data(data);
     }
   }
@@ -275,18 +304,20 @@ int RGWStreamSpliceCR::operate() {
 
       total_read += bl.length();
 
-      yield {
-        ldout(cct, 20) << "writing " << bl.length() << " bytes" << dendl;
-        ret = out_crf->write(bl);
-        if (ret < 0)  {
+      do {
+        yield {
+          ldout(cct, 20) << "writing " << bl.length() << " bytes" << dendl;
+          ret = out_crf->write(bl, &need_retry);
+          if (ret < 0)  {
+            return set_cr_error(ret);
+          }
+        }
+
+        if (retcode < 0) {
+          ldout(cct, 20) << __func__ << ": out_crf->write() retcode=" << retcode << dendl;
           return set_cr_error(ret);
         }
-      }
-
-      if (retcode < 0) {
-        ldout(cct, 20) << __func__ << ": out_crf->write() retcode=" << retcode << dendl;
-        return set_cr_error(ret);
-      }
+      } while (need_retry);
     } while (true);
 
     do {
