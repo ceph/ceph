@@ -12190,6 +12190,10 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
         ent.size_rounded += stats.total_size_rounded;
       }
     }
+
+    // fill in placement_rule from the bucket instance for use in swift's
+    // per-storage policy statistics
+    ent.placement_rule = std::move(bucket_info.placement_rule);
   }
 
   return m.size();
