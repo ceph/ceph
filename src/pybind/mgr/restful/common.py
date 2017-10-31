@@ -86,6 +86,7 @@ def pool_update_commands(pool_name, args):
                 'prefix': 'osd pool set',
                 'pool': pool_name,
                 'var': var,
+                'val': args[var],
             })
 
     return commands
