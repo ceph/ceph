@@ -27,7 +27,7 @@ using namespace std;
 
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
-  string store_path, cmd, out_path, oid;
+  string store_path, cmd, oid, backend;
   bool debug = false;
   desc.add_options()
     ("help", "produce help message")
@@ -38,6 +38,8 @@ int main(int argc, char **argv) {
     ("oid", po::value<string>(&oid), "Restrict to this object id when dumping objects")
     ("command", po::value<string>(&cmd),
      "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check, dump-headers, repair], mandatory")
+    ("backend", po::value<string>(&backend),
+     "DB backend (default rocksdb)")
     ;
   po::positional_options_description p;
   p.add("command", 1);
@@ -96,7 +98,15 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  KeyValueDB* store(KeyValueDB::create(g_ceph_context, "leveldb", store_path));
+  if (vm.count("backend") == 0) {
+    backend = "rocksdb";
+  }
+
+  KeyValueDB* store(KeyValueDB::create(g_ceph_context, backend, store_path));
+  if (store == NULL) {
+    std::cerr << "Invalid backend '" << backend << "' specified" << std::endl;
+    return 1;
+  }
   /*if (vm.count("paranoid")) {
     std::cerr << "Enabling paranoid checks" << std::endl;
     store->options.paranoid_checks = true;
@@ -112,6 +122,11 @@ int main(int argc, char **argv) {
   // We don't call omap.init() here because it will repair
   // the DBObjectMap which we might want to examine for diagnostic
   // reasons.  Instead use --command repair.
+
+  omap.get_state();
+  std::cout << "Version: " << (int)omap.state.v << std::endl;
+  std::cout << "Seq: " << omap.state.seq << std::endl;
+  std::cout << "legacy: " << (omap.state.legacy ? "true" : "false") << std::endl;
 
   if (cmd == "dump-raw-keys") {
     KeyValueDB::WholeSpaceIterator i = store->get_iterator();
@@ -164,7 +179,7 @@ int main(int argc, char **argv) {
   } else if (cmd == "check" || cmd == "repair") {
     ostringstream ss;
     bool repair = (cmd == "repair");
-    r = omap.check(ss, repair);
+    r = omap.check(ss, repair, true);
     if (r) {
       std::cerr << ss.str() << std::endl;
       if (r > 0) {
@@ -184,6 +199,10 @@ int main(int argc, char **argv) {
     for (auto i : headers)
       std::cout << i << std::endl;
     return 0;
+  } else if (cmd == "resetv2") {
+    omap.state.v = 2;
+    omap.state.legacy = false;
+    omap.set_state();
   } else {
     std::cerr << "Did not recognize command " << cmd << std::endl;
     return 1;

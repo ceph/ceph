@@ -621,9 +621,7 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	   << " initial v " << mds->sessionmap.get_version() << dendl;
   
 
-  int sessions_inserted = 0;
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
-    sessions_inserted++;
 
     Session *session = mds->sessionmap.get_session(p->second.name);
     assert(session);

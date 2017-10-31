@@ -55,9 +55,9 @@ static void append_escaped(const string &in, string *out)
   }
 }
 
-int DBObjectMap::check(std::ostream &out, bool repair)
+int DBObjectMap::check(std::ostream &out, bool repair, bool force)
 {
-  int errors = 0;
+  int errors = 0, comp_errors = 0;
   bool repaired = false;
   map<uint64_t, uint64_t> parent_to_num_children;
   map<uint64_t, uint64_t> parent_to_actual_num_children;
@@ -71,34 +71,37 @@ int DBObjectMap::check(std::ostream &out, bool repair)
       if (header.seq != 0)
 	parent_to_actual_num_children[header.seq] = header.num_children;
 
-      // Check complete table
-      bool complete_error = false;
-      boost::optional<string> prev;
-      KeyValueDB::Iterator complete_iter = db->get_iterator(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
-      for (complete_iter->seek_to_first(); complete_iter->valid();
-           complete_iter->next()) {
-         if (prev && prev >= complete_iter->key()) {
-             out << "Bad complete for " << header.oid << std::endl;
-             complete_error = true;
-             break;
-         }
-         prev = string(complete_iter->value().c_str(), complete_iter->value().length() - 1);
-      }
-      if (complete_error) {
-        out << "Complete mapping for " << header.seq << " :" << std::endl;
-        for (complete_iter->seek_to_first(); complete_iter->valid();
-             complete_iter->next()) {
-          out << complete_iter->key() << " -> " << string(complete_iter->value().c_str(), complete_iter->value().length() - 1) << std::endl;
-        }
-        if (repair) {
-          repaired = true;
-          KeyValueDB::Transaction t = db->get_transaction();
-          t->rmkeys_by_prefix(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
-          db->submit_transaction(t);
-          out << "Cleared complete mapping to repair" << std::endl;
-        } else {
-          errors++;  // Only count when not repaired
-        }
+      if (state.v == 2 || force) {
+	// Check complete table
+	bool complete_error = false;
+	boost::optional<string> prev;
+	KeyValueDB::Iterator complete_iter = db->get_iterator(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
+	for (complete_iter->seek_to_first(); complete_iter->valid();
+	     complete_iter->next()) {
+	  if (prev && prev >= complete_iter->key()) {
+	     out << "Bad complete for " << header.oid << std::endl;
+	     complete_error = true;
+	     break;
+	  }
+	  prev = string(complete_iter->value().c_str(), complete_iter->value().length() - 1);
+	}
+	if (complete_error) {
+	  out << "Complete mapping for " << header.seq << " :" << std::endl;
+	  for (complete_iter->seek_to_first(); complete_iter->valid();
+	       complete_iter->next()) {
+	    out << complete_iter->key() << " -> " << string(complete_iter->value().c_str(), complete_iter->value().length() - 1) << std::endl;
+	  }
+	  if (repair) {
+	    repaired = true;
+	    KeyValueDB::Transaction t = db->get_transaction();
+	    t->rmkeys_by_prefix(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
+	    db->submit_transaction(t);
+	    out << "Cleared complete mapping to repair" << std::endl;
+	  } else {
+	    errors++;  // Only count when not repaired
+	    comp_errors++;  // Track errors here for version update
+	  }
+	}
       }
 
       if (header.parent == 0)
@@ -137,6 +140,17 @@ int DBObjectMap::check(std::ostream &out, bool repair)
     }
     parent_to_actual_num_children.erase(i->first);
   }
+
+  // Only advance the version from 2 to 3 here
+  // Mark as legacy because there are still older structures
+  // we don't update.  The value of legacy is only used
+  // for internal assertions.
+  if (comp_errors == 0 && state.v == 2 && repair) {
+    state.v = 3;
+    state.legacy = true;
+    set_state();
+  }
+
   if (errors == 0 && repaired)
     return -1;
   return errors;
@@ -645,7 +659,7 @@ int DBObjectMap::rm_keys(const ghobject_t &oid,
     return db->submit_transaction(t);
   }
 
-  assert(state.v < 3);
+  assert(state.legacy);
 
   {
     // We only get here for legacy (v2) stores
@@ -852,7 +866,7 @@ int DBObjectMap::legacy_clone(const ghobject_t &oid,
 		       const ghobject_t &target,
 		       const SequencerPosition *spos)
 {
-  state.v = 2;
+  state.legacy = true;
 
   if (oid == target)
     return 0;
@@ -1021,15 +1035,22 @@ int DBObjectMap::upgrade_to_v2()
 
   state.v = 2;
 
-  Mutex::Locker l(header_lock);
-  KeyValueDB::Transaction t = db->get_transaction();
-  write_state(t);
-  db->submit_transaction_sync(t);
-  dout(1) << __func__ << " done" << dendl;
+  set_state();
   return 0;
 }
 
-int DBObjectMap::init(bool do_upgrade)
+void DBObjectMap::set_state()
+{
+  Mutex::Locker l(header_lock);
+  KeyValueDB::Transaction t = db->get_transaction();
+  write_state(t);
+  int ret = db->submit_transaction_sync(t);
+  assert(ret == 0);
+  dout(1) << __func__ << " done" << dendl;
+  return;
+}
+
+int DBObjectMap::get_state()
 {
   map<string, bufferlist> result;
   set<string> to_get;
@@ -1040,28 +1061,36 @@ int DBObjectMap::init(bool do_upgrade)
   if (!result.empty()) {
     bufferlist::iterator bliter = result.begin()->second.begin();
     state.decode(bliter);
-    if (state.v < 1) {
-      dout(1) << "DBObjectMap is *very* old; upgrade to an older version first"
-	      << dendl;
-      return -ENOTSUP;
-    }
-    if (state.v < 2) { // Needs upgrade
-      if (!do_upgrade) {
-	dout(1) << "DOBjbectMap requires an upgrade,"
-		<< " set filestore_update_to"
-		<< dendl;
-	return -ENOTSUP;
-      } else {
-	r = upgrade_to_v2();
-	if (r < 0)
-	  return r;
-      }
-    }
   } else {
     // New store
-    // Version 3 means that complete regions never used
-    state.v = 3;
+    state.v = State::CUR_VERSION;
     state.seq = 1;
+    state.legacy = false;
+  }
+  return 0;
+}
+
+int DBObjectMap::init(bool do_upgrade)
+{
+  int ret = get_state();
+  if (ret < 0)
+    return ret;
+  if (state.v < 1) {
+    dout(1) << "DBObjectMap is *very* old; upgrade to an older version first"
+	    << dendl;
+    return -ENOTSUP;
+  }
+  if (state.v < 2) { // Needs upgrade
+    if (!do_upgrade) {
+      dout(1) << "DOBjbectMap requires an upgrade,"
+	      << " set filestore_update_to"
+	      << dendl;
+      return -ENOTSUP;
+    } else {
+      int r = upgrade_to_v2();
+      if (r < 0)
+	return r;
+    }
   }
   ostringstream ss;
   int errors = check(ss, true);
@@ -1222,7 +1251,7 @@ void DBObjectMap::clear_header(Header header, KeyValueDB::Transaction t)
   dout(20) << "clear_header: clearing seq " << header->seq << dendl;
   t->rmkeys_by_prefix(user_prefix(header));
   t->rmkeys_by_prefix(sys_prefix(header));
-  if (state.v < 3)
+  if (state.legacy)
     t->rmkeys_by_prefix(complete_prefix(header)); // Needed when header.parent != 0
   t->rmkeys_by_prefix(xattr_prefix(header));
   set<string> keys;

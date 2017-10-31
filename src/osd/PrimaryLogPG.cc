@@ -2395,7 +2395,6 @@ void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
   dout(20) << __func__ << " r=" << r << dendl;
   assert(op->may_write());
   const osd_reqid_t &reqid = static_cast<const MOSDOp*>(op->get_req())->get_reqid();
-  ObjectContextRef obc;
   mempool::osd_pglog::list<pg_log_entry_t> entries;
   entries.push_back(pg_log_entry_t(pg_log_entry_t::ERROR, soid,
 				   get_next_version(), eversion_t(), 0,
