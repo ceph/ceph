@@ -859,6 +859,13 @@ void MgrMonitor::init()
   if (digest_event == nullptr) {
     send_digests();  // To get it to schedule its own event
   }
+  
+  mgr_command_descs = mgr_commands;
+  //set the mgr flag for the mgr command
+  //otherwise it will result in mon core dump
+  for (auto& p : mgr_command_descs) {
+      p.set_flag(MonCommand::FLAG_MGR);
+  }
 }
 
 void MgrMonitor::on_shutdown()
@@ -926,7 +933,7 @@ const std::vector<MonCommand> &MgrMonitor::get_command_descs() const
 {
   if (command_descs.empty()) {
     // must have just upgraded; fallback to static commands
-    return mgr_commands;
+    return mgr_command_descs;
   } else {
     return command_descs;
   }

@@ -64,7 +64,8 @@ class MgrMonitor: public PaxosService
   // Command descriptions we've learned from the active mgr
   std::vector<MonCommand> command_descs;
   std::vector<MonCommand> pending_command_descs;
-
+  //mgr command descriptions with mgr flag
+  std::vector<MonCommand> mgr_command_descs;
 public:
   MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name)
