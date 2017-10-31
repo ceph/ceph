@@ -18,6 +18,9 @@ overrides:
         osd_auto_discovery: false
         ceph_origin: repository
         ceph_repository: dev
+        ceph_mgr_modules:
+          - status
+          - restful
         cephfs_pools:
           - name: "cephfs_data"
             pgs: "64"
