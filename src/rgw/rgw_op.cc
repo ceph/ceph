@@ -2778,7 +2778,7 @@ void RGWCreateBucket::execute()
   }
 
   op_ret = rgw_link_bucket(store, s->user->user_id, s->bucket,
-			   info.creation_time, info.placement_rule, false);
+			   info.creation_time, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
     op_ret = rgw_unlink_bucket(store, s->user->user_id, s->bucket.tenant,
@@ -6308,8 +6308,8 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
     bucket = out_info.bucket;
   }
 
-  op_ret = rgw_link_bucket(store, s->user->user_id,bucket, out_info.creation_time,
-                           out_info.placement_rule, false);
+  op_ret = rgw_link_bucket(store, s->user->user_id, bucket,
+                           out_info.creation_time, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
     op_ret = rgw_unlink_bucket(store, s->user->user_id,
