@@ -3749,7 +3749,7 @@ int RGWRados::register_to_service_map(const string& daemon_type, const map<strin
   metadata["zone_name"] = zone_name();
   metadata["zone_id"] = zone_id();;
   string name = cct->_conf->name.get_id();
-  if (name.find("rgw.") == 0) {
+  if (name.compare(0, 4, "rgw.") == 0) {
     name = name.substr(4);
   }
   int ret = rados[0].service_daemon_register(daemon_type, name, metadata);
@@ -5720,7 +5720,7 @@ void RGWRados::create_bucket_id(string *bucket_id)
   uint64_t iid = instance_id();
   uint64_t bid = next_bucket_id();
   char buf[get_zone_params().get_id().size() + 48];
-  snprintf(buf, sizeof(buf), "%s.%llu.%llu", get_zone_params().get_id().c_str(), (long long)iid, (long long)bid);
+  snprintf(buf, sizeof(buf), "%s.%llu.%llu", get_zone_params().get_id().c_str(), iid, bid);
   *bucket_id = buf;
 }
 

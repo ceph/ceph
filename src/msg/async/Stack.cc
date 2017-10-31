@@ -39,7 +39,7 @@ std::function<void ()> NetworkStack::add_thread(unsigned i)
   Worker *w = workers[i];
   return [this, w]() {
       char tp_name[16];
-      sprintf(tp_name, "msgr-worker-%d", w->id);
+      sprintf(tp_name, "msgr-worker-%u", w->id);
       ceph_pthread_setname(pthread_self(), tp_name);
       const uint64_t EventMaxWaitUs = 30000000;
       w->center.set_owner();

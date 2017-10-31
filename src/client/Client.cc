@@ -11194,7 +11194,7 @@ bool Client::_vxattrcb_layout_exists(Inode *in)
 size_t Client::_vxattrcb_layout(Inode *in, char *val, size_t size)
 {
   int r = snprintf(val, size,
-      "stripe_unit=%lld stripe_count=%lld object_size=%lld pool=",
+      "stripe_unit=%llu stripe_count=%llu object_size=%llu pool=",
       (unsigned long long)in->layout.stripe_unit,
       (unsigned long long)in->layout.stripe_count,
       (unsigned long long)in->layout.object_size);
@@ -11213,15 +11213,15 @@ size_t Client::_vxattrcb_layout(Inode *in, char *val, size_t size)
 }
 size_t Client::_vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)in->layout.stripe_unit);
+  return snprintf(val, size, "%llu", (unsigned long long)in->layout.stripe_unit);
 }
 size_t Client::_vxattrcb_layout_stripe_count(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)in->layout.stripe_count);
+  return snprintf(val, size, "%llu", (unsigned long long)in->layout.stripe_count);
 }
 size_t Client::_vxattrcb_layout_object_size(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)in->layout.object_size);
+  return snprintf(val, size, "%llu", (unsigned long long)in->layout.object_size);
 }
 size_t Client::_vxattrcb_layout_pool(Inode *in, char *val, size_t size)
 {
@@ -11241,31 +11241,31 @@ size_t Client::_vxattrcb_layout_pool_namespace(Inode *in, char *val, size_t size
 }
 size_t Client::_vxattrcb_dir_entries(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)(in->dirstat.nfiles + in->dirstat.nsubdirs));
+  return snprintf(val, size, "%llu", (unsigned long long)(in->dirstat.nfiles + in->dirstat.nsubdirs));
 }
 size_t Client::_vxattrcb_dir_files(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)in->dirstat.nfiles);
+  return snprintf(val, size, "%llu", (unsigned long long)in->dirstat.nfiles);
 }
 size_t Client::_vxattrcb_dir_subdirs(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)in->dirstat.nsubdirs);
+  return snprintf(val, size, "%llu", (unsigned long long)in->dirstat.nsubdirs);
 }
 size_t Client::_vxattrcb_dir_rentries(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)(in->rstat.rfiles + in->rstat.rsubdirs));
+  return snprintf(val, size, "%llu", (unsigned long long)(in->rstat.rfiles + in->rstat.rsubdirs));
 }
 size_t Client::_vxattrcb_dir_rfiles(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)in->rstat.rfiles);
+  return snprintf(val, size, "%llu", (unsigned long long)in->rstat.rfiles);
 }
 size_t Client::_vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)in->rstat.rsubdirs);
+  return snprintf(val, size, "%llu", (unsigned long long)in->rstat.rsubdirs);
 }
 size_t Client::_vxattrcb_dir_rbytes(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)in->rstat.rbytes);
+  return snprintf(val, size, "%llu", (unsigned long long)in->rstat.rbytes);
 }
 size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
 {

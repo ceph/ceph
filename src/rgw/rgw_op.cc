@@ -3831,10 +3831,6 @@ void RGWPostObj::execute()
 
     s->obj_size = ofs;
 
-    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
-      op_ret = -ERR_BAD_DIGEST;
-      return;
-    }
 
     op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                                 user_quota, bucket_quota, s->obj_size);
@@ -3851,6 +3847,12 @@ void RGWPostObj::execute()
     buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
     etag = calc_md5;
+    
+    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+      op_ret = -ERR_BAD_DIGEST;
+      return;
+    }
+
     bl.append(etag.c_str(), etag.size() + 1);
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
