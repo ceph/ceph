@@ -2617,7 +2617,7 @@ void PGMap::get_health_checks(
   health_check_map_t *checks) const
 {
   utime_t now = ceph_clock_now();
-  const unsigned max = cct->_conf->mon_health_max_detail;
+  const auto max = cct->_conf->get_val<uint64_t>("mon_health_max_detail");
   const auto& pools = osdmap.get_pools();
 
   typedef enum pg_consequence_t {
@@ -2722,7 +2722,7 @@ void PGMap::get_health_checks(
     }
   }
 
-  utime_t cutoff = now - utime_t(cct->_conf->mon_pg_stuck_threshold, 0);
+  utime_t cutoff = now - utime_t(cct->_conf->get_val<int64_t>("mon_pg_stuck_threshold"), 0);
   // Loop over all PGs, if there are any possibly-unhealthy states in there
   if (!possible_responses.empty()) {
     for (const auto& i : pg_stat) {
@@ -2957,6 +2957,12 @@ void PGMap::get_health_checks(
   // MANY_OBJECTS_PER_PG
   if (!pg_stat.empty()) {
     list<string> pgp_detail, many_detail;
+    const auto mon_pg_warn_min_objects =
+      cct->_conf->get_val<int64_t>("mon_pg_warn_min_objects");
+    const auto mon_pg_warn_min_pool_objects =
+      cct->_conf->get_val<int64_t>("mon_pg_warn_min_pool_objects");
+    const auto mon_pg_warn_max_object_skew =
+      cct->_conf->get_val<double>("mon_pg_warn_max_object_skew");
     for (auto p = pg_pool_sum.begin();
          p != pg_pool_sum.end();
          ++p) {
@@ -2974,13 +2980,12 @@ void PGMap::get_health_checks(
       }
       int average_objects_per_pg = pg_sum.stats.sum.num_objects / pg_stat.size();
       if (average_objects_per_pg > 0 &&
-          pg_sum.stats.sum.num_objects >= cct->_conf->mon_pg_warn_min_objects &&
-          p->second.stats.sum.num_objects >=
-	  cct->_conf->mon_pg_warn_min_pool_objects) {
+          pg_sum.stats.sum.num_objects >= mon_pg_warn_min_objects &&
+          p->second.stats.sum.num_objects >= mon_pg_warn_min_pool_objects) {
 	int objects_per_pg = p->second.stats.sum.num_objects / pi->get_pg_num();
 	float ratio = (float)objects_per_pg / (float)average_objects_per_pg;
-	if (cct->_conf->mon_pg_warn_max_object_skew > 0 &&
-	    ratio > cct->_conf->mon_pg_warn_max_object_skew) {
+	if (mon_pg_warn_max_object_skew > 0 &&
+	    ratio > mon_pg_warn_max_object_skew) {
 	  ostringstream ss;
 	  ss << "pool " << name << " objects per pg ("
 	     << objects_per_pg << ") is more than " << ratio
@@ -3008,8 +3013,8 @@ void PGMap::get_health_checks(
   // POOL_FULL
   // POOL_NEAR_FULL
   {
-    float warn_threshold = (float)g_conf->mon_pool_quota_warn_threshold/100;
-    float crit_threshold = (float)g_conf->mon_pool_quota_crit_threshold/100;
+    float warn_threshold = (float)g_conf->get_val<int64_t>("mon_pool_quota_warn_threshold")/100;
+    float crit_threshold = (float)g_conf->get_val<int64_t>("mon_pool_quota_crit_threshold")/100;
     list<string> full_detail, nearfull_detail;
     unsigned full_pools = 0, nearfull_pools = 0;
     for (auto it : pools) {
@@ -3345,7 +3350,7 @@ void PGMap::get_health(
 
   mempool::pgmap::unordered_map<pg_t, pg_stat_t> stuck_pgs;
   utime_t now(ceph_clock_now());
-  utime_t cutoff = now - utime_t(cct->_conf->mon_pg_stuck_threshold, 0);
+  utime_t cutoff = now - utime_t(g_conf->get_val<int64_t>("mon_pg_stuck_threshold"), 0);
   uint64_t num_inactive_pgs = 0;
 
   if (detail) {
@@ -3361,7 +3366,7 @@ void PGMap::get_health(
         note["stuck inactive"] = stuck_pgs.size();
         num_inactive_pgs += stuck_pgs.size();
         note_stuck_detail(PGMap::STUCK_INACTIVE, stuck_pgs,
-			  cct->_conf->mon_health_max_detail, detail);
+			  cct->_conf->get_val<uint64_t>("mon_health_max_detail"), detail);
         stuck_pgs.clear();
       }
 
@@ -3369,7 +3374,7 @@ void PGMap::get_health(
         get_stuck_stats(PGMap::STUCK_UNCLEAN, cutoff, stuck_pgs);
         note["stuck unclean"] = stuck_pgs.size();
         note_stuck_detail(PGMap::STUCK_UNCLEAN, stuck_pgs,
-			  cct->_conf->mon_health_max_detail,  detail);
+			  cct->_conf->get_val<uint64_t>("mon_health_max_detail"),  detail);
         stuck_pgs.clear();
       }
 
@@ -3377,7 +3382,7 @@ void PGMap::get_health(
         get_stuck_stats(PGMap::STUCK_UNDERSIZED, cutoff, stuck_pgs);
         note["stuck undersized"] = stuck_pgs.size();
         note_stuck_detail(PGMap::STUCK_UNDERSIZED, stuck_pgs,
-			  cct->_conf->mon_health_max_detail,  detail);
+			  cct->_conf->get_val<uint64_t>("mon_health_max_detail"),  detail);
         stuck_pgs.clear();
       }
 
@@ -3385,7 +3390,7 @@ void PGMap::get_health(
         get_stuck_stats(PGMap::STUCK_DEGRADED, cutoff, stuck_pgs);
         note["stuck degraded"] = stuck_pgs.size();
         note_stuck_detail(PGMap::STUCK_DEGRADED, stuck_pgs,
-			  cct->_conf->mon_health_max_detail,  detail);
+			  cct->_conf->get_val<uint64_t>("mon_health_max_detail"),  detail);
         stuck_pgs.clear();
       }
 
@@ -3394,7 +3399,7 @@ void PGMap::get_health(
         note["stuck stale"] = stuck_pgs.size();
         num_inactive_pgs += stuck_pgs.size();
         note_stuck_detail(PGMap::STUCK_STALE, stuck_pgs,
-			  cct->_conf->mon_health_max_detail,  detail);
+			  cct->_conf->get_val<uint64_t>("mon_health_max_detail"),  detail);
       }
     }
   } else {
@@ -3410,7 +3415,7 @@ void PGMap::get_health(
   if (cct->_conf->mon_pg_min_inactive > 0 &&
       num_inactive_pgs >= cct->_conf->mon_pg_min_inactive) {
     ostringstream ss;
-    ss << num_inactive_pgs << " pgs are stuck inactive for more than " << cct->_conf->mon_pg_stuck_threshold << " seconds";
+    ss << num_inactive_pgs << " pgs are stuck inactive for more than " << g_conf->get_val<int64_t>("mon_pg_stuck_threshold") << " seconds";
     summary.push_back(make_pair(HEALTH_ERR, ss.str()));
   }
 
@@ -3422,7 +3427,7 @@ void PGMap::get_health(
     }
     if (detail) {
       int n = 0, more = 0;
-      int max = cct->_conf->mon_health_max_detail;
+      int max = cct->_conf->get_val<uint64_t>("mon_health_max_detail");
       for (auto p = pg_stat.begin();
            p != pg_stat.end();
            ++p) {
@@ -3922,7 +3927,7 @@ int process_pg_map_command(
       stuckop_vec.push_back("unclean");
     int64_t threshold;
     cmd_getval(g_ceph_context, cmdmap, "threshold", threshold,
-               int64_t(g_conf->mon_pg_stuck_threshold));
+               g_conf->get_val<int64_t>("mon_pg_stuck_threshold"));
 
     r = pg_map.dump_stuck_pg_stats(ds, f, (int)threshold, stuckop_vec);
     odata->append(ds);
@@ -4516,7 +4521,7 @@ void PGMapUpdater::check_down_pgs(
   // if a large number of osds changed state, just iterate over the whole
   // pg map.
   if (need_check_down_pg_osds.size() > (unsigned)osdmap.get_num_osds() *
-      g_conf->mon_pg_check_down_all_threshold) {
+      g_conf->get_val<double>("mon_pg_check_down_all_threshold")) {
     check_all = true;
   }
 
