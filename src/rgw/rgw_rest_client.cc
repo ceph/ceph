@@ -774,6 +774,12 @@ void RGWHTTPStreamRWRequest::add_send_data(bufferlist& bl)
   _set_write_paused(false);
 }
 
+uint64_t RGWHTTPStreamRWRequest::get_pending_send_size()
+{
+  Mutex::Locker wl(write_lock);
+  return outbl.length();
+}
+
 void RGWHTTPStreamRWRequest::finish_write()
 {
   Mutex::Locker req_locker(get_req_lock());
@@ -784,23 +790,34 @@ void RGWHTTPStreamRWRequest::finish_write()
 
 int RGWHTTPStreamRWRequest::send_data(void *ptr, size_t len, bool *pause)
 {
-  Mutex::Locker wl(write_lock);
+  uint64_t out_len;
+  uint64_t send_size;
+  {
+    Mutex::Locker wl(write_lock);
 
-  if (outbl.length() == 0) {
-    if (stream_writes && !write_stream_complete) {
-      *pause = true;
+    if (outbl.length() == 0) {
+      if (stream_writes && !write_stream_complete) {
+        *pause = true;
+      }
+      return 0;
     }
-    return 0;
+
+    len = std::min(len, (size_t)outbl.length());
+
+    bufferlist bl;
+    outbl.splice(0, len, &bl);
+    send_size = bl.length();
+    if (send_size > 0) {
+      memcpy(ptr, bl.c_str(), send_size);
+      write_ofs += send_size;
+    }
+
+    out_len = outbl.length();
   }
-
-  len = std::min(len, (size_t)outbl.length());
-
-  bufferlist bl;
-  outbl.splice(0, len, &bl);
-  uint64_t send_size = bl.length();
-  if (send_size > 0) {
-    memcpy(ptr, bl.c_str(), send_size);
-    write_ofs += send_size;
+  /* don't need to be under write_lock here, avoid deadlocks in case notify callback
+   * needs to lock */
+  if (write_drain_cb) {
+    write_drain_cb->notify(out_len);
   }
   return send_size;
 }
