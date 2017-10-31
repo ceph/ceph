@@ -2113,33 +2113,6 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   assert(m->get_orig_source_inst().name.is_osd());
 
   // check if osd has required features to boot
-  if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
-       CEPH_FEATURE_OSD_ERASURE_CODES) &&
-      !(m->get_connection()->get_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
-    dout(0) << __func__ << " osdmap requires erasure code but osd at "
-            << m->get_orig_source_inst()
-            << " doesn't announce support -- ignore" << dendl;
-    goto ignore;
-  }
-
-  if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
-       CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2) &&
-      !(m->get_connection()->get_features() & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2)) {
-    dout(0) << __func__ << " osdmap requires erasure code plugins v2 but osd at "
-            << m->get_orig_source_inst()
-            << " doesn't announce support -- ignore" << dendl;
-    goto ignore;
-  }
-
-  if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
-       CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3) &&
-      !(m->get_connection()->get_features() & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3)) {
-    dout(0) << __func__ << " osdmap requires erasure code plugins v3 but osd at "
-            << m->get_orig_source_inst()
-            << " doesn't announce support -- ignore" << dendl;
-    goto ignore;
-  }
-
   if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
       !HAVE_FEATURE(m->osd_features, SERVER_LUMINOUS)) {
     mon->clog->info() << "disallowing boot of OSD "
@@ -2170,34 +2143,12 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE) &&
-      !(m->osd_features & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
-    mon->clog->info() << "disallowing boot of OSD "
-		      << m->get_orig_source_inst()
-		      << " because 'sortbitwise' osdmap flag is set and OSD lacks the OSD_BITWISE_HOBJ_SORT feature";
-    goto ignore;
-  }
-
   if (osdmap.test_flag(CEPH_OSDMAP_RECOVERY_DELETES) &&
       !(m->osd_features & CEPH_FEATURE_OSD_RECOVERY_DELETES)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
 		      << " because 'recovery_deletes' osdmap flag is set and OSD lacks the OSD_RECOVERY_DELETES feature";
     goto ignore;
-  }
-
-  if (any_of(osdmap.get_pools().begin(),
-	     osdmap.get_pools().end(),
-	     [](const std::pair<int64_t,pg_pool_t>& pool)
-	     { return pool.second.use_gmt_hitset; })) {
-    assert(osdmap.get_num_up_osds() == 0 ||
-	   osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT);
-    if (!(m->osd_features & CEPH_FEATURE_OSD_HITSET_GMT)) {
-      dout(0) << __func__ << " one or more pools uses GMT hitsets but osd at "
-	      << m->get_orig_source_inst()
-	      << " doesn't announce support -- ignore" << dendl;
-      goto ignore;
-    }
   }
 
   // make sure upgrades stop at nautilus
@@ -2958,8 +2909,7 @@ void OSDMonitor::send_incremental(MonOpRequestRef op, epoch_t first)
   MonSession *s = op->get_session();
   assert(s);
 
-  if (s->proxy_con &&
-      s->proxy_con->has_feature(CEPH_FEATURE_MON_ROUTE_OSDMAP)) {
+  if (s->proxy_con) {
     // oh, we can tell the other mon to do it
     dout(10) << __func__ << " asking proxying mon to send_incremental from "
 	     << first << dendl;
@@ -5577,8 +5527,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   if (g_conf->osd_pool_default_flag_nosizechange)
     pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
-  if (g_conf->osd_pool_use_gmt_hitset &&
-      (osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT))
+  if (g_conf->osd_pool_use_gmt_hitset)
     pi->use_gmt_hitset = true;
   else
     pi->use_gmt_hitset = false;
@@ -5900,18 +5849,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     bloomp->set_fpp(f);
   } else if (var == "use_gmt_hitset") {
     if (val == "true" || (interr.empty() && n == 1)) {
-      string force;
-      cmd_getval(cct, cmdmap, "force", force);
-      if (!osdmap.get_num_up_osds() && force != "--yes-i-really-mean-it") {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        return -EPERM;
-      }
-      if (!(osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT)
-          && force != "--yes-i-really-mean-it") {
-	ss << "not all OSDs support GMT hit set.";
-	return -EINVAL;
-      }
       p.use_gmt_hitset = true;
     } else {
       ss << "expecting value 'true' or '1'";
@@ -8144,19 +8081,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       dout(20) << "erasure code profile " << name << " try again" << dendl;
       goto wait;
     } else {
-      if (plugin == "isa" || plugin == "lrc") {
-	err = check_cluster_features(CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2, ss);
-	if (err == -EAGAIN)
-	  goto wait;
-	if (err)
-	  goto reply;
-      } else if (plugin == "shec") {
-	err = check_cluster_features(CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3, ss);
-	if (err == -EAGAIN)
-	  goto wait;
-	if (err)
-	  goto reply;
-      }
       err = normalize_profile(name, profile_map, force, &ss);
       if (err)
 	goto reply;
@@ -8500,20 +8424,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     else if (key == "notieragent")
       return prepare_set_flag(op, CEPH_OSDMAP_NOTIERAGENT);
     else if (key == "sortbitwise") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        err = -EPERM;
-        goto reply;
-      }
-      if ((osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)
-          || sure == "--yes-i-really-mean-it") {
-	return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
-      } else {
-	ss << "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature";
-	err = -EPERM;
-	goto reply;
-      }
+      return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
     } else if (key == "recovery_deletes") {
       if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
         ss << "Not advisable to continue since no OSDs are up. Pass "
@@ -9452,11 +9363,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    err = check_cluster_features(CEPH_FEATURE_OSD_PRIMARY_AFFINITY, ss);
-    if (err == -EAGAIN)
-      goto wait;
-    if (err < 0)
-      goto reply;
     if (osdmap.exists(id)) {
       pending_inc.new_primary_affinity[id] = ww;
       ss << "set osd." << id << " primary-affinity to " << w << " (" << ios::hex << ww << ios::dec << ")";
@@ -9930,13 +9836,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (pool_type_str == "replicated") {
       pool_type = pg_pool_t::TYPE_REPLICATED;
     } else if (pool_type_str == "erasure") {
-      err = check_cluster_features(CEPH_FEATURE_CRUSH_V2 |
-				   CEPH_FEATURE_OSD_ERASURE_CODES,
-				   ss);
-      if (err == -EAGAIN)
-	goto wait;
-      if (err)
-	goto reply;
       pool_type = pg_pool_t::TYPE_ERASURE;
     } else {
       ss << "unknown pool type '" << pool_type_str << "'";
