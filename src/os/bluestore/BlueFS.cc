@@ -403,7 +403,7 @@ int BlueFS::mount()
   block_all.resize(MAX_BDEV);
   _init_alloc();
 
-  r = _replay(false);
+  r = _replay(false, false);
   if (r < 0) {
     derr << __func__ << " failed to replay log: " << cpp_strerror(r) << dendl;
     _stop_alloc();
@@ -521,7 +521,7 @@ int BlueFS::_open_super()
   return 0;
 }
 
-int BlueFS::_replay(bool noop)
+int BlueFS::_replay(bool noop, bool to_stdout)
 {
   dout(10) << __func__ << (noop ? " NO-OP" : "") << dendl;
   ino_last = 1;  // by the log
@@ -535,6 +535,9 @@ int BlueFS::_replay(bool noop)
   }
   log_file->fnode = super.log_fnode;
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
+  if (unlikely(to_stdout)) {
+    std::cout << " log_fnode " << super.log_fnode << std::endl;
+  } 
 
   FileReader *log_reader = new FileReader(
     log_file, cct->_conf->bluefs_max_prefetch,
@@ -609,6 +612,10 @@ int BlueFS::_replay(bool noop)
     assert(seq == t.seq);
     dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
              << ": " << t << dendl;
+    if (unlikely(to_stdout)) {
+      std::cout << " 0x" << std::hex << pos << std::dec
+                << ": " << t << std::endl;
+    }
 
     bufferlist::iterator p = t.op_bl.begin();
     while (!p.end()) {
@@ -619,6 +626,11 @@ int BlueFS::_replay(bool noop)
       case bluefs_transaction_t::OP_INIT:
 	dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                  << ":  op_init" << dendl;
+        if (unlikely(to_stdout)) {
+          std::cout << " 0x" << std::hex << pos << std::dec
+                    << ":  op_init" << std::endl;
+        }
+
 	assert(t.seq == 1);
 	break;
 
@@ -631,6 +643,13 @@ int BlueFS::_replay(bool noop)
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
 		   << ":  op_jump seq " << next_seq
 		   << " offset 0x" << std::hex << offset << std::dec << dendl;
+          if (unlikely(to_stdout)) {
+            std::cout << " 0x" << std::hex << pos << std::dec
+                      << ":  op_jump seq " << next_seq
+                      << " offset 0x" << std::hex << offset << std::dec
+                      << std::endl;
+          }
+
 	  assert(next_seq >= log_seq);
 	  log_seq = next_seq - 1; // we will increment it below
 	  uint64_t skip = offset - read_pos;
@@ -654,6 +673,11 @@ int BlueFS::_replay(bool noop)
 	  ::decode(next_seq, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_jump_seq " << next_seq << dendl;
+          if (unlikely(to_stdout)) {
+            std::cout << " 0x" << std::hex << pos << std::dec
+                      << ":  op_jump_seq " << next_seq << std::endl;
+          }
+
 	  assert(next_seq >= log_seq);
 	  log_seq = next_seq - 1; // we will increment it below
 	}
@@ -670,6 +694,13 @@ int BlueFS::_replay(bool noop)
                    << ":  op_alloc_add " << " " << (int)id
                    << ":0x" << std::hex << offset << "~" << length << std::dec
                    << dendl;
+          if (unlikely(to_stdout)) {
+            std::cout << " 0x" << std::hex << pos << std::dec
+                      << ":  op_alloc_add " << " " << (int)id
+                      << ":0x" << std::hex << offset << "~" << length << std::dec
+                      << std::endl;
+          }
+
 	  if (!noop) {
 	    block_all[id].insert(offset, length);
 	    alloc[id]->init_add_free(offset, length);
@@ -688,6 +719,13 @@ int BlueFS::_replay(bool noop)
                    << ":  op_alloc_rm " << " " << (int)id
                    << ":0x" << std::hex << offset << "~" << length << std::dec
                    << dendl;
+          if (unlikely(to_stdout)) {
+            std::cout << " 0x" << std::hex << pos << std::dec
+                      << ":  op_alloc_rm " << " " << (int)id
+                      << ":0x" << std::hex << offset << "~" << length << std::dec
+                      << std::endl;
+          }
+
 	  if (!noop) {
 	    block_all[id].erase(offset, length);
 	    alloc[id]->init_rm_free(offset, length);
@@ -706,6 +744,13 @@ int BlueFS::_replay(bool noop)
                    << ":  op_dir_link " << " " << dirname << "/" << filename
                    << " to " << ino
 		   << dendl;
+          if (unlikely(to_stdout)) {
+            std::cout << " 0x" << std::hex << pos << std::dec
+                      << ":  op_dir_link " << " " << dirname << "/" << filename
+                      << " to " << ino
+                      << std::endl;
+          }
+
 	  if (!noop) {
 	    FileRef file = _get_file(ino);
 	    assert(file->fnode.ino);
@@ -727,6 +772,12 @@ int BlueFS::_replay(bool noop)
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_dir_unlink " << " " << dirname << "/" << filename
                    << dendl;
+          if (unlikely(to_stdout)) {
+            std::cout << " 0x" << std::hex << pos << std::dec
+                      << ":  op_dir_unlink " << " " << dirname << "/" << filename
+                      << std::endl;
+          }
+ 
 	  if (!noop) {
 	    map<string,DirRef>::iterator q = dir_map.find(dirname);
 	    assert(q != dir_map.end());
@@ -745,6 +796,11 @@ int BlueFS::_replay(bool noop)
 	  ::decode(dirname, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_dir_create " << dirname << dendl;
+          if (unlikely(to_stdout)) {
+            std::cout << " 0x" << std::hex << pos << std::dec
+                      << ":  op_dir_create " << dirname << std::endl;
+          }
+
 	  if (!noop) {
 	    map<string,DirRef>::iterator q = dir_map.find(dirname);
 	    assert(q == dir_map.end());
@@ -759,6 +815,11 @@ int BlueFS::_replay(bool noop)
 	  ::decode(dirname, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_dir_remove " << dirname << dendl;
+          if (unlikely(to_stdout)) {
+            std::cout << " 0x" << std::hex << pos << std::dec
+                      << ":  op_dir_remove " << dirname << std::endl;
+          }
+
 	  if (!noop) {
 	    map<string,DirRef>::iterator q = dir_map.find(dirname);
 	    assert(q != dir_map.end());
@@ -774,6 +835,11 @@ int BlueFS::_replay(bool noop)
 	  ::decode(fnode, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_file_update " << " " << fnode << dendl;
+          if (unlikely(to_stdout)) {
+            std::cout << " 0x" << std::hex << pos << std::dec
+                      << ":  op_file_update " << " " << fnode << std::endl;
+          }
+
 	  if (!noop) {
 	    FileRef f = _get_file(fnode.ino);
 	    f->fnode = fnode;
@@ -790,6 +856,11 @@ int BlueFS::_replay(bool noop)
 	  ::decode(ino, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_file_remove " << ino << dendl;
+          if (unlikely(to_stdout)) {
+            std::cout << " 0x" << std::hex << pos << std::dec
+                      << ":  op_file_remove " << ino << std::endl;
+          }
+
 	  if (!noop) {
 	    auto p = file_map.find(ino);
 	    assert(p != file_map.end());
@@ -814,6 +885,11 @@ int BlueFS::_replay(bool noop)
 
   dout(10) << __func__ << " log file size was 0x"
            << std::hex << log_file->fnode.size << std::dec << dendl;
+  if (unlikely(to_stdout)) {
+    std::cout << " log file size was 0x"
+              << std::hex << log_file->fnode.size << std::dec << std::endl;
+  }
+
   delete log_reader;
 
   if (!noop) {
@@ -829,6 +905,27 @@ int BlueFS::_replay(bool noop)
   }
 
   dout(10) << __func__ << " done" << dendl;
+  return 0;
+}
+
+int BlueFS::log_dump(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  int r = _open_super();
+  if (r < 0) {
+    derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // only dump log file's content
+  r = _replay(true, true);
+  if (r < 0) {
+    derr << __func__ << " failed to replay log: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
   return 0;
 }
 
