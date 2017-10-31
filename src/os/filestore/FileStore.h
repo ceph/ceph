@@ -502,6 +502,7 @@ public:
   }
 
   void collect_metadata(map<string,string> *pm) override;
+  int get_devices(set<string> *ls) override;
 
   int statfs(struct store_statfs_t *buf) override;
 
