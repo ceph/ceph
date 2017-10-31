@@ -3456,6 +3456,7 @@ void RGWPutObj::execute()
     }
     if (len < 0) {
       op_ret = len;
+      ldout(s->cct, 20) << "get_data() returned ret=" << op_ret << dendl;
       goto done;
     }
 
