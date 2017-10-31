@@ -96,6 +96,12 @@ cdef extern from "rbd/librbd.h" nogil:
         uint64_t size
         char *name
 
+    ctypedef struct rbd_child_info_t:
+        char *pool_name
+        char *image_name
+        char *image_id
+        bint trash
+
     ctypedef enum rbd_mirror_mode_t:
         _RBD_MIRROR_MODE_DISABLED "RBD_MIRROR_MODE_DISABLED"
         _RBD_MIRROR_MODE_IMAGE "RBD_MIRROR_MODE_IMAGE"
@@ -269,6 +275,10 @@ cdef extern from "rbd/librbd.h" nogil:
                                void *cbdata)
     ssize_t rbd_list_children(rbd_image_t image, char *pools, size_t *pools_len,
                               char *images, size_t *images_len)
+    int rbd_list_children2(rbd_image_t image, rbd_child_info_t *children,
+                           int *max_children)
+    void rbd_list_children_cleanup(rbd_child_info_t *children,
+                                   size_t num_children)
     ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
                              char *tag, size_t *tag_len,
                              char *clients, size_t *clients_len,
@@ -2232,6 +2242,14 @@ written." % (self.name, ret, length))
             free(c_pools)
             free(c_images)
 
+    def list_children2(self):
+        """
+        Iterate over the children of a snapshot.
+
+        :returns: :class:`ChildIterator`
+        """
+        return ChildIterator(self)
+
     def list_lockers(self):
         """
         List clients that have locked the image and information
@@ -2958,3 +2976,53 @@ cdef class TrashIterator(object):
         if self.entries:
             free(self.entries)
 
+cdef class ChildIterator(object):
+    """
+    Iterator over child info for a snapshot.
+
+    Yields a dictionary containing information about a child.
+
+    Keys are:
+
+    * ``pool`` (str) - name of the pool
+
+    * ``image`` (str) - name of the child
+
+    * ``id`` (str) - id of the child
+
+    * ``trash`` (bool) - True if child is in trash bin
+    """
+
+    cdef rbd_child_info_t *children
+    cdef int num_children
+    cdef object image
+
+    def __init__(self, Image image):
+        self.image = image
+        self.children = NULL
+        self.num_children = 10
+        while True:
+            self.children = <rbd_child_info_t*>realloc_chk(self.children,
+                                                           self.num_children *
+                                                           sizeof(rbd_child_info_t))
+            with nogil:
+                ret = rbd_list_children2(image.image, self.children, &self.num_children)
+            if ret >= 0:
+                self.num_children = ret
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing children.')
+
+    def __iter__(self):
+        for i in range(self.num_children):
+            yield {
+                'pool'  : decode_cstr(self.children[i].pool_name),
+                'image' : decode_cstr(self.children[i].image_name),
+                'id'    : decode_cstr(self.children[i].image_id),
+                'trash' : self.children[i].trash
+                }
+
+    def __dealloc__(self):
+        if self.children:
+            rbd_list_children_cleanup(self.children, self.num_children)
+            free(self.children)
