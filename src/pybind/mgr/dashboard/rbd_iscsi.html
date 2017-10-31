@@ -16,6 +16,13 @@
 
             console.log(content_data);
 
+            rivets.formatters.relative_date = function(date_str) {
+                if (!date_str) {
+                    return "unknown";
+                }
+                return moment(date_str * 1000).fromNow();
+            }
+
             rivets.bind($("div#content"), content_data);
             setTimeout(refresh, 30000);
 
@@ -85,6 +92,7 @@
                     <th>Image</th>
                     <th>Active/Optimized</th>
                     <th>Active/Non-Optimized</th>
+                    <th>A/O Since</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -93,6 +101,7 @@
                         <td>{image.name}</td>
                         <td>{image.optimized_paths}</td>
                         <td>{image.non_optimized_paths}</td>
+                        <td>{image.optimized_since | relative_date}</td>
                     </tr>
                 </tbody>
             </table>
