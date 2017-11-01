@@ -81,26 +81,15 @@
             };
 
             rivets.formatters.pg_status_style = function(pg_status) {
-                var unhealthy = false;
-                var scrubbing = false;
                 $.each(pg_status, function(state, count) {
-                    if (state == "active+clean") {
-
-                    } else if (state == "active+clean+scrubbing"
-                    || state == "active+clean+scrubbing+deep") {
-                        scrubbing = true;
+                    if (state == "active+clean"
+                     || state == "active+clean+scrubbing"
+                     || state == "active+clean+scrubbing+deep") {
+                        return "color: #00bb00";
                     } else {
-                        unhealthy = true;
+                        return "color: #FFC200";
                     }
                 });
-
-                if (unhealthy) {
-                    return "color: #FFC200";
-                } else if (scrubbing) {
-                    return "color: #0000bb";
-                } else {
-                    return "color: #00bb00";
-                }
             };
 
             rivets.formatters.pg_status = function(pg_status) {

@@ -13,8 +13,7 @@
  */
 
 
-#ifndef MGR_PY_MODULE_H_
-#define MGR_PY_MODULE_H_
+#pragma once
 
 // Python.h comes first because otherwise it clobbers ceph's assert
 #include "Python.h"
@@ -22,14 +21,18 @@
 #include "common/cmdparse.h"
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
+#include "common/Thread.h"
 #include "mon/health_check.h"
 #include "mgr/Gil.h"
+
+#include "PyModuleRunner.h"
 
 #include <vector>
 #include <string>
 
 
-class MgrPyModule;
+class ActivePyModule;
+class ActivePyModules;
 
 /**
  * A Ceph CLI command description provided from a Python module
@@ -39,41 +42,35 @@ public:
   std::string cmdstring;
   std::string helpstring;
   std::string perm;
-  MgrPyModule *handler;
+  ActivePyModule *handler;
 };
 
-class MgrPyModule
+class ActivePyModule : public PyModuleRunner
 {
 private:
-  const std::string module_name;
-  PyObject *pClassInstance;
-  SafeThreadState pMainThreadState;
-  SafeThreadState pMyThreadState;
-
   health_check_map_t health_checks;
 
   std::vector<ModuleCommand> commands;
 
   int load_commands();
 
-public:
-  MgrPyModule(const std::string &module_name, const std::string &sys_path, PyThreadState *main_ts);
-  ~MgrPyModule();
+  // Optional, URI exposed by plugins that implement serve()
+  std::string uri;
 
-  int load();
-  int serve();
-  void shutdown();
+public:
+  ActivePyModule(const std::string &module_name_,
+      PyObject *pClass_,
+      const SafeThreadState &my_ts_)
+    : PyModuleRunner(module_name_, pClass_, my_ts_)
+  {}
+
+  int load(ActivePyModules *py_modules);
   void notify(const std::string &notify_type, const std::string &notify_id);
   void notify_clog(const LogEntry &le);
 
   const std::vector<ModuleCommand> &get_commands() const
   {
     return commands;
-  }
-
-  const std::string &get_name() const
-  {
-    return module_name;
   }
 
   int handle_command(
@@ -85,9 +82,17 @@ public:
     health_checks = std::move(c);
   }
   void get_health_checks(health_check_map_t *checks);
+
+  void set_uri(const std::string &str)
+  {
+    uri = str;
+  }
+
+  std::string get_uri() const
+  {
+    return uri;
+  }
 };
 
 std::string handle_pyerror();
-
-#endif
 
