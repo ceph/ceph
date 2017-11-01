@@ -4074,6 +4074,11 @@ void OSD::build_past_intervals_parallel()
         ++i) {
       PG *pg = i->second;
 
+      // Ignore PGs only partially created (DNE)
+      if (pg->info.dne()) {
+	continue;
+      }
+
       auto rpib = pg->get_required_past_interval_bounds(
 	pg->info,
 	superblock.oldest_map);
