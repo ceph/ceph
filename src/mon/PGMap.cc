@@ -1092,7 +1092,9 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   stamp_delta += delta_t;
 
   pg_sum_delta.stats.add(d.stats);
-  if (pg_sum_deltas.size() > (unsigned)MAX(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1)) {
+  auto smooth_intervals =
+    cct ? cct->_conf->get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
+  if (pg_sum_deltas.size() > smooth_intervals) {
     pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
     stamp_delta -= pg_sum_deltas.front().second;
     pg_sum_deltas.pop_front();
@@ -1902,26 +1904,12 @@ void PGMap::update_delta(
    * average it out.
    */
   result_pool_delta->stats.add(d.stats);
-  size_t s = MAX(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1);
+  size_t s = cct ? cct->_conf->get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
   if (delta_avg_list->size() > s) {
     result_pool_delta->stats.sub(delta_avg_list->front().first.stats);
     *result_ts_delta -= delta_avg_list->front().second;
     delta_avg_list->pop_front();
   }
-}
-
-/**
- * update aggregated delta
- *
- * @param cct            ceph context
- * @param ts             Timestamp
- * @param pg_sum_old     Old pg_sum
- */
-void PGMap::update_global_delta(CephContext *cct,
-                                const utime_t ts, const pool_stat_t& pg_sum_old)
-{
-  update_delta(cct, ts, pg_sum_old, &stamp, pg_sum, &pg_sum_delta,
-               &stamp_delta, &pg_sum_deltas);
 }
 
 /**
@@ -2083,7 +2071,7 @@ void PGMap::get_health_checks(
   health_check_map_t *checks) const
 {
   utime_t now = ceph_clock_now();
-  const unsigned max = cct->_conf->mon_health_max_detail;
+  const auto max = cct->_conf->get_val<uint64_t>("mon_health_max_detail");
   const auto& pools = osdmap.get_pools();
 
   typedef enum pg_consequence_t {
@@ -2189,7 +2177,7 @@ void PGMap::get_health_checks(
     }
   }
 
-  utime_t cutoff = now - utime_t(cct->_conf->mon_pg_stuck_threshold, 0);
+  utime_t cutoff = now - utime_t(cct->_conf->get_val<int64_t>("mon_pg_stuck_threshold"), 0);
   // Loop over all PGs, if there are any possibly-unhealthy states in there
   if (!possible_responses.empty()) {
     for (const auto& i : pg_stat) {
@@ -2457,6 +2445,12 @@ void PGMap::get_health_checks(
   // MANY_OBJECTS_PER_PG
   if (!pg_stat.empty()) {
     list<string> pgp_detail, many_detail;
+    const auto mon_pg_warn_min_objects =
+      cct->_conf->get_val<int64_t>("mon_pg_warn_min_objects");
+    const auto mon_pg_warn_min_pool_objects =
+      cct->_conf->get_val<int64_t>("mon_pg_warn_min_pool_objects");
+    const auto mon_pg_warn_max_object_skew =
+      cct->_conf->get_val<double>("mon_pg_warn_max_object_skew");
     for (auto p = pg_pool_sum.begin();
          p != pg_pool_sum.end();
          ++p) {
@@ -2474,13 +2468,12 @@ void PGMap::get_health_checks(
       }
       int average_objects_per_pg = pg_sum.stats.sum.num_objects / pg_stat.size();
       if (average_objects_per_pg > 0 &&
-          pg_sum.stats.sum.num_objects >= cct->_conf->mon_pg_warn_min_objects &&
-          p->second.stats.sum.num_objects >=
-	  cct->_conf->mon_pg_warn_min_pool_objects) {
+          pg_sum.stats.sum.num_objects >= mon_pg_warn_min_objects &&
+          p->second.stats.sum.num_objects >= mon_pg_warn_min_pool_objects) {
 	int objects_per_pg = p->second.stats.sum.num_objects / pi->get_pg_num();
 	float ratio = (float)objects_per_pg / (float)average_objects_per_pg;
-	if (cct->_conf->mon_pg_warn_max_object_skew > 0 &&
-	    ratio > cct->_conf->mon_pg_warn_max_object_skew) {
+	if (mon_pg_warn_max_object_skew > 0 &&
+	    ratio > mon_pg_warn_max_object_skew) {
 	  ostringstream ss;
 	  ss << "pool " << name << " objects per pg ("
 	     << objects_per_pg << ") is more than " << ratio
@@ -2508,8 +2501,8 @@ void PGMap::get_health_checks(
   // POOL_FULL
   // POOL_NEAR_FULL
   {
-    float warn_threshold = (float)g_conf->mon_pool_quota_warn_threshold/100;
-    float crit_threshold = (float)g_conf->mon_pool_quota_crit_threshold/100;
+    float warn_threshold = (float)g_conf->get_val<int64_t>("mon_pool_quota_warn_threshold")/100;
+    float crit_threshold = (float)g_conf->get_val<int64_t>("mon_pool_quota_crit_threshold")/100;
     list<string> full_detail, nearfull_detail;
     unsigned full_pools = 0, nearfull_pools = 0;
     for (auto it : pools) {
@@ -3024,7 +3017,7 @@ int process_pg_map_command(
       stuckop_vec.push_back("unclean");
     int64_t threshold;
     cmd_getval(g_ceph_context, cmdmap, "threshold", threshold,
-               int64_t(g_conf->mon_pg_stuck_threshold));
+               g_conf->get_val<int64_t>("mon_pg_stuck_threshold"));
 
     r = pg_map.dump_stuck_pg_stats(ds, f, (int)threshold, stuckop_vec);
     odata->append(ds);
@@ -3329,7 +3322,7 @@ void PGMapUpdater::check_down_pgs(
   // if a large number of osds changed state, just iterate over the whole
   // pg map.
   if (need_check_down_pg_osds.size() > (unsigned)osdmap.get_num_osds() *
-      g_conf->mon_pg_check_down_all_threshold) {
+      g_conf->get_val<double>("mon_pg_check_down_all_threshold")) {
     check_all = true;
   }
 

@@ -223,7 +223,6 @@ OPTION(mon_osd_prime_pg_temp, OPT_BOOL)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT)  // max time to spend priming
 OPTION(mon_osd_prime_pg_temp_max_estimate, OPT_FLOAT) // max estimate of pg total before we do all pgs in parallel
 OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL) // whether turn on fast read on the pool or not
-OPTION(mon_stat_smooth_intervals, OPT_INT)  // smooth stats over last N PGMap maps
 OPTION(mon_election_timeout, OPT_FLOAT)  // on election proposer, max waiting time for all ACKs
 OPTION(mon_lease, OPT_FLOAT)       // lease interval
 OPTION(mon_lease_renew_interval_factor, OPT_FLOAT) // on leader, to renew the lease
@@ -234,11 +233,7 @@ OPTION(mon_clock_drift_allowed, OPT_FLOAT) // allowed clock drift between monito
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT) // exponential backoff for clock drift warnings
 OPTION(mon_timecheck_interval, OPT_FLOAT) // on leader, timecheck (clock drift check) interval (seconds)
 OPTION(mon_timecheck_skew_interval, OPT_FLOAT) // on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
-OPTION(mon_pg_stuck_threshold, OPT_INT) // number of seconds after which pgs can be considered stuck inactive, unclean, etc (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_pg_min_inactive, OPT_U64) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
-OPTION(mon_pg_warn_max_object_skew, OPT_FLOAT) // max skew few average in objects per pg
-OPTION(mon_pg_warn_min_objects, OPT_INT)  // do not warn below this object #
-OPTION(mon_pg_warn_min_pool_objects, OPT_INT)  // do not warn on pools below this object #
 OPTION(mon_pg_check_down_all_threshold, OPT_FLOAT) // threshold of down osds after which we check all pgs
 OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT) // position between pool cache_target_full and max where we start warning
 OPTION(mon_osd_full_ratio, OPT_FLOAT) // what % full makes an OSD "full"
@@ -273,7 +268,6 @@ OPTION(mon_health_to_clog, OPT_BOOL)
 OPTION(mon_health_to_clog_interval, OPT_INT)
 OPTION(mon_health_to_clog_tick_interval, OPT_DOUBLE)
 OPTION(mon_health_preluminous_compat, OPT_BOOL)
-OPTION(mon_health_max_detail, OPT_INT) // max detailed pgs to report in health detail
 OPTION(mon_data_avail_crit, OPT_INT)
 OPTION(mon_data_avail_warn, OPT_INT)
 OPTION(mon_data_size_warn, OPT_U64) // issue a warning when the monitor's data store goes over 15GB (in bytes)
@@ -345,8 +339,6 @@ OPTION(mon_client_ping_timeout, OPT_DOUBLE)   // fail if we don't hear back
 OPTION(mon_client_hunt_interval_backoff, OPT_DOUBLE) // each time we reconnect to a monitor, double our timeout
 OPTION(mon_client_hunt_interval_max_multiple, OPT_DOUBLE) // up to a max of 10*default (30 seconds)
 OPTION(mon_client_max_log_entries_per_message, OPT_INT)
-OPTION(mon_pool_quota_warn_threshold, OPT_INT) // percent of quota at which to issue warnings
-OPTION(mon_pool_quota_crit_threshold, OPT_INT) // percent of quota at which to issue errors
 OPTION(client_cache_size, OPT_INT)
 OPTION(client_cache_mid, OPT_FLOAT)
 OPTION(client_use_random_mds, OPT_BOOL)
