@@ -69,10 +69,10 @@ public:
   PyObject *list_servers_python();
   PyObject *get_metadata_python(
     std::string const &handle,
-    const std::string &svc_name, const std::string &svc_id);
+    const std::string &svc_type, const std::string &svc_id);
   PyObject *get_daemon_status_python(
     std::string const &handle,
-    const std::string &svc_name, const std::string &svc_id);
+    const std::string &svc_type, const std::string &svc_id);
   PyObject *get_counter_python(
     std::string const &handle,
     const std::string &svc_name,
