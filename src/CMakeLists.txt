@@ -695,6 +695,7 @@ if (WITH_MGR)
       mgr/DaemonServer.cc
       mgr/ClusterState.cc
       mgr/ActivePyModules.cc
+      mgr/OSDHealthMetricCollector.cc
       mgr/StandbyPyModules.cc
       mgr/PyModuleRegistry.cc
       mgr/PyModuleRunner.cc
