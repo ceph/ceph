@@ -3510,6 +3510,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
 
+  if (mclock_service_tracker) {
+    qos_trk->track_resp(op->target.osd, m->get_qos_resp());
+  }
   ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
   _finish_op(op, 0);
 
