@@ -318,6 +318,11 @@ const string RGWZoneGroup::get_default_oid(bool old_region_format)
     return cct->_conf->rgw_default_region_info_oid;
   }
 
+  //no default realm exist
+  if (realm_id.empty()){
+    return zonegroup_names_oid_prefix + default_zonegroup_name;
+  }
+
   string default_oid = cct->_conf->rgw_default_zonegroup_info_oid;
 
   if (cct->_conf->rgw_default_zonegroup_info_oid.empty()) {
@@ -482,11 +487,10 @@ int RGWZoneGroup::read_default_id(string& default_id, bool old_format)
     /* try using default realm */
     RGWRealm realm;
     int ret = realm.init(cct, store);
-    if (ret < 0) {
-      ldout(cct, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
-      return -ENOENT;
+    //get default realm's id
+    if (ret == 0) {
+      realm_id = realm.get_id();
     }
-    realm_id = realm.get_id();
   }
 
   return RGWSystemMetaObj::read_default_id(default_id, old_format);
@@ -1776,6 +1780,11 @@ const string RGWZoneParams::get_default_oid(bool old_format)
     return cct->_conf->rgw_default_zone_info_oid;
   }
 
+  //no default realm exist
+  if (realm_id.empty()){
+    return zone_names_oid_prefix + default_zone_name;
+  }
+
   return cct->_conf->rgw_default_zone_info_oid + "." + realm_id;
 }
 
@@ -1808,11 +1817,10 @@ int RGWZoneParams::read_default_id(string& default_id, bool old_format)
     /* try using default realm */
     RGWRealm realm;
     int ret = realm.init(cct, store);
-    if (ret < 0) {
-      ldout(cct, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
-      return -ENOENT;
+    //get default realm's id
+    if (ret == 0) {
+      realm_id = realm.get_id();
     }
-    realm_id = realm.get_id();
   }
 
   return RGWSystemMetaObj::read_default_id(default_id, old_format);
