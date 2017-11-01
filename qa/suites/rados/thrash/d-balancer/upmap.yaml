@@ -1,0 +1,7 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph mgr module enable balancer
+      - while ! ceph balancer status ; do sleep 1 ; done
+      - ceph balancer mode upmap
+      - ceph balancer on
