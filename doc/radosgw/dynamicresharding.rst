@@ -60,7 +60,7 @@ Add a bucket to the resharding queue
 List resharding queue
 ---------------------
 ::
-   # radosgw-admon reshard list
+   # radosgw-admin reshard list
 
 Process/Schedule a bucket resharding
 ------------------------------------
