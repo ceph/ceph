@@ -687,24 +687,15 @@ void FileStore::collect_metadata(map<string,string> *pm)
   (*pm)["filestore_f_type"] = ss.str();
 
   if (cct->_conf->filestore_collect_device_partition_information) {
-    rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
+    BlkDev blkdev(fsid_fd);
+    rc = blkdev.partition(partition_path, PATH_MAX);
+    if (rc == 0)
+      (*pm)["backend_filestore_partition_path"] = string(partition_path);
+    rc = blkdev.wholedisk(dev_node, PATH_MAX);
+    if (rc == 0)
+      (*pm)["backend_filestore_dev_node"] = string(dev_node);
   } else {
     rc = -EINVAL;
-  }
-
-  switch (rc) {
-    case -EOPNOTSUPP:
-    case -EINVAL:
-      (*pm)["backend_filestore_partition_path"] = "unknown";
-      (*pm)["backend_filestore_dev_node"] = "unknown";
-      break;
-    case -ENODEV:
-      (*pm)["backend_filestore_partition_path"] = string(partition_path);
-      (*pm)["backend_filestore_dev_node"] = "unknown";
-      break;
-    default:
-      (*pm)["backend_filestore_partition_path"] = string(partition_path);
-      (*pm)["backend_filestore_dev_node"] = string(dev_node);
   }
 }
 

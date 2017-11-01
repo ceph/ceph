@@ -24,7 +24,6 @@
 #include "include/stringify.h"
 #include "common/errno.h"
 #include "common/debug.h"
-#include "common/blkdev.h"
 #include "common/align.h"
 
 #define dout_context cct
@@ -64,12 +63,14 @@ int KernelDevice::open(const string& p)
   dout(1) << __func__ << " path " << path << dendl;
 
   fd_direct = ::open(path.c_str(), O_RDWR | O_DIRECT);
+  BlkDev blkdev_direct(fd_direct);
   if (fd_direct < 0) {
     r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
     return r;
   }
   fd_buffered = ::open(path.c_str(), O_RDWR);
+  BlkDev blkdev_buffered(fd_buffered);
   if (fd_buffered < 0) {
     r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
@@ -118,7 +119,7 @@ int KernelDevice::open(const string& p)
 
   if (S_ISBLK(st.st_mode)) {
     int64_t s;
-    r = get_block_device_size(fd_direct, &s);
+    r = blkdev_direct.get_size(&s);
     if (r < 0) {
       goto out_fail;
     }
@@ -127,18 +128,7 @@ int KernelDevice::open(const string& p)
     size = st.st_size;
   }
 
-  {
-    char partition[PATH_MAX], devname[PATH_MAX];
-    r = get_device_by_fd(fd_buffered, partition, devname, sizeof(devname));
-    if (r < 0) {
-      derr << "unable to get device name for " << path << ": "
-	   << cpp_strerror(r) << dendl;
-      rotational = true;
-    } else {
-      dout(20) << __func__ << " devname " << devname << dendl;
-      rotational = block_device_is_rotational(devname);
-    }
-  }
+  rotational = blkdev_buffered.is_rotational();
 
   r = _aio_start();
   if (r < 0) {
@@ -190,13 +180,6 @@ void KernelDevice::close()
   path.clear();
 }
 
-static string get_dev_property(const char *dev, const char *property)
-{
-  char val[1024] = {0};
-  get_block_device_string_property(dev, property, val, sizeof(val));
-  return val;
-}
-
 int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
 {
   (*pm)[prefix + "rotational"] = stringify((int)(bool)rotational);
@@ -214,41 +197,25 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   if (r < 0)
     return -errno;
   if (S_ISBLK(st.st_mode)) {
+    char buffer[1024] = {0};
+    BlkDev blkdev(fd_buffered);
+
     (*pm)[prefix + "access_mode"] = "blk";
-    char partition_path[PATH_MAX];
-    char dev_node[PATH_MAX];
-    int rc = get_device_by_fd(fd_buffered, partition_path, dev_node, PATH_MAX);
-    switch (rc) {
-    case -EOPNOTSUPP:
-    case -EINVAL:
-      (*pm)[prefix + "partition_path"] = "unknown";
-      (*pm)[prefix + "dev_node"] = "unknown";
-      break;
-    case -ENODEV:
-      (*pm)[prefix + "partition_path"] = string(partition_path);
-      (*pm)[prefix + "dev_node"] = "unknown";
-      break;
-    default:
-      {
-	(*pm)[prefix + "partition_path"] = string(partition_path);
-	(*pm)[prefix + "dev_node"] = string(dev_node);
-	(*pm)[prefix + "model"] = get_dev_property(dev_node, "device/model");
-	(*pm)[prefix + "dev"] = get_dev_property(dev_node, "dev");
 
-	// nvme exposes a serial number
-	string serial = get_dev_property(dev_node, "device/serial");
-	if (serial.length()) {
-	  (*pm)[prefix + "serial"] = serial;
-	}
+    blkdev.model(buffer, sizeof(buffer));
+    (*pm)[prefix + "model"] = buffer;
 
-	// nvme has a device/device/* structure; infer from that.  there
-	// is probably a better way?
-	string nvme_vendor = get_dev_property(dev_node, "device/device/vendor");
-	if (nvme_vendor.length()) {
-	  (*pm)[prefix + "type"] = "nvme";
-	}
-      }
-    }
+    buffer[0] = '\0';
+    blkdev.dev(buffer, sizeof(buffer));
+    (*pm)[prefix + "dev"] = buffer;
+
+    // nvme exposes a serial number
+    buffer[0] = '\0';
+    blkdev.serial(buffer, sizeof(buffer));
+    (*pm)[prefix + "serial"] = buffer;
+
+    if (blkdev.is_nvme())
+      (*pm)[prefix + "type"] = "nvme";
   } else {
     (*pm)[prefix + "access_mode"] = "file";
     (*pm)[prefix + "path"] = path;
@@ -505,7 +472,7 @@ void KernelDevice::aio_submit(IOContext *ioc)
   ioc->num_pending -= pending;
   assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
   assert(ioc->pending_aios.size() == 0);
-  
+
   if (cct->_conf->bdev_debug_aio) {
     list<aio_t>::iterator p = ioc->running_aios.begin();
     while (p != e) {
@@ -520,9 +487,9 @@ void KernelDevice::aio_submit(IOContext *ioc)
 
   void *priv = static_cast<void*>(ioc);
   int r, retries = 0;
-  r = aio_queue.submit_batch(ioc->running_aios.begin(), e, 
+  r = aio_queue.submit_batch(ioc->running_aios.begin(), e,
 			     pending, priv, &retries);
-  
+
   if (retries)
     derr << __func__ << " retries " << retries << dendl;
   if (r < 0) {
@@ -725,7 +692,7 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
   r = ::pread(fd_direct, p.c_str(), aligned_len, aligned_off);
   if (r < 0) {
     r = -errno;
-    derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec 
+    derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
       << " error: " << cpp_strerror(r) << dendl;
     goto out;
   }
@@ -766,7 +733,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
       r = ::pread(fd_buffered, t, left, off);
       if (r < 0) {
 	r = -errno;
-        derr << __func__ << " 0x" << std::hex << off << "~" << left 
+        derr << __func__ << " 0x" << std::hex << off << "~" << left
           << std::dec << " error: " << cpp_strerror(r) << dendl;
 	goto out;
       }
@@ -779,8 +746,8 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
     r = ::pread(fd_direct, buf, len, off);
     if (r < 0) {
       r = -errno;
-      derr << __func__ << " direct_aligned_read" << " 0x" << std::hex 
-        << off << "~" << left << std::dec << " error: " << cpp_strerror(r) 
+      derr << __func__ << " direct_aligned_read" << " 0x" << std::hex
+        << off << "~" << left << std::dec << " error: " << cpp_strerror(r)
         << dendl;
       goto out;
     }
