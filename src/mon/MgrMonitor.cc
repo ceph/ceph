@@ -708,9 +708,20 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     }
     f->flush(rdata);
   } else if (prefix == "mgr module ls") {
-    f->open_array_section("modules");
-    for (auto& p : map.modules) {
-      f->dump_string("module", p);
+    f->open_object_section("modules");
+    {
+      f->open_array_section("enabled_modules");
+      for (auto& p : map.modules) {
+        f->dump_string("module", p);
+      }
+      f->close_section();
+      f->open_array_section("disabled_modules");
+      for (auto& p : map.available_modules) {
+        if (map.modules.count(p) == 0) {
+          f->dump_string("module", p);
+        }
+      }
+      f->close_section();
     }
     f->close_section();
     f->flush(rdata);
