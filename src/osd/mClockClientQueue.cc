@@ -77,8 +77,9 @@ namespace ceph {
 					 unsigned priority,
 					 unsigned cost,
 					 Request&& item) {
-    queue.enqueue(get_inner_client(cl, item), priority, cost,
-		  std::move(item));
+    auto qos_params = item.get_qos_params();
+    queue.enqueue_distributed(get_inner_client(cl, item), priority, cost,
+			      std::move(item), qos_params);
   }
 
   // Enqueue the op in the front of the regular queue
