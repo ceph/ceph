@@ -14,6 +14,7 @@
 
 #include "include/stringify.h"
 #include "common/errno.h"
+#include "common/backport14.h"
 
 #include "BaseMgrModule.h"
 #include "PyOSDMap.h"
