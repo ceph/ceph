@@ -191,7 +191,7 @@ void RDMADispatcher::polling()
 
     int rx_ret = rx_cq->poll_cq(MAX_COMPLETIONS, wc);
     if (rx_ret > 0) {
-      ldout(cct, 20) << __func__ << " rt completion queue got " << rx_ret
+      ldout(cct, 20) << __func__ << " rx completion queue got " << rx_ret
                      << " responses."<< dendl;
       perf_logger->inc(l_msgr_rdma_rx_total_wc, rx_ret);
       perf_logger->inc(l_msgr_rdma_rx_bufs_in_use, rx_ret);
