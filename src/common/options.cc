@@ -1008,9 +1008,11 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("mon_stat_smooth_intervals", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_stat_smooth_intervals", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(6)
-    .set_description(""),
+    .set_min(1)
+    .add_service("mgr")
+    .set_description("number of PGMaps stats over which we calc the average read/write throughput of the whole cluster"),
 
     Option("mon_election_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
@@ -1050,7 +1052,9 @@ std::vector<Option> get_global_options() {
 
     Option("mon_pg_stuck_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
-    .set_description(""),
+    .set_description("number of seconds after which pgs can be considered stuck inactive, unclean, etc")
+    .set_long_description("see doc/control.rst under dump_stuck for more info")
+    .add_service("mgr"),
 
     Option("mon_pg_min_inactive", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
@@ -1066,19 +1070,23 @@ std::vector<Option> get_global_options() {
 
     Option("mon_pg_warn_max_object_skew", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10.0)
-    .set_description(""),
+    .set_description("max skew few average in objects per pg")
+    .add_service("mgr"),
 
     Option("mon_pg_warn_min_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10000)
-    .set_description(""),
+    .set_description("do not warn below this object #")
+    .add_service("mgr"),
 
     Option("mon_pg_warn_min_pool_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
-    .set_description(""),
+    .set_description("do not warn on pools below this object #")
+    .add_service("mgr"),
 
     Option("mon_pg_check_down_all_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.5)
-    .set_description(""),
+    .set_description("threshold of down osds after which we check all pgs")
+    .add_service("mgr"),
 
     Option("mon_cache_target_full_warn_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.66)
@@ -1225,9 +1233,9 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Warn about the health JSON format change in preluminous JSON fields"),
 
-    Option("mon_health_max_detail", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_health_max_detail", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
-    .set_description(""),
+    .set_description("max detailed pgs to report in health detail"),
 
     Option("mon_health_log_update_period", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)
@@ -1516,11 +1524,13 @@ std::vector<Option> get_global_options() {
 
     Option("mon_pool_quota_warn_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("percent of quota at which to issue warnings")
+    .add_service("mgr"),
 
     Option("mon_pool_quota_crit_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("percent of quota at which to issue errors")
+    .add_service("mgr"),
 
     Option("crush_location", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
