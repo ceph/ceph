@@ -53,6 +53,62 @@ by a standby.
 If you want to pre-empt failover, you can explicitly mark a ceph-mgr
 daemon as failed using ``ceph mgr fail <mgr name>``.
 
+Using modules
+-------------
+
+Use the command ``ceph mgr module ls`` to see which modules are
+available, and which are currently enabled.  Enable or disable modules
+using the commands ``ceph mgr module enable <module>`` and
+``ceph mgr module disable <module>`` respectively.
+
+If a module is *enabled* then the active ceph-mgr daemon will load
+and execute it.  In the case of modules that provide a service,
+such as an HTTP server, the module may publish its address when it
+is loaded.  To see the addresses of such modules, use the command 
+``ceph mgr services``.
+
+Some modules may also implement a special standby mode which runs on
+standby ceph-mgr daemons as well as the active daemon.  This enables
+modules that provide services to redirect their clients to the active
+daemon, if the client tries to connect to a standby.
+
+Consult the documentation pages for individual manager modules for more
+information about what functionality each module provides.
+
+Here is an example of enabling the ``dashboard`` module:
+
+::
+
+	$ ceph mgr module ls
+	{
+		"enabled_modules": [
+			"restful",
+			"status"
+		],
+		"disabled_modules": [
+			"dashboard"
+		]
+	}
+
+	$ ceph mgr module enable dashboard
+	$ ceph mgr module ls
+	{
+		"enabled_modules": [
+			"restful",
+			"status",
+			"dashboard"
+		],
+		"disabled_modules": [
+		]
+	}
+
+	$ ceph mgr services
+	{
+		"dashboard": "http://myserver.com:7789/",
+		"restful": "https://myserver.com:8789/"
+	}
+
+
 Calling module commands
 -----------------------
 
