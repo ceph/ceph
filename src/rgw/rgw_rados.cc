@@ -334,9 +334,9 @@ int RGWZoneGroup::read_default_id(string& default_id, bool old_format)
     /* try using default realm */
     RGWRealm realm;
     int ret = realm.init(cct, store);
+    // no default realm exist
     if (ret < 0) {
-      ldout(cct, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
-      return -ENOENT;
+      return read_id(default_zonegroup_name, default_id);
     }
     realm_id = realm.get_id();
   }
@@ -1625,9 +1625,9 @@ int RGWZoneParams::read_default_id(string& default_id, bool old_format)
     /* try using default realm */
     RGWRealm realm;
     int ret = realm.init(cct, store);
+    //no default realm exist
     if (ret < 0) {
-      ldout(cct, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
-      return -ENOENT;
+      return read_id(default_zone_name, default_id);
     }
     realm_id = realm.get_id();
   }
