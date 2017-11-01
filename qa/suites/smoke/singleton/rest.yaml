@@ -3,7 +3,7 @@ overrides:
     rhbuild: '2.2'
     vars:
       ceph_conf_overrides:
-          global:
+        global:
           osd default pool size: 3
           osd pool default pg num: 64
           osd pool default pgp num: 64
