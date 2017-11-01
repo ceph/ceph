@@ -122,7 +122,7 @@ bool LCRule_S3::xml_end(const char *el) {
   if (lc_id){
     id = lc_id->get_data();
   } else {
-    gen_rand_alphanumeric_lower(nullptr, &id, LC_ID_LENGTH);
+    gen_rand_alphanumeric_lower(cct, &id, LC_ID_LENGTH);
   }
 
 
@@ -182,7 +182,7 @@ bool LCRule_S3::xml_end(const char *el) {
   return true;
 }
 
-void LCRule_S3::to_xml(CephContext *cct, ostream& out) {
+void LCRule_S3::to_xml(ostream& out) {
   out << "<Rule>" ;
   out << "<ID>" << id << "</ID>";
   if (!filter.empty()) {
@@ -243,7 +243,7 @@ XMLObj *RGWLCXMLParser_S3::alloc_obj(const char *el)
   if (strcmp(el, "LifecycleConfiguration") == 0) {
     obj = new RGWLifecycleConfiguration_S3(cct);
   } else if (strcmp(el, "Rule") == 0) {
-    obj = new LCRule_S3();
+    obj = new LCRule_S3(cct);
   } else if (strcmp(el, "ID") == 0) {
     obj = new LCID_S3();
   } else if (strcmp(el, "Prefix") == 0) {
