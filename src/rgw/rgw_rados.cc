@@ -5720,7 +5720,9 @@ void RGWRados::create_bucket_id(string *bucket_id)
   uint64_t iid = instance_id();
   uint64_t bid = next_bucket_id();
   char buf[get_zone_params().get_id().size() + 48];
-  snprintf(buf, sizeof(buf), "%s.%llu.%llu", get_zone_params().get_id().c_str(), iid, bid);
+  snprintf(buf, sizeof(buf), "%s.%llu.%llu", get_zone_params().get_id().c_str(),
+					     (unsigned long long)iid,
+					     (unsigned long long)bid);
   *bucket_id = buf;
 }
 
