@@ -1412,12 +1412,14 @@ class RGWPutLC : public RGWOp {
 protected:
   int len;
   char *data;
+  const char *content_md5;
   string cookie;
 
 public:
   RGWPutLC() {
     len = 0;
-    data = NULL;
+    data = nullptr;
+    content_md5 = nullptr;
   }
   ~RGWPutLC() override {
     free(data);

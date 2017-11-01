@@ -4846,6 +4846,25 @@ void RGWPutLC::execute()
   RGWLCXMLParser_S3 parser(s->cct);
   RGWLifecycleConfiguration_S3 new_config(s->cct);
 
+  content_md5 = s->info.env->get("HTTP_CONTENT_MD5");
+  if (content_md5 == nullptr) {
+    op_ret = -ERR_INVALID_REQUEST;
+    s->err.message = "Missing required header for this request: Content-MD5";
+    ldout(s->cct, 5) << s->err.message << dendl;
+    return;
+  }
+
+  std::string content_md5_bin;
+  try {
+    content_md5_bin = rgw::from_base64(boost::string_view(content_md5));
+  } catch (...) {
+    s->err.message = "Request header Content-MD5 contains character "
+                     "that is not base64 encoded.";
+    ldout(s->cct, 5) << s->err.message << dendl;
+    op_ret = -ERR_BAD_DIGEST;
+    return;
+  }
+
   if (!parser.init()) {
     op_ret = -EINVAL;
     return;
@@ -4856,6 +4875,21 @@ void RGWPutLC::execute()
     return;
 
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
+
+  MD5 data_hash;
+  unsigned char data_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  data_hash.Update(reinterpret_cast<const byte*>(data), len);
+  data_hash.Final(data_hash_res);
+
+  if (memcmp(data_hash_res, content_md5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
+    op_ret = -ERR_BAD_DIGEST;
+    s->err.message = "The Content-MD5 you specified did not match what we received.";
+    ldout(s->cct, 5) << s->err.message
+                     << " Specified content md5: " << content_md5
+                     << ", calculated content md5: " << data_hash_res
+                     << dendl;
+    return;
+  }
 
   if (!parser.parse(data, len, 1)) {
     op_ret = -ERR_MALFORMED_XML;
