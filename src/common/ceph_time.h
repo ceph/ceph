@@ -17,6 +17,7 @@
 
 #include <chrono>
 
+#include "include/assert.h"
 #include "include/encoding.h"
 
 #if defined(__APPLE__)
@@ -498,6 +499,10 @@ namespace std {
       return z > signedspan::zero() ?
 	std::chrono::duration_cast<timespan>(z) :
 	timespan(-z.count());
+    }
+    inline timespan to_timespan(signedspan z) {
+      ceph_assert(z >= signedspan::zero());
+      return std::chrono::duration_cast<timespan>(z);
     }
   }
 } // namespace std
