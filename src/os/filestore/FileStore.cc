@@ -708,6 +708,21 @@ void FileStore::collect_metadata(map<string,string> *pm)
   }
 }
 
+int FileStore::get_devices(set<string> *ls)
+{
+  char partition_path[PATH_MAX];
+  char dev_node[PATH_MAX];
+  int rc = 0;
+  rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
+  if (rc == 0) {
+    ls->insert(dev_node);
+    if (strncmp(dev_node, "dm-", 3) == 0) {
+      get_dm_parents(dev_node, ls);
+    }
+  }
+  return 0;
+}
+
 int FileStore::statfs(struct store_statfs_t *buf0)
 {
   struct statfs buf;

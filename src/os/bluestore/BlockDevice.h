@@ -128,6 +128,17 @@ public:
 
   virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const = 0;
 
+  virtual int get_devname(string *out) {
+    return -ENOENT;
+  }
+  virtual int get_devices(set<string> *ls) {
+    string s;
+    if (get_devname(&s) == 0) {
+      ls->insert(s);
+    }
+    return 0;
+  }
+
   virtual int read(
     uint64_t off,
     uint64_t len,

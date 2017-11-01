@@ -5678,6 +5678,9 @@ void OSD::_collect_metadata(map<string,string> *pm)
   (*pm)["back_iface"] = pick_iface(cct,
       cluster_messenger->get_myaddr().get_sockaddr_storage());
 
+  set<string> devnames;
+  store->get_devices(&devnames);
+  (*pm)["devices"] = stringify(devnames);
   dout(10) << __func__ << " " << *pm << dendl;
 }
 

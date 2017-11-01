@@ -280,6 +280,11 @@ public:
     return false;
   }
 
+  int get_devices(set<string> *ls) override {
+    // no devices for us!
+    return 0;
+  }
+
   int statfs(struct store_statfs_t *buf) override;
 
   bool exists(const coll_t& cid, const ghobject_t& oid) override;

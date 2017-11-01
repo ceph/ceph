@@ -6239,6 +6239,15 @@ void BlueStore::collect_metadata(map<string,string> *pm)
   }
 }
 
+int BlueStore::get_devices(set<string> *ls)
+{
+  bdev->get_devices(ls);
+  if (bluefs) {
+    bluefs->get_devices(ls);
+  }
+  return 0;
+}
+
 int BlueStore::statfs(struct store_statfs_t *buf)
 {
   buf->reset();
