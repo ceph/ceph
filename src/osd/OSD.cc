@@ -1514,7 +1514,8 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
   int flags;
   flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
 
-  MOSDOpReply *reply = new MOSDOpReply(m, err, osdmap->get_epoch(), flags, true);
+  MOSDOpReply *reply = new MOSDOpReply(m, err, osdmap->get_epoch(), flags,
+				       true, op->qos_resp);
   reply->set_reply_versions(v, uv);
   m->get_connection()->send_message(reply);
 }
