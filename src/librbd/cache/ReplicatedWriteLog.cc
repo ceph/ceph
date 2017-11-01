@@ -27,6 +27,17 @@ namespace cache {
 using namespace librbd::cache::rwl;
 using namespace librbd::cache::file;
 
+BlockExtent block_extent(uint64_t offset_bytes, uint64_t length_bytes)
+{
+  return BlockExtent(offset_bytes / BLOCK_SIZE,
+		     (offset_bytes + length_bytes) / BLOCK_SIZE);
+}
+
+BlockExtent block_extent(ImageCache::Extent& image_extent)
+{
+  return block_extent(image_extent.first, image_extent.second);
+}
+
 namespace rwl {
 
 SyncPoint::SyncPoint(CephContext *cct, uint64_t sync_gen_num)
@@ -115,7 +126,8 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
     m_persist_on_write_until_flush(true), m_persist_on_flush(false),
     m_flush_seen(false),
     m_lock("librbd::cache::ReplicatedWriteLog::m_lock"),
-    m_log_append_lock("librbd::cache::ReplicatedWriteLog::m_log_append_lock") {
+    m_log_append_lock("librbd::cache::ReplicatedWriteLog::m_log_append_lock"),
+    m_blocks_to_log_entries(image_ctx.cct) {
 }
 
 template <typename I>
@@ -161,6 +173,11 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
   //ldout(cct, 20) << "image_extents=" << image_extents << ", "
   //               << "on_finish=" << on_finish << dendl;
 
+  for (auto &extent : image_extents) {
+    WriteLogEntries log_entries = m_blocks_to_log_entries.find_entries(block_extent(extent));
+  }
+
+  
   if (m_image_ctx.persistent_cache_enabled) {
     m_image_cache.aio_read(std::move(image_extents), bl, fadvise_flags, on_finish);
   } else {
@@ -454,6 +471,14 @@ void ReplicatedWriteLog<I>::alloc_and_append_entries(WriteLogOperations &ops)
   complete_op_log_entries(ops, append_result);
 }
 
+template <typename I>
+void ReplicatedWriteLog<I>::complete_write_req(C_WriteRequest *write_req, int result)
+{
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 6) << "cell=" << write_req->m_cell << dendl;
+  release_guarded_request(write_req->m_cell);
+}
+
 /**
  * Takes custody of write_req.
  *
@@ -464,27 +489,20 @@ template <typename I>
 void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 {
   CephContext *cct = m_image_ctx.cct;
-  BlockGuardCell *cell = write_req->m_cell;
   
   TOID(struct WriteLogPoolRoot) pool_root;
   pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
-
-  write_req->_on_finish =
-    new FunctionContext([this, cell](int r) {
-	CephContext *cct = m_image_ctx.cct;
-	ldout(cct, 6) << "cell=" << cell << dendl;
-	release_guarded_request(cell);
-    });
 
   ldout(cct,6) << "bl=[" << write_req->bl << "]" << dendl;
   uint8_t *pmem_blocks = D_RW(D_RW(pool_root)->data_blocks);
 
   ExtentsSummary<ImageCache::Extents> image_extents_summary(write_req->image_extents);
 
+  WriteLogEntries log_entries;
   WriteLogOperationSet *set(new WriteLogOperationSet(
     cct, m_current_sync_point, m_persist_on_flush,
     BlockExtent(image_extents_summary.first_block,
-			image_extents_summary.last_block), write_req));
+		image_extents_summary.last_block), write_req));
   {
     uint64_t buffer_offset = 0;
     Mutex::Locker locker(m_lock);
@@ -499,6 +517,7 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 	WriteLogOperation *operation =
 	  new WriteLogOperation(set, extent.first, extent.second);
 	set->operations.emplace_back(operation);
+	log_entries.emplace_back(operation->log_entry);
 
 	/* Reserve both log entry and data block space */
 	m_free_log_entries--;
@@ -528,6 +547,14 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
       }
     }
   }
+
+  write_req->_on_finish =
+    new FunctionContext([this, write_req](int r) {
+	complete_write_req(write_req, r);
+      });
+
+  m_blocks_to_log_entries.add_entries(log_entries);
+  
   /* All extent ops subs created */
   set->m_extent_ops->activate();
   

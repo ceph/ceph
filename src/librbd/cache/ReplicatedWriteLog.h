@@ -26,6 +26,9 @@ namespace cache {
 
 static const uint32_t BLOCK_SIZE = 512;
 
+BlockExtent block_extent(uint64_t offset_bytes, uint64_t length_bytes);
+BlockExtent block_extent(ImageCache::Extent& image_extent);
+
 namespace rwl {
 
 /**** Write log entries ****/
@@ -64,8 +67,7 @@ struct WriteLogPmemEntry {
   }
   WriteLogPmemEntry() { WriteLogPmemEntry(0, 0); }
   BlockExtent block_extent() {
-    return BlockExtent(image_offset_bytes / BLOCK_SIZE,
-		       (image_offset_bytes + write_bytes) / BLOCK_SIZE);
+    return BlockExtent(librbd::cache::block_extent(image_offset_bytes, write_bytes));
   }
   friend std::ostream &operator<<(std::ostream &os,
 				  const WriteLogPmemEntry &entry) {
@@ -315,11 +317,52 @@ public:
    */
   int add_entry(WriteLogEntry *log_entry) {
     Mutex::Locker locker(m_lock);
+    return add_entry_locked(log_entry);
+  }
+
+  int add_entries(WriteLogEntries &log_entries) {
+    Mutex::Locker locker(m_lock);
+    ldout(m_cct, 20) << dendl;
+    for (auto &log_entry : log_entries) {
+      add_entry_locked(log_entry);
+    }
+  }
+  
+  /**
+   * Remove any map entries that refer to the supplied write log
+   * entry.
+   */
+  void remove_entry(WriteLogEntry *log_entry) {
+    Mutex::Locker locker(m_lock);
+    remove_entry_locked(log_entry);
+  }
+
+  int remove_entries(WriteLogEntries &log_entries) {
+    Mutex::Locker locker(m_lock);
+    ldout(m_cct, 20) << dendl;
+    for (auto &log_entry : log_entries) {
+      remove_entry_locked(log_entry);
+    }
+  }
+
+  /**
+   * Returns the list of all write log entries that overlap the
+   * specified block extent.
+   */
+  WriteLogEntries find_entries(BlockExtent block_extent) {
+    Mutex::Locker locker(m_lock);
+    ldout(m_cct, 20) << dendl;
+    return find_entries_locked(block_extent);
+  }
+  
+private:
+  int add_entry_locked(WriteLogEntry *log_entry) {
     const BlockExtent block_extent = log_entry->block_extent();
     ldout(m_cct, 20) << "block_start=" << block_extent.block_start << ", "
                      << "block_end=" << block_extent.block_end << ", "
                      << "free_slots=" << m_free_map_extents.size()
                      << dendl;
+    assert(m_lock.is_locked_by_me());
 #if 0
     WriteLogMapExtent *detained_block_extent;
     auto it = m_detained_block_extents.find(block_extent);
@@ -351,12 +394,9 @@ public:
 #endif
   }
 
-  /**
-   * Remove any map entries that refer to the supplied write log
-   * entry.
-   */
-  void remove_entry(WriteLogEntry *log_entry) {
-    Mutex::Locker locker(m_lock);
+  void remove_entry_locked(WriteLogEntry *log_entry) {
+    ldout(m_cct, 20) << dendl;
+    assert(m_lock.is_locked_by_me());
 
 #if 0
     assert(cell != nullptr);
@@ -377,7 +417,26 @@ public:
 #endif
   }
 
-private:
+  WriteLogEntries find_entries_locked(BlockExtent block_extent) {
+    WriteLogEntries overlaps;
+    ldout(m_cct, 20) << dendl;
+
+    assert(m_lock.is_locked_by_me());
+    WriteLogMapEntries map_entries = find_map_entries_locked(block_extent);
+    for (auto &map_entry : map_entries) {
+      overlaps.emplace_back(map_entry.log_entry);
+    }
+    return overlaps;
+  }
+
+  WriteLogMapEntries find_map_entries_locked(BlockExtent block_extent) {
+    WriteLogMapEntries overlaps;
+
+    ldout(m_cct, 20) << dendl;
+    assert(m_lock.is_locked_by_me());
+    return overlaps;
+  }
+
   struct WriteLogMapExtent : public boost::intrusive::list_base_hook<>,
 			     public boost::intrusive::set_base_hook<> {
     BlockExtent block_extent;
@@ -520,6 +579,8 @@ private:
 
   WriteLogOperations m_ops_to_append; /* Write ops needing event append in local log */
 
+  WriteLogMap m_blocks_to_log_entries;
+  
   void wake_up();
   void process_work();
 
@@ -533,6 +594,7 @@ private:
   void append_sync_point(SyncPoint *sync_point, int prior_write_status);
   void new_sync_point(void);
 
+  void complete_write_req(C_WriteRequest *write_req, int result);
   void dispatch_aio_write(C_WriteRequest *write_req);
   void append_scheduled_ops(void);
   void schedule_append(WriteLogOperations &ops);
