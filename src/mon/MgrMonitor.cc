@@ -490,7 +490,28 @@ void MgrMonitor::tick()
     return;
 
   const auto now = ceph::coarse_mono_clock::now();
-  const auto cutoff = now - std::chrono::seconds(g_conf->get_val<int64_t>("mon_mgr_beacon_grace"));
+
+  const auto mgr_beacon_grace = std::chrono::seconds(
+      g_conf->get_val<int64_t>("mon_mgr_beacon_grace"));
+
+  // Note that this is the mgr daemon's tick period, not ours (the
+  // beacon is sent with this period).
+  const auto mgr_tick_period = std::chrono::seconds(
+      g_conf->get_val<int64_t>("mgr_tick_period"));
+
+  if (last_tick != ceph::coarse_mono_clock::time_point::min()
+      && (now - last_tick > (mgr_beacon_grace - mgr_tick_period))) {
+    // This case handles either local slowness (calls being delayed
+    // for whatever reason) or cluster election slowness (a long gap
+    // between calls while an election happened)
+    dout(4) << __func__ << ": resetting beacon timeouts due to mon delay "
+            "(slow election?) of " << now - last_tick << " seconds" << dendl;
+    for (auto &i : last_beacon) {
+      i.second = now;
+    }
+  }
+
+  last_tick = now;
 
   // Populate any missing beacons (i.e. no beacon since MgrMonitor
   // instantiation) with the current time, so that they will
@@ -508,6 +529,7 @@ void MgrMonitor::tick()
   // Cull standbys first so that any remaining standbys
   // will be eligible to take over from the active if we cull him.
   std::list<uint64_t> dead_standbys;
+  const auto cutoff = now - mgr_beacon_grace;
   for (const auto &i : pending_map.standbys) {
     auto last_beacon_time = last_beacon.at(i.first);
     if (last_beacon_time < cutoff) {
@@ -566,6 +588,7 @@ void MgrMonitor::on_restart()
 {
   // Clear out the leader-specific state.
   last_beacon.clear();
+  last_tick = ceph::coarse_mono_clock::now();
 }
 
 
