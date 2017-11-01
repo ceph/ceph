@@ -605,12 +605,27 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   if (cfg->devpath.empty()) {
     char dev[64];
     bool try_load_module = true;
+    const char *path = "/sys/module/nbd/parameters/nbds_max";
+    int nbds_max = -1;
+    if (access(path, F_OK) == 0) {
+      std::ifstream ifs;
+      ifs.open(path, std::ifstream::in);
+      if (ifs.is_open()) {
+        ifs >> nbds_max;
+        ifs.close();
+      }
+    }
+
     while (true) {
       snprintf(dev, sizeof(dev), "/dev/nbd%d", index);
 
       nbd = open_device(dev, cfg, try_load_module);
       try_load_module = false;
       if (nbd < 0) {
+        if (nbd == -EPERM && nbds_max != -1 && index < (nbds_max-1)) {
+          ++index;
+          continue;
+        }
         r = nbd;
         cerr << "rbd-nbd: failed to find unused device" << std::endl;
         goto close_fd;
