@@ -831,7 +831,8 @@ static int get_mapped_info(int pid, Config *cfg)
   std::vector<const char*> args;
 
   ifs.open(path.c_str(), std::ifstream::in);
-  assert (ifs.is_open());
+  if (!ifs.is_open())
+    return -1;
   ifs >> cmdline;
 
   for (unsigned i = 0; i < cmdline.size(); i++) {
