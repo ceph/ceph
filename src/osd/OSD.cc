@@ -8093,6 +8093,15 @@ void OSD::split_pgs(
       i->ps(),
       &child->get_pool().info,
       rctx->transaction);
+
+    uint32_t pg_num = child->get_pool().info.get_pg_num();
+    uint64_t expected_num_objects_pg =
+      child->get_pool().info.expected_num_objects / pg_num;
+
+    dout(10) << "pool: " << child->get_pool().info.get_auid()
+             << " expected num objects per pg: " << expected_num_objects_pg
+             << dendl;
+
     parent->split_into(
       i->pgid,
       child,
