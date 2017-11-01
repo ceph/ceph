@@ -7012,8 +7012,8 @@ void PrimaryLogPG::_make_clone(
   ::encode(*poi, bv, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
 
   t->clone(coid, head);
-  setattr_maybe_cache(obc, ctx, t, OI_ATTR, bv);
-  rmattr_maybe_cache(obc, ctx, t, SS_ATTR);
+  setattr_maybe_cache(obc, t, OI_ATTR, bv);
+  rmattr_maybe_cache(obc, t, SS_ATTR);
 }
 
 void PrimaryLogPG::make_writeable(OpContext *ctx)
@@ -12528,7 +12528,7 @@ void PrimaryLogPG::hit_set_persist()
   map <string, bufferlist> attrs;
   attrs[OI_ATTR].claim(boi);
   attrs[SS_ATTR].claim(bss);
-  setattrs_maybe_cache(ctx->obc, ctx.get(), ctx->op_t.get(), attrs);
+  setattrs_maybe_cache(ctx->obc, ctx->op_t.get(), attrs);
   ctx->log.push_back(
     pg_log_entry_t(
       pg_log_entry_t::MODIFY,
@@ -14117,7 +14117,6 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 
 void PrimaryLogPG::setattr_maybe_cache(
   ObjectContextRef obc,
-  OpContext *op,
   PGTransaction *t,
   const string &key,
   bufferlist &val)
@@ -14127,7 +14126,6 @@ void PrimaryLogPG::setattr_maybe_cache(
 
 void PrimaryLogPG::setattrs_maybe_cache(
   ObjectContextRef obc,
-  OpContext *op,
   PGTransaction *t,
   map<string, bufferlist> &attrs)
 {
@@ -14136,7 +14134,6 @@ void PrimaryLogPG::setattrs_maybe_cache(
 
 void PrimaryLogPG::rmattr_maybe_cache(
   ObjectContextRef obc,
-  OpContext *op,
   PGTransaction *t,
   const string &key)
 {
