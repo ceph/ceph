@@ -1,13 +1,53 @@
 
-import ceph_state  #noqa
-import ceph_osdmap  #noqa
-import ceph_osdmap_incremental  #noqa
-import ceph_crushmap  #noqa
+import ceph_module  # noqa
+#import ceph_osdmap  #noqa
+#import ceph_osdmap_incremental  #noqa
+#import ceph_crushmap  #noqa
+
 import json
 import logging
 import threading
 from collections import defaultdict
 
+
+class CPlusPlusHandler(logging.Handler):
+    def __init__(self, module_inst):
+        super(CPlusPlusHandler, self).__init__()
+        self._module = module_inst
+
+    def emit(self, record):
+        if record.levelno <= logging.DEBUG:
+            ceph_level = 20
+        elif record.levelno <= logging.INFO:
+            ceph_level = 4
+        elif record.levelno <= logging.WARNING:
+            ceph_level = 1
+        else:
+            ceph_level = 0
+
+        self._module._ceph_log(ceph_level, self.format(record))
+
+
+def configure_logger(module_inst, name):
+    logger = logging.getLogger(name)
+
+
+    # Don't filter any logs at the python level, leave it to C++
+    logger.setLevel(logging.DEBUG)
+
+    # FIXME: we should learn the log level from C++ land, and then
+    # avoid calling the C++ level log when we know a message is of
+    # an insufficient level to be ultimately output
+    logger.addHandler(CPlusPlusHandler(module_inst))
+
+    return logger
+
+
+def unconfigure_logger(module_inst, name):
+    logger = logging.getLogger(name)
+    rm_handlers = [h for h in logger.handlers if isinstance(h, CPlusPlusHandler)]
+    for h in rm_handlers:
+        logger.removeHandler(h)
 
 class CommandResult(object):
     """
@@ -34,88 +74,122 @@ class CommandResult(object):
         return self.r, self.outb, self.outs
 
 
-class OSDMap(object):
-    def __init__(self, handle):
-        self._handle = handle
-
+class OSDMap(ceph_module.BasePyOSDMap):
     def get_epoch(self):
-        return ceph_osdmap.get_epoch(self._handle)
+        return self._get_epoch()
 
     def get_crush_version(self):
-        return ceph_osdmap.get_crush_version(self._handle)
+        return self._get_crush_version()
 
     def dump(self):
-        return ceph_osdmap.dump(self._handle)
+        return self._dump()
 
     def new_incremental(self):
-        return OSDMapIncremental(ceph_osdmap.new_incremental(self._handle))
+        return self._new_incremental()
 
     def apply_incremental(self, inc):
-        return OSDMap(ceph_osdmap.apply_incremental(self._handle, inc._handle))
+        return self._apply_incremental(inc)
 
     def get_crush(self):
-        return CRUSHMap(ceph_osdmap.get_crush(self._handle), self)
+        return self._get_crush()
 
     def get_pools_by_take(self, take):
-        return ceph_osdmap.get_pools_by_take(self._handle, take).get('pools', [])
+        return self._get_pools_by_take(take).get('pools', [])
 
     def calc_pg_upmaps(self, inc,
                        max_deviation=.01, max_iterations=10, pools=[]):
-        return ceph_osdmap.calc_pg_upmaps(
-            self._handle,
+        return self._calc_pg_upmaps(
             inc._handle,
             max_deviation, max_iterations, pools)
 
     def map_pool_pgs_up(self, poolid):
-        return ceph_osdmap.map_pool_pgs_up(self._handle, poolid)
+        return self._map_pool_pgs_up(poolid)
 
-class OSDMapIncremental(object):
-    def __init__(self, handle):
-        self._handle = handle
-
+class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
     def get_epoch(self):
-        return ceph_osdmap_incremental.get_epoch(self._handle)
+        return self._get_epoch()
 
     def dump(self):
-        return ceph_osdmap_incremental.dump(self._handle)
+        return self._dump()
 
     def set_osd_reweights(self, weightmap):
         """
         weightmap is a dict, int to float.  e.g. { 0: .9, 1: 1.0, 3: .997 }
         """
-        return ceph_osdmap_incremental.set_osd_reweights(self._handle, weightmap)
+        return self._set_osd_reweights(weightmap)
 
     def set_crush_compat_weight_set_weights(self, weightmap):
         """
         weightmap is a dict, int to float.  devices only.  e.g.,
         { 0: 3.4, 1: 3.3, 2: 3.334 }
         """
-        return ceph_osdmap_incremental.set_crush_compat_weight_set_weights(
-            self._handle, weightmap)
+        return self._set_crush_compat_weight_set_weights(weightmap)
 
-
-
-class CRUSHMap(object):
-    def __init__(self, handle, parent_osdmap):
-        self._handle = handle
-        # keep ref to parent osdmap since handle lifecycle is owned by it
-        self._parent_osdmap = parent_osdmap
-
+class CRUSHMap(ceph_module.BasePyCRUSH):
     def dump(self):
-        return ceph_crushmap.dump(self._handle)
+        return self._dump()
+
+    def get_item_weight(self, item):
+        return self._get_item_weight(item)
 
     def get_item_name(self, item):
-        return ceph_crushmap.get_item_name(self._handle, item)
+        return self._get_item_name(item)
 
     def find_takes(self):
-        return ceph_crushmap.find_takes(self._handle).get('takes',[])
+        return self._find_takes().get('takes', [])
 
     def get_take_weight_osd_map(self, root):
-        uglymap = ceph_crushmap.get_take_weight_osd_map(self._handle, root)
+        uglymap = self._get_take_weight_osd_map(root)
         return { int(k): v for k, v in uglymap.get('weights', {}).iteritems() }
 
+class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
+    """
+    Standby modules only implement a serve and shutdown method, they
+    are not permitted to implement commands and they do not receive
+    any notifications.
 
-class MgrModule(object):
+    They only have access to the mgrmap (for acecssing service URI info
+    from their active peer), and to configuration settings (read only).
+    """
+
+    def __init__(self, module_name, capsule):
+        super(MgrStandbyModule, self).__init__(capsule)
+        self.module_name = module_name
+        self._logger = configure_logger(self, module_name)
+
+    def __del__(self):
+        unconfigure_logger(self, self.module_name)
+
+    @property
+    def log(self):
+        return self._logger
+
+    def serve(self):
+        """
+        The serve method is mandatory for standby modules.
+        :return:
+        """
+        raise NotImplementedError()
+
+    def get_mgr_id(self):
+        return self._ceph_get_mgr_id()
+
+    def get_config(self, key):
+        return self._ceph_get_config(key)
+
+    def get_active_uri(self):
+        return self._ceph_get_active_uri()
+
+    def get_localized_config(self, key, default=None):
+        r = self.get_config(self.get_mgr_id() + '/' + key)
+        if r is None:
+            r = self.get_config(key)
+
+        if r is None:
+            r = default
+        return r
+
+class MgrModule(ceph_module.BaseMgrModule):
     COMMANDS = []
 
     # Priority definitions for perf counters
@@ -135,35 +209,22 @@ class MgrModule(object):
     PERFCOUNTER_HISTOGRAM = 0x10
     PERFCOUNTER_TYPE_MASK = ~2
 
-    def __init__(self, handle):
-        self._handle = handle
-        self._logger = logging.getLogger(handle)
+    def __init__(self, module_name, py_modules_ptr, this_ptr):
+        self.module_name = module_name
 
-        # Don't filter any logs at the python level, leave it to C++
-        self._logger.setLevel(logging.DEBUG)
+        # If we're taking over from a standby module, let's make sure
+        # its logger was unconfigured before we hook ours up
+        unconfigure_logger(self, self.module_name)
+        self._logger = configure_logger(self, module_name)
 
-        # FIXME: we should learn the log level from C++ land, and then
-        # avoid calling ceph_state.log when we know a message is of
-        # an insufficient level to be ultimately output
+        super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
 
-        class CPlusPlusHandler(logging.Handler):
-            def emit(self, record):
-                if record.levelno <= logging.DEBUG:
-                    ceph_level = 20
-                elif record.levelno <= logging.INFO:
-                    ceph_level = 4
-                elif record.levelno <= logging.WARNING:
-                    ceph_level = 1
-                else:
-                    ceph_level = 0
-
-                ceph_state.log(handle, ceph_level, self.format(record))
-
-        self._logger.addHandler(CPlusPlusHandler())
-
-        self._version = ceph_state.get_version()
+        self._version = self._ceph_get_version()
 
         self._perf_schema_cache = None
+
+    def __del__(self):
+        unconfigure_logger(self, self.module_name)
 
     def update_perf_schema(self, daemon_type, daemon_name):
         """
@@ -183,6 +244,12 @@ class MgrModule(object):
     @property
     def version(self):
         return self._version
+
+    def get_context(self):
+        """
+        :return: a Python capsule containing a C++ CephContext pointer
+        """
+        return self._ceph_get_context()
 
     def notify(self, notify_type, notify_id):
         """
@@ -215,7 +282,7 @@ class MgrModule(object):
         """
         Called by the plugin to load some cluster state from ceph-mgr
         """
-        return ceph_state.get(self._handle, data_name)
+        return self._ceph_get(data_name)
 
     def get_server(self, hostname):
         """
@@ -224,7 +291,7 @@ class MgrModule(object):
 
         :param hostname: a hostame
         """
-        return ceph_state.get_server(self._handle, hostname)
+        return self._ceph_get_server(hostname)
 
     def get_perf_schema(self, svc_type, svc_name):
         """
@@ -236,7 +303,7 @@ class MgrModule(object):
         :param svc_name:
         :return: list of dicts describing the counters requested
         """
-        return ceph_state.get_perf_schema(self._handle, svc_type, svc_name)
+        return self._ceph_get_perf_schema(svc_type, svc_name)
 
     def get_counter(self, svc_type, svc_name, path):
         """
@@ -248,14 +315,14 @@ class MgrModule(object):
         :param path:
         :return: A list of two-element lists containing time and value
         """
-        return ceph_state.get_counter(self._handle, svc_type, svc_name, path)
+        return self._ceph_get_counter(svc_type, svc_name, path)
 
     def list_servers(self):
         """
         Like ``get_server``, but instead of returning information
         about just one node, return all the nodes in an array.
         """
-        return ceph_state.get_server(self._handle, None)
+        return self._ceph_get_server(None)
 
     def get_metadata(self, svc_type, svc_id):
         """
@@ -265,7 +332,7 @@ class MgrModule(object):
         :param svc_id: string
         :return: dict
         """
-        return ceph_state.get_metadata(self._handle, svc_type, svc_id)
+        return self._ceph_get_metadata(svc_type, svc_id)
 
     def get_daemon_status(self, svc_type, svc_id):
         """
@@ -275,14 +342,14 @@ class MgrModule(object):
         :param svc_id: string
         :return: dict
         """
-        return ceph_state.get_daemon_status(self._handle, svc_type, svc_id)
+        return self._ceph_get_daemon_status(svc_type, svc_id)
 
     def send_command(self, *args, **kwargs):
         """
         Called by the plugin to send a command to the mon
         cluster.
         """
-        ceph_state.send_command(self._handle, *args, **kwargs)
+        self._ceph_send_command(*args, **kwargs)
 
     def set_health_checks(self, checks):
         """
@@ -306,7 +373,7 @@ class MgrModule(object):
 
         :param list: dict of health check dicts
         """
-        ceph_state.set_health_checks(self._handle, checks)
+        self._ceph_set_health_checks(checks)
 
     def handle_command(self, cmd):
         """
@@ -332,7 +399,7 @@ class MgrModule(object):
 
         :return: str
         """
-        return ceph_state.get_mgr_id()
+        return self._ceph_get_mgr_id()
 
     def get_config(self, key, default=None):
         """
@@ -341,7 +408,7 @@ class MgrModule(object):
         :param key: str
         :return: str
         """
-        r = ceph_state.get_config(self._handle, key)
+        r = self._ceph_get_config(key)
         if r is None:
             return default
         else:
@@ -354,7 +421,7 @@ class MgrModule(object):
         :param key_prefix: str
         :return: str
         """
-        return ceph_state.get_config_prefix(self._handle, key_prefix)
+        return self._ceph_get_config_prefix(key_prefix)
 
     def get_localized_config(self, key, default=None):
         """
@@ -378,7 +445,7 @@ class MgrModule(object):
         :param key: str
         :param val: str
         """
-        ceph_state.set_config(self._handle, key, val)
+        self._ceph_set_config(key, val)
 
     def set_localized_config(self, key, val):
         """
@@ -387,7 +454,7 @@ class MgrModule(object):
         :param default: str
         :return: str
         """
-        return self.set_config(self.get_mgr_id() + '/' + key, val)
+        return self._ceph_set_config(self.get_mgr_id() + '/' + key, val)
 
     def set_config_json(self, key, val):
         """
@@ -396,7 +463,7 @@ class MgrModule(object):
         :param key: str
         :param val: json-serializable object
         """
-        self.set_config(key, json.dumps(val))
+        self._ceph_set_config(key, json.dumps(val))
 
     def get_config_json(self, key):
         """
@@ -425,7 +492,7 @@ class MgrModule(object):
         OSDMap.
         :return: OSDMap
         """
-        return OSDMap(ceph_state.get_osdmap())
+        return self._ceph_get_osdmap()
 
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL):
         """
@@ -483,3 +550,12 @@ class MgrModule(object):
         self.log.debug("returning {0} counter".format(len(result)))
 
         return result
+
+    def set_uri(self, uri):
+        """
+        If the module exposes a service, then call this to publish the
+        address once it is available.
+
+        :return: a string
+        """
+        return self._ceph_set_uri(uri)

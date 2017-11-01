@@ -12,7 +12,7 @@
  */
 
 // Include this first to get python headers earlier
-#include "PyState.h"
+#include "BaseMgrModule.h"
 #include "Gil.h"
 
 #include "common/errno.h"
@@ -25,30 +25,29 @@
 
 #include "mgr/MgrContext.h"
 
-#include "PyModules.h"
+// For ::config_prefix
+#include "PyModuleRegistry.h"
+
+#include "ActivePyModules.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-// definition for non-const static member
-std::string PyModules::config_prefix;
 
-// constructor/destructor implementations cannot be in .h,
-// because ServeThread is still an "incomplete" type there
-
-PyModules::PyModules(DaemonStateIndex &ds, ClusterState &cs,
+ActivePyModules::ActivePyModules(PyModuleConfig const &config_,
+          DaemonStateIndex &ds, ClusterState &cs,
 	  MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
           Client &client_, Finisher &f)
-  : daemon_state(ds), cluster_state(cs), monc(mc), clog(clog_),
-    objecter(objecter_), client(client_), finisher(f),
-    lock("PyModules")
+  : config_cache(config_), daemon_state(ds), cluster_state(cs),
+    monc(mc), clog(clog_), objecter(objecter_), client(client_), finisher(f),
+    lock("ActivePyModules")
 {}
 
-PyModules::~PyModules() = default;
+ActivePyModules::~ActivePyModules() = default;
 
-void PyModules::dump_server(const std::string &hostname,
+void ActivePyModules::dump_server(const std::string &hostname,
                       const DaemonStateCollection &dmc,
                       Formatter *f)
 {
@@ -82,7 +81,7 @@ void PyModules::dump_server(const std::string &hostname,
 
 
 
-PyObject *PyModules::get_server_python(const std::string &hostname)
+PyObject *ActivePyModules::get_server_python(const std::string &hostname)
 {
   PyThreadState *tstate = PyEval_SaveThread();
   Mutex::Locker l(lock);
@@ -97,7 +96,7 @@ PyObject *PyModules::get_server_python(const std::string &hostname)
 }
 
 
-PyObject *PyModules::list_servers_python()
+PyObject *ActivePyModules::list_servers_python()
 {
   PyThreadState *tstate = PyEval_SaveThread();
   Mutex::Locker l(lock);
@@ -119,8 +118,7 @@ PyObject *PyModules::list_servers_python()
   return f.get();
 }
 
-PyObject *PyModules::get_metadata_python(
-  std::string const &handle,
+PyObject *ActivePyModules::get_metadata_python(
   const std::string &svc_type,
   const std::string &svc_id)
 {
@@ -140,8 +138,7 @@ PyObject *PyModules::get_metadata_python(
   return f.get();
 }
 
-PyObject *PyModules::get_daemon_status_python(
-  std::string const &handle,
+PyObject *ActivePyModules::get_daemon_status_python(
   const std::string &svc_type,
   const std::string &svc_id)
 {
@@ -159,7 +156,7 @@ PyObject *PyModules::get_daemon_status_python(
   return f.get();
 }
 
-PyObject *PyModules::get_python(const std::string &what)
+PyObject *ActivePyModules::get_python(const std::string &what)
 {
   PyThreadState *tstate = PyEval_SaveThread();
   Mutex::Locker l(lock);
@@ -324,209 +321,61 @@ PyObject *PyModules::get_python(const std::string &what)
   }
 }
 
-std::string PyModules::get_site_packages()
-{
-  std::stringstream site_packages;
-
-  // CPython doesn't auto-add site-packages dirs to sys.path for us,
-  // but it does provide a module that we can ask for them.
-  auto site_module = PyImport_ImportModule("site");
-  assert(site_module);
-
-  auto site_packages_fn = PyObject_GetAttrString(site_module, "getsitepackages");
-  if (site_packages_fn != nullptr) {
-    auto site_packages_list = PyObject_CallObject(site_packages_fn, nullptr);
-    assert(site_packages_list);
-
-    auto n = PyList_Size(site_packages_list);
-    for (Py_ssize_t i = 0; i < n; ++i) {
-      if (i != 0) {
-        site_packages << ":";
-      }
-      site_packages << PyString_AsString(PyList_GetItem(site_packages_list, i));
-    }
-
-    Py_DECREF(site_packages_list);
-    Py_DECREF(site_packages_fn);
-  } else {
-    // Fall back to generating our own site-packages paths by imitating
-    // what the standard site.py does.  This is annoying but it lets us
-    // run inside virtualenvs :-/
-
-    auto site_packages_fn = PyObject_GetAttrString(site_module, "addsitepackages");
-    assert(site_packages_fn);
-
-    auto known_paths = PySet_New(nullptr);
-    auto pArgs = PyTuple_Pack(1, known_paths);
-    PyObject_CallObject(site_packages_fn, pArgs);
-    Py_DECREF(pArgs);
-    Py_DECREF(known_paths);
-    Py_DECREF(site_packages_fn);
-
-    auto sys_module = PyImport_ImportModule("sys");
-    assert(sys_module);
-    auto sys_path = PyObject_GetAttrString(sys_module, "path");
-    assert(sys_path);
-
-    dout(1) << "sys.path:" << dendl;
-    auto n = PyList_Size(sys_path);
-    bool first = true;
-    for (Py_ssize_t i = 0; i < n; ++i) {
-      dout(1) << "  " << PyString_AsString(PyList_GetItem(sys_path, i)) << dendl;
-      if (first) {
-        first = false;
-      } else {
-        site_packages << ":";
-      }
-      site_packages << PyString_AsString(PyList_GetItem(sys_path, i));
-    }
-
-    Py_DECREF(sys_path);
-    Py_DECREF(sys_module);
-  }
-
-  Py_DECREF(site_module);
-
-  return site_packages.str();
-}
-
-
-int PyModules::init()
-{
-  Mutex::Locker locker(lock);
-
-  global_handle = this;
-  // namespace in config-key prefixed by "mgr/"
-  config_prefix = std::string(g_conf->name.get_type_str()) + "/";
-
-  // Set up global python interpreter
-  Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
-  Py_InitializeEx(0);
-
-  // Let CPython know that we will be calling it back from other
-  // threads in future.
-  if (! PyEval_ThreadsInitialized()) {
-    PyEval_InitThreads();
-  }
-
-  // Configure sys.path to include mgr_module_path
-  std::string sys_path = std::string(Py_GetPath()) + ":" + get_site_packages()
-                         + ":" + g_conf->get_val<std::string>("mgr_module_path");
-  dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
-
-  // Drop the GIL and remember the main thread state (current
-  // thread state becomes NULL)
-  pMainThreadState = PyEval_SaveThread();
-  assert(pMainThreadState != nullptr);
-
-  std::list<std::string> failed_modules;
-
-  // Load python code
-  set<string> ls;
-  cluster_state.with_mgrmap([&](const MgrMap& m) {
-      ls = m.modules;
-    });
-  for (const auto& module_name : ls) {
-    dout(1) << "Loading python module '" << module_name << "'" << dendl;
-    auto mod = std::unique_ptr<MgrPyModule>(new MgrPyModule(module_name, sys_path, pMainThreadState));
-    int r = mod->load();
-    if (r != 0) {
-      // Don't use handle_pyerror() here; we don't have the GIL
-      // or the right thread state (this is deliberate).
-      derr << "Error loading module '" << module_name << "': "
-        << cpp_strerror(r) << dendl;
-      failed_modules.push_back(module_name);
-      // Don't drop out here, load the other modules
-    } else {
-      // Success!
-      modules[module_name] = std::move(mod);
-    }
-  }
-
-  if (!failed_modules.empty()) {
-    clog->error() << "Failed to load ceph-mgr modules: " << joinify(
-        failed_modules.begin(), failed_modules.end(), std::string(", "));
-  }
-
-  return 0;
-}
-
-class ServeThread : public Thread
-{
-  MgrPyModule *mod;
-
-public:
-  bool running;
-
-  ServeThread(MgrPyModule *mod_)
-    : mod(mod_) {}
-
-  void *entry() override
-  {
-    running = true;
-
-    // No need to acquire the GIL here; the module does it.
-    dout(4) << "Entering thread for " << mod->get_name() << dendl;
-    mod->serve();
-
-    running = false;
-    return nullptr;
-  }
-};
-
-void PyModules::start()
+int ActivePyModules::start_one(std::string const &module_name,
+    PyObject *pClass, const SafeThreadState &pMyThreadState)
 {
   Mutex::Locker l(lock);
 
-  dout(1) << "Creating threads for " << modules.size() << " modules" << dendl;
-  for (auto& i : modules) {
-    auto thread = new ServeThread(i.second.get());
-    serve_threads[i.first].reset(thread);
-  }
+  assert(modules.count(module_name) == 0);
 
-  for (auto &i : serve_threads) {
-    std::ostringstream thread_name;
-    thread_name << "mgr." << i.first;
-    dout(4) << "Starting thread for " << i.first << dendl;
-    i.second->create(thread_name.str().c_str());
+  modules[module_name].reset(new ActivePyModule(
+      module_name, pClass,
+      pMyThreadState));
+
+  int r = modules[module_name]->load(this);
+  if (r != 0) {
+    return r;
+  } else {
+    dout(4) << "Starting thread for " << module_name << dendl;
+    // Giving Thread the module's module_name member as its
+    // char* thread name: thread must not outlive module class lifetime.
+    modules[module_name]->thread.create(
+        modules[module_name]->get_name().c_str());
+
+    return 0;
   }
 }
 
-void PyModules::shutdown()
+void ActivePyModules::shutdown()
 {
   Mutex::Locker locker(lock);
-  assert(global_handle);
 
   // Signal modules to drop out of serve() and/or tear down resources
   for (auto &i : modules) {
     auto module = i.second.get();
     const auto& name = i.first;
-    dout(10) << "waiting for module " << name << " to shutdown" << dendl;
+
     lock.Unlock();
+    dout(10) << "calling module " << name << " shutdown()" << dendl;
     module->shutdown();
+    dout(10) << "module " << name << " shutdown() returned" << dendl;
     lock.Lock();
-    dout(10) << "module " << name << " shutdown" << dendl;
   }
 
   // For modules implementing serve(), finish the threads where we
   // were running that.
-  for (auto &i : serve_threads) {
+  for (auto &i : modules) {
     lock.Unlock();
-    i.second->join();
+    dout(10) << "joining module " << i.first << dendl;
+    i.second->thread.join();
+    dout(10) << "joined module " << i.first << dendl;
     lock.Lock();
   }
-  serve_threads.clear();
 
   modules.clear();
-
-  PyEval_RestoreThread(pMainThreadState);
-  Py_Finalize();
-
-  // nobody needs me anymore.
-  global_handle = nullptr;
 }
 
-void PyModules::notify_all(const std::string &notify_type,
+void ActivePyModules::notify_all(const std::string &notify_type,
                      const std::string &notify_id)
 {
   Mutex::Locker l(lock);
@@ -534,8 +383,6 @@ void PyModules::notify_all(const std::string &notify_type,
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
   for (auto& i : modules) {
     auto module = i.second.get();
-    if (!serve_threads[i.first]->running)
-      continue;
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     finisher.queue(new FunctionContext([module, notify_type, notify_id](int r){
@@ -544,15 +391,13 @@ void PyModules::notify_all(const std::string &notify_type,
   }
 }
 
-void PyModules::notify_all(const LogEntry &log_entry)
+void ActivePyModules::notify_all(const LogEntry &log_entry)
 {
   Mutex::Locker l(lock);
 
   dout(10) << __func__ << ": notify_all (clog)" << dendl;
   for (auto& i : modules) {
     auto module = i.second.get();
-    if (!serve_threads[i.first]->running)
-      continue;
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     //
@@ -565,14 +410,15 @@ void PyModules::notify_all(const LogEntry &log_entry)
   }
 }
 
-bool PyModules::get_config(const std::string &handle,
+bool ActivePyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  const std::string global_key = config_prefix + handle + "/" + key;
+  const std::string global_key = PyModuleRegistry::config_prefix
+    + module_name + "/" + key;
 
   dout(4) << __func__ << "key: " << global_key << dendl;
 
@@ -584,14 +430,15 @@ bool PyModules::get_config(const std::string &handle,
   }
 }
 
-PyObject *PyModules::get_config_prefix(const std::string &handle,
+PyObject *ActivePyModules::get_config_prefix(const std::string &module_name,
     const std::string &prefix) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  const std::string base_prefix = config_prefix + handle + "/";
+  const std::string base_prefix = PyModuleRegistry::config_prefix
+                                    + module_name + "/";
   const std::string global_prefix = base_prefix + prefix;
   dout(4) << __func__ << "prefix: " << global_prefix << dendl;
 
@@ -604,10 +451,11 @@ PyObject *PyModules::get_config_prefix(const std::string &handle,
   return f.get();
 }
 
-void PyModules::set_config(const std::string &handle,
+void ActivePyModules::set_config(const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val)
 {
-  const std::string global_key = config_prefix + handle + "/" + key;
+  const std::string global_key = PyModuleRegistry::config_prefix
+                                   + module_name + "/" + key;
 
   Command set_cmd;
   {
@@ -647,7 +495,7 @@ void PyModules::set_config(const std::string &handle,
   }
 }
 
-std::vector<ModuleCommand> PyModules::get_py_commands() const
+std::vector<ModuleCommand> ActivePyModules::get_py_commands() const
 {
   Mutex::Locker l(lock);
 
@@ -663,7 +511,7 @@ std::vector<ModuleCommand> PyModules::get_py_commands() const
   return result;
 }
 
-std::vector<MonCommand> PyModules::get_commands() const
+std::vector<MonCommand> ActivePyModules::get_commands() const
 {
   std::vector<ModuleCommand> commands = get_py_commands();
   std::vector<MonCommand> result;
@@ -674,27 +522,23 @@ std::vector<MonCommand> PyModules::get_commands() const
   return result;
 }
 
-void PyModules::insert_config(const std::map<std::string,
-                              std::string> &new_config)
+
+std::map<std::string, std::string> ActivePyModules::get_services() const
 {
+  std::map<std::string, std::string> result;
   Mutex::Locker l(lock);
+  for (const auto& i : modules) {
+    const auto &module = i.second.get();
+    std::string svc_str = module->get_uri();
+    if (!svc_str.empty()) {
+      result[module->get_name()] = svc_str;
+    }
+  }
 
-  dout(4) << "Loaded " << new_config.size() << " config settings" << dendl;
-  config_cache = new_config;
+  return result;
 }
 
-void PyModules::log(const std::string &handle,
-    int level, const std::string &record)
-{
-#undef dout_prefix
-#define dout_prefix *_dout << "mgr[" << handle << "] "
-  dout(level) << record << dendl;
-#undef dout_prefix
-#define dout_prefix *_dout << "mgr " << __func__ << " "
-}
-
-PyObject* PyModules::get_counter_python(
-    const std::string &handle,
+PyObject* ActivePyModules::get_counter_python(
     const std::string &svc_name,
     const std::string &svc_id,
     const std::string &path)
@@ -735,8 +579,7 @@ PyObject* PyModules::get_counter_python(
   return f.get();
 }
 
-PyObject* PyModules::get_perf_schema_python(
-    const std::string &handle,
+PyObject* ActivePyModules::get_perf_schema_python(
     const std::string svc_type,
     const std::string &svc_id)
 {
@@ -791,7 +634,7 @@ PyObject* PyModules::get_perf_schema_python(
   return f.get();
 }
 
-PyObject *PyModules::get_context()
+PyObject *ActivePyModules::get_context()
 {
   PyThreadState *tstate = PyEval_SaveThread();
   Mutex::Locker l(lock);
@@ -804,73 +647,91 @@ PyObject *PyModules::get_context()
   return capsule;
 }
 
-static void delete_osdmap(PyObject *object)
+/**
+ * Helper for our wrapped types that take a capsule in their constructor.
+ */
+PyObject *construct_with_capsule(
+    const std::string &module_name,
+    const std::string &clsname,
+    void *wrapped)
 {
-  OSDMap *osdmap = static_cast<OSDMap*>(PyCapsule_GetPointer(object, nullptr));
-  assert(osdmap);
-  dout(10) << __func__ << " " << osdmap << dendl;
-  delete osdmap;
+  // Look up the OSDMap type which we will construct
+  PyObject *module = PyImport_ImportModule(module_name.c_str());
+  if (!module) {
+    derr << "Failed to import python module:" << dendl;
+    derr << handle_pyerror() << dendl;
+  }
+  assert(module);
+
+  PyObject *wrapper_type = PyObject_GetAttrString(
+      module, (const char*)clsname.c_str());
+  if (!wrapper_type) {
+    derr << "Failed to get python type:" << dendl;
+    derr << handle_pyerror() << dendl;
+  }
+  assert(wrapper_type);
+
+  // Construct a capsule containing an OSDMap.
+  auto wrapped_capsule = PyCapsule_New(wrapped, nullptr, nullptr);
+  assert(wrapped_capsule);
+
+  // Construct the python OSDMap
+  auto pArgs = PyTuple_Pack(1, wrapped_capsule);
+  auto wrapper_instance = PyObject_CallObject(wrapper_type, pArgs);
+  if (wrapper_instance == nullptr) {
+    derr << "Failed to construct python OSDMap:" << dendl;
+    derr << handle_pyerror() << dendl;
+  }
+  assert(wrapper_instance != nullptr);
+  Py_DECREF(pArgs);
+  Py_DECREF(wrapped_capsule);
+
+  Py_DECREF(wrapper_type);
+  Py_DECREF(module);
+
+  return wrapper_instance;
 }
 
-PyObject *PyModules::get_osdmap()
+PyObject *ActivePyModules::get_osdmap()
 {
   PyThreadState *tstate = PyEval_SaveThread();
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  // Construct a capsule containing an OSDMap.
   OSDMap *newmap = new OSDMap;
+
   cluster_state.with_osdmap([&](const OSDMap& o) {
       newmap->deepish_copy_from(o);
     });
-  dout(10) << __func__ << " " << newmap << dendl;
-  return PyCapsule_New(newmap, nullptr, &delete_osdmap);
+
+  return construct_with_capsule("mgr_module", "OSDMap", (void*)newmap);
 }
 
-static void _list_modules(
-  const std::string path,
-  std::set<std::string> *modules)
-{
-  DIR *dir = opendir(path.c_str());
-  if (!dir) {
-    return;
-  }
-  struct dirent *entry = NULL;
-  while ((entry = readdir(dir)) != NULL) {
-    string n(entry->d_name);
-    string fn = path + "/" + n;
-    struct stat st;
-    int r = ::stat(fn.c_str(), &st);
-    if (r == 0 && S_ISDIR(st.st_mode)) {
-      string initfn = fn + "/module.py";
-      r = ::stat(initfn.c_str(), &st);
-      if (r == 0) {
-	modules->insert(n);
-      }
-    }
-  }
-  closedir(dir);
-}
-
-void PyModules::list_modules(std::set<std::string> *modules)
-{
-  _list_modules(g_conf->get_val<std::string>("mgr_module_path"), modules);
-}
-
-void PyModules::set_health_checks(const std::string& handle,
+void ActivePyModules::set_health_checks(const std::string& module_name,
 				  health_check_map_t&& checks)
 {
   Mutex::Locker l(lock);
-  auto p = modules.find(handle);
+  auto p = modules.find(module_name);
   if (p != modules.end()) {
     p->second->set_health_checks(std::move(checks));
   }
 }
 
-void PyModules::get_health_checks(health_check_map_t *checks)
+void ActivePyModules::get_health_checks(health_check_map_t *checks)
 {
   Mutex::Locker l(lock);
   for (auto& p : modules) {
     p.second->get_health_checks(checks);
   }
 }
+
+void ActivePyModules::set_uri(const std::string& module_name,
+                        const std::string &uri)
+{
+  Mutex::Locker l(lock);
+
+  dout(4) << " module " << module_name << " set URI '" << uri << "'" << dendl;
+
+  modules[module_name]->set_uri(uri);
+}
+

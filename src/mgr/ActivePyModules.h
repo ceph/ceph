@@ -11,14 +11,12 @@
  * Foundation.  See file COPYING.
  */
 
-#ifndef PY_MODULES_H_
-#define PY_MODULES_H_
+#pragma once
 
-#include "MgrPyModule.h"
+#include "ActivePyModule.h"
 
 #include "common/Finisher.h"
 #include "common/Mutex.h"
-#include "common/Thread.h"
 
 #include "osdc/Objecter.h"
 #include "client/Client.h"
@@ -29,13 +27,15 @@
 #include "DaemonState.h"
 #include "ClusterState.h"
 
-class ServeThread;
 class health_check_map_t;
 
-class PyModules
+typedef std::map<std::string, std::string> PyModuleConfig;
+
+class ActivePyModules
 {
-  std::map<std::string, std::unique_ptr<MgrPyModule>> modules;
-  std::map<std::string, std::unique_ptr<ServeThread>> serve_threads;
+
+  std::map<std::string, std::unique_ptr<ActivePyModule>> modules;
+  PyModuleConfig config_cache;
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
@@ -44,20 +44,16 @@ class PyModules
   Client   &client;
   Finisher &finisher;
 
-  mutable Mutex lock{"PyModules::lock"};
 
-  std::string get_site_packages();
-
-  PyThreadState *pMainThreadState = nullptr;
+  mutable Mutex lock{"ActivePyModules::lock"};
 
 public:
-  static std::string config_prefix;
-
-  PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
+  ActivePyModules(PyModuleConfig const &config_,
+            DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
             LogChannelRef clog_, Objecter &objecter_, Client &client_,
             Finisher &f);
 
-  ~PyModules();
+  ~ActivePyModules();
 
   // FIXME: wrap for send_command?
   MonClient &get_monc() {return monc;}
@@ -68,24 +64,31 @@ public:
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
   PyObject *get_metadata_python(
-    std::string const &handle,
     const std::string &svc_type, const std::string &svc_id);
   PyObject *get_daemon_status_python(
-    std::string const &handle,
     const std::string &svc_type, const std::string &svc_id);
   PyObject *get_counter_python(
-    std::string const &handle,
-    const std::string &svc_name,
+    const std::string &svc_type,
     const std::string &svc_id,
     const std::string &path);
   PyObject *get_perf_schema_python(
-     const std::string &handle,
      const std::string svc_type,
      const std::string &svc_id);
   PyObject *get_context();
   PyObject *get_osdmap();
 
-  std::map<std::string, std::string> config_cache;
+  bool get_config(const std::string &module_name,
+      const std::string &key, std::string *val) const;
+  PyObject *get_config_prefix(const std::string &module_name,
+			      const std::string &prefix) const;
+  void set_config(const std::string &module_name,
+      const std::string &key, const boost::optional<std::string> &val);
+
+  void set_health_checks(const std::string& module_name,
+			 health_check_map_t&& checks);
+  void get_health_checks(health_check_map_t *checks);
+
+  void set_uri(const std::string& module_name, const std::string &uri);
 
   // Python command definitions, including callback
   std::vector<ModuleCommand> get_py_commands() const;
@@ -93,7 +96,7 @@ public:
   // Monitor command definitions, suitable for CLI
   std::vector<MonCommand> get_commands() const;
 
-  void insert_config(const std::map<std::string, std::string> &new_config);
+  std::map<std::string, std::string> get_services() const;
 
   // Public so that MonCommandCompletion can use it
   // FIXME: for send_command completion notifications,
@@ -103,29 +106,14 @@ public:
   void notify_all(const LogEntry &log_entry);
 
   int init();
-  void start();
   void shutdown();
+
+  int start_one(std::string const &module_name,
+                PyObject *pClass,
+                const SafeThreadState &pMyThreadState);
 
   void dump_server(const std::string &hostname,
                    const DaemonStateCollection &dmc,
                    Formatter *f);
-
-  bool get_config(const std::string &handle,
-      const std::string &key, std::string *val) const;
-  PyObject *get_config_prefix(const std::string &handle,
-			      const std::string &prefix) const;
-  void set_config(const std::string &handle,
-      const std::string &key, const boost::optional<std::string> &val);
-
-  void set_health_checks(const std::string& handle,
-			 health_check_map_t&& checks);
-  void get_health_checks(health_check_map_t *checks);
-
-  void log(const std::string &handle,
-           int level, const std::string &record);
-
-  static void list_modules(std::set<std::string> *modules);
 };
-
-#endif
 

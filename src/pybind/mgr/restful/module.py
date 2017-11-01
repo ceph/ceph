@@ -10,6 +10,7 @@ import inspect
 import tempfile
 import threading
 import traceback
+import socket
 
 import common
 
@@ -307,6 +308,13 @@ class Module(MgrModule):
             raise CannotServe('certificate %s does not exist' % cert_fname)
         if not os.path.isfile(pkey_fname):
             raise CannotServe('private key %s does not exist' % pkey_fname)
+
+        # Publish the URI that others may use to access the service we're
+        # about to start serving
+        self.set_uri("https://{0}:{1}/".format(
+            socket.gethostname() if server_addr == "::" else server_addr,
+            server_port
+        ))
 
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(

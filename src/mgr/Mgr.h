@@ -32,7 +32,7 @@
 #include "mon/MgrMap.h"
 
 #include "DaemonServer.h"
-#include "PyModules.h"
+#include "PyModuleRegistry.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -43,8 +43,6 @@ class MLog;
 class MServiceMap;
 class Objecter;
 class Client;
-
-class MgrPyModule;
 
 class Mgr {
 protected:
@@ -62,13 +60,16 @@ protected:
   bool digest_received;
   Cond digest_cond;
 
-  PyModules py_modules;
+  PyModuleRegistry *py_module_registry;
   DaemonStateIndex daemon_state;
   ClusterState cluster_state;
 
   DaemonServer server;
 
-  void load_config();
+  LogChannelRef clog;
+  LogChannelRef audit_clog;
+
+  PyModuleConfig load_config();
   void load_all_metadata();
   void init();
 
@@ -77,6 +78,7 @@ protected:
 
 public:
   Mgr(MonClient *monc_, const MgrMap& mgrmap,
+      PyModuleRegistry *py_module_registry_,
       Messenger *clientm_, Objecter *objecter_,
       Client *client_, LogChannelRef clog_, LogChannelRef audit_clog_);
   ~Mgr();
@@ -100,6 +102,7 @@ public:
   void shutdown();
 
   std::vector<MonCommand> get_command_set() const;
+  std::map<std::string, std::string> get_services() const;
 };
 
 #endif
