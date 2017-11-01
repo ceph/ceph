@@ -138,7 +138,6 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
   write_handler = new C_handle_write(this);
   wakeup_handler = new C_time_wakeup(this);
   tick_handler = new C_tick_wakeup(this);
-  memset(msgvec, 0, sizeof(msgvec));
   // double recv_max_prefetch see "read_until"
   recv_buf = new char[2*recv_max_prefetch];
   state_buffer = new char[4096];
@@ -448,22 +447,23 @@ void AsyncConnection::process()
           ldout(async_msgr->cct, 20) << __func__ << " got MSG header" << dendl;
 
           header = *((ceph_msg_header*)state_buffer);
-          if (msgr->crcflags & MSG_CRC_HEADER)
-            header_crc = ceph_crc32c(0, (unsigned char *)&header,
-                                     sizeof(header) - sizeof(header.crc));
 
-          ldout(async_msgr->cct, 20) << __func__ << " got envelope type=" << header.type
+	  ldout(async_msgr->cct, 20) << __func__ << " got envelope type=" << header.type
                               << " src " << entity_name_t(header.src)
                               << " front=" << header.front_len
                               << " data=" << header.data_len
                               << " off " << header.data_off << dendl;
 
-          // verify header crc
-          if (msgr->crcflags & MSG_CRC_HEADER && header_crc != header.crc) {
-            ldout(async_msgr->cct,0) << __func__ << " got bad header crc "
-                                     << header_crc << " != " << header.crc << dendl;
-            goto fail;
-          }
+	  if (msgr->crcflags & MSG_CRC_HEADER) {
+	    header_crc = ceph_crc32c(0, (unsigned char *)&header,
+		sizeof(header) - sizeof(header.crc));
+	    // verify header crc
+	    if (header_crc != header.crc) {
+	      ldout(async_msgr->cct,0) << __func__ << " got bad header crc "
+		<< header_crc << " != " << header.crc << dendl;
+	      goto fail;
+	    }
+	  }
 
           // Reset state
           data_buf.clear();
@@ -745,15 +745,13 @@ void AsyncConnection::process()
           auto fast_dispatch_time = ceph::mono_clock::now();
           logger->tinc(l_msgr_running_recv_time, fast_dispatch_time - recv_start_time);
           if (delay_state) {
-            utime_t release = message->get_recv_stamp();
             double delay_period = 0;
             if (rand() % 10000 < async_msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
               delay_period = async_msgr->cct->_conf->ms_inject_delay_max * (double)(rand() % 10000) / 10000.0;
-              release += delay_period;
-              ldout(async_msgr->cct, 1) << "queue_received will delay until " << release << " on "
-                                        << message << " " << *message << dendl;
+              ldout(async_msgr->cct, 1) << "queue_received will delay after " << (ceph_clock_now() + delay_period)
+					<< " on " << message << " " << *message << dendl;
             }
-            delay_state->queue(delay_period, release, message);
+            delay_state->queue(delay_period, message);
           } else if (async_msgr->ms_can_fast_dispatch(message)) {
             lock.unlock();
             dispatch_queue->fast_dispatch(message);
@@ -2288,15 +2286,7 @@ void AsyncConnection::DelayedDelivery::do_request(uint64_t id)
       return ;
     if (delay_queue.empty())
       return ;
-    utime_t release = delay_queue.front().first;
-    m = delay_queue.front().second;
-    string delay_msg_type = msgr->cct->_conf->ms_inject_delay_msg_type;
-    utime_t now = ceph_clock_now();
-    if ((release > now &&
-        (delay_msg_type.empty() || m->get_type_name() == delay_msg_type))) {
-      utime_t t = release - now;
-      t.sleep();
-    }
+    m = delay_queue.front();
     delay_queue.pop_front();
   }
   if (msgr->ms_can_fast_dispatch(m)) {
@@ -2312,7 +2302,7 @@ void AsyncConnection::DelayedDelivery::flush() {
       center->get_id(), [this] () mutable {
     std::lock_guard<std::mutex> l(delay_lock);
     while (!delay_queue.empty()) {
-      Message *m = delay_queue.front().second;
+      Message *m = delay_queue.front();
       if (msgr->ms_can_fast_dispatch(m)) {
         dispatch_queue->fast_dispatch(m);
       } else {

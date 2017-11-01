@@ -139,7 +139,7 @@ class AsyncConnection : public Connection {
    */
   class DelayedDelivery : public EventCallback {
     std::set<uint64_t> register_time_events; // need to delete it if stop
-    std::deque<std::pair<utime_t, Message*> > delay_queue;
+    std::deque<Message*> delay_queue;
     std::mutex delay_lock;
     AsyncMessenger *msgr;
     EventCenter *center;
@@ -158,9 +158,9 @@ class AsyncConnection : public Connection {
     }
     void set_center(EventCenter *c) { center = c; }
     void do_request(uint64_t id) override;
-    void queue(double delay_period, utime_t release, Message *m) {
+    void queue(double delay_period, Message *m) {
       std::lock_guard<std::mutex> l(delay_lock);
-      delay_queue.push_back(std::make_pair(release, m));
+      delay_queue.push_back(m);
       register_time_events.insert(center->create_time_event(delay_period*1000000, this));
     }
     void discard() {
@@ -168,7 +168,7 @@ class AsyncConnection : public Connection {
       center->submit_to(center->get_id(), [this] () mutable {
         std::lock_guard<std::mutex> l(delay_lock);
         while (!delay_queue.empty()) {
-          Message *m = delay_queue.front().second;
+          Message *m = delay_queue.front();
           dispatch_queue->dispatch_throttle_release(m->get_dispatch_throttle_size());
           m->put();
           delay_queue.pop_front();
@@ -324,7 +324,6 @@ class AsyncConnection : public Connection {
   EventCallbackRef write_handler;
   EventCallbackRef wakeup_handler;
   EventCallbackRef tick_handler;
-  struct iovec msgvec[ASYNC_IOV_MAX];
   char *recv_buf;
   uint32_t recv_max_prefetch;
   uint32_t recv_start;
