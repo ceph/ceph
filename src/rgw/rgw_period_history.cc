@@ -137,6 +137,8 @@ RGWPeriodHistory::Impl::Impl(CephContext* cct, Puller* puller,
 
     // get a cursor to the current period
     current_cursor = make_cursor(current_history, current_period.get_realm_epoch());
+  } else {
+    current_history = histories.end();
   }
 }
 
