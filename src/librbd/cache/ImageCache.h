@@ -17,7 +17,9 @@ namespace cache {
  * client-side, image extent cache interface
  */
 struct ImageCache {
-  typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
+  /* Extent: offset in bytes, length in bytes */
+  typedef std::pair<uint64_t,uint64_t> Extent;
+  typedef std::vector<Extent> Extents;
 
   enum CacheMode {
     CACHE_MODE_WRITEBACK,
