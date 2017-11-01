@@ -91,9 +91,10 @@ class StandbyPyModule : public PyModuleRunner
       StandbyPyModuleState &state_,
       const std::string &module_name_,
       PyObject *pClass_,
-      const SafeThreadState &pMyThreadState_)
+      const SafeThreadState &pMyThreadState_,
+      LogChannelRef clog_)
     :
-      PyModuleRunner(module_name_, pClass_, pMyThreadState_),
+      PyModuleRunner(module_name_, pClass_, pMyThreadState_, clog_),
       state(state_)
   {
   }
@@ -129,11 +130,14 @@ private:
 
   LoadConfigThread load_config_thread;
 
+  LogChannelRef clog;
+
 public:
 
   StandbyPyModules(
       MonClient *monc_,
-      const MgrMap &mgr_map_);
+      const MgrMap &mgr_map_,
+      LogChannelRef clog_);
 
   int start_one(std::string const &module_name,
                 PyObject *pClass,

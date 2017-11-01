@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/Thread.h"
+#include "common/LogClient.h"
 #include "mgr/Gil.h"
 
 /**
@@ -36,6 +37,8 @@ protected:
   // Populated when we construct our instance of pClass in load()
   PyObject *pClassInstance = nullptr;
 
+  LogChannelRef clog;
+
   class PyModuleRunnerThread : public Thread
   {
     PyModuleRunner *mod;
@@ -55,10 +58,12 @@ public:
   PyModuleRunner(
       const std::string &module_name_,
       PyObject *pClass_,
-      const SafeThreadState &pMyThreadState_)
+      const SafeThreadState &pMyThreadState_,
+      LogChannelRef clog_)
     : 
       module_name(module_name_),
       pClass(pClass_), pMyThreadState(pMyThreadState_),
+      clog(clog_),
       thread(this)
   {
     assert(pClass != nullptr);
