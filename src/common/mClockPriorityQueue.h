@@ -309,6 +309,12 @@ namespace ceph {
       queue.add_request(std::move(item), cl, cost);
     }
 
+    void enqueue_distributed(K cl, unsigned priority, unsigned cost, T&& item,
+			     const dmc::ReqParams& req_params) {
+      // priority is ignored
+      queue.add_request(std::move(item), cl, req_params, cost);
+    }
+
     void enqueue_front(K cl,
 		       unsigned priority,
 		       unsigned cost,
