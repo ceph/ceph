@@ -164,7 +164,7 @@ public:
     const std::string& name,     ///< daemon name (e.g., 'gwfoo')
     const std::map<std::string,std::string>& metadata); ///< static metadata about daemon
   int service_daemon_update_status(
-    const std::map<std::string,std::string>& status);
+    std::map<std::string,std::string>&& status);
 
   mon_feature_t get_required_monitor_features() const;
 };
