@@ -2016,8 +2016,11 @@ void PG::all_activated_and_committed()
 
   // Degraded?
   _update_calc_stats();
-  if (info.stats.stats.sum.num_objects_degraded)
+  if (info.stats.stats.sum.num_objects_degraded) {
     state_set(PG_STATE_DEGRADED);
+  } else {
+    state_clear(PG_STATE_DEGRADED);
+  }
 
   queue_peering_event(
     PGPeeringEventRef(
@@ -2107,7 +2110,7 @@ bool PG::set_force_recovery(bool b)
   if (!deleting) {
     if (b) {
       if (!(state & PG_STATE_FORCED_RECOVERY) &&
-	  (state & (PG_STATE_DEGRADED |
+	  (state & (PG_STATE_DEGRADED |		// XXX: Will this check be messed up?
 		    PG_STATE_RECOVERY_WAIT |
 		    PG_STATE_RECOVERING))) {
 	dout(20) << __func__ << " set" << dendl;
@@ -2133,7 +2136,7 @@ bool PG::set_force_backfill(bool b)
   if (!deleting) {
     if (b) {
       if (!(state & PG_STATE_FORCED_RECOVERY) &&
-	  (state & (PG_STATE_DEGRADED |
+	  (state & (PG_STATE_DEGRADED |		// XXX: Will this check be messed up?
 		    PG_STATE_BACKFILL_WAIT |
 		    PG_STATE_BACKFILLING))) {
 	dout(10) << __func__ << " set" << dendl;
@@ -2693,8 +2696,10 @@ void PG::_update_calc_stats()
   info.stats.stats.sum.num_objects_degraded = 0;
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
-  if (!is_clean() && (is_peered() || is_activating())) {
-    dout(20) << __func__ << " not clean" << dendl;
+  if ((is_remapped() || is_undersized() || !is_clean()) && (is_peered() || is_activating())) {
+    dout(20) << __func__ << " actingset " << actingset << " upset "
+             << upset << " actingbackfill " << actingbackfill << dendl;
+    dout(20) << __func__ << " acting " << acting << " up " << up << dendl;
 
     assert(!actingbackfill.empty());
 
@@ -2731,12 +2736,11 @@ void PG::_update_calc_stats()
       // all other peers track missing accurately.
       if (is_backfill_targets(peer.first)) {
 	missing = std::max((int64_t)0, num_objects - peer.second.stats.stats.sum.num_objects);
-        if (missing < 0) missing = 0;
       } else {
 	if (peer_missing.count(peer.first)) {
 	  missing = peer_missing[peer.first].num_missing();
 	} else {
-	  dout(20) << __func__ << " no peer_mssing found for " << peer.first << dendl;
+	  dout(20) << __func__ << " no peer_missing found for " << peer.first << dendl;
         }
       }
       if (upset.count(peer.first)) {
@@ -2779,6 +2783,11 @@ void PG::_update_calc_stats()
 	//    previously degraded are now present on the target.
 	degraded += m->first;
       }
+    }
+    if (target > upset.size()) {
+      int64_t undersize_degraded = (num_objects * (target - upset.size()));
+      degraded += undersize_degraded;
+      dout(20) << __func__ << " undersize degraded " << undersize_degraded << dendl;
     }
     dout(20) << __func__ << " degraded " << degraded << dendl;
     dout(20) << __func__ << " misplaced " << misplaced << dendl;
@@ -2845,6 +2854,11 @@ void PG::publish_stats_to_osd()
   }
 
   _update_calc_stats();
+  if (info.stats.stats.sum.num_objects_degraded) {
+    state_set(PG_STATE_DEGRADED);
+  } else {
+    state_clear(PG_STATE_DEGRADED);
+  }
   _update_blocked_by();
 
   pg_stat_t pre_publish = info.stats;
@@ -7149,7 +7163,6 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   assert(!pg->actingbackfill.empty());
   if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <=
       pg->actingbackfill.size()) {
-    pg->state_clear(PG_STATE_DEGRADED);
     pg->state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
     pg->publish_stats_to_osd();
   }
@@ -7379,16 +7392,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
   }
 
   bool need_publish = false;
-  pg->_update_calc_stats(); // Too bad this is called again from publish_stats_to_osd()
-  int64_t degraded = pg->info.stats.stats.sum.num_objects_degraded;
-  if (!pg->state_test(PG_STATE_DEGRADED) && degraded) {
-    need_publish = true;
-    pg->state_set(PG_STATE_DEGRADED);
-  } else if (pg->state_test(PG_STATE_DEGRADED) && !degraded) {
-    need_publish = true;
-    pg->state_clear(PG_STATE_DEGRADED);
-  }
-
   /* Check for changes in pool size (if the acting set changed as a result,
    * this does not matter) */
   if (advmap.lastmap->get_pg_size(pg->info.pgid.pgid) !=
@@ -7398,7 +7401,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
     } else {
       pg->state_set(PG_STATE_UNDERSIZED);
     }
-    need_publish = true; // undersized may have changed
+    // degraded changes will be detected by call from publish_stats_to_osd()
+    need_publish = true;
   }
 
   // if we haven't reported our PG stats in a long time, do so now.
