@@ -73,6 +73,7 @@ public:
   void set_require_lock(Direction direction, bool enabled);
 
   void apply_qos_iops_limit(uint64_t limit);
+  void apply_qos_bps_limit(uint64_t limit);
 
 protected:
   void *_void_dequeue() override;
@@ -98,6 +99,7 @@ private:
   std::atomic<unsigned> m_io_blockers { 0 };
 
   TokenBucketThrottle *iops_throttle;
+  TokenBucketThrottle *bps_throttle;
 
   bool m_shutdown = false;
   Context *m_on_shutdown = nullptr;
@@ -126,7 +128,7 @@ private:
   void handle_refreshed(int r, ImageRequest<ImageCtxT> *req);
   void handle_blocked_writes(int r);
 
-  void handle_iops_throttle_ready(int r, ImageRequest<ImageCtxT> *item);
+  void handle_throttle_ready(int r, ImageRequest<ImageCtxT> *item, uint64_t flag);
 };
 
 } // namespace io

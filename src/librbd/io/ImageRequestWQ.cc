@@ -76,12 +76,17 @@ ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
 
   iops_throttle = new TokenBucketThrottle(
       cct, 0, 0, timer, timer_lock);
+
+  bps_throttle = new TokenBucketThrottle(
+      cct, 0, 0, timer, timer_lock);
+
   this->register_work_queue();
 }
 
 template <typename I>
 ImageRequestWQ<I>::~ImageRequestWQ() {
   delete iops_throttle;
+  delete bps_throttle;
 }
 
 template <typename I>
@@ -560,10 +565,16 @@ void ImageRequestWQ<I>::apply_qos_iops_limit(uint64_t limit) {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::handle_iops_throttle_ready(int r, ImageRequest<I> *item) {
+void ImageRequestWQ<I>::apply_qos_bps_limit(uint64_t limit) {
+  bps_throttle->set_max(limit);
+  bps_throttle->set_average(limit);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::handle_throttle_ready(int r, ImageRequest<I> *item, uint64_t flag) {
   assert(m_io_blockers.load() > 0);
   --m_io_blockers;
-  item->set_throttled();
+  item->set_throttled(flag);
   this->requeue(item);
   this->signal();
 }
@@ -601,9 +612,19 @@ void *ImageRequestWQ<I>::_void_dequeue() {
     ThreadPool::PointerWQ<ImageRequest<I> >::_void_dequeue());
   assert(peek_item == item);
 
-  if (!item->was_throttled() &&
+  if (!item->was_throttled(RBD_IMAGE_IOPS_THROTTLE) &&
 	iops_throttle->get<ImageRequestWQ<I>, ImageRequest<I>,
-	    &ImageRequestWQ<I>::handle_iops_throttle_ready>(1, this, item)) {
+	    &ImageRequestWQ<I>::handle_throttle_ready>(
+	      1, this, item, RBD_IMAGE_IOPS_THROTTLE)) {
+    // io was queued into blockers list and wait for tokens.
+    ++m_io_blockers;
+    return nullptr;
+  }
+
+  if (!item->was_throttled(RBD_IMAGE_BPS_THROTTLE) &&
+	bps_throttle->get<ImageRequestWQ<I>, ImageRequest<I>,
+	    &ImageRequestWQ<I>::handle_throttle_ready>(
+	      item->get_length(), this, item, RBD_IMAGE_BPS_THROTTLE)) {
     // io was queued into blockers list and wait for tokens.
     ++m_io_blockers;
     return nullptr;

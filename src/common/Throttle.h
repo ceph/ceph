@@ -374,8 +374,8 @@ TokenBucketThrottle(CephContext *cct, uint64_t capacity, uint64_t avg,
 
 ~TokenBucketThrottle();
 
-template <typename T, typename I, void(T::*MF)(int, I*)>
-bool get(uint64_t c, T *handler, I *item) {
+template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
+bool get(uint64_t c, T *handler, I *item, uint64_t flag) {
   if (0 == m_throttle.max)
     return false;
 
@@ -388,8 +388,8 @@ bool get(uint64_t c, T *handler, I *item) {
   }
   if (got < c) {
     // Not enough tokens, add a blocker for it.
-    Context *ctx = new FunctionContext([this, handler, item](int r) {
-	(handler->*MF)(r, item);
+    Context *ctx = new FunctionContext([this, handler, item, flag](int r) {
+	(handler->*MF)(r, item, flag);
       });
     Mutex::Locker blockers_lock(m_blockers_lock);
     m_blockers.emplace_back(c - got, ctx);

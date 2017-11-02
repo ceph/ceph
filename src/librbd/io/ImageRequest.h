@@ -24,6 +24,9 @@ class AioCompletion;
 class ObjectRequestHandle;
 class ReadResult;
 
+#define RBD_IMAGE_IOPS_THROTTLE			1 << 0
+#define RBD_IMAGE_BPS_THROTTLE			1 << 1
+
 template <typename ImageCtxT = ImageCtx>
 class ImageRequest {
 public:
@@ -99,12 +102,16 @@ public:
     return m_trace;
   }
 
-  bool was_throttled() {
-    return m_throttled;
+  bool was_throttled(uint64_t flag) {
+    return m_throttled_flag & flag;
   }
 
-  void set_throttled() {
-    m_throttled = true;
+  void set_throttled(uint64_t flag) {
+    m_throttled_flag |= flag;
+  }
+
+  uint64_t get_length() {
+    return m_length;
   }
 
 protected:
@@ -115,7 +122,8 @@ protected:
   Extents m_image_extents;
   ZTracer::Trace m_trace;
   bool m_bypass_image_cache = false;
-  bool m_throttled = false;
+  uint64_t m_throttled_flag = 0;
+  uint64_t m_length = 0;
 
   ImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                Extents &&image_extents, const char *trace_name,
@@ -124,6 +132,10 @@ protected:
       m_image_extents(std::move(image_extents)),
       m_trace(util::create_trace(image_ctx, trace_name, parent_trace)) {
     m_trace.event("start");
+    auto &extents = this->m_image_extents;
+    for (auto &extent : extents) {
+      m_length += extent.second;
+    }
   }
   
 
