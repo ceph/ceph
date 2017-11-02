@@ -315,8 +315,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   backfill_reserved(false),
   backfill_reserving(false),
   flushes_in_progress(0),
-  pg_stats_publish_lock("PG::pg_stats_publish_lock"),
-  pg_stats_publish_valid(false),
   finish_sync_event(NULL),
   backoff_lock("PG::backoff_lock"),
   scrub_after_recovery(false),
@@ -2775,12 +2773,10 @@ void PG::_update_blocked_by()
   }
 }
 
-void PG::publish_stats_to_osd()
+void PG::prepare_stats()
 {
-  if (!is_primary())
+  if (!is_primary() || !pg_stats_publish_valid) // save us some effort
     return;
-
-  pg_stats_publish_lock.Lock();
 
   if (info.stats.stats.sum.num_scrub_errors)
     state_set(PG_STATE_INCONSISTENT);
@@ -2845,15 +2841,11 @@ void PG::publish_stats_to_osd()
     dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
 	     << ":" << pg_stats_publish.reported_seq << dendl;
   }
-  pg_stats_publish_lock.Unlock();
 }
 
-void PG::clear_publish_stats()
+void PG::publish_stats_to_osd()
 {
-  dout(15) << "clear_stats" << dendl;
-  pg_stats_publish_lock.Lock();
-  pg_stats_publish_valid = false;
-  pg_stats_publish_lock.Unlock();
+  pg_stats_publish_valid = true;
 }
 
 /**
@@ -5327,9 +5319,7 @@ void PG::start_peering_interval(
     info.stats.mapping_epoch = osdmap->get_epoch();
   }
 
-  pg_stats_publish_lock.Lock();
   pg_stats_publish_valid = false;
-  pg_stats_publish_lock.Unlock();
 
   // This will now be remapped during a backfill in cases
   // that it would not have been before.
@@ -5447,7 +5437,7 @@ void PG::start_peering_interval(
     // did primary change?
     if (was_old_primary != is_primary()) {
       state_clear(PG_STATE_CLEAN);
-      clear_publish_stats();
+      pg_stats_publish_valid = false;
     }
 
     on_role_change();
@@ -8491,11 +8481,9 @@ void PG::dump_missing(Formatter *f)
 
 void PG::get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f)
 {
-  pg_stats_publish_lock.Lock();
   if (pg_stats_publish_valid) {
     f(pg_stats_publish, pg_stats_publish.get_effective_last_epoch_clean());
   }
-  pg_stats_publish_lock.Unlock();
 }
 
 void PG::with_heartbeat_peers(std::function<void(int)> f)

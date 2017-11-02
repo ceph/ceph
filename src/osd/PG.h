@@ -467,6 +467,7 @@ public:
   void dump_pgstate_history(Formatter *f);
   void dump_missing(Formatter *f);
 
+  void prepare_stats();
   void get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f);
   void with_heartbeat_peers(std::function<void(int)> f);
 
@@ -1210,14 +1211,12 @@ protected:
   object_stat_collection_t unstable_stats;
 
   // publish stats
-  Mutex pg_stats_publish_lock;
-  bool pg_stats_publish_valid;
+  std::atomic<bool> pg_stats_publish_valid = {false};
   pg_stat_t pg_stats_publish;
 
   void _update_calc_stats();
   void _update_blocked_by();
   void publish_stats_to_osd();
-  void clear_publish_stats();
 
   void clear_primary_state();
 
