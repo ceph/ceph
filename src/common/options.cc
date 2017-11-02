@@ -821,9 +821,10 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("ms_dpdk_coremask", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("1")
+    .set_default("0xF")         //begin with 0x for the string
     .set_description("")
-    .set_safe(),
+    .set_safe()
+    .add_see_also("ms_async_op_threads"),
 
     Option("ms_dpdk_memory_channel", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("4")
