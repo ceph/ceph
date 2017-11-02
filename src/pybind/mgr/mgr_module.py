@@ -280,14 +280,25 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def get(self, data_name):
         """
-        Called by the plugin to load some cluster state from ceph-mgr
+        Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
+
+        :param str data_name: Valid things to fetch are osd_crush_map_text, 
+                osd_map, osd_map_tree, osd_map_crush, config, mon_map, fs_map,
+                osd_metadata, pg_summary, df, osd_stats, health, mon_status.
+
+        Note:
+            All these structures have their own JSON representations: experiment
+            or look at the C++ ``dump()`` methods to learn about them.
         """
         return self._ceph_get(data_name)
 
     def get_server(self, hostname):
         """
-        Called by the plugin to load information about a particular
-        node from ceph-mgr.
+        Called by the plugin to fetch metadata about a particular hostname from
+        ceph-mgr.
+
+        This is information that ceph-mgr has gleaned from the daemon metadata
+        reported by daemons running on a particular server.
 
         :param hostname: a hostame
         """
@@ -299,38 +310,44 @@ class MgrModule(ceph_module.BaseMgrModule):
         svc_name can be nullptr, as can svc_type, in which case
         they are wildcards
 
-        :param svc_type:
-        :param svc_name:
+        :param str svc_type:
+        :param str svc_name:
         :return: list of dicts describing the counters requested
         """
         return self._ceph_get_perf_schema(svc_type, svc_name)
 
     def get_counter(self, svc_type, svc_name, path):
         """
-        Called by the plugin to fetch data for a particular perf counter
-        on a particular service.
+        Called by the plugin to fetch the latest performance counter data for a
+        particular counter on a particular service.
 
-        :param svc_type:
-        :param svc_name:
-        :param path:
-        :return: A list of two-element lists containing time and value
+        :param str svc_type:
+        :param str svc_name:
+        :param str path: a period-separated concatenation of the subsystem and the
+            counter name, for example "mds.inodes".
+        :return: A list of two-tuples of (timestamp, value) is returned.  This may be
+            empty if no data is available.
         """
         return self._ceph_get_counter(svc_type, svc_name, path)
 
     def list_servers(self):
         """
-        Like ``get_server``, but instead of returning information
-        about just one node, return all the nodes in an array.
+        Like ``get_server``, but gives information about all servers (i.e. all
+        unique hostnames that have been mentioned in daemon metadata)
+
+        :return: a list of infomration about all servers
+        :rtype: list
         """
         return self._ceph_get_server(None)
 
     def get_metadata(self, svc_type, svc_id):
         """
-        Fetch the metadata for a particular service.
+        Fetch the daemon metadata for a particular service.
 
-        :param svc_type: string (e.g., 'mds', 'osd', 'mon')
-        :param svc_id: string
-        :return: dict
+        :param str svc_type: service type (e.g., 'mds', 'osd', 'mon')
+        :param str svc_id: service id. convert OSD integer IDs to strings when
+            calling this
+        :rtype: dict
         """
         return self._ceph_get_metadata(svc_type, svc_id)
 
@@ -348,6 +365,22 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Called by the plugin to send a command to the mon
         cluster.
+
+        :param CommandResult result: an instance of the ``CommandResult``
+            class, defined in the same module as MgrModule.  This acts as a
+            completion and stores the output of the command.  Use
+            ``CommandResult.wait()`` if you want to block on completion.
+        :param str svc_type:
+        :param str svc_id:
+        :param str command: a JSON-serialized command.  This uses the same
+            format as the ceph command line, which is a dictionary of command
+            arguments, with the extra ``prefix`` key containing the command
+            name itself.  Consult MonCommands.h for available commands and
+            their expected arguments.
+        :param str tag: used for nonblocking operation: when a command
+            completes, the ``notify()`` callback on the MgrModule instance is
+            triggered, with notify_type set to "command", and notify_id set to
+            the tag of the command.
         """
         self._ceph_send_command(*args, **kwargs)
 
@@ -384,7 +417,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         output string.  The output buffer is for data results,
         the output string is for informative text.
 
-        :param cmd: dict, from Ceph's cmdmap_t
+        :param dict cmd: from Ceph's cmdmap_t
 
         :return: 3-tuple of (int, str, str)
         """
@@ -405,7 +438,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Retrieve the value of a persistent configuration setting
 
-        :param key: str
+        :param str key:
         :return: str
         """
         r = self._ceph_get_config(key)
@@ -418,7 +451,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Retrieve a dict of config values with the given prefix
 
-        :param key_prefix: str
+        :param str key_prefix:
         :return: str
         """
         return self._ceph_get_config_prefix(key_prefix)
@@ -426,8 +459,8 @@ class MgrModule(ceph_module.BaseMgrModule):
     def get_localized_config(self, key, default=None):
         """
         Retrieve localized configuration for this ceph-mgr instance
-        :param key: str
-        :param default: str
+        :param str key:
+        :param str default:
         :return: str
         """
         r = self.get_config(self.get_mgr_id() + '/' + key)
@@ -442,16 +475,16 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Set the value of a persistent configuration setting
 
-        :param key: str
-        :param val: str
+        :param str key:
+        :param str val:
         """
         self._ceph_set_config(key, val)
 
     def set_localized_config(self, key, val):
         """
         Set localized configuration for this ceph-mgr instance
-        :param key: str
-        :param default: str
+        :param str key:
+        :param str default:
         :return: str
         """
         return self._ceph_set_config(self.get_mgr_id() + '/' + key, val)
@@ -460,7 +493,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Helper for setting json-serialized-config
 
-        :param key: str
+        :param str key:
         :param val: json-serializable object
         """
         self._ceph_set_config(key, json.dumps(val))
@@ -469,7 +502,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Helper for getting json-serialized config
 
-        :param key: str
+        :param str key:
         :return: object
         """
         raw = self.get_config(key)
