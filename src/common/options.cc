@@ -4092,7 +4092,7 @@ std::vector<Option> get_global_options() {
     .set_description("Filesystem path to manager modules."),
 
     Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("restful status")
+    .set_default("restful status balancer")
     .add_service("mon")
     .set_description("List of manager modules to enable when the cluster is "
                      "first started")
