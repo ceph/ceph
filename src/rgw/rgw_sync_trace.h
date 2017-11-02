@@ -34,7 +34,6 @@ class RGWSyncTraceNode {
   CephContext *cct;
 
   RGWSyncTraceManager *manager{nullptr};
-  RGWSyncTraceNodeRef parent;
 
   uint16_t state{0};
   std::string status;

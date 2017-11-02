@@ -15,10 +15,9 @@ using namespace std;
 #define dout_subsys ceph_subsys_rgw_sync
 
 RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_manager,
-                                   const RGWSyncTraceNodeRef& _parent,
+                                   const RGWSyncTraceNodeRef& parent,
                                    const string& _type, const string& _id) : cct(_cct),
                                                                              manager(_manager),
-                                                                             parent(_parent),
                                                                              type(_type),
                                                                              id(_id), history(cct->_conf->rgw_sync_trace_per_node_log_size)
 {
