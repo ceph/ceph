@@ -28,7 +28,7 @@ ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
     m_timer_lock(timer_lock), m_handler(handler), m_order(order),
     m_soft_max_size(1 << m_order), m_flush_interval(flush_interval),
     m_flush_bytes(flush_bytes), m_flush_age(flush_age), m_flush_handler(this),
-    m_append_task(NULL), m_lock(lock), m_append_tid(0), m_pending_bytes(0),
+    m_lock(lock), m_append_tid(0), m_pending_bytes(0),
     m_size(0), m_overflowed(false), m_object_closed(false),
     m_in_flight_flushes(false), m_aio_scheduled(false) {
   m_ioctx.dup(ioctx);
@@ -194,9 +194,11 @@ void ObjectRecorder::cancel_append_task() {
 
 void ObjectRecorder::schedule_append_task() {
   Mutex::Locker locker(m_timer_lock);
-  if (m_append_task == NULL && m_flush_age > 0) {
-    m_append_task = new C_AppendTask(this);
-    m_timer.add_event_after(m_flush_age, m_append_task);
+  if (m_append_task == nullptr && m_flush_age > 0) {
+    m_append_task = m_timer.add_event_after(
+      m_flush_age, new FunctionContext([this](int) {
+	  handle_append_task();
+	}));
   }
 }
 

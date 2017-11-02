@@ -270,13 +270,16 @@
         <div class="box-body">
             <table>
                 <thead>
-                <tr>
+                <tr rv-show="standbys | length">
                     <th>Daemon</th>
                 </tr>
                 </thead>
                 <tbody>
                 <tr rv-each-standby="standbys">
                     <td>{standby.name}</td>
+                </tr>
+                <tr class="ceph-none-found" rv-hide="standbys | length">
+                    <td>None found</td>
                 </tr>
                 </tbody>
             </table>

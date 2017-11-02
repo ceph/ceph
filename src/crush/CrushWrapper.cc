@@ -1593,7 +1593,56 @@ int CrushWrapper::add_simple_rule(
 			    rule_type, -1, err);
 }
 
-int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)
+float CrushWrapper::_get_take_weight_osd_map(int root,
+					     map<int,float> *pmap) const
+{
+  float sum = 0.0;
+  list<int> q;
+  q.push_back(root);
+  //breadth first iterate the OSD tree
+  while (!q.empty()) {
+    int bno = q.front();
+    q.pop_front();
+    crush_bucket *b = crush->buckets[-1-bno];
+    assert(b);
+    for (unsigned j=0; j<b->size; ++j) {
+      int item_id = b->items[j];
+      if (item_id >= 0) { //it's an OSD
+	float w = crush_get_bucket_item_weight(b, j);
+	(*pmap)[item_id] = w;
+	sum += w;
+      } else { //not an OSD, expand the child later
+	q.push_back(item_id);
+      }
+    }
+  }
+  return sum;
+}
+
+void CrushWrapper::_normalize_weight_map(float sum,
+					 const map<int,float>& m,
+					 map<int,float> *pmap) const
+{
+  for (auto& p : m) {
+    map<int,float>::iterator q = pmap->find(p.first);
+    if (q == pmap->end()) {
+      (*pmap)[p.first] = p.second / sum;
+    } else {
+      q->second += p.second / sum;
+    }
+  }
+}
+
+int CrushWrapper::get_take_weight_osd_map(int root, map<int,float> *pmap) const
+{
+  map<int,float> m;
+  float sum = _get_take_weight_osd_map(root, &m);
+  _normalize_weight_map(sum, m, pmap);
+  return 0;
+}
+
+int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno,
+					  map<int,float> *pmap) const
 {
   if (ruleno >= crush->max_rules)
     return -ENOENT;
@@ -1616,35 +1665,10 @@ int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)
 	m[n] = 1.0;
 	sum = 1.0;
       } else {
-	list<int> q;
-	q.push_back(n);
-	//breadth first iterate the OSD tree
-	while (!q.empty()) {
-	  int bno = q.front();
-	  q.pop_front();
-	  crush_bucket *b = crush->buckets[-1-bno];
-	  assert(b);
-	  for (unsigned j=0; j<b->size; ++j) {
-	    int item_id = b->items[j];
-	    if (item_id >= 0) { //it's an OSD
-	      float w = crush_get_bucket_item_weight(b, j);
-	      m[item_id] = w;
-	      sum += w;
-	    } else { //not an OSD, expand the child later
-	      q.push_back(item_id);
-	    }
-	  }
-	}
+	sum += _get_take_weight_osd_map(n, &m);
       }
     }
-    for (map<int,float>::iterator p = m.begin(); p != m.end(); ++p) {
-      map<int,float>::iterator q = pmap->find(p->first);
-      if (q == pmap->end()) {
-	(*pmap)[p->first] = p->second / sum;
-      } else {
-	q->second += p->second / sum;
-      }
-    }
+    _normalize_weight_map(sum, m, pmap);
   }
 
   return 0;

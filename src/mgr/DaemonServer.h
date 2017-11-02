@@ -14,7 +14,7 @@
 #ifndef DAEMON_SERVER_H_
 #define DAEMON_SERVER_H_
 
-#include "PyModules.h"
+#include "PyModuleRegistry.h"
 
 #include <set>
 #include <string>
@@ -42,7 +42,7 @@ struct MonCommand;
  * Server used in ceph-mgr to communicate with Ceph daemons like
  * MDSs and OSDs.
  */
-class DaemonServer : public Dispatcher
+class DaemonServer : public Dispatcher, public md_config_obs_t
 {
 protected:
   boost::scoped_ptr<Throttle> client_byte_throttler;
@@ -59,15 +59,20 @@ protected:
   Finisher  &finisher;
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
-  PyModules &py_modules;
+  PyModuleRegistry &py_modules;
   LogChannelRef clog, audit_clog;
 
   AuthAuthorizeHandlerRegistry auth_registry;
+
+  // Connections for daemons, and clients with service names set
+  // (i.e. those MgrClients that are allowed to send MMgrReports)
+  std::set<ConnectionRef> daemon_connections;
 
   /// connections for osds
   ceph::unordered_map<int,set<ConnectionRef>> osd_cons;
 
   ServiceMap pending_service_map;  // uncommitted
+
   epoch_t pending_service_map_dirty = 0;
 
   Mutex lock;
@@ -90,7 +95,7 @@ private:
   void _prune_pending_service_map();
 
   utime_t started_at;
-  bool pgmap_ready = false;
+  std::atomic<bool> pgmap_ready;
   std::set<int32_t> reported_osds;
   void maybe_ready(int32_t osd_id);
 
@@ -104,7 +109,7 @@ public:
                Finisher &finisher_,
 	       DaemonStateIndex &daemon_state_,
 	       ClusterState &cluster_state_,
-	       PyModules &py_modules_,
+	       PyModuleRegistry &py_modules_,
 	       LogChannelRef cl,
 	       LogChannelRef auditcl);
   ~DaemonServer() override;
@@ -128,6 +133,12 @@ public:
   bool handle_command(MCommand *m);
   void send_report();
   void got_service_map();
+
+  void _send_configure(ConnectionRef c);
+
+  virtual const char** get_tracked_conf_keys() const override;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+                          const std::set <std::string> &changed) override;
 };
 
 #endif

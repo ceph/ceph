@@ -24,7 +24,7 @@
 #include "mgr/MgrContext.h"
 #include "mgr/mgr_commands.h"
 
-#include "MgrPyModule.h"
+//#include "MgrPyModule.h"
 #include "DaemonServer.h"
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrDigest.h"
@@ -42,6 +42,7 @@
 
 
 Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
+         PyModuleRegistry *py_module_registry_,
 	 Messenger *clientm_, Objecter *objecter_,
 	 Client* client_, LogChannelRef clog_, LogChannelRef audit_clog_) :
   monc(monc_),
@@ -52,11 +53,12 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
   timer(g_ceph_context, lock),
   finisher(g_ceph_context, "Mgr", "mgr-fin"),
   digest_received(false),
-  py_modules(daemon_state, cluster_state, *monc, clog_, *objecter, *client,
-             finisher),
+  py_module_registry(py_module_registry_),
   cluster_state(monc, nullptr, mgrmap),
-  server(monc, finisher, daemon_state, cluster_state, py_modules,
+  server(monc, finisher, daemon_state, cluster_state, *py_module_registry,
          clog_, audit_clog_),
+  clog(clog_),
+  audit_clog(audit_clog_),
   initialized(false),
   initializing(false)
 {
@@ -220,7 +222,7 @@ void Mgr::init()
   // Preload config keys (`get` for plugins is to be a fast local
   // operation, we we don't have to synchronize these later because
   // all sets will come via mgr)
-  load_config();
+  auto loaded_config = load_config();
 
   // Wait for MgrDigest...
   dout(4) << "waiting for MgrDigest..." << dendl;
@@ -229,9 +231,9 @@ void Mgr::init()
   }
 
   // assume finisher already initialized in background_init
-  dout(4) << "starting PyModules..." << dendl;
-  py_modules.init();
-  py_modules.start();
+  dout(4) << "starting python modules..." << dendl;
+  py_module_registry->active_start(loaded_config, daemon_state, cluster_state, *monc,
+      clog, *objecter, *client, finisher);
 
   dout(4) << "Complete." << dendl;
   initializing = false;
@@ -327,7 +329,7 @@ void Mgr::load_all_metadata()
   }
 }
 
-void Mgr::load_config()
+std::map<std::string, std::string> Mgr::load_config()
 {
   assert(lock.is_locked_by_me());
 
@@ -345,7 +347,7 @@ void Mgr::load_config()
     std::string const key = key_str.get_str();
     dout(20) << "saw key '" << key << "'" << dendl;
 
-    const std::string config_prefix = PyModules::config_prefix;
+    const std::string config_prefix = PyModuleRegistry::config_prefix;
 
     if (key.substr(0, config_prefix.size()) == config_prefix) {
       dout(20) << "fetching '" << key << "'" << dendl;
@@ -361,7 +363,7 @@ void Mgr::load_config()
     }
   }
 
-  py_modules.insert_config(loaded);
+  return loaded;
 }
 
 void Mgr::shutdown()
@@ -377,7 +379,7 @@ void Mgr::shutdown()
       server.shutdown();
     }
     // after the messenger is stopped, signal modules to shutdown via finisher
-    py_modules.shutdown();
+    py_module_registry->active_shutdown();
   }));
 
   // Then stop the finisher to ensure its enqueued contexts aren't going
@@ -460,7 +462,7 @@ void Mgr::handle_osd_map()
 void Mgr::handle_log(MLog *m)
 {
   for (const auto &e : m->entries) {
-    py_modules.notify_all(e);
+    py_module_registry->notify_all(e);
   }
 
   m->put();
@@ -483,18 +485,18 @@ bool Mgr::ms_dispatch(Message *m)
       handle_mgr_digest(static_cast<MMgrDigest*>(m));
       break;
     case CEPH_MSG_MON_MAP:
-      py_modules.notify_all("mon_map", "");
+      py_module_registry->notify_all("mon_map", "");
       m->put();
       break;
     case CEPH_MSG_FS_MAP:
-      py_modules.notify_all("fs_map", "");
+      py_module_registry->notify_all("fs_map", "");
       handle_fs_map((MFSMap*)m);
       return false; // I shall let this pass through for Client
       break;
     case CEPH_MSG_OSD_MAP:
       handle_osd_map();
 
-      py_modules.notify_all("osd_map", "");
+      py_module_registry->notify_all("osd_map", "");
 
       // Continuous subscribe, so that we can generate notifications
       // for our MgrPyModules
@@ -503,7 +505,7 @@ bool Mgr::ms_dispatch(Message *m)
       break;
     case MSG_SERVICE_MAP:
       handle_service_map((MServiceMap*)m);
-      py_modules.notify_all("service_map", "");
+      py_module_registry->notify_all("service_map", "");
       m->put();
       break;
     case MSG_LOG:
@@ -614,12 +616,12 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
   dout(10) << m->mon_status_json.length() << dendl;
   dout(10) << m->health_json.length() << dendl;
   cluster_state.load_digest(m);
-  py_modules.notify_all("mon_status", "");
-  py_modules.notify_all("health", "");
+  py_module_registry->notify_all("mon_status", "");
+  py_module_registry->notify_all("health", "");
 
   // Hack: use this as a tick/opportunity to prompt python-land that
   // the pgmap might have changed since last time we were here.
-  py_modules.notify_all("pg_summary", "");
+  py_module_registry->notify_all("pg_summary", "");
   dout(10) << "done." << dendl;
 
   m->put();
@@ -641,8 +643,15 @@ std::vector<MonCommand> Mgr::get_command_set() const
   Mutex::Locker l(lock);
 
   std::vector<MonCommand> commands = mgr_commands;
-  std::vector<MonCommand> py_commands = py_modules.get_commands();
+  std::vector<MonCommand> py_commands = py_module_registry->get_commands();
   commands.insert(commands.end(), py_commands.begin(), py_commands.end());
   return commands;
+}
+
+std::map<std::string, std::string> Mgr::get_services() const
+{
+  Mutex::Locker l(lock);
+
+  return py_module_registry->get_services();
 }
 

@@ -11,6 +11,9 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/regex.hpp>
 
+// Definitions for enums
+#include "common/perf_counters.h"
+
 
 void Option::dump_value(const char *field_name,
     const Option::value_t &v, Formatter *f) const
@@ -1148,9 +1151,10 @@ std::vector<Option> get_global_options() {
     .set_default(100ul << 20)
     .set_description(""),
 
-    Option("mon_mgr_proxy_client_bytes_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("mon_mgr_proxy_client_bytes_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.3)
-    .set_description(""),
+    .set_description("ratio of mon_client_bytes that can be consumed by "
+                     "proxied mgr commands before we error out to client"),
 
     Option("mon_log_max_summary", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
@@ -4042,6 +4046,14 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
+  Option("mgr_stats_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default((int64_t)PerfCountersBuilder::PRIO_USEFUL)
+  .set_description("Lowest perfcounter priority collected by mgr")
+  .set_long_description("Daemons only set perf counter data to the manager "
+    "daemon if the counter has a priority higher than this.")
+  .set_min_max((int64_t)PerfCountersBuilder::PRIO_DEBUGONLY,
+               (int64_t)PerfCountersBuilder::PRIO_CRITICAL),
+
     Option("journal_zero_on_create", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
@@ -4076,79 +4088,110 @@ std::vector<Option> get_global_options() {
 
     Option("mgr_module_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR "/mgr")
-    .set_description(""),
+    .add_service("mgr")
+    .set_description("Filesystem path to manager modules."),
 
-    Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("restful status")
-    .set_description(""),
+    .add_service("mon")
+    .set_description("List of manager modules to enable when the cluster is "
+                     "first started")
+    .set_long_description("This list of module names is read by the monitor "
+        "when the cluster is first started after installation, to populate "
+        "the list of enabled manager modules.  Subsequent updates are done using "
+        "the 'mgr module [enable|disable]' commands.  List may be comma "
+        "or space separated."),
 
     Option("mgr_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/mgr/$cluster-$id")
-    .set_description(""),
+    .add_service("mgr")
+    .set_description("Filesystem path to the ceph-mgr data directory, used to "
+                     "contain keyring."),
 
     Option("mgr_tick_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2)
-    .set_description(""),
+    .add_service("mgr")
+    .set_description("Period in seconds of beacon messages to monitor"),
 
-    Option("mgr_stats_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mgr_stats_period", Option::TYPE_INT, Option::LEVEL_BASIC)
     .set_default(5)
-    .set_description(""),
+    .add_service("mgr")
+    .set_description("Period in seconds of OSD/MDS stats reports to manager")
+    .set_long_description("Use this setting to control the granularity of "
+                          "time series data collection from daemons.  Adjust "
+                          "upwards if the manager CPU load is too high, or "
+                          "if you simply do not require the most up to date "
+                          "performance counter data."),
 
-    Option("mgr_client_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_client_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128*1048576)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_client_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_client_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_osd_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_osd_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512*1048576)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_osd_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_osd_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(8192)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_mds_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_mds_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128*1048576)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_mds_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_mds_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_mon_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_mon_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128*1048576)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_mon_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mgr_mon_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128)
-    .set_description(""),
+    .add_service("mgr"),
 
-    Option("mgr_connect_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("mgr_connect_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1.0)
-    .set_description(""),
+    .add_service("common"),
 
     Option("mgr_service_beacon_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(60.0)
-    .set_description(""),
+    .add_service("mgr")
+    .set_description("Period in seconds from last beacon to manager dropping "
+                     "state about a monitored service (RGW, rbd-mirror etc)"),
 
-    Option("mon_mgr_digest_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_mgr_digest_period", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)
-    .set_description(""),
+    .add_service("mon")
+    .set_description("Period in seconds between monitor-to-manager "
+                     "health/status updates"),
 
     Option("mon_mgr_beacon_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
+    .add_service("mon")
+    .set_description("Period in seconds from last beacon to monitor marking "
+                     "a manager daemon as failed"),
 
     Option("mon_mgr_inactive_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
-    .set_description(""),
+    .add_service("mon")
+    .set_description("Period in seconds after cluster creation during which "
+                     "cluster may have no active manager")
+    .set_long_description("This grace period enables the cluster to come "
+                          "up cleanly without raising spurious health check "
+                          "failures about managers that aren't online yet"),
 
     Option("mon_mgr_mkfs_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
-    .set_description(""),
+    .add_service("mon")
+    .set_description("Period in seconds that the cluster may have no active "
+                     "manager before this is reported as an ERR rather than "
+                     "a WARN"),
 
     Option("mutex_perf_counter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)

@@ -157,6 +157,31 @@ a command completes, the ``notify()`` callback on the MgrModule
 instance is triggered, with notify_type set to "command", and
 notify_id set to the tag of the command.
 
+Implementing standby mode
+-------------------------
+
+For some modules, it is useful to run on standby manager daemons as well
+as on the active daemon.  For example, an HTTP server can usefully
+serve HTTP redirect responses from the standby managers so that
+the user can point his browser at any of the manager daemons without
+having to worry about which one is active.
+
+Standby manager daemons look for a class called ``StandbyModule``
+in each module.  If the class is not found then the module is not
+used at all on standby daemons.  If the class is found, then
+its ``serve`` method is called.  Implementations of ``StandbyModule``
+must inherit from ``mgr_module.MgrStandbyModule``.
+
+The interface of ``MgrStandbyModule`` is much restricted compared to
+``MgrModule`` -- none of the Ceph cluster state is available to
+the module.  ``serve`` and ``shutdown`` methods are used in the same
+way as a normal module class.  The ``get_active_uri`` method enables
+the standby module to discover the address of its active peer in
+order to make redirects.  See the ``MgrStandbyModule`` definition
+in the Ceph source code for the full list of methods.
+
+For an example of how to use this interface, look at the source code
+of the ``dashboard`` module.
 
 Logging
 -------

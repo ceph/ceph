@@ -159,11 +159,11 @@ void Elector::reset_timer(double plus)
    * as far as we know, we may even be dead); so, just propose ourselves as the
    * Leader.
    */
-  expire_event = new C_MonContext(mon, [this](int) {
-      expire();
-    });
-  mon->timer.add_event_after(g_conf->mon_election_timeout + plus,
-			     expire_event);
+  expire_event = mon->timer.add_event_after(
+    g_conf->mon_election_timeout + plus,
+    new C_MonContext(mon, [this](int) {
+	expire();
+      }));
 }
 
 

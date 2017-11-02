@@ -70,8 +70,8 @@ public:
 
   /* Schedule an event in the future
    * Call with the event_lock LOCKED */
-  bool add_event_after(double seconds, Context *callback);
-  bool add_event_at(utime_t when, Context *callback);
+  Context* add_event_after(double seconds, Context *callback);
+  Context* add_event_at(utime_t when, Context *callback);
 
   /* Cancel an event.
    * Call with the event_lock LOCKED

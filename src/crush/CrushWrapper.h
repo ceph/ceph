@@ -984,6 +984,17 @@ public:
       return true;
     return false;
   }
+  bool rule_has_take(unsigned ruleno, int take) const {
+    if (!crush) return false;
+    crush_rule *rule = get_rule(ruleno);
+    for (unsigned i = 0; i < rule->len; ++i) {
+      if (rule->steps[i].op == CRUSH_RULE_TAKE &&
+	  rule->steps[i].arg1 == take) {
+	return true;
+      }
+    }
+    return false;
+  }
   int get_rule_len(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return PTR_ERR(r);
@@ -1025,6 +1036,12 @@ public:
     return s->arg2;
   }
 
+private:
+  float _get_take_weight_osd_map(int root, map<int,float> *pmap) const;
+  void _normalize_weight_map(float sum, const map<int,float>& m,
+			     map<int,float> *pmap) const;
+
+public:
   /**
    * calculate a map of osds to weights for a given rule
    *
@@ -1035,7 +1052,19 @@ public:
    * @param pmap [out] map of osd to weight
    * @return 0 for success, or negative error code
    */
-  int get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap);
+  int get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap) const;
+
+  /**
+   * calculate a map of osds to weights for a given starting root
+   *
+   * Generate a map of which OSDs get how much relative weight for a
+   * given starting root
+   *
+   * @param root node
+   * @param pmap [out] map of osd to weight
+   * @return 0 for success, or negative error code
+   */
+  int get_take_weight_osd_map(int root, map<int,float> *pmap) const;
 
   /* modifiers */
 

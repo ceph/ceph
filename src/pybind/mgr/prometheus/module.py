@@ -1,7 +1,8 @@
 import cherrypy
+import json
+import errno
 import math
 import os
-import time
 from collections import OrderedDict
 from mgr_module import MgrModule
 
@@ -14,7 +15,7 @@ DEFAULT_PORT = 9283
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
-def os_exit_noop():
+def os_exit_noop(*args, **kwargs):
     pass
 
 
@@ -32,31 +33,32 @@ def global_instance():
     return _global_instance['plugin']
 
 
-# counter value types
-PERFCOUNTER_TIME = 1
-PERFCOUNTER_U64 = 2
+def health_status_to_number(status):
 
-# counter types
-PERFCOUNTER_LONGRUNAVG = 4
-PERFCOUNTER_COUNTER = 8
-PERFCOUNTER_HISTOGRAM = 0x10
-PERFCOUNTER_TYPE_MASK = ~2
+    if status == 'HEALTH_OK':
+        return 0
+    elif status == 'HEALTH_WARN':
+        return 1
+    elif status == 'HEALTH_ERR':
+        return 2
 
+PG_STATES = ['creating', 'active', 'clean', 'down', 'scrubbing', 'degraded',
+        'inconsistent', 'peering', 'repair', 'recovering', 'forced-recovery',
+        'backfill', 'forced-backfill', 'wait-backfill', 'backfill-toofull',
+        'incomplete', 'stale', 'remapped', 'undersized', 'peered']
 
-def stattype_to_str(stattype):
+DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
 
-    typeonly = stattype & PERFCOUNTER_TYPE_MASK
-    if typeonly == 0:
-        return 'gauge'
-    if typeonly == PERFCOUNTER_LONGRUNAVG:
-        # this lie matches the DaemonState decoding: only val, no counts
-        return 'counter'
-    if typeonly == PERFCOUNTER_COUNTER:
-        return 'counter'
-    if typeonly == PERFCOUNTER_HISTOGRAM:
-        return 'histogram'
+DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
+           'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
 
-    return ''
+OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
+
+OSD_STATUS = ['weight', 'up', 'in']
+
+POOL_METADATA = ('pool_id', 'name')
+
+DISK_OCCUPATION = ('instance', 'device', 'ceph_daemon')
 
 
 class Metric(object):
@@ -76,7 +78,7 @@ class Metric(object):
 
         def promethize(path):
             ''' replace illegal metric name characters '''
-            result = path.replace('.', '_').replace('+', '_plus') 
+            result = path.replace('.', '_').replace('+', '_plus').replace('::', '_')
 
             # Hyphens usually turn into underscores, unless they are
             # trailing
@@ -85,7 +87,7 @@ class Metric(object):
             else:
                 result = result.replace("-", "_")
 
-            return result
+            return "ceph_{0}".format(result)
 
         def floatstr(value):
             ''' represent as Go-compatible float '''
@@ -125,98 +127,233 @@ class Metric(object):
 
 
 class Module(MgrModule):
+    COMMANDS = [
+        {
+            "cmd": "prometheus self-test",
+            "desc": "Run a self test on the prometheus module",
+            "perm": "rw"
+        },
+    ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.notified = False
         self.serving = False
-        self.metrics = dict()
+        self.metrics = self._setup_static_metrics()
         self.schema = OrderedDict()
         _global_instance['plugin'] = self
 
-    def _get_ordered_schema(self, **kwargs):
+    def _stattype_to_str(self, stattype):
 
-        '''
-        fetch an ordered-by-key performance counter schema
-        ['perf_schema'][daemontype.id][countername] with keys
-        'nick' (if present)
-        'description'
-        'type' (counter type....counter/gauge/avg/histogram/etc.)
-        '''
+        typeonly = stattype & self.PERFCOUNTER_TYPE_MASK
+        if typeonly == 0:
+            return 'gauge'
+        if typeonly == self.PERFCOUNTER_LONGRUNAVG:
+            # this lie matches the DaemonState decoding: only val, no counts
+            return 'counter'
+        if typeonly == self.PERFCOUNTER_COUNTER:
+            return 'counter'
+        if typeonly == self.PERFCOUNTER_HISTOGRAM:
+            return 'histogram'
 
-        daemon_type = kwargs.get('daemon_type', '')
-        daemon_id = kwargs.get('daemon_id', '')
+        return ''
 
-        schema = self.get_perf_schema(daemon_type, daemon_id)
-        if not schema:
-            self.log.warning('_get_ordered_schema: no data')
-            return
+    def _setup_static_metrics(self):
+        metrics = {}
+        metrics['health_status'] = Metric(
+            'untyped',
+            'health_status',
+            'Cluster health status'
+        )
+        metrics['mon_quorum_count'] = Metric(
+            'gauge',
+            'mon_quorum_count',
+            'Monitors in quorum'
+        )
+        metrics['osd_metadata'] = Metric(
+            'untyped',
+            'osd_metadata',
+            'OSD Metadata',
+            OSD_METADATA
+        )
 
-        new_schema = dict()
-        for k1 in schema.keys():    # 'perf_schema', but assume only one
-            for k2 in sorted(schema[k1].keys()):
-                sorted_dict = OrderedDict(
-                    sorted(schema[k1][k2].items(), key=lambda i: i[0])
-                )
-                new_schema[k2] = sorted_dict
-        for k in sorted(new_schema.keys()):
-            self.log.debug("updating schema for %s" % k)
-            self.schema[k] = new_schema[k]
+        # The reason for having this separate to OSD_METADATA is
+        # so that we can stably use the same tag names that
+        # the Prometheus node_exporter does
+        metrics['disk_occupation'] = Metric(
+            'undef',
+            'disk_occupation',
+            'Associate Ceph daemon with disk used',
+            DISK_OCCUPATION
+        )
+
+        metrics['pool_metadata'] = Metric(
+            'untyped',
+            'pool_metadata',
+            'POOL Metadata',
+            POOL_METADATA
+        )
+        for state in OSD_STATUS:
+            path = 'osd_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'untyped',
+                path,
+                'OSD status {}'.format(state),
+                ('ceph_daemon',)
+            )
+        for state in PG_STATES:
+            path = 'pg_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'PG {}'.format(state),
+            )
+        for state in DF_CLUSTER:
+            path = 'cluster_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'DF {}'.format(state),
+            )
+        for state in DF_POOL:
+            path = 'pool_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'DF pool {}'.format(state),
+                ('pool_id',)
+            )
+
+        return metrics
 
     def shutdown(self):
         self.serving = False
         pass
 
-    # XXX duplicated from dashboard; factor out?
-    def get_latest(self, daemon_type, daemon_name, stat):
-        data = self.get_counter(daemon_type, daemon_name, stat)[stat]
-        if data:
-            return data[-1][1]
-        else:
-            return 0
-
-    def get_stat(self, daemon, path):
-
-        perfcounter = self.schema[daemon][path]
-        stattype = stattype_to_str(perfcounter['type'])
-        # XXX simplify first effort: no histograms
-        # averages are already collapsed to one value for us
-        if not stattype or stattype == 'histogram':
-            self.log.debug('ignoring %s, type %s' % (path, stattype))
-            return
-
-        if path not in self.metrics:
-            self.metrics[path] = Metric(
-                stattype,
-                path,
-                perfcounter['description'],
-                ('daemon',),
-            )
-
-        daemon_type, daemon_id = daemon.split('.')
-
-        self.metrics[path].set(
-            self.get_latest(daemon_type, daemon_id, path),
-            (daemon,)
+    def get_health(self):
+        health = json.loads(self.get('health')['json'])
+        self.metrics['health_status'].set(
+            health_status_to_number(health['status'])
         )
 
+    def get_df(self):
+        # maybe get the to-be-exported metrics from a config?
+        df = self.get('df')
+        for stat in DF_CLUSTER:
+            path = 'cluster_{}'.format(stat)
+            self.metrics[path].set(df['stats'][stat])
+
+        for pool in df['pools']:
+            for stat in DF_POOL:
+                path = 'pool_{}'.format(stat)
+                self.metrics[path].set(pool['stats'][stat], (pool['id'],))
+
+    def get_quorum_status(self):
+        mon_status = json.loads(self.get('mon_status')['json'])
+        self.metrics['mon_quorum_count'].set(len(mon_status['quorum']))
+
+    def get_pg_status(self):
+        # TODO add per pool status?
+        pg_s = self.get('pg_summary')['all']
+        reported_pg_s = [(s,v) for key, v in pg_s.items() for s in
+                         key.split('+')]
+        for state, value in reported_pg_s:
+            path = 'pg_{}'.format(state)
+            self.metrics[path].set(value)
+        reported_states = [s[0] for s in reported_pg_s]
+        for state in PG_STATES:
+            path = 'pg_{}'.format(state)
+            if state not in reported_states:
+                self.metrics[path].set(0)
+
+    def get_metadata_and_osd_status(self):
+        osd_map = self.get('osd_map')
+        osd_devices = self.get('osd_map_crush')['devices']
+        for osd in osd_map['osds']:
+            id_ = osd['osd']
+            p_addr = osd['public_addr'].split(':')[0]
+            c_addr = osd['cluster_addr'].split(':')[0]
+            dev_class = next((osd for osd in osd_devices if osd['id'] == id_))
+            self.metrics['osd_metadata'].set(0, (
+                c_addr,
+                dev_class['class'],
+                id_,
+                p_addr
+            ))
+            for state in OSD_STATUS:
+                status = osd[state]
+                self.metrics['osd_{}'.format(state)].set(
+                    status,
+                    ('osd.{}'.format(id_),))
+
+            osd_metadata = self.get_metadata("osd", str(id_))
+            dev_keys = ("backend_filestore_dev_node", "bluestore_bdev_dev_node")
+            osd_dev_node = None
+            for dev_key in dev_keys:
+                val = osd_metadata.get(dev_key, None)
+                if val and val != "unknown":
+                    osd_dev_node = val
+                    break
+            osd_hostname = osd_metadata.get('hostname', None)
+            if osd_dev_node and osd_hostname:
+                self.log.debug("Got dev for osd {0}: {1}/{2}".format(
+                    id_, osd_hostname, osd_dev_node))
+                self.metrics['disk_occupation'].set(0, (
+                    osd_hostname,
+                    osd_dev_node,
+                    "osd.{0}".format(id_)
+                ))
+            else:
+                self.log.info("Missing dev node metadata for osd {0}, skipping "
+                               "occupation record for this osd".format(id_))
+
+        for pool in osd_map['pools']:
+            id_ = pool['pool']
+            name = pool['pool_name']
+            self.metrics['pool_metadata'].set(0, (id_, name))
+
     def collect(self):
-        for daemon in self.schema.keys():
-            for path in self.schema[daemon].keys():
-                self.get_stat(daemon, path)
+        self.get_health()
+        self.get_df()
+        self.get_quorum_status()
+        self.get_metadata_and_osd_status()
+        self.get_pg_status()
+
+        for daemon, counters in self.get_all_perf_counters().iteritems():
+            for path, counter_info in counters.items():
+                stattype = self._stattype_to_str(counter_info['type'])
+                # XXX simplify first effort: no histograms
+                # averages are already collapsed to one value for us
+                if not stattype or stattype == 'histogram':
+                    self.log.debug('ignoring %s, type %s' % (path, stattype))
+                    continue
+
+                if path not in self.metrics:
+                    self.metrics[path] = Metric(
+                        stattype,
+                        path,
+                        counter_info['description'],
+                        ("ceph_daemon",),
+                    )
+
+                self.metrics[path].set(
+                    counter_info['value'],
+                    (daemon,)
+                )
+
         return self.metrics
 
-    def notify(self, ntype, nid):
-        ''' Just try to sync and not run until we're notified once '''
-        if not self.notified:
-            self.serving = True
-            self.notified = True
-        if ntype == 'perf_schema_update':
-            daemon_type, daemon_id = nid.split('.')
-            self._get_ordered_schema(
-                daemon_type=daemon_type,
-                daemon_id=daemon_id
-            )
+    def handle_command(self, cmd):
+        if cmd['prefix'] == 'prometheus self-test':
+            self.collect()
+            return 0, '', 'Self-test OK'
+        else:
+            return (-errno.EINVAL, '',
+                    "Command not found '{0}'".format(cmd['prefix']))
 
     def serve(self):
 
@@ -235,6 +372,17 @@ class Module(MgrModule):
 
             @cherrypy.expose
             def index(self):
+                return '''<!DOCTYPE html>
+<html>
+	<head><title>Ceph Exporter</title></head>
+	<body>
+		<h1>Ceph Exporter</h1>
+		<p><a href='/metrics'>Metrics</a></p>
+	</body>
+</html>'''
+
+            @cherrypy.expose
+            def metrics(self):
                 metrics = global_instance().collect()
                 cherrypy.response.headers['Content-Type'] = 'text/plain'
                 if metrics:
@@ -246,9 +394,6 @@ class Module(MgrModule):
             "server_addr: %s server_port: %s" %
             (server_addr, server_port)
         )
-        # wait for first notification (of any kind) to start up
-        while not self.serving:
-            time.sleep(1)
 
         cherrypy.config.update({
             'server.socket_host': server_addr,

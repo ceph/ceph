@@ -158,6 +158,11 @@ public:
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(Formatter *f) override;
 
+  PerfCounters *get_perf_counters() override
+  {
+    return logger;
+  }
+
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
     std::string seen ;
     int num_seen = 0;

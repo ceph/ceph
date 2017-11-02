@@ -131,3 +131,8 @@ COMMAND("service dump",
         "dump service map", "service", "r", "cli,rest")
 COMMAND("service status",
         "dump service state", "service", "r", "cli,rest")
+
+COMMAND("config set " \
+	"name=key,type=CephString name=value,type=CephString",
+	"Set a configuration option at runtime (not persistent)",
+	"mgr", "rw", "cli,rest")

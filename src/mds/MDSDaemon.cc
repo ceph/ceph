@@ -69,18 +69,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << name << ' '
 
-
-class MDSDaemon::C_MDS_Tick : public Context {
-  protected:
-    MDSDaemon *mds_daemon;
-public:
-  explicit C_MDS_Tick(MDSDaemon *m) : mds_daemon(m) {}
-  void finish(int r) override {
-    assert(mds_daemon->mds_lock.is_locked_by_me());
-    mds_daemon->tick();
-  }
-};
-
 // cons/des
 MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
@@ -102,7 +90,6 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   mgrc(m->cct, m),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   mds_rank(NULL),
-  tick_event(0),
   asok_hook(NULL)
 {
   orig_argc = 0;
@@ -545,8 +532,12 @@ void MDSDaemon::reset_tick()
   if (tick_event) timer.cancel_event(tick_event);
 
   // schedule
-  tick_event = new C_MDS_Tick(this);
-  timer.add_event_after(g_conf->mds_tick_interval, tick_event);
+  tick_event = timer.add_event_after(
+    g_conf->mds_tick_interval,
+    new FunctionContext([this](int) {
+	assert(mds_lock.is_locked_by_me());
+	tick();
+      }));
 }
 
 void MDSDaemon::tick()
