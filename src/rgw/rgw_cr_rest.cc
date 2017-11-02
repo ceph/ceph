@@ -14,12 +14,12 @@ class RGWCRHTTPGetDataCB : public RGWGetDataCB {
   Mutex lock;
   RGWCoroutinesEnv *env;
   RGWCoroutine *cr;
-  int64_t io_id;
+  rgw_io_id io_id;
   bufferlist data;
   bufferlist extra_data;
   bool got_all_extra_data{false};
 public:
-  RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, int64_t _io_id) : lock("RGWCRHTTPGetDataCB"), env(_env), cr(_cr), io_id(_io_id) {}
+  RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, const rgw_io_id& _io_id) : lock("RGWCRHTTPGetDataCB"), env(_env), cr(_cr), io_id(_io_id) {}
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
     {
@@ -86,7 +86,7 @@ int RGWStreamReadHTTPResourceCRF::init()
 {
   env->stack->init_new_io(req);
 
-  in_cb = new RGWCRHTTPGetDataCB(env, caller, req->get_io_id());
+  in_cb = new RGWCRHTTPGetDataCB(env, caller, req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ));
 
   req->set_in_cb(in_cb);
 
@@ -134,11 +134,12 @@ int RGWStreamReadHTTPResourceCRF::decode_rest_obj(map<string, string>& headers, 
 int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool *io_pending)
 {
     reenter(&read_state) {
+    io_read_mask = req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ | RGWHTTPClient::HTTPCLIENT_IO_CONTROL);
     while (!req->is_done() ||
            in_cb->has_data()) {
       *io_pending = true;
       if (!in_cb->has_data()) {
-        yield caller->io_block(0, req->get_io_id());
+        yield caller->io_block(0, io_read_mask);
       }
       got_attrs = true;
       if (need_extra_data() && !got_extra_data) {
@@ -202,7 +203,7 @@ int RGWStreamWriteHTTPResourceCRF::drain_writes(bool *need_retry)
     yield req->finish_write();
     *need_retry = !req->is_done();
     while (!req->is_done()) {
-      yield caller->io_block(0, req->get_io_id());
+      yield caller->io_block(0, req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_CONTROL));
       *need_retry = !req->is_done();
     }
 

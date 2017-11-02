@@ -20,14 +20,42 @@ void rgw_http_client_cleanup();
 struct rgw_http_req_data;
 class RGWHTTPManager;
 
+class RGWIOIDProvider
+{
+  std::atomic<int64_t> max = {0};
+
+public:
+  RGWIOIDProvider() {}
+  int64_t get_next() {
+    return ++max;
+  }
+};
+
+struct rgw_io_id {
+  int64_t id{0};
+  int channels{0};
+
+  rgw_io_id() {}
+  rgw_io_id(int64_t _id, int _channels) : id(_id), channels(_channels) {}
+
+  bool intersects(const rgw_io_id& rhs) {
+    return (id == rhs.id && ((channels | rhs.channels) != 0));
+  }
+};
+
 class RGWIOProvider
 {
+  int64_t id{-1};
+
 public:
   RGWIOProvider() {}
 
-  virtual void set_io_id(int64_t _io_id) = 0;
+  void assign_io(RGWIOIDProvider& io_id_provider, int io_type = -1);
+  rgw_io_id get_io_id(int io_type) {
+    return rgw_io_id{id, io_type};
+  }
+
   virtual void set_io_user_info(void *_user_info) = 0;
-  virtual int64_t get_io_id() = 0;
   virtual void *get_io_user_info() = 0;
 };
 
@@ -41,7 +69,6 @@ class RGWHTTPClient : public RGWIOProvider
   bool has_send_len;
   long http_status;
 
-  int64_t io_id{-1};
   void *user_info{nullptr};
 
   rgw_http_req_data *req_data;
@@ -113,6 +140,10 @@ public:
   static const long HTTP_STATUS_UNAUTHORIZED = 401;
   static const long HTTP_STATUS_NOTFOUND     = 404;
 
+  static constexpr int HTTPCLIENT_IO_READ    = 0x1;
+  static constexpr int HTTPCLIENT_IO_WRITE   = 0x2;
+  static constexpr int HTTPCLIENT_IO_CONTROL = 0x4;
+
   virtual ~RGWHTTPClient();
   explicit RGWHTTPClient(CephContext *cct,
                          const string& _method,
@@ -164,16 +195,8 @@ public:
     method = _method;
   }
 
-  void set_io_id(int64_t _io_id) override {
-    io_id = _io_id;
-  }
-
   void set_io_user_info(void *_user_info) override {
     user_info = _user_info;
-  }
-
-  int64_t get_io_id() override {
-    return io_id;
   }
 
   void *get_io_user_info() override {

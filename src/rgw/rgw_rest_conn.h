@@ -217,12 +217,8 @@ public:
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
-  void set_io_id(int64_t _io_id) override {
-    req.set_io_id(_io_id);
-  }
-
-  int64_t get_io_id() override {
-    return req.get_io_id();
+  rgw_io_id get_io_id(int io_type) {
+    return req.get_io_id(io_type);
   }
 
   void set_io_user_info(void *user_info) override {
@@ -343,12 +339,8 @@ public:
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
-  void set_io_id(int64_t _io_id) override {
-    req.set_io_id(_io_id);
-  }
-
-  int64_t get_io_id() override {
-    return req.get_io_id();
+  rgw_io_id get_io_id(int io_type) {
+    return req.get_io_id(io_type);
   }
 
   void set_io_user_info(void *user_info) override {
