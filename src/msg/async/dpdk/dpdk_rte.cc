@@ -16,6 +16,8 @@
  * under the License.
  */
 
+#include <bitset>
+
 #include <rte_config.h>
 #include <rte_common.h>
 #include <rte_ethdev.h>
@@ -40,10 +42,7 @@ namespace dpdk {
 
   static int bitcount(unsigned n)
   {
-    unsigned int c =0 ;
-    for (c = 0; n; ++c)
-      n &= (n -1);
-    return c;
+    return std::bitset<CHAR_BIT * sizeof(n)>{n}.count();
   }
 
   int eal::init(CephContext *c)
