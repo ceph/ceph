@@ -335,6 +335,25 @@ int main(int argc, char **argv)
       if (k.find("path_") == 0) {
 	p = path + "/" + k.substr(5);
 	int r = ::symlink(v.c_str(), p.c_str());
+	if (r < 0 && errno == EEXIST) {
+	  struct stat st;
+	  r = ::stat(p.c_str(), &st);
+	  if (r == 0 && S_ISLNK(st.st_mode)) {
+	    char target[PATH_MAX];
+	    r = ::readlink(p.c_str(), target, sizeof(target));
+	    if (r > 0) {
+	      if (v == target) {
+		r = 0;  // already matches our target
+	      } else {
+		::unlink(p.c_str());
+		r = ::symlink(v.c_str(), p.c_str());
+	      }
+	    } else {
+	      cerr << "error reading existing link at " << p << ": " << cpp_strerror(errno)
+		   << std::endl;
+	    }
+	  }
+	}
 	if (r < 0) {
 	  cerr << "error symlinking " << p << ": " << cpp_strerror(errno)
 	       << std::endl;
