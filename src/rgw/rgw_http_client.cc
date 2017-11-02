@@ -34,7 +34,7 @@ struct rgw_http_req_data : public RefCountedObject {
   int ret{0};
   std::atomic<bool> done = { false };
   RGWHTTPClient *client{nullptr};
-  int64_t io_id{-1};
+  rgw_io_id control_io_id;
   void *user_info{nullptr};
   bool registered{false};
   RGWHTTPManager *mgr{nullptr};
@@ -266,6 +266,13 @@ void rgw_release_all_curl_handles()
 {
   handles->flush_curl_handles();
   delete handles;
+}
+
+void RGWIOProvider::assign_io(RGWIOIDProvider& io_id_provider, int io_type)
+{
+  if (id == 0) {
+    id = io_id_provider.get_next();
+  }
 }
 
 /*
@@ -828,7 +835,7 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
     req_data->mgr = nullptr;
   }
   if (completion_mgr) {
-    completion_mgr->complete(NULL, req_data->io_id, req_data->user_info);
+    completion_mgr->complete(NULL, req_data->control_io_id, req_data->user_info);
   }
 
   req_data->put();
@@ -949,7 +956,7 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client, bool send_data_hint)
 
   req_data->mgr = this;
   req_data->client = client;
-  req_data->io_id = client->get_io_id();
+  req_data->control_io_id = client->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_CONTROL);
   req_data->user_info = client->get_io_user_info();
 
   register_request(req_data);

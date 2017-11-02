@@ -368,6 +368,8 @@ class RGWStreamReadHTTPResourceCRF : public RGWStreamReadResourceCRF {
   bool got_attrs{false};
   bool got_extra_data{false};
 
+  rgw_io_id io_read_mask;
+
 protected:
   rgw_rest_obj rest_obj;
 

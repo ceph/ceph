@@ -34,7 +34,7 @@ RGWCompletionManager::~RGWCompletionManager()
   timer.shutdown();
 }
 
-void RGWCompletionManager::complete(RGWAioCompletionNotifier *cn, int64_t io_id, void *user_info)
+void RGWCompletionManager::complete(RGWAioCompletionNotifier *cn, const rgw_io_id& io_id, void *user_info)
 {
   Mutex::Locker l(lock);
   _complete(cn, io_id, user_info);
@@ -56,7 +56,7 @@ void RGWCompletionManager::unregister_completion_notifier(RGWAioCompletionNotifi
   }
 }
 
-void RGWCompletionManager::_complete(RGWAioCompletionNotifier *cn, int64_t io_id, void *user_info)
+void RGWCompletionManager::_complete(RGWAioCompletionNotifier *cn, const rgw_io_id& io_id, void *user_info)
 {
   if (cn) {
     cns.erase(cn);
@@ -121,7 +121,7 @@ void RGWCompletionManager::_wakeup(void *opaque)
   if (iter != waiters.end()) {
     void *user_id = iter->second;
     waiters.erase(iter);
-    _complete(NULL, -1 /* no IO id */, user_id);
+    _complete(NULL, rgw_io_id() /* no IO id */, user_id);
   }
 }
 
@@ -145,6 +145,10 @@ void RGWCoroutine::set_sleeping(bool flag) {
 }
 
 int RGWCoroutine::io_block(int ret, int64_t io_id) {
+  return io_block(ret, rgw_io_id{io_id, -1});
+}
+
+int RGWCoroutine::io_block(int ret, const rgw_io_id& io_id) {
   if (stack->consume_io_finish(io_id)) {
     return 0;
   }
@@ -153,7 +157,7 @@ int RGWCoroutine::io_block(int ret, int64_t io_id) {
   return ret;
 }
 
-void RGWCoroutine::io_complete(int64_t io_id) {
+void RGWCoroutine::io_complete(const rgw_io_id& io_id) {
   stack->io_complete(io_id);
 }
 
@@ -311,7 +315,7 @@ void RGWCoroutinesStack::wakeup()
   completion_mgr->wakeup((void *)this);
 }
 
-void RGWCoroutinesStack::io_complete(int64_t io_id)
+void RGWCoroutinesStack::io_complete(const rgw_io_id& io_id)
 {
   RGWCompletionManager *completion_mgr = env->manager->get_completion_mgr();
   completion_mgr->complete(nullptr, io_id, (void *)this);
@@ -414,7 +418,7 @@ static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
   ((RGWAioCompletionNotifier *)arg)->cb();
 }
 
-RGWAioCompletionNotifier::RGWAioCompletionNotifier(RGWCompletionManager *_mgr, int64_t _io_id, void *_user_data) : completion_mgr(_mgr),
+RGWAioCompletionNotifier::RGWAioCompletionNotifier(RGWCompletionManager *_mgr, const rgw_io_id& _io_id, void *_user_data) : completion_mgr(_mgr),
                                                                          io_id(_io_id),
                                                                          user_data(_user_data), lock("RGWAioCompletionNotifier"), registered(true) {
   c = librados::Rados::aio_create_completion((void *)this, NULL,
@@ -472,27 +476,40 @@ void RGWCoroutinesStack::dump(Formatter *f) const {
 void RGWCoroutinesStack::init_new_io(RGWIOProvider *io_provider)
 {
   io_provider->set_io_user_info((void *)this);
-  io_provider->set_io_id(env->manager->get_next_io_id());
+  io_provider->assign_io(env->manager->get_io_id_provider());
 }
 
-bool RGWCoroutinesStack::try_io_unblock(int64_t io_id)
+bool RGWCoroutinesStack::try_io_unblock(const rgw_io_id& io_id)
 {
   if (!can_io_unblock(io_id)) {
-    io_finish_ids.insert(io_id);
+#warning io_finish_ids needs to be cleaned up when owning stack finishes
+    auto p = io_finish_ids.emplace(io_id.id, io_id);
+    auto& iter = p.first;
+    bool inserted = p.second;
+    if (!inserted) { /* could not insert, entry already existed, add channel to completion mask */
+      iter->second.channels |= io_id.channels;
+    }
     return false;
   }
 
   return true;
 }
 
-bool RGWCoroutinesStack::consume_io_finish(int64_t io_id)
+bool RGWCoroutinesStack::consume_io_finish(const rgw_io_id& io_id)
 {
-  auto iter = io_finish_ids.find(io_id);
+  auto iter = io_finish_ids.find(io_id.id);
   if (iter == io_finish_ids.end()) {
     return false;
   }
-  io_finish_ids.erase(iter);
-  return true;
+  int finish_mask = iter->second.channels;
+  bool found = (finish_mask & io_id.channels) != 0;
+
+  finish_mask &= ~(finish_mask & io_id.channels);
+
+  if (finish_mask == 0) {
+    io_finish_ids.erase(iter);
+  }
+  return found;
 }
 
 
@@ -546,7 +563,7 @@ void RGWCoroutinesManager::set_sleeping(RGWCoroutine *cr, bool flag)
   cr->set_sleeping(flag);
 }
 
-void RGWCoroutinesManager::io_complete(RGWCoroutine *cr, int64_t io_id)
+void RGWCoroutinesManager::io_complete(RGWCoroutine *cr, const rgw_io_id& io_id)
 {
   RWLock::WLocker wl(lock);
   cr->io_complete(io_id);
@@ -576,6 +593,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   env.scheduled_stacks = &scheduled_stacks;
 
   for (list<RGWCoroutinesStack *>::iterator iter = scheduled_stacks.begin(); iter != scheduled_stacks.end() && !going_down;) {
+    RGWCompletionManager::io_completion io;
     RGWCoroutinesStack *stack = *iter;
     ++iter;
     scheduled_stacks.pop_front();
@@ -647,7 +665,6 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       stack->run_count = 0;
     }
 
-    RGWCompletionManager::io_completion io;
     while (completion_mgr->try_get_next(&io)) {
       handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count);
     }
@@ -741,7 +758,8 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
 
 RGWAioCompletionNotifier *RGWCoroutinesManager::create_completion_notifier(RGWCoroutinesStack *stack)
 {
-  RGWAioCompletionNotifier *cn = new RGWAioCompletionNotifier(completion_mgr, get_next_io_id(), (void *)stack);
+  rgw_io_id io_id{get_next_io_id(), -1};
+  RGWAioCompletionNotifier *cn = new RGWAioCompletionNotifier(completion_mgr, io_id, (void *)stack);
   completion_mgr->register_completion_notifier(cn);
   return cn;
 }
