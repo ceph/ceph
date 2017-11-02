@@ -25,6 +25,7 @@
 #include "common/Clock.h"
 #include "common/Formatter.h"
 #include "common/perf_counters.h"
+#include "common/convenience.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
 #include "auth/Crypto.h"
@@ -1085,6 +1086,19 @@ bool verify_requester_payer_permission(struct req_state *s)
   return false;
 }
 
+namespace {
+Effect eval_or_pass(const optional<Policy>& policy,
+			   const rgw::IAM::Environment& env,
+			   const rgw::auth::Identity& id,
+			   const uint64_t op,
+			   const ARN& arn) {
+  if (!policy)
+    return Effect::Pass;
+  else
+    return policy->eval(env, id, op, arn);
+}
+}
+
 bool verify_bucket_permission(struct req_state * const s,
 			      const rgw_bucket& bucket,
                               RGWAccessControlPolicy * const user_acl,
@@ -1095,15 +1109,14 @@ bool verify_bucket_permission(struct req_state * const s,
   if (!verify_requester_payer_permission(s))
     return false;
 
-  if (bucket_policy) {
-    auto r = bucket_policy->eval(s->env, *s->auth.identity, op, ARN(bucket));
-    if (r == Effect::Allow)
-      // It looks like S3 ACLs only GRANT permissions rather than
-      // denying them, so this should be safe.
-      return true;
-    else if (r == Effect::Deny)
-      return false;
-  }
+  auto r = eval_or_pass(bucket_policy, s->env, *s->auth.identity,
+			op, ARN(bucket));
+  if (r == Effect::Allow)
+    // It looks like S3 ACLs only GRANT permissions rather than
+    // denying them, so this should be safe.
+    return true;
+  else if (r == Effect::Deny)
+    return false;
 
   const auto perm = op_to_perm(op);
 
@@ -1152,6 +1165,25 @@ bool verify_bucket_permission(struct req_state * const s, const uint64_t op)
                                   op);
 }
 
+// Authorize anyone permitted by the policy and the bucket owner
+// unless explicitly denied by the policy.
+
+int verify_bucket_owner_or_policy(struct req_state* const s,
+				  const uint64_t op)
+{
+  auto e = eval_or_pass(s->iam_policy,
+			s->env, *s->auth.identity,
+			op, ARN(s->bucket));
+  if (e == Effect::Allow ||
+      (e == Effect::Pass &&
+       s->auth.identity->is_owner_of(s->bucket_owner.get_id()))) {
+    return 0;
+  } else {
+    return -EACCES;
+  }
+}
+
+
 static inline bool check_deferred_bucket_perms(struct req_state * const s,
 					       const rgw_bucket& bucket,
 					       RGWAccessControlPolicy * const user_acl,
@@ -1185,15 +1217,14 @@ bool verify_object_permission(struct req_state * const s,
   if (!verify_requester_payer_permission(s))
     return false;
 
-  if (bucket_policy) {
-    auto r = bucket_policy->eval(s->env, *s->auth.identity, op, ARN(obj));
-    if (r == Effect::Allow)
-      // It looks like S3 ACLs only GRANT permissions rather than
-      // denying them, so this should be safe.
-      return true;
-    else if (r == Effect::Deny)
-      return false;
-  }
+
+  auto r = eval_or_pass(bucket_policy, s->env, *s->auth.identity, op, ARN(obj));
+  if (r == Effect::Allow)
+    // It looks like S3 ACLs only GRANT permissions rather than
+    // denying them, so this should be safe.
+    return true;
+  else if (r == Effect::Deny)
+    return false;
 
   const auto perm = op_to_perm(op);
 
