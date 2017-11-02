@@ -3751,6 +3751,20 @@ def main_activate(args):
             )
             osd_data = get_mount_point(cluster, osd_id)
 
+            args.cluster = cluster
+            if args.dmcrypt:
+                for name in Space.NAMES:
+                    # Check if encrypted device in journal
+                    dev_path = os.path.join(osd_data, name + '_dmcrypt')
+                    if not os.path.exists(dev_path):
+                        continue
+                    partition = DevicePartition.factory(
+                        path=None,
+                        dev=dev_path,
+                        args=args)
+                    partition.rawdev = args.path
+                    partition.map()
+
         elif stat.S_ISDIR(mode):
             (cluster, osd_id) = activate_dir(
                 path=args.path,
