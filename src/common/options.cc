@@ -4046,9 +4046,16 @@ std::vector<Option> get_global_options() {
     .set_default(CEPH_PKGLIBDIR "/mgr")
     .set_description(""),
 
-    Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("restful status")
-    .set_description(""),
+    Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
+    .set_default("restful status balancer")
+    .add_service("mon")
+    .set_description("List of manager modules to enable when the cluster is "
+                     "first started")
+    .set_long_description("This list of module names is read by the monitor "
+        "when the cluster is first started after installation, to populate "
+        "the list of enabled manager modules.  Subsequent updates are done using "
+        "the 'mgr module [enable|disable]' commands.  List may be comma "
+        "or space separated."),
 
     Option("mgr_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/mgr/$cluster-$id")
