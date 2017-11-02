@@ -99,7 +99,7 @@ class OSDMap(ceph_module.BasePyOSDMap):
     def calc_pg_upmaps(self, inc,
                        max_deviation=.01, max_iterations=10, pools=[]):
         return self._calc_pg_upmaps(
-            inc._handle,
+            inc,
             max_deviation, max_iterations, pools)
 
     def map_pool_pgs_up(self, poolid):
