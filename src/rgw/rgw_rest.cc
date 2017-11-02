@@ -1855,6 +1855,14 @@ int RGWHandler_REST::validate_bucket_name(const string& bucket)
     return -ERR_INVALID_BUCKET_NAME;
   }
 
+  const char *s = bucket.c_str();
+  for (int i = 0; i < len; ++i, ++s) {
+    if (*(unsigned char *)s == 0xff)
+      return -ERR_INVALID_BUCKET_NAME;
+    if (*(unsigned char *)s == '/')
+      return -ERR_INVALID_BUCKET_NAME;
+  }
+
   return 0;
 }
 
