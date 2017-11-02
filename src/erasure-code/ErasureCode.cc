@@ -88,7 +88,7 @@ int ErasureCode::chunk_index(unsigned int i) const
   return chunk_mapping.size() > i ? chunk_mapping[i] : i;
 }
 
-int ErasureCode::minimum_to_decode(const set<int> &want_to_read,
+int ErasureCode::_minimum_to_decode(const set<int> &want_to_read,
                                    const set<int> &available_chunks,
                                    set<int> *minimum)
 {
@@ -112,7 +112,7 @@ int ErasureCode::minimum_to_decode(const set<int> &want_to_read,
                                    map<int, vector<pair<int, int>>> *minimum)
 {
   set<int> minimum_shard_ids;
-  int r = minimum_to_decode(want_to_read, available_chunks, &minimum_shard_ids);
+  int r = _minimum_to_decode(want_to_read, available_chunks, &minimum_shard_ids);
   if (r != 0) {
     return r;
   }
@@ -133,7 +133,7 @@ int ErasureCode::minimum_to_decode_with_cost(const set<int> &want_to_read,
        i != available.end();
        ++i)
     available_chunks.insert(i->first);
-  return minimum_to_decode(want_to_read, available_chunks, minimum);
+  return _minimum_to_decode(want_to_read, available_chunks, minimum);
 }
 
 int ErasureCode::encode_prepare(const bufferlist &raw,
@@ -197,9 +197,9 @@ int ErasureCode::encode_chunks(const set<int> &want_to_encode,
   assert("ErasureCode::encode_chunks not implemented" == 0);
 }
  
-int ErasureCode::decode(const set<int> &want_to_read,
-                        const map<int, bufferlist> &chunks,
-                        map<int, bufferlist> *decoded)
+int ErasureCode::_decode(const set<int> &want_to_read,
+			 const map<int, bufferlist> &chunks,
+			 map<int, bufferlist> *decoded)
 {
   vector<int> have;
   have.reserve(chunks.size());
@@ -236,7 +236,7 @@ int ErasureCode::decode(const set<int> &want_to_read,
                         const map<int, bufferlist> &chunks,
                         map<int, bufferlist> *decoded, int chunk_size)
 {
-  return decode(want_to_read, chunks, decoded);
+  return _decode(want_to_read, chunks, decoded);
 }
 
 int ErasureCode::decode_chunks(const set<int> &want_to_read,
@@ -336,7 +336,7 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
     want_to_read.insert(chunk_index(i));
   }
   map<int, bufferlist> decoded_map;
-  int r = decode(want_to_read, chunks, &decoded_map);
+  int r = _decode(want_to_read, chunks, &decoded_map);
   if (r == 0) {
     for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
       decoded->claim_append(decoded_map[chunk_index(i)]);
