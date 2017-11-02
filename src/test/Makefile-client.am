@@ -26,6 +26,7 @@ if WITH_RADOS
 
 libradostest_la_SOURCES = \
 	test/librados/test.cc \
+	test/librados/test_common.cc \
 	test/librados/TestCase.cc
 noinst_LTLIBRARIES += libradostest.la
 libradostest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -332,10 +333,11 @@ bin_DEBUGPROGRAMS += ceph_test_librbd
 ceph_test_librbd_api_SOURCES = \
 	test/librbd/test_support.cc \
 	test/librbd/test_librbd.cc \
-	test/librbd/test_main.cc
+	test/librbd/test_main.cc \
+	test/librados/test.cc
 ceph_test_librbd_api_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 ceph_test_librbd_api_LDADD = \
-	$(LIBRBD) $(LIBRADOS) $(LIBCOMMON) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+	$(LIBRBD) $(LIBRADOS) $(UNITTEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_test_librbd_api
 
 if LINUX
