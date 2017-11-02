@@ -183,7 +183,7 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
   }
-  if (action == "prime-osd-dev") {
+  if (action == "prime-osd-dir") {
     if (devs.size() != 1) {
       cerr << "must specify the main bluestore device" << std::endl;
       exit(EXIT_FAILURE);
@@ -332,7 +332,6 @@ int main(int argc, char **argv)
 	v += label.meta["whoami"];
 	v += "]\nkey = " + i->second;
       }
-      v += "\n";
       if (k.find("path_") == 0) {
 	p = path + "/" + k.substr(5);
 	int r = ::symlink(v.c_str(), p.c_str());
@@ -342,6 +341,7 @@ int main(int argc, char **argv)
 	  exit(EXIT_FAILURE);
 	}
       } else {
+	v += "\n";
 	int fd = ::open(p.c_str(), O_CREAT|O_TRUNC|O_WRONLY, 0600);
 	if (fd < 0) {
 	  cerr << "error writing " << p << ": " << cpp_strerror(errno)
