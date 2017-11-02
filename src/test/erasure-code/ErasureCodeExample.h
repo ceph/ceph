@@ -35,7 +35,7 @@
 
 #define MINIMUM_TO_RECOVER 2u
 
-class ErasureCodeExample : public ErasureCode {
+class ErasureCodeExample final : public ErasureCode {
 public:
   ~ErasureCodeExample() override {}
 
@@ -45,10 +45,10 @@ public:
     return crush.add_simple_rule(name, "default", "host", "",
 				 "indep", pg_pool_t::TYPE_ERASURE, ss);
   }
-  
-  int minimum_to_decode(const set<int> &want_to_read,
+
+  int _minimum_to_decode(const set<int> &want_to_read,
                                 const set<int> &available_chunks,
-                                set<int> *minimum) {
+                                set<int> *minimum) override {
     if (includes(available_chunks.begin(), available_chunks.end(),
 		 want_to_read.begin(), want_to_read.end())) {
       *minimum = want_to_read;
@@ -88,7 +88,7 @@ public:
 	 i != c2c.end();
 	 ++i)
       available_chunks.insert(i->first);
-    return minimum_to_decode(want_to_read, available_chunks, minimum);
+    return _minimum_to_decode(want_to_read, available_chunks, minimum);
   }
 
   unsigned int get_chunk_count() const override {
@@ -144,9 +144,9 @@ public:
     return 0;
   }
 
-  int decode(const set<int> &want_to_read,
-                     const map<int, bufferlist> &chunks,
-                     map<int, bufferlist> *decoded) {
+  int _decode(const set<int> &want_to_read,
+	      const map<int, bufferlist> &chunks,
+	      map<int, bufferlist> *decoded) {
     //
     // All chunks have the same size
     //

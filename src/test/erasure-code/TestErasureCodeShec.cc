@@ -977,8 +977,8 @@ TEST(ErasureCodeShec, minimum_to_decode_8)
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
@@ -1013,8 +1013,8 @@ TEST(ErasureCodeShec, minimum_to_decode_9)
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
@@ -1049,8 +1049,8 @@ TEST(ErasureCodeShec, minimum_to_decode_10)
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_EQ(-EIO, r);
 
   delete shec;
@@ -1085,8 +1085,8 @@ TEST(ErasureCodeShec, minimum_to_decode_11)
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_EQ(-EIO, r);
 
   delete shec;
@@ -1119,7 +1119,7 @@ TEST(ErasureCodeShec, minimum_to_decode_12)
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks, NULL);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks, NULL);
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
@@ -1151,14 +1151,14 @@ TEST(ErasureCodeShec, minimum_to_decode_13)
     want_to_decode.insert(i);
     available_chunks.insert(i);
   }
-  shec->minimum_to_decode(want_to_decode, available_chunks, &minimum_chunks);
+  shec->_minimum_to_decode(want_to_decode, available_chunks, &minimum_chunks);
   minimum = minimum_chunks;		//normal value
   for (int i = 100; i < 120; ++i) {
     minimum_chunks.insert(i);	//insert extra data
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(minimum, minimum_chunks);
@@ -1193,8 +1193,8 @@ TEST(ErasureCodeShec, minimum_to_decode2_1)
   available_chunks.insert(1);
   available_chunks.insert(2);
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_TRUE(minimum_chunks.size());
@@ -1239,8 +1239,8 @@ TEST(ErasureCodeShec, minimum_to_decode2_3)
   }
   sleep(1);
   printf("*** test start ***\n");
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(want_to_decode, minimum_chunks);
@@ -1375,10 +1375,10 @@ TEST(ErasureCodeShec, encode_1)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
   decoded.clear();
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2),
-		   encoded,
-		   &decoded);
-  EXPECT_TRUE(shec->matrix != NULL);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2),
+		    encoded,
+		    &decoded);
+  EXPECT_NE(nullptr, shec->matrix);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
   EXPECT_EQ(32u, decoded[0].length());
@@ -1434,8 +1434,8 @@ TEST(ErasureCodeShec, encode_2)
   //decode
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -1489,7 +1489,7 @@ TEST(ErasureCodeShec, encode_3)
   //decode
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
 		   &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -1548,8 +1548,8 @@ TEST(ErasureCodeShec, encode_4)
   //decode
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -1679,8 +1679,8 @@ TEST(ErasureCodeShec, encode2_1)
   //decode
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -1750,8 +1750,8 @@ TEST(ErasureCodeShec, encode2_3)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -1812,8 +1812,8 @@ TEST(ErasureCodeShec, decode_1)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(7u, decoded.size());
@@ -1878,8 +1878,8 @@ TEST(ErasureCodeShec, decode_8)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7 }; //more than k+m
   map<int, bufferlist> decoded;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 8), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 8), encoded,
+		    &decoded);
   EXPECT_EQ(0, r);
   EXPECT_EQ(7u, decoded.size());
   EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
@@ -1949,8 +1949,8 @@ TEST(ErasureCodeShec, decode_9)
   buf.append("abc");
   encoded[100] = buf;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 10), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 10), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(7u, decoded.size());
@@ -2025,8 +2025,8 @@ TEST(ErasureCodeShec, decode_10)
     inchunks.insert(make_pair(i, encoded[i]));
   }
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), inchunks,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 7), inchunks,
+		    &decoded);
   EXPECT_EQ(-1, r);
 
   delete shec;
@@ -2075,8 +2075,8 @@ TEST(ErasureCodeShec, decode_11)
     inchunks.insert(make_pair(i, encoded[i]));
   }
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 5), inchunks,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 5), inchunks,
+		    &decoded);
   EXPECT_EQ(-1, r);
 
   delete shec;
@@ -2123,8 +2123,8 @@ TEST(ErasureCodeShec, decode_12)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
 
   //decoded = NULL
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
-		   NULL);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
+		    NULL);
   EXPECT_NE(0, r);
 
   delete shec;
@@ -2178,8 +2178,8 @@ TEST(ErasureCodeShec, decode_13)
     decoded[i] = buf;
   }
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
+		    &decoded);
   EXPECT_NE(0, r);
 
   delete shec;
@@ -2226,8 +2226,8 @@ TEST(ErasureCodeShec, decode2_1)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
   map<int, bufferlist> decoded;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -2290,8 +2290,8 @@ TEST(ErasureCodeShec, decode2_3)
   }
   sleep(1);
   printf("*** test start ***\n");
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -2353,8 +2353,8 @@ TEST(ErasureCodeShec, decode2_4)
   map<int, bufferlist> degraded;
   degraded[0] = encoded[0];
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), degraded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), degraded,
+		    &decoded);
   EXPECT_EQ(-1, r);
 
   delete shec;
@@ -2681,7 +2681,7 @@ void* thread1(void* pParam)
   printf("*** thread loop start ***\n");
   g_flag = 1;
   while (g_flag == 1) {
-    shec->minimum_to_decode(want_to_decode, available_chunks, &minimum_chunks);
+    shec->_minimum_to_decode(want_to_decode, available_chunks, &minimum_chunks);
   }
   printf("*** thread loop end ***\n");
 
@@ -2810,8 +2810,8 @@ void* thread5(void* pParam)
   printf("*** thread loop start ***\n");
   g_flag = 1;
   while (g_flag == 1) {
-    shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		 &decoded);
+    shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		  &decoded);
     decoded.clear();
   }
   printf("*** thread loop end ***\n");
