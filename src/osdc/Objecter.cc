@@ -3170,9 +3170,6 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
     m->set_reqid(op->reqid);
   }
 
-  logger->inc(l_osdc_op_send);
-  logger->inc(l_osdc_op_send_bytes, m->get_data().length());
-
   return m;
 }
 
@@ -3248,6 +3245,9 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
     m->trace.init("op msg", nullptr, &op->trace);
   }
   op->session->con->send_message(m);
+
+  logger->inc(l_osdc_op_send);
+  logger->inc(l_osdc_op_send_bytes, m->get_payload().length());
 }
 
 int Objecter::calc_op_budget(Op *op)
