@@ -1551,11 +1551,15 @@ void AuthMonitor::upgrade_format()
       }
     }
 
-    // add bootstrap key
-    {
+    // add bootstrap key if it does not already exist
+    // (might have already been get-or-create'd by
+    //  ceph-create-keys)
+    EntityName bootstrap_mgr_name;
+    int r = bootstrap_mgr_name.from_str("client.bootstrap-mgr");
+    assert(r);
+    if (!mon->key_server.contains(bootstrap_mgr_name)) {
       KeyServerData::Incremental auth_inc;
-      bool r = auth_inc.name.from_str("client.bootstrap-mgr");
-      assert(r);
+      auth_inc.name = bootstrap_mgr_name;
       ::encode("allow profile bootstrap-mgr", auth_inc.auth.caps["mon"]);
       auth_inc.op = KeyServerData::AUTH_INC_ADD;
       // generate key
