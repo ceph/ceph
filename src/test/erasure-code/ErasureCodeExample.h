@@ -46,21 +46,6 @@ public:
 				 "indep", pg_pool_t::TYPE_ERASURE, ss);
   }
 
-  int _minimum_to_decode(const set<int> &want_to_read,
-                                const set<int> &available_chunks,
-                                set<int> *minimum) override {
-    if (includes(available_chunks.begin(), available_chunks.end(),
-		 want_to_read.begin(), want_to_read.end())) {
-      *minimum = want_to_read;
-      return 0;
-    } else if (available_chunks.size() >= MINIMUM_TO_RECOVER) {
-      *minimum = available_chunks;
-      return 0;
-    } else {
-      return -EIO;
-    }
-  }
-
   int minimum_to_decode_with_cost(const set<int> &want_to_read,
                                           const map<int, int> &available,
                                           set<int> *minimum) override {
