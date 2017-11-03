@@ -6467,7 +6467,7 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRevokedTooFull &)
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILLING);
   cancel_backfill();
-  pg->schedule_backfill_retry(pg->cct->_conf->osd_recovery_retry_interval);
+  pg->schedule_backfill_retry(pg->cct->_conf->osd_backfill_retry_interval);
   return transit<NotBackfilling>();
 }
 
@@ -6569,7 +6569,7 @@ void PG::RecoveryState::WaitRemoteBackfillReserved::retry()
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
   pg->publish_stats_to_osd();
 
-  pg->schedule_backfill_retry(pg->cct->_conf->osd_recovery_retry_interval);
+  pg->schedule_backfill_retry(pg->cct->_conf->osd_backfill_retry_interval);
 }
 
 boost::statechart::result
