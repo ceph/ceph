@@ -1860,7 +1860,8 @@ static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, buffe
   return 0;
 }
 
-int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+int rgw_dir_suggest_changes(cls_method_context_t hctx,
+			    bufferlist *in, bufferlist *out)
 {
   CLS_LOG(1, "rgw_dir_suggest_changes()");
 
@@ -1953,8 +1954,21 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         }
         break;
       case CEPH_RGW_UPDATE:
+	if (!cur_disk.exists) {
+	  // this update would only have been sent by the rgw client
+	  // if the rgw_bucket_dir_entry existed, however between that
+	  // check and now the entry has diappeared, so we were likely
+	  // in the midst of a delete op, and we will not recreate the
+	  // entry
+	  CLS_LOG(10,
+		  "CEPH_RGW_UPDATE not applied because rgw_bucket_dir_entry"
+		  " no longer exists\n");
+	  break;
+	}
+
         CLS_LOG(10, "CEPH_RGW_UPDATE name=%s instance=%s total_entries: %" PRId64 " -> %" PRId64 "\n",
                 cur_change.key.name.c_str(), cur_change.key.instance.c_str(), stats.num_entries, stats.num_entries + 1);
+
         stats.num_entries++;
         stats.total_size += cur_change.meta.accounted_size;
         stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
@@ -1975,10 +1989,9 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
           }
         }
         break;
-      }
-    }
-
-  }
+      } // switch(op)
+    } // if (cur_disk.pending_map.empty())
+  } // while (!in_iter.end())
 
   if (header_changed) {
     return write_bucket_header(hctx, &header);
