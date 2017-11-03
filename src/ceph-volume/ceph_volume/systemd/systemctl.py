@@ -20,6 +20,10 @@ def disable(unit):
     process.run(['sudo', 'systemctl', 'disable', unit])
 
 
+def mask(unit):
+    process.run(['sudo', 'systemctl', 'disable', unit])
+
+
 def start_osd(id_):
     return start(osd_unit % id_)
 
@@ -40,9 +44,16 @@ def enable_volume(id_, fsid, device_type='lvm'):
     return enable(volume_unit % (device_type, id_, fsid))
 
 
+def mask_ceph_disk(instance='*'):
+    # ``instance`` will probably be '*' all the time, because ceph-volume will
+    # want all instances disabled at once, not just one
+    return mask(ceph_disk_unit % instance)
+
+
 #
 # templates
 #
 
 osd_unit = "ceph-osd@%s"
+ceph_disk_unit = "ceph-disk@%s"
 volume_unit = "ceph-volume@%s-%s-%s"
