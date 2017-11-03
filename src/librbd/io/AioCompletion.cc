@@ -12,8 +12,8 @@
 
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
-
 #include "librbd/Journal.h"
+#include "librbd/Types.h"
 
 #ifdef WITH_LTTNG
 #include "tracing/librbd.h"

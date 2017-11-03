@@ -125,6 +125,7 @@ namespace librbd {
     std::string id; // only used for new-format images
     ParentInfo parent_md;
     ImageCtx *parent;
+    ImageCtx *child = nullptr;
     cls::rbd::GroupSpec group_spec;
     uint64_t stripe_unit, stripe_count;
     uint64_t flags;

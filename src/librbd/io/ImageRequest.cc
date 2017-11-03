@@ -5,6 +5,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
+#include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/cache/ImageCache.h"
 #include "librbd/io/AioCompletion.h"

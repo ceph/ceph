@@ -12,6 +12,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/DisabledPolicy.h"
 #include "librbd/journal/StandardPolicy.h"
