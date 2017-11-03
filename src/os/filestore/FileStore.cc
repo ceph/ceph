@@ -4117,6 +4117,7 @@ void FileStore::inject_mdata_error(const ghobject_t &oid) {
   dout(10) << __func__ << ": init error on " << oid << dendl;
   mdata_error_set.insert(oid);
 }
+
 void FileStore::debug_obj_on_delete(const ghobject_t &oid) {
   Mutex::Locker l(read_error_lock);
   dout(10) << __func__ << ": clear error on " << oid << dendl;
