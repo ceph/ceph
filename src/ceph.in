@@ -780,6 +780,18 @@ def daemonperf(childargs, sockpath):
 
     return 0
 
+def ismdsactive(target):
+    ret, outbuf, outs = json_command(cluster_handle, prefix='fs dump',
+                                                                  argdict={'format': 'json'})
+    if ret:
+        raise RuntimeError('Can\'t contact mon for mds list')
+    d = json.loads(outbuf.decode('utf-8'))
+    target_type, target_name = target.split('.')
+    for fs in d['filesystems']:
+        for info in fs['mdsmap']['info'].values():
+            if info['name'] == target_name and info['state'] == 'up:active':
+                return True
+    return False
 
 def main():
     ceph_args = os.environ.get('CEPH_ARGS')
@@ -1003,6 +1015,12 @@ def main():
     except Exception as e:
         print('error handling command target: {0}'.format(e), file=sys.stderr)
         return 1
+
+    # Avoid telling inactive mdses
+    if (len(childargs) >= 2 and childargs[0] == 'tell' and childargs[1].split('.')[0] in ['mds'] and
+        not ismdsactive(childargs[1])):
+        print('Error: target {0} not active'.format(childargs[1]), file=sys.stderr)
+        return errno.EINVAL
 
     # Repulsive hack to handle tell: lop off 'tell' and target
     # and validate the rest of the command.  'target' is already
