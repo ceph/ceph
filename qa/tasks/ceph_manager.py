@@ -116,7 +116,7 @@ class Thrasher:
         if self.config.get('powercycle'):
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
-        self.minin = self.config.get("min_in", 3)
+        self.minin = self.config.get("min_in", 4)
         self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
         self.sighup_delay = self.config.get('sighup_delay')
         self.optrack_toggle_delay = self.config.get('optrack_toggle_delay')
