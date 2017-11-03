@@ -328,6 +328,10 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     }
     dir->unfreeze_tree();
     cache->try_subtree_merge(dir);
+    for (auto bd : it->second.residual_dirs) {
+      bd->unfreeze_tree();
+      cache->try_subtree_merge(bd);
+    }
     if (notify_peer &&
 	(!mds->is_cluster_degraded() ||
 	 mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer))) // tell them.
@@ -1083,6 +1087,10 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
 
   // CDir::_freeze_tree() should have forced it into subtree.
   assert(dir->get_dir_auth() == mds_authority_t(mds->get_nodeid(), mds->get_nodeid()));
+
+  set<client_t> export_client_set;
+  check_export_size(dir, it->second, export_client_set);
+
   // note the bounds.
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
@@ -1120,8 +1128,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
     CDir *bound = *p;
 
     // pin it.
-    bound->get(CDir::PIN_EXPORTBOUND);
-    bound->state_set(CDir::STATE_EXPORTBOUND);
+    assert(bound->state_test(CDir::STATE_EXPORTBOUND));
     
     dout(7) << "  export bound " << *bound << dendl;
     prep->add_bound( bound->dirfrag() );
@@ -1129,8 +1136,14 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
     // trace to bound
     bufferlist tracebl;
     CDir *cur = bound;
-    
+
     char start = '-';
+    if (it->second.residual_dirs.count(bound)) {
+      start = 'f';
+      cache->replicate_dir(bound, it->second.peer, tracebl);
+      dout(7) << "  added " << *bound << dendl;
+    }
+
     while (1) {
       // don't repeat inodes
       if (inodes_added.count(cur->inode->ino()))
@@ -1182,9 +1195,6 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   // make sure any new instantiations of caps are flushed out
   assert(it->second.warning_ack_waiting.empty());
 
-  set<client_t> export_client_set;
-  get_export_client_set(dir, export_client_set);
-
   MDSGatherBuilder gather(g_ceph_context);
   mds->server->flush_client_sessions(export_client_set, gather);
   if (gather.has_subs()) {
@@ -1194,35 +1204,79 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   }
 }
 
-void Migrator::get_export_client_set(CDir *dir, set<client_t>& client_set)
+void Migrator::check_export_size(CDir *dir, export_state_t& stat, set<client_t>& client_set)
 {
+  const unsigned frag_size = 800;
+  const unsigned inode_size = 1000;
+  const unsigned cap_size = 80;
+  const unsigned link_size = 10;
+  const unsigned null_size = 1;
+
+  uint64_t max_size = g_conf->get_val<uint64_t>("mds_max_export_size");
+  uint64_t approx_size = 0;
+
   list<CDir*> dfs;
   dfs.push_back(dir);
   while (!dfs.empty()) {
     CDir *dir = dfs.front();
     dfs.pop_front();
+
+    approx_size += frag_size;
     for (CDir::map_t::iterator p = dir->begin(); p != dir->end(); ++p) {
       CDentry *dn = p->second;
-      if (!dn->get_linkage()->is_primary())
+      if (dn->get_linkage()->is_null()) {
+	approx_size += null_size;
 	continue;
+      }
+      if (dn->get_linkage()->is_remote()) {
+	approx_size += link_size;
+	continue;
+      }
+
+      approx_size += inode_size;
       CInode *in = dn->get_linkage()->get_inode();
       if (in->is_dir()) {
 	// directory?
 	list<CDir*> ls;
 	in->get_dirfrags(ls);
-	for (list<CDir*>::iterator q = ls.begin(); q != ls.end(); ++q) {
-	  if (!(*q)->state_test(CDir::STATE_EXPORTBOUND)) {
+	for (auto q : ls) {
+	  if (q->is_subtree_root()) {
+	    q->state_set(CDir::STATE_EXPORTBOUND);
+	    q->get(CDir::PIN_EXPORTBOUND);
+	  } else {
 	    // include nested dirfrag
-	    assert((*q)->get_dir_auth().first == CDIR_AUTH_PARENT);
-	    dfs.push_back(*q); // it's ours, recurse (later)
+	    assert(q->get_dir_auth().first == CDIR_AUTH_PARENT);
+	    dfs.push_front(q);
 	  }
 	}
       }
       for (map<client_t, Capability*>::iterator q = in->client_caps.begin();
 	   q != in->client_caps.end();
-	   ++q)
+	   ++q) {
+	approx_size += cap_size;
 	client_set.insert(q->first);
+      }
     }
+
+    if (approx_size >= max_size)
+      break;
+  }
+
+  while (!dfs.empty()) {
+    CDir *dir = dfs.front();
+    dfs.pop_front();
+
+    dout(7) << "check_export_size: creating bound " << *dir << dendl;
+    assert(dir->is_auth());
+    dir->state_set(CDir::STATE_EXPORTBOUND);
+    dir->get(CDir::PIN_EXPORTBOUND);
+
+    mds->mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
+    // Another choice here is finishing all WAIT_UNFREEZE contexts and keeping
+    // the newly created subtree unfreeze.
+    dir->_freeze_tree();
+
+    stat.residual_dirs.insert(dir);
   }
 }
 
@@ -1595,7 +1649,7 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
       if (!t->state_test(CDir::STATE_EXPORTBOUND)) {
 	// include nested dirfrag
 	assert(t->get_dir_auth().first == CDIR_AUTH_PARENT);
-	subdirs.push_back(t);  // it's ours, recurse (later)
+	subdirs.push_front(t);  // it's ours, recurse (later)
       }
     }
   }
@@ -1805,6 +1859,10 @@ void Migrator::export_reverse(CDir *dir, export_state_t& stat)
 
   dir->unfreeze_tree();
   cache->try_subtree_merge(dir);
+  for (auto bd : stat.residual_dirs) {
+    bd->unfreeze_tree();
+    cache->try_subtree_merge(bd);
+  }
 
   // revoke/resume stale caps
   for (auto in : to_eval) {
@@ -1991,6 +2049,12 @@ void Migrator::export_finish(CDir *dir)
   //  (we do this _after_ removing EXPORTBOUND pins, to allow merges)
   dir->unfreeze_tree();
   cache->try_subtree_merge(dir);
+  for (auto bd : it->second.residual_dirs) {
+    export_queue.push_front(pair<dirfrag_t,mds_rank_t>(bd->dirfrag(), it->second.peer));
+    bd->take_waiting(CDir::WAIT_ANY_MASK, finished);
+    bd->unfreeze_tree();
+    cache->try_subtree_merge(bd);
+  }
 
   // no more auth subtree? clear scatter dirty
   if (!dir->get_inode()->is_auth() &&
@@ -2266,7 +2330,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
       } else
 	assert(0 == "unrecognized start char");
 
-      while (start != '-') {
+      while (!q.end()) {
 	CDentry *dn = cache->add_replica_dentry(q, cur, finished);
 	dout(10) << "  added " << *dn << dendl;
 	CInode *in = cache->add_replica_inode(q, dn, finished);
