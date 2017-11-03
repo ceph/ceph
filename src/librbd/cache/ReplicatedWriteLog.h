@@ -324,9 +324,10 @@ private:
   void add_entry_locked(WriteLogEntry *log_entry);
   void remove_entry_locked(WriteLogEntry *log_entry);
   void add_map_entry_locked(WriteLogMapEntry &map_entry);
-  void remove_map_entry_locked(WriteLogMapEntry map_entry);
+  void remove_map_entry_locked(WriteLogMapEntry &map_entry);
+  void adjust_map_entry_locked(WriteLogMapEntry &map_entry, BlockExtent &new_extent);
   //WriteLogEntries find_entries_locked(BlockExtent block_extent);
-  WriteLogMapEntries find_map_entries_locked(BlockExtent block_extent);
+  WriteLogMapEntries find_map_entries_locked(BlockExtent &block_extent);
 
   struct WriteLogMapExtent : public boost::intrusive::list_base_hook<>,
 			     public boost::intrusive::set_base_hook<> {

@@ -128,55 +128,36 @@ WriteLogMapEntries WriteLogMap::find_map_entries(BlockExtent block_extent) {
 }
   
 void WriteLogMap::add_entry_locked(WriteLogEntry *log_entry) {
-  const BlockExtent block_extent = log_entry->block_extent();
   WriteLogMapEntry map_entry(log_entry);
-  WriteLogMapExtent *map_extent;
-  ldout(m_cct, 20) << "block_start=" << block_extent.block_start << ", "
-		   << "block_end=" << block_extent.block_end << ", "
+  ldout(m_cct, 20) << "block_extent=" << map_entry.block_extent << ", "
 		   << "free_slots=" << m_free_map_extents.size()
 		   << dendl;
   assert(m_lock.is_locked_by_me());
-  WriteLogMapEntries overlap_entries = find_map_entries_locked(block_extent);
+  WriteLogMapEntries overlap_entries = find_map_entries_locked(map_entry.block_extent);
   if (overlap_entries.size()) {
     for (auto &entry : overlap_entries) {
       ldout(m_cct, 20) << entry << dendl;
-      if ((block_extent.block_start <= entry.block_extent.block_start) &&
-	  (block_extent.block_end >= entry.block_extent.block_end)) {
-	ldout(m_cct, 20) << "map entry completely occluded by new log entry" << dendl;
-	remove_map_entry_locked(entry);
-	
+      if (map_entry.block_extent.block_start <= entry.block_extent.block_start) {
+	if (map_entry.block_extent.block_end >= entry.block_extent.block_end) {
+	  ldout(m_cct, 20) << "map entry completely occluded by new log entry" << dendl;
+	  remove_map_entry_locked(entry);
+	} else {
+	  assert(map_entry.block_extent.block_end < entry.block_extent.block_end);
+	  /* The new entry occludes the beginning of the old entry */
+	  BlockExtent adjusted_extent(map_entry.block_extent.block_end+1,
+				      entry.block_extent.block_end);
+	  adjust_map_entry_locked(entry, adjusted_extent);
+	}
+      } else {
+	assert(map_entry.block_extent.block_start > entry.block_extent.block_start);
+	/* The new entry occludes the end of the old entry */
+	BlockExtent adjusted_extent(entry.block_extent.block_start,
+				    map_entry.block_extent.block_start-1);
+	adjust_map_entry_locked(entry, adjusted_extent);
       }
     }
-// #if 0
-//     auto it = m_detained_block_extents.find(block_extent);
-//     if (it != m_detained_block_extents.end()) {
-//       // request against an already detained block
-//       detained_block_extent = &(*it);
-//       if (map_entry != nullptr) {
-//         detained_block_extent->block_operations.emplace_back(
-// 							     std::move(*map_entry));
-//       }
-      
-//       // alert the caller that the IO was detained
-//       return detained_block_extent->block_operations.size();
-// #endif
-  } else {
-    add_map_entry_locked(map_entry);
-    // if (!m_free_map_extents.empty()) {
-    //   map_extent = &m_free_map_extents.front();
-    //   m_free_map_extents.pop_front();
-    // } else {
-    //   ldout(m_cct, 20) << "no free map entries" << dendl;
-    //   m_map_extent_pool.emplace_back();
-    //   map_extent = &m_map_extent_pool.back();
-    // }
-    
-    // map_extent->map_entry.block_extent = block_extent;
-    // map_extent->map_entry.log_entry = log_entry;
-    // log_entry->referring_map_entries++;
-    // m_block_to_log_entry_map.insert(*map_extent);
-    //return 0;
   }
+  add_map_entry_locked(map_entry);
 }
 
 void WriteLogMap::remove_entry_locked(WriteLogEntry *log_entry) {
@@ -220,7 +201,7 @@ void WriteLogMap::add_map_entry_locked(WriteLogMapEntry &map_entry)
   m_block_to_log_entry_map.insert(*map_extent);
 }
 
-void WriteLogMap::remove_map_entry_locked(WriteLogMapEntry map_entry)
+void WriteLogMap::remove_map_entry_locked(WriteLogMapEntry &map_entry)
 {
   auto it = m_block_to_log_entry_map.find(map_entry.block_extent);
   assert(it != m_block_to_log_entry_map.end());
@@ -229,6 +210,20 @@ void WriteLogMap::remove_map_entry_locked(WriteLogMapEntry map_entry)
   map_entry.log_entry->referring_map_entries--;
   WriteLogMapExtent *map_extent = &(*it);
   m_free_map_extents.push_front(*map_extent);
+  if (0 == map_entry.log_entry->referring_map_entries) {
+    ldout(m_cct, 20) << "log entry has zero map entries: " << map_entry.log_entry << dendl;
+  }
+}
+
+void WriteLogMap::adjust_map_entry_locked(WriteLogMapEntry &map_entry, BlockExtent &new_extent)
+{
+  auto it = m_block_to_log_entry_map.find(map_entry.block_extent);
+  assert(it != m_block_to_log_entry_map.end());
+
+  m_block_to_log_entry_map.erase(map_entry.block_extent);
+  WriteLogMapExtent *map_extent = &(*it);
+  map_extent->map_entry.block_extent = new_extent;
+  m_block_to_log_entry_map.insert(*map_extent);
 }
 
 #if 0
@@ -249,7 +244,7 @@ WriteLogEntries WriteLogMap::find_entries_locked(BlockExtent block_extent) {
  * TODO: Generalize this to do some arbitrary thing to each map
  * extent, instead of returning a list.
  */
-WriteLogMapEntries WriteLogMap::find_map_entries_locked(BlockExtent block_extent) {
+WriteLogMapEntries WriteLogMap::find_map_entries_locked(BlockExtent &block_extent) {
   WriteLogMapEntries overlaps;
   WriteLogMapExtent *map_extent;
   
