@@ -808,6 +808,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->bl.clear();
   c->bl.push_back(buffer::create_static(len, buf));
   c->blp = &c->bl;
+  c->out_buf = buf;
 
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc,
@@ -1630,6 +1631,8 @@ void librados::IoCtxImpl::C_aio_Ack::finish(int r)
   c->cond.Signal();
 
   if (r == 0 && c->blp && c->blp->length() > 0) {
+    if (c->out_buf && !c->blp->is_provided_buffer(c->out_buf))
+      c->blp->copy(0, c->blp->length(), c->out_buf);
     c->rval = c->blp->length();
   }
 
