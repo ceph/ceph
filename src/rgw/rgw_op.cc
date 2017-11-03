@@ -1135,7 +1135,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
 {
   ldout(s->cct, 20) << "user manifest obj=" << ent.key.name << "[" << ent.key.instance << "]" << dendl;
   RGWGetObj_CB cb(this);
-  RGWGetDataCB* filter = &cb;
+  RGWGetObj_Filter* filter = &cb;
   boost::optional<RGWGetObj_Decompress> decompress;
 
   int64_t cur_ofs = start_ofs;
@@ -1719,9 +1719,9 @@ void RGWGetObj::execute()
   int64_t ofs_x, end_x;
 
   RGWGetObj_CB cb(this);
-  RGWGetDataCB* filter = (RGWGetDataCB*)&cb;
+  RGWGetObj_Filter* filter = (RGWGetObj_Filter *)&cb;
   boost::optional<RGWGetObj_Decompress> decompress;
-  std::unique_ptr<RGWGetDataCB> decrypt;
+  std::unique_ptr<RGWGetObj_Filter> decrypt;
   map<string, bufferlist>::iterator attr_iter;
 
   perfcounter->inc(l_rgw_get);
@@ -3309,7 +3309,7 @@ void RGWPutObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-class RGWPutObj_CB : public RGWGetDataCB
+class RGWPutObj_CB : public RGWGetObj_Filter
 {
   RGWPutObj *op;
 public:
@@ -3334,9 +3334,9 @@ int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
 {
   RGWPutObj_CB cb(this);
-  RGWGetDataCB* filter = &cb;
+  RGWGetObj_Filter* filter = &cb;
   boost::optional<RGWGetObj_Decompress> decompress;
-  std::unique_ptr<RGWGetDataCB> decrypt;
+  std::unique_ptr<RGWGetObj_Filter> decrypt;
   RGWCompressionInfo cs_info;
   map<string, bufferlist> attrs;
   map<string, bufferlist>::iterator attr_iter;

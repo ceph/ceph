@@ -296,28 +296,10 @@ struct RGWUsageIter {
 };
 
 class RGWGetDataCB {
-protected:
-  uint64_t extra_data_len;
 public:
   virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) = 0;
-  RGWGetDataCB() : extra_data_len(0) {}
+  RGWGetDataCB() {}
   virtual ~RGWGetDataCB() {}
-  virtual void set_extra_data_len(uint64_t len) {
-    extra_data_len = len;
-  }
-  /**
-   * Flushes any cached data. Used by RGWGetObjFilter.
-   * Return logic same as handle_data.
-   */
-  virtual int flush() {
-    return 0;
-  }
-  /**
-   * Allows to extend fetch range of RGW object. Used by RGWGetObjFilter.
-   */
-  virtual int fixup_range(off_t& bl_ofs, off_t& bl_end) {
-    return 0;
-  }
 };
 
 class RGWAccessListFilter {

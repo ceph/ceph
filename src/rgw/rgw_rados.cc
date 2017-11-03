@@ -7346,7 +7346,7 @@ bool RGWRados::aio_completed(void *handle)
   return c->is_safe();
 }
 
-class RGWRadosPutObj : public RGWGetDataCB
+class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
 {
   CephContext* cct;
   rgw_obj obj;
@@ -7361,6 +7361,7 @@ class RGWRadosPutObj : public RGWGetDataCB
   uint64_t extra_data_left;
   uint64_t data_len;
   map<string, bufferlist> src_attrs;
+  off_t ofs{0};
 public:
   RGWRadosPutObj(CephContext* cct,
                  CompressorRef& plugin,
@@ -7402,7 +7403,7 @@ public:
     return 0;
   }
 
-  int handle_data(bufferlist& bl, off_t ofs, off_t len) override {
+  int handle_data(bufferlist& bl, bool *pause) override {
     if (progress_cb) {
       progress_cb(ofs, progress_data);
     }
@@ -7444,6 +7445,8 @@ public:
       if (ret < 0)
         return ret;
 
+      ofs += size;
+
       if (need_opstate && opstate) {
         /* need to update opstate repository with new state. This is ratelimited, so we're not
          * really doing it every time
@@ -7475,7 +7478,7 @@ public:
 
   void set_extra_data_len(uint64_t len) override {
     extra_data_left = len;
-    RGWGetDataCB::set_extra_data_len(len);
+    RGWHTTPStreamRWRequest::ReceiveCB::set_extra_data_len(len);
   }
 
   uint64_t get_data_len() {
@@ -7625,11 +7628,12 @@ inline ostream& operator<<(ostream& out, const obj_time_weight &o) {
   return out;
 }
 
-class RGWGetExtraDataCB : public RGWGetDataCB {
+class RGWGetExtraDataCB : public RGWHTTPStreamRWRequest::ReceiveCB {
   bufferlist extra_data;
 public:
   RGWGetExtraDataCB() {}
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+  int handle_data(bufferlist& bl, bool *pause) override {
+    int bl_len = (int)bl.length();
     if (extra_data.length() < extra_data_len) {
       off_t max = extra_data_len - extra_data.length();
       if (max > bl_len) {

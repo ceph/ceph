@@ -276,63 +276,6 @@ void RGWIOProvider::assign_io(RGWIOIDProvider& io_id_provider, int io_type)
 }
 
 /*
- * the simple set of callbacks will be called on RGWHTTPClient::process()
- */
-/* Static methods - callbacks for libcurl. */
-size_t RGWHTTPClient::simple_receive_http_header(void * const ptr,
-                                                 const size_t size,
-                                                 const size_t nmemb,
-                                                 void * const _info)
-{
-  RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  const size_t len = size * nmemb;
-  int ret = client->receive_header(ptr, size * nmemb);
-  if (ret < 0) {
-    dout(0) << "WARNING: client->receive_header() returned ret="
-            << ret << dendl;
-  }
-
-  return len;
-}
-
-size_t RGWHTTPClient::simple_receive_http_data(void * const ptr,
-                                               const size_t size,
-                                               const size_t nmemb,
-                                               void * const _info)
-{
-  RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  const size_t len = size * nmemb;
-  int ret = client->receive_data(ptr, size * nmemb);
-  if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret="
-            << ret << dendl;
-  }
-
-  return len;
-}
-
-size_t RGWHTTPClient::simple_send_http_data(void * const ptr,
-                                            const size_t size,
-                                            const size_t nmemb,
-                                            void * const _info)
-{
-  RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  bool pause = false;
-  int ret = client->send_data(ptr, size * nmemb, &pause);
-  if (ret < 0) {
-    dout(0) << "WARNING: client->send_data() returned ret="
-            << ret << dendl;
-  }
-
-  if (ret == 0 &&
-      pause) {
-    return CURL_READFUNC_PAUSE;
-  }
-
-  return ret;
-}
-
-/*
  * the following set of callbacks will be called either on RGWHTTPManager::process(),
  * or via the RGWHTTPManager async processing.
  */
@@ -366,15 +309,32 @@ size_t RGWHTTPClient::receive_http_data(void * const ptr,
   rgw_http_req_data *req_data = static_cast<rgw_http_req_data *>(_info);
   size_t len = size * nmemb;
 
+  bool pause = false;
+
+  size_t skip_bytes = req_data->client->receive_pause_skip;
+
+  if (skip_bytes >= len) {
+    skip_bytes -= len;
+    return len;
+  }
+
   Mutex::Locker l(req_data->lock);
   
   if (!req_data->registered) {
     return len;
   }
   
-  int ret = req_data->client->receive_data(ptr, size * nmemb);
+  int ret = req_data->client->receive_data((char *)ptr + skip_bytes, len - skip_bytes, &pause);
   if (ret < 0) {
     dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+  }
+
+  skip_bytes = 0;
+ 
+  if (pause) {
+    skip_bytes = len;
+  } else {
+    skip_bytes = 0;
   }
 
   return len;

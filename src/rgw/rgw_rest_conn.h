@@ -118,7 +118,7 @@ public:
     bool sync_manifest{false};
 
     bool skip_decrypt{true};
-    RGWGetDataCB *cb{nullptr};
+    RGWHTTPStreamRWRequest::ReceiveCB *cb{nullptr};
 
     bool range_is_set{false};
     uint64_t range_start{0};
@@ -131,7 +131,7 @@ public:
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
-              bool skip_decrypt, bool send, RGWGetDataCB *cb, RGWRESTStreamRWRequest **req);
+              bool skip_decrypt, bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
   int complete_request(RGWRESTStreamRWRequest *req, string& etag, ceph::real_time *mtime, uint64_t *psize, map<string, string>& attrs);
 
   int get_resource(const string& resource,
@@ -180,13 +180,13 @@ int RGWRESTConn::get_json_resource(const string& resource,  const rgw_http_param
   return get_json_resource(resource, &params, t);
 }
 
-class RGWStreamIntoBufferlist : public RGWGetDataCB {
+class RGWStreamIntoBufferlist : public RGWHTTPStreamRWRequest::ReceiveCB {
   bufferlist& bl;
 public:
   RGWStreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
-  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) override {
+  int handle_data(bufferlist& inbl, bool *pause) override {
     bl.claim_append(inbl);
-    return bl_len;
+    return inbl.length();
   }
 };
 

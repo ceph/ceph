@@ -162,7 +162,7 @@ int RGWHTTPSimpleRequest::send_data(void *ptr, size_t len)
   return len;
 }
 
-int RGWHTTPSimpleRequest::receive_data(void *ptr, size_t len)
+int RGWHTTPSimpleRequest::receive_data(void *ptr, size_t len, bool *pause)
 {
   size_t cp_len, left_len;
 
@@ -747,18 +747,27 @@ int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val)
   return 0;
 }
 
-int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len)
+int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
 {
+  size_t orig_len = len;
+
   if (cb) {
     bufferptr bp((const char *)ptr, len);
-    bufferlist bl;
-    bl.append(bp);
-    int ret = cb->handle_data(bl, ofs, len);
+    in_data.append(bp);
+    int ret = cb->handle_data(in_data, pause);
     if (ret < 0)
       return ret;
+    if (ret == 0) {
+      in_data.clear();
+    } else {
+      /* partial read */
+      len = ret;
+      bufferlist bl;
+      in_data.splice(0, len, &bl);
+    }
   }
   ofs += len;
-  return len;
+  return orig_len;
 }
 
 void RGWHTTPStreamRWRequest::set_stream_write(bool s) {
