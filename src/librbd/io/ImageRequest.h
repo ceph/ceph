@@ -110,8 +110,12 @@ public:
     m_throttled_flag |= flag;
   }
 
-  uint64_t get_length() {
-    return m_length;
+  uint64_t tokens_requested(uint64_t flag) {
+    if (flag == RBD_IMAGE_BPS_THROTTLE) {
+      return m_length;
+    }
+
+    return 1;
   }
 
 protected:

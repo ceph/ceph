@@ -98,8 +98,7 @@ private:
   std::atomic<unsigned> m_in_flight_writes { 0 };
   std::atomic<unsigned> m_io_blockers { 0 };
 
-  TokenBucketThrottle *iops_throttle;
-  TokenBucketThrottle *bps_throttle;
+  std::list<std::pair<uint64_t, TokenBucketThrottle*> > m_throttles;
 
   bool m_shutdown = false;
   Context *m_on_shutdown = nullptr;
@@ -114,6 +113,9 @@ private:
     RWLock::RLocker locker(m_lock);
     return (m_queued_writes == 0);
   }
+
+  bool needs_throttle(ImageRequest<ImageCtxT> *item);
+  void set_qos_limit(uint64_t limit, const uint64_t flag);
 
   void finish_queued_io(ImageRequest<ImageCtxT> *req);
   void finish_in_flight_write();
