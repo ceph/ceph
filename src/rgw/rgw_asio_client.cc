@@ -3,21 +3,17 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/asio/write.hpp>
-#include <beast/http/read.hpp>
 
 #include "rgw_asio_client.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-#undef dout_prefix
-#define dout_prefix (*_dout << "asio: ")
-
 using namespace rgw::asio;
 
 ClientIO::ClientIO(tcp::socket& socket,
                    parser_type& parser,
-                   beast::flat_streambuf& buffer)
+                   beast::flat_buffer& buffer)
   : socket(socket), parser(parser), buffer(buffer), txbuf(*this)
 {
 }
@@ -29,22 +25,19 @@ void ClientIO::init_env(CephContext *cct)
   env.init(cct);
 
   const auto& request = parser.get();
-  const auto& headers = request.fields;
+  const auto& headers = request;
   for (auto header = headers.begin(); header != headers.end(); ++header) {
-    const auto& name = header->name();
+    const auto& field = header->name(); // enum type for known headers
+    const auto& name = header->name_string();
     const auto& value = header->value();
 
-    if (boost::algorithm::iequals(name, "content-length")) {
+    if (field == beast::http::field::content_length) {
       env.set("CONTENT_LENGTH", value);
       continue;
     }
-    if (boost::algorithm::iequals(name, "content-type")) {
+    if (field == beast::http::field::content_type) {
       env.set("CONTENT_TYPE", value);
       continue;
-    }
-    if (boost::algorithm::iequals(name, "connection")) {
-      conn_keepalive = boost::algorithm::iequals(value, "keep-alive");
-      conn_close = boost::algorithm::iequals(value, "close");
     }
 
     static const boost::string_ref HTTP_{"HTTP_"};
@@ -63,15 +56,15 @@ void ClientIO::init_env(CephContext *cct)
     env.set(buf, value);
   }
 
-  int major = request.version / 10;
-  int minor = request.version % 10;
+  int major = request.version() / 10;
+  int minor = request.version() % 10;
   std::string http_version = std::to_string(major) + '.' + std::to_string(minor);
   env.set("HTTP_VERSION", http_version);
 
-  env.set("REQUEST_METHOD", request.method);
+  env.set("REQUEST_METHOD", request.method_string());
 
   // split uri from query
-  auto url = boost::string_ref{request.url};
+  auto url = request.target();
   auto pos = url.find('?');
   auto query = url.substr(pos + 1);
   url = url.substr(0, pos);
@@ -104,20 +97,18 @@ size_t ClientIO::write_data(const char* buf, size_t len)
 size_t ClientIO::read_data(char* buf, size_t max)
 {
   auto& message = parser.get();
-  auto& body_remaining = message.body;
-  body_remaining = boost::asio::mutable_buffer{buf, max};
-
-  boost::system::error_code ec;
+  auto& body_remaining = message.body();
+  body_remaining.data = buf;
+  body_remaining.size = max;
 
   dout(30) << this << " read_data for " << max << " with "
       << buffer.size() << " bytes buffered" << dendl;
 
-  while (boost::asio::buffer_size(body_remaining) && !parser.is_complete()) {
-    auto bytes = beast::http::read_some(socket, buffer, parser, ec);
-    buffer.consume(bytes);
-    if (ec == boost::asio::error::connection_reset ||
-        ec == boost::asio::error::eof ||
-        ec == beast::http::error::partial_message) {
+  while (body_remaining.size && !parser.is_done()) {
+    boost::system::error_code ec;
+    beast::http::read_some(socket, buffer, parser, ec);
+    if (ec == beast::http::error::partial_message ||
+        ec == beast::http::error::need_buffer) {
       break;
     }
     if (ec) {
@@ -125,7 +116,7 @@ size_t ClientIO::read_data(char* buf, size_t max)
       throw rgw::io::Exception(ec.value(), std::system_category());
     }
   }
-  return max - boost::asio::buffer_size(body_remaining);
+  return max - body_remaining.size;
 }
 
 size_t ClientIO::complete_request()
@@ -180,10 +171,10 @@ size_t ClientIO::complete_header()
     sent += txbuf.sputn(timestr, strlen(timestr));
   }
 
-  if (conn_keepalive) {
+  if (parser.is_keep_alive()) {
     constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
     sent += txbuf.sputn(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
-  } else if (conn_close) {
+  } else {
     constexpr char CONN_KEEP_CLOSE[] = "Connection: close\r\n";
     sent += txbuf.sputn(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
   }
