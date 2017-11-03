@@ -1,7 +1,6 @@
 tasks:
 - install:
 - ceph:
-    fs: btrfs
 - ceph-fuse: [client.0]
 - workunit:
     clients:
