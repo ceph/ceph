@@ -18,6 +18,7 @@
    ../../man/8/ceph-dencoder.rst
    ../../man/8/ceph-mon.rst
    ../../man/8/ceph-osd.rst
+   ../../man/8/ceph-kvstore-tool.rst
    ../../man/8/ceph-run.rst
    ../../man/8/ceph-syn.rst
    ../../man/8/crushtool.rst
