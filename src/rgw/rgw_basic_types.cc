@@ -33,10 +33,5 @@ ostream& operator <<(ostream& m, const Principal& p) {
   }
   return m << (p.is_user() ? "user/" : "role/") << p.get_id();
 }
-string to_string(const Principal& p) {
-  stringstream s;
-  s << p;
-  return s.str();
-}
 }
 }
