@@ -3835,7 +3835,10 @@ void CInode::validate_disk_state(CInode::validated_data *results,
     }
 
     ~ValidationContinuation() override {
-      delete shadow_in;
+      if (shadow_in) {
+	delete shadow_in;
+	in->mdcache->num_shadow_inodes--;
+      }
     }
 
     /**
@@ -3999,10 +4002,11 @@ next:
       assert(in->is_dir());
 
       if (in->is_base()) {
-        shadow_in = new CInode(in->mdcache);
-        in->mdcache->create_unlinked_system_inode(shadow_in,
-                                                  in->inode.ino,
-                                                  in->inode.mode);
+	if (!shadow_in) {
+	  shadow_in = new CInode(in->mdcache);
+	  in->mdcache->create_unlinked_system_inode(shadow_in, in->inode.ino, in->inode.mode);
+	  in->mdcache->num_shadow_inodes++;
+	}
         shadow_in->fetch(get_internal_callback(INODE));
         return false;
       } else {
