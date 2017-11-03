@@ -437,7 +437,9 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
 	string valstr = str_join(val, " ");
         int r = _conf->set_val(var.c_str(), valstr.c_str());
         if (r < 0) {
-          f->dump_stream("error") << "error setting '" << var << "' to '" << valstr << "': " << cpp_strerror(r);
+          f->dump_stream("error") << "error setting '" 
+                                  << var << "' to '" << valstr << "': "
+                                  << "No such key";
         } else {
           ostringstream ss;
           _conf->apply_changes(&ss);
@@ -454,7 +456,9 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
 	char *tmp = buf;
 	int r = _conf->get_val(var.c_str(), &tmp, sizeof(buf));
 	if (r < 0) {
-	    f->dump_stream("error") << "error getting '" << var << "': " << cpp_strerror(r);
+          f->dump_stream("error") << "error getting '"
+                                  << var << "': "
+                                  << "No such key";
 	} else {
 	    f->dump_string(var.c_str(), buf);
 	}
