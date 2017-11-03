@@ -1,3 +1,9 @@
 * The 'mon_warn_osd_usage_min_max_delta' health warning has been disabled because
   it does not address clusters undergoing recovery or CRUSH rules that do
   not target all devices in the cluster.
+
+* The OSDs now avoid starting new scrubs while recovery is in progress.  To
+  revert to the old behavior (and do not let recovery activity affect the
+  scrub scheduling) you can set the following option::
+
+    osd scrub during recovery = true
