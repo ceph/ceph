@@ -62,6 +62,209 @@ WriteLogOperation::WriteLogOperation(WriteLogOperationSet *set, uint64_t image_o
 void WriteLogOperation::complete(int result) {
 }
 
+/**
+ * Add a write log entry to the map. Subsequent queries for blocks
+ * within this log entry's extent will find this log entry. Portions
+ * of prior write log entries overlapping with this log entry will
+ * be replaced in the map by this log entry.
+ *
+ * The map_entries field of the log entry object will be updated to
+ * contain this map entry.
+ *
+ * The map_entries fields of all log entries overlapping with this
+ * entry will be updated to remove the regions that overlap with
+ * this.
+ */
+int WriteLogMap::add_entry(WriteLogEntry *log_entry) {
+  Mutex::Locker locker(m_lock);
+  add_entry_locked(log_entry);
+}
+
+int WriteLogMap::add_entries(WriteLogEntries &log_entries) {
+  Mutex::Locker locker(m_lock);
+  ldout(m_cct, 20) << dendl;
+  for (auto &log_entry : log_entries) {
+    add_entry_locked(log_entry);
+  }
+}
+  
+/**
+ * Remove any map entries that refer to the supplied write log
+ * entry.
+ */
+void WriteLogMap::remove_entry(WriteLogEntry *log_entry) {
+  Mutex::Locker locker(m_lock);
+  remove_entry_locked(log_entry);
+}
+
+int WriteLogMap::remove_entries(WriteLogEntries &log_entries) {
+  Mutex::Locker locker(m_lock);
+  ldout(m_cct, 20) << dendl;
+  for (auto &log_entry : log_entries) {
+    remove_entry_locked(log_entry);
+  }
+}
+
+#if 0
+/**
+ * Returns the list of all write log entries that overlap the
+ * specified block extent.
+ */
+WriteLogEntries WriteLogMap::find_entries(BlockExtent block_extent) {
+  Mutex::Locker locker(m_lock);
+  ldout(m_cct, 20) << dendl;
+  return find_entries_locked(block_extent);
+}
+#endif
+
+/**
+ * Returns the list of all write log map entries that overlap the
+ * specified block extent.
+ */
+WriteLogMapEntries WriteLogMap::find_map_entries(BlockExtent block_extent) {
+  Mutex::Locker locker(m_lock);
+  ldout(m_cct, 20) << dendl;
+  return find_map_entries_locked(block_extent);
+}
+  
+void WriteLogMap::add_entry_locked(WriteLogEntry *log_entry) {
+  const BlockExtent block_extent = log_entry->block_extent();
+  WriteLogMapEntry map_entry(log_entry);
+  WriteLogMapExtent *map_extent;
+  ldout(m_cct, 20) << "block_start=" << block_extent.block_start << ", "
+		   << "block_end=" << block_extent.block_end << ", "
+		   << "free_slots=" << m_free_map_extents.size()
+		   << dendl;
+  assert(m_lock.is_locked_by_me());
+  WriteLogMapEntries overlap_entries = find_map_entries_locked(block_extent);
+  if (overlap_entries.size()) {
+    for (auto &entry : overlap_entries) {
+      ldout(m_cct, 20) << entry << dendl;
+      if ((block_extent.block_start <= entry.block_extent.block_start) &&
+	  (block_extent.block_end >= entry.block_extent.block_end)) {
+	ldout(m_cct, 20) << "map entry completely occluded by new log entry" << dendl;
+	remove_map_entry_locked(entry);
+	
+      }
+    }
+// #if 0
+//     auto it = m_detained_block_extents.find(block_extent);
+//     if (it != m_detained_block_extents.end()) {
+//       // request against an already detained block
+//       detained_block_extent = &(*it);
+//       if (map_entry != nullptr) {
+//         detained_block_extent->block_operations.emplace_back(
+// 							     std::move(*map_entry));
+//       }
+      
+//       // alert the caller that the IO was detained
+//       return detained_block_extent->block_operations.size();
+// #endif
+  } else {
+    add_map_entry_locked(map_entry);
+    // if (!m_free_map_extents.empty()) {
+    //   map_extent = &m_free_map_extents.front();
+    //   m_free_map_extents.pop_front();
+    // } else {
+    //   ldout(m_cct, 20) << "no free map entries" << dendl;
+    //   m_map_extent_pool.emplace_back();
+    //   map_extent = &m_map_extent_pool.back();
+    // }
+    
+    // map_extent->map_entry.block_extent = block_extent;
+    // map_extent->map_entry.log_entry = log_entry;
+    // log_entry->referring_map_entries++;
+    // m_block_to_log_entry_map.insert(*map_extent);
+    //return 0;
+  }
+}
+
+void WriteLogMap::remove_entry_locked(WriteLogEntry *log_entry) {
+  ldout(m_cct, 20) << "*log_entry=" << *log_entry << dendl;
+  assert(m_lock.is_locked_by_me());
+  
+#if 0
+    assert(cell != nullptr);
+    auto &detained_block_extent = reinterpret_cast<WriteLogMapExtent &>(
+      *cell);
+    ldout(m_cct, 20) << "block_start="
+                     << detained_block_extent.block_extent.block_start << ", "
+                     << "block_end="
+                     << detained_block_extent.block_extent.block_end << ", "
+                     << "pending_ops="
+                     << (detained_block_extent.block_operations.empty() ?
+                          0 : detained_block_extent.block_operations.size() - 1)
+                     << dendl;
+
+    *block_operations = std::move(detained_block_extent.block_operations);
+    m_detained_block_extents.erase(detained_block_extent.block_extent);
+    m_free_detained_block_extents.push_back(detained_block_extent);
+#endif
+}
+
+void WriteLogMap::add_map_entry_locked(WriteLogMapEntry &map_entry)
+{
+  WriteLogMapExtent *map_extent;
+
+  if (!m_free_map_extents.empty()) {
+    map_extent = &m_free_map_extents.front();
+    m_free_map_extents.pop_front();
+  } else {
+    ldout(m_cct, 20) << "no free map entries" << dendl;
+    m_map_extent_pool.emplace_back();
+    map_extent = &m_map_extent_pool.back();
+  }
+  
+  map_extent->map_entry = map_entry;
+  map_entry.log_entry->referring_map_entries++;
+  m_block_to_log_entry_map.insert(*map_extent);
+}
+
+void WriteLogMap::remove_map_entry_locked(WriteLogMapEntry map_entry)
+{
+  auto it = m_block_to_log_entry_map.find(map_entry.block_extent);
+  assert(it != m_block_to_log_entry_map.end());
+
+  m_block_to_log_entry_map.erase(map_entry.block_extent);
+  map_entry.log_entry->referring_map_entries--;
+  WriteLogMapExtent *map_extent = &(*it);
+  m_free_map_extents.push_front(*map_extent);
+}
+
+#if 0
+WriteLogEntries WriteLogMap::find_entries_locked(BlockExtent block_extent) {
+  WriteLogEntries overlaps;
+  ldout(m_cct, 20) << "block_extent=" << block_extent << dendl;
+  
+  assert(m_lock.is_locked_by_me());
+  WriteLogMapEntries map_entries = find_map_entries_locked(block_extent);
+  for (auto &map_entry : map_entries) {
+    overlaps.emplace_back(map_entry.log_entry);
+  }
+  return overlaps;
+}
+#endif
+
+/**
+ * TODO: Generalize this to do some arbitrary thing to each map
+ * extent, instead of returning a list.
+ */
+WriteLogMapEntries WriteLogMap::find_map_entries_locked(BlockExtent block_extent) {
+  WriteLogMapEntries overlaps;
+  WriteLogMapExtent *map_extent;
+  
+  ldout(m_cct, 20) << "block_extent=" << block_extent << dendl;
+  assert(m_lock.is_locked_by_me());
+  auto p = m_block_to_log_entry_map.equal_range(block_extent);
+  ldout(m_cct, 20) << "count=" << std::distance(p.first, p.second) << dendl;
+  for ( auto i = p.first; i != p.second; ++i ) {
+    map_extent = &(*i);
+    overlaps.emplace_back(map_extent->map_entry);
+    ldout(m_cct, 20) << map_extent->map_entry << dendl;
+  }
+  return overlaps;
+}
+
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
   for (auto &extent : image_extents) {
     if (extent.first % BLOCK_SIZE != 0 || extent.second % BLOCK_SIZE != 0) {
@@ -169,14 +372,16 @@ public:
 template <typename I>
 void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
                                  int fadvise_flags, Context *on_finish) {
-  //CephContext *cct = m_image_ctx.cct;
-  //ldout(cct, 20) << "image_extents=" << image_extents << ", "
-  //               << "on_finish=" << on_finish << dendl;
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "image_extents=" << image_extents << ", "
+                 << "on_finish=" << on_finish << dendl;
 
   for (auto &extent : image_extents) {
-    WriteLogEntries log_entries = m_blocks_to_log_entries.find_entries(block_extent(extent));
+    WriteLogMapEntries map_entries = m_blocks_to_log_entries.find_map_entries(block_extent(extent));
+    for (auto &entry : map_entries) {
+      ldout(cct, 20) << entry << dendl;
+    }
   }
-
   
   if (m_image_ctx.persistent_cache_enabled) {
     m_image_cache.aio_read(std::move(image_extents), bl, fadvise_flags, on_finish);

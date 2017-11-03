@@ -16,7 +16,11 @@
 #include "librbd/cache/file/Policy.h"
 #include "librbd/BlockGuard.h"
 #include <functional>
+#include <boost/intrusive/list.hpp>
+#include <boost/intrusive/set.hpp>
+#include <deque>
 #include <list>
+#include "include/assert.h"
 
 namespace librbd {
 
@@ -277,17 +281,24 @@ typedef librbd::BlockGuard<GuardedRequest> WriteLogGuard;
  */
 /* A WriteLogMapEntry refers to a portion of a WriteLogEntry */
 struct WriteLogMapEntry {
-  uint64_t first_block_num;
-  uint64_t last_block_num;
+  BlockExtent block_extent;
   WriteLogEntry *log_entry;
   
-  WriteLogMapEntry(uint64_t first_block_num, uint64_t last_block_num, WriteLogEntry *log_entry)
-    : first_block_num(first_block_num), last_block_num(last_block_num), log_entry(log_entry) {
-    log_entry->referring_map_entries++;
+  WriteLogMapEntry(BlockExtent block_extent, WriteLogEntry *log_entry)
+    : block_extent(block_extent) , log_entry(log_entry) {
   }
-  ~WriteLogMapEntry() {
-    log_entry->referring_map_entries--;
+  WriteLogMapEntry(WriteLogEntry *log_entry)
+    : block_extent(log_entry->block_extent()) , log_entry(log_entry) {
   }
+  WriteLogMapEntry(void)
+    : block_extent(0, 0) , log_entry(NULL) {
+  }
+  friend std::ostream &operator<<(std::ostream &os,
+				  WriteLogMapEntry &e) {
+    os << "block_extent=" << e.block_extent << ", "
+       << "log_entry=[" << e.log_entry << "]";
+    return os;
+  };
 };
 typedef std::list<WriteLogMapEntry> WriteLogMapEntries;
 class WriteLogMap {
@@ -302,151 +313,30 @@ public:
   WriteLogMap(const WriteLogMap&) = delete;
   WriteLogMap &operator=(const WriteLogMap&) = delete;
 
-  /**
-   * Add a write log entry to the map. Subsequent queries for blocks
-   * within this log entry's extent will find this log entry. Portions
-   * of prior write log entries overlapping with this log entry will
-   * be replaced in the map by this log entry.
-   *
-   * The map_entries field of the log entry object will be updated to
-   * contain this map entry.
-   *
-   * The map_entries fields of all log entries overlapping with this
-   * entry will be updated to remove the regions that overlap with
-   * this.
-   */
-  int add_entry(WriteLogEntry *log_entry) {
-    Mutex::Locker locker(m_lock);
-    return add_entry_locked(log_entry);
-  }
-
-  int add_entries(WriteLogEntries &log_entries) {
-    Mutex::Locker locker(m_lock);
-    ldout(m_cct, 20) << dendl;
-    for (auto &log_entry : log_entries) {
-      add_entry_locked(log_entry);
-    }
-  }
-  
-  /**
-   * Remove any map entries that refer to the supplied write log
-   * entry.
-   */
-  void remove_entry(WriteLogEntry *log_entry) {
-    Mutex::Locker locker(m_lock);
-    remove_entry_locked(log_entry);
-  }
-
-  int remove_entries(WriteLogEntries &log_entries) {
-    Mutex::Locker locker(m_lock);
-    ldout(m_cct, 20) << dendl;
-    for (auto &log_entry : log_entries) {
-      remove_entry_locked(log_entry);
-    }
-  }
-
-  /**
-   * Returns the list of all write log entries that overlap the
-   * specified block extent.
-   */
-  WriteLogEntries find_entries(BlockExtent block_extent) {
-    Mutex::Locker locker(m_lock);
-    ldout(m_cct, 20) << dendl;
-    return find_entries_locked(block_extent);
-  }
+  int add_entry(WriteLogEntry *log_entry);
+  int add_entries(WriteLogEntries &log_entries);
+  void remove_entry(WriteLogEntry *log_entry);
+  int remove_entries(WriteLogEntries &log_entries);
+  //WriteLogEntries find_entries(BlockExtent block_extent);
+  WriteLogMapEntries find_map_entries(BlockExtent block_extent);
   
 private:
-  int add_entry_locked(WriteLogEntry *log_entry) {
-    const BlockExtent block_extent = log_entry->block_extent();
-    ldout(m_cct, 20) << "block_start=" << block_extent.block_start << ", "
-                     << "block_end=" << block_extent.block_end << ", "
-                     << "free_slots=" << m_free_map_extents.size()
-                     << dendl;
-    assert(m_lock.is_locked_by_me());
-#if 0
-    WriteLogMapExtent *detained_block_extent;
-    auto it = m_detained_block_extents.find(block_extent);
-    if (it != m_detained_block_extents.end()) {
-      // request against an already detained block
-      detained_block_extent = &(*it);
-      if (map_entry != nullptr) {
-        detained_block_extent->block_operations.emplace_back(
-          std::move(*map_entry));
-      }
-
-      // alert the caller that the IO was detained
-      return detained_block_extent->block_operations.size();
-    } else {
-      if (!m_free_map_extents.empty()) {
-        detained_block_extent = &m_free_map_extents.front();
-        detained_block_extent->block_operations.clear();
-        m_free_map_extents.pop_front();
-      } else {
-        ldout(m_cct, 20) << "no free detained block cells" << dendl;
-        m_detained_block_extent_pool.emplace_back();
-        detained_block_extent = &m_detained_block_extent_pool.back();
-      }
-
-      detained_block_extent->block_extent = block_extent;
-      m_detained_block_extents.insert(*detained_block_extent);
-      return 0;
-    }
-#endif
-  }
-
-  void remove_entry_locked(WriteLogEntry *log_entry) {
-    ldout(m_cct, 20) << dendl;
-    assert(m_lock.is_locked_by_me());
-
-#if 0
-    assert(cell != nullptr);
-    auto &detained_block_extent = reinterpret_cast<WriteLogMapExtent &>(
-      *cell);
-    ldout(m_cct, 20) << "block_start="
-                     << detained_block_extent.block_extent.block_start << ", "
-                     << "block_end="
-                     << detained_block_extent.block_extent.block_end << ", "
-                     << "pending_ops="
-                     << (detained_block_extent.block_operations.empty() ?
-                          0 : detained_block_extent.block_operations.size() - 1)
-                     << dendl;
-
-    *block_operations = std::move(detained_block_extent.block_operations);
-    m_detained_block_extents.erase(detained_block_extent.block_extent);
-    m_free_detained_block_extents.push_back(detained_block_extent);
-#endif
-  }
-
-  WriteLogEntries find_entries_locked(BlockExtent block_extent) {
-    WriteLogEntries overlaps;
-    ldout(m_cct, 20) << dendl;
-
-    assert(m_lock.is_locked_by_me());
-    WriteLogMapEntries map_entries = find_map_entries_locked(block_extent);
-    for (auto &map_entry : map_entries) {
-      overlaps.emplace_back(map_entry.log_entry);
-    }
-    return overlaps;
-  }
-
-  WriteLogMapEntries find_map_entries_locked(BlockExtent block_extent) {
-    WriteLogMapEntries overlaps;
-
-    ldout(m_cct, 20) << dendl;
-    assert(m_lock.is_locked_by_me());
-    return overlaps;
-  }
+  void add_entry_locked(WriteLogEntry *log_entry);
+  void remove_entry_locked(WriteLogEntry *log_entry);
+  void add_map_entry_locked(WriteLogMapEntry &map_entry);
+  void remove_map_entry_locked(WriteLogMapEntry map_entry);
+  //WriteLogEntries find_entries_locked(BlockExtent block_extent);
+  WriteLogMapEntries find_map_entries_locked(BlockExtent block_extent);
 
   struct WriteLogMapExtent : public boost::intrusive::list_base_hook<>,
 			     public boost::intrusive::set_base_hook<> {
-    BlockExtent block_extent;
     WriteLogMapEntry map_entry;
   };
 
   struct WriteLogMapExtentKey {
     typedef BlockExtent type;
     const BlockExtent &operator()(const WriteLogMapExtent &value) {
-      return value.block_extent;
+      return value.map_entry.block_extent;
     }
   };
 
