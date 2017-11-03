@@ -917,7 +917,7 @@ def wait_until_osds_up(ctx, cluster, remote, ceph_cluster='ceph'):
     """Wait until all Ceph OSDs are booted."""
     num_osds = num_instances_of_type(cluster, 'osd', ceph_cluster)
     testdir = get_testdir(ctx)
-    with safe_while(sleep=6, tries=50) as proceed:
+    with safe_while(sleep=6, tries=90) as proceed:
         while proceed():
             daemons = ctx.daemons.iter_daemons_of_role('osd', ceph_cluster)
             for daemon in daemons:
