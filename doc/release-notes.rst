@@ -787,7 +787,7 @@ Upgrade compatibility notes, Kraken to Luminous
   pool set ...`` commands.
 
 * The ``osd pool default crush replicated ruleset`` option has been
-  removed and replaced by the ``psd pool default crush rule`` option.
+  removed and replaced by the ``osd pool default crush rule`` option.
   By default it is -1, which means the mon will pick the first type
   replicated rule in the CRUSH map for replicated pools.  Erasure
   coded pools have rules that are automatically created for them if
