@@ -151,8 +151,8 @@ protected:
   void export_go_synced(CDir *dir, uint64_t tid);
   void export_try_cancel(CDir *dir, bool notify_peer=true);
   void export_cancel_finish(CDir *dir);
-  void export_reverse(CDir *dir);
-  void export_notify_abort(CDir *dir, set<CDir*>& bounds);
+  void export_reverse(CDir *dir, export_state_t& stat);
+  void export_notify_abort(CDir *dir, export_state_t& stat, set<CDir*>& bounds);
   void handle_export_ack(MExportDirAck *m);
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(MExportDirNotifyAck *m);
@@ -175,7 +175,7 @@ protected:
 
   void import_reverse_discovering(dirfrag_t df);
   void import_reverse_discovered(dirfrag_t df, CInode *diri);
-  void import_reverse_prepping(CDir *dir);
+  void import_reverse_prepping(CDir *dir, import_state_t& stat);
   void import_remove_pins(CDir *dir, set<CDir*>& bounds);
   void import_reverse_unfreeze(CDir *dir);
   void import_reverse_final(CDir *dir);
