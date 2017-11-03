@@ -173,8 +173,8 @@ target_link_libraries(unittest_erasure_code_example
   )
 set_target_properties(unittest_erasure_code_example PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
-include_directories(${CMAKE_SOURCE_DIR}/src/erasure-code/jerasure/jerasure/include)
-include_directories(${CMAKE_SOURCE_DIR}/src/erasure-code//jerasure/gf-complete/include)
+include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/src/erasure-code/jerasure/jerasure/include)
+include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/src/erasure-code//jerasure/gf-complete/include)
 
 # unittest_erasure_code_jerasure
 add_executable(unittest_erasure_code_jerasure
