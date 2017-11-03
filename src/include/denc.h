@@ -231,6 +231,13 @@ namespace _denc {
     std::true_type,
     is_any_of<T, Tail...>>::type
   {};
+  template<typename T, typename=void> struct underlying_type {
+    using type = T;
+  };
+  template<typename T> struct underlying_type<
+    T, typename std::enable_if<std::is_enum<T>::value>::type> {
+    using type = typename std::underlying_type<T>::type;
+  };
 }
 
 
@@ -238,7 +245,8 @@ template<typename T>
 struct denc_traits<
   T,
   typename std::enable_if<
-    _denc::is_any_of<T, ceph_le64, ceph_le32, ceph_le16, uint8_t
+    _denc::is_any_of<typename _denc::underlying_type<T>::type,
+		     ceph_le64, ceph_le32, ceph_le16, uint8_t
 #ifndef _CHAR_IS_SIGNED
 		     , int8_t
 #endif

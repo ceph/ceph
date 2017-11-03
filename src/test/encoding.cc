@@ -264,6 +264,23 @@ void encode<ceph_le64, denc_traits<ceph_le64>>(const ceph_le64&,
   ASSERT_TRUE(false);
 }
 
+namespace {
+  // search `underlying_type` in denc.h for supported underlying types
+  enum class Colour : int8_t { R,G,B };
+  ostream& operator<<(ostream& os, Colour c) {
+    switch (c) {
+    case Colour::R:
+      return os << "Colour::R";
+    case Colour::G:
+      return os << "Colour::G";
+    case Colour::B:
+      return os << "Colour::B";
+    default:
+      return os << "Colour::???";
+    }
+  }
+}
+
 TEST(EncodingRoundTrip, Integers) {
   // int types
   {
@@ -287,6 +304,16 @@ TEST(EncodingRoundTrip, Integers) {
     ceph_le64 i;
     i = 42;
     test_encode_and_decode(i);
+  }
+  // enum
+  {
+    test_encode_and_decode(Colour::R);
+    // this should not build, as the size of unsigned is not the same on
+    // different archs, that's why denc_traits<> intentionally leaves
+    // `int` and `unsigned int` out of supported types.
+    //
+    // enum E { R, G, B };
+    // test_encode_and_decode(R);
   }
 }
 
