@@ -2,6 +2,7 @@ import errno
 import os
 import pwd
 import platform
+import tempfile
 import uuid
 from ceph_volume import process
 from . import as_string
@@ -66,6 +67,36 @@ def chown(path, recursive=True):
         process.run(['chown', '-R', 'ceph:ceph', path])
     else:
         os.chown(path, uid, gid)
+
+
+class tmp_mount(object):
+    """
+    Temporarily mount a device on a temporary directory,
+    and unmount it upon exit
+    """
+
+    def __init__(self, device):
+        self.device = device
+        self.path = None
+
+    def __enter__(self):
+        self.path = tempfile.mkdtemp()
+        process.run([
+            'sudo',
+            'mount',
+            '-v',
+            self.device,
+            self.path
+        ])
+        return self.path
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        process.run([
+            'sudo',
+            'umount',
+            '-v',
+            self.path
+        ])
 
 
 def path_is_mounted(path, destination=None):
