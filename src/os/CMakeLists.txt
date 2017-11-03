@@ -57,7 +57,7 @@ if(HAVE_LIBZFS)
   add_library(os_zfs_objs OBJECT
     filestore/ZFSFileStoreBackend.cc
     fs/ZFS.cc)
-  target_include_directories(os_zfs_objs PRIVATE
+  target_include_directories(os_zfs_objs SYSTEM PRIVATE
     ${ZFS_INCLUDE_DIRS})
   list(APPEND libos_srcs $<TARGET_OBJECTS:os_zfs_objs>)
 endif()
@@ -72,7 +72,7 @@ add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 if(WITH_BLUEFS)
   add_library(bluefs SHARED 
     bluestore/BlueRocksEnv.cc)
-  target_include_directories(bluefs PUBLIC ${ROCKSDB_INCLUDE_DIR})
+  target_include_directories(bluefs SYSTEM PUBLIC ${ROCKSDB_INCLUDE_DIR})
   target_link_libraries(bluefs global)
   install(TARGETS bluefs DESTINATION lib)
 endif(WITH_BLUEFS)
@@ -94,6 +94,7 @@ if(WITH_SPDK)
     ${SPDK_LIBRARIES}
     ${DPDK_LIBRARIES})
   target_include_directories(os
+    SYSTEM
     PRIVATE
     ${DPDK_INCLUDE_DIR})
 endif(WITH_SPDK)
@@ -118,7 +119,7 @@ if(WITH_BLUESTORE)
 endif()
 
 if(WITH_SPDK)
-  include_directories("${CMAKE_SOURCE_DIR}/src/spdk/include")
+  include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/spdk/include")
   add_custom_target(build_spdk
     COMMAND
     $(MAKE) DPDK_INC_DIR=${DPDK_INCLUDE_DIR}
@@ -159,7 +160,7 @@ if(WITH_PMEM)
   set_target_properties(pmem PROPERTIES
     IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/nvml/src/nondebug/libpmem.a")
   target_link_libraries(os pmem)
-  target_include_directories(os PRIVATE "${CMAKE_BINARY_DIR}/src/nvml/src/include")
+  target_include_directories(os SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/src/nvml/src/include")
 endif(WITH_PMEM)
 
 if(WITH_LTTNG AND WITH_EVENTTRACE)

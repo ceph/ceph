@@ -363,7 +363,7 @@ add_library(crush_objs OBJECT ${crush_srcs})
 
 add_subdirectory(json_spirit)
 
-include_directories("${CMAKE_SOURCE_DIR}/src/xxHash")
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
 set(GMOCK_INCLUDE_DIRS
@@ -375,7 +375,7 @@ include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/src")
 include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 
 # needed for source files that friend unit tests (e.g., using FRIEND_TEST)
-include_directories("${CMAKE_SOURCE_DIR}/src/googletest/googletest/include")
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include")
 
 set(xio_common_srcs)
 if(HAVE_XIO)
@@ -727,7 +727,7 @@ if (WITH_MGR)
       mgr/mgr_commands.cc)
   add_executable(ceph-mgr ${mgr_srcs}
                  $<TARGET_OBJECTS:heap_profiler_objs>)
-  target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
+  target_include_directories(ceph-mgr SYSTEM PRIVATE "${PYTHON_INCLUDE_DIRS}")
   target_link_libraries(ceph-mgr osdc client global-static common
       Boost::python ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS ceph-mgr DESTINATION bin)
@@ -1039,14 +1039,14 @@ endif(WITH_KVS)
 if(WITH_RADOSGW)
   set(civetweb_common_files civetweb/src/civetweb.c)
   add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
-  target_include_directories(civetweb_common_objs PRIVATE
+  target_include_directories(civetweb_common_objs SYSTEM PRIVATE
 	"${CMAKE_SOURCE_DIR}/src/civetweb/include")
   set_property(TARGET civetweb_common_objs
     APPEND PROPERTY COMPILE_DEFINITIONS USE_IPV6=1)
   if(USE_OPENSSL)
     set_property(TARGET civetweb_common_objs
       APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1)
-    target_include_directories(civetweb_common_objs PRIVATE
+    target_include_directories(civetweb_common_objs SYSTEM PRIVATE
       "${SSL_INCLUDE_DIR}")
   endif(USE_OPENSSL)
   if (LIBSSL_SONAME)
