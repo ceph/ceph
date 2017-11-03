@@ -1624,10 +1624,10 @@ void PG::activate(ObjectStore::Transaction& t,
     if (intersection == info.purged_snaps) {
       snap_trimq.subtract(info.purged_snaps);
     } else {
-        dout(0) << "warning: info.purged_snaps (" << info.purged_snaps
-                << ") is not a subset of pool.cached_removed_snaps ("
-                << pool.cached_removed_snaps << ")" << dendl;
-        snap_trimq.subtract(intersection);
+      dout(0) << "warning: info.purged_snaps (" << info.purged_snaps
+	      << ") is not a subset of removed_snaps" << dendl;
+      snap_trimq.subtract(intersection);
+      assert(!cct->_conf->osd_debug_verify_cached_snaps);
     }
   }
 
@@ -3523,8 +3523,8 @@ void PG::update_snap_map(
  */
 void PG::filter_snapc(vector<snapid_t> &snaps)
 {
-  //nothing needs to trim, we can return immediately
-  if(snap_trimq.empty() && info.purged_snaps.empty())
+  // nothing needs to trim, we can return immediately
+  if (snap_trimq.empty() && info.purged_snaps.empty())
     return;
 
   bool filtering = false;
