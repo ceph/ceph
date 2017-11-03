@@ -125,6 +125,7 @@ protected:
 
   /* needs to be called under req_lock() */
   void _set_write_paused(bool pause);
+  void _set_read_paused(bool pause);
 public:
   static const long HTTP_STATUS_NOSTATUS     = 0;
   static const long HTTP_STATUS_UNAUTHORIZED = 401;
@@ -277,14 +278,16 @@ enum RGWHTTPRequestSetState {
   SET_NOP = 0,
   SET_WRITE_PAUSED = 1,
   SET_WRITE_RESUME = 2,
+  SET_READ_PAUSED  = 3,
+  SET_READ_RESUME  = 4,
 };
 
 class RGWHTTPManager {
   struct set_state {
     rgw_http_req_data *req;
-    RGWHTTPRequestSetState state;
+    int bitmask;
 
-    set_state(rgw_http_req_data *_req, RGWHTTPRequestSetState _state) : req(_req), state(_state) {}
+    set_state(rgw_http_req_data *_req, int _bitmask) : req(_req), bitmask(_bitmask) {}
   };
   CephContext *cct;
   RGWCompletionManager *completion_mgr;
