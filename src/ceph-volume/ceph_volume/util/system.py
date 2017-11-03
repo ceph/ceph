@@ -69,6 +69,18 @@ def chown(path, recursive=True):
         os.chown(path, uid, gid)
 
 
+def is_binary(path):
+    """
+    Detect if a file path is a binary or not. Will falsely report as binary
+    when utf-16 encoded. In the ceph universe there is no such risk (yet)
+    """
+    with open(path, 'rb') as fp:
+        contents = fp.read(8192)
+    if b'\x00' in contents:  # a null byte may signal binary
+        return True
+    return False
+
+
 class tmp_mount(object):
     """
     Temporarily mount a device on a temporary directory,
