@@ -928,12 +928,6 @@ ostream& operator <<(ostream& m, const MaskedIP& ip) {
   return m;
 }
 
-string to_string(const MaskedIP& m) {
-  stringstream ss;
-  ss << m;
-  return ss.str();
-}
-
 bool Condition::eval(const Environment& env) const {
   auto i = env.find(key);
   if (op == TokenID::Null) {
@@ -1217,12 +1211,6 @@ ostream& operator <<(ostream& m, const Condition& c) {
   m << ": { " << c.key;
   print_array(m, c.vals.cbegin(), c.vals.cend());
   return m << "}";
-}
-
-string to_string(const Condition& c) {
-  stringstream ss;
-  ss << c;
-  return ss.str();
 }
 
 Effect Statement::eval(const Environment& e,
@@ -1518,12 +1506,6 @@ ostream& operator <<(ostream& m, const Statement& s) {
   return m << " }";
 }
 
-string to_string(const Statement& s) {
-  stringstream m;
-  m << s;
-  return m.str();
-}
-
 Policy::Policy(CephContext* cct, const string& tenant,
 	       const bufferlist& _text)
   : text(_text.to_str()) {
@@ -1572,12 +1554,6 @@ ostream& operator <<(ostream& m, const Policy& p) {
     m << ", ";
   }
   return m << " }";
-}
-
-string to_string(const Policy& p) {
-  stringstream s;
-  s << p;
-  return s.str();
 }
 
 }

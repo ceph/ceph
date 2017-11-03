@@ -247,7 +247,6 @@ struct MaskedIP {
 };
 
 std::ostream& operator <<(std::ostream& m, const MaskedIP& ip);
-string to_string(const MaskedIP& m);
 
 inline bool operator ==(const MaskedIP& l, const MaskedIP& r) {
   auto shift = std::max((l.v6 ? 128 : 32) - l.prefix,
@@ -398,8 +397,6 @@ struct Condition {
 
 std::ostream& operator <<(std::ostream& m, const Condition& c);
 
-std::string to_string(const Condition& c);
-
 struct Statement {
   boost::optional<std::string> sid = boost::none;
 
@@ -424,7 +421,6 @@ struct Statement {
 };
 
 std::ostream& operator <<(ostream& m, const Statement& s);
-std::string to_string(const Statement& s);
 
 struct PolicyParseException : public std::exception {
   rapidjson::ParseResult pr;
@@ -452,7 +448,6 @@ struct Policy {
 };
 
 std::ostream& operator <<(ostream& m, const Policy& p);
-std::string to_string(const Policy& p);
 }
 }
 

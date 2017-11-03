@@ -177,7 +177,6 @@ public:
 };
 
 std::ostream& operator <<(std::ostream& m, const Principal& p);
-std::string to_string(const Principal& p);
 }
 }
 
