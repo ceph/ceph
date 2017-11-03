@@ -52,6 +52,12 @@ namespace dpdk {
     }
 
     bool done = false;
+    const char *hexstring = c->_conf->get_val<std::string>("ms_dpdk_coremaskbit").c_str();
+    int num = (int)strtol(hexstring, NULL, 0);
+    unsigned int coremaskbit = bitcount(num);
+
+    ceph_assert(coremaskbit > c->_conf->ms_async_op_threads);
+
     t = std::thread([&]() {
       // TODO: Inherit these from the app parameters - "opts"
       std::vector<std::vector<char>> args {
