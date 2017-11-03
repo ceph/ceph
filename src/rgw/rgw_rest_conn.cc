@@ -198,7 +198,7 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, con
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, bool get_op, bool rgwx_stat,
                          bool sync_manifest, bool skip_decrypt,
-                         bool send, RGWGetDataCB *cb, RGWRESTStreamRWRequest **req)
+                         bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req)
 {
   get_obj_params params;
   params.uid = uid;

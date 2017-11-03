@@ -516,7 +516,7 @@ bool AES_256_ECB_encrypt(CephContext* cct,
 
 
 RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(CephContext* cct,
-                                               RGWGetDataCB* next,
+                                               RGWGetObj_Filter* next,
                                                std::unique_ptr<BlockCrypt> crypt):
     RGWGetObj_Filter(next),
     cct(cct),

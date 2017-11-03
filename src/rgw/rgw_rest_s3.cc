@@ -339,7 +339,7 @@ send_data:
   return 0;
 }
 
-int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetDataCB> *filter, RGWGetDataCB* cb, bufferlist* manifest_bl)
+int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> *filter, RGWGetObj_Filter* cb, bufferlist* manifest_bl)
 {
   if (skip_decrypt) { // bypass decryption for multisite sync requests
     return 0;
@@ -1466,8 +1466,8 @@ static inline void set_attr(map<string, bufferlist>& attrs, const char* key, con
 }
 
 int RGWPutObj_ObjStore_S3::get_decrypt_filter(
-    std::unique_ptr<RGWGetDataCB>* filter,
-    RGWGetDataCB* cb,
+    std::unique_ptr<RGWGetObj_Filter>* filter,
+    RGWGetObj_Filter* cb,
     map<string, bufferlist>& attrs,
     bufferlist* manifest_bl)
 {

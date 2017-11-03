@@ -10,7 +10,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-class RGWCRHTTPGetDataCB : public RGWGetDataCB {
+class RGWCRHTTPGetDataCB : public RGWHTTPStreamRWRequest::ReceiveCB {
   Mutex lock;
   RGWCoroutinesEnv *env;
   RGWCoroutine *cr;
@@ -21,12 +21,14 @@ class RGWCRHTTPGetDataCB : public RGWGetDataCB {
 public:
   RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, const rgw_io_id& _io_id) : lock("RGWCRHTTPGetDataCB"), env(_env), cr(_cr), io_id(_io_id) {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+  int handle_data(bufferlist& bl, bool *pause) override {
     {
+      uint64_t bl_len = bl.length();
+
       Mutex::Locker l(lock);
 
       if (!got_all_extra_data) {
-        off_t max = extra_data_len - extra_data.length();
+        uint64_t max = extra_data_len - extra_data.length();
         if (max > bl_len) {
           max = bl_len;
         }
@@ -35,15 +37,11 @@ public:
         got_all_extra_data = extra_data.length() == extra_data_len;
       }
 
-      if (bl_len == bl.length()) {
-        data.append(bl);
-      } else {
-        bl.splice(0, bl_len, &data);
-      }
+      data.append(bl);
     }
 
 #define GET_DATA_WINDOW_SIZE 1 * 1024 * 1024
-    if (bl.length() >= GET_DATA_WINDOW_SIZE) {
+    if (data.length() >= GET_DATA_WINDOW_SIZE) {
       env->manager->io_complete(cr, io_id);
     }
     return 0;

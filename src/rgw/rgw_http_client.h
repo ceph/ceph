@@ -68,6 +68,8 @@ class RGWHTTPClient : public RGWIOProvider
   size_t send_len;
   bool has_send_len;
   long http_status;
+  size_t receive_pause_skip{0}; /* how many bytes to skip next time receive_data is called
+                                   due to being paused */
 
   void *user_info{nullptr};
 
@@ -93,7 +95,7 @@ protected:
   virtual int receive_header(void *ptr, size_t len) {
     return 0;
   }
-  virtual int receive_data(void *ptr, size_t len) {
+  virtual int receive_data(void *ptr, size_t len, bool *pause) {
     return 0;
   }
   virtual int send_data(void *ptr, size_t len, bool *pause) {
@@ -104,28 +106,16 @@ protected:
   }
 
   /* Callbacks for libcurl. */
-  static size_t simple_receive_http_header(void *ptr,
-                                           size_t size,
-                                           size_t nmemb,
-                                           void *_info);
   static size_t receive_http_header(void *ptr,
                                     size_t size,
                                     size_t nmemb,
                                     void *_info);
 
-  static size_t simple_receive_http_data(void *ptr,
-                                         size_t size,
-                                         size_t nmemb,
-                                         void *_info);
   static size_t receive_http_data(void *ptr,
                                   size_t size,
                                   size_t nmemb,
                                   void *_info);
 
-  static size_t simple_send_http_data(void *ptr,
-                                      size_t size,
-                                      size_t nmemb,
-                                      void *_info);
   static size_t send_http_data(void *ptr,
                                size_t size,
                                size_t nmemb,
@@ -231,14 +221,6 @@ public:
 protected:
   int receive_header(void *ptr, size_t len) override;
 
-  int receive_data(void *ptr, size_t len) override {
-    return 0;
-  }
-
-  int send_data(void *ptr, size_t len) override {
-    return 0;
-  }
-
 private:
   const std::set<header_name_t, ltstr_nocase> relevant_headers;
   std::map<header_name_t, header_value_t, ltstr_nocase> found_headers;
@@ -280,7 +262,7 @@ public:
 protected:
   int send_data(void* ptr, size_t len) override;
 
-  int receive_data(void *ptr, size_t len) override {
+  int receive_data(void *ptr, size_t len, bool *pause) override {
     read_bl->append((char *)ptr, len);
     return 0;
   }

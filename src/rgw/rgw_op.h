@@ -180,6 +180,46 @@ public:
   virtual int error_handler(int err_no, string *error_content);
 };
 
+class RGWGetObj_Filter : public RGWGetDataCB
+{
+protected:
+  RGWGetObj_Filter *next{nullptr};
+public:
+  RGWGetObj_Filter() {}
+  RGWGetObj_Filter(RGWGetObj_Filter *next): next(next) {}
+  ~RGWGetObj_Filter() override {}
+  /**
+   * Passes data through filter.
+   * Filter can modify content of bl.
+   * When bl_len == 0 , it means 'flush
+   */
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+    if (next) {
+      return next->handle_data(bl, bl_ofs, bl_len);
+    }
+    return 0;
+  }
+  /**
+   * Flushes any cached data. Used by RGWGetObjFilter.
+   * Return logic same as handle_data.
+   */
+  virtual int flush() {
+    if (next) {
+      return next->flush();
+    }
+    return 0;
+  }
+  /**
+   * Allows filter to extend range required for successful filtering
+   */
+  virtual int fixup_range(off_t& ofs, off_t& end) {
+    if (next) {
+      return next->fixup_range(ofs, end);
+    }
+    return 0;
+  }
+};
+
 class RGWGetObj : public RGWOp {
 protected:
   seed torrent; // get torrent
@@ -281,13 +321,13 @@ public:
   /**
    * calculates filter used to decrypt RGW objects data
    */
-  virtual int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter, RGWGetDataCB* cb, bufferlist* manifest_bl) {
+  virtual int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter, RGWGetObj_Filter* cb, bufferlist* manifest_bl) {
     *filter = nullptr;
     return 0;
   }
 };
 
-class RGWGetObj_CB : public RGWGetDataCB
+class RGWGetObj_CB : public RGWGetObj_Filter
 {
   RGWGetObj *op;
 public:
@@ -296,36 +336,6 @@ public:
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
     return op->get_data_cb(bl, bl_ofs, bl_len);
-  }
-};
-
-class RGWGetObj_Filter : public RGWGetDataCB
-{
-protected:
-  RGWGetDataCB* next;
-public:
-  RGWGetObj_Filter(RGWGetDataCB* next): next(next) {}
-  ~RGWGetObj_Filter() override {}
-  /**
-   * Passes data through filter.
-   * Filter can modify content of bl.
-   * When bl_len == 0 , it means 'flush
-   */
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
-    return next->handle_data(bl, bl_ofs, bl_len);
-  }
-  /**
-   * Flushes any cached data. Used by RGWGetObjFilter.
-   * Return logic same as handle_data.
-   */
-  int flush() override {
-    return next->flush();
-  }
-  /**
-   * Allows filter to extend range required for successful filtering
-   */
-  int fixup_range(off_t& ofs, off_t& end) override {
-    return next->fixup_range(ofs, end);
   }
 };
 
@@ -1041,8 +1051,8 @@ public:
   void execute() override;
 
   /* this is for cases when copying data from other object */
-  virtual int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter,
-                                 RGWGetDataCB* cb,
+  virtual int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
+                                 RGWGetObj_Filter* cb,
                                  map<string, bufferlist>& attrs,
                                  bufferlist* manifest_bl) {
     *filter = nullptr;
