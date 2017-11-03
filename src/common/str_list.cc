@@ -62,6 +62,13 @@ void get_str_list(const string& str, list<string>& str_list)
   return get_str_list(str, delims, str_list);
 }
 
+list<string> get_str_list(const string& str, const char *delims)
+{
+  list<string> result;
+  get_str_list(str, delims, result);
+  return result;
+}
+
 void get_str_vec(const string& str, const char *delims, vector<string>& str_vec)
 {
   size_t pos = 0;
@@ -81,6 +88,13 @@ void get_str_vec(const string& str, vector<string>& str_vec)
 {
   const char *delims = ";,= \t";
   return get_str_vec(str, delims, str_vec);
+}
+
+vector<string> get_str_vec(const string& str, const char *delims)
+{
+  vector<string> result;
+  get_str_vec(str, delims, result);
+  return result;
 }
 
 void get_str_set(const string& str, const char *delims, set<string>& str_set)
@@ -103,4 +117,11 @@ void get_str_set(const string& str, set<string>& str_set)
 {
   const char *delims = ";,= \t";
   return get_str_set(str, delims, str_set);
+}
+
+set<string> get_str_set(const string& str, const char *delims)
+{
+  set<string> result;
+  get_str_set(str, delims, result);
+  return result;
 }

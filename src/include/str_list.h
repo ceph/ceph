@@ -26,6 +26,9 @@ extern void get_str_list(const std::string& str,
                          const char *delims,
 			 std::list<std::string>& str_list);
 
+std::list<std::string> get_str_list(const std::string& str,
+                                    const char *delims = ";,= \t");
+
 /**
  * Split **str** into a list of strings, using the ";,= \t" delimiters and output the result in **str_vec**.
  * 
@@ -46,6 +49,8 @@ extern void get_str_vec(const std::string& str,
                          const char *delims,
 			 std::vector<std::string>& str_vec);
 
+std::vector<std::string> get_str_vec(const std::string& str,
+                                     const char *delims = ";,= \t");
 /**
  * Split **str** into a list of strings, using the ";,= \t" delimiters and output the result in **str_list**.
  * 
@@ -65,6 +70,9 @@ extern void get_str_set(const std::string& str,
 extern void get_str_set(const std::string& str,
                         const char *delims,
 			std::set<std::string>& str_list);
+
+std::set<std::string> get_str_set(const std::string& str,
+                                  const char *delims = ";,= \t");
 
 /**
  * Return a String containing the vector **v** joined with **sep**
@@ -88,14 +96,6 @@ inline std::string str_join(const std::vector<std::string>& v, const std::string
     r += *i;
   }
   return r;
-}
-
-static inline std::vector<std::string> get_str_vec(const std::string& str)
-{
-  std::vector<std::string> str_vec;
-  const char *delims = ";,= \t";
-  get_str_vec(str, delims, str_vec);
-  return str_vec;
 }
 
 #endif
