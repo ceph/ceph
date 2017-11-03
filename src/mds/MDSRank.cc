@@ -1097,7 +1097,7 @@ void MDSRank::boot_start(BootStep step, int r)
 	MDSGatherBuilder gather(g_ceph_context,
 	    new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
 
-	if (!standby_replaying && !purge_queue.is_recovered()) {
+	if (!standby_replaying) {
 	  dout(2) << "boot_start " << step << ": waiting for purge queue recovered" << dendl;
 	  purge_queue.wait_for_recovery(new C_IO_Wrapper(this, gather.new_sub()));
 	}
