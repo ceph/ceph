@@ -872,7 +872,7 @@ OPTION(rocksdb_collect_extended_stats, OPT_BOOL, false) //For rocksdb, this beha
 OPTION(rocksdb_collect_memory_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
 
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
-OPTION(filestore_rocksdb_options, OPT_STR, "max_background_compactions=8;compaction_readahead_size=2097152")
+OPTION(filestore_rocksdb_options, OPT_STR, "max_background_compactions=8;compaction_readahead_size=2097152;compression=kNoCompression")
 // rocksdb options that will be used in monstore
 OPTION(mon_rocksdb_options, OPT_STR, "write_buffer_size=33554432,compression=kNoCompression")
 
