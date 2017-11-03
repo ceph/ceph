@@ -1,5 +1,7 @@
 import argparse
 import os
+from ceph_volume import terminal
+from ceph_volume.util import disk
 
 
 class LVPath(object):
@@ -35,4 +37,35 @@ class LVPath(object):
 
         if error:
             raise argparse.ArgumentError(None, error)
+        return string
+
+
+class OSDPath(object):
+    """
+    Validate path exists and it looks like an OSD directory.
+    """
+
+    def __call__(self, string):
+        if not os.path.exists(string):
+            error = "Path does not exist: %s" % string
+            raise argparse.ArgumentError(None, error)
+
+        arg_is_partition = disk.is_partition(string)
+        if arg_is_partition:
+            return string
+        absolute_path = os.path.abspath(string)
+        if not os.path.isdir(absolute_path):
+            error = "Argument is not a directory or device which is required to scan"
+            raise argparse.ArgumentError(None, error)
+        key_files = ['ceph_fsid', 'fsid', 'keyring', 'ready', 'type', 'whoami']
+        dir_files = os.listdir(absolute_path)
+        for key_file in key_files:
+            if key_file not in dir_files:
+                terminal.error('All following files must exist in path: %s' % ' '.join(key_files))
+                error = "Required file (%s) was not found in OSD dir path: %s" % (
+                    key_file,
+                    absolute_path
+                )
+                raise argparse.ArgumentError(None, error)
+
         return string
