@@ -33,7 +33,7 @@ def download(ctx, config):
     s3_branches = [ 'giant', 'firefly', 'firefly-original', 'hammer' ]
     for (client, cconf) in config.items():
         branch = cconf.get('force-branch', None)
-        branch = ' wip-fix-416'
+        branch = 'wip-fix-416'
         if not branch:
             ceph_branch = ctx.config.get('branch')
             suite_branch = ctx.config.get('suite_branch', ceph_branch)
@@ -51,7 +51,7 @@ def download(ctx, config):
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
-                '-b', branch,
+                '-b', run.Raw(branch),
                 git_remote + 's3-tests.git',
                 '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
