@@ -446,7 +446,6 @@ OPTION(mds_log_max_events, OPT_INT)
 OPTION(mds_log_events_per_segment, OPT_INT)
 OPTION(mds_log_segment_size, OPT_INT)  // segment size for mds log, default to default file_layout_t
 OPTION(mds_log_max_segments, OPT_U32)
-OPTION(mds_log_max_expiring, OPT_INT)
 OPTION(mds_bal_export_pin, OPT_BOOL)  // allow clients to pin directory trees to ranks
 OPTION(mds_bal_sample_interval, OPT_DOUBLE)  // every 3 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT)
