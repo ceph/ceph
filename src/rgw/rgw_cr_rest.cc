@@ -14,12 +14,17 @@ class RGWCRHTTPGetDataCB : public RGWHTTPStreamRWRequest::ReceiveCB {
   Mutex lock;
   RGWCoroutinesEnv *env;
   RGWCoroutine *cr;
+  RGWHTTPStreamRWRequest *req;
   rgw_io_id io_id;
   bufferlist data;
   bufferlist extra_data;
   bool got_all_extra_data{false};
+  bool paused{false};
 public:
-  RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, const rgw_io_id& _io_id) : lock("RGWCRHTTPGetDataCB"), env(_env), cr(_cr), io_id(_io_id) {}
+  RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, RGWHTTPStreamRWRequest *_req) : lock("RGWCRHTTPGetDataCB"), env(_env), cr(_cr), req(_req) {
+    io_id = req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ |RGWHTTPClient::HTTPCLIENT_IO_CONTROL);
+    req->set_in_cb(this);
+  }
 
   int handle_data(bufferlist& bl, bool *pause) override {
     {
@@ -40,25 +45,39 @@ public:
       data.append(bl);
     }
 
-#define GET_DATA_WINDOW_SIZE 1 * 1024 * 1024
-    if (data.length() >= GET_DATA_WINDOW_SIZE) {
+#define GET_DATA_WINDOW_SIZE 2 * 1024 * 1024
+    uint64_t data_len = data.length();
+    if (data_len >= GET_DATA_WINDOW_SIZE) {
       env->manager->io_complete(cr, io_id);
+    }
+    if (data_len >= 2 * GET_DATA_WINDOW_SIZE) {
+      *pause = true;
+      paused = true;
     }
     return 0;
   }
 
   void claim_data(bufferlist *dest, uint64_t max) {
-    Mutex::Locker l(lock);
+    bool need_to_unpause = false;
 
-    if (data.length() == 0) {
-      return;
+    {
+      Mutex::Locker l(lock);
+
+      if (data.length() == 0) {
+        return;
+      }
+
+      if (data.length() < max) {
+        max = data.length();
+      }
+
+      data.splice(0, max, dest);
+      need_to_unpause = (paused && data.length() <= GET_DATA_WINDOW_SIZE);
     }
 
-    if (data.length() < max) {
-      max = data.length();
+    if (need_to_unpause) {
+      req->unpause_receive();
     }
-
-    data.splice(0, max, dest);
   }
 
   bufferlist& get_extra_data() {
@@ -84,9 +103,7 @@ int RGWStreamReadHTTPResourceCRF::init()
 {
   env->stack->init_new_io(req);
 
-  in_cb = new RGWCRHTTPGetDataCB(env, caller, req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ |RGWHTTPClient::HTTPCLIENT_IO_CONTROL));
-
-  req->set_in_cb(in_cb);
+  in_cb = new RGWCRHTTPGetDataCB(env, caller, req);
 
   int r = http_manager->add_request(req);
   if (r < 0) {
@@ -215,7 +232,7 @@ int RGWStreamWriteHTTPResourceCRF::write(bufferlist& data, bool *io_pending)
           /* it's ok to unlock here, even if io_complete() arrives before io_block(), it'll wakeup
            * correctly */
         }
-        yield caller->io_block(0, req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ | RGWHTTPClient::HTTPCLIENT_IO_CONTROL));
+        yield caller->io_block(0, req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_WRITE | RGWHTTPClient::HTTPCLIENT_IO_CONTROL));
       }
       yield req->add_send_data(data);
     }

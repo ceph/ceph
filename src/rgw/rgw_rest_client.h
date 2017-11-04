@@ -130,6 +130,8 @@ public:
   void set_in_cb(ReceiveCB *_cb) { cb = _cb; }
   void set_write_drain_cb(RGWWriteDrainCB *_cb) { write_drain_cb = _cb; }
 
+  void unpause_receive();
+
   void add_send_data(bufferlist& bl);
 
   void set_stream_write(bool s);

@@ -65,7 +65,6 @@ class RGWHTTPClient : public RGWIOProvider
 
   bufferlist send_bl;
   bufferlist::iterator send_iter;
-  size_t send_len;
   bool has_send_len;
   long http_status;
   size_t receive_pause_skip{0}; /* how many bytes to skip next time receive_data is called
@@ -84,6 +83,8 @@ protected:
 
   string method;
   string url;
+
+  size_t send_len{0};
 
   param_vec_t headers;
 
@@ -139,8 +140,7 @@ public:
   explicit RGWHTTPClient(CephContext *cct,
                          const string& _method,
                          const string& _url)
-    : send_len(0),
-      has_send_len(false),
+    : has_send_len(false),
       http_status(HTTP_STATUS_NOSTATUS),
       req_data(nullptr),
       verify_ssl(cct->_conf->rgw_verify_ssl),

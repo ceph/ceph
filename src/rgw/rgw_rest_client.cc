@@ -752,8 +752,10 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
   size_t orig_len = len;
 
   if (cb) {
-    bufferptr bp((const char *)ptr, len);
-    in_data.append(bp);
+    in_data.append((const char *)ptr, len);
+
+    size_t orig_in_data_len = in_data.length();
+
     int ret = cb->handle_data(in_data, pause);
     if (ret < 0)
       return ret;
@@ -761,9 +763,13 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
       in_data.clear();
     } else {
       /* partial read */
+      assert(in_data.length() <= orig_in_data_len);
       len = ret;
       bufferlist bl;
-      in_data.splice(0, len, &bl);
+      size_t left_to_read = orig_in_data_len - len;
+      if (in_data.length() > left_to_read) {
+        in_data.splice(0, in_data.length() - left_to_read, &bl);
+      }
     }
   }
   ofs += len;
@@ -773,6 +779,14 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
 void RGWHTTPStreamRWRequest::set_stream_write(bool s) {
   Mutex::Locker wl(write_lock);
   stream_writes = s;
+}
+
+void RGWHTTPStreamRWRequest::unpause_receive()
+{
+  Mutex::Locker req_locker(get_req_lock());
+  if (!read_paused) {
+    _set_read_paused(false);
+  }
 }
 
 void RGWHTTPStreamRWRequest::add_send_data(bufferlist& bl)
@@ -805,7 +819,8 @@ int RGWHTTPStreamRWRequest::send_data(void *ptr, size_t len, bool *pause)
     Mutex::Locker wl(write_lock);
 
     if (outbl.length() == 0) {
-      if (stream_writes && !write_stream_complete) {
+      if ((stream_writes && !write_stream_complete) ||
+          (write_ofs < send_len)) {
         *pause = true;
       }
       return 0;
