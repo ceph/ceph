@@ -32,6 +32,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         devel/gperf \
         devel/gmake \
         devel/cmake \
+        devel/cunit \
         devel/yasm \
         devel/boost-all \
         devel/boost-python-libs \
@@ -80,7 +81,7 @@ else
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y lsb-release devscripts equivs
-        $SUDO apt-get install -y dpkg-dev gcc
+        $SUDO apt-get install -y dpkg-dev gcc libcunit1-dev
         if ! test -r debian/control ; then
             echo debian/control is not a readable file
             exit 1
@@ -112,6 +113,7 @@ else
             builddepcmd="dnf -y builddep --allowerasing"
         fi
         echo "Using $yumdnf to install dependencies"
+        $SUDO $yumdnf install -y CUnit-devel
         $SUDO $yumdnf install -y redhat-lsb-core
         case $(lsb_release -si) in
             Fedora)

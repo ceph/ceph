@@ -70,7 +70,7 @@ endif()
 add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 
 if(WITH_BLUEFS)
-  add_library(bluefs SHARED 
+  add_library(bluefs SHARED
     bluestore/BlueRocksEnv.cc)
   target_include_directories(bluefs PUBLIC ${ROCKSDB_INCLUDE_DIR})
   target_link_libraries(bluefs global)
@@ -90,7 +90,13 @@ if(HAVE_LIBZFS)
 endif()
 
 if(WITH_SPDK)
-  target_link_libraries(os
+   set(DPDK_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/include)
+   set(check_LIBRARIES ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/lib/librte_eal.a
+                       ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/lib/librte_mempool.a
+                       ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/lib/librte_ring.a
+                       ${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build/lib/librte_mempool_ring.a)
+   set(DPDK_LIBRARIES -Wl,--whole-archive ${check_LIBRARIES} -Wl,--no-whole-archive -lrt)
+   target_link_libraries(os
     ${SPDK_LIBRARIES}
     ${DPDK_LIBRARIES})
   target_include_directories(os
@@ -118,18 +124,20 @@ if(WITH_BLUESTORE)
 endif()
 
 if(WITH_SPDK)
+  include(BuildDPDK)
   include_directories("${CMAKE_SOURCE_DIR}/src/spdk/include")
   add_custom_target(build_spdk
     COMMAND
-    $(MAKE) DPDK_INC_DIR=${DPDK_INCLUDE_DIR}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/lib
+    $(MAKE) DPDK_DIR=${CMAKE_SOURCE_DIR}/src/spdk/dpdk/build
+    DEPENDS build_dpdk
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk
     COMMENT "spdk building")
   # TODO: should use add_library(spdk INTERFACE IMPORTED) instead in new cmake,
   # if INTERFACE is supported.
   foreach(lib nvme log env_dpdk util)
     add_library(spdk_${lib} STATIC IMPORTED)
     add_dependencies(spdk_${lib} build_spdk)
-    target_link_libraries(os PRIVATE spdk_${lib})
+    target_link_libraries(os spdk_${lib})
     set_target_properties(spdk_${lib} PROPERTIES
       IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/spdk/build/lib/libspdk_${lib}.a"
       INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/spdk/include")
