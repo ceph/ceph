@@ -54,6 +54,23 @@ int PyModuleRunner::serve()
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
+    // This is not a very informative log message because it's an
+    // unknown/unexpected exception that we can't say much about.
+
+    // Peek at the exception for the cluster log, before
+    // dumping the backtrace to log log next.
+    PyObject *ptype, *pvalue, *ptraceback;
+    PyErr_Fetch(&ptype, &pvalue, &ptraceback);
+    assert(ptype);
+    assert(pvalue);
+    PyObject *pvalue_str = PyObject_Str(pvalue);
+    std::string exc_msg = PyString_AsString(pvalue_str);
+    Py_DECREF(pvalue_str);
+    PyErr_Restore(ptype, pvalue, ptraceback);
+    
+    clog->error() << "Unhandled exception from module '" << module_name
+                  << "' while running on mgr." << g_conf->name.get_id()
+                  << ": " << exc_msg;
     derr << module_name << ".serve:" << dendl;
     derr << handle_pyerror() << dendl;
     return -EINVAL;

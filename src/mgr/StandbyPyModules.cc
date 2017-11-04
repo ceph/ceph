@@ -34,8 +34,9 @@
 std::string handle_pyerror();
 
 
-StandbyPyModules::StandbyPyModules(MonClient *monc_, const MgrMap &mgr_map_)
-    : monc(monc_), load_config_thread(monc, &state)
+StandbyPyModules::StandbyPyModules(MonClient *monc_, const MgrMap &mgr_map_,
+    LogChannelRef clog_)
+    : monc(monc_), load_config_thread(monc, &state), clog(clog_)
 {
   state.set_mgr_map(mgr_map_);
 }
@@ -86,7 +87,7 @@ int StandbyPyModules::start_one(std::string const &module_name,
   modules[module_name].reset(new StandbyPyModule(
       state,
       module_name, pClass,
-      pMyThreadState));
+      pMyThreadState, clog));
 
   if (modules.size() == 1) {
     load_config_thread.create("LoadConfig");
