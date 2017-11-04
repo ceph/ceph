@@ -1,0 +1,29 @@
+language: cpp
+cache: ccache
+dist: trusty
+sudo: false
+branches:
+  only:
+    - master
+os:
+  - linux
+compiler:
+  - clang
+  - gcc
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - cmake
+      - libgtest-dev
+      - libboost-dev
+before_script:
+  - mkdir build
+  - cd build
+script:
+  - cmake ..
+  - cmake --build . -- -j2 && ctest -V -j2
+env:
+  global:
+    - LANG="en_US.UTF-8"
