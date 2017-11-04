@@ -3,8 +3,8 @@
 set(erasure_plugin_dir ${CMAKE_INSTALL_PKGLIBDIR}/erasure-code)
 
 #jerasure subdir must be before shec so jerasure & neon obj libs are declared
-include_directories(jerasure/jerasure/include)
-include_directories(jerasure/gf-complete/include)
+include_directories(SYSTEM jerasure/jerasure/include)
+include_directories(SYSTEM jerasure/gf-complete/include)
 include_directories(jerasure)
 
 # legacy jerasure flavors. these are left here for backward compatibility

@@ -279,7 +279,7 @@ add_executable(ceph_test_librgw_file
 set_target_properties(ceph_test_librgw_file PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 if(WITH_RADOSGW_FCGI_FRONTEND)
-target_include_directories(ceph_test_librgw_file PRIVATE ${FCGI_INCLUDE_DIR})
+target_include_directories(ceph_test_librgw_file SYSTEM PRIVATE ${FCGI_INCLUDE_DIR})
 endif(WITH_RADOSGW_FCGI_FRONTEND)
 target_link_libraries(ceph_test_librgw_file
   rgw
@@ -324,7 +324,7 @@ add_executable(ceph_test_librgw_file_nfsns
 set_target_properties(ceph_test_librgw_file_nfsns PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 if(WITH_RADOSGW_FCGI_FRONTEND)
-target_include_directories(ceph_test_librgw_file_nfsns PRIVATE ${FCGI_INCLUDE_DIR})
+target_include_directories(ceph_test_librgw_file_nfsns SYSTEM PRIVATE ${FCGI_INCLUDE_DIR})
 endif(WITH_RADOSGW_FCGI_FRONTEND)
 target_link_libraries(ceph_test_librgw_file_nfsns
   rgw
