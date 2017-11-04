@@ -55,28 +55,7 @@ struct rgw_http_req_data : public RefCountedObject {
     return ret;
   }
 
-  void set_state(int bitmask) {
-    Mutex::Locker l(lock);
-    CURLcode rc;
-    int bitmask;
-    switch (state) {
-      case SET_WRITE_PAUSED:
-        bitmask = CURLPAUSE_SEND;
-        break;
-      case SET_WRITE_RESUME:
-        bitmask = CURLPAUSE_CONT;
-        break;
-      default:
-        /* shouldn't really be here */
-        return;
-    }
-
-    rc = curl_easy_pause(**curl_handle, bitmask);
-    if (rc != CURLE_OK) {
-      dout(0) << "ERROR: curl_easy_pause() returned rc=" << rc << dendl;
-    }
-  }
-
+  void set_state(int bitmask);
 
   void finish(int r) {
     Mutex::Locker l(lock);
@@ -313,7 +292,7 @@ size_t RGWHTTPClient::receive_http_data(void * const ptr,
 
   bool pause = false;
 
-  size_t skip_bytes = req_data->client->receive_pause_skip;
+  size_t& skip_bytes = req_data->client->receive_pause_skip;
 
   if (skip_bytes >= len) {
     skip_bytes -= len;
@@ -334,7 +313,9 @@ size_t RGWHTTPClient::receive_http_data(void * const ptr,
   skip_bytes = 0;
  
   if (pause) {
+    dout(20) << "RGWHTTPClient::receive_http_data(): pause" << dendl;
     skip_bytes = len;
+    req_data->read_paused = true;
     return CURL_WRITEFUNC_PAUSE;
   }
 
@@ -983,8 +964,9 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
     return -EINVAL;
   }
 
-  bool suggested_wr_paused;
-  bool suggested_rd_paused;
+  bool suggested_wr_paused = req_data->write_paused;
+  bool suggested_rd_paused = req_data->read_paused;
+
   switch (state) {
     case SET_WRITE_PAUSED:
       suggested_wr_paused = true;
