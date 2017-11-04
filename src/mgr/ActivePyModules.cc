@@ -330,7 +330,7 @@ int ActivePyModules::start_one(std::string const &module_name,
 
   modules[module_name].reset(new ActivePyModule(
       module_name, pClass,
-      pMyThreadState));
+      pMyThreadState, clog));
 
   int r = modules[module_name]->load(this);
   if (r != 0) {
