@@ -19,7 +19,6 @@
 
 #include <iostream>
 #include <string>
-using namespace std;
 
 #include "osd/OSD.h"
 #include "os/ObjectStore.h"
@@ -63,7 +62,7 @@ TracepointProvider::Traits cyg_profile_traits("libcyg_profile_tp.so",
 
 } // anonymous namespace
 
-OSD *osd = NULL;
+OSD *osd = nullptr;
 
 void handle_osd_signal(int signum)
 {
@@ -183,7 +182,7 @@ int main(int argc, const char **argv)
   }
 
   if (get_journal_fsid) {
-    device_path = g_conf->osd_journal;
+    device_path = g_conf->get_val<std::string>("osd_journal");
     get_device_fsid = true;
   }
   if (get_device_fsid) {
@@ -203,8 +202,8 @@ int main(int argc, const char **argv)
     common_init_finish(g_ceph_context);
     bufferlist bl;
     std::string error;
-    int r = bl.read_file(dump_pg_log.c_str(), &error);
-    if (r >= 0) {
+
+    if (bl.read_file(dump_pg_log.c_str(), &error) >= 0) {
       pg_log_entry_t e;
       bufferlist::iterator p = bl.begin();
       while (!p.end()) {
@@ -228,21 +227,22 @@ int main(int argc, const char **argv)
   char *end;
   const char *id = g_conf->name.get_id().c_str();
   int whoami = strtol(id, &end, 10);
+  std::string data_path = g_conf->get_val<std::string>("osd_data");
   if (*end || end == id || whoami < 0) {
     derr << "must specify '-i #' where # is the osd number" << dendl;
     usage();
   }
 
-  if (g_conf->osd_data.empty()) {
+  if (data_path.empty()) {
     derr << "must specify '--osd-data=foo' data path" << dendl;
     usage();
   }
 
   // the store
-  string store_type = g_conf->osd_objectstore;
+  std::string store_type = g_conf->get_val<std::string>("osd_objectstore");
   {
     char fn[PATH_MAX];
-    snprintf(fn, sizeof(fn), "%s/type", g_conf->osd_data.c_str());
+    snprintf(fn, sizeof(fn), "%s/type", data_path.c_str());
     int fd = ::open(fn, O_RDONLY);
     if (fd >= 0) {
       bufferlist bl;
@@ -255,11 +255,14 @@ int main(int argc, const char **argv)
       ::close(fd);
     }
   }
+
+  std::string journal_path = g_conf->get_val<std::string>("osd_journal");
+  uint32_t flags = g_conf->get_val<uint64_t>("osd_os_flags");
   ObjectStore *store = ObjectStore::create(g_ceph_context,
 					   store_type,
-					   g_conf->osd_data,
-					   g_conf->osd_journal,
-                                           g_conf->osd_os_flags);
+					   data_path,
+					   journal_path,
+                                           flags);
   if (!store) {
     derr << "unable to create object store" << dendl;
     return -ENODEV;
@@ -280,21 +283,23 @@ int main(int argc, const char **argv)
     EntityName ename(g_conf->name);
     EntityAuth eauth;
 
-    int ret = keyring->load(g_ceph_context, g_conf->keyring);
+    std::string keyring_path = g_conf->get_val<std::string>("keyring");
+    int ret = keyring->load(g_ceph_context, keyring_path);
     if (ret == 0 &&
 	keyring->get_auth(ename, eauth)) {
-      derr << "already have key in keyring " << g_conf->keyring << dendl;
+      derr << "already have key in keyring " << keyring_path << dendl;
     } else {
       eauth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
       keyring->add(ename, eauth);
       bufferlist bl;
       keyring->encode_plaintext(bl);
-      int r = bl.write_file(g_conf->keyring.c_str(), 0600);
+      int r = bl.write_file(keyring_path.c_str(), 0600);
       if (r)
-	derr << TEXT_RED << " ** ERROR: writing new keyring to " << g_conf->keyring
-	     << ": " << cpp_strerror(r) << TEXT_NORMAL << dendl;
+	derr << TEXT_RED << " ** ERROR: writing new keyring to "
+             << keyring_path << ": " << cpp_strerror(r) << TEXT_NORMAL
+             << dendl;
       else
-	derr << "created new key in keyring " << g_conf->keyring << dendl;
+	derr << "created new key in keyring " << keyring_path << dendl;
     }
   }
   if (mkfs) {
@@ -310,14 +315,14 @@ int main(int argc, const char **argv)
       return -EINVAL;
     }
 
-    int err = OSD::mkfs(g_ceph_context, store, g_conf->osd_data,
-			mc.monmap.fsid, whoami);
+    int err = OSD::mkfs(g_ceph_context, store, data_path, mc.monmap.fsid,
+                        whoami);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating empty object store in "
-	   << g_conf->osd_data << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
+	   << data_path << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
-    dout(0) << "created object store " << g_conf->osd_data
+    dout(0) << "created object store " << data_path
 	    << " for osd." << whoami << " fsid " << mc.monmap.fsid << dendl;
   }
   if (mkfs || mkkey)
@@ -326,13 +331,13 @@ int main(int argc, const char **argv)
     common_init_finish(g_ceph_context);
     int err = store->mkjournal();
     if (err < 0) {
-      derr << TEXT_RED << " ** ERROR: error creating fresh journal " << g_conf->osd_journal
-	   << " for object store " << g_conf->osd_data
-	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
+      derr << TEXT_RED << " ** ERROR: error creating fresh journal "
+           << journal_path << " for object store " << data_path << ": "
+           << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
-    derr << "created new journal " << g_conf->osd_journal
-	 << " for object store " << g_conf->osd_data << dendl;
+    derr << "created new journal " << journal_path
+	 << " for object store " << data_path << dendl;
     exit(0);
   }
   if (check_wants_journal) {
@@ -366,14 +371,14 @@ int main(int argc, const char **argv)
     common_init_finish(g_ceph_context);
     int err = store->mount();
     if (err < 0) {
-      derr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf->osd_journal
-	   << " for object store " << g_conf->osd_data
+      derr << TEXT_RED << " ** ERROR: error flushing journal " << journal_path
+	   << " for object store " << data_path
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       goto flushjournal_out;
     }
     store->umount();
-    derr << "flushed journal " << g_conf->osd_journal
-	 << " for object store " << g_conf->osd_data
+    derr << "flushed journal " << journal_path
+	 << " for object store " << data_path
 	 << dendl;
 flushjournal_out:
     delete store;
@@ -383,13 +388,13 @@ flushjournal_out:
     common_init_finish(g_ceph_context);
     int err = store->dump_journal(cout);
     if (err < 0) {
-      derr << TEXT_RED << " ** ERROR: error dumping journal " << g_conf->osd_journal
-	   << " for object store " << g_conf->osd_data
+      derr << TEXT_RED << " ** ERROR: error dumping journal " << journal_path
+	   << " for object store " << data_path
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
-    derr << "dumped journal " << g_conf->osd_journal
-	 << " for object store " << g_conf->osd_data
+    derr << "dumped journal " << journal_path
+	 << " for object store " << data_path
 	 << dendl;
     exit(0);
 
@@ -399,14 +404,14 @@ flushjournal_out:
   if (convertfilestore) {
     int err = store->mount();
     if (err < 0) {
-      derr << TEXT_RED << " ** ERROR: error mounting store " << g_conf->osd_data
+      derr << TEXT_RED << " ** ERROR: error mounting store " << data_path
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
     err = store->upgrade();
     store->umount();
     if (err < 0) {
-      derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
+      derr << TEXT_RED << " ** ERROR: error converting store " << data_path
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
@@ -419,7 +424,7 @@ flushjournal_out:
   int r = OSD::peek_meta(store, magic, cluster_fsid, osd_fsid, w);
   if (r < 0) {
     derr << TEXT_RED << " ** ERROR: unable to open OSD superblock on "
-	 << g_conf->osd_data << ": " << cpp_strerror(-r)
+	 << data_path << ": " << cpp_strerror(-r)
 	 << TEXT_NORMAL << dendl;
     if (r == -ENOTSUP) {
       derr << TEXT_RED << " **        please verify that underlying storage "
@@ -449,38 +454,48 @@ flushjournal_out:
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC
                                 |CEPH_PICK_ADDRESS_CLUSTER);
 
-  if (g_conf->public_addr.is_blank_ip() && !g_conf->cluster_addr.is_blank_ip()) {
+  entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
+  entity_addr_t caddr = g_conf->get_val<entity_addr_t>("cluster_addr");
+
+
+  if (paddr.is_blank_ip() && !caddr.is_blank_ip()) {
     derr << TEXT_YELLOW
 	 << " ** WARNING: specified cluster addr but not public addr; we recommend **\n"
 	 << " **          you specify neither or both.                             **"
 	 << TEXT_NORMAL << dendl;
   }
 
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
-  std::string cluster_msgr_type = g_conf->ms_cluster_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_cluster_type;
-  Messenger *ms_public = Messenger::create(g_ceph_context, public_msgr_type,
+  std::string msg_type = g_conf->get_val<std::string>("ms_type");
+  std::string public_msg_type =
+    g_conf->get_val<std::string>("ms_public_type");
+  std::string cluster_msg_type =
+    g_conf->get_val<std::string>("ms_cluster_type");
+
+  public_msg_type = public_msg_type.empty() ? msg_type : public_msg_type;
+  cluster_msg_type = cluster_msg_type.empty() ? msg_type : cluster_msg_type;
+  Messenger *ms_public = Messenger::create(g_ceph_context, public_msg_type,
 					   entity_name_t::OSD(whoami), "client",
 					   getpid(),
 					   Messenger::HAS_HEAVY_TRAFFIC |
 					   Messenger::HAS_MANY_CONNECTIONS);
-  Messenger *ms_cluster = Messenger::create(g_ceph_context, cluster_msgr_type,
+  Messenger *ms_cluster = Messenger::create(g_ceph_context, cluster_msg_type,
 					    entity_name_t::OSD(whoami), "cluster",
 					    getpid(),
 					    Messenger::HAS_HEAVY_TRAFFIC |
 					    Messenger::HAS_MANY_CONNECTIONS);
-  Messenger *ms_hb_back_client = Messenger::create(g_ceph_context, cluster_msgr_type,
+  Messenger *ms_hb_back_client = Messenger::create(g_ceph_context, cluster_msg_type,
 					     entity_name_t::OSD(whoami), "hb_back_client",
 					     getpid(), Messenger::HEARTBEAT);
-  Messenger *ms_hb_front_client = Messenger::create(g_ceph_context, public_msgr_type,
+  Messenger *ms_hb_front_client = Messenger::create(g_ceph_context, public_msg_type,
 					     entity_name_t::OSD(whoami), "hb_front_client",
 					     getpid(), Messenger::HEARTBEAT);
-  Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, cluster_msgr_type,
+  Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, cluster_msg_type,
 						   entity_name_t::OSD(whoami), "hb_back_server",
 						   getpid(), Messenger::HEARTBEAT);
-  Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, public_msgr_type,
+  Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, public_msg_type,
 						    entity_name_t::OSD(whoami), "hb_front_server",
 						    getpid(), Messenger::HEARTBEAT);
-  Messenger *ms_objecter = Messenger::create(g_ceph_context, public_msgr_type,
+  Messenger *ms_objecter = Messenger::create(g_ceph_context, public_msg_type,
 					     entity_name_t::OSD(whoami), "ms_objecter",
 					     getpid(), 0);
   if (!ms_public || !ms_cluster || !ms_hb_front_client || !ms_hb_back_client || !ms_hb_back_server || !ms_hb_front_server || !ms_objecter)
@@ -493,14 +508,15 @@ flushjournal_out:
 
   cout << "starting osd." << whoami
        << " at " << ms_public->get_myaddr()
-       << " osd_data " << g_conf->osd_data
-       << " " << ((g_conf->osd_journal.empty()) ?
-		  "(no journal)" : g_conf->osd_journal)
+       << " osd_data " << data_path
+       << " " << ((journal_path.empty()) ?
+		  "(no journal)" : journal_path)
        << std::endl;
 
+  uint64_t message_size =
+    g_conf->get_val<uint64_t>("osd_client_message_size_cap");
   boost::scoped_ptr<Throttle> client_byte_throttler(
-    new Throttle(g_ceph_context, "osd_client_bytes",
-		 g_conf->osd_client_message_size_cap));
+    new Throttle(g_ceph_context, "osd_client_bytes", message_size));
 
   // All feature bits 0 - 34 should be present from dumpling v0.67 forward
   uint64_t osd_required =
@@ -543,14 +559,14 @@ flushjournal_out:
 
   ms_objecter->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
-  r = ms_public->bind(g_conf->public_addr);
-  if (r < 0)
-    exit(1);
-  r = ms_cluster->bind(g_conf->cluster_addr);
-  if (r < 0)
+  if (ms_public->bind(paddr) < 0)
     exit(1);
 
-  if (g_conf->osd_heartbeat_use_min_delay_socket) {
+  if (ms_cluster->bind(caddr) < 0)
+    exit(1);
+
+  bool is_delay = g_conf->get_val<bool>("osd_heartbeat_use_min_delay_socket");
+  if (is_delay) {
     ms_hb_front_client->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
     ms_hb_back_client->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
     ms_hb_back_server->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
@@ -558,28 +574,25 @@ flushjournal_out:
   }
 
   // hb back should bind to same ip as cluster_addr (if specified)
-  entity_addr_t hb_back_addr = g_conf->osd_heartbeat_addr;
-  if (hb_back_addr.is_blank_ip()) {
-    hb_back_addr = g_conf->cluster_addr;
-    if (hb_back_addr.is_ip())
-      hb_back_addr.set_port(0);
+  entity_addr_t haddr = g_conf->get_val<entity_addr_t>("osd_heartbeat_addr");
+  if (haddr.is_blank_ip()) {
+    haddr = caddr;
+    if (haddr.is_ip())
+      haddr.set_port(0);
   }
-  r = ms_hb_back_server->bind(hb_back_addr);
-  if (r < 0)
+
+  if (ms_hb_back_server->bind(haddr) < 0)
     exit(1);
-  r = ms_hb_back_client->client_bind(hb_back_addr);
-  if (r < 0)
+  if (ms_hb_back_client->client_bind(haddr) < 0)
     exit(1);
 
   // hb front should bind to same ip as public_addr
-  entity_addr_t hb_front_addr = g_conf->public_addr;
+  entity_addr_t hb_front_addr = paddr;
   if (hb_front_addr.is_ip())
     hb_front_addr.set_port(0);
-  r = ms_hb_front_server->bind(hb_front_addr);
-  if (r < 0)
+  if (ms_hb_front_server->bind(hb_front_addr) < 0)
     exit(1);
-  r = ms_hb_front_client->client_bind(hb_front_addr);
-  if (r < 0)
+  if (ms_hb_front_client->client_bind(hb_front_addr) < 0)
     exit(1);
 
   // Set up crypto, daemonize, etc.
@@ -615,8 +628,8 @@ flushjournal_out:
                 ms_hb_back_server,
                 ms_objecter,
                 &mc,
-                g_conf->osd_data,
-                g_conf->osd_journal);
+                data_path,
+                journal_path);
 
   int err = osd->pre_init();
   if (err < 0) {
@@ -653,7 +666,7 @@ flushjournal_out:
 
   osd->final_init();
 
-  if (g_conf->inject_early_sigterm)
+  if (g_conf->get_val<bool>("inject_early_sigterm"))
     kill(getpid(), SIGTERM);
 
   ms_public->wait();
