@@ -178,7 +178,7 @@ if(COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=${DIAGNOSTICS_COLOR}")
 endif()
 
-set(EXTRALIBS ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
+set(EXTRALIBS ${CMAKE_DL_LIBS})
 if(NOT APPLE)
   list(APPEND EXTRALIBS rt)
 endif()
@@ -865,8 +865,8 @@ add_subdirectory(erasure-code)
 
 # Support/Tools
 if(WITH_TESTS)
-add_subdirectory(googletest/googlemock)
-add_subdirectory(test)
+  add_subdirectory(googletest/googlemock)
+  add_subdirectory(test)
 endif(WITH_TESTS)
 
 add_subdirectory(compressor)
@@ -892,13 +892,11 @@ if(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64 AND (NOT APPLE))
 endif()
 
 if(WITH_TESTS)
-
-configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
-
-configure_file(${CMAKE_SOURCE_DIR}/src/ceph-debugpack.in
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack @ONLY)
-endif(WITH_TESTS)
+  configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
+  configure_file(${CMAKE_SOURCE_DIR}/src/ceph-debugpack.in
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack @ONLY)
+endif()
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
@@ -913,11 +911,11 @@ configure_file(ceph-post-file.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file @ONLY)
 
 if(WITH_TESTS)
-install(PROGRAMS
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage
-  DESTINATION bin)
-endif(WITH_TESTS)
+  install(PROGRAMS
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage
+    DESTINATION bin)
+endif()
 
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph

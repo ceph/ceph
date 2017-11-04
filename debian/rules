@@ -16,12 +16,6 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   extraopts += -DBOOST_J=$(NUMJOBS)
 endif
 
-ifeq ($(DEB_HOST_ARCH), armel)
-  # armel supports ARMv4t or above instructions sets.
-  # libatomic-ops is only usable with Ceph for ARMv6 or above.
-  extraopts += -DWITH_ATOMIC_OPS=OFF
-endif
-
 ifneq (,$(filter $(DEB_HOST_ARCH), arm armel armhf arm64 i386 amd64 mips mipsel powerpc ppc64))
   # beast depends on libboost_context which only support the archs above
   extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=ON

@@ -626,14 +626,14 @@ add_executable(unittest_encoding
   encoding.cc
   )
 add_ceph_unittest(unittest_encoding)
-target_link_libraries(unittest_encoding ceph-common librados ${XIO_LIBRARY} pthread rt m ${BLKID_LIBRARIES})
+target_link_libraries(unittest_encoding ceph-common)
 
 # unittest_addrs
 add_executable(unittest_addrs
   test_addrs.cc
   )
 add_ceph_unittest(unittest_addrs)
-target_link_libraries(unittest_addrs ceph-common librados ${XIO_LIBRARY} pthread rt m ${BLKID_LIBRARIES})
+target_link_libraries(unittest_addrs ceph-common)
 
 # unittest_workqueue
 add_executable(unittest_workqueue
@@ -641,7 +641,7 @@ add_executable(unittest_workqueue
   $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_workqueue)
-target_link_libraries(unittest_workqueue global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_workqueue global)
 
 # unittest_striper
 add_executable(unittest_striper
@@ -656,14 +656,14 @@ add_executable(unittest_prebufferedstreambuf
   test_prebufferedstreambuf.cc
   )
 add_ceph_unittest(unittest_prebufferedstreambuf)
-target_link_libraries(unittest_prebufferedstreambuf global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_prebufferedstreambuf global)
 
 # unittest_str_list
 add_executable(unittest_str_list
   test_str_list.cc
   )
 add_ceph_unittest(unittest_str_list)
-target_link_libraries(unittest_str_list global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_str_list global)
 
 # unittest_log
 add_executable(unittest_log
@@ -735,7 +735,7 @@ add_executable(unittest_xlist
   test_xlist.cc
   )
 add_ceph_unittest(unittest_xlist)
-target_link_libraries(unittest_xlist ceph-common ${XIO_LIBRARY})
+target_link_libraries(unittest_xlist ceph-common)
 
 # unittest_arch
 add_executable(unittest_arch
