@@ -436,7 +436,8 @@ If successful, the response contains the user information.
 :Type: Container
 
 ``tenant``
-:Description: The tenant which user is a part of
+
+:Description: The tenant which user is a part of.
 :Type: String
 :Parent: ``user``
 
