@@ -1206,12 +1206,14 @@ namespace crimson {
 
       // pull convenience constructor
       PullPriorityQueue(typename super::ClientInfoFunc _client_info_f,
-			bool _allow_limit_break = false) :
+			bool _allow_limit_break = false,
+			double _anticipation_timeout = 0.0) :
 	PullPriorityQueue(_client_info_f,
 			  std::chrono::minutes(10),
 			  std::chrono::minutes(15),
 			  std::chrono::minutes(6),
-			  _allow_limit_break)
+			  _allow_limit_break,
+			  _anticipation_timeout)
       {
 	// empty
       }
