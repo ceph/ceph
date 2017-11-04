@@ -92,7 +92,7 @@ public:
     bool modules_changed = mgr_map_.modules != mgr_map.modules;
     mgr_map = mgr_map_;
 
-    if (standby_modules != nullptr) {
+    if (standby_modules) {
       standby_modules->handle_mgr_map(mgr_map_);
     }
 
@@ -126,7 +126,7 @@ public:
   void with_active_modules(Callback&& cb, Args&&...args) const
   {
     Mutex::Locker l(lock);
-    assert(active_modules != nullptr);
+    assert(active_modules);
 
     std::forward<Callback>(cb)(*active_modules, std::forward<Args>(args)...);
   }

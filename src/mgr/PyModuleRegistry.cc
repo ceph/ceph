@@ -74,7 +74,7 @@ std::string PyModule::get_site_packages()
   assert(site_module);
 
   auto site_packages_fn = PyObject_GetAttrString(site_module, "getsitepackages");
-  if (site_packages_fn != nullptr) {
+  if (site_packages_fn) {
     auto site_packages_list = PyObject_CallObject(site_packages_fn, nullptr);
     assert(site_packages_list);
 
@@ -155,7 +155,7 @@ int PyModuleRegistry::init(const MgrMap &map)
   // Drop the GIL and remember the main thread state (current
   // thread state becomes NULL)
   pMainThreadState = PyEval_SaveThread();
-  assert(pMainThreadState != nullptr);
+  assert(pMainThreadState);
 
   std::list<std::string> failed_modules;
 
@@ -188,7 +188,7 @@ int PyModuleRegistry::init(const MgrMap &map)
 
 int PyModule::load(PyThreadState *pMainThreadState)
 {
-  assert(pMainThreadState != nullptr);
+  assert(pMainThreadState);
 
   // Configure sub-interpreter and construct C++-generated python classes
   {
@@ -196,7 +196,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
     Gil gil(sts);
 
     auto thread_state = Py_NewInterpreter();
-    if (thread_state == nullptr) {
+    if (!thread_state) {
       derr << "Failed to create python sub-interpreter for '" << module_name << '"' << dendl;
       return -EINVAL;
     } else {
@@ -231,7 +231,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
     // Initialize module
     PyObject *ceph_module = Py_InitModule("ceph_module", ModuleMethods);
-    assert(ceph_module != nullptr);
+    assert(ceph_module);
 
     auto load_class = [ceph_module](const char *name, PyTypeObject *type)
     {
@@ -330,7 +330,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
 
 PyModule::~PyModule()
 {
-  if (pMyThreadState.ts != nullptr) {
+  if (pMyThreadState.ts) {
     Gil gil(pMyThreadState, true);
     Py_XDECREF(pClass);
     Py_XDECREF(pStandbyClass);
@@ -340,8 +340,8 @@ PyModule::~PyModule()
 void PyModuleRegistry::standby_start(MonClient *monc)
 {
   Mutex::Locker l(lock);
-  assert(active_modules == nullptr);
-  assert(standby_modules == nullptr);
+  assert(!active_modules);
+  assert(!standby_modules);
   assert(is_initialized());
 
   dout(4) << "Starting modules in standby mode" << dendl;
@@ -384,10 +384,10 @@ void PyModuleRegistry::active_start(
 
   dout(4) << "Starting modules in active mode" << dendl;
 
-  assert(active_modules == nullptr);
+  assert(!active_modules);
   assert(is_initialized());
 
-  if (standby_modules != nullptr) {
+  if (standby_modules) {
     standby_modules->shutdown();
     standby_modules.reset();
   }
@@ -411,7 +411,7 @@ void PyModuleRegistry::active_shutdown()
 {
   Mutex::Locker locker(lock);
 
-  if (active_modules != nullptr) {
+  if (active_modules) {
     active_modules->shutdown();
     active_modules.reset();
   }
@@ -421,7 +421,7 @@ void PyModuleRegistry::shutdown()
 {
   Mutex::Locker locker(lock);
 
-  if (standby_modules != nullptr) {
+  if (standby_modules) {
     standby_modules->shutdown();
     standby_modules.reset();
   }

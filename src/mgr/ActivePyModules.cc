@@ -123,7 +123,7 @@ PyObject *ActivePyModules::get_metadata_python(
   const std::string &svc_id)
 {
   auto metadata = daemon_state.get(DaemonKey(svc_type, svc_id));
-  if (metadata == nullptr) {
+  if (!metadata) {
     derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
     Py_RETURN_NONE;
   }
@@ -143,7 +143,7 @@ PyObject *ActivePyModules::get_daemon_status_python(
   const std::string &svc_id)
 {
   auto metadata = daemon_state.get(DaemonKey(svc_type, svc_id));
-  if (metadata == nullptr) {
+  if (!metadata) {
     derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
     Py_RETURN_NONE;
   }
@@ -597,7 +597,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
     auto key = DaemonKey(svc_type, svc_id);
     // so that the below can be a loop in all cases
     auto got = daemon_state.get(key);
-    if (got != nullptr) {
+    if (got) {
       daemons[key] = got;
     }
   }
@@ -678,11 +678,11 @@ PyObject *construct_with_capsule(
   // Construct the python OSDMap
   auto pArgs = PyTuple_Pack(1, wrapped_capsule);
   auto wrapper_instance = PyObject_CallObject(wrapper_type, pArgs);
-  if (wrapper_instance == nullptr) {
+  if (!wrapper_instance) {
     derr << "Failed to construct python OSDMap:" << dendl;
     derr << handle_pyerror() << dendl;
   }
-  assert(wrapper_instance != nullptr);
+  assert(wrapper_instance);
   Py_DECREF(pArgs);
   Py_DECREF(wrapped_capsule);
 

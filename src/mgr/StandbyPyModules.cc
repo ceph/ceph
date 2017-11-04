@@ -113,16 +113,16 @@ int StandbyPyModule::load()
   // We tell the module how we name it, so that it can be consistent
   // with us in logging etc.
   auto pThisPtr = PyCapsule_New(this, nullptr, nullptr);
-  assert(pThisPtr != nullptr);
+  assert(pThisPtr);
   auto pModuleName = PyString_FromString(module_name.c_str());
-  assert(pModuleName != nullptr);
+  assert(pModuleName);
   auto pArgs = PyTuple_Pack(2, pModuleName, pThisPtr);
   Py_DECREF(pThisPtr);
   Py_DECREF(pModuleName);
 
   pClassInstance = PyObject_CallObject(pClass, pArgs);
   Py_DECREF(pArgs);
-  if (pClassInstance == nullptr) {
+  if (!pClassInstance) {
     derr << "Failed to construct class in '" << module_name << "'" << dendl;
     derr << handle_pyerror() << dendl;
     return -EINVAL;

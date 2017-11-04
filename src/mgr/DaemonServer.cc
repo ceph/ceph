@@ -432,7 +432,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
   }
 
   // Update the DaemonState
-  assert(daemon != nullptr);
+  assert(daemon);
   {
     Mutex::Locker l(daemon->lock);
     auto &daemon_counters = daemon->perf_counters;

@@ -61,8 +61,8 @@ public:
       pClass(pClass_), pMyThreadState(pMyThreadState_),
       thread(this)
   {
-    assert(pClass != nullptr);
-    assert(pMyThreadState.ts != nullptr);
+    assert(pClass);
+    assert(pMyThreadState.ts);
     assert(!module_name.empty());
   }
 
