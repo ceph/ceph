@@ -84,7 +84,7 @@ int parse_log_client_options(CephContext *cct,
   }
 
   fsid = cct->_conf->get_val<uuid_d>("fsid");
-  host = cct->_conf->host;
+  host = cct->_conf->get_val<std::string>("host");
   return 0;
 }
 

@@ -448,8 +448,8 @@ flushjournal_out:
 
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC
                                 |CEPH_PICK_ADDRESS_CLUSTER);
-
-  if (g_conf->public_addr.is_blank_ip() && !g_conf->cluster_addr.is_blank_ip()) {
+  entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
+  if (paddr.is_blank_ip() && !g_conf->cluster_addr.is_blank_ip()) {
     derr << TEXT_YELLOW
 	 << " ** WARNING: specified cluster addr but not public addr; we recommend **\n"
 	 << " **          you specify neither or both.                             **"
@@ -543,8 +543,7 @@ flushjournal_out:
 
   ms_objecter->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
-  r = ms_public->bind(g_conf->public_addr);
-  if (r < 0)
+  if (ms_public->bind(paddr) < 0)
     exit(1);
   r = ms_cluster->bind(g_conf->cluster_addr);
   if (r < 0)
@@ -572,7 +571,7 @@ flushjournal_out:
     exit(1);
 
   // hb front should bind to same ip as public_addr
-  entity_addr_t hb_front_addr = g_conf->public_addr;
+  entity_addr_t hb_front_addr = paddr;
   if (hb_front_addr.is_ip())
     hb_front_addr.set_port(0);
   r = ms_hb_front_server->bind(hb_front_addr);

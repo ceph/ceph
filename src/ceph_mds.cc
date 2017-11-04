@@ -169,8 +169,8 @@ int main(int argc, const char **argv)
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
                    Messenger::Policy::stateful_server(0));
 
-  int r = msgr->bind(g_conf->public_addr);
-  if (r < 0)
+  entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
+  if (msgr->bind(paddr) < 0)
     exit(1);
 
   global_init_daemonize(g_ceph_context);
@@ -191,7 +191,7 @@ int main(int argc, const char **argv)
   mds->orig_argc = argc;
   mds->orig_argv = argv;
 
-  r = mds->init();
+  int r = mds->init();
   if (r < 0) {
     msgr->wait();
     goto shutdown;

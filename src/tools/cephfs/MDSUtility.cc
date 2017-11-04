@@ -45,7 +45,8 @@ MDSUtility::~MDSUtility()
 int MDSUtility::init()
 {
   // Initialize Messenger
-  int r = messenger->bind(g_conf->public_addr);
+  entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
+  int r = messenger->bind(paddr);
   if (r < 0)
     return r;
 

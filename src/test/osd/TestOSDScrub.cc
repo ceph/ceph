@@ -62,7 +62,8 @@ TEST(TestOSDScrub, scrub_time_permit) {
 				    getpid(), 0);
   ms->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms->set_default_policy(Messenger::Policy::stateless_server(0));
-  ms->bind(g_conf->public_addr);
+  entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
+  ms->bind(paddr);
   MonClient mc(g_ceph_context);
   mc.build_initial_monmap();
   TestOSDScrub* osd = new TestOSDScrub(g_ceph_context, store, 0, ms, ms, ms, ms, ms, ms, ms, &mc, "", "");

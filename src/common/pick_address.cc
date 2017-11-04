@@ -164,8 +164,9 @@ void pick_addresses(CephContext *cct, int needs)
     exit(1);
   }
 
+  entity_addr_t paddr = cct->_conf->get_val<entity_addr_t>("public_addr");
   if ((needs & CEPH_PICK_ADDRESS_PUBLIC)
-      && cct->_conf->public_addr.is_blank_ip()
+      && paddr.is_blank_ip()
       && !cct->_conf->public_network.empty()) {
     fill_in_one_address(cct, ifa, cct->_conf->public_network,
 			cct->_conf->get_val<string>("public_network_interface"),

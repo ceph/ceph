@@ -267,7 +267,7 @@ public:
 
     // metadata
     if (log->graylog() && changed.count("host")) {
-      log->graylog()->set_hostname(conf->host);
+      log->graylog()->set_hostname(conf->get_val<std::string>("host"));
     }
 
     if (log->graylog() && changed.count("fsid")) {
@@ -484,7 +484,7 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
       md_config_t def_conf;
       def_conf.set_val("cluster", _conf->cluster);
       def_conf.name = _conf->name;
-      def_conf.set_val("host", _conf->host);
+      def_conf.set_val("host", def_conf.get_val<std::string>("host"));
       def_conf.apply_changes(NULL);
 
       map<string,pair<string,string> > diff;
@@ -520,7 +520,7 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
         md_config_t def_conf;
         def_conf.set_val("cluster", _conf->cluster);
         def_conf.name = _conf->name;
-        def_conf.set_val("host", _conf->host);
+        def_conf.set_val("host", def_conf.get_val<std::string>("host"));
         def_conf.apply_changes(NULL);
 
         map<string, pair<string, string>> diff;

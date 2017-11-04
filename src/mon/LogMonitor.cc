@@ -812,7 +812,8 @@ ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
     auto graylog(std::make_shared<ceph::logging::Graylog>("mon"));
 
     graylog->set_fsid(g_conf->get_val<uuid_d>("fsid"));
-    graylog->set_hostname(g_conf->host);
+    std::string host = g_conf->get_val<std::string>("host");
+    graylog->set_hostname(host);
     graylog->set_destination(get_str_map_key(log_to_graylog_host, channel,
 					     &CLOG_CONFIG_DEFAULT_KEY),
 			     atoi(get_str_map_key(log_to_graylog_port, channel,

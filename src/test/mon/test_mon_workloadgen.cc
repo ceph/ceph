@@ -380,8 +380,9 @@ class OSDStub : public TestStub
     messenger->set_policy(entity_name_t::TYPE_OSD,
 	Messenger::Policy::stateless_server(0));
 
-    dout(10) << __func__ << " public addr " << g_conf->public_addr << dendl;
-    int err = messenger->bind(g_conf->public_addr);
+    entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
+    dout(10) << __func__ << " public addr " << paddr << dendl;
+    int err = messenger->bind(paddr);
     if (err < 0)
       exit(1);
 

@@ -355,12 +355,13 @@ int main(int argc, const char **argv)
 	derr << argv[0] << ": warning: no initial monitors; must use admin socket to feed hints" << dendl;
       }
 
+      entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
       // am i part of the initial quorum?
       if (monmap.contains(g_conf->name.get_id())) {
 	// hmm, make sure the ip listed exists on the current host?
 	// maybe later.
-      } else if (!g_conf->public_addr.is_blank_ip()) {
-	entity_addr_t a = g_conf->public_addr;
+      } else if (!paddr.is_blank_ip()) {
+	entity_addr_t a = paddr;
 	if (a.get_port() == 0)
 	  a.set_port(CEPH_MON_PORT);
 	if (monmap.contains(a)) {
@@ -643,11 +644,12 @@ int main(int argc, const char **argv)
     dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
 
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
-    if (!g_conf->public_addr.is_blank_ip()) {
-      ipaddr = g_conf->public_addr;
+    entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
+    if (!paddr.is_blank_ip()) {
+      ipaddr = paddr;
       if (ipaddr.get_port() == 0)
 	ipaddr.set_port(CEPH_MON_PORT);
-      dout(0) << "using public_addr " << g_conf->public_addr << " -> "
+      dout(0) << "using public_addr " << paddr << " -> "
 	      << ipaddr << dendl;
     } else {
       MonMap tmpmap;

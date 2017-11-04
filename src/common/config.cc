@@ -1259,10 +1259,8 @@ bool md_config_t::expand_meta(std::string &origval,
           out += name.to_cstr();
 	else if (var == "host")
         {
-          if (host == "")
-            out += ceph_get_short_hostname();
-          else
-	    out += host;
+          std::string host = get_val<std::string>("host");
+          host == "" ? out += ceph_get_short_hostname() : out += host;
         }
 	else if (var == "num")
 	  out += name.get_id().c_str();

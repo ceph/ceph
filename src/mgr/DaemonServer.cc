@@ -111,9 +111,10 @@ int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
 			      mon_byte_throttler.get(),
 			      mon_msg_throttler.get());
 
-  int r = msgr->bind(g_conf->public_addr);
+  entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
+  int r = msgr->bind(paddr);
   if (r < 0) {
-    derr << "unable to bind mgr to " << g_conf->public_addr << dendl;
+    derr << "unable to bind mgr to " << paddr << dendl;
     return r;
   }
 
