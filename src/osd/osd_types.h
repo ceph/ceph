@@ -3597,6 +3597,10 @@ public:
     return head.version == 0 && head.epoch == 0;
   }
 
+  size_t approx_size() const {
+    return head.version - tail.version;
+  }
+
   static void filter_log(spg_t import_pgid, const OSDMap &curmap,
     const string &hit_set_namespace, const pg_log_t &in,
     pg_log_t &out, pg_log_t &reject);
