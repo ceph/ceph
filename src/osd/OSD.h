@@ -1593,6 +1593,7 @@ private:
    * and already requeued the items.
    */
   friend class PGOpItem;
+  friend class PGPeeringItem;
   friend class PGRecovery;
 
   class ShardedOpWQ
@@ -1798,6 +1799,17 @@ private:
   void dequeue_op(
     PGRef pg, OpRequestRef op,
     ThreadPool::TPHandle &handle);
+
+  void enqueue_peering_evt(
+    PG *pg,
+    PGPeeringEventRef ref);
+  void enqueue_peering_evt_front(
+    PG *pg,
+    PGPeeringEventRef ref);
+  void dequeue_peering_evt(
+    PG *pg,
+    PGPeeringEventRef ref,
+    ThreadPool::TPHandle& handle);
 
   // -- peering queue --
   struct PeeringWQ : public ThreadPool::BatchWorkQueue<PG> {

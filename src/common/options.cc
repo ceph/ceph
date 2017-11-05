@@ -3000,6 +3000,10 @@ std::vector<Option> get_global_options() {
     .set_default(3)
     .set_description(""),
 
+    Option("osd_peering_op_priority", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(255)
+    .set_description(""),
+
     Option("osd_snap_trim_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description(""),
