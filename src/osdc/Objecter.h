@@ -1165,7 +1165,7 @@ struct ObjectOperation {
     // CEPH_OSD_OP_SETALLOCHINT op is advisory and therefore deemed
     // not worth a feature bit.  Set FAILOK per-op flag to make
     // sure older osds don't trip over an unsupported opcode.
-    set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+    // set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
   }
 
   void dup(vector<OSDOp>& sops) {

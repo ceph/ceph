@@ -566,6 +566,8 @@ public:
     ObjectContextRef clone_obc;    // if we created a clone
     ObjectContextRef head_obc;     // if we also update snapset (see trim_object)
 
+    int rval;
+
     // FIXME: we may want to kill this msgr hint off at some point!
     boost::optional<int> data_off = boost::none;
 

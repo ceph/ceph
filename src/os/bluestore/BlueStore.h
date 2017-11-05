@@ -1568,6 +1568,8 @@ public:
     interval_set<uint64_t> allocated_fast, released_fast;
     volatile_statfs statfs_delta;
 
+    int rval = 0;
+
     IOContext ioc;
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 

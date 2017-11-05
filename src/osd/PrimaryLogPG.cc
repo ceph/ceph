@@ -198,17 +198,21 @@ class PrimaryLogPG::C_PG_ObjectContext : public Context {
 
 class PrimaryLogPG::C_OSD_OndiskWriteUnlock : public Context {
   ObjectContextRef obc, obc2, obc3;
+  int *rval;
   public:
   C_OSD_OndiskWriteUnlock(
     ObjectContextRef o,
     ObjectContextRef o2 = ObjectContextRef(),
-    ObjectContextRef o3 = ObjectContextRef()) : obc(o), obc2(o2), obc3(o3) {}
+    ObjectContextRef o3 = ObjectContextRef(),
+    int *r = NULL) : obc(o), obc2(o2), obc3(o3), rval(r) {}
   void finish(int r) override {
     obc->ondisk_write_unlock();
     if (obc2)
       obc2->ondisk_write_unlock();
     if (obc3)
       obc3->ondisk_write_unlock();
+    if (rval)
+      *rval = r;
   }
 };
 
@@ -3881,6 +3885,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending reply on " << *m << " " << reply << dendl;
+        reply->set_result(ctx->rval);
 	osd->send_message_osd_client(reply, m->get_connection());
 	ctx->sent_reply = true;
 	ctx->op->mark_commit_sent();
@@ -10159,7 +10164,8 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
   Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(
     ctx->obc,
     ctx->clone_obc,
-    ctx->head_obc);
+    ctx->head_obc,
+    &ctx->rval);
   if (!(ctx->log.empty())) {
     assert(ctx->at_version >= projected_last_update);
     projected_last_update = ctx->at_version;

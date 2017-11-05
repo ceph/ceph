@@ -11559,19 +11559,21 @@ int BlueStore::_set_alloc_hint(
 	   << dendl;
   int r = 0;
 
+  uint32_t old_flags = o->onode.alloc_hint_flags;
+
   if ((flags & CEPH_OSD_ALLOC_HINT_FLAG_FAST_TIER) && !bdev_fast) {
-    // FIXME: we should return error code
     derr << __func__ << " fast tier does not exist " << c->cid << " " << o->oid
          << " flags " << ceph_osd_alloc_hint_flag_string(flags) << dendl;
-    return 0;
+    txc->rval = -EINVAL;
+    goto out;
   }
 
-  uint32_t old_flags = o->onode.alloc_hint_flags;
   if ((old_flags ^ flags) & CEPH_OSD_ALLOC_HINT_FLAG_FAST_TIER) {
-    r = _move_data_between_tiers(txc, c, o, flags);
+    int r = _move_data_between_tiers(txc, c, o, flags);
     if (r < 0) {
-      return r;
-    } 
+      txc->rval = r;
+      goto out;
+    }
   }
 
   o->onode.expected_object_size = expected_object_size;
@@ -11583,6 +11585,7 @@ int BlueStore::_set_alloc_hint(
 	   << " write_size " << expected_write_size
 	   << " flags " << ceph_osd_alloc_hint_flag_string(flags)
 	   << " = " << r << dendl;
+ out:
   return r;
 }
 
