@@ -1980,6 +1980,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   store_is_rotational(store->is_rotational()),
   trace_endpoint("0.0.0.0", 0, "osd"),
   asok_hook(NULL),
+  m_osd_pg_epoch_max_lag_factor(cct->_conf->get_val<double>(
+				  "osd_pg_epoch_max_lag_factor")),
   osd_compat(get_osd_compat_set()),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
 	    get_num_op_threads()),
@@ -7347,6 +7349,29 @@ void OSD::handle_osd_map(MOSDMap *m)
     skip_maps = true;
   }
 
+  // wait for pgs to catch up
+  {
+    // we extend the map cache pins to accomodate pgs slow to consume maps
+    // for some period, until we hit the max_lag_factor bound, at which point
+    // we block here to stop injesting more maps than they are able to keep
+    // up with.
+    epoch_t max_lag = cct->_conf->osd_map_cache_size *
+      m_osd_pg_epoch_max_lag_factor;
+    assert(max_lag > 0);
+    if (osdmap->get_epoch() > max_lag) {
+      epoch_t min = service.get_min_pg_epoch();
+      epoch_t need = osdmap->get_epoch() - max_lag;
+      if (need > min) {
+	dout(10) << __func__ << " waiting for pgs to consume " << need
+		 << " (current min " << min
+		 << ", map cache is " << cct->_conf->osd_map_cache_size
+		 << ", max_lag_factor " << m_osd_pg_epoch_max_lag_factor
+		 << ")" << dendl;
+	service.wait_min_pg_epoch(need);
+      }
+    }
+  }
+
   ObjectStore::Transaction t;
   uint64_t txn_size = 0;
 
@@ -9314,6 +9339,7 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_op_history_slow_op_threshold",
     "osd_enable_op_tracker",
     "osd_map_cache_size",
+    "osd_pg_epoch_max_lag_factor",
     "osd_pg_epoch_persisted_max_stale",
     "osd_disk_thread_ioprio_class",
     "osd_disk_thread_ioprio_priority",
@@ -9389,6 +9415,10 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
       changed.count("host") ||
       changed.count("fsid")) {
     update_log_config();
+  }
+  if (changed.count("osd_pg_epoch_max_lag_factor")) {
+    m_osd_pg_epoch_max_lag_factor = conf->get_val<double>(
+      "osd_pg_epoch_max_lag_factor");
   }
 
 #ifdef HAVE_LIBFUSE

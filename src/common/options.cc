@@ -1911,6 +1911,11 @@ std::vector<Option> get_global_options() {
     .set_default(40)
     .set_description(""),
 
+    Option("osd_pg_epoch_max_lag_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(2.0)
+    .set_description("Max multiple of the map cache that PGs can lag before we throttle map injest")
+    .add_see_also("osd_map_cache_size"),
+
     Option("osd_inject_bad_map_crc_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
