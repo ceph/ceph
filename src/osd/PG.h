@@ -43,6 +43,7 @@
 #include "messages/MOSDPGLog.h"
 #include "include/str_list.h"
 #include "PGBackend.h"
+#include "PGPeeringEvent.h"
 
 #include <atomic>
 #include <list>
@@ -256,33 +257,6 @@ public:
 
   ObjectStore::CollectionHandle ch;
 
-  // -- classes --
-  class CephPeeringEvt {
-    epoch_t epoch_sent;
-    epoch_t epoch_requested;
-    boost::intrusive_ptr< const boost::statechart::event_base > evt;
-    string desc;
-  public:
-    MEMPOOL_CLASS_HELPERS();
-    template <class T>
-    CephPeeringEvt(epoch_t epoch_sent,
-		   epoch_t epoch_requested,
-		   const T &evt_) :
-      epoch_sent(epoch_sent), epoch_requested(epoch_requested),
-      evt(evt_.intrusive_from_this()) {
-      stringstream out;
-      out << "epoch_sent: " << epoch_sent
-	  << " epoch_requested: " << epoch_requested << " ";
-      evt_.print(&out);
-      desc = out.str();
-    }
-    epoch_t get_epoch_sent() { return epoch_sent; }
-    epoch_t get_epoch_requested() { return epoch_requested; }
-    const boost::statechart::event_base &get_event() { return *evt; }
-    string get_desc() { return desc; }
-  };
-  typedef ceph::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
-
   class RecoveryCtx;
 
   // -- methods --
@@ -432,7 +406,7 @@ public:
   bool set_force_recovery(bool b);
   bool set_force_backfill(bool b);
 
-  void queue_peering_event(CephPeeringEvtRef evt);
+  void queue_peering_event(PGPeeringEventRef evt);
   void process_peering_event(RecoveryCtx *rctx);
   void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
 		   pg_shard_t from, const pg_query_t& q);
@@ -1686,8 +1660,8 @@ protected:
       pg(pg), epoch(epoch), evt(evt) {}
     void finish(int r) override {
       pg->lock();
-      pg->queue_peering_event(PG::CephPeeringEvtRef(
-				new PG::CephPeeringEvt(
+      pg->queue_peering_event(PGPeeringEventRef(
+				new PGPeeringEvent(
 				  epoch,
 				  epoch,
 				  evt)));
@@ -1696,8 +1670,8 @@ protected:
   };
 
 
-  list<CephPeeringEvtRef> peering_queue;  // op queue
-  list<CephPeeringEvtRef> peering_waiters;
+  list<PGPeeringEventRef> peering_queue;  // op queue
+  list<PGPeeringEventRef> peering_waiters;
 
   struct QueryState : boost::statechart::event< QueryState > {
     Formatter *f;
@@ -2577,7 +2551,7 @@ protected:
       end_handle();
     }
 
-    void handle_event(CephPeeringEvtRef evt,
+    void handle_event(PGPeeringEventRef evt,
 		      RecoveryCtx *rctx) {
       start_handle(rctx);
       machine.process_event(evt->get_event());
@@ -2809,7 +2783,7 @@ protected:
   bool can_discard_replica_op(OpRequestRef& op);
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
-  bool old_peering_evt(CephPeeringEvtRef evt) {
+  bool old_peering_evt(PGPeeringEventRef evt) {
     return old_peering_msg(evt->get_epoch_sent(), evt->get_epoch_requested());
   }
   static bool have_same_or_newer_map(epoch_t cur_epoch, epoch_t e) {

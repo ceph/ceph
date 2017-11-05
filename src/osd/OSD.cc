@@ -3745,10 +3745,10 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
   dout(10) << "Adding newly split pg " << *pg << dendl;
   pg->handle_loaded(rctx);
   pg->queue_null(e, e);
-  map<spg_t, list<PG::CephPeeringEvtRef> >::iterator to_wake =
+  map<spg_t, list<PGPeeringEventRef> >::iterator to_wake =
     peering_wait_for_split.find(pg->pg_id);
   if (to_wake != peering_wait_for_split.end()) {
-    for (list<PG::CephPeeringEvtRef>::iterator i =
+    for (list<PGPeeringEventRef>::iterator i =
 	   to_wake->second.begin();
 	 i != to_wake->second.end();
 	 ++i) {
@@ -3974,7 +3974,7 @@ int OSD::handle_pg_peering_evt(
   const pg_history_t& orig_history,
   const PastIntervals& pi,
   epoch_t epoch,
-  PG::CephPeeringEvtRef evt)
+  PGPeeringEventRef evt)
 {
   if (service.splitting(pgid)) {
     peering_wait_for_split[pgid].push_back(evt);
@@ -8238,8 +8238,8 @@ void OSD::handle_pg_create(OpRequestRef op)
           history,
           pi,
           osdmap->get_epoch(),
-          PG::CephPeeringEvtRef(
-	    new PG::CephPeeringEvt(
+          PGPeeringEventRef(
+	    new PGPeeringEvent(
 	      osdmap->get_epoch(),
 	      osdmap->get_epoch(),
 	      PG::NullEvt()))
@@ -8479,8 +8479,8 @@ void OSD::handle_pg_notify(OpRequestRef op)
       spg_t(it->first.info.pgid.pgid, it->first.to),
       it->first.info.history, it->second,
       it->first.query_epoch,
-      PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
+      PGPeeringEventRef(
+	new PGPeeringEvent(
 	  it->first.epoch_sent, it->first.query_epoch,
 	  PG::MNotifyRec(pg_shard_t(from, it->first.from), it->first,
           op->get_req()->get_connection()->get_features())))
@@ -8510,8 +8510,8 @@ void OSD::handle_pg_log(OpRequestRef op)
   handle_pg_peering_evt(
     spg_t(m->get_pgid().pgid, m->to),
     m->info.history, m->past_intervals, m->get_epoch(),
-    PG::CephPeeringEvtRef(
-      new PG::CephPeeringEvt(
+    PGPeeringEventRef(
+      new PGPeeringEvent(
 	m->get_epoch(), m->get_query_epoch(),
 	PG::MLogRec(pg_shard_t(from, m->from), m)))
     );
@@ -8543,8 +8543,8 @@ void OSD::handle_pg_info(OpRequestRef op)
     handle_pg_peering_evt(
       spg_t(p->first.info.pgid.pgid, p->first.to),
       p->first.info.history, p->second, p->first.epoch_sent,
-      PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
+      PGPeeringEventRef(
+	new PGPeeringEvent(
 	  p->first.epoch_sent, p->first.query_epoch,
 	  PG::MInfoRec(
 	    pg_shard_t(
@@ -8593,16 +8593,16 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
   if (!require_same_or_newer_map(op, m->query_epoch, false))
     return;
 
-  PG::CephPeeringEvtRef evt;
+  PGPeeringEventRef evt;
   if (m->type == MBackfillReserve::REQUEST) {
-    evt = PG::CephPeeringEvtRef(
-      new PG::CephPeeringEvt(
+    evt = PGPeeringEventRef(
+      new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RequestBackfillPrio(m->priority)));
   } else if (m->type == MBackfillReserve::GRANT) {
-    evt = PG::CephPeeringEvtRef(
-      new PG::CephPeeringEvt(
+    evt = PGPeeringEventRef(
+      new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RemoteBackfillReserved()));
@@ -8612,26 +8612,26 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
     //                                  (for older peers)
     //      and also replica -> primary "i revoke your reservation"
     //                                  (for older peers)
-    evt = PG::CephPeeringEvtRef(
-      new PG::CephPeeringEvt(
+    evt = PGPeeringEventRef(
+      new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RemoteReservationRejected()));
   } else if (m->type == MBackfillReserve::RELEASE) {
-    evt = PG::CephPeeringEvtRef(
-      new PG::CephPeeringEvt(
+    evt = PGPeeringEventRef(
+      new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RemoteReservationCanceled()));
   } else if (m->type == MBackfillReserve::TOOFULL) {
-    evt = PG::CephPeeringEvtRef(
-      new PG::CephPeeringEvt(
+    evt = PGPeeringEventRef(
+      new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RemoteReservationRevokedTooFull()));
   } else if (m->type == MBackfillReserve::REVOKE) {
-    evt = PG::CephPeeringEvtRef(
-      new PG::CephPeeringEvt(
+    evt = PGPeeringEventRef(
+      new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RemoteReservationRevoked()));
@@ -8664,28 +8664,28 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
   if (!require_same_or_newer_map(op, m->query_epoch, false))
     return;
 
-  PG::CephPeeringEvtRef evt;
+  PGPeeringEventRef evt;
   if (m->type == MRecoveryReserve::REQUEST) {
-    evt = PG::CephPeeringEvtRef(
-      new PG::CephPeeringEvt(
+    evt = PGPeeringEventRef(
+      new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RequestRecoveryPrio(m->priority)));
   } else if (m->type == MRecoveryReserve::GRANT) {
-    evt = PG::CephPeeringEvtRef(
-      new PG::CephPeeringEvt(
+    evt = PGPeeringEventRef(
+      new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RemoteRecoveryReserved()));
   } else if (m->type == MRecoveryReserve::RELEASE) {
-    evt = PG::CephPeeringEvtRef(
-      new PG::CephPeeringEvt(
+    evt = PGPeeringEventRef(
+      new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
 	PG::RecoveryDone()));
   } else if (m->type == MRecoveryReserve::REVOKE) {
-    evt = PG::CephPeeringEvtRef(
-      new PG::CephPeeringEvt(
+    evt = PGPeeringEventRef(
+      new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
 	PG::DeferRecovery(0.0)));
@@ -8772,8 +8772,8 @@ void OSD::handle_pg_query(OpRequestRef op)
 
     if (service.splitting(pgid)) {
       peering_wait_for_split[pgid].push_back(
-	PG::CephPeeringEvtRef(
-	  new PG::CephPeeringEvt(
+	PGPeeringEventRef(
+	  new PGPeeringEvent(
 	    it->second.epoch_sent, it->second.epoch_sent,
 	    PG::MQuery(pg_shard_t(from, it->second.from),
 		       it->second, it->second.epoch_sent))));
