@@ -1837,13 +1837,11 @@ private:
   void note_up_osd(int osd);
   friend class C_OnMapCommit;
 
-  bool advance_pg(
+  void advance_pg(
     epoch_t advance_to, PG *pg,
     ThreadPool::TPHandle &handle,
     PG::RecoveryCtx *rctx,
-    set<PGRef> *split_pgs,
-    bool no_max
-  );
+    set<PGRef> *split_pgs);
   void consume_map();
   void activate_map();
 
