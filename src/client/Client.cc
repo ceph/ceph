@@ -4104,7 +4104,7 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
   }
 
   caps_size = s->caps.size();
-  if (caps_size > max)
+  if (caps_size > (size_t)max)
     _invalidate_kernel_dcache();
 }
 
