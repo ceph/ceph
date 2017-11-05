@@ -407,7 +407,6 @@ public:
   bool set_force_backfill(bool b);
 
   void queue_peering_event(PGPeeringEventRef evt);
-  void process_peering_event(RecoveryCtx *rctx);
   void do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rcx);
   void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
 		   pg_shard_t from, const pg_query_t& q);
@@ -1671,7 +1670,6 @@ protected:
   };
 
 
-  list<PGPeeringEventRef> peering_queue;  // op queue
   list<PGPeeringEventRef> peering_waiters;
 
   struct QueryState : boost::statechart::event< QueryState > {
