@@ -7763,38 +7763,24 @@ void OSD::check_osdmap_features()
   }
 }
 
-bool OSD::advance_pg(
+void OSD::advance_pg(
   epoch_t osd_epoch, PG *pg,
   ThreadPool::TPHandle &handle,
   PG::RecoveryCtx *rctx,
-  set<PGRef> *new_pgs,
-  bool no_max)
+  set<PGRef> *new_pgs)
 {
   assert(pg->is_locked());
   epoch_t next_epoch = pg->get_osdmap()->get_epoch() + 1;
   OSDMapRef lastmap = pg->get_osdmap();
 
-  if (lastmap->get_epoch() == osd_epoch)
-    return true;
   assert(lastmap->get_epoch() < osd_epoch);
 
-  epoch_t min_epoch = service.get_min_pg_epoch();
-  epoch_t max;
-  if (min_epoch) {
-    max = min_epoch + cct->_conf->osd_map_max_advance;
-  } else {
-    max = next_epoch + cct->_conf->osd_map_max_advance;
-  }
-
   for (;
-       next_epoch <= osd_epoch && (no_max || next_epoch <= max);
+       next_epoch <= osd_epoch;
        ++next_epoch) {
     OSDMapRef nextmap = service.try_get_map(next_epoch);
     if (!nextmap) {
       dout(20) << __func__ << " missing map " << next_epoch << dendl;
-      // make sure max is bumped up so that we can get past any
-      // gap in maps
-      max = MAX(max, next_epoch + cct->_conf->osd_map_max_advance);
       continue;
     }
 
@@ -7826,13 +7812,6 @@ bool OSD::advance_pg(
   }
   service.pg_update_epoch(pg->pg_id, lastmap->get_epoch());
   pg->handle_activate_map(rctx);
-  if (next_epoch <= osd_epoch) {
-    dout(10) << __func__ << " advanced to max " << max
-	     << " past min epoch " << min_epoch
-	     << " ... will requeue " << *pg << dendl;
-    return false;
-  }
-  return true;
 }
 
 void OSD::consume_map()
@@ -9260,7 +9239,7 @@ void OSD::dequeue_peering_evt(
   PG::RecoveryCtx rctx = create_context();
   set<PGRef> split_pgs;
   if (curmap->get_epoch() > pg->get_osdmap()->get_epoch()) {
-    advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs, true);
+    advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs);
   }
   pg->do_peering_event(evt, &rctx);
   auto need_up_thru = pg->get_need_up_thru();
