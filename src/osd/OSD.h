@@ -364,7 +364,6 @@ public:
   PerfCounters *&logger;
   PerfCounters *&recoverystate_perf;
   MonClient   *&monc;
-  ThreadPool::BatchWorkQueue<PG> &peering_wq;
   GenContextWQ recovery_gen_wq;
   ClassHandler  *&class_handler;
 
@@ -849,8 +848,6 @@ public:
   void send_pg_temp();
 
   void send_pg_created(pg_t pgid);
-
-  void queue_for_peering(PG *pg);
 
   Mutex snap_sleep_lock;
   SafeTimer snap_sleep_timer;
@@ -1344,7 +1341,6 @@ public:
 
 private:
 
-  ThreadPool peering_tp;
   ShardedThreadPool osd_op_tp;
   ThreadPool disk_tp;
   ThreadPool command_tp;
@@ -1810,63 +1806,6 @@ private:
     PG *pg,
     PGPeeringEventRef ref,
     ThreadPool::TPHandle& handle);
-
-  // -- peering queue --
-  struct PeeringWQ : public ThreadPool::BatchWorkQueue<PG> {
-    list<PG*> peering_queue;
-    OSD *osd;
-    set<PG*> in_use;
-    PeeringWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
-      : ThreadPool::BatchWorkQueue<PG>(
-	"OSD::PeeringWQ", ti, si, tp), osd(o) {}
-
-    void _dequeue(PG *pg) override {
-      for (list<PG*>::iterator i = peering_queue.begin();
-	   i != peering_queue.end();
-	   ) {
-	if (*i == pg) {
-	  peering_queue.erase(i++);
-	  pg->put("PeeringWQ");
-	} else {
-	  ++i;
-	}
-      }
-    }
-    bool _enqueue(PG *pg) override {
-      pg->get("PeeringWQ");
-      peering_queue.push_back(pg);
-      return true;
-    }
-    bool _empty() override {
-      return peering_queue.empty();
-    }
-    void _dequeue(list<PG*> *out) override;
-    void _process(
-      const list<PG *> &pgs,
-      ThreadPool::TPHandle &handle) override {
-      assert(!pgs.empty());
-      osd->process_peering_events(pgs, handle);
-      for (list<PG *>::const_iterator i = pgs.begin();
-	   i != pgs.end();
-	   ++i) {
-	(*i)->put("PeeringWQ");
-      }
-    }
-    void _process_finish(const list<PG *> &pgs) override {
-      for (list<PG*>::const_iterator i = pgs.begin();
-	   i != pgs.end();
-	   ++i) {
-	in_use.erase(*i);
-      }
-    }
-    void _clear() override {
-      assert(peering_queue.empty());
-    }
-  } peering_wq;
-
-  void process_peering_events(
-    const list<PG*> &pg,
-    ThreadPool::TPHandle &handle);
 
   friend class PG;
   friend class PrimaryLogPG;

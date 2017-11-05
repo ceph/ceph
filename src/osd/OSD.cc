@@ -213,7 +213,6 @@ OSDService::OSDService(OSD *osd) :
   logger(osd->logger),
   recoverystate_perf(osd->recoverystate_perf),
   monc(osd->monc),
-  peering_wq(osd->peering_wq),
   recovery_gen_wq("recovery_gen_wq", cct->_conf->osd_recovery_thread_timeout,
 		  &osd->disk_tp),
   class_handler(osd->class_handler),
@@ -1683,11 +1682,6 @@ void OSDService::enqueue_front(OpQueueItem&& qi)
   osd->op_shardedwq.queue_front(std::move(qi));
 }
 
-void OSDService::queue_for_peering(PG *pg)
-{
-  peering_wq.queue(pg);
-}
-
 void OSDService::queue_for_snap_trim(PG *pg)
 {
   dout(10) << "queueing " << *pg << " for snaptrim" << dendl;
@@ -1953,9 +1947,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   trace_endpoint("0.0.0.0", 0, "osd"),
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
-  peering_tp(cct, "OSD::peering_tp", "tp_peering",
-	     cct->_conf->osd_peering_wq_threads,
-	     "osd_peering_tp_threads"),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
 	    get_num_op_threads()),
   disk_tp(cct, "OSD::disk_tp", "tp_osd_disk", cct->_conf->osd_disk_threads, "osd_disk_threads"),
@@ -1983,11 +1974,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     cct->_conf->osd_op_thread_timeout,
     cct->_conf->osd_op_thread_suicide_timeout,
     &osd_op_tp),
-  peering_wq(
-    this,
-    cct->_conf->osd_op_thread_timeout,
-    cct->_conf->osd_op_thread_suicide_timeout,
-    &peering_tp),
   map_lock("OSD::map_lock"),
   pg_map_lock("OSD::pg_map_lock"),
   last_pg_create_epoch(0),
@@ -2602,7 +2588,6 @@ int OSD::init()
   monc->set_log_client(&log_client);
   update_log_config();
 
-  peering_tp.start();
   osd_op_tp.start();
   disk_tp.start();
   command_tp.start();
@@ -2668,7 +2653,6 @@ int OSD::init()
 
   dout(10) << "ensuring pgs have consumed prior maps" << dendl;
   consume_map();
-  peering_wq.drain();
 
   dout(0) << "done with init, starting boot process" << dendl;
 
@@ -3331,11 +3315,6 @@ int OSD::shutdown()
   heartbeat_lock.Unlock();
   heartbeat_thread.join();
 
-  peering_tp.drain();
-  peering_wq.clear();
-  peering_tp.stop();
-  dout(10) << "osd tp stopped" << dendl;
-
   osd_op_tp.drain();
   osd_op_tp.stop();
   dout(10) << "op sharded tp stopped" << dendl;
@@ -3436,8 +3415,6 @@ int OSD::shutdown()
   objecter_messenger->shutdown();
   hb_front_server_messenger->shutdown();
   hb_back_server_messenger->shutdown();
-
-  peering_wq.clear();
 
   return r;
 }
@@ -9270,51 +9247,6 @@ struct C_CompleteSplits : public Context {
   }
 };
 
-void OSD::process_peering_events(
-  const list<PG*> &pgs,
-  ThreadPool::TPHandle &handle
-  )
-{
-  bool need_up_thru = false;
-  epoch_t same_interval_since = 0;
-  OSDMapRef curmap;
-  PG::RecoveryCtx rctx = create_context();
-  rctx.handle = &handle;
-  for (list<PG*>::const_iterator i = pgs.begin();
-       i != pgs.end();
-       ++i) {
-    set<PGRef> split_pgs;
-    PG *pg = *i;
-    pg->lock_suspend_timeout(handle);
-    curmap = service.get_osdmap();
-    if (pg->is_deleting()) {
-      pg->unlock();
-      continue;
-    }
-    if (!advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs, false)) {
-      // we need to requeue the PG explicitly since we didn't actually
-      // handle an event
-      peering_wq.queue(pg);
-    } else {
-      pg->process_peering_event(&rctx);
-    }
-    need_up_thru = pg->get_need_up_thru() || need_up_thru;
-    same_interval_since = MAX(pg->get_same_interval_since(),
-			      same_interval_since);
-    if (!split_pgs.empty()) {
-      rctx.on_applied->add(new C_CompleteSplits(this, split_pgs));
-      split_pgs.clear();
-    }
-    dispatch_context_transaction(rctx, pg, &handle);
-    pg->unlock();
-  }
-  if (need_up_thru)
-    queue_want_up_thru(same_interval_since);
-  dispatch_context(rctx, 0, curmap, &handle);
-
-  service.send_pg_temp();
-}
-
 void OSD::dequeue_peering_evt(
   PG *pg,
   PGPeeringEventRef evt,
@@ -9728,21 +9660,6 @@ int OSD::init_op_flags(OpRequestRef& op)
     return -EINVAL;
 
   return 0;
-}
-
-void OSD::PeeringWQ::_dequeue(list<PG*> *out) {
-  for (list<PG*>::iterator i = peering_queue.begin();
-      i != peering_queue.end() &&
-      out->size() < osd->cct->_conf->osd_peering_wq_batch_size;
-      ) {
-        if (in_use.count(*i)) {
-          ++i;
-        } else {
-          out->push_back(*i);
-          peering_queue.erase(i++);
-        }
-  }
-  in_use.insert(out->begin(), out->end());
 }
 
 
