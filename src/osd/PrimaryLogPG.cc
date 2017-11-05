@@ -7402,7 +7402,8 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
 
   // read-op?  write-op noop? done?
   if (ctx->op_t->empty() && !ctx->modify) {
-    unstable_stats.add(ctx->delta_stats);
+    if (ctx->pending_async_reads.empty())
+      unstable_stats.add(ctx->delta_stats);
     if (ctx->op->may_write() &&
 	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
       ctx->update_log_only = true;
