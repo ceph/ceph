@@ -7790,7 +7790,8 @@ bool OSD::advance_pg(
   epoch_t osd_epoch, PG *pg,
   ThreadPool::TPHandle &handle,
   PG::RecoveryCtx *rctx,
-  set<PGRef> *new_pgs)
+  set<PGRef> *new_pgs,
+  bool no_max)
 {
   assert(pg->is_locked());
   epoch_t next_epoch = pg->get_osdmap()->get_epoch() + 1;
@@ -7809,7 +7810,7 @@ bool OSD::advance_pg(
   }
 
   for (;
-       next_epoch <= osd_epoch && next_epoch <= max;
+       next_epoch <= osd_epoch && (no_max || next_epoch <= max);
        ++next_epoch) {
     OSDMapRef nextmap = service.try_get_map(next_epoch);
     if (!nextmap) {
@@ -9264,7 +9265,7 @@ void OSD::process_peering_events(
       pg->unlock();
       continue;
     }
-    if (!advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs)) {
+    if (!advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs, false)) {
       // we need to requeue the PG explicitly since we didn't actually
       // handle an event
       peering_wq.queue(pg);
