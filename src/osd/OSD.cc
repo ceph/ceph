@@ -7691,8 +7691,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     maybe_update_heartbeat_peers();
 
   if (!is_active()) {
-    dout(10) << " not yet active; waiting for peering wq to drain" << dendl;
-    peering_wq.drain();
+    dout(10) << " not yet active; waiting for peering work to drain" << dendl;
+    service.wait_min_pg_epoch(last);
   } else {
     activate_map();
   }
