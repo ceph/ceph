@@ -306,6 +306,7 @@ public:
   unsigned get_osd_pool_default_min_size() const {
     auto min_size = get_val<uint64_t>("osd_pool_default_min_size");
     auto size = get_val<uint64_t>("osd_pool_default_size");
+    assert(size > 1 && "osd_pool_default_size must be larger than 1");
     return min_size ? std::min(min_size, size) : (size - size / 2);
   }
 
