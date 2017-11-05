@@ -206,6 +206,8 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
     if (!new_pool.second.tiers.empty()) {
       pg_pool_t& base = new_pool.second;
 
+      auto new_rem_it = new_removed_snaps.find(new_pool.first);
+
       for (const auto &tier_pool : base.tiers) {
 	const auto &r = new_pools.find(tier_pool);
 	pg_pool_t *tier = 0;
@@ -230,6 +232,10 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
 	tier->snap_epoch = base.snap_epoch;
 	tier->snaps = base.snaps;
 	tier->removed_snaps = base.removed_snaps;
+
+	if (new_rem_it != new_removed_snaps.end()) {
+	  new_removed_snaps[tier_pool] = new_rem_it->second;
+	}
       }
     }
   }
