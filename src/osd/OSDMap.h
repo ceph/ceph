@@ -1014,7 +1014,7 @@ public:
   int get_pg_num(int pg_pool) const
   {
     const pg_pool_t *pool = get_pg_pool(pg_pool);
-    assert(NULL != pool);
+    assert(pool);
     return pool->get_pg_num();
   }
 
@@ -1088,10 +1088,10 @@ public:
   /// map a pg to its acting set. @return acting set size
   void pg_to_acting_osds(const pg_t& pg, vector<int> *acting,
                         int *acting_primary) const {
-    _pg_to_up_acting_osds(pg, NULL, NULL, acting, acting_primary);
+    _pg_to_up_acting_osds(pg, nullptr, nullptr, acting, acting_primary);
   }
   void pg_to_acting_osds(pg_t pg, vector<int>& acting) const {
-    return pg_to_acting_osds(pg, &acting, NULL);
+    return pg_to_acting_osds(pg, &acting, nullptr);
   }
   /**
    * This does not apply temp overrides and should not be used
@@ -1181,7 +1181,7 @@ public:
     auto i = pools.find(p);
     if (i != pools.end())
       return &i->second;
-    return NULL;
+    return nullptr;
   }
   unsigned get_pg_size(pg_t pg) const {
     auto p = pools.find(pg.pool());
@@ -1213,7 +1213,7 @@ public:
    */
   bool is_up_acting_osd_shard(spg_t pg, int osd) const {
     vector<int> up, acting;
-    _pg_to_up_acting_osds(pg.pgid, &up, NULL, &acting, NULL, false);
+    _pg_to_up_acting_osds(pg.pgid, &up, nullptr, &acting, nullptr, false);
     if (pg.shard == shard_id_t::NO_SHARD) {
       if (calc_pg_role(osd, acting, acting.size()) >= 0 ||
 	  calc_pg_role(osd, up, up.size()) >= 0)

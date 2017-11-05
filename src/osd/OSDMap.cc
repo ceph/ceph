@@ -2055,7 +2055,7 @@ void OSDMap::pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const
     raw->clear();
     return;
   }
-  _pg_to_raw_osds(*pool, pg, raw, NULL);
+  _pg_to_raw_osds(*pool, pg, raw, nullptr);
   *primary = _pick_primary(*raw);
 }
 
@@ -3740,7 +3740,7 @@ bool OSDMap::try_pg_upmap(
     return false;
 
   // get original mapping
-  _pg_to_raw_osds(*pool, pg, orig, NULL);
+  _pg_to_raw_osds(*pool, pg, orig, nullptr);
 
   // make sure there is something there to remap
   bool any = false;
