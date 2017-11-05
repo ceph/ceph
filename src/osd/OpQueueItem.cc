@@ -23,6 +23,14 @@ void PGOpItem::run(OSD *osd,
   pg->unlock();
 }
 
+void PGPeeringItem::run(
+  OSD *osd,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  osd->dequeue_peering_evt(pg.get(), evt, handle);
+}
+
 void PGSnapTrim::run(OSD *osd,
                    PGRef& pg,
                    ThreadPool::TPHandle &handle)

@@ -9170,6 +9170,32 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch)
       epoch));
 }
 
+void OSD::enqueue_peering_evt(PG *pg, PGPeeringEventRef evt)
+{
+  dout(15) << __func__ << " " << pg->get_pgid() << " " << evt->get_desc() << dendl;
+  op_shardedwq.queue(
+    OpQueueItem(
+      unique_ptr<OpQueueItem::OpQueueable>(new PGPeeringItem(pg->get_pgid(), evt)),
+      10,
+      cct->_conf->osd_peering_op_priority,
+      utime_t(),
+      0,
+      evt->get_epoch_sent()));
+}
+
+void OSD::enqueue_peering_evt_front(PG *pg, PGPeeringEventRef evt)
+{
+  dout(15) << __func__ << " " << pg->get_pgid() << " " << evt->get_desc() << dendl;
+  op_shardedwq.queue_front(
+    OpQueueItem(
+      unique_ptr<OpQueueItem::OpQueueable>(new PGPeeringItem(pg->get_pgid(), evt)),
+      10,
+      cct->_conf->osd_peering_op_priority,
+      utime_t(),
+      0,
+      evt->get_epoch_sent()));
+}
+
 /*
  * NOTE: dequeue called in worker thread, with pg lock
  */
@@ -9284,6 +9310,39 @@ void OSD::process_peering_events(
   }
   if (need_up_thru)
     queue_want_up_thru(same_interval_since);
+  dispatch_context(rctx, 0, curmap, &handle);
+
+  service.send_pg_temp();
+}
+
+void OSD::dequeue_peering_evt(
+  PG *pg,
+  PGPeeringEventRef evt,
+  ThreadPool::TPHandle& handle)
+{
+  if (pg->is_deleting()) {
+    pg->unlock();
+    return;
+  }
+  auto curmap = service.get_osdmap();
+  PG::RecoveryCtx rctx = create_context();
+  set<PGRef> split_pgs;
+  if (curmap->get_epoch() > pg->get_osdmap()->get_epoch()) {
+    advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs, true);
+  }
+  pg->do_peering_event(evt, &rctx);
+  auto need_up_thru = pg->get_need_up_thru();
+  auto same_interval_since = pg->get_same_interval_since();
+  if (!split_pgs.empty()) {
+    rctx.on_applied->add(new C_CompleteSplits(this, split_pgs));
+    split_pgs.clear();
+ }
+  dispatch_context_transaction(rctx, pg, &handle);
+  pg->unlock();
+
+  if (need_up_thru) {
+    queue_want_up_thru(same_interval_since);
+  }
   dispatch_context(rctx, 0, curmap, &handle);
 
   service.send_pg_temp();

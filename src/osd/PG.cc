@@ -5787,11 +5787,11 @@ void PG::take_waiters()
 {
   dout(10) << "take_waiters" << dendl;
   requeue_map_waiters();
-  for (list<PGPeeringEventRef>::iterator i = peering_waiters.begin();
-       i != peering_waiters.end();
-       ++i) osd->queue_for_peering(this);
-  peering_queue.splice(peering_queue.begin(), peering_waiters,
-		       peering_waiters.begin(), peering_waiters.end());
+  for (auto i = peering_waiters.rbegin();
+       i != peering_waiters.rend();
+       ++i) {
+    osd->osd->enqueue_peering_evt_front(this, *i);
+  }
 }
 
 void PG::process_peering_event(RecoveryCtx *rctx)
@@ -5799,7 +5799,11 @@ void PG::process_peering_event(RecoveryCtx *rctx)
   assert(!peering_queue.empty());
   PGPeeringEventRef evt = peering_queue.front();
   peering_queue.pop_front();
+  do_peering_event(evt, rctx);
+}
 
+void PG::do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rctx)
+{
   dout(10) << __func__ << ": " << evt->get_desc() << dendl;
   if (!have_same_or_newer_map(evt->get_epoch_sent())) {
     dout(10) << "deferring event " << evt->get_desc() << dendl;
@@ -5816,8 +5820,7 @@ void PG::queue_peering_event(PGPeeringEventRef evt)
 {
   if (old_peering_evt(evt))
     return;
-  peering_queue.push_back(evt);
-  osd->queue_for_peering(this);
+  osd->osd->enqueue_peering_evt(this, evt);
 }
 
 void PG::queue_null(epoch_t msg_epoch,
