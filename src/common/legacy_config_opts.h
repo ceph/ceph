@@ -1389,6 +1389,7 @@ OPTION(rgw_region_root_pool, OPT_STR)  // pool where all region info is stored
 OPTION(rgw_default_region_info_oid, OPT_STR)  // oid where default region info is stored
 OPTION(rgw_zonegroup, OPT_STR) // zone group name
 OPTION(rgw_zonegroup_root_pool, OPT_STR)  // pool where all zone group info is stored
+OPTION(rgw_zonegroup_quota_sync_enabled, OPT_BOOL) // sync quota between zonegroups
 OPTION(rgw_default_zonegroup_info_oid, OPT_STR)  // oid where default zone group info is stored
 OPTION(rgw_realm, OPT_STR) // realm name
 OPTION(rgw_realm_root_pool, OPT_STR)  // pool where all realm info is stored

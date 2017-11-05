@@ -4697,6 +4697,10 @@ std::vector<Option> get_rgw_options() {
     .set_default(".rgw.root")
     .set_description(""),
 
+    Option("rgw_zonegroup_quota_sync_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description(""),
+
     Option("rgw_default_zonegroup_info_oid", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default.zonegroup")
     .set_description(""),

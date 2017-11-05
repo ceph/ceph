@@ -57,7 +57,8 @@ public:
   enum sync_type_t {
     APPLY_ALWAYS,
     APPLY_UPDATES,
-    APPLY_NEWER
+    APPLY_NEWER,
+    APPLY_ALWAYS_EXCEPT_QUOTA
   };
   static bool string_to_sync_type(const string& sync_string,
                                   sync_type_t& type) {
@@ -67,6 +68,8 @@ public:
       type = APPLY_NEWER;
     else if (sync_string.compare("always") == 0)
       type = APPLY_ALWAYS;
+    else if (sync_string.compare("always-except-quota") == 0)
+      type = APPLY_ALWAYS_EXCEPT_QUOTA;
     else
       return false;
     return true;
@@ -112,6 +115,8 @@ protected:
 	return false;
       break;
     case APPLY_ALWAYS: //deliberate fall-thru -- we always apply!
+      break;
+    case APPLY_ALWAYS_EXCEPT_QUOTA:
     default: break;
     }
     return true;

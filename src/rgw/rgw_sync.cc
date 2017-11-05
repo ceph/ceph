@@ -1057,7 +1057,13 @@ class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
   bufferlist bl;
 protected:
   int _send_request() override {
-    int ret = store->meta_mgr->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS);
+    CephContext *cct = store->ctx();
+    int ret;
+    if (!cct->_conf->rgw_zonegroup_quota_sync_enabled && !store->get_zonegroup().is_master) {
+      ret = store->meta_mgr->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS_EXCEPT_QUOTA);
+    } else {
+      ret = store->meta_mgr->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS);
+    }
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
       return ret;

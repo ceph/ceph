@@ -2731,6 +2731,11 @@ public:
       return STATUS_NO_APPLY;
     }
 
+    CephContext *cct = store->ctx();
+    if (sync_mode == RGWMetadataHandler::APPLY_ALWAYS_EXCEPT_QUOTA) {
+      uci.info.user_quota = old_info.user_quota;
+    }
+
     ret = rgw_store_user_info(store, uci.info, &old_info, &objv_tracker, mtime, false, pattrs);
     if (ret < 0) {
       return ret;
