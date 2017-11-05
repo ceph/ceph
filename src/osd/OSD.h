@@ -1890,7 +1890,8 @@ private:
     epoch_t advance_to, PG *pg,
     ThreadPool::TPHandle &handle,
     PG::RecoveryCtx *rctx,
-    set<PGRef> *split_pgs
+    set<PGRef> *split_pgs,
+    bool no_max
   );
   void consume_map();
   void activate_map();
