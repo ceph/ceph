@@ -15,6 +15,7 @@
 #ifndef CEPH_ZSTDCOMPRESSOR_H
 #define CEPH_ZSTDCOMPRESSOR_H
 
+#define ZSTD_STATIC_LINKING_ONLY
 #include "zstd/lib/zstd.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
@@ -23,8 +24,19 @@
 #define COMPRESSION_LEVEL 5
 
 class ZstdCompressor : public Compressor {
+ ZSTD_CStream* cs;
+ ZSTD_DStream* ds;
  public:
-  ZstdCompressor() : Compressor(COMP_ALG_ZSTD, "zstd") {}
+  ZstdCompressor() : Compressor(COMP_ALG_ZSTD, "zstd") {
+    cs = ZSTD_createCStream();
+    ZSTD_initCStream(cs, COMPRESSION_LEVEL);
+    ds = ZSTD_createDStream();
+    ZSTD_initDStream(ds);
+  }
+  ~ZstdCompressor() {
+    ZSTD_freeCStream(cs);
+    ZSTD_freeDStream(ds);
+  }
 
   int compress(const bufferlist &src, bufferlist &dst) override {
     bufferptr outptr = buffer::create_page_aligned(
@@ -34,8 +46,7 @@ class ZstdCompressor : public Compressor {
     outbuf.size = outptr.length();
     outbuf.pos = 0;
 
-    ZSTD_CStream *s = ZSTD_createCStream();
-    ZSTD_initCStream(s, COMPRESSION_LEVEL);
+    ZSTD_resetCStream(cs, src.length());
     auto p = src.begin();
     size_t left = src.length();
     while (left) {
@@ -43,13 +54,12 @@ class ZstdCompressor : public Compressor {
       struct ZSTD_inBuffer_s inbuf;
       inbuf.pos = 0;
       inbuf.size = p.get_ptr_and_advance(left, (const char**)&inbuf.src);
-      ZSTD_compressStream(s, &outbuf, &inbuf);
+      ZSTD_compressStream(cs, &outbuf, &inbuf);
       left -= inbuf.size;
     }
     assert(p.end());
-    ZSTD_flushStream(s, &outbuf);
-    ZSTD_endStream(s, &outbuf);
-    ZSTD_freeCStream(s);
+    ZSTD_flushStream(cs, &outbuf);
+    ZSTD_endStream(cs, &outbuf);
 
     // prefix with decompressed length
     ::encode((uint32_t)src.length(), dst);
@@ -77,8 +87,7 @@ class ZstdCompressor : public Compressor {
     outbuf.dst = dstptr.c_str();
     outbuf.size = dstptr.length();
     outbuf.pos = 0;
-    ZSTD_DStream *s = ZSTD_createDStream();
-    ZSTD_initDStream(s);
+    ZSTD_resetDStream(ds);
     while (compressed_len > 0) {
       if (p.end()) {
 	return -1;
@@ -86,10 +95,9 @@ class ZstdCompressor : public Compressor {
       ZSTD_inBuffer_s inbuf;
       inbuf.pos = 0;
       inbuf.size = p.get_ptr_and_advance(compressed_len, (const char**)&inbuf.src);
-      ZSTD_decompressStream(s, &outbuf, &inbuf);
+      ZSTD_decompressStream(ds, &outbuf, &inbuf);
       compressed_len -= inbuf.size;
     }
-    ZSTD_freeDStream(s);
 
     dst.append(dstptr, 0, outbuf.pos);
     return 0;
