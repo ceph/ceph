@@ -78,69 +78,8 @@ public:
     }
     
     if (m_set_redirect) {
-      /*
-       * set-redirect test
-       * 1. create objects (copy from)
-       * 2. set-redirect
-       */
-      int create_objects_end = m_objects + m_redirect_objects;
-      int set_redirect_end = create_objects_end + m_initial_redirected_objects; 
-
-      if (m_op <= create_objects_end) {
-	stringstream oid;
-	int _oid = m_op;
-	oid << _oid;
-	if ((_oid) % 2) {
-	  oid << " " << string(300, 'o');
-	}
-	stringstream oid2;
-	int _oid2 = _oid - m_objects;
-	oid2 << _oid2;
-	if ((_oid2) % 2) {
-	  oid2 << " " << string(300, 'o');
-	}
-	cout << m_op << ": " << "(create redirect oid) copy_from oid " << oid.str() 
-	      << " from oid " << oid2.str() << std::endl;
-	return new CopyFromOp(m_op, &context, oid.str(), oid2.str(), m_stats);
-      } else if (m_op <= set_redirect_end) {
-	stringstream oid;
-	int _oid = m_op-create_objects_end;
-	oid << _oid;
-	if ((_oid) % 2) {
-	  oid << " " << string(300, 'o');
-	}
-	stringstream oid2;
-	int _oid2 = _oid + m_objects;
-	oid2 << _oid2;
-	if ((_oid2) % 2) {
-	  oid2 << " " << string(300, 'o');
-	}
-	cout << m_op << ": " << "set_redirect oid " << oid.str() << " target oid " 
-	      << oid2.str() << std::endl;
-	return new SetRedirectOp(m_op, &context, oid.str(), oid2.str(), context.pool_name);
-      } 
-
-      if (!context.oid_redirect_not_in_use.size() && m_op > set_redirect_end) {
-	int set_size = context.oid_not_in_use.size();
-        if (set_size < m_objects + m_redirect_objects) {
-          return NULL;
-        }
-        for (int t_op = m_objects+1; t_op <= create_objects_end; t_op++) {
-          stringstream oid;
-          oid << t_op;
-          if (t_op % 2) {
-            oid << " " << string(300, 'o');
-          }
-          context.oid_not_flushing.erase(oid.str());
-          context.oid_not_in_use.erase(oid.str());
-          context.oid_in_use.erase(oid.str());
-          cout << m_op << ": " << " remove oid " << oid.str() << " from oid_*_use " << std::endl;
-          if (t_op > m_objects + m_initial_redirected_objects) {
-            context.oid_redirect_not_in_use.insert(oid.str());
-          }
-        }
-	cout << m_op << ": " << " oid_not_in_use: " << context.oid_not_in_use.size()
-	      << " oid_in_use: " << context.oid_in_use.size() << std::endl;
+      if (pre_init_extensible_tier(context, retval)) {
+	return retval;
       }
     }
 
@@ -167,6 +106,78 @@ public:
       }
     }
     return retval;
+  }
+  
+  bool pre_init_extensible_tier(RadosTestContext &context, TestOp *& op)
+  {
+    /*
+     * set-redirect test
+     * 1. create objects (copy from)
+     * 2. set-redirect
+     */
+    int create_objects_end = m_objects + m_redirect_objects;
+    int set_redirect_end = create_objects_end + m_initial_redirected_objects; 
+
+    if (m_op <= create_objects_end) {
+      stringstream oid;
+      int _oid = m_op;
+      oid << _oid;
+      if ((_oid) % 2) {
+	oid << " " << string(300, 'o');
+      }
+      stringstream oid2;
+      int _oid2 = _oid - m_objects;
+      oid2 << _oid2;
+      if ((_oid2) % 2) {
+	oid2 << " " << string(300, 'o');
+      }
+      cout << m_op << ": " << "(create redirect oid) copy_from oid " << oid.str() 
+	    << " from oid " << oid2.str() << std::endl;
+      op = new CopyFromOp(m_op, &context, oid.str(), oid2.str(), m_stats);
+      return true;
+    } else if (m_op <= set_redirect_end) {
+      stringstream oid;
+      int _oid = m_op-create_objects_end;
+      oid << _oid;
+      if ((_oid) % 2) {
+	oid << " " << string(300, 'o');
+      }
+      stringstream oid2;
+      int _oid2 = _oid + m_objects;
+      oid2 << _oid2;
+      if ((_oid2) % 2) {
+	oid2 << " " << string(300, 'o');
+      }
+      cout << m_op << ": " << "set_redirect oid " << oid.str() << " target oid " 
+	    << oid2.str() << std::endl;
+      op = new SetRedirectOp(m_op, &context, oid.str(), oid2.str(), context.pool_name);
+      return true;
+    } 
+
+    if (!context.oid_redirect_not_in_use.size() && m_op > set_redirect_end) {
+      int set_size = context.oid_not_in_use.size();
+      if (set_size < m_objects + m_redirect_objects) {
+	op = NULL;
+	return true;
+      }
+      for (int t_op = m_objects+1; t_op <= create_objects_end; t_op++) {
+	stringstream oid;
+	oid << t_op;
+	if (t_op % 2) {
+	  oid << " " << string(300, 'o');
+	}
+	context.oid_not_flushing.erase(oid.str());
+	context.oid_not_in_use.erase(oid.str());
+	context.oid_in_use.erase(oid.str());
+	cout << m_op << ": " << " remove oid " << oid.str() << " from oid_*_use " << std::endl;
+	if (t_op > m_objects + m_initial_redirected_objects) {
+	  context.oid_redirect_not_in_use.insert(oid.str());
+	}
+      }
+      cout << m_op << ": " << " oid_not_in_use: " << context.oid_not_in_use.size()
+	    << " oid_in_use: " << context.oid_in_use.size() << std::endl;
+    }
+    return false;
   }
 
 private:
