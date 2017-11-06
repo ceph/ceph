@@ -75,10 +75,13 @@ ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
   ImageCtx::get_timer_instance(cct, &timer, &timer_lock);
 
   m_throttles.push_back(make_pair(
-	RBD_IMAGE_IOPS_THROTTLE, new TokenBucketThrottle(
+	RBD_QOS_IOPS_THROTTLE, new TokenBucketThrottle(
 	  cct, 0, 0, timer, timer_lock)));
   m_throttles.push_back(make_pair(
-	RBD_IMAGE_BPS_THROTTLE, new TokenBucketThrottle(
+	RBD_QOS_BPS_THROTTLE, new TokenBucketThrottle(
+	  cct, 0, 0, timer, timer_lock)));
+  m_throttles.push_back(make_pair(
+	RBD_QOS_READ_IOPS_THROTTLE, new TokenBucketThrottle(
 	  cct, 0, 0, timer, timer_lock)));
 
   this->register_work_queue();
@@ -576,12 +579,17 @@ void ImageRequestWQ<I>::set_qos_limit(uint64_t limit, const uint64_t flag) {
 
 template <typename I>
 void ImageRequestWQ<I>::apply_qos_iops_limit(uint64_t limit) {
-  set_qos_limit(limit, RBD_IMAGE_IOPS_THROTTLE);
+  set_qos_limit(limit, RBD_QOS_IOPS_THROTTLE);
 }
 
 template <typename I>
 void ImageRequestWQ<I>::apply_qos_bps_limit(uint64_t limit) {
-  set_qos_limit(limit, RBD_IMAGE_BPS_THROTTLE);
+  set_qos_limit(limit, RBD_QOS_BPS_THROTTLE);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::apply_qos_read_iops_limit(uint64_t limit) {
+  set_qos_limit(limit, RBD_QOS_READ_IOPS_THROTTLE);
 }
 
 template <typename I>
