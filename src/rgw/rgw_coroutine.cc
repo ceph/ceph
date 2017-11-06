@@ -62,7 +62,10 @@ void RGWCompletionManager::_complete(RGWAioCompletionNotifier *cn, const rgw_io_
     cns.erase(cn);
   }
 
-#warning shouldn't have more than one entry in complete_reqs per io_id
+  if (complete_reqs_set.find(io_id) != complete_reqs_set.end()) {
+    /* already have completion for this io_id, don't allow multiple completions for it */
+    return;
+  }
   complete_reqs.push_back(io_completion{io_id, user_info});
   cond.Signal();
 }
@@ -77,6 +80,7 @@ int RGWCompletionManager::get_next(io_completion *io)
     cond.Wait(lock);
   }
   *io = complete_reqs.front();
+  complete_reqs_set.erase(io->io_id);
   complete_reqs.pop_front();
   return 0;
 }
@@ -88,6 +92,7 @@ bool RGWCompletionManager::try_get_next(io_completion *io)
     return false;
   }
   *io = complete_reqs.front();
+  complete_reqs_set.erase(io->io_id);
   complete_reqs.pop_front();
   return true;
 }

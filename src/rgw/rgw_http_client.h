@@ -41,6 +41,14 @@ struct rgw_io_id {
   bool intersects(const rgw_io_id& rhs) {
     return (id == rhs.id && ((channels | rhs.channels) != 0));
   }
+
+  bool operator<(const rgw_io_id& rhs) const {
+    if (id < rhs.id) {
+      return true;
+    }
+    return (id == rhs.id &&
+            channels < rhs.channels);
+  }
 };
 
 class RGWIOProvider
