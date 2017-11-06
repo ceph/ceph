@@ -1,13 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "test/rbd_mirror/test_mock_fixture.h"
+#include "test/librbd/test_mock_fixture.h"
 #include "include/rbd/librbd.hpp"
 #include "include/stringify.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
-#include "tools/rbd_mirror/image_sync/MetadataCopyRequest.h"
+#include "test/librbd/test_support.h"
 #include <map>
 
 namespace librbd {
@@ -23,11 +24,10 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 } // namespace librbd
 
 // template definitions
-#include "tools/rbd_mirror/image_sync/MetadataCopyRequest.cc"
+#include "librbd/deep_copy/MetadataCopyRequest.cc"
 
-namespace rbd {
-namespace mirror {
-namespace image_sync {
+namespace librbd {
+namespace deep_copy {
 
 using ::testing::_;
 using ::testing::DoAll;
@@ -36,20 +36,28 @@ using ::testing::Return;
 using ::testing::StrEq;
 using ::testing::WithArg;
 
-class TestMockImageSyncMetadataCopyRequest : public TestMockFixture {
+class TestMockDeepCopyMetadataCopyRequest : public TestMockFixture {
 public:
   typedef MetadataCopyRequest<librbd::MockTestImageCtx> MockMetadataCopyRequest;
   typedef std::map<std::string, bufferlist> Metadata;
 
+  librbd::ImageCtx *m_src_image_ctx;
+  librbd::ImageCtx *m_dst_image_ctx;
+  ThreadPool *m_thread_pool;
+  ContextWQ *m_work_queue;
+
   void SetUp() override {
     TestMockFixture::SetUp();
 
-    librbd::RBD rbd;
-    ASSERT_EQ(0, create_image(rbd, m_remote_io_ctx, m_image_name, m_image_size));
-    ASSERT_EQ(0, open_image(m_remote_io_ctx, m_image_name, &m_remote_image_ctx));
+    ASSERT_EQ(0, open_image(m_image_name, &m_src_image_ctx));
 
-    ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
-    ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &m_local_image_ctx));
+    librbd::RBD rbd;
+    std::string dst_image_name = get_temp_image_name();
+    ASSERT_EQ(0, create_image_pp(rbd, m_ioctx, dst_image_name, m_image_size));
+    ASSERT_EQ(0, open_image(dst_image_name, &m_dst_image_ctx));
+
+    librbd::ImageCtx::get_thread_pool_instance(m_src_image_ctx->cct,
+                                               &m_thread_pool, &m_work_queue);
   }
 
   void expect_metadata_list(librbd::MockTestImageCtx &mock_image_ctx,
@@ -74,14 +82,11 @@ public:
                      StrEq("metadata_set"), ContentsEqual(in_bl), _, _))
                   .WillOnce(Return(r));
   }
-
-  librbd::ImageCtx *m_remote_image_ctx;
-  librbd::ImageCtx *m_local_image_ctx;
 };
 
-TEST_F(TestMockImageSyncMetadataCopyRequest, Success) {
-  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+TEST_F(TestMockDeepCopyMetadataCopyRequest, Success) {
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
 
   size_t idx = 1;
   Metadata key_values_1;
@@ -99,59 +104,59 @@ TEST_F(TestMockImageSyncMetadataCopyRequest, Success) {
   }
 
   InSequence seq;
-  expect_metadata_list(mock_remote_image_ctx, key_values_1, 0);
-  expect_metadata_set(mock_local_image_ctx, key_values_1, 0);
-  expect_metadata_list(mock_remote_image_ctx, key_values_2, 0);
-  expect_metadata_set(mock_local_image_ctx, key_values_2, 0);
+  expect_metadata_list(mock_src_image_ctx, key_values_1, 0);
+  expect_metadata_set(mock_dst_image_ctx, key_values_1, 0);
+  expect_metadata_list(mock_src_image_ctx, key_values_2, 0);
+  expect_metadata_set(mock_dst_image_ctx, key_values_2, 0);
 
   C_SaferCond ctx;
-  auto request = MockMetadataCopyRequest::create(&mock_local_image_ctx,
-                                                 &mock_remote_image_ctx,
+  auto request = MockMetadataCopyRequest::create(&mock_src_image_ctx,
+                                                 &mock_dst_image_ctx,
                                                  &ctx);
   request->send();
 
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockImageSyncMetadataCopyRequest, Empty) {
-  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+TEST_F(TestMockDeepCopyMetadataCopyRequest, Empty) {
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
 
   Metadata key_values;
 
   InSequence seq;
-  expect_metadata_list(mock_remote_image_ctx, key_values, 0);
+  expect_metadata_list(mock_src_image_ctx, key_values, 0);
 
   C_SaferCond ctx;
-  auto request = MockMetadataCopyRequest::create(&mock_local_image_ctx,
-                                                 &mock_remote_image_ctx,
+  auto request = MockMetadataCopyRequest::create(&mock_src_image_ctx,
+                                                 &mock_dst_image_ctx,
                                                  &ctx);
   request->send();
 
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockImageSyncMetadataCopyRequest, MetadataListError) {
-  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+TEST_F(TestMockDeepCopyMetadataCopyRequest, MetadataListError) {
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
 
   Metadata key_values;
 
   InSequence seq;
-  expect_metadata_list(mock_remote_image_ctx, key_values, -EINVAL);
+  expect_metadata_list(mock_src_image_ctx, key_values, -EINVAL);
 
   C_SaferCond ctx;
-  auto request = MockMetadataCopyRequest::create(&mock_local_image_ctx,
-                                                 &mock_remote_image_ctx,
+  auto request = MockMetadataCopyRequest::create(&mock_src_image_ctx,
+                                                 &mock_dst_image_ctx,
                                                  &ctx);
   request->send();
 
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockImageSyncMetadataCopyRequest, MetadataSetError) {
-  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+TEST_F(TestMockDeepCopyMetadataCopyRequest, MetadataSetError) {
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
 
   Metadata key_values;
   bufferlist bl;
@@ -159,18 +164,17 @@ TEST_F(TestMockImageSyncMetadataCopyRequest, MetadataSetError) {
   key_values.emplace("key", bl);
 
   InSequence seq;
-  expect_metadata_list(mock_remote_image_ctx, key_values, 0);
-  expect_metadata_set(mock_local_image_ctx, key_values, -EINVAL);
+  expect_metadata_list(mock_src_image_ctx, key_values, 0);
+  expect_metadata_set(mock_dst_image_ctx, key_values, -EINVAL);
 
   C_SaferCond ctx;
-  auto request = MockMetadataCopyRequest::create(&mock_local_image_ctx,
-                                                 &mock_remote_image_ctx,
+  auto request = MockMetadataCopyRequest::create(&mock_src_image_ctx,
+                                                 &mock_dst_image_ctx,
                                                  &ctx);
   request->send();
 
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-} // namespace image_sync
-} // namespace mirror
-} // namespace rbd
+} // namespace deep_sync
+} // namespace librbd

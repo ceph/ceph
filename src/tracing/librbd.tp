@@ -1021,6 +1021,36 @@ TRACEPOINT_EVENT(librbd, copy4_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, deep_copy_enter,
+    TP_ARGS(
+        void*, src_imagectx,
+        const char*, src_name,
+        const char*, src_snap_name,
+        char, src_read_only,
+        const char*, dst_pool_name,
+        uint64_t, dst_id,
+        const char*, dst_name,
+        void*, opts),
+    TP_FIELDS(
+        ctf_integer_hex(void*, src_imagectx, src_imagectx)
+        ctf_string(src_name, src_name)
+        ctf_string(src_snap_name, src_snap_name)
+        ctf_integer(char, src_read_only, src_read_only)
+        ctf_string(dst_pool_name, dst_pool_name)
+        ctf_integer(uint64_t, dst_id, dst_id)
+        ctf_string(dst_name, dst_name)
+        ctf_integer_hex(void*, opts, opts)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, deep_copy_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, resize_enter,
     TP_ARGS(
         void*, imagectx,

@@ -7,6 +7,7 @@ add_library(rbd_types STATIC
 set(librbd_internal_srcs
   AsyncObjectThrottle.cc
   AsyncRequest.cc
+  DeepCopyRequest.cc
   ExclusiveLock.cc
   ImageCtx.cc
   ImageState.cc
@@ -27,6 +28,13 @@ set(librbd_internal_srcs
   api/Mirror.cc
   cache/ImageWriteback.cc
   cache/PassthroughImageCache.cc
+  deep_copy/ImageCopyRequest.cc
+  deep_copy/MetadataCopyRequest.cc
+  deep_copy/ObjectCopyRequest.cc
+  deep_copy/SetHeadRequest.cc
+  deep_copy/SnapshotCopyRequest.cc
+  deep_copy/SnapshotCreateRequest.cc
+  deep_copy/Utils.cc
   exclusive_lock/AutomaticPolicy.cc
   exclusive_lock/PreAcquireRequest.cc
   exclusive_lock/PostAcquireRequest.cc
