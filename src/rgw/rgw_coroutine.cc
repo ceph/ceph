@@ -488,7 +488,6 @@ void RGWCoroutinesStack::init_new_io(RGWIOProvider *io_provider)
 bool RGWCoroutinesStack::try_io_unblock(const rgw_io_id& io_id)
 {
   if (!can_io_unblock(io_id)) {
-#warning io_finish_ids needs to be cleaned up when owning stack finishes
     auto p = io_finish_ids.emplace(io_id.id, io_id);
     auto& iter = p.first;
     bool inserted = p.second;
