@@ -10943,7 +10943,6 @@ int BlueStore::_rmattrs(TransContext *txc,
 void BlueStore::_do_omap_clear(TransContext *txc, const string& omap_prefix,
 			       uint64_t id)
 {
-  KeyValueDB::Iterator it = db->get_iterator(omap_prefix);
   string prefix, tail;
   get_omap_header(id, &prefix);
   get_omap_tail(id, &tail);
