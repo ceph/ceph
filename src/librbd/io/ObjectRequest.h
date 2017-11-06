@@ -22,10 +22,10 @@ namespace io {
 
 struct AioCompletion;
 template <typename> class CopyupRequest;
-class ObjectRemoveRequest;
-class ObjectTruncateRequest;
-class ObjectWriteRequest;
-class ObjectZeroRequest;
+template <typename> class ObjectRemoveRequest;
+template <typename> class ObjectTruncateRequest;
+template <typename> class ObjectWriteRequest;
+template <typename> class ObjectZeroRequest;
 
 struct ObjectRequestHandle {
   virtual ~ObjectRequestHandle() {
@@ -229,9 +229,10 @@ private:
   void read_from_parent(Extents&& image_extents);
 };
 
-class AbstractObjectWriteRequest : public ObjectRequest<> {
+template <typename ImageCtxT = ImageCtx>
+class AbstractObjectWriteRequest : public ObjectRequest<ImageCtxT> {
 public:
-  AbstractObjectWriteRequest(ImageCtx *ictx, const std::string &oid,
+  AbstractObjectWriteRequest(ImageCtxT *ictx, const std::string &oid,
                              uint64_t object_no, uint64_t object_off,
                              uint64_t len, const ::SnapContext &snapc,
 			     bool hide_enoent, const char *trace_name,
@@ -317,15 +318,17 @@ private:
   void send_copyup();
 };
 
-class ObjectWriteRequest : public AbstractObjectWriteRequest {
+template <typename ImageCtxT = ImageCtx>
+class ObjectWriteRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
-  ObjectWriteRequest(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-                     uint64_t object_off, const ceph::bufferlist &data,
-                     const ::SnapContext &snapc, int op_flags,
-		     const ZTracer::Trace &parent_trace, Context *completion)
-    : AbstractObjectWriteRequest(ictx, oid, object_no, object_off,
-                                 data.length(), snapc, false, "write",
-				 parent_trace, completion),
+  ObjectWriteRequest(ImageCtxT *ictx, const std::string &oid,
+                     uint64_t object_no, uint64_t object_off,
+                     const ceph::bufferlist &data, const ::SnapContext &snapc,
+                     int op_flags, const ZTracer::Trace &parent_trace,
+                     Context *completion)
+    : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off,
+                                            data.length(), snapc, false,
+                                            "write", parent_trace, completion),
       m_write_data(data), m_op_flags(op_flags) {
   }
 
@@ -353,25 +356,27 @@ private:
   int m_op_flags;
 };
 
-class ObjectRemoveRequest : public AbstractObjectWriteRequest {
+template <typename ImageCtxT = ImageCtx>
+class ObjectRemoveRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
-  ObjectRemoveRequest(ImageCtx *ictx, const std::string &oid,
+  ObjectRemoveRequest(ImageCtxT *ictx, const std::string &oid,
                       uint64_t object_no, const ::SnapContext &snapc,
 		      const ZTracer::Trace &parent_trace, Context *completion)
-    : AbstractObjectWriteRequest(ictx, oid, object_no, 0, 0, snapc, true,
-				 "remote", parent_trace, completion),
+    : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, 0, 0, snapc,
+                                            true, "remove", parent_trace,
+                                            completion),
       m_object_state(OBJECT_NONEXISTENT) {
   }
 
   const char* get_op_type() const override {
-    if (has_parent()) {
+    if (this->has_parent()) {
       return "remove (trunc)";
     }
     return "remove";
   }
 
   bool pre_object_map_update(uint8_t *new_state) override {
-    if (has_parent()) {
+    if (this->has_parent()) {
       m_object_state = OBJECT_EXISTS;
     } else {
       m_object_state = OBJECT_PENDING;
@@ -393,7 +398,7 @@ public:
 protected:
   void add_write_ops(librados::ObjectWriteOperation *wr,
                      bool set_hints) override {
-    if (has_parent()) {
+    if (this->has_parent()) {
       wr->truncate(0);
     } else {
       wr->remove();
@@ -404,16 +409,17 @@ private:
   uint8_t m_object_state;
 };
 
-class ObjectTrimRequest : public AbstractObjectWriteRequest {
+template <typename ImageCtxT = ImageCtx>
+class ObjectTrimRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
   // we'd need to only conditionally specify if a post object map
   // update is needed. pre update is decided as usual (by checking
   // the state of the object in the map).
-  ObjectTrimRequest(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+  ObjectTrimRequest(ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
                     const ::SnapContext &snapc, bool post_object_map_update,
 		    Context *completion)
-    : AbstractObjectWriteRequest(ictx, oid, object_no, 0, 0, snapc, true,
-				 "trim", {}, completion),
+    : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, 0, 0, snapc,
+                                            true, "trim", {}, completion),
       m_post_object_map_update(post_object_map_update) {
   }
 
@@ -440,14 +446,16 @@ private:
   bool m_post_object_map_update;
 };
 
-class ObjectTruncateRequest : public AbstractObjectWriteRequest {
+template <typename ImageCtxT = ImageCtx>
+class ObjectTruncateRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
-  ObjectTruncateRequest(ImageCtx *ictx, const std::string &oid,
+  ObjectTruncateRequest(ImageCtxT *ictx, const std::string &oid,
                         uint64_t object_no, uint64_t object_off,
                         const ::SnapContext &snapc,
 			const ZTracer::Trace &parent_trace, Context *completion)
-    : AbstractObjectWriteRequest(ictx, oid, object_no, object_off, 0, snapc,
-                                 true, "truncate", parent_trace, completion) {
+    : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off, 0,
+                                            snapc, true, "truncate",
+                                            parent_trace, completion) {
   }
 
   const char* get_op_type() const override {
@@ -455,7 +463,7 @@ public:
   }
 
   bool pre_object_map_update(uint8_t *new_state) override {
-    if (!m_object_exist && !has_parent())
+    if (!this->m_object_exist && !this->has_parent())
       *new_state = OBJECT_NONEXISTENT;
     else
       *new_state = OBJECT_EXISTS;
@@ -467,19 +475,20 @@ public:
 protected:
   void add_write_ops(librados::ObjectWriteOperation *wr,
                      bool set_hints) override {
-    wr->truncate(m_object_off);
+    wr->truncate(this->m_object_off);
   }
 };
 
-class ObjectZeroRequest : public AbstractObjectWriteRequest {
+template <typename ImageCtxT = ImageCtx>
+class ObjectZeroRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
-  ObjectZeroRequest(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+  ObjectZeroRequest(ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
                     uint64_t object_off, uint64_t object_len,
                     const ::SnapContext &snapc,
 		    const ZTracer::Trace &parent_trace, Context *completion)
-    : AbstractObjectWriteRequest(ictx, oid, object_no, object_off, object_len,
-                                 snapc, true, "zero", parent_trace,
-				 completion) {
+    : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off,
+                                            object_len, snapc, true, "zero",
+                                            parent_trace, completion) {
   }
 
   const char* get_op_type() const override {
@@ -496,21 +505,23 @@ public:
 protected:
   void add_write_ops(librados::ObjectWriteOperation *wr,
                      bool set_hints) override {
-    wr->zero(m_object_off, m_object_len);
+    wr->zero(this->m_object_off, this->m_object_len);
   }
 };
 
-class ObjectWriteSameRequest : public AbstractObjectWriteRequest {
+template <typename ImageCtxT = ImageCtx>
+class ObjectWriteSameRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
-  ObjectWriteSameRequest(ImageCtx *ictx, const std::string &oid,
+  ObjectWriteSameRequest(ImageCtxT *ictx, const std::string &oid,
 			 uint64_t object_no, uint64_t object_off,
 			 uint64_t object_len, const ceph::bufferlist &data,
                          const ::SnapContext &snapc, int op_flags,
 			 const ZTracer::Trace &parent_trace,
 			 Context *completion)
-    : AbstractObjectWriteRequest(ictx, oid, object_no, object_off,
-                                 object_len, snapc, false, "writesame",
-				 parent_trace, completion),
+    : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off,
+                                            object_len, snapc, false,
+                                            "writesame", parent_trace,
+                                            completion),
       m_write_data(data), m_op_flags(op_flags) {
   }
 
@@ -534,11 +545,12 @@ private:
   int m_op_flags;
 };
 
-class ObjectCompareAndWriteRequest : public AbstractObjectWriteRequest {
+template <typename ImageCtxT = ImageCtx>
+class ObjectCompareAndWriteRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
   typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
 
-  ObjectCompareAndWriteRequest(ImageCtx *ictx, const std::string &oid,
+  ObjectCompareAndWriteRequest(ImageCtxT *ictx, const std::string &oid,
                                uint64_t object_no, uint64_t object_off,
                                const ceph::bufferlist &cmp_bl,
                                const ceph::bufferlist &write_bl,
@@ -546,9 +558,10 @@ public:
                                uint64_t *mismatch_offset, int op_flags,
                                const ZTracer::Trace &parent_trace,
                                Context *completion)
-   : AbstractObjectWriteRequest(ictx, oid, object_no, object_off,
-                                cmp_bl.length(), snapc, false, "compare_and_write",
-                                parent_trace, completion),
+   : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off,
+                                           cmp_bl.length(), snapc, false,
+                                           "compare_and_write", parent_trace,
+                                           completion),
     m_cmp_bl(cmp_bl), m_write_bl(write_bl),
     m_mismatch_offset(mismatch_offset), m_op_flags(op_flags) {
   }
@@ -581,5 +594,13 @@ private:
 
 extern template class librbd::io::ObjectRequest<librbd::ImageCtx>;
 extern template class librbd::io::ObjectReadRequest<librbd::ImageCtx>;
+extern template class librbd::io::AbstractObjectWriteRequest<librbd::ImageCtx>;
+extern template class librbd::io::ObjectWriteRequest<librbd::ImageCtx>;
+extern template class librbd::io::ObjectRemoveRequest<librbd::ImageCtx>;
+extern template class librbd::io::ObjectTrimRequest<librbd::ImageCtx>;
+extern template class librbd::io::ObjectTruncateRequest<librbd::ImageCtx>;
+extern template class librbd::io::ObjectZeroRequest<librbd::ImageCtx>;
+extern template class librbd::io::ObjectWriteSameRequest<librbd::ImageCtx>;
+extern template class librbd::io::ObjectCompareAndWriteRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_IO_OBJECT_REQUEST_H

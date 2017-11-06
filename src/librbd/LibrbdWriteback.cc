@@ -165,8 +165,8 @@ namespace librbd {
       assert(image_ctx->exclusive_lock->is_lock_owner());
 
       request_sent = true;
-      auto req = new io::ObjectWriteRequest(image_ctx, oid, object_no, off,
-                                            bl, snapc, 0, trace, this);
+      auto req = new io::ObjectWriteRequest<>(image_ctx, oid, object_no, off,
+                                              bl, snapc, 0, trace, this);
       req->send();
     }
   };
@@ -287,7 +287,7 @@ namespace librbd {
 	  m_ictx, oid.name, object_no, off, bl, snapc, journal_tid, trace,
           req_comp));
     } else {
-      auto req = new io::ObjectWriteRequest(
+      auto req = new io::ObjectWriteRequest<>(
 	m_ictx, oid.name, object_no, off, bl, snapc, 0, trace, req_comp);
       req->send();
     }

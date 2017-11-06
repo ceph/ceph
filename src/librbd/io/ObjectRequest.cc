@@ -51,8 +51,8 @@ ObjectRequest<I>::create_remove(I *ictx, const std::string &oid,
                                 const ::SnapContext &snapc,
 				const ZTracer::Trace &parent_trace,
                                 Context *completion) {
-  return new ObjectRemoveRequest(util::get_image_ctx(ictx), oid, object_no,
-                                 snapc, parent_trace, completion);
+  return new ObjectRemoveRequest<I>(ictx, oid, object_no, snapc, parent_trace,
+                                    completion);
 }
 
 template <typename I>
@@ -62,8 +62,8 @@ ObjectRequest<I>::create_truncate(I *ictx, const std::string &oid,
                                   const ::SnapContext &snapc,
                                   const ZTracer::Trace &parent_trace,
 				  Context *completion) {
-  return new ObjectTruncateRequest(util::get_image_ctx(ictx), oid, object_no,
-                                   object_off, snapc, parent_trace, completion);
+  return new ObjectTruncateRequest<I>(ictx, oid, object_no, object_off, snapc,
+                                      parent_trace, completion);
 }
 
 template <typename I>
@@ -72,8 +72,8 @@ ObjectRequest<I>::create_trim(I *ictx, const std::string &oid,
                               uint64_t object_no, const ::SnapContext &snapc,
                               bool post_object_map_update,
                               Context *completion) {
-  return new ObjectTrimRequest(util::get_image_ctx(ictx), oid, object_no,
-                               snapc, post_object_map_update, completion);
+  return new ObjectTrimRequest<I>(ictx, oid, object_no, snapc,
+                                  post_object_map_update, completion);
 }
 
 template <typename I>
@@ -84,9 +84,8 @@ ObjectRequest<I>::create_write(I *ictx, const std::string &oid,
                                const ::SnapContext &snapc, int op_flags,
 			       const ZTracer::Trace &parent_trace,
                                Context *completion) {
-  return new ObjectWriteRequest(util::get_image_ctx(ictx), oid, object_no,
-                                object_off, data, snapc, op_flags, parent_trace,
-				completion);
+  return new ObjectWriteRequest<I>(ictx, oid, object_no, object_off, data,
+                                   snapc, op_flags, parent_trace, completion);
 }
 
 template <typename I>
@@ -97,9 +96,8 @@ ObjectRequest<I>::create_zero(I *ictx, const std::string &oid,
                               const ::SnapContext &snapc,
 			      const ZTracer::Trace &parent_trace,
                               Context *completion) {
-  return new ObjectZeroRequest(util::get_image_ctx(ictx), oid, object_no,
-                               object_off, object_len, snapc, parent_trace,
-			       completion);
+  return new ObjectZeroRequest<I>(ictx, oid, object_no, object_off, object_len,
+                                  snapc, parent_trace, completion);
 }
 
 template <typename I>
@@ -111,15 +109,16 @@ ObjectRequest<I>::create_writesame(I *ictx, const std::string &oid,
                                    const ::SnapContext &snapc, int op_flags,
 				   const ZTracer::Trace &parent_trace,
                                    Context *completion) {
-  return new ObjectWriteSameRequest(util::get_image_ctx(ictx), oid, object_no,
-                                    object_off, object_len, data, snapc,
-                                    op_flags, parent_trace, completion);
+  return new ObjectWriteSameRequest<I>(ictx, oid, object_no, object_off,
+                                       object_len, data, snapc, op_flags,
+                                       parent_trace, completion);
 }
 
 template <typename I>
 ObjectRequest<I>*
 ObjectRequest<I>::create_compare_and_write(I *ictx, const std::string &oid,
-                                           uint64_t object_no, uint64_t object_off,
+                                           uint64_t object_no,
+                                           uint64_t object_off,
                                            const ceph::bufferlist &cmp_data,
                                            const ceph::bufferlist &write_data,
                                            const ::SnapContext &snapc,
@@ -127,10 +126,10 @@ ObjectRequest<I>::create_compare_and_write(I *ictx, const std::string &oid,
                                            int op_flags,
                                            const ZTracer::Trace &parent_trace,
                                            Context *completion) {
-  return new ObjectCompareAndWriteRequest(util::get_image_ctx(ictx), oid,
-                                          object_no, object_off, cmp_data,
-                                          write_data, snapc, mismatch_offset,
-                                          op_flags, parent_trace, completion);
+  return new ObjectCompareAndWriteRequest<I>(ictx, oid, object_no, object_off,
+                                             cmp_data, write_data, snapc,
+                                             mismatch_offset, op_flags,
+                                             parent_trace, completion);
 }
 
 template <typename I>
@@ -160,7 +159,7 @@ ObjectRequest<I>::ObjectRequest(I *ictx, const std::string &oid,
 template <typename I>
 void ObjectRequest<I>::complete(int r)
 {
-  if (should_complete(r)) {
+  if (this->should_complete(r)) {
     ldout(m_ictx->cct, 20) << dendl;
     if (m_hide_enoent && r == -ENOENT) {
       r = 0;
@@ -181,8 +180,7 @@ bool ObjectRequest<I>::compute_parent_extents() {
     // NOTE: it's possible for a snapshot to be deleted while we are
     // still reading from it
     lderr(m_ictx->cct) << "failed to retrieve parent overlap: "
-                       << cpp_strerror(r)
-                       << dendl;
+                       << cpp_strerror(r) << dendl;
     m_has_parent = false;
     m_parent_extents.clear();
     return false;
@@ -390,42 +388,42 @@ void ObjectReadRequest<I>::read_from_parent(Extents&& parent_extents)
 
 /** write **/
 
-AbstractObjectWriteRequest::AbstractObjectWriteRequest(ImageCtx *ictx,
-                                                       const std::string &oid,
-                                                       uint64_t object_no,
-                                                       uint64_t object_off,
-                                                       uint64_t len,
-                                                       const ::SnapContext &snapc,
-						       bool hide_enoent,
-						       const char *trace_name,
-						       const ZTracer::Trace &parent_trace,
-                                                       Context *completion)
-  : ObjectRequest(ictx, oid, object_no, object_off, len, CEPH_NOSNAP,
-                  hide_enoent, trace_name, parent_trace, completion),
+template <typename I>
+AbstractObjectWriteRequest<I>::AbstractObjectWriteRequest(
+    I *ictx, const std::string &oid, uint64_t object_no, uint64_t object_off,
+    uint64_t len, const ::SnapContext &snapc, bool hide_enoent,
+    const char *trace_name, const ZTracer::Trace &parent_trace,
+    Context *completion)
+  : ObjectRequest<I>(ictx, oid, object_no, object_off, len, CEPH_NOSNAP,
+                     hide_enoent, trace_name, parent_trace, completion),
     m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
 {
   m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
 }
 
-void AbstractObjectWriteRequest::guard_write()
+template <typename I>
+void AbstractObjectWriteRequest<I>::guard_write()
 {
-  if (has_parent()) {
+  I *image_ctx = this->m_ictx;
+  if (this->has_parent()) {
     m_state = LIBRBD_AIO_WRITE_GUARD;
     m_write.assert_exists();
-    ldout(m_ictx->cct, 20) << "guarding write" << dendl;
+    ldout(image_ctx->cct, 20) << "guarding write" << dendl;
   }
 }
 
-bool AbstractObjectWriteRequest::should_complete(int r)
+template <typename I>
+bool AbstractObjectWriteRequest<I>::should_complete(int r)
 {
-  ldout(m_ictx->cct, 20) << get_op_type() << m_oid << " "
-                         << m_object_off << "~" << m_object_len
-                         << " r = " << r << dendl;
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << this->get_op_type() << this->m_oid << " "
+                            << this->m_object_off << "~" << this->m_object_len
+                            << " r = " << r << dendl;
 
   bool finished = true;
   switch (m_state) {
   case LIBRBD_AIO_WRITE_PRE:
-    ldout(m_ictx->cct, 20) << "WRITE_PRE" << dendl;
+    ldout(image_ctx->cct, 20) << "WRITE_PRE" << dendl;
     if (r < 0) {
       return true;
     }
@@ -435,12 +433,12 @@ bool AbstractObjectWriteRequest::should_complete(int r)
     break;
 
   case LIBRBD_AIO_WRITE_POST:
-    ldout(m_ictx->cct, 20) << "WRITE_POST" << dendl;
+    ldout(image_ctx->cct, 20) << "WRITE_POST" << dendl;
     finished = true;
     break;
 
   case LIBRBD_AIO_WRITE_GUARD:
-    ldout(m_ictx->cct, 20) << "WRITE_CHECK_GUARD" << dendl;
+    ldout(image_ctx->cct, 20) << "WRITE_CHECK_GUARD" << dendl;
 
     if (r == -ENOENT) {
       handle_write_guard();
@@ -449,7 +447,7 @@ bool AbstractObjectWriteRequest::should_complete(int r)
     } else if (r < 0) {
       // pass the error code to the finish context
       m_state = LIBRBD_AIO_WRITE_ERROR;
-      complete(r);
+      this->complete(r);
       finished = false;
       break;
     }
@@ -458,10 +456,10 @@ bool AbstractObjectWriteRequest::should_complete(int r)
     break;
 
   case LIBRBD_AIO_WRITE_COPYUP:
-    ldout(m_ictx->cct, 20) << "WRITE_COPYUP" << dendl;
+    ldout(image_ctx->cct, 20) << "WRITE_COPYUP" << dendl;
     if (r < 0) {
       m_state = LIBRBD_AIO_WRITE_ERROR;
-      complete(r);
+      this->complete(r);
       finished = false;
     } else {
       finished = send_post_object_map_update();
@@ -469,56 +467,63 @@ bool AbstractObjectWriteRequest::should_complete(int r)
     break;
 
   case LIBRBD_AIO_WRITE_FLAT:
-    ldout(m_ictx->cct, 20) << "WRITE_FLAT" << dendl;
+    ldout(image_ctx->cct, 20) << "WRITE_FLAT" << dendl;
 
     finished = send_post_object_map_update();
     break;
 
   case LIBRBD_AIO_WRITE_ERROR:
     assert(r < 0);
-    lderr(m_ictx->cct) << "WRITE_ERROR: " << cpp_strerror(r) << dendl;
+    lderr(image_ctx->cct) << "WRITE_ERROR: " << cpp_strerror(r) << dendl;
     break;
 
   default:
-    lderr(m_ictx->cct) << "invalid request state: " << m_state << dendl;
+    lderr(image_ctx->cct) << "invalid request state: " << m_state << dendl;
     ceph_abort();
   }
 
   return finished;
 }
 
-void AbstractObjectWriteRequest::send() {
-  ldout(m_ictx->cct, 20) << get_op_type() << " " << m_oid << " "
-                         << m_object_off << "~" << m_object_len << dendl;
+template <typename I>
+void AbstractObjectWriteRequest<I>::send() {
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << this->get_op_type() << " " << this->m_oid << " "
+                            << this->m_object_off << "~" << this->m_object_len
+                            << dendl;
   {
-    RWLock::RLocker snap_lock(m_ictx->snap_lock);
-    if (m_ictx->object_map == nullptr) {
+    RWLock::RLocker snap_lock(image_ctx->snap_lock);
+    if (image_ctx->object_map == nullptr) {
       m_object_exist = true;
     } else {
       // should have been flushed prior to releasing lock
-      assert(m_ictx->exclusive_lock->is_lock_owner());
-      m_object_exist = m_ictx->object_map->object_may_exist(m_object_no);
+      assert(image_ctx->exclusive_lock->is_lock_owner());
+      m_object_exist = image_ctx->object_map->object_may_exist(
+        this->m_object_no);
     }
   }
 
   send_write();
 }
 
-void AbstractObjectWriteRequest::send_pre_object_map_update() {
-  ldout(m_ictx->cct, 20) << dendl;
+template <typename I>
+void AbstractObjectWriteRequest<I>::send_pre_object_map_update() {
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << dendl;
 
   {
-    RWLock::RLocker snap_lock(m_ictx->snap_lock);
-    if (m_ictx->object_map != nullptr) {
+    RWLock::RLocker snap_lock(image_ctx->snap_lock);
+    if (image_ctx->object_map != nullptr) {
       uint8_t new_state;
-      pre_object_map_update(&new_state);
-      RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-      ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off
-                             << "~" << m_object_len << dendl;
+      this->pre_object_map_update(&new_state);
+      RWLock::WLocker object_map_locker(image_ctx->object_map_lock);
+      ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off
+                                << "~" << this->m_object_len << dendl;
       m_state = LIBRBD_AIO_WRITE_PRE;
 
-      if (m_ictx->object_map->aio_update<ObjectRequest>(
-            CEPH_NOSNAP, m_object_no, new_state, {}, this->m_trace, this)) {
+      if (image_ctx->object_map->template aio_update<ObjectRequest<I>>(
+            CEPH_NOSNAP, this->m_object_no, new_state, {}, this->m_trace,
+            this)) {
         return;
       }
     }
@@ -527,24 +532,26 @@ void AbstractObjectWriteRequest::send_pre_object_map_update() {
   send_write_op();
 }
 
-bool AbstractObjectWriteRequest::send_post_object_map_update() {
-  ldout(m_ictx->cct, 20) << dendl;
+template <typename I>
+bool AbstractObjectWriteRequest<I>::send_post_object_map_update() {
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << dendl;
 
-  RWLock::RLocker snap_locker(m_ictx->snap_lock);
-  if (m_ictx->object_map == nullptr || !post_object_map_update()) {
+  RWLock::RLocker snap_locker(image_ctx->snap_lock);
+  if (image_ctx->object_map == nullptr || !post_object_map_update()) {
     return true;
   }
 
   // should have been flushed prior to releasing lock
-  assert(m_ictx->exclusive_lock->is_lock_owner());
+  assert(image_ctx->exclusive_lock->is_lock_owner());
 
-  RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off
-                         << "~" << m_object_len << dendl;
+  RWLock::WLocker object_map_locker(image_ctx->object_map_lock);
+  ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off
+                            << "~" << this->m_object_len << dendl;
   m_state = LIBRBD_AIO_WRITE_POST;
 
-  if (m_ictx->object_map->aio_update<ObjectRequest>(
-        CEPH_NOSNAP, m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING,
+  if (image_ctx->object_map->template aio_update<ObjectRequest<I>>(
+        CEPH_NOSNAP, this->m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING,
         this->m_trace, this)) {
     return false;
   }
@@ -552,11 +559,14 @@ bool AbstractObjectWriteRequest::send_post_object_map_update() {
   return true;
 }
 
-void AbstractObjectWriteRequest::send_write() {
-  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off << "~" << m_object_len
-                         << " object exist " << m_object_exist << dendl;
+template <typename I>
+void AbstractObjectWriteRequest<I>::send_write() {
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off << "~"
+                            << this->m_object_len << " object exist "
+                            << m_object_exist << dendl;
 
-  if (!m_object_exist && has_parent()) {
+  if (!m_object_exist && this->has_parent()) {
     m_state = LIBRBD_AIO_WRITE_GUARD;
     handle_write_guard();
   } else {
@@ -564,32 +574,38 @@ void AbstractObjectWriteRequest::send_write() {
   }
 }
 
-void AbstractObjectWriteRequest::send_copyup()
+template <typename I>
+void AbstractObjectWriteRequest<I>::send_copyup()
 {
-  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off
-                         << "~" << m_object_len << dendl;
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off
+                            << "~" << this->m_object_len << dendl;
   m_state = LIBRBD_AIO_WRITE_COPYUP;
 
-  m_ictx->copyup_list_lock.Lock();
-  auto it = m_ictx->copyup_list.find(m_object_no);
-  if (it == m_ictx->copyup_list.end()) {
-    auto new_req = CopyupRequest<>::create(
-      m_ictx, m_oid, m_object_no, std::move(m_parent_extents), this->m_trace);
-    m_parent_extents.clear();
+  image_ctx->copyup_list_lock.Lock();
+  auto it = image_ctx->copyup_list.find(this->m_object_no);
+  if (it == image_ctx->copyup_list.end()) {
+    auto new_req = CopyupRequest<I>::create(
+      image_ctx, this->m_oid, this->m_object_no,
+      std::move(this->m_parent_extents), this->m_trace);
+    this->m_parent_extents.clear();
 
     // make sure to wait on this CopyupRequest
     new_req->append_request(this);
-    m_ictx->copyup_list[m_object_no] = new_req;
+    image_ctx->copyup_list[this->m_object_no] = new_req;
 
-    m_ictx->copyup_list_lock.Unlock();
+    image_ctx->copyup_list_lock.Unlock();
     new_req->send();
   } else {
     it->second->append_request(this);
-    m_ictx->copyup_list_lock.Unlock();
+    image_ctx->copyup_list_lock.Unlock();
   }
 }
-void AbstractObjectWriteRequest::send_write_op()
+
+template <typename I>
+void AbstractObjectWriteRequest<I>::send_write_op()
 {
+  I *image_ctx = this->m_ictx;
   m_state = LIBRBD_AIO_WRITE_FLAT;
   if (m_guard) {
     guard_write();
@@ -600,165 +616,201 @@ void AbstractObjectWriteRequest::send_write_op()
 
   librados::AioCompletion *rados_completion =
     util::create_rados_callback(this);
-  int r = m_ictx->data_ctx.aio_operate(
-    m_oid, rados_completion, &m_write, m_snap_seq, m_snaps,
+  int r = image_ctx->data_ctx.aio_operate(
+    this->m_oid, rados_completion, &m_write, m_snap_seq, m_snaps,
     (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
   assert(r == 0);
   rados_completion->release();
 }
-void AbstractObjectWriteRequest::handle_write_guard()
+
+template <typename I>
+void AbstractObjectWriteRequest<I>::handle_write_guard()
 {
+  I *image_ctx = this->m_ictx;
   bool has_parent;
   {
-    RWLock::RLocker snap_locker(m_ictx->snap_lock);
-    RWLock::RLocker parent_locker(m_ictx->parent_lock);
-    has_parent = compute_parent_extents();
+    RWLock::RLocker snap_locker(image_ctx->snap_lock);
+    RWLock::RLocker parent_locker(image_ctx->parent_lock);
+    has_parent = this->compute_parent_extents();
   }
   // If parent still exists, overlap might also have changed.
   if (has_parent) {
     send_copyup();
   } else {
     // parent may have disappeared -- send original write again
-    ldout(m_ictx->cct, 20) << "should_complete(" << this
-                           << "): parent overlap now 0" << dendl;
+    ldout(image_ctx->cct, 20) << "should_complete(" << this
+                              << "): parent overlap now 0" << dendl;
     send_write();
   }
 }
 
-void ObjectWriteRequest::add_write_ops(librados::ObjectWriteOperation *wr,
-                                       bool set_hints) {
-  RWLock::RLocker snap_locker(m_ictx->snap_lock);
-  if (set_hints && m_ictx->enable_alloc_hint &&
-      (m_ictx->object_map == nullptr || !m_object_exist)) {
-    wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
+template <typename I>
+void ObjectWriteRequest<I>::add_write_ops(librados::ObjectWriteOperation *wr,
+                                          bool set_hints) {
+  I *image_ctx = this->m_ictx;
+  RWLock::RLocker snap_locker(image_ctx->snap_lock);
+  if (set_hints && image_ctx->enable_alloc_hint &&
+      (image_ctx->object_map == nullptr || !this->m_object_exist)) {
+    wr->set_alloc_hint(image_ctx->get_object_size(),
+                       image_ctx->get_object_size());
   }
 
-  if (m_object_off == 0 && m_object_len == m_ictx->get_object_size()) {
+  if (this->m_object_off == 0 &&
+      this->m_object_len == image_ctx->get_object_size()) {
     wr->write_full(m_write_data);
   } else {
-    wr->write(m_object_off, m_write_data);
+    wr->write(this->m_object_off, m_write_data);
   }
   wr->set_op_flags2(m_op_flags);
 }
 
-void ObjectWriteRequest::send_write() {
-  bool write_full = (m_object_off == 0 && m_object_len == m_ictx->get_object_size());
-  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off << "~" << m_object_len
-                         << " object exist " << m_object_exist
-                         << " write_full " << write_full << dendl;
-  if (write_full && !has_parent()) {
-    m_guard = false;
+template <typename I>
+void ObjectWriteRequest<I>::send_write() {
+  I *image_ctx = this->m_ictx;
+  bool write_full = (this->m_object_off == 0 &&
+                     this->m_object_len == image_ctx->get_object_size());
+  ldout(image_ctx->cct, 20) << this->m_oid << " "
+                            << this->m_object_off << "~" << this->m_object_len
+                            << " object exist " << this->m_object_exist
+                            << " write_full " << write_full << dendl;
+  if (write_full && !this->has_parent()) {
+    this->m_guard = false;
   }
 
-  AbstractObjectWriteRequest::send_write();
+  AbstractObjectWriteRequest<I>::send_write();
 }
 
-void ObjectRemoveRequest::guard_write() {
+template <typename I>
+void ObjectRemoveRequest<I>::guard_write() {
   // do nothing to disable write guard only if deep-copyup not required
-  RWLock::RLocker snap_locker(m_ictx->snap_lock);
-  if (!m_ictx->snaps.empty()) {
-    AbstractObjectWriteRequest::guard_write();
+  I *image_ctx = this->m_ictx;
+  RWLock::RLocker snap_locker(image_ctx->snap_lock);
+  if (!image_ctx->snaps.empty()) {
+    AbstractObjectWriteRequest<I>::guard_write();
   }
 }
-void ObjectRemoveRequest::send_write() {
-  ldout(m_ictx->cct, 20) << m_oid << " remove " << " object exist "
-                         << m_object_exist << dendl;
-  if (!m_object_exist && !has_parent()) {
-    m_state = LIBRBD_AIO_WRITE_FLAT;
-    Context *ctx = util::create_context_callback<ObjectRequest>(this);
-    m_ictx->op_work_queue->queue(ctx, 0);
+
+template <typename I>
+void ObjectRemoveRequest<I>::send_write() {
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << this->m_oid << " remove " << " object exist "
+                            << this->m_object_exist << dendl;
+  if (!this->m_object_exist && !this->has_parent()) {
+    this->m_state = AbstractObjectWriteRequest<I>::LIBRBD_AIO_WRITE_FLAT;
+    Context *ctx = util::create_context_callback<ObjectRequest<I>>(this);
+    image_ctx->op_work_queue->queue(ctx, 0);
   } else {
-    send_pre_object_map_update();
+    this->send_pre_object_map_update();
   }
 }
 
-void ObjectTruncateRequest::send_write() {
-  ldout(m_ictx->cct, 20) << m_oid << " truncate " << m_object_off
-                         << " object exist " << m_object_exist << dendl;
-  if (!m_object_exist && !has_parent()) {
-    m_state = LIBRBD_AIO_WRITE_FLAT;
-    Context *ctx = util::create_context_callback<ObjectRequest>(this);
-    m_ictx->op_work_queue->queue(ctx, 0);
+template <typename I>
+void ObjectTruncateRequest<I>::send_write() {
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << this->m_oid << " truncate " << this->m_object_off
+                            << " object exist " << this->m_object_exist
+                            << dendl;
+  if (!this->m_object_exist && !this->has_parent()) {
+    this->m_state = AbstractObjectWriteRequest<I>::LIBRBD_AIO_WRITE_FLAT;
+    Context *ctx = util::create_context_callback<ObjectRequest<I>>(this);
+    image_ctx->op_work_queue->queue(ctx, 0);
   } else {
-    AbstractObjectWriteRequest::send_write();
+    AbstractObjectWriteRequest<I>::send_write();
   }
 }
 
-void ObjectZeroRequest::send_write() {
-  ldout(m_ictx->cct, 20) << m_oid << " zero " << m_object_off << "~"
-                         << m_object_len << " object exist " << m_object_exist
-                         << dendl;
-  if (!m_object_exist && !has_parent()) {
-    m_state = LIBRBD_AIO_WRITE_FLAT;
-    Context *ctx = util::create_context_callback<ObjectRequest>(this);
-    m_ictx->op_work_queue->queue(ctx, 0);
+template <typename I>
+void ObjectZeroRequest<I>::send_write() {
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << this->m_oid << " zero "
+                            << this->m_object_off << "~" << this->m_object_len
+                            << " object exist " << this->m_object_exist
+                            << dendl;
+  if (!this->m_object_exist && !this->has_parent()) {
+    this->m_state = AbstractObjectWriteRequest<I>::LIBRBD_AIO_WRITE_FLAT;
+    Context *ctx = util::create_context_callback<ObjectRequest<I>>(this);
+    image_ctx->op_work_queue->queue(ctx, 0);
   } else {
-    AbstractObjectWriteRequest::send_write();
+    AbstractObjectWriteRequest<I>::send_write();
   }
 }
 
-void ObjectWriteSameRequest::add_write_ops(librados::ObjectWriteOperation *wr,
-                                           bool set_hints) {
-  RWLock::RLocker snap_locker(m_ictx->snap_lock);
-  if (set_hints && m_ictx->enable_alloc_hint &&
-      (m_ictx->object_map == nullptr || !m_object_exist)) {
-    wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
+template <typename I>
+void ObjectWriteSameRequest<I>::add_write_ops(
+    librados::ObjectWriteOperation *wr, bool set_hints) {
+  I *image_ctx = this->m_ictx;
+  RWLock::RLocker snap_locker(image_ctx->snap_lock);
+  if (set_hints && image_ctx->enable_alloc_hint &&
+      (image_ctx->object_map == nullptr || !this->m_object_exist)) {
+    wr->set_alloc_hint(image_ctx->get_object_size(),
+                       image_ctx->get_object_size());
   }
 
-  wr->writesame(m_object_off, m_object_len, m_write_data);
+  wr->writesame(this->m_object_off, this->m_object_len, m_write_data);
   wr->set_op_flags2(m_op_flags);
 }
 
-void ObjectWriteSameRequest::send_write() {
-  bool write_full = (m_object_off == 0 && m_object_len == m_ictx->get_object_size());
-  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off << "~" << m_object_len
-                         << " write_full " << write_full << dendl;
-  if (write_full && !has_parent()) {
-    m_guard = false;
+template <typename I>
+void ObjectWriteSameRequest<I>::send_write() {
+  I *image_ctx = this->m_ictx;
+  bool write_full = (this->m_object_off == 0 &&
+                     this->m_object_len == image_ctx->get_object_size());
+  ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off << "~"
+                            << this->m_object_len << " write_full "
+                            << write_full << dendl;
+  if (write_full && !this->has_parent()) {
+    this->m_guard = false;
   }
 
-  AbstractObjectWriteRequest::send_write();
+  AbstractObjectWriteRequest<I>::send_write();
 }
 
-void ObjectCompareAndWriteRequest::add_write_ops(librados::ObjectWriteOperation *wr,
-                                                 bool set_hints) {
-  RWLock::RLocker snap_locker(m_ictx->snap_lock);
+template <typename I>
+void ObjectCompareAndWriteRequest<I>::add_write_ops(
+    librados::ObjectWriteOperation *wr, bool set_hints) {
+  I *image_ctx = this->m_ictx;
+  RWLock::RLocker snap_locker(image_ctx->snap_lock);
 
-  if (set_hints && m_ictx->enable_alloc_hint &&
-      (m_ictx->object_map == nullptr || !m_object_exist)) {
-    wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
+  if (set_hints && image_ctx->enable_alloc_hint &&
+      (image_ctx->object_map == nullptr || !this->m_object_exist)) {
+    wr->set_alloc_hint(image_ctx->get_object_size(),
+                       image_ctx->get_object_size());
   }
 
   // add cmpext ops
-  wr->cmpext(m_object_off, m_cmp_bl, nullptr);
+  wr->cmpext(this->m_object_off, m_cmp_bl, nullptr);
 
-  if (m_object_off == 0 && m_object_len == m_ictx->get_object_size()) {
+  if (this->m_object_off == 0 &&
+      this->m_object_len == image_ctx->get_object_size()) {
     wr->write_full(m_write_bl);
   } else {
-    wr->write(m_object_off, m_write_bl);
+    wr->write(this->m_object_off, m_write_bl);
   }
   wr->set_op_flags2(m_op_flags);
 }
 
-void ObjectCompareAndWriteRequest::send_write() {
-  bool write_full = (m_object_off == 0 &&
-                     m_object_len == m_ictx->get_object_size());
-  ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
-                         << m_object_off << "~" << m_object_len
-                         << " object exist " << m_object_exist
-                         << " write_full " << write_full << dendl;
-  if (write_full && !has_parent()) {
-    m_guard = false;
+template <typename I>
+void ObjectCompareAndWriteRequest<I>::send_write() {
+  I *image_ctx = this->m_ictx;
+  bool write_full = (this->m_object_off == 0 &&
+                     this->m_object_len == image_ctx->get_object_size());
+  ldout(image_ctx->cct, 20) << this->m_oid << " "
+                            << this->m_object_off << "~" << this->m_object_len
+                            << " object exist " << this->m_object_exist
+                            << " write_full " << write_full << dendl;
+  if (write_full && !this->has_parent()) {
+    this->m_guard = false;
   }
 
-  AbstractObjectWriteRequest::send_write();
+  AbstractObjectWriteRequest<I>::send_write();
 }
 
-void ObjectCompareAndWriteRequest::complete(int r)
+template <typename I>
+void ObjectCompareAndWriteRequest<I>::complete(int r)
 {
-  if (should_complete(r)) {
-    ImageCtx *image_ctx = this->m_ictx;
-    ldout(m_ictx->cct, 20) << "complete " << this << dendl;
+  I *image_ctx = this->m_ictx;
+  if (this->should_complete(r)) {
+    ldout(image_ctx->cct, 20) << "complete " << this << dendl;
 
     if (this->m_hide_enoent && r == -ENOENT) {
       r = 0;
@@ -781,7 +833,7 @@ void ObjectCompareAndWriteRequest::complete(int r)
     }
 
     //compare and write object extent error
-    m_completion->complete(r);
+    this->m_completion->complete(r);
     delete this;
   }
 }
@@ -791,3 +843,11 @@ void ObjectCompareAndWriteRequest::complete(int r)
 
 template class librbd::io::ObjectRequest<librbd::ImageCtx>;
 template class librbd::io::ObjectReadRequest<librbd::ImageCtx>;
+template class librbd::io::AbstractObjectWriteRequest<librbd::ImageCtx>;
+template class librbd::io::ObjectWriteRequest<librbd::ImageCtx>;
+template class librbd::io::ObjectRemoveRequest<librbd::ImageCtx>;
+template class librbd::io::ObjectTrimRequest<librbd::ImageCtx>;
+template class librbd::io::ObjectTruncateRequest<librbd::ImageCtx>;
+template class librbd::io::ObjectZeroRequest<librbd::ImageCtx>;
+template class librbd::io::ObjectWriteSameRequest<librbd::ImageCtx>;
+template class librbd::io::ObjectCompareAndWriteRequest<librbd::ImageCtx>;
