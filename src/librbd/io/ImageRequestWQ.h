@@ -102,6 +102,14 @@ private:
   std::atomic<unsigned> m_in_flight_writes { 0 };
   std::atomic<unsigned> m_io_blockers { 0 };
 
+  std::list<uint64_t> m_throttle_flags = {
+    RBD_QOS_IOPS_THROTTLE,
+    RBD_QOS_BPS_THROTTLE,
+    RBD_QOS_READ_IOPS_THROTTLE,
+    RBD_QOS_WRITE_IOPS_THROTTLE,
+    RBD_QOS_READ_BPS_THROTTLE,
+    RBD_QOS_WRITE_BPS_THROTTLE
+  };
   std::list<std::pair<uint64_t, TokenBucketThrottle*> > m_throttles;
 
   bool m_shutdown = false;

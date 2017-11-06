@@ -74,24 +74,10 @@ ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
   Mutex *timer_lock;
   ImageCtx::get_timer_instance(cct, &timer, &timer_lock);
 
-  m_throttles.push_back(make_pair(
-	RBD_QOS_IOPS_THROTTLE, new TokenBucketThrottle(
-	  cct, 0, 0, timer, timer_lock)));
-  m_throttles.push_back(make_pair(
-	RBD_QOS_BPS_THROTTLE, new TokenBucketThrottle(
-	  cct, 0, 0, timer, timer_lock)));
-  m_throttles.push_back(make_pair(
-	RBD_QOS_READ_IOPS_THROTTLE, new TokenBucketThrottle(
-	  cct, 0, 0, timer, timer_lock)));
-  m_throttles.push_back(make_pair(
-	RBD_QOS_WRITE_IOPS_THROTTLE, new TokenBucketThrottle(
-	  cct, 0, 0, timer, timer_lock)));
-  m_throttles.push_back(make_pair(
-	RBD_QOS_READ_BPS_THROTTLE, new TokenBucketThrottle(
-	  cct, 0, 0, timer, timer_lock)));
-  m_throttles.push_back(make_pair(
-	RBD_QOS_WRITE_BPS_THROTTLE, new TokenBucketThrottle(
-	  cct, 0, 0, timer, timer_lock)));
+  for (auto flag : m_throttle_flags) {
+    m_throttles.push_back(make_pair(
+	  flag, new TokenBucketThrottle(cct, 0, 0, timer, timer_lock)));
+  }
 
   this->register_work_queue();
 }
