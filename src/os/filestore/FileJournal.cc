@@ -1227,7 +1227,10 @@ void FileJournal::write_thread_entry()
       // but should be fine given that we will have plenty of aios in
       // flight if we hit this limit to ensure we keep the device
       // saturated.
-      while (aio_num > 0) {
+      // Because every filejournal entry at least 4k(aling w/ header.align)
+      // So only aio_num > 6(min_new=1<< (6*2) = 4096), the condition cur >= min_new
+      // maybe false. So change it.
+      while (aio_num > 6) {
 	int exp = MIN(aio_num * 2, 24);
 	long unsigned min_new = 1ull << exp;
 	uint64_t cur = aio_write_queue_bytes;
@@ -1411,9 +1414,6 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
     aio_num++;
     aio_bytes += aio.len;
 
-    // need to save current aio len to update write_pos later because current
-    // aio could be ereased from aio_queue once it is done
-    uint64_t cur_len = aio.len;
     // unlock aio_lock because following io_submit might take time to return
     aio_lock.Unlock();
 
@@ -1426,7 +1426,7 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
       int r = io_submit(aio_ctx, 1, &piocb);
       dout(20) << "write_aio_bl io_submit return value: " << r << dendl;
       if (r < 0) {
-	derr << "io_submit to " << aio.off << "~" << cur_len
+	derr << "io_submit to " << aio.off << "~" << len
 	     << " got " << cpp_strerror(r) << dendl;
 	if (r == -EAGAIN && attempts-- > 0) {
 	  usleep(delay);
@@ -1439,7 +1439,7 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
 	break;
       }
     } while (true);
-    pos += cur_len;
+    pos += len;
   }
   aio_lock.Lock();
   write_finish_cond.Signal();
@@ -1477,7 +1477,6 @@ void FileJournal::write_finish_thread_entry()
     }
 
     {
-      Mutex::Locker locker(aio_lock);
       for (int i=0; i<r; i++) {
 	aio_info *ai = (aio_info *)event[i].obj;
 	if (event[i].res != ai->len) {
@@ -1502,27 +1501,33 @@ void FileJournal::write_finish_thread_entry()
  */
 void FileJournal::check_aio_completion()
 {
-  assert(aio_lock.is_locked());
   dout(20) << "check_aio_completion" << dendl;
 
-  bool completed_something = false, signal = false;
+  bool signal = false;
   uint64_t new_journaled_seq = 0;
 
-  list<aio_info>::iterator p = aio_queue.begin();
-  while (p != aio_queue.end() && p->done) {
-    dout(20) << "check_aio_completion completed seq " << p->seq << " "
-	     << p->off << "~" << p->len << dendl;
-    if (p->seq) {
-      new_journaled_seq = p->seq;
-      completed_something = true;
+  {
+    Mutex::Locker locker(aio_lock);
+    list<aio_info>::iterator p = aio_queue.begin();
+    while (p != aio_queue.end() && p->done) {
+      dout(20) << "check_aio_completion completed seq " << p->seq << " "
+	<< p->off << "~" << p->len << dendl;
+      if (p->seq) {
+	new_journaled_seq = p->seq;
+      }
+      aio_num--;
+      aio_bytes -= p->len;
+      aio_queue.erase(p++);
+      signal = true;
     }
-    aio_num--;
-    aio_bytes -= p->len;
-    aio_queue.erase(p++);
-    signal = true;
+
+    if (signal) {
+      // maybe write queue was waiting for aio count to drop?
+      aio_cond.Signal();
+    }
   }
 
-  if (completed_something) {
+  if (new_journaled_seq) {
     // kick finisher?
     //  only if we haven't filled up recently!
     Mutex::Locker locker(finisher_lock);
@@ -1540,11 +1545,7 @@ void FileJournal::check_aio_completion()
       }
     }
   }
-  if (signal) {
-    // maybe write queue was waiting for aio count to drop?
-    aio_cond.Signal();
   }
-}
 #endif
 
 int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) {
@@ -1640,7 +1641,6 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
 #ifdef HAVE_LIBAIO
     aio_write_queue_ops++;
     aio_write_queue_bytes += e.length();
-    aio_cond.Signal();
 #endif
 
     completions.push_back(
