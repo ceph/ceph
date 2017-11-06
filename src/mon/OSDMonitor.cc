@@ -3379,8 +3379,14 @@ bool OSDMonitor::handle_osd_timeouts(const utime_t &now,
       continue;
     const std::map<int,utime_t>::const_iterator t = last_osd_report.find(i);
     if (t == last_osd_report.end()) {
-      // it wasn't in the map; start the timer.
-      last_osd_report[i] = now;
+      // it must be down because leader hasn't received osd beacon for more than 'timeo'.
+      utime_t diff = now - mon->get_leader_since();
+      mon->clog->info() << "osd." << i << " marked down after no beacon for "
+                        << diff << " seconds since election finished";
+      derr << "no beacon from osd." << i << " since election finished"
+           << ", " << diff << " seconds ago.  marking down" << dendl;
+      pending_inc.new_state[i] = CEPH_OSD_UP;
+      new_down = true;
     } else if (can_mark_down(i)) {
       utime_t diff = now - t->second;
       if (diff > timeo) {
