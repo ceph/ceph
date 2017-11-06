@@ -143,3 +143,14 @@ class TestGetMounts(object):
         monkeypatch.setattr(os.path, 'exists', lambda x: False if x == '/dev/sda1' else True)
         result = system.get_mounts()
         assert result.get('/dev/sda1') is None
+
+
+class TestIsBinary(object):
+
+    def test_is_binary(self, tmpfile):
+        binary_path = tmpfile(contents='asd\n\nlkjh\x00')
+        assert system.is_binary(binary_path)
+
+    def test_is_not_binary(self, tmpfile):
+        binary_path = tmpfile(contents='asd\n\nlkjh0')
+        assert system.is_binary(binary_path) is False
