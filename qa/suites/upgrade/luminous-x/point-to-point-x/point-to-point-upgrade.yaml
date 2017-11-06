@@ -1,0 +1,225 @@
+meta:
+- desc: |
+   Run ceph on two nodes, using one of them as a client,
+   with a separate client-only node. 
+   Use xfs beneath the osds.
+   install ceph/luminous v12.2.2 point version
+   run workload and upgrade-sequence in parallel
+   install ceph/luminous latest version
+   run workload and upgrade-sequence in parallel
+   install ceph/-x version (luminous or master/mimic)
+   run workload and upgrade-sequence in parallel
+overrides:
+  ceph:
+    log-whitelist:
+    - reached quota
+    - scrub
+    - osd_map_max_advance
+    - wrongly marked
+    fs: xfs
+    conf:
+      mon:
+        mon debug unsafe allow tier with nonempty snaps: true
+        mon warn on pool no app: false
+      osd:
+        osd map max advance: 1000
+        osd_class_load_list: "cephfs hello journal lock log numops rbd refcount 
+                              replica_log rgw sdk statelog timeindex user version"
+        osd_class_default_list: "cephfs hello journal lock log numops rbd refcount 
+                                 replica_log rgw sdk statelog timeindex user version"
+      client:
+        rgw_crypt_require_ssl: false
+        rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - mgr.x
+- - mon.b
+  - mon.c
+  - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+- - client.1
+openstack:
+- volumes: # attached to each instance
+    count: 3
+    size: 30 # GB
+tasks:
+- print: "****  v12.2.2 about to install"
+- install:
+    tag: v12.2.2
+    # line below can be removed its from jewel test
+    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librgw2']
+- print: "**** done v12.2.2 install"
+- ceph:
+   fs: xfs
+   add_osds_to_crush: true
+- print: "**** done ceph xfs"
+- sequential:
+   - workload
+- print: "**** done workload"
+- install.upgrade:
+    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    mon.a:
+      branch: luminous
+    mon.b:
+      branch: luminous
+    # Note that client.a IS NOT upgraded at this point
+- parallel:
+   - workload_luminous
+   - upgrade-sequence_luminous
+- print: "**** done parallel luminous branch"
+- install.upgrade:
+    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    client.1:
+      branch: luminous
+- print: "**** done branch: luminous install.upgrade on client.1"
+- install.upgrade:
+    mon.a:
+    mon.b:
+- print: "**** done branch: -x install.upgrade on mon.a and mon.b"
+- parallel:
+   - workload_x
+   - upgrade-sequence_x
+- print: "**** done parallel -x branch"
+- exec:
+    osd.0:
+      - ceph osd set-require-min-compat-client luminous
+# Run librados tests on the -x upgraded cluster
+- install.upgrade:
+    client.1:
+- workunit:
+    branch: luminous
+    clients:
+      client.1:
+      - rados/test.sh
+      - cls
+- print: "**** done final test on -x cluster"
+#######################
+workload:
+   sequential:
+   - workunit:
+       clients:
+         client.0:
+           - suites/blogbench.sh
+workload_luminous:
+   full_sequential:
+   - workunit:
+       branch: luminous
+       clients:
+         client.1:
+         - rados/test.sh
+         - cls
+   - print: "**** done rados/test.sh &  cls workload_luminous"
+   - sequential:
+     - rgw: [client.0]
+     - print: "**** done rgw workload_luminous"
+     - s3tests:
+         client.0:
+           force-branch: ceph-luminous
+           rgw_server: client.0
+           scan_for_encryption_keys: false
+     - print: "**** done s3tests workload_luminous"
+upgrade-sequence_luminous:
+   sequential:
+   - print: "**** done branch: luminous install.upgrade"
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart all luminous branch mds/osd/mon"
+workload_x:
+   sequential:
+   - workunit:
+       branch: luminous
+       clients:
+         client.1:
+         - rados/test.sh
+         - cls
+   - print: "**** done rados/test.sh &  cls workload_x NOT upgraded  client"
+   - workunit:
+       branch: luminous
+       clients:
+         client.0:
+         - rados/test.sh
+         - cls
+   - print: "**** done rados/test.sh &  cls workload_x upgraded client"
+   - rgw: [client.1]
+   - print: "**** done rgw workload_x"
+   - s3tests:
+       client.1:
+         force-branch: ceph-luminous
+         rgw_server: client.1
+         scan_for_encryption_keys: false
+   - print: "**** done s3tests workload_x"
+upgrade-sequence_x:
+   sequential:
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart:
+       daemons: [osd.5]
+       wait-for-healthy: false
+       wait-for-up-osds: true
+   - ceph.restart:
+       daemons: [mgr.x]
+       wait-for-healthy: false
+   - exec:
+       osd.0:
+         - ceph osd require-osd-release luminous
+   - ceph.healthy:
+   - print: "**** done ceph.restart all -x branch mds/osd/mon"
