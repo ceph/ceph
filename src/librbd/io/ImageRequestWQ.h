@@ -77,6 +77,7 @@ public:
   void apply_qos_read_iops_limit(uint64_t limit);
   void apply_qos_write_iops_limit(uint64_t limit);
   void apply_qos_read_bps_limit(uint64_t limit);
+  void apply_qos_write_bps_limit(uint64_t limit);
 
 protected:
   void *_void_dequeue() override;

@@ -89,6 +89,9 @@ ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
   m_throttles.push_back(make_pair(
 	RBD_QOS_READ_BPS_THROTTLE, new TokenBucketThrottle(
 	  cct, 0, 0, timer, timer_lock)));
+  m_throttles.push_back(make_pair(
+	RBD_QOS_WRITE_BPS_THROTTLE, new TokenBucketThrottle(
+	  cct, 0, 0, timer, timer_lock)));
 
   this->register_work_queue();
 }
@@ -606,6 +609,11 @@ void ImageRequestWQ<I>::apply_qos_write_iops_limit(uint64_t limit) {
 template <typename I>
 void ImageRequestWQ<I>::apply_qos_read_bps_limit(uint64_t limit) {
   set_qos_limit(limit, RBD_QOS_READ_BPS_THROTTLE);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::apply_qos_write_bps_limit(uint64_t limit) {
+  set_qos_limit(limit, RBD_QOS_WRITE_BPS_THROTTLE);
 }
 
 template <typename I>
