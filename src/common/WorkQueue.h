@@ -644,6 +644,7 @@ public:
 
     virtual void _process(uint32_t thread_index, heartbeat_handle_d *hb ) = 0;
     virtual void return_waiting_threads() = 0;
+    virtual void stop_return_waiting_threads() = 0;
     virtual bool is_shard_empty(uint32_t thread_index) = 0;
   };      
 

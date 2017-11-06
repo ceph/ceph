@@ -9754,19 +9754,26 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   // peek at spg_t
   sdata->sdata_op_ordering_lock.Lock();
   if (sdata->pqueue->empty()) {
-    dout(20) << __func__ << " empty q, waiting" << dendl;
-    osd->cct->get_heartbeat_map()->clear_timeout(hb);
     sdata->sdata_lock.Lock();
-    sdata->sdata_op_ordering_lock.Unlock();
-    sdata->sdata_cond.Wait(sdata->sdata_lock);
-    sdata->sdata_lock.Unlock();
-    sdata->sdata_op_ordering_lock.Lock();
-    if (sdata->pqueue->empty()) {
+    if (!sdata->stop_waiting) {
+      dout(20) << __func__ << " empty q, waiting" << dendl;
+      osd->cct->get_heartbeat_map()->clear_timeout(hb);
+      sdata->sdata_op_ordering_lock.Unlock();
+      sdata->sdata_cond.Wait(sdata->sdata_lock);
+      sdata->sdata_lock.Unlock();
+      sdata->sdata_op_ordering_lock.Lock();
+      if (sdata->pqueue->empty()) {
+	sdata->sdata_op_ordering_lock.Unlock();
+	return;
+      }
+      osd->cct->get_heartbeat_map()->reset_timeout(hb,
+	  osd->cct->_conf->threadpool_default_timeout, 0);
+    } else {
+      dout(0) << __func__ << " need return immediately" << dendl;
+      sdata->sdata_lock.Unlock();
       sdata->sdata_op_ordering_lock.Unlock();
       return;
     }
-    osd->cct->get_heartbeat_map()->reset_timeout(hb,
-      osd->cct->_conf->threadpool_default_timeout, 0);
   }
   OpQueueItem item = sdata->pqueue->dequeue();
   if (osd->is_stopping()) {
