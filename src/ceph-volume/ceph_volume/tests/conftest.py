@@ -1,3 +1,4 @@
+import os
 import pytest
 from ceph_volume.api import lvm as lvm_api
 
@@ -53,3 +54,17 @@ def is_root(monkeypatch):
     is root (or is sudoing to superuser) can continue as-is
     """
     monkeypatch.setattr('os.getuid', lambda: 0)
+
+
+@pytest.fixture
+def tmpfile(tmpdir):
+    """
+    Create a temporary file, optionally filling it with contents, returns an
+    absolute path to the file when called
+    """
+    def generate_file(name='file', contents=''):
+        path = os.path.join(str(tmpdir), name)
+        with open(path, 'w') as fp:
+            fp.write(contents)
+        return path
+    return generate_file
