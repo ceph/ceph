@@ -168,7 +168,15 @@
                         center_text: raw_usage_text,
                         responsive: true,
                         legend: {display: false},
-                        animation: {duration: 0}
+                        animation: {duration: 0},
+                        tooltips: {
+                            callbacks: {
+                                label: function(tooltipItem, chart) {
+                                    return chart.labels[tooltipItem.index] + ": " +
+					    rivets.formatters.dimless_binary(chart.datasets[0].data[tooltipItem.index]);
+                                }
+                            }
+                        }
                     }
                 });
 
@@ -202,7 +210,15 @@
                     options: {
                         responsive: true,
                         legend: {display: false},
-                        animation: {duration: 0}
+                        animation: {duration: 0},
+                        tooltips: {
+                            callbacks: {
+                                label: function(tooltipItem, chart) {
+                                    return chart.labels[tooltipItem.index] + ": " +
+					    rivets.formatters.dimless_binary(chart.datasets[0].data[tooltipItem.index]);
+                                }
+                            }
+                        }
                     }
                 });
             }
