@@ -1,3 +1,5 @@
+import os
+import pytest
 from ceph_volume.devices.simple import scan
 
 
@@ -17,3 +19,26 @@ class TestGetContentst(object):
         magic_file = tmpfile(contents='first\n')
         scanner = scan.Scan([])
         assert scanner.get_contents(magic_file) == 'first'
+
+
+class TestEtcPath(object):
+
+    def test_directory_is_valid(self, tmpdir):
+        path = str(tmpdir)
+        scanner = scan.Scan([])
+        scanner._etc_path = path
+        assert scanner.etc_path == path
+
+    def test_directory_does_not_exist_gets_created(self, tmpdir):
+        path = os.path.join(str(tmpdir), 'subdir')
+        scanner = scan.Scan([])
+        scanner._etc_path = path
+        assert scanner.etc_path == path
+        assert os.path.isdir(path)
+
+    def test_complains_when_file(self, tmpfile):
+        path = tmpfile()
+        scanner = scan.Scan([])
+        scanner._etc_path = path
+        with pytest.raises(RuntimeError):
+            scanner.etc_path
