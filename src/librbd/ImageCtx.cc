@@ -1007,7 +1007,8 @@ struct C_InvalidateCache : public Context {
 	"rbd_qos_iops_limit", false)(
 	"rbd_qos_bps_limit", false)(
 	"rbd_qos_read_iops_limit", false)(
-	"rbd_qos_write_iops_limit", false);
+	"rbd_qos_write_iops_limit", false)(
+	"rbd_qos_read_bps_limit", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -1072,6 +1073,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(qos_bps_limit, uint64_t);
     ASSIGN_OPTION(qos_read_iops_limit, uint64_t);
     ASSIGN_OPTION(qos_write_iops_limit, uint64_t);
+    ASSIGN_OPTION(qos_read_bps_limit, uint64_t);
 
     if (thread_safe) {
       ASSIGN_OPTION(journal_pool, std::string);
@@ -1085,6 +1087,7 @@ struct C_InvalidateCache : public Context {
     io_work_queue->apply_qos_bps_limit(qos_bps_limit);
     io_work_queue->apply_qos_read_iops_limit(qos_read_iops_limit);
     io_work_queue->apply_qos_write_iops_limit(qos_write_iops_limit);
+    io_work_queue->apply_qos_read_bps_limit(qos_read_bps_limit);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {
