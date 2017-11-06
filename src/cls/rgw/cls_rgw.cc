@@ -705,7 +705,9 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   if (rc < 0)
     return rc;
 
-  return write_bucket_header(hctx, &header);
+  if (op.log_op && !header.syncstopped)
+    return write_bucket_header(hctx, &header);
+  return 0;
 }
 
 static void unaccount_entry(struct rgw_bucket_dir_header& header, struct rgw_bucket_dir_entry& entry)
