@@ -43,6 +43,7 @@ class RGWCompletionManager : public RefCountedObject {
     void *user_info;
   };
   list<io_completion> complete_reqs;
+  set<rgw_io_id> complete_reqs_set;
   using NotifierRef = boost::intrusive_ptr<RGWAioCompletionNotifier>;
   set<NotifierRef> cns;
 
