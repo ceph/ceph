@@ -150,6 +150,7 @@ int	closeprob = 0;			/* -c flag */
 int	debug = 0;			/* -d flag */
 unsigned long	debugstart = 0;		/* -D flag */
 int	flush_enabled = 0;		/* -f flag */
+int	deep_copy = 0;                  /* -g flag */
 int	holebdy = 1;			/* -h flag */
 bool    journal_replay = false;         /* -j flah */
 int	keep_on_success = 0;		/* -k flag */
@@ -752,6 +753,79 @@ librbd_resize(struct rbd_ctx *ctx, uint64_t size)
 }
 
 int
+__librbd_deep_copy(struct rbd_ctx *ctx, const char *src_snapname,
+		   const char *dst_imagename, uint64_t features, int *order,
+		   int stripe_unit, int stripe_count) {
+	int ret;
+
+        rbd_image_options_t opts;
+        rbd_image_options_create(&opts);
+        BOOST_SCOPE_EXIT_ALL( (&opts) ) {
+                rbd_image_options_destroy(opts);
+        };
+	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+                                           features);
+	assert(ret == 0);
+	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                           *order);
+	assert(ret == 0);
+	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                           stripe_unit);
+	assert(ret == 0);
+	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                           stripe_count);
+	assert(ret == 0);
+
+	ret = rbd_snap_set(ctx->image, src_snapname);
+	if (ret < 0) {
+		prt("rbd_snap_set(%s@%s) failed\n", ctx->name, src_snapname);
+		return ret;
+	}
+
+	ret = rbd_deep_copy(ctx->image, ioctx, dst_imagename, opts);
+	if (ret < 0) {
+		prt("rbd_deep_copy(%s@%s -> %s) failed\n",
+		    ctx->name, src_snapname, dst_imagename);
+		return ret;
+	}
+
+	ret = rbd_snap_set(ctx->image, "");
+	if (ret < 0) {
+		prt("rbd_snap_set(%s@) failed\n", ctx->name);
+		return ret;
+	}
+
+	rbd_image_t image;
+	ret = rbd_open(ioctx, dst_imagename, &image, nullptr);
+	if (ret < 0) {
+		prt("rbd_open(%s) failed\n", dst_imagename);
+		return ret;
+	}
+
+	ret = rbd_snap_unprotect(image, src_snapname);
+	if (ret < 0) {
+		prt("rbd_snap_unprotect(%s@%s) failed\n", dst_imagename,
+		    src_snapname);
+		return ret;
+	}
+
+	ret = rbd_snap_remove(image, src_snapname);
+	if (ret < 0) {
+		prt("rbd_snap_remove(%s@%s) failed\n", dst_imagename,
+		    src_snapname);
+		return ret;
+	}
+
+	ret = rbd_close(image);
+	if (ret < 0) {
+		prt("rbd_close(%s) failed\n", dst_imagename);
+		return ret;
+	}
+
+	return 0;
+}
+
+int
 __librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 	       const char *dst_imagename, int *order, int stripe_unit,
 	       int stripe_count, bool krbd)
@@ -779,13 +853,23 @@ __librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
                               RBD_FEATURE_DEEP_FLATTEN   |
                               RBD_FEATURE_JOURNALING);
 	}
-	ret = rbd_clone2(ioctx, ctx->name, src_snapname, ioctx,
-			 dst_imagename, features, order,
-			 stripe_unit, stripe_count);
-	if (ret < 0) {
-		prt("rbd_clone2(%s@%s -> %s) failed\n", ctx->name,
-		    src_snapname, dst_imagename);
-		return ret;
+	if (deep_copy) {
+		ret = __librbd_deep_copy(ctx, src_snapname, dst_imagename, features,
+					 order, stripe_unit, stripe_count);
+		if (ret < 0) {
+			prt("deep_copy(%s@%s -> %s) failed\n", ctx->name,
+			    src_snapname, dst_imagename);
+			return ret;
+		}
+	} else {
+		ret = rbd_clone2(ioctx, ctx->name, src_snapname, ioctx,
+				 dst_imagename, features, order,
+				 stripe_unit, stripe_count);
+		if (ret < 0) {
+			prt("rbd_clone2(%s@%s -> %s) failed\n", ctx->name,
+			    src_snapname, dst_imagename);
+			return ret;
+		}
 	}
 
 	return 0;
@@ -2504,6 +2588,7 @@ usage(void)
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
 	-f: flush and invalidate cache after I/O\n\
+        -g: deep copy instead of clone\n\
 	-h holebdy: 4096 would make discards page aligned (default 1)\n\
 	-j: journal replay stress test\n\
 	-k: keep data on success (default 0)\n\
@@ -2659,7 +2744,7 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfh:jkl:m:no:p:qr:s:t:w:xyCD:FHKMLN:OP:RS:UWZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfgh:jkl:m:no:p:qr:s:t:w:xyCD:FHKMLN:OP:RS:UWZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -2685,6 +2770,9 @@ main(int argc, char **argv)
 			break;
 		case 'f':
 			flush_enabled = 1;
+			break;
+		case 'g':
+			deep_copy = 1;
 			break;
 		case 'h':
 			holebdy = getnum(optarg, &endp);

@@ -56,6 +56,13 @@ public:
     STATE_ERROR
   };
 
+  static SnapshotRemoveRequest *create(
+      ImageCtxT &image_ctx, const cls::rbd::SnapshotNamespace &snap_namespace,
+      const std::string &snap_name, uint64_t snap_id, Context *on_finish) {
+    return new SnapshotRemoveRequest(image_ctx, on_finish, snap_namespace,
+                                     snap_name, snap_id);
+  }
+
   SnapshotRemoveRequest(ImageCtxT &image_ctx, Context *on_finish,
 			const cls::rbd::SnapshotNamespace &snap_namespace,
 		        const std::string &snap_name,
