@@ -79,34 +79,6 @@ struct C_FlushJournalCommit : public Context {
   }
 };
 
-template <typename ImageCtxT>
-class C_ObjectCacheRead : public Context {
-public:
-  explicit C_ObjectCacheRead(ImageCtxT &ictx, ObjectReadRequest<ImageCtxT> *req)
-    : m_image_ctx(ictx), m_req(req), m_enqueued(false) {}
-
-  void complete(int r) override {
-    if (!m_enqueued) {
-      // cache_lock creates a lock ordering issue -- so re-execute this context
-      // outside the cache_lock
-      m_enqueued = true;
-      m_image_ctx.op_work_queue->queue(this, r);
-      return;
-    }
-    Context::complete(r);
-  }
-
-protected:
-  void finish(int r) override {
-    m_req->complete(r);
-  }
-
-private:
-  ImageCtxT &m_image_ctx;
-  ObjectReadRequest<ImageCtxT> *m_req;
-  bool m_enqueued;
-};
-
 } // anonymous namespace
 
 template <typename I>
@@ -358,17 +330,7 @@ void ImageReadRequest<I>::send_request() {
         &image_ctx, extent.oid.name, extent.objectno, extent.offset,
         extent.length, snap_id, m_op_flags, this->m_trace, req_comp);
       req_comp->request = req;
-
-      if (image_ctx.object_cacher) {
-        C_ObjectCacheRead<I> *cache_comp = new C_ObjectCacheRead<I>(image_ctx,
-                                                                    req);
-        image_ctx.aio_read_from_cache(
-          extent.oid, extent.objectno, &req->data(), extent.length,
-          extent.offset, cache_comp, m_op_flags,
-          (this->m_trace.valid() ? &this->m_trace : nullptr));
-      } else {
-        req->send();
-      }
+      req->send();
     }
   }
 
