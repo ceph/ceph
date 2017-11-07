@@ -47,6 +47,9 @@ const std::string SERVICE_DAEMON_LEADER_KEY("leader");
 const std::string SERVICE_DAEMON_LOCAL_COUNT_KEY("image_local_count");
 const std::string SERVICE_DAEMON_REMOTE_COUNT_KEY("image_remote_count");
 
+const std::vector<std::string> UNIQUE_PEER_CONFIG_KEYS {
+  {"monmap", "mon_host", "mon_dns_srv_name", "key", "keyfile", "keyring"}};
+
 class PoolReplayerAdminSocketCommand {
 public:
   PoolReplayerAdminSocketCommand(PoolReplayer *pool_replayer)
@@ -260,7 +263,7 @@ void PoolReplayer::init()
   dout(20) << "replaying for " << m_peer << dendl;
   int r = init_rados(g_ceph_context->_conf->cluster,
                      g_ceph_context->_conf->name.to_str(),
-                     "local cluster", &m_local_rados);
+                     "local cluster", &m_local_rados, false);
   if (r < 0) {
     m_callout_id = m_service_daemon->add_or_update_callout(
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
@@ -270,7 +273,7 @@ void PoolReplayer::init()
 
   r = init_rados(m_peer.cluster_name, m_peer.client_name,
                  std::string("remote peer ") + stringify(m_peer),
-                 &m_remote_rados);
+                 &m_remote_rados, true);
   if (r < 0) {
     m_callout_id = m_service_daemon->add_or_update_callout(
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
@@ -377,7 +380,8 @@ void PoolReplayer::shut_down() {
 int PoolReplayer::init_rados(const std::string &cluster_name,
 			     const std::string &client_name,
 			     const std::string &description,
-			     RadosRef *rados_ref) {
+			     RadosRef *rados_ref,
+                             bool strip_cluster_overrides) {
   rados_ref->reset(new librados::Rados());
 
   // NOTE: manually bootstrap a CephContext here instead of via
@@ -402,6 +406,18 @@ int PoolReplayer::init_rados(const std::string &cluster_name,
     cct->put();
     return r;
   }
+
+  // preserve cluster-specific config settings before applying environment/cli
+  // overrides
+  std::map<std::string, std::string> config_values;
+  if (strip_cluster_overrides) {
+    // remote peer connections shouldn't apply cluster-specific
+    // configuration settings
+    for (auto& key : UNIQUE_PEER_CONFIG_KEYS) {
+      config_values[key] = cct->_conf->get_val<std::string>(key);
+    }
+  }
+
   cct->_conf->parse_env();
 
   // librados::Rados::conf_parse_env
@@ -424,6 +440,20 @@ int PoolReplayer::init_rados(const std::string &cluster_name,
 	   << cpp_strerror(r) << dendl;
       cct->put();
       return r;
+    }
+  }
+
+  if (strip_cluster_overrides) {
+    // remote peer connections shouldn't apply cluster-specific
+    // configuration settings
+    for (auto& pair : config_values) {
+      auto value = cct->_conf->get_val<std::string>(pair.first);
+      if (pair.second != value) {
+        dout(0) << "reverting global config option override: "
+                << pair.first << ": " << value << " -> " << pair.second
+                << dendl;
+        cct->_conf->set_val_or_die(pair.first, pair.second);
+      }
     }
   }
 
