@@ -10,6 +10,7 @@
 #include "common/snap_types.h"
 #include "common/zipkin_trace.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/io/Types.h"
 #include <map>
 
 class Context;
@@ -43,8 +44,6 @@ struct ObjectRequestHandle {
 template <typename ImageCtxT = ImageCtx>
 class ObjectRequest : public ObjectRequestHandle {
 public:
-  typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
-
   static ObjectRequest* create_remove(ImageCtxT *ictx,
                                       const std::string &oid,
                                       uint64_t object_no,
@@ -127,7 +126,7 @@ public:
   virtual bool pre_object_map_update(uint8_t *new_state) = 0;
 
 protected:
-  bool compute_parent_extents();
+  bool compute_parent_extents(Extents *parent_extents);
 
   ImageCtxT *m_ictx;
   std::string m_oid;
@@ -138,6 +137,9 @@ protected:
   bool m_hide_enoent;
   ZTracer::Trace m_trace;
 
+  void async_finish(int r);
+  void finish(int r);
+
 private:
   bool m_has_parent = false;
 };
@@ -145,7 +147,6 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class ObjectReadRequest : public ObjectRequest<ImageCtxT> {
 public:
-  typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
   typedef std::map<uint64_t, uint64_t> ExtentMap;
 
   static ObjectReadRequest* create(ImageCtxT *ictx, const std::string &oid,
@@ -166,7 +167,6 @@ public:
 
   bool should_complete(int r) override;
   void send() override;
-  void guard_read();
 
   inline uint64_t get_offset() const {
     return this->m_object_off;
@@ -190,38 +190,47 @@ public:
   }
 
 private:
-  bool m_tried_parent;
+  /**
+   * @verbatim
+   *
+   *           <start>
+   *              |
+   *              |
+   *    /--------/ \--------\
+   *    |                   |
+   *    | (cache            | (cache
+   *    v  disabled)        v  enabled)
+   * READ_OBJECT      READ_CACHE
+   *    |                   |
+   *    |/------------------/
+   *    |
+   *    v (skip if not needed)
+   * READ_PARENT
+   *    |
+   *    v (skip if not needed)
+   * COPYUP
+   *    |
+   *    v
+   * <finish>
+   *
+   * @endverbatim
+   */
+
   int m_op_flags;
+
   ceph::bufferlist m_read_data;
   ExtentMap m_ext_map;
 
-  /**
-   * Reads go through the following state machine to deal with
-   * layering:
-   *
-   *                          need copyup
-   * LIBRBD_AIO_READ_GUARD ---------------> LIBRBD_AIO_READ_COPYUP
-   *           |                                       |
-   *           v                                       |
-   *         done <------------------------------------/
-   *           ^
-   *           |
-   * LIBRBD_AIO_READ_FLAT
-   *
-   * Reads start in LIBRBD_AIO_READ_GUARD or _FLAT, depending on
-   * whether there is a parent or not.
-   */
-  enum read_state_d {
-    LIBRBD_AIO_READ_GUARD,
-    LIBRBD_AIO_READ_COPYUP,
-    LIBRBD_AIO_READ_FLAT
-  };
+  void read_cache();
+  void handle_read_cache(int r);
 
-  read_state_d m_state;
+  void read_object();
+  void handle_read_object(int r);
 
-  void send_copyup();
+  void read_parent();
+  void handle_read_parent(int r);
 
-  void read_from_parent(Extents&& image_extents);
+  void copyup();
 };
 
 template <typename ImageCtxT = ImageCtx>
@@ -543,8 +552,6 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class ObjectCompareAndWriteRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
-  typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
-
   ObjectCompareAndWriteRequest(ImageCtxT *ictx, const std::string &oid,
                                uint64_t object_no, uint64_t object_off,
                                const ceph::bufferlist &cmp_bl,
