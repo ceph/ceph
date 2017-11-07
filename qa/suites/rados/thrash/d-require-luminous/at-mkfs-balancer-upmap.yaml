@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug osd: 20
+tasks:
+- exec:
+    mon.a:
+      - while ! ceph balancer status ; do sleep 1 ; done
+      - ceph balancer mode upmap
+      - ceph balancer on
