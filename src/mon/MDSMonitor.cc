@@ -140,6 +140,11 @@ void MDSMonitor::create_pending()
   pending_fsmap = fsmap;
   pending_fsmap.epoch++;
 
+  if (mon->osdmon()->is_readable()) {
+    auto &osdmap = mon->osdmon()->osdmap;
+    pending_fsmap.sanitize([&osdmap](int64_t pool){return osdmap.have_pg_pool(pool);});
+  }
+
   dout(10) << "create_pending e" << pending_fsmap.epoch << dendl;
 }
 
