@@ -5,6 +5,26 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <boost/utility/string_view.hpp>
+
+
+namespace ceph {
+
+/// Split a string using the given delimiters, passing each piece as a
+/// (non-null-terminated) boost::string_view to the callback.
+template <typename Func> // where Func(boost::string_view) is a valid call
+void for_each_substr(boost::string_view s, const char *delims, Func&& f)
+{
+  auto pos = s.find_first_not_of(delims);
+  while (pos != s.npos) {
+    s.remove_prefix(pos); // trim delims from the front
+    auto end = s.find_first_of(delims);
+    f(s.substr(0, end));
+    pos = s.find_first_not_of(delims, end);
+  }
+}
+
+} // namespace ceph
 
 /**
  * Split **str** into a list of strings, using the ";,= \t" delimiters and output the result in **str_list**.
