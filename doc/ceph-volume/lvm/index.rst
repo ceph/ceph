@@ -24,5 +24,5 @@ There are other aspects of the ``lvm`` subcommand that are internal and not
 exposed to the user, these sections explain how these pieces work together,
 clarifying the workflows of the tool.
 
-:ref:`Systemd Units <ceph-volume-systemd>` |
+:ref:`Systemd Units <ceph-volume-lvm-systemd>` |
 :ref:`lvm <ceph-volume-lvm-api>`
