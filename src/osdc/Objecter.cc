@@ -961,9 +961,6 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
 bool Objecter::ms_dispatch(Message *m)
 {
   ldout(cct, 10) << __func__ << " " << cct << " " << *m << dendl;
-  if (!initialized)
-    return false;
-
   switch (m->get_type()) {
     // these we exlusively handle
   case CEPH_MSG_OSD_OPREPLY:
@@ -2046,7 +2043,6 @@ void Objecter::_kick_requests(OSDSession *session,
        p != session->ops.end();) {
     Op *op = p->second;
     ++p;
-    logger->inc(l_osdc_op_resend);
     if (op->should_resend) {
       if (!op->target.paused)
 	resend[op->tid] = op;
@@ -2056,26 +2052,27 @@ void Objecter::_kick_requests(OSDSession *session,
     }
   }
 
+  logger->inc(l_osdc_op_resend, resend.size());
   while (!resend.empty()) {
     _send_op(resend.begin()->second);
     resend.erase(resend.begin());
   }
 
   // resend lingers
+  logger->inc(l_osdc_linger_resend, session->linger_ops.size());
   for (map<ceph_tid_t, LingerOp*>::iterator j = session->linger_ops.begin();
        j != session->linger_ops.end(); ++j) {
     LingerOp *op = j->second;
     op->get();
-    logger->inc(l_osdc_linger_resend);
     assert(lresend.count(j->first) == 0);
     lresend[j->first] = op;
   }
 
   // resend commands
+  logger->inc(l_osdc_command_resend, session->command_ops.size());
   map<uint64_t,CommandOp*> cresend;  // resend in order
   for (map<ceph_tid_t, CommandOp*>::iterator k = session->command_ops.begin();
        k != session->command_ops.end(); ++k) {
-    logger->inc(l_osdc_command_resend);
     cresend[k->first] = k->second;
   }
   while (!cresend.empty()) {
@@ -3342,7 +3339,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 						    " onnvram" : " ack"))
 		  << " ... stray" << dendl;
     sl.unlock();
-    put_session(s);
+    s->put();
     m->put();
     return;
   }
@@ -3365,7 +3362,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     }
     _session_op_remove(s, op);
     sl.unlock();
-    put_session(s);
+    s->put();
 
     _op_submit(op, sul, NULL);
     m->put();
@@ -3381,7 +3378,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		    << op->session->con->get_peer_addr() << dendl;
       m->put();
       sl.unlock();
-      put_session(s);
+      s->put();
       return;
     }
   } else {
@@ -3400,7 +3397,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       num_in_flight--;
     _session_op_remove(s, op);
     sl.unlock();
-    put_session(s);
+    s->put();
 
     // FIXME: two redirects could race and reorder
 
@@ -3419,7 +3416,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       num_in_flight--;
     _session_op_remove(s, op);
     sl.unlock();
-    put_session(s);
+    s->put();
 
     op->tid = 0;
     op->target.flags &= ~(CEPH_OSD_FLAG_BALANCE_READS |
@@ -3513,7 +3510,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   }
 
   m->put();
-  put_session(s);
+  s->put();
 }
 
 void Objecter::handle_osd_backoff(MOSDBackoff *m)
