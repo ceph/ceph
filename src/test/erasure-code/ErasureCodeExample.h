@@ -46,9 +46,10 @@ public:
 				 "indep", pg_pool_t::TYPE_ERASURE, ss);
   }
   
+  using ErasureCode::minimum_to_decode;
   int minimum_to_decode(const set<int> &want_to_read,
-                                const set<int> &available_chunks,
-                                set<int> *minimum) {
+			const set<int> &available_chunks,
+			set<int> *minimum) {
     if (includes(available_chunks.begin(), available_chunks.end(),
 		 want_to_read.begin(), want_to_read.end())) {
       *minimum = want_to_read;
@@ -144,9 +145,10 @@ public:
     return 0;
   }
 
+  using ErasureCode::decode;
   int decode(const set<int> &want_to_read,
-                     const map<int, bufferlist> &chunks,
-                     map<int, bufferlist> *decoded) {
+	     const map<int, bufferlist> &chunks,
+	     map<int, bufferlist> *decoded) {
     //
     // All chunks have the same size
     //
