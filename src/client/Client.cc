@@ -7819,10 +7819,10 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
     if (diri->dn_set.empty())
       in = diri;
     else
-      in = diri->get_first_parent()->inode;
+      in = diri->get_first_parent()->dir->parent_inode;
 
     int r;
-    r = _getattr(diri, caps, dirp->perms);
+    r = _getattr(in, caps, dirp->perms);
     if (r < 0)
       return r;
 
