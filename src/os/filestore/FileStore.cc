@@ -5024,7 +5024,7 @@ int FileStore::collection_list(const coll_t& c,
   dout(20) << "objects: " << *ls << dendl;
 
   // HashIndex doesn't know the pool when constructing a 'next' value
-  if (next && !next->is_max()) {
+  if (!next->is_max()) {
     next->hobj.pool = pool;
     next->set_shard(shard);
     dout(20) << "  next " << *next << dendl;
