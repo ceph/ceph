@@ -424,7 +424,8 @@ static void add_grants_headers(map<int, string>& grants, RGWEnv& env, map<string
 
 void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
 {
-  string resource = obj.bucket.name + "/" + obj.get_oid();
+  string resource;
+  url_encode(obj.bucket.name + "/" + obj.get_oid(), resource);
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
