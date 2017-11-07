@@ -1,49 +1,33 @@
-.. _ceph-volume-lvm-systemd:
+.. _ceph-volume-systemd:
 
 systemd
 =======
-As part of the :ref:`ceph-volume-lvm-activate` process, a few systemd units will get enabled
-that will use the OSD id and uuid as part of their name. These units will be
-run when the system boots, and will proceed to activate their corresponding
-volumes.
+As part of the activation process (either with :ref:`ceph-volume-lvm-activate`
+or :ref:`ceph-volume-simple-activate`), systemd units will get enabled that
+will use the OSD id and uuid as part of their name. These units will be run
+when the system boots, and will proceed to activate their corresponding
+volumes via their sub-command implementation.
 
-The API for activation requires both the :term:`OSD id` and :term:`OSD uuid`,
-which get persisted by systemd. Internally, the activation process enables the
-systemd unit using the following convention::
+The API for activation is a bit loose, it only requires two parts: the
+subcommand to use and any extra meta information separated by a dash. This
+convention makes the units look like::
 
-    ceph-volume@<type>-<extra metadata>
+    ceph-volume@{command}-{extra metadata}
 
-Where ``type`` is the sub-command used to parse the extra metadata, and ``extra
-metadata`` is any additional information needed by the sub-command to be able
-to activate the OSD. For example an OSD with an ID of 0, for the ``lvm``
-sub-command would look like::
+The *extra metadata* can be anything needed that the subcommand implementing
+the processing might need. In the case of :ref:`ceph-volume-lvm` and
+:ref:`ceph-volume-simple`, both look to consume the :term:`OSD id` and :term:`OSD uuid`,
+but this is not a hard requirement, it is just how the sub-commands are
+implemented.
+
+Both the command and extra metadata gets persisted by systemd as part of the
+*"instance name"* of the unit.  For example an OSD with an ID of 0, for the
+``lvm`` sub-command would look like::
 
     systemctl enable ceph-volume@lvm-0-0A3E1ED2-DA8A-4F0E-AA95-61DEC71768D6
 
-
-Process
--------
-The systemd unit is a :term:`systemd oneshot` service, meant to start at boot after the
-local filesystem is ready to be used.
-
-Upon startup, it will identify the logical volume using :term:`LVM tags`,
-finding a matching ID and later ensuring it is the right one with
-the :term:`OSD uuid`.
-
-After identifying the correct volume it will then proceed to mount it by using
-the OSD destination conventions, that is::
-
-    /var/lib/ceph/osd/<cluster name>-<osd id>
-
-For our example OSD with an id of ``0``, that means the identified device will
-be mounted at::
-
-
-    /var/lib/ceph/osd/ceph-0
-
-Once that process is complete, a call will be made to start the OSD::
-
-    systemctl start ceph-osd@0
+The enabled unit is a :term:`systemd oneshot` service, meant to start at boot
+after the local filesystem is ready to be used.
 
 
 Failure and Retries
