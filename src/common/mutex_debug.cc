@@ -74,14 +74,16 @@ void mutex_debugging_base::_will_unlock() {  // about to unlock
 }
 
 ceph::mono_time mutex_debugging_base::before_lock_blocks() {
-  if (logger && cct && cct->_conf->mutex_perf_counter)
+  auto perf_counter = cct->_conf->get_val<bool>("mutex_perf_counter");
+  if (logger && cct && perf_counter)
     return ceph::mono_clock::now();
   return ceph::mono_time::min();
 }
 
 void mutex_debugging_base::after_lock_blocks(ceph::mono_time start,
 					     bool no_lockdep) {
-  if (logger && cct && cct->_conf->mutex_perf_counter)
+  auto perf_counter = cct->_conf->get_val<bool>("mutex_perf_counter");
+  if (logger && cct && perf_counter)
     logger->tinc(l_mutex_wait,
 		 ceph::mono_clock::now() - start);
   if (!no_lockdep && g_lockdep)

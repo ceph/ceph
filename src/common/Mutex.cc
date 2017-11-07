@@ -91,7 +91,8 @@ void Mutex::Lock(bool no_lockdep) {
 
   if (lockdep && g_lockdep && !no_lockdep && !recursive) _will_lock();
 
-  if (logger && cct && cct->_conf->mutex_perf_counter) {
+  auto perf_counter = cct->_conf->get_val<bool>("mutex_perf_counter");
+  if (logger && cct && perf_counter) {
     utime_t start;
     // instrumented mutex enabled
     start = ceph_clock_now();

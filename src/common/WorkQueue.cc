@@ -134,13 +134,12 @@ void ThreadPool::worker(WorkThread *wt)
     }
 
     ldout(cct,20) << "worker waiting" << dendl;
-    cct->get_heartbeat_map()->reset_timeout(
-      hb,
-      cct->_conf->threadpool_default_timeout,
-      0);
-    _cond.WaitInterval(_lock,
-      utime_t(
-	cct->_conf->threadpool_empty_queue_max_wait, 0));
+    auto default_timeout = cct->_conf->get_val<int64_t>(
+      "threadpool_default_timeout");
+    auto empty_queue_max_wait = cct->_conf->get_val<int64_t>(
+      "threadpool_empty_queue_max_wait");
+    cct->get_heartbeat_map()->reset_timeout(hb, default_timeout, 0);
+    _cond.WaitInterval(_lock, utime_t(empty_queue_max_wait, 0));
   }
   ldout(cct,1) << "worker finish" << dendl;
 
@@ -299,6 +298,9 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
   ss << name << " thread " << (void *)pthread_self();
   heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
 
+  auto tp_max_wait =
+    cct->_conf->get_val<int64_t>("threadpool_empty_queue_max_wait");
+
   while (!stop_threads) {
     if (pause_threads) {
       shardedpool_lock.Lock();
@@ -308,9 +310,8 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
        cct->get_heartbeat_map()->reset_timeout(
 	        hb,
 	        wq->timeout_interval, wq->suicide_interval);
-       shardedpool_cond.WaitInterval(shardedpool_lock,
-	   utime_t(
-	   cct->_conf->threadpool_empty_queue_max_wait, 0));
+       shardedpool_cond.WaitInterval(
+         shardedpool_lock, utime_t(tp_max_wait, 0));
       }
       --num_paused;
       shardedpool_lock.Unlock();
@@ -324,9 +325,8 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 	  cct->get_heartbeat_map()->reset_timeout(
 	    hb,
 	    wq->timeout_interval, wq->suicide_interval);
-          shardedpool_cond.WaitInterval(shardedpool_lock,
-	    utime_t(
-	      cct->_conf->threadpool_empty_queue_max_wait, 0));
+          shardedpool_cond.WaitInterval(
+            shardedpool_lock, utime_t(tp_max_wait, 0));
         }
         --num_drained;
       }

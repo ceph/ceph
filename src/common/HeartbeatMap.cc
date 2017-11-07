@@ -120,9 +120,11 @@ bool HeartbeatMap::is_healthy()
   int total = 0;
   m_rwlock.get_read();
   auto now = ceph::coarse_mono_clock::now();
-  if (m_cct->_conf->heartbeat_inject_failure) {
-    ldout(m_cct, 0) << "is_healthy injecting failure for next " << m_cct->_conf->heartbeat_inject_failure << " seconds" << dendl;
-    m_inject_unhealthy_until = now + std::chrono::seconds(m_cct->_conf->heartbeat_inject_failure);
+  auto hb_inject_failure =
+    m_cct->_conf->get_val<int64_t>("heartbeat_inject_failure");
+  if (hb_inject_failure) {
+    ldout(m_cct, 0) << "is_healthy injecting failure for next " << hb_inject_failure << " seconds" << dendl;
+    m_inject_unhealthy_until = now + std::chrono::seconds(hb_inject_failure);
     m_cct->_conf->set_val("heartbeat_inject_failure", "0");
   }
 
@@ -168,7 +170,8 @@ int HeartbeatMap::get_total_workers() const
 void HeartbeatMap::check_touch_file()
 {
   if (is_healthy()) {
-    string path = m_cct->_conf->heartbeat_file;
+    const auto& path =
+      m_cct->_conf->get_val<std::string>("heartbeat_file");
     if (path.length()) {
       int fd = ::open(path.c_str(), O_WRONLY|O_CREAT, 0644);
       if (fd >= 0) {

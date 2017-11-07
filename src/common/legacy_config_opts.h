@@ -20,7 +20,6 @@ OPTION(cluster_addr, OPT_ADDR)
 OPTION(public_network, OPT_STR)
 OPTION(cluster_network, OPT_STR)
 OPTION(lockdep, OPT_BOOL)
-OPTION(lockdep_force_backtrace, OPT_BOOL) // always gather current backtrace at every lock
 OPTION(run_dir, OPT_STR)       // the "/var/run/ceph" dir, created on daemon startup
 OPTION(admin_socket, OPT_STR) // default changed by common_preinit()
 OPTION(admin_socket_mode, OPT_STR) // permission bits to set for admin socket file, e.g., "0775", "0755"
@@ -109,9 +108,6 @@ OPTION(mempool_debug, OPT_BOOL)
 OPTION(key, OPT_STR)
 OPTION(keyfile, OPT_STR)
 OPTION(keyring, OPT_STR)
-OPTION(heartbeat_interval, OPT_INT)
-OPTION(heartbeat_file, OPT_STR)
-OPTION(heartbeat_inject_failure, OPT_INT)    // force an unhealthy heartbeat for N seconds
 OPTION(perf, OPT_BOOL)       // enable internal perf counters
 
 SAFE_OPTION(ms_type, OPT_STR)   // messenger backend. It will be modified in runtime, so use SAFE_OPTION
@@ -1250,7 +1246,6 @@ OPTION(rados_mon_op_timeout, OPT_DOUBLE) // how many seconds to wait for a respo
 OPTION(rados_osd_op_timeout, OPT_DOUBLE) // how many seconds to wait for a response from osds before returning an error from a rados operation. 0 means no limit.
 OPTION(rados_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabled
 
-OPTION(nss_db_path, OPT_STR) // path to nss db
 
 
 OPTION(rgw_max_chunk_size, OPT_INT)

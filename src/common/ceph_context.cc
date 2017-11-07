@@ -56,10 +56,11 @@ public:
 
   void handle_conf_change(const md_config_t *conf,
                           const std::set <std::string> &changed) override {
-    if (conf->lockdep && !m_registered) {
+    auto lockdep = conf->get_val<bool>("lockdep");
+    if (lockdep && !m_registered) {
       lockdep_register_ceph_context(m_cct);
       m_registered = true;
-    } else if (!conf->lockdep && m_registered) {
+    } else if (!lockdep && m_registered) {
       lockdep_unregister_ceph_context(m_cct);
       m_registered = false;
     }
@@ -100,7 +101,8 @@ public:
   void handle_conf_change(const md_config_t *conf,
                           const std::set <std::string> &changed) override {
     if (changed.count("mempool_debug")) {
-      mempool::set_debug_mode(cct->_conf->mempool_debug);
+      auto debug = cct->_conf->get_val<bool>("mempool_debug");
+      mempool::set_debug_mode(debug);
     }
   }
 
@@ -137,8 +139,9 @@ public:
     while (1) {
       Mutex::Locker l(_lock);
 
-      if (_cct->_conf->heartbeat_interval) {
-        utime_t interval(_cct->_conf->heartbeat_interval, 0);
+      auto hb_interval = _cct->_conf->get_val<int64_t>("heartbeat_interval");
+      if (hb_interval) {
+        utime_t interval(hb_interval, 0);
         _cond.WaitInterval(_lock, interval);
       } else
         _cond.Wait(_lock);
@@ -220,49 +223,61 @@ public:
                           const std::set <std::string> &changed) override {
     // stderr
     if (changed.count("log_to_stderr") || changed.count("err_to_stderr")) {
-      int l = conf->log_to_stderr ? 99 : (conf->err_to_stderr ? -1 : -2);
+      auto log_to_stderr = conf->get_val<bool>("log_to_stderr");
+      auto err_to_stderr = conf->get_val<bool>("err_to_stderr");
+      int l = log_to_stderr ? 99 : (err_to_stderr ? -1 : -2);
       log->set_stderr_level(l, l);
     }
 
     // syslog
     if (changed.count("log_to_syslog")) {
-      int l = conf->log_to_syslog ? 99 : (conf->err_to_syslog ? -1 : -2);
+      auto log_to_syslog = conf->get_val<bool>("log_to_syslog");
+      auto err_to_syslog = conf->get_val<bool>("err_to_syslog");
+      int l = log_to_syslog ? 99 : (err_to_syslog ? -1 : -2);
       log->set_syslog_level(l, l);
     }
 
     // file
     if (changed.count("log_file")) {
-      log->set_log_file(conf->log_file);
+      auto log_file = conf->get_val<std::string>("log_file");
+      log->set_log_file(log_file);
       log->reopen_log_file();
     }
 
     if (changed.count("log_max_new")) {
-
-      log->set_max_new(conf->log_max_new);
+      auto log_max_new = conf->get_val<int64_t>("log_max_new");
+      log->set_max_new(log_max_new);
     }
 
     if (changed.count("log_max_recent")) {
-      log->set_max_recent(conf->log_max_recent);
+      auto log_max_recent = conf->get_val<int64_t>("log_max_recent");
+      log->set_max_recent(log_max_recent);
     }
 
     // graylog
+    auto log_graylog = conf->get_val<bool>("log_to_graylog");
+    auto err_graylog = conf->get_val<bool>("err_to_graylog");
     if (changed.count("log_to_graylog") || changed.count("err_to_graylog")) {
-      int l = conf->log_to_graylog ? 99 : (conf->err_to_graylog ? -1 : -2);
+      int l = log_graylog ? 99 : (err_graylog ? -1 : -2);
       log->set_graylog_level(l, l);
 
-      if (conf->log_to_graylog || conf->err_to_graylog) {
+      if (log_graylog || err_graylog) {
 	log->start_graylog();
-      } else if (! (conf->log_to_graylog && conf->err_to_graylog)) {
+      } else if (! (log_graylog && err_graylog)) {
 	log->stop_graylog();
       }
     }
 
     if (log->graylog() && (changed.count("log_graylog_host") || changed.count("log_graylog_port"))) {
-      log->graylog()->set_destination(conf->log_graylog_host, conf->log_graylog_port);
+      auto log_graylog_host = conf->get_val<std::string>("log_graylog_host");
+      auto log_graylog_port = conf->get_val<int64_t>("log_graylog_port");
+      log->graylog()->set_destination(log_graylog_host, log_graylog_port);
     }
 
     if (changed.find("log_coarse_timestamps") != changed.end()) {
-      log->set_coarse_timestamps(conf->get_val<bool>("log_coarse_timestamps"));
+      auto log_coarse_timestamps = conf->get_val<bool>(
+        "log_coarse_timestamps");
+      log->set_coarse_timestamps(log_coarse_timestamps);
     }
 
     // metadata
@@ -271,7 +286,8 @@ public:
     }
 
     if (log->graylog() && changed.count("fsid")) {
-      log->graylog()->set_fsid(conf->get_val<uuid_d>("fsid"));
+      auto fsid = conf->get_val<uuid_d>("fsid");
+      log->graylog()->set_fsid(fsid);
     }
   }
 };
@@ -738,7 +754,8 @@ void CephContext::start_service_thread()
   }
 
   // make logs flush on_exit()
-  if (_conf->log_flush_on_exit)
+  auto log_flush_on_exit = _conf->get_val<bool>("log_flush_on_exit");
+  if (log_flush_on_exit)
     _log->set_flush_on_exit();
 
   // Trigger callbacks on any config observers that were waiting for

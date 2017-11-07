@@ -47,7 +47,8 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m,
   if (!use_perf)
     return;
 
-  if (cct->_conf->throttler_perf_counter) {
+  auto perf_counter = cct->_conf->get_val<bool>("throttler_perf_counter");
+  if (perf_counter) {
     PerfCountersBuilder b(cct, string("throttle-") + name, l_throttle_first, l_throttle_last);
     b.add_u64(l_throttle_val, "val", "Currently available throttle");
     b.add_u64(l_throttle_max, "max", "Max value for throttle");
@@ -267,8 +268,8 @@ BackoffThrottle::BackoffThrottle(CephContext *cct, const std::string& n,
 {
   if (!use_perf)
     return;
-
-  if (cct->_conf->throttler_perf_counter) {
+  auto perf_counter = cct->_conf->get_val<bool>("throttler_perf_counter");
+  if (perf_counter) {
     PerfCountersBuilder b(cct, string("throttle-") + name,
 			  l_backoff_throttle_first, l_backoff_throttle_last);
     b.add_u64(l_backoff_throttle_val, "val", "Currently available throttle");

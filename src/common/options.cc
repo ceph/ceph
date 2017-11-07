@@ -598,7 +598,7 @@ std::vector<Option> get_global_options() {
 
     Option("heartbeat_inject_failure", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("force an unhealthy heartbeat for N seconds"),
 
     Option("perf", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

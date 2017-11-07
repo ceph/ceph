@@ -164,28 +164,35 @@ void pick_addresses(CephContext *cct, int needs)
     exit(1);
   }
 
+  auto public_addr = cct->_conf->get_val<entity_addr_t>("public_addr");
+  const std::string& public_network =
+    cct->_conf->get_val<std::string>("public_network");
+  auto cluster_addr = cct->_conf->get_val<entity_addr_t>("cluster_addr");
+  const std::string& cluster_network =
+    cct->_conf->get_val<std::string>("cluster_network");
+
   if ((needs & CEPH_PICK_ADDRESS_PUBLIC)
-      && cct->_conf->public_addr.is_blank_ip()
-      && !cct->_conf->public_network.empty()) {
-    fill_in_one_address(cct, ifa, cct->_conf->public_network,
+      && public_addr.is_blank_ip()
+      && !public_network.empty()) {
+    fill_in_one_address(cct, ifa, public_network,
 			cct->_conf->get_val<string>("public_network_interface"),
 			"public_addr");
   }
 
   if ((needs & CEPH_PICK_ADDRESS_CLUSTER)
-      && cct->_conf->cluster_addr.is_blank_ip()) {
-    if (!cct->_conf->cluster_network.empty()) {
-      fill_in_one_address(
-	cct, ifa, cct->_conf->cluster_network,
-	cct->_conf->get_val<string>("cluster_network_interface"),
+      && cluster_addr.is_blank_ip()) {
+    if (!cluster_network.empty()) {
+      const std::string& cluster_network_interface =
+        cct->_conf->get_val<std::string>("cluster_network_interface");
+      fill_in_one_address(cct, ifa, cluster_network, cluster_network_interface,
 	"cluster_addr");
     } else {
-      if (!cct->_conf->public_network.empty()) {
+      if (!public_network.empty()) {
+        const std::string& public_network_interface =
+          cct->_conf->get_val<std::string>("public_network_interface");
         lderr(cct) << "Public network was set, but cluster network was not set " << dendl;
         lderr(cct) << "    Using public network also for cluster network" << dendl;
-        fill_in_one_address(
-	  cct, ifa, cct->_conf->public_network,
-	  cct->_conf->get_val<string>("public_network_interface"),
+        fill_in_one_address(cct, ifa, public_network, public_network_interface,
 	  "cluster_addr");
       }
     }

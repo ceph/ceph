@@ -56,8 +56,9 @@ static bool free_ids_inited;
 
 static bool lockdep_force_backtrace()
 {
-  return (g_lockdep_ceph_ctx != NULL &&
-          g_lockdep_ceph_ctx->_conf->lockdep_force_backtrace);
+  auto lockdep_force_backtrace = g_lockdep_ceph_ctx->_conf->get_val<bool>(
+    "lockdep_force_backtrace");
+  return (g_lockdep_ceph_ctx != NULL && lockdep_force_backtrace);
 }
 
 /******* Functions **********/

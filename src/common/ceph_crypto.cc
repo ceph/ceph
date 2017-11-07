@@ -61,10 +61,11 @@ void ceph::crypto::init(CephContext *cct)
     init_params.length = sizeof(init_params);
 
     uint32_t flags = (NSS_INIT_READONLY | NSS_INIT_PK11RELOAD);
-    if (cct->_conf->nss_db_path.empty()) {
+    auto nss_path = cct->_conf->get_val<std::string>("nss_db_path");
+    if (nss_path.empty()) {
       flags |= (NSS_INIT_NOCERTDB | NSS_INIT_NOMODDB);
     }
-    crypto_context = NSS_InitContext(cct->_conf->nss_db_path.c_str(), "", "",
+    crypto_context = NSS_InitContext(nss_path.c_str(), "", "",
                                      SECMOD_DB, &init_params, flags);
   }
   pthread_mutex_unlock(&crypto_init_mutex);

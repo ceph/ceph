@@ -34,49 +34,49 @@ int parse_log_client_options(CephContext *cct,
 {
   ostringstream oss;
 
-  int r = get_conf_str_map_helper(cct->_conf->clog_to_monitors, oss,
+  auto r = get_conf_str_map_helper(cct->_conf->get_val<std::string>("clog_to_monitors"), oss,
                                   &log_to_monitors, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_monitors'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_syslog, oss,
+  r = get_conf_str_map_helper(cct->_conf->get_val<std::string>("clog_to_syslog"), oss,
                               &log_to_syslog, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_syslog'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_syslog_facility, oss,
+  r = get_conf_str_map_helper(cct->_conf->get_val<std::string>("clog_to_syslog_facility"), oss,
                               &log_channels, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_syslog_facility'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_syslog_level, oss,
+  r = get_conf_str_map_helper(cct->_conf->get_val<std::string>("clog_to_syslog_level"), oss,
                               &log_prios, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_syslog_level'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_graylog, oss,
+  r = get_conf_str_map_helper(cct->_conf->get_val<std::string>("clog_to_graylog"), oss,
                               &log_to_graylog, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_graylog'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_graylog_host, oss,
+  r = get_conf_str_map_helper(cct->_conf->get_val<std::string>("clog_to_graylog_host"), oss,
                               &log_to_graylog_host, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_graylog_host'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_graylog_port, oss,
+  r = get_conf_str_map_helper(cct->_conf->get_val<std::string>("clog_to_graylog_port"), oss,
                               &log_to_graylog_port, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_graylog_port'" << dendl;
@@ -84,7 +84,7 @@ int parse_log_client_options(CephContext *cct,
   }
 
   fsid = cct->_conf->get_val<uuid_d>("fsid");
-  host = cct->_conf->host;
+  host = cct->_conf->get_val<std::string>("host");
   return 0;
 }
 
@@ -277,8 +277,10 @@ Message *LogClient::_get_mon_log_message()
   // limit entries per message
   unsigned num_unsent = last_log - last_log_sent;
   unsigned num_send;
-  if (cct->_conf->mon_client_max_log_entries_per_message > 0)
-    num_send = MIN(num_unsent, (unsigned)cct->_conf->mon_client_max_log_entries_per_message);
+  auto max_log_entries =
+    cct->_conf->get_val<int64_t>("mon_client_max_log_entries_per_message");
+  if (max_log_entries > 0)
+    num_send = MIN(num_unsent, (unsigned)max_log_entries);
   else
     num_send = num_unsent;
 
