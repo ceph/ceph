@@ -926,15 +926,15 @@ bool Locker::eval(CInode *in, int mask, bool caps_imported)
 
   // choose loner?
   if (in->is_auth() && in->is_head()) {
-    if (in->choose_ideal_loner() >= 0) {
-      if (in->try_set_loner()) {
-	dout(10) << "eval set loner to client." << in->get_loner() << dendl;
-	need_issue = true;
-	mask = -1;
-      } else
-	dout(10) << "eval want loner client." << in->get_wanted_loner() << " but failed to set it" << dendl;
-    } else
-      dout(10) << "eval doesn't want loner" << dendl;
+    client_t orig_loner = in->get_loner();
+    if (in->choose_ideal_loner()) {
+      dout(10) << "eval set loner: client." << orig_loner << " -> client." << in->get_loner() << dendl;
+      need_issue = true;
+      mask = -1;
+    } else if (in->get_wanted_loner() != in->get_loner()) {
+      dout(10) << "eval want loner: client." << in->get_wanted_loner() << " but failed to set it" << dendl;
+      mask = -1;
+    }
   }
 
  retry:
@@ -955,19 +955,14 @@ bool Locker::eval(CInode *in, int mask, bool caps_imported)
 
   // drop loner?
   if (in->is_auth() && in->is_head() && in->get_wanted_loner() != in->get_loner()) {
-    dout(10) << "  trying to drop loner" << dendl;
     if (in->try_drop_loner()) {
-      dout(10) << "  dropped loner" << dendl;
       need_issue = true;
-
       if (in->get_wanted_loner() >= 0) {
-	if (in->try_set_loner()) {
-	  dout(10) << "eval end set loner to client." << in->get_loner() << dendl;
-	  mask = -1;
-	  goto retry;
-	} else {
-	  dout(10) << "eval want loner client." << in->get_wanted_loner() << " but failed to set it" << dendl;
-	}
+	dout(10) << "eval end set loner to client." << in->get_loner() << dendl;
+	bool ok = in->try_set_loner();
+	assert(ok);
+	mask = -1;
+	goto retry;
       }
     }
   }

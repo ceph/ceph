@@ -932,9 +932,9 @@ public:
   }
 
   client_t calc_ideal_loner();
-  client_t choose_ideal_loner();
-  bool try_set_loner();
   void set_loner_cap(client_t l);
+  bool choose_ideal_loner();
+  bool try_set_loner();
   bool try_drop_loner();
 
   // choose new lock state during recovery, based on issued caps
