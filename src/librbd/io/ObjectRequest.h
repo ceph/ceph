@@ -152,17 +152,18 @@ public:
   static ObjectReadRequest* create(ImageCtxT *ictx, const std::string &oid,
                                    uint64_t objectno, uint64_t offset,
                                    uint64_t len, librados::snap_t snap_id,
-                                   int op_flags,
+                                   int op_flags, bool cache_initiated,
                                    const ZTracer::Trace &parent_trace,
                                    Context *completion) {
     return new ObjectReadRequest(ictx, oid, objectno, offset, len,
-                                 snap_id, op_flags, parent_trace, completion);
+                                 snap_id, op_flags, cache_initiated,
+                                 parent_trace, completion);
   }
 
   ObjectReadRequest(ImageCtxT *ictx, const std::string &oid,
                     uint64_t objectno, uint64_t offset, uint64_t len,
-                    librados::snap_t snap_id,
-                    int op_flags, const ZTracer::Trace &parent_trace,
+                    librados::snap_t snap_id, int op_flags,
+                    bool cache_initiated, const ZTracer::Trace &parent_trace,
                     Context *completion);
 
   bool should_complete(int r) override;
@@ -217,6 +218,7 @@ private:
    */
 
   int m_op_flags;
+  bool m_cache_initiated;
 
   ceph::bufferlist m_read_data;
   ExtentMap m_ext_map;
