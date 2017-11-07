@@ -12,7 +12,7 @@ How can the configuration be set? Well, there are several sources:
     --debug-ms=1
     --debug-pg=10
     etc.
- - arguments injected at runtime by using injectargs
+ - arguments injected at runtime using "injectargs" or "config set"
 
 
 The Configuration File
