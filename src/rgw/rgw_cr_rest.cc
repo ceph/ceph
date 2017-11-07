@@ -300,10 +300,6 @@ int RGWStreamSpliceCR::operate() {
         continue;
       }
 
-      if (bl.length() == 0 && in_crf->is_done()) {
-        break;
-      }
-
       if (!sent_attrs) {
         int ret = out_crf->init();
         if (ret < 0) {
@@ -315,6 +311,10 @@ int RGWStreamSpliceCR::operate() {
           return set_cr_error(ret);
         }
         sent_attrs = true;
+      }
+
+      if (bl.length() == 0 && in_crf->is_done()) {
+        break;
       }
 
       total_read += bl.length();
