@@ -149,9 +149,8 @@ TEST_F(TestMockIoObjectRequest, Read) {
   expect_read(mock_image_ctx, "object0", 0, 4096, 0);
 
   C_SaferCond ctx;
-  MockObjectReadRequest::Extents extents{{0, 4096}};
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, "object0", 0, 0, 4096, extents, CEPH_NOSNAP, 0, {}, &ctx);
+    &mock_image_ctx, "object0", 0, 0, 4096, CEPH_NOSNAP, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -176,11 +175,9 @@ TEST_F(TestMockIoObjectRequest, SparseReadThreshold) {
                      ictx->sparse_read_threshold_bytes, 0);
 
   C_SaferCond ctx;
-  MockObjectReadRequest::Extents extents{
-    {0, ictx->sparse_read_threshold_bytes}};
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, "object0", 0, 0, ictx->sparse_read_threshold_bytes,
-    extents, CEPH_NOSNAP, 0, {}, &ctx);
+    CEPH_NOSNAP, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
