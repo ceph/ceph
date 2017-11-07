@@ -202,14 +202,13 @@ bool ObjectRequest<I>::compute_parent_extents() {
 template <typename I>
 ObjectReadRequest<I>::ObjectReadRequest(I *ictx, const std::string &oid,
                                         uint64_t objectno, uint64_t offset,
-                                        uint64_t len, Extents& be,
-                                        librados::snap_t snap_id, int op_flags,
-					const ZTracer::Trace &parent_trace,
+                                        uint64_t len, librados::snap_t snap_id,
+                                        int op_flags,
+                                        const ZTracer::Trace &parent_trace,
                                         Context *completion)
   : ObjectRequest<I>(ictx, oid, objectno, offset, len, snap_id, false, "read",
                      parent_trace, completion),
-    m_buffer_extents(be), m_tried_parent(false), m_op_flags(op_flags),
-    m_state(LIBRBD_AIO_READ_FLAT) {
+    m_tried_parent(false), m_op_flags(op_flags), m_state(LIBRBD_AIO_READ_FLAT) {
   guard_read();
 }
 

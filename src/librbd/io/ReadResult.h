@@ -57,14 +57,15 @@ public:
   template <typename ImageCtxT>
   struct C_SparseReadRequest : public C_SparseReadRequestBase {
     ObjectReadRequest<ImageCtxT> *request;
+    Extents buffer_extents;
 
-    C_SparseReadRequest(AioCompletion *aio_completion)
-      : C_SparseReadRequestBase(aio_completion) {
+    C_SparseReadRequest(AioCompletion *aio_completion, Extents&& buffer_extents)
+      : C_SparseReadRequestBase(aio_completion),
+        buffer_extents(std::move(buffer_extents)) {
     }
 
     void finish(int r) override {
-      C_SparseReadRequestBase::finish(request->get_extent_map(),
-                                      request->get_buffer_extents(),
+      C_SparseReadRequestBase::finish(request->get_extent_map(), buffer_extents,
                                       request->get_offset(),
                                       request->get_length(), request->data(),
                                       r);
