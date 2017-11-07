@@ -8144,9 +8144,11 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     if (tail_placement.bucket.name.empty()) {
       manifest.set_tail_placement(tail_placement.placement_rule, src_obj.bucket);
     }
+    string ref_tag;
     for (; miter != astate->manifest.obj_end(); ++miter) {
       ObjectWriteOperation op;
-      cls_refcount_get(op, tag, true);
+      ref_tag = tag + '\0';
+      cls_refcount_get(op, ref_tag, true);
       const rgw_raw_obj& loc = miter.get_location().get_raw_obj(this);
       ref.ioctx.locator_set_key(loc.loc);
 
@@ -9730,7 +9732,6 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
       return r;
 
     bl.append(tag.c_str(), tag.size() + 1);
-
     op.setxattr(RGW_ATTR_ID_TAG,  bl);
   }
 
