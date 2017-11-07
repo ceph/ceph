@@ -20,6 +20,7 @@
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ObjectRequest.h"
+#include "librbd/io/ReadResult.h"
 
 #include "include/assert.h"
 
@@ -204,30 +205,29 @@ namespace librbd {
                              const ZTracer::Trace &parent_trace,
                              Context *onfinish)
   {
-    // on completion, take the mutex and then call onfinish.
-    Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_lock);
-
-    {
-      RWLock::RLocker snap_locker(m_ictx->snap_lock);
-      if (m_ictx->object_map != nullptr &&
-          !m_ictx->object_map->object_may_exist(object_no)) {
-        m_ictx->op_work_queue->queue(req, -ENOENT);
-	return;
-      }
+    ZTracer::Trace trace;
+    if (parent_trace.valid()) {
+      trace.init("", &m_ictx->trace_endpoint, &parent_trace);
+      trace.copy_name("cache read " + oid.name);
+      trace.event("start");
     }
 
-    librados::ObjectReadOperation op;
-    op.read(off, len, pbl, NULL);
-    op.set_op_flags2(op_flags);
-    int flags = m_ictx->get_read_flags(snapid);
+    // on completion, take the mutex and then call onfinish.
+    onfinish = new C_ReadRequest(m_ictx->cct, onfinish, &m_lock);
 
-    librados::AioCompletion *rados_completion =
-      util::create_rados_callback(req);
-    int r = m_ictx->data_ctx.aio_operate(
-      oid.name, rados_completion, &op, flags, nullptr,
-      (parent_trace.valid() ? parent_trace.get_info() : nullptr));
-    rados_completion->release();
-    assert(r >= 0);
+    // re-use standard object read state machine
+    auto aio_comp = io::AioCompletion::create_and_start(onfinish, m_ictx,
+                                                        io::AIO_TYPE_READ);
+    aio_comp->read_result = io::ReadResult{pbl};
+    aio_comp->set_request_count(1);
+
+    auto req_comp = new io::ReadResult::C_SparseReadRequest<>(
+      aio_comp, {{0, len}}, false);
+    auto req = io::ObjectReadRequest<>::create(m_ictx, oid.name, object_no, off,
+                                               len, snapid, op_flags, true,
+                                               trace, req_comp);
+    req_comp->request = req;
+    req->send();
   }
 
   bool LibrbdWriteback::may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid)

@@ -215,12 +215,12 @@ template <typename I>
 ObjectReadRequest<I>::ObjectReadRequest(I *ictx, const std::string &oid,
                                         uint64_t objectno, uint64_t offset,
                                         uint64_t len, librados::snap_t snap_id,
-                                        int op_flags,
+                                        int op_flags, bool cache_initiated,
                                         const ZTracer::Trace &parent_trace,
                                         Context *completion)
   : ObjectRequest<I>(ictx, oid, objectno, offset, len, snap_id, false, "read",
                      parent_trace, completion),
-    m_op_flags(op_flags) {
+    m_op_flags(op_flags), m_cache_initiated(cache_initiated) {
 }
 
 template <typename I>
@@ -228,7 +228,7 @@ void ObjectReadRequest<I>::send() {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << dendl;
 
-  if (image_ctx->object_cacher != nullptr) {
+  if (!m_cache_initiated && image_ctx->object_cacher != nullptr) {
     read_cache();
   } else {
     read_object();
@@ -325,6 +325,11 @@ void ObjectReadRequest<I>::handle_read_object(int r) {
 template <typename I>
 void ObjectReadRequest<I>::read_parent() {
   I *image_ctx = this->m_ictx;
+  if (m_cache_initiated) {
+    this->finish(-ENOENT);
+    return;
+  }
+
   uint64_t object_overlap = 0;
   Extents parent_extents;
   {

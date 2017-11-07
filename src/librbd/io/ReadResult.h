@@ -48,8 +48,10 @@ public:
   };
 
   struct C_SparseReadRequestBase : public C_ReadRequest {
-    C_SparseReadRequestBase(AioCompletion *aio_completion)
-      : C_ReadRequest(aio_completion) {
+    bool ignore_enoent;
+
+    C_SparseReadRequestBase(AioCompletion *aio_completion, bool ignore_enoent)
+      : C_ReadRequest(aio_completion), ignore_enoent(ignore_enoent) {
     }
 
     using C_ReadRequest::finish;
@@ -62,8 +64,9 @@ public:
     ObjectReadRequest<ImageCtxT> *request;
     Extents buffer_extents;
 
-    C_SparseReadRequest(AioCompletion *aio_completion, Extents&& buffer_extents)
-      : C_SparseReadRequestBase(aio_completion),
+    C_SparseReadRequest(AioCompletion *aio_completion, Extents&& buffer_extents,
+                        bool ignore_enoent)
+      : C_SparseReadRequestBase(aio_completion, ignore_enoent),
         buffer_extents(std::move(buffer_extents)) {
     }
 
