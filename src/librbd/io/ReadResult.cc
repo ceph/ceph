@@ -117,7 +117,10 @@ void ReadResult::C_SparseReadRequestBase::finish(ExtentMap &extent_map,
   ldout(cct, 10) << "C_SparseReadRequestBase: r = " << r
                  << dendl;
 
-  if (r >= 0 || r == -ENOENT) {
+  if (ignore_enoent && r == -ENOENT) {
+    r = 0;
+  }
+  if (r >= 0) {
     ldout(cct, 10) << " got " << extent_map
                    << " for " << buffer_extents
                    << " bl " << bl.length() << dendl;
