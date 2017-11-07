@@ -3,7 +3,15 @@ import pytest
 from ceph_volume.devices.simple import scan
 
 
-class TestGetContentst(object):
+class TestScan(object):
+
+    def test_main_spits_help_with_no_arguments(self, capsys):
+        scan.Scan([]).main()
+        stdout, stderr = capsys.readouterr()
+        assert 'Scan an OSD directory for files' in stdout
+
+
+class TestGetContents(object):
 
     def test_multiple_lines_are_left_as_is(self, tmpfile):
         magic_file = tmpfile(contents='first\nsecond\n')
