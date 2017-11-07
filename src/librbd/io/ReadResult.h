@@ -15,6 +15,9 @@
 struct CephContext;
 
 namespace librbd {
+
+struct ImageCtx;
+
 namespace io {
 
 struct AioCompletion;
@@ -54,7 +57,7 @@ public:
                 uint64_t offset, size_t length, bufferlist &bl, int r);
   };
 
-  template <typename ImageCtxT>
+  template <typename ImageCtxT = ImageCtx>
   struct C_SparseReadRequest : public C_SparseReadRequestBase {
     ObjectReadRequest<ImageCtxT> *request;
     Extents buffer_extents;
