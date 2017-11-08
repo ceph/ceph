@@ -104,7 +104,6 @@ class Activate(object):
             formatter_class=argparse.RawDescriptionHelpFormatter,
             description=sub_command_help,
         )
-
         parser.add_argument(
             'osd_id',
             metavar='ID',
@@ -116,6 +115,10 @@ class Activate(object):
             metavar='FSID',
             nargs='?',
             help='The FSID of the OSD, similar to a SHA1'
+        )
+        parser.add_argument(
+            '--file',
+            help='The path to a JSON file, from a scanned OSD'
         )
         if len(self.argv) == 0:
             print(sub_command_help)
@@ -130,7 +133,10 @@ class Activate(object):
         # at a non-default location which would not work at boot time if the
         # custom location is not exposed through an ENV var
         json_dir = os.environ.get('CEPH_VOLUME_SIMPLE_JSON_DIR', '/etc/ceph/osd/')
-        json_config = os.path.join(json_dir, '%s-%s.json' % (args.osd_id, args.osd_fsid))
+        if args.file:
+            json_config = args.file
+        else:
+            json_config = os.path.join(json_dir, '%s-%s.json' % (args.osd_id, args.osd_fsid))
         if not os.path.exists(json_config):
             raise RuntimeError('Expected JSON config path not found: %s' % json_config)
         args.json_config = json_config
