@@ -396,10 +396,17 @@ settings:
 
 ``mon cluster log file``
 
-:Description: The location of the cluster's log file. 
+:Description: The locations of the cluster's log files. There are two channels in
+              Ceph: ``cluster`` and ``audit``. This option represents a mapping
+              from channels to log files, where the log entries of that
+              channel are sent to. The ``default`` entry is a fallback
+              mapping for channels not explicitly specified. So, the following
+              default setting will send cluster log to ``$cluster.log``, and
+              send audit log to ``$cluster.audit.log``, where ``$cluster`` will
+              be replaced with the actual cluster name.
 :Type: String
 :Required: No
-:Default: ``/var/log/ceph/$cluster.log``
+:Default: ``default=/var/log/ceph/$cluster.$channel.log,cluster=/var/log/ceph/$cluster.log``
 
 
 
