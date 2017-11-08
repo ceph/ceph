@@ -13,6 +13,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <fstream>
 
 #include <boost/scoped_ptr.hpp>
 
@@ -558,8 +559,13 @@ int main(int argc, const char *argv[])
     }
 
   } else if (cmd == "store-crc") {
-    uint32_t crc = st.traverse(string(), true, NULL);
-    std::cout << "store at '" << path << "' crc " << crc << std::endl;
+    if (argc < 4) {
+      usage(argv[0]);
+      return 1;
+    }
+    std::ofstream fs(argv[4]);
+    uint32_t crc = st.traverse(string(), true, &fs);
+    std::cout << "store at '" << argv[4] << "' crc " << crc << std::endl;
 
   } else if (cmd == "compact") {
     st.compact();
