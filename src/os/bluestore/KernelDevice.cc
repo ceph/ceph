@@ -603,6 +603,8 @@ int KernelDevice::write(
   return _sync_write(off, bl, buffered);
 }
 
+#define  DEBUG_LEVEL 30
+
 int KernelDevice::aio_write(
   uint64_t off,
   bufferlist &bl,
@@ -645,9 +647,11 @@ int KernelDevice::aio_write(
       ++injecting_crash;
     } else {
       bl.prepare_iov(&aio.iov);
-      for (unsigned i=0; i<aio.iov.size(); ++i) {
-	dout(30) << "aio " << i << " " << aio.iov[i].iov_base
-		 << " " << aio.iov[i].iov_len << dendl;
+      if (cct->_conf->subsys.should_gather(ceph_subsys_bdev, DEBUG_LEVEL)) {
+	for (unsigned i=0; i<aio.iov.size(); ++i) {
+	  dout(DEBUG_LEVEL) << "aio " << i << " " << aio.iov[i].iov_base
+	    << " " << aio.iov[i].iov_len << dendl;
+	}
       }
       aio.bl.claim_append(bl);
       aio.pwritev(off, len);
@@ -712,9 +716,11 @@ int KernelDevice::aio_read(
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     aio.pread(off, len);
-    for (unsigned i=0; i<aio.iov.size(); ++i) {
-      dout(30) << "aio " << i << " " << aio.iov[i].iov_base
-	       << " " << aio.iov[i].iov_len << dendl;
+    if (cct->_conf->subsys.should_gather(ceph_subsys_bdev, DEBUG_LEVEL)) {
+      for (unsigned i=0; i<aio.iov.size(); ++i) {
+	dout(DEBUG_LEVEL) << "aio " << i << " " << aio.iov[i].iov_base
+	  << " " << aio.iov[i].iov_len << dendl;
+      }
     }
     pbl->append(aio.bl);
     dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
