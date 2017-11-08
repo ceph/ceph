@@ -768,6 +768,7 @@ EOF
                 ceph_adm osd pool create "cephfs_data_${name}" 8
                 ceph_adm osd pool create "cephfs_metadata_${name}" 8
                 ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
+					 ceph_adm fs authorize "cephfs_${name}" "client.fs_${name}" / rwp
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
             done
