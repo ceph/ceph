@@ -77,7 +77,7 @@ class Activate(object):
             terminal.success('Successfully activated OSD %s with FSID %s' % (osd_id, osd_fsid))
             terminal.warning(
                 ('All ceph-disk systemd units have been disabled to '
-                 'prevent OSD %s getting triggered by UDEV events')
+                 'prevent OSDs getting triggered by UDEV events')
             )
 
     def main(self):
