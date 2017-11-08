@@ -348,7 +348,7 @@ PG::~PG()
 
 void PG::lock(bool no_lockdep) const
 {
-  _lock.Lock(no_lockdep);
+  _lock.get_write(!no_lockdep);
   // if we have unrecorded dirty state with the lock dropped, there is a bug
   assert(!dirty_info);
   assert(!dirty_big_info);
@@ -360,7 +360,7 @@ std::string PG::gen_prefix() const
 {
   stringstream out;
   OSDMapRef mapref = osdmap_ref;
-  if (_lock.is_locked_by_me()) {
+  if (_lock.is_wlocked()) {
     out << "osd." << osd->whoami
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
 	<< " " << *this << " ";

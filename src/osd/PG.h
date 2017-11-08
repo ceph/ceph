@@ -310,8 +310,9 @@ public:
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
     assert(!dirty_info);
     assert(!dirty_big_info);
-    _lock.Unlock();
+    _lock.unlock();
   }
+
   bool is_locked() const {
     return _lock.is_locked();
   }
@@ -541,7 +542,7 @@ protected:
   // get() should be called on pointer copy (to another thread, etc.).
   // put() should be called on destruction of some previously copied pointer.
   // unlock() when done with the current pointer (_most common_).
-  mutable Mutex _lock = {"PG::_lock"};
+  mutable RWLock _lock;
 
   std::atomic_uint ref{0};
 
@@ -585,17 +586,16 @@ protected:
   void requeue_map_waiters();
 
   void update_osdmap_ref(OSDMapRef newmap) {
-    assert(_lock.is_locked_by_me());
+    // FIXME: is_locked_by_me()
+    assert(_lock.is_locked());
     osdmap_ref = std::move(newmap);
   }
 
 protected:
 
-
   bool deleting;  // true while in removing or OSD is shutting down
 
   ZTracer::Endpoint trace_endpoint;
-
 
 protected:
   bool dirty_info, dirty_big_info;
