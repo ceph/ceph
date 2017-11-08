@@ -23,19 +23,18 @@ using std::ostringstream;
 
 const char* get_rand_socket_path()
 {
-  static char *g_socket_path = NULL;
+  static char *g_socket_path = nullptr;
 
-  if (g_socket_path == NULL) {
-    char buf[512];
-    const char *tdir = getenv("TMPDIR");
-    if (tdir == NULL) {
-      tdir = "/tmp";
-    }
-    snprintf(buf, sizeof(((struct sockaddr_un*)0)->sun_path),
-	     "%s/perfcounters_test_socket.%ld.%ld",
-	     tdir, (long int)getpid(), time(NULL));
-    g_socket_path = (char*)strdup(buf);
+  char buf[512];
+  const char *tdir = getenv("TMPDIR");
+  if (tdir == NULL) {
+    tdir = "/tmp";
   }
+  snprintf(buf, sizeof(((struct sockaddr_un*)0)->sun_path),
+           "%s/perfcounters_test_socket.%ld.%ld", tdir,
+           (long int)getpid(), time(NULL));
+  g_socket_path = (char*)strdup(buf);
+
   return g_socket_path;
 }
 
