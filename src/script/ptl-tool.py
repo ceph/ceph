@@ -2,7 +2,8 @@
 
 # README:
 #
-# This tool's purpose is to make it easier to merge PRs into Ceph.
+# This tool's purpose is to make it easier to merge PRs into test branches and
+# into master.
 #
 # Because developers often have custom names for the ceph upstream remote
 # (https://github.com/ceph/ceph.git), You will probably want to export the
@@ -18,9 +19,42 @@
 #
 # ** Here are some basic exmples to get started: **
 #
+# Merging all PRs labeled 'wip-pdonnell-testing' into a new test branch:
+#
+# $ src/script/ptl-tool.py --pr-label wip-pdonnell-testing
+# Adding labeled PR #18805 to PR list
+# Adding labeled PR #18774 to PR list
+# Adding labeled PR #18600 to PR list
+# Will merge PRs: [18805, 18774, 18600]
+# Detaching HEAD onto base: master
+# Merging PR #18805
+# Merging PR #18774
+# Merging PR #18600
+# Checked out new branch wip-pdonnell-testing-20171108.054517
+# Created tag testing/wip-pdonnell-testing-20171108.054517
+#
+#
+# Merging all PRs labeled 'wip-pdonnell-testing' into master:
+#
+# $ src/script/ptl-tool.py --pr-label wip-pdonnell-testing --branch master
+# Adding labeled PR #18805 to PR list
+# Adding labeled PR #18774 to PR list
+# Adding labeled PR #18600 to PR list
+# Will merge PRs: [18805, 18774, 18600]
+# Detaching HEAD onto base: master
+# Merging PR #18805
+# Merging PR #18774
+# Merging PR #18600
+# Checked out branch master
+#
+# Now push to master:
+# $ git push upstream master
+# ...
+#
+#
 # Merging PR #1234567 and #2345678 into a new test branch with a testing label added to the PR:
 #
-# $ src/script/ptl-tool.py --base master 1234567 2345678 --label wip-pdonnell-testing
+# $ src/script/ptl-tool.py 1234567 2345678 --label wip-pdonnell-testing
 # Detaching HEAD onto base: master
 # Merging PR #1234567
 # Labeled PR #1234567 wip-pdonnell-testing
@@ -33,7 +67,7 @@
 #
 # Merging PR #1234567 into master leaving a detached HEAD (i.e. do not update your repo's master branch) and do not label:
 #
-# $ src/script/ptl-tool.py --base master --branch HEAD --merge-branch-name master 1234567
+# $ src/script/ptl-tool.py --branch HEAD --merge-branch-name master 1234567
 # Detaching HEAD onto base: master
 # Merging PR #1234567
 # Leaving HEAD detached; no branch anchors your commits
@@ -245,7 +279,7 @@ def build_branch(args):
                         indications.add("Reviewed-by: "+NEW_CONTRIBUTORS[user])
                     except KeyError as e:
                         try:
-                            name = raw_input("Need name for contributor \"%s\"; Reviewed-by: " % user)
+                            name = raw_input("Need name for contributor \"%s\" (use ^D to skip); Reviewed-by: " % user)
                             name = name.strip()
                             if len(name) == 0:
                                 continue
@@ -286,23 +320,20 @@ def build_branch(args):
     if branch == 'HEAD':
         log.info("Leaving HEAD detached; no branch anchors your commits")
     else:
-        G.head.reference = G.create_head(branch, force=True)
-        log.info("Checked out new branch {branch}".format(branch=branch))
+        created_branch = False
+        try:
+            G.head.reference = G.create_head(branch)
+            log.info("Checked out new branch {branch}".format(branch=branch))
+            created_branch = True
+        except:
+            G.head.reference = G.create_head(branch, force=True)
+            log.info("Checked out branch {branch}".format(branch=branch))
 
-        # tag it for future reference.
-        for i in range(0, 100):
-            if i == 0:
-                name = "testing/%s" % branch
-            else:
-                name = "testing/%s_%02d" % (branch, i)
-            try:
-                git.refs.tag.Tag.create(G, name)
-                log.info("Created tag %s" % name)
-                break
-            except:
-                pass
-            if i == 99:
-                raise RuntimeException("ran out of numbers")
+        if created_branch:
+            # tag it for future reference.
+            tag = "testing/%s" % branch
+            git.refs.tag.Tag.create(G, tag)
+            log.info("Created tag %s" % tag)
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
