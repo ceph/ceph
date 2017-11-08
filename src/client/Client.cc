@@ -12292,9 +12292,12 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
   uint32_t su = layout->stripe_unit;
   uint32_t stripe_count = layout->stripe_count;
   uint64_t stripes_per_object = object_size / su;
+  uint64_t stripeno = 0, stripepos = 0;
 
-  uint64_t stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
-  uint64_t stripepos = blockno % stripe_count;   // which object in the object set (X)
+  if(stripe_count) {
+      stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
+      stripepos = blockno % stripe_count;   // which object in the object set (X)
+  }
   uint64_t objectsetno = stripeno / stripes_per_object;       // which object set
   uint64_t objectno = objectsetno * stripe_count + stripepos;  // object id
 
