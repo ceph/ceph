@@ -286,23 +286,20 @@ def build_branch(args):
     if branch == 'HEAD':
         log.info("Leaving HEAD detached; no branch anchors your commits")
     else:
-        G.head.reference = G.create_head(branch, force=True)
-        log.info("Checked out new branch {branch}".format(branch=branch))
+        created_branch = False
+        try:
+            G.head.reference = G.create_head(branch)
+            log.info("Checked out new branch {branch}".format(branch=branch))
+            created_branch = True
+        except:
+            G.head.reference = G.create_head(branch, force=True)
+            log.info("Checked out branch {branch}".format(branch=branch))
 
-        # tag it for future reference.
-        for i in range(0, 100):
-            if i == 0:
-                name = "testing/%s" % branch
-            else:
-                name = "testing/%s_%02d" % (branch, i)
-            try:
-                git.refs.tag.Tag.create(G, name)
-                log.info("Created tag %s" % name)
-                break
-            except:
-                pass
-            if i == 99:
-                raise RuntimeException("ran out of numbers")
+        if created_branch:
+            # tag it for future reference.
+            tag = "testing/%s" % branch
+            git.refs.tag.Tag.create(G, tag)
+            log.info("Created tag %s" % tag)
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
