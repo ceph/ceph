@@ -105,9 +105,8 @@ public:
     m_trace.event("finish");
   }
 
-  virtual void add_copyup_ops(librados::ObjectWriteOperation *wr,
-                              bool set_hints) {
-  };
+  static void add_write_hint(ImageCtxT& image_ctx,
+                             librados::ObjectWriteOperation *wr);
 
   virtual void complete(int r);
 
@@ -118,12 +117,7 @@ public:
     return m_has_parent;
   }
 
-  virtual bool is_op_payload_empty() const {
-    return false;
-  }
-
   virtual const char *get_op_type() const = 0;
-  virtual bool pre_object_map_update(uint8_t *new_state) = 0;
 
 protected:
   bool compute_parent_extents(Extents *parent_extents);
@@ -186,10 +180,6 @@ public:
     return "read";
   }
 
-  bool pre_object_map_update(uint8_t *new_state) override {
-    return false;
-  }
-
 private:
   /**
    * @verbatim
@@ -245,11 +235,19 @@ public:
 			     const ZTracer::Trace &parent_trace,
                              Context *completion);
 
-  void add_copyup_ops(librados::ObjectWriteOperation *wr,
-                      bool set_hints) override
-  {
-    add_write_ops(wr, set_hints);
+  virtual bool is_empty_write_op() const {
+    return false;
   }
+
+  virtual uint8_t get_pre_write_object_map_state() const {
+    return OBJECT_EXISTS;
+  }
+
+  virtual void add_copyup_ops(librados::ObjectWriteOperation *wr) {
+    add_write_ops(wr);
+  }
+
+  void handle_copyup(int r);
 
   bool should_complete(int r) override;
   void send() override;
@@ -304,11 +302,12 @@ protected:
   librados::ObjectWriteOperation m_write;
   uint64_t m_snap_seq;
   std::vector<librados::snap_t> m_snaps;
-  bool m_object_exist = false;
+  bool m_object_may_exist = false;
   bool m_guard = true;
 
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr,
-                             bool set_hints) = 0;
+  virtual void add_write_hint(librados::ObjectWriteOperation *wr);
+  virtual void add_write_ops(librados::ObjectWriteOperation *wr) = 0;
+
   virtual void guard_write();
   virtual bool post_object_map_update() {
     return false;
@@ -338,7 +337,7 @@ public:
       m_write_data(data), m_op_flags(op_flags) {
   }
 
-  bool is_op_payload_empty() const override {
+  bool is_empty_write_op() const override {
     return (m_write_data.length() == 0);
   }
 
@@ -346,14 +345,8 @@ public:
     return "write";
   }
 
-  bool pre_object_map_update(uint8_t *new_state) override {
-    *new_state = OBJECT_EXISTS;
-    return true;
-  }
-
 protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr,
-                     bool set_hints) override;
+  void add_write_ops(librados::ObjectWriteOperation *wr) override;
 
   void send_write() override;
 
@@ -370,8 +363,12 @@ public:
 		      const ZTracer::Trace &parent_trace, Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, 0, 0, snapc,
                                             true, "remove", parent_trace,
-                                            completion),
-      m_object_state(OBJECT_NONEXISTENT) {
+                                            completion) {
+    if (this->has_parent()) {
+      m_object_state = OBJECT_EXISTS;
+    } else {
+      m_object_state = OBJECT_PENDING;
+    }
   }
 
   const char* get_op_type() const override {
@@ -381,14 +378,21 @@ public:
     return "remove";
   }
 
-  bool pre_object_map_update(uint8_t *new_state) override {
+  uint8_t get_pre_write_object_map_state() const override {
+    return m_object_state;
+  }
+
+protected:
+  void add_write_hint(librados::ObjectWriteOperation *wr) override {
+    // no hint for remove
+  }
+
+  void add_write_ops(librados::ObjectWriteOperation *wr) override {
     if (this->has_parent()) {
-      m_object_state = OBJECT_EXISTS;
+      wr->truncate(0);
     } else {
-      m_object_state = OBJECT_PENDING;
+      wr->remove();
     }
-    *new_state = m_object_state;
-    return true;
   }
 
   bool post_object_map_update() override {
@@ -400,16 +404,6 @@ public:
 
   void guard_write() override;
   void send_write() override;
-
-protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr,
-                     bool set_hints) override {
-    if (this->has_parent()) {
-      wr->truncate(0);
-    } else {
-      wr->remove();
-    }
-  }
 
 private:
   uint8_t m_object_state;
@@ -433,19 +427,21 @@ public:
     return "remove (trim)";
   }
 
-  bool pre_object_map_update(uint8_t *new_state) override {
-    *new_state = OBJECT_PENDING;
-    return true;
+  uint8_t get_pre_write_object_map_state() const override {
+    return OBJECT_PENDING;
+  }
+
+protected:
+  void add_write_hint(librados::ObjectWriteOperation *wr) override {
+    // no hint for remove
+  }
+
+  void add_write_ops(librados::ObjectWriteOperation *wr) override {
+    wr->remove();
   }
 
   bool post_object_map_update() override {
     return m_post_object_map_update;
-  }
-
-protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr,
-                     bool set_hints) override {
-    wr->remove();
   }
 
 private:
@@ -468,21 +464,22 @@ public:
     return "truncate";
   }
 
-  bool pre_object_map_update(uint8_t *new_state) override {
-    if (!this->m_object_exist && !this->has_parent())
-      *new_state = OBJECT_NONEXISTENT;
-    else
-      *new_state = OBJECT_EXISTS;
-    return true;
+  uint8_t get_pre_write_object_map_state() const override {
+    if (!this->m_object_may_exist && !this->has_parent())
+      return OBJECT_NONEXISTENT;
+    return OBJECT_EXISTS;
+  }
+
+protected:
+  void add_write_hint(librados::ObjectWriteOperation *wr) override {
+    // no hint for truncate
+  }
+
+  void add_write_ops(librados::ObjectWriteOperation *wr) override {
+    wr->truncate(this->m_object_off);
   }
 
   void send_write() override;
-
-protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr,
-                     bool set_hints) override {
-    wr->truncate(this->m_object_off);
-  }
 };
 
 template <typename ImageCtxT = ImageCtx>
@@ -501,18 +498,12 @@ public:
     return "zero";
   }
 
-  bool pre_object_map_update(uint8_t *new_state) override {
-    *new_state = OBJECT_EXISTS;
-    return true;
+protected:
+  void add_write_ops(librados::ObjectWriteOperation *wr) override {
+    wr->zero(this->m_object_off, this->m_object_len);
   }
 
   void send_write() override;
-
-protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr,
-                     bool set_hints) override {
-    wr->zero(this->m_object_off, this->m_object_len);
-  }
 };
 
 template <typename ImageCtxT = ImageCtx>
@@ -535,14 +526,8 @@ public:
     return "writesame";
   }
 
-  bool pre_object_map_update(uint8_t *new_state) override {
-    *new_state = OBJECT_EXISTS;
-    return true;
-  }
-
 protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr,
-                     bool set_hints) override;
+  void add_write_ops(librados::ObjectWriteOperation *wr) override;
 
   void send_write() override;
 
@@ -574,15 +559,10 @@ public:
     return "compare_and_write";
   }
 
-  bool pre_object_map_update(uint8_t *new_state) override {
-    *new_state = OBJECT_EXISTS;
-    return true;
-  }
-
   void complete(int r) override;
+
 protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr,
-                     bool set_hints) override;
+  void add_write_ops(librados::ObjectWriteOperation *wr) override;
 
   void send_write() override;
 
