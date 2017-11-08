@@ -50,7 +50,7 @@ def mask_ceph_disk():
     # masking ceph-disk@* will not work, so we must link the service directly.
     # /etc/systemd takes precendence regardless of the location of the unit
     process.run(
-        ['sudo', 'ln',  '-s', '/dev/null',  '/etc/systemd/system/ceph-disk@.service']
+        ['sudo', 'ln', '-sf', '/dev/null',  '/etc/systemd/system/ceph-disk@.service']
     )
 
 
