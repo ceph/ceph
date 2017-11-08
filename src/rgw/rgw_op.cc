@@ -585,56 +585,39 @@ rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
   rgw::IAM::Environment e;
   const auto& m = s->info.env->get_map();
   auto t = ceph::real_clock::now();
-  e.emplace(std::piecewise_construct,
-	    std::forward_as_tuple("aws:CurrentTime"),
-	    std::forward_as_tuple(std::to_string(
-				    ceph::real_clock::to_time_t(t))));
-  e.emplace(std::piecewise_construct,
-	    std::forward_as_tuple("aws:EpochTime"),
-	    std::forward_as_tuple(ceph::to_iso_8601(t)));
+  e.emplace("aws:CurrentTime", std::to_string(ceph::real_clock::to_time_t(t)));
+  e.emplace("aws:EpochTime", ceph::to_iso_8601(t));
   // TODO: This is fine for now, but once we have STS we'll need to
   // look and see. Also this won't work with the IdentityApplier
   // model, since we need to know the actual credential.
-  e.emplace(std::piecewise_construct,
-	    std::forward_as_tuple("aws:PrincipalType"),
-	    std::forward_as_tuple("User"));
+  e.emplace("aws:PrincipalType", "User");
 
   auto i = m.find("HTTP_REFERER");
   if (i != m.end()) {
-    e.emplace(std::piecewise_construct,
-	      std::forward_as_tuple("aws:Referer"),
-	      std::forward_as_tuple(i->second));
+    e.emplace("aws:Referer", i->second);
   }
 
   // These seem to be the semantics, judging from rest_rgw_s3.cc
   i = m.find("SERVER_PORT_SECURE");
   if (i != m.end()) {
-    e.emplace(std::piecewise_construct,
-	      std::forward_as_tuple("aws:SecureTransport"),
-	      std::forward_as_tuple("true"));
+    e.emplace("aws:SecureTransport", "true");
   }
 
   i = m.find("HTTP_HOST");
   if (i != m.end()) {
-    e.emplace(std::piecewise_construct,
-	      std::forward_as_tuple("aws:SourceIp"),
-	      std::forward_as_tuple(i->second));
+    e.emplace("aws:SourceIp", i->second);
   }
 
   i = m.find("HTTP_USER_AGENT"); {
   if (i != m.end())
-    e.emplace(std::piecewise_construct,
-	      std::forward_as_tuple("aws:UserAgent"),
-	      std::forward_as_tuple(i->second));
+    e.emplace("aws:UserAgent", i->second);
   }
 
   if (s->user) {
     // What to do about aws::userid? One can have multiple access
     // keys so that isn't really suitable. Do we have a durable
     // identifier that can persist through name changes?
-    e.emplace(std::piecewise_construct,
-	      std::forward_as_tuple("aws:username"),
-	      std::forward_as_tuple(s->user->user_id.id));
+    e.emplace("aws:username", s->user->user_id.id);
   }
   return e;
 }
@@ -2201,18 +2184,12 @@ int RGWListBucket::verify_permission()
     return op_ret;
   }
   if (!prefix.empty())
-    s->env.emplace(std::piecewise_construct,
-		   std::forward_as_tuple("s3:prefix"),
-		   std::forward_as_tuple(prefix));
+    s->env.emplace("s3:prefix", prefix);
 
   if (!delimiter.empty())
-    s->env.emplace(std::piecewise_construct,
-		   std::forward_as_tuple("s3:delimiter"),
-		   std::forward_as_tuple(delimiter));
+    s->env.emplace("s3:delimiter", delimiter);
 
-  s->env.emplace(std::piecewise_construct,
-		 std::forward_as_tuple("s3:max-keys"),
-		 std::forward_as_tuple(to_string(max)));
+  s->env.emplace("s3:max-keys", std::to_string(max));
 
   if (!verify_bucket_permission(s,
 				list_versions ?
