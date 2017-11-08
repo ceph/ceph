@@ -118,6 +118,11 @@ public:
   void count_metadata(const string& field, std::map<string,int> *out);
 
   friend class C_Updated;
+
+  // When did the mon last call into our tick() method?  Used for detecting
+  // when the mon was not updating us for some period (e.g. during slow
+  // election) to reset last_beacon timeouts
+  ceph::coarse_mono_clock::time_point last_tick;
 };
 
 #endif
