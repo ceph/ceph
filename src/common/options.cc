@@ -1035,11 +1035,11 @@ std::vector<Option> get_global_options() {
     .set_default(1)
     .set_description(""),
 
-    Option("mon_pg_warn_min_per_osd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_pg_warn_min_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
+    .set_description("minimal number PGs per (in) osd before we warn the admin"),
 
-    Option("mon_max_pg_per_osd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_max_pg_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(200)
     .set_description("Max number of PGs per OSD the cluster will allow"),
 
@@ -2568,6 +2568,13 @@ std::vector<Option> get_global_options() {
     Option("osd_pg_log_trim_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
     .set_description(""),
+
+    Option("osd_max_pg_per_osd_hard_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(2)
+    .set_min(1)
+    .set_description("Maximum number of PG per OSD, a factor of 'mon_max_pg_per_osd'")
+    .set_long_description("OSD will refuse to instantiate PG if the number of PG it serves exceeds this number.")
+    .add_see_also("mon_max_pg_per_osd"),
 
     Option("osd_op_complaint_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30)
