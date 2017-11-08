@@ -2857,7 +2857,10 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT_ROLE_POLICY_PUT
                           && opt_cmd != OPT_ROLE_POLICY_LIST
                           && opt_cmd != OPT_ROLE_POLICY_GET
-                          && opt_cmd != OPT_ROLE_POLICY_DELETE) {
+                          && opt_cmd != OPT_ROLE_POLICY_DELETE
+                          && opt_cmd != OPT_RESHARD_ADD
+                          && opt_cmd != OPT_RESHARD_CANCEL
+                          && opt_cmd != OPT_RESHARD_STATUS) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
