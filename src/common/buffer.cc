@@ -2496,6 +2496,10 @@ int buffer::list::write_fd_zero_copy(int fd) const
 
 __u32 buffer::list::crc32c(__u32 crc) const
 {
+  int cache_misses = 0;
+  int cache_hits = 0;
+  int cache_adjusts = 0;
+
   for (std::list<ptr>::const_iterator it = _buffers.begin();
        it != _buffers.end();
        ++it) {
@@ -2507,8 +2511,7 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	if (ccrc.first == crc) {
 	  // got it already
 	  crc = ccrc.second;
-	  if (buffer_track_crc)
-	    buffer_cached_crc++;
+	  cache_hits++;
 	} else {
 	  /* If we have cached crc32c(buf, v) for initial value v,
 	   * we can convert this to a different initial value v' by:
@@ -2519,18 +2522,26 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	   * note, u for our crc32c implementation is 0
 	   */
 	  crc = ccrc.second ^ ceph_crc32c(ccrc.first ^ crc, NULL, it->length());
-	  if (buffer_track_crc)
-	    buffer_cached_crc_adjusted++;
+	  cache_adjusts++;
 	}
       } else {
-	if (buffer_track_crc)
-	  buffer_missed_crc++;
+	cache_misses++;
 	uint32_t base = crc;
 	crc = ceph_crc32c(crc, (unsigned char*)it->c_str(), it->length());
 	r->set_crc(ofs, make_pair(base, crc));
       }
     }
   }
+
+  if (buffer_track_crc) {
+    if (cache_adjusts)
+      buffer_cached_crc_adjusted += cache_adjusts;
+    if (cache_hits)
+      buffer_cached_crc += cache_hits;
+    if (cache_misses)
+      buffer_missed_crc += cache_misses;
+  }
+
   return crc;
 }
 
