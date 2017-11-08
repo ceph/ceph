@@ -5250,7 +5250,7 @@ struct FlushState {
   ~FlushState() {
     pg->lock();
     if (!pg->pg_has_reset_since(epoch))
-      pg->queue_flushed(epoch);
+      pg->on_flushed();
     pg->unlock();
   }
 };
@@ -5825,14 +5825,6 @@ void PG::queue_null(epoch_t msg_epoch,
 					 NullEvt())));
 }
 
-void PG::queue_flushed(epoch_t e)
-{
-  dout(10) << "flushed" << dendl;
-  queue_peering_event(
-    CephPeeringEvtRef(std::make_shared<CephPeeringEvt>(e, e,
-					 FlushedEvt())));
-}
-
 void PG::queue_query(epoch_t msg_epoch,
 		     epoch_t query_epoch,
 		     pg_shard_t from, const pg_query_t& q)
@@ -6075,16 +6067,6 @@ PG::RecoveryState::Started::react(const IntervalFlush&)
   return discard_event();
 }
 
-
-boost::statechart::result
-PG::RecoveryState::Started::react(const FlushedEvt&)
-{
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->on_flushed();
-  return discard_event();
-}
-
-
 boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap)
 {
   PG *pg = context< RecoveryMachine >().pg;
@@ -6133,14 +6115,6 @@ PG::RecoveryState::Reset::Reset(my_context ctx)
 
   pg->flushes_in_progress = 0;
   pg->set_last_peering_reset();
-}
-
-boost::statechart::result
-PG::RecoveryState::Reset::react(const FlushedEvt&)
-{
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->on_flushed();
-  return discard_event();
 }
 
 boost::statechart::result
