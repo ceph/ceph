@@ -66,6 +66,8 @@ class Scan(object):
             file_path = os.path.join(path, _file)
             if os.path.islink(file_path):
                 osd_metadata[_file] = self.scan_device(file_path)
+            if os.path.isdir(file_path):
+                continue
             # the check for binary needs to go before the file, to avoid
             # capturing data from binary files but still be able to capture
             # contents from actual files later
