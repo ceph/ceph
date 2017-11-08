@@ -61,6 +61,10 @@ public:
       return 0;
     }
 
+    virtual bool needs_exclusive_pglock(OSD *osd) {
+      return true;
+    }
+
     virtual ostream &print(ostream &rhs) const = 0;
 
     virtual void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) = 0;
@@ -116,6 +120,9 @@ public:
   }
   uint64_t get_reserved_pushes() const {
     return qitem->get_reserved_pushes();
+  }
+  bool needs_exclusive_pglock(OSD *osd) {
+    return qitem->needs_exclusive_pglock(osd);
   }
   void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) {
     qitem->run(osd, pg, handle);
@@ -182,6 +189,7 @@ public:
   boost::optional<OpRequestRef> maybe_get_op() const override final {
     return op;
   }
+  bool needs_exclusive_pglock(OSD *osd) override final;
   void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };
 

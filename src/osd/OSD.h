@@ -1608,6 +1608,7 @@ private:
       OSDMapRef waiting_for_pg_osdmap;
       struct pg_slot {
 	PGRef pg;                     ///< cached pg reference [optional]
+	Mutex transition_lock;        ///< order items for this slot
 	deque<OpQueueItem> to_process; ///< order items for this slot
 	int num_running = 0;          ///< _process threads doing pg lookup/lock
 
@@ -1618,6 +1619,8 @@ private:
 	/// incremented by wake_pg_waiters; indicates racing _process threads
 	/// should bail out (their op has been requeued)
 	uint64_t requeue_seq = 0;
+
+        pg_slot() : transition_lock("transition_lock") {}
       };
 
       /// map of slots for each spg_t.  maintains ordering of items dequeued

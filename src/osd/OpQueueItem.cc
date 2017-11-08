@@ -22,6 +22,17 @@ void PGOpItem::run(OSD *osd,
   osd->dequeue_op(pg, op, handle);
 }
 
+bool PGOpItem::needs_exclusive_pglock(OSD *osd)
+{
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
+  // This is **buggy**. Sorry. We can't use op::may_write() and friends.
+  // OSD::init_op_flags() hasn't been called yet and there is very good
+  // reason for that: the MOSDop isn't fully parsed at this stage!
+  // Maybe a bit assistance from a client would be needed. Will see.
+  return !m->has_flag(CEPH_OSD_FLAG_READ) ||
+          m->has_flag(CEPH_OSD_FLAG_WRITE);
+}
+
 void PGSnapTrim::run(OSD *osd,
                    PGRef& pg,
                    ThreadPool::TPHandle &handle)

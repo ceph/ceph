@@ -544,7 +544,7 @@ protected:
   // get() should be called on pointer copy (to another thread, etc.).
   // put() should be called on destruction of some previously copied pointer.
   // unlock() when done with the current pointer (_most common_).
-  mutable RWLock _lock;
+  mutable RWLock _lock = {"PG::lock"};
 
   std::atomic_uint ref{0};
 
