@@ -71,6 +71,9 @@ class Activate(object):
             # disable any/all ceph-disk units
             systemctl.mask_ceph_disk()
 
+        # enable the OSD
+        systemctl.enable_osd(osd_id)
+
         # start the OSD
         systemctl.start_osd(osd_id)
 
