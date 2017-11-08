@@ -388,6 +388,16 @@ TYPE(rgw_obj)
 #include "rgw/rgw_log.h"
 TYPE(rgw_log_entry)
 
+#include "rgw/rgw_sync.h"
+TYPE(rgw_meta_sync_info)
+TYPE(rgw_meta_sync_marker)
+TYPE(rgw_meta_sync_status)
+
+#include "rgw/rgw_data_sync.h"
+TYPE(rgw_data_sync_info)
+TYPE(rgw_data_sync_marker)
+TYPE(rgw_data_sync_status)
+
 #ifdef WITH_RBD
 #include "cls/rbd/cls_rbd.h"
 TYPE(cls_rbd_parent)

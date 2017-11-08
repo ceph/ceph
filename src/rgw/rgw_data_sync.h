@@ -83,6 +83,7 @@ struct rgw_data_sync_info {
     JSONDecoder::decode_json("num_shards", num_shards, obj);
     JSONDecoder::decode_json("instance_id", num_shards, obj);
   }
+  static void generate_test_instances(std::list<rgw_data_sync_info*>& o);
 
   rgw_data_sync_info() : state((int)StateInit), num_shards(0) {}
 };
@@ -144,6 +145,7 @@ struct rgw_data_sync_marker {
     JSONDecoder::decode_json("timestamp", t, obj);
     timestamp = t.to_real_time();
   }
+  static void generate_test_instances(std::list<rgw_data_sync_marker*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_marker)
 
@@ -175,6 +177,7 @@ struct rgw_data_sync_status {
     JSONDecoder::decode_json("info", sync_info, obj);
     JSONDecoder::decode_json("markers", sync_markers, obj);
   }
+  static void generate_test_instances(std::list<rgw_data_sync_status*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_status)
 
