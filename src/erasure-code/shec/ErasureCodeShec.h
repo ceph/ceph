@@ -71,9 +71,10 @@ public:
 
   unsigned int get_chunk_size(unsigned int object_size) const override;
 
+  using ErasureCode::minimum_to_decode;
   int minimum_to_decode(const set<int> &want_to_read,
-				const set<int> &available_chunks,
-				set<int> *minimum);
+			const set<int> &available_chunks,
+			set<int> *minimum);
 
   int minimum_to_decode_with_cost(const set<int> &want_to_read,
 					  const map<int, int> &available,
@@ -85,9 +86,10 @@ public:
   int encode_chunks(const set<int> &want_to_encode,
 			    map<int, bufferlist> *encoded) override;
 
+  using ErasureCode::decode;
   int decode(const set<int> &want_to_read,
-		     const map<int, bufferlist> &chunks,
-		     map<int, bufferlist> *decoded);
+	     const map<int, bufferlist> &chunks,
+	     map<int, bufferlist> *decoded);
   int decode_chunks(const set<int> &want_to_read,
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded) override;

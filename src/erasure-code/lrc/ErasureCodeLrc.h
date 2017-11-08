@@ -87,6 +87,7 @@ public:
   std::set<int> get_erasures(const std::set<int> &need,
 			const std::set<int> &available) const;
 
+  using ErasureCode::minimum_to_decode;
   int minimum_to_decode(const std::set<int> &want_to_read,
 				const std::set<int> &available,
 				std::set<int> *minimum) override;

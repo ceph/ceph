@@ -1119,7 +1119,8 @@ TEST(ErasureCodeShec, minimum_to_decode_12)
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks, NULL);
+  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
+				  static_cast<std::set<int>*>(nullptr));
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
