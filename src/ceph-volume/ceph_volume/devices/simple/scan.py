@@ -79,6 +79,9 @@ class Scan(object):
         device = path_mounts.get(path)
         # it is possible to have more than one device, pick the first one, and
         # warn that it is possible that more than one device is 'data'
+        if not device:
+            terminal.error('Unable to detect device mounted for path: %s' % path)
+            raise RuntimeError('Cannot activate OSD')
         osd_metadata['data'] = self.scan_device(device[0] if len(device) else None)
 
         return osd_metadata
