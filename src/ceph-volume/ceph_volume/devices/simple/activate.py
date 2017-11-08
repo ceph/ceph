@@ -22,10 +22,11 @@ class Activate(object):
 
     @decorators.needs_root
     def activate(self, args):
-        osd_id = args.osd_id
-        osd_fsid = args.osd_fsid
         with open(args.json_config, 'r') as fp:
             osd_metadata = json.load(fp)
+
+        osd_id = osd_metadata.get('whoami', args.osd_id)
+        osd_fsid = osd_metadata.get('fsid', args.osd_fsid)
 
         cluster_name = osd_metadata.get('cluster_name', 'ceph')
         osd_dir = '/var/lib/ceph/osd/%s-%s' % (cluster_name, osd_id)
