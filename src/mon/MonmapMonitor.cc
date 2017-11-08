@@ -188,8 +188,9 @@ void MonmapMonitor::on_active()
     mon->has_ever_joined = true;
   }
 
-  if (mon->is_leader())
-    mon->clog->info() << "monmap " << *mon->monmap;
+  if (mon->is_leader()) {
+    mon->clog->debug() << "monmap " << *mon->monmap;
+  }
 
   apply_mon_features(mon->get_quorum_mon_features());
 }
