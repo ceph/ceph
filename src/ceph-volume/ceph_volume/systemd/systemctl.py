@@ -44,10 +44,14 @@ def enable_volume(id_, fsid, device_type='lvm'):
     return enable(volume_unit % (device_type, id_, fsid))
 
 
-def mask_ceph_disk(instance='*'):
-    # ``instance`` will probably be '*' all the time, because ceph-volume will
-    # want all instances disabled at once, not just one
-    return mask(ceph_disk_unit % instance)
+def mask_ceph_disk():
+    # systemctl allows using a glob like '*' for masking, but there was a bug
+    # in that it wouldn't allow this for service templates. This means that
+    # masking ceph-disk@* will not work, so we must link the service directly.
+    # /etc/systemd takes precendence regardless of the location of the unit
+    process.run(
+        ['sudo', 'ln',  '-s', '/dev/null',  '/etc/systemd/system/ceph-disk@.service']
+    )
 
 
 #
