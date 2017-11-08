@@ -1300,11 +1300,13 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    auto fs = mon->mdsmon()->get_fsmap().get_filesystem(filesystem);
-    if (!fs) {
-      ss << "filesystem " << filesystem << " does not exist.";
-      err = -EINVAL;
-      goto done;
+    if (filesystem != "*") {
+      auto fs = mon->mdsmon()->get_fsmap().get_filesystem(filesystem);
+      if (!fs) {
+	ss << "filesystem " << filesystem << " does not exist.";
+	err = -EINVAL;
+	goto done;
+      }
     }
 
     osd_cap_string += osd_cap_string.empty()? "" : ", ";
