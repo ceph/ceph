@@ -3144,8 +3144,12 @@ void OSD::create_logger()
     l_osd_map_bl_cache_miss, "osd_map_bl_cache_miss",
     "OSDMap buffer cache misses");
 
-  osd_plb.add_u64(l_osd_stat_bytes, "stat_bytes", "OSD size");
-  osd_plb.add_u64(l_osd_stat_bytes_used, "stat_bytes_used", "Used space");
+  osd_plb.add_u64(
+    l_osd_stat_bytes, "stat_bytes", "OSD size", "size",
+    PerfCountersBuilder::PRIO_USEFUL);
+  osd_plb.add_u64(
+    l_osd_stat_bytes_used, "stat_bytes_used", "Used space", "used",
+    PerfCountersBuilder::PRIO_USEFUL);
   osd_plb.add_u64(l_osd_stat_bytes_avail, "stat_bytes_avail", "Available space");
 
   osd_plb.add_u64_counter(
