@@ -656,6 +656,8 @@ class Module(MgrModule):
 
         # get current compat weight-set weights
         orig_ws = self.get_compat_weight_set_weights()
+        if orig_ws is None:
+            return False
         orig_ws = { a: b for a, b in orig_ws.iteritems() if a >= 0 }
 
         # Make sure roots don't overlap their devices.  If so, we
