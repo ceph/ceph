@@ -150,6 +150,15 @@ ObjectRequest<I>::ObjectRequest(I *ictx, const std::string &oid,
 }
 
 template <typename I>
+void ObjectRequest<I>::add_write_hint(I& image_ctx,
+                                      librados::ObjectWriteOperation *wr) {
+  if (image_ctx.enable_alloc_hint) {
+    wr->set_alloc_hint(image_ctx.get_object_size(),
+                       image_ctx.get_object_size());
+  }
+}
+
+template <typename I>
 void ObjectRequest<I>::complete(int r)
 {
   if (this->should_complete(r)) {
@@ -450,6 +459,26 @@ AbstractObjectWriteRequest<I>::AbstractObjectWriteRequest(
 }
 
 template <typename I>
+void AbstractObjectWriteRequest<I>::add_write_hint(
+    librados::ObjectWriteOperation *wr) {
+  I *image_ctx = this->m_ictx;
+  RWLock::RLocker snap_locker(image_ctx->snap_lock);
+  if (image_ctx->object_map == nullptr || !this->m_object_may_exist) {
+    ObjectRequest<I>::add_write_hint(*image_ctx, wr);
+  }
+}
+
+template <typename I>
+void AbstractObjectWriteRequest<I>::handle_copyup(int r) {
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << "r=" << r << dendl;
+
+  // TODO
+  assert(m_state == LIBRBD_AIO_WRITE_COPYUP);
+  this->complete(r);
+}
+
+template <typename I>
 void AbstractObjectWriteRequest<I>::guard_write()
 {
   I *image_ctx = this->m_ictx;
@@ -542,11 +571,11 @@ void AbstractObjectWriteRequest<I>::send() {
   {
     RWLock::RLocker snap_lock(image_ctx->snap_lock);
     if (image_ctx->object_map == nullptr) {
-      m_object_exist = true;
+      m_object_may_exist = true;
     } else {
       // should have been flushed prior to releasing lock
       assert(image_ctx->exclusive_lock->is_lock_owner());
-      m_object_exist = image_ctx->object_map->object_may_exist(
+      m_object_may_exist = image_ctx->object_map->object_may_exist(
         this->m_object_no);
     }
   }
@@ -562,8 +591,7 @@ void AbstractObjectWriteRequest<I>::send_pre_object_map_update() {
   {
     RWLock::RLocker snap_lock(image_ctx->snap_lock);
     if (image_ctx->object_map != nullptr) {
-      uint8_t new_state;
-      this->pre_object_map_update(&new_state);
+      uint8_t new_state = this->get_pre_write_object_map_state();
       RWLock::WLocker object_map_locker(image_ctx->object_map_lock);
       ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off
                                 << "~" << this->m_object_len << dendl;
@@ -612,9 +640,9 @@ void AbstractObjectWriteRequest<I>::send_write() {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off << "~"
                             << this->m_object_len << " object exist "
-                            << m_object_exist << dendl;
+                            << m_object_may_exist << dendl;
 
-  if (!m_object_exist && this->has_parent()) {
+  if (!m_object_may_exist && this->has_parent()) {
     m_state = LIBRBD_AIO_WRITE_GUARD;
     handle_write_guard();
   } else {
@@ -659,7 +687,8 @@ void AbstractObjectWriteRequest<I>::send_write_op()
     guard_write();
   }
 
-  add_write_ops(&m_write, true);
+  add_write_hint(&m_write);
+  add_write_ops(&m_write);
   assert(m_write.size() != 0);
 
   librados::AioCompletion *rados_completion =
@@ -693,15 +722,8 @@ void AbstractObjectWriteRequest<I>::handle_write_guard()
 }
 
 template <typename I>
-void ObjectWriteRequest<I>::add_write_ops(librados::ObjectWriteOperation *wr,
-                                          bool set_hints) {
+void ObjectWriteRequest<I>::add_write_ops(librados::ObjectWriteOperation *wr) {
   I *image_ctx = this->m_ictx;
-  RWLock::RLocker snap_locker(image_ctx->snap_lock);
-  if (set_hints && image_ctx->enable_alloc_hint &&
-      (image_ctx->object_map == nullptr || !this->m_object_exist)) {
-    wr->set_alloc_hint(image_ctx->get_object_size(),
-                       image_ctx->get_object_size());
-  }
 
   if (this->m_object_off == 0 &&
       this->m_object_len == image_ctx->get_object_size()) {
@@ -719,7 +741,7 @@ void ObjectWriteRequest<I>::send_write() {
                      this->m_object_len == image_ctx->get_object_size());
   ldout(image_ctx->cct, 20) << this->m_oid << " "
                             << this->m_object_off << "~" << this->m_object_len
-                            << " object exist " << this->m_object_exist
+                            << " object exist " << this->m_object_may_exist
                             << " write_full " << write_full << dendl;
   if (write_full && !this->has_parent()) {
     this->m_guard = false;
@@ -742,8 +764,8 @@ template <typename I>
 void ObjectRemoveRequest<I>::send_write() {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << this->m_oid << " remove " << " object exist "
-                            << this->m_object_exist << dendl;
-  if (!this->m_object_exist && !this->has_parent()) {
+                            << this->m_object_may_exist << dendl;
+  if (!this->m_object_may_exist && !this->has_parent()) {
     this->m_state = AbstractObjectWriteRequest<I>::LIBRBD_AIO_WRITE_FLAT;
     Context *ctx = util::create_context_callback<ObjectRequest<I>>(this);
     image_ctx->op_work_queue->queue(ctx, 0);
@@ -756,9 +778,9 @@ template <typename I>
 void ObjectTruncateRequest<I>::send_write() {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << this->m_oid << " truncate " << this->m_object_off
-                            << " object exist " << this->m_object_exist
+                            << " object exist " << this->m_object_may_exist
                             << dendl;
-  if (!this->m_object_exist && !this->has_parent()) {
+  if (!this->m_object_may_exist && !this->has_parent()) {
     this->m_state = AbstractObjectWriteRequest<I>::LIBRBD_AIO_WRITE_FLAT;
     Context *ctx = util::create_context_callback<ObjectRequest<I>>(this);
     image_ctx->op_work_queue->queue(ctx, 0);
@@ -772,9 +794,9 @@ void ObjectZeroRequest<I>::send_write() {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << this->m_oid << " zero "
                             << this->m_object_off << "~" << this->m_object_len
-                            << " object exist " << this->m_object_exist
+                            << " object exist " << this->m_object_may_exist
                             << dendl;
-  if (!this->m_object_exist && !this->has_parent()) {
+  if (!this->m_object_may_exist && !this->has_parent()) {
     this->m_state = AbstractObjectWriteRequest<I>::LIBRBD_AIO_WRITE_FLAT;
     Context *ctx = util::create_context_callback<ObjectRequest<I>>(this);
     image_ctx->op_work_queue->queue(ctx, 0);
@@ -785,15 +807,7 @@ void ObjectZeroRequest<I>::send_write() {
 
 template <typename I>
 void ObjectWriteSameRequest<I>::add_write_ops(
-    librados::ObjectWriteOperation *wr, bool set_hints) {
-  I *image_ctx = this->m_ictx;
-  RWLock::RLocker snap_locker(image_ctx->snap_lock);
-  if (set_hints && image_ctx->enable_alloc_hint &&
-      (image_ctx->object_map == nullptr || !this->m_object_exist)) {
-    wr->set_alloc_hint(image_ctx->get_object_size(),
-                       image_ctx->get_object_size());
-  }
-
+    librados::ObjectWriteOperation *wr) {
   wr->writesame(this->m_object_off, this->m_object_len, m_write_data);
   wr->set_op_flags2(m_op_flags);
 }
@@ -815,15 +829,8 @@ void ObjectWriteSameRequest<I>::send_write() {
 
 template <typename I>
 void ObjectCompareAndWriteRequest<I>::add_write_ops(
-    librados::ObjectWriteOperation *wr, bool set_hints) {
+    librados::ObjectWriteOperation *wr) {
   I *image_ctx = this->m_ictx;
-  RWLock::RLocker snap_locker(image_ctx->snap_lock);
-
-  if (set_hints && image_ctx->enable_alloc_hint &&
-      (image_ctx->object_map == nullptr || !this->m_object_exist)) {
-    wr->set_alloc_hint(image_ctx->get_object_size(),
-                       image_ctx->get_object_size());
-  }
 
   // add cmpext ops
   wr->cmpext(this->m_object_off, m_cmp_bl, nullptr);
@@ -844,7 +851,7 @@ void ObjectCompareAndWriteRequest<I>::send_write() {
                      this->m_object_len == image_ctx->get_object_size());
   ldout(image_ctx->cct, 20) << this->m_oid << " "
                             << this->m_object_off << "~" << this->m_object_len
-                            << " object exist " << this->m_object_exist
+                            << " object exist " << this->m_object_may_exist
                             << " write_full " << write_full << dendl;
   if (write_full && !this->has_parent()) {
     this->m_guard = false;
