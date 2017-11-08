@@ -124,10 +124,11 @@ class Activate(object):
             print(sub_command_help)
             return
         args = parser.parse_args(self.argv)
-        if not args.osd_id and not args.osd_fsid:
-            terminal.error('ID and FSID are required to find the right OSD to activate')
-            terminal.error('from a scanned OSD location in /etc/ceph/osd/')
-            raise RuntimeError('Unable to activate without both ID and FSID')
+        if not args.file:
+            if not args.osd_id and not args.osd_fsid:
+                terminal.error('ID and FSID are required to find the right OSD to activate')
+                terminal.error('from a scanned OSD location in /etc/ceph/osd/')
+                raise RuntimeError('Unable to activate without both ID and FSID')
         # don't allow a CLI flag to specify the JSON dir, because that might
         # implicitly indicate that it would be possible to activate a json file
         # at a non-default location which would not work at boot time if the
