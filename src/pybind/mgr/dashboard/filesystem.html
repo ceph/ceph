@@ -8,7 +8,7 @@
             var content_data = {{ content_data }};
 
             var refresh = function() {
-                $.get("/filesystem_data/" + content_data.fs_status.filesystem.id  + "/", function(data) {
+                $.get("{{ url_prefix }}/filesystem_data/" + content_data.fs_status.filesystem.id  + "/", function(data) {
                     _.extend(content_data.fs_status, data);
                     setTimeout(refresh, 5000);
                 });
@@ -71,7 +71,7 @@
             var rhs_transform = delta_timeseries;
 
             var draw_chart = function() {
-                $.get("/mds_counters/" + content_data.fs_status.filesystem.id  + "/", function(data) {
+                $.get("{{ url_prefix }}/mds_counters/" + content_data.fs_status.filesystem.id  + "/", function(data) {
                     var top_chart = true;
 
                     // Cull any chart elements that correspond to MDSs no
