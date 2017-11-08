@@ -21,7 +21,7 @@ def disable(unit):
 
 
 def mask(unit):
-    process.run(['sudo', 'systemctl', 'disable', unit])
+    process.run(['sudo', 'systemctl', 'mask', unit])
 
 
 def start_osd(id_):
