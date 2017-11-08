@@ -1,6 +1,6 @@
 import argparse
 import os
-from ceph_volume import terminal, exceptions
+from ceph_volume import terminal
 from ceph_volume import decorators
 from ceph_volume.util import disk
 
@@ -54,7 +54,7 @@ class OSDPath(object):
 
         arg_is_partition = disk.is_partition(string)
         if arg_is_partition:
-            return string
+            return os.path.abspath(string)
         absolute_path = os.path.abspath(string)
         if not os.path.isdir(absolute_path):
             error = "Argument is not a directory or device which is required to scan"
@@ -70,4 +70,4 @@ class OSDPath(object):
                 )
                 raise argparse.ArgumentError(None, error)
 
-        return string
+        return os.path.abspath(string)
