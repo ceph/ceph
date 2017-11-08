@@ -25,7 +25,7 @@ struct ImageCtx;
 namespace io {
 
 struct AioCompletion;
-template <typename I> class ObjectRequest;
+template <typename I> class AbstractObjectWriteRequest;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class CopyupRequest {
@@ -41,7 +41,7 @@ public:
                 Extents &&image_extents, const ZTracer::Trace &parent_trace);
   ~CopyupRequest();
 
-  void append_request(ObjectRequest<ImageCtxT> *req);
+  void append_request(AbstractObjectWriteRequest<ImageCtxT> *req);
 
   void send();
 
@@ -93,7 +93,7 @@ private:
 
   State m_state;
   ceph::bufferlist m_copyup_data;
-  std::vector<ObjectRequest<ImageCtxT> *> m_pending_requests;
+  std::vector<AbstractObjectWriteRequest<ImageCtxT> *> m_pending_requests;
   std::atomic<unsigned> m_pending_copyups { 0 };
 
   AsyncOperation m_async_op;
