@@ -306,6 +306,8 @@ public:
     handle.reset_tp_timeout();
   }
   void lock(bool no_lockdep = false) const;
+  void lock_in_mode(bool exclusive, bool no_lockdep = false) const;
+
   void unlock() const {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
     assert(!dirty_info);

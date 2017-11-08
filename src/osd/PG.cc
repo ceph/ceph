@@ -356,6 +356,16 @@ void PG::lock(bool no_lockdep) const
   dout(30) << "lock" << dendl;
 }
 
+void PG::lock_in_mode(bool exclusive, bool no_lockdep) const
+{
+  _lock.get(exclusive);
+  // if we have unrecorded dirty state with the lock dropped, there is a bug
+  assert(!dirty_info);
+  assert(!dirty_big_info);
+
+  dout(30) << "lock" << dendl;
+}
+
 std::string PG::gen_prefix() const
 {
   stringstream out;
