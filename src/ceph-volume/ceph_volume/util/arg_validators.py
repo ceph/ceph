@@ -1,6 +1,7 @@
 import argparse
 import os
-from ceph_volume import terminal
+from ceph_volume import terminal, exceptions
+from ceph_volume import decorators
 from ceph_volume.util import disk
 
 
@@ -45,6 +46,7 @@ class OSDPath(object):
     Validate path exists and it looks like an OSD directory.
     """
 
+    @decorators.needs_root
     def __call__(self, string):
         if not os.path.exists(string):
             error = "Path does not exist: %s" % string
