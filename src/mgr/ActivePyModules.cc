@@ -603,6 +603,8 @@ PyObject* ActivePyModules::get_perf_schema_python(
   }
 
   PyFormatter f;
+  f.open_object_section("perf_schema");
+
   if (!daemons.empty()) {
     for (auto statepair : daemons) {
       auto key = statepair.first;
@@ -613,10 +615,11 @@ PyObject* ActivePyModules::get_perf_schema_python(
       f.open_object_section(daemon_name.str().c_str());
 
       Mutex::Locker l(state->lock);
-      for (auto ctr_inst_iter : state->perf_counters.instances) {
-        const auto &counter_name = ctr_inst_iter.first;
-	f.open_object_section(counter_name.c_str());
-	auto type = state->perf_counters.types[counter_name];
+      for (const auto &ctr_inst_iter : state->perf_counters.instances) {
+        const auto &typestr = ctr_inst_iter.first;
+
+	f.open_object_section(typestr.c_str());
+	auto type = state->perf_counters.types[typestr];
 	f.dump_string("description", type.description);
 	if (!type.nick.empty()) {
 	  f.dump_string("nick", type.nick);
