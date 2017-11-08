@@ -64,6 +64,37 @@ To view the fio options specific to the objectstore engine:
 
     ./fio --enghelp=libfio_ceph_objectstore.so
 
+The conf= option requires a ceph configuration file (ceph.conf).
+The pool= option specifies Ceph pool to use.
+
+Example rados plugin job is provided in the same directory as
+this README.
+
+To run:
+
+    ./fio /path/to/job.fio
+
+Rados
+-----------
+
+This fio engine allows you to benchmark Ceph using librados interface
+against running Ceph cluster
+
+To build fio_ceph_rados:
+```
+  mkdir build && cd build
+  cmake -DWITH_FIO=ON -DFIO_INCLUDE_DIR=/path/to/fio -DCMAKE_BUILD_TYPE=Release /path/to/ceph
+  make -C src/test/fio install
+```
+If you install the ceph libraries to a location that isn't in your
+LD_LIBRARY_PATH, be sure to add it:
+
+    export LD_LIBRARY_PATH=/path/to/install/lib
+
+To view the fio options specific to the objectstore engine:
+
+    ./fio --enghelp=libfio_ceph_rados.so
+
 The conf= option requires a ceph configuration file (ceph.conf). Example job
 and conf files for each object store are provided in the same directory as
 this README.
