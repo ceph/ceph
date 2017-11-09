@@ -1593,16 +1593,7 @@ function test_mon_osd()
   # When CEPH_CLI_TEST_DUP_COMMAND is set, osd create
   # is repeated and consumes two osd id, not just one.
   #
-  local next_osd
-  if test "$CEPH_CLI_TEST_DUP_COMMAND" ; then
-      next_osd=$((gap_start + 1))
-  else
-      next_osd=$gap_start
-  fi
-  id=`ceph osd create`
-  [ "$id" = "$next_osd" ]
-
-  next_osd=$((id + 1))
+  local next_osd=$gap_start
   id=`ceph osd create $(uuidgen)`
   [ "$id" = "$next_osd" ]
 
