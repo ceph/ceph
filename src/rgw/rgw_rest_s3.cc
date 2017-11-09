@@ -14,6 +14,8 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/utility/string_view.hpp>
 
+#include <liboath/oath.h>
+
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_s3website.h"
@@ -879,37 +881,33 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-class RGWSetBucketVersioningParser : public RGWXMLParser
-{
-  XMLObj *alloc_obj(const char *el) override {
-    return new XMLObj;
-  }
+struct ver_config_status {
+  int status{VersioningSuspended};
+  int mfa_status{0};
 
-public:
-  RGWSetBucketVersioningParser() {}
-  ~RGWSetBucketVersioningParser() override {}
-
-  int get_versioning_status(int *status) {
-    XMLObj *config = find_first("VersioningConfiguration");
-    if (!config)
-      return -EINVAL;
-
-    *status = VersioningNotChanged;
-
-    XMLObj *field = config->find_first("Status");
-    if (!field)
-      return 0;
-
-    *status = VersioningSuspended;
-    string& s = field->get_data();
-
-    if (stringcasecmp(s, "Enabled") == 0) {
-      *status = VersioningEnabled;
-    } else if (stringcasecmp(s, "Suspended") != 0) {
-      return -EINVAL;
+  void decode_xml(XMLObj *obj) {
+dout(0) << __FILE__ << ":" << __LINE__ << dendl;
+    string status_str;
+    string mfa_str;
+    RGWXMLDecoder::decode_xml("Status", status_str, obj);
+dout(0) << __FILE__ << ":" << __LINE__ << dendl;
+    if (status_str == "Enabled") {
+      status = VersioningEnabled;
+    } else if (status_str != "Suspended") {
+      status = VersioningStatusInvalid;
     }
 
-    return 0;
+dout(0) << __FILE__ << ":" << __LINE__ << " status_str=" << status_str << dendl;
+
+    RGWXMLDecoder::decode_xml("MfaDelete", mfa_str, obj);
+dout(0) << __FILE__ << ":" << __LINE__ << " mfa_str=" << mfa_str << dendl;
+    if (mfa_str == "Enabled") {
+      mfa_status = 1;
+    } else if (mfa_str == "Disabled") {
+      mfa_status = 0;
+    } else {
+      mfa_status = -EINVAL;
+    }
   }
 };
 
@@ -930,12 +928,10 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     return r;
   }
 
-  RGWSetBucketVersioningParser parser;
-
+  RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
     ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
-    r = -EIO;
-    return r;
+    return -EIO;
   }
 
   if (!parser.parse(data, len, 1)) {
@@ -944,13 +940,25 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     return r;
   }
 
+  ver_config_status status_conf;
+
+  RGWXMLDecoder::decode_xml("VersioningConfiguration", status_conf, &parser);
+
   if (!store->is_meta_master()) {
     /* only need to keep this data around if we're not meta master */
     in_data.append(data, len);
   }
 
-  r = parser.get_versioning_status(&versioning_status);
-  
+  versioning_status = status_conf.status;
+  if (versioning_status == VersioningStatusInvalid) {
+    r = -EINVAL;
+  }
+
+  if (status_conf.mfa_status >= 0) {
+    mfa_status = (bool)status_conf.mfa_status;
+  } else {
+    r = -EINVAL;
+  }
   return r;
 }
 
@@ -3216,6 +3224,42 @@ int RGWHandler_REST_S3::init_from_header(struct req_state* s,
   return 0;
 }
 
+static int verify_mfa(RGWRados *store, RGWUserInfo *user, const string& mfa_str, bool *verified)
+{
+  vector<string> params;
+  get_str_vec(mfa_str, " ", params);
+
+  if (params.size() != 2) {
+    ldout(store->ctx(), 5) << "NOTICE: invalid mfa string provided: " << mfa_str << dendl;
+    return -EINVAL;
+  }
+
+  string& serial = params[0];
+  string& otp = params[1];
+
+  auto i = user->mfa_devices.find(serial);
+  if (i == user->mfa_devices.end()) {
+    ldout(store->ctx(), 5) << "NOTICE: user does not have mfa device with serial=" << serial << dendl;
+    return -EACCES;
+  }
+
+  string& seed = i->second;
+
+  utime_t now = ceph_clock_now();
+
+  int result = oath_totp_validate3(seed.c_str(), seed.size(), now.sec(),
+                                   30 /* step size */, 0, 2 /* window */,
+                                   NULL, NULL, otp.c_str());
+  if (result == OATH_INVALID_OTP) {
+    ldout(cct, 5) << "NOTICE: totp token failed to validate" << dendl;
+    return -EACCES;
+  }
+
+  *verified = true;
+
+  return 0;
+}
+
 int RGWHandler_REST_S3::postauth_init()
 {
   struct req_init_state *t = &s->init_state;
@@ -3250,6 +3294,12 @@ int RGWHandler_REST_S3::postauth_init()
     if (ret)
       return ret;
   }
+
+  const char *mfa = s->info.env->get("HTTP_X_AMZ_MFA");
+  if (mfa) {
+    ret = verify_mfa(store, s->user, string(mfa), &s->mfa_verified);
+  }
+
   return 0;
 }
 

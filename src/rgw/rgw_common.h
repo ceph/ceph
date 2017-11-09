@@ -634,6 +634,7 @@ struct RGWUserInfo
   map<int, string> temp_url_keys;
   RGWQuotaInfo user_quota;
   uint32_t type;
+  map<string, string> mfa_devices;
 
   RGWUserInfo()
     : auid(0),
@@ -653,7 +654,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(19, 9, bl);
+     ENCODE_START(20, 9, bl);
      encode(auid, bl);
      string access_key;
      string secret_key;
@@ -694,10 +695,11 @@ struct RGWUserInfo
      encode(user_id.tenant, bl);
      encode(admin, bl);
      encode(type, bl);
+     encode(mfa_devices, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(19, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(20, 9, 9, bl);
      if (struct_v >= 2) decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -769,6 +771,9 @@ struct RGWUserInfo
     }
     if (struct_v >= 19) {
       decode(type, bl);
+    }
+    if (struct_v >= 20) {
+      ::decode(mfa_devices, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1178,6 +1183,7 @@ enum RGWBucketFlags {
   BUCKET_VERSIONED = 0x2,
   BUCKET_VERSIONS_SUSPENDED = 0x4,
   BUCKET_DATASYNC_DISABLED = 0X8,
+  BUCKET_MFA_ENABLED = 0X10,
 };
 
 enum RGWBucketIndexType {
@@ -1345,8 +1351,9 @@ struct RGWBucketInfo
   void decode_json(JSONObj *obj);
 
   bool versioned() const { return (flags & BUCKET_VERSIONED) != 0; }
-  int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
+  int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED | BUCKET_MFA_ENABLED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
+  bool mfa_enabled() { return versioning_status() == BUCKET_MFA_ENABLED; }
   bool datasync_flag_enabled() const { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
 
   bool has_swift_versioning() const {
@@ -1880,6 +1887,8 @@ struct req_state {
   string dialect;
   string req_id;
   string trans_id;
+
+  bool mfa_verified;
 
   req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
   ~req_state();
