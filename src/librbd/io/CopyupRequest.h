@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
+#include "common/Mutex.h"
 #include "common/zipkin_trace.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/Types.h"
@@ -99,6 +100,8 @@ private:
 
   std::vector<uint64_t> m_snap_ids;
   librados::IoCtx m_data_ctx; // for empty SnapContext
+
+  Mutex m_lock;
 
   void complete_requests(int r);
 
