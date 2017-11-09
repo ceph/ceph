@@ -1942,20 +1942,20 @@ void RGWGetUsage::execute()
 
   op_ret = rgw_user_sync_all_stats(store, s->user->user_id);
   if (op_ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to sync user stats: " << dendl;
+    ldout(store->ctx(), 0) << "ERROR: failed to sync user stats" << dendl;
     return;
   }
 
   op_ret = rgw_user_get_all_buckets_stats(store, s->user->user_id, buckets_usage);
   if (op_ret < 0) {
-    cerr << "ERROR: failed to sync user stats: " << std::endl;
-    return ;
+    ldout(store->ctx(), 0) << "ERROR: failed to get user's buckets stats" << dendl;
+    return;
   }
 
   string user_str = s->user->user_id.to_str();
   op_ret = store->cls_user_get_header(user_str, &header);
   if (op_ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: can't read user header: "  << dendl;
+    ldout(store->ctx(), 0) << "ERROR: can't read user header"  << dendl;
     return;
   }
   
