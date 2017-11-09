@@ -49,6 +49,8 @@ inline const char *get_paxos_name(int p) {
 
 #define CEPH_MON_ONDISK_MAGIC "ceph mon volume v012"
 
+extern const string CONFIG_PREFIX;
+
 // map of entity_type -> features -> count
 struct FeatureMap {
   std::map<uint32_t,std::map<uint64_t,uint64_t>> m;
