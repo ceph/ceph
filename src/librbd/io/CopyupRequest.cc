@@ -87,7 +87,7 @@ CopyupRequest<I>::CopyupRequest(I *ictx, const std::string &oid,
   : m_ictx(util::get_image_ctx(ictx)), m_oid(oid), m_object_no(objectno),
     m_image_extents(image_extents),
     m_trace(util::create_trace(*m_ictx, "copy-up", parent_trace)),
-    m_state(STATE_READ_FROM_PARENT)
+    m_state(STATE_READ_FROM_PARENT), m_lock("CopyupRequest", false, false)
 {
   m_async_op.start_op(*m_ictx);
 }
@@ -117,12 +117,10 @@ void CopyupRequest<I>::complete_requests(int r) {
 
 template <typename I>
 bool CopyupRequest<I>::send_copyup() {
-  bool add_copyup_op = !m_copyup_data.is_zero();
   bool copy_on_read = m_pending_requests.empty();
-  if (!add_copyup_op && copy_on_read) {
-    // copyup empty object to prevent future CoR attempts
+  bool add_copyup_op = !m_copyup_data.is_zero();
+  if (!add_copyup_op) {
     m_copyup_data.clear();
-    add_copyup_op = true;
   }
 
   ldout(m_ictx->cct, 20) << "oid " << m_oid << dendl;
@@ -134,17 +132,13 @@ bool CopyupRequest<I>::send_copyup() {
 
   std::vector<librados::snap_t> snaps;
 
-  if (!copy_on_read) {
-    m_pending_copyups++;
-  }
-
+  Mutex::Locker locker(m_lock);
   int r;
   if (copy_on_read || (!snapc.snaps.empty() && add_copyup_op)) {
-    assert(add_copyup_op);
-    add_copyup_op = false;
 
     librados::ObjectWriteOperation copyup_op;
     copyup_op.exec("rbd", "copyup", m_copyup_data);
+    m_copyup_data.clear();
 
     // send only the copyup request with a blank snapshot context so that
     // all snapshots are detected from the parent for this object.  If
@@ -168,10 +162,7 @@ bool CopyupRequest<I>::send_copyup() {
 
   if (!copy_on_read) {
     librados::ObjectWriteOperation write_op;
-    if (add_copyup_op) {
-      // CoW did not need to handle existing snapshots
-      write_op.exec("rbd", "copyup", m_copyup_data);
-    }
+    write_op.exec("rbd", "copyup", m_copyup_data);
 
     // merge all pending write ops into this single RADOS op
     for (size_t i=0; i<m_pending_requests.size(); ++i) {
@@ -180,7 +171,8 @@ bool CopyupRequest<I>::send_copyup() {
       bool set_hints = (i == 0);
       req->add_copyup_ops(&write_op, set_hints);
     }
-    assert(write_op.size() != 0);
+
+    m_pending_copyups++;
 
     snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
     librados::AioCompletion *comp = util::create_rados_callback(this);
@@ -263,8 +255,11 @@ bool CopyupRequest<I>::should_complete(int r)
     return send_copyup();
 
   case STATE_COPYUP:
-    // invoked via a finisher in librados, so thread safe
-    pending_copyups = --m_pending_copyups;
+    {
+      Mutex::Locker locker(m_lock);
+      assert(m_pending_copyups > 0);
+      pending_copyups = --m_pending_copyups;
+    }
     ldout(cct, 20) << "COPYUP (" << pending_copyups << " pending)"
                    << dendl;
     if (r == -ENOENT) {
