@@ -445,7 +445,7 @@ int MDSDaemon::init()
   messenger->add_dispatcher_tail(&beacon);
   messenger->add_dispatcher_tail(this);
 
-  // get monmap
+  // init monc
   monc->set_messenger(messenger);
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD |
@@ -453,7 +453,7 @@ int MDSDaemon::init()
   int r = 0;
   r = monc->init();
   if (r < 0) {
-    derr << "ERROR: failed to get monmap: " << cpp_strerror(-r) << dendl;
+    derr << "ERROR: failed to init monc: " << cpp_strerror(-r) << dendl;
     mds_lock.Lock();
     suicide();
     mds_lock.Unlock();
