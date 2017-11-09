@@ -23,6 +23,9 @@ The above command will assume that a JSON configuration will be found in::
 
     /etc/ceph/osd/0-6cc43680-4f6e-4feb-92ff-9c7ba204120e.json
 
+Alternatively, using a path to a JSON file directly is also possible::
+
+    ceph-volume simple activate --file /etc/ceph/osd/0-6cc43680-4f6e-4feb-92ff-9c7ba204120e.json
 
 requiring uuids
 ^^^^^^^^^^^^^^^
