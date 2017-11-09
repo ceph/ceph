@@ -139,6 +139,9 @@ public:
   bool _internal_field(const string& k);
   void call_all_observers();
 
+  /// Look up an option in the schema
+  const Option *find_option(const string& name);
+  
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostream *oss);
 

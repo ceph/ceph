@@ -59,6 +59,8 @@
 
 #define MSG_PAXOS                  40
 
+#define MSG_CONFIG           61
+
 
 // osd internal
 #define MSG_OSD_PING         70

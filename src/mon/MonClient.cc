@@ -20,6 +20,7 @@
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
+#include "messages/MConfig.h"
 #include "messages/MAuth.h"
 #include "messages/MLogAck.h"
 #include "messages/MAuthReply.h"
@@ -244,6 +245,7 @@ bool MonClient::ms_dispatch(Message *m)
   case CEPH_MSG_MON_GET_VERSION_REPLY:
   case MSG_MON_COMMAND_ACK:
   case MSG_LOGACK:
+  case MSG_CONFIG:
     break;
   default:
     return false;
@@ -300,6 +302,9 @@ bool MonClient::ms_dispatch(Message *m)
     }
     break;
   }
+  case MSG_CONFIG:
+    handle_config(static_cast<MConfig*>(m));
+    break;
   return true;
 }
 
@@ -347,6 +352,13 @@ void MonClient::handle_monmap(MMonMap *m)
 
   map_cond.Signal();
   want_monmap = false;
+}
+
+void MonClient::handle_config(MConfig *m)
+{
+  ldout(cct,10) << __func__ << " " << *m << dendl;
+  ldout(cct,20) << m->config << dendl;
+  m->put();
 }
 
 // ----------------------
@@ -452,6 +464,7 @@ int MonClient::authenticate(double timeout)
   }
 
   _sub_want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
+  _sub_want("config", 0);
   if (!_opened())
     _reopen_session();
 

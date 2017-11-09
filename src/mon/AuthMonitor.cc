@@ -472,6 +472,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
     }
   }
 
+  bool finished = false;
   try {
     uint64_t auid = 0;
     if (start) {
@@ -504,6 +505,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       }
       s->caps.parse(str, NULL);
       s->auid = auid;
+      finished = true;
     }
   } catch (const buffer::error &err) {
     ret = -EINVAL;
@@ -513,6 +515,9 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 reply:
   reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
   mon->send_reply(op, reply);
+  if (finished) {
+    mon->configmon()->check_sub(s);
+  }
 done:
   return true;
 }
