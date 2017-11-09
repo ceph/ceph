@@ -1568,6 +1568,7 @@ public:
       if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateBuildingFullSyncMaps) {
         tn->log(10, SSTR("building full sync maps"));
         /* call sync module init here */
+        sync_status.sync_info.num_shards = num_shards;
         yield call(data_sync_module->init_sync(sync_env));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: sync module init_sync() failed, retcode=" << retcode));
