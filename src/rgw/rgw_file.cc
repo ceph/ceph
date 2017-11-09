@@ -1023,31 +1023,41 @@ namespace rgw {
     return false;
   }
 
-  int RGWFileHandle::readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset,
+  std::ostream& operator<<(std::ostream &os,
+			   RGWFileHandle::readdir_offset const &offset)
+  {
+    using boost::get;
+    if (unlikely(!! get<uint64_t*>(&offset))) {
+      uint64_t* ioff = get<uint64_t*>(offset);
+      os << *ioff;
+    }
+    else
+      os << get<const char*>(offset);
+    return os;
+  }
+
+  int RGWFileHandle::readdir(rgw_readdir_cb rcb, void *cb_arg,
+			     readdir_offset offset,
 			     bool *eof, uint32_t flags)
   {
     using event = RGWLibFS::event;
+    using boost::get;
     int rc = 0;
     struct timespec now;
     CephContext* cct = fs->get_context();
-
-    if ((*offset == 0) &&
-	(flags & RGW_READDIR_FLAG_DOTDOT)) {
-      /* send '.' and '..' with their NFS-defined offsets */
-      rcb(".", cb_arg, 1, RGW_LOOKUP_FLAG_DIR);
-      rcb("..", cb_arg, 2, RGW_LOOKUP_FLAG_DIR);
-    }
-
-    lsubdout(fs->get_context(), rgw, 15)
-      << __func__
-      << " offset=" << *offset
-      << dendl;
 
     directory* d = get<directory>(&variant_type);
     if (d) {
       (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
       lock_guard guard(mtx);
       d->last_readdir = now;
+    }
+
+    bool initial_off;
+    if (likely(!! get<const char*>(&offset))) {
+      initial_off = ! get<const char*>(offset);
+    } else {
+      initial_off = (*get<uint64_t*>(offset) == 0);
     }
 
     if (is_root()) {
@@ -1058,7 +1068,7 @@ namespace rgw {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
 	state.atime = now;
-	if (*offset == 0)
+	if (initial_off)
 	  set_nlink(2);
 	inc_nlink(req.d_count);
 	*eof = req.eof();
@@ -1073,7 +1083,7 @@ namespace rgw {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
 	state.atime = now;
-	if (*offset == 0)
+	if (initial_off)
 	  set_nlink(2);
 	inc_nlink(req.d_count);
 	*eof = req.eof();
@@ -1888,9 +1898,50 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     /* bad parent */
     return -EINVAL;
   }
+
+  lsubdout(parent->get_fs()->get_context(), rgw, 15)
+    << __func__
+    << " offset=" << *offset
+    << dendl;
+
+  if ((*offset == 0) &&
+      (flags & RGW_READDIR_FLAG_DOTDOT)) {
+    /* send '.' and '..' with their NFS-defined offsets */
+    rcb(".", cb_arg, 1, RGW_LOOKUP_FLAG_DIR);
+    rcb("..", cb_arg, 2, RGW_LOOKUP_FLAG_DIR);
+  }
+
   int rc = parent->readdir(rcb, cb_arg, offset, eof, flags);
   return rc;
-}
+} /* rgw_readdir */
+
+/* enumeration continuing from name */
+int rgw_readdir2(struct rgw_fs *rgw_fs,
+		 struct rgw_file_handle *parent_fh, const char *name,
+		 rgw_readdir_cb rcb, void *cb_arg, bool *eof,
+		 uint32_t flags)
+{
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+  if (! parent) {
+    /* bad parent */
+    return -EINVAL;
+  }
+
+  lsubdout(parent->get_fs()->get_context(), rgw, 15)
+    << __func__
+    << " offset=" << name
+    << dendl;
+
+  if ((! name) &&
+      (flags & RGW_READDIR_FLAG_DOTDOT)) {
+    /* send '.' and '..' with their NFS-defined offsets */
+    rcb(".", cb_arg, 1, RGW_LOOKUP_FLAG_DIR);
+    rcb("..", cb_arg, 2, RGW_LOOKUP_FLAG_DIR);
+  }
+
+  int rc = parent->readdir(rcb, cb_arg, name, eof, flags);
+  return rc;
+} /* rgw_readdir2 */
 
 /* project offset of dirent name */
 int rgw_dirent_offset(struct rgw_fs *rgw_fs,
