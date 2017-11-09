@@ -71,9 +71,9 @@ public:
 
   unsigned int get_chunk_size(unsigned int object_size) const override;
 
-  int minimum_to_decode(const set<int> &want_to_read,
-				const set<int> &available_chunks,
-				set<int> *minimum);
+  int _minimum_to_decode(const std::set<int> &want_to_read,
+			 const std::set<int> &available_chunks,
+			 std::set<int> *minimum);
 
   int minimum_to_decode_with_cost(const set<int> &want_to_read,
 					  const map<int, int> &available,
@@ -85,9 +85,9 @@ public:
   int encode_chunks(const set<int> &want_to_encode,
 			    map<int, bufferlist> *encoded) override;
 
-  int decode(const set<int> &want_to_read,
-		     const map<int, bufferlist> &chunks,
-		     map<int, bufferlist> *decoded);
+  int _decode(const std::set<int> &want_to_read,
+	      const std::map<int, bufferlist> &chunks,
+	      std::map<int, bufferlist> *decoded) override;
   int decode_chunks(const set<int> &want_to_read,
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded) override;
@@ -119,7 +119,7 @@ private:
                                         int *minimum);
 };
 
-class ErasureCodeShecReedSolomonVandermonde : public ErasureCodeShec {
+class ErasureCodeShecReedSolomonVandermonde final : public ErasureCodeShec {
 public:
 
   ErasureCodeShecReedSolomonVandermonde(ErasureCodeShecTableCache &_tcache,
