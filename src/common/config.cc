@@ -174,6 +174,15 @@ void md_config_t::validate_schema()
   }
 }
 
+const Option *md_config_t::find_option(const string& name) const
+{
+  auto p = schema.find(name);
+  if (p != schema.end()) {
+    return &p->second;
+  }
+  return nullptr;
+}
+
 void md_config_t::init_subsys()
 {
 #define SUBSYS(name, log, gather) \
