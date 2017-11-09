@@ -1019,8 +1019,9 @@ TEST_F(TestMockJournal, EventCommitError) {
   };
 
   C_SaferCond object_request_ctx;
-  auto object_request = new io::ObjectRemoveRequest<>(
-    ictx, "oid", 0, {}, {}, &object_request_ctx);
+  auto object_request = new io::ObjectDiscardRequest<>(
+    ictx, "oid", 0, 0, ictx->layout.object_size, {}, true, true, {},
+    &object_request_ctx);
 
   ::journal::MockFuture mock_future;
   Context *on_journal_safe;
@@ -1060,8 +1061,9 @@ TEST_F(TestMockJournal, EventCommitErrorWithPendingWriteback) {
   };
 
   C_SaferCond object_request_ctx;
-  auto object_request = new io::ObjectRemoveRequest<>(
-    ictx, "oid", 0, {}, {}, &object_request_ctx);
+  auto object_request = new io::ObjectDiscardRequest<>(
+    ictx, "oid", 0, 0, ictx->layout.object_size, {}, true, true, {},
+    &object_request_ctx);
 
   ::journal::MockFuture mock_future;
   Context *on_journal_safe;

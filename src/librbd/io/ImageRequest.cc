@@ -642,22 +642,10 @@ ObjectRequestHandle *ImageDiscardRequest<I>::create_object_request(
     Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
-  ObjectRequest<I> *req;
-  if (object_extent.length == image_ctx.layout.object_size) {
-    req = ObjectRequest<I>::create_remove(
-      &image_ctx, object_extent.oid.name, object_extent.objectno, snapc,
-      this->m_trace, on_finish);
-  } else if (object_extent.offset + object_extent.length ==
-               image_ctx.layout.object_size) {
-    req = ObjectRequest<I>::create_truncate(
-      &image_ctx, object_extent.oid.name, object_extent.objectno,
-      object_extent.offset, snapc, this->m_trace, on_finish);
-  } else {
-    req = ObjectRequest<I>::create_zero(
-      &image_ctx, object_extent.oid.name, object_extent.objectno,
-      object_extent.offset, object_extent.length, snapc,
-      this->m_trace, on_finish);
-  }
+  auto req = ObjectRequest<I>::create_discard(
+    &image_ctx, object_extent.oid.name, object_extent.objectno,
+    object_extent.offset, object_extent.length, snapc, true, true,
+    this->m_trace, on_finish);
   return req;
 }
 
