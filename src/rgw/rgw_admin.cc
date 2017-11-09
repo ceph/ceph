@@ -4139,13 +4139,17 @@ int main(int argc, const char **argv)
           need_zone_update = true;
         }
 
-        for (auto add : tier_config_add) {
-          zone.tier_config[add.first] = add.second;
+        if (tier_config_add.size() > 0) {
+          for (auto add : tier_config_add) {
+            zone.tier_config[add.first] = add.second;
+          }
           need_zone_update = true;
         }
 
-        for (auto rm : tier_config_rm) {
-          zone.tier_config.erase(rm.first);
+        if (tier_config_rm.size() > 0) {
+          for (auto rm : tier_config_rm) {
+            zone.tier_config.erase(rm.first);
+          }
           need_zone_update = true;
         }
 
