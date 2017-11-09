@@ -107,6 +107,22 @@ function. This will result in a circular locking exception.
 .. automethod:: MgrModule.get_metadata
 .. automethod:: MgrModule.get_counter
 
+What if the mons are down?
+--------------------------
+
+The manager daemon gets much of its state (such as the cluster maps)
+from the monitor.  If the monitor cluster is inaccessible, whichever
+manager was active will continue to run, with the latest state it saw
+still in memory.
+
+However, if you are creating a module that shows the cluster state
+to the user then you may well not want to mislead them by showing
+them that out of date state.
+
+To check if the manager daemon currently has a connection to
+the monitor cluster, use this function:
+
+.. automethod:: MgrModule.have_mon_connection
 
 Sending commands
 ----------------
