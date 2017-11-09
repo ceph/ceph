@@ -146,12 +146,12 @@ void *RGWLC::LCWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
     if (should_work(start)) {
-      dout(5) << "life cycle: start" << dendl;
+      dout(2) << "life cycle: start" << dendl;
       int r = lc->process();
       if (r < 0) {
         dout(0) << "ERROR: do life cycle process() returned error r=" << r << dendl;
       }
-      dout(5) << "life cycle: stop" << dendl;
+      dout(2) << "life cycle: stop" << dendl;
     }
     if (lc->going_down())
       break;
@@ -455,7 +455,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
-              ldout(cct, 10) << "DELETED:" << bucket_name << ":" << key << dendl;
+              ldout(cct, 2) << "DELETED:" << bucket_name << ":" << key << dendl;
             }
           }
         }
@@ -557,7 +557,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
-              ldout(cct, 10) << "DELETED:" << bucket_name << ":" << obj_iter->key << dendl;
+              ldout(cct, 2) << "DELETED:" << bucket_name << ":" << obj_iter->key << dendl;
             }
           }
         }
