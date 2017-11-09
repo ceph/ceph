@@ -46,38 +46,6 @@ inline bool is_copy_on_read(I *ictx, librados::snap_t snap_id) {
 
 template <typename I>
 ObjectRequest<I>*
-ObjectRequest<I>::create_remove(I *ictx, const std::string &oid,
-                                uint64_t object_no,
-                                const ::SnapContext &snapc,
-				const ZTracer::Trace &parent_trace,
-                                Context *completion) {
-  return new ObjectRemoveRequest<I>(ictx, oid, object_no, snapc, parent_trace,
-                                    completion);
-}
-
-template <typename I>
-ObjectRequest<I>*
-ObjectRequest<I>::create_truncate(I *ictx, const std::string &oid,
-                                  uint64_t object_no, uint64_t object_off,
-                                  const ::SnapContext &snapc,
-                                  const ZTracer::Trace &parent_trace,
-				  Context *completion) {
-  return new ObjectTruncateRequest<I>(ictx, oid, object_no, object_off, snapc,
-                                      parent_trace, completion);
-}
-
-template <typename I>
-ObjectRequest<I>*
-ObjectRequest<I>::create_trim(I *ictx, const std::string &oid,
-                              uint64_t object_no, const ::SnapContext &snapc,
-                              bool post_object_map_update,
-                              Context *completion) {
-  return new ObjectTrimRequest<I>(ictx, oid, object_no, snapc,
-                                  post_object_map_update, completion);
-}
-
-template <typename I>
-ObjectRequest<I>*
 ObjectRequest<I>::create_write(I *ictx, const std::string &oid,
                                uint64_t object_no, uint64_t object_off,
                                const ceph::bufferlist &data,
@@ -90,14 +58,18 @@ ObjectRequest<I>::create_write(I *ictx, const std::string &oid,
 
 template <typename I>
 ObjectRequest<I>*
-ObjectRequest<I>::create_zero(I *ictx, const std::string &oid,
-                              uint64_t object_no, uint64_t object_off,
-                              uint64_t object_len,
-                              const ::SnapContext &snapc,
-			      const ZTracer::Trace &parent_trace,
-                              Context *completion) {
-  return new ObjectZeroRequest<I>(ictx, oid, object_no, object_off, object_len,
-                                  snapc, parent_trace, completion);
+ObjectRequest<I>::create_discard(I *ictx, const std::string &oid,
+                                 uint64_t object_no, uint64_t object_off,
+                                 uint64_t object_len,
+                                 const ::SnapContext &snapc,
+                                 bool disable_clone_remove,
+                                 bool update_object_map,
+                                 const ZTracer::Trace &parent_trace,
+                                 Context *completion) {
+  return new ObjectDiscardRequest<I>(ictx, oid, object_no, object_off,
+                                     object_len, snapc, disable_clone_remove,
+                                     update_object_map, parent_trace,
+                                     completion);
 }
 
 template <typename I>
@@ -751,55 +723,23 @@ void ObjectWriteRequest<I>::send_write() {
 }
 
 template <typename I>
-void ObjectRemoveRequest<I>::guard_write() {
-  // do nothing to disable write guard only if deep-copyup not required
+void ObjectDiscardRequest<I>::send_write() {
   I *image_ctx = this->m_ictx;
-  RWLock::RLocker snap_locker(image_ctx->snap_lock);
-  if (!image_ctx->snaps.empty()) {
-    AbstractObjectWriteRequest<I>::guard_write();
-  }
-}
+  ldout(image_ctx->cct, 20) << this->m_oid << " " << get_op_type() << " "
+                            << this->m_object_off << "~"
+                            << this->m_object_len << ", "
+                            << "object exist " << this->m_object_may_exist
+                            << dendl;
 
-template <typename I>
-void ObjectRemoveRequest<I>::send_write() {
-  I *image_ctx = this->m_ictx;
-  ldout(image_ctx->cct, 20) << this->m_oid << " remove " << " object exist "
-                            << this->m_object_may_exist << dendl;
   if (!this->m_object_may_exist && !this->has_parent()) {
+    // optimization: nothing to discard
     this->m_state = AbstractObjectWriteRequest<I>::LIBRBD_AIO_WRITE_FLAT;
     Context *ctx = util::create_context_callback<ObjectRequest<I>>(this);
     image_ctx->op_work_queue->queue(ctx, 0);
-  } else {
+  } else if (m_discard_action == DISCARD_ACTION_REMOVE ||
+             m_discard_action == DISCARD_ACTION_REMOVE_TRUNCATE) {
+    // optimization: skip the copyup path for removals
     this->send_pre_object_map_update();
-  }
-}
-
-template <typename I>
-void ObjectTruncateRequest<I>::send_write() {
-  I *image_ctx = this->m_ictx;
-  ldout(image_ctx->cct, 20) << this->m_oid << " truncate " << this->m_object_off
-                            << " object exist " << this->m_object_may_exist
-                            << dendl;
-  if (!this->m_object_may_exist && !this->has_parent()) {
-    this->m_state = AbstractObjectWriteRequest<I>::LIBRBD_AIO_WRITE_FLAT;
-    Context *ctx = util::create_context_callback<ObjectRequest<I>>(this);
-    image_ctx->op_work_queue->queue(ctx, 0);
-  } else {
-    AbstractObjectWriteRequest<I>::send_write();
-  }
-}
-
-template <typename I>
-void ObjectZeroRequest<I>::send_write() {
-  I *image_ctx = this->m_ictx;
-  ldout(image_ctx->cct, 20) << this->m_oid << " zero "
-                            << this->m_object_off << "~" << this->m_object_len
-                            << " object exist " << this->m_object_may_exist
-                            << dendl;
-  if (!this->m_object_may_exist && !this->has_parent()) {
-    this->m_state = AbstractObjectWriteRequest<I>::LIBRBD_AIO_WRITE_FLAT;
-    Context *ctx = util::create_context_callback<ObjectRequest<I>>(this);
-    image_ctx->op_work_queue->queue(ctx, 0);
   } else {
     AbstractObjectWriteRequest<I>::send_write();
   }
@@ -900,9 +840,6 @@ template class librbd::io::ObjectRequest<librbd::ImageCtx>;
 template class librbd::io::ObjectReadRequest<librbd::ImageCtx>;
 template class librbd::io::AbstractObjectWriteRequest<librbd::ImageCtx>;
 template class librbd::io::ObjectWriteRequest<librbd::ImageCtx>;
-template class librbd::io::ObjectRemoveRequest<librbd::ImageCtx>;
-template class librbd::io::ObjectTrimRequest<librbd::ImageCtx>;
-template class librbd::io::ObjectTruncateRequest<librbd::ImageCtx>;
-template class librbd::io::ObjectZeroRequest<librbd::ImageCtx>;
+template class librbd::io::ObjectDiscardRequest<librbd::ImageCtx>;
 template class librbd::io::ObjectWriteSameRequest<librbd::ImageCtx>;
 template class librbd::io::ObjectCompareAndWriteRequest<librbd::ImageCtx>;
