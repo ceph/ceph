@@ -1659,7 +1659,8 @@ BlueStore::SharedBlob::~SharedBlob()
     get_cache()->rm_blob();
   }
   if (loaded && persistent) {
-    delete persistent; 
+    delete persistent;
+    persistent = nullptr;
   }
 }
 
@@ -1729,7 +1730,7 @@ ostream& operator<<(ostream& out, const BlueStore::Blob& b)
   if (b.shared_blob) {
     out << " " << *b.shared_blob;
   } else {
-    out << " (shared_blob=NULL)";
+    out << " (shared_blob=nullptr)";
   }
   out << ")";
   return out;
@@ -3205,6 +3206,7 @@ uint64_t BlueStore::Collection::make_blob_unshared(SharedBlob *sb)
   shared_blob_set.remove(sb);
   sb->loaded = false;
   delete sb->persistent;
+  sb->persistent = nullptr;
   sb->sbid_unloaded = 0;
   ldout(store->cct, 20) << __func__ << " now " << *sb << dendl;
   return sbid;
@@ -3380,7 +3382,7 @@ void *BlueStore::MempoolThread::entry()
     cond.WaitInterval(lock, wait);
   }
   stop = false;
-  return NULL;
+  return nullptr;
 }
 
 // =======================================================
@@ -3540,18 +3542,20 @@ BlueStore::~BlueStore()
 {
   for (auto f : finishers) {
     delete f;
+    f = nullptr;
   }
   finishers.clear();
 
   cct->_conf->remove_observer(this);
   _shutdown_logger();
   assert(!mounted);
-  assert(db == NULL);
-  assert(bluefs == NULL);
+  assert(!db);
+  assert(!bluefs);
   assert(fsid_fd < 0);
   assert(path_fd < 0);
   for (auto i : cache_shards) {
     delete i;
+    i = nullptr;
   }
   cache_shards.clear();
 }
@@ -3584,7 +3588,7 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_max_blob_size",
     "bluestore_max_blob_size_ssd",
     "bluestore_max_blob_size_hdd",
-    NULL
+    nullptr
   };
   return KEYS;
 }
@@ -3997,6 +4001,7 @@ void BlueStore::_shutdown_logger()
 {
   cct->get_perfcounters_collection()->remove(logger);
   delete logger;
+  logger = nullptr;
 }
 
 int BlueStore::get_block_device_fsid(CephContext* cct, const string& path,
@@ -4173,7 +4178,7 @@ void BlueStore::_set_alloc_sizes(void)
 
 int BlueStore::_open_bdev(bool create)
 {
-  assert(bdev == NULL);
+  assert(!bdev);
   string p = path + "/block";
   bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this));
   int r = bdev->open(p);
@@ -4209,7 +4214,7 @@ int BlueStore::_open_bdev(bool create)
   bdev->close();
  fail:
   delete bdev;
-  bdev = NULL;
+  bdev = nullptr;
   return r;
 }
 
@@ -4218,12 +4223,12 @@ void BlueStore::_close_bdev()
   assert(bdev);
   bdev->close();
   delete bdev;
-  bdev = NULL;
+  bdev = nullptr;
 }
 
 int BlueStore::_open_fm(bool create)
 {
-  assert(fm == NULL);
+  assert(!fm);
   fm = FreelistManager::create(cct, freelist_type, db, PREFIX_ALLOC);
 
   if (create) {
@@ -4305,7 +4310,7 @@ int BlueStore::_open_fm(bool create)
   if (r < 0) {
     derr << __func__ << " freelist init failed: " << cpp_strerror(r) << dendl;
     delete fm;
-    fm = NULL;
+    fm = nullptr;
     return r;
   }
   return 0;
@@ -4317,12 +4322,12 @@ void BlueStore::_close_fm()
   assert(fm);
   fm->shutdown();
   delete fm;
-  fm = NULL;
+  fm = nullptr;
 }
 
 int BlueStore::_open_alloc()
 {
-  assert(alloc == NULL);
+  assert(!alloc);
   assert(bdev->get_size());
   alloc = Allocator::create(cct, cct->_conf->bluestore_allocator,
                             bdev->get_size(),
@@ -4365,7 +4370,7 @@ void BlueStore::_close_alloc()
   assert(alloc);
   alloc->shutdown();
   delete alloc;
-  alloc = NULL;
+  alloc = nullptr;
 }
 
 int BlueStore::_open_fsid(bool create)
@@ -4558,7 +4563,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   }
   dout(10) << __func__ << " do_bluefs = " << do_bluefs << dendl;
 
-  rocksdb::Env *env = NULL;
+  rocksdb::Env *env = nullptr;
   if (do_bluefs) {
     dout(10) << __func__ << " initializing bluefs" << dendl;
     if (kv_backend != "rocksdb") {
@@ -4764,12 +4769,12 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
     if (bluefs) {
       bluefs->umount();
       delete bluefs;
-      bluefs = NULL;
+      bluefs = nullptr;
     }
     // delete env manually here since we can't depend on db to do this
     // under this case
     delete env;
-    env = NULL;
+    env = nullptr;
     return -EIO;
   }
 
@@ -4809,10 +4814,10 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
     if (bluefs) {
       bluefs->umount();
       delete bluefs;
-      bluefs = NULL;
+      bluefs = nullptr;
     }
     delete db;
-    db = NULL;
+    db = nullptr;
     return -EIO;
   }
   dout(1) << __func__ << " opened " << kv_backend
@@ -4822,7 +4827,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
 free_bluefs:
   assert(bluefs);
   delete bluefs;
-  bluefs = NULL;
+  bluefs = nullptr;
   return r;
 }
 
@@ -4830,11 +4835,11 @@ void BlueStore::_close_db()
 {
   assert(db);
   delete db;
-  db = NULL;
+  db = nullptr;
   if (bluefs) {
     bluefs->umount();
     delete bluefs;
-    bluefs = NULL;
+    bluefs = nullptr;
   }
 }
 
@@ -6652,7 +6657,7 @@ int BlueStore::_do_read(
                                     // measure the whole block below.
                                     // The error isn't that much...
   vector<bufferlist> compressed_blob_bls;
-  IOContext ioc(cct, NULL, true); // allow EIO
+  IOContext ioc(cct, nullptr, true); // allow EIO
   for (auto& p : blobs2read) {
     BlobRef bptr = p.first;
     dout(20) << __func__ << "  blob " << *bptr << std::hex
@@ -8232,17 +8237,17 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
   // warning: we're calling onreadable_sync inside the sequencer lock
   if (txc->onreadable_sync) {
     txc->onreadable_sync->complete(0);
-    txc->onreadable_sync = NULL;
+    txc->onreadable_sync = nullptr;
   }
   unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
   if (txc->oncommit) {
     logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
     finishers[n]->queue(txc->oncommit);
-    txc->oncommit = NULL;
+    txc->oncommit = nullptr;
   }
   if (txc->onreadable) {
     finishers[n]->queue(txc->onreadable);
-    txc->onreadable = NULL;
+    txc->onreadable = nullptr;
   }
 
   if (!txc->oncommits.empty()) {
@@ -8311,6 +8316,7 @@ void BlueStore::_txc_finish(TransContext *txc)
     releasing_txc.pop_front();
     txc->log_state_latency(logger, l_bluestore_state_done_lat);
     delete txc;
+    txc = nullptr;
   }
 
   if (submit_deferred) {
@@ -8776,6 +8782,7 @@ void BlueStore::_kv_finalize_thread()
 	  _txc_state_proc(txc); // this may destroy txc
 	}
 	delete b;
+        b = nullptr;
       }
       deferred_stable.clear();
 
@@ -8992,6 +8999,7 @@ int BlueStore::_deferred_replay()
       derr << __func__ << " failed to decode deferred txn "
 	   << pretty_binary_string(it->key()) << dendl;
       delete deferred_txn;
+      deferred_txn = nullptr;
       r = -EIO;
       goto out;
     }
@@ -9028,8 +9036,11 @@ int BlueStore::queue_transactions(
     dout(0) << __func__ << " objectstore_blackhole = TRUE, dropping transaction"
 	    << dendl;
     delete ondisk;
+    ondisk = nullptr;
     delete onreadable;
+    onreadable = nullptr;
     delete onreadable_sync;
+    onreadable_sync = nullptr;
     return 0;
   }
   utime_t start = ceph_clock_now();

@@ -66,7 +66,7 @@ public:
     std::atomic_int num_reading;
 
     File()
-      : RefCountedObject(NULL, 0),
+      : RefCountedObject(nullptr, 0),
 	refs(0),
 	dirty_seq(0),
 	locked(false),
@@ -103,7 +103,7 @@ public:
 
     mempool::bluefs::map<string,FileRef> file_map;
 
-    Dir() : RefCountedObject(NULL, 0) {}
+    Dir() : RefCountedObject(nullptr, 0) {}
 
     friend void intrusive_ptr_add_ref(Dir *d) {
       d->get();

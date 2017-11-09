@@ -94,8 +94,8 @@ int PMEMDevice::open(const string& p)
   }
 
   size_t map_len;
-  addr = (char *)pmem_map_file(path.c_str(), size, PMEM_FILE_EXCL, O_RDWR, &map_len, NULL);
-  if (addr == NULL) {
+  addr = (char *)pmem_map_file(path.c_str(), size, PMEM_FILE_EXCL, O_RDWR, &map_len, nullptr);
+  if (!addr) {
     derr << __func__ << " pmem_map_file error" << dendl;
     goto out_fail;
   }
@@ -130,7 +130,7 @@ void PMEMDevice::close()
 {
   dout(1) << __func__ << dendl;
 
-  assert(addr != NULL);
+  assert(addr);
   pmem_unmap(addr, size);
   assert(fd >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd));

@@ -18,7 +18,7 @@
 #include "include/stringify.h"
 
 void ExtentList::add_extents(int64_t start, int64_t count) {
-  AllocExtent *last_extent = NULL;
+  AllocExtent *last_extent = nullptr;
   bool can_merge = false;
 
   if (!m_extents->empty()) {

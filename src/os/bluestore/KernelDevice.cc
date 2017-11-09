@@ -36,7 +36,7 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     fd_direct(-1),
     fd_buffered(-1),
-    fs(NULL), aio(false), dio(false),
+    fs(nullptr), aio(false), dio(false),
     debug_lock("KernelDevice::debug_lock"),
     aio_queue(cct->_conf->bdev_aio_max_queue_depth),
     aio_stop(false),
@@ -190,7 +190,7 @@ void KernelDevice::close()
 
   assert(fs);
   delete fs;
-  fs = NULL;
+  fs = nullptr;
 
   assert(fd_direct >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd_direct));

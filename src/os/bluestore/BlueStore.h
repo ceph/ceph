@@ -761,7 +761,10 @@ public:
     }
 
     struct DeleteDisposer {
-      void operator()(Extent *e) { delete e; }
+      void operator()(Extent *e) {
+        delete e;
+        e = nullptr;
+      }
     };
 
     ExtentMap(Onode *o);
@@ -1576,6 +1579,7 @@ public:
     }
     ~TransContext() {
       delete deferred_txn;
+      deferred_txn = nullptr;
     }
 
     void write_onode(OnodeRef &o) {
@@ -1671,7 +1675,7 @@ public:
 
     OpSequencer(CephContext* cct, BlueStore *store)
       : Sequencer_impl(cct),
-	parent(NULL), store(store) {
+	parent(nullptr), store(store) {
       store->register_osr(this);
     }
     ~OpSequencer() override {
@@ -1774,7 +1778,7 @@ public:
     explicit KVSyncThread(BlueStore *s) : store(s) {}
     void *entry() override {
       store->_kv_sync_thread();
-      return NULL;
+      return nullptr;
     }
   };
   struct KVFinalizeThread : public Thread {
@@ -1782,7 +1786,7 @@ public:
     explicit KVFinalizeThread(BlueStore *s) : store(s) {}
     void *entry() {
       store->_kv_finalize_thread();
-      return NULL;
+      return nullptr;
     }
   };
 
@@ -2402,7 +2406,7 @@ public:
     Sequencer *osr,
     vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
-    ThreadPool::TPHandle *handle = NULL) override;
+    ThreadPool::TPHandle *handle = nullptr) override;
 
   // error injection
   void inject_data_error(const ghobject_t& o) override {

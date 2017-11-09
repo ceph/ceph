@@ -161,11 +161,11 @@ class SharedDriverQueueData {
     // usable queue depth should minus 1 to aovid overflow.
     max_queue_depth = opts.io_queue_size - 1;
     qpair = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, &opts, sizeof(opts));
-    assert(qpair != NULL);
+    assert(qpair);
 
     // allocate spdk dma memory
     for (uint16_t i = 0; i < data_buffer_default_num; i++) {
-      void *b = spdk_dma_zmalloc(data_buffer_size, CEPH_PAGE_SIZE, NULL);
+      void *b = spdk_dma_zmalloc(data_buffer_size, CEPH_PAGE_SIZE, nullptr);
       if (!b) {
         derr << __func__ << " failed to create memory pool for nvme data buffer" << dendl;
         assert(b);
@@ -209,6 +209,7 @@ class SharedDriverQueueData {
     }
 
     delete logger;
+    logger = nullptr;
   }
 };
 
@@ -239,6 +240,7 @@ struct Task {
       for (uint16_t i = 0; i < io_request.nseg; i++)
         queue_data->data_buf_mempool.push_back(io_request.extra_segs[i]);
       delete io_request.extra_segs;
+      io_request.extra_segs = nullptr;
     } else if (io_request.nseg) {
       for (uint16_t i = 0; i < io_request.nseg; i++)
         queue_data->data_buf_mempool.push_back(io_request.inline_segs[i]);
@@ -402,6 +404,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
             t->release_segs(this);
             delete t;
+            t = nullptr;
             ceph_abort();
           }
           cur = ceph::coarse_real_clock::now();
@@ -425,6 +428,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
             derr << __func__ << " failed to read" << dendl;
             t->release_segs(this);
             delete t;
+            t = nullptr;
             ceph_abort();
           } else {
             cur = ceph::coarse_real_clock::now();
@@ -441,6 +445,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
             derr << __func__ << " failed to flush" << dendl;
             t->release_segs(this);
             delete t;
+            t = nullptr;
             ceph_abort();
           } else {
             cur = ceph::coarse_real_clock::now();
@@ -521,7 +526,7 @@ static bool probe_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid, st
   NVMEManager::ProbeContext *ctx = static_cast<NVMEManager::ProbeContext*>(cb_ctx);
   char serial_number[128];
   struct spdk_pci_addr pci_addr;
-  struct spdk_pci_device *pci_dev = NULL;
+  struct spdk_pci_device *pci_dev = nullptr;
   int result = 0;
 
   if (trid->trtype != SPDK_NVME_TRANSPORT_PCIE) {
@@ -563,7 +568,7 @@ static void attach_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid,
                       struct spdk_nvme_ctrlr *ctrlr, const struct spdk_nvme_ctrlr_opts *opts)
 {
   struct spdk_pci_addr pci_addr;
-  struct spdk_pci_device *pci_dev = NULL;
+  struct spdk_pci_device *pci_dev = nullptr;
 
   spdk_pci_addr_parse(&pci_addr, trid->traddr);
 
@@ -593,7 +598,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
     return r;
   }
 
-  core_value = strtoll(coremask_arg, NULL, 16);
+  core_value = strtoll(coremask_arg, nullptr, 16);
   for (uint32_t i = 0; i < sizeof(long long) * 8; i++) {
     bool tmp = (core_value >> i) & 0x1;
     if (tmp) {
@@ -644,7 +649,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
           if (!probe_queue.empty()) {
             ProbeContext* ctxt = probe_queue.front();
             probe_queue.pop_front();
-            r = spdk_nvme_probe(NULL, ctxt, probe_cb, attach_cb, NULL);
+            r = spdk_nvme_probe(nullptr, ctxt, probe_cb, attach_cb, nullptr);
             if (r < 0) {
               assert(!ctxt->driver);
               derr << __func__ << " device probe nvme failed" << dendl;
@@ -680,8 +685,8 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
   IOContext *ctx = task->ctx;
   SharedDriverQueueData *queue = task->queue;
 
-  assert(queue != NULL);
-  assert(ctx != NULL);
+  assert(queue);
+  assert(ctx);
   --queue->current_queue_depth;
   auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(
       ceph::coarse_real_clock::now() - task->start);
@@ -701,6 +706,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     }
     task->release_segs(queue);
     delete task;
+    task = nullptr;
   } else if (task->command == IOCommand::READ_COMMAND) {
     queue->logger->tinc(l_bluestore_nvmedevice_read_lat, dur);
     assert(!spdk_nvme_cpl_is_error(completion));
@@ -717,6 +723,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
         ctx->try_aio_wake();
       }
       delete task;
+      task = nullptr;
     } else {
       task->return_code = 0;
       ctx->try_aio_wake();
@@ -903,7 +910,7 @@ int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered)
   assert(off < size);
   assert(off + len <= size);
 
-  IOContext ioc(cct, NULL);
+  IOContext ioc(cct, nullptr);
   write_split(this, off, bl, &ioc);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   aio_submit(&ioc);
@@ -935,6 +942,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   pbl->push_back(std::move(p));
   r = t->return_code;
   delete t;
+  t = nullptr;
   return r;
 }
 
@@ -994,6 +1002,7 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
 
   r = t->return_code;
   delete t;
+  t = nullptr;
   return r;
 }
 

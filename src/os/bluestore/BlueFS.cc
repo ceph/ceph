@@ -43,10 +43,12 @@ BlueFS::~BlueFS()
     if (p) {
       p->close();
       delete p;
+      p = nullptr;
     }
   }
   for (auto p : ioc) {
     delete p;
+    p = nullptr;
   }
 }
 
@@ -103,6 +105,7 @@ void BlueFS::_shutdown_logger()
 {
   cct->get_perfcounters_collection()->remove(logger);
   delete logger;
+  logger = nullptr;
 }
 
 void BlueFS::_update_logger_stats()
@@ -132,17 +135,18 @@ int BlueFS::add_block_device(unsigned id, const string& path)
 {
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   assert(id < bdev.size());
-  assert(bdev[id] == NULL);
-  BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL);
+  assert(!bdev[id]);
+  BlockDevice *b = BlockDevice::create(cct, path, nullptr, nullptr);
   int r = b->open(path);
   if (r < 0) {
     delete b;
+    b = nullptr;
     return r;
   }
   dout(1) << __func__ << " bdev " << id << " path " << path
 	  << " size " << pretty_si_t(b->get_size()) << "B" << dendl;
   bdev[id] = b;
-  ioc[id] = new IOContext(cct, NULL);
+  ioc[id] = new IOContext(cct, nullptr);
   return 0;
 }
 
@@ -348,7 +352,7 @@ int BlueFS::mkfs(uuid_d osd_uuid)
   // clean up
   super = bluefs_super_t();
   _close_writer(log_writer);
-  log_writer = NULL;
+  log_writer = nullptr;
   block_all.clear();
   _stop_alloc();
   _shutdown_logger();
@@ -384,6 +388,7 @@ void BlueFS::_stop_alloc()
     if (p != nullptr)  {
       p->shutdown();
       delete p;
+      p = nullptr;
     }
   }
   alloc.clear();
@@ -441,7 +446,7 @@ void BlueFS::umount()
   sync_metadata();
 
   _close_writer(log_writer);
-  log_writer = NULL;
+  log_writer = nullptr;
 
   _stop_alloc();
   file_map.clear();
@@ -559,7 +564,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     bufferlist bl;
     {
       int r = _read(log_reader, &log_reader->buf, read_pos, super.block_size,
-		    &bl, NULL);
+		    &bl, nullptr);
       assert(r == (int)super.block_size);
       read_pos += r;
     }
@@ -595,7 +600,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       dout(20) << __func__ << " need 0x" << std::hex << more << std::dec
                << " more bytes" << dendl;
       bufferlist t;
-      int r = _read(log_reader, &log_reader->buf, read_pos, more, &t, NULL);
+      int r = _read(log_reader, &log_reader->buf, read_pos, more, &t, nullptr);
       if (r < (int)more) {
 	dout(10) << __func__ << " 0x" << std::hex << pos
                  << ": stop: len is 0x" << bl.length() + more << std::dec
@@ -616,6 +621,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                << ": stop: failed to decode: " << e.what()
                << dendl;
       delete log_reader;
+      log_reader = nullptr;
       return -EIO;
     }
     assert(seq == t.seq);
@@ -665,7 +671,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 	  if (skip) {
 	    bufferlist junk;
 	    int r = _read(log_reader, &log_reader->buf, read_pos, skip, &junk,
-			  NULL);
+			  nullptr);
 	    if (r != (int)skip) {
 	      dout(10) << __func__ << " 0x" << std::hex << read_pos
 		       << ": stop: failed to skip to " << offset
@@ -882,6 +888,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 	derr << __func__ << " 0x" << std::hex << pos << std::dec
              << ": stop: unrecognized op " << (int)op << dendl;
 	delete log_reader;
+        log_reader = nullptr;
         return -EIO;
       }
     }
@@ -900,6 +907,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   }
 
   delete log_reader;
+  log_reader = nullptr;
 
   if (!noop) {
     // verify file link counts are all >0
@@ -2122,9 +2130,9 @@ BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
   FileWriter *w = new FileWriter(f);
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (bdev[i]) {
-      w->iocv[i] = new IOContext(cct, NULL);
+      w->iocv[i] = new IOContext(cct, nullptr);
     } else {
-      w->iocv[i] = NULL;
+      w->iocv[i] = nullptr;
     }
   }
   return w;
@@ -2141,6 +2149,7 @@ void BlueFS::_close_writer(FileWriter *h)
     }
   }
   delete h;
+  h = nullptr;
 }
 
 int BlueFS::open_for_read(
@@ -2339,6 +2348,7 @@ int BlueFS::unlock_file(FileLock *fl)
   assert(fl->file->locked);
   fl->file->locked = false;
   delete fl;
+  fl = nullptr;
   return 0;
 }
 

@@ -17,7 +17,7 @@ FreelistManager *FreelistManager::create(
   assert(prefix == "B");
   if (type == "bitmap")
     return new BitmapFreelistManager(cct, kvdb, "B", "b");
-  return NULL;
+  return nullptr;
 }
 
 void FreelistManager::setup_merge_operators(KeyValueDB *db)

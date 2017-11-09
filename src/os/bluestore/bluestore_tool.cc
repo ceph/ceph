@@ -130,6 +130,7 @@ void log_dump(
   }
 
   delete fs;
+  fs = nullptr;
 }
 
 BlueFS *open_bluefs(
@@ -304,7 +305,7 @@ int main(int argc, char **argv)
   }
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(cct.get());
 
@@ -463,6 +464,7 @@ int main(int argc, char **argv)
     BlueFS *fs = open_bluefs(cct.get(), path, devs);
     fs->dump_block_extents(cout);
     delete fs;
+    fs = nullptr;
   }
   else if (action == "bluefs-bdev-expand") {
     BlueFS *fs = open_bluefs(cct.get(), path, devs);
@@ -480,6 +482,7 @@ int main(int argc, char **argv)
       }
     }
     delete fs;
+    fs = nullptr;
   }
   else if (action == "bluefs-export") {
     BlueFS *fs = open_bluefs(cct.get(), path, devs);
@@ -550,7 +553,7 @@ int main(int argc, char **argv)
 	  int left = size;
 	  while (left) {
 	    bufferlist bl;
-	    r = fs->read(h, &h->buf, pos, left, &bl, NULL);
+	    r = fs->read(h, &h->buf, pos, left, &bl, nullptr);
 	    if (r <= 0) {
 	      cerr << "read " << dir << "/" << file << " from " << pos
 		   << " failed: " << cpp_strerror(r) << std::endl;
@@ -566,12 +569,14 @@ int main(int argc, char **argv)
 	    left -= r;
 	  }
 	  delete h;
+          h = nullptr;
 	}
 	::close(fd);
       }
     }
     fs->umount();
     delete fs;
+    fs = nullptr;
   } else if (action == "bluefs-log-dump") {
     log_dump(cct.get(), path, devs);
   } else {

@@ -66,8 +66,8 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 #if defined(HAVE_PMEM)
   if (type == "kernel") {
     int is_pmem = 0;
-    void *addr = pmem_map_file(path.c_str(), 1024*1024, PMEM_FILE_EXCL, O_RDONLY, NULL, &is_pmem);
-    if (addr != NULL) {
+    void *addr = pmem_map_file(path.c_str(), 1024*1024, PMEM_FILE_EXCL, O_RDONLY, nullptr, &is_pmem);
+    if (addr) {
       if (is_pmem)
 	type = "pmem";
       pmem_unmap(addr, 1024*1024);
@@ -95,7 +95,7 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 
   derr << __func__ << " unknown backend " << type << dendl;
   ceph_abort();
-  return NULL;
+  return nullptr;
 }
 
 void BlockDevice::queue_reap_ioc(IOContext *ioc)
@@ -113,6 +113,7 @@ void BlockDevice::reap_ioc()
     for (auto p : ioc_reap_queue) {
       dout(20) << __func__ << " reap ioc " << p << dendl;
       delete p;
+      p = nullptr;
     }
     ioc_reap_queue.clear();
     --ioc_reap_count;

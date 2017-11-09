@@ -36,6 +36,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   BlueRocksSequentialFile(BlueFS *fs, BlueFS::FileReader *h) : fs(fs), h(h) {}
   ~BlueRocksSequentialFile() override {
     delete h;
+    h = nullptr;
   }
 
   // Read up to "n" bytes from the file.  "scratch[0..n-1]" may be
@@ -47,7 +48,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   //
   // REQUIRES: External synchronization
   rocksdb::Status Read(size_t n, rocksdb::Slice* result, char* scratch) override {
-    int r = fs->read(h, &h->buf, h->buf.pos, n, NULL, scratch);
+    int r = fs->read(h, &h->buf, h->buf.pos, n, nullptr, scratch);
     assert(r >= 0);
     *result = rocksdb::Slice(scratch, r);
     return rocksdb::Status::OK();
@@ -82,6 +83,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   BlueRocksRandomAccessFile(BlueFS *fs, BlueFS::FileReader *h) : fs(fs), h(h) {}
   ~BlueRocksRandomAccessFile() override {
     delete h;
+    h = nullptr;
   }
 
   // Read up to "n" bytes from the file starting at "offset".
@@ -402,7 +404,7 @@ rocksdb::Status BlueRocksEnv::FileExists(const std::string& fname)
     return target()->FileExists(fname);
   std::string dir, file;
   split(fname, &dir, &file);
-  if (fs->stat(dir, file, NULL, NULL) == 0)
+  if (fs->stat(dir, file, nullptr, nullptr) == 0)
     return rocksdb::Status::OK();
   return err_to_status(-ENOENT);
 }
@@ -458,7 +460,7 @@ rocksdb::Status BlueRocksEnv::GetFileSize(
 {
   std::string dir, file;
   split(fname, &dir, &file);
-  int r = fs->stat(dir, file, file_size, NULL);
+  int r = fs->stat(dir, file, file_size, nullptr);
   if (r < 0)
     return err_to_status(r);
   return rocksdb::Status::OK();
@@ -470,7 +472,7 @@ rocksdb::Status BlueRocksEnv::GetFileModificationTime(const std::string& fname,
   std::string dir, file;
   split(fname, &dir, &file);
   utime_t mtime;
-  int r = fs->stat(dir, file, NULL, &mtime);
+  int r = fs->stat(dir, file, nullptr, &mtime);
   if (r < 0)
     return err_to_status(r);
   *file_mtime = mtime.sec();
@@ -528,7 +530,7 @@ rocksdb::Status BlueRocksEnv::LockFile(
 {
   std::string dir, file;
   split(fname, &dir, &file);
-  BlueFS::FileLock *l = NULL;
+  BlueFS::FileLock *l = nullptr;
   int r = fs->lock_file(dir, file, &l);
   if (r < 0)
     return err_to_status(r);
@@ -543,6 +545,7 @@ rocksdb::Status BlueRocksEnv::UnlockFile(rocksdb::FileLock* lock)
   if (r < 0)
     return err_to_status(r);
   delete lock;
+  lock = nullptr;
   return rocksdb::Status::OK();
 }
 

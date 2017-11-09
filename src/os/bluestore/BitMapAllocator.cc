@@ -64,6 +64,7 @@ BitMapAllocator::BitMapAllocator(CephContext* cct, int64_t device_size,
 BitMapAllocator::~BitMapAllocator()
 {
   delete m_bit_alloc;
+  m_bit_alloc = nullptr;
 }
 
 void BitMapAllocator::insert_free(uint64_t off, uint64_t len)

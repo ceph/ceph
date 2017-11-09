@@ -109,7 +109,7 @@ public:
         m_end = true;
         return &(*m_list)[cur_idx];
       }
-      return NULL;
+      return nullptr;
     }
     m_cur_idx++;
 
@@ -123,7 +123,7 @@ public:
       /*
        * End of list
        */
-      return NULL;
+      return nullptr;
     }
 
     alloc_assert(cur_idx < (int64_t)m_list->size());
@@ -307,7 +307,7 @@ public:
         m_end = true;
         return m_list->get_nth_item(cur_idx);
       }
-      return NULL;
+      return nullptr;
     }
     m_cur_idx++;
 
@@ -320,7 +320,7 @@ public:
       /*
        * End of list
        */
-      return NULL;
+      return nullptr;
     }
 
     /* This method should be *really* fast as it's being executed over
