@@ -87,9 +87,13 @@ class Activate(object):
     def main(self):
         sub_command_help = dedent("""
         Activate OSDs by mounting devices previously configured to their
-        appropriate destination:
+        appropriate destination::
 
             ceph-volume simple activate {ID} {FSID}
+
+        Or using a JSON file directly::
+
+            ceph-volume simple activate --file /etc/ceph/osd/{ID}-{FSID}.json
 
         The OSD must have been "scanned" previously (see ``ceph-volume simple
         scan``), so that all needed OSD device information and metadata exist.
