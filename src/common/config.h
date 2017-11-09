@@ -134,6 +134,9 @@ public:
   void set_safe_to_start_threads();
   void _clear_safe_to_start_threads();  // this is only used by the unit test
 
+  /// Look up an option in the schema
+  const Option *find_option(const string& name) const;
+
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostream *oss);
 
