@@ -101,22 +101,20 @@ class C_tick_wakeup : public EventCallback {
 static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 {
   // create a buffer to read into that matches the data alignment
+  unsigned alloc_len = 0;
   unsigned left = len;
+  unsigned head = 0;
   if (off & ~CEPH_PAGE_MASK) {
     // head
-    unsigned head = 0;
+    alloc_len += CEPH_PAGE_SIZE;
     head = MIN(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
-    data.push_back(buffer::create(head));
     left -= head;
   }
-  unsigned middle = left & CEPH_PAGE_MASK;
-  if (middle > 0) {
-    data.push_back(buffer::create_page_aligned(middle));
-    left -= middle;
-  }
-  if (left) {
-    data.push_back(buffer::create(left));
-  }
+  alloc_len += left;
+  bufferptr ptr(buffer::create_page_aligned(alloc_len));
+  if (head)
+    ptr.set_offset(CEPH_PAGE_SIZE - head);
+  data.push_back(std::move(ptr));
 }
 
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
