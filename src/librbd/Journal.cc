@@ -1496,7 +1496,7 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
        it != aio_object_requests.end(); ++it) {
     if (r < 0) {
       // don't send aio requests if the journal fails -- bubble error up
-      (*it)->complete(r);
+      (*it)->fail(r);
     } else {
       // send any waiting aio requests now that journal entry is safe
       (*it)->send();

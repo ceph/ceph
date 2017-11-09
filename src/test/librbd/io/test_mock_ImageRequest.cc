@@ -102,8 +102,8 @@ struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
     s_instance = nullptr;
   }
 
-  MOCK_METHOD1(complete, void(int));
   MOCK_METHOD0(send, void());
+  MOCK_METHOD1(fail, void(int));
 };
 
 template <>
