@@ -166,6 +166,21 @@ else()
   set(C_STANDARD_REQUIRED ON)
 endif()
 
+include(CheckCXXSourceCompiles)
+CHECK_CXX_SOURCE_COMPILES("
+int main() {
+#ifdef __GLIBCXX__
+#if __GLIBCXX__ < 20150422ul /* libstdc++ < 5.1.0 */
+#error libstdc++ < 5.1.0 does not confirm to C++11
+#endif
+#endif
+}
+" HAVE_SANE_GLIBCXX)
+if(NOT HAVE_SANE_GLIBCXX)
+  # libstdc++ 4.9 has O(n) list::size(), and its regex is buggy
+  message(WARNING "performance regression is expected due to an O(n) implementation of 'std::list::size()' in libstdc++ older than 5.1.0")
+endif()
+
 ## Handle diagnostics color if compiler supports them.
 CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
   COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
