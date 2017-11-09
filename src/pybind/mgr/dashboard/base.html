@@ -38,10 +38,14 @@
             var refresh_interval = 5000;
 
             var refresh = function() {
-                $.get("{{ url_prefix }}/toplevel_data", function(data) {
-                    _.extend(toplevel_data, data);
-                    setTimeout(refresh, refresh_interval);
-                });
+                $.get("{{ url_prefix }}/toplevel_data")
+                    .done(function(data) {
+                        _.extend(toplevel_data, data);
+                        setTimeout(refresh, refresh_interval);
+                    })
+                    .fail(function(){
+                        $("#mgr-load-banner").show();
+                    });
             };
 
             rivets.configure({
@@ -292,6 +296,10 @@
 
 <div style="display:none;" id="mon-conn-banner" class="alert alert-danger" rv-hide="have_mon_connection">
 No monitor connection from manager daemon {mgr_id}: data may be stale
+</div>
+
+<div style="display:none;" id="mgr-load-banner" class="alert alert-warning">
+Failed to load data from server <a href="javascript:window.location.reload(true)">Reload</a>
 </div>
 
 <div class="wrapper">
