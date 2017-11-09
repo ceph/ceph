@@ -311,6 +311,8 @@ int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<strin
             ldout(cct, 0) << "ERROR: abort_multipart_upload failed, ret=" << ret <<dendl;
             return ret;
           }
+          if (going_down())
+            return 0;
         }
       }
     } while(is_truncated);
@@ -414,6 +416,9 @@ int RGWLC::bucket_lc_process(string& shard_id)
             } else {
               ldout(cct, 10) << "DELETED:" << bucket_name << ":" << key << dendl;
             }
+
+            if (going_down())
+              return 0;
           }
         }
       } while (is_truncated);
@@ -517,6 +522,9 @@ int RGWLC::bucket_lc_process(string& shard_id)
             } else {
               ldout(cct, 10) << "DELETED:" << bucket_name << ":" << obj_iter->key << dendl;
             }
+
+            if (going_down())
+              return 0;
           }
         }
       } while (is_truncated);
