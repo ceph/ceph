@@ -33,22 +33,22 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
                 << "(" << service->get_epoch() << ") ";
 }
 
-const string ConfigKeyService::STORE_PREFIX = "mon_config_key";
+const string CONFIG_PREFIX = "mon_config_key";
 
 int ConfigKeyService::store_get(const string &key, bufferlist &bl)
 {
-  return mon->store->get(STORE_PREFIX, key, bl);
+  return mon->store->get(CONFIG_PREFIX, key, bl);
 }
 
 void ConfigKeyService::get_store_prefixes(set<string>& s) const
 {
-  s.insert(STORE_PREFIX);
+  s.insert(CONFIG_PREFIX);
 }
 
 void ConfigKeyService::store_put(const string &key, bufferlist &bl, Context *cb)
 {
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-  t->put(STORE_PREFIX, key, bl);
+  t->put(CONFIG_PREFIX, key, bl);
   if (cb)
     paxos->queue_pending_finisher(cb);
   paxos->trigger_propose();
@@ -67,18 +67,18 @@ void ConfigKeyService::store_delete(
     MonitorDBStore::TransactionRef t,
     const string &key)
 {
-  t->erase(STORE_PREFIX, key);
+  t->erase(CONFIG_PREFIX, key);
 }
 
 bool ConfigKeyService::store_exists(const string &key)
 {
-  return mon->store->exists(STORE_PREFIX, key);
+  return mon->store->exists(CONFIG_PREFIX, key);
 }
 
 void ConfigKeyService::store_list(stringstream &ss)
 {
   KeyValueDB::Iterator iter =
-    mon->store->get_iterator(STORE_PREFIX);
+    mon->store->get_iterator(CONFIG_PREFIX);
 
   JSONFormatter f(true);
   f.open_array_section("keys");
@@ -95,7 +95,7 @@ void ConfigKeyService::store_list(stringstream &ss)
 bool ConfigKeyService::store_has_prefix(const string &prefix)
 {
   KeyValueDB::Iterator iter =
-    mon->store->get_iterator(STORE_PREFIX);
+    mon->store->get_iterator(CONFIG_PREFIX);
 
   while (iter->valid()) {
     string key(iter->key());
@@ -111,7 +111,7 @@ bool ConfigKeyService::store_has_prefix(const string &prefix)
 void ConfigKeyService::store_dump(stringstream &ss)
 {
   KeyValueDB::Iterator iter =
-    mon->store->get_iterator(STORE_PREFIX);
+    mon->store->get_iterator(CONFIG_PREFIX);
 
   JSONFormatter f(true);
   f.open_object_section("config-key store");
@@ -129,7 +129,7 @@ void ConfigKeyService::store_delete_prefix(
     const string &prefix)
 {
   KeyValueDB::Iterator iter =
-    mon->store->get_iterator(STORE_PREFIX);
+    mon->store->get_iterator(CONFIG_PREFIX);
 
   while (iter->valid()) {
     string key(iter->key());
