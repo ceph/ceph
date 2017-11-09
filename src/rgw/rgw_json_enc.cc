@@ -474,6 +474,7 @@ void RGWUserInfo::dump(Formatter *f) const
     break;
   }
   encode_json("type", user_source_type, f);
+  encode_json("mfa_devices", mfa_devices, f);
 }
 
 
@@ -543,6 +544,7 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   } else if (user_source_type == "none") {
     type = TYPE_NONE;
   }
+  JSONDecoder::decode_json("mfa_devices", mfa_devices, obj);
 }
 
 void RGWQuotaInfo::dump(Formatter *f) const
@@ -781,7 +783,6 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   int rs;
   JSONDecoder::decode_json("reshard_status", rs, obj);
   reshard_status = (cls_rgw_reshard_status)rs;
-  JSONDecoder::decode_json("new_bucket_instance_id",new_bucket_instance_id, obj);
 }
 
 void rgw_obj_key::dump(Formatter *f) const
