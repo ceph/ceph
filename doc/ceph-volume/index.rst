@@ -23,6 +23,7 @@ that may have been deployed with ``ceph-disk``.
    :caption: Contents:
 
    intro
+   systemd
    lvm/index
    lvm/activate
    lvm/prepare
