@@ -369,7 +369,7 @@ void PrimaryLogPG::on_local_recover(
       bufferlist bl;
       ::encode(recovery_info.oi, bl,
 	       get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-      assert(!pool.info.require_rollback());
+      assert(!pool.info.is_erasure());
       t->setattr(coll, ghobject_t(recovery_info.soid), OI_ATTR, bl);
       if (obc)
 	obc->attr_cache[OI_ATTR] = bl;
@@ -3212,6 +3212,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   if (result == -EINPROGRESS || pending_async_reads) {
     // come back later.
     if (pending_async_reads) {
+      assert(pool.info.is_erasure());
       in_progress_async_reads.push_back(make_pair(op, ctx));
       ctx->start_async_reads(this);
     }
@@ -4464,7 +4465,7 @@ int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
 			  csum_init_value_size);
   bl_it->advance(csum_init_value_size);
 
-  if (pool.info.require_rollback() && op.checksum.length > 0) {
+  if (pool.info.is_erasure() && op.checksum.length > 0) {
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.
     boost::optional<uint32_t> maybe_crc;
@@ -4636,7 +4637,7 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
   } else if (!ctx->obs->exists || ctx->obs->oi.is_whiteout()) {
     dout(20) << __func__ << " object DNE" << dendl;
     return finish_extent_cmp(osd_op, {});
-  } else if (pool.info.require_rollback()) {
+  } else if (pool.info.is_erasure()) {
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.
     boost::optional<uint32_t> maybe_crc;
@@ -4721,7 +4722,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     // read size was trimmed to zero and it is expected to do nothing
     // a read operation of 0 bytes does *not* do nothing, this is why
     // the trimmed_read boolean is needed
-  } else if (pool.info.require_rollback()) {
+  } else if (pool.info.is_erasure()) {
     boost::optional<uint32_t> maybe_crc;
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.  FillInVerifyExtent will
@@ -5027,7 +5028,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_SYNC_READ:
-      if (pool.info.require_rollback()) {
+      if (pool.info.is_erasure()) {
 	result = -EOPNOTSUPP;
 	break;
       }
@@ -5067,7 +5068,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     /* map extents */
     case CEPH_OSD_OP_MAPEXT:
       tracepoint(osd, do_osd_op_pre_mapext, soid.oid.name.c_str(), soid.snap.val, op.extent.offset, op.extent.length);
-      if (pool.info.require_rollback()) {
+      if (pool.info.is_erasure()) {
 	result = -EOPNOTSUPP;
 	break;
       }
@@ -5749,7 +5750,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
 	maybe_create_new_object(ctx);
-	if (pool.info.require_rollback()) {
+	if (pool.info.is_erasure()) {
 	  t->truncate(soid, 0);
 	} else if (obs.exists && op.extent.length < oi.size) {
 	  t->truncate(soid, op.extent.length);
@@ -6179,7 +6180,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // -- trivial map --
     case CEPH_OSD_OP_TMAPGET:
       tracepoint(osd, do_osd_op_pre_tmapget, soid.oid.name.c_str(), soid.snap.val);
-      if (pool.info.require_rollback()) {
+      if (pool.info.is_erasure()) {
 	result = -EOPNOTSUPP;
 	break;
       }
@@ -6196,7 +6197,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_TMAPPUT:
       tracepoint(osd, do_osd_op_pre_tmapput, soid.oid.name.c_str(), soid.snap.val);
-      if (pool.info.require_rollback()) {
+      if (pool.info.is_erasure()) {
 	result = -EOPNOTSUPP;
 	break;
       }
@@ -6255,7 +6256,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_TMAPUP:
       tracepoint(osd, do_osd_op_pre_tmapup, soid.oid.name.c_str(), soid.snap.val);
-      if (pool.info.require_rollback()) {
+      if (pool.info.is_erasure()) {
 	result = -EOPNOTSUPP;
 	break;
       }
@@ -7098,7 +7099,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
       ctx->clone_obc->obs.exists = true;
       ctx->clone_obc->ssc = ctx->obc->ssc;
       ctx->clone_obc->ssc->ref++;
-      if (pool.info.require_rollback())
+      if (pool.info.is_erasure())
 	ctx->clone_obc->attr_cache = ctx->obc->attr_cache;
       snap_oi = &ctx->clone_obc->obs.oi;
       bool got = ctx->lock_manager.get_write_greedy(
@@ -7677,7 +7678,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
   bool async_read_started = false;
   object_copy_data_t _reply_obj;
   C_CopyFrom_AsyncReadCb *cb = nullptr;
-  if (pool.info.require_rollback()) {
+  if (pool.info.is_erasure()) {
     cb = new C_CopyFrom_AsyncReadCb(&osd_op, features);
   }
   object_copy_data_t &reply_obj = cb ? cb->reply_obj : _reply_obj;
@@ -9722,7 +9723,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
     if (is_active())
       populate_obc_watchers(obc);
 
-    if (pool.info.require_rollback()) {
+    if (pool.info.is_erasure()) {
       if (attrs) {
 	obc->attr_cache = *attrs;
       } else {
@@ -13869,7 +13870,7 @@ bool PrimaryLogPG::check_osdmap_full(const set<pg_shard_t> &missing_on)
 int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpRequestRef op)
 {
   // Only supports replicated pools
-  assert(!pool.info.require_rollback());
+  assert(!pool.info.is_erasure());
   assert(is_primary());
 
   dout(10) << __func__ << " " << soid
@@ -14146,7 +14147,7 @@ int PrimaryLogPG::getattr_maybe_cache(
   const string &key,
   bufferlist *val)
 {
-  if (pool.info.require_rollback()) {
+  if (pool.info.is_erasure()) {
     map<string, bufferlist>::iterator i = obc->attr_cache.find(key);
     if (i != obc->attr_cache.end()) {
       if (val)
@@ -14165,7 +14166,7 @@ int PrimaryLogPG::getattrs_maybe_cache(
 {
   int r = 0;
   assert(out);
-  if (pool.info.require_rollback()) {
+  if (pool.info.is_erasure()) {
     *out = obc->attr_cache;
   } else {
     r = pgbackend->objects_get_attrs(obc->obs.oi.soid, out);
