@@ -27,7 +27,7 @@ Ceph Conf: {ceph_path}
     """
 
     def __init__(self, argv=None, parse=True):
-        self.mapper = {'lvm': devices.lvm.LVM}
+        self.mapper = {'lvm': devices.lvm.LVM, 'simple': devices.simple.Simple}
         self.plugin_help = "No plugins found/loaded"
         if argv is None:
             self.argv = sys.argv
