@@ -69,7 +69,24 @@ ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
     m_lock(util::unique_lock_name("ImageRequestWQ<I>::m_lock", this)) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << "ictx=" << image_ctx << dendl;
+
+  SafeTimer *timer;
+  Mutex *timer_lock;
+  ImageCtx::get_timer_instance(cct, &timer, &timer_lock);
+
+  iops_throttle = new TokenBucketThrottle(
+      cct, 0, 0, timer, timer_lock);
+
+  bps_throttle = new TokenBucketThrottle(
+      cct, 0, 0, timer, timer_lock);
+
   this->register_work_queue();
+}
+
+template <typename I>
+ImageRequestWQ<I>::~ImageRequestWQ() {
+  delete iops_throttle;
+  delete bps_throttle;
 }
 
 template <typename I>
@@ -542,6 +559,27 @@ void ImageRequestWQ<I>::set_require_lock(Direction direction, bool enabled) {
 }
 
 template <typename I>
+void ImageRequestWQ<I>::apply_qos_iops_limit(uint64_t limit) {
+  iops_throttle->set_max(limit);
+  iops_throttle->set_average(limit);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::apply_qos_bps_limit(uint64_t limit) {
+  bps_throttle->set_max(limit);
+  bps_throttle->set_average(limit);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::handle_throttle_ready(int r, ImageRequest<I> *item, uint64_t flag) {
+  assert(m_io_blockers.load() > 0);
+  --m_io_blockers;
+  item->set_throttled(flag);
+  this->requeue(item);
+  this->signal();
+}
+
+template <typename I>
 void *ImageRequestWQ<I>::_void_dequeue() {
   CephContext *cct = m_image_ctx.cct;
   ImageRequest<I> *peek_item = this->front();
@@ -573,6 +611,24 @@ void *ImageRequestWQ<I>::_void_dequeue() {
   ImageRequest<I> *item = reinterpret_cast<ImageRequest<I> *>(
     ThreadPool::PointerWQ<ImageRequest<I> >::_void_dequeue());
   assert(peek_item == item);
+
+  if (!item->was_throttled(RBD_IMAGE_IOPS_THROTTLE) &&
+	iops_throttle->get<ImageRequestWQ<I>, ImageRequest<I>,
+	    &ImageRequestWQ<I>::handle_throttle_ready>(
+	      1, this, item, RBD_IMAGE_IOPS_THROTTLE)) {
+    // io was queued into blockers list and wait for tokens.
+    ++m_io_blockers;
+    return nullptr;
+  }
+
+  if (!item->was_throttled(RBD_IMAGE_BPS_THROTTLE) &&
+	bps_throttle->get<ImageRequestWQ<I>, ImageRequest<I>,
+	    &ImageRequestWQ<I>::handle_throttle_ready>(
+	      item->get_length(), this, item, RBD_IMAGE_BPS_THROTTLE)) {
+    // io was queued into blockers list and wait for tokens.
+    ++m_io_blockers;
+    return nullptr;
+  }
 
   if (lock_required) {
     this->get_pool_lock().Unlock();

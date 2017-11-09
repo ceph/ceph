@@ -44,6 +44,9 @@ struct ImageRequest<librbd::MockTestImageCtx> {
   MOCK_CONST_METHOD0(start_op, void());
   MOCK_CONST_METHOD0(send, void());
   MOCK_CONST_METHOD1(fail, void(int));
+  MOCK_CONST_METHOD1(was_throttled, bool(uint64_t));
+  MOCK_CONST_METHOD1(set_throttled, void(uint64_t));
+  MOCK_CONST_METHOD0(get_length, uint64_t());
 
   ImageRequest() {
     s_instance = this;

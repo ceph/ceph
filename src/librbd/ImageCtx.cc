@@ -1021,7 +1021,9 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_max_concurrent_object_sets", false)(
         "rbd_mirroring_resync_after_disconnect", false)(
         "rbd_mirroring_replay_delay", false)(
-        "rbd_skip_partial_discard", false);
+        "rbd_skip_partial_discard", false)(
+	"rbd_qos_iops_limit", false)(
+	"rbd_qos_bps_limit", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -1082,6 +1084,8 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(mirroring_replay_delay, int64_t);
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(blkin_trace_all, bool);
+    ASSIGN_OPTION(qos_iops_limit, uint64_t);
+    ASSIGN_OPTION(qos_bps_limit, uint64_t);
 
     if (thread_safe) {
       ASSIGN_OPTION(journal_pool, std::string);
@@ -1090,6 +1094,9 @@ struct C_InvalidateCache : public Context {
     if (sparse_read_threshold_bytes == 0) {
       sparse_read_threshold_bytes = get_object_size();
     }
+
+    io_work_queue->apply_qos_iops_limit(qos_iops_limit);
+    io_work_queue->apply_qos_bps_limit(qos_bps_limit);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

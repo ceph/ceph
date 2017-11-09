@@ -6,6 +6,7 @@
 
 #include "include/Context.h"
 #include "common/RWLock.h"
+#include "common/Throttle.h"
 #include "common/WorkQueue.h"
 #include "librbd/io/Types.h"
 
@@ -28,6 +29,7 @@ class ImageRequestWQ
 public:
   ImageRequestWQ(ImageCtxT *image_ctx, const string &name, time_t ti,
                  ThreadPool *tp);
+  ~ImageRequestWQ();
 
   ssize_t read(uint64_t off, uint64_t len, ReadResult &&read_result,
                int op_flags);
@@ -70,6 +72,9 @@ public:
 
   void set_require_lock(Direction direction, bool enabled);
 
+  void apply_qos_iops_limit(uint64_t limit);
+  void apply_qos_bps_limit(uint64_t limit);
+
 protected:
   void *_void_dequeue() override;
   void process(ImageRequest<ImageCtxT> *req) override;
@@ -92,6 +97,9 @@ private:
   std::atomic<unsigned> m_in_flight_ios { 0 };
   std::atomic<unsigned> m_in_flight_writes { 0 };
   std::atomic<unsigned> m_io_blockers { 0 };
+
+  TokenBucketThrottle *iops_throttle;
+  TokenBucketThrottle *bps_throttle;
 
   bool m_shutdown = false;
   Context *m_on_shutdown = nullptr;
@@ -119,6 +127,8 @@ private:
   void handle_acquire_lock(int r, ImageRequest<ImageCtxT> *req);
   void handle_refreshed(int r, ImageRequest<ImageCtxT> *req);
   void handle_blocked_writes(int r);
+
+  void handle_throttle_ready(int r, ImageRequest<ImageCtxT> *item, uint64_t flag);
 };
 
 } // namespace io
