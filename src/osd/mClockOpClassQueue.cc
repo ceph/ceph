@@ -34,7 +34,8 @@ namespace ceph {
    */
 
   mClockOpClassQueue::mClockOpClassQueue(CephContext *cct) :
-    queue(std::bind(&mClockOpClassQueue::op_class_client_info_f, this, _1)),
+    queue(std::bind(&mClockOpClassQueue::op_class_client_info_f, this, _1),
+	  cct->_conf->osd_op_queue_mclock_anticipation_timeout),
     client_info_mgr(cct)
   {
     // empty
