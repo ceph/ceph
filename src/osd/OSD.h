@@ -1628,6 +1628,8 @@ private:
       /// priority queue
       std::unique_ptr<OpQueue<OpQueueItem, uint64_t>> pqueue;
 
+      bool stop_waiting = false;
+
       void _enqueue_front(OpQueueItem&& item, unsigned cutoff) {
 	unsigned priority = item.get_priority();
 	unsigned cost = item.get_cost();
@@ -1723,7 +1725,18 @@ private:
 	ShardData* sdata = shard_list[i];
 	assert (NULL != sdata); 
 	sdata->sdata_lock.Lock();
+	sdata->stop_waiting = true;
 	sdata->sdata_cond.Signal();
+	sdata->sdata_lock.Unlock();
+      }
+    }
+
+    void stop_return_waiting_threads() override {
+      for(uint32_t i = 0; i < num_shards; i++) {
+	ShardData* sdata = shard_list[i];
+	assert (NULL != sdata);
+	sdata->sdata_lock.Lock();
+	sdata->stop_waiting = false;
 	sdata->sdata_lock.Unlock();
       }
     }
