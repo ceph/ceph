@@ -5431,9 +5431,28 @@ void PG::start_peering_interval(
   }
   clear_primary_state();
 
-    
   // pg->on_*
   on_change(t);
+
+  // choose version alignment
+  {
+    unsigned num_pgs;
+    info.pgid.pgid.calc_merge_alignment(
+      pool.info.get_pg_num(),
+      pool.info.get_pgp_num(),
+      &num_pgs,
+      &version_offset);
+    assert(num_pgs > 0);
+    version_mask = num_pgs - 1;  // make it a bit mask. num_pgs is a power of 2.
+    if (!version_mask &&
+	cct->_conf->get_val<bool>("osd_debug_randomize_version_offsets")) {
+      dout(10) << __func__ << " randomizing version mask and offset" << dendl;
+      version_mask = 15;
+      version_offset = rand() % 16;
+    }
+    dout(10) << __func__ << " version_mask " << version_mask << " version_offset "
+	     << version_offset << dendl;
+  }
 
   projected_last_update = eversion_t();
 
