@@ -3670,7 +3670,7 @@ std::vector<Option> get_global_options() {
     // filestore
 
     Option("filestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("max_background_compactions=8;compaction_readahead_size=2097152")
+    .set_default("max_background_compactions=8,compaction_readahead_size=2097152,compression=kNoCompression")
     .set_description(""),
 
     Option("filestore_omap_backend", Option::TYPE_STR, Option::LEVEL_ADVANCED)
