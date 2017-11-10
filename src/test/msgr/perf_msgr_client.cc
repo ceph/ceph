@@ -100,7 +100,8 @@ class MessengerClient {
 		       oloc.nspace);
 	spg_t spgid(pgid);
         MOSDOp *m = new MOSDOp(client_inc, 0, hobj, spgid, 0, 0, 0);
-        m->write(0, msg_len, data);
+        bufferlist msg_data(data);
+        m->write(0, msg_len, msg_data);
         inflight++;
         conn->send_message(m);
         //cerr << __func__ << " send m=" << m << std::endl;
