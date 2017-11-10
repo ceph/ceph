@@ -522,10 +522,7 @@ void KernelDevice::aio_submit(IOContext *ioc)
   if (cct->_conf->bdev_debug_aio) {
     list<aio_t>::iterator p = ioc->running_aios.begin();
     while (p != e) {
-      for (auto& io : p->iov)
-	dout(30) << __func__ << "   iov " << (void*)io.iov_base
-		 << " len " << io.iov_len << dendl;
-
+      dout(30) << __func__ << " " << *p << dendl;
       std::lock_guard<std::mutex> l(debug_queue_lock);
       debug_aio_link(*p++);
     }
@@ -645,10 +642,7 @@ int KernelDevice::aio_write(
       ++injecting_crash;
     } else {
       bl.prepare_iov(&aio.iov);
-      for (unsigned i=0; i<aio.iov.size(); ++i) {
-	dout(30) << "aio " << i << " " << aio.iov[i].iov_base
-		 << " " << aio.iov[i].iov_len << dendl;
-      }
+      dout(30) << aio << dendl;
       aio.bl.claim_append(bl);
       aio.pwritev(off, len);
     }
@@ -712,10 +706,7 @@ int KernelDevice::aio_read(
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     aio.pread(off, len);
-    for (unsigned i=0; i<aio.iov.size(); ++i) {
-      dout(30) << "aio " << i << " " << aio.iov[i].iov_base
-	       << " " << aio.iov[i].iov_len << dendl;
-    }
+    dout(30) << aio << dendl;
     pbl->append(aio.bl);
     dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
 	    << std::dec << " aio " << &aio << dendl;
