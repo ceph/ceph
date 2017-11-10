@@ -667,13 +667,13 @@ upgrades from Jewel to Luminous.
   weight.  That is, after marking an OSD out and then in, the weight
   will be the same as before (instead of being reset to 1.0).
   Previously the mons would only preserve the weight if the mon
-  automatically marked and OSD out and then in, but not when an admin
+  automatically marked an OSD out and then in, but not when an admin
   did so explicitly.
 
 * The 'ceph osd perf' command will display 'commit_latency(ms)' and
-  'apply_latency(ms)'. Previously, the names of these two columns are
-  'fs_commit_latency(ms)' and 'fs_apply_latency(ms)'. We remove the
-  prefix 'fs\_', because they are not filestore specific.
+  'apply_latency(ms)'. Previously, the names of these two columns were
+  'fs_commit_latency(ms)' and 'fs_apply_latency(ms)'. We removed the
+  prefix 'fs\_' because the values are not filestore-specific.
 
 * Monitors will no longer allow pools to be removed by default.  The
   setting mon_allow_pool_delete has to be set to true (defaults to
@@ -4165,7 +4165,7 @@ Upgrade notes
     osd scrub during recovery = true
 
 * The list of monitor hosts/addresses for building the monmap can now be
-  obtained from DNS SRV records. The service name used in when querying the DNS
+  obtained from DNS SRV records. The service name used when querying the DNS
   is defined in the "mon_dns_srv_name" config option, which defaults to
   "ceph-mon".
 
@@ -4270,8 +4270,8 @@ Upgrade notes
 * Calculation of recovery priorities has been updated.
   This could lead to unintuitive recovery prioritization
   during cluster upgrade. In case of such recovery, OSDs
-  in old version would operate on different priority ranges
-  than new ones. Once upgraded, cluster will operate on
+  in the old version would operate on different priority ranges
+  than new ones. Once upgraded, the cluster will operate on
   consistent values.
 
 
