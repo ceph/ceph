@@ -743,7 +743,7 @@ void CephContext::start_service_thread()
 
   // Trigger callbacks on any config observers that were waiting for
   // it to become safe to start threads.
-  _conf->set_val("internal_safe_to_start_threads", "true");
+  _conf->set_safe_to_start_threads();
   _conf->call_all_observers();
 
   // start admin socket
