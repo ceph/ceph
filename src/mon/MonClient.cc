@@ -15,11 +15,13 @@
 #include <random>
 
 #include "include/scope_guard.h"
+#include "include/stringify.h"
 
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
+#include "messages/MConfig.h"
 #include "messages/MAuth.h"
 #include "messages/MLogAck.h"
 #include "messages/MAuthReply.h"
@@ -244,6 +246,7 @@ bool MonClient::ms_dispatch(Message *m)
   case CEPH_MSG_MON_GET_VERSION_REPLY:
   case MSG_MON_COMMAND_ACK:
   case MSG_LOGACK:
+  case MSG_CONFIG:
     break;
   default:
     return false;
@@ -299,6 +302,9 @@ bool MonClient::ms_dispatch(Message *m)
       m->put();
     }
     break;
+  case MSG_CONFIG:
+    handle_config(static_cast<MConfig*>(m));
+    break;
   }
   return true;
 }
@@ -347,6 +353,60 @@ void MonClient::handle_monmap(MMonMap *m)
 
   map_cond.Signal();
   want_monmap = false;
+}
+
+void MonClient::handle_config(MConfig *m)
+{
+  ldout(cct,10) << __func__ << " " << *m << dendl;
+  map<string,pair<string,string>> old_diff;
+  cct->_conf->diff(&old_diff);
+  for (auto& i : m->config) {
+    const Option *o = cct->_conf->find_option(i.first);
+    if (!o) {
+      ldout(cct,10) << __func__ << " " << i.first << " = " << i.second
+		    << " (unrecognized option)" << dendl;
+      continue;
+    }
+    if (o->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+      old_diff.erase(i.first);
+      continue;
+    }
+    Option::value_t new_val;
+    string err;
+    int r = o->parse_value(i.second, &new_val, &err);
+    if (r < 0) {
+      ldout(cct,10) << __func__ << " " << i.first << " = " << i.second
+		    << " (failed: " << err << ")" << dendl;
+      // Hmm, should we clear old_diff so we don't reset to default here?
+      continue;
+    }
+    const Option::value_t cur_val = cct->_conf->get_val_generic(i.first);
+    if (cur_val == new_val) {
+      ldout(cct,20) << __func__ << " " << i.first << " = " << i.second
+		    << " (no change)" << dendl;
+    } else {
+      ldout(cct,10) << __func__ << " " << i.first << " = " << i.second
+		    << " (was " << cur_val << ")" << dendl;
+      int r = cct->_conf->set_val(i.first, i.second);
+      if (r < 0) {
+	lderr(cct) << __func__ << " failed to set " << i.first << " = "
+		   << i.second << ": " << cpp_strerror(r) << dendl;
+      }
+    }
+    old_diff.erase(i.first);
+  }
+  for (auto& i : old_diff) {
+    const Option *o = cct->_conf->find_option(i.first);
+    assert(o);
+    if (o->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+      continue;
+    }
+    ldout(cct,10) << __func__ << " resetting " << i.first << " = "
+		  << i.second.second << " (was " << i.second.first << ")"
+		  << dendl;
+#warning write me
+  }
+  m->put();
 }
 
 // ----------------------
@@ -452,6 +512,7 @@ int MonClient::authenticate(double timeout)
   }
 
   _sub_want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
+  _sub_want("config", 0, 0);
   if (!_opened())
     _reopen_session();
 

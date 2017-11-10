@@ -85,6 +85,75 @@ int Option::validate(const Option::value_t &new_value, std::string *err) const
   return 0;
 }
 
+int Option::parse_value(
+  const std::string& raw_val,
+  value_t *out,
+  std::string *error_message) const
+{
+  std::string val = raw_val;
+
+  int r = pre_validate(&val, error_message);
+  if (r != 0) {
+    return r;
+  }
+
+  if (type == Option::TYPE_INT) {
+    int64_t f = strict_si_cast<int64_t>(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
+    }
+    *out = f;
+  } else if (type == Option::TYPE_UINT) {
+    uint64_t f = strict_si_cast<uint64_t>(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
+    }
+    *out = f;
+  } else if (type == Option::TYPE_STR) {
+    *out = val;
+  } else if (type == Option::TYPE_FLOAT) {
+    double f = strict_strtod(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
+    } else {
+      *out = f;
+    }
+  } else if (type == Option::TYPE_BOOL) {
+    if (strcasecmp(val.c_str(), "false") == 0) {
+      *out = false;
+    } else if (strcasecmp(val.c_str(), "true") == 0) {
+      *out = true;
+    } else {
+      int b = strict_strtol(val.c_str(), 10, error_message);
+      if (!error_message->empty()) {
+	return -EINVAL;
+      }
+      *out = !!b;
+    }
+  } else if (type == Option::TYPE_ADDR) {
+    entity_addr_t addr;
+    if (!addr.parse(val.c_str())){
+      return -EINVAL;
+    }
+    *out = addr;
+  } else if (type == Option::TYPE_UUID) {
+    uuid_d uuid;
+    if (!uuid.parse(val.c_str())) {
+      return -EINVAL;
+    }
+    *out = uuid;
+  } else {
+    ceph_abort();
+  }
+
+  r = validate(*out, error_message);
+  if (r != 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 void Option::dump(Formatter *f) const
 {
   f->open_object_section("option");
@@ -156,11 +225,13 @@ std::vector<Option> get_global_options() {
     Option("host", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_description("local hostname")
     .set_long_description("if blank, ceph assumes the short hostname (hostname -s)")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common")
     .add_tag("network"),
 
     Option("fsid", Option::TYPE_UUID, Option::LEVEL_BASIC)
     .set_description("cluster fsid (uuid)")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common")
     .add_tag("service"),
 

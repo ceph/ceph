@@ -75,8 +75,9 @@ int ceph_resolve_file_search(const std::string& filename_list,
 
 
 md_config_t::md_config_t(bool is_daemon)
-  : cluster(""),
-  lock("md_config_t", true, false)
+  : is_daemon(is_daemon),
+    cluster(""),
+    lock("md_config_t", true, false)
 {
   init_subsys();
 
@@ -172,6 +173,15 @@ void md_config_t::validate_schema()
       ceph_abort();
     }
   }
+}
+
+const Option *md_config_t::find_option(const string& name)
+{
+  auto p = schema.find(name);
+  if (p != schema.end()) {
+    return &p->second;
+  }
+  return nullptr;
 }
 
 void md_config_t::init_subsys()
@@ -871,6 +881,12 @@ int md_config_t::get_val(const std::string &key, char **buf, int len) const
   return _get_val(key, buf,len);
 }
 
+int md_config_t::get_val(const std::string &key, std::string *val) const
+{
+  Mutex::Locker l(lock);
+  return _get_val(key, val);
+}
+
 const Option::value_t&
 md_config_t::get_val_generic(const std::string &key) const
 {
@@ -1040,68 +1056,11 @@ int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
 {
   assert(lock.is_locked());
 
-  std::string val = raw_val;
-
-  int r = opt.pre_validate(&val, error_message);
-  if (r != 0) {
-    return r;
-  }
-
   Option::value_t new_value;
-  if (opt.type == Option::TYPE_INT) {
-    int64_t f = strict_si_cast<int64_t>(val.c_str(), error_message);
-    if (!error_message->empty()) {
-      return -EINVAL;
-    }
-    new_value = f;
-  } else if (opt.type == Option::TYPE_UINT) {
-    uint64_t f = strict_si_cast<uint64_t>(val.c_str(), error_message);
-    if (!error_message->empty()) {
-      return -EINVAL;
-    }
-    new_value = f;
-  } else if (opt.type == Option::TYPE_STR) {
-    new_value = val;
-  } else if (opt.type == Option::TYPE_FLOAT) {
-    double f = strict_strtod(val.c_str(), error_message);
-    if (!error_message->empty()) {
-      return -EINVAL;
-    } else {
-      new_value = f;
-    }
-  } else if (opt.type == Option::TYPE_BOOL) {
-    if (strcasecmp(val.c_str(), "false") == 0) {
-      new_value = false;
-    } else if (strcasecmp(val.c_str(), "true") == 0) {
-      new_value = true;
-    } else {
-      int b = strict_strtol(val.c_str(), 10, error_message);
-      if (!error_message->empty()) {
-	return -EINVAL;
-      }
-      new_value = !!b;
-    }
-  } else if (opt.type == Option::TYPE_ADDR) {
-    entity_addr_t addr;
-    if (!addr.parse(val.c_str())){
-      return -EINVAL;
-    }
-    new_value = addr;
-  } else if (opt.type == Option::TYPE_UUID) {
-    uuid_d uuid;
-    if (!uuid.parse(val.c_str())) {
-      return -EINVAL;
-    }
-    new_value = uuid;
-  } else {
-    ceph_abort();
-  }
-
-  r = opt.validate(new_value, error_message);
-  if (r != 0) {
+  int r = opt.parse_value(raw_val, &new_value, error_message);
+  if (r < 0) {
     return r;
   }
-
 
   // Apply the value to its entry in the `values` map
   values[opt.name] = new_value;
@@ -1380,6 +1339,27 @@ void md_config_t::diff_helper(
     else if (!setting.empty()) {
         diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
         break;
+    }
+  }
+}
+
+void md_config_t::diff(map<string,pair<string,string> > *diff)
+{
+  Mutex::Locker l(lock);
+  for (const auto &i : schema) {
+    const Option &opt = i.second;
+    const Option::value_t cur = get_val_generic(opt.name);
+    Option::value_t default_val;
+    bool has_daemon_default = !boost::get<boost::blank>(&opt.daemon_value);
+    if (is_daemon && has_daemon_default) {
+      default_val = opt.daemon_value;
+    } else {
+      default_val = opt.value;
+    }
+
+    if (cur != default_val) {
+      diff->insert(make_pair(opt.name,
+			     make_pair(stringify(cur), stringify(default_val))));
     }
   }
 }
