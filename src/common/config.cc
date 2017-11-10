@@ -221,7 +221,7 @@ int md_config_t::parse_config_files(const char *conf_files,
 {
   Mutex::Locker l(lock);
 
-  if (internal_safe_to_start_threads)
+  if (safe_to_start_threads)
     return -ENOSYS;
 
   if (!cluster.size() && !conf_files) {
@@ -372,7 +372,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
 void md_config_t::parse_env()
 {
   Mutex::Locker l(lock);
-  if (internal_safe_to_start_threads)
+  if (safe_to_start_threads)
     return;
   if (getenv("CEPH_KEYRING")) {
     set_val_or_die("keyring", getenv("CEPH_KEYRING"));
@@ -430,7 +430,7 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
 int md_config_t::parse_argv(std::vector<const char*>& args)
 {
   Mutex::Locker l(lock);
-  if (internal_safe_to_start_threads) {
+  if (safe_to_start_threads) {
     return -ENOSYS;
   }
 
@@ -662,13 +662,6 @@ void md_config_t::apply_changes(std::ostream *oss)
     _apply_changes(oss);
 }
 
-bool md_config_t::_internal_field(const string& s)
-{
-  if (s == "internal_safe_to_start_threads")
-    return true;
-  return false;
-}
-
 void md_config_t::_apply_changes(std::ostream *oss)
 {
   /* Maps observers to the configuration options that they care about which
@@ -698,8 +691,7 @@ void md_config_t::_apply_changes(std::ostream *oss)
     pair < obs_map_t::iterator, obs_map_t::iterator >
       range(observers.equal_range(key));
     if ((oss) &&
-	(!_get_val(key.c_str(), &bufptr, sizeof(buf))) &&
-	!_internal_field(key)) {
+	!_get_val(key.c_str(), &bufptr, sizeof(buf))) {
       (*oss) << key << " = '" << buf << "' ";
       if (range.first == range.second) {
 	(*oss) << "(not observed, change may require restart) ";
@@ -748,6 +740,16 @@ void md_config_t::call_all_observers()
        ++p) {
     p->first->handle_conf_change(this, p->second);
   }
+}
+
+void md_config_t::set_safe_to_start_threads()
+{
+  safe_to_start_threads = true;
+}
+
+void md_config_t::_clear_safe_to_start_threads()
+{
+  safe_to_start_threads = false;
 }
 
 int md_config_t::injectargs(const std::string& s, std::ostream *oss)
@@ -839,7 +841,7 @@ int md_config_t::set_val(const std::string &key, const char *val,
   const auto &opt_iter = schema.find(k);
   if (opt_iter != schema.end()) {
     const Option &opt = opt_iter->second;
-    if ((!opt.is_safe()) && internal_safe_to_start_threads) {
+    if ((!opt.is_safe()) && safe_to_start_threads) {
       // If threads have been started and the option is not thread safe
       if (observers.find(opt.name) == observers.end()) {
         // And there is no observer to safely change it...
