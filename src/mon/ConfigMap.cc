@@ -34,7 +34,7 @@ ostream& operator<<(ostream& out, const MaskedOption& o)
 }
 
 void ConfigMap::generate_entity_map(
-  EntityName name,
+  const EntityName& name,
   const map<std::string,std::string>& crush_location,
   const CrushWrapper *crush,
   const std::string& device_class,

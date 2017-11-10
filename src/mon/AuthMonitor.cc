@@ -20,6 +20,7 @@
 #include "mon/ConfigKeyService.h"
 #include "mon/OSDMonitor.h"
 #include "mon/MDSMonitor.h"
+#include "mon/ConfigMonitor.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MAuth.h"
@@ -374,6 +375,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   bufferlist::iterator indata = m->auth_payload.begin();
   __u32 proto = m->protocol;
   bool start = false;
+  bool finished = false;
   EntityName entity_name;
 
   // set up handler?
@@ -472,7 +474,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
     }
   }
 
-  bool finished = false;
   try {
     uint64_t auid = 0;
     if (start) {

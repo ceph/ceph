@@ -15,6 +15,7 @@
 #include <random>
 
 #include "include/scope_guard.h"
+#include "include/stringify.h"
 
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
@@ -301,10 +302,10 @@ bool MonClient::ms_dispatch(Message *m)
       m->put();
     }
     break;
-  }
   case MSG_CONFIG:
     handle_config(static_cast<MConfig*>(m));
     break;
+  }
   return true;
 }
 
@@ -357,7 +358,43 @@ void MonClient::handle_monmap(MMonMap *m)
 void MonClient::handle_config(MConfig *m)
 {
   ldout(cct,10) << __func__ << " " << *m << dendl;
-  ldout(cct,20) << m->config << dendl;
+  map<string,pair<string,string>> old_diff;
+  cct->_conf->diff(&old_diff);
+  for (auto& i : m->config) {
+    const Option *o = cct->_conf->find_option(i.first);
+    if (!o) {
+      ldout(cct,10) << __func__ << " " << i.first << " = " << i.second
+		    << " (unrecognized option)" << dendl;
+      continue;
+    }
+    Option::value_t new_val;
+    string err;
+    int r = o->parse_value(i.second, &new_val, &err);
+    if (r < 0) {
+      ldout(cct,10) << __func__ << " " << i.first << " = " << i.second
+		    << " (failed: " << err << ")" << dendl;
+      continue;
+    }
+    const Option::value_t cur_val = cct->_conf->get_val_generic(i.first);
+    if (cur_val == new_val) {
+      ldout(cct,20) << __func__ << " " << i.first << " = " << i.second
+		    << " (no change)" << dendl;
+    } else {
+      ldout(cct,10) << __func__ << " " << i.first << " = " << i.second << dendl;
+      int r = cct->_conf->set_val(i.first, i.second);
+      if (r < 0) {
+	lderr(cct) << __func__ << " failed to set " << i.first << " = "
+		   << i.second << ": " << cpp_strerror(r) << dendl;
+      }
+    }
+    old_diff.erase(i.first);
+  }
+  for (auto& i : old_diff) {
+    ldout(cct,10) << __func__ << " resetting " << i.first << " = "
+		  << i.second.second << " (was " << i.second.first << ")"
+		  << dendl;
+#warning write me
+  }
   m->put();
 }
 
@@ -464,7 +501,7 @@ int MonClient::authenticate(double timeout)
   }
 
   _sub_want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
-  _sub_want("config", 0);
+  _sub_want("config", 0, 0);
   if (!_opened())
     _reopen_session();
 

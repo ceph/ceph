@@ -6,7 +6,6 @@
 #include "msg/Message.h"
 
 struct MConfig : public Message {
-
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 
@@ -14,7 +13,7 @@ struct MConfig : public Message {
 
   MConfig() : Message(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
   MConfig(const map<string,string>& c)
-    : Message(CEPH_MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+    : Message(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
       config(c) {}
 
   const char *get_type_name() const override {
@@ -29,8 +28,8 @@ struct MConfig : public Message {
     ::decode(config, p);
   }
 
-  void encode_payload() override {
-    ::encode(config, p);
+  void encode_payload(uint64_t) override {
+    ::encode(config, payload);
   }
 
 };

@@ -8,6 +8,8 @@
 #include "ConfigMap.h"
 #include "mon/PaxosService.h"
 
+class MonSession;
+
 class ConfigMonitor : public PaxosService
 {
   version_t version = 0;
@@ -34,7 +36,8 @@ public:
 
   void tick() override;
 
-  bool refresh_config(Session *s);
-  void send_config(Session *s);
+  bool refresh_config(MonSession *s);
+  void send_config(MonSession *s);
+  void check_sub(MonSession *s);
   void check_sub(Subscription *sub);
 };

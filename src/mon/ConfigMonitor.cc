@@ -5,7 +5,8 @@
 
 #include "mon/Monitor.h"
 #include "mon/ConfigMonitor.h"
-
+#include "mon/OSDMonitor.h"
+#include "messages/MConfig.h"
 #include "common/Formatter.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -104,11 +105,12 @@ void ConfigMonitor::tick()
 
 void ConfigMonitor::load_config()
 {
+  unsigned num = 0;
   KeyValueDB::Iterator it = mon->store->get_iterator(CONFIG_PREFIX);
   it->lower_bound(KEY_PREFIX);
   while (it->valid() &&
 	 it->key().compare(0, KEY_PREFIX.size(), KEY_PREFIX) == 0) {
-    string key = it->key().substr(KEY_PREFIX.size() + 1);
+    string key = it->key().substr(KEY_PREFIX.size());
     string value = it->value().to_str();
     vector<string> split;
     boost::split(split, key, [](char c){return c == '/';});
@@ -153,20 +155,21 @@ void ConfigMonitor::load_config()
       }
     }
     section->options.insert(make_pair(name, mopt));
+    ++num;
+    it->next();
   }
+  dout(10) << __func__ << " got " << num << " keys" << dendl;
 }
 
-bool ConfigMonitor::refresh_config(Session *s)
+bool ConfigMonitor::refresh_config(MonSession *s)
 {
   const OSDMap& osdmap = mon->osdmon()->osdmap;
 
-  // initialize crush location?
-  // FIXME: should we refresh this periodically?
-  if (s->crush_location.empty() &&
-      s->remote_host.size()) {
-    osdmap->crush->get_full_location(s->remote_host, &s->crush_location);
-    dout(10) << __func__ << " crush_location for remote_host " << s->remote_host << " is "
-	     << s->crush_location << dendl;
+  map<string,string> crush_location;
+  if (s->remote_host.size()) {
+    osdmap.crush->get_full_location(s->remote_host, &crush_location);
+    dout(10) << __func__ << " crush_location for remote_host " << s->remote_host
+	     << " is " << crush_location << dendl;
   }
 
   string device_class;
@@ -181,9 +184,10 @@ bool ConfigMonitor::refresh_config(Session *s)
   map<string,string> out;
   config_map.generate_entity_map(
     s->entity_name,
-    s->crush_location,
-    osdmap->crush,
-    out);
+    crush_location,
+    osdmap.crush.get(),
+    device_class,
+    &out);
 
   if (out == s->last_config) {
     return false;
@@ -193,25 +197,25 @@ bool ConfigMonitor::refresh_config(Session *s)
   return true;
 }
 
-void ConfigMonitor::send_config(Session *s)
+void ConfigMonitor::send_config(MonSession *s)
 {
   bool changed = refresh_config(s);
   dout(10) << __func__ << " to " << s->inst << " "
 	   << (changed ? "(changed)" : "(unchanged)")
 	   << dendl;
   auto m = new MConfig(s->last_config);
-  sub->session->con->send_message(m);
+  s->con->send_message(m);
 }
 
-void ConfigMonitor::check_sub(Session *s)
+void ConfigMonitor::check_sub(MonSession *s)
 {
   if (!s->is_capable(s->entity_name.get_type_str(), MON_CAP_R)) {
     dout(20) << __func__ << " not capable for " << s->entity_name << " with "
 	     << s->caps << dendl;
     return;
   }
-  auto p = s->subs.find("config");
-  if (p != s->subs.end()) {
+  auto p = s->sub_map.find("config");
+  if (p != s->sub_map.end()) {
     check_sub(p->second);
   }
 }
@@ -228,7 +232,7 @@ void ConfigMonitor::check_sub(Subscription *sub)
 	  session_map.remove_sub(sub);
 	});
     } else {
-      sub->next = epoch + 1;
+      sub->next = version + 1;
     }
   }
 }

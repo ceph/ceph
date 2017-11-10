@@ -73,6 +73,8 @@ public:
                          bool md_config_t::*,
                          entity_addr_t md_config_t::*,
                          uuid_d md_config_t::*> member_ptr_t;
+  /// true if we are a daemon (as per CephContext::code_env)
+  bool is_daemon;
 
   /* Maps configuration options to the observer listening for them. */
   typedef std::multimap <std::string, md_config_obs_t*> obs_map_t;
@@ -141,7 +143,7 @@ public:
 
   /// Look up an option in the schema
   const Option *find_option(const string& name);
-  
+
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostream *oss);
 
@@ -162,6 +164,7 @@ public:
   // Get a configuration value.
   // No metavariables will be returned (they will have already been expanded)
   int get_val(const std::string &key, char **buf, int len) const;
+  int get_val(const std::string &key, std::string *val) const;
   int _get_val(const std::string &key, char **buf, int len) const;
   const Option::value_t& get_val_generic(const std::string &key) const;
   template<typename T> const T& get_val(const std::string &key) const;
@@ -193,6 +196,9 @@ public:
   void diff(const md_config_t *other,
             map<string,pair<string,string>> *diff, set<string> *unknown, 
             const string& setting);
+
+  /// obtain a diff between config values and defaults
+  void diff(map<string,pair<string,string> > *diff);
 
   /// print/log warnings/errors from parsing the config
   void complain_about_parse_errors(CephContext *cct);
