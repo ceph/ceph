@@ -593,7 +593,7 @@ int KernelDevice::write(
   assert(is_valid_io(off, len));
 
   if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
-      bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
+      bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
   }
   dout(40) << "data: ";
@@ -620,7 +620,7 @@ int KernelDevice::aio_write(
   assert(off + len <= size);
 
   if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
-      bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
+      bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
   }
   dout(40) << "data: ";
