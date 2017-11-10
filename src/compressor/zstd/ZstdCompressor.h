@@ -26,7 +26,14 @@
 
 class ZstdCompressor : public Compressor {
  public:
-  ZstdCompressor() : Compressor(COMP_ALG_ZSTD, "zstd") {}
+  ZSTD_CStream *s;
+  ZstdCompressor() : Compressor(COMP_ALG_ZSTD, "zstd") {
+    s = ZSTD_createCStream();
+    ZSTD_initCStream(s, COMPRESSION_LEVEL);
+  }
+  ~ZstdCompressor() {
+    ZSTD_freeCStream(s);
+  }
 
   int compress(const bufferlist &src, bufferlist &dst) override {
     bufferptr outptr = buffer::create_page_aligned(
@@ -36,8 +43,8 @@ class ZstdCompressor : public Compressor {
     outbuf.size = outptr.length();
     outbuf.pos = 0;
 
-    ZSTD_CStream *s = ZSTD_createCStream();
-    ZSTD_initCStream_srcSize(s, COMPRESSION_LEVEL, src.length());
+    ZSTD_resetCStream(s, src.length());
+
     auto p = src.begin();
     size_t left = src.length();
     while (left) {
@@ -50,7 +57,6 @@ class ZstdCompressor : public Compressor {
     }
     assert(p.end());
     int r = ZSTD_endStream(s, &outbuf);
-    ZSTD_freeCStream(s);
     if (ZSTD_isError(r)) {
       return -EINVAL;
     }
