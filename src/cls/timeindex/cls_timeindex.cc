@@ -137,7 +137,6 @@ static int cls_timeindex_list(cls_method_context_t hctx,
     const string& index = iter->first;
     bufferlist& bl = iter->second;
 
-    marker = index;
     if (use_time_boundary && index.compare(0, to_index.size(), to_index) >= 0) {
       CLS_LOG(20, "DEBUG: cls_timeindex_list: finishing on to_index=%s",
               to_index.c_str());
@@ -156,6 +155,7 @@ static int cls_timeindex_list(cls_method_context_t hctx,
       e.value = bl;
       entries.push_back(e);
     }
+    marker = index;
   }
 
   ret.marker = marker;
