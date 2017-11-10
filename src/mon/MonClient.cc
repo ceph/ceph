@@ -367,12 +367,17 @@ void MonClient::handle_config(MConfig *m)
 		    << " (unrecognized option)" << dendl;
       continue;
     }
+    if (o->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+      old_diff.erase(i.first);
+      continue;
+    }
     Option::value_t new_val;
     string err;
     int r = o->parse_value(i.second, &new_val, &err);
     if (r < 0) {
       ldout(cct,10) << __func__ << " " << i.first << " = " << i.second
 		    << " (failed: " << err << ")" << dendl;
+      // Hmm, should we clear old_diff so we don't reset to default here?
       continue;
     }
     const Option::value_t cur_val = cct->_conf->get_val_generic(i.first);
@@ -380,7 +385,8 @@ void MonClient::handle_config(MConfig *m)
       ldout(cct,20) << __func__ << " " << i.first << " = " << i.second
 		    << " (no change)" << dendl;
     } else {
-      ldout(cct,10) << __func__ << " " << i.first << " = " << i.second << dendl;
+      ldout(cct,10) << __func__ << " " << i.first << " = " << i.second
+		    << " (was " << cur_val << ")" << dendl;
       int r = cct->_conf->set_val(i.first, i.second);
       if (r < 0) {
 	lderr(cct) << __func__ << " failed to set " << i.first << " = "
@@ -390,6 +396,11 @@ void MonClient::handle_config(MConfig *m)
     old_diff.erase(i.first);
   }
   for (auto& i : old_diff) {
+    const Option *o = cct->_conf->find_option(i.first);
+    assert(o);
+    if (o->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+      continue;
+    }
     ldout(cct,10) << __func__ << " resetting " << i.first << " = "
 		  << i.second.second << " (was " << i.second.first << ")"
 		  << dendl;

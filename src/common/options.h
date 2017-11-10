@@ -56,6 +56,7 @@ struct Option {
 
   enum flag_t {
     FLAG_SAFE = 1,
+    FLAG_NO_MON_UPDATE = 2,
   };
 
   using value_t = boost::variant<
