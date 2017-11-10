@@ -54,6 +54,10 @@ struct Option {
     }
   }
 
+  enum flag_t {
+    FLAG_SAFE = 1,
+  };
+
   using value_t = boost::variant<
     boost::blank,
     std::string,
@@ -69,6 +73,8 @@ struct Option {
 
   std::string desc;
   std::string long_desc;
+
+  unsigned flags = 0;
 
   value_t value;
   value_t daemon_value;
@@ -93,8 +99,6 @@ struct Option {
   value_t min, max;
   std::vector<const char*> enum_allowed;
 
-  bool safe;
-
   /**
    * Return nonzero and set second argument to error string if the
    * value is invalid.
@@ -106,7 +110,7 @@ struct Option {
   validator_fn_t validator;
 
   Option(std::string const &name, type_t t, level_t l)
-    : name(name), type(t), level(l), safe(false)
+    : name(name), type(t), level(l)
   {
     // While value_t is nullable (via boost::blank), we don't ever
     // want it set that way in an Option instance: within an instance,
@@ -239,8 +243,13 @@ struct Option {
     return *this;
   }
 
+  Option &set_flag(flag_t f) {
+    flags |= f;
+    return *this;
+  }
+
   Option &set_safe() {
-    safe = true;
+    flags |= FLAG_SAFE;
     return *this;
   }
 
@@ -252,6 +261,10 @@ struct Option {
 
   void dump(Formatter *f) const;
 
+  bool has_flag(flag_t f) const {
+    return flags & f;
+  }
+
   /**
    * A crude indicator of whether the value may be
    * modified safely at runtime -- should be replaced
@@ -259,8 +272,9 @@ struct Option {
    */
   bool is_safe() const
   {
-    return safe || type == TYPE_BOOL || type == TYPE_INT
-                || type == TYPE_UINT || type == TYPE_FLOAT;
+    return has_flag(FLAG_SAFE)
+      || type == TYPE_BOOL || type == TYPE_INT
+      || type == TYPE_UINT || type == TYPE_FLOAT;
   }
 };
 
