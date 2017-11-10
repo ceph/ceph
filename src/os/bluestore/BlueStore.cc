@@ -10555,11 +10555,17 @@ int BlueStore::_do_alloc_write(
       need += wi.blob_length;
     }
   }
-  int r = alloc_target->reserve(need);
-  if (r < 0) {
-    derr << __func__ << " failed to reserve 0x" << std::hex << need << std::dec
-	 << dendl;
-    return r;
+  if (wctx->preallocated > 0) {
+    int64_t unreserve  = wctx->preallocated - need;
+    assert(unreserve >= 0);
+    alloc_target->unreserve(unreserve);
+  } else {
+    int r = alloc_target->reserve(need);
+    if (r < 0) {
+      derr << __func__ << " failed to reserve 0x" << std::hex << need << std::dec
+	   << dendl;
+      return r;
+    }
   }
   AllocExtentVector prealloc;
   prealloc.reserve(2 * wctx->writes.size());;
@@ -10998,6 +11004,9 @@ int BlueStore::_do_write(
   WriteContext wctx;
   _choose_write_options(c, o, fadvise_flags, &wctx);
   o->extent_map.fault_range(db, offset, length);
+  if (txc->preallocated > 0) {
+    wctx.preallocated = txc->preallocated;
+  }
   _do_write_data(txc, c, o, offset, length, bl, &wctx);
   r = _do_alloc_write(txc, c, o, &wctx);
   if (r < 0) {
@@ -11608,14 +11617,23 @@ int BlueStore::_move_data_between_tiers(
   if (r < 0)
     goto out;
 
+  txc->preallocated = P2ROUNDUP((uint64_t)bl.length(), min_alloc_size);
+
+  if (flags & CEPH_OSD_ALLOC_HINT_FLAG_FAST_TIER) {
+    r = alloc_fast->reserve(txc->preallocated);
+  } else {
+    r = alloc->reserve(txc->preallocated);
+  }
+  if (r < 0)
+    goto out;
+
   _do_truncate(txc, c, o, 0);
 
   o->onode.alloc_hint_flags = flags;
   txc->write_onode(o);
 
   r = _do_write(txc, c, o, 0, size, bl, 0);
-  if (r < 0)
-    goto out;
+  assert(r == 0);
 
  out:
   return r;

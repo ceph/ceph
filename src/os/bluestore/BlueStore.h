@@ -1568,6 +1568,7 @@ public:
     interval_set<uint64_t> allocated_fast, released_fast;
     volatile_statfs statfs_delta;
 
+    uint64_t preallocated = 0;
     int rval = 0;
 
     IOContext ioc;
@@ -2485,6 +2486,7 @@ private:
   struct WriteContext {
     bool buffered = false;          ///< buffered write
     bool compress = false;          ///< compressed write
+    uint64_t preallocated = 0;
     uint64_t target_blob_size = 0;  ///< target (max) blob size
     unsigned csum_order = 0;        ///< target checksum chunk order
 
