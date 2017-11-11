@@ -422,7 +422,7 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
       t->erase(get_service_name(), full_key);
     }
   }
-  if (g_conf->mon_compact_on_trim) {
+  if (g_conf->get_val<bool>("mon_compact_on_trim")) {
     dout(20) << " compacting prefix " << get_service_name() << dendl;
     t->compact_range(get_service_name(), stringify(from - 1), stringify(to));
     t->compact_range(get_service_name(),

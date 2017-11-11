@@ -349,7 +349,7 @@ int destroy_one_ec_pool(const std::string &pool_name, rados_t *cluster)
   }
 
   CephContext *cct = static_cast<CephContext*>(rados_cct(*cluster));
-  if (!cct->_conf->mon_fake_pool_delete) { // hope this is in [global]
+  if (!cct->_conf->get_val<bool>("mon_fake_pool_delete")) { // hope this is in [global]
     std::ostringstream oss;
     ret = destroy_ec_profile_and_ruleset(cluster, pool_name, oss);
     if (ret) {
@@ -383,7 +383,7 @@ int destroy_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
   }
 
   CephContext *cct = static_cast<CephContext*>(cluster.cct());
-  if (!cct->_conf->mon_fake_pool_delete) { // hope this is in [global]
+  if (!cct->_conf->get_val<bool>("mon_fake_pool_delete")) { // hope this is in [global]
     std::ostringstream oss;
     ret = destroy_ec_profile_and_ruleset_pp(cluster, pool_name, oss);
     if (ret) {

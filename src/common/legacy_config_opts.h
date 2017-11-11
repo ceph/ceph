@@ -62,16 +62,6 @@ OPTION(clog_to_syslog_facility, OPT_STR)
 OPTION(clog_to_graylog, OPT_STR)
 OPTION(clog_to_graylog_host, OPT_STR)
 OPTION(clog_to_graylog_port, OPT_STR)
-
-OPTION(mon_cluster_log_to_syslog, OPT_STR)
-OPTION(mon_cluster_log_to_syslog_level, OPT_STR)   // this level and above
-OPTION(mon_cluster_log_to_syslog_facility, OPT_STR)
-OPTION(mon_cluster_log_file, OPT_STR)
-OPTION(mon_cluster_log_file_level, OPT_STR)
-OPTION(mon_cluster_log_to_graylog, OPT_STR)
-OPTION(mon_cluster_log_to_graylog_host, OPT_STR)
-OPTION(mon_cluster_log_to_graylog_port, OPT_STR)
-
 OPTION(enable_experimental_unrecoverable_data_corrupting_features, OPT_STR)
 
 SAFE_OPTION(plugin_dir, OPT_STR)
@@ -188,128 +178,6 @@ OPTION(ms_dpdk_debug_allow_loopback, OPT_BOOL)
 OPTION(ms_dpdk_rx_buffer_count_per_core, OPT_INT)
 
 OPTION(inject_early_sigterm, OPT_BOOL)
-
-OPTION(mon_data, OPT_STR)
-OPTION(mon_initial_members, OPT_STR)    // list of initial cluster mon ids; if specified, need majority to form initial quorum and create new cluster
-OPTION(mon_compact_on_start, OPT_BOOL)  // compact leveldb on ceph-mon start
-OPTION(mon_compact_on_bootstrap, OPT_BOOL)  // trigger leveldb compaction on bootstrap
-OPTION(mon_compact_on_trim, OPT_BOOL)       // compact (a prefix) when we trim old states
-OPTION(mon_osd_cache_size, OPT_INT)  // the size of osdmaps cache, not to rely on underlying store's cache
-
-OPTION(mon_cpu_threads, OPT_INT)
-OPTION(mon_osd_mapping_pgs_per_chunk, OPT_INT)
-OPTION(mon_osd_max_creating_pgs, OPT_INT)
-OPTION(mon_tick_interval, OPT_INT)
-OPTION(mon_session_timeout, OPT_INT)    // must send keepalive or subscribe
-OPTION(mon_subscribe_interval, OPT_DOUBLE)  // for legacy clients only
-OPTION(mon_delta_reset_interval, OPT_DOUBLE)   // seconds of inactivity before we reset the pg delta to 0
-OPTION(mon_osd_laggy_halflife, OPT_INT)        // (seconds) how quickly our laggy estimations decay
-OPTION(mon_osd_laggy_weight, OPT_DOUBLE)          // weight for new 'samples's in laggy estimations
-OPTION(mon_osd_laggy_max_interval, OPT_INT)      // maximum value of laggy_interval in laggy estimations
-OPTION(mon_osd_adjust_heartbeat_grace, OPT_BOOL)    // true if we should scale based on laggy estimations
-OPTION(mon_osd_adjust_down_out_interval, OPT_BOOL)  // true if we should scale based on laggy estimations
-OPTION(mon_osd_auto_mark_in, OPT_BOOL)         // mark any booting osds 'in'
-OPTION(mon_osd_auto_mark_auto_out_in, OPT_BOOL) // mark booting auto-marked-out osds 'in'
-OPTION(mon_osd_auto_mark_new_in, OPT_BOOL)      // mark booting new osds 'in'
-OPTION(mon_osd_destroyed_out_interval, OPT_INT) // seconds
-OPTION(mon_osd_down_out_interval, OPT_INT) // seconds
-OPTION(mon_osd_down_out_subtree_limit, OPT_STR)   // smallest crush unit/type that we will not automatically mark out
-OPTION(mon_osd_min_up_ratio, OPT_DOUBLE)    // min osds required to be up to mark things down
-OPTION(mon_osd_min_in_ratio, OPT_DOUBLE)   // min osds required to be in to mark things out
-OPTION(mon_osd_warn_op_age, OPT_DOUBLE)     // max op age before we generate a warning (make it a power of 2)
-OPTION(mon_osd_err_op_age_ratio, OPT_DOUBLE)  // when to generate an error, as multiple of mon_osd_warn_op_age
-OPTION(mon_osd_max_split_count, OPT_INT) // largest number of PGs per "involved" OSD to let split create
-OPTION(mon_osd_prime_pg_temp, OPT_BOOL)  // prime osdmap with pg mapping changes
-OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT)  // max time to spend priming
-OPTION(mon_osd_prime_pg_temp_max_estimate, OPT_FLOAT) // max estimate of pg total before we do all pgs in parallel
-OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL) // whether turn on fast read on the pool or not
-OPTION(mon_election_timeout, OPT_FLOAT)  // on election proposer, max waiting time for all ACKs
-OPTION(mon_lease, OPT_FLOAT)       // lease interval
-OPTION(mon_lease_renew_interval_factor, OPT_FLOAT) // on leader, to renew the lease
-OPTION(mon_lease_ack_timeout_factor, OPT_FLOAT) // on leader, if lease isn't acked by all peons
-OPTION(mon_accept_timeout_factor, OPT_FLOAT)    // on leader, if paxos update isn't accepted
-
-OPTION(mon_clock_drift_allowed, OPT_FLOAT) // allowed clock drift between monitors
-OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT) // exponential backoff for clock drift warnings
-OPTION(mon_timecheck_interval, OPT_FLOAT) // on leader, timecheck (clock drift check) interval (seconds)
-OPTION(mon_timecheck_skew_interval, OPT_FLOAT) // on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
-OPTION(mon_pg_min_inactive, OPT_U64) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
-OPTION(mon_pg_check_down_all_threshold, OPT_FLOAT) // threshold of down osds after which we check all pgs
-OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT) // position between pool cache_target_full and max where we start warning
-OPTION(mon_osd_full_ratio, OPT_FLOAT) // what % full makes an OSD "full"
-OPTION(mon_osd_backfillfull_ratio, OPT_FLOAT) // what % full makes an OSD backfill full (backfill halted)
-OPTION(mon_osd_nearfull_ratio, OPT_FLOAT) // what % full makes an OSD near full
-OPTION(mon_osd_initial_require_min_compat_client, OPT_STR)
-OPTION(mon_allow_pool_delete, OPT_BOOL) // allow pool deletion
-OPTION(mon_fake_pool_delete, OPT_BOOL)  // fake pool deletion (add _DELETED suffix)
-OPTION(mon_globalid_prealloc, OPT_U32)   // how many globalids to prealloc
-OPTION(mon_osd_report_timeout, OPT_INT)    // grace period before declaring unresponsive OSDs dead
-OPTION(mon_force_standby_active, OPT_BOOL) // should mons force standby-replay mds to be active
-OPTION(mon_warn_on_legacy_crush_tunables, OPT_BOOL) // warn if crush tunables are too old (older than mon_min_crush_required_version)
-OPTION(mon_crush_min_required_version, OPT_STR)
-OPTION(mon_warn_on_crush_straw_calc_version_zero, OPT_BOOL) // warn if crush straw_calc_version==0
-OPTION(mon_warn_on_osd_down_out_interval_zero, OPT_BOOL) // warn if 'mon_osd_down_out_interval == 0'
-OPTION(mon_warn_on_cache_pools_without_hit_sets, OPT_BOOL)
-OPTION(mon_min_osdmap_epochs, OPT_INT)
-OPTION(mon_max_pgmap_epochs, OPT_INT)
-OPTION(mon_max_log_epochs, OPT_INT)
-OPTION(mon_max_mdsmap_epochs, OPT_INT)
-OPTION(mon_max_osd, OPT_INT)
-OPTION(mon_probe_timeout, OPT_DOUBLE)
-OPTION(mon_client_bytes, OPT_U64)  // client msg data allowed in memory (in bytes)
-OPTION(mon_log_max_summary, OPT_U64)
-OPTION(mon_daemon_bytes, OPT_U64)  // mds, osd message memory cap (in bytes)
-OPTION(mon_max_log_entries_per_event, OPT_INT)
-OPTION(mon_reweight_min_pgs_per_osd, OPT_U64)   // min pgs per osd for reweight-by-pg command
-OPTION(mon_reweight_min_bytes_per_osd, OPT_U64)   // min bytes per osd for reweight-by-utilization command
-OPTION(mon_reweight_max_osds, OPT_INT)   // max osds to change per reweight-by-* command
-OPTION(mon_reweight_max_change, OPT_DOUBLE)
-OPTION(mon_health_to_clog, OPT_BOOL)
-OPTION(mon_health_to_clog_interval, OPT_INT)
-OPTION(mon_health_to_clog_tick_interval, OPT_DOUBLE)
-OPTION(mon_health_preluminous_compat, OPT_BOOL)
-OPTION(mon_data_avail_crit, OPT_INT)
-OPTION(mon_data_avail_warn, OPT_INT)
-OPTION(mon_data_size_warn, OPT_U64) // issue a warning when the monitor's data store goes over 15GB (in bytes)
-OPTION(mon_warn_not_scrubbed, OPT_INT)
-OPTION(mon_warn_not_deep_scrubbed, OPT_INT)
-OPTION(mon_scrub_interval, OPT_INT) // once a day
-OPTION(mon_scrub_timeout, OPT_INT) // let's give it 5 minutes; why not.
-OPTION(mon_scrub_max_keys, OPT_INT) // max number of keys to scrub each time
-OPTION(mon_scrub_inject_crc_mismatch, OPT_DOUBLE) // probability of injected crc mismatch [0.0, 1.0]
-OPTION(mon_scrub_inject_missing_keys, OPT_DOUBLE) // probability of injected missing keys [0.0, 1.0]
-OPTION(mon_config_key_max_entry_size, OPT_INT) // max num bytes per config-key entry
-OPTION(mon_sync_timeout, OPT_DOUBLE)
-OPTION(mon_sync_max_payload_size, OPT_U32) // max size for a sync chunk payload (say)
-OPTION(mon_sync_debug, OPT_BOOL) // enable sync-specific debug
-OPTION(mon_inject_sync_get_chunk_delay, OPT_DOUBLE)  // inject N second delay on each get_chunk request
-OPTION(mon_osd_force_trim_to, OPT_INT)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous)
-OPTION(mon_mds_force_trim_to, OPT_INT)   // force mon to trim mdsmaps to this point (dangerous)
-OPTION(mon_mds_skip_sanity, OPT_BOOL)  // skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
-
-// monitor debug options
-OPTION(mon_debug_deprecated_as_obsolete, OPT_BOOL) // consider deprecated commands as obsolete
-
-// dump transactions
-OPTION(mon_debug_dump_transactions, OPT_BOOL)
-OPTION(mon_debug_dump_json, OPT_BOOL)
-OPTION(mon_debug_dump_location, OPT_STR)
-OPTION(mon_debug_no_require_mimic, OPT_BOOL)
-OPTION(mon_debug_no_require_bluestore_for_ec_overwrites, OPT_BOOL)
-OPTION(mon_debug_no_initial_persistent_features, OPT_BOOL)
-OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE)      // seconds
-OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE) // range [0, 1]
-
-OPTION(mon_sync_provider_kill_at, OPT_INT)  // kill the sync provider at a specific point in the work flow
-OPTION(mon_sync_requester_kill_at, OPT_INT) // kill the sync requester at a specific point in the work flow
-OPTION(mon_force_quorum_join, OPT_BOOL) // force monitor to join quorum even if it has been previously removed from the map
-OPTION(mon_keyvaluedb, OPT_STR)   // type of keyvaluedb backend
-
-// UNSAFE -- TESTING ONLY! Allows addition of a cache tier with preexisting snaps
-OPTION(mon_debug_unsafe_allow_tier_with_nonempty_snaps, OPT_BOOL)
-OPTION(mon_osd_blacklist_default_expire, OPT_DOUBLE) // default one hour
-OPTION(mon_osd_crush_smoke_test, OPT_BOOL)
-
 OPTION(paxos_stash_full_interval, OPT_INT)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE)  // gather updates for this long before proposing a map update
@@ -332,13 +200,6 @@ OPTION(cephx_sign_messages, OPT_BOOL)  // Default to signing session messages if
 OPTION(auth_mon_ticket_ttl, OPT_DOUBLE)
 OPTION(auth_service_ticket_ttl, OPT_DOUBLE)
 OPTION(auth_debug, OPT_BOOL)          // if true, assert when weird things happen
-OPTION(mon_client_hunt_parallel, OPT_U32)   // how many mons to try to connect to in parallel during hunt
-OPTION(mon_client_hunt_interval, OPT_DOUBLE)   // try new mon every N seconds until we connect
-OPTION(mon_client_ping_interval, OPT_DOUBLE)  // ping every N seconds
-OPTION(mon_client_ping_timeout, OPT_DOUBLE)   // fail if we don't hear back
-OPTION(mon_client_hunt_interval_backoff, OPT_DOUBLE) // each time we reconnect to a monitor, double our timeout
-OPTION(mon_client_hunt_interval_max_multiple, OPT_DOUBLE) // up to a max of 10*default (30 seconds)
-OPTION(mon_client_max_log_entries_per_message, OPT_INT)
 OPTION(client_cache_size, OPT_INT)
 OPTION(client_cache_mid, OPT_FLOAT)
 OPTION(client_use_random_mds, OPT_BOOL)

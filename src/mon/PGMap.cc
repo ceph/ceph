@@ -1888,7 +1888,7 @@ void PGMap::update_delta(
 
   // adjust delta_t, quick start if there is no update in a long period
   delta_t = std::min(delta_t,
-                    utime_t(2 * (cct ? cct->_conf->mon_delta_reset_interval : 10), 0));
+                    utime_t(2 * (cct ? cct->_conf->get_val<double>("mon_delta_reset_interval") : 10), 0));
 
   // calculate a delta, and average over the last 6 deltas by default.
   /* start by taking a copy of our current @p result_pool_sum, and by
@@ -2381,7 +2381,7 @@ void PGMap::get_health_checks(
       const pool_stat_t& st = get_pg_pool_sum_stat(p.first);
       uint64_t ratio = p.second.cache_target_full_ratio_micro +
 	((1000000 - p.second.cache_target_full_ratio_micro) *
-	 cct->_conf->mon_cache_target_full_warn_ratio);
+	 cct->_conf->get_val<double>("mon_cache_target_full_warn_ratio"));
       if (p.second.target_max_objects &&
 	  (uint64_t)(st.stats.sum.num_objects -
 		     st.stats.sum.num_objects_hit_set_archive) >
@@ -2464,7 +2464,7 @@ void PGMap::get_health_checks(
       const string& name = osdmap.get_pool_name(p->first);
       if (pi->get_pg_num() > pi->get_pgp_num() &&
 	  !(name.find(".DELETED") != string::npos &&
-	    cct->_conf->mon_fake_pool_delete)) {
+	    cct->_conf->get_val<bool>("mon_fake_pool_delete"))) {
 	ostringstream ss;
 	ss << "pool " << name << " pg_num "
 	   << pi->get_pg_num() << " > pgp_num " << pi->get_pgp_num();
@@ -2621,18 +2621,18 @@ void PGMap::get_health_checks(
 
   // REQUEST_SLOW
   // REQUEST_STUCK
-  if (cct->_conf->mon_osd_warn_op_age > 0 &&
+  if (cct->_conf->get_val<double>("mon_osd_warn_op_age") > 0 &&
       !osd_sum.op_queue_age_hist.h.empty() &&
       osd_sum.op_queue_age_hist.upper_bound() / 1000.0 >
-      cct->_conf->mon_osd_warn_op_age) {
+      cct->_conf->get_val<double>("mon_osd_warn_op_age")) {
     list<string> warn_detail, error_detail;
     unsigned warn = 0, error = 0;
     float err_age =
-      cct->_conf->mon_osd_warn_op_age * cct->_conf->mon_osd_err_op_age_ratio;
+      cct->_conf->get_val<double>("mon_osd_warn_op_age") * cct->_conf->get_val<double>("mon_osd_err_op_age_ratio");
     const pow2_hist_t& h = osd_sum.op_queue_age_hist;
     for (unsigned i = h.h.size() - 1; i > 0; --i) {
       float ub = (float)(1 << i) / 1000.0;
-      if (ub < cct->_conf->mon_osd_warn_op_age)
+      if (ub < cct->_conf->get_val<double>("mon_osd_warn_op_age"))
 	break;
       if (h.h[i]) {
 	ostringstream ss;
@@ -2654,7 +2654,7 @@ void PGMap::get_health_checks(
 	const pow2_hist_t& h = p.second.op_queue_age_hist;
 	for (unsigned i = h.h.size() - 1; i > 0; --i) {
 	  float ub = (float)(1 << i) / 1000.0;
-	  if (ub < cct->_conf->mon_osd_warn_op_age)
+	  if (ub < cct->_conf->get_val<double>("mon_osd_warn_op_age"))
 	    break;
 	  if (h.h[i]) {
 	    if (ub > err_age) {
@@ -2671,7 +2671,7 @@ void PGMap::get_health_checks(
     if (!warn_detail.empty()) {
       ostringstream ss;
       ss << warn << " slow requests are blocked > "
-	 << cct->_conf->mon_osd_warn_op_age << " sec";
+	 << cct->_conf->get_val<double>("mon_osd_warn_op_age") << " sec";
       auto& d = checks->add("REQUEST_SLOW", HEALTH_WARN, ss.str());
       d.detail.swap(warn_detail);
       int left = max;
@@ -2717,22 +2717,22 @@ void PGMap::get_health_checks(
   // PG_NOT_SCRUBBED
   // PG_NOT_DEEP_SCRUBBED
   {
-    if (cct->_conf->mon_warn_not_scrubbed ||
-        cct->_conf->mon_warn_not_deep_scrubbed) {
+    if (cct->_conf->get_val<int64_t>("mon_warn_not_scrubbed") ||
+        cct->_conf->get_val<int64_t>("mon_warn_not_deep_scrubbed")) {
       list<string> detail, deep_detail;
       int detail_max = max, deep_detail_max = max;
       int detail_more = 0, deep_detail_more = 0;
       int detail_total = 0, deep_detail_total = 0;
-      const double age = cct->_conf->mon_warn_not_scrubbed +
-        cct->_conf->mon_scrub_interval;
+      const double age = cct->_conf->get_val<int64_t>("mon_warn_not_scrubbed") +
+        cct->_conf->get_val<int64_t>("mon_scrub_interval");
       utime_t cutoff = now;
       cutoff -= age;
-      const double deep_age = cct->_conf->mon_warn_not_deep_scrubbed +
+      const double deep_age = cct->_conf->get_val<int64_t>("mon_warn_not_deep_scrubbed") +
         cct->_conf->osd_deep_scrub_interval;
       utime_t deep_cutoff = now;
       deep_cutoff -= deep_age;
       for (auto& p : pg_stat) {
-        if (cct->_conf->mon_warn_not_scrubbed &&
+        if (cct->_conf->get_val<int64_t>("mon_warn_not_scrubbed") &&
             p.second.last_scrub_stamp < cutoff) {
           if (detail_max > 0) {
             ostringstream ss;
@@ -2745,7 +2745,7 @@ void PGMap::get_health_checks(
           }
           ++detail_total;
         }
-        if (cct->_conf->mon_warn_not_deep_scrubbed &&
+        if (cct->_conf->get_val<int64_t>("mon_warn_not_deep_scrubbed") &&
             p.second.last_deep_scrub_stamp < deep_cutoff) {
           if (deep_detail_max > 0) {
             ostringstream ss;
@@ -3404,7 +3404,7 @@ int reweight::by_utilization(
       }
     }
 
-    if (!num_osds || (num_pg_copies / num_osds < g_conf->mon_reweight_min_pgs_per_osd)) {
+    if (!num_osds || (num_pg_copies / num_osds < g_conf->get_val<uint64_t>("mon_reweight_min_pgs_per_osd"))) {
       *ss << "Refusing to reweight: we only have " << num_pg_copies
 	  << " PGs across " << num_osds << " osds!\n";
       return -EDOM;
@@ -3415,13 +3415,13 @@ int reweight::by_utilization(
     // by osd utilization
     int num_osd = MAX(1, pgm.osd_stat.size());
     if ((uint64_t)pgm.osd_sum.kb * 1024 / num_osd
-	< g_conf->mon_reweight_min_bytes_per_osd) {
+	< g_conf->get_val<uint64_t>("mon_reweight_min_bytes_per_osd")) {
       *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
 	  << " kb across all osds!\n";
       return -EDOM;
     }
     if ((uint64_t)pgm.osd_sum.kb_used * 1024 / num_osd
-	< g_conf->mon_reweight_min_bytes_per_osd) {
+	< g_conf->get_val<uint64_t>("mon_reweight_min_bytes_per_osd")) {
       *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb_used
 	  << " kb used across all osds!\n";
       return -EDOM;

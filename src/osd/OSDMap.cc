@@ -3298,8 +3298,8 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
       if (*end != '\0')
 	continue;
 
-      if (o > cct->_conf->mon_max_osd) {
-	lderr(cct) << "[osd." << o << "] in config has id > mon_max_osd " << cct->_conf->mon_max_osd << dendl;
+      if (o > cct->_conf->get_val<int64_t>("mon_max_osd)")) {
+	lderr(cct) << "[osd." << o << "] in config has id > mon_max_osd " << cct->_conf->get_val<int64_t>("mon_max_osd") << dendl;
 	return -ERANGE;
       }
 
@@ -4600,19 +4600,19 @@ void OSDMap::check_health(health_check_map_t *checks) const
   }
 
   // OLD_CRUSH_TUNABLES
-  if (g_conf->mon_warn_on_legacy_crush_tunables) {
+  if (g_conf->get_val<bool>("mon_warn_on_legacy_crush_tunables")) {
     string min = crush->get_min_required_version();
-    if (min < g_conf->mon_crush_min_required_version) {
+    if (min < g_conf->get_val<std::string>("mon_crush_min_required_version")) {
       ostringstream ss;
       ss << "crush map has legacy tunables (require " << min
-	 << ", min is " << g_conf->mon_crush_min_required_version << ")";
+	 << ", min is " << g_conf->get_val<std::string>("mon_crush_min_required_version") << ")";
       auto& d = checks->add("OLD_CRUSH_TUNABLES", HEALTH_WARN, ss.str());
       d.detail.push_back("see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables");
     }
   }
 
   // OLD_CRUSH_STRAW_CALC_VERSION
-  if (g_conf->mon_warn_on_crush_straw_calc_version_zero) {
+  if (g_conf->get_val<bool>("mon_warn_on_crush_straw_calc_version_zero")) {
     if (crush->get_straw_calc_version() == 0) {
       ostringstream ss;
       ss << "crush map has straw_calc_version=0";
@@ -4623,7 +4623,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
   }
 
   // CACHE_POOL_NO_HIT_SET
-  if (g_conf->mon_warn_on_cache_pools_without_hit_sets) {
+  if (g_conf->get_val<bool>("mon_warn_on_cache_pools_without_hit_sets")) {
     list<string> detail;
     for (map<int64_t, pg_pool_t>::const_iterator p = pools.begin();
 	 p != pools.end();

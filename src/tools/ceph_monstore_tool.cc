@@ -650,7 +650,7 @@ static int update_pgmap_meta(MonitorDBStore& st)
   // be conservative, so PGMonitor will scan the all pools for pg changes
   t->put(prefix, "last_pg_scan", 1);
   {
-    auto full_ratio = g_ceph_context->_conf->mon_osd_full_ratio;
+    auto full_ratio = g_ceph_context->_conf->get_val<double>("mon_osd_full_ratio");
     if (full_ratio > 1.0)
       full_ratio /= 100.0;
     bufferlist bl;
@@ -658,7 +658,7 @@ static int update_pgmap_meta(MonitorDBStore& st)
     t->put(prefix, "full_ratio", bl);
   }
   {
-    auto backfillfull_ratio = g_ceph_context->_conf->mon_osd_backfillfull_ratio;
+    auto backfillfull_ratio = g_ceph_context->_conf->get_val<double>("mon_osd_backfillfull_ratio");
     if (backfillfull_ratio > 1.0)
       backfillfull_ratio /= 100.0;
     bufferlist bl;
@@ -666,7 +666,7 @@ static int update_pgmap_meta(MonitorDBStore& st)
     t->put(prefix, "backfillfull_ratio", bl);
   }
   {
-    auto nearfull_ratio = g_ceph_context->_conf->mon_osd_nearfull_ratio;
+    auto nearfull_ratio = g_ceph_context->_conf->get_val<double>("mon_osd_nearfull_ratio");
     if (nearfull_ratio > 1.0)
       nearfull_ratio /= 100.0;
     bufferlist bl;
