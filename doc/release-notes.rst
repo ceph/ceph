@@ -526,7 +526,7 @@ Upgrade from Jewel or Kraken
    other client users. RBD client users with only ``"allow r"``
    monitor caps should to be updated as follows::
 
-     # ceph auth caps client.<ID> mon 'allow r, allow command "osd blacklist"'
+     # ceph auth caps client.<ID> mon 'allow r, allow command "osd blacklist"' osd '<existing OSD caps for user>'
 
 #. Upgrade monitors by installing the new packages and restarting the
    monitor daemons.  Note that, unlike prior releases, the ceph-mon
