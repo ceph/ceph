@@ -55,7 +55,7 @@ extern const char *CEPH_CONF_FILE_DEFAULT;
  *
  * To prevent serious problems resulting from thread-safety issues, we disallow
  * changing std::string configuration values after
- * md_config_t::internal_safe_to_start_threads becomes true. You can still
+ * md_config_t::safe_to_start_threads becomes true. You can still
  * change integer or floating point values, and the option declared with
  * SAFE_OPTION macro. Notice the latter options can not be read directly
  * (conf->foo), one should use either observers or get_val() method
@@ -138,6 +138,9 @@ public:
   void _apply_changes(std::ostream *oss);
   bool _internal_field(const string& k);
   void call_all_observers();
+
+  void set_safe_to_start_threads();
+  void _clear_safe_to_start_threads();  // this is only used by the unit test
 
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostream *oss);
@@ -254,6 +257,10 @@ private:
 public:
   std::deque<std::string> parse_errors;
 private:
+
+  // This will be set to true when it is safe to start threads.
+  // Once it is true, it will never change.
+  bool safe_to_start_threads = false;
 
   obs_map_t observers;
   changed_set_t changed;
