@@ -15,7 +15,9 @@
 #ifndef CEPH_ZSTDCOMPRESSOR_H
 #define CEPH_ZSTDCOMPRESSOR_H
 
+#define ZSTD_STATIC_LINKING_ONLY
 #include "zstd/lib/zstd.h"
+
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "compressor/Compressor.h"
@@ -24,7 +26,14 @@
 
 class ZstdCompressor : public Compressor {
  public:
-  ZstdCompressor() : Compressor(COMP_ALG_ZSTD, "zstd") {}
+  ZSTD_CStream *s;
+  ZstdCompressor() : Compressor(COMP_ALG_ZSTD, "zstd") {
+    s = ZSTD_createCStream();
+    ZSTD_initCStream(s, COMPRESSION_LEVEL);
+  }
+  ~ZstdCompressor() {
+    ZSTD_freeCStream(s);
+  }
 
   int compress(const bufferlist &src, bufferlist &dst) override {
     bufferptr outptr = buffer::create_page_aligned(
@@ -34,8 +43,8 @@ class ZstdCompressor : public Compressor {
     outbuf.size = outptr.length();
     outbuf.pos = 0;
 
-    ZSTD_CStream *s = ZSTD_createCStream();
-    ZSTD_initCStream(s, COMPRESSION_LEVEL);
+    ZSTD_resetCStream(s, src.length());
+
     auto p = src.begin();
     size_t left = src.length();
     while (left) {
@@ -47,9 +56,11 @@ class ZstdCompressor : public Compressor {
       left -= inbuf.size;
     }
     assert(p.end());
-    ZSTD_flushStream(s, &outbuf);
-    ZSTD_endStream(s, &outbuf);
-    ZSTD_freeCStream(s);
+    int r = ZSTD_endStream(s, &outbuf);
+    if (ZSTD_isError(r)) {
+      return -EINVAL;
+    }
+    assert(r == 0); // we should have had enough room in the output buffer.
 
     // prefix with decompressed length
     ::encode((uint32_t)src.length(), dst);
@@ -85,7 +96,8 @@ class ZstdCompressor : public Compressor {
       }
       ZSTD_inBuffer_s inbuf;
       inbuf.pos = 0;
-      inbuf.size = p.get_ptr_and_advance(compressed_len, (const char**)&inbuf.src);
+      inbuf.size = p.get_ptr_and_advance(compressed_len,
+					 (const char**)&inbuf.src);
       ZSTD_decompressStream(s, &outbuf, &inbuf);
       compressed_len -= inbuf.size;
     }
