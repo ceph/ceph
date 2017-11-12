@@ -549,7 +549,7 @@ public:
   int read_percent;
   int num_objs;
   size_t min_obj_len;
-  uint64_t max_obj_len;
+  size_t max_obj_len;
   size_t min_op_len;
   size_t max_op_len;
   size_t max_ops;
