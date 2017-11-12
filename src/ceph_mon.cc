@@ -104,7 +104,7 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
 
 int check_mon_data_exists()
 {
-  string mon_data = g_conf->mon_data;
+  string mon_data = g_conf->get_val<std::string>("mon_data");
   struct stat buf;
   if (::stat(mon_data.c_str(), &buf)) {
     if (errno != ENOENT) {
@@ -128,7 +128,7 @@ int check_mon_data_exists()
  */
 int check_mon_data_empty()
 {
-  string mon_data = g_conf->mon_data;
+  string mon_data = g_conf->get_val<std::string>("mon_data");
 
   DIR *dir = ::opendir(mon_data.c_str());
   if (!dir) {
@@ -282,7 +282,7 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  if (g_conf->mon_data.empty()) {
+  if (g_conf->get_val<std::string>("mon_data").empty()) {
     derr << "must specify '--mon-data=foo' data path" << dendl;
     usage();
   }
@@ -297,13 +297,13 @@ int main(int argc, const char **argv)
 
     int err = check_mon_data_exists();
     if (err == -ENOENT) {
-      if (::mkdir(g_conf->mon_data.c_str(), 0755)) {
-	derr << "mkdir(" << g_conf->mon_data << ") : "
+      if (::mkdir(g_conf->get_val<std::string>("mon_data").c_str(), 0755)) {
+	derr << "mkdir(" << g_conf->get_val<std::string>("mon_data") << ") : "
 	     << cpp_strerror(errno) << dendl;
 	exit(1);
       }
     } else if (err < 0) {
-      derr << "error opening '" << g_conf->mon_data << "': "
+      derr << "error opening '" << g_conf->get_val<std::string>("mon_data") << "': "
            << cpp_strerror(-err) << dendl;
       exit(-err);
     }
@@ -311,11 +311,11 @@ int main(int argc, const char **argv)
     err = check_mon_data_empty();
     if (err == -ENOTEMPTY) {
       // Mon may exist.  Let the user know and exit gracefully.
-      derr << "'" << g_conf->mon_data << "' already exists and is not empty"
+      derr << "'" << g_conf->get_val<std::string>("mon_data") << "' already exists and is not empty"
            << ": monitor may already exist" << dendl;
       exit(0);
     } else if (err < 0) {
-      derr << "error checking if '" << g_conf->mon_data << "' is empty: "
+      derr << "error checking if '" << g_conf->get_val<std::string>("mon_data") << "' is empty: "
            << cpp_strerror(-err) << dendl;
       exit(-err);
     }
@@ -416,14 +416,14 @@ int main(int argc, const char **argv)
     }
 
     // go
-    MonitorDBStore store(g_conf->mon_data);
+    MonitorDBStore store(g_conf->get_val<std::string>("mon_data"));
     ostringstream oss;
     int r = store.create_and_open(oss);
     if (oss.tellp())
       derr << oss.str() << dendl;
     if (r < 0) {
       derr << argv[0] << ": error opening mon data directory at '"
-           << g_conf->mon_data << "': " << cpp_strerror(r) << dendl;
+           << g_conf->get_val<std::string>("mon_data") << "': " << cpp_strerror(r) << dendl;
       exit(1);
     }
     assert(r == 0);
@@ -435,30 +435,30 @@ int main(int argc, const char **argv)
       exit(1);
     }
     store.close();
-    dout(0) << argv[0] << ": created monfs at " << g_conf->mon_data 
+    dout(0) << argv[0] << ": created monfs at " << g_conf->get_val<std::string>("mon_data")
 	 << " for " << g_conf->name << dendl;
     return 0;
   }
 
   err = check_mon_data_exists();
   if (err < 0 && err == -ENOENT) {
-    derr << "monitor data directory at '" << g_conf->mon_data << "'"
+    derr << "monitor data directory at '" << g_conf->get_val<std::string>("mon_data") << "'"
          << " does not exist: have you run 'mkfs'?" << dendl;
     exit(1);
   } else if (err < 0) {
     derr << "error accessing monitor data directory at '"
-         << g_conf->mon_data << "': " << cpp_strerror(-err) << dendl;
+         << g_conf->get_val<std::string>("mon_data") << "': " << cpp_strerror(-err) << dendl;
     exit(1);
   }
 
   err = check_mon_data_empty();
   if (err == 0) {
-    derr << "monitor data directory at '" << g_conf->mon_data
+    derr << "monitor data directory at '" << g_conf->get_val<std::string>("mon_data")
       << "' is empty: have you run 'mkfs'?" << dendl;
     exit(1);
   } else if (err < 0 && err != -ENOTEMPTY) {
     // we don't want an empty data dir by now
-    derr << "error accessing '" << g_conf->mon_data << "': "
+    derr << "error accessing '" << g_conf->get_val<std::string>("mon_data") << "': "
          << cpp_strerror(-err) << dendl;
     exit(1);
   }
@@ -466,18 +466,18 @@ int main(int argc, const char **argv)
   {
     // check fs stats. don't start if it's critically close to full.
     ceph_data_stats_t stats;
-    int err = get_fs_stats(stats, g_conf->mon_data.c_str());
+    int err = get_fs_stats(stats, g_conf->get_val<std::string>("mon_data").c_str());
     if (err < 0) {
       derr << "error checking monitor data's fs stats: " << cpp_strerror(err)
            << dendl;
       exit(-err);
     }
-    if (stats.avail_percent <= g_conf->mon_data_avail_crit) {
+    if (stats.avail_percent <= g_conf->get_val<int64_t>("mon_data_avail_crit")) {
       derr << "error: monitor data filesystem reached concerning levels of"
            << " available storage space (available: "
            << stats.avail_percent << "% " << prettybyte_t(stats.byte_avail)
            << ")\nyou may adjust 'mon data avail crit' to a lower value"
-           << " to make this go away (default: " << g_conf->mon_data_avail_crit
+           << " to make this go away (default: " << g_conf->get_val<int64_t>("mon_data_avail_crit")
            << "%)\n" << dendl;
       exit(ENOSPC);
     }
@@ -513,7 +513,7 @@ int main(int argc, const char **argv)
 #endif
   }
 
-  MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
+  MonitorDBStore *store = new MonitorDBStore(g_conf->get_val<std::string>("mon_data"));
   {
     ostringstream oss;
     err = store->open(oss);
@@ -521,7 +521,7 @@ int main(int argc, const char **argv)
       derr << oss.str() << dendl;
     if (err < 0) {
       derr << "error opening mon data directory at '"
-           << g_conf->mon_data << "': " << cpp_strerror(err) << dendl;
+           << g_conf->get_val<std::string>("mon_data") << "': " << cpp_strerror(err) << dendl;
       prefork.exit(1);
     }
   }
@@ -696,7 +696,7 @@ int main(int argc, const char **argv)
 
   // throttle client traffic
   Throttle *client_throttler = new Throttle(g_ceph_context, "mon_client_bytes",
-					    g_conf->mon_client_bytes);
+					    g_conf->get_val<uint64_t>("mon_client_bytes"));
   msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 				     client_throttler, NULL);
 
@@ -704,7 +704,7 @@ int main(int argc, const char **argv)
   // NOTE: actual usage on the leader may multiply by the number of
   // monitors if they forward large update messages from daemons.
   Throttle *daemon_throttler = new Throttle(g_ceph_context, "mon_daemon_bytes",
-					    g_conf->mon_daemon_bytes);
+					    g_conf->get_val<uint64_t>("mon_daemon_bytes"));
   msgr->set_policy_throttlers(entity_name_t::TYPE_OSD, daemon_throttler,
 				     NULL);
   msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler,
@@ -726,7 +726,7 @@ int main(int argc, const char **argv)
   dout(0) << "starting " << g_conf->name << " rank " << rank
        << " at public addr " << public_addr
        << " at bind addr " << bind_addr
-       << " mon_data " << g_conf->mon_data
+       << " mon_data " << g_conf->get_val<std::string>("mon_data")
        << " fsid " << monmap.get_fsid()
        << dendl;
 
@@ -752,7 +752,7 @@ int main(int argc, const char **argv)
 
   dout(0) << "starting " << g_conf->name << " rank " << rank
        << " at " << ipaddr
-       << " mon_data " << g_conf->mon_data
+       << " mon_data " << g_conf->get_val<std::string>("mon_data")
        << " fsid " << monmap.get_fsid()
        << dendl;
 
@@ -774,7 +774,7 @@ int main(int argc, const char **argv)
     prefork.exit(1);
   }
 
-  if (compact || g_conf->mon_compact_on_start) {
+  if (compact || g_conf->get_val<bool>("mon_compact_on_start")) {
     derr << "compacting monitor store ..." << dendl;
     mon->store->compact();
     derr << "done compacting" << dendl;

@@ -201,8 +201,8 @@ void Paxos::collect(version_t oldpn)
 
   // set timeout event
   collect_timeout_event = mon->timer.add_event_after(
-    g_conf->mon_accept_timeout_factor *
-    g_conf->mon_lease,
+    g_conf->get_val<double>("mon_accept_timeout_factor") *
+    g_conf->get_val<double>("mon_lease"),
     new C_MonContext(mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
@@ -693,7 +693,7 @@ void Paxos::begin(bufferlist& v)
 
   // set timeout event
   accept_timeout_event = mon->timer.add_event_after(
-    g_conf->mon_accept_timeout_factor * g_conf->mon_lease,
+    g_conf->get_val<double>("mon_accept_timeout_factor") * g_conf->get_val<double>("mon_lease"),
     new C_MonContext(mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
@@ -973,11 +973,11 @@ void Paxos::extend_lease()
   //assert(is_active());
 
   lease_expire = ceph_clock_now();
-  lease_expire += g_conf->mon_lease;
+  lease_expire += g_conf->get_val<double>("mon_lease");
   acked_lease.clear();
   acked_lease.insert(mon->rank);
 
-  dout(7) << "extend_lease now+" << g_conf->mon_lease 
+  dout(7) << "extend_lease now+" << g_conf->get_val<double>("mon_lease")
 	  << " (" << lease_expire << ")" << dendl;
 
   // bcast
@@ -997,7 +997,7 @@ void Paxos::extend_lease()
   //  if old timeout is still in place, leave it.
   if (!lease_ack_timeout_event) {
     lease_ack_timeout_event = mon->timer.add_event_after(
-      g_conf->mon_lease_ack_timeout_factor * g_conf->mon_lease,
+      g_conf->get_val<double>("mon_lease_ack_timeout_factor") * g_conf->get_val<double>("mon_lease"),
       new C_MonContext(mon, [this](int r) {
 	  if (r == -ECANCELED)
 	    return;
@@ -1007,8 +1007,8 @@ void Paxos::extend_lease()
 
   // set renew event
   utime_t at = lease_expire;
-  at -= g_conf->mon_lease;
-  at += g_conf->mon_lease_renew_interval_factor * g_conf->mon_lease;
+  at -= g_conf->get_val<double>("mon_lease");
+  at += g_conf->get_val<double>("mon_lease_renew_interval_factor") * g_conf->get_val<double>("mon_lease");
   lease_renew_event = mon->timer.add_event_at(
     at, new C_MonContext(mon, [this](int r) {
 	if (r == -ECANCELED)
@@ -1022,10 +1022,10 @@ void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
   utime_t now = ceph_clock_now();
   if (t > now) {
     utime_t diff = t - now;
-    if (diff > g_conf->mon_clock_drift_allowed) {
+    if (diff > g_conf->get_val<double>("mon_clock_drift_allowed")) {
       utime_t warn_diff = now - last_clock_drift_warn;
       if (warn_diff >
-	  pow(g_conf->mon_clock_drift_warn_backoff, clock_drift_warned)) {
+	  pow(g_conf->get_val<double>("mon_clock_drift_warn_backoff"), clock_drift_warned)) {
 	mon->clog->warn() << "message from " << from << " was stamped " << diff
 			 << "s in the future, clocks not synchronized";
 	last_clock_drift_warn = ceph_clock_now();
@@ -1198,7 +1198,7 @@ void Paxos::reset_lease_timeout()
   if (lease_timeout_event)
     mon->timer.cancel_event(lease_timeout_event);
   lease_timeout_event = mon->timer.add_event_after(
-    g_conf->mon_lease_ack_timeout_factor * g_conf->mon_lease,
+    g_conf->get_val<double>("mon_lease_ack_timeout_factor") * g_conf->get_val<double>("mon_lease"),
     new C_MonContext(mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
@@ -1243,7 +1243,7 @@ void Paxos::trim()
     t->erase(get_name(), v);
   }
   t->put(get_name(), "first_committed", end);
-  if (g_conf->mon_compact_on_trim) {
+  if (g_conf->get_val<bool>("mon_compact_on_trim")) {
     dout(10) << " compacting trimmed range" << dendl;
     t->compact_range(get_name(), stringify(first_committed - 1), stringify(end));
   }

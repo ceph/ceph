@@ -127,7 +127,7 @@ int MonClient::get_monmap_privately()
       break;
 
     utime_t interval;
-    interval.set_from_double(cct->_conf->mon_client_hunt_interval);
+    interval.set_from_double(cct->_conf->get_val<double>("mon_client_hunt_interval"));
     map_cond.WaitInterval(monc_lock, interval);
 
     if (monmap.fsid.is_zero() && con) {
@@ -657,7 +657,7 @@ void MonClient::_add_conns(uint64_t global_id)
   std::random_device rd;
   std::mt19937 rng(rd());
   std::shuffle(ranks.begin(), ranks.end(), rng);
-  unsigned n = cct->_conf->mon_client_hunt_parallel;
+  unsigned n = cct->_conf->get_val<uint64_t>("mon_client_hunt_parallel");
   if (n == 0 || n > ranks.size()) {
     n = ranks.size();
   }
@@ -709,11 +709,11 @@ void MonClient::_start_hunting()
   // adjust timeouts if necessary
   if (!had_a_connection)
     return;
-  reopen_interval_multiplier *= cct->_conf->mon_client_hunt_interval_backoff;
+  reopen_interval_multiplier *= cct->_conf->get_val<double>("mon_client_hunt_interval_backoff");
   if (reopen_interval_multiplier >
-      cct->_conf->mon_client_hunt_interval_max_multiple) {
+      cct->_conf->get_val<double>("mon_client_hunt_interval_max_multiple")) {
     reopen_interval_multiplier =
-      cct->_conf->mon_client_hunt_interval_max_multiple;
+      cct->_conf->get_val<double>("mon_client_hunt_interval_max_multiple");
   }
 }
 
@@ -763,11 +763,11 @@ void MonClient::tick()
 
     cur_con->send_keepalive();
 
-    if (cct->_conf->mon_client_ping_timeout > 0 &&
+    if (cct->_conf->get_val<double>("mon_client_ping_timeout") > 0 &&
 	cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
       utime_t lk = cur_con->get_last_keepalive_ack();
       utime_t interval = now - lk;
-      if (interval > cct->_conf->mon_client_ping_timeout) {
+      if (interval > cct->_conf->get_val<double>("mon_client_ping_timeout")) {
 	ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
 		      << " seconds), reconnecting" << dendl;
 	return _reopen_session();
@@ -794,11 +794,11 @@ void MonClient::schedule_tick()
 {
   auto do_tick = make_lambda_context([this]() { tick(); });
   if (_hunting()) {
-    const auto hunt_interval = (cct->_conf->mon_client_hunt_interval *
+    const auto hunt_interval = (cct->_conf->get_val<double>("mon_client_hunt_interval") *
 				reopen_interval_multiplier);
     timer.add_event_after(hunt_interval, do_tick);
   } else {
-    timer.add_event_after(cct->_conf->mon_client_ping_interval, do_tick);
+    timer.add_event_after(cct->_conf->get_val<double>("mon_client_ping_interval"), do_tick);
   }
 }
 

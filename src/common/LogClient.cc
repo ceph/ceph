@@ -277,8 +277,8 @@ Message *LogClient::_get_mon_log_message()
   // limit entries per message
   unsigned num_unsent = last_log - last_log_sent;
   unsigned num_send;
-  if (cct->_conf->mon_client_max_log_entries_per_message > 0)
-    num_send = MIN(num_unsent, (unsigned)cct->_conf->mon_client_max_log_entries_per_message);
+  if (cct->_conf->get_val<int64_t>("mon_client_max_log_entries_per_message") > 0)
+    num_send = MIN(num_unsent, (unsigned)cct->_conf->get_val<int64_t>("mon_client_max_log_entries_per_message"));
   else
     num_send = num_unsent;
 

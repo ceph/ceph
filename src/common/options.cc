@@ -883,7 +883,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_initial_members", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("list of initial cluster mon ids; if specified, need majority to form initial quorum and create new cluster"),
 
     Option("mon_compact_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -955,11 +955,11 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osd_auto_mark_auto_out_in", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("mark booting auto-marked-out osds 'in'"),
 
     Option("mon_osd_auto_mark_new_in", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("mark booting new osds 'in'"),
 
     Option("mon_osd_destroyed_out_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(600)
@@ -971,43 +971,43 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osd_down_out_subtree_limit", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("rack")
-    .set_description(""),
+    .set_description("smallest crush unit/type that we will not automatically mark out"),
 
     Option("mon_osd_min_up_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.3)
-    .set_description(""),
+    .set_description("min osds required to be up to mark things down"),
 
     Option("mon_osd_min_in_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.75)
-    .set_description(""),
+    .set_description("min osds required to be in to mark things out"),
 
     Option("mon_osd_warn_op_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(32)
-    .set_description(""),
+    .set_description("max op age before we generate a warning (make it a power of 2)"),
 
     Option("mon_osd_err_op_age_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(128)
-    .set_description(""),
+    .set_description("when to generate an error, as multiple of mon_osd_warn_op_age"),
 
     Option("mon_osd_max_split_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(32)
-    .set_description(""),
+    .set_description("largest number of PGs per  OSD to let split create"),
 
     Option("mon_osd_prime_pg_temp", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("prime osdmap with pg mapping changes"),
 
     Option("mon_osd_prime_pg_temp_max_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.5)
-    .set_description(""),
+    .set_description("max time to spend priming"),
 
     Option("mon_osd_prime_pg_temp_max_estimate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.25)
-    .set_description(""),
+    .set_description("max estimate of pg total before we do all pgs in parallel"),
 
     Option("mon_osd_pool_ec_fast_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("whether turn on fast read on the pool or not"),
 
     Option("mon_stat_smooth_intervals", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(6)
@@ -1017,39 +1017,39 @@ std::vector<Option> get_global_options() {
 
     Option("mon_election_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("on election proposer, max waiting time for all ACKs"),
 
     Option("mon_lease", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("lease interval"),
 
     Option("mon_lease_renew_interval_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.6)
-    .set_description(""),
+    .set_description("on leader, to renew the lease"),
 
     Option("mon_lease_ack_timeout_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(2.0)
-    .set_description(""),
+    .set_description("on leader, if lease isn't acked by all peons"),
 
     Option("mon_accept_timeout_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(2.0)
-    .set_description(""),
+    .set_description("on leader, if paxos update isn't accepted"),
 
     Option("mon_clock_drift_allowed", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.050)
-    .set_description(""),
+    .set_description("allowed clock drift between monitors"),
 
     Option("mon_clock_drift_warn_backoff", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("exponential backoff for clock drift warnings"),
 
     Option("mon_timecheck_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(300.0)
-    .set_description(""),
+    .set_description("on leader, timecheck (clock drift check) interval (seconds)"),
 
     Option("mon_timecheck_skew_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30.0)
-    .set_description(""),
+    .set_description("on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)"),
 
     Option("mon_pg_stuck_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
@@ -1059,7 +1059,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_pg_min_inactive", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description(""),
+    .set_long_description("the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR."),
 
     Option("mon_pg_warn_min_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(30)
@@ -1091,19 +1091,19 @@ std::vector<Option> get_global_options() {
 
     Option("mon_cache_target_full_warn_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.66)
-    .set_description(""),
+    .set_description("position between pool cache_target_full and max where we start warning"),
 
     Option("mon_osd_full_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.95)
-    .set_description(""),
+    .set_description("what % full makes an OSD full"),
 
     Option("mon_osd_backfillfull_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.90)
-    .set_description(""),
+    .set_description("what % full makes an OSD backfill full (backfill halted)"),
 
     Option("mon_osd_nearfull_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.85)
-    .set_description(""),
+    .set_description("what % full makes an OSD near full"),
 
     Option("mon_osd_initial_require_min_compat_client", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("jewel")
@@ -1111,7 +1111,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_allow_pool_delete", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("allow pool deletion"),
 
     Option("mon_fake_pool_delete", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -1119,19 +1119,19 @@ std::vector<Option> get_global_options() {
 
     Option("mon_globalid_prealloc", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10000)
-    .set_description(""),
+    .set_description("how many globalids to prealloc"),
 
     Option("mon_osd_report_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(900)
-    .set_description(""),
+    .set_description("grace period before declaring unresponsive OSDs dead"),
 
     Option("mon_force_standby_active", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("should mons force standby-replay mds to be active"),
 
     Option("mon_warn_on_legacy_crush_tunables", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("warn if crush tunables are too old (older than mon_min_crush_required_version)"),
 
     Option("mon_crush_min_required_version", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("firefly")
@@ -1139,11 +1139,11 @@ std::vector<Option> get_global_options() {
 
     Option("mon_warn_on_crush_straw_calc_version_zero", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("warn if crush straw_calc_version==0"),
 
     Option("mon_warn_on_osd_down_out_interval_zero", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("warn if mon_osd_down_out_interval == 0"),
 
     Option("mon_warn_on_cache_pools_without_hit_sets", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -1179,7 +1179,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_client_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100ul << 20)
-    .set_description(""),
+    .set_description("client msg data allowed in memory in bytes"),
 
     Option("mon_mgr_proxy_client_bytes_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.3)
@@ -1192,7 +1192,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_daemon_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(400ul << 20)
-    .set_description(""),
+    .set_description("mds, osd message memory cap in bytes"),
 
     Option("mon_max_log_entries_per_event", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4096)
@@ -1200,15 +1200,15 @@ std::vector<Option> get_global_options() {
 
     Option("mon_reweight_min_pgs_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
-    .set_description(""),
+    .set_description("min pgs per osd for reweight-by-pg command"),
 
     Option("mon_reweight_min_bytes_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100_M)
-    .set_description(""),
+    .set_description("min bytes per osd for reweight-by-utilization command"),
 
     Option("mon_reweight_max_osds", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4)
-    .set_description(""),
+    .set_description("max osds to change per reweight-by-* command"),
 
     Option("mon_reweight_max_change", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.05)
@@ -1254,7 +1254,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_data_size_warn", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(15_G)
-    .set_description(""),
+    .set_description("issue a warning when the monitor's data store goes over 15GB in bytes"),
 
     Option("mon_warn_not_scrubbed", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -1274,19 +1274,19 @@ std::vector<Option> get_global_options() {
 
     Option("mon_scrub_max_keys", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(100)
-    .set_description(""),
+    .set_description("max number of keys to scrub each time"),
 
     Option("mon_scrub_inject_crc_mismatch", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.0)
-    .set_description(""),
+    .set_description("probability of injected crc mismatch [0.0, 1.0)"),
 
     Option("mon_scrub_inject_missing_keys", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.0)
-    .set_description(""),
+    .set_description("probability of injected missing keys [0.0, 1.0)"),
 
     Option("mon_config_key_max_entry_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4_K)
-    .set_description(""),
+    .set_description("max num bytes per config-key entry"),
 
     Option("mon_sync_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(60.0)
@@ -1294,15 +1294,15 @@ std::vector<Option> get_global_options() {
 
     Option("mon_sync_max_payload_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1_M)
-    .set_description(""),
+    .set_description("max size for a sync chunk payload in bytes"),
 
     Option("mon_sync_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("enable sync-specific debug"),
 
     Option("mon_inject_sync_get_chunk_delay", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("inject N second delay on each get_chunk request"),
 
     Option("mon_osd_min_down_reporters", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(2)
@@ -1318,15 +1318,15 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osd_force_trim_to", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("force mon to trim maps to this point, regardless of min_last_epoch_clean *dangerous*"),
 
     Option("mon_mds_force_trim_to", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("force mon to trim mdsmaps to this point *dangerous*"),
 
     Option("mon_mds_skip_sanity", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("skip safety assertions on FSMap (in case of bugs where we want to continue anyway)"),
 
     Option("mon_debug_deprecated_as_obsolete", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
@@ -1362,23 +1362,23 @@ std::vector<Option> get_global_options() {
 
     Option("mon_inject_transaction_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("range [0, 1)"),
 
     Option("mon_sync_provider_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("kill the sync provider at a specific point in the work flow"),
 
     Option("mon_sync_requester_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("kill the sync requester at a specific point in the work flow"),
 
     Option("mon_force_quorum_join", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("force monitor to join quorum even if it has been previously removed from the map"),
 
     Option("mon_keyvaluedb", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("rocksdb")
-    .set_description(""),
+    .set_description("type of keyvaluedb backend"),
 
     Option("mon_debug_unsafe_allow_tier_with_nonempty_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
@@ -1489,23 +1489,23 @@ std::vector<Option> get_global_options() {
 
     Option("mon_client_hunt_parallel", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(2)
-    .set_description(""),
+    .set_description("how many mons to try to connect to in parallel during hunt"),
 
     Option("mon_client_hunt_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(3.0)
-    .set_description(""),
+    .set_description("try new mon every N seconds until we connect"),
 
     Option("mon_client_ping_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10.0)
-    .set_description(""),
+    .set_description("ping every N seconds"),
 
     Option("mon_client_ping_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30.0)
-    .set_description(""),
+    .set_description("fail if we don't hear back"),
 
     Option("mon_client_hunt_interval_backoff", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(2.0)
-    .set_description(""),
+    .set_description("each time we reconnect to a monitor, double our timeout"),
 
     Option("mon_client_hunt_interval_min_multiple", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1.0)
@@ -1513,7 +1513,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_client_hunt_interval_max_multiple", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10.0)
-    .set_description(""),
+    .set_description("up to a max of 10*default (30 seconds)"),
 
     Option("mon_client_max_log_entries_per_message", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)

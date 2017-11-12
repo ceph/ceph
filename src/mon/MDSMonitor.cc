@@ -121,7 +121,7 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   // new map
   dout(4) << "new map" << dendl;
   print_map(fsmap, 0);
-  if (!g_conf->mon_mds_skip_sanity) {
+  if (!g_conf->get_val<bool>("mon_mds_skip_sanity")) {
     fsmap.sanity();
   }
 
@@ -153,7 +153,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // print map iff 'debug mon = 30' or higher
   print_map(pending_fsmap, 30);
-  if (!g_conf->mon_mds_skip_sanity) {
+  if (!g_conf->get_val<bool>("mon_mds_skip_sanity")) {
     pending_fsmap.sanity();
   }
 
@@ -255,14 +255,14 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 version_t MDSMonitor::get_trim_to() const
 {
   version_t floor = 0;
-  if (g_conf->mon_mds_force_trim_to > 0 &&
-      g_conf->mon_mds_force_trim_to < (int)get_last_committed()) {
-    floor = g_conf->mon_mds_force_trim_to;
+  if (g_conf->get_val<int64_t>("mon_mds_force_trim_to") > 0 &&
+      g_conf->get_val<int64_t>("mon_mds_force_trim_to") < (int)get_last_committed()) {
+    floor = g_conf->get_val<int64_t>("mon_mds_force_trim_to");
     dout(10) << __func__ << " explicit mon_mds_force_trim_to = "
              << floor << dendl;
   }
 
-  unsigned max = g_conf->mon_max_mdsmap_epochs;
+  unsigned max = g_conf->get_val<int64_t>("mon_max_mdsmap_epochs");
   version_t last = get_last_committed();
 
   if (last - get_first_committed() > max && floor < last - max)
@@ -1777,7 +1777,7 @@ bool MDSMonitor::maybe_expand_cluster(std::shared_ptr<Filesystem> fs)
       mds++;
     }
     mds_gid_t newgid = pending_fsmap.find_replacement_for({fs->fscid, mds},
-                         name, g_conf->mon_force_standby_active);
+                         name, g_conf->get_val<bool>("mon_force_standby_active"));
     if (newgid == MDS_GID_NONE) {
       break;
     }
@@ -1831,7 +1831,7 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid, const MDSMap::mds_info_t& info
       may_replace &&
       !pending_fsmap.get_filesystem(fscid)->mds_map.test_flag(CEPH_MDSMAP_DOWN) &&
       (sgid = pending_fsmap.find_replacement_for({fscid, info.rank}, info.name,
-                g_conf->mon_force_standby_active)) != MDS_GID_NONE)
+                g_conf->get_val<bool>("mon_force_standby_active"))) != MDS_GID_NONE)
   {
     
     MDSMap::mds_info_t si = pending_fsmap.get_info_gid(sgid);
@@ -1890,7 +1890,7 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
     while (p != failed.end()) {
       mds_rank_t f = *p++;
       mds_gid_t sgid = pending_fsmap.find_replacement_for({fs->fscid, f}, {},
-          g_conf->mon_force_standby_active);
+          g_conf->get_val<bool>("mon_force_standby_active"));
       if (sgid) {
         const MDSMap::mds_info_t si = pending_fsmap.get_info_gid(sgid);
         dout(0) << " taking over failed mds." << f << " with " << sgid
