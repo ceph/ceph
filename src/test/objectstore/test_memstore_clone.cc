@@ -183,10 +183,10 @@ TEST_F(MemStoreClone, CloneRangeHoleEnd)
 int main(int argc, char** argv)
 {
   // default to memstore
-  vector<const char*> defaults{
-    "--osd_objectstore", "memstore",
-    "--osd_data", "msc.test_temp_dir",
-    "--memstore_page_size", "4",
+  map<string,string> defaults = {
+    { "osd_objectstore", "memstore" },
+    { "osd_data", "msc.test_temp_dir" },
+    { "memstore_page_size", "4" }
   };
 
   vector<const char*> args;

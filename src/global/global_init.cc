@@ -80,10 +80,11 @@ static int chown_path(const std::string &pathname, const uid_t owner, const gid_
   return r;
 }
 
-void global_pre_init(std::vector < const char * > *alt_def_args,
-		     std::vector < const char* >& args,
-		     uint32_t module_type, code_environment_t code_env,
-		     int flags)
+void global_pre_init(
+  const std::map<std::string,std::string> *defaults,
+  std::vector < const char* >& args,
+  uint32_t module_type, code_environment_t code_env,
+  int flags)
 {
   std::string conf_file_list;
   std::string cluster = "";
@@ -94,8 +95,12 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   global_init_set_globals(cct);
   md_config_t *conf = cct->_conf;
 
-  if (alt_def_args)
-    conf->parse_argv(*alt_def_args);  // alternative default args
+  // alternate defaults
+  if (defaults) {
+    for (auto& i : *defaults) {
+      conf->set_val_default(i.first, i.second);
+    }
+  }
 
   int ret = conf->parse_config_files(c_str_or_null(conf_file_list),
 				     &cerr, flags);
@@ -130,7 +135,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
 }
 
 boost::intrusive_ptr<CephContext>
-global_init(std::vector < const char * > *alt_def_args,
+global_init(const std::map<std::string,std::string> *defaults,
 	    std::vector < const char* >& args,
 	    uint32_t module_type, code_environment_t code_env,
 	    int flags,
@@ -141,7 +146,7 @@ global_init(std::vector < const char * > *alt_def_args,
   if (run_pre_init) {
     // We will run pre_init from here (default).
     assert(!g_ceph_context && first_run);
-    global_pre_init(alt_def_args, args, module_type, code_env, flags);
+    global_pre_init(defaults, args, module_type, code_env, flags);
   } else {
     // Caller should have invoked pre_init manually.
     assert(g_ceph_context && first_run);

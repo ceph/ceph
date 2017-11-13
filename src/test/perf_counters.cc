@@ -46,11 +46,11 @@
 #include "common/common_init.h"
 
 int main(int argc, char **argv) {
-  std::vector<const char *> preargs;
-  preargs.push_back("--admin-socket");
-  preargs.push_back(get_rand_socket_path());
+  map<string,string> defaults = {
+    { "admin_socket", get_rand_socket_path() }
+  };
   std::vector<const char*> args;
-  auto cct = global_init(&preargs, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);

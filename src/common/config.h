@@ -86,6 +86,9 @@ public:
    */
   std::map<std::string, const Option&> schema;
 
+  /// default values (if they vary from the schema)
+  std::map<std::string, Option::value_t> default_values;
+
   /**
    * The current values of all settings described by the schema
    */
@@ -138,6 +141,15 @@ public:
 
   /// Look up an option in the schema
   const Option *find_option(const string& name) const;
+
+  /// Look up the default value for an option by name
+  Option::value_t get_val_default(const string& name, bool meta) const;
+
+  /// Look up the default value for an option
+  Option::value_t _get_val_default(const Option& o, bool meta) const;
+
+  /// Set a default value
+  void set_val_default(const std::string& key, const std::string &val);
 
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostream *oss);

@@ -183,9 +183,10 @@ int main(int argc, const char **argv)
   }
 
   /* alternative default for module */
-  vector<const char *> def_args;
-  def_args.push_back("--debug-rgw=1/5");
-  def_args.push_back("--keyring=$rgw_data/keyring");
+  map<string,string> defaults = {
+    { "debug_rgw", "1/5" },
+    { "keyring", "$rgw_data/keyring" }
+  };
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -193,8 +194,9 @@ int main(int argc, const char **argv)
 
   // First, let's determine which frontends are configured.
   int flags = CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS;
-  global_pre_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-          flags);
+  global_pre_init(
+    &defaults, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
+    flags);
 
   list<string> frontends;
   g_conf->early_expand_meta(g_conf->rgw_frontends, &cerr);
@@ -240,7 +242,7 @@ int main(int argc, const char **argv)
   // initialization. Passing false as the final argument ensures that
   // global_pre_init() is not invoked twice.
   // claim the reference and release it after subsequent destructors have fired
-  auto cct = global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_DAEMON,
 			 flags, "rgw_data", false);
 
