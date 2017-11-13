@@ -173,8 +173,10 @@ using namespace ceph;
     std::atomic<unsigned> nref { 0 };
     int mempool;
 
+    std::pair<size_t, size_t> last_crc_offset {std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()};
+    std::pair<uint32_t, uint32_t> last_crc_val;
+
     mutable ceph::spinlock crc_spinlock;
-    map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
     explicit raw(unsigned l, int mempool=mempool::mempool_buffer_anon)
       : data(NULL), len(l), nref(0), mempool(mempool) {
@@ -248,24 +250,22 @@ public:
     bool get_crc(const pair<size_t, size_t> &fromto,
          pair<uint32_t, uint32_t> *crc) const {
       std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
-      map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >::const_iterator i =
-      crc_map.find(fromto);
-      if (i == crc_map.end()) {
-          return false;
+      if (last_crc_offset == fromto) {
+        *crc = last_crc_val;
+        return true;
       }
-      *crc = i->second;
-      return true;
+      return false;
     }
     void set_crc(const pair<size_t, size_t> &fromto,
          const pair<uint32_t, uint32_t> &crc) {
       std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
-      crc_map[fromto] = crc;
+      last_crc_offset = fromto;
+      last_crc_val = crc;
     }
     void invalidate_crc() {
       std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
-      if (crc_map.size() != 0) {
-        crc_map.clear();
-      }
+      last_crc_offset.first = std::numeric_limits<size_t>::max();
+      last_crc_offset.second = std::numeric_limits<size_t>::max();
     }
   };
 
