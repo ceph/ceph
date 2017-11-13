@@ -121,12 +121,36 @@ void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
   ls.back()->prefer_bdev = 1;
 }
 
+void bluefs_fnode_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(ino, bl);
+  ::encode(size, bl);
+  ::encode(mtime, bl);
+  ::encode(prefer_bdev, bl);
+  ::encode(extents, bl);
+  ENCODE_FINISH(bl);
+}
+
+void bluefs_fnode_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(ino, p);
+  ::decode(size, p);
+  ::decode(mtime, p);
+  ::decode(prefer_bdev, p);
+  ::decode(extents, p);
+  DECODE_FINISH(p);
+  recalc_allocated();
+}
+
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 {
   return out << "file(ino " << file.ino
 	     << " size 0x" << std::hex << file.size << std::dec
 	     << " mtime " << file.mtime
 	     << " bdev " << (int)file.prefer_bdev
+	     << " allocated " << std::hex << file.allocated << std::dec
 	     << " extents " << file.extents
 	     << ")";
 }

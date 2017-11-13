@@ -45,29 +45,46 @@ struct bluefs_fnode_t {
     return allocated;
   }
 
-  void recalc_allocated() {
-    allocated = 0;
-    for (auto& p : extents)
-      allocated += p.length;
+  void append_extent(const bluefs_extent_t& ext) {
+    extents.push_back(ext);
+    allocated += ext.length;
   }
 
-  DENC(bluefs_fnode_t, v, p) {
-    DENC_START(1, 1, p);
-    denc_varint(v.ino, p);
-    denc_varint(v.size, p);
-    denc(v.mtime, p);
-    denc(v.prefer_bdev, p);
-    denc(v.extents, p);
-    DENC_FINISH(p);
+  void pop_front_extent() {
+    auto it = extents.begin();
+    allocated -= it->length;
+    extents.erase(it);
   }
+  
+  void swap_extents(bluefs_fnode_t& other) {
+    other.extents.swap(extents);
+    std::swap(allocated, other.allocated);
+  }
+  void swap_extents(mempool::bluefs::vector<bluefs_extent_t>& swap_to, uint64_t& new_allocated) {
+    swap_to.swap(extents);
+    std::swap(allocated, new_allocated);
+  }
+  void clear_extents() {
+    extents.clear();
+    allocated = 0;
+  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
 
   mempool::bluefs::vector<bluefs_extent_t>::iterator seek(
     uint64_t off, uint64_t *x_off);
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluefs_fnode_t*>& ls);
+private:
+  void recalc_allocated() {
+    allocated = 0;
+    for (auto& p : extents)
+      allocated += p.length;
+  }
+
 };
-WRITE_CLASS_DENC(bluefs_fnode_t)
+WRITE_CLASS_ENCODER(bluefs_fnode_t)
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file);
 
