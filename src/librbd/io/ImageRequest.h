@@ -99,6 +99,18 @@ public:
     return m_trace;
   }
 
+  bool was_throttled(uint64_t flag) {
+    return m_throttled_flag & flag;
+  }
+
+  void set_throttled(uint64_t flag) {
+    m_throttled_flag |= flag;
+  }
+
+  uint64_t tokens_requested(uint64_t flag) {
+    return __tokens_requested(flag);;
+  }
+
 protected:
   typedef std::list<ObjectRequestHandle *> ObjectRequests;
 
@@ -107,6 +119,8 @@ protected:
   Extents m_image_extents;
   ZTracer::Trace m_trace;
   bool m_bypass_image_cache = false;
+  uint64_t m_throttled_flag = 0;
+  uint64_t m_length = 0;
 
   ImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                Extents &&image_extents, const char *trace_name,
@@ -115,6 +129,10 @@ protected:
       m_image_extents(std::move(image_extents)),
       m_trace(util::create_trace(image_ctx, trace_name, parent_trace)) {
     m_trace.event("start");
+    auto &extents = this->m_image_extents;
+    for (auto &extent : extents) {
+      m_length += extent.second;
+    }
   }
   
 
@@ -124,6 +142,10 @@ protected:
 
   virtual aio_type_t get_aio_type() const = 0;
   virtual const char *get_request_type() const = 0;
+
+  virtual uint64_t __tokens_requested(uint64_t flag) {
+    return 0;
+  }
 };
 
 template <typename ImageCtxT = ImageCtx>
@@ -146,6 +168,18 @@ protected:
   }
   const char *get_request_type() const override {
     return "aio_read";
+  }
+
+  uint64_t __tokens_requested(uint64_t flag) override {
+    if (flag & RBD_QOS_WRITE_MASK) {
+      return 0;
+    }
+
+    if (flag & RBD_QOS_BPS_MASK) {
+      return this->m_length;
+    }
+
+    return 1;
   }
 private:
   int m_op_flags;
@@ -198,6 +232,16 @@ protected:
                                         bool synchronous) = 0;
   virtual void update_stats(size_t length) = 0;
 
+  uint64_t __tokens_requested(uint64_t flag) override {
+    if (flag & RBD_QOS_READ_MASK) {
+      return 0;
+    }
+
+    if (flag & RBD_QOS_BPS_MASK) {
+      return this->m_length;
+    }
+    return 1;
+  }
 private:
   bool m_synchronous;
 };

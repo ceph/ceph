@@ -69,7 +69,24 @@ ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
     m_lock(util::unique_lock_name("ImageRequestWQ<I>::m_lock", this)) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << "ictx=" << image_ctx << dendl;
+
+  SafeTimer *timer;
+  Mutex *timer_lock;
+  ImageCtx::get_timer_instance(cct, &timer, &timer_lock);
+
+  for (auto flag : m_throttle_flags) {
+    m_throttles.push_back(make_pair(
+	  flag, new TokenBucketThrottle(cct, 0, 0, timer, timer_lock)));
+  }
+
   this->register_work_queue();
+}
+
+template <typename I>
+ImageRequestWQ<I>::~ImageRequestWQ() {
+  for (auto t : m_throttles) {
+    delete t.second;
+  }
 }
 
 template <typename I>
@@ -542,6 +559,75 @@ void ImageRequestWQ<I>::set_require_lock(Direction direction, bool enabled) {
 }
 
 template <typename I>
+void ImageRequestWQ<I>::set_qos_limit(uint64_t limit, const uint64_t flag) {
+  TokenBucketThrottle *throttle = nullptr;
+  for (auto pair : m_throttles) {
+    if (flag == pair.first) {
+      throttle = pair.second;
+      break;
+    }
+  }
+  assert(throttle != nullptr);
+  throttle->set_max(limit);
+  throttle->set_average(limit);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::apply_qos_iops_limit(uint64_t limit) {
+  set_qos_limit(limit, RBD_QOS_IOPS_THROTTLE);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::apply_qos_bps_limit(uint64_t limit) {
+  set_qos_limit(limit, RBD_QOS_BPS_THROTTLE);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::apply_qos_read_iops_limit(uint64_t limit) {
+  set_qos_limit(limit, RBD_QOS_READ_IOPS_THROTTLE);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::apply_qos_write_iops_limit(uint64_t limit) {
+  set_qos_limit(limit, RBD_QOS_WRITE_IOPS_THROTTLE);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::apply_qos_read_bps_limit(uint64_t limit) {
+  set_qos_limit(limit, RBD_QOS_READ_BPS_THROTTLE);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::apply_qos_write_bps_limit(uint64_t limit) {
+  set_qos_limit(limit, RBD_QOS_WRITE_BPS_THROTTLE);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::handle_throttle_ready(int r, ImageRequest<I> *item, uint64_t flag) {
+  assert(m_io_blockers.load() > 0);
+  --m_io_blockers;
+  item->set_throttled(flag);
+  this->requeue(item);
+  this->signal();
+}
+
+template <typename I>
+bool ImageRequestWQ<I>::needs_throttle(ImageRequest<I> *item) { 
+  for (auto t : m_throttles) {
+    uint64_t flag = t.first;
+    uint64_t tokens = item->tokens_requested(flag);
+    TokenBucketThrottle* throttle = t.second;
+    if (!item->was_throttled(flag) &&
+	  throttle->get<ImageRequestWQ<I>, ImageRequest<I>,
+	      &ImageRequestWQ<I>::handle_throttle_ready>(
+		tokens, this, item, flag)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template <typename I>
 void *ImageRequestWQ<I>::_void_dequeue() {
   CephContext *cct = m_image_ctx.cct;
   ImageRequest<I> *peek_item = this->front();
@@ -573,6 +659,11 @@ void *ImageRequestWQ<I>::_void_dequeue() {
   ImageRequest<I> *item = reinterpret_cast<ImageRequest<I> *>(
     ThreadPool::PointerWQ<ImageRequest<I> >::_void_dequeue());
   assert(peek_item == item);
+
+  if (needs_throttle(item)) {
+    ++m_io_blockers;
+    return nullptr;
+  }
 
   if (lock_required) {
     this->get_pool_lock().Unlock();
