@@ -3057,6 +3057,28 @@ void CDir::dump(Formatter *f) const
   MDSCacheObject::dump(f);
 }
 
+void CDir::dump_load(Formatter *f, utime_t now, const DecayRate& rate)
+{
+  f->dump_stream("path") << get_path();
+  f->dump_stream("dirfrag") << dirfrag();
+
+  f->open_object_section("pop_me");
+  pop_me.dump(f, now, rate);
+  f->close_section();
+
+  f->open_object_section("pop_nested");
+  pop_nested.dump(f, now, rate);
+  f->close_section();
+
+  f->open_object_section("pop_auth_subtree");
+  pop_auth_subtree.dump(f, now, rate);
+  f->close_section();
+
+  f->open_object_section("pop_auth_subtree_nested");
+  pop_auth_subtree_nested.dump(f, now, rate);
+  f->close_section();
+}
+
 /****** Scrub Stuff *******/
 
 void CDir::scrub_info_create() const
