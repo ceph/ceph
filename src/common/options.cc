@@ -5426,6 +5426,22 @@ static std::vector<Option> get_rbd_options() {
     Option("rbd_journal_max_concurrent_object_sets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("maximum number of object sets a journal client can be behind before it is automatically unregistered"),
+
+    Option("rbd_qos_iops_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired limit of IO operations per second"),
+
+    Option("rbd_qos_bps_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired limit of IO bandwidth per second"),
+
+    Option("rbd_qos_read_iops_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired limit of read operations per second"),
+
+    Option("rbd_qos_write_iops_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired limit of write operations per second"),
   });
 }
 
