@@ -182,6 +182,12 @@ struct Option {
     return *this;
   }
 
+  /// parse and validate a string input
+  int parse_value(
+    const std::string& raw_val,
+    value_t *out,
+    std::string *error_message) const;
+
   template<typename T>
   Option& set_default(const T& v) {
     return set_value(value, v);
