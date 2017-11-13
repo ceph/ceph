@@ -222,7 +222,7 @@ Application Tags
 
 Access may be restricted to specific pools as defined by their application
 metadata. The ``*`` wildcard may be used for the ``key`` argument, the
-``value`` argument, or both.
+``value`` argument, or both. ``all`` is a synony for ``*``.
 
 Namespace
 ---------

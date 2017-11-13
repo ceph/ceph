@@ -1300,7 +1300,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    if (filesystem != "*") {
+    if (filesystem != "*" && filesystem != "all") {
       auto fs = mon->mdsmon()->get_fsmap().get_filesystem(filesystem);
       if (!fs) {
 	ss << "filesystem " << filesystem << " does not exist.";

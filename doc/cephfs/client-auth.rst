@@ -50,6 +50,9 @@ Note that if a client's read access is restricted to a path, they will only
 be able to mount the filesystem when specifying a readable path in the
 mount command (see below).
 
+Supplying ``all`` or ``*`` as the filesystem name will grant access to every
+file system. Note that it is usually necessary to quote ``*`` to protect it from
+the shell.
 
 See `User Management - Add a User to a Keyring`_. for additional details on user management
 
