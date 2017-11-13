@@ -159,6 +159,7 @@ public:
   // Get a configuration value.
   // No metavariables will be returned (they will have already been expanded)
   int get_val(const std::string &key, char **buf, int len) const;
+  int get_val_as_string(const std::string &key, std::string *val) const;
   int _get_val(const std::string &key, char **buf, int len) const;
   Option::value_t get_val_generic(const std::string &key) const;
   template<typename T> const T get_val(const std::string &key) const;
@@ -208,7 +209,7 @@ private:
   void validate_schema();
   void validate_default_settings();
 
-  int _get_val(const std::string &key, std::string *value) const;
+  int _get_val_as_string(const std::string &key, std::string *value) const;
   Option::value_t _get_val_generic(const std::string &key) const;
   void _show_config(std::ostream *out, Formatter *f);
 
